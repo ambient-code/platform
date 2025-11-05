@@ -1,10 +1,12 @@
 package handlers
 
 import (
+	"ambient-code-backend/server"
 	"encoding/base64"
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -87,6 +89,12 @@ func GetK8sClientsForRequest(c *gin.Context) (*kubernetes.Clientset, dynamic.Int
 	// Debug: basic auth header state (do not log token)
 	hasAuthHeader := strings.TrimSpace(rawAuth) != ""
 	hasFwdToken := strings.TrimSpace(rawFwd) != ""
+
+	// In dev mode (minikube/local), use service account credentials for mock tokens
+	if token == "mock-token-for-local-dev" || os.Getenv("DISABLE_AUTH") == "true" {
+		log.Printf("Dev mode detected - using service account credentials for %s", c.FullPath())
+		return server.K8sClient, server.DynamicClient
+	}
 
 	if token != "" && BaseKubeConfig != nil {
 		cfg := *BaseKubeConfig

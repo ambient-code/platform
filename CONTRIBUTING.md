@@ -76,7 +76,7 @@ Before contributing, ensure you have:
 - Node.js 20+ and npm (for frontend development)
 - Python 3.11+ (for runner development)
 - Docker or Podman (for building containers)
-- OpenShift Local (CRC) or access to an OpenShift/Kubernetes cluster
+- Minikube or access to an OpenShift/Kubernetes cluster
 - Git for version control
 
 ### Fork and Clone
@@ -155,8 +155,8 @@ Use conventional commit messages:
 
 ```bash
 git commit -m "feat: add multi-repo session support"
-git commit -m "fix: resolve PVC mounting issue in CRC"
-git commit -m "docs: update CRC setup instructions"
+git commit -m "fix: resolve PVC mounting issue in minikube"
+git commit -m "docs: update minikube setup instructions"
 git commit -m "test: add integration tests for operator"
 ```
 
@@ -344,7 +344,7 @@ Your PR should include:
 
 ## Local Development Setup
 
-The recommended way to develop and test Ambient Code Platform locally is using OpenShift Local (CRC - CodeReady Containers). This provides a complete OpenShift environment running on your local machine with real authentication, RBAC, and production-like behavior.
+The recommended way to develop and test Ambient Code Platform locally is using **Minikube**. This provides a lightweight Kubernetes environment on your local machine with no authentication requirements, making development fast and easy.
 
 ### Installing and Setting Up CRC
 

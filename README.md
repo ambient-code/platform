@@ -89,8 +89,8 @@ The platform consists of containerized microservices orchestrated via Kubernetes
 ## Prerequisites
 
 ### Required Tools
-- **OpenShift Local (CRC)** for local development or OpenShift cluster for production
-- **oc** (OpenShift CLI) or **kubectl** v1.28+ configured to access your cluster
+- **Minikube** for local development or **OpenShift cluster** for production
+- **kubectl** v1.28+ configured to access your cluster
 - **Docker or Podman** for building container images
 - **Container registry access** (Docker Hub, Quay.io, ECR, etc.) for production
 - **Go 1.24+** for building backend services (if building from source)
@@ -339,48 +339,53 @@ curl http://localhost:8080/health
 
 ## Development
 
-### Local Development with OpenShift Local (CRC)
+### Local Development with Minikube
 
 **Single Command Setup:**
 ```bash
 # Start complete local development environment
-make dev-start
+make local-start
 ```
 
 **What this provides:**
-- ✅ Full OpenShift cluster with CRC
-- ✅ Real OpenShift authentication and RBAC
-- ✅ Production-like environment
+- ✅ Local Kubernetes cluster with minikube
+- ✅ No authentication required - automatic login as "developer"
 - ✅ Automatic image builds and deployments
 - ✅ Working frontend-backend integration
+- ✅ Ingress configuration for easy access
+- ✅ Faster startup than OpenShift (2-3 minutes)
 
 **Prerequisites:**
 ```bash
-# Install CRC (macOS)
-brew install crc
-
-# Get Red Hat pull secret (free):
-# 1. Visit: https://console.redhat.com/openshift/create/local
-# 2. Download pull secret to ~/.crc/pull-secret.json
-# 3. Run: crc setup
+# Install minikube and kubectl (macOS)
+brew install minikube kubectl
 
 # Then start development
-make dev-start
-```
-
-**Hot Reloading (optional):**
-```bash
-# Terminal 1: Start with development images
-DEV_MODE=true make dev-start
-
-# Terminal 2: Enable file sync for hot-reloading
-make dev-sync
+make local-start
 ```
 
 **Access URLs:**
-- Frontend: `https://vteam-frontend-vteam-dev.apps-crc.testing`
-- Backend: `https://vteam-backend-vteam-dev.apps-crc.testing/health`
-- Console: `https://console-openshift-console.apps-crc.testing`
+
+After adding `127.0.0.1 vteam.local` to `/etc/hosts`:
+- Frontend: `http://vteam.local`
+- Backend: `http://vteam.local/api`
+
+Or using NodePort (no /etc/hosts needed):
+- Frontend: `http://$(minikube ip):30030`
+- Backend: `http://$(minikube ip):30080`
+
+**Common Commands:**
+```bash
+make local-start     # Start minikube and deploy
+make local-stop      # Stop deployment (keep minikube)
+make local-delete    # Delete minikube cluster
+make local-status    # Check deployment status
+make local-logs      # View backend logs
+make dev-test        # Run tests
+```
+
+**For detailed local development guide, see:**
+- [LOCAL_DEVELOPMENT.md](LOCAL_DEVELOPMENT.md)
 
 ### Building from Source
 ```bash
