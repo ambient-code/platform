@@ -342,7 +342,7 @@ func isLocalDevEnvironment() bool {
 	if namespace == "" {
 		namespace = "default"
 	}
-	
+
 	// Reject if namespace contains 'prod' or is the default production namespace
 	if strings.Contains(strings.ToLower(namespace), "prod") {
 		log.Printf("Refusing dev mode in production-like namespace: %s", namespace)
@@ -359,10 +359,10 @@ func getLocalDevK8sClients() (*kubernetes.Clientset, dynamic.Interface) {
 	// In local dev, we use the local-dev-user service account
 	// which has limited, namespace-scoped permissions
 	// This is safer than using the backend service account
-	
+
 	// For now, use the server clients (which are the backend service account)
 	// TODO: Mint a token for the local-dev-user service account
 	// and create clients using that token for proper permission scoping
-	
+
 	return server.K8sClient, server.DynamicClient
 }
