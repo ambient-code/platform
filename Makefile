@@ -1,258 +1,370 @@
-.PHONY: help setup-env build-all build-frontend build-backend build-operator build-runner deploy clean dev-frontend dev-backend lint test registry-login push-all dev-start dev-stop dev-test dev-logs-operator dev-restart-operator dev-operator-status dev-test-operator e2e-test e2e-setup e2e-clean setup-hooks remove-hooks deploy-langfuse-openshift
+.PHONY: help setup build-all build-frontend build-backend build-operator build-runner deploy clean
+.PHONY: local-up local-down local-clean local-status local-rebuild local-reload-backend local-reload-frontend local-reload-operator
+.PHONY: local-logs local-shell local-test local-url local-troubleshoot local-port-forward
+.PHONY: push-all registry-login setup-hooks remove-hooks
+.PHONY: e2e-test e2e-setup e2e-clean deploy-langfuse-openshift
 
 # Default target
-help: ## Show this help message
-	@echo 'Usage: make [target]'
-	@echo ''
-	@echo 'Configuration Variables:'
-	@echo '  CONTAINER_ENGINE   Container engine to use (default: podman, can be set to docker)'
-	@echo '  PLATFORM           Target platform (e.g., linux/amd64, linux/arm64)'
-	@echo '  BUILD_FLAGS        Additional flags to pass to build command'
-	@echo '  REGISTRY           Container registry for push operations'
-	@echo ''
-	@echo 'Examples:'
-	@echo '  make build-all CONTAINER_ENGINE=docker'
-	@echo '  make build-all PLATFORM=linux/amd64'
-	@echo '  make build-all BUILD_FLAGS="--no-cache --pull"'
-	@echo '  make build-all CONTAINER_ENGINE=docker PLATFORM=linux/arm64'
-	@echo ''
-	@echo 'Targets:'
-	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-15s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+.DEFAULT_GOAL := help
 
-# Container engine configuration
+# Configuration
 CONTAINER_ENGINE ?= podman
 PLATFORM ?= linux/amd64
 BUILD_FLAGS ?= 
+NAMESPACE ?= ambient-code
+REGISTRY ?= quay.io/your-org
 
+# Image tags
+FRONTEND_IMAGE ?= vteam-frontend:latest
+BACKEND_IMAGE ?= vteam-backend:latest
+OPERATOR_IMAGE ?= vteam-operator:latest
+RUNNER_IMAGE ?= vteam-runner:latest
 
-# Construct platform flag if PLATFORM is set
+# Colors for output
+COLOR_RESET := \033[0m
+COLOR_BOLD := \033[1m
+COLOR_GREEN := \033[32m
+COLOR_YELLOW := \033[33m
+COLOR_BLUE := \033[34m
+COLOR_RED := \033[31m
+
+# Platform flag
 ifneq ($(PLATFORM),)
 PLATFORM_FLAG := --platform=$(PLATFORM)
 else
-PLATFORM_FLAG := 
+PLATFORM_FLAG :=
 endif
 
-# Docker image tags
-FRONTEND_IMAGE ?= vteam_frontend:latest
-BACKEND_IMAGE ?= vteam_backend:latest
-OPERATOR_IMAGE ?= vteam_operator:latest
-RUNNER_IMAGE ?= vteam_claude_runner:latest
+##@ General
 
-# Docker registry operations (customize REGISTRY as needed)
-REGISTRY ?= your-registry.com
+help: ## Display this help message
+	@echo '$(COLOR_BOLD)Ambient Code Platform - Development Makefile$(COLOR_RESET)'
+	@echo ''
+	@echo '$(COLOR_BOLD)Quick Start:$(COLOR_RESET)'
+	@echo '  $(COLOR_GREEN)make local-up$(COLOR_RESET)       Start local development environment'
+	@echo '  $(COLOR_GREEN)make local-status$(COLOR_RESET)   Check status of local environment'
+	@echo '  $(COLOR_GREEN)make local-logs$(COLOR_RESET)     View logs from all components'
+	@echo '  $(COLOR_GREEN)make local-down$(COLOR_RESET)     Stop local environment'
+	@echo ''
+	@awk 'BEGIN {FS = ":.*##"; printf "$(COLOR_BOLD)Available Targets:$(COLOR_RESET)\n"} /^[a-zA-Z_-]+:.*?##/ { printf "  $(COLOR_BLUE)%-20s$(COLOR_RESET) %s\n", $$1, $$2 } /^##@/ { printf "\n$(COLOR_BOLD)%s$(COLOR_RESET)\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
+	@echo ''
+	@echo '$(COLOR_BOLD)Configuration Variables:$(COLOR_RESET)'
+	@echo '  CONTAINER_ENGINE=$(CONTAINER_ENGINE)  (docker or podman)'
+	@echo '  NAMESPACE=$(NAMESPACE)'
+	@echo '  PLATFORM=$(PLATFORM)'
+	@echo ''
+	@echo '$(COLOR_BOLD)Examples:$(COLOR_RESET)'
+	@echo '  make local-up CONTAINER_ENGINE=docker'
+	@echo '  make local-reload-backend'
+	@echo '  make build-all PLATFORM=linux/arm64'
 
-# Build all images
+##@ Building
+
 build-all: build-frontend build-backend build-operator build-runner ## Build all container images
 
-# Build individual components
-build-frontend: ## Build the frontend container image
-	@echo "Building frontend image with $(CONTAINER_ENGINE)..."
-	cd components/frontend && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) -t $(FRONTEND_IMAGE) .
-
-build-backend: ## Build the backend API container image
-	@echo "Building backend image with $(CONTAINER_ENGINE)..."
-	cd components/backend && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) -t $(BACKEND_IMAGE) .
-
-build-operator: ## Build the operator container image
-	@echo "Building operator image with $(CONTAINER_ENGINE)..."
-	cd components/operator && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) -t $(OPERATOR_IMAGE) .
-
-build-runner: ## Build the Claude Code runner container image
-	@echo "Building Claude Code runner image with $(CONTAINER_ENGINE)..."
-	cd components/runners && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) -t $(RUNNER_IMAGE) -f claude-code-runner/Dockerfile .
-
-# Kubernetes deployment
-deploy: ## Deploy all components to OpenShift (production overlay)
-	@echo "Deploying to OpenShift..."
-	cd components/manifests && ./deploy.sh
-
-# Cleanup
-clean: ## Clean up all Kubernetes resources (production overlay)
-	@echo "Cleaning up Kubernetes resources..."
-	cd components/manifests && ./deploy.sh clean
+build-frontend: ## Build frontend image
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building frontend with $(CONTAINER_ENGINE)..."
+	@cd components/frontend && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) -t $(FRONTEND_IMAGE) .
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Frontend built: $(FRONTEND_IMAGE)"
 
 
+build-backend: ## Build backend image
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building backend with $(CONTAINER_ENGINE)..."
+	@cd components/backend && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) -t $(BACKEND_IMAGE) .
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Backend built: $(BACKEND_IMAGE)"
 
-push-all: ## Push all images to registry
-	$(CONTAINER_ENGINE) tag $(FRONTEND_IMAGE) $(REGISTRY)/$(FRONTEND_IMAGE)
-	$(CONTAINER_ENGINE) tag $(BACKEND_IMAGE) $(REGISTRY)/$(BACKEND_IMAGE)
-	$(CONTAINER_ENGINE) tag $(OPERATOR_IMAGE) $(REGISTRY)/$(OPERATOR_IMAGE)
-	$(CONTAINER_ENGINE) tag $(RUNNER_IMAGE) $(REGISTRY)/$(RUNNER_IMAGE)
-	$(CONTAINER_ENGINE) push $(REGISTRY)/$(FRONTEND_IMAGE)
-	$(CONTAINER_ENGINE) push $(REGISTRY)/$(BACKEND_IMAGE)
-	$(CONTAINER_ENGINE) push $(REGISTRY)/$(OPERATOR_IMAGE)
-	$(CONTAINER_ENGINE) push $(REGISTRY)/$(RUNNER_IMAGE)
+build-operator: ## Build operator image
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building operator with $(CONTAINER_ENGINE)..."
+	@cd components/operator && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) -t $(OPERATOR_IMAGE) .
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Operator built: $(OPERATOR_IMAGE)"
 
-# Git hooks for branch protection
+build-runner: ## Build Claude Code runner image
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building runner with $(CONTAINER_ENGINE)..."
+	@cd components/runners && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) -t $(RUNNER_IMAGE) -f claude-code-runner/Dockerfile .
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Runner built: $(RUNNER_IMAGE)"
+
+##@ Git Hooks
+
 setup-hooks: ## Install git hooks for branch protection
 	@./scripts/install-git-hooks.sh
 
 remove-hooks: ## Remove git hooks
-	@echo "Removing git hooks..."
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Removing git hooks..."
 	@rm -f .git/hooks/pre-commit
 	@rm -f .git/hooks/pre-push
-	@echo "✅ Git hooks removed"
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Git hooks removed"
 
-# Local development with minikube
-NAMESPACE ?= ambient-code
+##@ Registry Operations
 
-local-start: ## Start minikube and deploy vTeam
-	@command -v minikube >/dev/null || (echo "❌ Please install minikube first: https://minikube.sigs.k8s.io/docs/start/" && exit 1)
-	@echo "🔍 Validating environment..."
-	@kubectl config current-context | grep -q minikube || (echo "❌ Not connected to minikube! Current context: $$(kubectl config current-context)" && exit 1)
-	@echo "🚀 Starting minikube..."
-	@minikube start --memory=4096 --cpus=2 || true
-	@echo "📦 Enabling required addons..."
-	@minikube addons enable ingress
-	@minikube addons enable storage-provisioner
-	@echo "🏗️  Building images with $(CONTAINER_ENGINE)..."
-	@$(CONTAINER_ENGINE) build -t vteam-backend:latest components/backend
-	@$(CONTAINER_ENGINE) build -t vteam-frontend:latest components/frontend
-	@$(CONTAINER_ENGINE) build -t vteam-operator:latest components/operator
-	@echo "📥 Loading images into minikube..."
-	@minikube image load vteam-backend:latest
-	@minikube image load vteam-frontend:latest
-	@minikube image load vteam-operator:latest
-	@echo "📋 Creating namespace..."
-	@kubectl create namespace $(NAMESPACE) --dry-run=client -o yaml | kubectl apply -f -
-	@echo "🔧 Deploying CRDs..."
-	@kubectl apply -f components/manifests/crds/ || true
-	@echo "🔐 Deploying RBAC..."
-	@kubectl apply -f components/manifests/rbac/ || true
-	@kubectl apply -f components/manifests/minikube/local-dev-rbac.yaml
-	@echo "💾 Creating PVCs..."
-	@kubectl apply -f components/manifests/workspace-pvc.yaml -n $(NAMESPACE) || true
-	@echo "🚀 Deploying backend..."
-	@kubectl apply -f components/manifests/minikube/backend-deployment.yaml
-	@kubectl apply -f components/manifests/minikube/backend-service.yaml
-	@echo "🌐 Deploying frontend..."
-	@kubectl apply -f components/manifests/minikube/frontend-deployment.yaml
-	@kubectl apply -f components/manifests/minikube/frontend-service.yaml
-	@echo "🤖 Deploying operator..."
-	@kubectl apply -f components/manifests/minikube/operator-deployment.yaml
-	@echo "🌍 Creating ingress..."
-	@echo "   Waiting for ingress controller to be ready..."
-	@kubectl wait --namespace ingress-nginx --for=condition=ready pod --selector=app.kubernetes.io/component=controller --timeout=120s || true
-	@kubectl apply -f components/manifests/minikube/ingress.yaml || echo "   ⚠️  Ingress creation failed (controller may still be starting)"
-	@echo ""
-	@echo "✅ Deployment complete!"
-	@echo ""
-	@echo "⚠️  SECURITY NOTE: Authentication is DISABLED for local development only."
-	@echo "⚠️  DO NOT use this configuration in production!"
-	@echo ""
-	@echo "📍 Access URLs:"
-	@echo "   Add to /etc/hosts: 127.0.0.1 vteam.local"
-	@echo "   Frontend: http://vteam.local"
-	@echo "   Backend:  http://vteam.local/api"
-	@echo ""
-	@echo "   Or use NodePort:"
-	@echo "   Frontend: http://$$(minikube ip):30030"
-	@echo "   Backend:  http://$$(minikube ip):30080"
-	@echo ""
-	@echo "🔍 Check status with: make local-status"
+registry-login: ## Login to container registry
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Logging in to $(REGISTRY)..."
+	@$(CONTAINER_ENGINE) login $(REGISTRY)
 
-# E2E Testing with kind
+push-all: registry-login ## Push all images to registry
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Pushing images to $(REGISTRY)..."
+	@for image in $(FRONTEND_IMAGE) $(BACKEND_IMAGE) $(OPERATOR_IMAGE) $(RUNNER_IMAGE); do \
+		echo "  Tagging and pushing $$image..."; \
+		$(CONTAINER_ENGINE) tag $$image $(REGISTRY)/$$image && \
+		$(CONTAINER_ENGINE) push $(REGISTRY)/$$image; \
+	done
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) All images pushed"
+
+##@ Local Development (Minikube)
+
+local-up: check-minikube check-kubectl ## Start local development environment (minikube)
+	@echo "$(COLOR_BOLD)🚀 Starting Ambient Code Platform Local Environment$(COLOR_RESET)"
+	@echo ""
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 1/8: Starting minikube..."
+	@minikube start --memory=4096 --cpus=2 2>/dev/null || \
+		(minikube status >/dev/null 2>&1 && echo "$(COLOR_GREEN)✓$(COLOR_RESET) Minikube already running") || \
+		(echo "$(COLOR_RED)✗$(COLOR_RESET) Failed to start minikube" && exit 1)
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 2/8: Enabling addons..."
+	@minikube addons enable ingress >/dev/null 2>&1 || true
+	@minikube addons enable storage-provisioner >/dev/null 2>&1 || true
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 3/8: Building images..."
+	@$(MAKE) --no-print-directory _build-and-load
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 4/8: Creating namespace..."
+	@kubectl create namespace $(NAMESPACE) --dry-run=client -o yaml | kubectl apply -f - >/dev/null 2>&1
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 5/8: Applying CRDs and RBAC..."
+	@kubectl apply -f components/manifests/crds/ >/dev/null 2>&1 || true
+	@kubectl apply -f components/manifests/rbac/ >/dev/null 2>&1 || true
+	@kubectl apply -f components/manifests/minikube/local-dev-rbac.yaml >/dev/null 2>&1 || true
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 6/8: Creating storage..."
+	@kubectl apply -f components/manifests/workspace-pvc.yaml -n $(NAMESPACE) >/dev/null 2>&1 || true
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 7/8: Deploying services..."
+	@kubectl apply -f components/manifests/minikube/backend-deployment.yaml >/dev/null 2>&1
+	@kubectl apply -f components/manifests/minikube/backend-service.yaml >/dev/null 2>&1
+	@kubectl apply -f components/manifests/minikube/frontend-deployment.yaml >/dev/null 2>&1
+	@kubectl apply -f components/manifests/minikube/frontend-service.yaml >/dev/null 2>&1
+	@kubectl apply -f components/manifests/minikube/operator-deployment.yaml >/dev/null 2>&1
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 8/8: Setting up ingress..."
+	@kubectl wait --namespace ingress-nginx --for=condition=ready pod \
+		--selector=app.kubernetes.io/component=controller --timeout=90s >/dev/null 2>&1 || true
+	@kubectl apply -f components/manifests/minikube/ingress.yaml >/dev/null 2>&1 || true
+	@echo ""
+	@echo "$(COLOR_GREEN)✓ Ambient Code Platform is starting up!$(COLOR_RESET)"
+	@echo ""
+	@$(MAKE) --no-print-directory _show-access-info
+	@echo ""
+	@echo "$(COLOR_YELLOW)⚠  Next steps:$(COLOR_RESET)"
+	@echo "  • Wait ~30s for pods to be ready"
+	@echo "  • Run: $(COLOR_BOLD)make local-status$(COLOR_RESET) to check deployment"
+	@echo "  • Run: $(COLOR_BOLD)make local-logs$(COLOR_RESET) to view logs"
+
+local-down: check-kubectl ## Stop Ambient Code Platform (keep minikube running)
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Stopping Ambient Code Platform..."
+	@kubectl delete namespace $(NAMESPACE) --ignore-not-found=true --timeout=60s
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Ambient Code Platform stopped (minikube still running)"
+	@echo "  To stop minikube: $(COLOR_BOLD)make local-clean$(COLOR_RESET)"
+
+local-clean: check-minikube ## Delete minikube cluster completely
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Deleting minikube cluster..."
+	@minikube delete
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Minikube cluster deleted"
+
+local-status: check-kubectl ## Show status of local deployment
+	@echo "$(COLOR_BOLD)📊 Ambient Code Platform Status$(COLOR_RESET)"
+	@echo ""
+	@echo "$(COLOR_BOLD)Minikube:$(COLOR_RESET)"
+	@minikube status 2>/dev/null || echo "$(COLOR_RED)✗$(COLOR_RESET) Minikube not running"
+	@echo ""
+	@echo "$(COLOR_BOLD)Pods:$(COLOR_RESET)"
+	@kubectl get pods -n $(NAMESPACE) -o wide 2>/dev/null || echo "$(COLOR_RED)✗$(COLOR_RESET) Namespace not found"
+	@echo ""
+	@echo "$(COLOR_BOLD)Services:$(COLOR_RESET)"
+	@kubectl get svc -n $(NAMESPACE) 2>/dev/null | grep -E "NAME|NodePort" || echo "No services found"
+	@echo ""
+	@$(MAKE) --no-print-directory _show-access-info
+
+local-rebuild: ## Rebuild and reload all components
+	@echo "$(COLOR_BOLD)🔄 Rebuilding all components...$(COLOR_RESET)"
+	@$(MAKE) --no-print-directory _build-and-load
+	@$(MAKE) --no-print-directory _restart-all
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) All components rebuilt and reloaded"
+
+local-reload-backend: ## Rebuild and reload backend only
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rebuilding backend..."
+	@cd components/backend && $(CONTAINER_ENGINE) build -t $(BACKEND_IMAGE) . >/dev/null 2>&1
+	@minikube image load $(BACKEND_IMAGE) >/dev/null 2>&1
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Restarting backend..."
+	@kubectl rollout restart deployment/backend-api -n $(NAMESPACE) >/dev/null 2>&1
+	@kubectl rollout status deployment/backend-api -n $(NAMESPACE) --timeout=60s
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Backend reloaded"
+
+local-reload-frontend: ## Rebuild and reload frontend only
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rebuilding frontend..."
+	@cd components/frontend && $(CONTAINER_ENGINE) build -t $(FRONTEND_IMAGE) . >/dev/null 2>&1
+	@minikube image load $(FRONTEND_IMAGE) >/dev/null 2>&1
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Restarting frontend..."
+	@kubectl rollout restart deployment/frontend -n $(NAMESPACE) >/dev/null 2>&1
+	@kubectl rollout status deployment/frontend -n $(NAMESPACE) --timeout=60s
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Frontend reloaded"
+
+
+local-reload-operator: ## Rebuild and reload operator only
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rebuilding operator..."
+	@cd components/operator && $(CONTAINER_ENGINE) build -t $(OPERATOR_IMAGE) . >/dev/null 2>&1
+	@minikube image load $(OPERATOR_IMAGE) >/dev/null 2>&1
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Restarting operator..."
+	@kubectl rollout restart deployment/agentic-operator -n $(NAMESPACE) >/dev/null 2>&1
+	@kubectl rollout status deployment/agentic-operator -n $(NAMESPACE) --timeout=60s
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Operator reloaded"
+
+##@ Testing
+
+test-all: local-test-quick local-test-dev ## Run all tests (quick + comprehensive)
+
+local-test-dev: ## Run local developer experience tests
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Running local developer experience tests..."
+	@./tests/local-dev-test.sh
+
+local-test-quick: check-kubectl check-minikube ## Quick smoke test of local environment
+	@echo "$(COLOR_BOLD)🧪 Quick Smoke Test$(COLOR_RESET)"
+	@echo ""
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Testing minikube..."
+	@minikube status >/dev/null 2>&1 && echo "$(COLOR_GREEN)✓$(COLOR_RESET) Minikube running" || (echo "$(COLOR_RED)✗$(COLOR_RESET) Minikube not running" && exit 1)
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Testing namespace..."
+	@kubectl get namespace $(NAMESPACE) >/dev/null 2>&1 && echo "$(COLOR_GREEN)✓$(COLOR_RESET) Namespace exists" || (echo "$(COLOR_RED)✗$(COLOR_RESET) Namespace missing" && exit 1)
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Testing pods..."
+	@kubectl get pods -n $(NAMESPACE) 2>/dev/null | grep -q "Running" && echo "$(COLOR_GREEN)✓$(COLOR_RESET) Pods running" || (echo "$(COLOR_RED)✗$(COLOR_RESET) No pods running" && exit 1)
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Testing backend health..."
+	@curl -sf http://$$(minikube ip):30080/health >/dev/null 2>&1 && echo "$(COLOR_GREEN)✓$(COLOR_RESET) Backend healthy" || (echo "$(COLOR_RED)✗$(COLOR_RESET) Backend not responding" && exit 1)
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Testing frontend..."
+	@curl -sf http://$$(minikube ip):30030 >/dev/null 2>&1 && echo "$(COLOR_GREEN)✓$(COLOR_RESET) Frontend accessible" || (echo "$(COLOR_RED)✗$(COLOR_RESET) Frontend not responding" && exit 1)
+	@echo ""
+	@echo "$(COLOR_GREEN)✓ Quick smoke test passed!$(COLOR_RESET)"
+
+##@ Development Tools
+
+local-logs: check-kubectl ## Show logs from all components (follow mode)
+	@echo "$(COLOR_BOLD)📋 Streaming logs from all components (Ctrl+C to stop)$(COLOR_RESET)"
+	@kubectl logs -n $(NAMESPACE) -l 'app in (backend-api,frontend,agentic-operator)' --tail=20 --prefix=true -f 2>/dev/null || \
+		echo "$(COLOR_RED)✗$(COLOR_RESET) No pods found. Run 'make local-status' to check deployment."
+
+local-logs-backend: check-kubectl ## Show backend logs only
+	@kubectl logs -n $(NAMESPACE) -l app=backend-api --tail=100 -f
+
+local-logs-frontend: check-kubectl ## Show frontend logs only
+	@kubectl logs -n $(NAMESPACE) -l app=frontend --tail=100 -f
+
+local-logs-operator: check-kubectl ## Show operator logs only
+	@kubectl logs -n $(NAMESPACE) -l app=agentic-operator --tail=100 -f
+
+local-shell: check-kubectl ## Open shell in backend pod
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Opening shell in backend pod..."
+	@kubectl exec -it -n $(NAMESPACE) $$(kubectl get pod -n $(NAMESPACE) -l app=backend-api -o jsonpath='{.items[0].metadata.name}' 2>/dev/null) -- /bin/sh 2>/dev/null || \
+		echo "$(COLOR_RED)✗$(COLOR_RESET) Backend pod not found or not ready"
+
+local-shell-frontend: check-kubectl ## Open shell in frontend pod
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Opening shell in frontend pod..."
+	@kubectl exec -it -n $(NAMESPACE) $$(kubectl get pod -n $(NAMESPACE) -l app=frontend -o jsonpath='{.items[0].metadata.name}' 2>/dev/null) -- /bin/sh 2>/dev/null || \
+		echo "$(COLOR_RED)✗$(COLOR_RESET) Frontend pod not found or not ready"
+
+local-test: local-test-quick ## Alias for local-test-quick (backward compatibility)
+
+local-url: check-minikube ## Display access URLs
+	@$(MAKE) --no-print-directory _show-access-info
+
+local-port-forward: check-kubectl ## Port-forward for direct access (8080→backend, 3000→frontend)
+	@echo "$(COLOR_BOLD)🔌 Setting up port forwarding$(COLOR_RESET)"
+	@echo ""
+	@echo "  Backend:  http://localhost:8080"
+	@echo "  Frontend: http://localhost:3000"
+	@echo ""
+	@echo "$(COLOR_YELLOW)Press Ctrl+C to stop$(COLOR_RESET)"
+	@echo ""
+	@trap 'echo ""; echo "$(COLOR_GREEN)✓$(COLOR_RESET) Port forwarding stopped"; exit 0' INT; \
+	(kubectl port-forward -n $(NAMESPACE) svc/backend-service 8080:8080 >/dev/null 2>&1 &); \
+	(kubectl port-forward -n $(NAMESPACE) svc/frontend-service 3000:3000 >/dev/null 2>&1 &); \
+	wait
+
+local-troubleshoot: check-kubectl ## Show troubleshooting information
+	@echo "$(COLOR_BOLD)🔍 Troubleshooting Information$(COLOR_RESET)"
+	@echo ""
+	@echo "$(COLOR_BOLD)Pod Status:$(COLOR_RESET)"
+	@kubectl get pods -n $(NAMESPACE) -o wide 2>/dev/null || echo "$(COLOR_RED)✗$(COLOR_RESET) No pods found"
+	@echo ""
+	@echo "$(COLOR_BOLD)Recent Events:$(COLOR_RESET)"
+	@kubectl get events -n $(NAMESPACE) --sort-by='.lastTimestamp' | tail -10 2>/dev/null || echo "No events"
+	@echo ""
+	@echo "$(COLOR_BOLD)Failed Pods (if any):$(COLOR_RESET)"
+	@kubectl get pods -n $(NAMESPACE) --field-selector=status.phase!=Running,status.phase!=Succeeded 2>/dev/null || echo "All pods are running"
+	@echo ""
+	@echo "$(COLOR_BOLD)Pod Descriptions:$(COLOR_RESET)"
+	@for pod in $$(kubectl get pods -n $(NAMESPACE) -o name 2>/dev/null | head -3); do \
+		echo ""; \
+		echo "$(COLOR_BLUE)$$pod:$(COLOR_RESET)"; \
+		kubectl describe -n $(NAMESPACE) $$pod | grep -A 5 "Conditions:\|Events:" | head -10; \
+	done
+
+##@ Production Deployment
+
+deploy: ## Deploy to production Kubernetes cluster
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Deploying to Kubernetes..."
+	@cd components/manifests && ./deploy.sh
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Deployment complete"
+
+clean: ## Clean up Kubernetes resources
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Cleaning up..."
+	@cd components/manifests && ./deploy.sh clean
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Cleanup complete"
+
+##@ E2E Testing (kind-based)
+
 e2e-test: ## Run complete e2e test suite (setup, deploy, test, cleanup)
-	@echo "Running e2e tests..."
-	@# Clean up any existing cluster first
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Running e2e tests..."
 	@cd e2e && CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/cleanup.sh 2>/dev/null || true
-	@# Setup and deploy (allows password prompt for /etc/hosts)
 	cd e2e && CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/setup-kind.sh
 	cd e2e && CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/deploy.sh
-	@# Run tests with cleanup trap (no more password prompts needed)
 	@cd e2e && trap 'CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/cleanup.sh' EXIT; ./scripts/run-tests.sh
 
 e2e-setup: ## Install e2e test dependencies
-	@echo "Installing e2e test dependencies..."
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Installing e2e test dependencies..."
 	cd e2e && npm install
 
 e2e-clean: ## Clean up e2e test environment
-	@echo "Cleaning up e2e environment..."
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Cleaning up e2e environment..."
 	cd e2e && CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/cleanup.sh
 
 deploy-langfuse-openshift: ## Deploy Langfuse to OpenShift/ROSA cluster
-	@echo "Deploying Langfuse to OpenShift cluster..."
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Deploying Langfuse to OpenShift cluster..."
 	@cd e2e && ./scripts/deploy-langfuse.sh --openshift
 
-# Minikube local development targets
-local-stop: ## Stop vTeam (delete namespace, keep minikube running)
-	@echo "🛑 Stopping vTeam..."
-	@kubectl delete namespace $(NAMESPACE) --ignore-not-found=true
-	@echo "✅ vTeam stopped. Minikube is still running."
-	@echo "   To stop minikube: make local-delete"
+##@ Internal Helpers (do not call directly)
 
-local-delete: ## Delete minikube cluster completely
-	@echo "🗑️  Deleting minikube cluster..."
-	@minikube delete
-	@echo "✅ Minikube cluster deleted."
+check-minikube: ## Check if minikube is installed
+	@command -v minikube >/dev/null 2>&1 || \
+		(echo "$(COLOR_RED)✗$(COLOR_RESET) minikube not found. Install: https://minikube.sigs.k8s.io/docs/start/" && exit 1)
 
-local-status: ## Show status of local deployment
-	@echo "🔍 Minikube status:"
-	@minikube status || echo "❌ Minikube not running"
+check-kubectl: ## Check if kubectl is installed
+	@command -v kubectl >/dev/null 2>&1 || \
+		(echo "$(COLOR_RED)✗$(COLOR_RESET) kubectl not found. Install: https://kubernetes.io/docs/tasks/tools/" && exit 1)
+
+_build-and-load: ## Internal: Build and load images
+	@$(CONTAINER_ENGINE) build -t $(BACKEND_IMAGE) components/backend >/dev/null 2>&1
+	@$(CONTAINER_ENGINE) build -t $(FRONTEND_IMAGE) components/frontend >/dev/null 2>&1
+	@$(CONTAINER_ENGINE) build -t $(OPERATOR_IMAGE) components/operator >/dev/null 2>&1
+	@minikube image load $(BACKEND_IMAGE) >/dev/null 2>&1
+	@minikube image load $(FRONTEND_IMAGE) >/dev/null 2>&1
+	@minikube image load $(OPERATOR_IMAGE) >/dev/null 2>&1
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Images built and loaded"
+
+_restart-all: ## Internal: Restart all deployments
+	@kubectl rollout restart deployment -n $(NAMESPACE) >/dev/null 2>&1
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for deployments to be ready..."
+	@kubectl rollout status deployment -n $(NAMESPACE) --timeout=90s >/dev/null 2>&1 || true
+
+_show-access-info: ## Internal: Show access information
+	@echo "$(COLOR_BOLD)🌐 Access URLs:$(COLOR_RESET)"
+	@MINIKUBE_IP=$$(minikube ip 2>/dev/null) && \
+		echo "  Frontend: $(COLOR_BLUE)http://$$MINIKUBE_IP:30030$(COLOR_RESET)" && \
+		echo "  Backend:  $(COLOR_BLUE)http://$$MINIKUBE_IP:30080$(COLOR_RESET)" || \
+		echo "  $(COLOR_RED)✗$(COLOR_RESET) Cannot get minikube IP"
 	@echo ""
-	@echo "📦 Pods in namespace $(NAMESPACE):"
-	@kubectl get pods -n $(NAMESPACE) 2>/dev/null || echo "❌ No pods found (namespace may not exist)"
+	@echo "$(COLOR_BOLD)Alternative:$(COLOR_RESET) Port forward for localhost access"
+	@echo "  Run: $(COLOR_BOLD)make local-port-forward$(COLOR_RESET)"
+	@echo "  Then access:"
+	@echo "    Frontend: $(COLOR_BLUE)http://localhost:3000$(COLOR_RESET)"
+	@echo "    Backend:  $(COLOR_BLUE)http://localhost:8080$(COLOR_RESET)"
 	@echo ""
-	@echo "🌐 Services:"
-	@kubectl get svc -n $(NAMESPACE) 2>/dev/null || echo "❌ No services found"
-	@echo ""
-	@echo "🔗 Ingress:"
-	@kubectl get ingress -n $(NAMESPACE) 2>/dev/null || echo "❌ No ingress found"
-
-local-logs: ## Show logs from backend
-	@kubectl logs -n $(NAMESPACE) -l app=backend-api --tail=50 -f
-
-local-logs-frontend: ## Show frontend logs
-	@kubectl logs -n $(NAMESPACE) -l app=frontend --tail=50 -f
-
-local-logs-operator: ## Show operator logs
-	@kubectl logs -n $(NAMESPACE) -l app=agentic-operator --tail=50 -f
-
-local-logs-all: ## Show logs from all pods
-	@kubectl logs -n $(NAMESPACE) -l 'app in (backend-api,frontend,agentic-operator)' --tail=20 --prefix=true
-
-local-restart: ## Restart all deployments
-	@echo "🔄 Restarting all deployments..."
-	@kubectl rollout restart deployment -n $(NAMESPACE)
-	@kubectl rollout status deployment -n $(NAMESPACE) --timeout=60s
-
-local-restart-backend: ## Restart backend deployment
-	@kubectl rollout restart deployment/backend-api -n $(NAMESPACE)
-	@kubectl rollout status deployment/backend-api -n $(NAMESPACE) --timeout=60s
-
-local-restart-frontend: ## Restart frontend deployment
-	@kubectl rollout restart deployment/frontend -n $(NAMESPACE)
-	@kubectl rollout status deployment/frontend -n $(NAMESPACE) --timeout=60s
-
-local-restart-operator: ## Restart operator deployment
-	@kubectl rollout restart deployment/agentic-operator -n $(NAMESPACE)
-	@kubectl rollout status deployment/agentic-operator -n $(NAMESPACE) --timeout=60s
-
-local-shell-backend: ## Open shell in backend pod
-	@kubectl exec -it -n $(NAMESPACE) $$(kubectl get pod -n $(NAMESPACE) -l app=backend-api -o jsonpath='{.items[0].metadata.name}') -- /bin/sh
-
-local-shell-frontend: ## Open shell in frontend pod
-	@kubectl exec -it -n $(NAMESPACE) $$(kubectl get pod -n $(NAMESPACE) -l app=frontend -o jsonpath='{.items[0].metadata.name}') -- /bin/sh
-
-dev-test: ## Run tests against local minikube deployment
-	@echo "🧪 Testing local deployment..."
-	@echo ""
-	@echo "Testing backend health endpoint..."
-	@curl -f http://$$(minikube ip):30080/health && echo "✅ Backend is healthy" || echo "❌ Backend health check failed"
-	@echo ""
-	@echo "Testing frontend..."
-	@curl -f http://$$(minikube ip):30030 > /dev/null && echo "✅ Frontend is accessible" || echo "❌ Frontend check failed"
-	@echo ""
-	@echo "Checking pods..."
-	@kubectl get pods -n $(NAMESPACE) | grep -E "(backend-api|frontend)" | grep Running && echo "✅ All pods running" || echo "❌ Some pods not running"
-
-# Backward compatibility aliases (dev-* -> local-*)
-dev-start: local-start ## Alias for local-start (backward compatibility)
-
-dev-stop: local-stop ## Alias for local-stop (backward compatibility)
-
-dev-logs: local-logs ## Alias for local-logs (backward compatibility)
-
-dev-logs-backend: local-logs ## Alias for local-logs (backward compatibility)
-
-dev-logs-frontend: local-logs-frontend ## Alias for local-logs-frontend (backward compatibility)
+	@echo "$(COLOR_YELLOW)⚠  SECURITY NOTE:$(COLOR_RESET) Authentication is DISABLED for local development."

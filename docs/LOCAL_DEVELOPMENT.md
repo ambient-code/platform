@@ -37,21 +37,27 @@ sudo install minikube-linux-amd64 /usr/local/bin/minikube
 
 ```bash
 # Start local environment
-make dev-start
+make local-up
 
-# Add to /etc/hosts (optional, for ingress access)
-echo "127.0.0.1 vteam.local" | sudo tee -a /etc/hosts
 ```
 
 ## Access URLs
 
-### Via Ingress (after /etc/hosts)
-- Frontend: http://vteam.local
-- Backend: http://vteam.local/api/health
+Access the application using NodePort:
 
-### Via NodePort (no /etc/hosts needed)
-- Frontend: http://$(minikube ip):30030
-- Backend: http://$(minikube ip):30080/health
+```bash
+# Get minikube IP
+minikube ip
+
+# Access URLs (replace IP with output from above)
+# Frontend: http://192.168.64.4:30030
+# Backend: http://192.168.64.4:30080/health
+```
+
+Or use the Makefile command:
+```bash
+make local-url
+```
 
 ## Authentication
 

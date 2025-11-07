@@ -1,7 +1,7 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: vteam-ingress
+  name: ambient-code-ingress
   namespace: ambient-code
   annotations:
     nginx.ingress.kubernetes.io/rewrite-target: /$2
@@ -9,7 +9,7 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-  - host: vteam.local
+  - host: ambient.code.platform.local
     http:
       paths:
       - path: /api(/|$)(.*)

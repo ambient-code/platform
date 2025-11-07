@@ -50,6 +50,28 @@ The platform consists of containerized microservices orchestrated via Kubernetes
 5. **Result Storage**: Analysis results stored back in Custom Resource status
 6. **UI Updates**: Frontend displays real-time progress and completed results
 
+## 🚀 Quick Start
+
+**Get started in under 5 minutes!**
+
+See **[QUICK_START.md](QUICK_START.md)** for the fastest way to run vTeam locally.
+
+```bash
+# Install prerequisites (one-time)
+brew install minikube kubectl  # macOS
+# or follow QUICK_START.md for Linux
+
+# Start
+make local-up
+
+# Check status
+make local-status
+```
+
+That's it! Access the app at `http://$(minikube ip):30030` (get IP with `make local-url`).
+
+---
+
 ## Git Provider Support
 
 ### Supported Providers
