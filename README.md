@@ -389,11 +389,8 @@ brew install minikube kubectl
 make local-start
 ```
 
-**Access URLs:**
+**Local MiniKube Access URLs:**
 
-After adding `127.0.0.1 vteam.local` to `/etc/hosts`:
-- Frontend: `http://vteam.local`
-- Backend: `http://vteam.local/api`
 
 Or using NodePort (no /etc/hosts needed):
 - Frontend: `http://$(minikube ip):30030`
