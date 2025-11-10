@@ -2,6 +2,19 @@
 
 This guide explains how to set up and use the minikube-based local development environment for the Ambient Code Platform.
 
+> **⚠️ SECURITY WARNING - LOCAL DEVELOPMENT ONLY**
+>
+> This setup is **ONLY for local development** and is **COMPLETELY INSECURE** for production use:
+> - ❌ Authentication is disabled
+> - ❌ Mock tokens are accepted without validation
+> - ❌ Backend uses cluster-admin service account (full cluster access)
+> - ❌ All RBAC restrictions are bypassed
+> - ❌ No multi-tenant isolation
+>
+> **NEVER use this configuration in production, staging, or any shared environment.**
+>
+> For production deployments, see the main [README.md](../README.md) and ensure proper OpenShift OAuth, RBAC, and namespace isolation are configured.
+
 ## Complete Feature List
 
 ✅ **Authentication Disabled** - No login required  
@@ -61,6 +74,10 @@ make local-url
 
 ## Authentication
 
+> **⚠️ INSECURE - LOCAL ONLY**
+>
+> Authentication is **completely disabled** for local development. This setup has NO security and should **NEVER** be used outside of isolated local environments.
+
 Authentication is **completely disabled** for local development:
 
 - ✅ No OpenShift OAuth required
@@ -77,6 +94,8 @@ Authentication is **completely disabled** for local development:
    - Token: mock-token-for-local-dev
 
 3. **Backend**: Detects mock token and uses service account credentials
+
+> **Security Note**: The mock token `mock-token-for-local-dev` is hardcoded and provides full cluster access. This is acceptable ONLY in isolated local minikube clusters. Production environments use real OAuth tokens with proper RBAC enforcement.
 
 ## Features Tested
 
@@ -150,43 +169,96 @@ make local-delete            # Delete minikube cluster
 ## Technical Details
 
 ### Authentication Flow
+
+> **⚠️ INSECURE FLOW - DO NOT USE IN PRODUCTION**
+
 1. Frontend sends request with `X-Forwarded-Access-Token: mock-token-for-local-dev`
 2. Backend middleware checks: `if token == "mock-token-for-local-dev"`
 3. Backend uses `server.K8sClient` and `server.DynamicClient` (service account)
 4. No RBAC restrictions - full cluster access
 
+**Why this is insecure:**
+- Mock token is a known, hardcoded value that anyone can use
+- Backend bypasses all RBAC checks when this token is detected
+- Service account has cluster-admin permissions (unrestricted access)
+- No user identity verification or authorization
+
 ### Environment Variables
-- `DISABLE_AUTH=true` (Frontend & Backend)
-- `MOCK_USER=developer` (Frontend)
+- `DISABLE_AUTH=true` (Frontend & Backend) - **NEVER set in production**
+- `MOCK_USER=developer` (Frontend) - **Local development only**
+- `ENVIRONMENT=local` or `development` - Required for dev mode to activate
 
 ### RBAC
-- Backend service account has cluster-admin role
-- All namespaces accessible
-- Full Kubernetes API access
+
+> **⚠️ DANGEROUS - FULL CLUSTER ACCESS**
+
+- Backend service account has **cluster-admin** role
+- All namespaces accessible (no isolation)
+- Full Kubernetes API access (read/write/delete everything)
+- **This would be a critical security vulnerability in production**
+
+**Production RBAC:**
+In production, the backend service account has minimal permissions, and user tokens determine access via namespace-scoped RBAC policies.
 
 ## Production Differences
 
-| Feature | Minikube (Dev) | OpenShift (Prod) |
-|---------|----------------|------------------|
-| Authentication | Disabled, mock user | OpenShift OAuth |
-| User Tokens | Mock token | Real OAuth tokens |
-| Kubernetes Access | Service account | User token with RBAC |
-| Namespace Visibility | All (cluster-admin) | User permissions |
+> **Critical Security Differences**
+>
+> The local development setup intentionally disables all security measures for convenience. Production environments have multiple layers of security that are completely absent in local dev.
 
-## Changes Made
+| Feature | Minikube (Dev) ⚠️ INSECURE | OpenShift (Prod) ✅ SECURE |
+|---------|---------------------------|---------------------------|
+| **Authentication** | Disabled, mock user accepted | OpenShift OAuth with real identity |
+| **User Tokens** | Hardcoded mock token | Cryptographically signed OAuth tokens |
+| **Kubernetes Access** | Service account (cluster-admin) | User token with namespace-scoped RBAC |
+| **Namespace Visibility** | All namespaces (unrestricted) | Only authorized namespaces |
+| **Authorization** | None - full access for all | RBAC enforced on every request |
+| **Token Validation** | Mock token bypasses validation | Token signature verified, expiration checked |
+| **Service Account** | Cluster-admin permissions | Minimal permissions (no user impersonation) |
+| **Multi-tenancy** | No isolation | Full namespace isolation |
+| **Audit Trail** | Mock user only | Real user identity in audit logs |
+
+**Why local dev is insecure:**
+1. **No identity verification**: Anyone can use the mock token
+2. **No authorization**: RBAC is completely bypassed
+3. **Unrestricted access**: Cluster-admin can do anything
+4. **No audit trail**: All actions appear as "developer"
+5. **No token expiration**: Mock token never expires
+6. **No namespace isolation**: Can access all projects/namespaces
+
+## Changes Made for Local Development
+
+> **⚠️ SECURITY WARNING**
+>
+> These code changes disable authentication and should **ONLY** activate in verified local development environments. Production deployments must never enable these code paths.
 
 ### Backend (`components/backend/handlers/middleware.go`)
+
 ```go
 // In dev mode, use service account credentials for mock tokens
+// WARNING: This bypasses all RBAC and provides cluster-admin access
+// Only activates when:
+// 1. ENVIRONMENT=local or development
+// 2. DISABLE_AUTH=true
+// 3. Namespace does not contain 'prod'
 if token == "mock-token-for-local-dev" || os.Getenv("DISABLE_AUTH") == "true" {
     log.Printf("Dev mode detected - using service account credentials for %s", c.FullPath())
     return server.K8sClient, server.DynamicClient
 }
 ```
 
+**Safety Mechanisms:**
+- Requires `ENVIRONMENT=local` or `development` (line 297-299 in middleware.go)
+- Requires `DISABLE_AUTH=true` explicitly set (line 303-305)
+- Rejects if namespace contains "prod" (line 314-317)
+- Logs activation for audit trail (line 319)
+
 ### Frontend (`components/frontend/src/lib/auth.ts`)
+
 ```typescript
 // If auth is disabled, provide mock credentials
+// WARNING: This provides a hardcoded token that grants full cluster access
+// Only use in isolated local development environments
 if (process.env.DISABLE_AUTH === 'true') {
   const mockUser = process.env.MOCK_USER || 'developer';
   headers['X-Forwarded-User'] = mockUser;
@@ -197,6 +269,8 @@ if (process.env.DISABLE_AUTH === 'true') {
 }
 ```
 
+**Security Note:** These changes create a "dev mode" backdoor. While protected by environment checks, this code should be reviewed carefully during security audits.
+
 ## Success Criteria
 
 ✅ All components running  
@@ -204,4 +278,41 @@ if (process.env.DISABLE_AUTH === 'true') {
 ✅ No authentication required  
 ✅ Full application functionality available  
 ✅ Development workflow simple and fast
+
+## Security Checklist
+
+Before using this setup, verify:
+
+- [ ] Running on **isolated local machine only** (not a shared server)
+- [ ] Minikube cluster is **not accessible from network**
+- [ ] `ENVIRONMENT=local` or `development` is set
+- [ ] You understand this setup has **NO security**
+- [ ] You will **NEVER deploy this to production**
+- [ ] You will **NOT set `DISABLE_AUTH=true`** in production
+- [ ] You will **NOT use mock tokens** in production
+
+## Transitioning to Production
+
+When deploying to production:
+
+1. **Remove Development Settings:**
+   - Remove `DISABLE_AUTH=true` environment variable
+   - Remove `ENVIRONMENT=local` or `development` settings
+   - Remove `MOCK_USER` environment variable
+
+2. **Enable Production Security:**
+   - Configure OpenShift OAuth (see main README)
+   - Set up namespace-scoped RBAC policies
+   - Use minimal service account permissions (not cluster-admin)
+   - Enable network policies for component isolation
+   - Configure proper TLS certificates
+
+3. **Verify Security:**
+   - Test with real user tokens
+   - Verify RBAC restrictions work
+   - Ensure mock token is rejected
+   - Check audit logs show real user identities
+   - Validate namespace isolation
+
+**Never assume local dev configuration is production-ready.**
 
