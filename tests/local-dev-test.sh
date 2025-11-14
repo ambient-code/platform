@@ -10,7 +10,8 @@
 #   --ci                CI mode (treats known TODOs as non-failures)
 #
 
-set -e
+# Don't exit on error - we want to collect all test results
+set +e
 
 # Colors for output
 RED='\033[0;31m'
@@ -259,7 +260,7 @@ test_namespace_exists() {
 test_crds_installed() {
     log_section "Test 6: Custom Resource Definitions"
     
-    local crds=("agenticsessions.vteam.ambient-code" "projectsettings.vteam.ambient-code" "rfeworkflows.vteam.ambient-code")
+    local crds=("agenticsessions.vteam.ambient-code" "projectsettings.vteam.ambient-code")
     
     for crd in "${crds[@]}"; do
         if kubectl get crd "$crd" >/dev/null 2>&1; then

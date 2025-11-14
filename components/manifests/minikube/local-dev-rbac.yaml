@@ -8,6 +8,33 @@ metadata:
   labels:
     app: ambient-local-dev
 ---
+# ServiceAccount for backend-api
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: backend-api
+  namespace: ambient-code
+  labels:
+    app: backend-api
+---
+# ServiceAccount for frontend
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: frontend
+  namespace: ambient-code
+  labels:
+    app: frontend
+---
+# ServiceAccount for agentic-operator
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: agentic-operator
+  namespace: ambient-code
+  labels:
+    app: agentic-operator
+---
 # Role with necessary permissions for local development
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
@@ -25,10 +52,10 @@ rules:
   resources: ["agenticsessions"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 
-# RFE Workflows CRD access
+# AgenticSessions status subresource
 - apiGroups: ["vteam.ambient-code"]
-  resources: ["rfeworkflows"]
-  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  resources: ["agenticsessions/status"]
+  verbs: ["get", "update", "patch"]
 
 # Core resources
 - apiGroups: [""]
@@ -78,6 +105,54 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: local-dev-user
+  namespace: ambient-code
+---
+# ClusterRole for backend-api (needs broad permissions for local dev)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: local-dev-backend-api
+rules:
+- apiGroups: ["*"]
+  resources: ["*"]
+  verbs: ["*"]
+---
+# ClusterRoleBinding for backend-api
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: local-dev-backend-api
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: local-dev-backend-api
+subjects:
+- kind: ServiceAccount
+  name: backend-api
+  namespace: ambient-code
+---
+# ClusterRole for agentic-operator (needs to watch and manage CRDs)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: local-dev-agentic-operator
+rules:
+- apiGroups: ["*"]
+  resources: ["*"]
+  verbs: ["*"]
+---
+# ClusterRoleBinding for agentic-operator
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: local-dev-agentic-operator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: local-dev-agentic-operator
+subjects:
+- kind: ServiceAccount
+  name: agentic-operator
   namespace: ambient-code
 
 

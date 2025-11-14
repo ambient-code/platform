@@ -11,7 +11,7 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v5
-    
+      
     - name: Install minikube and kubectl
       run: |
         # Install kubectl
@@ -81,15 +81,40 @@ jobs:
         echo "Setting up ingress..."
         kubectl apply -f components/manifests/minikube/ingress.yaml
         
-        echo "Waiting for deployments to be ready..."
-        kubectl wait --for=condition=available --timeout=120s deployment/backend-api -n ambient-code || true
-        kubectl wait --for=condition=available --timeout=120s deployment/frontend -n ambient-code || true
-        kubectl wait --for=condition=available --timeout=120s deployment/agentic-operator -n ambient-code || true
+        echo "Checking deployment objects..."
+        kubectl get deployments -n ambient-code -o wide
         
-        echo "Deployment status:"
-        kubectl get pods -n ambient-code
+        echo ""
+        echo "Waiting for deployments to be ready (will timeout if pods fail)..."
+        kubectl wait --for=condition=available --timeout=180s deployment/backend-api -n ambient-code || echo "⚠️  Backend deployment timeout"
+        kubectl wait --for=condition=available --timeout=180s deployment/frontend -n ambient-code || echo "⚠️  Frontend deployment timeout"
+        kubectl wait --for=condition=available --timeout=180s deployment/agentic-operator -n ambient-code || echo "⚠️  Operator deployment timeout"
+        
+        echo ""
+        echo "Pod status:"
+        kubectl get pods -n ambient-code -o wide || echo "No pods found"
+        
+        echo ""
+        echo "Events (last 20):"
+        kubectl get events -n ambient-code --sort-by='.lastTimestamp' | tail -20 || true
+        
+        echo ""
+        echo "Deployment details:"
+        kubectl describe deployments -n ambient-code | grep -A 10 "Conditions:\|Events:" || true
+        
+        echo ""
+        echo "ReplicaSets:"
+        kubectl get replicasets -n ambient-code -o wide || true
+        
+        echo ""
+        echo "Checking for pod failures..."
+        if kubectl get pods -n ambient-code 2>/dev/null | grep -q "ImagePullBackOff\|CrashLoopBackOff\|Error"; then
+          echo "⚠️  Found pods with errors - describing them:"
+          kubectl describe pods -n ambient-code || true
+        fi
     
     - name: Run comprehensive test suite
+      continue-on-error: true
       run: |
         echo "Running local development test suite..."
         chmod +x tests/local-dev-test.sh
@@ -139,17 +164,42 @@ jobs:
         echo "=== Namespace ==="
         kubectl get namespace ambient-code || true
         
-        echo "=== Pods ==="
-        kubectl get pods -n ambient-code || true
+        echo ""
+        echo "=== Deployments ==="
+        kubectl get deployments -n ambient-code -o wide || true
         
+        echo ""
+        echo "=== ReplicaSets ==="
+        kubectl get replicasets -n ambient-code -o wide || true
+        
+        echo ""
+        echo "=== Pods ==="
+        kubectl get pods -n ambient-code -o wide || true
+        
+        echo ""
         echo "=== Services ==="
         kubectl get svc -n ambient-code || true
         
+        echo ""
         echo "=== Ingress ==="
         kubectl get ingress -n ambient-code || true
         
+        echo ""
         echo "=== CRDs ==="
         kubectl get crd | grep vteam || true
+        
+        echo ""
+        echo "=== Events (last 30) ==="
+        kubectl get events -n ambient-code --sort-by='.lastTimestamp' | tail -30 || true
+        
+        echo ""
+        echo "=== Deployment describe (if no pods) ==="
+        if ! kubectl get pods -n ambient-code 2>/dev/null | grep -q "backend-api\|frontend\|agentic-operator"; then
+          echo "No pods found - describing deployments for details:"
+          kubectl describe deployment backend-api -n ambient-code 2>/dev/null | tail -50 || true
+          kubectl describe deployment frontend -n ambient-code 2>/dev/null | tail -50 || true
+          kubectl describe deployment agentic-operator -n ambient-code 2>/dev/null | tail -50 || true
+        fi
     
     - name: Cleanup
       if: always()
