@@ -67,8 +67,6 @@ on:
   pull_request:
     paths:
       - 'Makefile'
-      - 'tests/local-dev-test.sh'
-      - 'e2e/scripts/*.sh'
       - '.github/workflows/makefile-quality.yml'
   push:
     branches:
