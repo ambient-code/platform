@@ -61,7 +61,8 @@ jobs:
         kubectl label namespace ambient-code ambient-code.io/managed=true
         
         echo "Installing CRDs..."
-        kubectl apply -f components/manifests/base/crds/
+        kubectl apply -f components/manifests/base/crds/agenticsessions-crd.yaml
+        kubectl apply -f components/manifests/base/crds/projectsettings-crd.yaml
         
         echo "Setting up RBAC..."
         kubectl apply -f components/manifests/minikube/local-dev-rbac.yaml
