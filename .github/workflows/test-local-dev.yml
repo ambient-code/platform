@@ -64,8 +64,16 @@ jobs:
         kubectl apply -f components/manifests/base/crds/agenticsessions-crd.yaml
         kubectl apply -f components/manifests/base/crds/projectsettings-crd.yaml
         
+        echo "Creating PersistentVolumeClaim..."
+        kubectl apply -f components/manifests/base/workspace-pvc.yaml
+        
         echo "Setting up RBAC..."
         kubectl apply -f components/manifests/minikube/local-dev-rbac.yaml
+        kubectl apply -f components/manifests/base/rbac/cluster-roles.yaml
+        kubectl apply -f components/manifests/base/rbac/backend-clusterrole.yaml
+        kubectl apply -f components/manifests/base/rbac/backend-clusterrolebinding.yaml
+        kubectl apply -f components/manifests/base/rbac/operator-clusterrole.yaml
+        kubectl apply -f components/manifests/base/rbac/operator-clusterrolebinding.yaml
         
         echo "Deploying backend..."
         kubectl apply -f components/manifests/minikube/backend-deployment.yaml
@@ -114,7 +122,6 @@ jobs:
         fi
     
     - name: Run comprehensive test suite
-      continue-on-error: true
       run: |
         echo "Running local development test suite..."
         chmod +x tests/local-dev-test.sh
