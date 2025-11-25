@@ -2024,7 +2024,7 @@ class ClaudeCodeAdapter:
         return allowed_servers
 
     def _load_mcp_config(self, cwd_path: str) -> dict | None:
-        """Load MCP server configuration from the vTeam runner's .mcp.json file.
+        """Load MCP server configuration from the ambient runner's .mcp.json file.
 
         Only loads MCP servers from the centrally-controlled configuration file
         in the runner's own directory. Does NOT load from user workspace repos
@@ -2032,8 +2032,6 @@ class ClaudeCodeAdapter:
 
         The .mcp.json file should be located at:
         /app/claude-runner/.mcp.json (in the container)
-
-        Only allows http and sse type MCP servers.
 
         Returns the parsed MCP servers configuration dict, or None if not found.
         """
@@ -2046,12 +2044,7 @@ class ClaudeCodeAdapter:
                 with open(runner_mcp_file, 'r') as f:
                     config = _json.load(f)
                     all_servers = config.get('mcpServers', {})
-                    filtered_servers = self._filter_mcp_servers(all_servers)
-                    if filtered_servers:
-                        logging.info(f"MCP servers loaded: {list(filtered_servers.keys())}")
-                        return filtered_servers
-                    logging.info("No valid MCP servers found after filtering")
-                    return None
+                    return all_servers
             else:
                 logging.info("No .mcp.json file found in runner directory")
                 return None

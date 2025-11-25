@@ -14,6 +14,7 @@ dependencies = [
   "anthropic[vertex]>=0.68.0",
   "claude-agent-sdk>=0.1.4",
   "langfuse>=3.0.0",
+  "mcp-atlassian>=0.11.9",
 ]
 
 [tool.uv]
@@ -31,4 +32,3 @@ py-modules = ["wrapper", "observability", "security_utils"]
 [build-system]
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
-
