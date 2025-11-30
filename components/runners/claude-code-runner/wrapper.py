@@ -862,12 +862,13 @@ class ClaudeCodeAdapter:
                             logging.warning(f"Failed to reset {name}: {e}")
                             await self._send_log(f"⚠️ Failed to reset {name}, using existing state")
 
-                    # Git identity with fallbacks
-                    user_name = os.getenv("GIT_USER_NAME", "").strip() or "Ambient Code Bot"
-                    user_email = os.getenv("GIT_USER_EMAIL", "").strip() or "bot@ambient-code.local"
-                    await self._run_cmd(["git", "config", "user.name", user_name], cwd=str(repo_dir))
-                    await self._run_cmd(["git", "config", "user.email", user_email], cwd=str(repo_dir))
-                    logging.info(f"Git identity configured: {user_name} <{user_email}>")
+                    # Git identity with fallbacks (only if repo exists)
+                    if repo_dir.exists():
+                        user_name = os.getenv("GIT_USER_NAME", "").strip() or "Ambient Code Bot"
+                        user_email = os.getenv("GIT_USER_EMAIL", "").strip() or "bot@ambient-code.local"
+                        await self._run_cmd(["git", "config", "user.name", user_name], cwd=str(repo_dir), ignore_errors=True)
+                        await self._run_cmd(["git", "config", "user.email", user_email], cwd=str(repo_dir), ignore_errors=True)
+                        logging.info(f"Git identity configured: {user_name} <{user_email}>")
 
                     # Configure output remote if present
                     out = r.get('output') or {}
@@ -929,12 +930,13 @@ class ClaudeCodeAdapter:
                     logging.warning(f"Failed to reset workspace: {e}")
                     await self._send_log(f"⚠️ Failed to reset workspace, using existing state")
 
-            # Git identity with fallbacks
-            user_name = os.getenv("GIT_USER_NAME", "").strip() or "Ambient Code Bot"
-            user_email = os.getenv("GIT_USER_EMAIL", "").strip() or "bot@ambient-code.local"
-            await self._run_cmd(["git", "config", "user.name", user_name], cwd=str(workspace))
-            await self._run_cmd(["git", "config", "user.email", user_email], cwd=str(workspace))
-            logging.info(f"Git identity configured: {user_name} <{user_email}>")
+            # Git identity with fallbacks (only if workspace exists and has .git)
+            if workspace.exists() and (workspace / ".git").exists():
+                user_name = os.getenv("GIT_USER_NAME", "").strip() or "Ambient Code Bot"
+                user_email = os.getenv("GIT_USER_EMAIL", "").strip() or "bot@ambient-code.local"
+                await self._run_cmd(["git", "config", "user.name", user_name], cwd=str(workspace), ignore_errors=True)
+                await self._run_cmd(["git", "config", "user.email", user_email], cwd=str(workspace), ignore_errors=True)
+                logging.info(f"Git identity configured: {user_name} <{user_email}>")
 
             if output_repo:
                 await self._send_log("Configuring output remote...")
@@ -1159,8 +1161,8 @@ class ClaudeCodeAdapter:
             # Configure git identity
             user_name = os.getenv("GIT_USER_NAME", "").strip() or "Ambient Code Bot"
             user_email = os.getenv("GIT_USER_EMAIL", "").strip() or "bot@ambient-code.local"
-            await self._run_cmd(["git", "config", "user.name", user_name], cwd=str(repo_dir))
-            await self._run_cmd(["git", "config", "user.email", user_email], cwd=str(repo_dir))
+            await self._run_cmd(["git", "config", "user.name", user_name], cwd=str(repo_dir), ignore_errors=True)
+            await self._run_cmd(["git", "config", "user.email", user_email], cwd=str(repo_dir), ignore_errors=True)
 
             await self._send_log(f"✅ Repository {repo_name} added")
         except Exception as e:
@@ -1974,6 +1976,15 @@ class ClaudeCodeAdapter:
         # Workflow-specific instructions
         if ambient_config.get("systemPrompt"):
             prompt += f"## Workflow Instructions\n{ambient_config['systemPrompt']}\n\n"
+
+        # External service integrations
+        prompt += "## External Service Integrations\n"
+        prompt += "When you need to interact with external services (JIRA, GitLab, GitHub, etc.), check if the relevant environment variables are available.\n\n"
+        prompt += "**General Guidelines:**\n"
+        prompt += "- Use the Bash tool to check if environment variables are set: `echo $JIRA_URL`\n"
+        prompt += "- If credentials are available, use them to interact with the service via its REST API\n"
+        prompt += "- If credentials are missing, inform the user that the environment variables need to be configured\n"
+        prompt += "- Never hardcode credentials or ask the user to provide them inline\n\n"
 
         prompt += "## Navigation\n"
         prompt += "All directories are accessible via relative or absolute paths.\n"
