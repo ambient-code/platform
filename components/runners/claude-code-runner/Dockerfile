@@ -9,8 +9,6 @@ RUN dnf install -y 'dnf-command(config-manager)' && \
     dnf install -y git jq && \
     dnf clean all
 
-RUN npm install -g @anthropic-ai/claude-code
-
 # Create working directory
 WORKDIR /app
 
