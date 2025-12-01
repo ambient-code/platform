@@ -837,8 +837,12 @@ class ClaudeCodeAdapter:
                             # Update remote URL to persist token (git strips it from clone URL)
                             await self._run_cmd(["git", "remote", "set-url", "origin", clone_url], cwd=str(repo_dir), ignore_errors=True)
                             logging.info(f"Successfully cloned {name}")
-                        except Exception as e:
-                            logging.warning(f"Failed to clone {name}: {e}")
+                        except (RuntimeError, OSError) as e:
+                            logging.warning(f"Failed to clone {name} ({type(e).__name__}): {e}")
+                            # Clean up partial clone if it exists
+                            if repo_dir.exists():
+                                logging.info(f"Cleaning up partial clone at {repo_dir}")
+                                shutil.rmtree(repo_dir, ignore_errors=True)
                             await self._send_log(f"⚠️ Failed to clone {name}, continuing without it")
                             continue  # Skip this repo and continue with others
                     elif reusing_workspace:
@@ -858,8 +862,8 @@ class ClaudeCodeAdapter:
                             await self._run_cmd(["git", "checkout", branch], cwd=str(repo_dir))
                             await self._run_cmd(["git", "reset", "--hard", f"origin/{branch}"], cwd=str(repo_dir))
                             logging.info(f"Reset {name} to origin/{branch}")
-                        except Exception as e:
-                            logging.warning(f"Failed to reset {name}: {e}")
+                        except (RuntimeError, OSError) as e:
+                            logging.warning(f"Failed to reset {name} ({type(e).__name__}): {e}")
                             await self._send_log(f"⚠️ Failed to reset {name}, using existing state")
 
                     # Git identity with fallbacks (only if repo exists)
@@ -907,8 +911,12 @@ class ClaudeCodeAdapter:
                     # Update remote URL to persist token (git strips it from clone URL)
                     await self._run_cmd(["git", "remote", "set-url", "origin", clone_url], cwd=str(workspace), ignore_errors=True)
                     logging.info("Successfully cloned repository")
-                except Exception as e:
-                    logging.warning(f"Failed to clone repository: {e}")
+                except (RuntimeError, OSError) as e:
+                    logging.warning(f"Failed to clone repository ({type(e).__name__}): {e}")
+                    # Clean up partial clone if it exists
+                    if workspace.exists():
+                        logging.info(f"Cleaning up partial clone at {workspace}")
+                        shutil.rmtree(workspace, ignore_errors=True)
                     await self._send_log(f"⚠️ Failed to clone repository, continuing without it")
             elif reusing_workspace:
                 # Reusing workspace - preserve local changes from previous session
@@ -926,8 +934,8 @@ class ClaudeCodeAdapter:
                     await self._run_cmd(["git", "checkout", input_branch], cwd=str(workspace))
                     await self._run_cmd(["git", "reset", "--hard", f"origin/{input_branch}"], cwd=str(workspace))
                     logging.info(f"Reset workspace to origin/{input_branch}")
-                except Exception as e:
-                    logging.warning(f"Failed to reset workspace: {e}")
+                except (RuntimeError, OSError) as e:
+                    logging.warning(f"Failed to reset workspace ({type(e).__name__}): {e}")
                     await self._send_log(f"⚠️ Failed to reset workspace, using existing state")
 
             # Git identity with fallbacks (only if workspace exists and has .git)
@@ -1069,8 +1077,12 @@ class ClaudeCodeAdapter:
         try:
             await self._run_cmd(["git", "clone", "--branch", branch, "--single-branch", clone_url, str(temp_clone_dir)], cwd=str(workspace))
             logging.info(f"Successfully cloned workflow to temp directory")
-        except Exception as e:
-            logging.warning(f"Failed to clone workflow {workflow_name}: {e}")
+        except (RuntimeError, OSError) as e:
+            logging.warning(f"Failed to clone workflow {workflow_name} ({type(e).__name__}): {e}")
+            # Clean up partial clone if it exists
+            if temp_clone_dir.exists():
+                logging.info(f"Cleaning up partial clone at {temp_clone_dir}")
+                shutil.rmtree(temp_clone_dir, ignore_errors=True)
             await self._send_log(f"⚠️ Failed to clone workflow {workflow_name}, continuing without it")
             return  # Exit early, workflow not available
 
@@ -1165,8 +1177,12 @@ class ClaudeCodeAdapter:
             await self._run_cmd(["git", "config", "user.email", user_email], cwd=str(repo_dir), ignore_errors=True)
 
             await self._send_log(f"✅ Repository {repo_name} added")
-        except Exception as e:
-            logging.warning(f"Failed to clone repository {repo_name}: {e}")
+        except (RuntimeError, OSError) as e:
+            logging.warning(f"Failed to clone repository {repo_name} ({type(e).__name__}): {e}")
+            # Clean up partial clone if it exists
+            if repo_dir.exists():
+                logging.info(f"Cleaning up partial clone at {repo_dir}")
+                shutil.rmtree(repo_dir, ignore_errors=True)
             await self._send_log(f"⚠️ Failed to clone {repo_name}, continuing without it")
             return  # Exit early, don't update REPOS_JSON or request restart
 
@@ -1605,8 +1621,12 @@ class ClaudeCodeAdapter:
         if stderr_text.strip():
             logging.info(f"Command stderr: {self._redact_secrets(stderr_text.strip())}")
 
-        if proc.returncode != 0 and not ignore_errors:
-            raise RuntimeError(stderr_text or f"Command failed: {' '.join(cmd_safe)}")
+        if proc.returncode != 0:
+            if ignore_errors:
+                # Log the error even when ignoring it
+                logging.warning(f"Command failed (ignored): {' '.join(cmd_safe)}, return code: {proc.returncode}, stderr: {self._redact_secrets(stderr_text or 'N/A')}")
+            else:
+                raise RuntimeError(stderr_text or f"Command failed: {' '.join(cmd_safe)}")
 
         logging.info(f"Command completed with return code: {proc.returncode}")
 
