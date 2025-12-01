@@ -23,9 +23,11 @@ type AgenticSessionSpec struct {
 	// Multi-repo support (unified mapping)
 	Repos         []SessionRepoMapping `json:"repos,omitempty"`
 	MainRepoIndex *int                 `json:"mainRepoIndex,omitempty"`
+	// Active workflow for dynamic workflow switching
+	ActiveWorkflow *WorkflowSelection `json:"activeWorkflow,omitempty"`
 }
 
-// Named repository types for multi-repo session support
+// NamedGitRepo represents named repository types for multi-repo session support.
 type NamedGitRepo struct {
 	URL    string  `json:"url"`
 	Branch *string `json:"branch,omitempty"`
@@ -36,7 +38,7 @@ type OutputNamedGitRepo struct {
 	Branch *string `json:"branch,omitempty"`
 }
 
-// Unified session repo mapping
+// SessionRepoMapping is a unified session repo mapping.
 type SessionRepoMapping struct {
 	Input  NamedGitRepo        `json:"input"`
 	Output *OutputNamedGitRepo `json:"output,omitempty"`
@@ -83,4 +85,42 @@ type CreateAgenticSessionRequest struct {
 type CloneSessionRequest struct {
 	TargetProject  string `json:"targetProject" binding:"required"`
 	NewSessionName string `json:"newSessionName" binding:"required"`
+}
+
+type UpdateAgenticSessionRequest struct {
+	Prompt      *string      `json:"prompt,omitempty"`
+	DisplayName *string      `json:"displayName,omitempty"`
+	Timeout     *int         `json:"timeout,omitempty"`
+	LLMSettings *LLMSettings `json:"llmSettings,omitempty"`
+}
+
+type CloneAgenticSessionRequest struct {
+	TargetProject     string `json:"targetProject,omitempty"`
+	TargetSessionName string `json:"targetSessionName,omitempty"`
+	DisplayName       string `json:"displayName,omitempty"`
+	Prompt            string `json:"prompt,omitempty"`
+}
+
+// WorkflowSelection represents a workflow to load into the session
+type WorkflowSelection struct {
+	GitURL string `json:"gitUrl" binding:"required"`
+	Branch string `json:"branch,omitempty"`
+	Path   string `json:"path,omitempty"`
+}
+
+// Mixed Provider Support Types
+
+// ProviderResult contains the result of operations for a specific provider
+type ProviderResult struct {
+	Provider ProviderType `json:"provider"`
+	Success  bool         `json:"success"`
+	Error    string       `json:"error,omitempty"`
+	RepoURL  string       `json:"repoUrl"`
+}
+
+// MixedProviderSessionResult contains results from multiple providers
+type MixedProviderSessionResult struct {
+	OverallSuccess bool             `json:"overallSuccess"`
+	Results        []ProviderResult `json:"results"`
+	Message        string           `json:"message"`
 }

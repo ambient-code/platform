@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -40,20 +41,26 @@ const DialogContent = React.forwardRef<
   React.HTMLAttributes<HTMLDivElement>
 >(({ className, children, ...props }, ref) => {
   const { open, onOpenChange } = React.useContext(DialogContext);
+  const [mounted, setMounted] = React.useState(false);
 
-  if (!open) return null;
+  React.useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
 
-  return (
+  if (!open || !mounted) return null;
+
+  const content = (
     <div className="fixed inset-0 z-50">
       <div
-        className="fixed inset-0 bg-black/50 backdrop-blur-sm"
+        className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm"
         onClick={() => onOpenChange(false)}
       />
-      <div className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2">
+      <div className="fixed left-1/2 top-1/2 z-[60] -translate-x-1/2 -translate-y-1/2">
         <div
           ref={ref}
           className={cn(
-            "w-full max-w-lg bg-white rounded-lg border shadow-lg p-6 relative",
+            "w-full max-w-lg bg-card rounded-lg border shadow-lg p-6 relative",
             className
           )}
           {...props}
@@ -70,6 +77,8 @@ const DialogContent = React.forwardRef<
       </div>
     </div>
   );
+
+  return createPortal(content, document.body);
 });
 DialogContent.displayName = "DialogContent";
 
@@ -122,7 +131,7 @@ const DialogDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <p
     ref={ref}
-    className={cn("text-sm text-gray-600", className)}
+    className={cn("text-sm text-muted-foreground", className)}
     {...props}
   />
 ));

@@ -1,3 +1,4 @@
+// Package git provides Git repository operations including cloning, forking, and PR creation.
 package git
 
 import (
@@ -17,11 +18,13 @@ import (
 	"strings"
 	"time"
 
-	"k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
+
+	"ambient-code-backend/gitlab"
+	"ambient-code-backend/types"
 )
 
 // Package-level dependencies (set from main package)
@@ -29,6 +32,7 @@ var (
 	GetProjectSettingsResource func() schema.GroupVersionResource
 	GetGitHubInstallation      func(context.Context, string) (interface{}, error)
 	GitHubTokenManager         interface{} // *GitHubTokenManager from main package
+	GetBackendNamespace        func() string
 )
 
 // ProjectSettings represents the project configuration
@@ -42,37 +46,6 @@ type DiffSummary struct {
 	TotalRemoved int `json:"total_removed"`
 	FilesAdded   int `json:"files_added"`
 	FilesRemoved int `json:"files_removed"`
-}
-
-// getProjectSettings retrieves the ProjectSettings CR for a project using the provided dynamic client
-func getProjectSettings(ctx context.Context, dynClient dynamic.Interface, projectName string) (*ProjectSettings, error) {
-	if dynClient == nil {
-		return &ProjectSettings{}, nil
-	}
-
-	if GetProjectSettingsResource == nil {
-		return &ProjectSettings{}, nil
-	}
-
-	gvr := GetProjectSettingsResource()
-	obj, err := dynClient.Resource(gvr).Namespace(projectName).Get(ctx, "projectsettings", v1.GetOptions{})
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return &ProjectSettings{}, nil
-		}
-		return nil, fmt.Errorf("failed to get ProjectSettings: %w", err)
-	}
-
-	settings := &ProjectSettings{}
-	if obj != nil {
-		if spec, ok := obj.Object["spec"].(map[string]interface{}); ok {
-			if v, ok := spec["runnerSecretsName"].(string); ok {
-				settings.RunnerSecret = strings.TrimSpace(v)
-			}
-		}
-	}
-
-	return settings, nil
 }
 
 // GetGitHubToken tries to get a GitHub token from GitHub App first, then falls back to project runner secret
@@ -104,48 +77,89 @@ func GetGitHubToken(ctx context.Context, k8sClient *kubernetes.Clientset, dynCli
 		}
 	}
 
-	// Fall back to project runner secret GIT_TOKEN
+	// Fall back to project integration secret GITHUB_TOKEN (hardcoded secret name)
 	if k8sClient == nil {
-		log.Printf("Cannot read runner secret: k8s client is nil")
-		return "", fmt.Errorf("no GitHub credentials available. Either connect GitHub App or configure GIT_TOKEN in project runner secret")
+		log.Printf("Cannot read integration secret: k8s client is nil")
+		return "", fmt.Errorf("no GitHub credentials available. Either connect GitHub App or configure GITHUB_TOKEN in integration secrets")
 	}
 
-	settings, err := getProjectSettings(ctx, dynClient, project)
+	const secretName = "ambient-non-vertex-integrations"
 
-	// Default to "ambient-runner-secrets" if not configured
-	secretName := "ambient-runner-secrets"
-	if err != nil {
-		log.Printf("Failed to get ProjectSettings for %s (using default secret name): %v", project, err)
-	} else if settings != nil && settings.RunnerSecret != "" {
-		secretName = settings.RunnerSecret
-	}
-
-	log.Printf("Attempting to read GIT_TOKEN from secret %s/%s", project, secretName)
+	log.Printf("Attempting to read GITHUB_TOKEN from secret %s/%s", project, secretName)
 
 	secret, err := k8sClient.CoreV1().Secrets(project).Get(ctx, secretName, v1.GetOptions{})
 	if err != nil {
-		log.Printf("Failed to get runner secret %s/%s: %v", project, secretName, err)
-		return "", fmt.Errorf("no GitHub credentials available. Either connect GitHub App or configure GIT_TOKEN in project runner secret")
+		log.Printf("Failed to get integration secret %s/%s: %v", project, secretName, err)
+		return "", fmt.Errorf("no GitHub credentials available. Either connect GitHub App or configure GITHUB_TOKEN in integration secrets")
 	}
 
 	if secret.Data == nil {
 		log.Printf("Secret %s/%s exists but Data is nil", project, secretName)
-		return "", fmt.Errorf("no GitHub credentials available. Either connect GitHub App or configure GIT_TOKEN in project runner secret")
+		return "", fmt.Errorf("no GitHub credentials available. Either connect GitHub App or configure GITHUB_TOKEN in integration secrets")
 	}
 
-	token, ok := secret.Data["GIT_TOKEN"]
+	token, ok := secret.Data["GITHUB_TOKEN"]
 	if !ok {
-		log.Printf("Secret %s/%s exists but has no GIT_TOKEN key (available keys: %v)", project, secretName, getSecretKeys(secret.Data))
-		return "", fmt.Errorf("no GitHub credentials available. Either connect GitHub App or configure GIT_TOKEN in project runner secret")
+		log.Printf("Secret %s/%s exists but has no GITHUB_TOKEN key (available keys: %v)", project, secretName, getSecretKeys(secret.Data))
+		return "", fmt.Errorf("no GitHub credentials available. Either connect GitHub App or configure GITHUB_TOKEN in integration secrets")
 	}
 
 	if len(token) == 0 {
-		log.Printf("Secret %s/%s has GIT_TOKEN key but value is empty", project, secretName)
-		return "", fmt.Errorf("no GitHub credentials available. Either connect GitHub App or configure GIT_TOKEN in project runner secret")
+		log.Printf("Secret %s/%s has GITHUB_TOKEN key but value is empty", project, secretName)
+		return "", fmt.Errorf("no GitHub credentials available. Either connect GitHub App or configure GITHUB_TOKEN in integration secrets")
 	}
 
-	log.Printf("Using GIT_TOKEN from project runner secret %s/%s", project, secretName)
+	log.Printf("Using GITHUB_TOKEN from integration secret %s/%s", project, secretName)
 	return string(token), nil
+}
+
+// GetGitLabToken retrieves a GitLab Personal Access Token for a user
+func GetGitLabToken(ctx context.Context, k8sClient kubernetes.Interface, project, userID string) (string, error) {
+	if k8sClient == nil {
+		log.Printf("Cannot read GitLab token: k8s client is nil")
+		return "", fmt.Errorf("no GitLab credentials available. Please connect your GitLab account")
+	}
+
+	// GitLab tokens are stored in the project namespace (multi-tenant isolation)
+	// This matches the GitHub PAT pattern using ambient-non-vertex-integrations
+	secret, err := k8sClient.CoreV1().Secrets(project).Get(ctx, "gitlab-user-tokens", v1.GetOptions{})
+	if err != nil {
+		log.Printf("Failed to get gitlab-user-tokens secret in %s: %v", project, err)
+		return "", fmt.Errorf("no GitLab credentials available. Please connect your GitLab account in this project")
+	}
+
+	if secret.Data == nil {
+		log.Printf("Secret gitlab-user-tokens exists but Data is nil")
+		return "", fmt.Errorf("no GitLab credentials available. Please connect your GitLab account")
+	}
+
+	token, ok := secret.Data[userID]
+	if !ok {
+		log.Printf("Secret gitlab-user-tokens has no token for user %s", userID)
+		return "", fmt.Errorf("no GitLab credentials available. Please connect your GitLab account")
+	}
+
+	if len(token) == 0 {
+		log.Printf("Secret gitlab-user-tokens has token for user %s but value is empty", userID)
+		return "", fmt.Errorf("no GitLab credentials available. Please connect your GitLab account")
+	}
+
+	log.Printf("Using GitLab token for user %s from gitlab-user-tokens secret", userID)
+	return string(token), nil
+}
+
+// GetGitToken retrieves a Git token based on the repository provider
+func GetGitToken(ctx context.Context, k8sClient *kubernetes.Clientset, dynClient dynamic.Interface, repoURL, project, userID string) (string, error) {
+	provider := types.DetectProvider(repoURL)
+
+	switch provider {
+	case types.ProviderGitHub:
+		return GetGitHubToken(ctx, k8sClient, dynClient, project, userID)
+	case types.ProviderGitLab:
+		return GetGitLabToken(ctx, k8sClient, project, userID)
+	default:
+		return "", fmt.Errorf("unsupported repository provider for URL: %s", repoURL)
+	}
 }
 
 // getSecretKeys returns a list of keys from a secret's Data map for debugging
@@ -158,38 +172,77 @@ func getSecretKeys(data map[string][]byte) []string {
 }
 
 // CheckRepoSeeding checks if a repo has been seeded by verifying .claude/commands/ and .specify/ exist
-func CheckRepoSeeding(ctx context.Context, repoURL string, branch *string, githubToken string) (bool, map[string]interface{}, error) {
-	owner, repo, err := ParseGitHubURL(repoURL)
-	if err != nil {
-		return false, nil, err
-	}
-
+// Supports both GitHub and GitLab repositories
+func CheckRepoSeeding(ctx context.Context, repoURL string, branch *string, token string) (bool, map[string]interface{}, error) {
 	branchName := "main"
 	if branch != nil && strings.TrimSpace(*branch) != "" {
 		branchName = strings.TrimSpace(*branch)
 	}
 
-	claudeExists, err := checkGitHubPathExists(ctx, owner, repo, branchName, ".claude", githubToken)
-	if err != nil {
-		return false, nil, fmt.Errorf("failed to check .claude: %w", err)
-	}
+	provider := types.DetectProvider(repoURL)
 
-	// Check for .claude/commands directory (spec-kit slash commands)
-	claudeCommandsExists, err := checkGitHubPathExists(ctx, owner, repo, branchName, ".claude/commands", githubToken)
-	if err != nil {
-		return false, nil, fmt.Errorf("failed to check .claude/commands: %w", err)
-	}
+	var claudeExists, claudeCommandsExists, claudeAgentsExists, specifyExists bool
+	var err error
 
-	// Check for .claude/agents directory
-	claudeAgentsExists, err := checkGitHubPathExists(ctx, owner, repo, branchName, ".claude/agents", githubToken)
-	if err != nil {
-		return false, nil, fmt.Errorf("failed to check .claude/agents: %w", err)
-	}
+	switch provider {
+	case types.ProviderGitHub:
+		var owner, repo string
+		owner, repo, err = ParseGitHubURL(repoURL)
+		if err != nil {
+			return false, nil, err
+		}
 
-	// Check for .specify directory (from spec-kit)
-	specifyExists, err := checkGitHubPathExists(ctx, owner, repo, branchName, ".specify", githubToken)
-	if err != nil {
-		return false, nil, fmt.Errorf("failed to check .specify: %w", err)
+		claudeExists, err = checkGitHubPathExists(ctx, owner, repo, branchName, ".claude", token)
+		if err != nil {
+			return false, nil, fmt.Errorf("failed to check .claude: %w", err)
+		}
+
+		claudeCommandsExists, err = checkGitHubPathExists(ctx, owner, repo, branchName, ".claude/commands", token)
+		if err != nil {
+			return false, nil, fmt.Errorf("failed to check .claude/commands: %w", err)
+		}
+
+		claudeAgentsExists, err = checkGitHubPathExists(ctx, owner, repo, branchName, ".claude/agents", token)
+		if err != nil {
+			return false, nil, fmt.Errorf("failed to check .claude/agents: %w", err)
+		}
+
+		specifyExists, err = checkGitHubPathExists(ctx, owner, repo, branchName, ".specify", token)
+		if err != nil {
+			return false, nil, fmt.Errorf("failed to check .specify: %w", err)
+		}
+
+	case types.ProviderGitLab:
+		var parsed *types.ParsedGitLabRepo
+		parsed, err = gitlab.ParseGitLabURL(repoURL)
+		if err != nil {
+			return false, nil, fmt.Errorf("invalid GitLab URL: %w", err)
+		}
+
+		client := gitlab.NewClient(parsed.APIURL, token)
+
+		claudeExists, err = checkGitLabPathExists(ctx, client, parsed.ProjectID, branchName, ".claude")
+		if err != nil {
+			return false, nil, fmt.Errorf("failed to check .claude: %w", err)
+		}
+
+		claudeCommandsExists, err = checkGitLabPathExists(ctx, client, parsed.ProjectID, branchName, ".claude/commands")
+		if err != nil {
+			return false, nil, fmt.Errorf("failed to check .claude/commands: %w", err)
+		}
+
+		claudeAgentsExists, err = checkGitLabPathExists(ctx, client, parsed.ProjectID, branchName, ".claude/agents")
+		if err != nil {
+			return false, nil, fmt.Errorf("failed to check .claude/agents: %w", err)
+		}
+
+		specifyExists, err = checkGitLabPathExists(ctx, client, parsed.ProjectID, branchName, ".specify")
+		if err != nil {
+			return false, nil, fmt.Errorf("failed to check .specify: %w", err)
+		}
+
+	default:
+		return false, nil, fmt.Errorf("unsupported repository provider for URL: %s", repoURL)
 	}
 
 	details := map[string]interface{}{
@@ -202,6 +255,24 @@ func CheckRepoSeeding(ctx context.Context, repoURL string, branch *string, githu
 	// Repo is properly seeded if all critical components exist
 	isSeeded := claudeCommandsExists && claudeAgentsExists && specifyExists
 	return isSeeded, details, nil
+}
+
+// checkGitLabPathExists checks if a path exists in a GitLab repository
+func checkGitLabPathExists(ctx context.Context, client *gitlab.Client, projectID, branch, path string) (bool, error) {
+	// Try to get the tree for this path
+	entries, err := client.GetAllTreeEntries(ctx, projectID, branch, path)
+	if err != nil {
+		// Check if it's a 404 error (path doesn't exist)
+		if gitlabErr, ok := err.(*types.GitLabAPIError); ok {
+			if gitlabErr.StatusCode == 404 {
+				return false, nil
+			}
+		}
+		return false, err
+	}
+
+	// Path exists if we got entries
+	return len(entries) > 0 || entries != nil, nil
 }
 
 // ParseGitHubURL extracts owner and repo from a GitHub URL
@@ -295,7 +366,7 @@ type Workflow interface {
 // PerformRepoSeeding performs the actual seeding operations
 // wf parameter should implement the Workflow interface
 // Returns: branchExisted (bool), error
-func PerformRepoSeeding(ctx context.Context, wf Workflow, branchName, githubToken, agentURL, agentBranch, agentPath, specKitRepo, specKitVersion, specKitTemplate string) (bool, error) {
+func PerformRepoSeeding(ctx context.Context, wf Workflow, branchName, token, agentURL, agentBranch, agentPath, specKitRepo, specKitVersion, specKitTemplate string) (bool, error) {
 	umbrellaRepo := wf.GetUmbrellaRepo()
 	if umbrellaRepo == nil {
 		return false, fmt.Errorf("workflow has no spec repo")
@@ -307,7 +378,7 @@ func PerformRepoSeeding(ctx context.Context, wf Workflow, branchName, githubToke
 
 	// Validate push access to spec repo before starting
 	log.Printf("Validating push access to spec repo: %s", umbrellaRepo.GetURL())
-	if err := validatePushAccess(ctx, umbrellaRepo.GetURL(), githubToken); err != nil {
+	if err := validatePushAccess(ctx, umbrellaRepo.GetURL(), token); err != nil {
 		return false, fmt.Errorf("spec repo access validation failed: %w", err)
 	}
 
@@ -316,7 +387,7 @@ func PerformRepoSeeding(ctx context.Context, wf Workflow, branchName, githubToke
 	if len(supportingRepos) > 0 {
 		log.Printf("Validating push access to %d supporting repos", len(supportingRepos))
 		for i, repo := range supportingRepos {
-			if err := validatePushAccess(ctx, repo.GetURL(), githubToken); err != nil {
+			if err := validatePushAccess(ctx, repo.GetURL(), token); err != nil {
 				return false, fmt.Errorf("supporting repo #%d (%s) access validation failed: %w", i+1, repo.GetURL(), err)
 			}
 		}
@@ -326,17 +397,25 @@ func PerformRepoSeeding(ctx context.Context, wf Workflow, branchName, githubToke
 	if err != nil {
 		return false, fmt.Errorf("failed to create temp dir for spec repo: %w", err)
 	}
-	defer os.RemoveAll(umbrellaDir)
+	defer func() {
+		if err := os.RemoveAll(umbrellaDir); err != nil {
+			log.Printf("Warning: failed to cleanup temp directory %s: %v", umbrellaDir, err)
+		}
+	}()
 
 	agentSrcDir, err := os.MkdirTemp("", "agents-*")
 	if err != nil {
 		return false, fmt.Errorf("failed to create temp dir for agent source: %w", err)
 	}
-	defer os.RemoveAll(agentSrcDir)
+	defer func() {
+		if err := os.RemoveAll(agentSrcDir); err != nil {
+			log.Printf("Warning: failed to cleanup temp directory %s: %v", agentSrcDir, err)
+		}
+	}()
 
 	// Clone umbrella repo with authentication
 	log.Printf("Cloning umbrella repo: %s", umbrellaRepo.GetURL())
-	authenticatedURL, err := InjectGitHubToken(umbrellaRepo.GetURL(), githubToken)
+	authenticatedURL, err := InjectGitToken(umbrellaRepo.GetURL(), token)
 	if err != nil {
 		return false, fmt.Errorf("failed to prepare spec repo URL: %w", err)
 	}
@@ -374,9 +453,30 @@ func PerformRepoSeeding(ctx context.Context, wf Workflow, branchName, githubToke
 	}
 
 	// Check if feature branch already exists remotely
-	cmd = exec.CommandContext(ctx, "git", "-C", umbrellaDir, "ls-remote", "--heads", "origin", branchName)
+	// Use authenticated URL directly to avoid issues with shallow clone remote setup
+	cmd = exec.CommandContext(ctx, "git", "ls-remote", "--heads", authenticatedURL, fmt.Sprintf("refs/heads/%s", branchName))
 	lsRemoteOut, lsRemoteErr := cmd.CombinedOutput()
-	branchExistsRemotely := lsRemoteErr == nil && strings.TrimSpace(string(lsRemoteOut)) != ""
+	log.Printf("DEBUG: ls-remote for branch '%s': error=%v, output='%s'", branchName, lsRemoteErr, string(lsRemoteOut))
+
+	// Check if branch exists by looking for actual git ref (ignoring warnings)
+	// Valid output format: "<sha>\trefs/heads/<branch>"
+	branchExistsRemotely := false
+	if lsRemoteErr == nil {
+		lines := strings.Split(string(lsRemoteOut), "\n")
+		for _, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			// Skip empty lines and warning messages
+			if trimmed == "" || strings.HasPrefix(trimmed, "warning:") {
+				continue
+			}
+			// Check if line contains the branch ref
+			if strings.Contains(trimmed, fmt.Sprintf("refs/heads/%s", branchName)) {
+				branchExistsRemotely = true
+				break
+			}
+		}
+	}
+	log.Printf("DEBUG: branchExistsRemotely=%v", branchExistsRemotely)
 
 	if branchExistsRemotely {
 		// Branch exists - check it out instead of creating new
@@ -634,11 +734,11 @@ func PerformRepoSeeding(ctx context.Context, wf Workflow, branchName, githubToke
 	log.Printf("Successfully seeded umbrella repo on branch %s", branchName)
 
 	// Create feature branch in all supporting repos
-	// Note: we already validated push access to all repos above, so any failure here is unexpected
+	// Push access will be validated by the actual git operations - if they fail, we'll get a clear error
 	if len(supportingRepos) > 0 {
 		log.Printf("Creating feature branch %s in %d supporting repos", branchName, len(supportingRepos))
 		for i, repo := range supportingRepos {
-			if err := createBranchInRepo(ctx, repo, branchName, githubToken); err != nil {
+			if err := createBranchInRepo(ctx, repo, branchName, token); err != nil {
 				return false, fmt.Errorf("failed to create branch in supporting repo #%d (%s): %w", i+1, repo.GetURL(), err)
 			}
 		}
@@ -647,11 +747,24 @@ func PerformRepoSeeding(ctx context.Context, wf Workflow, branchName, githubToke
 	return branchExistsRemotely, nil
 }
 
+// sanitizeURLForError removes credentials from a URL for safe error logging
+func sanitizeURLForError(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		// If URL can't be parsed, just return a generic message
+		return "[invalid URL format]"
+	}
+	// Remove any embedded credentials
+	u.User = nil
+	return u.String()
+}
+
 // InjectGitHubToken injects a GitHub token into a git URL for authentication
 func InjectGitHubToken(gitURL, token string) (string, error) {
 	u, err := url.Parse(gitURL)
 	if err != nil {
-		return "", fmt.Errorf("invalid git URL: %w", err)
+		// Sanitize URL before including in error message
+		return "", fmt.Errorf("invalid git URL (%s): %w", sanitizeURLForError(gitURL), err)
 	}
 
 	if u.Scheme != "https" {
@@ -660,6 +773,183 @@ func InjectGitHubToken(gitURL, token string) (string, error) {
 
 	u.User = url.UserPassword("x-access-token", token)
 	return u.String(), nil
+}
+
+// InjectGitLabToken injects a GitLab token into a git URL for authentication
+func InjectGitLabToken(gitURL, token string) (string, error) {
+	u, err := url.Parse(gitURL)
+	if err != nil {
+		// Sanitize URL before including in error message
+		return "", fmt.Errorf("invalid git URL (%s): %w", sanitizeURLForError(gitURL), err)
+	}
+
+	if u.Scheme != "https" {
+		return gitURL, nil
+	}
+
+	// GitLab uses oauth2:token@ format
+	u.User = url.UserPassword("oauth2", token)
+	return u.String(), nil
+}
+
+// InjectGitToken injects a Git token into a URL based on the repository provider
+func InjectGitToken(gitURL, token string) (string, error) {
+	provider := types.DetectProvider(gitURL)
+
+	switch provider {
+	case types.ProviderGitHub:
+		return InjectGitHubToken(gitURL, token)
+	case types.ProviderGitLab:
+		return InjectGitLabToken(gitURL, token)
+	default:
+		return "", fmt.Errorf("unsupported repository provider for URL: %s", gitURL)
+	}
+}
+
+// DetectPushError analyzes git push error output and provides user-friendly error messages
+func DetectPushError(repoURL, stderr, stdout string) error {
+	provider := types.DetectProvider(repoURL)
+
+	// Common error patterns
+	stderrLower := strings.ToLower(stderr)
+	stdoutLower := strings.ToLower(stdout)
+	combined := stderrLower + " " + stdoutLower
+
+	// Check for authentication/permission errors
+	if strings.Contains(combined, "403") || strings.Contains(combined, "forbidden") {
+		switch provider {
+		case types.ProviderGitLab:
+			return fmt.Errorf("GitLab push failed: insufficient permissions. Ensure your GitLab token has 'write_repository' scope. You can update your token by reconnecting your GitLab account with the required permissions")
+		case types.ProviderGitHub:
+			return fmt.Errorf("GitHub push failed: insufficient permissions. Check that your GitHub App installation has write access to this repository")
+		default:
+			return fmt.Errorf("push failed: insufficient permissions (403 Forbidden)")
+		}
+	}
+
+	// Check for authentication failures
+	if strings.Contains(combined, "401") || strings.Contains(combined, "unauthorized") || strings.Contains(combined, "authentication failed") {
+		switch provider {
+		case types.ProviderGitLab:
+			return fmt.Errorf("GitLab push failed: authentication failed. Your GitLab token may be invalid or expired. Please reconnect your GitLab account")
+		case types.ProviderGitHub:
+			return fmt.Errorf("GitHub push failed: authentication failed. Check your GitHub App installation")
+		default:
+			return fmt.Errorf("push failed: authentication failed (401 Unauthorized)")
+		}
+	}
+
+	// Check for network errors
+	if strings.Contains(combined, "could not resolve host") || strings.Contains(combined, "connection refused") {
+		return fmt.Errorf("push failed: unable to connect to %s. Check network connectivity", extractHostFromURL(repoURL))
+	}
+
+	// Check for rate limiting
+	if strings.Contains(combined, "429") || strings.Contains(combined, "rate limit") {
+		if provider == types.ProviderGitLab {
+			return fmt.Errorf("GitLab push failed: rate limit exceeded. Please wait a few minutes before retrying")
+		}
+		return fmt.Errorf("push failed: API rate limit exceeded. Please wait before retrying")
+	}
+
+	// Check for repository not found
+	if strings.Contains(combined, "404") || strings.Contains(combined, "not found") || strings.Contains(combined, "repository not found") {
+		return fmt.Errorf("push failed: repository not found. Verify the repository URL: %s", repoURL)
+	}
+
+	// Return original error if no pattern matched
+	errMsg := strings.TrimSpace(stderr)
+	if errMsg == "" {
+		errMsg = strings.TrimSpace(stdout)
+	}
+	if len(errMsg) > 500 {
+		errMsg = errMsg[:500] + "..."
+	}
+	return fmt.Errorf("push failed: %s", errMsg)
+}
+
+// extractHostFromURL extracts the host from a git URL for error messages
+func extractHostFromURL(gitURL string) string {
+	if strings.HasPrefix(gitURL, "git@") {
+		// SSH format: git@host:owner/repo
+		parts := strings.Split(gitURL, "@")
+		if len(parts) > 1 {
+			hostParts := strings.Split(parts[1], ":")
+			if len(hostParts) > 0 {
+				return hostParts[0]
+			}
+		}
+	} else {
+		// HTTPS format
+		u, err := url.Parse(gitURL)
+		if err == nil && u.Host != "" {
+			return u.Host
+		}
+	}
+	return "repository host"
+}
+
+// ConstructBranchURL constructs a web URL to view a branch based on the provider
+func ConstructBranchURL(repoURL, branch string) (string, error) {
+	provider := types.DetectProvider(repoURL)
+
+	switch provider {
+	case types.ProviderGitHub:
+		return ConstructGitHubBranchURL(repoURL, branch)
+	case types.ProviderGitLab:
+		return ConstructGitLabBranchURL(repoURL, branch)
+	default:
+		return "", fmt.Errorf("unsupported provider for URL: %s", repoURL)
+	}
+}
+
+// ConstructGitHubBranchURL constructs a GitHub web URL for a branch
+func ConstructGitHubBranchURL(repoURL, branch string) (string, error) {
+	owner, repo, err := ParseGitHubURL(repoURL)
+	if err != nil {
+		return "", err
+	}
+
+	// Clean repo name (remove .git if present)
+	repo = strings.TrimSuffix(repo, ".git")
+
+	return fmt.Sprintf("https://github.com/%s/%s/tree/%s", owner, repo, branch), nil
+}
+
+// ConstructGitLabBranchURL constructs a GitLab web URL for a branch
+func ConstructGitLabBranchURL(repoURL, branch string) (string, error) {
+	parsed, err := gitlab.ParseGitLabURL(repoURL)
+	if err != nil {
+		return "", err
+	}
+
+	// GitLab branch URL format: https://gitlab.com/owner/repo/-/tree/branch
+	return fmt.Sprintf("https://%s/%s/%s/-/tree/%s", parsed.Host, parsed.Owner, parsed.Repo, branch), nil
+}
+
+// GetRepositoryWebURL returns the main web URL for a repository
+func GetRepositoryWebURL(repoURL string) (string, error) {
+	provider := types.DetectProvider(repoURL)
+
+	switch provider {
+	case types.ProviderGitHub:
+		owner, repo, err := ParseGitHubURL(repoURL)
+		if err != nil {
+			return "", err
+		}
+		repo = strings.TrimSuffix(repo, ".git")
+		return fmt.Sprintf("https://github.com/%s/%s", owner, repo), nil
+
+	case types.ProviderGitLab:
+		parsed, err := gitlab.ParseGitLabURL(repoURL)
+		if err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("https://%s/%s/%s", parsed.Host, parsed.Owner, parsed.Repo), nil
+
+	default:
+		return "", fmt.Errorf("unsupported provider for URL: %s", repoURL)
+	}
 }
 
 // DeriveRepoFolderFromURL extracts the repo folder from a Git URL
@@ -730,21 +1020,26 @@ func PushRepo(ctx context.Context, repoDir, commitMessage, outputRepoURL, branch
 			defer resp.Body.Close()
 			switch resp.StatusCode {
 			case 200:
-				var ghUser struct {
-					Login string `json:"login"`
-					Name  string `json:"name"`
-					Email string `json:"email"`
-				}
-				if json.Unmarshal([]byte(fmt.Sprintf("%v", resp.Body)), &ghUser) == nil {
-					if gitUserName == "" && ghUser.Name != "" {
-						gitUserName = ghUser.Name
-					} else if gitUserName == "" && ghUser.Login != "" {
-						gitUserName = ghUser.Login
+				body, err := io.ReadAll(resp.Body)
+				if err == nil {
+					var ghUser struct {
+						Login string `json:"login"`
+						Name  string `json:"name"`
+						Email string `json:"email"`
 					}
-					if gitUserEmail == "" && ghUser.Email != "" {
-						gitUserEmail = ghUser.Email
+					if err := json.Unmarshal(body, &ghUser); err == nil {
+						if gitUserName == "" && ghUser.Name != "" {
+							gitUserName = ghUser.Name
+						} else if gitUserName == "" && ghUser.Login != "" {
+							gitUserName = ghUser.Login
+						}
+						if gitUserEmail == "" && ghUser.Email != "" {
+							gitUserEmail = ghUser.Email
+						}
+						log.Printf("gitPushRepo: fetched GitHub user name=%q email=%q", gitUserName, gitUserEmail)
+					} else {
+						log.Printf("Failed to parse GitHub user info: %v", err)
 					}
-					log.Printf("gitPushRepo: fetched GitHub user name=%q email=%q", gitUserName, gitUserEmail)
 				}
 			case 403:
 				log.Printf("gitPushRepo: GitHub API /user returned 403 (token lacks 'read:user' scope, using fallback identity)")
@@ -819,7 +1114,8 @@ func PushRepo(ctx context.Context, repoDir, commitMessage, outputRepoURL, branch
 			sout = sout[:2000] + "..."
 		}
 		log.Printf("gitPushRepo: push failed url=%q ref=%q err=%v stderr.snip=%q stdout.snip=%q", outputRepoURL, ref, err, serr, sout)
-		return "", fmt.Errorf("push failed: %s", errOut)
+		// Use enhanced error detection for user-friendly messages
+		return "", DetectPushError(outputRepoURL, errOut, out)
 	}
 
 	if len(out) > 2000 {
@@ -994,15 +1290,29 @@ func CheckBranchExists(ctx context.Context, repoURL, branchName, githubToken str
 	return false, fmt.Errorf("GitHub API error: %s (body: %s)", resp.Status, string(body))
 }
 
-// validatePushAccess checks if the user has push access to a repository via GitHub API
-func validatePushAccess(ctx context.Context, repoURL, githubToken string) error {
+// validatePushAccess checks if the user has push access to a repository (supports both GitHub and GitLab)
+func validatePushAccess(ctx context.Context, repoURL, token string) error {
+	provider := types.DetectProvider(repoURL)
+
+	switch provider {
+	case types.ProviderGitHub:
+		return validateGitHubPushAccess(ctx, repoURL, token)
+	case types.ProviderGitLab:
+		return validateGitLabPushAccess(ctx, repoURL, token)
+	default:
+		return fmt.Errorf("unsupported repository provider for URL: %s", repoURL)
+	}
+}
+
+// validateGitHubPushAccess checks if the user has push access to a GitHub repository
+func validateGitHubPushAccess(ctx context.Context, repoURL, githubToken string) error {
 	owner, repo, err := ParseGitHubURL(repoURL)
 	if err != nil {
-		return fmt.Errorf("invalid repository URL: %w", err)
+		return fmt.Errorf("invalid GitHub repository URL: %w", err)
 	}
 
 	// Use GitHub API to check repository permissions
-	log.Printf("Validating push access to %s with token (len=%d)", repoURL, len(githubToken))
+	log.Printf("Validating push access to GitHub repo %s with token (len=%d)", repoURL, len(githubToken))
 	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/%s", owner, repo)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
@@ -1042,7 +1352,6 @@ func validatePushAccess(ctx context.Context, repoURL, githubToken string) error 
 	}
 
 	// Parse response to check permissions
-
 	var repoInfo struct {
 		Permissions struct {
 			Push bool `json:"push"`
@@ -1057,14 +1366,150 @@ func validatePushAccess(ctx context.Context, repoURL, githubToken string) error 
 		return fmt.Errorf("you don't have push access to %s. Please fork the repository or use a repository you have write access to", repoURL)
 	}
 
-	log.Printf("Validated push access to %s", repoURL)
+	log.Printf("Validated push access to GitHub repo %s", repoURL)
+	return nil
+}
+
+// validateGitLabPushAccess checks if the user has push access to a GitLab repository
+func validateGitLabPushAccess(ctx context.Context, repoURL, gitlabToken string) error {
+	parsed, err := gitlab.ParseGitLabURL(repoURL)
+	if err != nil {
+		return fmt.Errorf("invalid GitLab repository URL: %w", err)
+	}
+
+	// Use GitLab API to check repository permissions
+	log.Printf("Validating push access to GitLab repo %s with token (len=%d)", repoURL, len(gitlabToken))
+
+	// Get project details to check permissions
+	// Note: parsed.ProjectID is already URL-encoded, don't double-encode it
+	apiURL := fmt.Sprintf("%s/projects/%s", parsed.APIURL, parsed.ProjectID)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+gitlabToken)
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to check repository access: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Read response body once
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	if resp.StatusCode == http.StatusNotFound {
+		return fmt.Errorf("repository %s/%s not found or you don't have access to it. Verify the repository URL and your GitLab token permissions", parsed.Owner, parsed.Repo)
+	}
+
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return fmt.Errorf("authentication failed for GitLab repository. Ensure your GitLab token has 'api' and 'write_repository' scopes")
+	}
+
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return fmt.Errorf("GitLab API rate limit exceeded. Please wait a few minutes before retrying")
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("GitLab API error: %s (body: %s)", resp.Status, string(body))
+	}
+
+	// Parse response to check permissions and ownership
+	var projectInfo struct {
+		Visibility string `json:"visibility"`
+		Namespace  struct {
+			Kind string `json:"kind"`
+			Path string `json:"path"`
+		} `json:"namespace"`
+		Permissions struct {
+			ProjectAccess *struct {
+				AccessLevel int `json:"access_level"`
+			} `json:"project_access"`
+			GroupAccess *struct {
+				AccessLevel int `json:"access_level"`
+			} `json:"group_access"`
+		} `json:"permissions"`
+	}
+
+	if err := json.Unmarshal(body, &projectInfo); err != nil {
+		return fmt.Errorf("failed to parse project info: %w (body: %s)", err, string(body))
+	}
+
+	// For public repositories, GitLab may return null permissions
+	// In this case, verify access by checking if we can get the authenticated user's info
+	// and if the namespace matches
+	if projectInfo.Permissions.ProjectAccess == nil && projectInfo.Permissions.GroupAccess == nil {
+		log.Printf("GitLab repo %s has null permissions (likely public repo), verifying access via user info", repoURL)
+
+		// Get authenticated user info to verify token and check namespace ownership
+		userReq, err := http.NewRequestWithContext(ctx, "GET", parsed.APIURL+"/user", nil)
+		if err != nil {
+			return fmt.Errorf("failed to create user info request: %w", err)
+		}
+		userReq.Header.Set("Authorization", "Bearer "+gitlabToken)
+		userReq.Header.Set("Accept", "application/json")
+
+		userResp, err := http.DefaultClient.Do(userReq)
+		if err != nil {
+			return fmt.Errorf("failed to get user info: %w", err)
+		}
+		defer userResp.Body.Close()
+
+		if userResp.StatusCode != http.StatusOK {
+			return fmt.Errorf("unable to verify repository access. Token may not have sufficient permissions")
+		}
+
+		userBody, err := io.ReadAll(userResp.Body)
+		if err != nil {
+			return fmt.Errorf("failed to read user info: %w", err)
+		}
+
+		var userInfo struct {
+			Username string `json:"username"`
+		}
+		if err := json.Unmarshal(userBody, &userInfo); err != nil {
+			return fmt.Errorf("failed to parse user info: %w", err)
+		}
+
+		// For user namespaces, check if the authenticated user owns the namespace
+		if projectInfo.Namespace.Kind == "user" && projectInfo.Namespace.Path == userInfo.Username {
+			log.Printf("Validated push access to GitLab repo %s (owner: %s)", repoURL, userInfo.Username)
+			return nil
+		}
+
+		// For public repos not owned by the user, we cannot guarantee push access
+		// but if the token is valid and scoped correctly, assume access based on visibility
+		if projectInfo.Visibility == "public" {
+			log.Printf("Warning: GitLab repo %s is public but permissions are null. Assuming push access based on valid token", repoURL)
+			return nil
+		}
+
+		return fmt.Errorf("unable to verify push access to %s. Repository may require explicit permissions", repoURL)
+	}
+
+	// GitLab access levels: 10=Guest, 20=Reporter, 30=Developer, 40=Maintainer, 50=Owner
+	// Need at least Developer (30) to push
+	hasAccess := (projectInfo.Permissions.ProjectAccess != nil && projectInfo.Permissions.ProjectAccess.AccessLevel >= 30) ||
+		(projectInfo.Permissions.GroupAccess != nil && projectInfo.Permissions.GroupAccess.AccessLevel >= 30)
+
+	if !hasAccess {
+		return fmt.Errorf("you don't have push access to %s. You need at least Developer (30) access level. Please check your permissions in GitLab", repoURL)
+	}
+
+	log.Printf("Validated push access to GitLab repo %s", repoURL)
 	return nil
 }
 
 // createBranchInRepo creates a feature branch in a supporting repository
 // Follows the same pattern as umbrella repo seeding but without adding files
 // Note: This function assumes push access has already been validated by the caller
-func createBranchInRepo(ctx context.Context, repo GitRepo, branchName, githubToken string) error {
+func createBranchInRepo(ctx context.Context, repo GitRepo, branchName, token string) error {
 	repoURL := repo.GetURL()
 	if repoURL == "" {
 		return fmt.Errorf("repository URL is empty")
@@ -1074,9 +1519,13 @@ func createBranchInRepo(ctx context.Context, repo GitRepo, branchName, githubTok
 	if err != nil {
 		return fmt.Errorf("failed to create temp dir: %w", err)
 	}
-	defer os.RemoveAll(repoDir)
+	defer func() {
+		if err := os.RemoveAll(repoDir); err != nil {
+			log.Printf("Warning: failed to cleanup temp directory %s: %v", repoDir, err)
+		}
+	}()
 
-	authenticatedURL, err := InjectGitHubToken(repoURL, githubToken)
+	authenticatedURL, err := InjectGitToken(repoURL, token)
 	if err != nil {
 		return fmt.Errorf("failed to prepare repo URL: %w", err)
 	}
@@ -1122,7 +1571,8 @@ func createBranchInRepo(ctx context.Context, repo GitRepo, branchName, githubTok
 		return fmt.Errorf("failed to set remote URL: %w (output: %s)", err, string(out))
 	}
 
-	cmd = exec.CommandContext(ctx, "git", "-C", repoDir, "push", "-u", "origin", branchName)
+	// Push using HEAD:branchName refspec to ensure the newly created local branch is pushed
+	cmd = exec.CommandContext(ctx, "git", "-C", repoDir, "push", "-u", "origin", fmt.Sprintf("HEAD:%s", branchName))
 	if out, err := cmd.CombinedOutput(); err != nil {
 		// Check if it's a permission error
 		errMsg := string(out)
@@ -1134,4 +1584,312 @@ func createBranchInRepo(ctx context.Context, repo GitRepo, branchName, githubTok
 
 	log.Printf("Successfully created and pushed branch '%s' in %s", branchName, repoURL)
 	return nil
+}
+
+// InitRepo initializes a new git repository
+func InitRepo(ctx context.Context, repoDir string) error {
+	cmd := exec.CommandContext(ctx, "git", "init")
+	cmd.Dir = repoDir
+
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to init git repo: %w (output: %s)", err, string(out))
+	}
+
+	// Configure default user if not set
+	cmd = exec.CommandContext(ctx, "git", "config", "user.name", "Ambient Code Bot")
+	cmd.Dir = repoDir
+	_ = cmd.Run() // Best effort
+
+	cmd = exec.CommandContext(ctx, "git", "config", "user.email", "bot@ambient-code.local")
+	cmd.Dir = repoDir
+	_ = cmd.Run() // Best effort
+
+	return nil
+}
+
+// ConfigureRemote adds or updates a git remote
+func ConfigureRemote(ctx context.Context, repoDir, remoteName, remoteURL string) error {
+	// Try to remove existing remote first
+	cmd := exec.CommandContext(ctx, "git", "remote", "remove", remoteName)
+	cmd.Dir = repoDir
+	_ = cmd.Run() // Ignore error if remote doesn't exist
+
+	// Add the remote
+	cmd = exec.CommandContext(ctx, "git", "remote", "add", remoteName, remoteURL)
+	cmd.Dir = repoDir
+
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to add remote: %w (output: %s)", err, string(out))
+	}
+
+	return nil
+}
+
+// MergeStatus contains information about merge conflict status
+type MergeStatus struct {
+	CanMergeClean      bool     `json:"canMergeClean"`
+	LocalChanges       int      `json:"localChanges"`
+	RemoteCommitsAhead int      `json:"remoteCommitsAhead"`
+	ConflictingFiles   []string `json:"conflictingFiles"`
+	RemoteBranchExists bool     `json:"remoteBranchExists"`
+}
+
+// CheckMergeStatus checks if local and remote can merge cleanly
+func CheckMergeStatus(ctx context.Context, repoDir, branch string) (*MergeStatus, error) {
+	if branch == "" {
+		branch = "main"
+	}
+
+	status := &MergeStatus{
+		ConflictingFiles: []string{},
+	}
+
+	run := func(args ...string) (string, error) {
+		cmd := exec.CommandContext(ctx, args[0], args[1:]...)
+		cmd.Dir = repoDir
+		var stdout bytes.Buffer
+		cmd.Stdout = &stdout
+		if err := cmd.Run(); err != nil {
+			return stdout.String(), err
+		}
+		return stdout.String(), nil
+	}
+
+	// Fetch remote branch
+	_, err := run("git", "fetch", "origin", branch)
+	if err != nil {
+		// Remote branch doesn't exist yet
+		status.RemoteBranchExists = false
+		status.CanMergeClean = true
+		return status, nil
+	}
+	status.RemoteBranchExists = true
+
+	// Count local uncommitted changes
+	statusOut, _ := run("git", "status", "--porcelain")
+	status.LocalChanges = len(strings.Split(strings.TrimSpace(statusOut), "\n"))
+	if strings.TrimSpace(statusOut) == "" {
+		status.LocalChanges = 0
+	}
+
+	// Count commits on remote but not local
+	countOut, _ := run("git", "rev-list", "--count", "HEAD..origin/"+branch)
+	fmt.Sscanf(strings.TrimSpace(countOut), "%d", &status.RemoteCommitsAhead)
+
+	// Test merge to detect conflicts (dry run)
+	mergeBase, err := run("git", "merge-base", "HEAD", "origin/"+branch)
+	if err != nil {
+		// No common ancestor - unrelated histories
+		// This is NOT a conflict - we can merge with --allow-unrelated-histories
+		// which is already used in PullRepo and SyncRepo
+		status.CanMergeClean = true
+		status.ConflictingFiles = []string{}
+		return status, nil
+	}
+
+	// Use git merge-tree to simulate merge without touching working directory
+	mergeTreeOut, err := run("git", "merge-tree", strings.TrimSpace(mergeBase), "HEAD", "origin/"+branch)
+	if err == nil && strings.TrimSpace(mergeTreeOut) != "" {
+		// Check for conflict markers in output
+		if strings.Contains(mergeTreeOut, "<<<<<<<") {
+			status.CanMergeClean = false
+			// Parse conflicting files from merge-tree output
+			for _, line := range strings.Split(mergeTreeOut, "\n") {
+				if strings.HasPrefix(line, "--- a/") || strings.HasPrefix(line, "+++ b/") {
+					file := strings.TrimPrefix(strings.TrimPrefix(line, "--- a/"), "+++ b/")
+					if file != "" && !contains(status.ConflictingFiles, file) {
+						status.ConflictingFiles = append(status.ConflictingFiles, file)
+					}
+				}
+			}
+		} else {
+			status.CanMergeClean = true
+		}
+	} else {
+		status.CanMergeClean = true
+	}
+
+	return status, nil
+}
+
+// PullRepo pulls changes from remote branch
+func PullRepo(ctx context.Context, repoDir, branch string) error {
+	if branch == "" {
+		branch = "main"
+	}
+
+	cmd := exec.CommandContext(ctx, "git", "pull", "--allow-unrelated-histories", "origin", branch)
+	cmd.Dir = repoDir
+
+	if out, err := cmd.CombinedOutput(); err != nil {
+		outStr := string(out)
+		if strings.Contains(outStr, "CONFLICT") {
+			return fmt.Errorf("merge conflicts detected: %s", outStr)
+		}
+		return fmt.Errorf("failed to pull: %w (output: %s)", err, outStr)
+	}
+
+	log.Printf("Successfully pulled from origin/%s", branch)
+	return nil
+}
+
+// PushToRepo pushes local commits to specified branch
+func PushToRepo(ctx context.Context, repoDir, branch, commitMessage string) error {
+	if branch == "" {
+		branch = "main"
+	}
+
+	run := func(args ...string) (string, error) {
+		cmd := exec.CommandContext(ctx, args[0], args[1:]...)
+		cmd.Dir = repoDir
+		var stdout bytes.Buffer
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stdout
+		err := cmd.Run()
+		return stdout.String(), err
+	}
+
+	// Ensure we're on the correct branch (create if needed)
+	// This handles fresh git init repos that don't have a branch yet
+	if _, err := run("git", "checkout", "-B", branch); err != nil {
+		return fmt.Errorf("failed to checkout branch: %w", err)
+	}
+
+	// Stage all changes
+	if _, err := run("git", "add", "."); err != nil {
+		return fmt.Errorf("failed to stage changes: %w", err)
+	}
+
+	// Commit if there are changes
+	if out, err := run("git", "commit", "-m", commitMessage); err != nil {
+		if !strings.Contains(out, "nothing to commit") {
+			return fmt.Errorf("failed to commit: %w", err)
+		}
+	}
+
+	// Push to branch
+	if out, err := run("git", "push", "-u", "origin", branch); err != nil {
+		return fmt.Errorf("failed to push: %w (output: %s)", err, out)
+	}
+
+	log.Printf("Successfully pushed to origin/%s", branch)
+	return nil
+}
+
+// CreateBranch creates a new branch and pushes it to remote
+func CreateBranch(ctx context.Context, repoDir, branchName string) error {
+	run := func(args ...string) (string, error) {
+		cmd := exec.CommandContext(ctx, args[0], args[1:]...)
+		cmd.Dir = repoDir
+		var stdout bytes.Buffer
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stdout
+		err := cmd.Run()
+		return stdout.String(), err
+	}
+
+	// Create and checkout new branch
+	if _, err := run("git", "checkout", "-b", branchName); err != nil {
+		return fmt.Errorf("failed to create branch: %w", err)
+	}
+
+	// Push to remote using HEAD:branchName refspec
+	if out, err := run("git", "push", "-u", "origin", fmt.Sprintf("HEAD:%s", branchName)); err != nil {
+		return fmt.Errorf("failed to push new branch: %w (output: %s)", err, out)
+	}
+
+	log.Printf("Successfully created and pushed branch %s", branchName)
+	return nil
+}
+
+// ListRemoteBranches lists all branches in the remote repository
+func ListRemoteBranches(ctx context.Context, repoDir string) ([]string, error) {
+	cmd := exec.CommandContext(ctx, "git", "ls-remote", "--heads", "origin")
+	cmd.Dir = repoDir
+
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("failed to list remote branches: %w", err)
+	}
+
+	branches := []string{}
+	for _, line := range strings.Split(stdout.String(), "\n") {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		// Format: "commit-hash refs/heads/branch-name"
+		parts := strings.Fields(line)
+		if len(parts) >= 2 {
+			ref := parts[1]
+			branchName := strings.TrimPrefix(ref, "refs/heads/")
+			branches = append(branches, branchName)
+		}
+	}
+
+	return branches, nil
+}
+
+// SyncRepo commits, pulls, and pushes changes
+func SyncRepo(ctx context.Context, repoDir, commitMessage, branch string) error {
+	if branch == "" {
+		branch = "main"
+	}
+
+	// Stage all changes
+	cmd := exec.CommandContext(ctx, "git", "add", ".")
+	cmd.Dir = repoDir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to stage changes: %w (output: %s)", err, string(out))
+	}
+
+	// Commit changes (only if there are changes)
+	cmd = exec.CommandContext(ctx, "git", "commit", "-m", commitMessage)
+	cmd.Dir = repoDir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		// Check if error is "nothing to commit"
+		outStr := string(out)
+		if !strings.Contains(outStr, "nothing to commit") && !strings.Contains(outStr, "no changes added") {
+			return fmt.Errorf("failed to commit: %w (output: %s)", err, outStr)
+		}
+		// Nothing to commit is not an error
+		log.Printf("SyncRepo: nothing to commit in %s", repoDir)
+	}
+
+	// Pull with rebase to sync with remote
+	cmd = exec.CommandContext(ctx, "git", "pull", "--rebase", "origin", branch)
+	cmd.Dir = repoDir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		outStr := string(out)
+		// Check if it's just "no tracking information" (first push)
+		if !strings.Contains(outStr, "no tracking information") && !strings.Contains(outStr, "couldn't find remote ref") {
+			return fmt.Errorf("failed to pull: %w (output: %s)", err, outStr)
+		}
+		log.Printf("SyncRepo: pull skipped (no remote tracking): %s", outStr)
+	}
+
+	// Push to remote
+	cmd = exec.CommandContext(ctx, "git", "push", "-u", "origin", branch)
+	cmd.Dir = repoDir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		outStr := string(out)
+		if strings.Contains(outStr, "Permission denied") || strings.Contains(outStr, "403") {
+			return fmt.Errorf("permission denied: no push access to remote")
+		}
+		return fmt.Errorf("failed to push: %w (output: %s)", err, outStr)
+	}
+
+	log.Printf("Successfully synchronized %s to %s", repoDir, branch)
+	return nil
+}
+
+// Helper function to check if string slice contains a value
+func contains(slice []string, str string) bool {
+	for _, s := range slice {
+		if s == str {
+			return true
+		}
+	}
+	return false
 }

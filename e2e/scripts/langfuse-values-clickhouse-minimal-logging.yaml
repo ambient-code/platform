@@ -1,0 +1,34 @@
+# Langfuse values override to disable ClickHouse internal logging
+# This prevents system logs from consuming disk space (trace_log, text_log, metric_log, etc.)
+# Only keeps essential Langfuse data (traces, observations, scores)
+
+clickhouse:
+  # Disable ClickHouse's internal system logging tables to save disk space
+  # These tables can consume several GB over time and are not needed for Langfuse functionality
+  configuration: |
+    <clickhouse>
+      <!-- Reduce logging verbosity -->
+      <logger>
+        <level>warning</level>
+      </logger>
+
+      <!-- Disable system log tables (saves ~7GB+ over time) -->
+      <!-- These are ClickHouse's internal query/performance logs, not Langfuse data -->
+      <query_log remove="1"/>
+      <query_thread_log remove="1"/>
+      <query_views_log remove="1"/>
+      <part_log remove="1"/>
+      <trace_log remove="1"/>
+      <crash_log remove="1"/>
+      <text_log remove="1"/>
+      <metric_log remove="1"/>
+      <asynchronous_metric_log remove="1"/>
+      <opentelemetry_span_log remove="1"/>
+      <session_log remove="1"/>
+      <zookeeper_log remove="1"/>
+      <processors_profile_log remove="1"/>
+      <asynchronous_insert_log remove="1"/>
+      <latency_log remove="1"/>
+      <error_log remove="1"/>
+      <query_metric_log remove="1"/>
+    </clickhouse>

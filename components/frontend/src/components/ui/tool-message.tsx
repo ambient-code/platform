@@ -72,21 +72,21 @@ const ExpandableMarkdown: React.FC<ExpandableMarkdownProps> = ({
       children?: React.ReactNode;
     } & React.HTMLAttributes<HTMLElement>) => {
       return inline ? (
-        <code className="bg-gray-100 px-1 py-0.5 rounded text-xs" {...(props as React.HTMLAttributes<HTMLElement>)}>
+        <code className="bg-muted px-1 py-0.5 rounded text-xs" {...(props as React.HTMLAttributes<HTMLElement>)}>
           {children}
         </code>
       ) : (
-        <pre className="bg-gray-800 text-gray-100 p-2 rounded text-xs overflow-x-auto">
+        <pre className="bg-slate-950 dark:bg-black text-slate-50 p-2 rounded text-xs overflow-x-auto">
           <code className={className} {...(props as React.HTMLAttributes<HTMLElement>)}>
             {children}
           </code>
         </pre>
       );
     },
-    p: ({ children }) => <p className="text-gray-600 leading-relaxed mb-2 text-sm">{children}</p>,
-    h1: ({ children }) => <h1 className="text-lg font-bold text-gray-800 mb-2">{children}</h1>,
-    h2: ({ children }) => <h2 className="text-md font-semibold text-gray-800 mb-2">{children}</h2>,
-    h3: ({ children }) => <h3 className="text-sm font-medium text-gray-800 mb-1">{children}</h3>,
+    p: ({ children }) => <p className="text-muted-foreground leading-relaxed mb-2 text-sm">{children}</p>,
+    h1: ({ children }) => <h1 className="text-lg font-bold text-foreground mb-2">{children}</h1>,
+    h2: ({ children }) => <h2 className="text-md font-semibold text-foreground mb-2">{children}</h2>,
+    h3: ({ children }) => <h3 className="text-sm font-medium text-foreground mb-1">{children}</h3>,
   };
 
   return (
@@ -99,7 +99,7 @@ const ExpandableMarkdown: React.FC<ExpandableMarkdownProps> = ({
           <button
             type="button"
             onClick={() => setExpanded(!expanded)}
-            className="text-xs px-2 py-1 rounded border bg-white hover:bg-gray-50 text-gray-700"
+            className="text-xs px-2 py-1 rounded border bg-card hover:bg-muted/50 text-foreground/80"
           >
             {expanded ? "Show less" : "Show more"}
           </button>
@@ -128,16 +128,16 @@ const hashStringToNumber = (str: string) => {
 
 const getColorClassesForName = (name: string) => {
   const colorChoices = [
-    { avatarBg: "bg-purple-600", cardBg: "bg-purple-50", border: "border-purple-200", badgeText: "text-purple-700", badgeBorder: "border-purple-200" },
-    { avatarBg: "bg-blue-600", cardBg: "bg-blue-50", border: "border-blue-200", badgeText: "text-blue-700", badgeBorder: "border-blue-200" },
-    { avatarBg: "bg-emerald-600", cardBg: "bg-emerald-50", border: "border-emerald-200", badgeText: "text-emerald-700", badgeBorder: "border-emerald-200" },
-    { avatarBg: "bg-teal-600", cardBg: "bg-teal-50", border: "border-teal-200", badgeText: "text-teal-700", badgeBorder: "border-teal-200" },
-    { avatarBg: "bg-cyan-600", cardBg: "bg-cyan-50", border: "border-cyan-200", badgeText: "text-cyan-700", badgeBorder: "border-cyan-200" },
-    { avatarBg: "bg-sky-600", cardBg: "bg-sky-50", border: "border-sky-200", badgeText: "text-sky-700", badgeBorder: "border-sky-200" },
-    { avatarBg: "bg-indigo-600", cardBg: "bg-indigo-50", border: "border-indigo-200", badgeText: "text-indigo-700", badgeBorder: "border-indigo-200" },
-    { avatarBg: "bg-fuchsia-600", cardBg: "bg-fuchsia-50", border: "border-fuchsia-200", badgeText: "text-fuchsia-700", badgeBorder: "border-fuchsia-200" },
-    { avatarBg: "bg-rose-600", cardBg: "bg-rose-50", border: "border-rose-200", badgeText: "text-rose-700", badgeBorder: "border-rose-200" },
-    { avatarBg: "bg-amber-600", cardBg: "bg-amber-50", border: "border-amber-200", badgeText: "text-amber-700", badgeBorder: "border-amber-200" },
+    { avatarBg: "bg-purple-600", badgeBg: "bg-purple-600", cardBg: "bg-purple-50", border: "border-purple-200", badgeText: "text-purple-700", badgeBorder: "border-purple-200" },
+    { avatarBg: "bg-blue-600", badgeBg: "bg-blue-600", cardBg: "bg-blue-50", border: "border-blue-200", badgeText: "text-blue-700", badgeBorder: "border-blue-200" },
+    { avatarBg: "bg-emerald-600", badgeBg: "bg-emerald-600", cardBg: "bg-emerald-50", border: "border-emerald-200", badgeText: "text-emerald-700", badgeBorder: "border-emerald-200" },
+    { avatarBg: "bg-teal-600", badgeBg: "bg-teal-600", cardBg: "bg-teal-50", border: "border-teal-200", badgeText: "text-teal-700", badgeBorder: "border-teal-200" },
+    { avatarBg: "bg-cyan-600", badgeBg: "bg-cyan-600", cardBg: "bg-cyan-50", border: "border-cyan-200", badgeText: "text-cyan-700", badgeBorder: "border-cyan-200" },
+    { avatarBg: "bg-sky-600", badgeBg: "bg-sky-600", cardBg: "bg-sky-50", border: "border-sky-200", badgeText: "text-sky-700", badgeBorder: "border-sky-200" },
+    { avatarBg: "bg-indigo-600", badgeBg: "bg-indigo-600", cardBg: "bg-indigo-50", border: "border-indigo-200", badgeText: "text-indigo-700", badgeBorder: "border-indigo-200" },
+    { avatarBg: "bg-fuchsia-600", badgeBg: "bg-fuchsia-600", cardBg: "bg-fuchsia-50", border: "border-fuchsia-200", badgeText: "text-fuchsia-700", badgeBorder: "border-fuchsia-200" },
+    { avatarBg: "bg-rose-600", badgeBg: "bg-rose-600", cardBg: "bg-rose-50", border: "border-rose-200", badgeText: "text-rose-700", badgeBorder: "border-rose-200" },
+    { avatarBg: "bg-amber-600", badgeBg: "bg-amber-600", cardBg: "bg-amber-50", border: "border-amber-200", badgeText: "text-amber-700", badgeBorder: "border-amber-200" },
   ];
   const idx = hashStringToNumber(name) % colorChoices.length;
   return colorChoices[idx];
@@ -200,9 +200,12 @@ export const ToolMessage = React.forwardRef<HTMLDivElement, ToolMessageProps>(
     const isSubagent = Boolean(subagentType);
     const subagentClasses = subagentType ? getColorClassesForName(subagentType) : undefined;
     const displayName = isSubagent ? subagentType : toolName;
+    
+    // Compact mode for simple tool calls (non-subagent)
+    const isCompact = !isSubagent;
 
     return (
-      <div ref={ref} className={cn("mb-4", className)} {...props}>
+      <div ref={ref} className={cn(isCompact ? "mb-1" : "mb-4", className)} {...props}>
         <div className="flex items-start space-x-3">
           {/* Avatar */}
           <div className="flex-shrink-0">
@@ -223,37 +226,49 @@ export const ToolMessage = React.forwardRef<HTMLDivElement, ToolMessageProps>(
           <div className="flex-1 min-w-0">
             <div
               className={cn(
-                borderless ? "p-0" : "rounded-lg border shadow-sm",
-                isSubagent ? subagentClasses?.cardBg : "bg-white",
+                isCompact ? "" : (borderless ? "p-0" : "rounded-lg border shadow-sm"),
+                isSubagent ? subagentClasses?.cardBg : "",
                 isSubagent ? subagentClasses?.border : undefined
               )}
             >
               {/* Collapsible Header */}
               <div
-                className="flex items-center justify-between p-3 cursor-pointer hover:bg-gray-50 transition-colors"
+                className={cn(
+                  "flex items-center justify-between cursor-pointer hover:bg-muted/50 transition-colors",
+                  isCompact ? "py-1 px-0" : "p-3"
+                )}
                 onClick={() => setIsExpanded(!isExpanded)}
               >
-                <div className="flex items-center space-x-2">
+                <div className={cn("flex items-center", isCompact ? "space-x-1.5" : "space-x-2")}>
                   {/* Status Icon */}
-                  <div className="flex-shrink-0">
-                    {isLoading && (
-                      <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
-                    )}
-                    {isSuccess && <Check className="w-4 h-4 text-green-500" />}
-                    {isError && <X className="w-4 h-4 text-red-500" />}
-                  </div>
+                  {!isCompact && (
+                    <div className="flex-shrink-0">
+                      {isLoading && (
+                        <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
+                      )}
+                      {isSuccess && <Check className="w-4 h-4 text-green-500" />}
+                      {isError && <X className="w-4 h-4 text-red-500" />}
+                    </div>
+                  )}
+                  {isCompact && (
+                    <div className="flex-shrink-0">
+                      {isLoading && (
+                        <Loader2 className="w-3 h-3 text-blue-500 animate-spin" />
+                      )}
+                      {isError && <X className="w-3 h-3 text-red-500" />}
+                    </div>
+                  )}
 
                   {/* Tool Name */}
-                  <div className="flex-1">
+                  <div className="flex-1 flex items-center min-h-0">
                     <Badge
-                      variant="outline"
                       className={cn(
-                        "text-xs",
-                        isLoading && "animate-pulse",
-                        isError && "border-red-200 text-red-700",
-                        isSuccess && "border-green-200 text-green-700",
-                        isSubagent && subagentClasses?.badgeBorder,
-                        isSubagent && subagentClasses?.badgeText
+                        "text-xs text-white",
+                        isLoading && "bg-blue-500 animate-pulse",
+                        isError && "bg-red-600",
+                        isSuccess && "bg-green-600",
+                        isSubagent && subagentClasses?.badgeBg,
+                        isCompact && "!py-0 px-1.5 leading-tight"
                       )}
                     >
                       {isSubagent ? displayName : (isLoading ? "Calling" : "Called") + " " + displayName}
@@ -263,9 +278,9 @@ export const ToolMessage = React.forwardRef<HTMLDivElement, ToolMessageProps>(
                   {/* Expand/Collapse Icon */}
                   <div className="flex-shrink-0">
                     {isExpanded ? (
-                      <ChevronDown className="w-4 h-4 text-gray-400" />
+                      <ChevronDown className={cn(isCompact ? "w-3 h-3" : "w-4 h-4", "text-muted-foreground/60")} />
                     ) : (
-                      <ChevronRight className="w-4 h-4 text-gray-400" />
+                      <ChevronRight className={cn(isCompact ? "w-3 h-3" : "w-4 h-4", "text-muted-foreground/60")} />
                     )}
                   </div>
                 </div>
@@ -274,24 +289,29 @@ export const ToolMessage = React.forwardRef<HTMLDivElement, ToolMessageProps>(
               {/* Subagent primary content (description + prompt) */}
               {isSubagent ? (
                 <div className="px-3 pb-3 space-y-3">
-                  {subagentDescription && (
-                    <div>
-                      <div className="text-gray-800">
+                  <div>
+                    {subagentDescription && subagentDescription.trim() ? (
+                      <div className="text-foreground">
                         <ExpandableMarkdown className="prose-sm" content={subagentDescription} />
                       </div>
-                      {isLoading && (
-                        <div className="flex items-center gap-2 text-xs text-gray-500 mt-2">
-                          <Loader2 className="w-3 h-3 animate-bounce" />
-                          <span>Waiting for result…</span>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                    ) : isLoading ? (
+                      <div className="text-muted-foreground text-sm italic">
+                        Working on your request...
+                      </div>
+                    ) : null}
+                    
+                    {isLoading && subagentDescription && subagentDescription.trim() && (
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground mt-2">
+                        <Loader2 className="w-3 h-3 animate-bounce" />
+                        <span>Waiting for result…</span>
+                      </div>
+                    )}
+                  </div>
 
                   {isExpanded && subagentPrompt && (
                     <div>
-                      <h4 className="text-xs font-medium text-gray-700 mb-1">Prompt</h4>
-                      <div className="bg-white rounded p-2 overflow-x-auto border">
+                      <h4 className="text-xs font-medium text-foreground/80 mb-1">Prompt</h4>
+                      <div className="rounded p-2 overflow-x-auto">
                         <ExpandableMarkdown className="prose-sm" content={subagentPrompt} />
                       </div>
                     </div>
@@ -300,11 +320,11 @@ export const ToolMessage = React.forwardRef<HTMLDivElement, ToolMessageProps>(
               ) : (
                 // Default tool rendering (existing behavior)
                 isExpanded && (
-                  <div className="px-3 pb-3 space-y-3 bg-gray-50">
+                  <div className="px-3 pb-3 space-y-3 bg-muted/50">
                     {toolUseBlock?.input && (
                       <div>
-                        <h4 className="text-xs font-medium text-gray-700 mb-1">Input</h4>
-                        <div className="bg-gray-800 rounded text-xs p-2 overflow-x-auto">
+                        <h4 className="text-xs font-medium text-foreground/80 mb-1">Input</h4>
+                        <div className="bg-slate-950 dark:bg-black rounded text-xs p-2 overflow-x-auto">
                           <pre className="text-gray-100">
                             {formatToolInput(JSON.stringify(toolUseBlock.input))}
                           </pre>
@@ -314,13 +334,13 @@ export const ToolMessage = React.forwardRef<HTMLDivElement, ToolMessageProps>(
 
                     {isToolResult && (
                       <div>
-                        <h4 className="text-xs font-medium text-gray-700 mb-1">
-                          Result {isError && <span className="text-red-600">(Error)</span>}
+                        <h4 className="text-xs font-medium text-foreground/80 mb-1">
+                          Result {isError && <span className="text-red-600 dark:text-red-400">(Error)</span>}
                         </h4>
                         <div
                           className={cn(
-                            "rounded p-2 overflow-x-auto text-gray-800",
-                            isError ? "bg-red-50 border border-red-200" : "bg-white border"
+                            "rounded p-2 overflow-x-auto text-foreground",
+                            isError && "bg-red-50 border border-red-200"
                           )}
                         >
                           <ExpandableMarkdown
@@ -356,8 +376,7 @@ export const ToolMessage = React.forwardRef<HTMLDivElement, ToolMessageProps>(
                     </div>
                     <div className="flex-1">
                       <Badge
-                        variant="outline"
-                        className={cn("text-xs", subagentClasses?.badgeBorder, subagentClasses?.badgeText)}
+                        className={cn("text-xs text-white", subagentClasses?.badgeBg)}
                       >
                         {displayName}
                       </Badge>
@@ -365,7 +384,7 @@ export const ToolMessage = React.forwardRef<HTMLDivElement, ToolMessageProps>(
                   </div>
                 </div>
                 <div className="px-3 pb-3">
-                  <div className={cn("rounded p-2 overflow-x-auto text-gray-800 bg-white border")}>
+                  <div className={cn("rounded p-2 overflow-x-auto text-foreground")}>
                     <ExpandableMarkdown className="prose-sm" content={extractTextFromResultContent(toolResultBlock?.content as unknown)} />
                   </div>
                 </div>

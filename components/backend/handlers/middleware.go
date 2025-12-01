@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -29,6 +30,23 @@ var (
 	BoolPtr   = func(b bool) *bool { return &b }
 	StringPtr = func(s string) *string { return &s }
 )
+
+// Kubernetes DNS-1123 label validation (namespace, service account names)
+var kubernetesNameRegex = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
+
+// isValidKubernetesName validates that a string is a valid Kubernetes DNS-1123 label
+// Returns false if:
+//   - name is empty (prevents empty string injection)
+//   - name exceeds 63 characters
+//   - name contains invalid characters (not lowercase alphanumeric or '-')
+//   - name starts or ends with '-' (enforced by regex)
+func isValidKubernetesName(name string) bool {
+	// Explicit length check: reject empty strings and names > 63 chars
+	if len(name) == 0 || len(name) > 63 {
+		return false
+	}
+	return kubernetesNameRegex.MatchString(name)
+}
 
 // ContentListItem represents a content list item for file browsing
 type ContentListItem struct {
@@ -102,6 +120,14 @@ func GetK8sClientsForRequest(c *gin.Context) (*kubernetes.Clientset, dynamic.Int
 // updateAccessKeyLastUsedAnnotation attempts to update the ServiceAccount's last-used annotation
 // when the incoming token is a ServiceAccount JWT. Uses the backend service account client strictly
 // for this telemetry update and only for SAs labeled app=ambient-access-key. Best-effort; errors ignored.
+//
+// RBAC:
+// This function intentionally uses the backend service account (K8sClientMw) instead of user credentials
+// because it updates platform-managed telemetry metadata (last-used timestamp) that users should not control.
+//
+// - Only updates ServiceAccounts with label app=ambient-access-key (line check below)
+// - Only updates the last-used-at annotation (no other metadata changes)
+// - Best-effort operation with all errors ignored (cannot disrupt user requests)
 func updateAccessKeyLastUsedAnnotation(c *gin.Context) {
 	// Parse Authorization header
 	rawAuth := c.GetHeader("Authorization")
@@ -248,6 +274,13 @@ func ValidateProjectContext() gin.HandlerFunc {
 		}
 		if projectHeader == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Project is required in path /api/projects/:projectName or X-OpenShift-Project header"})
+			c.Abort()
+			return
+		}
+
+		// Validate namespace name to prevent injection attacks
+		if !isValidKubernetesName(projectHeader) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid project name format"})
 			c.Abort()
 			return
 		}

@@ -12,8 +12,23 @@ The **Ambient Code Platform** is an AI automation platform that combines Claude 
 
 - **Intelligent Agentic Sessions**: AI-powered automation for analysis, research, content creation, and development tasks
 - **Multi-Agent Workflows**: Specialized AI agents model realistic software team dynamics
+- **Git Provider Support**: Native integration with GitHub and GitLab (SaaS and self-hosted)
 - **Kubernetes Native**: Built with Custom Resources, Operators, and proper RBAC for enterprise deployment
 - **Real-time Monitoring**: Live status updates and job execution tracking
+- **🤖 Amber Background Agent**: Automated issue-to-PR workflows via GitHub Actions ([quickstart](docs/amber-quickstart.md))
+
+### Amber: Self-Service Automation
+
+**Amber** is a background agent that handles GitHub issues automatically:
+
+- 🤖 **Auto-Fix**: Create issue with `amber:auto-fix` label → Amber creates PR with linting/formatting fixes
+- 🔧 **Refactoring**: Label issue `amber:refactor` → Amber breaks large files, extracts patterns
+- 🧪 **Test Coverage**: Use `amber:test-coverage` → Amber adds missing tests
+
+**Quick Links**:
+- [5-Minute Quickstart](docs/amber-quickstart.md)
+- [Complete Guide](docs/amber-automation.md)
+- [Create Auto-Fix Issue](../../issues/new?template=amber-auto-fix.yml)
 
 ## Architecture
 
@@ -35,11 +50,47 @@ The platform consists of containerized microservices orchestrated via Kubernetes
 5. **Result Storage**: Analysis results stored back in Custom Resource status
 6. **UI Updates**: Frontend displays real-time progress and completed results
 
+## Git Provider Support
+
+### Supported Providers
+
+**GitHub**:
+- ✅ GitHub.com (public and private repositories)
+- ✅ GitHub Enterprise Server
+- ✅ GitHub App authentication
+- ✅ Personal Access Token authentication
+
+**GitLab** (v1.1.0+):
+- ✅ GitLab.com (SaaS)
+- ✅ Self-hosted GitLab (Community & Enterprise editions)
+- ✅ Personal Access Token authentication
+- ✅ HTTPS and SSH URL formats
+- ✅ Custom domains and ports
+
+### Key Features
+
+- **Automatic Provider Detection**: Repositories automatically identified as GitHub or GitLab from URL
+- **Multi-Provider Projects**: Use GitHub and GitLab repositories in the same project
+- **Secure Token Storage**: All credentials encrypted in Kubernetes Secrets
+- **Provider-Specific Error Handling**: Clear, actionable error messages for each platform
+
+### Getting Started with GitLab
+
+1. **Create Personal Access Token**: [GitLab PAT Setup Guide](docs/gitlab-token-setup.md)
+2. **Connect Account**: Settings → Integrations → GitLab
+3. **Configure Repository**: Add GitLab repository URL to project settings
+4. **Create Sessions**: AgenticSessions work seamlessly with GitLab repos
+
+**Documentation**:
+- [GitLab Integration Guide](docs/gitlab-integration.md) - Complete user guide
+- [GitLab Token Setup](docs/gitlab-token-setup.md) - Step-by-step PAT creation
+- [Self-Hosted GitLab](docs/gitlab-self-hosted.md) - Enterprise configuration
+
 ## Prerequisites
 
 ### Required Tools
 - **OpenShift Local (CRC)** for local development or OpenShift cluster for production
-- **oc** (OpenShift CLI) or **kubectl** v1.28+ configured to access your cluster  
+- **oc** (OpenShift CLI) or **kubectl** v1.28+ configured to access your cluster
 - **Docker or Podman** for building container images
 - **Container registry access** (Docker Hub, Quay.io, ECR, etc.) for production
 - **Go 1.24+** for building backend services (if building from source)
@@ -156,6 +207,61 @@ For cluster-based authentication and authorization, the deployment script can co
 
 ## Configuration & Secrets
 
+### Operator Configuration (Vertex AI vs Direct API)
+
+The operator supports two modes for accessing Claude AI:
+
+#### Direct Anthropic API (Default)
+Use `operator-config.yaml` or `operator-config-crc.yaml` for standard deployments:
+
+```bash
+# Apply the standard config (Vertex AI disabled)
+kubectl apply -f components/manifests/operator-config.yaml -n ambient-code
+```
+
+**When to use:**
+- Standard cloud deployments without Google Cloud integration
+- Local development with CRC/Minikube
+- Any environment using direct Anthropic API access
+
+**Configuration:** Sets `CLAUDE_CODE_USE_VERTEX=0`
+
+#### Google Cloud Vertex AI
+Use `operator-config-openshift.yaml` for production OpenShift deployments with Vertex AI:
+
+```bash
+# Apply the Vertex AI config
+kubectl apply -f components/manifests/operator-config-openshift.yaml -n ambient-code
+```
+
+**When to use:**
+- Production deployments on Google Cloud
+- Environments requiring Vertex AI integration
+- Enterprise deployments with Google Cloud service accounts
+
+**Configuration:** Sets `CLAUDE_CODE_USE_VERTEX=1` and configures:
+- `CLOUD_ML_REGION`: Google Cloud region (default: "global")
+- `ANTHROPIC_VERTEX_PROJECT_ID`: Your GCP project ID
+- `GOOGLE_APPLICATION_CREDENTIALS`: Path to service account key file
+
+**Creating the Vertex AI Secret:**
+
+When using Vertex AI, you must create a secret containing your Google Cloud service account key:
+
+```bash
+# The key file MUST be named ambient-code-key.json
+kubectl create secret generic ambient-vertex \
+  --from-file=ambient-code-key.json=ambient-code-key.json \
+  -n ambient-code
+```
+
+**Important Requirements:**
+- ✅ Secret name must be `ambient-vertex`
+- ✅ Key file must be named `ambient-code-key.json`
+- ✅ Service account must have Vertex AI API access
+- ✅ Project ID in config must match the service account's project
+
+
 ### Session Timeout Configuration
 
 Sessions have a configurable timeout (default: 300 seconds):
@@ -243,7 +349,7 @@ make dev-start
 
 **What this provides:**
 - ✅ Full OpenShift cluster with CRC
-- ✅ Real OpenShift authentication and RBAC  
+- ✅ Real OpenShift authentication and RBAC
 - ✅ Production-like environment
 - ✅ Automatic image builds and deployments
 - ✅ Working frontend-backend integration
@@ -403,6 +509,35 @@ cd components/frontend
 npm test                      # Run test suite
 ```
 
+### E2E Testing
+
+Run automated end-to-end tests in a local kind cluster:
+
+```bash
+make e2e-test                # Full test suite (setup, deploy, test, cleanup)
+```
+
+Or run steps individually:
+
+```bash
+cd e2e
+./scripts/setup-kind.sh      # Create kind cluster
+./scripts/deploy.sh          # Deploy vTeam
+./scripts/run-tests.sh       # Run Cypress tests
+./scripts/cleanup.sh         # Clean up
+```
+
+The e2e tests deploy the complete vTeam stack to a kind (Kubernetes in Docker) cluster and verify core functionality including project creation and UI navigation. Tests run automatically in GitHub Actions on every PR.
+
+See [e2e/README.md](e2e/README.md) for detailed documentation, troubleshooting, and development guide.
+
+## Agent Strategy for Pilot
+- To ensure maximum focus and efficiency for the current RFE (Request for Enhancement) pilot, we are temporarily streamlining the active agent pool.
+- Active Agents (Focused Scope): The 5 agents required for this specific RFE workflow are currently located in the agents folder.
+- Agent Bullpen (Holding Pattern): All remaining agent definitions have been relocated to the "agent bullpen" folder. This transition does not signify the deprecation of any roles.
+- Future Planning: Agents in the "agent bullpen" are designated for future reintegration and will be actively utilized as we expand to address subsequent processes and workflows across the organization.
+
+
 ### Documentation
 
 - Update relevant documentation when changing functionality
@@ -412,10 +547,17 @@ npm test                      # Run test suite
 
 ## Support & Documentation
 
+### Deployment & Configuration
 - **Deployment Guide**: [docs/OPENSHIFT_DEPLOY.md](docs/OPENSHIFT_DEPLOY.md)
 - **OAuth Setup**: [docs/OPENSHIFT_OAUTH.md](docs/OPENSHIFT_OAUTH.md)
 - **Architecture Details**: [diagrams/](diagrams/)
 - **API Documentation**: Available in web interface after deployment
+
+### GitLab Integration
+- **GitLab Integration Guide**: [docs/gitlab-integration.md](docs/gitlab-integration.md)
+- **GitLab Token Setup**: [docs/gitlab-token-setup.md](docs/gitlab-token-setup.md)
+- **Self-Hosted GitLab**: [docs/gitlab-self-hosted.md](docs/gitlab-self-hosted.md)
+- **GitLab Testing**: [docs/gitlab-testing-procedures.md](docs/gitlab-testing-procedures.md)
 
 ## Legacy vTeam References
 

@@ -7,31 +7,32 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { ChevronRight, Home } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export type BreadcrumbItem = {
   label: string;
   href?: string;
   icon?: React.ReactNode;
+  rightIcon?: React.ReactNode;
 };
 
 export type BreadcrumbsProps = {
   items: BreadcrumbItem[];
   className?: string;
-  showHome?: boolean;
   separator?: React.ReactNode;
 };
 
 export function Breadcrumbs({
   items,
   className,
-  showHome = true,
   separator = <ChevronRight className="h-4 w-4" />,
 }: BreadcrumbsProps) {
-  const allItems: BreadcrumbItem[] = showHome
-    ? [{ label: 'Home', href: '/', icon: <Home className="h-4 w-4" /> }, ...items]
-    : items;
+  // Temporarily hiding Home from breadcrumbs
+  // const allItems: BreadcrumbItem[] = showHome
+  //   ? [{ label: 'Home', href: '/', icon: <Home className="h-4 w-4" /> }, ...items]
+  //   : items;
+  const allItems: BreadcrumbItem[] = items;
 
   return (
     <nav aria-label="Breadcrumb" className={cn('flex items-center space-x-1 text-sm', className)}>
@@ -53,6 +54,7 @@ export function Breadcrumbs({
                 >
                   {item.icon}
                   {item.label}
+                  {item.rightIcon}
                 </span>
               ) : (
                 <Link
@@ -61,6 +63,7 @@ export function Breadcrumbs({
                 >
                   {item.icon}
                   {item.label}
+                  {item.rightIcon}
                 </Link>
               )}
             </li>
@@ -74,10 +77,12 @@ export function Breadcrumbs({
 /**
  * Compact breadcrumbs that collapse middle items on mobile
  */
-export function CompactBreadcrumbs({ items, className, showHome = true }: BreadcrumbsProps) {
-  const allItems: BreadcrumbItem[] = showHome
-    ? [{ label: 'Home', href: '/', icon: <Home className="h-4 w-4" /> }, ...items]
-    : items;
+export function CompactBreadcrumbs({ items, className }: BreadcrumbsProps) {
+  // Temporarily hiding Home from breadcrumbs
+  // const allItems: BreadcrumbItem[] = showHome
+  //   ? [{ label: 'Home', href: '/', icon: <Home className="h-4 w-4" /> }, ...items]
+  //   : items;
+  const allItems: BreadcrumbItem[] = items;
 
   // On mobile, show first, last, and ellipsis if there are many items
   const shouldCollapse = allItems.length > 3;
@@ -134,11 +139,12 @@ export function CompactBreadcrumbs({ items, className, showHome = true }: Breadc
               <span className="flex items-center gap-1.5 font-medium text-foreground" aria-current="page">
                 {allItems[allItems.length - 1].icon}
                 {allItems[allItems.length - 1].label}
+                {allItems[allItems.length - 1].rightIcon}
               </span>
             </li>
           </>
         ) : (
-          <Breadcrumbs items={items} showHome={showHome} className={className} />
+          <Breadcrumbs items={items} className={className} />
         )}
       </ol>
     </nav>
