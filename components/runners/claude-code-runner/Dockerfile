@@ -3,9 +3,11 @@ FROM registry.access.redhat.com/ubi9/python-311@sha256:d0b35f779ca0ae87deaf17cd1
 USER 0
 
 # Add GitHub CLI repository and install packages
-RUN curl -fsSL https://cli.github.com/packages/rpm/gh-cli.repo -o /etc/yum.repos.d/gh-cli.repo && \
-    microdnf install -y git curl jq gh ca-certificates && \
-    microdnf clean all
+RUN dnf install -y 'dnf-command(config-manager)' && \
+    dnf config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo && \
+    dnf install -y gh --repo gh-cli && \
+    dnf install -y git jq && \
+    dnf clean all
 
 RUN npm install -g @anthropic-ai/claude-code
 
