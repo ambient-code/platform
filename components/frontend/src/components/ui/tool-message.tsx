@@ -128,16 +128,16 @@ const hashStringToNumber = (str: string) => {
 
 const getColorClassesForName = (name: string) => {
   const colorChoices = [
-    { avatarBg: "bg-purple-600", badgeBg: "bg-purple-600", cardBg: "bg-purple-50", border: "border-purple-200", badgeText: "text-purple-700", badgeBorder: "border-purple-200" },
-    { avatarBg: "bg-blue-600", badgeBg: "bg-blue-600", cardBg: "bg-blue-50", border: "border-blue-200", badgeText: "text-blue-700", badgeBorder: "border-blue-200" },
-    { avatarBg: "bg-emerald-600", badgeBg: "bg-emerald-600", cardBg: "bg-emerald-50", border: "border-emerald-200", badgeText: "text-emerald-700", badgeBorder: "border-emerald-200" },
-    { avatarBg: "bg-teal-600", badgeBg: "bg-teal-600", cardBg: "bg-teal-50", border: "border-teal-200", badgeText: "text-teal-700", badgeBorder: "border-teal-200" },
-    { avatarBg: "bg-cyan-600", badgeBg: "bg-cyan-600", cardBg: "bg-cyan-50", border: "border-cyan-200", badgeText: "text-cyan-700", badgeBorder: "border-cyan-200" },
-    { avatarBg: "bg-sky-600", badgeBg: "bg-sky-600", cardBg: "bg-sky-50", border: "border-sky-200", badgeText: "text-sky-700", badgeBorder: "border-sky-200" },
-    { avatarBg: "bg-indigo-600", badgeBg: "bg-indigo-600", cardBg: "bg-indigo-50", border: "border-indigo-200", badgeText: "text-indigo-700", badgeBorder: "border-indigo-200" },
-    { avatarBg: "bg-fuchsia-600", badgeBg: "bg-fuchsia-600", cardBg: "bg-fuchsia-50", border: "border-fuchsia-200", badgeText: "text-fuchsia-700", badgeBorder: "border-fuchsia-200" },
-    { avatarBg: "bg-rose-600", badgeBg: "bg-rose-600", cardBg: "bg-rose-50", border: "border-rose-200", badgeText: "text-rose-700", badgeBorder: "border-rose-200" },
-    { avatarBg: "bg-amber-600", badgeBg: "bg-amber-600", cardBg: "bg-amber-50", border: "border-amber-200", badgeText: "text-amber-700", badgeBorder: "border-amber-200" },
+    { avatarBg: "bg-purple-600", badgeBg: "bg-purple-600", cardBg: "bg-purple-50 dark:bg-purple-950/50", border: "border-purple-200 dark:border-purple-800", badgeText: "text-purple-700 dark:text-purple-300", badgeBorder: "border-purple-200 dark:border-purple-800" },
+    { avatarBg: "bg-blue-600", badgeBg: "bg-blue-600", cardBg: "bg-blue-50 dark:bg-blue-950/50", border: "border-blue-200 dark:border-blue-800", badgeText: "text-blue-700 dark:text-blue-300", badgeBorder: "border-blue-200 dark:border-blue-800" },
+    { avatarBg: "bg-emerald-600", badgeBg: "bg-emerald-600", cardBg: "bg-emerald-50 dark:bg-emerald-950/50", border: "border-emerald-200 dark:border-emerald-800", badgeText: "text-emerald-700 dark:text-emerald-300", badgeBorder: "border-emerald-200 dark:border-emerald-800" },
+    { avatarBg: "bg-teal-600", badgeBg: "bg-teal-600", cardBg: "bg-teal-50 dark:bg-teal-950/50", border: "border-teal-200 dark:border-teal-800", badgeText: "text-teal-700 dark:text-teal-300", badgeBorder: "border-teal-200 dark:border-teal-800" },
+    { avatarBg: "bg-cyan-600", badgeBg: "bg-cyan-600", cardBg: "bg-cyan-50 dark:bg-cyan-950/50", border: "border-cyan-200 dark:border-cyan-800", badgeText: "text-cyan-700 dark:text-cyan-300", badgeBorder: "border-cyan-200 dark:border-cyan-800" },
+    { avatarBg: "bg-sky-600", badgeBg: "bg-sky-600", cardBg: "bg-sky-50 dark:bg-sky-950/50", border: "border-sky-200 dark:border-sky-800", badgeText: "text-sky-700 dark:text-sky-300", badgeBorder: "border-sky-200 dark:border-sky-800" },
+    { avatarBg: "bg-indigo-600", badgeBg: "bg-indigo-600", cardBg: "bg-indigo-50 dark:bg-indigo-950/50", border: "border-indigo-200 dark:border-indigo-800", badgeText: "text-indigo-700 dark:text-indigo-300", badgeBorder: "border-indigo-200 dark:border-indigo-800" },
+    { avatarBg: "bg-fuchsia-600", badgeBg: "bg-fuchsia-600", cardBg: "bg-fuchsia-50 dark:bg-fuchsia-950/50", border: "border-fuchsia-200 dark:border-fuchsia-800", badgeText: "text-fuchsia-700 dark:text-fuchsia-300", badgeBorder: "border-fuchsia-200 dark:border-fuchsia-800" },
+    { avatarBg: "bg-rose-600", badgeBg: "bg-rose-600", cardBg: "bg-rose-50 dark:bg-rose-950/50", border: "border-rose-200 dark:border-rose-800", badgeText: "text-rose-700 dark:text-rose-300", badgeBorder: "border-rose-200 dark:border-rose-800" },
+    { avatarBg: "bg-amber-600", badgeBg: "bg-amber-600", cardBg: "bg-amber-50 dark:bg-amber-950/50", border: "border-amber-200 dark:border-amber-800", badgeText: "text-amber-700 dark:text-amber-300", badgeBorder: "border-amber-200 dark:border-amber-800" },
   ];
   const idx = hashStringToNumber(name) % colorChoices.length;
   return colorChoices[idx];
@@ -340,7 +340,7 @@ export const ToolMessage = React.forwardRef<HTMLDivElement, ToolMessageProps>(
                         <div
                           className={cn(
                             "rounded p-2 overflow-x-auto text-foreground",
-                            isError && "bg-red-50 border border-red-200"
+                            isError && "bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800"
                           )}
                         >
                           <ExpandableMarkdown
