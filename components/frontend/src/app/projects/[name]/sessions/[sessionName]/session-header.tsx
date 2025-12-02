@@ -43,7 +43,7 @@ export function SessionHeader({
   const phase = session.status?.phase || "Pending";
   const canStop = phase === "Running" || phase === "Creating";
   const canResume = phase === "Stopped";
-  const canDelete = phase === "Completed" || phase === "Failed" || phase === "Stopped" || phase === "Error";
+  const canDelete = phase === "Completed" || phase === "Failed" || phase === "Stopped";
 
   // Kebab menu only (for breadcrumb line)
   if (renderMode === 'kebab-only') {
