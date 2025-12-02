@@ -48,12 +48,14 @@ This repository uses a structured **memory system** to provide targeted, loadabl
 
 **Load these files when working in specific areas:**
 
-| Task Type | Context File | Repomix View | Pattern File |
-|-----------|--------------|--------------|--------------|
-| **Backend API work** | `.claude/context/backend-development.md` | `repomix-analysis/04-backend-focused.xml` | `.claude/patterns/k8s-client-usage.md` |
-| **Frontend UI work** | `.claude/context/frontend-development.md` | `repomix-analysis/05-frontend-focused.xml` | `.claude/patterns/react-query-usage.md` |
-| **Security review** | `.claude/context/security-standards.md` | `repomix-analysis/02-production-optimized.xml` | `.claude/patterns/error-handling.md` |
+| Task Type | Context File | Architecture View | Pattern File |
+|-----------|--------------|-------------------|--------------|
+| **Backend API work** | `.claude/context/backend-development.md` | `repomix-analysis/03-architecture-only.xml` | `.claude/patterns/k8s-client-usage.md` |
+| **Frontend UI work** | `.claude/context/frontend-development.md` | `repomix-analysis/03-architecture-only.xml` | `.claude/patterns/react-query-usage.md` |
+| **Security review** | `.claude/context/security-standards.md` | `repomix-analysis/03-architecture-only.xml` | `.claude/patterns/error-handling.md` |
 | **Architecture questions** | - | `repomix-analysis/03-architecture-only.xml` | See ADRs below |
+
+**Note:** We use a single repomix architecture view (grade 8.8/10, 187K tokens) for all tasks. See `.claude/repomix-guide.md` for details.
 
 ### Available Memory Files
 
@@ -80,8 +82,8 @@ This repository uses a structured **memory system** to provide targeted, loadabl
 
 **4. Repomix Usage Guide** (`.claude/repomix-guide.md`)
 
-- How to use the 7 existing repomix views effectively
-- When to use each view based on the task
+- Guide for using the architecture view effectively
+- Why we use a single view approach (vs. 7 views)
 
 **5. Decision Log** (`docs/decisions.md`)
 
@@ -91,12 +93,13 @@ This repository uses a structured **memory system** to provide targeted, loadabl
 ### Example Usage
 
 ```
-"Claude, load the backend-development context file and the backend-focused repomix view (04),
-then help me add a new endpoint for listing RFE workflows in a project."
+"Claude, load the architecture view (repomix-analysis/03-architecture-only.xml) and the
+backend-development context file, then help me add a new endpoint for listing RFE workflows."
 ```
 
 ```
-"Claude, reference the security-standards context file and review this PR for token handling issues."
+"Claude, load the architecture view and security-standards context file,
+then review this PR for token handling issues."
 ```
 
 ```

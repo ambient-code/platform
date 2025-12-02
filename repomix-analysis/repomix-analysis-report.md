@@ -2,6 +2,29 @@
 
 Evaluation of 7 repomix permutations for AI agent steering quality.
 
+## Executive Decision: Single View Adoption
+
+**Decision:** Keep only `03-architecture-only.xml` (grade 8.8/10, 187K tokens).
+
+**Rationale:**
+- Highest overall quality score (8.8/10) of all 7 configurations
+- Optimal token efficiency (187K tokens fits comfortably in context windows)
+- Comprehensive coverage (132 files across all 7 components)
+- Simpler developer experience (no decision fatigue about which view to use)
+- Significant repo size reduction (19M → 1M, 94% smaller)
+
+**Files Deleted:**
+1. `01-full-context.xml` - Too large (550K tokens), poor token efficiency (grade 3.0)
+2. `02-production-optimized.xml` - Excessive (1.1M tokens), unusable (grade 1.5)
+3. `04-backend-focused.xml` - Too narrow (grade 6.6), missing cross-component context
+4. `05-frontend-focused.xml` - Too narrow (grade 6.4), missing cross-component context
+5. `06-ultra-compressed.xml` - Catastrophically large (2.6M tokens), grade 0.5
+6. `07-metadata-rich.xml` - Redundant with #03 (grade 8.3 vs 8.8)
+
+**Usage:** See `.claude/repomix-guide.md` for simplified usage instructions.
+
+---
+
 ## Executive Summary
 
 ### What Makes a Good Agent Steering File?
@@ -480,36 +503,81 @@ A **high-quality repomix output** (8-10/10) must balance:
 
 ## Best Practices for Agent Steering
 
-### When to Use Each Permutation
+### Single View Approach (Adopted)
 
-**Default Choice:** `03-architecture-only.xml` (Grade: 8.8/10)
-- Use this for general agent steering tasks
-- 187,420 tokens fits comfortably in most context windows
+**Use `03-architecture-only.xml` for all tasks:**
+- General development work
+- Architecture understanding
+- Planning new features
+- Code reviews
+- Cross-component analysis
 
-**Component-Focused Work:**
-- `04-backend-focused.xml` (Grade: 6.6/10) - 103,075 tokens for deep dives
-- `05-frontend-focused.xml` (Grade: 6.4/10) - 196,153 tokens for deep dives
+**Why this works:**
+- Comprehensive enough for most tasks (132 files, all components)
+- Small enough to leave room for conversation (187K tokens)
+- Eliminates decision fatigue
+- Simpler mental model
 
-**High-Level Planning & Architecture:**
-- `03-architecture-only.xml` (Grade: 8.8/10) - 187,420 tokens for strategic decisions
-- `07-metadata-rich.xml` (Grade: 8.3/10) - 215,960 tokens for strategic decisions
+### Combining with Context Files
+
+For specialized work, combine the architecture view with context files from `.claude/context/`:
+
+```bash
+# Backend work
+"Claude, load repomix-analysis/03-architecture-only.xml and .claude/context/backend-development.md"
+
+# Frontend work
+"Claude, load repomix-analysis/03-architecture-only.xml and .claude/context/frontend-development.md"
+
+# Security review
+"Claude, load repomix-analysis/03-architecture-only.xml and .claude/context/security-standards.md"
+```
 
 ### Key Takeaways
 
-1. **Context window matters** - Keep under 200k tokens for conversation space
-2. **CLAUDE.md is critical** - Project instructions guide agent behavior
-3. **Type definitions preserve contracts** - Essential for code generation
-4. **Tests are often noise** - Exclude for architecture understanding
-5. **Component focus beats full context** - Targeted > comprehensive
+1. **One view is enough** - 03-architecture-only.xml covers 95% of use cases
+2. **Token efficiency matters** - Under 200K tokens leaves room for conversation
+3. **CLAUDE.md is critical** - Project instructions guide agent behavior
+4. **Type definitions preserve contracts** - Essential for code generation
+5. **Tests are often noise** - Exclude for architecture understanding
+6. **Combine with context files** - Layer specific knowledge on top of architecture
+
+### When to Generate Custom Views
+
+For rare specialized needs, generate on-demand:
+
+```bash
+# Backend-heavy analysis
+repomix --include "components/backend/**" --output backend-custom.xml --style xml
+
+# Frontend-heavy analysis
+repomix --include "components/frontend/**" --output frontend-custom.xml --style xml
+```
+
+But in practice, the architecture view works for 95% of tasks.
 
 ## Quick Start Guide
 
-To use the best-performing configuration:
+### Using the Committed View
+
+The repo includes a pre-generated architecture view:
 
 ```bash
-# Copy the production-optimized .repomixignore (already in repo)
-# Run repomix with optimal settings
-repomix --output ambient-code.xml --style xml
+# Simply reference it in your prompts
+"Claude, load repomix-analysis/03-architecture-only.xml and help me understand X"
 ```
 
-This will generate a 187,420-token file optimized for AI agent steering.
+### Regenerating After Changes
+
+Update the view after major architectural changes:
+
+```bash
+# Uses .repomixignore patterns
+repomix --output repomix-analysis/03-architecture-only.xml --style xml
+```
+
+**Regenerate monthly or when:**
+- Major architectural changes occur
+- Component structure changes significantly
+- Before major refactoring efforts
+- View feels "stale" (>2 months old)

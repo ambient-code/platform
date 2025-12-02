@@ -1,187 +1,143 @@
-# Repomix Context Switching Guide
+# Repomix Architecture View Guide
 
-**Purpose:** Quick reference for loading the right repomix view based on the task.
+**Purpose:** Guide for using the repomix architecture view for Claude Code context loading.
 
-## Available Views
+## Executive Decision: Single View Approach
 
-The `repomix-analysis/` directory contains 7 pre-generated codebase views optimized for different scenarios:
+After comprehensive analysis of 7 different repomix configurations (see `repomix-analysis/repomix-analysis-report.md`), we've adopted a **single-view approach** using only `03-architecture-only.xml`.
 
-| File | Size | Use When |
-|------|------|----------|
-| `01-full-context.xml` | 2.1MB | Deep dive into specific component implementation |
-| `02-production-optimized.xml` | 4.2MB | General development work, most common use case |
-| `03-architecture-only.xml` | 737KB | Understanding system design, new team member onboarding |
-| `04-backend-focused.xml` | 403KB | Backend API work (Go handlers, K8s integration) |
-| `05-frontend-focused.xml` | 767KB | UI development (NextJS, React Query, Shadcn) |
-| `06-ultra-compressed.xml` | 10MB | Quick overview, exploring unfamiliar areas |
-| `07-metadata-rich.xml` | 849KB | File structure analysis, refactoring planning |
+**Why one view?**
+- **Grade 8.8/10** - Highest quality score of all tested configurations
+- **187K tokens** - Optimal for context windows, leaves room for conversation
+- **Comprehensive coverage** - 132 critical files across all 7 components
+- **Simpler mental model** - No decision fatigue about which view to use
+- **Smaller repo** - 1M vs 19M for all 7 views
 
-## Usage Patterns
+See the [analysis heatmap](../repomix-analysis/repomix-heatmap.png) for visual comparison.
 
-### Scenario 1: Backend Development
+## Available View
 
-**Task:** Adding a new API endpoint for project settings
+The `repomix-analysis/` directory contains one pre-generated codebase view:
 
-**Command:**
+| File | Size | Tokens | Grade | Use For |
+|------|------|--------|-------|---------|
+| `03-architecture-only.xml` | 737KB | 187K | 8.8/10 | All development tasks, architecture understanding, planning |
 
-```
-"Claude, reference the backend-focused repomix view (04-backend-focused.xml) and help me add a new endpoint for updating project settings."
-```
+**What's included:**
+- ✓ CLAUDE.md (project instructions)
+- ✓ All component READMEs (11 files)
+- ✓ Type definitions (17 files)
+- ✓ Design guidelines
+- ✓ Route definitions
+- ✓ Infrastructure manifests
+- ✓ CRD definitions
+- ✓ 132 critical files across all components
 
-**Why this view:**
+**What's excluded:**
+- Test files (reduces noise)
+- Generated code
+- Dependencies (node_modules, vendor)
+- Build artifacts
 
-- Contains all backend handlers and types
-- Includes K8s client patterns
-- Focused context without frontend noise
+## Usage Examples
 
-### Scenario 2: Frontend Development
-
-**Task:** Creating a new UI component for RFE workflows
-
-**Command:**
-
-```
-"Claude, load the frontend-focused repomix view (05-frontend-focused.xml) and help me create a new component for displaying RFE workflow steps."
-```
-
-**Why this view:**
-
-- All React components and pages
-- Shadcn UI patterns
-- React Query hooks
-
-### Scenario 3: Architecture Understanding
-
-**Task:** Explaining the system to a new team member
-
-**Command:**
+### General Development
 
 ```
-"Claude, using the architecture-only repomix view (03-architecture-only.xml), explain how the operator watches for AgenticSession creation and spawns jobs."
+"Claude, load the repomix architecture view (repomix-analysis/03-architecture-only.xml)
+and help me understand how multi-repo support works in AgenticSessions."
 ```
 
-**Why this view:**
-
-- High-level component structure
-- CRD definitions
-- Component relationships
-- No implementation details
-
-### Scenario 4: Cross-Component Analysis
-
-**Task:** Tracing a request from frontend through backend to operator
-
-**Command:**
+### Architecture Understanding
 
 ```
-"Claude, use the production-optimized repomix view (02-production-optimized.xml) and trace the flow of creating an AgenticSession from UI click to Job creation."
+"Claude, using the architecture view, explain how the operator watches for
+AgenticSession creation and spawns jobs."
 ```
 
-**Why this view:**
-
-- Balanced coverage of all components
-- Includes key implementation files
-- Not overwhelmed with test files
-
-### Scenario 5: Quick Exploration
-
-**Task:** Finding where a specific feature is implemented
-
-**Command:**
+### Planning New Features
 
 ```
-"Claude, use the ultra-compressed repomix view (06-ultra-compressed.xml) to help me find where multi-repo support is implemented."
+"Claude, reference the architecture view and help me plan where to add
+support for custom agent configurations in the frontend."
 ```
 
-**Why this view:**
+### Combining with Context Files
 
-- Fast to process
-- Good for keyword searches
-- Covers entire codebase breadth
-
-### Scenario 6: Refactoring Planning
-
-**Task:** Planning to break up large handlers/sessions.go file
-
-**Command:**
+For even better results, combine the architecture view with context files:
 
 ```
-"Claude, analyze the metadata-rich repomix view (07-metadata-rich.xml) and suggest how to split handlers/sessions.go into smaller modules."
+"Claude, load the architecture view and the backend-development context file,
+then help me add a new endpoint for project settings."
 ```
 
-**Why this view:**
-
-- File size and structure metadata
-- Module boundaries
-- Import relationships
-
-### Scenario 7: Deep Implementation Dive
-
-**Task:** Debugging a complex operator reconciliation issue
-
-**Command:**
-
 ```
-"Claude, load the full-context repomix view (01-full-context.xml) and help me understand why the operator is creating duplicate jobs for the same session."
+"Claude, load the architecture view and security-standards context file,
+then review this PR for authentication issues."
 ```
-
-**Why this view:**
-
-- Complete implementation details
-- All edge case handling
-- Full operator logic
-
-## Best Practices
-
-### Start Broad, Then Narrow
-
-1. **First pass:** Use `03-architecture-only.xml` to understand where the feature lives
-2. **Second pass:** Use component-specific view (`04-backend` or `05-frontend`)
-3. **Deep dive:** Use `01-full-context.xml` for specific implementation details
-
-### Combine with Context Files
-
-For even better results, combine repomix views with context files:
-
-```
-"Claude, load the backend-focused repomix view (04) and the backend-development context file, then help me add user token authentication to the new endpoint."
-```
-
-### Regenerate Periodically
-
-Repomix views are snapshots in time. Regenerate monthly (or after major changes):
-
-```bash
-# Full regeneration
-cd repomix-analysis
-./regenerate-all.sh  # If you create this script
-
-# Or manually
-repomix --output 02-production-optimized.xml --config repomix-production.json
-```
-
-**Tip:** Add to monthly maintenance calendar.
 
 ## Quick Reference Table
 
-| Task Type | Repomix View | Context File |
-|-----------|--------------|--------------|
-| Backend API work | 04-backend-focused | backend-development.md |
-| Frontend UI work | 05-frontend-focused | frontend-development.md |
-| Security review | 02-production-optimized | security-standards.md |
-| Architecture overview | 03-architecture-only | - |
-| Quick exploration | 06-ultra-compressed | - |
-| Refactoring | 07-metadata-rich | - |
-| Deep debugging | 01-full-context | (component-specific) |
+| Task Type | Command Pattern | Context Files |
+|-----------|----------------|---------------|
+| Backend API work | Load architecture view | backend-development.md |
+| Frontend UI work | Load architecture view | frontend-development.md |
+| Security review | Load architecture view | security-standards.md |
+| Architecture planning | Load architecture view | - |
+| Pattern implementation | Load architecture view | patterns/*.md |
 
-## Maintenance
+## Regenerating the View
+
+The architecture view is a snapshot in time. Regenerate monthly or after major changes:
+
+```bash
+# Regenerate the architecture-only view
+repomix --output repomix-analysis/03-architecture-only.xml --style xml
+
+# Uses exclusion patterns from .repomixignore
+```
 
 **When to regenerate:**
-
 - After major architectural changes
-- Monthly (scheduled)
+- Monthly (scheduled maintenance)
 - Before major refactoring efforts
-- When views feel "stale" (>2 months old)
+- When codebase structure changes significantly
 
-**How to regenerate:**
-See `.repomixignore` for exclusion patterns. Adjust as needed to balance completeness with token efficiency.
+**Tip:** Add to monthly maintenance calendar alongside dependency updates.
+
+## Why Not Multiple Views?
+
+The original analysis tested 7 different configurations:
+
+1. **01-full-context.xml** (550K tokens) - Too large, poor token efficiency
+2. **02-production-optimized.xml** (1.1M tokens) - Excessive, unusable
+3. **03-architecture-only.xml** (187K tokens) - ✅ **Perfect balance**
+4. **04-backend-focused.xml** (103K tokens) - Too narrow, grade 6.6
+5. **05-frontend-focused.xml** (196K tokens) - Too narrow, grade 6.4
+6. **06-ultra-compressed.xml** (2.6M tokens) - Catastrophically large
+7. **07-metadata-rich.xml** (216K tokens) - Redundant with #03
+
+**The verdict:** #03 provides the best balance of:
+- Token efficiency (fits in context window)
+- Architecture visibility (complete picture)
+- Code navigation (132 critical files)
+- Context completeness (all components)
+
+See `repomix-analysis/repomix-analysis-report.md` for full analysis details and the heatmap visualization.
+
+## Advanced: Generate-on-Demand
+
+For specialized needs, you can generate custom views on-demand:
+
+```bash
+# Backend-only view (if you need it)
+repomix --include "components/backend/**" --output backend-custom.xml --style xml
+
+# Frontend-only view
+repomix --include "components/frontend/**" --output frontend-custom.xml --style xml
+
+# Security-focused view
+repomix --include "**/handlers/**,**/middleware/**,CLAUDE.md" --output security-custom.xml --style xml
+```
+
+But in practice, the architecture-only view works for 95% of tasks.
