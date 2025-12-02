@@ -1,26 +1,19 @@
-
-# Claude Code Review with Fork Support
+# Amber Automatic Code Review
 #
-# Manual @claude reviews only - automatic reviews now handled by amber-auto-review.yml
-# Uses default workflow token for GitHub operations (comments appear from github-actions[bot])
-# Supports fork PRs and automatically minimizes old review comments
+# Uses memory system to apply repository-specific standards
+# Comments appear from github-actions[bot]
 #
 # Required GitHub Secret:
 # - CLAUDE_CODE_OAUTH_TOKEN: OAuth token for Claude Code
 
-name: Claude Code Review
+name: Amber Automatic Code Review
 
 on:
-  issue_comment:
-    types: [created]
-  pull_request_review_comment:
-    types: [created]
+  pull_request_target:
+    types: [opened, synchronize]
 
 jobs:
-  claude-review:
-    # Only run when @claude is mentioned
-    if: |
-      contains(github.event.comment.body, '@claude')
+  amber-review:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -46,17 +39,17 @@ jobs:
           PR_NUMBER="${{ github.event.pull_request.number }}"
 
           echo "Finding previous Claude Code Review comments to minimize..."
-          
+
           # Get all comment IDs from github-actions[bot] with "Claude Code Review" at the start
           # Using startswith() to avoid matching code blocks or inline mentions
           COMMENT_IDS=$(gh api "repos/$REPO/issues/$PR_NUMBER/comments" \
             --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("# Claude Code Review"))) | .node_id')
-          
+
           if [ -z "$COMMENT_IDS" ]; then
             echo "No old Claude Code Review comments found"
             exit 0
           fi
-          
+
           # Minimize each comment with error handling
           # Use here-string to avoid subshell variable scoping issues with pipe
           COUNT=0
@@ -72,10 +65,11 @@ jobs:
               fi
             fi
           done <<< "$COMMENT_IDS"
-          
+
           echo "Minimized $COUNT comment(s), $ERRORS error(s)"
-      - name: Run Claude Code Review
-        id: claude-review
+
+      - name: Run Amber Code Review (with memory system)
+        id: amber-review
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -86,84 +80,56 @@ jobs:
           prompt: |
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number }}
-            
-            Perform a comprehensive code review with the following focus areas:
-            
-            1. **Code Quality & Best Practices**
-               - Follow repository's CLAUDE.md guidelines
-               - Clean code principles and design patterns
-               - Proper error handling and edge cases
-               - Code readability and maintainability
-               - TypeScript/Go best practices (see CLAUDE.md)
-            
-            2. **Security**
-               - Potential security vulnerabilities
-               - Input validation and sanitization
-               - Authentication/authorization logic
-               - Sensitive data handling
-               - API security concerns
-            
-            3. **Performance**
-               - Performance bottlenecks
-               - Database query efficiency
-               - Memory leaks or resource issues
-               - React rendering optimizations
-               - API response times
-            
-            4. **Testing**
-               - Test coverage adequacy
-               - Test quality and edge cases
-               - Missing test scenarios
-               - Integration test needs
-            
-            5. **Architecture & Design**
-               - Component structure and organization
-               - API design and contracts
-               - State management patterns
-               - Separation of concerns
-            
-            6. **Documentation**
-               - Code comments and clarity
-               - README updates for new features
-               - API documentation accuracy
-               - Type definitions completeness
-            
-            ---
-            
-            **Review Instructions:**
-            
-            - Use `gh pr comment` for the review comment with this format:
-            
+
+            Load the following memory system files to understand repository standards:
+
+            1. Read CLAUDE.md (master project instructions)
+            2. Read .claude/context/backend-development.md
+            3. Read .claude/context/frontend-development.md
+            4. Read .claude/context/security-standards.md
+            5. Read .claude/patterns/k8s-client-usage.md
+            6. Read .claude/patterns/error-handling.md
+            7. Read .claude/patterns/react-query-usage.md
+
+            After loading all memory files, perform a comprehensive code review following the standards and patterns you just loaded.
+
+            Focus on:
+            1. **Code Quality** - Does it follow CLAUDE.md patterns?
+            2. **Security** - Check security standards (user token auth, RBAC, token redaction)
+            3. **Performance** - Any bottlenecks?
+            4. **Testing** - Adequate coverage?
+            5. **Architecture** - Follows project structure from memory context?
+            6. **Error Handling** - Follows error handling patterns?
+
+            Use `gh pr comment` to post your review with this format:
+
             # Claude Code Review
-            
+
             ## Summary
-            [Brief overview and overall assessment]
-            
+            [Brief overview]
+
             ## Issues by Severity
-            Categorize findings by severity (omit empty sections):
-            
+
             ### 🚫 Blocker Issues
-            [Must fix before merge - security vulnerabilities, breaking changes, data loss risks]
-            
-            ### 🔴 Critical Issues  
-            [Should fix before merge - major bugs, performance issues, significant security concerns]
-            
+            [Must fix before merge]
+
+            ### 🔴 Critical Issues
+            [Should fix before merge]
+
             ### 🟡 Major Issues
-            [Important to address - code quality, maintainability, test coverage gaps]
-            
+            [Important to address]
+
             ### 🔵 Minor Issues
-            [Nice-to-have - style, minor optimizations, documentation]
-            
+            [Nice-to-have improvements]
+
             ## Positive Highlights
             [Things done well]
-            
+
             ## Recommendations
             [Prioritized action items]
 
-            Focus on substance. Be constructive and specific.
-
-      - name: Add workflow link to review
-        if: steps.claude-review.conclusion == 'success'
+      - name: Add workflow link with memory system visibility
+        if: steps.amber-review.conclusion == 'success'
         uses: actions/github-script@v7
         env:
           RUN_ID: ${{ github.run_id }}
@@ -176,7 +142,7 @@ jobs:
             const serverUrl = process.env.GITHUB_SERVER_URL;
             const repository = process.env.GITHUB_REPOSITORY;
 
-            // Find Claude Code Review comment
+            // Find review comment
             const comments = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -187,12 +153,42 @@ jobs:
               .filter(c => c.user.login === 'github-actions[bot]' && c.body.startsWith('# Claude Code Review'))
               .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
 
-            if (!reviewComment || reviewComment.body.includes('View AI decision process')) {
-              console.log('No review comment found or already has workflow link');
+            if (!reviewComment) {
+              console.log('No review comment found');
               return;
             }
 
-            const updatedBody = reviewComment.body + `\n\n---\n🔍 [View AI decision process](${serverUrl}/${repository}/actions/runs/${runId}) (logs available for 90 days)`;
+            if (reviewComment.body.includes('View AI decision process')) {
+              console.log('Transparency link already added');
+              return;
+            }
+
+            const transparencySection = `
+
+---
+🔍 [View AI decision process](${serverUrl}/${repository}/actions/runs/${runId}) (logs available for 90 days)
+
+<details>
+<summary>📋 View memory system files loaded (click to expand)</summary>
+
+### What Amber Loaded for Code Review
+
+Amber automatically loaded these repository standards from the memory system:
+
+1. **CLAUDE.md** - Master project instructions, development standards
+2. **backend-development.md** - Go backend, K8s integration patterns
+3. **frontend-development.md** - NextJS, Shadcn UI, React Query patterns
+4. **security-standards.md** - Auth, RBAC, token handling
+5. **k8s-client-usage.md** - User token vs service account patterns
+6. **error-handling.md** - Consistent error patterns
+7. **react-query-usage.md** - Data fetching patterns
+
+**Impact**: This review used your repository's specific code quality standards, security patterns, and best practices from the memory system (PRs #359, #360) - not just generic code review guidelines.
+
+</details>
+`;
+
+            const updatedBody = reviewComment.body + transparencySection;
 
             await github.rest.issues.updateComment({
               owner: context.repo.owner,
@@ -200,3 +196,5 @@ jobs:
               comment_id: reviewComment.id,
               body: updatedBody
             });
+
+            console.log('Added transparency link to review comment');
