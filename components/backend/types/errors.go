@@ -1,10 +1,5 @@
 package types
 
-import (
-	"fmt"
-	"strings"
-)
-
 // GetProviderSpecificGuidance returns remediation guidance for provider-specific errors
 func GetProviderSpecificGuidance(provider ProviderType, errorType string) string {
 	switch provider {
@@ -32,63 +27,5 @@ func GetProviderSpecificGuidance(provider ProviderType, errorType string) string
 		}
 	default:
 		return "Check your repository configuration and try again"
-	}
-}
-
-// FormatMixedProviderError formats an error message for mixed-provider scenarios
-func FormatMixedProviderError(results []ProviderResult) string {
-	failedProviders := []string{}
-	successfulProviders := []string{}
-
-	for _, result := range results {
-		if result.Success {
-			successfulProviders = append(successfulProviders, string(result.Provider))
-		} else {
-			failedProviders = append(failedProviders, string(result.Provider))
-		}
-	}
-
-	if len(failedProviders) == 0 {
-		return "All repository operations completed successfully"
-	} else if len(failedProviders) == len(results) {
-		return "All repository operations failed. Check your provider configurations and credentials"
-	} else {
-		return fmt.Sprintf("Some repository operations failed (%s). Successful: %s",
-			strings.Join(failedProviders, ", "),
-			strings.Join(successfulProviders, ", "))
-	}
-}
-
-// CreateProviderResult creates a ProviderResult from an operation outcome
-func CreateProviderResult(provider ProviderType, repoURL string, err error) ProviderResult {
-	result := ProviderResult{
-		Provider: provider,
-		RepoURL:  repoURL,
-	}
-
-	if err != nil {
-		result.Success = false
-		result.Error = err.Error()
-	} else {
-		result.Success = true
-	}
-
-	return result
-}
-
-// AggregateProviderResults creates a MixedProviderSessionResult from multiple provider results
-func AggregateProviderResults(results []ProviderResult) MixedProviderSessionResult {
-	allSuccess := true
-	for _, result := range results {
-		if !result.Success {
-			allSuccess = false
-			break
-		}
-	}
-
-	return MixedProviderSessionResult{
-		OverallSuccess: allSuccess,
-		Results:        results,
-		Message:        FormatMixedProviderError(results),
 	}
 }
