@@ -748,6 +748,7 @@ class ClaudeCodeAdapter:
         # Model mapping from Anthropic API to Vertex AI
         # Reference: https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-claude
         model_map = {
+            'claude-opus-4-5': 'claude-opus-4-5@20251101',
             'claude-opus-4-1': 'claude-opus-4-1@20250805',
             'claude-sonnet-4-5': 'claude-sonnet-4-5@20250929',
             'claude-haiku-4-5': 'claude-haiku-4-5@20251001',

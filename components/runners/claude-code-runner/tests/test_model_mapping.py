@@ -20,6 +20,12 @@ from wrapper import ClaudeCodeAdapter  # type: ignore[import]
 class TestMapToVertexModel:
     """Test suite for _map_to_vertex_model method"""
 
+    def test_map_opus_4_5(self):
+        """Test mapping for Claude Opus 4.5"""
+        adapter = ClaudeCodeAdapter()
+        result = adapter._map_to_vertex_model('claude-opus-4-5')
+        assert result == 'claude-opus-4-5@20251101'
+
     def test_map_opus_4_1(self):
         """Test mapping for Claude Opus 4.1"""
         adapter = ClaudeCodeAdapter()
@@ -86,14 +92,16 @@ class TestMapToVertexModel:
         # These are the exact model values from the frontend dropdown
         frontend_models = [
             'claude-sonnet-4-5',
-            'claude-haiku-4-5',
+            'claude-opus-4-5',
             'claude-opus-4-1',
+            'claude-haiku-4-5',
         ]
 
         expected_mappings = {
             'claude-sonnet-4-5': 'claude-sonnet-4-5@20250929',
-            'claude-haiku-4-5': 'claude-haiku-4-5@20251001',
+            'claude-opus-4-5': 'claude-opus-4-5@20251101',
             'claude-opus-4-1': 'claude-opus-4-1@20250805',
+            'claude-haiku-4-5': 'claude-haiku-4-5@20251001',
         }
 
         for model in frontend_models:
@@ -105,7 +113,7 @@ class TestMapToVertexModel:
         """Test that all mapped models include version dates"""
         adapter = ClaudeCodeAdapter()
 
-        models = ['claude-opus-4-1', 'claude-sonnet-4-5', 'claude-haiku-4-5']
+        models = ['claude-opus-4-5', 'claude-opus-4-1', 'claude-sonnet-4-5', 'claude-haiku-4-5']
 
         for model in models:
             result = adapter._map_to_vertex_model(model)
@@ -152,6 +160,7 @@ class TestModelMappingIntegration:
 
         # Expected Vertex AI model ID format: model-name@YYYYMMDD
         models_to_test = [
+            ('claude-opus-4-5', 'claude-opus-4-5@20251101'),
             ('claude-opus-4-1', 'claude-opus-4-1@20250805'),
             ('claude-sonnet-4-5', 'claude-sonnet-4-5@20250929'),
             ('claude-haiku-4-5', 'claude-haiku-4-5@20251001'),
@@ -169,8 +178,9 @@ class TestModelMappingIntegration:
         # Simulate user selecting from UI dropdown
         ui_selections = [
             'claude-sonnet-4-5',  # User selects Sonnet 4.5
-            'claude-haiku-4-5',   # User selects Haiku 4.5
+            'claude-opus-4-5',    # User selects Opus 4.5
             'claude-opus-4-1',    # User selects Opus 4.1
+            'claude-haiku-4-5',   # User selects Haiku 4.5
         ]
 
         for selection in ui_selections:
@@ -191,9 +201,14 @@ class TestModelMappingIntegration:
         # Simulate complete flow for each model
         test_scenarios = [
             {
+                'ui_selection': 'claude-opus-4-5',
+                'expected_vertex_id': 'claude-opus-4-5@20251101',
+                'description': 'Latest Opus model',
+            },
+            {
                 'ui_selection': 'claude-opus-4-1',
                 'expected_vertex_id': 'claude-opus-4-1@20250805',
-                'description': 'Most capable model',
+                'description': 'Previous Opus model',
             },
             {
                 'ui_selection': 'claude-sonnet-4-5',
@@ -231,10 +246,11 @@ class TestModelMappingIntegration:
         """Test that model ordering is consistent between frontend and backend"""
         adapter = ClaudeCodeAdapter()
 
-        # Expected ordering: Opus (most capable) → Sonnet (balanced) → Haiku (fastest)
+        # Expected ordering: Sonnet → Opus 4.5 → Opus 4.1 → Haiku (matches frontend dropdown)
         expected_order = [
-            'claude-opus-4-1',
             'claude-sonnet-4-5',
+            'claude-opus-4-5',
+            'claude-opus-4-1',
             'claude-haiku-4-5',
         ]
 
@@ -243,7 +259,8 @@ class TestModelMappingIntegration:
             vertex_id = adapter._map_to_vertex_model(model)
             assert '@' in vertex_id, f"Model {model} should map to valid Vertex AI ID"
 
-        # Verify ordering matches capability hierarchy
-        assert expected_order[0] == 'claude-opus-4-1'  # Most capable first
-        assert expected_order[1] == 'claude-sonnet-4-5'  # Balanced second
-        assert expected_order[2] == 'claude-haiku-4-5'  # Fastest third
+        # Verify ordering matches frontend dropdown
+        assert expected_order[0] == 'claude-sonnet-4-5'  # Balanced (default)
+        assert expected_order[1] == 'claude-opus-4-5'  # Latest Opus
+        assert expected_order[2] == 'claude-opus-4-1'  # Previous Opus
+        assert expected_order[3] == 'claude-haiku-4-5'  # Fastest

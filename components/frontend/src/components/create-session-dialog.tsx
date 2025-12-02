@@ -40,6 +40,7 @@ import { successToast, errorToast } from "@/hooks/use-toast";
 
 const models = [
   { value: "claude-sonnet-4-5", label: "Claude Sonnet 4.5" },
+  { value: "claude-opus-4-5", label: "Claude Opus 4.5" },
   { value: "claude-opus-4-1", label: "Claude Opus 4.1" },
   { value: "claude-haiku-4-5", label: "Claude Haiku 4.5" },
 ];
