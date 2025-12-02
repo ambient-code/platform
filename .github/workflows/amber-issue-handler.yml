@@ -249,11 +249,17 @@ jobs:
         env:
           ISSUE_NUMBER: ${{ steps.issue-details.outputs.issue_number }}
           ACTION_TYPE: ${{ steps.action-type.outputs.type }}
+          RUN_ID: ${{ github.run_id }}
+          GITHUB_SERVER_URL: ${{ github.server_url }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         uses: actions/github-script@v7
         with:
           script: |
             const issueNumber = parseInt(process.env.ISSUE_NUMBER);
             const actionType = process.env.ACTION_TYPE;
+            const runId = process.env.RUN_ID;
+            const serverUrl = process.env.GITHUB_SERVER_URL;
+            const repository = process.env.GITHUB_REPOSITORY;
 
             await github.rest.issues.createComment({
               owner: context.repo.owner,
@@ -268,7 +274,10 @@ jobs:
             - No linting issues found
             - The requested changes may have already been applied
 
-            If you believe changes are still needed, please provide more specific instructions or file paths in the issue description.`
+            If you believe changes are still needed, please provide more specific instructions or file paths in the issue description.
+
+            ---
+            🔍 [View AI decision process](${serverUrl}/${repository}/actions/runs/${runId}) (logs available for 90 days)`
             });
 
       - name: Push branch to remote
@@ -283,6 +292,9 @@ jobs:
         if: steps.check-changes.outputs.has_changes == 'true'
         env:
           ISSUE_NUMBER: ${{ steps.issue-details.outputs.issue_number }}
+          RUN_ID: ${{ github.run_id }}
+          GITHUB_SERVER_URL: ${{ github.server_url }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         uses: actions/github-script@v7
         with:
           script: |
@@ -291,6 +303,9 @@ jobs:
             const execFileAsync = promisify(execFile);
 
             const issueNumber = parseInt(process.env.ISSUE_NUMBER);
+            const runId = process.env.RUN_ID;
+            const serverUrl = process.env.GITHUB_SERVER_URL;
+            const repository = process.env.GITHUB_REPOSITORY;
 
             // Safely get git diff (no shell injection risk with execFile)
             const { stdout: diff } = await execFileAsync('git', ['diff', 'HEAD~1', '--stat']);
@@ -299,7 +314,7 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: issueNumber,
-              body: `## Amber Change Summary\n\nThe following files were modified:\n\n\`\`\`\n${diff}\n\`\`\`\n\n**Next Steps:**\n- Review that changes match the issue description\n- Verify no scope creep or unintended modifications\n- A PR will be created shortly for formal review`
+              body: `## Amber Change Summary\n\nThe following files were modified:\n\n\`\`\`\n${diff}\n\`\`\`\n\n**Next Steps:**\n- Review that changes match the issue description\n- Verify no scope creep or unintended modifications\n- A PR will be created shortly for formal review\n\n---\n🔍 [View AI decision process](${serverUrl}/${repository}/actions/runs/${runId}) (logs available for 90 days)`
             });
 
       - name: Create Pull Request
@@ -311,6 +326,8 @@ jobs:
           ISSUE_TITLE: ${{ steps.issue-details.outputs.issue_title }}
           ACTION_TYPE: ${{ steps.action-type.outputs.type }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          GITHUB_SERVER_URL: ${{ github.server_url }}
         uses: actions/github-script@v7
         with:
           script: |
@@ -320,6 +337,8 @@ jobs:
             const issueTitle = process.env.ISSUE_TITLE;
             const actionType = process.env.ACTION_TYPE;
             const repository = process.env.GITHUB_REPOSITORY;
+            const runId = process.env.RUN_ID;
+            const serverUrl = process.env.GITHUB_SERVER_URL;
 
             // Create PR with error handling (Issue #3)
             try {
@@ -369,7 +388,7 @@ jobs:
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: issueNumber,
-                body: `🤖 Amber has created a pull request to address this issue: #${pr.data.number}\n\nThe changes are ready for review. All automated checks will run on the PR.`
+                body: `🤖 Amber has created a pull request to address this issue: #${pr.data.number}\n\nThe changes are ready for review. All automated checks will run on the PR.\n\n---\n🔍 [View AI decision process](${serverUrl}/${repository}/actions/runs/${runId}) (logs available for 90 days)`
               });
 
               console.log('Created PR:', pr.data.html_url);

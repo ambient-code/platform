@@ -153,5 +153,44 @@ jobs:
             
             ## Recommendations
             [Prioritized action items]
-            
+
             Focus on substance. Be constructive and specific.
+
+      - name: Add workflow link to review
+        if: steps.claude-review.conclusion == 'success'
+        uses: actions/github-script@v7
+        env:
+          RUN_ID: ${{ github.run_id }}
+          GITHUB_SERVER_URL: ${{ github.server_url }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        with:
+          script: |
+            const prNumber = context.payload.pull_request.number;
+            const runId = process.env.RUN_ID;
+            const serverUrl = process.env.GITHUB_SERVER_URL;
+            const repository = process.env.GITHUB_REPOSITORY;
+
+            // Find Claude Code Review comment
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber
+            });
+
+            const reviewComment = comments.data
+              .filter(c => c.user.login === 'github-actions[bot]' && c.body.startsWith('# Claude Code Review'))
+              .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
+
+            if (!reviewComment || reviewComment.body.includes('View AI decision process')) {
+              console.log('No review comment found or already has workflow link');
+              return;
+            }
+
+            const updatedBody = reviewComment.body + `\n\n---\n🔍 [View AI decision process](${serverUrl}/${repository}/actions/runs/${runId}) (logs available for 90 days)`;
+
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: reviewComment.id,
+              body: updatedBody
+            });
