@@ -185,6 +185,7 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 		}
 
 		// Set phase=Pending to trigger job creation (using StatusPatch)
+		// Clear any conditions from previous run that could interfere with phase derivation
 		statusPatch.SetField("phase", "Pending")
 		statusPatch.SetField("startTime", time.Now().UTC().Format(time.RFC3339))
 		statusPatch.DeleteField("completionTime")
@@ -193,6 +194,25 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 			Status:  "False",
 			Reason:  "Restarting",
 			Message: "Preparing to start session",
+		})
+		// Clear terminal state conditions from previous run
+		statusPatch.AddCondition(conditionUpdate{
+			Type:    conditionStopping,
+			Status:  "False",
+			Reason:  "Restarting",
+			Message: "Session restarting",
+		})
+		statusPatch.AddCondition(conditionUpdate{
+			Type:    conditionCompleted,
+			Status:  "False",
+			Reason:  "Restarting",
+			Message: "Session restarting",
+		})
+		statusPatch.AddCondition(conditionUpdate{
+			Type:    conditionFailed,
+			Status:  "False",
+			Reason:  "Restarting",
+			Message: "Session restarting",
 		})
 		// Apply immediately since we need to proceed with job creation
 		if err := statusPatch.ApplyAndReset(); err != nil {
