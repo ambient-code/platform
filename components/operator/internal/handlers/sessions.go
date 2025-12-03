@@ -113,6 +113,9 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 		return fmt.Errorf("failed to verify AgenticSession %s exists: %v", name, err)
 	}
 
+	// Create status accumulator - all status changes will be batched into a single API call
+	statusPatch := NewStatusPatch(sessionNamespace, name)
+
 	// Get the current status from the fresh object (status may be empty right after creation
 	// because the API server drops .status on create when the status subresource is enabled)
 	stMap, found, _ := unstructured.NestedMap(currentObj.Object, "status")
@@ -124,7 +127,10 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 	}
 	// If status.phase is missing, treat as Pending and initialize it
 	if phase == "" {
-		_ = updateAgenticSessionStatus(sessionNamespace, name, map[string]interface{}{"phase": "Pending"})
+		statusPatch.SetField("phase", "Pending")
+		if err := statusPatch.ApplyAndReset(); err != nil {
+			log.Printf("Warning: failed to initialize phase: %v", err)
+		}
 		phase = "Pending"
 	}
 
@@ -178,41 +184,37 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 			}
 		}
 
-		// Set phase=Pending to trigger job creation
-		_ = mutateAgenticSessionStatus(sessionNamespace, name, func(status map[string]interface{}) {
-			status["phase"] = "Pending"
-			status["startTime"] = time.Now().UTC().Format(time.RFC3339)
-			delete(status, "completionTime")
-			setCondition(status, conditionUpdate{
-				Type:    conditionReady,
-				Status:  "False",
-				Reason:  "Restarting",
-				Message: "Preparing to start session",
-			})
+		// Set phase=Pending to trigger job creation (using StatusPatch)
+		statusPatch.SetField("phase", "Pending")
+		statusPatch.SetField("startTime", time.Now().UTC().Format(time.RFC3339))
+		statusPatch.DeleteField("completionTime")
+		statusPatch.AddCondition(conditionUpdate{
+			Type:    conditionReady,
+			Status:  "False",
+			Reason:  "Restarting",
+			Message: "Preparing to start session",
 		})
+		// Apply immediately since we need to proceed with job creation
+		if err := statusPatch.ApplyAndReset(); err != nil {
+			log.Printf("[DesiredPhase] Warning: failed to update status: %v", err)
+		}
 
-		// Clear desired-phase annotation (request fulfilled)
-		_ = clearAnnotation(sessionNamespace, name, "ambient-code.io/desired-phase")
+		// DON'T clear desired-phase annotation yet!
+		// The watch may still have queued events with the old phase=Failed.
+		// We'll clear it after the job is successfully created (below).
+		// Only clear start-requested-at timestamp
 		_ = clearAnnotation(sessionNamespace, name, "ambient-code.io/start-requested-at")
 
 		log.Printf("[DesiredPhase] Session %s/%s: set phase=Pending, will create job on next reconciliation", sessionNamespace, name)
-		return nil // Will be processed again with phase=Pending
+		// Continue to reconciliation logic below instead of returning
+		// This ensures we proceed even if the status update hasn't propagated yet
+		phase = "Pending"
+		// Note: Don't return early - let the code fall through to the Pending handler below
 	}
 
 	// Handle desired-phase=Stopped (user wants to stop)
 	if desiredPhase == "Stopped" && (phase == "Running" || phase == "Creating") {
 		log.Printf("[DesiredPhase] Session %s/%s: user requested stop (current=%s → desired=Stopped)", sessionNamespace, name, phase)
-
-		// Set phase=Stopping to indicate cleanup in progress
-		_ = mutateAgenticSessionStatus(sessionNamespace, name, func(status map[string]interface{}) {
-			status["phase"] = "Stopping"
-			setCondition(status, conditionUpdate{
-				Type:    conditionReady,
-				Status:  "False",
-				Reason:  "Stopping",
-				Message: "Cleaning up job and pods",
-			})
-		})
 
 		// Delete running job (this triggers pod deletion via OwnerReferences)
 		jobName := fmt.Sprintf("%s-job", name)
@@ -221,29 +223,31 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 			// Set to Stopped anyway - cleanup will happen via OwnerReferences
 		}
 
-		// Update status to Stopped after cleanup initiated
-		_ = mutateAgenticSessionStatus(sessionNamespace, name, func(status map[string]interface{}) {
-			status["phase"] = "Stopped"
-			status["completionTime"] = time.Now().UTC().Format(time.RFC3339)
-			setCondition(status, conditionUpdate{
-				Type:    conditionReady,
-				Status:  "False",
-				Reason:  "UserStopped",
-				Message: "User requested stop",
-			})
-			setCondition(status, conditionUpdate{
-				Type:    conditionRunnerStarted,
-				Status:  "False",
-				Reason:  "UserStopped",
-				Message: "Runner stopped by user",
-			})
+		// Set status to Stopped directly (batch Stopping → Stopped into single update)
+		statusPatch.SetField("phase", "Stopped")
+		statusPatch.SetField("completionTime", time.Now().UTC().Format(time.RFC3339))
+		statusPatch.AddCondition(conditionUpdate{
+			Type:    conditionReady,
+			Status:  "False",
+			Reason:  "UserStopped",
+			Message: "User requested stop",
 		})
+		statusPatch.AddCondition(conditionUpdate{
+			Type:    conditionRunnerStarted,
+			Status:  "False",
+			Reason:  "UserStopped",
+			Message: "Runner stopped by user",
+		})
+		// Apply immediately before returning
+		if err := statusPatch.Apply(); err != nil {
+			log.Printf("[DesiredPhase] Warning: failed to update status: %v", err)
+		}
 
 		// Clear desired-phase annotation (request fulfilled)
 		_ = clearAnnotation(sessionNamespace, name, "ambient-code.io/desired-phase")
 		_ = clearAnnotation(sessionNamespace, name, "ambient-code.io/stop-requested-at")
 
-		log.Printf("[DesiredPhase] Session %s/%s: transitioned Stopping → Stopped", sessionNamespace, name)
+		log.Printf("[DesiredPhase] Session %s/%s: transitioned to Stopped", sessionNamespace, name)
 		return nil
 	}
 
@@ -257,38 +261,33 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 	if phase == "Stopped" || phase == "Completed" || phase == "Failed" {
 		if tempContentRequested {
 			// User wants workspace access - ensure temp pod exists
-			if err := reconcileTempContentPod(sessionNamespace, name, tempPodName, currentObj); err != nil {
+			if err := reconcileTempContentPodWithPatch(sessionNamespace, name, tempPodName, currentObj, statusPatch); err != nil {
 				log.Printf("[TempPod] Failed to reconcile temp pod: %v", err)
 			}
 		} else {
 			// Temp pod not requested - delete if it exists
-			tempPod, err := config.K8sClient.CoreV1().Pods(sessionNamespace).Get(context.TODO(), tempPodName, v1.GetOptions{})
+			_, err := config.K8sClient.CoreV1().Pods(sessionNamespace).Get(context.TODO(), tempPodName, v1.GetOptions{})
 			if err == nil {
 				log.Printf("[TempPod] Deleting unrequested temp pod: %s", tempPodName)
 				if err := config.K8sClient.CoreV1().Pods(sessionNamespace).Delete(context.TODO(), tempPodName, v1.DeleteOptions{}); err != nil && !errors.IsNotFound(err) {
 					log.Printf("[TempPod] Failed to delete temp pod: %v", err)
 				} else {
-					_ = mutateAgenticSessionStatus(sessionNamespace, name, func(status map[string]interface{}) {
-						setCondition(status, conditionUpdate{
-							Type:    conditionTempContentPodReady,
-							Status:  "False",
-							Reason:  "NotRequested",
-							Message: "Temp pod removed (not requested)",
-						})
-					})
-				}
-			} else if errors.IsNotFound(err) && tempPod != nil {
-				// Ensure condition is cleared if pod doesn't exist
-				_ = mutateAgenticSessionStatus(sessionNamespace, name, func(status map[string]interface{}) {
-					setCondition(status, conditionUpdate{
+					statusPatch.AddCondition(conditionUpdate{
 						Type:    conditionTempContentPodReady,
 						Status:  "False",
-						Reason:  "NotFound",
-						Message: "Temp pod does not exist",
+						Reason:  "NotRequested",
+						Message: "Temp pod removed (not requested)",
 					})
-				})
+				}
 			}
 		}
+		// Apply temp pod status changes and return (no further reconciliation needed for stopped sessions)
+		if statusPatch.HasChanges() {
+			if err := statusPatch.Apply(); err != nil {
+				log.Printf("[TempPod] Warning: failed to apply status patch: %v", err)
+			}
+		}
+		return nil
 	}
 
 	// === CONTINUE WITH PHASE-BASED RECONCILIATION ===
@@ -392,51 +391,45 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 				sessionNamespace, name, currentGeneration, observedGeneration)
 
 			spec, _, _ := unstructured.NestedMap(currentObj.Object, "spec")
-			reposErr := reconcileSpecRepos(sessionNamespace, name, spec, currentObj)
+			reposErr := reconcileSpecReposWithPatch(sessionNamespace, name, spec, currentObj, statusPatch)
 			if reposErr != nil {
 				log.Printf("[Reconcile] Failed to reconcile repos for %s/%s: %v", sessionNamespace, name, reposErr)
-				// Condition already set by reconcileSpecRepos
 				// Don't update observedGeneration - will retry on next watch event
-				// Set general reconciliation error condition for visibility
-				_ = mutateAgenticSessionStatus(sessionNamespace, name, func(status map[string]interface{}) {
-					setCondition(status, conditionUpdate{
-						Type:    "Reconciled",
-						Status:  "False",
-						Reason:  "RepoReconciliationFailed",
-						Message: fmt.Sprintf("Failed to reconcile repos: %v", reposErr),
-					})
+				statusPatch.AddCondition(conditionUpdate{
+					Type:    "Reconciled",
+					Status:  "False",
+					Reason:  "RepoReconciliationFailed",
+					Message: fmt.Sprintf("Failed to reconcile repos: %v", reposErr),
 				})
+				_ = statusPatch.Apply()
 				return fmt.Errorf("repo reconciliation failed: %w", reposErr)
 			}
 
-			workflowErr := reconcileActiveWorkflow(sessionNamespace, name, spec, currentObj)
+			workflowErr := reconcileActiveWorkflowWithPatch(sessionNamespace, name, spec, currentObj, statusPatch)
 			if workflowErr != nil {
 				log.Printf("[Reconcile] Failed to reconcile workflow for %s/%s: %v", sessionNamespace, name, workflowErr)
-				// Condition already set by reconcileActiveWorkflow
 				// Don't update observedGeneration - will retry on next watch event
-				// Set general reconciliation error condition for visibility
-				_ = mutateAgenticSessionStatus(sessionNamespace, name, func(status map[string]interface{}) {
-					setCondition(status, conditionUpdate{
-						Type:    "Reconciled",
-						Status:  "False",
-						Reason:  "WorkflowReconciliationFailed",
-						Message: fmt.Sprintf("Failed to reconcile workflow: %v", workflowErr),
-					})
+				statusPatch.AddCondition(conditionUpdate{
+					Type:    "Reconciled",
+					Status:  "False",
+					Reason:  "WorkflowReconciliationFailed",
+					Message: fmt.Sprintf("Failed to reconcile workflow: %v", workflowErr),
 				})
+				_ = statusPatch.Apply()
 				return fmt.Errorf("workflow reconciliation failed: %w", workflowErr)
 			}
 
 			// Update observedGeneration only if reconciliation succeeded
-			_ = mutateAgenticSessionStatus(sessionNamespace, name, func(status map[string]interface{}) {
-				status["observedGeneration"] = currentGeneration
-				// Set success condition
-				setCondition(status, conditionUpdate{
-					Type:    "Reconciled",
-					Status:  "True",
-					Reason:  "SpecApplied",
-					Message: fmt.Sprintf("Successfully reconciled generation %d", currentGeneration),
-				})
+			statusPatch.SetField("observedGeneration", currentGeneration)
+			statusPatch.AddCondition(conditionUpdate{
+				Type:    "Reconciled",
+				Status:  "True",
+				Reason:  "SpecApplied",
+				Message: fmt.Sprintf("Successfully reconciled generation %d", currentGeneration),
 			})
+			if err := statusPatch.Apply(); err != nil {
+				log.Printf("[Reconcile] Warning: failed to apply status patch: %v", err)
+			}
 			log.Printf("[Reconcile] Session %s/%s: updated observedGeneration to %d after successful reconciliation", sessionNamespace, name, currentGeneration)
 		} else {
 			log.Printf("[Reconcile] Session %s/%s: no spec changes detected (generation %d == observed %d)", sessionNamespace, name, currentGeneration, observedGeneration)
@@ -473,34 +466,55 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 			// Job doesn't exist but phase is Creating - check if this is due to a stop request
 			if desiredPhase == "Stopped" {
 				log.Printf("Session %s in Creating phase but job not found and stop requested, transitioning to Stopped", name)
-				_ = mutateAgenticSessionStatus(sessionNamespace, name, func(status map[string]interface{}) {
-					status["phase"] = "Stopped"
-					status["completionTime"] = time.Now().UTC().Format(time.RFC3339)
-					setCondition(status, conditionUpdate{
-						Type:    conditionReady,
-						Status:  "False",
-						Reason:  "UserStopped",
-						Message: "User requested stop during job creation",
-					})
+				statusPatch.SetField("phase", "Stopped")
+				statusPatch.SetField("completionTime", time.Now().UTC().Format(time.RFC3339))
+				statusPatch.AddCondition(conditionUpdate{
+					Type:    conditionReady,
+					Status:  "False",
+					Reason:  "UserStopped",
+					Message: "User requested stop during job creation",
 				})
+				_ = statusPatch.Apply()
 				_ = clearAnnotation(sessionNamespace, name, "ambient-code.io/desired-phase")
 				return nil
 			}
 
 			// Job doesn't exist but phase is Creating - this is inconsistent state
-			// Could happen if job was manually deleted or operator crashed between job creation and status update
-			// Reset to Pending and let it fall through to job creation logic below
+			// Could happen if:
+			// 1. Job was manually deleted
+			// 2. Operator crashed between job creation and status update
+			// 3. Session is being stopped and job was deleted (stale event)
+
+			// Before recreating, verify the session hasn't been stopped
+			// Fetch fresh status to check for recent state changes
+			freshObj, err := config.DynamicClient.Resource(types.GetAgenticSessionResource()).
+				Namespace(sessionNamespace).Get(context.TODO(), name, v1.GetOptions{})
+			if err != nil {
+				if errors.IsNotFound(err) {
+					log.Printf("Session %s was deleted, skipping recovery", name)
+					return nil
+				}
+				log.Printf("Error fetching fresh status for %s: %v, will attempt recovery anyway", name, err)
+			} else {
+				// Check fresh phase - if it's Stopped/Stopping/Failed/Completed, don't recreate
+				freshStatus, _, _ := unstructured.NestedMap(freshObj.Object, "status")
+				freshPhase, _, _ := unstructured.NestedString(freshStatus, "phase")
+				if freshPhase == "Stopped" || freshPhase == "Stopping" || freshPhase == "Failed" || freshPhase == "Completed" {
+					log.Printf("Session %s is now in %s phase (stale Creating event), skipping job recreation", name, freshPhase)
+					return nil
+				}
+			}
+
 			log.Printf("Session %s in Creating phase but job not found, resetting to Pending and recreating", name)
-			_ = mutateAgenticSessionStatus(sessionNamespace, name, func(status map[string]interface{}) {
-				status["phase"] = "Pending"
-				// Clear Creating-related conditions
-				setCondition(status, conditionUpdate{
-					Type:    conditionJobCreated,
-					Status:  "False",
-					Reason:  "JobMissing",
-					Message: "Job not found, will recreate",
-				})
+			statusPatch.SetField("phase", "Pending")
+			statusPatch.AddCondition(conditionUpdate{
+				Type:    conditionJobCreated,
+				Status:  "False",
+				Reason:  "JobMissing",
+				Message: "Job not found, will recreate",
 			})
+			// Apply immediately and continue to Pending logic
+			_ = statusPatch.ApplyAndReset()
 			// Don't return - fall through to Pending logic to create job
 			phase = "Pending"
 		} else {
@@ -557,22 +571,18 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 	if !reusingPVC {
 		if err := services.EnsureSessionWorkspacePVC(sessionNamespace, pvcName, ownerRefs); err != nil {
 			log.Printf("Failed to ensure session PVC %s in %s: %v", pvcName, sessionNamespace, err)
-			_ = mutateAgenticSessionStatus(sessionNamespace, name, func(status map[string]interface{}) {
-				setCondition(status, conditionUpdate{
-					Type:    conditionPVCReady,
-					Status:  "False",
-					Reason:  "ProvisioningFailed",
-					Message: err.Error(),
-				})
+			statusPatch.AddCondition(conditionUpdate{
+				Type:    conditionPVCReady,
+				Status:  "False",
+				Reason:  "ProvisioningFailed",
+				Message: err.Error(),
 			})
 		} else {
-			_ = mutateAgenticSessionStatus(sessionNamespace, name, func(status map[string]interface{}) {
-				setCondition(status, conditionUpdate{
-					Type:    conditionPVCReady,
-					Status:  "True",
-					Reason:  "Bound",
-					Message: fmt.Sprintf("PVC %s ready", pvcName),
-				})
+			statusPatch.AddCondition(conditionUpdate{
+				Type:    conditionPVCReady,
+				Status:  "True",
+				Reason:  "Bound",
+				Message: fmt.Sprintf("PVC %s ready", pvcName),
 			})
 		}
 	} else {
@@ -592,32 +602,26 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 			}
 			if err := services.EnsureSessionWorkspacePVC(sessionNamespace, pvcName, ownerRefs); err != nil {
 				log.Printf("Failed to create fallback PVC %s: %v", pvcName, err)
-				_ = mutateAgenticSessionStatus(sessionNamespace, name, func(status map[string]interface{}) {
-					setCondition(status, conditionUpdate{
-						Type:    conditionPVCReady,
-						Status:  "False",
-						Reason:  "ProvisioningFailed",
-						Message: err.Error(),
-					})
+				statusPatch.AddCondition(conditionUpdate{
+					Type:    conditionPVCReady,
+					Status:  "False",
+					Reason:  "ProvisioningFailed",
+					Message: err.Error(),
 				})
 			} else {
-				_ = mutateAgenticSessionStatus(sessionNamespace, name, func(status map[string]interface{}) {
-					setCondition(status, conditionUpdate{
-						Type:    conditionPVCReady,
-						Status:  "True",
-						Reason:  "Bound",
-						Message: fmt.Sprintf("PVC %s ready", pvcName),
-					})
+				statusPatch.AddCondition(conditionUpdate{
+					Type:    conditionPVCReady,
+					Status:  "True",
+					Reason:  "Bound",
+					Message: fmt.Sprintf("PVC %s ready", pvcName),
 				})
 			}
 		} else {
-			_ = mutateAgenticSessionStatus(sessionNamespace, name, func(status map[string]interface{}) {
-				setCondition(status, conditionUpdate{
-					Type:    conditionPVCReady,
-					Status:  "True",
-					Reason:  "Reused",
-					Message: fmt.Sprintf("Reused PVC %s from parent session", pvcName),
-				})
+			statusPatch.AddCondition(conditionUpdate{
+				Type:    conditionPVCReady,
+				Status:  "True",
+				Reason:  "Reused",
+				Message: fmt.Sprintf("Reused PVC %s from parent session", pvcName),
 			})
 		}
 	}
@@ -646,39 +650,37 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 			log.Printf("Successfully copied %s secret to %s", types.AmbientVertexSecretName, sessionNamespace)
 		} else if !errors.IsNotFound(err) {
 			errMsg := fmt.Sprintf("Failed to check for %s secret: %v", types.AmbientVertexSecretName, err)
-			_ = mutateAgenticSessionStatus(sessionNamespace, name, func(status map[string]interface{}) {
-				setCondition(status, conditionUpdate{
-					Type:    conditionSecretsReady,
-					Status:  "False",
-					Reason:  "SecretCheckFailed",
-					Message: errMsg,
-				})
-				setCondition(status, conditionUpdate{
-					Type:    conditionFailed,
-					Status:  "True",
-					Reason:  "VertexSecretError",
-					Message: errMsg,
-				})
+			statusPatch.AddCondition(conditionUpdate{
+				Type:    conditionSecretsReady,
+				Status:  "False",
+				Reason:  "SecretCheckFailed",
+				Message: errMsg,
 			})
+			statusPatch.AddCondition(conditionUpdate{
+				Type:    conditionFailed,
+				Status:  "True",
+				Reason:  "VertexSecretError",
+				Message: errMsg,
+			})
+			_ = statusPatch.Apply()
 			return fmt.Errorf("failed to check for %s secret in %s (CLAUDE_CODE_USE_VERTEX=1): %w", types.AmbientVertexSecretName, operatorNamespace, err)
 		} else {
 			// Vertex enabled but secret not found - fail fast
 			errMsg := fmt.Sprintf("CLAUDE_CODE_USE_VERTEX=1 but %s secret not found in namespace %s. Create it with: kubectl create secret generic %s --from-file=ambient-code-key.json=/path/to/sa.json -n %s",
 				types.AmbientVertexSecretName, operatorNamespace, types.AmbientVertexSecretName, operatorNamespace)
-			_ = mutateAgenticSessionStatus(sessionNamespace, name, func(status map[string]interface{}) {
-				setCondition(status, conditionUpdate{
-					Type:    conditionSecretsReady,
-					Status:  "False",
-					Reason:  "VertexSecretMissing",
-					Message: errMsg,
-				})
-				setCondition(status, conditionUpdate{
-					Type:    conditionFailed,
-					Status:  "True",
-					Reason:  "VertexSecretMissing",
-					Message: "Vertex AI enabled but ambient-vertex secret not found",
-				})
+			statusPatch.AddCondition(conditionUpdate{
+				Type:    conditionSecretsReady,
+				Status:  "False",
+				Reason:  "VertexSecretMissing",
+				Message: errMsg,
 			})
+			statusPatch.AddCondition(conditionUpdate{
+				Type:    conditionFailed,
+				Status:  "True",
+				Reason:  "VertexSecretMissing",
+				Message: "Vertex AI enabled but ambient-vertex secret not found",
+			})
+			_ = statusPatch.Apply()
 			return fmt.Errorf("CLAUDE_CODE_USE_VERTEX=1 but %s secret not found in namespace %s", types.AmbientVertexSecretName, operatorNamespace)
 		}
 	} else {
@@ -719,22 +721,23 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 	_, err = config.K8sClient.BatchV1().Jobs(sessionNamespace).Get(context.TODO(), jobName, v1.GetOptions{})
 	if err == nil {
 		log.Printf("Job %s already exists for AgenticSession %s", jobName, name)
-		_ = mutateAgenticSessionStatus(sessionNamespace, name, func(status map[string]interface{}) {
-			status["observedGeneration"] = currentObj.GetGeneration()
-			setCondition(status, conditionUpdate{
-				Type:    conditionJobCreated,
-				Status:  "True",
-				Reason:  "JobExists",
-				Message: "Runner job already exists",
-			})
+		statusPatch.SetField("observedGeneration", currentObj.GetGeneration())
+		statusPatch.AddCondition(conditionUpdate{
+			Type:    conditionJobCreated,
+			Status:  "True",
+			Reason:  "JobExists",
+			Message: "Runner job already exists",
 		})
+		_ = statusPatch.Apply()
+		// Clear desired-phase annotation if it exists (job already created)
+		_ = clearAnnotation(sessionNamespace, name, "ambient-code.io/desired-phase")
 		return nil
 	}
 
 	// Extract spec information from the fresh object
 	spec, _, _ := unstructured.NestedMap(currentObj.Object, "spec")
-	_ = reconcileSpecRepos(sessionNamespace, name, spec, currentObj)
-	_ = reconcileActiveWorkflow(sessionNamespace, name, spec, currentObj)
+	_ = reconcileSpecReposWithPatch(sessionNamespace, name, spec, currentObj, statusPatch)
+	_ = reconcileActiveWorkflowWithPatch(sessionNamespace, name, spec, currentObj, statusPatch)
 	prompt, _, _ := unstructured.NestedString(spec, "initialPrompt")
 	timeout, _, _ := unstructured.NestedInt64(spec, "timeout")
 	interactive, _, _ := unstructured.NestedBool(spec, "interactive")
@@ -755,14 +758,13 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 		} else {
 			log.Printf("Runner secret %s missing in %s", runnerSecretsName, sessionNamespace)
 		}
-		_ = mutateAgenticSessionStatus(sessionNamespace, name, func(status map[string]interface{}) {
-			setCondition(status, conditionUpdate{
-				Type:    conditionSecretsReady,
-				Status:  "False",
-				Reason:  "RunnerSecretMissing",
-				Message: fmt.Sprintf("Secret %s missing", runnerSecretsName),
-			})
+		statusPatch.AddCondition(conditionUpdate{
+			Type:    conditionSecretsReady,
+			Status:  "False",
+			Reason:  "RunnerSecretMissing",
+			Message: fmt.Sprintf("Secret %s missing", runnerSecretsName),
 		})
+		_ = statusPatch.Apply()
 		return fmt.Errorf("runner secret %s missing in namespace %s", runnerSecretsName, sessionNamespace)
 	}
 
@@ -776,22 +778,20 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 		log.Printf("No %s secret found in %s (optional, skipping)", integrationSecretsName, sessionNamespace)
 	}
 
-	_ = mutateAgenticSessionStatus(sessionNamespace, name, func(status map[string]interface{}) {
-		setCondition(status, conditionUpdate{
-			Type:    conditionSecretsReady,
-			Status:  "True",
-			Reason:  "AllRequiredSecretsFound",
-			Message: "Runner secret available",
-		})
-		if integrationSecretsExist {
-			setCondition(status, conditionUpdate{
-				Type:    "IntegrationSecretsReady",
-				Status:  "True",
-				Reason:  "OptionalSecretFound",
-				Message: fmt.Sprintf("Secret %s present", integrationSecretsName),
-			})
-		}
+	statusPatch.AddCondition(conditionUpdate{
+		Type:    conditionSecretsReady,
+		Status:  "True",
+		Reason:  "AllRequiredSecretsFound",
+		Message: "Runner secret available",
 	})
+	if integrationSecretsExist {
+		statusPatch.AddCondition(conditionUpdate{
+			Type:    "IntegrationSecretsReady",
+			Status:  "True",
+			Reason:  "OptionalSecretFound",
+			Message: fmt.Sprintf("Secret %s present", integrationSecretsName),
+		})
+	}
 
 	// Extract repos configuration (simplified format: url and branch)
 	type RepoConfig struct {
@@ -1246,36 +1246,44 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 		// If job already exists, this is likely a race condition from duplicate watch events - not an error
 		if errors.IsAlreadyExists(err) {
 			log.Printf("Job %s already exists (race condition), continuing", jobName)
+			// Clear desired-phase annotation since job exists
+			_ = clearAnnotation(sessionNamespace, name, "ambient-code.io/desired-phase")
 			return nil
 		}
 		log.Printf("Failed to create job %s: %v", jobName, err)
-		_ = mutateAgenticSessionStatus(sessionNamespace, name, func(status map[string]interface{}) {
-			setCondition(status, conditionUpdate{
-				Type:    conditionJobCreated,
-				Status:  "False",
-				Reason:  "CreateFailed",
-				Message: err.Error(),
-			})
-			setCondition(status, conditionUpdate{
-				Type:    conditionReady,
-				Status:  "False",
-				Reason:  "JobCreationFailed",
-				Message: "Runner job creation failed",
-			})
+		statusPatch.AddCondition(conditionUpdate{
+			Type:    conditionJobCreated,
+			Status:  "False",
+			Reason:  "CreateFailed",
+			Message: err.Error(),
 		})
+		statusPatch.AddCondition(conditionUpdate{
+			Type:    conditionReady,
+			Status:  "False",
+			Reason:  "JobCreationFailed",
+			Message: "Runner job creation failed",
+		})
+		_ = statusPatch.Apply()
 		return fmt.Errorf("failed to create job: %v", err)
 	}
 
 	log.Printf("Created job %s for AgenticSession %s", jobName, name)
-	_ = mutateAgenticSessionStatus(sessionNamespace, name, func(status map[string]interface{}) {
-		status["observedGeneration"] = currentObj.GetGeneration()
-		setCondition(status, conditionUpdate{
-			Type:    conditionJobCreated,
-			Status:  "True",
-			Reason:  "JobCreated",
-			Message: "Runner job created",
-		})
+	statusPatch.SetField("observedGeneration", currentObj.GetGeneration())
+	statusPatch.AddCondition(conditionUpdate{
+		Type:    conditionJobCreated,
+		Status:  "True",
+		Reason:  "JobCreated",
+		Message: "Runner job created",
 	})
+	// Apply all accumulated status changes in a single API call
+	if err := statusPatch.Apply(); err != nil {
+		log.Printf("Warning: failed to apply status patch: %v", err)
+	}
+
+	// Clear desired-phase annotation now that job is created
+	// (This was deferred from the restart handler to avoid race conditions with stale events)
+	_ = clearAnnotation(sessionNamespace, name, "ambient-code.io/desired-phase")
+	log.Printf("[DesiredPhase] Cleared desired-phase annotation after successful job creation")
 
 	// Create a per-job Service pointing to the content container
 	svc := &corev1.Service{
@@ -1566,6 +1574,243 @@ func reconcileActiveWorkflow(sessionNamespace, sessionName string, spec map[stri
 	return nil
 }
 
+// reconcileSpecReposWithPatch is a version of reconcileSpecRepos that uses StatusPatch for batched updates.
+// This is used during initial reconciliation to avoid triggering multiple watch events.
+func reconcileSpecReposWithPatch(sessionNamespace, sessionName string, spec map[string]interface{}, session *unstructured.Unstructured, statusPatch *StatusPatch) error {
+	repoSlice, found, _ := unstructured.NestedSlice(spec, "repos")
+	if !found {
+		log.Printf("[Reconcile] Session %s/%s: no repos defined in spec", sessionNamespace, sessionName)
+		statusPatch.DeleteField("reconciledRepos")
+		statusPatch.AddCondition(conditionUpdate{
+			Type:    conditionReposReconciled,
+			Status:  "True",
+			Reason:  "NoRepos",
+			Message: "No repositories defined",
+		})
+		return nil
+	}
+
+	// Parse spec repos
+	specRepos := make([]map[string]string, 0, len(repoSlice))
+	for _, entry := range repoSlice {
+		if repoMap, ok := entry.(map[string]interface{}); ok {
+			url, _ := repoMap["url"].(string)
+			if strings.TrimSpace(url) == "" {
+				continue
+			}
+			branch := "main"
+			if b, ok := repoMap["branch"].(string); ok && strings.TrimSpace(b) != "" {
+				branch = b
+			}
+			specRepos = append(specRepos, map[string]string{
+				"url":    url,
+				"branch": branch,
+			})
+		}
+	}
+
+	// Get current reconciled repos from status
+	status, _, _ := unstructured.NestedMap(session.Object, "status")
+	reconciledReposRaw, _, _ := unstructured.NestedSlice(status, "reconciledRepos")
+	reconciledRepos := make([]map[string]string, 0, len(reconciledReposRaw))
+	for _, entry := range reconciledReposRaw {
+		if repoMap, ok := entry.(map[string]interface{}); ok {
+			url, _ := repoMap["url"].(string)
+			branch, _ := repoMap["branch"].(string)
+			if url != "" {
+				reconciledRepos = append(reconciledRepos, map[string]string{
+					"url":    url,
+					"branch": branch,
+				})
+			}
+		}
+	}
+
+	// Detect drift: repos added or removed
+	toAdd := []map[string]string{}
+	toRemove := []map[string]string{}
+
+	// Find repos in spec but not in reconciled (need to add)
+	for _, specRepo := range specRepos {
+		found := false
+		for _, reconciledRepo := range reconciledRepos {
+			if specRepo["url"] == reconciledRepo["url"] {
+				found = true
+				break
+			}
+		}
+		if !found {
+			toAdd = append(toAdd, specRepo)
+		}
+	}
+
+	// Find repos in reconciled but not in spec (need to remove)
+	for _, reconciledRepo := range reconciledRepos {
+		found := false
+		for _, specRepo := range specRepos {
+			if reconciledRepo["url"] == specRepo["url"] {
+				found = true
+				break
+			}
+		}
+		if !found {
+			toRemove = append(toRemove, reconciledRepo)
+		}
+	}
+
+	if len(toAdd) == 0 && len(toRemove) == 0 {
+		log.Printf("[Reconcile] Session %s/%s: repos already reconciled (%d repos)", sessionNamespace, sessionName, len(specRepos))
+		return nil
+	}
+
+	log.Printf("[Reconcile] Session %s/%s: detected repo drift - adding %d, removing %d", sessionNamespace, sessionName, len(toAdd), len(toRemove))
+
+	// Send WebSocket messages via backend to trigger runner actions
+	backendURL := getBackendAPIURL(sessionNamespace)
+
+	// Add repos
+	for _, repo := range toAdd {
+		repoName := deriveRepoNameFromURL(repo["url"])
+		log.Printf("[Reconcile] Session %s/%s: sending repo_added message for %s (%s@%s)", sessionNamespace, sessionName, repoName, repo["url"], repo["branch"])
+		if err := sendWebSocketMessageViaBackend(sessionNamespace, sessionName, backendURL, map[string]interface{}{
+			"type":   "repo_added",
+			"url":    repo["url"],
+			"branch": repo["branch"],
+			"name":   repoName,
+		}); err != nil {
+			log.Printf("[Reconcile] Failed to send repo_added message: %v", err)
+			statusPatch.AddCondition(conditionUpdate{
+				Type:    conditionReposReconciled,
+				Status:  "False",
+				Reason:  "MessageFailed",
+				Message: fmt.Sprintf("Failed to notify runner: %v", err),
+			})
+			return fmt.Errorf("failed to send repo_added message: %w", err)
+		}
+	}
+
+	// Remove repos
+	for _, repo := range toRemove {
+		repoName := deriveRepoNameFromURL(repo["url"])
+		log.Printf("[Reconcile] Session %s/%s: sending repo_removed message for %s", sessionNamespace, sessionName, repoName)
+		if err := sendWebSocketMessageViaBackend(sessionNamespace, sessionName, backendURL, map[string]interface{}{
+			"type": "repo_removed",
+			"name": repoName,
+		}); err != nil {
+			log.Printf("[Reconcile] Failed to send repo_removed message: %v", err)
+			statusPatch.AddCondition(conditionUpdate{
+				Type:    conditionReposReconciled,
+				Status:  "False",
+				Reason:  "MessageFailed",
+				Message: fmt.Sprintf("Failed to notify runner: %v", err),
+			})
+			return fmt.Errorf("failed to send repo_removed message: %w", err)
+		}
+	}
+
+	// Update status to reflect the reconciled state (via statusPatch)
+	reconciled := make([]interface{}, 0, len(specRepos))
+	for _, repo := range specRepos {
+		reconciled = append(reconciled, map[string]interface{}{
+			"url":      repo["url"],
+			"branch":   repo["branch"],
+			"status":   "Ready",
+			"clonedAt": time.Now().UTC().Format(time.RFC3339),
+		})
+	}
+	statusPatch.SetField("reconciledRepos", reconciled)
+	statusPatch.AddCondition(conditionUpdate{
+		Type:    conditionReposReconciled,
+		Status:  "True",
+		Reason:  "Reconciled",
+		Message: fmt.Sprintf("Reconciled %d repos (added: %d, removed: %d)", len(specRepos), len(toAdd), len(toRemove)),
+	})
+
+	log.Printf("[Reconcile] Session %s/%s: successfully reconciled repos", sessionNamespace, sessionName)
+	return nil
+}
+
+// reconcileActiveWorkflowWithPatch is a version of reconcileActiveWorkflow that uses StatusPatch for batched updates.
+func reconcileActiveWorkflowWithPatch(sessionNamespace, sessionName string, spec map[string]interface{}, session *unstructured.Unstructured, statusPatch *StatusPatch) error {
+	workflow, found, _ := unstructured.NestedMap(spec, "activeWorkflow")
+	if !found || len(workflow) == 0 {
+		log.Printf("[Reconcile] Session %s/%s: no workflow defined in spec", sessionNamespace, sessionName)
+		statusPatch.DeleteField("reconciledWorkflow")
+		statusPatch.AddCondition(conditionUpdate{
+			Type:    conditionWorkflowReconciled,
+			Status:  "True",
+			Reason:  "NotConfigured",
+			Message: "No workflow selected",
+		})
+		return nil
+	}
+
+	gitURL, _ := workflow["gitUrl"].(string)
+	branch := "main"
+	if b, ok := workflow["branch"].(string); ok && strings.TrimSpace(b) != "" {
+		branch = b
+	}
+	path, _ := workflow["path"].(string)
+
+	if strings.TrimSpace(gitURL) == "" {
+		log.Printf("[Reconcile] Session %s/%s: workflow gitUrl is empty", sessionNamespace, sessionName)
+		return nil
+	}
+
+	// Get current reconciled workflow from status
+	status, _, _ := unstructured.NestedMap(session.Object, "status")
+	reconciledWorkflowRaw, _, _ := unstructured.NestedMap(status, "reconciledWorkflow")
+	reconciledGitURL, _ := reconciledWorkflowRaw["gitUrl"].(string)
+	reconciledBranch, _ := reconciledWorkflowRaw["branch"].(string)
+
+	// Detect drift: workflow changed
+	if reconciledGitURL == gitURL && reconciledBranch == branch {
+		log.Printf("[Reconcile] Session %s/%s: workflow already reconciled (%s@%s)", sessionNamespace, sessionName, gitURL, branch)
+		return nil
+	}
+
+	log.Printf("[Reconcile] Session %s/%s: detected workflow drift - switching from %s@%s to %s@%s",
+		sessionNamespace, sessionName, reconciledGitURL, reconciledBranch, gitURL, branch)
+
+	// Send WebSocket message via backend to trigger runner workflow switch
+	backendURL := getBackendAPIURL(sessionNamespace)
+	log.Printf("[Reconcile] Session %s/%s: sending workflow_change message for %s@%s (path: %s)", sessionNamespace, sessionName, gitURL, branch, path)
+
+	if err := sendWebSocketMessageViaBackend(sessionNamespace, sessionName, backendURL, map[string]interface{}{
+		"type":   "workflow_change",
+		"gitUrl": gitURL,
+		"branch": branch,
+		"path":   path,
+	}); err != nil {
+		log.Printf("[Reconcile] Failed to send workflow_change message: %v", err)
+		statusPatch.AddCondition(conditionUpdate{
+			Type:    conditionWorkflowReconciled,
+			Status:  "False",
+			Reason:  "MessageFailed",
+			Message: fmt.Sprintf("Failed to notify runner: %v", err),
+		})
+		return fmt.Errorf("failed to send workflow_selected message: %w", err)
+	}
+
+	// Update status to reflect the reconciled state (via statusPatch)
+	statusPatch.SetField("reconciledWorkflow", map[string]interface{}{
+		"gitUrl":    gitURL,
+		"branch":    branch,
+		"path":      path,
+		"status":    "Active",
+		"appliedAt": time.Now().UTC().Format(time.RFC3339),
+	})
+	statusPatch.AddCondition(conditionUpdate{
+		Type:    conditionWorkflowReconciled,
+		Status:  "True",
+		Reason:  "Reconciled",
+		Message: fmt.Sprintf("Switched to workflow %s@%s", gitURL, branch),
+	})
+
+	log.Printf("[Reconcile] Session %s/%s: successfully reconciled workflow", sessionNamespace, sessionName)
+	return nil
+}
+
 func monitorJob(jobName, sessionName, sessionNamespace string) {
 	monitorKey := fmt.Sprintf("%s/%s", sessionNamespace, jobName)
 
@@ -1582,6 +1827,9 @@ func monitorJob(jobName, sessionName, sessionNamespace string) {
 	defer ticker.Stop()
 
 	for range ticker.C {
+		// Create status accumulator for this tick - all updates batched into single API call
+		statusPatch := NewStatusPatch(sessionNamespace, sessionName)
+
 		gvr := types.GetAgenticSessionResource()
 		sessionObj, err := config.DynamicClient.Resource(gvr).Namespace(sessionNamespace).Get(context.TODO(), sessionName, v1.GetOptions{})
 		if err != nil {
@@ -1623,22 +1871,20 @@ func monitorJob(jobName, sessionName, sessionNamespace string) {
 		}
 
 		if job.Status.Succeeded > 0 {
-			_ = mutateAgenticSessionStatus(sessionNamespace, sessionName, func(status map[string]interface{}) {
-				status["completionTime"] = time.Now().UTC().Format(time.RFC3339)
-				setCondition(status, conditionUpdate{Type: conditionCompleted, Status: "True", Reason: "JobSucceeded", Message: "Runner completed successfully"})
-				setCondition(status, conditionUpdate{Type: conditionReady, Status: "False", Reason: "Completed", Message: "Session finished"})
-			})
+			statusPatch.SetField("completionTime", time.Now().UTC().Format(time.RFC3339))
+			statusPatch.AddCondition(conditionUpdate{Type: conditionCompleted, Status: "True", Reason: "JobSucceeded", Message: "Runner completed successfully"})
+			statusPatch.AddCondition(conditionUpdate{Type: conditionReady, Status: "False", Reason: "Completed", Message: "Session finished"})
+			_ = statusPatch.Apply()
 			_ = ensureSessionIsInteractive(sessionNamespace, sessionName)
 			_ = deleteJobAndPerJobService(sessionNamespace, jobName, sessionName)
 			return
 		}
 
 		if job.Spec.BackoffLimit != nil && job.Status.Failed >= *job.Spec.BackoffLimit {
-			_ = mutateAgenticSessionStatus(sessionNamespace, sessionName, func(status map[string]interface{}) {
-				status["completionTime"] = time.Now().UTC().Format(time.RFC3339)
-				setCondition(status, conditionUpdate{Type: conditionFailed, Status: "True", Reason: "BackoffLimitExceeded", Message: "Runner failed repeatedly"})
-				setCondition(status, conditionUpdate{Type: conditionReady, Status: "False", Reason: "Error", Message: "Runner failed"})
-			})
+			statusPatch.SetField("completionTime", time.Now().UTC().Format(time.RFC3339))
+			statusPatch.AddCondition(conditionUpdate{Type: conditionFailed, Status: "True", Reason: "BackoffLimitExceeded", Message: "Runner failed repeatedly"})
+			statusPatch.AddCondition(conditionUpdate{Type: conditionReady, Status: "False", Reason: "Error", Message: "Runner failed"})
+			_ = statusPatch.Apply()
 			_ = ensureSessionIsInteractive(sessionNamespace, sessionName)
 			_ = deleteJobAndPerJobService(sessionNamespace, jobName, sessionName)
 			return
@@ -1646,21 +1892,20 @@ func monitorJob(jobName, sessionName, sessionNamespace string) {
 
 		if len(pods.Items) == 0 {
 			if job.Status.Active == 0 && job.Status.Succeeded == 0 && job.Status.Failed == 0 {
-				_ = mutateAgenticSessionStatus(sessionNamespace, sessionName, func(status map[string]interface{}) {
-					status["completionTime"] = time.Now().UTC().Format(time.RFC3339)
-					setCondition(status, conditionUpdate{
-						Type:    conditionFailed,
-						Status:  "True",
-						Reason:  "PodMissing",
-						Message: "Job pod disappeared unexpectedly",
-					})
-					setCondition(status, conditionUpdate{
-						Type:    conditionReady,
-						Status:  "False",
-						Reason:  "PodMissing",
-						Message: "Runner pod missing",
-					})
+				statusPatch.SetField("completionTime", time.Now().UTC().Format(time.RFC3339))
+				statusPatch.AddCondition(conditionUpdate{
+					Type:    conditionFailed,
+					Status:  "True",
+					Reason:  "PodMissing",
+					Message: "Job pod disappeared unexpectedly",
 				})
+				statusPatch.AddCondition(conditionUpdate{
+					Type:    conditionReady,
+					Status:  "False",
+					Reason:  "PodMissing",
+					Message: "Runner pod missing",
+				})
+				_ = statusPatch.Apply()
 				_ = ensureSessionIsInteractive(sessionNamespace, sessionName)
 				_ = deleteJobAndPerJobService(sessionNamespace, jobName, sessionName)
 				return
@@ -1673,17 +1918,14 @@ func monitorJob(jobName, sessionName, sessionNamespace string) {
 		// Use k8s-resources endpoint or kubectl for live pod info
 
 		if pod.Spec.NodeName != "" {
-			_ = mutateAgenticSessionStatus(sessionNamespace, sessionName, func(status map[string]interface{}) {
-				setCondition(status, conditionUpdate{Type: conditionPodScheduled, Status: "True", Reason: "Scheduled", Message: fmt.Sprintf("Scheduled on %s", pod.Spec.NodeName)})
-			})
+			statusPatch.AddCondition(conditionUpdate{Type: conditionPodScheduled, Status: "True", Reason: "Scheduled", Message: fmt.Sprintf("Scheduled on %s", pod.Spec.NodeName)})
 		}
 
 		if pod.Status.Phase == corev1.PodFailed {
-			_ = mutateAgenticSessionStatus(sessionNamespace, sessionName, func(status map[string]interface{}) {
-				status["completionTime"] = time.Now().UTC().Format(time.RFC3339)
-				setCondition(status, conditionUpdate{Type: conditionFailed, Status: "True", Reason: pod.Status.Reason, Message: pod.Status.Message})
-				setCondition(status, conditionUpdate{Type: conditionReady, Status: "False", Reason: "PodFailed", Message: pod.Status.Message})
-			})
+			statusPatch.SetField("completionTime", time.Now().UTC().Format(time.RFC3339))
+			statusPatch.AddCondition(conditionUpdate{Type: conditionFailed, Status: "True", Reason: pod.Status.Reason, Message: pod.Status.Message})
+			statusPatch.AddCondition(conditionUpdate{Type: conditionReady, Status: "False", Reason: "PodFailed", Message: pod.Status.Message})
+			_ = statusPatch.Apply()
 			_ = ensureSessionIsInteractive(sessionNamespace, sessionName)
 			_ = deleteJobAndPerJobService(sessionNamespace, jobName, sessionName)
 			return
@@ -1691,17 +1933,15 @@ func monitorJob(jobName, sessionName, sessionNamespace string) {
 
 		runner := getContainerStatusByName(&pod, "ambient-code-runner")
 		if runner == nil {
+			// Apply any accumulated changes (e.g., PodScheduled) before continuing
+			_ = statusPatch.Apply()
 			continue
 		}
 
 		if runner.State.Running != nil {
-			_ = mutateAgenticSessionStatus(sessionNamespace, sessionName, func(status map[string]interface{}) {
-				if _, ok := status["startTime"]; !ok {
-					status["startTime"] = time.Now().UTC().Format(time.RFC3339)
-				}
-				setCondition(status, conditionUpdate{Type: conditionRunnerStarted, Status: "True", Reason: "ContainerRunning", Message: "Runner container is executing"})
-				setCondition(status, conditionUpdate{Type: conditionReady, Status: "True", Reason: "Running", Message: "Session is running"})
-			})
+			statusPatch.AddCondition(conditionUpdate{Type: conditionRunnerStarted, Status: "True", Reason: "ContainerRunning", Message: "Runner container is executing"})
+			statusPatch.AddCondition(conditionUpdate{Type: conditionReady, Status: "True", Reason: "Running", Message: "Session is running"})
+			_ = statusPatch.Apply()
 			continue
 		}
 
@@ -1710,11 +1950,10 @@ func monitorJob(jobName, sessionName, sessionNamespace string) {
 			errorStates := map[string]bool{"ImagePullBackOff": true, "ErrImagePull": true, "CrashLoopBackOff": true, "CreateContainerConfigError": true, "InvalidImageName": true}
 			if errorStates[waiting.Reason] {
 				msg := fmt.Sprintf("Runner waiting: %s - %s", waiting.Reason, waiting.Message)
-				_ = mutateAgenticSessionStatus(sessionNamespace, sessionName, func(status map[string]interface{}) {
-					status["completionTime"] = time.Now().UTC().Format(time.RFC3339)
-					setCondition(status, conditionUpdate{Type: conditionFailed, Status: "True", Reason: waiting.Reason, Message: waiting.Message})
-					setCondition(status, conditionUpdate{Type: conditionReady, Status: "False", Reason: waiting.Reason, Message: msg})
-				})
+				statusPatch.SetField("completionTime", time.Now().UTC().Format(time.RFC3339))
+				statusPatch.AddCondition(conditionUpdate{Type: conditionFailed, Status: "True", Reason: waiting.Reason, Message: waiting.Message})
+				statusPatch.AddCondition(conditionUpdate{Type: conditionReady, Status: "False", Reason: waiting.Reason, Message: msg})
+				_ = statusPatch.Apply()
 				_ = ensureSessionIsInteractive(sessionNamespace, sessionName)
 				_ = deleteJobAndPerJobService(sessionNamespace, jobName, sessionName)
 				return
@@ -1725,46 +1964,42 @@ func monitorJob(jobName, sessionName, sessionNamespace string) {
 			term := runner.State.Terminated
 			now := time.Now().UTC().Format(time.RFC3339)
 
+			statusPatch.SetField("completionTime", now)
 			switch term.ExitCode {
 			case 0:
-				_ = mutateAgenticSessionStatus(sessionNamespace, sessionName, func(status map[string]interface{}) {
-					status["completionTime"] = now
-					setCondition(status, conditionUpdate{Type: conditionCompleted, Status: "True", Reason: "ExitCode0", Message: "Runner exited successfully"})
-					setCondition(status, conditionUpdate{Type: conditionReady, Status: "False", Reason: "Completed", Message: "Runner finished"})
-				})
+				statusPatch.AddCondition(conditionUpdate{Type: conditionCompleted, Status: "True", Reason: "ExitCode0", Message: "Runner exited successfully"})
+				statusPatch.AddCondition(conditionUpdate{Type: conditionReady, Status: "False", Reason: "Completed", Message: "Runner finished"})
 			case 2:
 				msg := fmt.Sprintf("Runner exited due to prerequisite failure: %s", term.Message)
-				_ = mutateAgenticSessionStatus(sessionNamespace, sessionName, func(status map[string]interface{}) {
-					status["completionTime"] = now
-					setCondition(status, conditionUpdate{
-						Type:    conditionFailed,
-						Status:  "True",
-						Reason:  "PrerequisiteFailed",
-						Message: msg,
-					})
-					setCondition(status, conditionUpdate{
-						Type:    conditionReady,
-						Status:  "False",
-						Reason:  "PrerequisiteFailed",
-						Message: msg,
-					})
+				statusPatch.AddCondition(conditionUpdate{
+					Type:    conditionFailed,
+					Status:  "True",
+					Reason:  "PrerequisiteFailed",
+					Message: msg,
+				})
+				statusPatch.AddCondition(conditionUpdate{
+					Type:    conditionReady,
+					Status:  "False",
+					Reason:  "PrerequisiteFailed",
+					Message: msg,
 				})
 			default:
 				msg := fmt.Sprintf("Runner exited with code %d: %s", term.ExitCode, term.Reason)
 				if term.Message != "" {
 					msg = fmt.Sprintf("%s - %s", msg, term.Message)
 				}
-				_ = mutateAgenticSessionStatus(sessionNamespace, sessionName, func(status map[string]interface{}) {
-					status["completionTime"] = now
-					setCondition(status, conditionUpdate{Type: conditionFailed, Status: "True", Reason: "RunnerExit", Message: msg})
-					setCondition(status, conditionUpdate{Type: conditionReady, Status: "False", Reason: "RunnerExit", Message: msg})
-				})
+				statusPatch.AddCondition(conditionUpdate{Type: conditionFailed, Status: "True", Reason: "RunnerExit", Message: msg})
+				statusPatch.AddCondition(conditionUpdate{Type: conditionReady, Status: "False", Reason: "RunnerExit", Message: msg})
 			}
 
+			_ = statusPatch.Apply()
 			_ = ensureSessionIsInteractive(sessionNamespace, sessionName)
 			_ = deleteJobAndPerJobService(sessionNamespace, jobName, sessionName)
 			return
 		}
+
+		// Apply any accumulated changes at end of tick
+		_ = statusPatch.Apply()
 	}
 }
 
@@ -2211,6 +2446,136 @@ func reconcileTempContentPod(sessionNamespace, sessionName, tempPodName string, 
 				Reason:  "PodFailed",
 				Message: fmt.Sprintf("Temp content pod failed: %s", tempPod.Status.Message),
 			})
+		})
+	}
+
+	return nil
+}
+
+// reconcileTempContentPodWithPatch is a version of reconcileTempContentPod that uses StatusPatch for batched updates.
+func reconcileTempContentPodWithPatch(sessionNamespace, sessionName, tempPodName string, session *unstructured.Unstructured, statusPatch *StatusPatch) error {
+	// Check if pod already exists
+	tempPod, err := config.K8sClient.CoreV1().Pods(sessionNamespace).Get(context.TODO(), tempPodName, v1.GetOptions{})
+
+	if errors.IsNotFound(err) {
+		// Create temp pod
+		log.Printf("[TempPod] Creating temp content pod for workspace access: %s/%s", sessionNamespace, tempPodName)
+
+		pvcName := fmt.Sprintf("ambient-workspace-%s", sessionName)
+		appConfig := config.LoadConfig()
+
+		pod := &corev1.Pod{
+			ObjectMeta: v1.ObjectMeta{
+				Name:      tempPodName,
+				Namespace: sessionNamespace,
+				Labels: map[string]string{
+					"app":             "temp-content-service",
+					"agentic-session": sessionName,
+				},
+				Annotations: map[string]string{
+					"ambient-code.io/created-at": time.Now().UTC().Format(time.RFC3339),
+				},
+				OwnerReferences: []v1.OwnerReference{{
+					APIVersion: session.GetAPIVersion(),
+					Kind:       session.GetKind(),
+					Name:       session.GetName(),
+					UID:        session.GetUID(),
+					Controller: boolPtr(true),
+				}},
+			},
+			Spec: corev1.PodSpec{
+				RestartPolicy: corev1.RestartPolicyNever,
+				Containers: []corev1.Container{{
+					Name:            "content",
+					Image:           appConfig.ContentServiceImage,
+					ImagePullPolicy: appConfig.ImagePullPolicy,
+					Env: []corev1.EnvVar{
+						{Name: "CONTENT_SERVICE_MODE", Value: "true"},
+						{Name: "STATE_BASE_DIR", Value: "/workspace"},
+					},
+					Ports: []corev1.ContainerPort{{ContainerPort: 8080, Name: "http"}},
+					VolumeMounts: []corev1.VolumeMount{{
+						Name:      "workspace",
+						MountPath: "/workspace",
+					}},
+					ReadinessProbe: &corev1.Probe{
+						ProbeHandler: corev1.ProbeHandler{
+							HTTPGet: &corev1.HTTPGetAction{
+								Path: "/health",
+								Port: intstr.FromString("http"),
+							},
+						},
+						InitialDelaySeconds: 3,
+						PeriodSeconds:       3,
+					},
+				}},
+				Volumes: []corev1.Volume{{
+					Name: "workspace",
+					VolumeSource: corev1.VolumeSource{
+						PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+							ClaimName: pvcName,
+						},
+					},
+				}},
+			},
+		}
+
+		if _, err := config.K8sClient.CoreV1().Pods(sessionNamespace).Create(context.TODO(), pod, v1.CreateOptions{}); err != nil {
+			log.Printf("[TempPod] Failed to create temp pod: %v", err)
+			statusPatch.AddCondition(conditionUpdate{
+				Type:    conditionTempContentPodReady,
+				Status:  "False",
+				Reason:  "CreationFailed",
+				Message: fmt.Sprintf("Failed to create temp pod: %v", err),
+			})
+			return fmt.Errorf("failed to create temp pod: %w", err)
+		}
+
+		log.Printf("[TempPod] Created temp pod %s", tempPodName)
+		statusPatch.AddCondition(conditionUpdate{
+			Type:    conditionTempContentPodReady,
+			Status:  "Unknown",
+			Reason:  "Provisioning",
+			Message: "Temp content pod starting",
+		})
+		return nil
+	}
+
+	if err != nil {
+		return fmt.Errorf("failed to check temp pod: %w", err)
+	}
+
+	// Temp pod exists, check readiness
+	if tempPod.Status.Phase == corev1.PodRunning {
+		ready := false
+		for _, cond := range tempPod.Status.Conditions {
+			if cond.Type == corev1.PodReady && cond.Status == corev1.ConditionTrue {
+				ready = true
+				break
+			}
+		}
+
+		if ready {
+			statusPatch.AddCondition(conditionUpdate{
+				Type:    conditionTempContentPodReady,
+				Status:  "True",
+				Reason:  "Ready",
+				Message: "Temp content pod is ready for workspace access",
+			})
+		} else {
+			statusPatch.AddCondition(conditionUpdate{
+				Type:    conditionTempContentPodReady,
+				Status:  "Unknown",
+				Reason:  "NotReady",
+				Message: "Temp content pod not ready yet",
+			})
+		}
+	} else if tempPod.Status.Phase == corev1.PodFailed {
+		statusPatch.AddCondition(conditionUpdate{
+			Type:    conditionTempContentPodReady,
+			Status:  "False",
+			Reason:  "PodFailed",
+			Message: fmt.Sprintf("Temp content pod failed: %s", tempPod.Status.Message),
 		})
 	}
 

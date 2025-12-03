@@ -46,6 +46,86 @@ type conditionUpdate struct {
 	Message string
 }
 
+// StatusPatch accumulates status field updates and condition changes
+// before applying them in a single batch update. This reduces watch events
+// by batching multiple status changes into one API call.
+type StatusPatch struct {
+	Fields     map[string]interface{}
+	Conditions []conditionUpdate
+	Deletions  map[string]bool // Fields to delete
+	Namespace  string
+	Name       string
+}
+
+// NewStatusPatch creates a new status accumulator for the given session.
+func NewStatusPatch(namespace, name string) *StatusPatch {
+	return &StatusPatch{
+		Fields:     make(map[string]interface{}),
+		Conditions: make([]conditionUpdate, 0),
+		Deletions:  make(map[string]bool),
+		Namespace:  namespace,
+		Name:       name,
+	}
+}
+
+// SetField queues a field update to be applied when Apply() is called.
+func (sp *StatusPatch) SetField(key string, value interface{}) {
+	delete(sp.Deletions, key) // Remove from deletions if it was there
+	sp.Fields[key] = value
+}
+
+// DeleteField queues a field deletion to be applied when Apply() is called.
+func (sp *StatusPatch) DeleteField(key string) {
+	delete(sp.Fields, key) // Remove from fields if it was there
+	sp.Deletions[key] = true
+}
+
+// AddCondition queues a condition update to be applied when Apply() is called.
+func (sp *StatusPatch) AddCondition(cond conditionUpdate) {
+	sp.Conditions = append(sp.Conditions, cond)
+}
+
+// HasChanges returns true if there are any pending changes to apply.
+func (sp *StatusPatch) HasChanges() bool {
+	return len(sp.Fields) > 0 || len(sp.Conditions) > 0 || len(sp.Deletions) > 0
+}
+
+// Apply executes all accumulated changes in a single API call.
+// Returns nil if there are no changes to apply.
+func (sp *StatusPatch) Apply() error {
+	if !sp.HasChanges() {
+		return nil // No changes to apply
+	}
+
+	return mutateAgenticSessionStatus(sp.Namespace, sp.Name, func(status map[string]interface{}) {
+		// Apply field deletions first
+		for key := range sp.Deletions {
+			delete(status, key)
+		}
+
+		// Apply field updates
+		for key, value := range sp.Fields {
+			status[key] = value
+		}
+
+		// Apply condition updates
+		for _, cond := range sp.Conditions {
+			setCondition(status, cond)
+		}
+	})
+}
+
+// ApplyAndReset applies all changes and resets the patch for reuse.
+// This is useful when you need to apply changes mid-reconciliation
+// (e.g., before returning early) but want to continue accumulating.
+func (sp *StatusPatch) ApplyAndReset() error {
+	err := sp.Apply()
+	sp.Fields = make(map[string]interface{})
+	sp.Conditions = make([]conditionUpdate, 0)
+	sp.Deletions = make(map[string]bool)
+	return err
+}
+
 // mutateAgenticSessionStatus loads the AgenticSession, applies the mutator to the status map, and persists the result.
 func mutateAgenticSessionStatus(sessionNamespace, name string, mutator func(status map[string]interface{})) error {
 	gvr := types.GetAgenticSessionResource()
