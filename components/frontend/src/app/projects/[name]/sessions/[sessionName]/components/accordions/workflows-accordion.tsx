@@ -191,7 +191,7 @@ export function WorkflowsAccordion({
                       {showCommandsList && (
                         <div className="relative mt-2">
                           {commandsScrollTop && (
-                            <div className="absolute top-0 left-0 right-0 h-8 bg-gradient-to-b from-white to-transparent pointer-events-none z-10" />
+                            <div className="absolute top-0 left-0 right-0 h-8 bg-gradient-to-b from-card to-transparent pointer-events-none z-10" />
                           )}
                           <div 
                             className="max-h-[400px] overflow-y-auto space-y-2 pr-1"
@@ -236,7 +236,7 @@ export function WorkflowsAccordion({
                             })}
                           </div>
                           {commandsScrollBottom && (
-                            <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-white to-transparent pointer-events-none z-10" />
+                            <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-card to-transparent pointer-events-none z-10" />
                           )}
                         </div>
                       )}
@@ -275,7 +275,7 @@ export function WorkflowsAccordion({
                           {/* Scrollable agents list */}
                           <div className="relative">
                             {agentsScrollTop && (
-                              <div className="absolute top-0 left-0 right-0 h-8 bg-gradient-to-b from-white to-transparent pointer-events-none z-10" />
+                              <div className="absolute top-0 left-0 right-0 h-8 bg-gradient-to-b from-card to-transparent pointer-events-none z-10" />
                             )}
                             <div
                               className="max-h-48 overflow-y-auto space-y-1 pr-1"
@@ -317,7 +317,7 @@ export function WorkflowsAccordion({
                               </div>
                             </div>
                             {agentsScrollBottom && (
-                              <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-white to-transparent pointer-events-none z-10" />
+                              <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-card to-transparent pointer-events-none z-10" />
                             )}
                           </div>
                         </div>
