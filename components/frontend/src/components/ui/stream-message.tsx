@@ -36,7 +36,7 @@ export const StreamMessage: React.FC<StreamMessageProps> = ({ message, onGoToRes
     m != null && typeof m === "object" && "toolUseBlock" in m && "resultBlock" in m;
 
   if (isToolUsePair(message)) {
-    return <ToolMessage toolUseBlock={message.toolUseBlock} resultBlock={message.resultBlock} />;
+    return <ToolMessage toolUseBlock={message.toolUseBlock} resultBlock={message.resultBlock} timestamp={message.timestamp} />;
   }
 
   const m = message as MessageObject;
@@ -54,13 +54,13 @@ export const StreamMessage: React.FC<StreamMessageProps> = ({ message, onGoToRes
     case "user_message":
     case "agent_message": {
       if (typeof m.content === "string") {
-        return <Message role={m.type === "agent_message" ? "bot" : "user"} content={m.content} name="Claude AI" borderless={plainCard}/>;
+        return <Message role={m.type === "agent_message" ? "bot" : "user"} content={m.content} name="Claude AI" borderless={plainCard} timestamp={m.timestamp}/>;
       }
       switch (m.content.type) {
         case "thinking_block":
           return <ThinkingMessage block={m.content} />
         case "text_block":
-          return <Message role={m.type === "agent_message" ? "bot" : "user"} content={m.content.text} name="Claude AI" borderless={plainCard}/>
+          return <Message role={m.type === "agent_message" ? "bot" : "user"} content={m.content.text} name="Claude AI" borderless={plainCard} timestamp={m.timestamp}/>
         case "tool_use_block":
           return <ToolMessage toolUseBlock={m.content} borderless={plainCard}/>
         case "tool_result_block":
@@ -78,6 +78,7 @@ export const StreamMessage: React.FC<StreamMessageProps> = ({ message, onGoToRes
           role="bot"
           content={m.is_error ? "Agent completed with errors." : "Agent completed successfully."}
           name="Claude AI"
+          timestamp={m.timestamp}
           actions={
             <div className="flex items-center justify-between">
               <div className="text-xs text-muted-foreground">
