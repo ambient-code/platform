@@ -163,30 +163,20 @@ jobs:
               return;
             }
 
-            const transparencySection = `
-
----
-🔍 [View AI decision process](${serverUrl}/${repository}/actions/runs/${runId}) (logs available for 90 days)
-
-<details>
-<summary>📋 View memory system files loaded (click to expand)</summary>
-
-### What Amber Loaded for Code Review
-
-Amber automatically loaded these repository standards from the memory system:
-
-1. **CLAUDE.md** - Master project instructions, development standards
-2. **backend-development.md** - Go backend, K8s integration patterns
-3. **frontend-development.md** - NextJS, Shadcn UI, React Query patterns
-4. **security-standards.md** - Auth, RBAC, token handling
-5. **k8s-client-usage.md** - User token vs service account patterns
-6. **error-handling.md** - Consistent error patterns
-7. **react-query-usage.md** - Data fetching patterns
-
-**Impact**: This review used your repository's specific code quality standards, security patterns, and best practices from the memory system (PRs #359, #360) - not just generic code review guidelines.
-
-</details>
-`;
+            const transparencySection = '\n\n---\n🔍 [View AI decision process](' + serverUrl + '/' + repository + '/actions/runs/' + runId + ') (logs available for 90 days)\n\n' +
+              '<details>\n' +
+              '<summary>📋 View memory system files loaded (click to expand)</summary>\n\n' +
+              '### What Amber Loaded for Code Review\n\n' +
+              'Amber automatically loaded these repository standards from the memory system:\n\n' +
+              '1. **CLAUDE.md** - Master project instructions, development standards\n' +
+              '2. **backend-development.md** - Go backend, K8s integration patterns\n' +
+              '3. **frontend-development.md** - NextJS, Shadcn UI, React Query patterns\n' +
+              '4. **security-standards.md** - Auth, RBAC, token handling\n' +
+              '5. **k8s-client-usage.md** - User token vs service account patterns\n' +
+              '6. **error-handling.md** - Consistent error patterns\n' +
+              '7. **react-query-usage.md** - Data fetching patterns\n\n' +
+              '**Impact**: This review used your repository\'s specific code quality standards, security patterns, and best practices from the memory system (PRs #359, #360) - not just generic code review guidelines.\n\n' +
+              '</details>';
 
             const updatedBody = reviewComment.body + transparencySection;
 
