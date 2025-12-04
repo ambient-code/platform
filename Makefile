@@ -121,9 +121,15 @@ local-up: check-minikube check-kubectl ## Start local development environment (m
 	@echo "$(COLOR_BOLD)🚀 Starting Ambient Code Platform Local Environment$(COLOR_RESET)"
 	@echo ""
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 1/8: Starting minikube..."
-	@minikube start --driver=podman --memory=4096 --cpus=2 --kubernetes-version=v1.28.3 --container-runtime=cri-o 2>/dev/null || \
-		(minikube status >/dev/null 2>&1 && echo "$(COLOR_GREEN)✓$(COLOR_RESET) Minikube already running") || \
-		(echo "$(COLOR_RED)✗$(COLOR_RESET) Failed to start minikube" && exit 1)
+	@if [ "$(CONTAINER_ENGINE)" = "docker" ]; then \
+		minikube start --driver=docker --memory=4096 --cpus=2 2>/dev/null || \
+			(minikube status >/dev/null 2>&1 && echo "$(COLOR_GREEN)✓$(COLOR_RESET) Minikube already running") || \
+			(echo "$(COLOR_RED)✗$(COLOR_RESET) Failed to start minikube" && exit 1); \
+	else \
+		minikube start --driver=podman --memory=4096 --cpus=2 --kubernetes-version=v1.28.3 --container-runtime=cri-o 2>/dev/null || \
+			(minikube status >/dev/null 2>&1 && echo "$(COLOR_GREEN)✓$(COLOR_RESET) Minikube already running") || \
+			(echo "$(COLOR_RED)✗$(COLOR_RESET) Failed to start minikube" && exit 1); \
+	fi
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 2/8: Enabling addons..."
 	@minikube addons enable ingress >/dev/null 2>&1 || true
 	@minikube addons enable storage-provisioner >/dev/null 2>&1 || true
