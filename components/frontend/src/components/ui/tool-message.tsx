@@ -21,6 +21,7 @@ export type ToolMessageProps = {
   resultBlock?: ToolResultBlock;
   className?: string;
   borderless?: boolean;
+  timestamp?: string;
 };
 
 const formatToolName = (toolName?: string) => {
@@ -179,7 +180,7 @@ const extractTextFromResultContent = (content: unknown): string => {
 };
 
 export const ToolMessage = React.forwardRef<HTMLDivElement, ToolMessageProps>(
-  ({ toolUseBlock, resultBlock, className, borderless, ...props }, ref) => {
+  ({ toolUseBlock, resultBlock, className, borderless, timestamp, ...props }, ref) => {
     const [isExpanded, setIsExpanded] = useState(false);
 
     const toolResultBlock = resultBlock;
@@ -299,7 +300,7 @@ export const ToolMessage = React.forwardRef<HTMLDivElement, ToolMessageProps>(
                         Working on your request...
                       </div>
                     ) : null}
-                    
+
                     {isLoading && subagentDescription && subagentDescription.trim() && (
                       <div className="flex items-center gap-2 text-xs text-muted-foreground mt-2">
                         <Loader2 className="w-3 h-3 animate-bounce" />
@@ -314,6 +315,15 @@ export const ToolMessage = React.forwardRef<HTMLDivElement, ToolMessageProps>(
                       <div className="rounded p-2 overflow-x-auto">
                         <ExpandableMarkdown className="prose-sm" content={subagentPrompt} />
                       </div>
+                    </div>
+                  )}
+
+                  {/* Timestamp for subagent */}
+                  {timestamp && (
+                    <div className="pt-2 border-t">
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(timestamp).toLocaleTimeString()}
+                      </span>
                     </div>
                   )}
                 </div>
@@ -352,6 +362,15 @@ export const ToolMessage = React.forwardRef<HTMLDivElement, ToolMessageProps>(
                             }
                           />
                         </div>
+                      </div>
+                    )}
+
+                    {/* Timestamp for default tool */}
+                    {timestamp && (
+                      <div className="pt-2 border-t">
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(timestamp).toLocaleTimeString()}
+                        </span>
                       </div>
                     )}
                   </div>

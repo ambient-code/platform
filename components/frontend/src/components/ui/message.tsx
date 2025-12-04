@@ -18,6 +18,7 @@ export type MessageProps = {
   components?: Components;
   borderless?: boolean;
   actions?: React.ReactNode;
+  timestamp?: string;
 };
 
 const defaultComponents: Components = {
@@ -169,7 +170,7 @@ export const LoadingDots = () => {
 
 export const Message = React.forwardRef<HTMLDivElement, MessageProps>(
   (
-    { role, content, isLoading, className, components, borderless, actions, ...props },
+    { role, content, isLoading, className, components, borderless, actions, timestamp, ...props },
     ref
   ) => {
     const isBot = role === "bot";
@@ -220,6 +221,15 @@ export const Message = React.forwardRef<HTMLDivElement, MessageProps>(
                   </ReactMarkdown>
                 )}
               </div>
+
+              {/* Timestamp */}
+              {timestamp && !isLoading && (
+                <div className="mt-2">
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(timestamp).toLocaleTimeString()}
+                  </span>
+                </div>
+              )}
 
               {actions ? (
                 <div className={cn(borderless ? "mt-1" : "mt-3 pt-2 border-t")}>{actions}</div>

@@ -9,9 +9,10 @@ import type { ThinkingBlock } from "@/types/agentic-session";
 export type ThinkingMessageProps = {
   block: ThinkingBlock;
   className?: string;
+  timestamp?: string;
 };
 
-export const ThinkingMessage: React.FC<ThinkingMessageProps> = ({ block, className }) => {
+export const ThinkingMessage: React.FC<ThinkingMessageProps> = ({ block, className, timestamp }) => {
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -51,7 +52,16 @@ export const ThinkingMessage: React.FC<ThinkingMessageProps> = ({ block, classNa
                       {block.thinking}
                     </pre>
                   </div>
-                
+
+              </div>
+            )}
+
+            {/* Timestamp */}
+            {timestamp && (
+              <div className="mt-2 pt-2 border-t">
+                <span className="text-xs text-muted-foreground">
+                  {new Date(timestamp).toLocaleTimeString()}
+                </span>
               </div>
             )}
           </div>
