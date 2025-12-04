@@ -49,6 +49,9 @@ nav:
   - Developer Guide:
     - Observability & Instrumentation: observability-langfuse.md
     - Model Pricing: model-pricing.md
+  - Architecture:
+    - Platform Architecture: diagrams/platform-architecture.md
+    - Amber Workflow: diagrams/amber-workflow.md
   - Labs:
     - Overview: labs/index.md
     - Lab 1 - Your First Agentic Session: labs/basic/lab-1-first-rfe.md
