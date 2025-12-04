@@ -32,6 +32,52 @@ FAILED_TESTS=0
 PASSED_TESTS=0
 KNOWN_FAILURES=0
 
+# Detect if we need to use localhost (macOS + Podman VM networking)
+# On macOS with Podman, minikube runs inside a VM and its IP is not directly accessible
+get_test_url() {
+    local port=$1
+    local minikube_ip
+    
+    # Check if we're on macOS with Podman (VM networking doesn't expose minikube IP)
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        # On macOS, prefer localhost with port-forwarding
+        # Check if port-forward is running
+        if pgrep -f "kubectl.*port-forward.*${port}" >/dev/null 2>&1; then
+            if [[ "$port" == "30080" ]]; then
+                echo "http://localhost:8080"
+            elif [[ "$port" == "30030" ]]; then
+                echo "http://localhost:3000"
+            fi
+            return 0
+        fi
+        
+        # Try minikube ip anyway (might work with Docker driver)
+        minikube_ip=$(minikube ip 2>/dev/null)
+        if [[ -n "$minikube_ip" ]]; then
+            # Test if we can actually reach it
+            if curl -sf --connect-timeout 2 "http://${minikube_ip}:${port}" >/dev/null 2>&1; then
+                echo "http://${minikube_ip}:${port}"
+                return 0
+            fi
+        fi
+        
+        # Fallback to localhost (requires port-forwarding)
+        if [[ "$port" == "30080" ]]; then
+            echo "http://localhost:8080"
+        elif [[ "$port" == "30030" ]]; then
+            echo "http://localhost:3000"
+        fi
+    else
+        # Linux: minikube IP is directly accessible
+        minikube_ip=$(minikube ip 2>/dev/null)
+        if [[ -n "$minikube_ip" ]]; then
+            echo "http://${minikube_ip}:${port}"
+        else
+            echo ""
+        fi
+    fi
+}
+
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -338,14 +384,14 @@ test_ingress() {
 test_backend_health() {
     log_section "Test 10: Backend Health Endpoint"
     
-    local minikube_ip
-    minikube_ip=$(minikube ip 2>/dev/null)
+    local backend_url
+    backend_url=$(get_test_url 30080)
     
-    if [ -n "$minikube_ip" ]; then
-        log_info "Minikube IP: $minikube_ip"
-        assert_http_ok "http://$minikube_ip:30080/health" "Backend health endpoint responds" 10
+    if [ -n "$backend_url" ]; then
+        log_info "Backend URL: $backend_url"
+        assert_http_ok "${backend_url}/health" "Backend health endpoint responds" 10
     else
-        log_error "Could not get minikube IP"
+        log_error "Could not determine backend URL (minikube not running or port-forward not active)"
         ((FAILED_TESTS++))
     fi
 }
@@ -354,13 +400,14 @@ test_backend_health() {
 test_frontend_accessibility() {
     log_section "Test 11: Frontend Accessibility"
     
-    local minikube_ip
-    minikube_ip=$(minikube ip 2>/dev/null)
+    local frontend_url
+    frontend_url=$(get_test_url 30030)
     
-    if [ -n "$minikube_ip" ]; then
-        assert_http_ok "http://$minikube_ip:30030" "Frontend is accessible" 10
+    if [ -n "$frontend_url" ]; then
+        log_info "Frontend URL: $frontend_url"
+        assert_http_ok "$frontend_url" "Frontend is accessible" 10
     else
-        log_error "Could not get minikube IP"
+        log_error "Could not determine frontend URL (minikube not running or port-forward not active)"
         ((FAILED_TESTS++))
     fi
 }
@@ -1123,8 +1170,8 @@ main() {
             echo ""
             log_info "Your local development environment is ready!"
             log_info "Access the application:"
-            log_info "  • Frontend: http://$(minikube ip 2>/dev/null):30030"
-            log_info "  • Backend:  http://$(minikube ip 2>/dev/null):30080"
+            log_info "  • Frontend: $(get_test_url 30030)"
+            log_info "  • Backend:  $(get_test_url 30080)"
             echo ""
             if [ $KNOWN_FAILURES -gt 0 ]; then
                 log_warning "Note: $KNOWN_FAILURES known TODOs tracked for future implementation"
