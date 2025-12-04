@@ -26,6 +26,8 @@ The platform includes **Amber**, a background agent that automates common develo
 
 ### Core Architecture
 
+For detailed visual workflows, see [Architecture Workflows](docs/architecture-workflows.md).
+
 The system follows a Kubernetes-native pattern with Custom Resources, Operators, and Job execution:
 
 1. **Frontend** (NextJS + Shadcn): Web UI for session management and monitoring

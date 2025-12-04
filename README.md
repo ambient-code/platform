@@ -550,6 +550,7 @@ See [e2e/README.md](e2e/README.md) for detailed documentation, troubleshooting, 
 ### Deployment & Configuration
 - **Deployment Guide**: [docs/OPENSHIFT_DEPLOY.md](docs/OPENSHIFT_DEPLOY.md)
 - **OAuth Setup**: [docs/OPENSHIFT_OAUTH.md](docs/OPENSHIFT_OAUTH.md)
+- **Architecture & Workflows**: [docs/architecture-workflows.md](docs/architecture-workflows.md) - Visual diagrams of component interactions
 - **Architecture Details**: [diagrams/](diagrams/)
 - **API Documentation**: Available in web interface after deployment
 

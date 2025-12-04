@@ -48,6 +48,7 @@ nav:
     - Amber Quickstart: user-guide/amber-quickstart.md
   - Developer Guide:
     - Observability & Instrumentation: observability-langfuse.md
+    - Architecture Workflows: architecture-workflows.md
     - Model Pricing: model-pricing.md
   - Labs:
     - Overview: labs/index.md
