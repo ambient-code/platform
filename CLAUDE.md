@@ -992,6 +992,14 @@ Special lab track for leadership training located in `docs/labs/director-trainin
 - Structured exercises for understanding the vTeam system from a strategic perspective
 - Validation reports for tracking completion and understanding
 
+## Documentation Standards
+
+**Default to improving existing documentation** rather than creating new files. When documentation updates are needed:
+
+- **Prefer inline updates**: Improve existing markdown files or code comments
+- **Colocate new docs**: When feasible, documentation should live alongside relevant code (e.g., `components/backend/README.md`, not top-level)
+- **Avoid top-level proliferation**: Only create top-level docs for cross-cutting concerns (architecture, security, deployment)
+
 ## Production Considerations
 
 ### Security
