@@ -15,6 +15,7 @@ import {
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { formatTimestamp } from "@/lib/format-timestamp";
 
 export type ToolMessageProps = {
   toolUseBlock?: ToolUseBlock;
@@ -201,9 +202,11 @@ export const ToolMessage = React.forwardRef<HTMLDivElement, ToolMessageProps>(
     const isSubagent = Boolean(subagentType);
     const subagentClasses = subagentType ? getColorClassesForName(subagentType) : undefined;
     const displayName = isSubagent ? subagentType : toolName;
-    
+
     // Compact mode for simple tool calls (non-subagent)
     const isCompact = !isSubagent;
+
+    const formattedTime = formatTimestamp(timestamp);
 
     return (
       <div ref={ref} className={cn(isCompact ? "mb-1" : "mb-4", className)} {...props}>
@@ -225,6 +228,12 @@ export const ToolMessage = React.forwardRef<HTMLDivElement, ToolMessageProps>(
 
           {/* Tool Message Content */}
           <div className="flex-1 min-w-0">
+            {/* Timestamp */}
+            {formattedTime && (
+              <div className="text-[10px] text-muted-foreground/60 mb-1">
+                {formattedTime}
+              </div>
+            )}
             <div
               className={cn(
                 isCompact ? "" : (borderless ? "p-0" : "rounded-lg border shadow-sm"),

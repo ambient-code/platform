@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Components } from "react-markdown";
+import { formatTimestamp } from "@/lib/format-timestamp";
 
 export type MessageRole = "bot" | "user";
 
@@ -176,6 +177,7 @@ export const Message = React.forwardRef<HTMLDivElement, MessageProps>(
     const isBot = role === "bot";
     const avatarBg = isBot ? "bg-blue-600" : "bg-green-600";
     const avatarText = isBot ? "AI" : "U";
+    const formattedTime = formatTimestamp(timestamp);
 
     const avatar = (
       <div className="flex-shrink-0">
@@ -201,10 +203,16 @@ export const Message = React.forwardRef<HTMLDivElement, MessageProps>(
 
           {/* Message Content */}
           <div className={cn("flex-1 min-w-0", !isBot && "max-w-[70%]")}>
+            {/* Timestamp */}
+            {formattedTime && (
+              <div className={cn("text-[10px] text-muted-foreground/60 mb-1", !isBot && "text-right")}>
+                {formattedTime}
+              </div>
+            )}
             <div className={cn(
               borderless ? "p-0" : "rounded-lg p-3",
               !borderless && (isBot ? "bg-card" : "bg-border/30")
-            )}> 
+            )}>
               {/* Content */}
               <div className="text-sm text-foreground">
                 {isLoading ? (
