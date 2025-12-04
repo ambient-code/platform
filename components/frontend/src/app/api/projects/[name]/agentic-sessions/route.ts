@@ -9,7 +9,10 @@ export async function GET(
   try {
     const { name } = await params;
     const headers = await buildForwardHeadersAsync(request);
-    const response = await fetch(`${BACKEND_URL}/projects/${encodeURIComponent(name)}/agentic-sessions`, { headers });
+    // Forward query parameters to backend
+    const url = new URL(request.url);
+    const queryString = url.search;
+    const response = await fetch(`${BACKEND_URL}/projects/${encodeURIComponent(name)}/agentic-sessions${queryString}`, { headers });
     const text = await response.text();
     return new Response(text, { status: response.status, headers: { 'Content-Type': 'application/json' } });
   } catch (error) {

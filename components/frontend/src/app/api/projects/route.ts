@@ -6,7 +6,9 @@ export async function GET(request: NextRequest) {
   try {
     const headers = await buildForwardHeadersAsync(request);
 
-    const response = await fetch(`${BACKEND_URL}/projects`, {
+    // Forward query parameters to backend
+    const queryString = request.nextUrl.search;
+    const response = await fetch(`${BACKEND_URL}/projects${queryString}`, {
       method: 'GET',
       headers,
     });

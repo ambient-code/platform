@@ -246,6 +246,7 @@ func filterNamespacesBySearch(namespaces []corev1.Namespace, search string, isOp
 		}
 	}
 
+	log.Printf("[filterNamespacesBySearch] Output: filtered %d namespaces from %d total", len(filtered), len(namespaces))
 	return filtered
 }
 
