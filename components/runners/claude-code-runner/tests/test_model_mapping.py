@@ -1,8 +1,12 @@
 """
-Test cases for ClaudeCodeAdapter._map_to_vertex_model()
+Test cases for ClaudeCodeAdapter model mapping methods
 
-This module tests the model name mapping from Anthropic API model names
-to Vertex AI model identifiers.
+This module tests the model name mapping from short model names to:
+- Anthropic API model identifiers with date suffixes
+- Vertex AI model identifiers
+
+The frontend stores short model names (e.g., 'claude-opus-4-5') which must
+be mapped to the full model IDs required by the respective APIs.
 """
 
 import pytest
@@ -15,6 +19,140 @@ if str(wrapper_dir) not in sys.path:
     sys.path.insert(0, str(wrapper_dir))
 
 from wrapper import ClaudeCodeAdapter  # type: ignore[import]
+
+
+class TestMapToAnthropicModel:
+    """Test suite for _map_to_anthropic_model method"""
+
+    def test_map_opus_4_5(self):
+        """Test mapping for Claude Opus 4.5"""
+        adapter = ClaudeCodeAdapter()
+        result = adapter._map_to_anthropic_model('claude-opus-4-5')
+        assert result == 'claude-opus-4-5-20251101'
+
+    def test_map_opus_4_1(self):
+        """Test mapping for Claude Opus 4.1"""
+        adapter = ClaudeCodeAdapter()
+        result = adapter._map_to_anthropic_model('claude-opus-4-1')
+        assert result == 'claude-opus-4-1-20250805'
+
+    def test_map_sonnet_4_5(self):
+        """Test mapping for Claude Sonnet 4.5"""
+        adapter = ClaudeCodeAdapter()
+        result = adapter._map_to_anthropic_model('claude-sonnet-4-5')
+        assert result == 'claude-sonnet-4-5-20250929'
+
+    def test_map_haiku_4_5(self):
+        """Test mapping for Claude Haiku 4.5"""
+        adapter = ClaudeCodeAdapter()
+        result = adapter._map_to_anthropic_model('claude-haiku-4-5')
+        assert result == 'claude-haiku-4-5-20251001'
+
+    def test_unknown_model_returns_unchanged(self):
+        """Test that unknown model names are returned unchanged"""
+        adapter = ClaudeCodeAdapter()
+        unknown_model = 'claude-unknown-model-99'
+        result = adapter._map_to_anthropic_model(unknown_model)
+        assert result == unknown_model
+
+    def test_empty_string_returns_unchanged(self):
+        """Test that empty string is returned unchanged"""
+        adapter = ClaudeCodeAdapter()
+        result = adapter._map_to_anthropic_model('')
+        assert result == ''
+
+    def test_case_sensitive_mapping(self):
+        """Test that model mapping is case-sensitive"""
+        adapter = ClaudeCodeAdapter()
+        # Uppercase should not match
+        result = adapter._map_to_anthropic_model('CLAUDE-OPUS-4-1')
+        assert result == 'CLAUDE-OPUS-4-1'  # Should return unchanged
+
+    def test_whitespace_in_model_name(self):
+        """Test handling of whitespace in model names"""
+        adapter = ClaudeCodeAdapter()
+        # Model name with whitespace should not match
+        result = adapter._map_to_anthropic_model(' claude-opus-4-1 ')
+        assert result == ' claude-opus-4-1 '  # Should return unchanged
+
+    def test_partial_model_name_no_match(self):
+        """Test that partial model names don't match"""
+        adapter = ClaudeCodeAdapter()
+        result = adapter._map_to_anthropic_model('claude-opus')
+        assert result == 'claude-opus'  # Should return unchanged
+
+    def test_anthropic_model_id_passthrough(self):
+        """Test that full Anthropic API model IDs are returned unchanged"""
+        adapter = ClaudeCodeAdapter()
+        anthropic_id = 'claude-opus-4-1-20250805'
+        result = adapter._map_to_anthropic_model(anthropic_id)
+        # If already a full ID, should return unchanged
+        assert result == anthropic_id
+
+    def test_all_frontend_models_have_mapping(self):
+        """Test that all models from frontend dropdown have valid mappings"""
+        adapter = ClaudeCodeAdapter()
+
+        # These are the exact model values from the frontend dropdown
+        frontend_models = [
+            'claude-sonnet-4-5',
+            'claude-opus-4-5',
+            'claude-opus-4-1',
+            'claude-haiku-4-5',
+        ]
+
+        expected_mappings = {
+            'claude-sonnet-4-5': 'claude-sonnet-4-5-20250929',
+            'claude-opus-4-5': 'claude-opus-4-5-20251101',
+            'claude-opus-4-1': 'claude-opus-4-1-20250805',
+            'claude-haiku-4-5': 'claude-haiku-4-5-20251001',
+        }
+
+        for model in frontend_models:
+            result = adapter._map_to_anthropic_model(model)
+            assert result == expected_mappings[model], \
+                f"Model {model} should map to {expected_mappings[model]}, got {result}"
+
+    def test_mapping_includes_version_date(self):
+        """Test that all mapped models include version dates"""
+        adapter = ClaudeCodeAdapter()
+
+        models = ['claude-opus-4-5', 'claude-opus-4-1', 'claude-sonnet-4-5', 'claude-haiku-4-5']
+
+        for model in models:
+            result = adapter._map_to_anthropic_model(model)
+            # All Anthropic API models should have -YYYYMMDD format
+            assert '-' in result, f"Mapped model {result} should include - separators"
+            parts = result.split('-')
+            version_date = parts[-1]  # Last part should be date
+            assert len(version_date) == 8, f"Version date {version_date} should be 8 digits (YYYYMMDD)"
+            assert version_date.isdigit(), f"Version date {version_date} should be all digits"
+
+    def test_none_input_handling(self):
+        """Test that None input raises TypeError (invalid type per signature)"""
+        adapter = ClaudeCodeAdapter()
+        # Function signature specifies str -> str, so None should raise
+        with pytest.raises((TypeError, AttributeError)):
+            adapter._map_to_anthropic_model(None)  # type: ignore[arg-type]
+
+    def test_numeric_input_handling(self):
+        """Test that numeric input raises TypeError (invalid type per signature)"""
+        adapter = ClaudeCodeAdapter()
+        # Function signature specifies str -> str, so int should raise
+        with pytest.raises((TypeError, AttributeError)):
+            adapter._map_to_anthropic_model(123)  # type: ignore[arg-type]
+
+    def test_mapping_consistency(self):
+        """Test that mapping is consistent across multiple calls"""
+        adapter = ClaudeCodeAdapter()
+        model = 'claude-sonnet-4-5'
+
+        # Call multiple times
+        results = [adapter._map_to_anthropic_model(model) for _ in range(5)]
+
+        # All results should be identical
+        assert all(r == results[0] for r in results)
+        assert results[0] == 'claude-sonnet-4-5-20250929'
 
 
 class TestMapToVertexModel:

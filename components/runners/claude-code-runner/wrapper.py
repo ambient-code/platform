@@ -233,11 +233,15 @@ class ClaudeCodeAdapter:
 
             # Get model configuration early for observability tracking
             model = self.context.get_env('LLM_MODEL')
-            configured_model = model or 'claude-sonnet-4-5@20250929'  # Default model for tracking
+            configured_model = model or 'claude-sonnet-4-5-20250929'  # Default model for tracking
 
-            # Map to Vertex model if using Vertex
-            if use_vertex and model:
-                configured_model = self._map_to_vertex_model(model)
+            # Map model name to proper format based on provider
+            if model:
+                if use_vertex:
+                    configured_model = self._map_to_vertex_model(model)
+                else:
+                    # Map to full Anthropic API model ID with date suffix
+                    configured_model = self._map_to_anthropic_model(model)
 
             # Initialize observability (Langfuse) with model metadata
             obs = ObservabilityManager(session_id=self.context.session_id, user_id=user_id, user_name=user_name)
@@ -725,6 +729,29 @@ class ClaudeCodeAdapter:
                 "error": str(e)
             }
 
+    def _map_to_anthropic_model(self, model: str) -> str:
+        """Map short model names to full Anthropic API model IDs.
+
+        Args:
+            model: Short model name (e.g., 'claude-opus-4-5')
+
+        Returns:
+            Full Anthropic API model ID (e.g., 'claude-opus-4-5-20251101')
+        """
+        # Model mapping to full Anthropic API model IDs with date suffixes
+        # Reference: https://docs.anthropic.com/en/docs/about-claude/models
+        model_map = {
+            'claude-opus-4-5': 'claude-opus-4-5-20251101',
+            'claude-opus-4-1': 'claude-opus-4-1-20250805',
+            'claude-sonnet-4-5': 'claude-sonnet-4-5-20250929',
+            'claude-haiku-4-5': 'claude-haiku-4-5-20251001',
+        }
+
+        mapped = model_map.get(model, model)
+        if mapped != model:
+            logging.info(f"Anthropic model mapping: {model} → {mapped}")
+        return mapped
+
     def _map_to_vertex_model(self, model: str) -> str:
         """Map Anthropic API model names to Vertex AI model names.
 
@@ -745,7 +772,7 @@ class ClaudeCodeAdapter:
 
         mapped = model_map.get(model, model)
         if mapped != model:
-            logging.info(f"Model mapping: {model} → {mapped}")
+            logging.info(f"Vertex model mapping: {model} → {mapped}")
         return mapped
 
     async def _setup_vertex_credentials(self) -> dict:
