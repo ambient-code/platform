@@ -7,14 +7,40 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { Save, Loader2, Info, AlertTriangle } from "lucide-react";
+import { Save, Loader2, AlertTriangle, Container, Info } from "lucide-react";
 import { Plus, Trash2, Eye, EyeOff, ChevronDown, ChevronRight } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { successToast, errorToast } from "@/hooks/use-toast";
 import { useProject, useUpdateProject } from "@/services/queries/use-projects";
 import { useSecretsValues, useUpdateSecrets, useIntegrationSecrets, useUpdateIntegrationSecrets } from "@/services/queries/use-secrets";
+import { useWorkspaceContainerSettings, useUpdateWorkspaceContainerSettings } from "@/services/queries/use-workspace-container";
 import { useClusterInfo } from "@/hooks/use-cluster-info";
-import { useMemo } from "react";
+
+// Fixed keys that have dedicated UI sections and should be filtered from custom env vars
+type FixedSecretKey =
+  | "ANTHROPIC_API_KEY"
+  | "GIT_USER_NAME"
+  | "GIT_USER_EMAIL"
+  | "GITHUB_TOKEN"
+  | "JIRA_URL"
+  | "JIRA_PROJECT"
+  | "JIRA_EMAIL"
+  | "JIRA_API_TOKEN"
+  | "GITLAB_TOKEN"
+  | "GITLAB_INSTANCE_URL";
+
+const FIXED_KEYS: readonly FixedSecretKey[] = [
+  "ANTHROPIC_API_KEY",
+  "GIT_USER_NAME",
+  "GIT_USER_EMAIL",
+  "GITHUB_TOKEN",
+  "JIRA_URL",
+  "JIRA_PROJECT",
+  "JIRA_EMAIL",
+  "JIRA_API_TOKEN",
+  "GITLAB_TOKEN",
+  "GITLAB_INSTANCE_URL",
+];
 
 type SettingsSectionProps = {
   projectName: string;
@@ -42,16 +68,23 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
   const [githubExpanded, setGithubExpanded] = useState<boolean>(false);
   const [jiraExpanded, setJiraExpanded] = useState<boolean>(false);
   const [gitlabExpanded, setGitlabExpanded] = useState<boolean>(false);
-  const FIXED_KEYS = useMemo(() => ["ANTHROPIC_API_KEY","GIT_USER_NAME","GIT_USER_EMAIL","GITHUB_TOKEN","JIRA_URL","JIRA_PROJECT","JIRA_EMAIL","JIRA_API_TOKEN","GITLAB_TOKEN","GITLAB_INSTANCE_URL"] as const, []);
+  const [workspaceExpanded, setWorkspaceExpanded] = useState<boolean>(false);
+  const [workspaceImage, setWorkspaceImage] = useState<string>("");
+  const [workspaceCpuRequest, setWorkspaceCpuRequest] = useState<string>("");
+  const [workspaceCpuLimit, setWorkspaceCpuLimit] = useState<string>("");
+  const [workspaceMemoryRequest, setWorkspaceMemoryRequest] = useState<string>("");
+  const [workspaceMemoryLimit, setWorkspaceMemoryLimit] = useState<string>("");
 
   // React Query hooks
   const { data: project, isLoading: projectLoading } = useProject(projectName);
   const { data: runnerSecrets } = useSecretsValues(projectName);  // ambient-runner-secrets (ANTHROPIC_API_KEY)
   const { data: integrationSecrets } = useIntegrationSecrets(projectName);  // ambient-non-vertex-integrations (GITHUB_TOKEN, GIT_USER_*, JIRA_*, custom)
+  const { data: workspaceContainerData } = useWorkspaceContainerSettings(projectName);
   const { vertexEnabled } = useClusterInfo();
   const updateProjectMutation = useUpdateProject();
   const updateSecretsMutation = useUpdateSecrets();
   const updateIntegrationSecretsMutation = useUpdateIntegrationSecrets();
+  const updateWorkspaceContainerMutation = useUpdateWorkspaceContainerSettings();
 
   // Sync project data to form
   useEffect(() => {
@@ -59,6 +92,17 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
       setFormData({ displayName: project.displayName || "", description: project.description || "" });
     }
   }, [project]);
+
+  // Sync workspace container settings to state
+  useEffect(() => {
+    if (workspaceContainerData) {
+      setWorkspaceImage(workspaceContainerData.image || "");
+      setWorkspaceCpuRequest(workspaceContainerData.resources?.cpuRequest || "");
+      setWorkspaceCpuLimit(workspaceContainerData.resources?.cpuLimit || "");
+      setWorkspaceMemoryRequest(workspaceContainerData.resources?.memoryRequest || "");
+      setWorkspaceMemoryLimit(workspaceContainerData.resources?.memoryLimit || "");
+    }
+  }, [workspaceContainerData]);
 
   // Sync secrets values to state (merge both secrets)
   useEffect(() => {
@@ -75,9 +119,9 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
       setJiraToken(byKey["JIRA_API_TOKEN"] || "");
       setGitlabToken(byKey["GITLAB_TOKEN"] || "");
       setGitlabInstanceUrl(byKey["GITLAB_INSTANCE_URL"] || "");
-      setSecrets(allSecrets.filter(s => !FIXED_KEYS.includes(s.key as typeof FIXED_KEYS[number])));
+      setSecrets(allSecrets.filter(s => !FIXED_KEYS.includes(s.key as FixedSecretKey)));
     }
-  }, [runnerSecrets, integrationSecrets, FIXED_KEYS]);
+  }, [runnerSecrets, integrationSecrets]);
 
   const handleSave = () => {
     if (!project) return;
@@ -149,7 +193,7 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
     if (gitlabInstanceUrl) integrationData["GITLAB_INSTANCE_URL"] = gitlabInstanceUrl;
     for (const { key, value } of secrets) {
       if (!key) continue;
-      if (FIXED_KEYS.includes(key as typeof FIXED_KEYS[number])) continue;
+      if (FIXED_KEYS.includes(key as FixedSecretKey)) continue;
       integrationData[key] = value ?? "";
     }
 
@@ -169,6 +213,40 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
         },
         onError: (error) => {
           const message = error instanceof Error ? error.message : "Failed to save integration secrets";
+          errorToast(message);
+        },
+      }
+    );
+  };
+
+  // Save workspace container settings (optional customizations)
+  const handleSaveWorkspaceContainer = () => {
+    if (!projectName) return;
+
+    const resources = {
+      cpuRequest: workspaceCpuRequest || undefined,
+      cpuLimit: workspaceCpuLimit || undefined,
+      memoryRequest: workspaceMemoryRequest || undefined,
+      memoryLimit: workspaceMemoryLimit || undefined,
+    };
+
+    // Only include resources if any are set
+    const hasResources = Object.values(resources).some(v => v !== undefined);
+
+    updateWorkspaceContainerMutation.mutate(
+      {
+        projectName,
+        settings: {
+          image: workspaceImage || undefined,
+          resources: hasResources ? resources : undefined,
+        },
+      },
+      {
+        onSuccess: () => {
+          successToast("Workspace container settings saved");
+        },
+        onError: (error) => {
+          const message = error instanceof Error ? error.message : "Failed to save workspace settings";
           errorToast(message);
         },
       }
@@ -463,6 +541,101 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
                     value={gitlabInstanceUrl}
                     onChange={(e) => setGitlabInstanceUrl(e.target.value)}
                   />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Workspace Container Section (ADR-0006) */}
+          <div className="border rounded-lg">
+            <button
+              type="button"
+              onClick={() => setWorkspaceExpanded(!workspaceExpanded)}
+              className="w-full flex items-center justify-between p-3 hover:bg-muted/50 transition-colors rounded-lg"
+            >
+              <div className="flex items-center gap-2">
+                {workspaceExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                <Container className="h-4 w-4" />
+                <span className="font-semibold">Workspace Container</span>
+                {workspaceImage && <span className="text-xs text-muted-foreground">(custom image)</span>}
+              </div>
+            </button>
+            {workspaceExpanded && (
+              <div className="px-3 pb-3 space-y-4 border-t pt-3">
+                <div className="space-y-2">
+                  <Label htmlFor="workspaceImage">Custom Container Image (Optional)</Label>
+                  <div className="text-xs text-muted-foreground mb-1">
+                    Override the default workspace container image
+                  </div>
+                  <Input
+                    id="workspaceImage"
+                    placeholder="Leave empty to use runner image"
+                    value={workspaceImage}
+                    onChange={(e) => setWorkspaceImage(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Resource Limits (Optional)</Label>
+                  <div className="text-xs text-muted-foreground mb-2">
+                    Configure CPU and memory resources for workspace containers
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label htmlFor="workspaceCpuRequest" className="text-xs">CPU Request</Label>
+                      <Input
+                        id="workspaceCpuRequest"
+                        placeholder="500m"
+                        value={workspaceCpuRequest}
+                        onChange={(e) => setWorkspaceCpuRequest(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="workspaceCpuLimit" className="text-xs">CPU Limit</Label>
+                      <Input
+                        id="workspaceCpuLimit"
+                        placeholder="2000m"
+                        value={workspaceCpuLimit}
+                        onChange={(e) => setWorkspaceCpuLimit(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="workspaceMemoryRequest" className="text-xs">Memory Request</Label>
+                      <Input
+                        id="workspaceMemoryRequest"
+                        placeholder="512Mi"
+                        value={workspaceMemoryRequest}
+                        onChange={(e) => setWorkspaceMemoryRequest(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="workspaceMemoryLimit" className="text-xs">Memory Limit</Label>
+                      <Input
+                        id="workspaceMemoryLimit"
+                        placeholder="4Gi"
+                        value={workspaceMemoryLimit}
+                        onChange={(e) => setWorkspaceMemoryLimit(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div className="pt-2">
+                  <Button
+                    onClick={handleSaveWorkspaceContainer}
+                    disabled={updateWorkspaceContainerMutation.isPending}
+                    size="sm"
+                  >
+                    {updateWorkspaceContainerMutation.isPending ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4 mr-2" />
+                        Save Workspace Settings
+                      </>
+                    )}
+                  </Button>
                 </div>
               </div>
             )}

@@ -96,6 +96,10 @@ func registerRoutes(r *gin.Engine) {
 			projectGroup.GET("/integration-secrets", handlers.ListIntegrationSecrets)
 			projectGroup.PUT("/integration-secrets", handlers.UpdateIntegrationSecrets)
 
+			// Workspace container settings (ADR-0006)
+			projectGroup.GET("/workspace-container", handlers.GetWorkspaceContainerSettings)
+			projectGroup.PUT("/workspace-container", handlers.UpdateWorkspaceContainerSettings)
+
 			// GitLab authentication endpoints (project-scoped)
 			projectGroup.POST("/auth/gitlab/connect", handlers.ConnectGitLabGlobal)
 			projectGroup.GET("/auth/gitlab/status", handlers.GetGitLabStatusGlobal)

@@ -19,9 +19,14 @@ RUN cd /app/runner-shell && pip install --no-cache-dir .
 # Copy claude-runner specific files
 COPY claude-code-runner /app/claude-runner
 
+# Copy MCP servers (ADR-0006: workspace streaming exec)
+COPY claude-code-runner/mcp-servers /app/mcp-servers
+
 # Install runner wrapper as a package (pulls dependencies like claude-agent-sdk)
+# Also install MCP SDK and httpx for workspace MCP server (ADR-0006)
 RUN pip install --no-cache-dir /app/claude-runner[observability] \
-    && pip install --no-cache-dir aiofiles
+    && pip install --no-cache-dir aiofiles mcp httpx \
+    && python3 /app/claude-runner/patches/patch_sdk_remove_bash.py
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1

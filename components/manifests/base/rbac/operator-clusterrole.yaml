@@ -25,13 +25,17 @@ rules:
 - apiGroups: ["batch"]
   resources: ["jobs"]
   verbs: ["get", "list", "watch", "create", "delete"]
-# Pods (for getting logs from failed jobs and cleanup on stop)
+# Pods (for getting logs from failed jobs, creating workspace pods, and cleanup on stop)
 - apiGroups: [""]
   resources: ["pods"]
-  verbs: ["get", "list", "watch", "delete", "deletecollection"]
+  verbs: ["get", "list", "watch", "create", "delete", "deletecollection"]
 - apiGroups: [""]
   resources: ["pods/log"]
   verbs: ["get"]
+# Pod exec (ADR-0006: execute commands in workspace pods)
+- apiGroups: [""]
+  resources: ["pods/exec"]
+  verbs: ["create"]
 # PersistentVolumeClaims (create workspace PVCs)
 - apiGroups: [""]
   resources: ["persistentvolumeclaims"]
@@ -63,3 +67,24 @@ rules:
 - apiGroups: [""]
   resources: ["secrets"]
   verbs: ["get", "create", "delete", "update"]
+# ServiceAccounts (create ambient-runner SA in project namespaces)
+- apiGroups: [""]
+  resources: ["serviceaccounts"]
+  verbs: ["get", "create", "delete"]
+# ConfigMaps (create workspace template ConfigMaps for workspace container mode)
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "create", "delete", "update"]
+# Roles (create roles for runner service accounts in project namespaces)
+# 'escalate' required to create roles with permissions the operator already holds
+- apiGroups: ["rbac.authorization.k8s.io"]
+  resources: ["roles"]
+  verbs: ["get", "create", "update", "escalate"]
+# TokenReview (ADR-0006: authenticate runner ServiceAccount tokens for streaming exec API)
+- apiGroups: ["authentication.k8s.io"]
+  resources: ["tokenreviews"]
+  verbs: ["create"]
+# Events (ADR-0006: emit audit events for command execution)
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["create", "patch"]

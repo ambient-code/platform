@@ -221,6 +221,13 @@ class ClaudeCodeAdapter:
                 logging.info(f"  CLOUD_ML_REGION: {os.environ.get('CLOUD_ML_REGION')}")
 
             # NOW we can safely import the SDK with the correct environment set
+            # IMPORTANT: Import Bash filter BEFORE SDK to monkey-patch tool filtering (ADR-0006)
+            try:
+                import _bash_filter_wrapper
+                logging.info("Bash filter wrapper loaded - Bash tool will be excluded from init message")
+            except ImportError as e:
+                logging.warning(f"Bash filter wrapper not available: {e} - relying on allowed_tools filtering")
+
             from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions
 
             from observability import ObservabilityManager
@@ -361,12 +368,31 @@ class ClaudeCodeAdapter:
 
             # Load MCP server configuration from .mcp.json if present
             mcp_servers = self._load_mcp_config(cwd_path)
-            # Build allowed_tools list with MCP server
-            allowed_tools = ["Read","Write","Bash","Glob","Grep","Edit","MultiEdit","WebSearch","WebFetch"]
+            if mcp_servers is None:
+                mcp_servers = {}
+
+            # Build allowed_tools list
+            # ADR-0006: All command execution goes through workspace MCP streaming exec
+            # Bash tool is disabled - agent uses workspace MCP tools instead
+            allowed_tools = ["Read", "Write", "Glob", "Grep", "Edit", "MultiEdit", "WebSearch", "WebFetch"]
+            logging.info("ADR-0006: Bash DISABLED, using workspace MCP for all command execution")
+
+            # Explicitly disallow Bash tool (belt-and-suspenders with monkey patch)
+            # This ensures SDK filtering is applied even if the runtime wrapper fails
+            disallowed_tools: list[str] = ["Bash"]
+
+            # ADR-0006: Add workspace MCP server for streaming command execution
+            # Uses operator's streaming exec API for real-time output
+            mcp_servers["workspace"] = {
+                "command": "python3",
+                "args": ["/app/mcp-servers/workspace.py"],
+            }
+
             if mcp_servers:
                 # Add permissions for all tools from each MCP server
                 for server_name in mcp_servers.keys():
-                    allowed_tools.append(f"mcp__{server_name}")
+                    if f"mcp__{server_name}" not in allowed_tools:
+                        allowed_tools.append(f"mcp__{server_name}")
                 logging.info(f"MCP tool permissions granted for servers: {list(mcp_servers.keys())}")
 
             # Build comprehensive workspace context system prompt
@@ -374,7 +400,7 @@ class ClaudeCodeAdapter:
                 repos_cfg=repos_cfg,
                 workflow_name=derived_name if active_workflow_url else None,
                 artifacts_path="artifacts",
-                ambient_config=ambient_config
+                ambient_config=ambient_config,
             )
             system_prompt_config = {
                 "type": "text",
@@ -387,6 +413,7 @@ class ClaudeCodeAdapter:
                 cwd=cwd_path,
                 permission_mode="acceptEdits",
                 allowed_tools=allowed_tools,
+                disallowed_tools=disallowed_tools if disallowed_tools else None,
                 mcp_servers=mcp_servers,
                 setting_sources=["project"],
                 system_prompt=system_prompt_config
@@ -1866,7 +1893,49 @@ class ClaudeCodeAdapter:
     def _build_workspace_context_prompt(self, repos_cfg, workflow_name, artifacts_path, ambient_config):
         """Generate comprehensive system prompt describing workspace layout."""
 
-        prompt = "You are Claude Code working in a structured development workspace.\n\n"
+        prompt = """You are Claude Code working in a structured development workspace.
+
+## Command Execution (ADR-0006)
+
+All shell commands execute in an isolated workspace pod via the `workspace` MCP tools.
+The Bash tool is not available - use these MCP tools instead:
+
+**Available tools:**
+
+- `mcp__workspace__exec(command, workdir, timeout)` - Execute command in workspace pod
+  - command: Shell command to run (e.g., "npm install", "git status")
+  - workdir: Working directory (default: /workspace)
+  - timeout: Timeout in seconds (default: 300, max: 1800)
+  - State persists across calls (environment, background processes)
+  - Output streams in real-time
+
+- `mcp__workspace__status()` - Show workspace pod status
+  - Returns pod name, namespace, and session info
+
+- `mcp__workspace__logs(lines)` - View workspace pod logs
+  - lines: Number of recent lines to show (default: 100)
+
+**Examples:**
+```
+# Install dependencies
+mcp__workspace__exec("npm install")
+
+# Run tests
+mcp__workspace__exec("npm test")
+
+# Build in specific directory
+mcp__workspace__exec("cargo build --release", workdir="/workspace/myrepo")
+
+# Long-running command with extended timeout
+mcp__workspace__exec("make all", timeout=600)
+
+# Check workspace status
+mcp__workspace__status()
+```
+
+The workspace pod shares the same PVC as this session, so file changes are visible to both.
+
+"""
 
         # Current working directory
         if workflow_name:
