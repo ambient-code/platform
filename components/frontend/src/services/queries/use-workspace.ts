@@ -151,13 +151,21 @@ export function useAllSessionGitHubDiffs(
     },
     enabled: !!projectName && !!sessionName && !!repos && (options?.enabled ?? true),
     staleTime: 10 * 1000, // 10 seconds
-    // Poll for diff updates when session is running
+    // Poll for diff updates based on session phase
     refetchInterval: () => {
-      const isRunning =
-        options?.sessionPhase === 'Running' ||
-        options?.sessionPhase === 'Creating' ||
-        options?.sessionPhase === 'Pending';
-      return isRunning ? 10000 : false; // Poll every 10 seconds if running
+      const phase = options?.sessionPhase;
+      // Transitional states - poll more frequently
+      const isTransitioning =
+        phase === 'Stopping' ||
+        phase === 'Pending' ||
+        phase === 'Creating';
+      if (isTransitioning) return 5000;
+      
+      // Running state - poll normally
+      if (phase === 'Running') return 10000;
+      
+      // Terminal states - no polling
+      return false;
     },
   });
 }

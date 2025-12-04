@@ -44,14 +44,33 @@ export function useSession(projectName: string, sessionName: string) {
     queryKey: sessionKeys.detail(projectName, sessionName),
     queryFn: () => sessionsApi.getSession(projectName, sessionName),
     enabled: !!projectName && !!sessionName,
-    // Poll for status updates on running sessions
+    // Poll for status updates based on session phase
     refetchInterval: (query) => {
       const session = query.state.data as AgenticSession | undefined;
-      const isRunning =
-        session?.status?.phase === 'Running' ||
-        session?.status?.phase === 'Creating' ||
-        session?.status?.phase === 'Pending';
-      return isRunning ? 5000 : false; // Poll every 5 seconds if running
+      const phase = session?.status?.phase;
+      const annotations = session?.metadata?.annotations || {};
+      
+      // Check if a state transition is pending (user requested start/stop)
+      // This catches the case where the phase hasn't updated yet but we know
+      // a transition is coming
+      const desiredPhase = annotations['ambient-code.io/desired-phase'];
+      if (desiredPhase) {
+        // Pending transition - poll very aggressively (every 500ms)
+        return 500;
+      }
+      
+      // Transitional states - poll aggressively (every 1 second)
+      const isTransitioning =
+        phase === 'Stopping' ||
+        phase === 'Pending' ||
+        phase === 'Creating';
+      if (isTransitioning) return 1000;
+      
+      // Running state - poll normally (every 5 seconds)
+      if (phase === 'Running') return 5000;
+      
+      // Terminal states (Stopped, Completed, Failed) - no polling
+      return false;
     },
   });
 }
@@ -66,13 +85,20 @@ export function useSessionMessages(projectName: string, sessionName: string, ses
     enabled: !!projectName && !!sessionName,
     // Messages are typically handled via WebSocket, so longer stale time
     staleTime: 5 * 1000, // 5 seconds
-    // Poll for message updates on running sessions
+    // Poll for message updates based on session phase
     refetchInterval: () => {
-      const isRunning =
-        sessionPhase === 'Running' ||
-        sessionPhase === 'Creating' ||
-        sessionPhase === 'Pending';
-      return isRunning ? 5000 : false; // Poll every 5 seconds if running
+      // Transitional states - poll aggressively (every 1 second)
+      const isTransitioning =
+        sessionPhase === 'Stopping' ||
+        sessionPhase === 'Pending' ||
+        sessionPhase === 'Creating';
+      if (isTransitioning) return 1000;
+      
+      // Running state - poll normally (every 5 seconds)
+      if (sessionPhase === 'Running') return 5000;
+      
+      // Terminal states - no polling
+      return false;
     },
   });
 }
