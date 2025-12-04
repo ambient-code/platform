@@ -3,8 +3,22 @@ name: Go Lint and Format
 on:
   push:
     branches: [main]
+    paths:
+      - 'components/backend/**/*.go'
+      - 'components/backend/go.mod'
+      - 'components/backend/go.sum'
+      - 'components/operator/**/*.go'
+      - 'components/operator/go.mod'
+      - 'components/operator/go.sum'
   pull_request:
     branches: [main]
+    paths:
+      - 'components/backend/**/*.go'
+      - 'components/backend/go.mod'
+      - 'components/backend/go.sum'
+      - 'components/operator/**/*.go'
+      - 'components/operator/go.mod'
+      - 'components/operator/go.sum'
   workflow_dispatch:
 
 jobs:
