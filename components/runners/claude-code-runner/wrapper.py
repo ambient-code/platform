@@ -599,7 +599,7 @@ class ClaudeCodeAdapter:
 
             # Use async with - SDK will use continue_conversation to resume from local state
             # Wrap in retry logic to handle conversation not found errors
-            async def create_sdk_client(opts, disable_continue=False):
+            def create_sdk_client(opts, disable_continue=False):
                 """Create SDK client, optionally disabling continue_conversation on retry."""
                 if disable_continue and hasattr(opts, 'continue_conversation'):
                     opts.continue_conversation = False  # type: ignore[attr-defined]
