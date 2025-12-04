@@ -16,12 +16,13 @@ jobs:
   amber-handler:
     runs-on: ubuntu-latest
     timeout-minutes: 30  # Issue #7: Prevent runaway jobs
-    # Only run for specific labels or commands
+    # Only run for specific labels, commands, or @amber mentions
     if: |
       (github.event.label.name == 'amber:auto-fix' ||
        github.event.label.name == 'amber:refactor' ||
        github.event.label.name == 'amber:test-coverage' ||
-       contains(github.event.comment.body, '/amber execute'))
+       contains(github.event.comment.body, '/amber execute') ||
+       contains(github.event.comment.body, '@amber'))
 
     steps:
       - name: Checkout repository
@@ -45,7 +46,8 @@ jobs:
           elif [[ "$LABEL_NAME" == "amber:test-coverage" ]]; then
             echo "type=test-coverage" >> $GITHUB_OUTPUT
             echo "severity=medium" >> $GITHUB_OUTPUT
-          elif [[ "$COMMENT_BODY" == *"/amber execute"* ]]; then
+          elif [[ "$COMMENT_BODY" == *"/amber execute"* ]] || [[ "$COMMENT_BODY" == *"@amber"* ]]; then
+            # Treat @amber mentions same as /amber execute - let Claude figure out the intent
             echo "type=execute-proposal" >> $GITHUB_OUTPUT
             echo "severity=medium" >> $GITHUB_OUTPUT
           else

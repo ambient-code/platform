@@ -111,15 +111,24 @@ Body:
 
 ### Manual Trigger via Comment
 
-You can also trigger Amber by commenting on an existing issue:
+You can trigger Amber by commenting on an existing issue using either:
 
 ```
 /amber execute
 ```
 
-This tells Amber to execute the proposal described in the issue body.
+Or simply mention Amber:
 
-**Use Case**: After discussing a refactoring approach in an issue, comment `/amber execute` to have Amber implement it.
+```
+@amber
+```
+
+Both commands tell Amber to execute the proposal described in the issue body. Amber will read the full issue context and determine the appropriate action.
+
+**Use Cases**:
+- After discussing a refactoring approach in an issue, comment `@amber` to have Amber implement it
+- Quick fixes without needing to add labels: `@amber please fix the linting errors in this file`
+- Code review requests: `@amber review this approach and suggest improvements`
 
 ---
 
