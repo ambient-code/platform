@@ -701,7 +701,7 @@ A: No. GitHub and GitLab integrations are independent and work side-by-side.
 
 **Getting Help**:
 - vTeam GitHub Issues: [Create an issue](https://github.com/natifridman/vTeam/issues)
-- vTeam Documentation: [Main README](../README.md)
+- vTeam Documentation: [Main README](https://github.com/ambient-code/platform/blob/main/README.md)
 
 ---
 

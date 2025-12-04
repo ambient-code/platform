@@ -423,8 +423,8 @@ A: Depends on task complexity. Typical auto-fix: ~10K tokens ($0.03), refactorin
 
 ## Related Documentation
 
-- [Amber Configuration](.claude/amber-config.yml) - Automation policies
-- [Project Standards](../CLAUDE.md) - Conventions Amber follows
+- [Amber Configuration](https://github.com/ambient-code/platform/blob/main/.claude/amber-config.yml) - Automation policies
+- [Project Standards](https://github.com/ambient-code/platform/blob/main/CLAUDE.md) - Conventions Amber follows
 - [GitHub Actions Security](https://docs.github.com/en/actions/security-for-github-actions) - Official security guide
 
 ---

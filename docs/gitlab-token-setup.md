@@ -609,7 +609,7 @@ Need help with token creation?
 
 **For vTeam Integration Issues**:
 - vTeam GitHub Issues: https://github.com/natifridman/vTeam/issues
-- vTeam Documentation: [Main README](../README.md)
+- vTeam Documentation: [Main README](https://github.com/ambient-code/platform/blob/main/README.md)
 
 ---
 

@@ -45,6 +45,10 @@ nav:
     - Overview: user-guide/index.md
     - Getting Started: user-guide/getting-started.md
     - Working with Amber: user-guide/working-with-amber.md
+    - Amber Quickstart: user-guide/amber-quickstart.md
+    - Amber Interactive Mode: user-guide/amber-interactive.md
+    - Amber Background Agent: user-guide/amber-background-agent.md
+    - Amber Troubleshooting: user-guide/amber-troubleshooting.md
   - Developer Guide:
     - Observability & Instrumentation: observability-langfuse.md
     - Model Pricing: model-pricing.md
