@@ -128,10 +128,21 @@ spec:
         volumeMounts:
         - name: backend-state
           mountPath: /workspace
+        # Vertex AI credentials (optional - only needed when CLAUDE_CODE_USE_VERTEX=1)
+        - name: vertex-credentials
+          mountPath: /app/vertex
+          readOnly: true
       volumes:
       - name: backend-state
         persistentVolumeClaim:
           claimName: backend-state-pvc
+      # ambient-vertex secret contains GCP service account key for Vertex AI
+      # This secret must exist in the same namespace as the backend (ambient-code)
+      # Created manually: kubectl create secret generic ambient-vertex --from-file=ambient-code-key.json=<path-to-key> -n ambient-code
+      - name: vertex-credentials
+        secret:
+          secretName: ambient-vertex
+          optional: true  # Don't fail if Vertex not configured
       
 ---
 apiVersion: v1
