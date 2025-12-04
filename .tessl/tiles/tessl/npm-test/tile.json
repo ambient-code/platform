@@ -1,0 +1,7 @@
+{
+  "name": "tessl/npm-test",
+  "version": "3.3.0",
+  "docs": "docs/index.md",
+  "describes": "pkg:npm/test@3.3.0",
+  "summary": "Node.js 18's node:test, as an npm package providing comprehensive testing framework for Node.js 14+"
+}
