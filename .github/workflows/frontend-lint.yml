@@ -12,6 +12,7 @@ on:
       - 'components/frontend/package-lock.json'
       - 'components/frontend/tsconfig.json'
       - 'components/frontend/eslint.config.mjs'
+      - '.github/workflows/frontend-lint.yml'
       
   pull_request:
     branches: [main]
@@ -24,7 +25,13 @@ on:
       - 'components/frontend/package-lock.json'
       - 'components/frontend/tsconfig.json'
       - 'components/frontend/eslint.config.mjs'
+      - '.github/workflows/frontend-lint.yml'
+      
   workflow_dispatch:
+
+concurrency:
+  group: frontend-lint-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   lint-frontend:

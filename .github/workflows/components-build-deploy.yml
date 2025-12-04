@@ -3,9 +3,27 @@ name: Build and Push Component Docker Images
 on:
   push:
     branches: [main]
+    paths:
+      - '.github/workflows/components-build-deploy.yml'
+      - 'components/manifests/**'
+      - 'components/runners/**'
+      - 'components/operator/**'
+      - 'components/backend/**'
+      - 'components/frontend/**'
   pull_request_target:
     branches: [main]
+    paths:
+      - '.github/workflows/components-build-deploy.yml'
+      - 'components/manifests/**'
+      - 'components/runners/**'
+      - 'components/operator/**'
+      - 'components/backend/**'
+      - 'components/frontend/**'
   workflow_dispatch:
+
+concurrency:
+  group: components-build-deploy-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   detect-changes:

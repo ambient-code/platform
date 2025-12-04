@@ -10,6 +10,7 @@ on:
       - 'components/operator/**/*.go'
       - 'components/operator/go.mod'
       - 'components/operator/go.sum'
+      - '.github/workflows/go-lint.yml'
   pull_request:
     branches: [main]
     paths:
@@ -19,7 +20,12 @@ on:
       - 'components/operator/**/*.go'
       - 'components/operator/go.mod'
       - 'components/operator/go.sum'
+      - '.github/workflows/go-lint.yml'
   workflow_dispatch:
+
+concurrency:
+  group: go-lint-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   detect-go-changes:

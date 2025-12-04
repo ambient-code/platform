@@ -22,6 +22,10 @@ on:
       - 'agents/**'
   workflow_dispatch:  # Allow manual trigger
 
+concurrency:
+  group: e2e-tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   detect-changes:
     runs-on: ubuntu-latest
