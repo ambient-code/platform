@@ -46,6 +46,9 @@ nav:
     - Getting Started: user-guide/getting-started.md
     - Working with Amber: user-guide/working-with-amber.md
     - Amber Quickstart: user-guide/amber-quickstart.md
+  - Architecture:
+    - Platform Architecture: diagrams/platform-architecture.md
+    - Amber Workflows: diagrams/amber-workflow.md
   - Developer Guide:
     - Observability & Instrumentation: observability-langfuse.md
     - Model Pricing: model-pricing.md

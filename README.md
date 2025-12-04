@@ -550,7 +550,8 @@ See [e2e/README.md](e2e/README.md) for detailed documentation, troubleshooting, 
 ### Deployment & Configuration
 - **Deployment Guide**: [docs/OPENSHIFT_DEPLOY.md](docs/OPENSHIFT_DEPLOY.md)
 - **OAuth Setup**: [docs/OPENSHIFT_OAUTH.md](docs/OPENSHIFT_OAUTH.md)
-- **Architecture Details**: [diagrams/](diagrams/)
+- **Platform Architecture**: [docs/diagrams/platform-architecture.md](docs/diagrams/platform-architecture.md) - System components, data flows, deployment architecture
+- **Amber Workflows**: [docs/diagrams/amber-workflow.md](docs/diagrams/amber-workflow.md) - Issue-to-PR automation workflows
 - **API Documentation**: Available in web interface after deployment
 
 ### GitLab Integration
