@@ -82,14 +82,30 @@ spec:
           value: "main"
         - name: OOTB_WORKFLOWS_PATH
           value: "workflows"
-        # Backend needs CLAUDE_CODE_USE_VERTEX to expose vertexEnabled flag via /api/cluster-info
-        # This allows the frontend to show warnings when ANTHROPIC_API_KEY is configured with Vertex enabled
-        # Shares the same config value as the operator for consistency
+        # Vertex AI configuration from operator-config ConfigMap
+        # Backend needs these for:
+        # 1. CLAUDE_CODE_USE_VERTEX: Expose vertexEnabled flag via /api/cluster-info
+        # 2. Other Vertex vars: Display name auto-generation uses Claude Haiku via Vertex
         - name: CLAUDE_CODE_USE_VERTEX
           valueFrom:
             configMapKeyRef:
               name: operator-config
               key: CLAUDE_CODE_USE_VERTEX
+        - name: CLOUD_ML_REGION
+          valueFrom:
+            configMapKeyRef:
+              name: operator-config
+              key: CLOUD_ML_REGION
+        - name: ANTHROPIC_VERTEX_PROJECT_ID
+          valueFrom:
+            configMapKeyRef:
+              name: operator-config
+              key: ANTHROPIC_VERTEX_PROJECT_ID
+        - name: GOOGLE_APPLICATION_CREDENTIALS
+          valueFrom:
+            configMapKeyRef:
+              name: operator-config
+              key: GOOGLE_APPLICATION_CREDENTIALS
         resources:
           requests:
             cpu: 100m

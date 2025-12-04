@@ -143,7 +143,7 @@ func getAnthropicClient(ctx context.Context, projectName string) (anthropic.Clie
 			region = "us-central1" // Default region
 		}
 		if gcpProjectID == "" {
-			return anthropic.Client{}, false, fmt.Errorf("ANTHROPIC_VERTEX_PROJECT_ID is required when CLAUDE_CODE_USE_VERTEX=1")
+			return anthropic.Client{}, false, fmt.Errorf("ANTHROPIC_VERTEX_PROJECT_ID is required when CLAUDE_CODE_USE_VERTEX=1 (check backend deployment env vars)")
 		}
 
 		log.Printf("DisplayNameGen: Using Vertex AI for %s (region: %s, project: %s)", projectName, region, gcpProjectID)
@@ -153,7 +153,7 @@ func getAnthropicClient(ctx context.Context, projectName string) (anthropic.Clie
 		return client, true, nil
 	}
 
-	// Fall back to API key from project secret
+	// Vertex not enabled - use API key from project secret
 	apiKey, err := getAPIKeyFromSecret(ctx, projectName)
 	if err != nil {
 		return anthropic.Client{}, false, fmt.Errorf("failed to get API key: %w", err)
