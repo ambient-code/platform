@@ -30,8 +30,19 @@ class WebSocketTransport:
         """Connect to WebSocket endpoint."""
         try:
             # Forward Authorization header if BOT_TOKEN (runner SA token) is present
+            # Read from file if BOT_TOKEN_PATH is set (for dynamic token refresh)
+            # Otherwise fall back to BOT_TOKEN env var (backward compatibility)
             headers: Dict[str, str] = {}
-            token = (os.getenv("BOT_TOKEN") or "").strip()
+            token = ""
+            token_path = (os.getenv("BOT_TOKEN_PATH") or "").strip()
+            if token_path:
+                try:
+                    with open(token_path, "r") as f:
+                        token = f.read().strip()
+                except Exception as e:
+                    logger.warning(f"Failed to read token from {token_path}: {e}")
+            if not token:
+                token = (os.getenv("BOT_TOKEN") or "").strip()
             if token:
                 headers["Authorization"] = f"Bearer {token}"
 
@@ -69,10 +80,16 @@ class WebSocketTransport:
             )
             # Surface a clearer hint when auth is likely missing
             if status == 401:
+                token_path = (os.getenv("BOT_TOKEN_PATH") or "").strip()
                 has_token = bool((os.getenv("BOT_TOKEN") or "").strip())
-                if not has_token:
+                has_token_path = bool(token_path)
+                if not has_token and not has_token_path:
                     logger.error(
-                        "No BOT_TOKEN present; backend project routes require Authorization."
+                        "No BOT_TOKEN or BOT_TOKEN_PATH present; backend project routes require Authorization."
+                    )
+                elif has_token_path and not token:
+                    logger.error(
+                        f"BOT_TOKEN_PATH is set to {token_path} but token could not be read."
                     )
             raise
         except Exception as e:
