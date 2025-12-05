@@ -62,6 +62,29 @@ spec:
                       - "github"
                       - "gitlab"
                       description: "Git hosting provider (auto-detected from URL if not specified)"
+              workspaceContainer:
+                type: object
+                description: "Workspace container configuration for ADR-0006 agent isolation. Optional customization - sessions always run in workspace containers using the platform default image if not specified."
+                properties:
+                  image:
+                    type: string
+                    description: "Custom container image for workspace pods (optional - uses platform default if not specified)"
+                  resources:
+                    type: object
+                    description: "Resource requirements for workspace containers"
+                    properties:
+                      cpuRequest:
+                        type: string
+                        description: "CPU request (e.g., 250m)"
+                      cpuLimit:
+                        type: string
+                        description: "CPU limit (e.g., 2)"
+                      memoryRequest:
+                        type: string
+                        description: "Memory request (e.g., 512Mi)"
+                      memoryLimit:
+                        type: string
+                        description: "Memory limit (e.g., 2Gi)"
           status:
             type: object
             properties:
