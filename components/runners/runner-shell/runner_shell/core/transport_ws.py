@@ -39,6 +39,7 @@ class WebSocketTransport:
                 try:
                     with open(token_path, "r", encoding="utf-8") as f:
                         token = f.read().strip()
+                    logger.info(f"Read token from {token_path}")
                 except Exception as e:
                     logger.warning(f"Failed to read token from {token_path}: {e}")
             if not token:
