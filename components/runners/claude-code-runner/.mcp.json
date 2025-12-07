@@ -9,6 +9,14 @@
         "JIRA_SSL_VERIFY": "true",
         "READ_ONLY_MODE": "true"
       }
+    },
+    "mcp-ambient": {
+      "command": "mcp-ambient-server",
+      "args": [],
+      "env": {
+        "BACKEND_API_URL": "${BACKEND_API_URL}",
+        "BOT_TOKEN": "${BOT_TOKEN}"
+      }
     }
   }
 }

@@ -81,5 +81,59 @@ describe('vTeam E2E Tests', () => {
       expect(response.body.isOpenShift).to.eq(false)  // kind is vanilla k8s
     })
   })
+
+  it('should verify MCP server can reach backend endpoints', () => {
+    // Test backend endpoints that MCP server uses are accessible
+    cy.request('/api/cluster-info').then((response) => {
+      expect(response.status).to.eq(200)
+      expect(response.body).to.have.property('isOpenShift')
+    })
+
+    cy.request('/api/workflows/ootb').then((response) => {
+      expect(response.status).to.eq(200)
+      expect(response.body).to.have.property('workflows')
+    })
+  })
+
+  it('should verify project endpoints work with auth', () => {
+    // Test authenticated endpoints that MCP uses
+    cy.request({
+      url: '/api/projects',
+      headers: {'Authorization': `Bearer ${Cypress.env('TEST_TOKEN')}`}
+    }).then((response) => {
+      expect(response.status).to.eq(200)
+      expect(response.body).to.have.property('items')
+    })
+  })
+
+  it('should create project and verify via API (like MCP would)', () => {
+    const projectName = `e2e-mcp-${Date.now()}`
+
+    // Create via UI
+    cy.visit('/projects')
+    cy.contains('button', 'New Workspace').click()
+    cy.get('#name').type(projectName)
+    cy.contains('button', 'Create Workspace').click()
+    cy.url({ timeout: 15000 }).should('include', `/projects/${projectName}`)
+
+    // Verify via API (like MCP would do)
+    cy.request({
+      url: `/api/projects/${projectName}`,
+      headers: {'Authorization': `Bearer ${Cypress.env('TEST_TOKEN')}`}
+    }).then((response) => {
+      expect(response.status).to.eq(200)
+      expect(response.body.metadata.name).to.eq(projectName)
+    })
+
+    // Verify session list endpoint works
+    cy.request({
+      url: `/api/projects/${projectName}/agentic-sessions`,
+      headers: {'Authorization': `Bearer ${Cypress.env('TEST_TOKEN')}`}
+    }).then((response) => {
+      expect(response.status).to.eq(200)
+      expect(response.body).to.have.property('items')
+      expect(response.body.items).to.be.an('array')
+    })
+  })
 })
 

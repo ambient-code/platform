@@ -16,6 +16,10 @@ WORKDIR /app
 COPY runner-shell /app/runner-shell
 RUN cd /app/runner-shell && pip install --no-cache-dir .
 
+# Copy and install mcp-ambient-server package
+COPY mcp-ambient-server /app/mcp-ambient-server
+RUN cd /app/mcp-ambient-server && pip install --no-cache-dir .
+
 # Copy claude-runner specific files
 COPY claude-code-runner /app/claude-runner
 

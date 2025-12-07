@@ -132,3 +132,7 @@ e2e/langfuse/.env.langfuse-keys
 # AI assistant configuration
 .cursor/
 .tessl/
+.mcp.json
+
+# Developer-specific setup documentation
+LOCAL_SETUP.md

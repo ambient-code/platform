@@ -1,0 +1,28 @@
+[project]
+name = "mcp-ambient-server"
+version = "0.1.0"
+description = "MCP server for Ambient Code Platform API"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+  { name = "Ambient Code Platform" }
+]
+dependencies = [
+  "mcp>=1.1.0",
+  "httpx>=0.27.0",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.0.0",
+  "pytest-asyncio>=0.23.0",
+  "pytest-cov>=4.1.0",
+  "pytest-httpx>=0.30.0",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project.scripts]
+mcp-ambient-server = "mcp_ambient_server.server:main"
