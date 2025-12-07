@@ -41,7 +41,7 @@ spec:
         - name: GITHUB_APP_SLUG
           value: "ambient-code"
         - name: VTEAM_VERSION
-          value: "v0.0.3"
+          value: "v0.0.12-22-g5553056"
         - name: DISABLE_AUTH
           value: "true"
         - name: MOCK_USER

@@ -1,5 +1,5 @@
 .PHONY: help setup build-all build-frontend build-backend build-operator build-runner deploy clean
-.PHONY: local-up local-down local-clean local-status local-rebuild local-reload-backend local-reload-frontend local-reload-operator
+.PHONY: local-up local-down local-clean local-status local-rebuild local-reload-backend local-reload-frontend local-reload-operator local-sync-version
 .PHONY: local-logs local-logs-backend local-logs-frontend local-logs-operator local-shell local-shell-frontend
 .PHONY: local-test local-test-dev local-test-quick test-all local-url local-troubleshoot local-port-forward local-stop-port-forward
 .PHONY: push-all registry-login setup-hooks remove-hooks check-minikube check-kubectl
@@ -145,6 +145,7 @@ local-up: check-minikube check-kubectl ## Start local development environment (m
 	@kubectl apply -f components/manifests/base/workspace-pvc.yaml -n $(NAMESPACE) >/dev/null 2>&1 || true
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 6.5/8: Configuring operator..."
 	@$(MAKE) --no-print-directory _create-operator-config
+	@$(MAKE) --no-print-directory local-sync-version
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 7/8: Deploying services..."
 	@kubectl apply -f components/manifests/minikube/backend-deployment.yaml >/dev/null 2>&1
 	@kubectl apply -f components/manifests/minikube/backend-service.yaml >/dev/null 2>&1
@@ -192,6 +193,26 @@ local-status: check-kubectl ## Show status of local deployment
 	@kubectl get svc -n $(NAMESPACE) 2>/dev/null | grep -E "NAME|NodePort" || echo "No services found"
 	@echo ""
 	@$(MAKE) --no-print-directory _show-access-info
+	@echo ""
+	@echo "$(COLOR_BOLD)Version Status:$(COLOR_RESET)"
+	@GIT_VERSION=$$(git describe --tags --always 2>/dev/null || echo "unknown") && \
+	MANIFEST_VERSION=$$(grep -A1 "name: VTEAM_VERSION" components/manifests/minikube/frontend-deployment.yaml | tail -1 | sed 's/.*value: "\(.*\)"/\1/' | tr -d ' ') && \
+	RUNNING_VERSION=$$(kubectl get deployment frontend -n $(NAMESPACE) -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="VTEAM_VERSION")].value}' 2>/dev/null || echo "not-deployed") && \
+	echo "  Git:      $$GIT_VERSION" && \
+	echo "  Manifest: $$MANIFEST_VERSION" && \
+	echo "  Running:  $$RUNNING_VERSION" && \
+	if [ "$$GIT_VERSION" != "$$MANIFEST_VERSION" ]; then \
+	  echo "  $(COLOR_YELLOW)⚠$(COLOR_RESET)  Manifest version differs from git (run 'make local-sync-version')"; \
+	fi
+
+local-sync-version: ## Sync version from git to local deployment manifests
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Syncing version from git..."
+	@VERSION=$$(git describe --tags --always 2>/dev/null || echo "dev") && \
+	echo "  Using version: $$VERSION" && \
+	sed -i.bak "s|value: \"v.*\"|value: \"$$VERSION\"|" \
+	  components/manifests/minikube/frontend-deployment.yaml && \
+	rm -f components/manifests/minikube/frontend-deployment.yaml.bak && \
+	echo "  $(COLOR_GREEN)✓$(COLOR_RESET) Version synced to $$VERSION"
 
 local-rebuild: ## Rebuild and reload all components
 	@echo "$(COLOR_BOLD)🔄 Rebuilding all components...$(COLOR_RESET)"
