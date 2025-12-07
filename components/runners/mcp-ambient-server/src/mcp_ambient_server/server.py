@@ -45,6 +45,28 @@ def format_json(data: dict) -> str:
 
 
 @mcp.tool()
+async def create_project(
+    name: str, display_name: str = "", description: str = ""
+) -> str:
+    """Create a new project in the Ambient Code Platform.
+
+    Args:
+        name: Project name (required, must be valid Kubernetes namespace name)
+        display_name: Display name (optional, used on OpenShift)
+        description: Project description (optional)
+
+    Returns:
+        JSON object with created project details (name, namespace, status)
+    """
+    try:
+        project = await api_client.create_project(name, display_name, description)
+        return format_json(project)
+    except Exception as e:
+        logger.error(f"Failed to create project {name}: {e}")
+        return f"Error creating project: {str(e)}"
+
+
+@mcp.tool()
 async def list_projects() -> str:
     """List all projects accessible by the user.
 

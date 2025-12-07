@@ -93,6 +93,36 @@ class APIClient:
 
     # Project Management
 
+    async def create_project(
+        self, name: str, display_name: str = "", description: str = ""
+    ) -> dict[str, Any]:
+        """Create a new project.
+
+        Args:
+            name: Project name (required, must be valid Kubernetes namespace name)
+            display_name: Display name (optional, used on OpenShift)
+            description: Project description (optional, used on OpenShift)
+
+        Returns:
+            Created project object with name, namespace, status
+
+        Raises:
+            Exception: If project creation fails (conflict, forbidden, etc.)
+        """
+        payload = {"name": name}
+        if display_name:
+            payload["displayName"] = display_name
+        if description:
+            payload["description"] = description
+
+        try:
+            response = await self.client.post("/projects", json=payload)
+            return await self._handle_response(response, "project")
+        except httpx.ConnectError:
+            raise Exception("Cannot reach backend API. Check cluster connectivity.")
+        except httpx.TimeoutException:
+            raise Exception("Request timed out after 30s. Backend may be overloaded.")
+
     async def list_projects(self) -> list[dict[str, Any]]:
         """List all projects accessible by the user.
 
@@ -318,12 +348,14 @@ class APIClient:
             Health status object
         """
         try:
-            # Health endpoint is at root, not under /api
-            response = await self.client.get(
-                "/health",
-                base_url=self.base_url.replace("/api", ""),
-            )
-            return await self._handle_response(response, "health status")
+            # Health endpoint is at root, not under /api - use full URL
+            health_url = self.base_url.replace("/api", "") + "/health"
+            async with httpx.AsyncClient(
+                headers={"Authorization": f"Bearer {self.token}"},
+                timeout=30.0,
+            ) as client:
+                response = await client.get(health_url)
+                return await self._handle_response(response, "health status")
         except httpx.ConnectError:
             raise Exception("Cannot reach backend API. Check cluster connectivity.")
         except httpx.TimeoutException:
