@@ -41,6 +41,12 @@ theme:
 
 nav:
   - Home: index.md
+  - Architecture:
+    - Overview: architecture/index.md
+    - Core System Architecture: architecture/core-system-architecture.md
+    - Agentic Session Lifecycle: architecture/agentic-session-lifecycle.md
+    - Multi-Tenancy Architecture: architecture/multi-tenancy-architecture.md
+    - Kubernetes Resources: architecture/kubernetes-resources.md
   - User Guide:
     - Overview: user-guide/index.md
     - Getting Started: user-guide/getting-started.md

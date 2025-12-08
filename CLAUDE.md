@@ -40,6 +40,12 @@ User Creates Session → Backend Creates CR → Operator Spawns Job →
 Pod Runs Claude CLI → Results Stored in CR → UI Displays Progress
 ```
 
+📐 **Architecture Diagrams:** See [docs/architecture/](docs/architecture/) for comprehensive visual guides including:
+- [Core System Architecture](docs/architecture/core-system-architecture.md) - 4-component system with data flows
+- [Agentic Session Lifecycle](docs/architecture/agentic-session-lifecycle.md) - State machine and reconciliation
+- [Multi-Tenancy Architecture](docs/architecture/multi-tenancy-architecture.md) - Project isolation and RBAC
+- [Kubernetes Resources](docs/architecture/kubernetes-resources.md) - CRD structures and relationships
+
 ## Memory System - Loadable Context
 
 This repository uses a structured **memory system** to provide targeted, loadable context instead of relying solely on this comprehensive CLAUDE.md file.
