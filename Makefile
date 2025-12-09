@@ -16,6 +16,19 @@ PLATFORM ?= linux/amd64
 BUILD_FLAGS ?= 
 NAMESPACE ?= ambient-code
 REGISTRY ?= quay.io/your-org
+CI_MODE ?= false
+
+# In CI we want full command output to diagnose failures. Locally we keep the Makefile quieter.
+# GitHub Actions sets CI=true by default; the workflow can also pass CI_MODE=true explicitly.
+ifeq ($(CI),true)
+CI_MODE := true
+endif
+
+ifeq ($(CI_MODE),true)
+QUIET_REDIRECT :=
+else
+QUIET_REDIRECT := >/dev/null 2>&1
+endif
 
 # Image tags
 FRONTEND_IMAGE ?= vteam-frontend:latest
@@ -122,40 +135,40 @@ local-up: check-minikube check-kubectl ## Start local development environment (m
 	@echo ""
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 1/8: Starting minikube..."
 	@if [ "$(CONTAINER_ENGINE)" = "docker" ]; then \
-		minikube start --driver=docker --memory=4096 --cpus=2 2>/dev/null || \
+		minikube start --driver=docker --memory=4096 --cpus=2 $(QUIET_REDIRECT) || \
 			(minikube status >/dev/null 2>&1 && echo "$(COLOR_GREEN)✓$(COLOR_RESET) Minikube already running") || \
 			(echo "$(COLOR_RED)✗$(COLOR_RESET) Failed to start minikube" && exit 1); \
 	else \
-		minikube start --driver=podman --memory=4096 --cpus=2 --kubernetes-version=v1.28.3 --container-runtime=cri-o 2>/dev/null || \
+		minikube start --driver=podman --memory=4096 --cpus=2 --kubernetes-version=v1.28.3 --container-runtime=cri-o $(QUIET_REDIRECT) || \
 			(minikube status >/dev/null 2>&1 && echo "$(COLOR_GREEN)✓$(COLOR_RESET) Minikube already running") || \
 			(echo "$(COLOR_RED)✗$(COLOR_RESET) Failed to start minikube" && exit 1); \
 	fi
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 2/8: Enabling addons..."
-	@minikube addons enable ingress >/dev/null 2>&1 || true
-	@minikube addons enable storage-provisioner >/dev/null 2>&1 || true
+	@minikube addons enable ingress $(QUIET_REDIRECT) || true
+	@minikube addons enable storage-provisioner $(QUIET_REDIRECT) || true
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 3/8: Building images..."
 	@$(MAKE) --no-print-directory _build-and-load
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 4/8: Creating namespace..."
-	@kubectl create namespace $(NAMESPACE) --dry-run=client -o yaml | kubectl apply -f - >/dev/null 2>&1
+	@kubectl create namespace $(NAMESPACE) --dry-run=client -o yaml | kubectl apply -f - $(QUIET_REDIRECT)
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 5/8: Applying CRDs and RBAC..."
-	@kubectl apply -f components/manifests/base/crds/ >/dev/null 2>&1 || true
-	@kubectl apply -f components/manifests/base/rbac/ >/dev/null 2>&1 || true
-	@kubectl apply -f components/manifests/minikube/local-dev-rbac.yaml >/dev/null 2>&1 || true
+	@kubectl apply -f components/manifests/base/crds/ $(QUIET_REDIRECT) || true
+	@kubectl apply -f components/manifests/base/rbac/ $(QUIET_REDIRECT) || true
+	@kubectl apply -f components/manifests/minikube/local-dev-rbac.yaml $(QUIET_REDIRECT) || true
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 6/8: Creating storage..."
-	@kubectl apply -f components/manifests/base/workspace-pvc.yaml -n $(NAMESPACE) >/dev/null 2>&1 || true
+	@kubectl apply -f components/manifests/base/workspace-pvc.yaml -n $(NAMESPACE) $(QUIET_REDIRECT) || true
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 6.5/8: Configuring operator..."
 	@$(MAKE) --no-print-directory _create-operator-config
 	@$(MAKE) --no-print-directory local-sync-version
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 7/8: Deploying services..."
-	@kubectl apply -f components/manifests/minikube/backend-deployment.yaml >/dev/null 2>&1
-	@kubectl apply -f components/manifests/minikube/backend-service.yaml >/dev/null 2>&1
-	@kubectl apply -f components/manifests/minikube/frontend-deployment.yaml >/dev/null 2>&1
-	@kubectl apply -f components/manifests/minikube/frontend-service.yaml >/dev/null 2>&1
-	@kubectl apply -f components/manifests/minikube/operator-deployment.yaml >/dev/null 2>&1
+	@kubectl apply -f components/manifests/minikube/backend-deployment.yaml $(QUIET_REDIRECT)
+	@kubectl apply -f components/manifests/minikube/backend-service.yaml $(QUIET_REDIRECT)
+	@kubectl apply -f components/manifests/minikube/frontend-deployment.yaml $(QUIET_REDIRECT)
+	@kubectl apply -f components/manifests/minikube/frontend-service.yaml $(QUIET_REDIRECT)
+	@kubectl apply -f components/manifests/minikube/operator-deployment.yaml $(QUIET_REDIRECT)
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 8/8: Setting up ingress..."
 	@kubectl wait --namespace ingress-nginx --for=condition=ready pod \
 		--selector=app.kubernetes.io/component=controller --timeout=90s >/dev/null 2>&1 || true
-	@kubectl apply -f components/manifests/minikube/ingress.yaml >/dev/null 2>&1 || true
+	@kubectl apply -f components/manifests/minikube/ingress.yaml $(QUIET_REDIRECT) || true
 	@echo ""
 	@echo "$(COLOR_GREEN)✓ Ambient Code Platform is starting up!$(COLOR_RESET)"
 	@echo ""
@@ -356,7 +369,7 @@ local-test-quick: check-kubectl check-minikube ## Quick smoke test of local envi
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Testing namespace..."
 	@kubectl get namespace $(NAMESPACE) >/dev/null 2>&1 && echo "$(COLOR_GREEN)✓$(COLOR_RESET) Namespace exists" || (echo "$(COLOR_RED)✗$(COLOR_RESET) Namespace missing" && exit 1)
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for pods to be ready..."
-	@kubectl wait --for=condition=ready pod -l app=backend -n $(NAMESPACE) --timeout=60s >/dev/null 2>&1 && \
+	@kubectl wait --for=condition=ready pod -l app=backend-api -n $(NAMESPACE) --timeout=60s >/dev/null 2>&1 && \
 	 kubectl wait --for=condition=ready pod -l app=frontend -n $(NAMESPACE) --timeout=60s >/dev/null 2>&1 && \
 	 echo "$(COLOR_GREEN)✓$(COLOR_RESET) Pods ready" || (echo "$(COLOR_RED)✗$(COLOR_RESET) Pods not ready" && exit 1)
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Testing backend health..."
@@ -492,13 +505,13 @@ check-kubectl: ## Check if kubectl is installed
 
 _build-and-load: ## Internal: Build and load images
 	@echo "  Building backend..."
-	@$(CONTAINER_ENGINE) build -t $(BACKEND_IMAGE) components/backend >/dev/null 2>&1
+	@$(CONTAINER_ENGINE) build -t $(BACKEND_IMAGE) components/backend $(QUIET_REDIRECT)
 	@echo "  Building frontend..."
-	@$(CONTAINER_ENGINE) build -t $(FRONTEND_IMAGE) components/frontend >/dev/null 2>&1
+	@$(CONTAINER_ENGINE) build -t $(FRONTEND_IMAGE) components/frontend $(QUIET_REDIRECT)
 	@echo "  Building operator..."
-	@$(CONTAINER_ENGINE) build -t $(OPERATOR_IMAGE) components/operator >/dev/null 2>&1
+	@$(CONTAINER_ENGINE) build -t $(OPERATOR_IMAGE) components/operator $(QUIET_REDIRECT)
 	@echo "  Building runner..."
-	@$(CONTAINER_ENGINE) build -t $(RUNNER_IMAGE) -f components/runners/claude-code-runner/Dockerfile components/runners >/dev/null 2>&1
+	@$(CONTAINER_ENGINE) build -t $(RUNNER_IMAGE) -f components/runners/claude-code-runner/Dockerfile components/runners $(QUIET_REDIRECT)
 	@echo "  Tagging images with localhost prefix..."
 	@$(CONTAINER_ENGINE) tag $(BACKEND_IMAGE) localhost/$(BACKEND_IMAGE) 2>/dev/null || true
 	@$(CONTAINER_ENGINE) tag $(FRONTEND_IMAGE) localhost/$(FRONTEND_IMAGE) 2>/dev/null || true
@@ -510,10 +523,10 @@ _build-and-load: ## Internal: Build and load images
 	@$(CONTAINER_ENGINE) save -o /tmp/minikube-images/frontend.tar localhost/$(FRONTEND_IMAGE)
 	@$(CONTAINER_ENGINE) save -o /tmp/minikube-images/operator.tar localhost/$(OPERATOR_IMAGE)
 	@$(CONTAINER_ENGINE) save -o /tmp/minikube-images/runner.tar localhost/$(RUNNER_IMAGE)
-	@minikube image load /tmp/minikube-images/backend.tar >/dev/null 2>&1
-	@minikube image load /tmp/minikube-images/frontend.tar >/dev/null 2>&1
-	@minikube image load /tmp/minikube-images/operator.tar >/dev/null 2>&1
-	@minikube image load /tmp/minikube-images/runner.tar >/dev/null 2>&1
+	@minikube image load /tmp/minikube-images/backend.tar $(QUIET_REDIRECT)
+	@minikube image load /tmp/minikube-images/frontend.tar $(QUIET_REDIRECT)
+	@minikube image load /tmp/minikube-images/operator.tar $(QUIET_REDIRECT)
+	@minikube image load /tmp/minikube-images/runner.tar $(QUIET_REDIRECT)
 	@rm -rf /tmp/minikube-images
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Images built and loaded"
 

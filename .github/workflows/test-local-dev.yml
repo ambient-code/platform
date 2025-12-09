@@ -11,6 +11,12 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v5
+
+    - name: Set up Go
+      uses: actions/setup-go@v6
+      with:
+        go-version-file: 'components/backend/go.mod'
+        cache-dependency-path: 'components/backend/go.sum'
       
     - name: Install minikube and kubectl
       run: |
@@ -35,7 +41,7 @@ jobs:
     - name: Deploy using Makefile
       run: |
         echo "Using Makefile to deploy complete stack..."
-        make local-up CONTAINER_ENGINE=docker
+        make local-up CONTAINER_ENGINE=docker CI_MODE=true
         
     - name: Wait for deployments
       run: |
@@ -58,6 +64,29 @@ jobs:
           kubectl describe deployment agentic-operator -n ambient-code | tail -50
           exit 1
         }
+
+    - name: Run backend integration tests (real k8s auth path)
+      run: |
+        set -euo pipefail
+
+        echo "Setting up ServiceAccount + RBAC for backend integration tests..."
+        kubectl -n ambient-code create serviceaccount backend-integration-test 2>/dev/null || true
+        kubectl -n ambient-code create role backend-integration-test \
+          --verb=get,list \
+          --resource=configmaps 2>/dev/null || true
+        kubectl -n ambient-code create rolebinding backend-integration-test \
+          --role=backend-integration-test \
+          --serviceaccount=ambient-code:backend-integration-test 2>/dev/null || true
+
+        TEST_TOKEN="$(kubectl -n ambient-code create token backend-integration-test)"
+        echo "::add-mask::$TEST_TOKEN"
+
+        echo "Running Go integration tests (skips any external-provider tests without env)..."
+        cd components/backend
+        INTEGRATION_TESTS=true \
+        K8S_TEST_TOKEN="$TEST_TOKEN" \
+        K8S_TEST_NAMESPACE="ambient-code" \
+        go test ./tests/integration/... -count=1 -timeout=10m
     
     - name: Run Makefile smoke tests
       run: |

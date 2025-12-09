@@ -132,3 +132,7 @@ e2e/langfuse/.env.langfuse-keys
 # AI assistant configuration
 .cursor/
 .tessl/
+
+# Test Reporting
+logs/
+reports/
