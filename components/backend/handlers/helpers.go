@@ -50,7 +50,8 @@ func RetryWithBackoff(maxRetries int, initialDelay, maxDelay time.Duration, oper
 
 // ValidateSecretAccess checks if the user has permission to perform the given verb on secrets
 // Returns an error if the user lacks the required permission
-func ValidateSecretAccess(ctx context.Context, k8sClient *kubernetes.Clientset, namespace, verb string) error {
+// Accepts kubernetes.Interface for compatibility with dependency injection in tests
+func ValidateSecretAccess(ctx context.Context, k8sClient kubernetes.Interface, namespace, verb string) error {
 	ssar := &authv1.SelfSubjectAccessReview{
 		Spec: authv1.SelfSubjectAccessReviewSpec{
 			ResourceAttributes: &authv1.ResourceAttributes{

@@ -31,6 +31,12 @@ linters:
           - staticcheck
           - govet
 
+      # Exclude style checks from test utilities (common patterns in test code)
+      - path: tests/.*\.go
+        linters:
+          - staticcheck
+        text: "(should not use|should not use dot imports|should not use ALL_CAPS|at least one file)"
+
       # Allow type assertions in K8s unstructured object parsing (intentional pattern)
       - path: (handlers|jira)/.*\.go
         text: "type assertion"

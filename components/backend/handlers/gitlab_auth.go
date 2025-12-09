@@ -18,9 +18,18 @@ type GitLabAuthHandler struct {
 }
 
 // NewGitLabAuthHandler creates a new GitLab authentication handler
-func NewGitLabAuthHandler(clientset *kubernetes.Clientset, namespace string) *GitLabAuthHandler {
+func NewGitLabAuthHandler(clientset kubernetes.Interface, namespace string) *GitLabAuthHandler {
+	// Convert interface to concrete type for gitlab.NewConnectionManager
+	var k8sClientset *kubernetes.Clientset
+	if clientset != nil {
+		if concrete, ok := clientset.(*kubernetes.Clientset); ok {
+			k8sClientset = concrete
+		}
+		// For tests with fake clients, NewConnectionManager will handle nil gracefully
+	}
+
 	return &GitLabAuthHandler{
-		connectionManager: gitlab.NewConnectionManager(clientset, namespace),
+		connectionManager: gitlab.NewConnectionManager(k8sClientset, namespace),
 	}
 }
 
@@ -339,6 +348,7 @@ func (h *GitLabAuthHandler) DisconnectGitLab(c *gin.Context) {
 
 // ConnectGitLabGlobal is the global handler for POST /projects/:projectName/auth/gitlab/connect
 func ConnectGitLabGlobal(c *gin.Context) {
+	fmt.Println("DEBUG: ConnectGitLabGlobal called")
 	// Get project from URL parameter - this is the namespace where tokens will be stored
 	project := c.Param("projectName")
 	if project == "" {
@@ -347,15 +357,15 @@ func ConnectGitLabGlobal(c *gin.Context) {
 	}
 
 	// Get user-scoped K8s client (RBAC enforcement)
-	reqK8s, _ := GetK8sClientsForRequest(c)
-	if reqK8s == nil {
+	k8sClt, _ := GetK8sClientsForRequest(c)
+	if k8sClt == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 		c.Abort()
 		return
 	}
 
 	// Create handler with user-scoped client (multi-tenant isolation)
-	handler := NewGitLabAuthHandler(reqK8s, project)
+	handler := NewGitLabAuthHandler(k8sClt, project)
 	handler.ConnectGitLab(c)
 }
 
@@ -369,15 +379,15 @@ func GetGitLabStatusGlobal(c *gin.Context) {
 	}
 
 	// Get user-scoped K8s client (RBAC enforcement)
-	reqK8s, _ := GetK8sClientsForRequest(c)
-	if reqK8s == nil {
+	k8sClt, _ := GetK8sClientsForRequest(c)
+	if k8sClt == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 		c.Abort()
 		return
 	}
 
 	// Create handler with user-scoped client
-	handler := NewGitLabAuthHandler(reqK8s, project)
+	handler := NewGitLabAuthHandler(k8sClt, project)
 	handler.GetGitLabStatus(c)
 }
 
@@ -391,14 +401,14 @@ func DisconnectGitLabGlobal(c *gin.Context) {
 	}
 
 	// Get user-scoped K8s client (RBAC enforcement)
-	reqK8s, _ := GetK8sClientsForRequest(c)
-	if reqK8s == nil {
+	k8sClt, _ := GetK8sClientsForRequest(c)
+	if k8sClt == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 		c.Abort()
 		return
 	}
 
 	// Create handler with user-scoped client
-	handler := NewGitLabAuthHandler(reqK8s, project)
+	handler := NewGitLabAuthHandler(k8sClt, project)
 	handler.DisconnectGitLab(c)
 }
