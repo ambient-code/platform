@@ -1707,6 +1707,24 @@ func monitorJob(jobName, sessionName, sessionNamespace string) {
 			return
 		}
 
+		// Check Job conditions for failures (e.g., DeadlineExceeded)
+		for _, condition := range job.Status.Conditions {
+			if condition.Type == batchv1.JobFailed && condition.Status == corev1.ConditionTrue {
+				statusPatch.SetField("phase", "Failed")
+				statusPatch.SetField("completionTime", time.Now().UTC().Format(time.RFC3339))
+				statusPatch.AddCondition(conditionUpdate{
+					Type:    conditionReady,
+					Status:  "False",
+					Reason:  condition.Reason,
+					Message: condition.Message,
+				})
+				_ = statusPatch.Apply()
+				_ = ensureSessionIsInteractive(sessionNamespace, sessionName)
+				_ = deleteJobAndPerJobService(sessionNamespace, jobName, sessionName)
+				return
+			}
+		}
+
 		if len(pods.Items) == 0 {
 			if job.Status.Active == 0 && job.Status.Succeeded == 0 && job.Status.Failed == 0 {
 				statusPatch.SetField("phase", "Failed")

@@ -7,17 +7,28 @@ import (
 	"ambient-code-operator/internal/config"
 	"ambient-code-operator/internal/types"
 
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	k8stypes "k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/dynamic/fake"
+	k8sfake "k8s.io/client-go/kubernetes/fake"
 )
 
 // setupTestClient initializes a fake Kubernetes client for testing
 func setupTestClient(objects ...runtime.Object) {
-	config.K8sClient = fake.NewSimpleClientset(objects...)
+	config.K8sClient = k8sfake.NewSimpleClientset(objects...)
+}
+
+// setupTestClients initializes both fake Kubernetes and dynamic clients
+func setupTestClients(k8sObjects []runtime.Object, dynamicObjects []runtime.Object) {
+	config.K8sClient = k8sfake.NewSimpleClientset(k8sObjects...)
+	scheme := runtime.NewScheme()
+	_ = corev1.AddToScheme(scheme)
+	_ = batchv1.AddToScheme(scheme)
+	config.DynamicClient = fake.NewSimpleDynamicClient(scheme, dynamicObjects...)
 }
 
 // TestCopySecretToNamespace_NoSharedDataMutation verifies that we don't mutate cached secret objects
@@ -594,5 +605,186 @@ func TestDeleteAmbientVertexSecret_NilAnnotations(t *testing.T) {
 	}
 	if result == nil {
 		t.Error("Secret should still exist")
+	}
+}
+
+// TestJobConditionHandling_DeadlineExceeded tests detection of DeadlineExceeded Job condition
+func TestJobConditionHandling_DeadlineExceeded(t *testing.T) {
+	// Create a Job with DeadlineExceeded condition
+	now := metav1.Now()
+	job := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-session-job",
+			Namespace: "test-ns",
+		},
+		Status: batchv1.JobStatus{
+			Conditions: []batchv1.JobCondition{
+				{
+					Type:               batchv1.JobFailed,
+					Status:             corev1.ConditionTrue,
+					LastTransitionTime: now,
+					Reason:             "DeadlineExceeded",
+					Message:            "Job was active longer than specified deadline",
+				},
+			},
+			Failed: 1,
+		},
+	}
+
+	// Expected behavior: Job should be detected as failed with DeadlineExceeded reason
+	if len(job.Status.Conditions) == 0 {
+		t.Fatal("Job should have at least one condition")
+	}
+
+	foundDeadlineExceeded := false
+	for _, condition := range job.Status.Conditions {
+		if condition.Type == batchv1.JobFailed && condition.Status == corev1.ConditionTrue {
+			if condition.Reason == "DeadlineExceeded" {
+				foundDeadlineExceeded = true
+			}
+		}
+	}
+
+	if !foundDeadlineExceeded {
+		t.Error("DeadlineExceeded condition not found in Job status")
+	}
+}
+
+// TestJobConditionHandling_OtherFailure tests detection of non-deadline Job failures
+func TestJobConditionHandling_OtherFailure(t *testing.T) {
+	// Create a Job with a different failure reason
+	now := metav1.Now()
+	job := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-session-job",
+			Namespace: "test-ns",
+		},
+		Status: batchv1.JobStatus{
+			Conditions: []batchv1.JobCondition{
+				{
+					Type:               batchv1.JobFailed,
+					Status:             corev1.ConditionTrue,
+					LastTransitionTime: now,
+					Reason:             "BackoffLimitExceeded",
+					Message:            "Job has reached the specified backoff limit",
+				},
+			},
+			Failed: 3,
+		},
+	}
+
+	// Verify the condition is present
+	foundFailure := false
+	for _, condition := range job.Status.Conditions {
+		if condition.Type == batchv1.JobFailed && condition.Status == corev1.ConditionTrue {
+			foundFailure = true
+			if condition.Reason != "BackoffLimitExceeded" {
+				t.Errorf("Expected reason 'BackoffLimitExceeded', got '%s'", condition.Reason)
+			}
+		}
+	}
+
+	if !foundFailure {
+		t.Error("Job failure condition not found")
+	}
+}
+
+// TestJobConditionHandling_NoFailure tests Job without failure conditions
+func TestJobConditionHandling_NoFailure(t *testing.T) {
+	// Create a Job with no failure conditions (running or succeeded)
+	job := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-session-job",
+			Namespace: "test-ns",
+		},
+		Status: batchv1.JobStatus{
+			Active: 1,
+		},
+	}
+
+	// Verify no failure conditions
+	for _, condition := range job.Status.Conditions {
+		if condition.Type == batchv1.JobFailed && condition.Status == corev1.ConditionTrue {
+			t.Error("Job should not have JobFailed condition")
+		}
+	}
+}
+
+// TestJobConditionHandling_MultipleConditions tests Job with multiple conditions
+func TestJobConditionHandling_MultipleConditions(t *testing.T) {
+	// Create a Job with multiple conditions, including DeadlineExceeded
+	now := metav1.Now()
+	job := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-session-job",
+			Namespace: "test-ns",
+		},
+		Status: batchv1.JobStatus{
+			Conditions: []batchv1.JobCondition{
+				{
+					Type:               batchv1.JobComplete,
+					Status:             corev1.ConditionFalse,
+					LastTransitionTime: now,
+					Reason:             "NotComplete",
+					Message:            "Job is not complete",
+				},
+				{
+					Type:               batchv1.JobFailed,
+					Status:             corev1.ConditionTrue,
+					LastTransitionTime: now,
+					Reason:             "DeadlineExceeded",
+					Message:            "Job was active longer than specified deadline",
+				},
+			},
+			Failed: 1,
+		},
+	}
+
+	// Should find DeadlineExceeded among multiple conditions
+	foundDeadlineExceeded := false
+	for _, condition := range job.Status.Conditions {
+		if condition.Type == batchv1.JobFailed && condition.Status == corev1.ConditionTrue {
+			if condition.Reason == "DeadlineExceeded" {
+				foundDeadlineExceeded = true
+				if condition.Message != "Job was active longer than specified deadline" {
+					t.Errorf("Unexpected message: %s", condition.Message)
+				}
+			}
+		}
+	}
+
+	if !foundDeadlineExceeded {
+		t.Error("DeadlineExceeded condition not found among multiple conditions")
+	}
+}
+
+// TestJobConditionHandling_FailedButNotTrue tests Job with Failed condition but status False
+func TestJobConditionHandling_FailedButNotTrue(t *testing.T) {
+	// Create a Job with JobFailed condition but Status=False (cleared failure)
+	now := metav1.Now()
+	job := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-session-job",
+			Namespace: "test-ns",
+		},
+		Status: batchv1.JobStatus{
+			Conditions: []batchv1.JobCondition{
+				{
+					Type:               batchv1.JobFailed,
+					Status:             corev1.ConditionFalse,
+					LastTransitionTime: now,
+					Reason:             "PreviouslyFailed",
+					Message:            "Job was previously failed but is now retrying",
+				},
+			},
+			Active: 1,
+		},
+	}
+
+	// Should NOT detect as failed (Status must be True)
+	for _, condition := range job.Status.Conditions {
+		if condition.Type == batchv1.JobFailed && condition.Status == corev1.ConditionTrue {
+			t.Error("Job should not be detected as failed when Status is False")
+		}
 	}
 }
