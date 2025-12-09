@@ -180,29 +180,70 @@ jobs:
 
           echo "prompt_file=amber-prompt.md" >> $GITHUB_OUTPUT
 
-      - name: Create feature branch
+      - name: Check for existing PR
+        id: check-existing-pr
+        env:
+          ISSUE_NUMBER: ${{ steps.issue-details.outputs.issue_number }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Check if there's already an open PR for this issue
+          EXISTING_PR=$(gh pr list --state open --search "Closes #${ISSUE_NUMBER}" --json number,headRefName --jq '.[0]' 2>/dev/null || echo "")
+
+          if [ -n "$EXISTING_PR" ] && [ "$EXISTING_PR" != "null" ]; then
+            PR_NUMBER=$(echo "$EXISTING_PR" | jq -r '.number')
+            EXISTING_BRANCH=$(echo "$EXISTING_PR" | jq -r '.headRefName')
+            echo "existing_pr=true" >> $GITHUB_OUTPUT
+            echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
+            echo "existing_branch=$EXISTING_BRANCH" >> $GITHUB_OUTPUT
+            echo "Found existing PR #$PR_NUMBER on branch $EXISTING_BRANCH"
+          else
+            echo "existing_pr=false" >> $GITHUB_OUTPUT
+            echo "No existing PR found for issue #${ISSUE_NUMBER}"
+          fi
+
+      - name: Create or checkout feature branch
         id: create-branch
         env:
           ISSUE_NUMBER: ${{ steps.issue-details.outputs.issue_number }}
           ISSUE_TITLE: ${{ steps.issue-details.outputs.issue_title }}
+          EXISTING_PR: ${{ steps.check-existing-pr.outputs.existing_pr }}
+          EXISTING_BRANCH: ${{ steps.check-existing-pr.outputs.existing_branch }}
         run: |
-          # Improved sanitization (Issue #10) - handles special chars, spaces, consecutive dashes
-          SANITIZED_TITLE=$(echo "$ISSUE_TITLE" \
-            | tr '[:upper:]' '[:lower:]' \
-            | sed 's/[^a-z0-9-]/-/g' \
-            | sed 's/--*/-/g' \
-            | sed 's/^-//' \
-            | sed 's/-$//' \
-            | cut -c1-50)
-
-          BRANCH_NAME="amber/issue-${ISSUE_NUMBER}-${SANITIZED_TITLE}"
-
           git config user.name "Amber Agent"
           git config user.email "amber@ambient-code.ai"
-          git checkout -b "$BRANCH_NAME"
+
+          if [ "$EXISTING_PR" == "true" ] && [ -n "$EXISTING_BRANCH" ]; then
+            # Checkout existing branch and pull latest changes
+            echo "Checking out existing branch: $EXISTING_BRANCH"
+            git fetch origin "$EXISTING_BRANCH"
+            git checkout -B "$EXISTING_BRANCH" "origin/$EXISTING_BRANCH"
+            BRANCH_NAME="$EXISTING_BRANCH"
+          else
+            # Create new branch with sanitized title
+            # Improved sanitization (Issue #10) - handles special chars, spaces, consecutive dashes
+            SANITIZED_TITLE=$(echo "$ISSUE_TITLE" \
+              | tr '[:upper:]' '[:lower:]' \
+              | sed 's/[^a-z0-9-]/-/g' \
+              | sed 's/--*/-/g' \
+              | sed 's/^-//' \
+              | sed 's/-$//' \
+              | cut -c1-50)
+
+            BRANCH_NAME="amber/issue-${ISSUE_NUMBER}-${SANITIZED_TITLE}"
+
+            # Check if branch exists remotely
+            if git ls-remote --heads origin "$BRANCH_NAME" | grep -q "$BRANCH_NAME"; then
+              echo "Branch $BRANCH_NAME exists remotely, checking out"
+              git fetch origin "$BRANCH_NAME"
+              git checkout -B "$BRANCH_NAME" "origin/$BRANCH_NAME"
+            else
+              echo "Creating new branch: $BRANCH_NAME"
+              git checkout -b "$BRANCH_NAME"
+            fi
+          fi
 
           echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
-          echo "Created branch: $BRANCH_NAME"
+          echo "Using branch: $BRANCH_NAME"
 
       - name: Read prompt file
         id: read-prompt
@@ -297,6 +338,8 @@ jobs:
           RUN_ID: ${{ github.run_id }}
           GITHUB_SERVER_URL: ${{ github.server_url }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          EXISTING_PR: ${{ steps.check-existing-pr.outputs.existing_pr }}
+          EXISTING_PR_NUMBER: ${{ steps.check-existing-pr.outputs.pr_number }}
         uses: actions/github-script@v8
         with:
           script: |
@@ -308,18 +351,24 @@ jobs:
             const runId = process.env.RUN_ID;
             const serverUrl = process.env.GITHUB_SERVER_URL;
             const repository = process.env.GITHUB_REPOSITORY;
+            const existingPr = process.env.EXISTING_PR === 'true';
+            const existingPrNumber = process.env.EXISTING_PR_NUMBER;
 
             // Safely get git diff (no shell injection risk with execFile)
             const { stdout: diff } = await execFileAsync('git', ['diff', 'HEAD~1', '--stat']);
+
+            const nextSteps = existingPr
+              ? `- Review that changes match the issue description\n- Verify no scope creep or unintended modifications\n- Changes pushed to existing PR #${existingPrNumber}`
+              : `- Review that changes match the issue description\n- Verify no scope creep or unintended modifications\n- A PR will be created shortly for formal review`;
 
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: issueNumber,
-              body: `## Amber Change Summary\n\nThe following files were modified:\n\n\`\`\`\n${diff}\n\`\`\`\n\n**Next Steps:**\n- Review that changes match the issue description\n- Verify no scope creep or unintended modifications\n- A PR will be created shortly for formal review\n\n---\n🔍 [View AI decision process](${serverUrl}/${repository}/actions/runs/${runId}) (logs available for 90 days)`
+              body: `## Amber Change Summary\n\nThe following files were modified:\n\n\`\`\`\n${diff}\n\`\`\`\n\n**Next Steps:**\n${nextSteps}\n\n---\n🔍 [View AI decision process](${serverUrl}/${repository}/actions/runs/${runId}) (logs available for 90 days)`
             });
 
-      - name: Create Pull Request
+      - name: Create or Update Pull Request
         if: steps.check-changes.outputs.has_changes == 'true'
         env:
           BRANCH_NAME: ${{ steps.check-changes.outputs.branch_name }}
@@ -330,6 +379,8 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
           RUN_ID: ${{ github.run_id }}
           GITHUB_SERVER_URL: ${{ github.server_url }}
+          EXISTING_PR: ${{ steps.check-existing-pr.outputs.existing_pr }}
+          EXISTING_PR_NUMBER: ${{ steps.check-existing-pr.outputs.pr_number }}
         uses: actions/github-script@v8
         with:
           script: |
@@ -341,6 +392,8 @@ jobs:
             const repository = process.env.GITHUB_REPOSITORY;
             const runId = process.env.RUN_ID;
             const serverUrl = process.env.GITHUB_SERVER_URL;
+            const existingPr = process.env.EXISTING_PR === 'true';
+            const existingPrNumber = process.env.EXISTING_PR_NUMBER ? parseInt(process.env.EXISTING_PR_NUMBER) : null;
 
             // Helper function for retrying API calls with exponential backoff
             // Retries on: 5xx errors, network errors (no status), JSON parse errors
@@ -368,8 +421,40 @@ jobs:
               throw new Error('retryWithBackoff: max retries exceeded');
             }
 
-            // Create PR with error handling (Issue #3)
             try {
+              // If PR already exists, just add a comment about the new push
+              if (existingPr && existingPrNumber) {
+                console.log(`PR #${existingPrNumber} already exists, adding update comment`);
+
+                // Add comment to PR about the new commit
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: existingPrNumber,
+                  body: `🤖 **Amber pushed additional changes**
+
+            - **Commit:** ${commitSha.substring(0, 7)}
+            - **Action Type:** ${actionType}
+
+            New changes have been pushed to this PR. Please review the updated code.
+
+            ---
+            🔍 [View AI decision process](${serverUrl}/${repository}/actions/runs/${runId}) (logs available for 90 days)`
+                });
+
+                // Also notify on the issue
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issueNumber,
+                  body: `🤖 Amber pushed additional changes to the existing PR #${existingPrNumber}.\n\n---\n🔍 [View AI decision process](${serverUrl}/${repository}/actions/runs/${runId}) (logs available for 90 days)`
+                });
+
+                console.log(`Updated existing PR #${existingPrNumber}`);
+                return;
+              }
+
+              // Create new PR
               const pr = await github.rest.pulls.create({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -423,8 +508,8 @@ jobs:
 
               console.log('Created PR:', pr.data.html_url);
             } catch (error) {
-              console.error('Failed to create PR:', error);
-              core.setFailed(`PR creation failed: ${error.message}`);
+              console.error('Failed to create/update PR:', error);
+              core.setFailed(`PR creation/update failed: ${error.message}`);
 
               // Notify on issue about failure
               await github.rest.issues.createComment({
