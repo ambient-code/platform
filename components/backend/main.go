@@ -96,9 +96,10 @@ func main() {
 	handlers.DeriveRepoFolderFromURL = git.DeriveRepoFolderFromURL
 	handlers.SendMessageToSession = websocket.SendMessageToSession
 
-	// Initialize repo handlers
-	handlers.GetK8sClientsForRequestRepo = handlers.GetK8sClientsForRequest
-	handlers.GetGitHubTokenRepo = git.GetGitHubToken
+	// Initialize repo handlers (default implementation already set in client_selection.go)
+	// GetK8sClientsForRequestRepoFunc uses getK8sClientsForRequestRepoDefault by default
+	handlers.GetGitHubTokenRepo = handlers.WrapGitHubTokenForRepo(git.GetGitHubToken)
+	handlers.DoGitHubRequest = nil // nil means use doGitHubRequest (default implementation)
 
 	// Initialize middleware
 	handlers.BaseKubeConfig = server.BaseKubeConfig

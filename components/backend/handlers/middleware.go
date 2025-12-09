@@ -1,12 +1,10 @@
 package handlers
 
 import (
-	"ambient-code-backend/server"
 	"encoding/base64"
 	"encoding/json"
 	"log"
 	"net/http"
-	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -24,7 +22,7 @@ import (
 // Dependencies injected from main package
 var (
 	BaseKubeConfig *rest.Config
-	K8sClientMw    *kubernetes.Clientset
+	K8sClientMw    kubernetes.Interface
 )
 
 // Helper functions and types
@@ -59,10 +57,34 @@ type ContentListItem struct {
 	ModifiedAt string `json:"modifiedAt"`
 }
 
+// GetK8sClientsFunc is a function variable that allows dependency injection for testing.
+// In production, this points to getK8sClientsDefault. In tests, it can be overridden.
+// Returns kubernetes.Interface (not *kubernetes.Clientset) to support both real and fake clients.
+//
+// SECURITY: This variable is immutable in production code. Tests can override it via SetGetK8sClientsFunc.
+// No environment variable checks are performed - authentication is always enforced in production.
+var GetK8sClientsFunc func(c *gin.Context) (kubernetes.Interface, dynamic.Interface) = getK8sClientsDefault
+
+// SetGetK8sClientsFunc allows test code to override GetK8sClientsFunc for dependency injection.
+// This function should ONLY be called from test code. Production code must never call this.
+//
+// SECURITY: This function does NOT check environment variables. It directly sets the function variable.
+// Production code never calls this function - it's only used by test utilities to inject fake clients.
+// The production implementation (getK8sClientsDefault) always enforces authentication.
+func SetGetK8sClientsFunc(fn func(c *gin.Context) (kubernetes.Interface, dynamic.Interface)) {
+	GetK8sClientsFunc = fn
+}
+
 // GetK8sClientsForRequest returns K8s typed and dynamic clients using the caller's token when provided.
 // It supports both Authorization: Bearer and X-Forwarded-Access-Token and NEVER falls back to the backend service account.
 // Returns nil, nil if no valid user token is provided - all API operations require user authentication.
-func GetK8sClientsForRequest(c *gin.Context) (*kubernetes.Clientset, dynamic.Interface) {
+// Returns kubernetes.Interface (not *kubernetes.Clientset) to support both real and fake clients in tests.
+func GetK8sClientsForRequest(c *gin.Context) (kubernetes.Interface, dynamic.Interface) {
+	return GetK8sClientsFunc(c)
+}
+
+// getK8sClientsDefault is the production implementation of GetK8sClientsForRequest
+func getK8sClientsDefault(c *gin.Context) (kubernetes.Interface, dynamic.Interface) {
 	// Prefer Authorization header (Bearer <token>)
 	rawAuth := c.GetHeader("Authorization")
 	rawFwd := c.GetHeader("X-Forwarded-Access-Token")
@@ -90,11 +112,9 @@ func GetK8sClientsForRequest(c *gin.Context) (*kubernetes.Clientset, dynamic.Int
 	hasAuthHeader := strings.TrimSpace(rawAuth) != ""
 	hasFwdToken := strings.TrimSpace(rawFwd) != ""
 
-	// In verified local dev environment, use dedicated local-dev-user service account
-	if isLocalDevEnvironment() && (token == "mock-token-for-local-dev" || os.Getenv("DISABLE_AUTH") == "true") {
-		log.Printf("Local dev mode detected - using local-dev-user service account for %s", c.FullPath())
-		return getLocalDevK8sClients()
-	}
+	// SECURITY: No authentication bypass in production code.
+	// All requests must provide a valid user token. No environment variable checks.
+	// No fallback to service account credentials.
 
 	if token != "" && BaseKubeConfig != nil {
 		cfg := *BaseKubeConfig
@@ -214,8 +234,24 @@ func updateAccessKeyLastUsedAnnotation(c *gin.Context) {
 }
 
 // ExtractServiceAccountFromAuth extracts namespace and ServiceAccount name from the Authorization Bearer JWT 'sub' claim
+// Also checks X-Remote-User header for service account format (OpenShift OAuth proxy format)
 // Returns (namespace, saName, true) when a SA subject is present, otherwise ("","",false)
 func ExtractServiceAccountFromAuth(c *gin.Context) (string, string, bool) {
+	// Check X-Remote-User header (OpenShift OAuth proxy format)
+	// This is a production feature, not just for tests
+	remoteUser := c.GetHeader("X-Remote-User")
+	if remoteUser != "" {
+		const prefix = "system:serviceaccount:"
+		if strings.HasPrefix(remoteUser, prefix) {
+			rest := strings.TrimPrefix(remoteUser, prefix)
+			parts := strings.SplitN(rest, ":", 2)
+			if len(parts) == 2 {
+				return parts[0], parts[1], true
+			}
+		}
+	}
+
+	// Standard Authorization Bearer JWT parsing
 	rawAuth := c.GetHeader("Authorization")
 	parts := strings.SplitN(rawAuth, " ", 2)
 	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
@@ -263,13 +299,15 @@ func ValidateProjectContext() gin.HandlerFunc {
 				c.Request.Header.Set("Authorization", "Bearer "+qp)
 			}
 		}
+
+		// SECURITY: Authentication is always required - no bypass mechanism
 		// Require user/API key token; do not fall back to service account
 		if c.GetHeader("Authorization") == "" && c.GetHeader("X-Forwarded-Access-Token") == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "User token required"})
 			c.Abort()
 			return
 		}
-		reqK8s, _ := GetK8sClientsForRequest(c)
+		reqK8s := GetK8sClientForPermissions(c)
 		if reqK8s == nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 			c.Abort()
@@ -323,62 +361,12 @@ func ValidateProjectContext() gin.HandlerFunc {
 	}
 }
 
-// isLocalDevEnvironment validates that we're in a safe local development environment
-// This prevents accidentally enabling dev mode in production
-func isLocalDevEnvironment() bool {
-	// Must have ENVIRONMENT=local or development
-	env := os.Getenv("ENVIRONMENT")
-	if env != "local" && env != "development" {
-		return false
-	}
-
-	// Must explicitly opt-in
-	if os.Getenv("DISABLE_AUTH") != "true" {
-		return false
-	}
-
-	// Additional safety: check we're not in a production namespace
-	namespace := os.Getenv("NAMESPACE")
-	if namespace == "" {
-		namespace = "default"
-	}
-
-	// SECURITY: Use allow-list approach to restrict dev mode to specific namespaces
-	// This prevents accidental activation in staging, qa, demo, or other non-production environments
-	allowedNamespaces := []string{
-		"ambient-code", // Default minikube namespace
-		"vteam-dev",    // Legacy local dev namespace
-	}
-
-	isAllowed := false
-	for _, allowed := range allowedNamespaces {
-		if namespace == allowed {
-			isAllowed = true
-			break
-		}
-	}
-
-	if !isAllowed {
-		log.Printf("Refusing dev mode in non-whitelisted namespace: %s", namespace)
-		log.Printf("Dev mode only allowed in: %v", allowedNamespaces)
-		log.Printf("SECURITY: Dev mode uses elevated permissions and should NEVER run outside local development")
-		return false
-	}
-
-	log.Printf("Local dev environment validated: env=%s namespace=%s (whitelisted)", env, namespace)
-	return true
-}
-
-// getLocalDevK8sClients returns clients for local development
-// Uses a dedicated local-dev-user service account with scoped permissions
-func getLocalDevK8sClients() (*kubernetes.Clientset, dynamic.Interface) {
-	// In local dev, we use the local-dev-user service account
-	// which has limited, namespace-scoped permissions
-	// This is safer than using the backend service account
-
-	// For now, use the server clients (which are the backend service account)
-	// TODO: Mint a token for the local-dev-user service account
-	// and create clients using that token for proper permission scoping
-
-	return server.K8sClient, server.DynamicClient
-}
+// SECURITY: Removed isLocalDevEnvironment() and getLocalDevK8sClients() functions.
+// These functions checked environment variables (GO_TEST, DISABLE_AUTH, ENVIRONMENT)
+// which could be accidentally set in production, creating an authentication bypass risk.
+//
+// Production code must NEVER bypass authentication based on environment variables.
+// All requests require valid user tokens. No exceptions.
+//
+// For local development, use proper authentication tokens or configure the cluster
+// to allow unauthenticated access only in development namespaces (not via code).
