@@ -23,6 +23,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	intstr "k8s.io/apimachinery/pkg/util/intstr"
@@ -700,6 +701,21 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 			copyCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 			if err := copySecretToNamespace(copyCtx, ambientVertexSecret, sessionNamespace, currentObj); err != nil {
+				errMsg := fmt.Sprintf("Failed to copy Vertex AI secret: %v", err)
+				statusPatch.SetField("phase", "Failed")
+				statusPatch.AddCondition(conditionUpdate{
+					Type:    conditionSecretsReady,
+					Status:  "False",
+					Reason:  "SecretCopyFailed",
+					Message: errMsg,
+				})
+				statusPatch.AddCondition(conditionUpdate{
+					Type:    conditionReady,
+					Status:  "False",
+					Reason:  "VertexSecretError",
+					Message: errMsg,
+				})
+				_ = statusPatch.Apply()
 				return fmt.Errorf("failed to copy %s secret from %s to %s (CLAUDE_CODE_USE_VERTEX=1): %w", types.AmbientVertexSecretName, operatorNamespace, sessionNamespace, err)
 			}
 			ambientVertexSecretCopied = true
@@ -800,6 +816,37 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 	prompt, _, _ := unstructured.NestedString(spec, "initialPrompt")
 	timeout, _, _ := unstructured.NestedInt64(spec, "timeout")
 	interactive, _, _ := unstructured.NestedBool(spec, "interactive")
+
+	// ADR-0006: Workspace container mode is always enabled
+	// Configuration priority: CR spec.workspacePodTemplate > ProjectSettings > platform default
+	workspacePodTemplate, hasCRTemplate, _ := unstructured.NestedMap(spec, "workspacePodTemplate")
+
+	// If no CR-level template, check ProjectSettings CR for customizations
+	if !hasCRTemplate {
+		psImage, _ := getWorkspaceContainerFromProjectSettings(sessionNamespace)
+		workspaceImage := psImage
+		if workspaceImage == "" {
+			workspaceImage = appConfig.AmbientCodeRunnerImage
+		}
+		log.Printf("Workspace container mode for session %s: image=%s (custom=%v)", name, workspaceImage, psImage != "")
+
+		// Build a workspacePodTemplate with just the image
+		workspacePodTemplate = map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "Pod",
+			"spec": map[string]interface{}{
+				"containers": []interface{}{
+					map[string]interface{}{
+						"name":  "workspace",
+						"image": workspaceImage,
+					},
+				},
+			},
+		}
+	} else {
+		workspaceImage := extractWorkspaceImage(workspacePodTemplate)
+		log.Printf("Workspace container mode enabled for session %s with CR image: %s", name, workspaceImage)
+	}
 
 	llmSettings, _, _ := unstructured.NestedMap(spec, "llmSettings")
 	model, _, _ := unstructured.NestedString(llmSettings, "model")
@@ -931,6 +978,12 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 	}
 	log.Printf("Session %s initiated by user: %s (userId: %s)", name, userName, userID)
 
+	// ADR-0006: Ensure runner service account exists for session-proxy pods/exec operations
+	if err := ensureRunnerServiceAccount(sessionNamespace); err != nil {
+		log.Printf("Warning: Failed to ensure runner service account: %v", err)
+		// Continue - job may still work if SA already exists
+	}
+
 	// Create the Job
 	job := &batchv1.Job{
 		ObjectMeta: v1.ObjectMeta{
@@ -968,14 +1021,42 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 				},
 				Spec: corev1.PodSpec{
 					RestartPolicy: corev1.RestartPolicyNever,
-					// Explicitly set service account for pod creation permissions
+					// ADR-0006: Disable automatic token mounting - only proxy sidecar gets the token
 					AutomountServiceAccountToken: boolPtr(false),
+					// ADR-0006: Use service account with pods/exec permissions (for proxy sidecar)
+					ServiceAccountName: "ambient-runner",
 					Volumes: []corev1.Volume{
 						{
 							Name: "workspace",
 							VolumeSource: corev1.VolumeSource{
 								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
 									ClaimName: pvcName,
+								},
+							},
+						},
+						// ADR-0006: Projected volume for SA token - mounted only in proxy sidecar
+						{
+							Name: "proxy-token",
+							VolumeSource: corev1.VolumeSource{
+								Projected: &corev1.ProjectedVolumeSource{
+									Sources: []corev1.VolumeProjection{
+										{
+											ServiceAccountToken: &corev1.ServiceAccountTokenProjection{
+												Path:              "token",
+												ExpirationSeconds: int64Ptr(3600),
+											},
+										},
+										{
+											ConfigMap: &corev1.ConfigMapProjection{
+												LocalObjectReference: corev1.LocalObjectReference{
+													Name: "kube-root-ca.crt",
+												},
+												Items: []corev1.KeyToPath{
+													{Key: "ca.crt", Path: "ca.crt"},
+												},
+											},
+										},
+									},
 								},
 							},
 						},
@@ -1083,6 +1164,21 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 									// WebSocket URL used by runner-shell to connect back to backend
 									corev1.EnvVar{Name: "WEBSOCKET_URL", Value: fmt.Sprintf("ws://backend-service.%s.svc.cluster.local:8080/api/projects/%s/sessions/%s/ws", appConfig.BackendNamespace, sessionNamespace, name)},
 									// S3 disabled; backend persists messages
+								)
+
+								// ADR-0006: Workspace MCP environment variables
+								// Agent uses workspace MCP tool for ALL command execution (Bash disabled)
+								base = append(base,
+									// Session identification for workspace MCP server (streaming exec)
+									corev1.EnvVar{Name: "SESSION_NAME", Value: name},
+									corev1.EnvVar{Name: "SESSION_UID", Value: string(currentObj.GetUID())},
+									// Namespace for K8s operations
+									corev1.EnvVar{
+										Name: "POD_NAMESPACE",
+										ValueFrom: &corev1.EnvVarSource{
+											FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.namespace"},
+										},
+									},
 								)
 
 								// Platform-wide Langfuse observability configuration
@@ -1274,10 +1370,62 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 
 							Resources: corev1.ResourceRequirements{},
 						},
+						// ADR-0006: Session proxy sidecar - provides streaming exec API
+						// Token is mounted only in this container via projected volume
+						{
+							Name:            "session-proxy",
+							Image:           appConfig.SessionProxyImage,
+							ImagePullPolicy: appConfig.ImagePullPolicy,
+							Env: []corev1.EnvVar{
+								{Name: "SESSION_NAME", Value: name},
+								{Name: "NAMESPACE", Value: sessionNamespace},
+								{Name: "LISTEN_ADDR", Value: ":8081"},
+							},
+							Ports: []corev1.ContainerPort{
+								{ContainerPort: 8081, Name: "exec-api"},
+							},
+							// Mount the projected SA token - only this container has K8s API access
+							VolumeMounts: []corev1.VolumeMount{
+								{
+									Name:      "proxy-token",
+									MountPath: "/var/run/secrets/kubernetes.io/serviceaccount",
+									ReadOnly:  true,
+								},
+							},
+							SecurityContext: &corev1.SecurityContext{
+								AllowPrivilegeEscalation: boolPtr(false),
+								ReadOnlyRootFilesystem:   boolPtr(true),
+								Capabilities: &corev1.Capabilities{
+									Drop: []corev1.Capability{"ALL"},
+								},
+							},
+							Resources: corev1.ResourceRequirements{
+								Requests: corev1.ResourceList{
+									corev1.ResourceCPU:    resource.MustParse("50m"),
+									corev1.ResourceMemory: resource.MustParse("64Mi"),
+								},
+								Limits: corev1.ResourceList{
+									corev1.ResourceCPU:    resource.MustParse("200m"),
+									corev1.ResourceMemory: resource.MustParse("128Mi"),
+								},
+							},
+						},
 					},
 				},
 			},
 		},
+	}
+
+	// ADR-0006: Add SESSION_PROXY_URL to runner container for exec API access
+	// Session-proxy sidecar listens on port 8081 (content service uses 8080)
+	for i := range job.Spec.Template.Spec.Containers {
+		if job.Spec.Template.Spec.Containers[i].Name == "ambient-code-runner" {
+			job.Spec.Template.Spec.Containers[i].Env = append(
+				job.Spec.Template.Spec.Containers[i].Env,
+				corev1.EnvVar{Name: "SESSION_PROXY_URL", Value: "http://localhost:8081"},
+			)
+			break
+		}
 	}
 
 	// Note: No volume mounts needed for runner/integration secrets
@@ -1333,13 +1481,86 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 	}
 
 	log.Printf("Created job %s for AgenticSession %s", jobName, name)
+
+	// ADR-0006: Create the workspace pod
+	// The proxy sidecar in the runner pod will exec into this pod
+	workspacePodName := fmt.Sprintf("%s-workspace", name)
+	workspaceImage := extractWorkspaceImage(workspacePodTemplate)
+	if workspaceImage == "" {
+		workspaceImage = appConfig.AmbientCodeRunnerImage // fallback to runner image
+	}
+
+	workspacePod := &corev1.Pod{
+		ObjectMeta: v1.ObjectMeta{
+			Name:      workspacePodName,
+			Namespace: sessionNamespace,
+			Labels: map[string]string{
+				"session": name,
+				"type":    "workspace",
+				"app":     "ambient-workspace",
+			},
+			OwnerReferences: []v1.OwnerReference{
+				{
+					APIVersion: "batch/v1",
+					Kind:       "Job",
+					Name:       jobName,
+					UID:        createdJob.UID,
+					Controller: boolPtr(true),
+				},
+			},
+		},
+		Spec: corev1.PodSpec{
+			RestartPolicy: corev1.RestartPolicyNever,
+			Containers: []corev1.Container{
+				{
+					Name:            "workspace",
+					Image:           workspaceImage,
+					ImagePullPolicy: appConfig.ImagePullPolicy,
+					Command:         []string{"sleep", "infinity"}, // Keep pod alive for exec
+					VolumeMounts: []corev1.VolumeMount{
+						{Name: "workspace", MountPath: "/workspace"},
+					},
+					WorkingDir: fmt.Sprintf("/workspace/sessions/%s/workspace", name),
+					SecurityContext: &corev1.SecurityContext{
+						AllowPrivilegeEscalation: boolPtr(false),
+						ReadOnlyRootFilesystem:   boolPtr(false),
+						Capabilities: &corev1.Capabilities{
+							Drop: []corev1.Capability{"ALL"},
+						},
+					},
+				},
+			},
+			Volumes: []corev1.Volume{
+				{
+					Name: "workspace",
+					VolumeSource: corev1.VolumeSource{
+						PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+							ClaimName: pvcName,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if _, err := config.K8sClient.CoreV1().Pods(sessionNamespace).Create(context.TODO(), workspacePod, v1.CreateOptions{}); err != nil {
+		if !errors.IsAlreadyExists(err) {
+			log.Printf("Failed to create workspace pod %s: %v", workspacePodName, err)
+			// Don't fail the session - the proxy will retry finding the pod
+		}
+	} else {
+		log.Printf("Created workspace pod %s for session %s", workspacePodName, name)
+	}
+
+	// Update status using batched StatusPatch approach
 	statusPatch.SetField("phase", "Creating")
 	statusPatch.SetField("observedGeneration", currentObj.GetGeneration())
+	statusPatch.SetField("workspacePod", workspacePodName)
 	statusPatch.AddCondition(conditionUpdate{
 		Type:    conditionJobCreated,
 		Status:  "True",
 		Reason:  "JobCreated",
-		Message: "Runner job created",
+		Message: "Runner job and workspace pod created",
 	})
 	// Apply all accumulated status changes in a single API call
 	if err := statusPatch.Apply(); err != nil {
@@ -2470,6 +2691,174 @@ func regenerateRunnerToken(sessionNamespace, sessionName string, session *unstru
 
 	log.Printf("[TokenProvision] Successfully regenerated token for session %s/%s", sessionNamespace, sessionName)
 	return nil
+}
+
+// ensureRunnerServiceAccount creates or updates the ambient-runner service account and RBAC
+// resources needed for workspace container mode (session-proxy permissions).
+// ADR-0006: Supports pod creation, exec, logs, and deletion for workspace containers.
+func ensureRunnerServiceAccount(namespace string) error {
+	ctx := context.Background()
+
+	// Create/Update ServiceAccount
+	sa := &corev1.ServiceAccount{
+		ObjectMeta: v1.ObjectMeta{
+			Name:      "ambient-runner",
+			Namespace: namespace,
+		},
+	}
+	_, err := config.K8sClient.CoreV1().ServiceAccounts(namespace).Create(ctx, sa, v1.CreateOptions{})
+	if err != nil && !errors.IsAlreadyExists(err) {
+		return fmt.Errorf("failed to create service account: %w", err)
+	}
+
+	// Create/Update Role with pods/exec permissions for session proxy sidecar
+	// ADR-0006: Proxy needs to list pods (to find workspace) and exec into them
+	role := &rbacv1.Role{
+		ObjectMeta: v1.ObjectMeta{
+			Name:      "ambient-runner-exec",
+			Namespace: namespace,
+		},
+		Rules: []rbacv1.PolicyRule{
+			// Pod list permission (to discover workspace pod by label)
+			{
+				APIGroups: []string{""},
+				Resources: []string{"pods"},
+				Verbs:     []string{"get", "list"},
+			},
+			// Pod exec permission (to run commands in workspace container)
+			{
+				APIGroups: []string{""},
+				Resources: []string{"pods/exec"},
+				Verbs:     []string{"create"},
+			},
+		},
+	}
+	_, err = config.K8sClient.RbacV1().Roles(namespace).Create(ctx, role, v1.CreateOptions{})
+	if err != nil {
+		if errors.IsAlreadyExists(err) {
+			// Update existing role with new permissions
+			_, err = config.K8sClient.RbacV1().Roles(namespace).Update(ctx, role, v1.UpdateOptions{})
+			if err != nil {
+				return fmt.Errorf("failed to update role: %w", err)
+			}
+		} else {
+			return fmt.Errorf("failed to create role: %w", err)
+		}
+	}
+
+	// Create/Update RoleBinding
+	rb := &rbacv1.RoleBinding{
+		ObjectMeta: v1.ObjectMeta{
+			Name:      "ambient-runner-exec",
+			Namespace: namespace,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "Role",
+			Name:     "ambient-runner-exec",
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      "ambient-runner",
+				Namespace: namespace,
+			},
+		},
+	}
+	_, err = config.K8sClient.RbacV1().RoleBindings(namespace).Create(ctx, rb, v1.CreateOptions{})
+	if err != nil && !errors.IsAlreadyExists(err) {
+		return fmt.Errorf("failed to create role binding: %w", err)
+	}
+
+	log.Printf("Ensured ambient-runner RBAC resources in namespace %s", namespace)
+	return nil
+}
+
+// getWorkspaceContainerFromProjectSettings returns custom workspace container settings from ProjectSettings CR.
+// Returns (image, resources) - empty values mean use platform defaults.
+// Workspace container mode is always enabled (ADR-0006); this function just retrieves optional customizations.
+func getWorkspaceContainerFromProjectSettings(namespace string) (string, map[string]string) {
+	gvr := types.GetProjectSettingsResource()
+	ctx := context.Background()
+
+	obj, err := config.DynamicClient.Resource(gvr).Namespace(namespace).Get(ctx, "projectsettings", v1.GetOptions{})
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			log.Printf("Error getting ProjectSettings for namespace %s: %v", namespace, err)
+		}
+		return "", nil
+	}
+
+	spec, found, _ := unstructured.NestedMap(obj.Object, "spec")
+	if !found {
+		return "", nil
+	}
+
+	wcMap, found, _ := unstructured.NestedMap(spec, "workspaceContainer")
+	if !found {
+		return "", nil
+	}
+
+	image, _, _ := unstructured.NestedString(wcMap, "image")
+
+	// Extract resources if present
+	resources := make(map[string]string)
+	if resMap, found, _ := unstructured.NestedMap(wcMap, "resources"); found {
+		if v, ok := resMap["cpuRequest"].(string); ok && v != "" {
+			resources["cpuRequest"] = v
+		}
+		if v, ok := resMap["cpuLimit"].(string); ok && v != "" {
+			resources["cpuLimit"] = v
+		}
+		if v, ok := resMap["memoryRequest"].(string); ok && v != "" {
+			resources["memoryRequest"] = v
+		}
+		if v, ok := resMap["memoryLimit"].(string); ok && v != "" {
+			resources["memoryLimit"] = v
+		}
+	}
+
+	return image, resources
+}
+
+// extractWorkspaceImage extracts the image from a workspacePodTemplate.
+// It looks for containers[].name=="workspace" or falls back to the first container.
+func extractWorkspaceImage(template map[string]interface{}) string {
+	if template == nil {
+		return ""
+	}
+
+	specMap, found, _ := unstructured.NestedMap(template, "spec")
+	if !found {
+		return ""
+	}
+
+	containers, found, _ := unstructured.NestedSlice(specMap, "containers")
+	if !found || len(containers) == 0 {
+		return ""
+	}
+
+	// Look for container named "workspace" first
+	for _, c := range containers {
+		container, ok := c.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if name, _, _ := unstructured.NestedString(container, "name"); name == "workspace" {
+			if image, _, _ := unstructured.NestedString(container, "image"); image != "" {
+				return image
+			}
+		}
+	}
+
+	// Fall back to first container's image
+	if first, ok := containers[0].(map[string]interface{}); ok {
+		if image, _, _ := unstructured.NestedString(first, "image"); image != "" {
+			return image
+		}
+	}
+
+	return ""
 }
 
 // Helper functions

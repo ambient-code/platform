@@ -18,6 +18,18 @@ export type ProjectResourceLimits = {
   diskQuotaGB: number;
 };
 
+// Workspace container customization settings.
+// Workspace container mode is always enabled (ADR-0006); these settings allow optional customization.
+export type WorkspaceContainerSettings = {
+  image?: string;
+  resources?: {
+    cpuRequest?: string;
+    cpuLimit?: string;
+    memoryRequest?: string;
+    memoryLimit?: string;
+  };
+};
+
 export type ObjectMeta = {
   name: string;
   namespace: string;
