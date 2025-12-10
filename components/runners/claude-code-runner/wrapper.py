@@ -1192,6 +1192,12 @@ class ClaudeCodeAdapter:
                         logging.warning(f"No output URL configured for {name}, skipping push")
                         continue
 
+                    # Check per-repo autoPush flag
+                    auto_push = r.get('autoPush', False)
+                    if not auto_push:
+                        logging.info(f"autoPush disabled for {name}, skipping push")
+                        continue
+
                     # Add token to output URL
                     out_url = self._url_with_token(out_url_raw, token) if token else out_url_raw
 
@@ -1870,7 +1876,17 @@ class ClaudeCodeAdapter:
         logging.debug(f"Claude Code adapter received message: {msg_type}")
 
     def _build_workspace_context_prompt(self, repos_cfg, workflow_name, artifacts_path, ambient_config):
-        """Generate comprehensive system prompt describing workspace layout."""
+        """Generate comprehensive system prompt describing workspace layout.
+
+        Args:
+            repos_cfg: List of repository configurations from REPOS_JSON
+            workflow_name: Name of the active workflow (if any)
+            artifacts_path: Path to shared artifacts directory
+            ambient_config: Workflow-specific configuration
+
+        Returns:
+            str: System prompt with workspace context and git instructions
+        """
 
         prompt = "You are Claude Code working in a structured development workspace.\n\n"
 
@@ -1894,6 +1910,24 @@ class ClaudeCodeAdapter:
                 prompt += f"- {name}/\n"
             prompt += "\nThese repositories contain source code you can read or modify.\n"
             prompt += "Each has its own git configuration and remote.\n\n"
+
+            # Add git push instructions if any repo has autoPush enabled
+            auto_push_repos = []
+            for repo in repos_cfg:
+                if repo.get('autoPush', False):
+                    auto_push_repos.append(repo.get('name', 'unknown'))
+
+            if auto_push_repos:
+                prompt += "## Git Operations - IMPORTANT\n"
+                prompt += "When you complete your work:\n"
+                prompt += "1. Commit your changes with a clear, descriptive message\n"
+                prompt += "2. Push changes to the configured output branch\n"
+                prompt += "3. Confirm the push succeeded\n\n"
+                prompt += "Git push best practices:\n"
+                prompt += "- Use: git push -u origin <branch-name>\n"
+                prompt += "- Only retry on network errors (up to 4 times with backoff)\n"
+                prompt += "- Verify the push with: git log origin/<branch> --oneline -1\n\n"
+                prompt += f"Repositories with auto-push enabled: {', '.join(auto_push_repos)}\n\n"
 
         # Workflow-specific instructions
         if ambient_config.get("systemPrompt"):
@@ -1936,11 +1970,18 @@ class ClaudeCodeAdapter:
                         except Exception:
                             name = ''
                     if name and isinstance(input_obj, dict) and url:
-                        out.append({'name': name, 'input': input_obj, 'output': output_obj})
+                        # Extract autoPush flag (default to False if not present)
+                        auto_push = it.get('autoPush', False)
+                        out.append({
+                            'name': name,
+                            'input': input_obj,
+                            'output': output_obj,
+                            'autoPush': auto_push
+                        })
                 return out
-        except Exception:
+        except Exception as e:
+            logging.warning(f"Failed to parse repos config from REPOS_JSON: {e}")
             return []
-        return []
 
     def _filter_mcp_servers(self, servers: dict) -> dict:
         """Filter MCP servers to only allow http and sse types.
