@@ -17,6 +17,8 @@ The platform follows a cloud-native microservices architecture:
 - Custom Resource Definitions (AgenticSession, ProjectSettings, RFEWorkflow)
 - Operator-based reconciliation for declarative session management
 
+**Visual Architecture:** See the [Architecture Diagrams](diagrams/architecture.md) for detailed visual representations of system components, data flows, and interaction patterns.
+
 ## Quick Start
 
 ### Local Development

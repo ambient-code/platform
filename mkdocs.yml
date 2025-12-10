@@ -41,6 +41,9 @@ theme:
 
 nav:
   - Home: index.md
+  - Architecture:
+    - Architecture Diagrams: diagrams/architecture.md
+    - Amber Workflow Diagrams: diagrams/amber-workflow.md
   - User Guide:
     - Overview: user-guide/index.md
     - Getting Started: user-guide/getting-started.md
