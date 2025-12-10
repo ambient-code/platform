@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"ambient-code-operator/internal/config"
@@ -786,5 +787,450 @@ func TestJobConditionHandling_FailedButNotTrue(t *testing.T) {
 		if condition.Type == batchv1.JobFailed && condition.Status == corev1.ConditionTrue {
 			t.Error("Job should not be detected as failed when Status is False")
 		}
+	}
+}
+
+// TestParseRepos_NewFormat tests parsing repos in new format (input/output/autoPush)
+func TestParseRepos_NewFormat(t *testing.T) {
+	tests := []struct {
+		name     string
+		reposMap []interface{}
+		validate func(t *testing.T, repos []repoConfig)
+	}{
+		{
+			name: "new format with input and output",
+			reposMap: []interface{}{
+				map[string]interface{}{
+					"input": map[string]interface{}{
+						"url":    "https://github.com/org/repo",
+						"branch": "main",
+					},
+					"output": map[string]interface{}{
+						"url":    "https://github.com/user/fork",
+						"branch": "feature",
+					},
+					"autoPush": true,
+				},
+			},
+			validate: func(t *testing.T, repos []repoConfig) {
+				if len(repos) != 1 {
+					t.Fatalf("Expected 1 repo, got %d", len(repos))
+				}
+
+				repo := repos[0]
+				if repo.Input == nil {
+					t.Fatal("Input should not be nil")
+				}
+				if repo.Input.URL != "https://github.com/org/repo" {
+					t.Errorf("Expected input URL 'https://github.com/org/repo', got '%s'", repo.Input.URL)
+				}
+				if repo.Input.Branch != "main" {
+					t.Errorf("Expected input branch 'main', got '%s'", repo.Input.Branch)
+				}
+
+				if repo.Output == nil {
+					t.Fatal("Output should not be nil")
+				}
+				if repo.Output.URL != "https://github.com/user/fork" {
+					t.Errorf("Expected output URL 'https://github.com/user/fork', got '%s'", repo.Output.URL)
+				}
+				if repo.Output.Branch != "feature" {
+					t.Errorf("Expected output branch 'feature', got '%s'", repo.Output.Branch)
+				}
+
+				if !repo.AutoPush {
+					t.Error("Expected autoPush to be true")
+				}
+			},
+		},
+		{
+			name: "new format with input only",
+			reposMap: []interface{}{
+				map[string]interface{}{
+					"input": map[string]interface{}{
+						"url":    "https://github.com/org/repo",
+						"branch": "develop",
+					},
+					"autoPush": false,
+				},
+			},
+			validate: func(t *testing.T, repos []repoConfig) {
+				if len(repos) != 1 {
+					t.Fatalf("Expected 1 repo, got %d", len(repos))
+				}
+
+				repo := repos[0]
+				if repo.Input == nil {
+					t.Fatal("Input should not be nil")
+				}
+				if repo.Input.URL != "https://github.com/org/repo" {
+					t.Errorf("Expected input URL 'https://github.com/org/repo', got '%s'", repo.Input.URL)
+				}
+				if repo.Input.Branch != "develop" {
+					t.Errorf("Expected input branch 'develop', got '%s'", repo.Input.Branch)
+				}
+
+				if repo.Output != nil {
+					t.Error("Output should be nil when not specified")
+				}
+
+				if repo.AutoPush {
+					t.Error("Expected autoPush to be false")
+				}
+			},
+		},
+		{
+			name: "new format without branch defaults to main",
+			reposMap: []interface{}{
+				map[string]interface{}{
+					"input": map[string]interface{}{
+						"url": "https://github.com/org/repo",
+					},
+				},
+			},
+			validate: func(t *testing.T, repos []repoConfig) {
+				if len(repos) != 1 {
+					t.Fatalf("Expected 1 repo, got %d", len(repos))
+				}
+
+				repo := repos[0]
+				if repo.Input.Branch != "main" {
+					t.Errorf("Expected default branch 'main', got '%s'", repo.Input.Branch)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Call production parseRepoConfig() function instead of duplicating logic
+			repos := make([]repoConfig, 0, len(tt.reposMap))
+			for _, repoItem := range tt.reposMap {
+				if repoMap, ok := repoItem.(map[string]interface{}); ok {
+					repo, err := parseRepoConfig(repoMap, "test-ns", "test-session")
+					if err != nil {
+						t.Fatalf("parseRepoConfig failed: %v", err)
+					}
+					repos = append(repos, repo)
+				}
+			}
+
+			tt.validate(t, repos)
+		})
+	}
+}
+
+// TestParseRepos_LegacyFormat tests parsing repos in legacy format (url/branch)
+func TestParseRepos_LegacyFormat(t *testing.T) {
+	tests := []struct {
+		name     string
+		reposMap []interface{}
+		validate func(t *testing.T, repos []repoConfig)
+	}{
+		{
+			name: "legacy format with branch",
+			reposMap: []interface{}{
+				map[string]interface{}{
+					"url":    "https://github.com/org/legacy",
+					"branch": "master",
+				},
+			},
+			validate: func(t *testing.T, repos []repoConfig) {
+				if len(repos) != 1 {
+					t.Fatalf("Expected 1 repo, got %d", len(repos))
+				}
+
+				repo := repos[0]
+				if repo.URL != "https://github.com/org/legacy" {
+					t.Errorf("Expected URL 'https://github.com/org/legacy', got '%s'", repo.URL)
+				}
+				if repo.Branch != "master" {
+					t.Errorf("Expected branch 'master', got '%s'", repo.Branch)
+				}
+
+				// New format fields should be nil for legacy repos
+				if repo.Input != nil {
+					t.Error("Input should be nil for legacy format")
+				}
+				if repo.Output != nil {
+					t.Error("Output should be nil for legacy format")
+				}
+			},
+		},
+		{
+			name: "legacy format without branch defaults to main",
+			reposMap: []interface{}{
+				map[string]interface{}{
+					"url": "https://github.com/org/legacy",
+				},
+			},
+			validate: func(t *testing.T, repos []repoConfig) {
+				if len(repos) != 1 {
+					t.Fatalf("Expected 1 repo, got %d", len(repos))
+				}
+
+				repo := repos[0]
+				if repo.Branch != "main" {
+					t.Errorf("Expected default branch 'main', got '%s'", repo.Branch)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Call production parseRepoConfig() function instead of duplicating logic
+			repos := make([]repoConfig, 0, len(tt.reposMap))
+			for _, repoItem := range tt.reposMap {
+				if repoMap, ok := repoItem.(map[string]interface{}); ok {
+					repo, err := parseRepoConfig(repoMap, "test-ns", "test-session")
+					if err != nil {
+						t.Fatalf("parseRepoConfig failed: %v", err)
+					}
+					repos = append(repos, repo)
+				}
+			}
+
+			tt.validate(t, repos)
+		})
+	}
+}
+
+// TestParseRepos_EdgeCases tests edge cases and error handling
+func TestParseRepos_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name        string
+		repoMap     map[string]interface{}
+		expectError bool
+		validate    func(t *testing.T, repo repoConfig, err error)
+	}{
+		{
+			name: "empty URL in new format",
+			repoMap: map[string]interface{}{
+				"input": map[string]interface{}{
+					"url":    "",
+					"branch": "main",
+				},
+			},
+			expectError: true,
+			validate: func(t *testing.T, repo repoConfig, err error) {
+				if err == nil {
+					t.Error("Expected error for empty input URL")
+				}
+				if err != nil && !strings.Contains(err.Error(), "empty") {
+					t.Errorf("Expected 'empty' in error message, got: %v", err)
+				}
+			},
+		},
+		{
+			name: "empty URL in legacy format",
+			repoMap: map[string]interface{}{
+				"url":    "",
+				"branch": "main",
+			},
+			expectError: true,
+			validate: func(t *testing.T, repo repoConfig, err error) {
+				if err == nil {
+					t.Error("Expected error for empty URL")
+				}
+			},
+		},
+		{
+			name: "whitespace-only URL in new format",
+			repoMap: map[string]interface{}{
+				"input": map[string]interface{}{
+					"url":    "   ",
+					"branch": "main",
+				},
+			},
+			expectError: true,
+			validate: func(t *testing.T, repo repoConfig, err error) {
+				if err == nil {
+					t.Error("Expected error for whitespace-only URL")
+				}
+			},
+		},
+		{
+			name: "both new and legacy formats present (new should win)",
+			repoMap: map[string]interface{}{
+				"input": map[string]interface{}{
+					"url":    "https://github.com/new/format",
+					"branch": "new-branch",
+				},
+				"url":    "https://github.com/legacy/format",
+				"branch": "legacy-branch",
+			},
+			expectError: false,
+			validate: func(t *testing.T, repo repoConfig, err error) {
+				if err != nil {
+					t.Fatalf("Unexpected error: %v", err)
+				}
+				// New format should take precedence
+				if repo.Input == nil {
+					t.Fatal("Input should not be nil when new format present")
+				}
+				if repo.Input.URL != "https://github.com/new/format" {
+					t.Errorf("Expected new format URL, got '%s'", repo.Input.URL)
+				}
+				if repo.Input.Branch != "new-branch" {
+					t.Errorf("Expected new format branch, got '%s'", repo.Input.Branch)
+				}
+			},
+		},
+		{
+			name: "new format without branch defaults to main",
+			repoMap: map[string]interface{}{
+				"input": map[string]interface{}{
+					"url": "https://github.com/org/repo",
+				},
+			},
+			expectError: false,
+			validate: func(t *testing.T, repo repoConfig, err error) {
+				if err != nil {
+					t.Fatalf("Unexpected error: %v", err)
+				}
+				if repo.Input == nil {
+					t.Fatal("Input should not be nil")
+				}
+				if repo.Input.Branch != "main" {
+					t.Errorf("Expected default branch 'main', got '%s'", repo.Input.Branch)
+				}
+			},
+		},
+		{
+			name: "legacy format without branch defaults to main",
+			repoMap: map[string]interface{}{
+				"url": "https://github.com/org/repo",
+			},
+			expectError: false,
+			validate: func(t *testing.T, repo repoConfig, err error) {
+				if err != nil {
+					t.Fatalf("Unexpected error: %v", err)
+				}
+				if repo.Branch != "main" {
+					t.Errorf("Expected default branch 'main', got '%s'", repo.Branch)
+				}
+			},
+		},
+		{
+			name: "invalid type for input (not a map)",
+			repoMap: map[string]interface{}{
+				"input": "not-a-map",
+			},
+			expectError: true,
+			validate: func(t *testing.T, repo repoConfig, err error) {
+				if err == nil {
+					t.Error("Expected error for invalid input type")
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo, err := parseRepoConfig(tt.repoMap, "test-ns", "test-session")
+			tt.validate(t, repo, err)
+		})
+	}
+}
+
+// TestBackwardCompatEnvVars tests extraction of backward compat env vars from repos
+func TestBackwardCompatEnvVars(t *testing.T) {
+	tests := []struct {
+		name              string
+		repos             []repoConfig
+		expectedInput     string
+		expectedInBranch  string
+		expectedOutput    string
+		expectedOutBranch string
+	}{
+		{
+			name: "new format with output",
+			repos: []repoConfig{
+				{
+					Input: &repoLocation{
+						URL:    "https://github.com/org/repo",
+						Branch: "main",
+					},
+					Output: &repoLocation{
+						URL:    "https://github.com/user/fork",
+						Branch: "feature",
+					},
+					AutoPush: true,
+				},
+			},
+			expectedInput:     "https://github.com/org/repo",
+			expectedInBranch:  "main",
+			expectedOutput:    "https://github.com/user/fork",
+			expectedOutBranch: "feature",
+		},
+		{
+			name: "new format without output",
+			repos: []repoConfig{
+				{
+					Input: &repoLocation{
+						URL:    "https://github.com/org/repo",
+						Branch: "develop",
+					},
+					AutoPush: false,
+				},
+			},
+			expectedInput:     "https://github.com/org/repo",
+			expectedInBranch:  "develop",
+			expectedOutput:    "https://github.com/org/repo",
+			expectedOutBranch: "develop",
+		},
+		{
+			name: "legacy format",
+			repos: []repoConfig{
+				{
+					URL:    "https://github.com/org/legacy",
+					Branch: "master",
+				},
+			},
+			expectedInput:     "https://github.com/org/legacy",
+			expectedInBranch:  "master",
+			expectedOutput:    "https://github.com/org/legacy",
+			expectedOutBranch: "master",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Extract backward compat env vars using the same logic as operator
+			var inputRepo, inputBranch, outputRepo, outputBranch string
+			if len(tt.repos) > 0 {
+				firstRepo := tt.repos[0]
+				if firstRepo.Input != nil {
+					inputRepo = firstRepo.Input.URL
+					inputBranch = firstRepo.Input.Branch
+					if firstRepo.Output != nil {
+						outputRepo = firstRepo.Output.URL
+						outputBranch = firstRepo.Output.Branch
+					} else {
+						outputRepo = firstRepo.Input.URL
+						outputBranch = firstRepo.Input.Branch
+					}
+				} else {
+					inputRepo = firstRepo.URL
+					inputBranch = firstRepo.Branch
+					outputRepo = firstRepo.URL
+					outputBranch = firstRepo.Branch
+				}
+			}
+
+			if inputRepo != tt.expectedInput {
+				t.Errorf("Expected inputRepo '%s', got '%s'", tt.expectedInput, inputRepo)
+			}
+			if inputBranch != tt.expectedInBranch {
+				t.Errorf("Expected inputBranch '%s', got '%s'", tt.expectedInBranch, inputBranch)
+			}
+			if outputRepo != tt.expectedOutput {
+				t.Errorf("Expected outputRepo '%s', got '%s'", tt.expectedOutput, outputRepo)
+			}
+			if outputBranch != tt.expectedOutBranch {
+				t.Errorf("Expected outputBranch '%s', got '%s'", tt.expectedOutBranch, outputBranch)
+			}
+		})
 	}
 }

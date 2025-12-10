@@ -36,6 +36,94 @@ var (
 	monitoredJobsMu sync.Mutex
 )
 
+const (
+	// defaultBranch is the default git branch when none is specified
+	defaultBranch = "main"
+)
+
+// repoLocation represents a git repository location (input source or output target)
+type repoLocation struct {
+	URL    string `json:"url"`
+	Branch string `json:"branch,omitempty"`
+}
+
+// repoConfig represents repository configuration supporting both legacy and new formats
+type repoConfig struct {
+	// New format (preferred)
+	Input    *repoLocation `json:"input,omitempty"`
+	Output   *repoLocation `json:"output,omitempty"`
+	AutoPush bool          `json:"autoPush,omitempty"`
+
+	// Legacy format (deprecated, for backwards compatibility)
+	URL    string `json:"url,omitempty"`
+	Branch string `json:"branch,omitempty"`
+}
+
+// parseRepoConfig parses a repository configuration map supporting both legacy and new formats.
+// New format (preferred): {input: {url, branch}, output: {url, branch}, autoPush: bool}
+// Legacy format: {url: string, branch: string}
+// Returns error if URL is empty or invalid.
+func parseRepoConfig(repoMap map[string]interface{}, namespace, sessionName string) (repoConfig, error) {
+	repo := repoConfig{}
+
+	// Check for new format (input/output/autoPush)
+	// New format takes precedence if both formats are present
+	if inputMap, hasInput := repoMap["input"].(map[string]interface{}); hasInput {
+		// New format
+		input := &repoLocation{}
+		if url, ok := inputMap["url"].(string); ok {
+			input.URL = url
+		}
+		if branch, ok := inputMap["branch"].(string); ok {
+			input.Branch = branch
+		} else {
+			input.Branch = defaultBranch
+		}
+		repo.Input = input
+
+		// Parse output if present
+		if outputMap, hasOutput := repoMap["output"].(map[string]interface{}); hasOutput {
+			output := &repoLocation{}
+			if url, ok := outputMap["url"].(string); ok {
+				output.URL = url
+			}
+			if branch, ok := outputMap["branch"].(string); ok {
+				output.Branch = branch
+			}
+			repo.Output = output
+		}
+
+		// Parse autoPush if present
+		if autoPush, ok := repoMap["autoPush"].(bool); ok {
+			repo.AutoPush = autoPush
+		}
+
+		// Validate input URL
+		if strings.TrimSpace(repo.Input.URL) == "" {
+			return repoConfig{}, fmt.Errorf("repo input.url is empty in session %s/%s", namespace, sessionName)
+		}
+
+		return repo, nil
+	}
+
+	// Legacy format
+	if url, ok := repoMap["url"].(string); ok {
+		repo.URL = url
+	}
+	if branch, ok := repoMap["branch"].(string); ok {
+		repo.Branch = branch
+	} else {
+		repo.Branch = defaultBranch
+	}
+
+	// Validate legacy URL
+	if strings.TrimSpace(repo.URL) == "" {
+		return repoConfig{}, fmt.Errorf("repo url is empty in session %s/%s", namespace, sessionName)
+	}
+
+	return repo, nil
+}
+
 // WatchAgenticSessions watches for AgenticSession custom resources and creates jobs
 func WatchAgenticSessions() {
 	gvr := types.GetAgenticSessionResource()
@@ -858,32 +946,28 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 		})
 	}
 
-	// Extract repos configuration (simplified format: url and branch)
-	type RepoConfig struct {
-		URL    string
-		Branch string
-	}
+	// Extract repos configuration (supports both legacy and new formats)
+	var repos []repoConfig
 
-	var repos []RepoConfig
-
-	// Read simplified repos[] array format
+	// Read repos[] array format (supports both legacy and new formats)
 	if reposArr, found, _ := unstructured.NestedSlice(spec, "repos"); found && len(reposArr) > 0 {
-		repos = make([]RepoConfig, 0, len(reposArr))
-		for _, repoItem := range reposArr {
-			if repoMap, ok := repoItem.(map[string]interface{}); ok {
-				repo := RepoConfig{}
-				if url, ok := repoMap["url"].(string); ok {
-					repo.URL = url
-				}
-				if branch, ok := repoMap["branch"].(string); ok {
-					repo.Branch = branch
-				} else {
-					repo.Branch = "main"
-				}
-				if repo.URL != "" {
-					repos = append(repos, repo)
-				}
+		repos = make([]repoConfig, 0, len(reposArr))
+		for i, repoItem := range reposArr {
+			repoMap, ok := repoItem.(map[string]interface{})
+			if !ok {
+				log.Printf("Warning: Invalid repo item type at index %d in session %s/%s (expected map, got %T)",
+					i, sessionNamespace, name, repoItem)
+				continue
 			}
+
+			repo, err := parseRepoConfig(repoMap, sessionNamespace, name)
+			if err != nil {
+				log.Printf("Warning: Skipping invalid repo at index %d in session %s/%s: %v",
+					i, sessionNamespace, name, err)
+				continue
+			}
+
+			repos = append(repos, repo)
 		}
 	} else {
 		// Fallback to old format for backward compatibility (input/output structure)
@@ -897,9 +981,9 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 		}
 		if inputRepo != "" {
 			if inputBranch == "" {
-				inputBranch = "main"
+				inputBranch = defaultBranch
 			}
-			repos = []RepoConfig{{
+			repos = []repoConfig{{
 				URL:    inputRepo,
 				Branch: inputBranch,
 			}}
@@ -909,10 +993,26 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 	// Get first repo for backward compatibility env vars (first repo is always main repo)
 	var inputRepo, inputBranch, outputRepo, outputBranch string
 	if len(repos) > 0 {
-		inputRepo = repos[0].URL
-		inputBranch = repos[0].Branch
-		outputRepo = repos[0].URL // Output same as input in simplified format
-		outputBranch = repos[0].Branch
+		firstRepo := repos[0]
+		// Extract from new format if available, otherwise use legacy format
+		if firstRepo.Input != nil {
+			inputRepo = firstRepo.Input.URL
+			inputBranch = firstRepo.Input.Branch
+			// Use output if specified, otherwise fall back to input
+			if firstRepo.Output != nil {
+				outputRepo = firstRepo.Output.URL
+				outputBranch = firstRepo.Output.Branch
+			} else {
+				outputRepo = firstRepo.Input.URL
+				outputBranch = firstRepo.Input.Branch
+			}
+		} else {
+			// Legacy format
+			inputRepo = firstRepo.URL
+			inputBranch = firstRepo.Branch
+			outputRepo = firstRepo.URL
+			outputBranch = firstRepo.Branch
+		}
 	}
 
 	// Read autoPushOnComplete flag
@@ -1176,10 +1276,10 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 								})
 								// Add CR-provided envs last (override base when same key)
 								if spec, ok := currentObj.Object["spec"].(map[string]interface{}); ok {
-									// Inject REPOS_JSON and MAIN_REPO_NAME from spec.repos and spec.mainRepoName if present
-									if repos, ok := spec["repos"].([]interface{}); ok && len(repos) > 0 {
-										// Use a minimal JSON serialization via fmt (we'll rely on client to pass REPOS_JSON too)
-										// This ensures runner gets repos even if env vars weren't passed from frontend
+									// Inject REPOS_JSON from parsed repos array (includes autoPush flags and normalized structure)
+									if len(repos) > 0 {
+										// Serialize parsed repos array with autoPush flags and normalized structure
+										// This ensures runner gets the fully-parsed repo configuration
 										b, _ := json.Marshal(repos)
 										base = append(base, corev1.EnvVar{Name: "REPOS_JSON", Value: string(b)})
 									}
@@ -1415,7 +1515,7 @@ func reconcileSpecReposWithPatch(sessionNamespace, sessionName string, spec map[
 			if strings.TrimSpace(url) == "" {
 				continue
 			}
-			branch := "main"
+			branch := defaultBranch
 			if b, ok := repoMap["branch"].(string); ok && strings.TrimSpace(b) != "" {
 				branch = b
 			}
@@ -1563,7 +1663,7 @@ func reconcileActiveWorkflowWithPatch(sessionNamespace, sessionName string, spec
 	}
 
 	gitURL, _ := workflow["gitUrl"].(string)
-	branch := "main"
+	branch := defaultBranch
 	if b, ok := workflow["branch"].(string); ok && strings.TrimSpace(b) != "" {
 		branch = b
 	}
