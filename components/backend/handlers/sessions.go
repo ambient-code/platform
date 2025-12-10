@@ -109,7 +109,7 @@ func parseSpec(spec map[string]interface{}) types.AgenticSessionSpec {
 		result.UserContext = uc
 	}
 
-	// Multi-repo parsing (simplified format)
+	// Multi-repo parsing (supports both legacy and new formats)
 	if arr, ok := spec["repos"].([]interface{}); ok {
 		repos := make([]types.SimpleRepo, 0, len(arr))
 		for _, it := range arr {
@@ -117,16 +117,14 @@ func parseSpec(spec map[string]interface{}) types.AgenticSessionSpec {
 			if !ok {
 				continue
 			}
-			r := types.SimpleRepo{}
-			if url, ok := m["url"].(string); ok {
-				r.URL = url
+
+			// Use ParseRepoMap helper to avoid code duplication
+			r, err := ParseRepoMap(m)
+			if err != nil {
+				log.Printf("Skipping invalid repo in spec: %v", err)
+				continue
 			}
-			if branch, ok := m["branch"].(string); ok && strings.TrimSpace(branch) != "" {
-				r.Branch = types.StringPtr(branch)
-			}
-			if strings.TrimSpace(r.URL) != "" {
-				repos = append(repos, r)
-			}
+			repos = append(repos, r)
 		}
 		result.Repos = repos
 	}
@@ -565,17 +563,27 @@ func CreateSession(c *gin.Context) {
 		session["spec"].(map[string]interface{})["autoPushOnComplete"] = *req.AutoPushOnComplete
 	}
 
-	// Set multi-repo configuration on spec (simplified format)
+	// Set multi-repo configuration on spec with new input/output/autoPush structure
 	{
 		spec := session["spec"].(map[string]interface{})
 		if len(req.Repos) > 0 {
+			// Get session-level autoPush default (false if not set)
+			sessionAutoPush := false
+			if req.AutoPushOnComplete != nil {
+				sessionAutoPush = *req.AutoPushOnComplete
+			}
+
 			arr := make([]map[string]interface{}, 0, len(req.Repos))
 			for _, r := range req.Repos {
-				m := map[string]interface{}{"url": r.URL}
-				if r.Branch != nil {
-					m["branch"] = *r.Branch
+				// Normalize legacy format to new format
+				normalized, err := r.NormalizeRepo(sessionAutoPush)
+				if err != nil {
+					log.Printf("Failed to normalize repo: %v", err)
+					c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Invalid repository configuration: %v", err)})
+					return
 				}
-				arr = append(arr, m)
+				// Convert to map for CR storage
+				arr = append(arr, normalized.ToMapForCR())
 			}
 			spec["repos"] = arr
 		}
@@ -1310,18 +1318,12 @@ func AddRepo(c *gin.Context) {
 	sessionName := c.Param("sessionName")
 	_, reqDyn := GetK8sClientsForRequest(c)
 
-	var req struct {
-		URL    string `json:"url" binding:"required"`
-		Branch string `json:"branch"`
-	}
+	// Request body supports both legacy and new repo formats
+	var req types.SimpleRepo
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
-	}
-
-	if req.Branch == "" {
-		req.Branch = "main"
 	}
 
 	gvr := GetAgenticSessionV1Alpha1Resource()
@@ -1352,10 +1354,21 @@ func AddRepo(c *gin.Context) {
 		repos = []interface{}{}
 	}
 
-	newRepo := map[string]interface{}{
-		"url":    req.URL,
-		"branch": req.Branch,
+	// Get session-level autoPush default
+	sessionAutoPush := false
+	if v, ok := spec["autoPushOnComplete"].(bool); ok {
+		sessionAutoPush = v
 	}
+
+	// Normalize and convert to CR format
+	normalized, err := req.NormalizeRepo(sessionAutoPush)
+	if err != nil {
+		log.Printf("Failed to normalize repo: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Invalid repository configuration: %v", err)})
+		return
+	}
+	newRepo := normalized.ToMapForCR()
+
 	repos = append(repos, newRepo)
 	spec["repos"] = repos
 
@@ -1379,7 +1392,14 @@ func AddRepo(c *gin.Context) {
 		session.Status = parseStatus(statusMap)
 	}
 
-	log.Printf("Added repository %s to session %s in project %s", req.URL, sessionName, project)
+	// Log the added repo URL (from either new or legacy format)
+	repoURL := ""
+	if req.Input != nil {
+		repoURL = req.Input.URL
+	} else {
+		repoURL = req.URL
+	}
+	log.Printf("Added repository %s to session %s in project %s", repoURL, sessionName, project)
 	c.JSON(http.StatusOK, gin.H{"message": "Repository added", "session": session})
 }
 
@@ -1419,8 +1439,26 @@ func RemoveRepo(c *gin.Context) {
 	filteredRepos := []interface{}{}
 	found := false
 	for _, r := range repos {
-		rm, _ := r.(map[string]interface{})
-		url, _ := rm["url"].(string)
+		rm, ok := r.(map[string]interface{})
+		if !ok {
+			log.Printf("Warning: repo entry is not a map, skipping")
+			continue
+		}
+
+		// Get URL from either new format (input.url) or legacy format (url)
+		url := ""
+		if inputMap, hasInput := rm["input"].(map[string]interface{}); hasInput {
+			if urlStr, ok := inputMap["url"].(string); ok {
+				url = urlStr
+			} else {
+				log.Printf("Warning: input.url is not a string in repo map")
+			}
+		} else if urlStr, ok := rm["url"].(string); ok {
+			url = urlStr
+		} else {
+			log.Printf("Warning: url is not a string in repo map")
+		}
+
 		if DeriveRepoFolderFromURL(url) != repoName {
 			filteredRepos = append(filteredRepos, r)
 		} else {
