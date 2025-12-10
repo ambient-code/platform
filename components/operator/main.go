@@ -28,6 +28,11 @@ func main() {
 		}
 	}
 
+	// Run v2 repo format migration before starting watchers
+	log.Println("Running v2 repo format migration...")
+	handlers.MigrateAllSessions()
+	log.Println("Migration check complete - see logs above for details")
+
 	// Start watching AgenticSession resources
 	go handlers.WatchAgenticSessions()
 
