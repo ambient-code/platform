@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Textarea } from "@/components/ui/textarea";
-import type { CreateAgenticSessionRequest } from "@/types/agentic-session";
+import type { CreateAgenticSessionRequest, SessionRepo } from "@/types/agentic-session";
 import { Checkbox } from "@/components/ui/checkbox";
 import { successToast, errorToast } from "@/hooks/use-toast";
 import { Breadcrumbs } from "@/components/breadcrumbs";
@@ -29,16 +29,24 @@ const formSchema = z
     maxTokens: z.number().min(100).max(8000),
     timeout: z.number().min(60).max(1800),
     interactive: z.boolean().default(false),
-    // Unified multi-repo array
+    // Unified multi-repo array with new structure
     repos: z
       .array(z.object({
-        url: z.string().url(),
-        branch: z.string().optional(),
+        name: z.string().optional(),
+        input: z.object({
+          url: z.string().url(),
+          branch: z.string().optional(),
+        }),
+        output: z.object({
+          url: z.string().url(),
+          branch: z.string().optional(),
+        }).optional(),
+        autoPush: z.boolean().optional(),
       }))
       .optional()
       .default([]),
-    // Runner behavior
-    autoPushOnComplete: z.boolean().default(false),
+    // Default auto-push for new repos
+    defaultAutoPush: z.boolean().default(false),
   })
   .superRefine((data, ctx) => {
     const isInteractive = Boolean(data.interactive);
@@ -59,7 +67,10 @@ export default function NewProjectSessionPage({ params }: { params: Promise<{ na
   const [projectName, setProjectName] = useState<string>("");
   const [editingRepoIndex, setEditingRepoIndex] = useState<number | null>(null);
   const [repoDialogOpen, setRepoDialogOpen] = useState(false);
-  const [tempRepo, setTempRepo] = useState<{ url: string; branch?: string }>({ url: "", branch: "main" });
+  const [tempRepo, setTempRepo] = useState<SessionRepo>({
+    input: { url: "", branch: "main" },
+    autoPush: false,
+  });
 
   // React Query hooks
   const createSessionMutation = useCreateSession();
@@ -77,7 +88,7 @@ export default function NewProjectSessionPage({ params }: { params: Promise<{ na
       maxTokens: 4000,
       timeout: 300,
       interactive: false,
-      autoPushOnComplete: false,
+      defaultAutoPush: false,
       repos: [],
     },
   });
@@ -107,7 +118,6 @@ export default function NewProjectSessionPage({ params }: { params: Promise<{ na
       },
       timeout: values.timeout,
       interactive: values.interactive,
-      autoPushOnComplete: values.autoPushOnComplete,
       };
 
       // Apply labels if projectName is present
@@ -118,12 +128,14 @@ export default function NewProjectSessionPage({ params }: { params: Promise<{ na
         };
       }
 
-
-      // Multi-repo configuration (simplified format)
-      const repos = (values.repos || []).filter(r => r && r.url);
+      // Multi-repo configuration with new structure
+      const repos = (values.repos || []).filter(r => r && r.input?.url);
       if (repos.length > 0) {
         request.repos = repos;
       }
+
+      // Note: autoPushOnComplete is deprecated and not sent by the frontend.
+      // The backend computes it from per-repo autoPush flags.
 
     createSessionMutation.mutate(
       { projectName, data: request },
@@ -209,16 +221,20 @@ export default function NewProjectSessionPage({ params }: { params: Promise<{ na
 
               {/* Repositories (Optional) */}
               <RepositoryList
-                repos={(form.watch("repos") || []) as Array<{ url: string; branch?: string }>}
+                repos={(form.watch("repos") || []) as SessionRepo[]}
                 onAddRepo={() => {
-                  setTempRepo({ url: "", branch: "main" });
+                  const defaultAutoPush = form.watch("defaultAutoPush");
+                  setTempRepo({
+                    input: { url: "", branch: "main" },
+                    autoPush: defaultAutoPush,
+                  });
                   setEditingRepoIndex(null);
                   setRepoDialogOpen(true);
                 }}
                 onEditRepo={(index) => {
-                  const repo = form.getValues(`repos.${index}`) as { url: string; branch?: string } | undefined;
+                  const repo = form.getValues(`repos.${index}`) as SessionRepo | undefined;
                   if (repo) {
-                    setTempRepo({ url: repo.url, branch: repo.branch || "main" });
+                    setTempRepo(repo);
                     setEditingRepoIndex(index);
                     setRepoDialogOpen(true);
                   }
@@ -234,7 +250,7 @@ export default function NewProjectSessionPage({ params }: { params: Promise<{ na
                 repo={tempRepo}
                 onRepoChange={setTempRepo}
                 onSave={() => {
-                  if (!tempRepo.url) return;
+                  if (!tempRepo.input?.url) return;
                   if (editingRepoIndex !== null) {
                     updateRepo(editingRepoIndex, tempRepo);
                   } else {
@@ -243,21 +259,22 @@ export default function NewProjectSessionPage({ params }: { params: Promise<{ na
                 }}
                 isEditing={editingRepoIndex !== null}
                 projectName={projectName}
+                defaultAutoPush={form.watch("defaultAutoPush")}
               />
 
-              {/* Runner behavior */}
+              {/* Default auto-push setting */}
               <FormField
                 control={form.control}
-                name="autoPushOnComplete"
+                name="defaultAutoPush"
                 render={({ field }) => (
                   <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-3">
                     <FormControl>
                       <Checkbox checked={field.value} onCheckedChange={(v) => field.onChange(Boolean(v))} />
                     </FormControl>
                     <div className="space-y-1 leading-none">
-                      <FormLabel>Auto-push to Git on completion</FormLabel>
+                      <FormLabel>Default: Auto-push for new repositories</FormLabel>
                       <FormDescription>
-                        When enabled, the runner will commit and push changes automatically after it finishes.
+                        When enabled, new repositories added below will have auto-push enabled by default. You can override this per-repository.
                       </FormDescription>
                     </div>
                     <FormMessage />

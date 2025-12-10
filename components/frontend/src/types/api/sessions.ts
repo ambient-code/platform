@@ -4,12 +4,20 @@
  */
 
 // Import shared types from agentic-session to avoid duplication
-export type {
+import type {
   SessionRepo,
   RepoLocation,
   AgenticSessionPhase,
   LLMSettings,
 } from '../agentic-session';
+
+// Re-export for convenience
+export type {
+  SessionRepo,
+  RepoLocation,
+  AgenticSessionPhase,
+  LLMSettings,
+};
 
 export type UserContext = {
   userId: string;
