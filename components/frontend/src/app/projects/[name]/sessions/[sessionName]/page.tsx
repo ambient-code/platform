@@ -62,6 +62,7 @@ import { Label } from "@/components/ui/label";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { SessionHeader } from "./session-header";
 import { getPhaseColor } from "@/utils/session-helpers";
+import { getRepoDisplayName } from "@/utils/repo";
 
 // Extracted components
 import { AddContextModal } from "./components/modals/add-context-modal";
@@ -384,7 +385,7 @@ export default function ProjectSessionDetailPage({
 
     if (session?.spec?.repos) {
       session.spec.repos.forEach((repo, idx) => {
-        const repoName = repo.url.split('/').pop()?.replace('.git', '') || `repo-${idx}`;
+        const repoName = getRepoDisplayName(repo, idx);
         options.push({
           type: "repo",
           name: repoName,
