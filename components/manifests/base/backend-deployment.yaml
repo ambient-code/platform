@@ -75,6 +75,25 @@ spec:
               name: github-app-secret
               key: GITHUB_STATE_SECRET
               optional: true
+        # Google OAuth configuration for workspace-mcp
+        - name: GOOGLE_OAUTH_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: google-workflow-app-secret
+              key: GOOGLE_OAUTH_CLIENT_ID
+              optional: true
+        - name: GOOGLE_OAUTH_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: google-workflow-app-secret
+              key: GOOGLE_OAUTH_CLIENT_SECRET
+              optional: true
+        - name: OAUTH_STATE_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: google-workflow-app-secret
+              key: OAUTH_STATE_SECRET
+              optional: true
         # OOTB Workflows Configuration
         - name: OOTB_WORKFLOWS_REPO
           value: "https://github.com/ambient-code/ootb-ambient-workflows.git"
