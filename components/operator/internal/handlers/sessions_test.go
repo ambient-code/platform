@@ -14,22 +14,12 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	k8stypes "k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/dynamic/fake"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 )
 
 // setupTestClient initializes a fake Kubernetes client for testing
 func setupTestClient(objects ...runtime.Object) {
 	config.K8sClient = k8sfake.NewSimpleClientset(objects...)
-}
-
-// setupTestClients initializes both fake Kubernetes and dynamic clients
-func setupTestClients(k8sObjects []runtime.Object, dynamicObjects []runtime.Object) {
-	config.K8sClient = k8sfake.NewSimpleClientset(k8sObjects...)
-	scheme := runtime.NewScheme()
-	_ = corev1.AddToScheme(scheme)
-	_ = batchv1.AddToScheme(scheme)
-	config.DynamicClient = fake.NewSimpleDynamicClient(scheme, dynamicObjects...)
 }
 
 // TestCopySecretToNamespace_NoSharedDataMutation verifies that we don't mutate cached secret objects
