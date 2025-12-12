@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -10,22 +9,18 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/gin-gonic/gin"
-	authv1 "k8s.io/api/authorization/v1"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/kubernetes"
-
 	"ambient-code-backend/git"
 	"ambient-code-backend/gitlab"
 	"ambient-code-backend/types"
+
+	"github.com/gin-gonic/gin"
+	authv1 "k8s.io/api/authorization/v1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // Dependencies injected from main package
-var (
-	GetK8sClientsForRequestRepo func(*gin.Context) (*kubernetes.Clientset, dynamic.Interface)
-	GetGitHubTokenRepo          func(context.Context, *kubernetes.Clientset, dynamic.Interface, string, string) (string, error)
-)
+// Note: GetGitHubTokenRepo and DoGitHubRequest are declared in github_auth.go
+// GetK8sClientsForRequestRepoFunc is declared in client_selection.go
 
 // ===== Helper Functions =====
 
@@ -63,7 +58,13 @@ func parseOwnerRepo(full string) (string, string, error) {
 // It performs a Kubernetes SelfSubjectAccessReview using the caller token (user or API key).
 func AccessCheck(c *gin.Context) {
 	projectName := c.Param("projectName")
-	reqK8s, _ := GetK8sClientsForRequestRepo(c)
+	reqK8s, _ := GetK8sClientsForRequest(c)
+	if reqK8s == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
+	k8sClt := reqK8s
 
 	// Build the SSAR spec for RoleBinding management in the project namespace
 	ssar := &authv1.SelfSubjectAccessReview{
@@ -78,7 +79,7 @@ func AccessCheck(c *gin.Context) {
 	}
 
 	// Perform the review
-	res, err := reqK8s.AuthorizationV1().SelfSubjectAccessReviews().Create(c.Request.Context(), ssar, v1.CreateOptions{})
+	res, err := k8sClt.AuthorizationV1().SelfSubjectAccessReviews().Create(c.Request.Context(), ssar, v1.CreateOptions{})
 	if err != nil {
 		log.Printf("SSAR failed for project %s: %v", projectName, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to perform access review"})
@@ -101,7 +102,7 @@ func AccessCheck(c *gin.Context) {
 				},
 			},
 		}
-		res2, err2 := reqK8s.AuthorizationV1().SelfSubjectAccessReviews().Create(c.Request.Context(), editSSAR, v1.CreateOptions{})
+		res2, err2 := k8sClt.AuthorizationV1().SelfSubjectAccessReviews().Create(c.Request.Context(), editSSAR, v1.CreateOptions{})
 		if err2 == nil && res2.Status.Allowed {
 			role = "edit"
 		}
@@ -127,17 +128,29 @@ func ListUserForks(c *gin.Context) {
 	}
 
 	userID, _ := c.Get("userID")
-	reqK8s, reqDyn := GetK8sClientsForRequestRepo(c)
+	reqK8s, reqDyn := GetK8sClientsForRequest(c)
 
 	// Try to get GitHub token (GitHub App or PAT from runner secret)
-	token, err := GetGitHubTokenRepo(c.Request.Context(), reqK8s, reqDyn, project, userID.(string))
+	// Try to get GitHub token (GitHub App or PAT from runner secret)
+	var token string
+	var err error
+	if userID != nil {
+		token, err = GetGitHubTokenRepo(c.Request.Context(), reqK8s, reqDyn, project, userID.(string))
+	} else {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing user context"})
+		c.Abort()
+		return
+	}
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		// Log actual error for debugging, but return generic message to avoid leaking internal details
+		log.Printf("Failed to get GitHub token for project %s, user %s: %v", project, userID, err)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 		return
 	}
 
 	owner, repoName, err := parseOwnerRepo(upstreamRepo)
 	if err != nil {
+		// Validation errors can be specific for 400 Bad Request
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -205,12 +218,25 @@ func CreateUserFork(c *gin.Context) {
 	}
 
 	userID, _ := c.Get("userID")
-	reqK8s, reqDyn := GetK8sClientsForRequestRepo(c)
+	reqK8s, reqDyn := GetK8sClientsForRequest(c)
+
+	// Check for missing authentication
+	if reqK8s == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
 
 	// Try to get GitHub token (GitHub App or PAT from runner secret)
-	token, err := GetGitHubTokenRepo(c.Request.Context(), reqK8s, reqDyn, project, userID.(string))
+	var userIDStr string
+	if userID != nil {
+		userIDStr = userID.(string)
+	}
+	token, err := GetGitHubTokenRepo(c.Request.Context(), reqK8s, reqDyn, project, userIDStr)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		// Log actual error for debugging, but return generic message to avoid leaking internal details
+		log.Printf("Failed to get GitHub token for project %s, user %s: %v", project, userIDStr, err)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 		return
 	}
 
@@ -219,9 +245,15 @@ func CreateUserFork(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+
 	api := githubAPIBaseURL("github.com")
 	url := fmt.Sprintf("%s/repos/%s/%s/forks", api, owner, repoName)
-	resp, err := doGitHubRequest(c.Request.Context(), http.MethodPost, url, "Bearer "+token, "", nil)
+	var resp *http.Response
+	if DoGitHubRequest != nil {
+		resp, err = DoGitHubRequest(c.Request.Context(), http.MethodPost, url, "Bearer "+token, "", nil)
+	} else {
+		resp, err = doGitHubRequest(c.Request.Context(), http.MethodPost, url, "Bearer "+token, "", nil)
+	}
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("GitHub request failed: %v", err)})
 		return
@@ -250,7 +282,13 @@ func GetRepoTree(c *gin.Context) {
 	}
 
 	userID, _ := c.Get("userID")
-	reqK8s, reqDyn := GetK8sClientsForRequestRepo(c)
+	reqK8s, reqDyn := GetK8sClientsForRequest(c)
+
+	// Check for missing user context
+	if userID == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing user context"})
+		return
+	}
 
 	// Detect provider from repo URL
 	provider := types.DetectProvider(repo)
@@ -260,7 +298,9 @@ func GetRepoTree(c *gin.Context) {
 		// Handle GitLab repository
 		token, err := git.GetGitLabToken(c.Request.Context(), reqK8s, project, userID.(string))
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+			// Log actual error for debugging, but return generic message to avoid leaking internal details
+			log.Printf("Failed to get GitLab token for project %s, user %s: %v", project, userID, err)
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 			return
 		}
 
@@ -291,7 +331,9 @@ func GetRepoTree(c *gin.Context) {
 		// Handle GitHub repository (existing logic)
 		token, err := GetGitHubTokenRepo(c.Request.Context(), reqK8s, reqDyn, project, userID.(string))
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+			// Log actual error for debugging, but return generic message to avoid leaking internal details
+			log.Printf("Failed to get GitHub token for project %s, user %s: %v", project, userID, err)
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 			return
 		}
 
@@ -385,7 +427,13 @@ func ListRepoBranches(c *gin.Context) {
 	}
 
 	userID, _ := c.Get("userID")
-	reqK8s, reqDyn := GetK8sClientsForRequestRepo(c)
+	reqK8s, reqDyn := GetK8sClientsForRequest(c)
+
+	// Check for missing user context
+	if userID == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing user context"})
+		return
+	}
 
 	// Detect provider from repo URL
 	provider := types.DetectProvider(repo)
@@ -395,7 +443,9 @@ func ListRepoBranches(c *gin.Context) {
 		// Handle GitLab repository
 		token, err := git.GetGitLabToken(c.Request.Context(), reqK8s, project, userID.(string))
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+			// Log actual error for debugging, but return generic message to avoid leaking internal details
+			log.Printf("Failed to get GitLab token for project %s, user %s: %v", project, userID, err)
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 			return
 		}
 
@@ -426,7 +476,9 @@ func ListRepoBranches(c *gin.Context) {
 		// Handle GitHub repository (existing logic)
 		token, err := GetGitHubTokenRepo(c.Request.Context(), reqK8s, reqDyn, project, userID.(string))
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+			// Log actual error for debugging, but return generic message to avoid leaking internal details
+			log.Printf("Failed to get GitHub token for project %s, user %s: %v", project, userID, err)
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 			return
 		}
 
@@ -487,7 +539,13 @@ func GetRepoBlob(c *gin.Context) {
 	}
 
 	userID, _ := c.Get("userID")
-	reqK8s, reqDyn := GetK8sClientsForRequestRepo(c)
+	reqK8s, reqDyn := GetK8sClientsForRequest(c)
+
+	// Check for missing user context
+	if userID == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing user context"})
+		return
+	}
 
 	// Detect provider from repo URL
 	provider := types.DetectProvider(repo)
@@ -497,7 +555,9 @@ func GetRepoBlob(c *gin.Context) {
 		// Handle GitLab repository
 		token, err := git.GetGitLabToken(c.Request.Context(), reqK8s, project, userID.(string))
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+			// Log actual error for debugging, but return generic message to avoid leaking internal details
+			log.Printf("Failed to get GitLab token for project %s, user %s: %v", project, userID, err)
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 			return
 		}
 
@@ -537,7 +597,9 @@ func GetRepoBlob(c *gin.Context) {
 		// Handle GitHub repository (existing logic)
 		token, err := GetGitHubTokenRepo(c.Request.Context(), reqK8s, reqDyn, project, userID.(string))
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+			// Log actual error for debugging, but return generic message to avoid leaking internal details
+			log.Printf("Failed to get GitHub token for project %s, user %s: %v", project, userID, err)
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 			return
 		}
 
@@ -613,6 +675,7 @@ func GetRepoBlob(c *gin.Context) {
 
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": "unsupported repository provider (only GitHub and GitLab are supported)"})
+		return
 	}
 	// Fallback unexpected structure
 	c.JSON(http.StatusBadGateway, gin.H{"error": "unexpected GitHub response structure"})

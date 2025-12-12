@@ -230,7 +230,13 @@ func GetRepoSeedStatus(c *gin.Context) {
 	}
 
 	userID, _ := c.Get("userID")
-	reqK8s, reqDyn := GetK8sClientsForRequestRepo(c)
+	reqK8s, reqDyn := GetK8sClientsForRequest(c)
+
+	// Check for missing user context
+	if userID == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing user context"})
+		return
+	}
 
 	// Detect provider
 	provider := types.DetectProvider(repoURL)
@@ -253,13 +259,17 @@ func GetRepoSeedStatus(c *gin.Context) {
 	case types.ProviderGitLab:
 		token, err = git.GetGitLabToken(c.Request.Context(), reqK8s, project, userID.(string))
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+			// Log actual error for debugging, but return generic message to avoid leaking internal details
+			log.Printf("Failed to get GitLab token for project %s, user %s: %v", project, userID, err)
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 			return
 		}
 	case types.ProviderGitHub:
 		token, err = GetGitHubTokenRepo(c.Request.Context(), reqK8s, reqDyn, project, userID.(string))
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+			// Log actual error for debugging, but return generic message to avoid leaking internal details
+			log.Printf("Failed to get GitHub token for project %s, user %s: %v", project, userID, err)
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 			return
 		}
 	default:
@@ -306,7 +316,13 @@ func SeedRepositoryEndpoint(c *gin.Context) {
 	}
 
 	userID, _ := c.Get("userID")
-	reqK8s, reqDyn := GetK8sClientsForRequestRepo(c)
+	reqK8s, reqDyn := GetK8sClientsForRequest(c)
+
+	// Check for missing user context
+	if userID == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing user context"})
+		return
+	}
 
 	// Detect provider
 	provider := types.DetectProvider(req.RepositoryURL)
@@ -318,8 +334,10 @@ func SeedRepositoryEndpoint(c *gin.Context) {
 	case types.ProviderGitLab:
 		token, err = git.GetGitLabToken(c.Request.Context(), reqK8s, project, userID.(string))
 		if err != nil {
+			// Log actual error for debugging, but return generic message to avoid leaking internal details
+			log.Printf("Failed to get GitLab token for project %s, user %s: %v", project, userID, err)
 			c.JSON(http.StatusUnauthorized, gin.H{
-				"error":       err.Error(),
+				"error":       "Invalid or missing token",
 				"remediation": "Connect your GitLab account via /auth/gitlab/connect",
 			})
 			return
@@ -327,8 +345,10 @@ func SeedRepositoryEndpoint(c *gin.Context) {
 	case types.ProviderGitHub:
 		token, err = GetGitHubTokenRepo(c.Request.Context(), reqK8s, reqDyn, project, userID.(string))
 		if err != nil {
+			// Log actual error for debugging, but return generic message to avoid leaking internal details
+			log.Printf("Failed to get GitHub token for project %s, user %s: %v", project, userID, err)
 			c.JSON(http.StatusUnauthorized, gin.H{
-				"error":       err.Error(),
+				"error":       "Invalid or missing token",
 				"remediation": "Ensure GitHub App is installed or configure GIT_TOKEN in project runner secret",
 			})
 			return

@@ -317,7 +317,9 @@ func ContentGitSync(c *gin.Context) {
 
 	// Perform git sync operations
 	if err := git.SyncRepo(c.Request.Context(), abs, body.Message, body.Branch); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		// Log actual error for debugging, but return generic message to avoid leaking internal details
+		log.Printf("Internal server error: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
 
@@ -697,7 +699,9 @@ func ContentGitMergeStatus(c *gin.Context) {
 	status, err := GitCheckMergeStatus(c.Request.Context(), abs, branch)
 	if err != nil {
 		log.Printf("ContentGitMergeStatus: check failed: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		// Log actual error for debugging, but return generic message to avoid leaking internal details
+		log.Printf("Internal server error: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
 
@@ -825,7 +829,9 @@ func ContentGitListBranches(c *gin.Context) {
 
 	branches, err := GitListRemoteBranches(c.Request.Context(), abs)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		// Log actual error for debugging, but return generic message to avoid leaking internal details
+		log.Printf("Internal server error: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
 

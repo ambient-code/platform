@@ -257,7 +257,7 @@ func TestGitLabProviderDetection(t *testing.T) {
 	}{
 		{
 			name:     "GitLab.com HTTPS",
-			url:      "https://gitlab.com/owner/repo.git",
+			url:      "https://gitlab.com/owner/repo",
 			expected: types.ProviderGitLab,
 		},
 		{
@@ -267,17 +267,17 @@ func TestGitLabProviderDetection(t *testing.T) {
 		},
 		{
 			name:     "GitLab.com SSH",
-			url:      "git@gitlab.com:owner/repo.git",
+			url:      "git@gitlab.com:owner/repo",
 			expected: types.ProviderGitLab,
 		},
 		{
 			name:     "Self-hosted GitLab HTTPS",
-			url:      "https://gitlab.company.com/group/project.git",
+			url:      "https://gitlab.company.com/group/project",
 			expected: types.ProviderGitLab,
 		},
 		{
 			name:     "Self-hosted GitLab SSH",
-			url:      "git@gitlab.company.com:group/project.git",
+			url:      "git@gitlab.company.com:group/project",
 			expected: types.ProviderGitLab,
 		},
 		{
@@ -311,27 +311,27 @@ func TestGitLabURLNormalization(t *testing.T) {
 		{
 			name:     "HTTPS with .git",
 			input:    "https://gitlab.com/owner/repo.git",
-			expected: "https://gitlab.com/owner/repo.git",
+			expected: "https://gitlab.com/owner/repo",
 		},
 		{
 			name:     "HTTPS without .git",
 			input:    "https://gitlab.com/owner/repo",
-			expected: "https://gitlab.com/owner/repo.git",
+			expected: "https://gitlab.com/owner/repo",
 		},
 		{
 			name:     "SSH format",
 			input:    "git@gitlab.com:owner/repo.git",
-			expected: "https://gitlab.com/owner/repo.git",
+			expected: "https://gitlab.com/owner/repo",
 		},
 		{
 			name:     "Self-hosted HTTPS",
 			input:    "https://gitlab.company.com/group/project",
-			expected: "https://gitlab.company.com/group/project.git",
+			expected: "https://gitlab.company.com/group/project",
 		},
 		{
 			name:     "Self-hosted SSH",
 			input:    "git@gitlab.company.com:group/project.git",
-			expected: "https://gitlab.company.com/group/project.git",
+			expected: "https://gitlab.company.com/group/project",
 		},
 	}
 

@@ -35,7 +35,7 @@ import (
 var (
 	GetAgenticSessionV1Alpha1Resource func() schema.GroupVersionResource
 	DynamicClient                     dynamic.Interface
-	GetGitHubToken                    func(context.Context, *kubernetes.Clientset, dynamic.Interface, string, string) (string, error)
+	GetGitHubToken                    func(context.Context, kubernetes.Interface, dynamic.Interface, string, string) (string, error)
 	DeriveRepoFolderFromURL           func(string) string
 	SendMessageToSession              func(string, string, map[string]interface{})
 )
@@ -298,8 +298,13 @@ func parseStatus(status map[string]interface{}) *types.AgenticSessionStatus {
 
 func ListSessions(c *gin.Context) {
 	project := c.GetString("project")
-	reqK8s, reqDyn := GetK8sClientsForRequest(c)
-	_ = reqK8s
+
+	reqK8s, k8sDyn := GetK8sClientsForRequest(c)
+	if reqK8s == nil || k8sDyn == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
 	gvr := GetAgenticSessionV1Alpha1Resource()
 
 	// Parse pagination parameters
@@ -316,7 +321,7 @@ func ListSessions(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	list, err := reqDyn.Resource(gvr).Namespace(project).List(ctx, v1.ListOptions{})
+	list, err := k8sDyn.Resource(gvr).Namespace(project).List(ctx, v1.ListOptions{})
 	if err != nil {
 		log.Printf("Failed to list agentic sessions in project %s: %v", project, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list agentic sessions"})
@@ -325,17 +330,22 @@ func ListSessions(c *gin.Context) {
 
 	var sessions []types.AgenticSession
 	for _, item := range list.Items {
+		meta, _, err := unstructured.NestedMap(item.Object, "metadata")
+		if err != nil {
+			log.Printf("ListSessions: failed to read metadata for %s/%s: %v", project, item.GetName(), err)
+			meta = map[string]interface{}{}
+		}
 		session := types.AgenticSession{
 			APIVersion: item.GetAPIVersion(),
 			Kind:       item.GetKind(),
-			Metadata:   item.Object["metadata"].(map[string]interface{}),
+			Metadata:   meta,
 		}
 
-		if spec, ok := item.Object["spec"].(map[string]interface{}); ok {
+		if spec, found, err := unstructured.NestedMap(item.Object, "spec"); err == nil && found {
 			session.Spec = parseSpec(spec)
 		}
 
-		if status, ok := item.Object["status"].(map[string]interface{}); ok {
+		if status, found, err := unstructured.NestedMap(item.Object, "status"); err == nil && found {
 			session.Status = parseStatus(status)
 		}
 
@@ -445,15 +455,16 @@ func paginateSessions(sessions []types.AgenticSession, offset, limit int) ([]typ
 
 func CreateSession(c *gin.Context) {
 	project := c.GetString("project")
-	// Get user-scoped clients for creating the AgenticSession (enforces user RBAC)
-	_, reqDyn := GetK8sClientsForRequest(c)
-	if reqDyn == nil {
+
+	_, k8sDyn := GetK8sClientsForRequest(c)
+	if k8sDyn == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User token required"})
+		c.Abort()
 		return
 	}
 	var req types.CreateAgenticSessionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
 		return
 	}
 
@@ -618,7 +629,7 @@ func CreateSession(c *gin.Context) {
 	obj := &unstructured.Unstructured{Object: session}
 
 	// Create AgenticSession using user token (enforces user RBAC permissions)
-	created, err := reqDyn.Resource(gvr).Namespace(project).Create(context.TODO(), obj, v1.CreateOptions{})
+	created, err := k8sDyn.Resource(gvr).Namespace(project).Create(context.TODO(), obj, v1.CreateOptions{})
 	if err != nil {
 		log.Printf("Failed to create agentic session in project %s: %v", project, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create agentic session"})
@@ -653,7 +664,7 @@ func CreateSession(c *gin.Context) {
 	if DynamicClient == nil || K8sClient == nil {
 		log.Printf("Warning: backend SA clients not available, skipping runner token provisioning for session %s/%s", project, name)
 	} else if err := provisionRunnerTokenForSession(c, K8sClient, DynamicClient, project, name); err != nil {
-		// Non-fatal: log and continue. Operator may retry later if implemented.
+		// Nonfatal: log and continue. Operator may retry later if implemented.
 		log.Printf("Warning: failed to provision runner token for session %s/%s: %v", project, name, err)
 	}
 
@@ -666,7 +677,7 @@ func CreateSession(c *gin.Context) {
 
 // provisionRunnerTokenForSession creates a per-session ServiceAccount, grants minimal RBAC,
 // mints a short-lived token, stores it in a Secret, and annotates the AgenticSession with the Secret name.
-func provisionRunnerTokenForSession(c *gin.Context, reqK8s *kubernetes.Clientset, reqDyn dynamic.Interface, project string, sessionName string) error {
+func provisionRunnerTokenForSession(c *gin.Context, reqK8s kubernetes.Interface, reqDyn dynamic.Interface, project string, sessionName string) error {
 	// Load owning AgenticSession to parent all resources
 	gvr := GetAgenticSessionV1Alpha1Resource()
 	obj, err := reqDyn.Resource(gvr).Namespace(project).Get(c.Request.Context(), sessionName, v1.GetOptions{})
@@ -829,11 +840,16 @@ func provisionRunnerTokenForSession(c *gin.Context, reqK8s *kubernetes.Clientset
 func GetSession(c *gin.Context) {
 	project := c.GetString("project")
 	sessionName := c.Param("sessionName")
-	reqK8s, reqDyn := GetK8sClientsForRequest(c)
-	_ = reqK8s
+
+	_, k8sDyn := GetK8sClientsForRequest(c)
+	if k8sDyn == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
 	gvr := GetAgenticSessionV1Alpha1Resource()
 
-	item, err := reqDyn.Resource(gvr).Namespace(project).Get(context.TODO(), sessionName, v1.GetOptions{})
+	item, err := k8sDyn.Resource(gvr).Namespace(project).Get(context.TODO(), sessionName, v1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Session not found"})
@@ -955,7 +971,8 @@ func MintSessionGitHubToken(c *gin.Context) {
 	// Get GitHub token (GitHub App or PAT fallback via project runner secret)
 	tokenStr, err := GetGitHubToken(c.Request.Context(), K8sClient, DynamicClient, project, userID)
 	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		log.Printf("Failed to get GitHub token for project %s: %v", project, err)
+		c.JSON(http.StatusBadGateway, gin.H{"error": "Failed to retrieve GitHub token"})
 		return
 	}
 	// Note: PATs don't have expiration, so we omit expiresAt for simplicity
@@ -966,18 +983,23 @@ func MintSessionGitHubToken(c *gin.Context) {
 func PatchSession(c *gin.Context) {
 	project := c.GetString("project")
 	sessionName := c.Param("sessionName")
-	_, reqDyn := GetK8sClientsForRequest(c)
+	_, k8sDyn := GetK8sClientsForRequest(c)
+	if k8sDyn == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
 
 	var patch map[string]interface{}
 	if err := c.ShouldBindJSON(&patch); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
 		return
 	}
 
 	gvr := GetAgenticSessionV1Alpha1Resource()
 
 	// Get current resource
-	item, err := reqDyn.Resource(gvr).Namespace(project).Get(context.TODO(), sessionName, v1.GetOptions{})
+	item, err := k8sDyn.Resource(gvr).Namespace(project).Get(context.TODO(), sessionName, v1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Session not found"})
@@ -990,19 +1012,32 @@ func PatchSession(c *gin.Context) {
 	// Apply patch to metadata annotations
 	if metaPatch, ok := patch["metadata"].(map[string]interface{}); ok {
 		if annsPatch, ok := metaPatch["annotations"].(map[string]interface{}); ok {
-			metadata := item.Object["metadata"].(map[string]interface{})
-			if metadata["annotations"] == nil {
-				metadata["annotations"] = make(map[string]interface{})
+			metadata, found, err := unstructured.NestedMap(item.Object, "metadata")
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to patch session"})
+				return
 			}
-			anns := metadata["annotations"].(map[string]interface{})
+			if !found || metadata == nil {
+				metadata = map[string]interface{}{}
+			}
+			anns, found, err := unstructured.NestedMap(metadata, "annotations")
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to patch session"})
+				return
+			}
+			if !found || anns == nil {
+				anns = map[string]interface{}{}
+			}
 			for k, v := range annsPatch {
 				anns[k] = v
 			}
+			_ = unstructured.SetNestedMap(metadata, anns, "annotations")
+			_ = unstructured.SetNestedMap(item.Object, metadata, "metadata")
 		}
 	}
 
 	// Update the resource
-	updated, err := reqDyn.Resource(gvr).Namespace(project).Update(context.TODO(), item, v1.UpdateOptions{})
+	updated, err := k8sDyn.Resource(gvr).Namespace(project).Update(context.TODO(), item, v1.UpdateOptions{})
 	if err != nil {
 		log.Printf("Failed to patch agentic session %s: %v", sessionName, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to patch session"})
@@ -1015,9 +1050,12 @@ func PatchSession(c *gin.Context) {
 func UpdateSession(c *gin.Context) {
 	project := c.GetString("project")
 	sessionName := c.Param("sessionName")
-	reqK8s, reqDyn := GetK8sClientsForRequest(c)
-	_ = reqK8s
-
+	_, k8sDyn := GetK8sClientsForRequest(c)
+	if k8sDyn == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
 	var req types.UpdateAgenticSessionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -1030,7 +1068,7 @@ func UpdateSession(c *gin.Context) {
 	var item *unstructured.Unstructured
 	var err error
 	for attempt := 0; attempt < 5; attempt++ {
-		item, err = reqDyn.Resource(gvr).Namespace(project).Get(context.TODO(), sessionName, v1.GetOptions{})
+		item, err = k8sDyn.Resource(gvr).Namespace(project).Get(context.TODO(), sessionName, v1.GetOptions{})
 		if err == nil {
 			break
 		}
@@ -1088,7 +1126,7 @@ func UpdateSession(c *gin.Context) {
 	}
 
 	// Update the resource
-	updated, err := reqDyn.Resource(gvr).Namespace(project).Update(context.TODO(), item, v1.UpdateOptions{})
+	updated, err := k8sDyn.Resource(gvr).Namespace(project).Update(context.TODO(), item, v1.UpdateOptions{})
 	if err != nil {
 		log.Printf("Failed to update agentic session %s in project %s: %v", sessionName, project, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update agentic session"})
@@ -1118,11 +1156,10 @@ func UpdateSession(c *gin.Context) {
 func UpdateSessionDisplayName(c *gin.Context) {
 	project := c.GetString("project")
 	sessionName := c.Param("sessionName")
-	reqK8s, reqDyn := GetK8sClientsForRequest(c)
-
-	// Check if user has valid auth (reqDyn is nil if token is invalid)
-	if reqK8s == nil || reqDyn == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing authentication token"})
+	k8sClt, k8sDyn := GetK8sClientsForRequest(c)
+	if k8sClt == nil || k8sDyn == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
 		return
 	}
 
@@ -1137,7 +1174,7 @@ func UpdateSessionDisplayName(c *gin.Context) {
 			},
 		},
 	}
-	res, err := reqK8s.AuthorizationV1().SelfSubjectAccessReviews().Create(c.Request.Context(), ssar, v1.CreateOptions{})
+	res, err := k8sClt.AuthorizationV1().SelfSubjectAccessReviews().Create(c.Request.Context(), ssar, v1.CreateOptions{})
 	if err != nil {
 		log.Printf("RBAC check failed for update session display name in project %s: %v", project, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify permissions"})
@@ -1165,7 +1202,7 @@ func UpdateSessionDisplayName(c *gin.Context) {
 	gvr := GetAgenticSessionV1Alpha1Resource()
 
 	// Retrieve current resource
-	item, err := reqDyn.Resource(gvr).Namespace(project).Get(context.TODO(), sessionName, v1.GetOptions{})
+	item, err := k8sDyn.Resource(gvr).Namespace(project).Get(context.TODO(), sessionName, v1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Session not found"})
@@ -1196,7 +1233,7 @@ func UpdateSessionDisplayName(c *gin.Context) {
 	}
 
 	// Persist the change
-	updated, err := reqDyn.Resource(gvr).Namespace(project).Update(context.TODO(), item, v1.UpdateOptions{})
+	updated, err := k8sDyn.Resource(gvr).Namespace(project).Update(context.TODO(), item, v1.UpdateOptions{})
 	if err != nil {
 		log.Printf("Failed to update display name for agentic session %s in project %s: %v", sessionName, project, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update display name"})
@@ -1226,7 +1263,12 @@ func UpdateSessionDisplayName(c *gin.Context) {
 func SelectWorkflow(c *gin.Context) {
 	project := c.GetString("project")
 	sessionName := c.Param("sessionName")
-	_, reqDyn := GetK8sClientsForRequest(c)
+	_, k8sDyn := GetK8sClientsForRequest(c)
+	if k8sDyn == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
 
 	var req types.WorkflowSelection
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -1237,7 +1279,7 @@ func SelectWorkflow(c *gin.Context) {
 	gvr := GetAgenticSessionV1Alpha1Resource()
 
 	// Retrieve current resource
-	item, err := reqDyn.Resource(gvr).Namespace(project).Get(context.TODO(), sessionName, v1.GetOptions{})
+	item, err := k8sDyn.Resource(gvr).Namespace(project).Get(context.TODO(), sessionName, v1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Session not found"})
@@ -1275,7 +1317,7 @@ func SelectWorkflow(c *gin.Context) {
 	spec["activeWorkflow"] = workflowMap
 
 	// Persist the change
-	updated, err := reqDyn.Resource(gvr).Namespace(project).Update(context.TODO(), item, v1.UpdateOptions{})
+	updated, err := k8sDyn.Resource(gvr).Namespace(project).Update(context.TODO(), item, v1.UpdateOptions{})
 	if err != nil {
 		log.Printf("Failed to update workflow for agentic session %s in project %s: %v", sessionName, project, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update workflow"})
@@ -1308,7 +1350,12 @@ func SelectWorkflow(c *gin.Context) {
 func AddRepo(c *gin.Context) {
 	project := c.GetString("project")
 	sessionName := c.Param("sessionName")
-	_, reqDyn := GetK8sClientsForRequest(c)
+	_, k8sDyn := GetK8sClientsForRequest(c)
+	if k8sDyn == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
 
 	var req struct {
 		URL    string `json:"url" binding:"required"`
@@ -1325,7 +1372,7 @@ func AddRepo(c *gin.Context) {
 	}
 
 	gvr := GetAgenticSessionV1Alpha1Resource()
-	item, err := reqDyn.Resource(gvr).Namespace(project).Get(context.TODO(), sessionName, v1.GetOptions{})
+	item, err := k8sDyn.Resource(gvr).Namespace(project).Get(context.TODO(), sessionName, v1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Session not found"})
@@ -1360,7 +1407,7 @@ func AddRepo(c *gin.Context) {
 	spec["repos"] = repos
 
 	// Persist change
-	updated, err := reqDyn.Resource(gvr).Namespace(project).Update(context.TODO(), item, v1.UpdateOptions{})
+	updated, err := k8sDyn.Resource(gvr).Namespace(project).Update(context.TODO(), item, v1.UpdateOptions{})
 	if err != nil {
 		log.Printf("Failed to update session %s in project %s: %v", sessionName, project, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update session"})
@@ -1390,7 +1437,11 @@ func RemoveRepo(c *gin.Context) {
 	sessionName := c.Param("sessionName")
 	repoName := c.Param("repoName")
 	_, reqDyn := GetK8sClientsForRequest(c)
-
+	if reqDyn == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
 	gvr := GetAgenticSessionV1Alpha1Resource()
 	item, err := reqDyn.Resource(gvr).Namespace(project).Get(context.TODO(), sessionName, v1.GetOptions{})
 	if err != nil {
@@ -1482,12 +1533,16 @@ func GetWorkflowMetadata(c *gin.Context) {
 
 	// Try temp service first (for completed sessions), then regular service
 	serviceName := fmt.Sprintf("temp-content-%s", sessionName)
+	// Use the dependency-injected client selection function
 	reqK8s, _ := GetK8sClientsForRequest(c)
-	if reqK8s != nil {
-		if _, err := reqK8s.CoreV1().Services(project).Get(c.Request.Context(), serviceName, v1.GetOptions{}); err != nil {
-			// Temp service doesn't exist, use regular service
-			serviceName = fmt.Sprintf("ambient-content-%s", sessionName)
-		}
+	if reqK8s == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
+	if _, err := reqK8s.CoreV1().Services(project).Get(c.Request.Context(), serviceName, v1.GetOptions{}); err != nil {
+		// Temp service doesn't exist, use regular service
+		serviceName = fmt.Sprintf("ambient-content-%s", sessionName)
 	} else {
 		serviceName = fmt.Sprintf("ambient-content-%s", sessionName)
 	}
@@ -1613,15 +1668,19 @@ func ListOOTBWorkflows(c *gin.Context) {
 	token := ""
 	project := c.Query("project") // Optional query parameter
 	if project != "" {
-		userID, _ := c.Get("userID")
-		if reqK8s, reqDyn := GetK8sClientsForRequest(c); reqK8s != nil {
-			if userIDStr, ok := userID.(string); ok && userIDStr != "" {
-				if githubToken, err := GetGitHubToken(c.Request.Context(), reqK8s, reqDyn, project, userIDStr); err == nil {
-					token = githubToken
-					log.Printf("ListOOTBWorkflows: using user's GitHub token for project %s (better rate limits)", project)
-				} else {
-					log.Printf("ListOOTBWorkflows: failed to get GitHub token for project %s: %v", project, err)
-				}
+		usrID, _ := c.Get("userID")
+		k8sClt, sessDyn := GetK8sClientsForRequest(c)
+		if k8sClt == nil || sessDyn == nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+			c.Abort()
+			return
+		}
+		if userIDStr, ok := usrID.(string); ok && userIDStr != "" {
+			if githubToken, err := GetGitHubToken(c.Request.Context(), k8sClt, sessDyn, project, userIDStr); err == nil {
+				token = githubToken
+				log.Printf("ListOOTBWorkflows: using user's GitHub token for project %s (better rate limits)", project)
+			} else {
+				log.Printf("ListOOTBWorkflows: failed to get GitHub token for project %s: %v", project, err)
 			}
 		}
 	}
@@ -1711,11 +1770,15 @@ func ListOOTBWorkflows(c *gin.Context) {
 func DeleteSession(c *gin.Context) {
 	project := c.GetString("project")
 	sessionName := c.Param("sessionName")
-	reqK8s, reqDyn := GetK8sClientsForRequest(c)
-	_ = reqK8s
+	_, k8sDyn := GetK8sClientsForRequest(c)
+	if k8sDyn == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
 	gvr := GetAgenticSessionV1Alpha1Resource()
 
-	err := reqDyn.Resource(gvr).Namespace(project).Delete(context.TODO(), sessionName, v1.DeleteOptions{})
+	err := k8sDyn.Resource(gvr).Namespace(project).Delete(context.TODO(), sessionName, v1.DeleteOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Session not found"})
@@ -1732,8 +1795,12 @@ func DeleteSession(c *gin.Context) {
 func CloneSession(c *gin.Context) {
 	project := c.GetString("project")
 	sessionName := c.Param("sessionName")
-	_, reqDyn := GetK8sClientsForRequest(c)
-
+	_, k8sDyn := GetK8sClientsForRequest(c)
+	if k8sDyn == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
 	var req types.CloneSessionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -1743,7 +1810,7 @@ func CloneSession(c *gin.Context) {
 	gvr := GetAgenticSessionV1Alpha1Resource()
 
 	// Get source session
-	sourceItem, err := reqDyn.Resource(gvr).Namespace(project).Get(context.TODO(), sessionName, v1.GetOptions{})
+	sourceItem, err := k8sDyn.Resource(gvr).Namespace(project).Get(context.TODO(), sessionName, v1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Source session not found"})
@@ -1756,7 +1823,7 @@ func CloneSession(c *gin.Context) {
 
 	// Validate target project exists and is managed by Ambient via OpenShift Project
 	projGvr := GetOpenShiftProjectResource()
-	projObj, err := reqDyn.Resource(projGvr).Get(context.TODO(), req.TargetProject, v1.GetOptions{})
+	projObj, err := k8sDyn.Resource(projGvr).Get(context.TODO(), req.TargetProject, v1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Target project not found"})
@@ -1787,7 +1854,7 @@ func CloneSession(c *gin.Context) {
 	finalName := newName
 	conflicted := false
 	for i := 0; i < 50; i++ {
-		_, getErr := reqDyn.Resource(gvr).Namespace(req.TargetProject).Get(context.TODO(), finalName, v1.GetOptions{})
+		_, getErr := k8sDyn.Resource(gvr).Namespace(req.TargetProject).Get(context.TODO(), finalName, v1.GetOptions{})
 		if errors.IsNotFound(getErr) {
 			break
 		}
@@ -1830,7 +1897,7 @@ func CloneSession(c *gin.Context) {
 
 	obj := &unstructured.Unstructured{Object: clonedSession}
 
-	created, err := reqDyn.Resource(gvr).Namespace(req.TargetProject).Create(context.TODO(), obj, v1.CreateOptions{})
+	created, err := k8sDyn.Resource(gvr).Namespace(req.TargetProject).Create(context.TODO(), obj, v1.CreateOptions{})
 	if err != nil {
 		log.Printf("Failed to create cloned agentic session in project %s: %v", req.TargetProject, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create cloned agentic session"})
@@ -1858,11 +1925,17 @@ func CloneSession(c *gin.Context) {
 func StartSession(c *gin.Context) {
 	project := c.GetString("project")
 	sessionName := c.Param("sessionName")
-	_, reqDyn := GetK8sClientsForRequest(c)
 	gvr := GetAgenticSessionV1Alpha1Resource()
 
+	_, k8sDyn := GetK8sClientsForRequest(c)
+	if k8sDyn == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
+
 	// Get current resource
-	item, err := reqDyn.Resource(gvr).Namespace(project).Get(context.TODO(), sessionName, v1.GetOptions{})
+	item, err := k8sDyn.Resource(gvr).Namespace(project).Get(context.TODO(), sessionName, v1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Session not found"})
@@ -1915,7 +1988,7 @@ func StartSession(c *gin.Context) {
 	}
 
 	// Update spec and annotations (operator will observe and handle job lifecycle)
-	updated, err := reqDyn.Resource(gvr).Namespace(project).Update(context.TODO(), item, v1.UpdateOptions{})
+	updated, err := k8sDyn.Resource(gvr).Namespace(project).Update(context.TODO(), item, v1.UpdateOptions{})
 	if err != nil {
 		log.Printf("Failed to update agentic session %s in project %s: %v", sessionName, project, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update session"})
@@ -1982,10 +2055,16 @@ func ensureRuntimeMutationAllowed(item *unstructured.Unstructured) error {
 func StopSession(c *gin.Context) {
 	project := c.GetString("project")
 	sessionName := c.Param("sessionName")
-	_, reqDyn := GetK8sClientsForRequest(c)
 	gvr := GetAgenticSessionV1Alpha1Resource()
 
-	item, err := reqDyn.Resource(gvr).Namespace(project).Get(context.TODO(), sessionName, v1.GetOptions{})
+	_, k8sDyn := GetK8sClientsForRequest(c)
+	if k8sDyn == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
+
+	item, err := k8sDyn.Resource(gvr).Namespace(project).Get(context.TODO(), sessionName, v1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Session not found"})
@@ -2016,7 +2095,7 @@ func StopSession(c *gin.Context) {
 	}
 
 	// Update spec and annotations (operator will observe and handle job cleanup)
-	updated, err := reqDyn.Resource(gvr).Namespace(project).Update(context.TODO(), item, v1.UpdateOptions{})
+	updated, err := k8sDyn.Resource(gvr).Namespace(project).Update(context.TODO(), item, v1.UpdateOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
 			c.JSON(http.StatusOK, gin.H{"message": "Session no longer exists (already deleted)"})
@@ -2049,10 +2128,16 @@ func StopSession(c *gin.Context) {
 func EnableWorkspaceAccess(c *gin.Context) {
 	project := c.GetString("project")
 	sessionName := c.Param("sessionName")
-	_, reqDyn := GetK8sClientsForRequest(c)
 	gvr := GetAgenticSessionV1Alpha1Resource()
 
-	item, err := reqDyn.Resource(gvr).Namespace(project).Get(context.TODO(), sessionName, v1.GetOptions{})
+	_, k8sDyn := GetK8sClientsForRequest(c)
+	if k8sDyn == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
+
+	item, err := k8sDyn.Resource(gvr).Namespace(project).Get(context.TODO(), sessionName, v1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Session not found"})
@@ -2081,7 +2166,7 @@ func EnableWorkspaceAccess(c *gin.Context) {
 	item.SetAnnotations(annotations)
 
 	// Update CR
-	updated, err := reqDyn.Resource(gvr).Namespace(project).Update(context.TODO(), item, v1.UpdateOptions{})
+	updated, err := k8sDyn.Resource(gvr).Namespace(project).Update(context.TODO(), item, v1.UpdateOptions{})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to enable workspace access"})
 		return
@@ -2108,10 +2193,16 @@ func EnableWorkspaceAccess(c *gin.Context) {
 func TouchWorkspaceAccess(c *gin.Context) {
 	project := c.GetString("project")
 	sessionName := c.Param("sessionName")
-	_, reqDyn := GetK8sClientsForRequest(c)
 	gvr := GetAgenticSessionV1Alpha1Resource()
 
-	item, err := reqDyn.Resource(gvr).Namespace(project).Get(context.TODO(), sessionName, v1.GetOptions{})
+	_, k8sDyn := GetK8sClientsForRequest(c)
+	if k8sDyn == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
+
+	item, err := k8sDyn.Resource(gvr).Namespace(project).Get(context.TODO(), sessionName, v1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Session not found"})
@@ -2128,7 +2219,7 @@ func TouchWorkspaceAccess(c *gin.Context) {
 	annotations["ambient-code.io/temp-content-last-accessed"] = time.Now().UTC().Format(time.RFC3339)
 	item.SetAnnotations(annotations)
 
-	if _, err := reqDyn.Resource(gvr).Namespace(project).Update(context.TODO(), item, v1.UpdateOptions{}); err != nil {
+	if _, err := k8sDyn.Resource(gvr).Namespace(project).Update(context.TODO(), item, v1.UpdateOptions{}); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update timestamp"})
 		return
 	}
@@ -2147,15 +2238,21 @@ func GetSessionK8sResources(c *gin.Context) {
 	}
 	sessionName := c.Param("sessionName")
 
-	reqK8s, reqDyn := GetK8sClientsForRequest(c)
-	if reqK8s == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+	k8sClt, k8sDyn := GetK8sClientsForRequest(c)
+	if k8sDyn == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
+	if k8sClt == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
 		return
 	}
 
 	// Get session to find job name
 	gvr := GetAgenticSessionV1Alpha1Resource()
-	session, err := reqDyn.Resource(gvr).Namespace(project).Get(c.Request.Context(), sessionName, v1.GetOptions{})
+	session, err := k8sDyn.Resource(gvr).Namespace(project).Get(c.Request.Context(), sessionName, v1.GetOptions{})
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
 		return
@@ -2170,7 +2267,7 @@ func GetSessionK8sResources(c *gin.Context) {
 	result := map[string]interface{}{}
 
 	// Get Job status
-	job, err := reqK8s.BatchV1().Jobs(project).Get(c.Request.Context(), jobName, v1.GetOptions{})
+	job, err := k8sClt.BatchV1().Jobs(project).Get(c.Request.Context(), jobName, v1.GetOptions{})
 	jobExists := err == nil
 
 	if jobExists {
@@ -2199,7 +2296,7 @@ func GetSessionK8sResources(c *gin.Context) {
 	// Get Pods for this job (only if job exists)
 	podInfos := []map[string]interface{}{}
 	if jobExists {
-		pods, err := reqK8s.CoreV1().Pods(project).List(c.Request.Context(), v1.ListOptions{
+		pods, err := k8sClt.CoreV1().Pods(project).List(c.Request.Context(), v1.ListOptions{
 			LabelSelector: fmt.Sprintf("job-name=%s", jobName),
 		})
 		if err == nil {
@@ -2247,7 +2344,7 @@ func GetSessionK8sResources(c *gin.Context) {
 
 	// Check for temp-content pod
 	tempPodName := fmt.Sprintf("temp-content-%s", sessionName)
-	tempPod, err := reqK8s.CoreV1().Pods(project).Get(c.Request.Context(), tempPodName, v1.GetOptions{})
+	tempPod, err := k8sClt.CoreV1().Pods(project).Get(c.Request.Context(), tempPodName, v1.GetOptions{})
 	if err == nil {
 		tempPodPhase := string(tempPod.Status.Phase)
 		if tempPod.DeletionTimestamp != nil {
@@ -2293,7 +2390,7 @@ func GetSessionK8sResources(c *gin.Context) {
 	// Get PVC info - always use session's own PVC name
 	// Note: If session was created with parent_session_id (via API), the operator handles PVC reuse
 	pvcName := fmt.Sprintf("ambient-workspace-%s", sessionName)
-	pvc, err := reqK8s.CoreV1().PersistentVolumeClaims(project).Get(c.Request.Context(), pvcName, v1.GetOptions{})
+	pvc, err := k8sClt.CoreV1().PersistentVolumeClaims(project).Get(c.Request.Context(), pvcName, v1.GetOptions{})
 	result["pvcName"] = pvcName
 	if err == nil {
 		result["pvcExists"] = true
@@ -2339,13 +2436,15 @@ func ListSessionWorkspace(c *gin.Context) {
 
 	// Try temp service first (for completed sessions), then regular service
 	serviceName := fmt.Sprintf("temp-content-%s", session)
-	reqK8s, _ := GetK8sClientsForRequest(c)
-	if reqK8s != nil {
-		if _, err := reqK8s.CoreV1().Services(project).Get(c.Request.Context(), serviceName, v1.GetOptions{}); err != nil {
-			// Temp service doesn't exist, use regular service
-			serviceName = fmt.Sprintf("ambient-content-%s", session)
-		}
-	} else {
+	// AuthN: require user token before probing K8s Services
+	k8sClt, _ := GetK8sClientsForRequest(c)
+	if k8sClt == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
+	if _, err := k8sClt.CoreV1().Services(project).Get(c.Request.Context(), serviceName, v1.GetOptions{}); err != nil {
+		// Temp service doesn't exist, use regular service
 		serviceName = fmt.Sprintf("ambient-content-%s", session)
 	}
 
@@ -2402,12 +2501,13 @@ func GetSessionWorkspaceFile(c *gin.Context) {
 
 	// Try temp service first (for completed sessions), then regular service
 	serviceName := fmt.Sprintf("temp-content-%s", session)
-	reqK8s, _ := GetK8sClientsForRequest(c)
-	if reqK8s != nil {
-		if _, err := reqK8s.CoreV1().Services(project).Get(c.Request.Context(), serviceName, v1.GetOptions{}); err != nil {
-			serviceName = fmt.Sprintf("ambient-content-%s", session)
-		}
-	} else {
+	k8sClt, _ := GetK8sClientsForRequest(c)
+	if k8sClt == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
+	if _, err := k8sClt.CoreV1().Services(project).Get(c.Request.Context(), serviceName, v1.GetOptions{}); err != nil {
 		serviceName = fmt.Sprintf("ambient-content-%s", session)
 	}
 
@@ -2451,13 +2551,14 @@ func PutSessionWorkspaceFile(c *gin.Context) {
 
 	// Try temp service first (for completed sessions), then regular service
 	serviceName := fmt.Sprintf("temp-content-%s", session)
-	reqK8s, _ := GetK8sClientsForRequest(c)
-	if reqK8s != nil {
-		if _, err := reqK8s.CoreV1().Services(project).Get(c.Request.Context(), serviceName, v1.GetOptions{}); err != nil {
-			// Temp service doesn't exist, use regular service
-			serviceName = fmt.Sprintf("ambient-content-%s", session)
-		}
-	} else {
+	k8sClt, _ := GetK8sClientsForRequest(c)
+	if k8sClt == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
+	if _, err := k8sClt.CoreV1().Services(project).Get(c.Request.Context(), serviceName, v1.GetOptions{}); err != nil {
+		// Temp service doesn't exist, use regular service
 		serviceName = fmt.Sprintf("ambient-content-%s", session)
 	}
 
@@ -2505,12 +2606,13 @@ func PushSessionRepo(c *gin.Context) {
 
 	// Try temp service first (for completed sessions), then regular service
 	serviceName := fmt.Sprintf("temp-content-%s", session)
-	reqK8s, _ := GetK8sClientsForRequest(c)
-	if reqK8s != nil {
-		if _, err := reqK8s.CoreV1().Services(project).Get(c.Request.Context(), serviceName, v1.GetOptions{}); err != nil {
-			serviceName = fmt.Sprintf("ambient-content-%s", session)
-		}
-	} else {
+	k8sClt, k8sDyn := GetK8sClientsForRequest(c)
+	if k8sClt == nil || k8sDyn == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
+	if _, err := k8sClt.CoreV1().Services(project).Get(c.Request.Context(), serviceName, v1.GetOptions{}); err != nil {
 		serviceName = fmt.Sprintf("ambient-content-%s", session)
 	}
 	endpoint := fmt.Sprintf("http://%s.%s.svc:8080", serviceName, project)
@@ -2521,42 +2623,37 @@ func PushSessionRepo(c *gin.Context) {
 	// default branch when not defined on output
 	resolvedBranch := fmt.Sprintf("sessions/%s", session)
 	resolvedOutputURL := ""
-	if _, reqDyn := GetK8sClientsForRequest(c); reqDyn != nil {
-		gvr := GetAgenticSessionV1Alpha1Resource()
-		obj, err := reqDyn.Resource(gvr).Namespace(project).Get(c.Request.Context(), session, v1.GetOptions{})
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "failed to read session"})
-			return
-		}
-		spec, _ := obj.Object["spec"].(map[string]interface{})
-		repos, _ := spec["repos"].([]interface{})
-		if body.RepoIndex < 0 || body.RepoIndex >= len(repos) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid repo index"})
-			return
-		}
-		rm, _ := repos[body.RepoIndex].(map[string]interface{})
-		// Derive repoPath from input URL folder name
-		if in, ok := rm["input"].(map[string]interface{}); ok {
-			if urlv, ok2 := in["url"].(string); ok2 && strings.TrimSpace(urlv) != "" {
-				folder := DeriveRepoFolderFromURL(strings.TrimSpace(urlv))
-				if folder != "" {
-					resolvedRepoPath = fmt.Sprintf("/sessions/%s/workspace/%s", session, folder)
-				}
-			}
-		}
-		if out, ok := rm["output"].(map[string]interface{}); ok {
-			if urlv, ok2 := out["url"].(string); ok2 && strings.TrimSpace(urlv) != "" {
-				resolvedOutputURL = strings.TrimSpace(urlv)
-			}
-			if bs, ok2 := out["branch"].(string); ok2 && strings.TrimSpace(bs) != "" {
-				resolvedBranch = strings.TrimSpace(bs)
-			} else if bv, ok2 := out["branch"].(*string); ok2 && bv != nil && strings.TrimSpace(*bv) != "" {
-				resolvedBranch = strings.TrimSpace(*bv)
-			}
-		}
-	} else {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "no dynamic client"})
+	gvr := GetAgenticSessionV1Alpha1Resource()
+	obj, err := k8sDyn.Resource(gvr).Namespace(project).Get(c.Request.Context(), session, v1.GetOptions{})
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to read session"})
 		return
+	}
+	spec, _ := obj.Object["spec"].(map[string]interface{})
+	repos, _ := spec["repos"].([]interface{})
+	if body.RepoIndex < 0 || body.RepoIndex >= len(repos) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid repo index"})
+		return
+	}
+	rm, _ := repos[body.RepoIndex].(map[string]interface{})
+	// Derive repoPath from input URL folder name
+	if in, ok := rm["input"].(map[string]interface{}); ok {
+		if urlv, ok2 := in["url"].(string); ok2 && strings.TrimSpace(urlv) != "" {
+			folder := DeriveRepoFolderFromURL(strings.TrimSpace(urlv))
+			if folder != "" {
+				resolvedRepoPath = fmt.Sprintf("/sessions/%s/workspace/%s", session, folder)
+			}
+		}
+	}
+	if out, ok := rm["output"].(map[string]interface{}); ok {
+		if urlv, ok2 := out["url"].(string); ok2 && strings.TrimSpace(urlv) != "" {
+			resolvedOutputURL = strings.TrimSpace(urlv)
+		}
+		if bs, ok2 := out["branch"].(string); ok2 && strings.TrimSpace(bs) != "" {
+			resolvedBranch = strings.TrimSpace(bs)
+		} else if bv, ok2 := out["branch"].(*string); ok2 && bv != nil && strings.TrimSpace(*bv) != "" {
+			resolvedBranch = strings.TrimSpace(*bv)
+		}
 	}
 	// If input URL missing or unparsable, fall back to numeric index path (last resort)
 	if strings.TrimSpace(resolvedRepoPath) == "" {
@@ -2587,41 +2684,47 @@ func PushSessionRepo(c *gin.Context) {
 		req.Header.Set("X-Forwarded-Access-Token", v)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	k8sClt, k8sDyn = GetK8sClientsForRequest(c)
+	if k8sClt == nil || k8sDyn == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
 
 	// Attach short-lived GitHub token for one-shot authenticated push
-	if reqK8s, reqDyn := GetK8sClientsForRequest(c); reqK8s != nil {
-		// Load session to get authoritative userId
-		gvr := GetAgenticSessionV1Alpha1Resource()
-		obj, err := reqDyn.Resource(gvr).Namespace(project).Get(c.Request.Context(), session, v1.GetOptions{})
-		if err == nil {
-			spec, _ := obj.Object["spec"].(map[string]interface{})
-			userID := ""
-			if spec != nil {
-				if uc, ok := spec["userContext"].(map[string]interface{}); ok {
-					if v, ok := uc["userId"].(string); ok {
-						userID = strings.TrimSpace(v)
-					}
+	// Load session to get authoritative userId
+	gvr = GetAgenticSessionV1Alpha1Resource()
+	obj, err = k8sDyn.Resource(gvr).Namespace(project).Get(c.Request.Context(), session, v1.GetOptions{})
+	if err == nil {
+		spec, _ := obj.Object["spec"].(map[string]interface{})
+		userID := ""
+		if spec != nil {
+			if uc, ok := spec["userContext"].(map[string]interface{}); ok {
+				if v, ok := uc["userId"].(string); ok {
+					userID = strings.TrimSpace(v)
 				}
 			}
-			if userID != "" {
-				if tokenStr, err := GetGitHubToken(c.Request.Context(), reqK8s, reqDyn, project, userID); err == nil && strings.TrimSpace(tokenStr) != "" {
-					req.Header.Set("X-GitHub-Token", tokenStr)
-					log.Printf("pushSessionRepo: attached short-lived GitHub token for project=%s session=%s", project, session)
-				} else if err != nil {
-					log.Printf("pushSessionRepo: failed to resolve GitHub token: %v", err)
-				}
-			} else {
-				log.Printf("pushSessionRepo: session %s/%s missing userContext.userId; proceeding without token", project, session)
+		}
+		if userID != "" {
+			if tokenStr, err := GetGitHubToken(c.Request.Context(), k8sClt, k8sDyn, project, userID); err == nil && strings.TrimSpace(tokenStr) != "" {
+				req.Header.Set("X-GitHub-Token", tokenStr)
+				log.Printf("pushSessionRepo: attached short-lived GitHub token for project=%s session=%s", project, session)
+			} else if err != nil {
+				log.Printf("pushSessionRepo: failed to resolve GitHub token: %v", err)
 			}
 		} else {
-			log.Printf("pushSessionRepo: failed to read session for token attach: %v", err)
+			log.Printf("pushSessionRepo: session %s/%s missing userContext.userId; proceeding without token", project, session)
 		}
+	} else {
+		log.Printf("pushSessionRepo: failed to read session for token attach: %v", err)
 	}
 
 	log.Printf("pushSessionRepo: proxy push project=%s session=%s repoIndex=%d repoPath=%s endpoint=%s", project, session, body.RepoIndex, resolvedRepoPath, endpoint+"/content/github/push")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		// Log actual error for debugging, but return generic message to avoid leaking internal details
+		log.Printf("Bad gateway error: %v", err)
+		c.JSON(http.StatusBadGateway, gin.H{"error": "Service temporarily unavailable"})
 		return
 	}
 	defer resp.Body.Close()
@@ -2657,12 +2760,13 @@ func AbandonSessionRepo(c *gin.Context) {
 
 	// Try temp service first (for completed sessions), then regular service
 	serviceName := fmt.Sprintf("temp-content-%s", session)
-	reqK8s, _ := GetK8sClientsForRequest(c)
-	if reqK8s != nil {
-		if _, err := reqK8s.CoreV1().Services(project).Get(c.Request.Context(), serviceName, v1.GetOptions{}); err != nil {
-			serviceName = fmt.Sprintf("ambient-content-%s", session)
-		}
-	} else {
+	k8sClt, _ := GetK8sClientsForRequest(c)
+	if k8sClt == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
+	if _, err := k8sClt.CoreV1().Services(project).Get(c.Request.Context(), serviceName, v1.GetOptions{}); err != nil {
 		serviceName = fmt.Sprintf("ambient-content-%s", session)
 	}
 	endpoint := fmt.Sprintf("http://%s.%s.svc:8080", serviceName, project)
@@ -2690,7 +2794,9 @@ func AbandonSessionRepo(c *gin.Context) {
 	log.Printf("abandonSessionRepo: proxy abandon project=%s session=%s repoIndex=%d repoPath=%s", project, session, body.RepoIndex, repoPath)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		// Log actual error for debugging, but return generic message to avoid leaking internal details
+		log.Printf("Bad gateway error: %v", err)
+		c.JSON(http.StatusBadGateway, gin.H{"error": "Service temporarily unavailable"})
 		return
 	}
 	defer resp.Body.Close()
@@ -2721,12 +2827,13 @@ func DiffSessionRepo(c *gin.Context) {
 
 	// Try temp service first (for completed sessions), then regular service
 	serviceName := fmt.Sprintf("temp-content-%s", session)
-	reqK8s, _ := GetK8sClientsForRequest(c)
-	if reqK8s != nil {
-		if _, err := reqK8s.CoreV1().Services(project).Get(c.Request.Context(), serviceName, v1.GetOptions{}); err != nil {
-			serviceName = fmt.Sprintf("ambient-content-%s", session)
-		}
-	} else {
+	k8sClt, _ := GetK8sClientsForRequest(c)
+	if k8sClt == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
+	if _, err := k8sClt.CoreV1().Services(project).Get(c.Request.Context(), serviceName, v1.GetOptions{}); err != nil {
 		serviceName = fmt.Sprintf("ambient-content-%s", session)
 	}
 	endpoint := fmt.Sprintf("http://%s.%s.svc:8080", serviceName, project)
@@ -2773,12 +2880,13 @@ func GetGitStatus(c *gin.Context) {
 
 	// Get content service endpoint
 	serviceName := fmt.Sprintf("temp-content-%s", session)
-	reqK8s, _ := GetK8sClientsForRequest(c)
-	if reqK8s != nil {
-		if _, err := reqK8s.CoreV1().Services(project).Get(c.Request.Context(), serviceName, v1.GetOptions{}); err != nil {
-			serviceName = fmt.Sprintf("ambient-content-%s", session)
-		}
-	} else {
+	k8sClt, _ := GetK8sClientsForRequest(c)
+	if k8sClt == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
+	if _, err := k8sClt.CoreV1().Services(project).Get(c.Request.Context(), serviceName, v1.GetOptions{}); err != nil {
 		serviceName = fmt.Sprintf("ambient-content-%s", session)
 	}
 
@@ -2806,7 +2914,12 @@ func GetGitStatus(c *gin.Context) {
 func ConfigureGitRemote(c *gin.Context) {
 	project := c.Param("projectName")
 	sessionName := c.Param("sessionName")
-	_, reqDyn := GetK8sClientsForRequest(c)
+	_, k8sDyn := GetK8sClientsForRequest(c)
+	if k8sDyn == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
 
 	var body struct {
 		Path      string `json:"path" binding:"required"`
@@ -2828,12 +2941,13 @@ func ConfigureGitRemote(c *gin.Context) {
 
 	// Get content service endpoint
 	serviceName := fmt.Sprintf("temp-content-%s", sessionName)
-	reqK8s, _ := GetK8sClientsForRequest(c)
-	if reqK8s != nil {
-		if _, err := reqK8s.CoreV1().Services(project).Get(c.Request.Context(), serviceName, v1.GetOptions{}); err != nil {
-			serviceName = fmt.Sprintf("ambient-content-%s", sessionName)
-		}
-	} else {
+	k8sClt, _ := GetK8sClientsForRequest(c)
+	if k8sClt == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
+	if _, err := k8sClt.CoreV1().Services(project).Get(c.Request.Context(), serviceName, v1.GetOptions{}); err != nil {
 		serviceName = fmt.Sprintf("ambient-content-%s", sessionName)
 	}
 
@@ -2852,8 +2966,8 @@ func ConfigureGitRemote(c *gin.Context) {
 	}
 
 	// Get and forward GitHub token for authenticated remote URL
-	if reqK8s != nil && reqDyn != nil && GetGitHubToken != nil {
-		if token, err := GetGitHubToken(c.Request.Context(), reqK8s, reqDyn, project, ""); err == nil && token != "" {
+	if GetGitHubToken != nil {
+		if token, err := GetGitHubToken(c.Request.Context(), k8sClt, k8sDyn, project, ""); err == nil && token != "" {
 			req.Header.Set("X-GitHub-Token", token)
 			log.Printf("Forwarding GitHub token for remote configuration")
 		}
@@ -2870,20 +2984,25 @@ func ConfigureGitRemote(c *gin.Context) {
 	if resp.StatusCode == http.StatusOK {
 		// Persist remote config in annotations (supports multiple directories)
 		gvr := GetAgenticSessionV1Alpha1Resource()
-		item, err := reqDyn.Resource(gvr).Namespace(project).Get(c.Request.Context(), sessionName, v1.GetOptions{})
+		item, err := k8sDyn.Resource(gvr).Namespace(project).Get(c.Request.Context(), sessionName, v1.GetOptions{})
 		if err == nil {
-			metadata := item.Object["metadata"].(map[string]interface{})
-			if metadata["annotations"] == nil {
-				metadata["annotations"] = make(map[string]interface{})
+			metadata, _, err := unstructured.NestedMap(item.Object, "metadata")
+			if err != nil || metadata == nil {
+				metadata = map[string]interface{}{}
 			}
-			anns := metadata["annotations"].(map[string]interface{})
+			anns, _, err := unstructured.NestedMap(metadata, "annotations")
+			if err != nil || anns == nil {
+				anns = map[string]interface{}{}
+			}
 
 			// Derive safe annotation key from path (use :: as separator to avoid conflicts with hyphens in path)
 			annotationKey := strings.ReplaceAll(body.Path, "/", "::")
 			anns[fmt.Sprintf("ambient-code.io/remote-%s-url", annotationKey)] = body.RemoteURL
 			anns[fmt.Sprintf("ambient-code.io/remote-%s-branch", annotationKey)] = body.Branch
+			_ = unstructured.SetNestedMap(metadata, anns, "annotations")
+			_ = unstructured.SetNestedMap(item.Object, metadata, "metadata")
 
-			_, err = reqDyn.Resource(gvr).Namespace(project).Update(c.Request.Context(), item, v1.UpdateOptions{})
+			_, err = k8sDyn.Resource(gvr).Namespace(project).Update(c.Request.Context(), item, v1.UpdateOptions{})
 			if err != nil {
 				log.Printf("Warning: Failed to persist remote config to annotations: %v", err)
 			} else {
@@ -2924,12 +3043,13 @@ func SynchronizeGit(c *gin.Context) {
 
 	// Get content service endpoint
 	serviceName := fmt.Sprintf("temp-content-%s", session)
-	reqK8s, _ := GetK8sClientsForRequest(c)
-	if reqK8s != nil {
-		if _, err := reqK8s.CoreV1().Services(project).Get(c.Request.Context(), serviceName, v1.GetOptions{}); err != nil {
-			serviceName = fmt.Sprintf("ambient-content-%s", session)
-		}
-	} else {
+	k8sClt, _ := GetK8sClientsForRequest(c)
+	if k8sClt == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
+	if _, err := k8sClt.CoreV1().Services(project).Get(c.Request.Context(), serviceName, v1.GetOptions{}); err != nil {
 		serviceName = fmt.Sprintf("ambient-content-%s", session)
 	}
 
@@ -2976,12 +3096,13 @@ func GetGitMergeStatus(c *gin.Context) {
 	absPath := fmt.Sprintf("/sessions/%s/workspace/%s", session, relativePath)
 
 	serviceName := fmt.Sprintf("temp-content-%s", session)
-	reqK8s, _ := GetK8sClientsForRequest(c)
-	if reqK8s != nil {
-		if _, err := reqK8s.CoreV1().Services(project).Get(c.Request.Context(), serviceName, v1.GetOptions{}); err != nil {
-			serviceName = fmt.Sprintf("ambient-content-%s", session)
-		}
-	} else {
+	k8sClt, _ := GetK8sClientsForRequest(c)
+	if k8sClt == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
+	if _, err := k8sClt.CoreV1().Services(project).Get(c.Request.Context(), serviceName, v1.GetOptions{}); err != nil {
 		serviceName = fmt.Sprintf("ambient-content-%s", session)
 	}
 
@@ -3030,12 +3151,13 @@ func GitPullSession(c *gin.Context) {
 	absPath := fmt.Sprintf("/sessions/%s/workspace/%s", session, body.Path)
 
 	serviceName := fmt.Sprintf("temp-content-%s", session)
-	reqK8s, _ := GetK8sClientsForRequest(c)
-	if reqK8s != nil {
-		if _, err := reqK8s.CoreV1().Services(project).Get(c.Request.Context(), serviceName, v1.GetOptions{}); err != nil {
-			serviceName = fmt.Sprintf("ambient-content-%s", session)
-		}
-	} else {
+	k8sClt, _ := GetK8sClientsForRequest(c)
+	if k8sClt == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
+	if _, err := k8sClt.CoreV1().Services(project).Get(c.Request.Context(), serviceName, v1.GetOptions{}); err != nil {
 		serviceName = fmt.Sprintf("ambient-content-%s", session)
 	}
 
@@ -3093,12 +3215,13 @@ func GitPushSession(c *gin.Context) {
 	absPath := fmt.Sprintf("/sessions/%s/workspace/%s", session, body.Path)
 
 	serviceName := fmt.Sprintf("temp-content-%s", session)
-	reqK8s, _ := GetK8sClientsForRequest(c)
-	if reqK8s != nil {
-		if _, err := reqK8s.CoreV1().Services(project).Get(c.Request.Context(), serviceName, v1.GetOptions{}); err != nil {
-			serviceName = fmt.Sprintf("ambient-content-%s", session)
-		}
-	} else {
+	k8sClt, _ := GetK8sClientsForRequest(c)
+	if k8sClt == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
+	if _, err := k8sClt.CoreV1().Services(project).Get(c.Request.Context(), serviceName, v1.GetOptions{}); err != nil {
 		serviceName = fmt.Sprintf("ambient-content-%s", session)
 	}
 
@@ -3150,12 +3273,13 @@ func GitCreateBranchSession(c *gin.Context) {
 	absPath := fmt.Sprintf("/sessions/%s/workspace/%s", session, body.Path)
 
 	serviceName := fmt.Sprintf("temp-content-%s", session)
-	reqK8s, _ := GetK8sClientsForRequest(c)
-	if reqK8s != nil {
-		if _, err := reqK8s.CoreV1().Services(project).Get(c.Request.Context(), serviceName, v1.GetOptions{}); err != nil {
-			serviceName = fmt.Sprintf("ambient-content-%s", session)
-		}
-	} else {
+	k8sClt, _ := GetK8sClientsForRequest(c)
+	if k8sClt == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
+	if _, err := k8sClt.CoreV1().Services(project).Get(c.Request.Context(), serviceName, v1.GetOptions{}); err != nil {
 		serviceName = fmt.Sprintf("ambient-content-%s", session)
 	}
 
@@ -3197,12 +3321,13 @@ func GitListBranchesSession(c *gin.Context) {
 	absPath := fmt.Sprintf("/sessions/%s/workspace/%s", session, relativePath)
 
 	serviceName := fmt.Sprintf("temp-content-%s", session)
-	reqK8s, _ := GetK8sClientsForRequest(c)
-	if reqK8s != nil {
-		if _, err := reqK8s.CoreV1().Services(project).Get(c.Request.Context(), serviceName, v1.GetOptions{}); err != nil {
-			serviceName = fmt.Sprintf("ambient-content-%s", session)
-		}
-	} else {
+	k8sClt, _ := GetK8sClientsForRequest(c)
+	if k8sClt == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
+	if _, err := k8sClt.CoreV1().Services(project).Get(c.Request.Context(), serviceName, v1.GetOptions{}); err != nil {
 		serviceName = fmt.Sprintf("ambient-content-%s", session)
 	}
 

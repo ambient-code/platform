@@ -19,9 +19,14 @@ import (
 // ListNamespaceSecrets handles GET /api/projects/:projectName/secrets -> { items: [{name, createdAt}] }
 func ListNamespaceSecrets(c *gin.Context) {
 	projectName := c.Param("projectName")
-	reqK8s, _ := GetK8sClientsForRequest(c)
+	k8sClient, _ := GetK8sClientsForRequest(c)
+	if k8sClient == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
 
-	list, err := reqK8s.CoreV1().Secrets(projectName).List(c.Request.Context(), v1.ListOptions{})
+	list, err := k8sClient.CoreV1().Secrets(projectName).List(c.Request.Context(), v1.ListOptions{})
 	if err != nil {
 		log.Printf("Failed to list secrets in %s: %v", projectName, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list secrets"})
@@ -58,8 +63,8 @@ func ListNamespaceSecrets(c *gin.Context) {
 // ListRunnerSecrets handles GET /api/projects/:projectName/runner-secrets -> { data: { key: value } }
 func ListRunnerSecrets(c *gin.Context) {
 	projectName := c.Param("projectName")
-	reqK8s, _ := GetK8sClientsForRequest(c)
-	if reqK8s == nil {
+	k8sClient, _ := GetK8sClientsForRequest(c)
+	if k8sClient == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 		c.Abort()
 		return
@@ -67,7 +72,7 @@ func ListRunnerSecrets(c *gin.Context) {
 
 	const secretName = "ambient-runner-secrets"
 
-	sec, err := reqK8s.CoreV1().Secrets(projectName).Get(c.Request.Context(), secretName, v1.GetOptions{})
+	sec, err := k8sClient.CoreV1().Secrets(projectName).Get(c.Request.Context(), secretName, v1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
 			c.JSON(http.StatusOK, gin.H{"data": map[string]string{}})
@@ -88,8 +93,8 @@ func ListRunnerSecrets(c *gin.Context) {
 // UpdateRunnerSecrets handles PUT /api/projects/:projectName/runner-secrets { data: { key: value } }
 func UpdateRunnerSecrets(c *gin.Context) {
 	projectName := c.Param("projectName")
-	reqK8s, _ := GetK8sClientsForRequest(c)
-	if reqK8s == nil {
+	k8sClient, _ := GetK8sClientsForRequest(c)
+	if k8sClient == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 		c.Abort()
 		return
@@ -119,7 +124,7 @@ func UpdateRunnerSecrets(c *gin.Context) {
 
 	const secretName = "ambient-runner-secrets"
 
-	sec, err := reqK8s.CoreV1().Secrets(projectName).Get(c.Request.Context(), secretName, v1.GetOptions{})
+	sec, err := k8sClient.CoreV1().Secrets(projectName).Get(c.Request.Context(), secretName, v1.GetOptions{})
 	if errors.IsNotFound(err) {
 		// Create new Secret
 		newSec := &corev1.Secret{
@@ -134,7 +139,7 @@ func UpdateRunnerSecrets(c *gin.Context) {
 			Type:       corev1.SecretTypeOpaque,
 			StringData: req.Data,
 		}
-		if _, err := reqK8s.CoreV1().Secrets(projectName).Create(c.Request.Context(), newSec, v1.CreateOptions{}); err != nil {
+		if _, err := k8sClient.CoreV1().Secrets(projectName).Create(c.Request.Context(), newSec, v1.CreateOptions{}); err != nil {
 			log.Printf("Failed to create Secret %s/%s: %v", projectName, secretName, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create runner secrets"})
 			return
@@ -150,7 +155,7 @@ func UpdateRunnerSecrets(c *gin.Context) {
 		for k, v := range req.Data {
 			sec.Data[k] = []byte(v)
 		}
-		if _, err := reqK8s.CoreV1().Secrets(projectName).Update(c.Request.Context(), sec, v1.UpdateOptions{}); err != nil {
+		if _, err := k8sClient.CoreV1().Secrets(projectName).Update(c.Request.Context(), sec, v1.UpdateOptions{}); err != nil {
 			log.Printf("Failed to update Secret %s/%s: %v", projectName, secretName, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update runner secrets"})
 			return
@@ -167,8 +172,8 @@ func UpdateRunnerSecrets(c *gin.Context) {
 // ListIntegrationSecrets handles GET /api/projects/:projectName/integration-secrets -> { data: { key: value } }
 func ListIntegrationSecrets(c *gin.Context) {
 	projectName := c.Param("projectName")
-	reqK8s, _ := GetK8sClientsForRequest(c)
-	if reqK8s == nil {
+	k8sClient, _ := GetK8sClientsForRequest(c)
+	if k8sClient == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 		c.Abort()
 		return
@@ -176,7 +181,7 @@ func ListIntegrationSecrets(c *gin.Context) {
 
 	const secretName = "ambient-non-vertex-integrations"
 
-	sec, err := reqK8s.CoreV1().Secrets(projectName).Get(c.Request.Context(), secretName, v1.GetOptions{})
+	sec, err := k8sClient.CoreV1().Secrets(projectName).Get(c.Request.Context(), secretName, v1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
 			c.JSON(http.StatusOK, gin.H{"data": map[string]string{}})
@@ -197,8 +202,8 @@ func ListIntegrationSecrets(c *gin.Context) {
 // UpdateIntegrationSecrets handles PUT /api/projects/:projectName/integration-secrets { data: { key: value } }
 func UpdateIntegrationSecrets(c *gin.Context) {
 	projectName := c.Param("projectName")
-	reqK8s, _ := GetK8sClientsForRequest(c)
-	if reqK8s == nil {
+	k8sClient, _ := GetK8sClientsForRequest(c)
+	if k8sClient == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 		c.Abort()
 		return
@@ -214,7 +219,7 @@ func UpdateIntegrationSecrets(c *gin.Context) {
 
 	const secretName = "ambient-non-vertex-integrations"
 
-	sec, err := reqK8s.CoreV1().Secrets(projectName).Get(c.Request.Context(), secretName, v1.GetOptions{})
+	sec, err := k8sClient.CoreV1().Secrets(projectName).Get(c.Request.Context(), secretName, v1.GetOptions{})
 	if errors.IsNotFound(err) {
 		newSec := &corev1.Secret{
 			ObjectMeta: v1.ObjectMeta{
@@ -228,7 +233,7 @@ func UpdateIntegrationSecrets(c *gin.Context) {
 			Type:       corev1.SecretTypeOpaque,
 			StringData: req.Data,
 		}
-		if _, err := reqK8s.CoreV1().Secrets(projectName).Create(c.Request.Context(), newSec, v1.CreateOptions{}); err != nil {
+		if _, err := k8sClient.CoreV1().Secrets(projectName).Create(c.Request.Context(), newSec, v1.CreateOptions{}); err != nil {
 			log.Printf("Failed to create Secret %s/%s: %v", projectName, secretName, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create integration secrets"})
 			return
@@ -243,7 +248,7 @@ func UpdateIntegrationSecrets(c *gin.Context) {
 		for k, v := range req.Data {
 			sec.Data[k] = []byte(v)
 		}
-		if _, err := reqK8s.CoreV1().Secrets(projectName).Update(c.Request.Context(), sec, v1.UpdateOptions{}); err != nil {
+		if _, err := k8sClient.CoreV1().Secrets(projectName).Update(c.Request.Context(), sec, v1.UpdateOptions{}); err != nil {
 			log.Printf("Failed to update Secret %s/%s: %v", projectName, secretName, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update integration secrets"})
 			return

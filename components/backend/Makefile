@@ -18,20 +18,61 @@ clean: ## Clean build artifacts
 # Test targets
 test: test-unit test-contract ## Run all tests (excluding integration tests)
 
-test-unit: ## Run unit tests
-	go test ./tests/unit/... -v
+test-unit: ## Run unit tests using Ginkgo
+	@echo "Running unit tests with Ginkgo..."
+	ginkgo run --label-filter="unit" --junit-report=reports/junit.xml --json-report=reports/results.json test/unit
+
+test-unit-go: ## Run unit tests with go test (alternative)
+	go test -v -tags=test ./handlers ./types ./git -timeout=5m
 
 test-contract: ## Run contract tests
 	go test ./tests/contract/... -v
 
 test-integration: ## Run integration tests (requires Kubernetes cluster)
 	@echo "Running integration tests (requires Kubernetes cluster access)..."
-	go test ./tests/integration/... -v -timeout=5m
+	USE_REAL_CLUSTER=true CLEANUP_RESOURCES=true ginkgo run --label-filter="integration" --timeout=10m
 
 test-integration-short: ## Run integration tests with short timeout
 	go test ./tests/integration/... -v -short
 
 test-all: test test-integration ## Run all tests including integration tests
+
+# Ginkgo-specific test targets
+test-ginkgo: ## Run all tests using Ginkgo framework
+	@echo "Running all tests with Ginkgo..."
+	ginkgo run --junit-report=reports/junit.xml --json-report=reports/results.json
+
+test-ginkgo-parallel: ## Run tests in parallel
+	@echo "Running tests in parallel..."
+	ginkgo run -p --junit-report=reports/junit.xml --json-report=reports/results.json
+
+test-ginkgo-verbose: ## Run tests with verbose output
+	@echo "Running tests with verbose output..."
+	ginkgo run -v --junit-report=reports/junit.xml --json-report=reports/results.json
+
+test-handlers: ## Run handler tests only
+	@echo "Running handler tests..."
+	ginkgo run --tags=test --label-filter="handlers" -v
+
+test-types: ## Run type tests only
+	@echo "Running type tests..."
+	ginkgo run --tags=test --label-filter="types" -v
+
+test-git: ## Run git operation tests only
+	@echo "Running git operation tests..."
+	ginkgo run --tags=test --label-filter="git" -v
+
+test-fast: ## Run tests excluding slow ones
+	@echo "Running fast tests only..."
+	SKIP_SLOW_TESTS=true ginkgo run --tags=test --label-filter="!slow"
+
+test-auth: ## Run authentication and authorization tests
+	@echo "Running auth tests..."
+	ginkgo run --tags=test --label-filter="auth" -v
+
+test-focus: ## Run specific test by pattern (usage: make test-focus FOCUS="test pattern")
+	@echo "Running focused tests: $(FOCUS)"
+	ginkgo run --focus="$(FOCUS)" -v
 
 # Test with specific configuration
 test-integration-local: ## Run integration tests with local configuration
@@ -88,7 +129,10 @@ vet: ## Run go vet
 	go vet ./...
 
 lint: ## Run golangci-lint (requires golangci-lint to be installed)
-	golangci-lint run
+	# Lint production build
+	golangci-lint run --timeout=5m
+	# Lint test build (handlers unit tests use -tags=test for test-only hooks)
+	golangci-lint run --timeout=5m --build-tags=test
 
 # Dependency management
 deps: ## Download dependencies
@@ -106,6 +150,7 @@ install-tools: ## Install development tools
 	@echo "Installing development tools..."
 	go install github.com/cosmtrek/air@latest
 	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	go install github.com/onsi/ginkgo/v2/ginkgo@latest
 
 # Kubernetes-specific targets for integration testing
 k8s-setup: ## Setup local Kubernetes for testing (requires kubectl and kind)

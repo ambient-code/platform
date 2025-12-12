@@ -89,6 +89,15 @@ jobs:
           working-directory: components/backend
           args: --timeout=5m
 
+      # The backend unit tests require -tags=test (to compile test-only hooks used by handlers tests).
+      # We lint both production build (default) and test build (with tags) to avoid hiding issues.
+      - name: Run golangci-lint (test build tags)
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: latest
+          working-directory: components/backend
+          args: --timeout=5m --build-tags=test
+
   lint-operator:
     runs-on: ubuntu-latest
     needs: detect-go-changes

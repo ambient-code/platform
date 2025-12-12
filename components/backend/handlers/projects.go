@@ -32,7 +32,7 @@ var (
 	GetOpenShiftProjectResource func() schema.GroupVersionResource
 	// K8sClientProjects is the backend service account client used for namespace operations
 	// that require elevated permissions (e.g., creating namespaces, assigning roles)
-	K8sClientProjects *kubernetes.Clientset
+	K8sClientProjects kubernetes.Interface
 	// DynamicClientProjects is the backend SA dynamic client for OpenShift Project operations
 	DynamicClientProjects dynamic.Interface
 )
@@ -160,9 +160,8 @@ const parallelSSARWorkerCount = 10
 // Supports pagination via limit/offset and search filtering.
 // SSAR checks are performed in parallel for improved performance.
 func ListProjects(c *gin.Context) {
-	reqK8s, _ := GetK8sClientsForRequest(c)
-
-	if reqK8s == nil {
+	k8sClt, _ := GetK8sClientsForRequest(c)
+	if k8sClt == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 		return
 	}
@@ -199,7 +198,7 @@ func ListProjects(c *gin.Context) {
 	filteredNamespaces := filterNamespacesBySearch(nsList.Items, params.Search, isOpenShift)
 
 	// Perform parallel SSAR checks using worker pool
-	accessibleProjects := performParallelSSARChecks(ctx, reqK8s, filteredNamespaces, isOpenShift)
+	accessibleProjects := performParallelSSARChecks(ctx, k8sClt, filteredNamespaces, isOpenShift)
 
 	// Sort by creation timestamp (newest first)
 	sortProjectsByCreationTime(accessibleProjects)
@@ -252,7 +251,7 @@ func filterNamespacesBySearch(namespaces []corev1.Namespace, search string, isOp
 }
 
 // performParallelSSARChecks performs SSAR checks in parallel using a worker pool
-func performParallelSSARChecks(ctx context.Context, reqK8s *kubernetes.Clientset, namespaces []corev1.Namespace, isOpenShift bool) []types.AmbientProject {
+func performParallelSSARChecks(ctx context.Context, reqK8s kubernetes.Interface, namespaces []corev1.Namespace, isOpenShift bool) []types.AmbientProject {
 	if len(namespaces) == 0 {
 		return []types.AmbientProject{}
 	}
@@ -405,23 +404,22 @@ func projectFromNamespace(ns *corev1.Namespace, isOpenShift bool) types.AmbientP
 // The ClusterRole is namespace-scoped via the RoleBinding, giving the user admin access
 // only to their specific project namespace.
 func CreateProject(c *gin.Context) {
-	reqK8s, _ := GetK8sClientsForRequest(c)
-
-	// Validate that user authentication succeeded
-	if reqK8s == nil {
-		log.Printf("CreateProject: Invalid or missing authentication token")
+	k8Clt, _ := GetK8sClientsForRequest(c)
+	if k8Clt == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 		return
 	}
 
 	var req types.CreateProjectRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		// Return validation error details for 400 Bad Request (user-facing validation)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	// Validate project name
 	if err := validateProjectName(req.Name); err != nil {
+		// Validation errors can be specific for 400 Bad Request
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -441,7 +439,8 @@ func CreateProject(c *gin.Context) {
 		ObjectMeta: v1.ObjectMeta{
 			Name: req.Name,
 			Labels: map[string]string{
-				"ambient-code.io/managed": "true",
+				"ambient-code.io/managed":      "true",
+				"app.kubernetes.io/managed-by": "ambient-code",
 			},
 			Annotations: map[string]string{},
 		},
@@ -631,9 +630,12 @@ func CreateProject(c *gin.Context) {
 // Returns Namespace details with OpenShift annotations if on OpenShift
 func GetProject(c *gin.Context) {
 	projectName := c.Param("projectName")
-	reqK8s, _ := GetK8sClientsForRequest(c)
-
-	if reqK8s == nil {
+	if projectName == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Project name is required"})
+		return
+	}
+	k8sClt, _ := GetK8sClientsForRequest(c)
+	if k8sClt == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 		return
 	}
@@ -668,7 +670,7 @@ func GetProject(c *gin.Context) {
 	}
 
 	// Verify user can view the project (GET projectsettings)
-	canView, err := checkUserCanViewProject(reqK8s, projectName)
+	canView, err := checkUserCanViewProject(k8sClt, projectName)
 	if err != nil {
 		log.Printf("GetProject: Failed to check access for %s: %v", projectName, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify permissions"})
@@ -690,9 +692,8 @@ func GetProject(c *gin.Context) {
 // On Kubernetes: No-op (k8s namespaces don't have display metadata)
 func UpdateProject(c *gin.Context) {
 	projectName := c.Param("projectName")
-	reqK8s, _ := GetK8sClientsForRequest(c)
-
-	if reqK8s == nil {
+	k8sClt, _ := GetK8sClientsForRequest(c)
+	if k8sClt == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 		return
 	}
@@ -742,7 +743,7 @@ func UpdateProject(c *gin.Context) {
 	}
 
 	// Verify user can modify the project (UPDATE projectsettings)
-	canModify, err := checkUserCanModifyProject(reqK8s, projectName)
+	canModify, err := checkUserCanModifyProject(k8sClt, projectName)
 	if err != nil {
 		log.Printf("UpdateProject: Failed to check access for %s: %v", projectName, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify permissions"})
@@ -797,9 +798,12 @@ func UpdateProject(c *gin.Context) {
 // Namespace deletion is cluster-scoped, so regular users can't delete directly
 func DeleteProject(c *gin.Context) {
 	projectName := c.Param("projectName")
-	reqK8s, _ := GetK8sClientsForRequest(c)
-
-	if reqK8s == nil {
+	if projectName == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Project name is required"})
+		return
+	}
+	k8sClt, _ := GetK8sClientsForRequest(c)
+	if k8sClt == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 		return
 	}
@@ -832,7 +836,7 @@ func DeleteProject(c *gin.Context) {
 	}
 
 	// Verify user can modify the project (UPDATE projectsettings)
-	canModify, err := checkUserCanModifyProject(reqK8s, projectName)
+	canModify, err := checkUserCanModifyProject(k8sClt, projectName)
 	if err != nil {
 		log.Printf("DeleteProject: Failed to check access for %s: %v", projectName, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify permissions"})
@@ -861,11 +865,12 @@ func DeleteProject(c *gin.Context) {
 	}
 
 	c.Status(http.StatusNoContent)
+	c.Writer.WriteHeaderNow()
 }
 
 // checkUserCanViewProject checks if user can GET projectsettings in the namespace
 // This determines if they can view the project/namespace details
-func checkUserCanViewProject(userClient *kubernetes.Clientset, namespace string) (bool, error) {
+func checkUserCanViewProject(userClient kubernetes.Interface, namespace string) (bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
@@ -890,7 +895,7 @@ func checkUserCanViewProject(userClient *kubernetes.Clientset, namespace string)
 
 // checkUserCanModifyProject checks if user can UPDATE projectsettings in the namespace
 // This determines if they can update or delete the project/namespace
-func checkUserCanModifyProject(userClient *kubernetes.Clientset, namespace string) (bool, error) {
+func checkUserCanModifyProject(userClient kubernetes.Interface, namespace string) (bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
@@ -917,7 +922,11 @@ func checkUserCanModifyProject(userClient *kubernetes.Clientset, namespace strin
 // This is the proper Kubernetes-native way - lets RBAC engine determine access from ALL sources
 // (RoleBindings, ClusterRoleBindings, groups, etc.)
 // Deprecated: Use checkUserCanViewProject or checkUserCanModifyProject instead
-func checkUserCanAccessNamespace(userClient *kubernetes.Clientset, namespace string) (bool, error) {
+func checkUserCanAccessNamespace(userClient kubernetes.Interface, namespace string) (bool, error) {
+	// Safety check: ensure client is not nil
+	if userClient == nil {
+		return false, fmt.Errorf("kubernetes client is nil")
+	}
 	// For backward compatibility, check if user can list agenticsessions
 	return checkUserCanViewProject(userClient, namespace)
 }

@@ -19,15 +19,44 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 )
 
 // Package-level variables for GitHub auth (set from main package)
 var (
-	K8sClient          *kubernetes.Clientset
+	K8sClient          kubernetes.Interface
 	Namespace          string
 	GithubTokenManager GithubTokenManagerInterface
+
+	// GetGitHubTokenRepo is a dependency-injectable function for getting GitHub tokens in repo operations
+	// Tests can override this to provide mock implementations
+	// Signature: func(context.Context, kubernetes.Interface, dynamic.Interface, string, string) (string, error)
+	GetGitHubTokenRepo func(context.Context, kubernetes.Interface, dynamic.Interface, string, string) (string, error)
+
+	// DoGitHubRequest is a dependency-injectable function for making GitHub API requests
+	// Tests can override this to provide mock implementations
+	// Signature: func(context.Context, string, string, string, string, io.Reader) (*http.Response, error)
+	// If nil, falls back to doGitHubRequest
+	DoGitHubRequest func(context.Context, string, string, string, string, io.Reader) (*http.Response, error)
 )
+
+// WrapGitHubTokenForRepo wraps git.GetGitHubToken to accept kubernetes.Interface instead of *kubernetes.Clientset
+// This allows dependency injection while maintaining compatibility with git.GetGitHubToken
+func WrapGitHubTokenForRepo(originalFunc func(context.Context, *kubernetes.Clientset, dynamic.Interface, string, string) (string, error)) func(context.Context, kubernetes.Interface, dynamic.Interface, string, string) (string, error) {
+	return func(ctx context.Context, k8s kubernetes.Interface, dyn dynamic.Interface, project, userID string) (string, error) {
+		// Type assert to *kubernetes.Clientset for git.GetGitHubToken
+		var k8sClient *kubernetes.Clientset
+		if k8s != nil {
+			if concrete, ok := k8s.(*kubernetes.Clientset); ok {
+				k8sClient = concrete
+			} else {
+				return "", fmt.Errorf("kubernetes client is not a *Clientset (got %T)", k8s)
+			}
+		}
+		return originalFunc(ctx, k8sClient, dyn, project, userID)
+	}
+}
 
 // GithubTokenManagerInterface defines the interface for GitHub token management
 type GithubTokenManagerInterface interface {
