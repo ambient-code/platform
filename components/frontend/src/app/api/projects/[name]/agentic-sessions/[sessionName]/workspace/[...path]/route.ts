@@ -33,4 +33,19 @@ export async function PUT(
   return new Response(respBody, { status: resp.status, headers: { 'Content-Type': 'application/json' } })
 }
 
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ name: string; sessionName: string; path: string[] }> },
+) {
+  const { name, sessionName, path } = await params
+  const headers = await buildForwardHeadersAsync(request)
+  const rel = path.join('/')
+  const resp = await fetch(`${BACKEND_URL}/projects/${encodeURIComponent(name)}/agentic-sessions/${encodeURIComponent(sessionName)}/workspace/${encodeURIComponent(rel)}`, {
+    method: 'DELETE',
+    headers,
+  })
+  const respBody = await resp.text()
+  return new Response(respBody, { status: resp.status, headers: { 'Content-Type': 'application/json' } })
+}
+
 

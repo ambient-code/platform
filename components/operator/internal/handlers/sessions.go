@@ -292,12 +292,15 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 	}
 
 	// === TEMP CONTENT POD RECONCILIATION ===
-	// Manage temporary content pods for workspace access on stopped sessions
+	// Manage temporary content pods for workspace access when runner is not active
 
 	tempContentRequested := annotations != nil && annotations[tempContentRequestedAnnotation] == "true"
 	tempPodName := fmt.Sprintf("temp-content-%s", name)
 
-	// Only manage temp pods for stopped/completed/failed sessions
+	// Manage temp pods for:
+	// - Pending sessions (for pre-upload before runner starts)
+	// - Stopped/Completed/Failed sessions (for post-session workspace access)
+	// Do NOT create temp pods for Running/Creating sessions (they have ambient-content service)
 	if phase == "Stopped" || phase == "Completed" || phase == "Failed" {
 		if tempContentRequested {
 			// User wants workspace access - ensure temp pod exists
@@ -328,6 +331,33 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 			}
 		}
 		return nil
+	}
+
+	// For Pending sessions: allow temp pod creation for file uploads, but don't return early
+	// This ensures Job creation can proceed when user starts the session
+	if phase == "Pending" {
+		if tempContentRequested {
+			// User wants to upload files - ensure temp pod exists
+			if err := reconcileTempContentPodWithPatch(sessionNamespace, name, tempPodName, currentObj, statusPatch); err != nil {
+				log.Printf("[TempPod] Failed to reconcile temp pod for Pending session: %v", err)
+			}
+			// Apply status changes but CONTINUE to allow Job creation logic below
+			if statusPatch.HasChanges() {
+				if err := statusPatch.Apply(); err != nil {
+					log.Printf("[TempPod] Warning: failed to apply status patch: %v", err)
+				}
+			}
+			// Do NOT return - continue to Job creation logic
+		} else {
+			// Temp pod not requested - delete if it exists
+			_, err := config.K8sClient.CoreV1().Pods(sessionNamespace).Get(context.TODO(), tempPodName, v1.GetOptions{})
+			if err == nil {
+				log.Printf("[TempPod] Deleting temp pod from Pending session: %s", tempPodName)
+				if err := config.K8sClient.CoreV1().Pods(sessionNamespace).Delete(context.TODO(), tempPodName, v1.DeleteOptions{}); err != nil && !errors.IsNotFound(err) {
+					log.Printf("[TempPod] Failed to delete temp pod: %v", err)
+				}
+			}
+		}
 	}
 
 	// === CONTINUE WITH PHASE-BASED RECONCILIATION ===
@@ -770,6 +800,44 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 		}
 	} else {
 		log.Printf("Langfuse disabled, skipping secret copy")
+	}
+
+	// CRITICAL: Delete temp content pod before creating Job to avoid PVC mount conflict
+	// The PVC is ReadWriteOnce, so only one pod can mount it at a time
+	tempPodName = fmt.Sprintf("temp-content-%s", name)
+	if _, err := config.K8sClient.CoreV1().Pods(sessionNamespace).Get(context.TODO(), tempPodName, v1.GetOptions{}); err == nil {
+		log.Printf("[PVCConflict] Deleting temp pod %s before creating Job (ReadWriteOnce PVC)", tempPodName)
+
+		// Force immediate termination with zero grace period
+		gracePeriod := int64(0)
+		deleteOptions := v1.DeleteOptions{
+			GracePeriodSeconds: &gracePeriod,
+		}
+		if err := config.K8sClient.CoreV1().Pods(sessionNamespace).Delete(context.TODO(), tempPodName, deleteOptions); err != nil && !errors.IsNotFound(err) {
+			log.Printf("[PVCConflict] Warning: failed to delete temp pod: %v", err)
+		}
+
+		// Wait for temp pod to fully terminate to prevent PVC mount conflicts
+		// This is critical because ReadWriteOnce PVCs cannot be mounted by multiple pods
+		// With gracePeriod=0, this should complete in 1-3 seconds
+		log.Printf("[PVCConflict] Waiting for temp pod %s to fully terminate...", tempPodName)
+		maxWaitSeconds := 10                    // Reduced from 30 since we're force-deleting
+		for i := 0; i < maxWaitSeconds*4; i++ { // Poll 4x per second for faster detection
+			_, err := config.K8sClient.CoreV1().Pods(sessionNamespace).Get(context.TODO(), tempPodName, v1.GetOptions{})
+			if errors.IsNotFound(err) {
+				elapsed := float64(i) * 0.25
+				log.Printf("[PVCConflict] Temp pod fully terminated after %.2f seconds", elapsed)
+				break
+			}
+			if i == (maxWaitSeconds*4)-1 {
+				log.Printf("[PVCConflict] Warning: temp pod still exists after %d seconds, proceeding anyway", maxWaitSeconds)
+			}
+			time.Sleep(250 * time.Millisecond) // Poll every 250ms instead of 1s
+		}
+
+		// Clear temp pod annotations since we're starting the session
+		_ = clearAnnotation(sessionNamespace, name, tempContentRequestedAnnotation)
+		_ = clearAnnotation(sessionNamespace, name, tempContentLastAccessedAnnotation)
 	}
 
 	// Create a Kubernetes Job for this AgenticSession
@@ -2152,7 +2220,8 @@ func reconcileTempContentPodWithPatch(sessionNamespace, sessionName, tempPodName
 				}},
 			},
 			Spec: corev1.PodSpec{
-				RestartPolicy: corev1.RestartPolicyNever,
+				RestartPolicy:                 corev1.RestartPolicyNever,
+				TerminationGracePeriodSeconds: int64Ptr(0), // Enable instant termination
 				Containers: []corev1.Container{{
 					Name:            "content",
 					Image:           appConfig.ContentServiceImage,

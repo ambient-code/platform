@@ -1,17 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2, Info } from "lucide-react";
+import { Loader2, Info, Upload } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Separator } from "@/components/ui/separator";
 
 type AddContextModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onAddRepository: (url: string, branch: string) => Promise<void>;
+  onUploadFile?: () => void;
   isLoading?: boolean;
 };
 
@@ -19,6 +21,7 @@ export function AddContextModal({
   open,
   onOpenChange,
   onAddRepository,
+  onUploadFile,
   isLoading = false,
 }: AddContextModalProps) {
   const [contextUrl, setContextUrl] = useState("");
@@ -83,6 +86,30 @@ export function AddContextModal({
               Leave empty to use the default branch
             </p>
           </div>
+
+          {onUploadFile && (
+            <>
+              <Separator className="my-4" />
+              <div className="space-y-2">
+                <Label>Upload Files</Label>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Upload files directly to your workspace for use as context
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    onUploadFile();
+                    onOpenChange(false);
+                  }}
+                  className="w-full"
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  Upload Files
+                </Button>
+              </div>
+            </>
+          )}
         </div>
 
         <DialogFooter>

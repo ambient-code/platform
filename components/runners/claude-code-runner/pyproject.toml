@@ -12,7 +12,7 @@ dependencies = [
   "aiohttp>=3.8.0",
   "pyjwt>=2.8.0",
   "anthropic[vertex]>=0.68.0",
-  "claude-agent-sdk>=0.1.4",
+  "claude-agent-sdk>=0.1.12",
   "langfuse>=3.0.0",
   "mcp-atlassian>=0.11.9",
 ]
