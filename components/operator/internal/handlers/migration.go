@@ -9,6 +9,7 @@ import (
 	"ambient-code-operator/internal/config"
 	"ambient-code-operator/internal/types"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
@@ -18,6 +19,11 @@ const (
 	MigrationAnnotation = "ambient-code.io/repos-migrated"
 	// MigrationVersion is the current migration version
 	MigrationVersion = "v2"
+
+	// Event reasons for migration tracking
+	eventReasonMigrationStarted   = "MigrationStarted"
+	eventReasonMigrationCompleted = "MigrationCompleted"
+	eventReasonMigrationFailed    = "MigrationFailed"
 )
 
 // MigrateAllSessions migrates all AgenticSessions from legacy repo format to v2 format.
@@ -26,7 +32,16 @@ const (
 // Legacy format: repos[].{url, branch}
 // New format: repos[].{input: {url, branch}, autoPush: false}
 //
-// Returns the number of sessions successfully migrated.
+// SECURITY MODEL: This migration runs at operator startup using the operator's service
+// account privileges. This is intentional and safe because:
+//  1. Migration occurs before any user requests are processed (operator startup only)
+//  2. The operator is reconciling existing CRs it already has RBAC access to
+//  3. No new user data is being created or accessed
+//  4. Migration only updates the repo structure format, not repository content
+//  5. Active sessions (Running/Creating) are skipped to avoid interfering with in-flight work
+//
+// Returns nil even if individual migrations fail (failures are logged).
+// This allows operator startup to continue and retry failed sessions on next restart.
 func MigrateAllSessions() error {
 	ctx := context.Background()
 	gvr := types.GetAgenticSessionResource()
@@ -49,13 +64,31 @@ func MigrateAllSessions() error {
 		name := session.GetName()
 		namespace := session.GetNamespace()
 
-		// Check if session is currently active (skip without annotation)
+		// Check if session is currently active
 		status, found, _ := unstructured.NestedMap(session.Object, "status")
 		if found && status != nil {
 			phase, found, _ := unstructured.NestedString(status, "phase")
 			if found && (phase == "Running" || phase == "Creating") {
+				// Add annotation to track that migration was skipped due to active status
+				// This allows us to identify sessions that need migration once they complete
+				annotations := session.GetAnnotations()
+				if annotations == nil {
+					annotations = make(map[string]string)
+				}
+				// Only add if not already present
+				if _, exists := annotations["ambient-code.io/migration-skipped-active"]; !exists {
+					annotations["ambient-code.io/migration-skipped-active"] = phase
+					session.SetAnnotations(annotations)
+
+					gvr := types.GetAgenticSessionResource()
+					if _, err := config.DynamicClient.Resource(gvr).Namespace(namespace).Update(context.TODO(), &session, metav1.UpdateOptions{}); err != nil {
+						log.Printf("Warning: failed to add skip annotation to active session %s/%s: %v", namespace, name, err)
+					} else {
+						log.Printf("Marked active session %s/%s (phase: %s) as skipped for migration", namespace, name, phase)
+					}
+				}
 				skippedCount++
-				continue // Skip active sessions entirely (don't add annotation)
+				continue
 			}
 		}
 
@@ -73,6 +106,8 @@ func MigrateAllSessions() error {
 		// Check if session has repos that need migration
 		if needsMigration, err := sessionNeedsMigration(&session); err != nil {
 			log.Printf("ERROR: Failed to check migration status for session %s/%s: %v", namespace, name, err)
+			recordMigrationEvent(&session, corev1.EventTypeWarning, eventReasonMigrationFailed,
+				fmt.Sprintf("Failed to check migration status: %v", err))
 			errorCount++
 			continue
 		} else if !needsMigration {
@@ -89,12 +124,16 @@ func MigrateAllSessions() error {
 		// Migrate the session
 		if err := migrateSession(&session, namespace, name); err != nil {
 			log.Printf("ERROR: Failed to migrate session %s/%s: %v", namespace, name, err)
+			recordMigrationEvent(&session, corev1.EventTypeWarning, eventReasonMigrationFailed,
+				fmt.Sprintf("Failed to migrate to v2 repo format: %v", err))
 			errorCount++
 			continue
 		}
 
 		migratedCount++
 		log.Printf("Successfully migrated session %s/%s to v2 repo format", namespace, name)
+		recordMigrationEvent(&session, corev1.EventTypeNormal, eventReasonMigrationCompleted,
+			"Successfully migrated to v2 repo format")
 	}
 
 	log.Printf("Migration complete: %d migrated, %d skipped, %d errors (out of %d total)",
@@ -170,6 +209,7 @@ func migrateSession(session *unstructured.Unstructured, namespace, name string) 
 	}
 
 	// Convert each repo from legacy to new format
+	// Handle mixed v1/v2 format (edge case from manual CR editing)
 	migratedRepos := make([]interface{}, 0, len(repos))
 	for i, repoInterface := range repos {
 		repo, ok := repoInterface.(map[string]interface{})
@@ -177,7 +217,15 @@ func migrateSession(session *unstructured.Unstructured, namespace, name string) 
 			return fmt.Errorf("repo[%d] is not a map", i)
 		}
 
-		// Extract legacy fields
+		// Check if repo is already in v2 format
+		_, hasInput := repo["input"]
+		if hasInput {
+			// Already v2 format, preserve as-is
+			migratedRepos = append(migratedRepos, repo)
+			continue
+		}
+
+		// Migrate from v1 format
 		url, hasURL := repo["url"].(string)
 		if !hasURL {
 			return fmt.Errorf("repo[%d] missing url field", i)
@@ -194,7 +242,11 @@ func migrateSession(session *unstructured.Unstructured, namespace, name string) 
 		}
 
 		if branch != "" {
-			newRepo["input"].(map[string]interface{})["branch"] = branch
+			inputMap, ok := newRepo["input"].(map[string]interface{})
+			if !ok {
+				return fmt.Errorf("migration failed: input field at repo[%d] is not a map", i)
+			}
+			inputMap["branch"] = branch
 		}
 
 		// Preserve name if present
@@ -274,4 +326,39 @@ func addMigrationAnnotation(session *unstructured.Unstructured, namespace, name 
 	}
 
 	return nil
+}
+
+// recordMigrationEvent records a Kubernetes Event for migration tracking.
+// Events appear in `kubectl describe agenticsession` output.
+func recordMigrationEvent(session *unstructured.Unstructured, eventType, reason, message string) {
+	ctx := context.Background()
+
+	event := &corev1.Event{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s.%s", session.GetName(), metav1.Now().Format("20060102150405")),
+			Namespace: session.GetNamespace(),
+		},
+		InvolvedObject: corev1.ObjectReference{
+			Kind:       session.GetKind(),
+			Namespace:  session.GetNamespace(),
+			Name:       session.GetName(),
+			UID:        session.GetUID(),
+			APIVersion: session.GetAPIVersion(),
+		},
+		Reason:  reason,
+		Message: message,
+		Type:    eventType,
+		Source: corev1.EventSource{
+			Component: "agentic-operator",
+		},
+		FirstTimestamp: metav1.Now(),
+		LastTimestamp:  metav1.Now(),
+		Count:          1,
+	}
+
+	_, err := config.K8sClient.CoreV1().Events(session.GetNamespace()).Create(ctx, event, metav1.CreateOptions{})
+	if err != nil {
+		// Don't fail migration if event recording fails
+		log.Printf("Warning: failed to record migration event for %s/%s: %v", session.GetNamespace(), session.GetName(), err)
+	}
 }

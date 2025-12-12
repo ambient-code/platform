@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"ambient-code-backend/git"
+	"ambient-code-backend/types"
 
 	"github.com/gin-gonic/gin"
 )
@@ -269,7 +270,7 @@ func ContentGitConfigureRemote(c *gin.Context) {
 	// This is best-effort - don't fail if fetch fails
 	branch := body.Branch
 	if branch == "" {
-		branch = "main"
+		branch = types.DefaultBranch
 	}
 	cmd := exec.CommandContext(c.Request.Context(), "git", "fetch", "origin", branch)
 	cmd.Dir = abs
@@ -676,7 +677,7 @@ func ContentGitMergeStatus(c *gin.Context) {
 	}
 
 	if branch == "" {
-		branch = "main"
+		branch = types.DefaultBranch
 	}
 
 	abs := filepath.Join(StateBaseDir, path)
@@ -724,7 +725,7 @@ func ContentGitPull(c *gin.Context) {
 	}
 
 	if body.Branch == "" {
-		body.Branch = "main"
+		body.Branch = types.DefaultBranch
 	}
 
 	abs := filepath.Join(StateBaseDir, path)
@@ -759,7 +760,7 @@ func ContentGitPushToBranch(c *gin.Context) {
 	}
 
 	if body.Branch == "" {
-		body.Branch = "main"
+		body.Branch = types.DefaultBranch
 	}
 
 	if body.Message == "" {

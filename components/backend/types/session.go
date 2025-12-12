@@ -142,6 +142,26 @@ func (r *SimpleRepo) NormalizeRepo(sessionDefaultAutoPush bool) (SimpleRepo, err
 		if strings.TrimSpace(r.Input.URL) == "" {
 			return SimpleRepo{}, fmt.Errorf("cannot normalize repo with empty input.url")
 		}
+
+		// Validate that output differs from input (if output is specified)
+		if r.Output != nil {
+			inputURL := strings.TrimSpace(r.Input.URL)
+			outputURL := strings.TrimSpace(r.Output.URL)
+			inputBranch := ""
+			outputBranch := ""
+			if r.Input.Branch != nil {
+				inputBranch = strings.TrimSpace(*r.Input.Branch)
+			}
+			if r.Output.Branch != nil {
+				outputBranch = strings.TrimSpace(*r.Output.Branch)
+			}
+
+			// Output must differ from input in either URL or branch
+			if inputURL == outputURL && inputBranch == outputBranch {
+				return SimpleRepo{}, fmt.Errorf("output repository must differ from input (different URL or branch required)")
+			}
+		}
+
 		return *r, nil
 	}
 

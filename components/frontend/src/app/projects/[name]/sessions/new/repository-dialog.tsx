@@ -8,6 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { useRepoBranches } from "@/services/queries";
 import type { SessionRepo } from "@/types/agentic-session";
+import { DEFAULT_BRANCH } from "@/utils/repo";
 import { useState } from "react";
 
 type RepositoryDialogProps = {
@@ -32,10 +33,11 @@ export function RepositoryDialog({
   defaultAutoPush = false,
 }: RepositoryDialogProps) {
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   // Fetch branches for the repository
   const inputUrl = repo.input?.url || "";
-  const { data: branchesData, isLoading: branchesLoading } = useRepoBranches(
+  const { data: branchesData, isLoading: branchesLoading, error: branchesError } = useRepoBranches(
     projectName,
     inputUrl,
     { enabled: !!inputUrl && open }
@@ -65,7 +67,7 @@ export function RepositoryDialog({
             <div className="space-y-2">
               <Label className="text-sm font-medium">Branch</Label>
               <Select
-                value={repo.input?.branch || "main"}
+                value={repo.input?.branch || DEFAULT_BRANCH}
                 onValueChange={(value) => onRepoChange({
                   ...repo,
                   input: { ...repo.input, url: inputUrl, branch: value }
@@ -85,7 +87,7 @@ export function RepositoryDialog({
                     ))
                   ) : (
                     <>
-                      <SelectItem value="main">main</SelectItem>
+                      <SelectItem value={DEFAULT_BRANCH}>{DEFAULT_BRANCH}</SelectItem>
                       <SelectItem value="master">master</SelectItem>
                       <SelectItem value="develop">develop</SelectItem>
                     </>
@@ -94,6 +96,11 @@ export function RepositoryDialog({
               </Select>
               {!inputUrl && (
                 <p className="text-xs text-muted-foreground">Enter repository URL first to load branches</p>
+              )}
+              {branchesError && (
+                <p className="text-xs text-red-600 dark:text-red-400">
+                  Failed to load branches. Using default branches. Error: {branchesError instanceof Error ? branchesError.message : String(branchesError)}
+                </p>
               )}
             </div>
           </div>
@@ -188,20 +195,51 @@ export function RepositoryDialog({
             )}
           </div>
         </div>
-        <div className="flex justify-end gap-2">
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            onClick={() => {
-              if (!inputUrl) return;
-              onSave();
+        <div className="space-y-2">
+          {validationError && (
+            <p className="text-xs text-red-600 dark:text-red-400 px-2">
+              {validationError}
+            </p>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => {
+              setValidationError(null);
               onOpenChange(false);
-            }}
-          >
-            {isEditing ? "Update" : "Add"}
-          </Button>
+            }}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                // Clear previous validation errors
+                setValidationError(null);
+
+                // Validate required fields
+                if (!inputUrl) {
+                  setValidationError("Repository URL is required");
+                  return;
+                }
+
+                // Validate output differs from input
+                if (repo.output?.url) {
+                  const inputUrlTrimmed = (repo.input?.url || "").trim();
+                  const outputUrlTrimmed = (repo.output?.url || "").trim();
+                  const inputBranch = (repo.input?.branch || "").trim();
+                  const outputBranch = (repo.output?.branch || "").trim();
+
+                  if (inputUrlTrimmed === outputUrlTrimmed && inputBranch === outputBranch) {
+                    setValidationError("Output repository must differ from input (different URL or branch required)");
+                    return;
+                  }
+                }
+
+                onSave();
+                onOpenChange(false);
+              }}
+            >
+              {isEditing ? "Update" : "Add"}
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

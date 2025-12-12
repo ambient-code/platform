@@ -1913,9 +1913,13 @@ class ClaudeCodeAdapter:
 
             # Add git push instructions if any repo has autoPush enabled
             auto_push_repos = []
+            no_push_repos = []
             for repo in repos_cfg:
+                repo_name = repo.get('name', 'unknown')
                 if repo.get('autoPush', False):
-                    auto_push_repos.append(repo.get('name', 'unknown'))
+                    auto_push_repos.append(repo_name)
+                else:
+                    no_push_repos.append(repo_name)
 
             if auto_push_repos:
                 prompt += "## Git Operations - IMPORTANT\n"
@@ -1927,7 +1931,10 @@ class ClaudeCodeAdapter:
                 prompt += "- Use: git push -u origin <branch-name>\n"
                 prompt += "- Only retry on network errors (up to 4 times with backoff)\n"
                 prompt += "- Verify the push with: git log origin/<branch> --oneline -1\n\n"
-                prompt += f"Repositories with auto-push enabled: {', '.join(auto_push_repos)}\n\n"
+                prompt += f"Repositories with auto-push enabled: {', '.join(auto_push_repos)}\n"
+                if no_push_repos:
+                    prompt += f"DO NOT push these repositories: {', '.join(no_push_repos)}\n"
+                prompt += "\n"
 
         # Workflow-specific instructions
         if ambient_config.get("systemPrompt"):

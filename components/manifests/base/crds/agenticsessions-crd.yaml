@@ -2,6 +2,11 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   name: agenticsessions.vteam.ambient-code
+  # Migration Annotations:
+  # - ambient-code.io/repos-migrated: "v2" - Marks sessions migrated from legacy repo format.
+  #   Added by operator during startup migration. Prevents re-migration on subsequent restarts.
+  # - ambient-code.io/migration-skipped-active: "Running|Creating" - Marks active sessions skipped during migration.
+  #   Allows tracking which sessions need migration once they complete. Value indicates phase at skip time.
 spec:
   group: vteam.ambient-code
   versions:

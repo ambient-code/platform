@@ -120,6 +120,9 @@ const DefaultPaginationLimit = 20
 // MaxPaginationLimit is the maximum allowed items per page
 const MaxPaginationLimit = 100
 
+// DefaultBranch is the default Git branch name used when no branch is specified
+const DefaultBranch = "main"
+
 // NormalizePaginationParams ensures pagination params are within valid bounds
 func NormalizePaginationParams(params *PaginationParams) {
 	if params.Limit <= 0 {

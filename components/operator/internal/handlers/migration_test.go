@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic/fake"
+	k8sfake "k8s.io/client-go/kubernetes/fake"
 )
 
 // setupTestDynamicClient initializes a fake dynamic client for testing with custom resource support
@@ -26,6 +27,9 @@ func setupTestDynamicClient(objects ...runtime.Object) {
 	}
 
 	config.DynamicClient = fake.NewSimpleDynamicClientWithCustomListKinds(scheme, gvrToListKind, objects...)
+
+	// Initialize fake K8sClient for Event recording
+	config.K8sClient = k8sfake.NewSimpleClientset()
 }
 
 // createLegacySession creates an AgenticSession with legacy repo format
@@ -624,5 +628,139 @@ func TestMigrateAllSessions_MixedFormats(t *testing.T) {
 	noReposAnnotations := noReposUpdated.GetAnnotations()
 	if noReposAnnotations == nil || noReposAnnotations[handlers.MigrationAnnotation] != handlers.MigrationVersion {
 		t.Error("No-repos session should have migration annotation to mark as checked")
+	}
+}
+
+// TestMigrateAllSessions_SingleSessionMixedV1V2Repos tests migration of a session
+// with some repos in v1 format and some in v2 format (edge case from manual editing)
+func TestMigrateAllSessions_SingleSessionMixedV1V2Repos(t *testing.T) {
+	// Create a session with mixed repo formats (could happen from manual CR editing)
+	mixedSession := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "vteam.ambient-code/v1alpha1",
+			"kind":       "AgenticSession",
+			"metadata": map[string]interface{}{
+				"name":      "mixed-repos-session",
+				"namespace": "default",
+			},
+			"spec": map[string]interface{}{
+				"repos": []interface{}{
+					// v1 format repo
+					map[string]interface{}{
+						"url":    "https://github.com/org/legacy-repo.git",
+						"branch": "main",
+					},
+					// v2 format repo
+					map[string]interface{}{
+						"input": map[string]interface{}{
+							"url":    "https://github.com/org/new-repo.git",
+							"branch": "develop",
+						},
+						"autoPush": false,
+					},
+					// v1 format repo without branch
+					map[string]interface{}{
+						"url": "https://github.com/org/another-legacy.git",
+					},
+				},
+			},
+		},
+	}
+
+	setupTestDynamicClient(mixedSession)
+
+	err := handlers.MigrateAllSessions()
+	if err != nil {
+		t.Fatalf("MigrateAllSessions() failed: %v", err)
+	}
+
+	gvr := types.GetAgenticSessionResource()
+
+	// Verify session was migrated
+	updated, err := config.DynamicClient.Resource(gvr).Namespace("default").Get(context.Background(), "mixed-repos-session", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Failed to get updated session: %v", err)
+	}
+
+	// Check migration annotation
+	annotations := updated.GetAnnotations()
+	if annotations == nil || annotations[handlers.MigrationAnnotation] != handlers.MigrationVersion {
+		t.Error("Session with mixed repo formats should have migration annotation")
+	}
+
+	// Verify all repos are now in v2 format
+	spec, found, err := unstructured.NestedMap(updated.Object, "spec")
+	if !found || err != nil {
+		t.Fatalf("Failed to get spec: %v", err)
+	}
+
+	repos, found, err := unstructured.NestedSlice(spec, "repos")
+	if !found || err != nil {
+		t.Fatalf("Failed to get repos: %v", err)
+	}
+
+	if len(repos) != 3 {
+		t.Fatalf("Expected 3 repos, got %d", len(repos))
+	}
+
+	// Verify each repo is in v2 format
+	for i, repoInterface := range repos {
+		repo, ok := repoInterface.(map[string]interface{})
+		if !ok {
+			t.Errorf("Repo %d is not a map", i)
+			continue
+		}
+
+		// All repos should have "input" field
+		input, hasInput := repo["input"]
+		if !hasInput {
+			t.Errorf("Repo %d missing input field after migration", i)
+			continue
+		}
+
+		inputMap, ok := input.(map[string]interface{})
+		if !ok {
+			t.Errorf("Repo %d input is not a map", i)
+			continue
+		}
+
+		// Check URL exists
+		if _, hasURL := inputMap["url"]; !hasURL {
+			t.Errorf("Repo %d input missing url field", i)
+		}
+
+		// All repos should have autoPush field
+		if _, hasAutoPush := repo["autoPush"]; !hasAutoPush {
+			t.Errorf("Repo %d missing autoPush field after migration", i)
+		}
+
+		// Legacy fields should not be present
+		if _, hasLegacyURL := repo["url"]; hasLegacyURL {
+			t.Errorf("Repo %d should not have legacy url field after migration", i)
+		}
+	}
+
+	// Verify that migration events were recorded
+	events, err := config.K8sClient.CoreV1().Events("default").List(context.Background(), metav1.ListOptions{})
+	if err != nil {
+		t.Fatalf("Failed to list events: %v", err)
+	}
+
+	// Should have one event for the successful migration
+	foundMigrationEvent := false
+	for _, event := range events.Items {
+		if event.InvolvedObject.Name == "mixed-repos-session" && event.Reason == "MigrationCompleted" {
+			foundMigrationEvent = true
+			if event.Type != "Normal" {
+				t.Errorf("Expected event type 'Normal', got '%s'", event.Type)
+			}
+			if event.Message != "Successfully migrated to v2 repo format" {
+				t.Errorf("Unexpected event message: %s", event.Message)
+			}
+		}
+	}
+
+	if !foundMigrationEvent {
+		t.Error("Expected MigrationCompleted event to be recorded")
 	}
 }

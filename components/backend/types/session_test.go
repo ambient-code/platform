@@ -302,6 +302,32 @@ func TestNormalizeRepo_ErrorCases(t *testing.T) {
 			},
 			expectedError: "cannot normalize repo with empty input.url",
 		},
+		{
+			name: "output same as input (same URL and branch)",
+			repo: types.SimpleRepo{
+				Input: &types.RepoLocation{
+					URL:    "https://github.com/org/repo",
+					Branch: types.StringPtr("main"),
+				},
+				Output: &types.RepoLocation{
+					URL:    "https://github.com/org/repo",
+					Branch: types.StringPtr("main"),
+				},
+			},
+			expectedError: "output repository must differ from input",
+		},
+		{
+			name: "output same URL as input (both nil branches)",
+			repo: types.SimpleRepo{
+				Input: &types.RepoLocation{
+					URL: "https://github.com/org/repo",
+				},
+				Output: &types.RepoLocation{
+					URL: "https://github.com/org/repo",
+				},
+			},
+			expectedError: "output repository must differ from input",
+		},
 	}
 
 	for _, tt := range tests {
