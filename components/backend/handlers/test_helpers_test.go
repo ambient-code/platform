@@ -1,3 +1,5 @@
+//go:build test
+
 package handlers
 
 import (
@@ -7,7 +9,6 @@ import (
 	"ambient-code-backend/tests/logger"
 	"ambient-code-backend/tests/test_utils"
 
-	"github.com/gin-gonic/gin"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
@@ -35,28 +36,9 @@ func SetupHandlerDependencies(k8sUtils *test_utils.K8sTestUtils) {
 	}
 
 	// Default: require auth header and return fake clients.
-	// Individual tests can loosen or tighten behavior by overriding the test-only hook.
-	fakeClientset := k8sUtils.K8sClient
-	if restoreK8sClientsForRequestHook != nil {
-		restoreK8sClientsForRequestHook()
-		restoreK8sClientsForRequestHook = nil
-	}
-	original := getK8sClientsForRequest
-	getK8sClientsForRequest = func(c *gin.Context) (kubernetes.Interface, dynamic.Interface) {
-		auth := c.GetHeader("Authorization")
-		if auth == "" {
-			auth = c.GetHeader("X-Forwarded-Access-Token")
-		}
-		if strings.TrimSpace(auth) == "" {
-			return nil, nil
-		}
-		// Simulate invalid token scenarios deterministically in unit tests
-		if strings.TrimSpace(auth) == "invalid-token" || strings.Contains(strings.TrimSpace(auth), "invalid-token") {
-			return nil, nil
-		}
-		return fakeClientset, k8sUtils.DynamicClient
-	}
-	restoreK8sClientsForRequestHook = func() { getK8sClientsForRequest = original }
+	// Auth behavior is enforced by the -tags=test GetK8sClientsForRequest implementation:
+	// it requires a token header and returns K8sClientMw/DynamicClient when present.
+	restoreK8sClientsForRequestHook = nil
 
 	// Other handler dependencies with safe defaults for unit tests
 	GetGitHubToken = func(ctx context.Context, k8sClient kubernetes.Interface, dynClient dynamic.Interface, namespace, userID string) (string, error) {
@@ -78,18 +60,8 @@ func SetupHandlerDependencies(k8sUtils *test_utils.K8sTestUtils) {
 
 // WithAuthCheckEnabled temporarily forces auth checks by returning nil clients when no auth header is present.
 func WithAuthCheckEnabled() func() {
-	original := getK8sClientsForRequest
-	getK8sClientsForRequest = func(c *gin.Context) (kubernetes.Interface, dynamic.Interface) {
-		auth := c.GetHeader("Authorization")
-		if auth == "" {
-			auth = c.GetHeader("X-Forwarded-Access-Token")
-		}
-		if strings.TrimSpace(auth) == "" {
-			return nil, nil
-		}
-		return original(c)
-	}
-	return func() { getK8sClientsForRequest = original }
+	// No-op: auth strictness is always enforced in the test build.
+	return func() {}
 }
 
 // WithAuthCheckDisabled restores the default behavior for the duration of a test.

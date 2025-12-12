@@ -1,3 +1,5 @@
+//go:build test
+
 package handlers
 
 import (
@@ -16,6 +18,7 @@ import (
 	"github.com/gin-gonic/gin"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	authv1 "k8s.io/api/authorization/v1"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	k8stesting "k8s.io/client-go/testing"
@@ -25,7 +28,7 @@ var _ = Describe("Repo Handler >", Label(test_constants.LabelUnit, test_constant
 	var (
 		httpUtils                 *test_utils.HTTPTestUtils
 		testClientFactory         *test_utils.TestClientFactory
-		fakeClients               *test_utils.FakeClientSet
+		testToken                 string
 		originalK8sClient         kubernetes.Interface
 		originalK8sClientMw       kubernetes.Interface
 		originalK8sClientProjects kubernetes.Interface
@@ -44,12 +47,12 @@ var _ = Describe("Repo Handler >", Label(test_constants.LabelUnit, test_constant
 		// Auth is disabled by default from config for unit tests
 
 		// Use centralized handler dependencies setup
-		k8sUtils := test_utils.NewK8sTestUtils(false, *config.TestNamespace)
+		k8sUtils = test_utils.NewK8sTestUtils(false, *config.TestNamespace)
 		SetupHandlerDependencies(k8sUtils)
 
 		// Create test client factory with fake clients
 		testClientFactory = test_utils.NewTestClientFactory()
-		fakeClients = testClientFactory.GetFakeClients()
+		_ = testClientFactory.GetFakeClients()
 
 		// For repo tests, we need to set all the package-level K8s client variables
 		// Different handlers use different client variables, so set them all
@@ -83,6 +86,27 @@ var _ = Describe("Repo Handler >", Label(test_constants.LabelUnit, test_constant
 		}
 
 		httpUtils = test_utils.NewHTTPTestUtils()
+
+		// Create a realistic RBAC-backed token (instead of arbitrary strings).
+		// This aligns unit tests with the production auth/RBAC model.
+		ctx := context.Background()
+		err := k8sUtils.CreateNamespace(ctx, "test-project")
+		Expect(err).NotTo(HaveOccurred())
+		_, err = k8sUtils.CreateTestRole(ctx, "test-project", "test-full-access-role", []string{"get", "list", "create", "update", "delete", "patch"}, "*", "")
+		Expect(err).NotTo(HaveOccurred())
+
+		// Seed an initial gin context so SetValidTestToken can set headers, then store the token for later contexts.
+		_ = httpUtils.CreateTestGinContext("GET", "/noop", nil)
+		token, _, err := httpUtils.SetValidTestToken(
+			k8sUtils,
+			"test-project",
+			[]string{"get", "list", "create", "update", "delete", "patch"},
+			"*",
+			"",
+			"test-full-access-role",
+		)
+		Expect(err).NotTo(HaveOccurred())
+		testToken = token
 	})
 
 	AfterEach(func() {
@@ -102,7 +126,7 @@ var _ = Describe("Repo Handler >", Label(test_constants.LabelUnit, test_constant
 				context.Params = gin.Params{
 					{Key: "projectName", Value: "test-project"},
 				}
-				httpUtils.SetAuthHeader("test-token")
+				httpUtils.SetAuthHeader(testToken)
 				httpUtils.SetUserContext("test-user", "Test User", "test@example.com")
 				httpUtils.AutoSetProjectContextFromParams()
 
@@ -115,12 +139,50 @@ var _ = Describe("Repo Handler >", Label(test_constants.LabelUnit, test_constant
 				logger.Log("Access check completed")
 			})
 
+			It("Should return edit role when rolebinding create is denied but agentic session create is allowed", func() {
+				originalSSARFunc := k8sUtils.SSARAllowedFunc
+				k8sUtils.SSARAllowedFunc = func(action k8stesting.Action) bool {
+					create, ok := action.(k8stesting.CreateAction)
+					if !ok {
+						return true
+					}
+					ssar, ok := create.GetObject().(*authv1.SelfSubjectAccessReview)
+					if !ok || ssar.Spec.ResourceAttributes == nil {
+						return true
+					}
+					ra := ssar.Spec.ResourceAttributes
+					if ra.Resource == "rolebindings" && ra.Verb == "create" {
+						return false
+					}
+					if ra.Resource == "agenticsessions" && ra.Verb == "create" {
+						return true
+					}
+					return false
+				}
+				defer func() { k8sUtils.SSARAllowedFunc = originalSSARFunc }()
+
+				context := httpUtils.CreateTestGinContext("GET", "/projects/test-project/access-check", nil)
+				context.Params = gin.Params{
+					{Key: "projectName", Value: "test-project"},
+				}
+				httpUtils.SetAuthHeader(testToken)
+
+				AccessCheck(context)
+
+				httpUtils.AssertHTTPStatus(http.StatusOK)
+				httpUtils.AssertJSONContains(map[string]interface{}{
+					"project":  "test-project",
+					"allowed":  false,
+					"userRole": "edit",
+				})
+			})
+
 			It("Should require project name parameter", func() {
 				context := httpUtils.CreateTestGinContext("GET", "/access-check", nil)
 				context.Params = gin.Params{
 					{Key: "projectName", Value: ""},
 				}
-				httpUtils.SetAuthHeader("test-token")
+				httpUtils.SetAuthHeader(testToken)
 
 				AccessCheck(context)
 
@@ -130,14 +192,6 @@ var _ = Describe("Repo Handler >", Label(test_constants.LabelUnit, test_constant
 
 			It("Should return access info for unauthenticated users", func() {
 				// AccessCheck uses GetK8sClientsForRequestRepo which calls GetK8sClientsForRequest
-				// Temporarily override the package-private hook to always return a client for unauthenticated access
-				original := getK8sClientsForRequest
-				getK8sClientsForRequest = func(c *gin.Context) (kubernetes.Interface, dynamic.Interface) {
-					// Always return clients for this test to allow unauthenticated access
-					return k8sUtils.K8sClient, fakeClients.GetDynamicClient()
-				}
-				defer func() { getK8sClientsForRequest = original }()
-
 				// Configure SSAR to return allowed=false for unauthenticated users
 				originalSSARFunc := k8sUtils.SSARAllowedFunc
 				k8sUtils.SSARAllowedFunc = func(action k8stesting.Action) bool {
@@ -152,16 +206,16 @@ var _ = Describe("Repo Handler >", Label(test_constants.LabelUnit, test_constant
 				context.Params = gin.Params{
 					{Key: "projectName", Value: "test-project"},
 				}
-				// Don't set auth header - test override allows this
+				// AccessCheck requires auth; provide a token but deny via SSARAllowedFunc
+				httpUtils.SetAuthHeader(testToken)
 
 				AccessCheck(context)
 
-				// AccessCheck returns permission info even for unauthenticated users
-				// The SSAR will return allowed: false for unauthenticated users
 				httpUtils.AssertHTTPStatus(http.StatusOK)
 				httpUtils.AssertJSONContains(map[string]interface{}{
-					"allowed": false,
-					"project": "test-project",
+					"allowed":  false,
+					"project":  "test-project",
+					"userRole": "view",
 				})
 			})
 		})
@@ -174,7 +228,7 @@ var _ = Describe("Repo Handler >", Label(test_constants.LabelUnit, test_constant
 				context.Params = gin.Params{
 					{Key: "projectName", Value: "test-project"},
 				}
-				httpUtils.SetAuthHeader("test-token")
+				httpUtils.SetAuthHeader(testToken)
 				httpUtils.SetUserContext("test-user", "Test User", "test@example.com")
 				httpUtils.AutoSetProjectContextFromParams()
 
@@ -189,7 +243,7 @@ var _ = Describe("Repo Handler >", Label(test_constants.LabelUnit, test_constant
 				context.Params = gin.Params{
 					{Key: "projectName", Value: "test-project"},
 				}
-				httpUtils.SetAuthHeader("test-token")
+				httpUtils.SetAuthHeader(testToken)
 				httpUtils.SetUserContext("test-user", "Test User", "test@example.com")
 				httpUtils.AutoSetProjectContextFromParams()
 
@@ -206,7 +260,7 @@ var _ = Describe("Repo Handler >", Label(test_constants.LabelUnit, test_constant
 				context.Params = gin.Params{
 					{Key: "projectName", Value: "unauthorized-project"},
 				}
-				httpUtils.SetAuthHeader("test-token")
+				httpUtils.SetAuthHeader(testToken)
 				httpUtils.SetUserContext("test-user", "Test User", "test@example.com")
 				httpUtils.AutoSetProjectContextFromParams()
 
@@ -243,7 +297,7 @@ var _ = Describe("Repo Handler >", Label(test_constants.LabelUnit, test_constant
 				context.Params = gin.Params{
 					{Key: "projectName", Value: "test-project"},
 				}
-				httpUtils.SetAuthHeader("test-token")
+				httpUtils.SetAuthHeader(testToken)
 				httpUtils.SetUserContext("test-user", "Test User", "test@example.com")
 				httpUtils.AutoSetProjectContextFromParams()
 
@@ -261,7 +315,7 @@ var _ = Describe("Repo Handler >", Label(test_constants.LabelUnit, test_constant
 				context.Params = gin.Params{
 					{Key: "projectName", Value: "test-project"},
 				}
-				httpUtils.SetAuthHeader("test-token")
+				httpUtils.SetAuthHeader(testToken)
 				httpUtils.SetUserContext("test-user", "Test User", "test@example.com")
 				httpUtils.AutoSetProjectContextFromParams()
 
@@ -282,7 +336,7 @@ var _ = Describe("Repo Handler >", Label(test_constants.LabelUnit, test_constant
 				context.Params = gin.Params{
 					{Key: "projectName", Value: "unauthorized-project"},
 				}
-				httpUtils.SetAuthHeader("test-token")
+				httpUtils.SetAuthHeader(testToken)
 				httpUtils.SetUserContext("test-user", "Test User", "test@example.com")
 				httpUtils.AutoSetProjectContextFromParams()
 
@@ -297,7 +351,7 @@ var _ = Describe("Repo Handler >", Label(test_constants.LabelUnit, test_constant
 				context.Params = gin.Params{
 					{Key: "projectName", Value: "test-project"},
 				}
-				httpUtils.SetAuthHeader("test-token")
+				httpUtils.SetAuthHeader(testToken)
 				httpUtils.SetUserContext("test-user", "Test User", "test@example.com")
 
 				CreateUserFork(context)
@@ -335,7 +389,7 @@ var _ = Describe("Repo Handler >", Label(test_constants.LabelUnit, test_constant
 				context.Params = gin.Params{
 					{Key: "projectName", Value: "test-project"},
 				}
-				httpUtils.SetAuthHeader("test-token")
+				httpUtils.SetAuthHeader(testToken)
 				httpUtils.SetUserContext("test-user", "Test User", "test@example.com")
 				httpUtils.AutoSetProjectContextFromParams()
 
@@ -350,7 +404,7 @@ var _ = Describe("Repo Handler >", Label(test_constants.LabelUnit, test_constant
 				context.Params = gin.Params{
 					{Key: "projectName", Value: "test-project"},
 				}
-				httpUtils.SetAuthHeader("test-token")
+				httpUtils.SetAuthHeader(testToken)
 				httpUtils.SetUserContext("test-user", "Test User", "test@example.com")
 				httpUtils.AutoSetProjectContextFromParams()
 
@@ -365,7 +419,7 @@ var _ = Describe("Repo Handler >", Label(test_constants.LabelUnit, test_constant
 				context.Params = gin.Params{
 					{Key: "projectName", Value: "test-project"},
 				}
-				httpUtils.SetAuthHeader("test-token")
+				httpUtils.SetAuthHeader(testToken)
 				httpUtils.SetUserContext("test-user", "Test User", "test@example.com")
 				httpUtils.AutoSetProjectContextFromParams()
 
@@ -380,7 +434,7 @@ var _ = Describe("Repo Handler >", Label(test_constants.LabelUnit, test_constant
 				context.Params = gin.Params{
 					{Key: "projectName", Value: "test-project"},
 				}
-				httpUtils.SetAuthHeader("test-token")
+				httpUtils.SetAuthHeader(testToken)
 				httpUtils.SetUserContext("test-user", "Test User", "test@example.com")
 				httpUtils.AutoSetProjectContextFromParams()
 
@@ -413,7 +467,7 @@ var _ = Describe("Repo Handler >", Label(test_constants.LabelUnit, test_constant
 				context.Params = gin.Params{
 					{Key: "projectName", Value: "test-project"},
 				}
-				httpUtils.SetAuthHeader("test-token")
+				httpUtils.SetAuthHeader(testToken)
 				httpUtils.SetUserContext("test-user", "Test User", "test@example.com")
 				httpUtils.AutoSetProjectContextFromParams()
 
@@ -428,7 +482,7 @@ var _ = Describe("Repo Handler >", Label(test_constants.LabelUnit, test_constant
 				context.Params = gin.Params{
 					{Key: "projectName", Value: "test-project"},
 				}
-				httpUtils.SetAuthHeader("test-token")
+				httpUtils.SetAuthHeader(testToken)
 				httpUtils.SetUserContext("test-user", "Test User", "test@example.com")
 				httpUtils.AutoSetProjectContextFromParams()
 
@@ -443,7 +497,7 @@ var _ = Describe("Repo Handler >", Label(test_constants.LabelUnit, test_constant
 				context.Params = gin.Params{
 					{Key: "projectName", Value: "test-project"},
 				}
-				httpUtils.SetAuthHeader("test-token")
+				httpUtils.SetAuthHeader(testToken)
 				httpUtils.SetUserContext("test-user", "Test User", "test@example.com")
 				httpUtils.AutoSetProjectContextFromParams()
 
@@ -461,7 +515,7 @@ var _ = Describe("Repo Handler >", Label(test_constants.LabelUnit, test_constant
 				context.Params = gin.Params{
 					{Key: "projectName", Value: "test-project"},
 				}
-				httpUtils.SetAuthHeader("test-token")
+				httpUtils.SetAuthHeader(testToken)
 				httpUtils.SetUserContext("test-user", "Test User", "test@example.com")
 				httpUtils.AutoSetProjectContextFromParams()
 
@@ -494,7 +548,7 @@ var _ = Describe("Repo Handler >", Label(test_constants.LabelUnit, test_constant
 				context.Params = gin.Params{
 					{Key: "projectName", Value: "test-project"},
 				}
-				httpUtils.SetAuthHeader("test-token")
+				httpUtils.SetAuthHeader(testToken)
 				httpUtils.SetUserContext("test-user", "Test User", "test@example.com")
 				httpUtils.AutoSetProjectContextFromParams()
 
@@ -509,7 +563,7 @@ var _ = Describe("Repo Handler >", Label(test_constants.LabelUnit, test_constant
 				context.Params = gin.Params{
 					{Key: "projectName", Value: "test-project"},
 				}
-				httpUtils.SetAuthHeader("test-token")
+				httpUtils.SetAuthHeader(testToken)
 				httpUtils.SetUserContext("test-user", "Test User", "test@example.com")
 				httpUtils.AutoSetProjectContextFromParams()
 
@@ -524,7 +578,7 @@ var _ = Describe("Repo Handler >", Label(test_constants.LabelUnit, test_constant
 				context.Params = gin.Params{
 					{Key: "projectName", Value: "test-project"},
 				}
-				httpUtils.SetAuthHeader("test-token")
+				httpUtils.SetAuthHeader(testToken)
 				httpUtils.SetUserContext("test-user", "Test User", "test@example.com")
 				httpUtils.AutoSetProjectContextFromParams()
 
@@ -539,7 +593,7 @@ var _ = Describe("Repo Handler >", Label(test_constants.LabelUnit, test_constant
 				context.Params = gin.Params{
 					{Key: "projectName", Value: "test-project"},
 				}
-				httpUtils.SetAuthHeader("test-token")
+				httpUtils.SetAuthHeader(testToken)
 				httpUtils.SetUserContext("test-user", "Test User", "test@example.com")
 				httpUtils.AutoSetProjectContextFromParams()
 
@@ -557,7 +611,7 @@ var _ = Describe("Repo Handler >", Label(test_constants.LabelUnit, test_constant
 				context.Params = gin.Params{
 					{Key: "projectName", Value: "test-project"},
 				}
-				httpUtils.SetAuthHeader("test-token")
+				httpUtils.SetAuthHeader(testToken)
 				httpUtils.SetUserContext("test-user", "Test User", "test@example.com")
 				httpUtils.AutoSetProjectContextFromParams()
 
@@ -612,7 +666,7 @@ var _ = Describe("Repo Handler >", Label(test_constants.LabelUnit, test_constant
 					context.Params = gin.Params{
 						{Key: "projectName", Value: "test-project"},
 					}
-					httpUtils.SetAuthHeader("test-token")
+					httpUtils.SetAuthHeader(testToken)
 					httpUtils.SetUserContext("test-user", "Test User", "test@example.com")
 					httpUtils.AutoSetProjectContextFromParams()
 
@@ -677,7 +731,7 @@ var _ = Describe("Repo Handler >", Label(test_constants.LabelUnit, test_constant
 			context.Params = gin.Params{
 				{Key: "projectName", Value: "test-project"},
 			}
-			httpUtils.SetAuthHeader("test-token")
+			httpUtils.SetAuthHeader(testToken)
 			// Don't set user context
 
 			ListUserForks(context)
@@ -692,7 +746,7 @@ var _ = Describe("Repo Handler >", Label(test_constants.LabelUnit, test_constant
 			context.Params = gin.Params{
 				{Key: "projectName", Value: "test-project"},
 			}
-			httpUtils.SetAuthHeader("test-token")
+			httpUtils.SetAuthHeader(testToken)
 			httpUtils.SetUserContext("test-user", "Test User", "test@example.com")
 
 			CreateUserFork(context)
@@ -714,7 +768,7 @@ var _ = Describe("Repo Handler >", Label(test_constants.LabelUnit, test_constant
 				context.Params = gin.Params{
 					{Key: "projectName", Value: "test-project"},
 				}
-				httpUtils.SetAuthHeader("test-token")
+				httpUtils.SetAuthHeader(testToken)
 				httpUtils.SetUserContext("test-user", "Test User", "test@example.com")
 
 				CreateUserFork(context)

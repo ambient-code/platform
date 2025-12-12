@@ -1,8 +1,9 @@
+//go:build test
+
 // Package test contains the Ginkgo test suite for ambient-code-backend
 package handlers
 
 import (
-	test_constants "ambient-code-backend/tests/constants"
 	"context"
 	"fmt"
 	"os"
@@ -47,16 +48,8 @@ var _ = BeforeSuite(func() {
 	err := os.Setenv("ENVIRONMENT", "local")
 	Expect(err).NotTo(HaveOccurred(), "Error setting environment to local")
 
-	// Set environment variables from config flags for handlers that check os.Getenv directly
-	if *config.GoTestMode {
-		err = os.Setenv("GO_TEST", "true")
-		Expect(err).NotTo(HaveOccurred(), "Error setting GO_TEST from config")
-	}
-
-	if *config.DisableAuth {
-		err = os.Setenv("DISABLE_AUTH", "true")
-		Expect(err).NotTo(HaveOccurred(), "Error setting DISABLE_AUTH from config")
-	}
+	// NOTE: No auth bypass environment variables are supported/used in tests.
+	// Handler tests must set Authorization headers / valid tokens explicitly.
 
 	// Initialize Kubernetes test utilities
 	logger.Log("Setting up Kubernetes test utilities...")
@@ -154,8 +147,7 @@ func TestBackend(t *testing.T) {
 	err = os.MkdirAll(testReportDirectory, 0755)
 	Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating Reports Directory: %s", testReportDirectory))
 
-	os.Setenv(test_constants.EnvDisableAuth, "true")
-	os.Setenv(test_constants.EnvGoTest, "true")
+	// SECURITY: Do not set DISABLE_AUTH/GO_TEST in unit tests. Use explicit tokens/headers instead.
 
 	// Configure suite and reporter
 	suiteConfig, reporterConfig := GinkgoConfiguration()

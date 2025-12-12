@@ -1,3 +1,5 @@
+//go:build test
+
 package handlers
 
 import (
@@ -231,7 +233,7 @@ var _ = Describe("Sessions Handler", Label(test_constants.LabelUnit, test_consta
 				// Act
 				ListSessions(context)
 
-				// Assert - With DISABLE_AUTH=true, should succeed but return empty list
+				// Assert - request is allowed in tests, but there are no sessions in this namespace
 				httpUtils.AssertHTTPStatus(http.StatusOK)
 
 				var response map[string]interface{}
@@ -244,7 +246,7 @@ var _ = Describe("Sessions Handler", Label(test_constants.LabelUnit, test_consta
 				Expect(ok).To(BeTrue(), "Items should be an array")
 				Expect(items).To(HaveLen(0), "Should return empty list for namespace without sessions")
 
-				logger.Log("Unauthorized project returned empty list (auth disabled in tests)")
+				logger.Log("Unauthorized project returned empty list")
 			})
 		})
 	})

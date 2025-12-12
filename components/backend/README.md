@@ -34,6 +34,51 @@ make run
 make dev
 ```
 
+### Local development authentication (DISABLE_AUTH removed)
+
+The backend **does not** support authentication bypass via `DISABLE_AUTH` (or any env-var based bypass).
+All authenticated endpoints require a valid Kubernetes/OpenShift token passed via:
+
+- `Authorization: Bearer <token>` (preferred)
+- `X-Forwarded-Access-Token: <token>` (when running behind an auth proxy)
+
+#### Option A: OpenShift / CRC (recommended for this repo)
+
+```bash
+# Login and obtain a user token
+oc login ...
+export OC_TOKEN="$(oc whoami -t)"
+
+# Example request
+curl -H "Authorization: Bearer ${OC_TOKEN}" \
+  http://localhost:8080/health
+```
+
+#### Option B: kind/minikube (ServiceAccount token for local dev)
+
+```bash
+export DEV_NS=ambient-code
+kubectl create namespace "${DEV_NS}" 2>/dev/null || true
+
+kubectl -n "${DEV_NS}" create serviceaccount backend-dev 2>/dev/null || true
+
+# Minimal example permissions (adjust as needed)
+kubectl -n "${DEV_NS}" create role backend-dev \
+  --verb=get,list,watch,create,update,patch,delete \
+  --resource=secrets,configmaps,services,pods,rolebindings 2>/dev/null || true
+
+kubectl -n "${DEV_NS}" create rolebinding backend-dev \
+  --role=backend-dev \
+  --serviceaccount="${DEV_NS}:backend-dev" 2>/dev/null || true
+
+export DEV_TOKEN="$(kubectl -n "${DEV_NS}" create token backend-dev)"
+
+curl -H "Authorization: Bearer ${DEV_TOKEN}" \
+  http://localhost:8080/health
+```
+
+> Tip: If you’re running the backend in-cluster (e.g. via `make dev-start`), your client must still send a token; the backend will never fall back to the in-cluster service account for user-initiated operations.
+
 ### Build
 
 ```bash

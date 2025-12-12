@@ -1,3 +1,5 @@
+//go:build test
+
 package handlers
 
 import (
@@ -61,7 +63,7 @@ var _ = Describe("GitHub Auth Handler", Label(test_constants.LabelUnit, test_con
 		fakeClients = testClientFactory.GetFakeClients()
 
 		// Use centralized handler dependencies setup
-		k8sUtils := test_utils.NewK8sTestUtils(false, *config.TestNamespace)
+		k8sUtils = test_utils.NewK8sTestUtils(false, *config.TestNamespace)
 		SetupHandlerDependencies(k8sUtils)
 
 		// For GitHub auth tests, we need to set all the package-level K8s client variables

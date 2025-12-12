@@ -1,3 +1,5 @@
+//go:build test
+
 package handlers
 
 import (
@@ -46,7 +48,7 @@ var _ = Describe("Repository Seeding Handler", Label(test_constants.LabelUnit, t
 		// Auth is disabled by default from config for unit tests
 
 		// Use centralized handler dependencies setup
-		k8sUtils := test_utils.NewK8sTestUtils(false, *config.TestNamespace)
+		k8sUtils = test_utils.NewK8sTestUtils(false, *config.TestNamespace)
 		SetupHandlerDependencies(k8sUtils)
 
 		// Create test client factory with fake clients

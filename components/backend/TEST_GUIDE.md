@@ -115,6 +115,9 @@ ginkgo run --label-filter="unit && handlers && !slow" -v
 
 Integration tests live under `components/backend/tests/integration/` and are intended to run against a real Kubernetes/OpenShift cluster.
 
+For local development authentication setup (since `DISABLE_AUTH` is not supported), see:
+- `components/backend/README.md` → **Local development authentication (DISABLE_AUTH removed)**
+
 ```bash
 cd components/backend
 

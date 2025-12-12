@@ -1,3 +1,5 @@
+//go:build test
+
 package handlers
 
 import (
@@ -33,7 +35,6 @@ var _ = Describe("Permissions Handler", Ordered, Label(test_constants.LabelUnit,
 		originalK8sClientMw       kubernetes.Interface
 		originalK8sClientProjects kubernetes.Interface
 		originalEnv               string
-		originalDisableAuth       string
 		originalNamespace         string
 		createdNamespaces         []string
 	)
@@ -48,7 +49,6 @@ var _ = Describe("Permissions Handler", Ordered, Label(test_constants.LabelUnit,
 
 		// Store original environment values for cleanup
 		originalEnv = os.Getenv("ENVIRONMENT")
-		originalDisableAuth = os.Getenv("DISABLE_AUTH")
 		originalNamespace = os.Getenv("NAMESPACE")
 
 		// Use centralized handler dependencies setup
@@ -131,12 +131,6 @@ var _ = Describe("Permissions Handler", Ordered, Label(test_constants.LabelUnit,
 			os.Unsetenv("ENVIRONMENT")
 		} else {
 			os.Setenv("ENVIRONMENT", originalEnv)
-		}
-
-		if originalDisableAuth == "" {
-			os.Unsetenv("DISABLE_AUTH")
-		} else {
-			os.Setenv("DISABLE_AUTH", originalDisableAuth)
 		}
 
 		if originalNamespace == "" {
@@ -817,16 +811,6 @@ var _ = Describe("Permissions Handler", Ordered, Label(test_constants.LabelUnit,
 	})
 
 	Context("Error Handling", func() {
-		BeforeEach(func() {
-			// Temporarily disable auth bypass for auth error tests
-			os.Unsetenv("DISABLE_AUTH")
-		})
-
-		AfterEach(func() {
-			// Restore auth bypass for other tests
-			os.Setenv("DISABLE_AUTH", "true")
-		})
-
 		It("Should handle Kubernetes API errors gracefully", func() {
 			// Test with a fake client that will return errors for create operations
 			// This would require modifying the fake client to return errors,

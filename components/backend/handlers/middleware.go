@@ -57,22 +57,6 @@ type ContentListItem struct {
 	ModifiedAt string `json:"modifiedAt"`
 }
 
-// getK8sClientsForRequest is a package-private function pointer used by GetK8sClientsForRequest.
-//
-// SECURITY:
-// - It is intentionally unexported (cannot be overridden by other packages).
-// - Production code never mutates it; it always points to getK8sClientsDefault.
-// - Handler unit tests (which live in the handlers package) may override it in _test.go files.
-var getK8sClientsForRequest = getK8sClientsDefault
-
-// GetK8sClientsForRequest returns K8s typed and dynamic clients using the caller's token when provided.
-// It supports both Authorization: Bearer and X-Forwarded-Access-Token and NEVER falls back to the backend service account.
-// Returns nil, nil if no valid user token is provided - all API operations require user authentication.
-// Returns kubernetes.Interface (not *kubernetes.Clientset) to support both real and fake clients in tests.
-func GetK8sClientsForRequest(c *gin.Context) (kubernetes.Interface, dynamic.Interface) {
-	return getK8sClientsForRequest(c)
-}
-
 // getK8sClientsDefault is the production implementation of GetK8sClientsForRequest
 func getK8sClientsDefault(c *gin.Context) (kubernetes.Interface, dynamic.Interface) {
 	// Prefer Authorization header (Bearer <token>)

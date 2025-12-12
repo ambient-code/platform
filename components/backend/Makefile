@@ -23,7 +23,7 @@ test-unit: ## Run unit tests using Ginkgo
 	ginkgo run --label-filter="unit" --junit-report=reports/junit.xml --json-report=reports/results.json test/unit
 
 test-unit-go: ## Run unit tests with go test (alternative)
-	go test -v ./handlers ./types ./git -timeout=5m
+	go test -v -tags=test ./handlers ./types ./git -timeout=5m
 
 test-contract: ## Run contract tests
 	go test ./tests/contract/... -v
@@ -52,23 +52,23 @@ test-ginkgo-verbose: ## Run tests with verbose output
 
 test-handlers: ## Run handler tests only
 	@echo "Running handler tests..."
-	ginkgo run --label-filter="handlers" -v
+	ginkgo run --tags=test --label-filter="handlers" -v
 
 test-types: ## Run type tests only
 	@echo "Running type tests..."
-	ginkgo run --label-filter="types" -v
+	ginkgo run --tags=test --label-filter="types" -v
 
 test-git: ## Run git operation tests only
 	@echo "Running git operation tests..."
-	ginkgo run --label-filter="git" -v
+	ginkgo run --tags=test --label-filter="git" -v
 
 test-fast: ## Run tests excluding slow ones
 	@echo "Running fast tests only..."
-	SKIP_SLOW_TESTS=true ginkgo run --label-filter="!slow"
+	SKIP_SLOW_TESTS=true ginkgo run --tags=test --label-filter="!slow"
 
 test-auth: ## Run authentication and authorization tests
 	@echo "Running auth tests..."
-	ginkgo run --label-filter="auth" -v
+	ginkgo run --tags=test --label-filter="auth" -v
 
 test-focus: ## Run specific test by pattern (usage: make test-focus FOCUS="test pattern")
 	@echo "Running focused tests: $(FOCUS)"
@@ -129,7 +129,10 @@ vet: ## Run go vet
 	go vet ./...
 
 lint: ## Run golangci-lint (requires golangci-lint to be installed)
-	golangci-lint run
+	# Lint production build
+	golangci-lint run --timeout=5m
+	# Lint test build (handlers unit tests use -tags=test for test-only hooks)
+	golangci-lint run --timeout=5m --build-tags=test
 
 # Dependency management
 deps: ## Download dependencies

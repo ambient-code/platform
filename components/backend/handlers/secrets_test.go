@@ -1,9 +1,10 @@
+//go:build test
+
 package handlers
 
 import (
 	"context"
 	"net/http"
-	"os"
 	"time"
 
 	test_constants "ambient-code-backend/tests/constants"
@@ -520,17 +521,6 @@ var _ = Describe("Secrets Handler", Label(test_constants.LabelUnit, test_constan
 			})
 
 			It("Should require authentication", func() {
-				// Temporarily disable auth fallback to test proper auth failure
-				originalDisableAuth := os.Getenv("DISABLE_AUTH")
-				os.Setenv("DISABLE_AUTH", "false")
-				defer func() {
-					if originalDisableAuth != "" {
-						os.Setenv("DISABLE_AUTH", originalDisableAuth)
-					} else {
-						os.Unsetenv("DISABLE_AUTH")
-					}
-				}()
-
 				// Arrange
 				ginCtx := httpUtils.CreateTestGinContext("GET", "/api/projects/test-project/integration-secrets", nil)
 				ginCtx.Params = gin.Params{

@@ -68,7 +68,7 @@ jobs:
         shell: bash
         working-directory: ${{ env.TESTS_DIR }}
         run: |
-          go run github.com/onsi/ginkgo/v2/ginkgo -r -v --cover --keep-going --github-output=true --label-filter=${{ steps.configure.outputs.TEST_LABEL }} --junit-report=${{ env.JUNIT_FILENAME }} --output-dir=reports -- -testNamespace=${{ steps.configure.outputs.DEFAULT_NAMESPACE }}
+          go run github.com/onsi/ginkgo/v2/ginkgo -r -v --cover --keep-going --github-output=true --tags=test --label-filter=${{ steps.configure.outputs.TEST_LABEL }} --junit-report=${{ env.JUNIT_FILENAME }} --output-dir=reports -- -testNamespace=${{ steps.configure.outputs.DEFAULT_NAMESPACE }}
         continue-on-error: true
 
       - name: Install Junit2Html plugin and generate report
