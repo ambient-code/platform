@@ -60,10 +60,20 @@ type PermissionAssignment struct {
 // ListProjectPermissions handles GET /api/projects/:projectName/permissions
 func ListProjectPermissions(c *gin.Context) {
 	projectName := c.Param("projectName")
+	if strings.TrimSpace(projectName) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Project name is required"})
+		return
+	}
+
 	reqK8s, _ := GetK8sClientsForRequest(c)
+	k8sClient := reqK8s
+	if k8sClient == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		return
+	}
 
 	// Prefer new label, but also include legacy group-access for backward-compat listing
-	rbsAll, err := reqK8s.RbacV1().RoleBindings(projectName).List(context.TODO(), v1.ListOptions{})
+	rbsAll, err := k8sClient.RbacV1().RoleBindings(projectName).List(context.TODO(), v1.ListOptions{})
 	if err != nil {
 		log.Printf("Failed to list RoleBindings in %s: %v", projectName, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list permissions"})
@@ -129,7 +139,13 @@ func ListProjectPermissions(c *gin.Context) {
 // AddProjectPermission handles POST /api/projects/:projectName/permissions
 func AddProjectPermission(c *gin.Context) {
 	projectName := c.Param("projectName")
+
 	reqK8s, _ := GetK8sClientsForRequest(c)
+	k8sClient := reqK8s
+	if k8sClient == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		return
+	}
 
 	var req struct {
 		SubjectType string `json:"subjectType" binding:"required"`
@@ -138,6 +154,12 @@ func AddProjectPermission(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Validate subject name is a valid Kubernetes resource name
+	if !isValidKubernetesName(req.SubjectName) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid userName format. Must be a valid Kubernetes resource name."})
 		return
 	}
 
@@ -182,9 +204,13 @@ func AddProjectPermission(c *gin.Context) {
 		Subjects: []rbacv1.Subject{{Kind: subjectKind, APIGroup: "rbac.authorization.k8s.io", Name: req.SubjectName}},
 	}
 
-	if _, err := reqK8s.RbacV1().RoleBindings(projectName).Create(context.TODO(), rb, v1.CreateOptions{}); err != nil {
+	if _, err := k8sClient.RbacV1().RoleBindings(projectName).Create(context.TODO(), rb, v1.CreateOptions{}); err != nil {
 		if errors.IsAlreadyExists(err) {
 			c.JSON(http.StatusConflict, gin.H{"error": "permission already exists for this subject and role"})
+			return
+		}
+		if errors.IsForbidden(err) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Insufficient permissions to grant permission"})
 			return
 		}
 		log.Printf("Failed to create RoleBinding in %s for %s %s: %v", projectName, st, req.SubjectName, err)
@@ -192,15 +218,25 @@ func AddProjectPermission(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"message": "permission added"})
+	c.JSON(http.StatusCreated, gin.H{"message": "Permission added"})
 }
 
 // RemoveProjectPermission handles DELETE /api/projects/:projectName/permissions/:subjectType/:subjectName
 func RemoveProjectPermission(c *gin.Context) {
 	projectName := c.Param("projectName")
+	if strings.TrimSpace(projectName) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Project is required in path /api/projects/:projectName or X-OpenShift-Project header"})
+		return
+	}
 	subjectType := strings.ToLower(c.Param("subjectType"))
 	subjectName := c.Param("subjectName")
+
 	reqK8s, _ := GetK8sClientsForRequest(c)
+	k8sClient := reqK8s
+	if k8sClient == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		return
+	}
 
 	if subjectType != "group" && subjectType != "user" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "subjectType must be one of: group, user"})
@@ -211,7 +247,7 @@ func RemoveProjectPermission(c *gin.Context) {
 		return
 	}
 
-	rbs, err := reqK8s.RbacV1().RoleBindings(projectName).List(context.TODO(), v1.ListOptions{LabelSelector: "app=ambient-permission"})
+	rbs, err := k8sClient.RbacV1().RoleBindings(projectName).List(context.TODO(), v1.ListOptions{LabelSelector: "app=ambient-permission"})
 	if err != nil {
 		log.Printf("Failed to list RoleBindings in %s: %v", projectName, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to remove permission"})
@@ -221,27 +257,33 @@ func RemoveProjectPermission(c *gin.Context) {
 	for _, rb := range rbs.Items {
 		for _, sub := range rb.Subjects {
 			if strings.EqualFold(sub.Kind, "Group") && subjectType == "group" && sub.Name == subjectName {
-				_ = reqK8s.RbacV1().RoleBindings(projectName).Delete(context.TODO(), rb.Name, v1.DeleteOptions{})
+				_ = k8sClient.RbacV1().RoleBindings(projectName).Delete(context.TODO(), rb.Name, v1.DeleteOptions{})
 				break
 			}
 			if strings.EqualFold(sub.Kind, "User") && subjectType == "user" && sub.Name == subjectName {
-				_ = reqK8s.RbacV1().RoleBindings(projectName).Delete(context.TODO(), rb.Name, v1.DeleteOptions{})
+				_ = k8sClient.RbacV1().RoleBindings(projectName).Delete(context.TODO(), rb.Name, v1.DeleteOptions{})
 				break
 			}
 		}
 	}
 
-	c.Status(http.StatusNoContent)
+	c.JSON(http.StatusNoContent, nil)
 }
 
 // ListProjectKeys handles GET /api/projects/:projectName/keys
 // Lists access keys (ServiceAccounts with label app=ambient-access-key)
 func ListProjectKeys(c *gin.Context) {
 	projectName := c.Param("projectName")
+
 	reqK8s, _ := GetK8sClientsForRequest(c)
+	k8sClient := reqK8s
+	if k8sClient == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		return
+	}
 
 	// List ServiceAccounts with label app=ambient-access-key
-	sas, err := reqK8s.CoreV1().ServiceAccounts(projectName).List(context.TODO(), v1.ListOptions{LabelSelector: "app=ambient-access-key"})
+	sas, err := k8sClient.CoreV1().ServiceAccounts(projectName).List(context.TODO(), v1.ListOptions{LabelSelector: "app=ambient-access-key"})
 	if err != nil {
 		log.Printf("Failed to list access keys in %s: %v", projectName, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list access keys"})
@@ -250,7 +292,7 @@ func ListProjectKeys(c *gin.Context) {
 
 	// Map ServiceAccount -> role by scanning RoleBindings with the same label
 	roleBySA := map[string]string{}
-	if rbs, err := reqK8s.RbacV1().RoleBindings(projectName).List(context.TODO(), v1.ListOptions{LabelSelector: "app=ambient-access-key"}); err == nil {
+	if rbs, err := k8sClient.RbacV1().RoleBindings(projectName).List(context.TODO(), v1.ListOptions{LabelSelector: "app=ambient-access-key"}); err == nil {
 		for _, rb := range rbs.Items {
 			role := strings.ToLower(rb.Annotations["ambient-code.io/role"])
 			if role == "" {
@@ -298,7 +340,17 @@ func ListProjectKeys(c *gin.Context) {
 // Creates a new access key (ServiceAccount with token and RoleBinding)
 func CreateProjectKey(c *gin.Context) {
 	projectName := c.Param("projectName")
+	if strings.TrimSpace(projectName) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Project name is required"})
+		return
+	}
+
 	reqK8s, _ := GetK8sClientsForRequest(c)
+	k8sClient := reqK8s
+	if k8sClient == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		return
+	}
 
 	var req struct {
 		Name        string `json:"name" binding:"required"`
@@ -344,7 +396,7 @@ func CreateProjectKey(c *gin.Context) {
 			},
 		},
 	}
-	if _, err := reqK8s.CoreV1().ServiceAccounts(projectName).Create(context.TODO(), sa, v1.CreateOptions{}); err != nil && !errors.IsAlreadyExists(err) {
+	if _, err := k8sClient.CoreV1().ServiceAccounts(projectName).Create(context.TODO(), sa, v1.CreateOptions{}); err != nil && !errors.IsAlreadyExists(err) {
 		log.Printf("Failed to create ServiceAccount %s in %s: %v", saName, projectName, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create service account"})
 		return
@@ -366,7 +418,7 @@ func CreateProjectKey(c *gin.Context) {
 		RoleRef:  rbacv1.RoleRef{APIGroup: "rbac.authorization.k8s.io", Kind: "ClusterRole", Name: roleRefName},
 		Subjects: []rbacv1.Subject{{Kind: "ServiceAccount", Name: saName, Namespace: projectName}},
 	}
-	if _, err := reqK8s.RbacV1().RoleBindings(projectName).Create(context.TODO(), rb, v1.CreateOptions{}); err != nil && !errors.IsAlreadyExists(err) {
+	if _, err := k8sClient.RbacV1().RoleBindings(projectName).Create(context.TODO(), rb, v1.CreateOptions{}); err != nil && !errors.IsAlreadyExists(err) {
 		log.Printf("Failed to create RoleBinding %s in %s: %v", rbName, projectName, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to bind service account"})
 		return
@@ -374,7 +426,7 @@ func CreateProjectKey(c *gin.Context) {
 
 	// Issue a one-time JWT token for this ServiceAccount (no audience; used as API key)
 	tr := &authnv1.TokenRequest{Spec: authnv1.TokenRequestSpec{}}
-	tok, err := reqK8s.CoreV1().ServiceAccounts(projectName).CreateToken(context.TODO(), saName, tr, v1.CreateOptions{})
+	tok, err := k8sClient.CoreV1().ServiceAccounts(projectName).CreateToken(context.TODO(), saName, tr, v1.CreateOptions{})
 	if err != nil {
 		log.Printf("Failed to create token for SA %s/%s: %v", projectName, saName, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate access token"})
@@ -395,19 +447,34 @@ func CreateProjectKey(c *gin.Context) {
 // Deletes an access key (ServiceAccount and associated RoleBindings)
 func DeleteProjectKey(c *gin.Context) {
 	projectName := c.Param("projectName")
+	if strings.TrimSpace(projectName) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Project name is required"})
+		return
+	}
+
 	keyID := c.Param("keyId")
+	if strings.TrimSpace(keyID) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Key ID is required"})
+		return
+	}
+
 	reqK8s, _ := GetK8sClientsForRequest(c)
+	k8sClient := reqK8s
+	if k8sClient == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		return
+	}
 
 	// Delete associated RoleBindings
-	rbs, _ := reqK8s.RbacV1().RoleBindings(projectName).List(context.TODO(), v1.ListOptions{LabelSelector: "app=ambient-access-key"})
+	rbs, _ := k8sClient.RbacV1().RoleBindings(projectName).List(context.TODO(), v1.ListOptions{LabelSelector: "app=ambient-access-key"})
 	for _, rb := range rbs.Items {
 		if rb.Annotations["ambient-code.io/sa-name"] == keyID {
-			_ = reqK8s.RbacV1().RoleBindings(projectName).Delete(context.TODO(), rb.Name, v1.DeleteOptions{})
+			_ = k8sClient.RbacV1().RoleBindings(projectName).Delete(context.TODO(), rb.Name, v1.DeleteOptions{})
 		}
 	}
 
 	// Delete the ServiceAccount itself
-	if err := reqK8s.CoreV1().ServiceAccounts(projectName).Delete(context.TODO(), keyID, v1.DeleteOptions{}); err != nil {
+	if err := k8sClient.CoreV1().ServiceAccounts(projectName).Delete(context.TODO(), keyID, v1.DeleteOptions{}); err != nil {
 		if !errors.IsNotFound(err) {
 			log.Printf("Failed to delete service account %s in %s: %v", keyID, projectName, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete access key"})
