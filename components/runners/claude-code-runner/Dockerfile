@@ -9,6 +9,9 @@ RUN dnf install -y 'dnf-command(config-manager)' && \
     dnf install -y git jq && \
     dnf clean all
 
+# Install uv (provides uvx for package execution)
+RUN pip install --no-cache-dir uv
+
 # Create working directory
 WORKDIR /app
 

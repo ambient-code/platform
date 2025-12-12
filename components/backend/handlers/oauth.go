@@ -65,7 +65,11 @@ func getOAuthProvider(provider string) (*OAuthProvider, error) {
 			ClientSecret: clientSecret,
 			TokenURL:     "https://oauth2.googleapis.com/token",
 			Scopes: []string{
+				"openid",
 				"https://www.googleapis.com/auth/userinfo.email",
+				"https://www.googleapis.com/auth/userinfo.profile",
+				"https://www.googleapis.com/auth/drive",
+				"https://www.googleapis.com/auth/drive.readonly",
 				"https://www.googleapis.com/auth/drive.file",
 			},
 		}, nil
@@ -633,13 +637,25 @@ func writeCredentialsToSessionPVC(ctx context.Context, projectName, sessionName,
 func storeCredentialsInSecret(ctx context.Context, projectName, sessionName, provider, accessToken, refreshToken string, expiresIn int64) error {
 	secretName := fmt.Sprintf("%s-%s-oauth", sessionName, provider)
 
-	// Prepare credentials JSON
+	// Get OAuth provider config for client_id and client_secret
+	providerConfig, err := getOAuthProvider(provider)
+	if err != nil {
+		return fmt.Errorf("failed to get OAuth provider config: %w", err)
+	}
+
+	// Calculate expiry time in ISO 8601 format as expected by workspace-mcp
+	// workspace-mcp expects timezone-naive format like Python's datetime.isoformat()
+	expiryTime := time.Now().Add(time.Duration(expiresIn) * time.Second)
+
+	// Prepare credentials JSON in the format expected by workspace-mcp
 	credentials := map[string]interface{}{
-		"access_token":  accessToken,
+		"token":         accessToken,
 		"refresh_token": refreshToken,
-		"token_type":    "Bearer",
-		"expires_in":    expiresIn,
-		"created_at":    time.Now().Unix(),
+		"token_uri":     providerConfig.TokenURL,
+		"client_id":     providerConfig.ClientID,
+		"client_secret": providerConfig.ClientSecret,
+		"scopes":        providerConfig.Scopes,
+		"expiry":        expiryTime.Format("2006-01-02T15:04:05"), // Timezone-naive format for Python compatibility
 	}
 
 	credentialsJSON, err := json.MarshalIndent(credentials, "", "  ")

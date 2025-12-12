@@ -71,6 +71,7 @@ import { CommitChangesDialog } from "./components/modals/commit-changes-dialog";
 import { WorkflowsAccordion } from "./components/accordions/workflows-accordion";
 import { RepositoriesAccordion } from "./components/accordions/repositories-accordion";
 import { ArtifactsAccordion } from "./components/accordions/artifacts-accordion";
+import { McpIntegrationsAccordion } from "./components/accordions/mcp-integrations-accordion";
 
 // Extracted hooks and utilities
 import { useGitOperations } from "./hooks/use-git-operations";
@@ -778,6 +779,11 @@ export default function ProjectSessionDetailPage({
                       onRefresh={refetchArtifactsFiles}
                       onDownloadFile={artifactsOps.handleDownloadFile}
                       onNavigateBack={artifactsOps.navigateBack}
+                    />
+
+                    <McpIntegrationsAccordion
+                      projectName={projectName}
+                      sessionName={sessionName}
                     />
 
                     {/* File Explorer */}
