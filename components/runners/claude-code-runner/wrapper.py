@@ -85,7 +85,6 @@ class ClaudeCodeAdapter:
                 logging.warning(f"User ID exceeds max length (255), truncating: {len(user_id)} chars")
                 user_id = user_id[:255]
             # Remove any characters that could cause injection issues
-            import re
             sanitized_id = re.sub(r'[^a-zA-Z0-9@._-]', '', user_id)
             if sanitized_id != user_id:
                 logging.warning(f"User ID contained invalid characters, sanitized from {len(user_id)} to {len(sanitized_id)} chars")
@@ -99,7 +98,6 @@ class ClaudeCodeAdapter:
                 logging.warning(f"User name exceeds max length (255), truncating: {len(user_name)} chars")
                 user_name = user_name[:255]
             # Remove control characters and non-printable characters
-            import re
             sanitized_name = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', user_name)
             if sanitized_name != user_name:
                 logging.warning(f"User name contained control characters, sanitized from {len(user_name)} to {len(sanitized_name)} chars")

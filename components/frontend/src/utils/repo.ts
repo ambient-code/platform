@@ -45,3 +45,29 @@ export function hasValidOutputConfig(repo: SessionRepo): boolean {
     (repo.output.branch || DEFAULT_BRANCH) !== (repo.input.branch || DEFAULT_BRANCH)
   );
 }
+
+/**
+ * Sanitize a repository URL for display by redacting credentials.
+ * Protects against token exposure in UI by replacing username/password with asterisks.
+ *
+ * Examples:
+ * - "https://token@github.com/org/repo" -> "https://***@github.com/org/repo"
+ * - "https://user:pass@gitlab.com/repo" -> "https://***:***@gitlab.com/repo"
+ * - "https://github.com/org/repo" -> "https://github.com/org/repo" (unchanged)
+ *
+ * @param url - The repository URL to sanitize
+ * @returns URL with credentials redacted, or original URL if parsing fails
+ */
+export function sanitizeUrlForDisplay(url: string): string {
+  try {
+    const parsed = new URL(url);
+    if (parsed.username || parsed.password) {
+      parsed.username = '***';
+      parsed.password = '***';
+    }
+    return parsed.toString();
+  } catch {
+    // If URL parsing fails, return as-is (not a valid URL)
+    return url;
+  }
+}

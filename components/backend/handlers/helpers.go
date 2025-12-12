@@ -114,6 +114,25 @@ func ParseRepoMap(m map[string]interface{}) (types.SimpleRepo, error) {
 		if strings.TrimSpace(r.Input.URL) == "" {
 			return r, fmt.Errorf("input.url is required")
 		}
+
+		// Validate that output differs from input (if output is specified)
+		if r.Output != nil {
+			inputURL := strings.TrimSpace(r.Input.URL)
+			outputURL := strings.TrimSpace(r.Output.URL)
+			inputBranch := ""
+			outputBranch := ""
+			if r.Input.Branch != nil {
+				inputBranch = strings.TrimSpace(*r.Input.Branch)
+			}
+			if r.Output.Branch != nil {
+				outputBranch = strings.TrimSpace(*r.Output.Branch)
+			}
+
+			// Output must differ from input in either URL or branch
+			if inputURL == outputURL && inputBranch == outputBranch {
+				return r, fmt.Errorf("output repository must differ from input (different URL or branch required)")
+			}
+		}
 	} else {
 		// Legacy format
 		if url, ok := m["url"].(string); ok {

@@ -177,6 +177,14 @@ func sessionNeedsMigration(session *unstructured.Unstructured) (bool, error) {
 		return false, nil // No repos - nothing to migrate
 	}
 
+	// Defensive type checking: validate first element type before processing
+	// Catches type errors early with clearer error messages
+	if len(repos) > 0 {
+		if _, ok := repos[0].(map[string]interface{}); !ok {
+			return false, fmt.Errorf("repos[0]: invalid type %T (expected map)", repos[0])
+		}
+	}
+
 	// Check all repos to detect if any are in legacy format
 	// We check all repos (not just the first) to handle edge cases where
 	// someone manually edited a CR and created mixed formats

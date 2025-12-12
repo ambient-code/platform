@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { useRepoBranches } from "@/services/queries";
 import type { SessionRepo } from "@/types/agentic-session";
-import { DEFAULT_BRANCH } from "@/utils/repo";
+import { DEFAULT_BRANCH, sanitizeUrlForDisplay } from "@/utils/repo";
 import { useState } from "react";
 
 type RepositoryDialogProps = {
@@ -144,7 +144,7 @@ export function RepositoryDialog({
             {/* Show summary when collapsed but output is configured */}
             {!showAdvanced && repo.output?.url && (
               <div className="text-xs text-muted-foreground pl-2 border-l-2 border-muted">
-                <span className="font-medium">Output:</span> {repo.output.url}
+                <span className="font-medium">Output:</span> {sanitizeUrlForDisplay(repo.output.url)}
                 {repo.output.branch && <span> ({repo.output.branch})</span>}
               </div>
             )}
