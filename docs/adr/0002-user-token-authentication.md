@@ -38,10 +38,18 @@ Chosen option: "User token for all operations", because:
 4. **Least privilege:** Backend only uses service account when necessary
 5. **Simplicity:** One pattern for user operations, exceptions documented
 
-**Exception:** Backend service account ONLY for:
+**Backend Exception:** Backend service account ONLY for:
 * Writing CRs after user authorization validated (handlers/sessions.go:417)
 * Minting service account tokens for runner pods (handlers/sessions.go:449)
 * Cross-namespace operations backend is explicitly authorized for
+
+**Operator Exception:** Operator service account for startup migrations:
+* V1→V2 repo format migration (operator/internal/handlers/migration.go)
+* Runs once at operator startup before processing user requests
+* Updates existing CRs the operator already has RBAC access to
+* Only modifies data structure format, not repository content
+* Active sessions (Running/Creating) are skipped to avoid interference
+* See migration.go:29-47 for detailed security model documentation
 
 ### Consequences
 

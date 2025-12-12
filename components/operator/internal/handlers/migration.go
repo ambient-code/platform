@@ -47,7 +47,9 @@ func MigrateAllSessions() error {
 	gvr := types.GetAgenticSessionResource()
 
 	// List all AgenticSessions across all namespaces
-	log.Println("Scanning for AgenticSessions requiring migration...")
+	log.Println("========================================")
+	log.Println("Starting AgenticSession v2 migration...")
+	log.Println("========================================")
 	sessionList, err := config.DynamicClient.Resource(gvr).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to list AgenticSessions: %w", err)
@@ -57,8 +59,9 @@ func MigrateAllSessions() error {
 	migratedCount := 0
 	skippedCount := 0
 	errorCount := 0
+	activeSkippedCount := 0
 
-	log.Printf("Found %d AgenticSessions total", totalSessions)
+	log.Printf("Found %d AgenticSessions to process", totalSessions)
 
 	for _, session := range sessionList.Items {
 		name := session.GetName()
@@ -87,7 +90,7 @@ func MigrateAllSessions() error {
 						log.Printf("Marked active session %s/%s (phase: %s) as skipped for migration", namespace, name, phase)
 					}
 				}
-				skippedCount++
+				activeSkippedCount++
 				continue
 			}
 		}
@@ -136,8 +139,20 @@ func MigrateAllSessions() error {
 			"Successfully migrated to v2 repo format")
 	}
 
-	log.Printf("Migration complete: %d migrated, %d skipped, %d errors (out of %d total)",
-		migratedCount, skippedCount, errorCount, totalSessions)
+	log.Println("========================================")
+	log.Println("Migration Summary:")
+	log.Printf("  Total sessions processed: %d", totalSessions)
+	log.Printf("  Successfully migrated: %d", migratedCount)
+	log.Printf("  Already migrated (skipped): %d", skippedCount)
+	log.Printf("  Active sessions (skipped): %d", activeSkippedCount)
+	log.Printf("  Errors: %d", errorCount)
+
+	if errorCount > 0 {
+		log.Printf("⚠️  Migration completed with %d errors - failed sessions will retry on next restart", errorCount)
+	} else {
+		log.Println("✅ Migration completed successfully")
+	}
+	log.Println("========================================")
 
 	// Note: We return nil even with errors to allow operator startup to continue.
 	// Individual session errors are logged above and don't prevent other sessions
