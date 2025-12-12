@@ -1,5 +1,6 @@
 .PHONY: help setup build-all build-frontend build-backend build-operator build-runner deploy clean
 .PHONY: local-up local-down local-clean local-status local-rebuild local-reload-backend local-reload-frontend local-reload-operator local-sync-version
+.PHONY: local-dev-token
 .PHONY: local-logs local-logs-backend local-logs-frontend local-logs-operator local-shell local-shell-frontend
 .PHONY: local-test local-test-dev local-test-quick test-all local-url local-troubleshoot local-port-forward local-stop-port-forward
 .PHONY: push-all registry-login setup-hooks remove-hooks check-minikube check-kubectl
@@ -561,6 +562,16 @@ _show-access-info: ## Internal: Show access information
 	fi
 	@echo ""
 	@echo "$(COLOR_YELLOW)⚠  SECURITY NOTE:$(COLOR_RESET) Authentication is DISABLED for local development."
+
+local-dev-token: check-kubectl ## Print a TokenRequest token for local-dev-user (for local dev API calls)
+	@kubectl get serviceaccount local-dev-user -n $(NAMESPACE) >/dev/null 2>&1 || \
+		(echo "$(COLOR_RED)✗$(COLOR_RESET) local-dev-user ServiceAccount not found in namespace $(NAMESPACE). Run 'make local-up' first." && exit 1)
+	@TOKEN=$$(kubectl -n $(NAMESPACE) create token local-dev-user 2>/dev/null); \
+	if [ -z "$$TOKEN" ]; then \
+		echo "$(COLOR_RED)✗$(COLOR_RESET) Failed to mint token (kubectl create token). Ensure TokenRequest is supported and kubectl is v1.24+"; \
+		exit 1; \
+	fi; \
+	echo "$$TOKEN"
 
 _create-operator-config: ## Internal: Create operator config from environment variables
 	@VERTEX_PROJECT_ID=$${ANTHROPIC_VERTEX_PROJECT_ID:-""}; \

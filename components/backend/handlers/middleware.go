@@ -364,8 +364,8 @@ func ValidateProjectContext() gin.HandlerFunc {
 	}
 }
 
-// SECURITY: Removed isLocalDevEnvironment() and getLocalDevK8sClients() functions.
-// These functions checked environment variables (GO_TEST, DISABLE_AUTH, ENVIRONMENT)
+// SECURITY: Removed the previous local-dev authentication bypass helpers.
+// The removed implementation relied on environment variables (test/dev flags)
 // which could be accidentally set in production, creating an authentication bypass risk.
 //
 // Production code must NEVER bypass authentication based on environment variables.
