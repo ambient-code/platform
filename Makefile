@@ -372,12 +372,28 @@ local-test-quick: check-kubectl check-minikube ## Quick smoke test of local envi
 	@minikube status >/dev/null 2>&1 && printf "%b\n" "$(COLOR_GREEN)✓$(COLOR_RESET) Minikube running" || (printf "%b\n" "$(COLOR_RED)✗$(COLOR_RESET) Minikube not running" && exit 1)
 	@printf "%b\n" "$(COLOR_BLUE)▶$(COLOR_RESET) Testing namespace..."
 	@kubectl get namespace $(NAMESPACE) >/dev/null 2>&1 && printf "%b\n" "$(COLOR_GREEN)✓$(COLOR_RESET) Namespace exists" || (printf "%b\n" "$(COLOR_RED)✗$(COLOR_RESET) Namespace missing" && exit 1)
-	@printf "%b\n" "$(COLOR_BLUE)▶$(COLOR_RESET) Testing pods..."
-	@kubectl get pods -n $(NAMESPACE) 2>/dev/null | grep -q "Running" && printf "%b\n" "$(COLOR_GREEN)✓$(COLOR_RESET) Pods running" || (printf "%b\n" "$(COLOR_RED)✗$(COLOR_RESET) No pods running" && exit 1)
+	@printf "%b\n" "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for pods to be ready..."
+	@kubectl wait --for=condition=ready pod -l app=backend -n $(NAMESPACE) --timeout=60s >/dev/null 2>&1 && \
+	 kubectl wait --for=condition=ready pod -l app=frontend -n $(NAMESPACE) --timeout=60s >/dev/null 2>&1 && \
+	 printf "%b\n" "$(COLOR_GREEN)✓$(COLOR_RESET) Pods ready" || (printf "%b\n" "$(COLOR_RED)✗$(COLOR_RESET) Pods not ready" && exit 1)
 	@printf "%b\n" "$(COLOR_BLUE)▶$(COLOR_RESET) Testing backend health..."
-	@curl -sf http://$$(minikube ip):30080/health >/dev/null 2>&1 && printf "%b\n" "$(COLOR_GREEN)✓$(COLOR_RESET) Backend healthy" || (printf "%b\n" "$(COLOR_RED)✗$(COLOR_RESET) Backend not responding" && exit 1)
+	@for i in 1 2 3 4 5; do \
+		curl -sf http://$$(minikube ip):30080/health >/dev/null 2>&1 && { printf "%b\n" "$(COLOR_GREEN)✓$(COLOR_RESET) Backend healthy"; break; } || { \
+			if [ $$i -eq 5 ]; then \
+				printf "%b\n" "$(COLOR_RED)✗$(COLOR_RESET) Backend not responding after 5 attempts"; exit 1; \
+			fi; \
+			sleep 2; \
+		}; \
+	done
 	@printf "%b\n" "$(COLOR_BLUE)▶$(COLOR_RESET) Testing frontend..."
-	@curl -sf http://$$(minikube ip):30030 >/dev/null 2>&1 && printf "%b\n" "$(COLOR_GREEN)✓$(COLOR_RESET) Frontend accessible" || (printf "%b\n" "$(COLOR_RED)✗$(COLOR_RESET) Frontend not responding" && exit 1)
+	@for i in 1 2 3 4 5; do \
+		curl -sf http://$$(minikube ip):30030 >/dev/null 2>&1 && { printf "%b\n" "$(COLOR_GREEN)✓$(COLOR_RESET) Frontend accessible"; break; } || { \
+			if [ $$i -eq 5 ]; then \
+				printf "%b\n" "$(COLOR_RED)✗$(COLOR_RESET) Frontend not responding after 5 attempts"; exit 1; \
+			fi; \
+			sleep 2; \
+		}; \
+	done
 	@echo ""
 	@printf "%b\n" "$(COLOR_GREEN)✓ Quick smoke test passed!$(COLOR_RESET)"
 

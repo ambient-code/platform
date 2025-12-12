@@ -44,16 +44,19 @@ jobs:
           echo "⚠️  Backend deployment timeout - showing status"
           kubectl get pods -n ambient-code -o wide
           kubectl describe deployment backend-api -n ambient-code | tail -50
+          exit 1
         }
         kubectl wait --for=condition=available --timeout=180s deployment/frontend -n ambient-code || {
           echo "⚠️  Frontend deployment timeout - showing status"
           kubectl get pods -n ambient-code -o wide
           kubectl describe deployment frontend -n ambient-code | tail -50
+          exit 1
         }
         kubectl wait --for=condition=available --timeout=180s deployment/agentic-operator -n ambient-code || {
           echo "⚠️  Operator deployment timeout - showing status"
           kubectl get pods -n ambient-code -o wide
           kubectl describe deployment agentic-operator -n ambient-code | tail -50
+          exit 1
         }
     
     - name: Run Makefile smoke tests

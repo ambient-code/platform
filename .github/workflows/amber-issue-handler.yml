@@ -1,3 +1,22 @@
+# Amber Issue-to-PR Handler
+#
+# This workflow automates issue resolution via the Amber background agent.
+#
+# TRIGGERS:
+# - Issue labeled with: amber:auto-fix, amber:refactor, amber:test-coverage
+# - Issue comment containing: /amber execute or @amber
+#
+# BEHAVIOR:
+# - Checks for existing open PR for the issue (prevents duplicate PRs)
+# - Creates or updates feature branch: amber/issue-{number}-{sanitized-title}
+# - Runs Claude Code to implement changes
+# - Creates PR or pushes to existing PR
+#
+# SECURITY:
+# - Validates branch names against injection attacks
+# - Uses strict regex matching for PR lookup
+# - Handles race conditions when PRs are closed during execution
+
 name: Amber Issue-to-PR Handler
 
 on:
@@ -180,29 +199,121 @@ jobs:
 
           echo "prompt_file=amber-prompt.md" >> $GITHUB_OUTPUT
 
-      - name: Create feature branch
+      - name: Check for existing PR
+        id: check-existing-pr
+        env:
+          ISSUE_NUMBER: ${{ steps.issue-details.outputs.issue_number }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Validate issue number is numeric to prevent injection
+          if ! [[ "$ISSUE_NUMBER" =~ ^[0-9]+$ ]]; then
+            echo "Error: Invalid issue number format"
+            exit 1
+          fi
+
+          # Check if there's already an open PR for this issue using stricter matching
+          # Search for PRs that reference this issue and filter by body containing exact "Closes #N" pattern
+          EXISTING_PR=$(gh pr list --state open --json number,headRefName,body --jq \
+            ".[] | select(.body | test(\"Closes #${ISSUE_NUMBER}($|[^0-9])\")) | {number, headRefName}" \
+            2>/dev/null | head -1 || echo "")
+
+          if [ -n "$EXISTING_PR" ] && [ "$EXISTING_PR" != "null" ] && [ "$EXISTING_PR" != "{}" ]; then
+            PR_NUMBER=$(echo "$EXISTING_PR" | jq -r '.number')
+            EXISTING_BRANCH=$(echo "$EXISTING_PR" | jq -r '.headRefName')
+
+            # Validate branch name format to prevent command injection
+            if ! [[ "$EXISTING_BRANCH" =~ ^[a-zA-Z0-9/_.-]+$ ]]; then
+              echo "Error: Invalid branch name format in existing PR"
+              echo "existing_pr=false" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+
+            echo "existing_pr=true" >> $GITHUB_OUTPUT
+            echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
+            echo "existing_branch=$EXISTING_BRANCH" >> $GITHUB_OUTPUT
+            echo "Found existing PR #$PR_NUMBER on branch $EXISTING_BRANCH"
+          else
+            echo "existing_pr=false" >> $GITHUB_OUTPUT
+            echo "No existing PR found for issue #${ISSUE_NUMBER}"
+          fi
+
+      - name: Create or checkout feature branch
         id: create-branch
         env:
           ISSUE_NUMBER: ${{ steps.issue-details.outputs.issue_number }}
           ISSUE_TITLE: ${{ steps.issue-details.outputs.issue_title }}
+          EXISTING_PR: ${{ steps.check-existing-pr.outputs.existing_pr }}
+          EXISTING_BRANCH: ${{ steps.check-existing-pr.outputs.existing_branch }}
         run: |
-          # Improved sanitization (Issue #10) - handles special chars, spaces, consecutive dashes
-          SANITIZED_TITLE=$(echo "$ISSUE_TITLE" \
-            | tr '[:upper:]' '[:lower:]' \
-            | sed 's/[^a-z0-9-]/-/g' \
-            | sed 's/--*/-/g' \
-            | sed 's/^-//' \
-            | sed 's/-$//' \
-            | cut -c1-50)
-
-          BRANCH_NAME="amber/issue-${ISSUE_NUMBER}-${SANITIZED_TITLE}"
-
           git config user.name "Amber Agent"
           git config user.email "amber@ambient-code.ai"
-          git checkout -b "$BRANCH_NAME"
+
+          # Validate issue number format
+          if ! [[ "$ISSUE_NUMBER" =~ ^[0-9]+$ ]]; then
+            echo "Error: Invalid issue number format"
+            exit 1
+          fi
+
+          checkout_branch() {
+            local branch="$1"
+            local is_existing="$2"
+
+            # Validate branch name format (alphanumeric, slashes, dashes, dots, underscores only)
+            if ! [[ "$branch" =~ ^[a-zA-Z0-9/_.-]+$ ]]; then
+              echo "Error: Invalid branch name format: $branch"
+              return 1
+            fi
+
+            echo "Attempting to checkout branch: $branch"
+            if git fetch origin "$branch" 2>/dev/null; then
+              git checkout -B "$branch" "origin/$branch"
+              echo "Checked out existing remote branch: $branch"
+            elif [ "$is_existing" == "true" ]; then
+              # Race condition: PR existed but branch was deleted
+              echo "Warning: Branch $branch no longer exists on remote (PR may have been closed)"
+              return 1
+            else
+              echo "Creating new branch: $branch"
+              git checkout -b "$branch"
+            fi
+            return 0
+          }
+
+          if [ "$EXISTING_PR" == "true" ] && [ -n "$EXISTING_BRANCH" ]; then
+            # Try to checkout existing PR branch with race condition handling
+            if ! checkout_branch "$EXISTING_BRANCH" "true"; then
+              echo "Existing PR branch unavailable, falling back to new branch creation"
+              # Fall through to create new branch
+              EXISTING_PR="false"
+            else
+              BRANCH_NAME="$EXISTING_BRANCH"
+            fi
+          fi
+
+          if [ "$EXISTING_PR" != "true" ]; then
+            # Create new branch with sanitized title
+            # Sanitization: lowercase, replace non-alphanumeric with dash, collapse dashes, trim
+            SANITIZED_TITLE=$(echo "$ISSUE_TITLE" \
+              | tr '[:upper:]' '[:lower:]' \
+              | sed 's/[^a-z0-9-]/-/g' \
+              | sed 's/--*/-/g' \
+              | sed 's/^-//' \
+              | sed 's/-$//' \
+              | cut -c1-50)
+
+            BRANCH_NAME="amber/issue-${ISSUE_NUMBER}-${SANITIZED_TITLE}"
+
+            # Validate the generated branch name
+            if ! [[ "$BRANCH_NAME" =~ ^[a-zA-Z0-9/_.-]+$ ]]; then
+              echo "Error: Generated branch name is invalid: $BRANCH_NAME"
+              exit 1
+            fi
+
+            checkout_branch "$BRANCH_NAME" "false" || exit 1
+          fi
 
           echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
-          echo "Created branch: $BRANCH_NAME"
+          echo "Using branch: $BRANCH_NAME"
 
       - name: Read prompt file
         id: read-prompt
@@ -297,6 +408,8 @@ jobs:
           RUN_ID: ${{ github.run_id }}
           GITHUB_SERVER_URL: ${{ github.server_url }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          EXISTING_PR: ${{ steps.check-existing-pr.outputs.existing_pr }}
+          EXISTING_PR_NUMBER: ${{ steps.check-existing-pr.outputs.pr_number }}
         uses: actions/github-script@v8
         with:
           script: |
@@ -308,18 +421,24 @@ jobs:
             const runId = process.env.RUN_ID;
             const serverUrl = process.env.GITHUB_SERVER_URL;
             const repository = process.env.GITHUB_REPOSITORY;
+            const existingPr = process.env.EXISTING_PR === 'true';
+            const existingPrNumber = process.env.EXISTING_PR_NUMBER;
 
             // Safely get git diff (no shell injection risk with execFile)
             const { stdout: diff } = await execFileAsync('git', ['diff', 'HEAD~1', '--stat']);
+
+            const nextSteps = existingPr
+              ? `- Review that changes match the issue description\n- Verify no scope creep or unintended modifications\n- Changes pushed to existing PR #${existingPrNumber}`
+              : `- Review that changes match the issue description\n- Verify no scope creep or unintended modifications\n- A PR will be created shortly for formal review`;
 
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: issueNumber,
-              body: `## Amber Change Summary\n\nThe following files were modified:\n\n\`\`\`\n${diff}\n\`\`\`\n\n**Next Steps:**\n- Review that changes match the issue description\n- Verify no scope creep or unintended modifications\n- A PR will be created shortly for formal review\n\n---\n🔍 [View AI decision process](${serverUrl}/${repository}/actions/runs/${runId}) (logs available for 90 days)`
+              body: `## Amber Change Summary\n\nThe following files were modified:\n\n\`\`\`\n${diff}\n\`\`\`\n\n**Next Steps:**\n${nextSteps}\n\n---\n🔍 [View AI decision process](${serverUrl}/${repository}/actions/runs/${runId}) (logs available for 90 days)`
             });
 
-      - name: Create Pull Request
+      - name: Create or Update Pull Request
         if: steps.check-changes.outputs.has_changes == 'true'
         env:
           BRANCH_NAME: ${{ steps.check-changes.outputs.branch_name }}
@@ -330,6 +449,8 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
           RUN_ID: ${{ github.run_id }}
           GITHUB_SERVER_URL: ${{ github.server_url }}
+          EXISTING_PR: ${{ steps.check-existing-pr.outputs.existing_pr }}
+          EXISTING_PR_NUMBER: ${{ steps.check-existing-pr.outputs.pr_number }}
         uses: actions/github-script@v8
         with:
           script: |
@@ -341,6 +462,8 @@ jobs:
             const repository = process.env.GITHUB_REPOSITORY;
             const runId = process.env.RUN_ID;
             const serverUrl = process.env.GITHUB_SERVER_URL;
+            const existingPr = process.env.EXISTING_PR === 'true';
+            const existingPrNumber = process.env.EXISTING_PR_NUMBER ? parseInt(process.env.EXISTING_PR_NUMBER) : null;
 
             // Helper function for retrying API calls with exponential backoff
             // Retries on: 5xx errors, network errors (no status), JSON parse errors
@@ -368,8 +491,57 @@ jobs:
               throw new Error('retryWithBackoff: max retries exceeded');
             }
 
-            // Create PR with error handling (Issue #3)
+            // Helper function to safely add a comment with fallback logging
+            async function safeComment(issueNum, body, description) {
+              try {
+                await retryWithBackoff(async () => {
+                  return await github.rest.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: issueNum,
+                    body: body
+                  });
+                });
+                console.log(`Successfully added comment: ${description}`);
+              } catch (commentError) {
+                // Log but don't fail the workflow for comment failures
+                console.log(`Warning: Failed to add comment (${description}): ${commentError.message}`);
+                console.log(`Comment body was: ${body.substring(0, 200)}...`);
+              }
+            }
+
             try {
+              // If PR already exists, just add a comment about the new push
+              if (existingPr && existingPrNumber) {
+                console.log(`PR #${existingPrNumber} already exists, adding update comment`);
+
+                // Add comment to PR about the new commit (with fallback)
+                await safeComment(
+                  existingPrNumber,
+                  `🤖 **Amber pushed additional changes**
+
+            - **Commit:** ${commitSha.substring(0, 7)}
+            - **Action Type:** ${actionType}
+
+            New changes have been pushed to this PR. Please review the updated code.
+
+            ---
+            🔍 [View AI decision process](${serverUrl}/${repository}/actions/runs/${runId}) (logs available for 90 days)`,
+                  `PR #${existingPrNumber} update notification`
+                );
+
+                // Also notify on the issue (with fallback)
+                await safeComment(
+                  issueNumber,
+                  `🤖 Amber pushed additional changes to the existing PR #${existingPrNumber}.\n\n---\n🔍 [View AI decision process](${serverUrl}/${repository}/actions/runs/${runId}) (logs available for 90 days)`,
+                  `Issue #${issueNumber} update notification`
+                );
+
+                console.log(`Updated existing PR #${existingPrNumber}`);
+                return;
+              }
+
+              // Create new PR
               const pr = await github.rest.pulls.create({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -403,36 +575,38 @@ jobs:
             Closes #${issueNumber}`
               });
 
-              // Add labels with retry logic for transient API failures
-              await retryWithBackoff(async () => {
-                return await github.rest.issues.addLabels({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  issue_number: pr.data.number,
-                  labels: ['amber-generated', 'auto-fix', actionType]
+              // Add labels with retry logic for transient API failures (non-critical)
+              try {
+                await retryWithBackoff(async () => {
+                  return await github.rest.issues.addLabels({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: pr.data.number,
+                    labels: ['amber-generated', 'auto-fix', actionType]
+                  });
                 });
-              });
+              } catch (labelError) {
+                console.log(`Warning: Failed to add labels to PR #${pr.data.number}: ${labelError.message}`);
+              }
 
-              // Link PR back to issue
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: issueNumber,
-                body: `🤖 Amber has created a pull request to address this issue: #${pr.data.number}\n\nThe changes are ready for review. All automated checks will run on the PR.\n\n---\n🔍 [View AI decision process](${serverUrl}/${repository}/actions/runs/${runId}) (logs available for 90 days)`
-              });
+              // Link PR back to issue (with fallback)
+              await safeComment(
+                issueNumber,
+                `🤖 Amber has created a pull request to address this issue: #${pr.data.number}\n\nThe changes are ready for review. All automated checks will run on the PR.\n\n---\n🔍 [View AI decision process](${serverUrl}/${repository}/actions/runs/${runId}) (logs available for 90 days)`,
+                `Issue #${issueNumber} PR link notification`
+              );
 
               console.log('Created PR:', pr.data.html_url);
             } catch (error) {
-              console.error('Failed to create PR:', error);
-              core.setFailed(`PR creation failed: ${error.message}`);
+              console.error('Failed to create/update PR:', error);
+              core.setFailed(`PR creation/update failed: ${error.message}`);
 
-              // Notify on issue about failure
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: issueNumber,
-                body: `⚠️ Amber completed changes but failed to create a pull request.\n\n**Error:** ${error.message}\n\nChanges committed to \`${branchName}\`. A maintainer can manually create the PR.`
-              });
+              // Notify on issue about failure (with fallback - best effort)
+              await safeComment(
+                issueNumber,
+                `⚠️ Amber completed changes but failed to create a pull request.\n\n**Error:** ${error.message}\n\nChanges committed to \`${branchName}\`. A maintainer can manually create the PR.`,
+                `Issue #${issueNumber} PR failure notification`
+              );
             }
 
       - name: Report failure
@@ -447,16 +621,23 @@ jobs:
         with:
           script: |
             const issueNumber = parseInt(process.env.ISSUE_NUMBER);
-            const actionType = process.env.ACTION_TYPE;
+            const actionType = process.env.ACTION_TYPE || 'unknown';
             const runId = process.env.RUN_ID;
             const serverUrl = process.env.GITHUB_SERVER_URL;
             const repository = process.env.GITHUB_REPOSITORY;
 
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: issueNumber,
-              body: `⚠️ Amber encountered an error while processing this issue.
+            // Validate issue number before attempting comment
+            if (!issueNumber || isNaN(issueNumber)) {
+              console.log('Error: Invalid issue number, cannot post failure comment');
+              return;
+            }
+
+            try {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                body: `⚠️ Amber encountered an error while processing this issue.
 
             **Action Type:** ${actionType}
             **Workflow Run:** ${serverUrl}/${repository}/actions/runs/${runId}
@@ -467,4 +648,8 @@ jobs:
             3. Ensure the changes are feasible for automation
 
             Manual intervention may be required for complex changes.`
-            });
+              });
+              console.log(`Posted failure comment to issue #${issueNumber}`);
+            } catch (commentError) {
+              console.log(`Warning: Failed to post failure comment to issue #${issueNumber}: ${commentError.message}`);
+            }
