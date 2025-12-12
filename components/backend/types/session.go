@@ -1,5 +1,10 @@
 package types
 
+import (
+	"fmt"
+	"strings"
+)
+
 // AgenticSession represents the structure of our custom resource
 type AgenticSession struct {
 	APIVersion string                 `json:"apiVersion"`
@@ -26,8 +31,21 @@ type AgenticSessionSpec struct {
 	ActiveWorkflow *WorkflowSelection `json:"activeWorkflow,omitempty"`
 }
 
-// SimpleRepo represents a simplified repository configuration
+// SimpleRepo represents a repository configuration with support for both
+// legacy (url/branch) and new (input/output/autoPush) formats
 type SimpleRepo struct {
+	// New structure (preferred)
+	Input    *RepoLocation `json:"input,omitempty"`
+	Output   *RepoLocation `json:"output,omitempty"`
+	AutoPush *bool         `json:"autoPush,omitempty"`
+
+	// Legacy structure (deprecated, for backwards compatibility)
+	URL    string  `json:"url,omitempty"`
+	Branch *string `json:"branch,omitempty"`
+}
+
+// RepoLocation represents a git repository location (input source or output target)
+type RepoLocation struct {
 	URL    string  `json:"url"`
 	Branch *string `json:"branch,omitempty"`
 }
@@ -112,4 +130,96 @@ type Condition struct {
 	Message            string `json:"message,omitempty"`
 	LastTransitionTime string `json:"lastTransitionTime,omitempty"`
 	ObservedGeneration int64  `json:"observedGeneration,omitempty"`
+}
+
+// NormalizeRepo converts a legacy repo format to the new input/output structure.
+// If the repo already uses the new format, it returns the repo as-is.
+// Legacy: {url: "...", branch: "..."} -> New: {input: {url: "...", branch: "..."}, autoPush: false}
+// Returns an error if the repo has an empty URL.
+func (r *SimpleRepo) NormalizeRepo(sessionDefaultAutoPush bool) (SimpleRepo, error) {
+	// If already using new format, validate and return as-is
+	if r.Input != nil {
+		if strings.TrimSpace(r.Input.URL) == "" {
+			return SimpleRepo{}, fmt.Errorf("cannot normalize repo with empty input.url")
+		}
+
+		// Validate that output differs from input (if output is specified)
+		if r.Output != nil {
+			inputURL := strings.TrimSpace(r.Input.URL)
+			outputURL := strings.TrimSpace(r.Output.URL)
+			inputBranch := ""
+			outputBranch := ""
+			if r.Input.Branch != nil {
+				inputBranch = strings.TrimSpace(*r.Input.Branch)
+			}
+			if r.Output.Branch != nil {
+				outputBranch = strings.TrimSpace(*r.Output.Branch)
+			}
+
+			// Output must differ from input in either URL or branch
+			if inputURL == outputURL && inputBranch == outputBranch {
+				return SimpleRepo{}, fmt.Errorf("output repository must differ from input (different URL or branch required)")
+			}
+		}
+
+		return *r, nil
+	}
+
+	// Validate legacy format before normalizing
+	if strings.TrimSpace(r.URL) == "" {
+		return SimpleRepo{}, fmt.Errorf("cannot normalize repo with empty url")
+	}
+
+	// Convert legacy format to new format
+	normalized := SimpleRepo{
+		Input: &RepoLocation{
+			URL:    r.URL,
+			Branch: r.Branch,
+		},
+		AutoPush: BoolPtr(sessionDefaultAutoPush),
+	}
+
+	return normalized, nil
+}
+
+// ToMapForCR converts SimpleRepo to a map suitable for CustomResource spec.repos[]
+func (r *SimpleRepo) ToMapForCR() map[string]interface{} {
+	m := make(map[string]interface{})
+
+	// Use new format if Input is defined
+	if r.Input != nil {
+		inputMap := map[string]interface{}{
+			"url": r.Input.URL,
+		}
+		if r.Input.Branch != nil {
+			inputMap["branch"] = *r.Input.Branch
+		}
+		m["input"] = inputMap
+
+		// Add output if defined
+		if r.Output != nil {
+			outputMap := map[string]interface{}{
+				"url": r.Output.URL,
+			}
+			if r.Output.Branch != nil {
+				outputMap["branch"] = *r.Output.Branch
+			}
+			m["output"] = outputMap
+		}
+
+		// Add autoPush flag
+		if r.AutoPush != nil {
+			m["autoPush"] = *r.AutoPush
+		}
+	} else {
+		// Legacy format - preserve for backward compatibility with un-normalized repos
+		// This path should only be reached for repos that haven't been normalized yet
+		// (e.g., when reading existing CRs created before the new format was introduced)
+		m["url"] = r.URL
+		if r.Branch != nil {
+			m["branch"] = *r.Branch
+		}
+	}
+
+	return m
 }

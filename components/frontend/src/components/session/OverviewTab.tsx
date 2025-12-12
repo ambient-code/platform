@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import type { AgenticSession } from "@/types/agentic-session";
 import type { SessionMessage } from "@/types";
 import { getK8sResourceStatusColor } from "@/lib/status-colors";
+import { hasValidOutputConfig, DEFAULT_BRANCH } from "@/utils/repo";
 
 type Props = {
   session: AgenticSession;
@@ -405,20 +406,21 @@ export const OverviewTab: React.FC<Props> = ({ session, promptExpanded, setPromp
                     <div className="space-y-2">
                       {session.spec.repos.map((repo, idx) => {
                         const isMain = idx === 0; // First repo is always the working directory
-                        const branch = repo.branch || 'main';
-                        const compareUrl = buildGithubCompareUrl(repo.url, branch, repo.url, branch);
-                        
+                        const repoUrl = repo.input.url;
+                        const branch = repo.input.branch || DEFAULT_BRANCH;
+                        const compareUrl = buildGithubCompareUrl(repoUrl, branch, repoUrl, branch);
+
                         // Check if temp pod is running and ready
                         const tempPod = k8sResources?.pods?.find(p => p.isTempPod);
                         const tempPodReady = tempPod?.phase === 'Running';
-                        
+
                         const br = diffTotals[idx] || { total_added: 0, total_removed: 0 };
                         const hasChanges = tempPodReady && (br.total_added > 0 || br.total_removed > 0);
                         return (
                           <div key={idx} className="flex items-center gap-2 text-sm font-mono">
                             {isMain && <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded font-sans">MAIN</span>}
-                            <span className="text-muted-foreground break-all">{repo.url}</span>
-                            <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded font-sans">{repo.branch || "main"}</span>
+                            <span className="text-muted-foreground break-all">{repoUrl}</span>
+                            <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded font-sans">{branch}</span>
                             {/* repo.status removed from simplified repo structure */}
                             <span className="flex-1" />
                             
@@ -466,7 +468,7 @@ export const OverviewTab: React.FC<Props> = ({ session, promptExpanded, setPromp
                               </a>
                             ) : null}
                             {hasChanges && tempPodReady && (
-                              repo.url ? (
+                              hasValidOutputConfig(repo) ? (
                                 <div className="flex items-center gap-2">
                                   <Button size="sm" variant="secondary" onClick={() => onPush(idx)} disabled={!tempPodReady}>{busyRepo[idx] === 'push' ? 'Pushing…' : 'Push'}</Button>
                                   <Button size="sm" variant="outline" onClick={() => onAbandon(idx)} disabled={!tempPodReady}>{busyRepo[idx] === 'abandon' ? 'Abandoning…' : 'Abandon'}</Button>
