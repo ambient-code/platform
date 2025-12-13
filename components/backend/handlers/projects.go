@@ -133,6 +133,12 @@ func isOpenShiftCluster() bool {
 // Returns information about the cluster type (OpenShift vs vanilla Kubernetes)
 // and whether Vertex AI is enabled
 // This endpoint does not require authentication as it's public cluster information
+// @Summary      Get cluster information
+// @Description  Returns platform information including whether running on OpenShift and Vertex AI status
+// @Tags         cluster
+// @Produce      json
+// @Success      200  {object}  map[string]interface{}  "Cluster platform information"
+// @Router       /cluster-info [get]
 func GetClusterInfo(c *gin.Context) {
 	isOpenShift := isOpenShiftCluster()
 	vertexEnabled := os.Getenv("CLAUDE_CODE_USE_VERTEX") == "1"
@@ -159,6 +165,15 @@ const parallelSSARWorkerCount = 10
 // then uses SubjectAccessReview to verify user access to each namespace.
 // Supports pagination via limit/offset and search filtering.
 // SSAR checks are performed in parallel for improved performance.
+// @Summary      List projects
+// @Description  Returns all projects (Kubernetes namespaces) the authenticated user has access to
+// @Tags         projects
+// @Security     BearerAuth
+// @Produce      json
+// @Success      200  {array}   types.AmbientProject  "List of accessible projects"
+// @Failure      401  {object}  map[string]string     "Unauthorized"
+// @Failure      500  {object}  map[string]string     "Internal server error"
+// @Router       /projects [get]
 func ListProjects(c *gin.Context) {
 	reqK8s, _ := GetK8sClientsForRequest(c)
 
@@ -404,6 +419,19 @@ func projectFromNamespace(ns *corev1.Namespace, isOpenShift bool) types.AmbientP
 //
 // The ClusterRole is namespace-scoped via the RoleBinding, giving the user admin access
 // only to their specific project namespace.
+// @Summary      Create project
+// @Description  Creates a new project (OpenShift Project or Kubernetes Namespace) and assigns admin role to creator
+// @Tags         projects
+// @Security     BearerAuth
+// @Accept       json
+// @Produce      json
+// @Param        project  body      types.CreateProjectRequest  true  "Project details"
+// @Success      201      {object}  types.AmbientProject        "Project created successfully"
+// @Failure      400      {object}  map[string]string           "Invalid request"
+// @Failure      401      {object}  map[string]string           "Unauthorized"
+// @Failure      409      {object}  map[string]string           "Project already exists"
+// @Failure      500      {object}  map[string]string           "Internal server error"
+// @Router       /projects [post]
 func CreateProject(c *gin.Context) {
 	reqK8s, _ := GetK8sClientsForRequest(c)
 
@@ -629,6 +657,18 @@ func CreateProject(c *gin.Context) {
 
 // GetProject handles GET /projects/:projectName
 // Returns Namespace details with OpenShift annotations if on OpenShift
+// @Summary      Get project details
+// @Description  Retrieves detailed information about a specific project
+// @Tags         projects
+// @Security     BearerAuth
+// @Produce      json
+// @Param        projectName  path      string                  true  "Project name"
+// @Success      200          {object}  types.AmbientProject    "Project details"
+// @Failure      401          {object}  map[string]string       "Unauthorized"
+// @Failure      403          {object}  map[string]string       "Forbidden"
+// @Failure      404          {object}  map[string]string       "Project not found"
+// @Failure      500          {object}  map[string]string       "Internal server error"
+// @Router       /projects/{projectName} [get]
 func GetProject(c *gin.Context) {
 	projectName := c.Param("projectName")
 	reqK8s, _ := GetK8sClientsForRequest(c)
@@ -688,6 +728,21 @@ func GetProject(c *gin.Context) {
 // UpdateProject handles PUT /projects/:projectName
 // On OpenShift: Updates namespace annotations for display name/description
 // On Kubernetes: No-op (k8s namespaces don't have display metadata)
+// @Summary      Update project
+// @Description  Updates a project's display name and description (OpenShift only, no-op on vanilla Kubernetes)
+// @Tags         projects
+// @Security     BearerAuth
+// @Accept       json
+// @Produce      json
+// @Param        projectName  path      string                     true  "Project name"
+// @Param        project      body      types.CreateProjectRequest true  "Updated project details"
+// @Success      200          {object}  types.AmbientProject       "Project updated successfully"
+// @Failure      400          {object}  map[string]string          "Invalid request"
+// @Failure      401          {object}  map[string]string          "Unauthorized"
+// @Failure      403          {object}  map[string]string          "Forbidden"
+// @Failure      404          {object}  map[string]string          "Project not found"
+// @Failure      500          {object}  map[string]string          "Internal server error"
+// @Router       /projects/{projectName} [put]
 func UpdateProject(c *gin.Context) {
 	projectName := c.Param("projectName")
 	reqK8s, _ := GetK8sClientsForRequest(c)
@@ -795,6 +850,18 @@ func UpdateProject(c *gin.Context) {
 // DeleteProject handles DELETE /projects/:projectName
 // Verifies user has access, then uses backend SA to delete namespace (both platforms)
 // Namespace deletion is cluster-scoped, so regular users can't delete directly
+// @Summary      Delete project
+// @Description  Deletes a project (Kubernetes namespace or OpenShift Project) and all its resources
+// @Tags         projects
+// @Security     BearerAuth
+// @Produce      json
+// @Param        projectName  path      string             true  "Project name"
+// @Success      204          "Project deleted successfully"
+// @Failure      401          {object}  map[string]string  "Unauthorized"
+// @Failure      403          {object}  map[string]string  "Forbidden"
+// @Failure      404          {object}  map[string]string  "Project not found"
+// @Failure      500          {object}  map[string]string  "Internal server error"
+// @Router       /projects/{projectName} [delete]
 func DeleteProject(c *gin.Context) {
 	projectName := c.Param("projectName")
 	reqK8s, _ := GetK8sClientsForRequest(c)
