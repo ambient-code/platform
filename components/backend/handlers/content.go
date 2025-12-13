@@ -35,6 +35,16 @@ var (
 )
 
 // ContentGitPush handles POST /content/github/push in CONTENT_SERVICE_MODE
+// @Summary      Push repository changes
+// @Description  Commits and pushes repository changes to configured output URL (internal content service endpoint)
+// @Tags         content
+// @Security     BearerAuth
+// @Accept       json
+// @Produce      json
+// @Param        push  body      map[string]string      true  "Push configuration (repoPath, commitMessage, outputRepoUrl, branch)"
+// @Success      200   {object}  map[string]interface{}  "Push completed successfully"
+// @Failure      400   {object}  map[string]string       "Invalid request body or push failed"
+// @Router       /content/github/push [post]
 func ContentGitPush(c *gin.Context) {
 	var body struct {
 		RepoPath      string `json:"repoPath"`
@@ -89,6 +99,16 @@ func ContentGitPush(c *gin.Context) {
 }
 
 // ContentGitAbandon handles POST /content/github/abandon
+// @Summary      Abandon repository changes
+// @Description  Discards all uncommitted changes in repository (git reset --hard)
+// @Tags         content
+// @Security     BearerAuth
+// @Accept       json
+// @Produce      json
+// @Param        abandon  body      map[string]string      true  "Abandon configuration (repoPath)"
+// @Success      200      {object}  map[string]interface{}  "Changes abandoned successfully"
+// @Failure      400      {object}  map[string]string       "Invalid request body or abandon failed"
+// @Router       /content/github/abandon [post]
 func ContentGitAbandon(c *gin.Context) {
 	var body struct {
 		RepoPath string `json:"repoPath"`
@@ -118,6 +138,15 @@ func ContentGitAbandon(c *gin.Context) {
 }
 
 // ContentGitDiff handles GET /content/github/diff
+// @Summary      Get repository diff
+// @Description  Returns diff statistics (insertions, deletions, modified files) for uncommitted changes
+// @Tags         content
+// @Security     BearerAuth
+// @Produce      json
+// @Param        repoPath  query     string                 true  "Repository path"
+// @Success      200       {object}  map[string]interface{}  "Diff statistics"
+// @Failure      400       {object}  map[string]string       "Invalid request - missing repoPath"
+// @Router       /content/github/diff [get]
 func ContentGitDiff(c *gin.Context) {
 	repoPath := strings.TrimSpace(c.Query("repoPath"))
 	if repoPath == "" {
@@ -157,6 +186,15 @@ func ContentGitDiff(c *gin.Context) {
 }
 
 // ContentGitStatus handles GET /content/git-status?path=
+// @Summary      Get git status
+// @Description  Returns git repository status (initialized, hasChanges, file counts)
+// @Tags         content
+// @Security     BearerAuth
+// @Produce      json
+// @Param        path  query     string                 true  "Repository path"
+// @Success      200   {object}  map[string]interface{}  "Git status information"
+// @Failure      400   {object}  map[string]string       "Invalid path"
+// @Router       /content/git-status [get]
 func ContentGitStatus(c *gin.Context) {
 	path := filepath.Clean("/" + strings.TrimSpace(c.Query("path")))
 	if path == "/" || strings.Contains(path, "..") {
@@ -210,7 +248,17 @@ func ContentGitStatus(c *gin.Context) {
 }
 
 // ContentGitConfigureRemote handles POST /content/git-configure-remote
-// Body: { path: string, remoteURL: string, branch: string }
+// @Summary      Configure git remote
+// @Description  Initializes git repository and configures remote URL/branch
+// @Tags         content
+// @Security     BearerAuth
+// @Accept       json
+// @Produce      json
+// @Param        config  body      map[string]string      true  "Remote configuration (path, remoteUrl, branch)"
+// @Success      200     {object}  map[string]interface{}  "Remote configured successfully"
+// @Failure      400     {object}  map[string]string       "Invalid request body or directory not found"
+// @Failure      500     {object}  map[string]string       "Failed to initialize git or configure remote"
+// @Router       /content/git-configure-remote [post]
 func ContentGitConfigureRemote(c *gin.Context) {
 	var body struct {
 		Path      string `json:"path"`
@@ -287,7 +335,17 @@ func ContentGitConfigureRemote(c *gin.Context) {
 }
 
 // ContentGitSync handles POST /content/git-sync
-// Body: { path: string, message: string, branch: string }
+// @Summary      Synchronize git repository
+// @Description  Commits local changes, pulls from remote, and pushes to remote in a single operation
+// @Tags         content
+// @Security     BearerAuth
+// @Accept       json
+// @Produce      json
+// @Param        sync  body      map[string]string      true  "Sync configuration (path, message, branch)"
+// @Success      200   {object}  map[string]interface{}  "Synchronized successfully"
+// @Failure      400   {object}  map[string]string       "Invalid path or git repository not initialized"
+// @Failure      500   {object}  map[string]string       "Synchronization failed"
+// @Router       /content/git-sync [post]
 func ContentGitSync(c *gin.Context) {
 	var body struct {
 		Path    string `json:"path"`
@@ -329,6 +387,17 @@ func ContentGitSync(c *gin.Context) {
 }
 
 // ContentWrite handles POST /content/write when running in CONTENT_SERVICE_MODE
+// @Summary      Write file content
+// @Description  Writes or updates file content in workspace
+// @Tags         content
+// @Security     BearerAuth
+// @Accept       json
+// @Produce      json
+// @Param        write  body      map[string]string      true  "Write configuration (path, content, encoding)"
+// @Success      200    {object}  map[string]string       "File written successfully"
+// @Failure      400    {object}  map[string]string       "Invalid request body, path, or base64 content"
+// @Failure      500    {object}  map[string]string       "Failed to create directory or write file"
+// @Router       /content/write [post]
 func ContentWrite(c *gin.Context) {
 	var req struct {
 		Path     string `json:"path"`
@@ -378,6 +447,17 @@ func ContentWrite(c *gin.Context) {
 }
 
 // ContentRead handles GET /content/file?path=
+// @Summary      Read file content
+// @Description  Retrieves file content from workspace
+// @Tags         content
+// @Security     BearerAuth
+// @Produce      application/octet-stream
+// @Param        path  query  string  true  "File path"
+// @Success      200   {file}  file              "File content"
+// @Failure      400   {object}  map[string]string  "Invalid path"
+// @Failure      404   {object}  map[string]string  "File not found"
+// @Failure      500   {object}  map[string]string  "Read failed"
+// @Router       /content/file [get]
 func ContentRead(c *gin.Context) {
 	path := filepath.Clean("/" + strings.TrimSpace(c.Query("path")))
 	log.Printf("ContentRead: requested path=%q StateBaseDir=%q", c.Query("path"), StateBaseDir)
@@ -406,6 +486,17 @@ func ContentRead(c *gin.Context) {
 }
 
 // ContentList handles GET /content/list?path=
+// @Summary      List directory contents
+// @Description  Lists files and directories in workspace path
+// @Tags         content
+// @Security     BearerAuth
+// @Produce      json
+// @Param        path  query     string                 true  "Directory path"
+// @Success      200   {object}  map[string]interface{}  "Directory listing with files and folders"
+// @Failure      400   {object}  map[string]string       "Invalid path"
+// @Failure      404   {object}  map[string]string       "Directory not found"
+// @Failure      500   {object}  map[string]string       "Stat or readdir failed"
+// @Router       /content/list [get]
 func ContentList(c *gin.Context) {
 	path := filepath.Clean("/" + strings.TrimSpace(c.Query("path")))
 	log.Printf("ContentList: requested path=%q", c.Query("path"))
@@ -462,7 +553,15 @@ func ContentList(c *gin.Context) {
 }
 
 // ContentWorkflowMetadata handles GET /content/workflow-metadata?session=
-// Parses .claude/commands/*.md and .claude/agents/*.md files from active workflow
+// @Summary      Get workflow metadata
+// @Description  Retrieves commands and agents metadata from active workflow (.claude/commands/*.md and .claude/agents/*.md)
+// @Tags         content
+// @Security     BearerAuth
+// @Produce      json
+// @Param        session  query     string                 true  "Session name"
+// @Success      200      {object}  map[string]interface{}  "Workflow metadata (commands, agents, config)"
+// @Failure      400      {object}  map[string]string       "Missing session parameter"
+// @Router       /content/workflow-metadata [get]
 func ContentWorkflowMetadata(c *gin.Context) {
 	sessionName := c.Query("session")
 	if sessionName == "" {
@@ -666,6 +765,17 @@ func findActiveWorkflowDir(sessionName string) string {
 }
 
 // ContentGitMergeStatus handles GET /content/git-merge-status?path=&branch=
+// @Summary      Get git merge status
+// @Description  Checks if local workspace and remote repository can merge without conflicts
+// @Tags         content
+// @Security     BearerAuth
+// @Produce      json
+// @Param        path    query     string                 true  "Repository path"
+// @Param        branch  query     string                 false "Remote branch to check (default: main)"
+// @Success      200     {object}  map[string]interface{}  "Merge status with conflict information"
+// @Failure      400     {object}  map[string]string       "Invalid path"
+// @Failure      500     {object}  map[string]string       "Merge status check failed"
+// @Router       /content/git-merge-status [get]
 func ContentGitMergeStatus(c *gin.Context) {
 	path := filepath.Clean("/" + strings.TrimSpace(c.Query("path")))
 	branch := strings.TrimSpace(c.Query("branch"))
@@ -705,7 +815,16 @@ func ContentGitMergeStatus(c *gin.Context) {
 }
 
 // ContentGitPull handles POST /content/git-pull
-// Body: { path: string, branch: string }
+// @Summary      Git pull
+// @Description  Pulls latest changes from remote repository to workspace directory
+// @Tags         content
+// @Security     BearerAuth
+// @Accept       json
+// @Produce      json
+// @Param        pull  body      map[string]string      true  "Pull configuration (path, branch)"
+// @Success      200   {object}  map[string]interface{}  "Pulled successfully"
+// @Failure      400   {object}  map[string]string       "Invalid request body or pull failed"
+// @Router       /content/git-pull [post]
 func ContentGitPull(c *gin.Context) {
 	var body struct {
 		Path   string `json:"path"`
@@ -739,7 +858,16 @@ func ContentGitPull(c *gin.Context) {
 }
 
 // ContentGitPushToBranch handles POST /content/git-push
-// Body: { path: string, branch: string, message: string }
+// @Summary      Git push
+// @Description  Commits local changes and pushes to remote repository branch
+// @Tags         content
+// @Security     BearerAuth
+// @Accept       json
+// @Produce      json
+// @Param        push  body      map[string]string      true  "Push configuration (path, branch, message)"
+// @Success      200   {object}  map[string]interface{}  "Pushed successfully"
+// @Failure      400   {object}  map[string]string       "Invalid request body or push failed"
+// @Router       /content/git-push [post]
 func ContentGitPushToBranch(c *gin.Context) {
 	var body struct {
 		Path    string `json:"path"`
@@ -778,7 +906,16 @@ func ContentGitPushToBranch(c *gin.Context) {
 }
 
 // ContentGitCreateBranch handles POST /content/git-create-branch
-// Body: { path: string, branchName: string }
+// @Summary      Git create branch
+// @Description  Creates a new git branch in workspace repository
+// @Tags         content
+// @Security     BearerAuth
+// @Accept       json
+// @Produce      json
+// @Param        branch  body      map[string]string      true  "Branch configuration (path, branchName)"
+// @Success      200     {object}  map[string]interface{}  "Branch created successfully"
+// @Failure      400     {object}  map[string]string       "Invalid request body or branch creation failed"
+// @Router       /content/git-create-branch [post]
 func ContentGitCreateBranch(c *gin.Context) {
 	var body struct {
 		Path       string `json:"path"`
@@ -813,6 +950,16 @@ func ContentGitCreateBranch(c *gin.Context) {
 }
 
 // ContentGitListBranches handles GET /content/git-list-branches?path=
+// @Summary      Git list branches
+// @Description  Lists all remote branches for workspace repository
+// @Tags         content
+// @Security     BearerAuth
+// @Produce      json
+// @Param        path  query     string                 true  "Repository path"
+// @Success      200   {object}  map[string]interface{}  "List of remote branches"
+// @Failure      400   {object}  map[string]string       "Invalid path"
+// @Failure      500   {object}  map[string]string       "Failed to list branches"
+// @Router       /content/git-list-branches [get]
 func ContentGitListBranches(c *gin.Context) {
 	path := filepath.Clean("/" + strings.TrimSpace(c.Query("path")))
 
