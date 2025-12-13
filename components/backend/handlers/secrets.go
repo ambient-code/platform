@@ -16,7 +16,15 @@ import (
 // 1. ambient-runner-secrets: ANTHROPIC_API_KEY only (ignored when Vertex enabled)
 // 2. ambient-non-vertex-integrations: GITHUB_TOKEN, JIRA_*, custom keys (optional, injected if present)
 
-// ListNamespaceSecrets handles GET /api/projects/:projectName/secrets -> { items: [{name, createdAt}] }
+// @Summary      List namespace secrets
+// @Description  Returns all runner/session secrets in the project namespace (Opaque type with ambient-code.io/runner-secret annotation)
+// @Tags         secrets
+// @Produce      json
+// @Param        projectName  path      string  true  "Project name (Kubernetes namespace)"
+// @Success      200  {object}  map[string]interface{}  "List of secrets with name, createdAt, and type"
+// @Failure      401  {object}  map[string]string       "Unauthorized - invalid or missing token"
+// @Failure      500  {object}  map[string]string       "Internal server error"
+// @Router       /projects/{projectName}/secrets [get]
 func ListNamespaceSecrets(c *gin.Context) {
 	projectName := c.Param("projectName")
 	reqK8s, _ := GetK8sClientsForRequest(c)
@@ -55,7 +63,15 @@ func ListNamespaceSecrets(c *gin.Context) {
 // Hardcoded secret name: "ambient-runner-secrets"
 // Only injected when Vertex is disabled
 
-// ListRunnerSecrets handles GET /api/projects/:projectName/runner-secrets -> { data: { key: value } }
+// @Summary      List runner secrets
+// @Description  Returns runner secrets (ANTHROPIC_API_KEY) from the ambient-runner-secrets Secret. Returns empty map if secret doesn't exist.
+// @Tags         secrets
+// @Produce      json
+// @Param        projectName  path      string  true  "Project name (Kubernetes namespace)"
+// @Success      200  {object}  map[string]interface{}  "Runner secrets data as key-value pairs"
+// @Failure      401  {object}  map[string]string       "Unauthorized - invalid or missing token"
+// @Failure      500  {object}  map[string]string       "Internal server error"
+// @Router       /projects/{projectName}/runner-secrets [get]
 func ListRunnerSecrets(c *gin.Context) {
 	projectName := c.Param("projectName")
 	reqK8s, _ := GetK8sClientsForRequest(c)
@@ -85,7 +101,18 @@ func ListRunnerSecrets(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": out})
 }
 
-// UpdateRunnerSecrets handles PUT /api/projects/:projectName/runner-secrets { data: { key: value } }
+// @Summary      Update runner secrets
+// @Description  Creates or updates the ambient-runner-secrets Secret. Only ANTHROPIC_API_KEY is allowed. Used when Vertex is disabled.
+// @Tags         secrets
+// @Accept       json
+// @Produce      json
+// @Param        projectName  path      string                 true  "Project name (Kubernetes namespace)"
+// @Param        secrets      body      map[string]interface{}  true  "Secret data (only ANTHROPIC_API_KEY allowed)"
+// @Success      200  {object}  map[string]string  "Runner secrets updated successfully"
+// @Failure      400  {object}  map[string]string  "Invalid request body or disallowed keys"
+// @Failure      401  {object}  map[string]string  "Unauthorized - invalid or missing token"
+// @Failure      500  {object}  map[string]string  "Internal server error"
+// @Router       /projects/{projectName}/runner-secrets [put]
 func UpdateRunnerSecrets(c *gin.Context) {
 	projectName := c.Param("projectName")
 	reqK8s, _ := GetK8sClientsForRequest(c)
@@ -164,7 +191,15 @@ func UpdateRunnerSecrets(c *gin.Context) {
 // Hardcoded secret name: "ambient-non-vertex-integrations"
 // Injected as env vars if present (optional), regardless of Vertex setting
 
-// ListIntegrationSecrets handles GET /api/projects/:projectName/integration-secrets -> { data: { key: value } }
+// @Summary      List integration secrets
+// @Description  Returns integration secrets (GITHUB_TOKEN, JIRA_*, custom keys) from the ambient-non-vertex-integrations Secret. Returns empty map if secret doesn't exist.
+// @Tags         secrets
+// @Produce      json
+// @Param        projectName  path      string  true  "Project name (Kubernetes namespace)"
+// @Success      200  {object}  map[string]interface{}  "Integration secrets data as key-value pairs"
+// @Failure      401  {object}  map[string]string       "Unauthorized - invalid or missing token"
+// @Failure      500  {object}  map[string]string       "Internal server error"
+// @Router       /projects/{projectName}/integration-secrets [get]
 func ListIntegrationSecrets(c *gin.Context) {
 	projectName := c.Param("projectName")
 	reqK8s, _ := GetK8sClientsForRequest(c)
@@ -194,7 +229,18 @@ func ListIntegrationSecrets(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": out})
 }
 
-// UpdateIntegrationSecrets handles PUT /api/projects/:projectName/integration-secrets { data: { key: value } }
+// @Summary      Update integration secrets
+// @Description  Creates or updates the ambient-non-vertex-integrations Secret. Accepts GITHUB_TOKEN, JIRA_*, and custom integration keys. Injected regardless of Vertex setting.
+// @Tags         secrets
+// @Accept       json
+// @Produce      json
+// @Param        projectName  path      string                 true  "Project name (Kubernetes namespace)"
+// @Param        secrets      body      map[string]interface{}  true  "Secret data (GITHUB_TOKEN, JIRA_*, custom keys)"
+// @Success      200  {object}  map[string]string  "Integration secrets updated successfully"
+// @Failure      400  {object}  map[string]string  "Invalid request body"
+// @Failure      401  {object}  map[string]string  "Unauthorized - invalid or missing token"
+// @Failure      500  {object}  map[string]string  "Internal server error"
+// @Router       /projects/{projectName}/integration-secrets [put]
 func UpdateIntegrationSecrets(c *gin.Context) {
 	projectName := c.Param("projectName")
 	reqK8s, _ := GetK8sClientsForRequest(c)
