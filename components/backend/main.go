@@ -1,3 +1,23 @@
+// @title           Ambient Code Platform API
+// @version         1.0
+// @description     Kubernetes-native AI automation platform for intelligent agentic workflows
+// @termsOfService  https://ambient-code.com/terms/
+
+// @contact.name   Ambient Code Support
+// @contact.url    https://ambient-code.com/support
+// @contact.email  support@ambient-code.com
+
+// @license.name  Apache 2.0
+// @license.url   http://www.apache.org/licenses/LICENSE-2.0.html
+
+// @host      localhost:8081
+// @BasePath  /api
+
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+// @description Type "Bearer" followed by a space and your authentication token.
+
 package main
 
 import (
@@ -13,6 +33,8 @@ import (
 	"ambient-code-backend/websocket"
 
 	"github.com/joho/godotenv"
+
+	_ "ambient-code-backend/docs" // Swagger docs (auto-generated)
 )
 
 func main() {

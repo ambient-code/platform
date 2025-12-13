@@ -122,6 +122,32 @@ k8s-teardown: ## Teardown local Kubernetes test cluster
 # Pre-commit hooks
 pre-commit: fmt vet test ## Run pre-commit checks
 
+# Swagger documentation targets
+.PHONY: install-swagger swagger swagger-validate swagger-copy
+
+install-swagger: ## Install swaggo/swag CLI tool
+	@echo "Installing swaggo/swag CLI..."
+	go install github.com/swaggo/swag/cmd/swag@latest
+
+swagger: install-swagger ## Generate Swagger documentation
+	@echo "Generating Swagger documentation..."
+	$(shell go env GOPATH)/bin/swag init -g main.go --output ./docs --parseDependency --parseInternal
+	@echo "✓ Swagger docs generated at ./docs/swagger.yaml"
+
+swagger-validate: swagger ## Validate Swagger documentation (fail on warnings)
+	@echo "Validating Swagger documentation..."
+	@if grep -i "warning" docs/swagger.json 2>/dev/null; then \
+		echo "❌ ERROR: Swagger generation produced warnings"; \
+		exit 1; \
+	fi
+	@echo "✓ Swagger validation passed"
+
+swagger-copy: swagger ## Copy OpenAPI spec to docs/api/
+	@echo "Copying OpenAPI spec to docs/api/..."
+	@mkdir -p ../../docs/api
+	cp docs/swagger.yaml ../../docs/api/openapi.yaml
+	@echo "✓ Spec copied to docs/api/openapi.yaml"
+
 # Build information
 version: ## Show version information
 	@echo "Go version: $(shell go version)"

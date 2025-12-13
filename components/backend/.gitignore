@@ -46,3 +46,6 @@ ambient-code-backend
 
 .env
 private-key.pem
+
+# Swagger auto-generated docs (committed to docs/api/, not here)
+docs/

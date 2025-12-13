@@ -5,6 +5,8 @@ import (
 	"ambient-code-backend/websocket"
 
 	"github.com/gin-gonic/gin"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
 func registerContentRoutes(r *gin.Engine) {
@@ -120,4 +122,7 @@ func registerRoutes(r *gin.Engine) {
 
 	// Health check endpoint
 	r.GET("/health", handlers.Health)
+
+	// Swagger UI endpoint (serves interactive API documentation)
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 }
