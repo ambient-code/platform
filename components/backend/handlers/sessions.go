@@ -2766,8 +2766,19 @@ func PutSessionWorkspaceFile(c *gin.Context) {
 }
 
 // PushSessionRepo proxies a push request for a given session repo to the per-job content service.
-// POST /api/projects/:projectName/agentic-sessions/:sessionName/github/push
-// Body: { repoIndex: number, commitMessage?: string, branch?: string }
+// @Summary      Push session repository
+// @Description  Commits and pushes changes from session workspace repository to configured output (fork or original repo)
+// @Tags         sessions
+// @Security     BearerAuth
+// @Accept       json
+// @Produce      json
+// @Param        projectName  path      string                 true  "Project name (Kubernetes namespace)"
+// @Param        sessionName  path      string                 true  "Session name"
+// @Param        push         body      map[string]interface{}  true  "Push configuration (repoIndex, commitMessage, branch)"
+// @Success      200  {object}  map[string]interface{}  "Push completed successfully"
+// @Failure      400  {object}  map[string]string       "Invalid request body"
+// @Failure      503  {object}  map[string]string       "Content service unavailable or push failed"
+// @Router       /projects/{projectName}/agentic-sessions/{sessionName}/github/push [post]
 func PushSessionRepo(c *gin.Context) {
 	project := c.Param("projectName")
 	session := c.Param("sessionName")
@@ -2922,6 +2933,19 @@ func PushSessionRepo(c *gin.Context) {
 }
 
 // AbandonSessionRepo instructs sidecar to discard local changes for a repo.
+// @Summary      Abandon session repository changes
+// @Description  Discards all uncommitted changes in session workspace repository (git reset --hard)
+// @Tags         sessions
+// @Security     BearerAuth
+// @Accept       json
+// @Produce      json
+// @Param        projectName  path      string                 true  "Project name (Kubernetes namespace)"
+// @Param        sessionName  path      string                 true  "Session name"
+// @Param        abandon      body      map[string]interface{}  true  "Abandon configuration (repoIndex, repoPath)"
+// @Success      200  {object}  map[string]interface{}  "Changes abandoned successfully"
+// @Failure      400  {object}  map[string]string       "Invalid request body"
+// @Failure      503  {object}  map[string]string       "Content service unavailable or abandon failed"
+// @Router       /projects/{projectName}/agentic-sessions/{sessionName}/github/abandon [post]
 func AbandonSessionRepo(c *gin.Context) {
 	project := c.Param("projectName")
 	session := c.Param("sessionName")
@@ -2984,7 +3008,19 @@ func AbandonSessionRepo(c *gin.Context) {
 }
 
 // DiffSessionRepo proxies diff counts for a given session repo to the content sidecar.
-// GET /api/projects/:projectName/agentic-sessions/:sessionName/github/diff?repoIndex=0&repoPath=...
+// @Summary      Diff session repository
+// @Description  Returns diff statistics (insertions, deletions, modified files) for uncommitted changes in repository
+// @Tags         sessions
+// @Security     BearerAuth
+// @Produce      json
+// @Param        projectName  path   string  true   "Project name (Kubernetes namespace)"
+// @Param        sessionName  path   string  true   "Session name"
+// @Param        repoIndex    query  string  false  "Repository index (alternative to repoPath)"
+// @Param        repoPath     query  string  false  "Repository path (alternative to repoIndex)"
+// @Success      200  {object}  map[string]interface{}  "Diff statistics"
+// @Failure      400  {object}  map[string]string       "Missing repoPath/repoIndex"
+// @Failure      503  {object}  map[string]string       "Content service unavailable"
+// @Router       /projects/{projectName}/agentic-sessions/{sessionName}/github/diff [get]
 func DiffSessionRepo(c *gin.Context) {
 	project := c.Param("projectName")
 	session := c.Param("sessionName")
@@ -3036,7 +3072,18 @@ func DiffSessionRepo(c *gin.Context) {
 }
 
 // GetGitStatus returns git status for a directory in the workspace
-// GET /api/projects/:projectName/agentic-sessions/:sessionName/git/status?path=artifacts
+// @Summary      Get git status
+// @Description  Returns git status (modified, untracked, staged files) for a workspace directory
+// @Tags         sessions
+// @Security     BearerAuth
+// @Produce      json
+// @Param        projectName  path   string  true  "Project name (Kubernetes namespace)"
+// @Param        sessionName  path   string  true  "Session name"
+// @Param        path         query  string  true  "Relative path within workspace"
+// @Success      200  {object}  map[string]interface{}  "Git status with file lists"
+// @Failure      400  {object}  map[string]string       "Missing path parameter"
+// @Failure      503  {object}  map[string]string       "Content service unavailable"
+// @Router       /projects/{projectName}/agentic-sessions/{sessionName}/git/status [get]
 func GetGitStatus(c *gin.Context) {
 	project := c.Param("projectName")
 	session := c.Param("sessionName")
@@ -3080,8 +3127,19 @@ func GetGitStatus(c *gin.Context) {
 }
 
 // ConfigureGitRemote initializes git and configures remote for a workspace directory
-// Body: { path: string, remoteURL: string, branch: string }
-// POST /api/projects/:projectName/agentic-sessions/:sessionName/git/configure-remote
+// @Summary      Configure git remote
+// @Description  Initializes git repository and configures remote URL/branch for a workspace directory
+// @Tags         sessions
+// @Security     BearerAuth
+// @Accept       json
+// @Produce      json
+// @Param        projectName  path      string                 true  "Project name (Kubernetes namespace)"
+// @Param        sessionName  path      string                 true  "Session name"
+// @Param        config       body      map[string]string      true  "Git configuration (path, remoteUrl, branch)"
+// @Success      200  {object}  map[string]interface{}  "Git remote configured successfully"
+// @Failure      400  {object}  map[string]string       "Invalid request body"
+// @Failure      503  {object}  map[string]string       "Content service unavailable"
+// @Router       /projects/{projectName}/agentic-sessions/{sessionName}/git/configure-remote [post]
 func ConfigureGitRemote(c *gin.Context) {
 	project := c.Param("projectName")
 	sessionName := c.Param("sessionName")
@@ -3176,8 +3234,19 @@ func ConfigureGitRemote(c *gin.Context) {
 }
 
 // SynchronizeGit commits, pulls, and pushes changes for a workspace directory
-// Body: { path: string, message?: string, branch?: string }
-// POST /api/projects/:projectName/agentic-sessions/:sessionName/git/synchronize
+// @Summary      Synchronize git repository
+// @Description  Commits local changes, pulls from remote, and pushes to remote in a single operation
+// @Tags         sessions
+// @Security     BearerAuth
+// @Accept       json
+// @Produce      json
+// @Param        projectName  path      string                 true  "Project name (Kubernetes namespace)"
+// @Param        sessionName  path      string                 true  "Session name"
+// @Param        sync         body      map[string]string      true  "Sync configuration (path, message, branch)"
+// @Success      200  {object}  map[string]interface{}  "Git synchronization completed successfully"
+// @Failure      400  {object}  map[string]string       "Invalid request body"
+// @Failure      503  {object}  map[string]string       "Content service unavailable or sync failed"
+// @Router       /projects/{projectName}/agentic-sessions/{sessionName}/git/synchronize [post]
 func SynchronizeGit(c *gin.Context) {
 	project := c.Param("projectName")
 	session := c.Param("sessionName")
@@ -3238,7 +3307,18 @@ func SynchronizeGit(c *gin.Context) {
 }
 
 // GetGitMergeStatus checks if local and remote can merge cleanly
-// GET /api/projects/:projectName/agentic-sessions/:sessionName/git/merge-status?path=&branch=
+// @Summary      Get git merge status
+// @Description  Checks if local workspace and remote repository can merge without conflicts
+// @Tags         sessions
+// @Security     BearerAuth
+// @Produce      json
+// @Param        projectName  path   string  true   "Project name (Kubernetes namespace)"
+// @Param        sessionName  path   string  true   "Session name"
+// @Param        path         query  string  false  "Relative path within workspace (default: artifacts)"
+// @Param        branch       query  string  false  "Remote branch to check (default: main)"
+// @Success      200  {object}  map[string]interface{}  "Merge status with conflict information"
+// @Failure      503  {object}  map[string]string       "Content service unavailable"
+// @Router       /projects/{projectName}/agentic-sessions/{sessionName}/git/merge-status [get]
 func GetGitMergeStatus(c *gin.Context) {
 	project := c.Param("projectName")
 	session := c.Param("sessionName")
@@ -3284,7 +3364,19 @@ func GetGitMergeStatus(c *gin.Context) {
 }
 
 // GitPullSession pulls changes from remote
-// POST /api/projects/:projectName/agentic-sessions/:sessionName/git/pull
+// @Summary      Git pull
+// @Description  Pulls latest changes from remote repository to workspace directory
+// @Tags         sessions
+// @Security     BearerAuth
+// @Accept       json
+// @Produce      json
+// @Param        projectName  path      string                 true  "Project name (Kubernetes namespace)"
+// @Param        sessionName  path      string                 true  "Session name"
+// @Param        pull         body      map[string]string      true  "Pull configuration (path, branch)"
+// @Success      200  {object}  map[string]interface{}  "Pull completed successfully"
+// @Failure      400  {object}  map[string]string       "Invalid request body"
+// @Failure      503  {object}  map[string]string       "Content service unavailable or pull failed"
+// @Router       /projects/{projectName}/agentic-sessions/{sessionName}/git/pull [post]
 func GitPullSession(c *gin.Context) {
 	project := c.Param("projectName")
 	session := c.Param("sessionName")
@@ -3343,7 +3435,19 @@ func GitPullSession(c *gin.Context) {
 }
 
 // GitPushSession pushes changes to remote branch
-// POST /api/projects/:projectName/agentic-sessions/:sessionName/git/push
+// @Summary      Git push
+// @Description  Commits local changes and pushes to remote repository branch
+// @Tags         sessions
+// @Security     BearerAuth
+// @Accept       json
+// @Produce      json
+// @Param        projectName  path      string                 true  "Project name (Kubernetes namespace)"
+// @Param        sessionName  path      string                 true  "Session name"
+// @Param        push         body      map[string]string      true  "Push configuration (path, branch, message)"
+// @Success      200  {object}  map[string]interface{}  "Push completed successfully"
+// @Failure      400  {object}  map[string]string       "Invalid request body"
+// @Failure      503  {object}  map[string]string       "Content service unavailable or push failed"
+// @Router       /projects/{projectName}/agentic-sessions/{sessionName}/git/push [post]
 func GitPushSession(c *gin.Context) {
 	project := c.Param("projectName")
 	session := c.Param("sessionName")
@@ -3407,7 +3511,19 @@ func GitPushSession(c *gin.Context) {
 }
 
 // GitCreateBranchSession creates a new git branch
-// POST /api/projects/:projectName/agentic-sessions/:sessionName/git/create-branch
+// @Summary      Git create branch
+// @Description  Creates a new git branch in workspace repository
+// @Tags         sessions
+// @Security     BearerAuth
+// @Accept       json
+// @Produce      json
+// @Param        projectName  path      string                 true  "Project name (Kubernetes namespace)"
+// @Param        sessionName  path      string                 true  "Session name"
+// @Param        branch       body      map[string]string      true  "Branch configuration (path, branchName)"
+// @Success      200  {object}  map[string]interface{}  "Branch created successfully"
+// @Failure      400  {object}  map[string]string       "Invalid request body"
+// @Failure      503  {object}  map[string]string       "Content service unavailable or branch creation failed"
+// @Router       /projects/{projectName}/agentic-sessions/{sessionName}/git/create-branch [post]
 func GitCreateBranchSession(c *gin.Context) {
 	project := c.Param("projectName")
 	session := c.Param("sessionName")
@@ -3463,7 +3579,17 @@ func GitCreateBranchSession(c *gin.Context) {
 }
 
 // GitListBranchesSession lists all remote branches
-// GET /api/projects/:projectName/agentic-sessions/:sessionName/git/list-branches?path=
+// @Summary      Git list branches
+// @Description  Lists all remote branches for workspace repository
+// @Tags         sessions
+// @Security     BearerAuth
+// @Produce      json
+// @Param        projectName  path   string  true   "Project name (Kubernetes namespace)"
+// @Param        sessionName  path   string  true   "Session name"
+// @Param        path         query  string  false  "Relative path within workspace (default: artifacts)"
+// @Success      200  {object}  map[string]interface{}  "List of remote branches"
+// @Failure      503  {object}  map[string]string       "Content service unavailable"
+// @Router       /projects/{projectName}/agentic-sessions/{sessionName}/git/list-branches [get]
 func GitListBranchesSession(c *gin.Context) {
 	project := c.Param("projectName")
 	session := c.Param("sessionName")
