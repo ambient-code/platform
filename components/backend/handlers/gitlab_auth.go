@@ -338,6 +338,20 @@ func (h *GitLabAuthHandler) DisconnectGitLab(c *gin.Context) {
 // Global wrapper functions for routes (now project-scoped)
 
 // ConnectGitLabGlobal is the global handler for POST /projects/:projectName/auth/gitlab/connect
+// @Summary      Connect GitLab account
+// @Description  Connects a GitLab account to the project by storing a Personal Access Token (validates token, enforces RBAC, project-scoped storage)
+// @Tags         authentication
+// @Security     BearerAuth
+// @Accept       json
+// @Produce      json
+// @Param        projectName  path      string                      true  "Project name (Kubernetes namespace)"
+// @Param        credentials  body      ConnectGitLabRequest       true  "GitLab credentials (personalAccessToken, instanceUrl)"
+// @Success      200  {object}  ConnectGitLabResponse  "GitLab account connected successfully"
+// @Failure      400  {object}  map[string]interface{}  "Invalid request body or input validation failure"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized - invalid or missing token"
+// @Failure      403  {object}  map[string]interface{}  "Forbidden - insufficient permissions to manage GitLab credentials"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /projects/{projectName}/auth/gitlab/connect [post]
 func ConnectGitLabGlobal(c *gin.Context) {
 	// Get project from URL parameter - this is the namespace where tokens will be stored
 	project := c.Param("projectName")
@@ -360,6 +374,18 @@ func ConnectGitLabGlobal(c *gin.Context) {
 }
 
 // GetGitLabStatusGlobal is the global handler for GET /projects/:projectName/auth/gitlab/status
+// @Summary      Get GitLab connection status
+// @Description  Retrieves the current GitLab connection status for the authenticated user in the project (enforces RBAC)
+// @Tags         authentication
+// @Security     BearerAuth
+// @Produce      json
+// @Param        projectName  path      string                      true  "Project name (Kubernetes namespace)"
+// @Success      200  {object}  GitLabStatusResponse  "GitLab connection status (connected, username, instanceUrl, gitlabUserId)"
+// @Failure      400  {object}  map[string]interface{}  "Project name is required"
+// @Failure      401  {object}  map[string]interface{}  "Unauthorized - invalid or missing token"
+// @Failure      403  {object}  map[string]interface{}  "Forbidden - insufficient permissions to read GitLab credentials"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /projects/{projectName}/auth/gitlab/status [get]
 func GetGitLabStatusGlobal(c *gin.Context) {
 	// Get project from URL parameter
 	project := c.Param("projectName")
@@ -382,6 +408,18 @@ func GetGitLabStatusGlobal(c *gin.Context) {
 }
 
 // DisconnectGitLabGlobal is the global handler for POST /projects/:projectName/auth/gitlab/disconnect
+// @Summary      Disconnect GitLab account
+// @Description  Disconnects the GitLab account from the project by deleting stored credentials (enforces RBAC, project-scoped deletion)
+// @Tags         authentication
+// @Security     BearerAuth
+// @Produce      json
+// @Param        projectName  path      string                      true  "Project name (Kubernetes namespace)"
+// @Success      200  {object}  map[string]interface{}  "GitLab account disconnected successfully"
+// @Failure      400  {object}  map[string]string       "Project name is required"
+// @Failure      401  {object}  map[string]string       "Unauthorized - invalid or missing token"
+// @Failure      403  {object}  map[string]interface{}  "Forbidden - insufficient permissions to manage GitLab credentials"
+// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Router       /projects/{projectName}/auth/gitlab/disconnect [post]
 func DisconnectGitLabGlobal(c *gin.Context) {
 	// Get project from URL parameter
 	project := c.Param("projectName")
