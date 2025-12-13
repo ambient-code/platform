@@ -1864,6 +1864,19 @@ func ListOOTBWorkflows(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"workflows": workflows})
 }
 
+// DeleteSession handles DELETE /projects/:projectName/agentic-sessions/:sessionName
+// @Summary      Delete agentic session
+// @Description  Deletes an agentic session and all associated resources (Jobs, Pods, PVCs, Secrets, Services)
+// @Tags         sessions
+// @Security     BearerAuth
+// @Produce      json
+// @Param        projectName   path  string  true  "Project name (Kubernetes namespace)"
+// @Param        sessionName   path  string  true  "Session name"
+// @Success      204  "Session deleted successfully"
+// @Failure      401  {object}  map[string]string  "Unauthorized - invalid or missing token"
+// @Failure      404  {object}  map[string]string  "Session not found"
+// @Failure      500  {object}  map[string]string  "Internal server error"
+// @Router       /projects/{projectName}/agentic-sessions/{sessionName} [delete]
 func DeleteSession(c *gin.Context) {
 	project := c.GetString("project")
 	sessionName := c.Param("sessionName")
@@ -1885,6 +1898,22 @@ func DeleteSession(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+// CloneSession handles POST /projects/:projectName/agentic-sessions/:sessionName/clone
+// @Summary      Clone agentic session
+// @Description  Creates a copy of an existing session in the same or different project with unique name resolution
+// @Tags         sessions
+// @Security     BearerAuth
+// @Accept       json
+// @Produce      json
+// @Param        projectName   path      string                      true  "Source project name (Kubernetes namespace)"
+// @Param        sessionName   path      string                      true  "Source session name"
+// @Param        clone         body      types.CloneSessionRequest  true  "Clone configuration (targetProject, newSessionName)"
+// @Success      201  {object}  types.AgenticSession  "Cloned session created successfully"
+// @Failure      400  {object}  map[string]string     "Invalid request body"
+// @Failure      403  {object}  map[string]string     "Target project not managed by Ambient"
+// @Failure      404  {object}  map[string]string     "Source session or target project not found"
+// @Failure      500  {object}  map[string]string     "Internal server error"
+// @Router       /projects/{projectName}/agentic-sessions/{sessionName}/clone [post]
 func CloneSession(c *gin.Context) {
 	project := c.GetString("project")
 	sessionName := c.Param("sessionName")
@@ -2011,6 +2040,18 @@ func CloneSession(c *gin.Context) {
 	c.JSON(http.StatusCreated, session)
 }
 
+// StartSession handles POST /projects/:projectName/agentic-sessions/:sessionName/start
+// @Summary      Start agentic session
+// @Description  Starts or continues a session by setting desired-phase=Running annotation (operator handles Job creation/restart)
+// @Tags         sessions
+// @Security     BearerAuth
+// @Produce      json
+// @Param        projectName   path      string                     true  "Project name (Kubernetes namespace)"
+// @Param        sessionName   path      string                     true  "Session name"
+// @Success      202  {object}  types.AgenticSession  "Session start requested (operator will reconcile)"
+// @Failure      404  {object}  map[string]string     "Session not found"
+// @Failure      500  {object}  map[string]string     "Internal server error"
+// @Router       /projects/{projectName}/agentic-sessions/{sessionName}/start [post]
 func StartSession(c *gin.Context) {
 	project := c.GetString("project")
 	sessionName := c.Param("sessionName")
@@ -2135,6 +2176,18 @@ func ensureRuntimeMutationAllowed(item *unstructured.Unstructured) error {
 	return nil
 }
 
+// StopSession handles POST /projects/:projectName/agentic-sessions/:sessionName/stop
+// @Summary      Stop agentic session
+// @Description  Stops a running session by setting desired-phase=Stopped annotation (operator handles Job cleanup, workspace preserved)
+// @Tags         sessions
+// @Security     BearerAuth
+// @Produce      json
+// @Param        projectName   path      string                     true  "Project name (Kubernetes namespace)"
+// @Param        sessionName   path      string                     true  "Session name"
+// @Success      202  {object}  types.AgenticSession  "Session stop requested (operator will reconcile)"
+// @Failure      404  {object}  map[string]string     "Session not found"
+// @Failure      500  {object}  map[string]string     "Internal server error"
+// @Router       /projects/{projectName}/agentic-sessions/{sessionName}/stop [post]
 func StopSession(c *gin.Context) {
 	project := c.GetString("project")
 	sessionName := c.Param("sessionName")
@@ -2201,7 +2254,18 @@ func StopSession(c *gin.Context) {
 }
 
 // EnableWorkspaceAccess requests a temporary content pod for workspace access on stopped sessions
-// POST /api/projects/:projectName/agentic-sessions/:sessionName/workspace/enable
+// @Summary      Enable workspace access
+// @Description  Requests temporary content pod for workspace access on stopped/completed sessions (operator provisions temp pod)
+// @Tags         sessions
+// @Security     BearerAuth
+// @Produce      json
+// @Param        projectName   path      string                     true  "Project name (Kubernetes namespace)"
+// @Param        sessionName   path      string                     true  "Session name"
+// @Success      202  {object}  types.AgenticSession  "Workspace access requested (operator will provision temp pod)"
+// @Failure      404  {object}  map[string]string     "Session not found"
+// @Failure      409  {object}  map[string]string     "Workspace access only available for stopped sessions"
+// @Failure      500  {object}  map[string]string     "Internal server error"
+// @Router       /projects/{projectName}/agentic-sessions/{sessionName}/workspace/enable [post]
 func EnableWorkspaceAccess(c *gin.Context) {
 	project := c.GetString("project")
 	sessionName := c.Param("sessionName")
@@ -2260,7 +2324,17 @@ func EnableWorkspaceAccess(c *gin.Context) {
 }
 
 // TouchWorkspaceAccess updates the last-accessed timestamp to keep temp pod alive
-// POST /api/projects/:projectName/agentic-sessions/:sessionName/workspace/touch
+// @Summary      Touch workspace access
+// @Description  Updates workspace access timestamp to prevent temp pod expiration (extends timeout window)
+// @Tags         sessions
+// @Security     BearerAuth
+// @Produce      json
+// @Param        projectName   path      string                 true  "Project name (Kubernetes namespace)"
+// @Param        sessionName   path      string                 true  "Session name"
+// @Success      200  {object}  map[string]string  "Workspace access timestamp updated"
+// @Failure      404  {object}  map[string]string  "Session not found"
+// @Failure      500  {object}  map[string]string  "Internal server error"
+// @Router       /projects/{projectName}/agentic-sessions/{sessionName}/workspace/touch [post]
 func TouchWorkspaceAccess(c *gin.Context) {
 	project := c.GetString("project")
 	sessionName := c.Param("sessionName")
@@ -2294,7 +2368,17 @@ func TouchWorkspaceAccess(c *gin.Context) {
 }
 
 // GetSessionK8sResources returns job, pod, and PVC information for a session
-// GET /api/projects/:projectName/agentic-sessions/:sessionName/k8s-resources
+// @Summary      Get session Kubernetes resources
+// @Description  Returns detailed information about session's Job, Pods, PVC, and Services (for debugging and monitoring)
+// @Tags         sessions
+// @Security     BearerAuth
+// @Produce      json
+// @Param        projectName   path      string                 true  "Project name (Kubernetes namespace)"
+// @Param        sessionName   path      string                 true  "Session name"
+// @Success      200  {object}  map[string]interface{}  "Kubernetes resource details (job, pods, pvc, services)"
+// @Failure      401  {object}  map[string]string       "Unauthorized - invalid or missing token"
+// @Failure      404  {object}  map[string]string       "Session not found"
+// @Router       /projects/{projectName}/agentic-sessions/{sessionName}/k8s-resources [get]
 func GetSessionK8sResources(c *gin.Context) {
 	// Get project from context (set by middleware) or param
 	project := c.GetString("project")
@@ -2466,6 +2550,18 @@ func GetSessionK8sResources(c *gin.Context) {
 // setRepoStatus removed - status.repos no longer in CRD (status simplified to phase, message, is_error)
 
 // ListSessionWorkspace proxies to per-job content service for directory listing.
+// @Summary      List session workspace
+// @Description  Lists files and directories in session workspace via content service proxy
+// @Tags         sessions
+// @Security     BearerAuth
+// @Produce      json
+// @Param        projectName   path      string  true   "Project name (Kubernetes namespace)"
+// @Param        sessionName   path      string  true   "Session name"
+// @Param        path          query     string  false  "Relative path within workspace (default: root)"
+// @Success      200  {object}  map[string]interface{}  "Directory listing with files and folders"
+// @Failure      400  {object}  map[string]string       "Invalid request - project namespace required"
+// @Failure      503  {object}  map[string]string       "Content service unavailable"
+// @Router       /projects/{projectName}/agentic-sessions/{sessionName}/workspace [get]
 func ListSessionWorkspace(c *gin.Context) {
 	// Get project from context (set by middleware) or param
 	project := c.GetString("project")
@@ -2535,6 +2631,19 @@ func ListSessionWorkspace(c *gin.Context) {
 }
 
 // GetSessionWorkspaceFile reads a file via content service.
+// @Summary      Get session workspace file
+// @Description  Retrieves file content from session workspace via content service proxy
+// @Tags         sessions
+// @Security     BearerAuth
+// @Produce      application/octet-stream
+// @Param        projectName   path      string  true  "Project name (Kubernetes namespace)"
+// @Param        sessionName   path      string  true  "Session name"
+// @Param        path          path      string  true  "File path within workspace"
+// @Success      200  {file}  file              "File content"
+// @Failure      400  {object}  map[string]string  "Invalid request - project namespace required"
+// @Failure      404  {object}  map[string]string  "File not found"
+// @Failure      503  {object}  map[string]string  "Content service unavailable"
+// @Router       /projects/{projectName}/agentic-sessions/{sessionName}/workspace/file/{path} [get]
 func GetSessionWorkspaceFile(c *gin.Context) {
 	// Get project from context (set by middleware) or param
 	project := c.GetString("project")
@@ -2585,6 +2694,20 @@ func GetSessionWorkspaceFile(c *gin.Context) {
 }
 
 // PutSessionWorkspaceFile writes a file via content service.
+// @Summary      Put session workspace file
+// @Description  Writes or updates file content in session workspace via content service proxy
+// @Tags         sessions
+// @Security     BearerAuth
+// @Accept       application/octet-stream
+// @Produce      json
+// @Param        projectName   path      string  true  "Project name (Kubernetes namespace)"
+// @Param        sessionName   path      string  true  "Session name"
+// @Param        path          path      string  true  "File path within workspace"
+// @Param        content       body      string  true  "File content"
+// @Success      200  {object}  map[string]interface{}  "File written successfully"
+// @Failure      400  {object}  map[string]string       "Invalid request - project namespace required"
+// @Failure      503  {object}  map[string]string       "Content service unavailable"
+// @Router       /projects/{projectName}/agentic-sessions/{sessionName}/workspace/file/{path} [put]
 func PutSessionWorkspaceFile(c *gin.Context) {
 	// Get project from context (set by middleware) or param
 	project := c.GetString("project")
