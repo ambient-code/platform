@@ -58,6 +58,16 @@ type PermissionAssignment struct {
 }
 
 // ListProjectPermissions handles GET /api/projects/:projectName/permissions
+// @Summary      List project permissions
+// @Description  Returns all permission assignments (users and groups) for a project
+// @Tags         projects
+// @Security     BearerAuth
+// @Produce      json
+// @Param        projectName  path      string             true  "Project name"
+// @Success      200          {object}  map[string]interface{}  "List of permission assignments"
+// @Failure      401          {object}  map[string]string  "Unauthorized"
+// @Failure      500          {object}  map[string]string  "Internal server error"
+// @Router       /api/projects/{projectName}/permissions [get]
 func ListProjectPermissions(c *gin.Context) {
 	projectName := c.Param("projectName")
 	reqK8s, _ := GetK8sClientsForRequest(c)
@@ -127,6 +137,20 @@ func ListProjectPermissions(c *gin.Context) {
 }
 
 // AddProjectPermission handles POST /api/projects/:projectName/permissions
+// @Summary      Add project permission
+// @Description  Grants a permission (admin, edit, or view) to a user or group for a project
+// @Tags         projects
+// @Security     BearerAuth
+// @Accept       json
+// @Produce      json
+// @Param        projectName  path      string             true  "Project name"
+// @Param        permission   body      object             true  "Permission assignment (subjectType, subjectName, role)"
+// @Success      201          {object}  map[string]string  "Permission added successfully"
+// @Failure      400          {object}  map[string]string  "Invalid request"
+// @Failure      401          {object}  map[string]string  "Unauthorized"
+// @Failure      409          {object}  map[string]string  "Permission already exists"
+// @Failure      500          {object}  map[string]string  "Internal server error"
+// @Router       /api/projects/{projectName}/permissions [post]
 func AddProjectPermission(c *gin.Context) {
 	projectName := c.Param("projectName")
 	reqK8s, _ := GetK8sClientsForRequest(c)
@@ -196,6 +220,19 @@ func AddProjectPermission(c *gin.Context) {
 }
 
 // RemoveProjectPermission handles DELETE /api/projects/:projectName/permissions/:subjectType/:subjectName
+// @Summary      Remove project permission
+// @Description  Revokes all permissions for a user or group from a project
+// @Tags         projects
+// @Security     BearerAuth
+// @Produce      json
+// @Param        projectName  path  string  true  "Project name"
+// @Param        subjectType  path  string  true  "Subject type (user or group)"
+// @Param        subjectName  path  string  true  "Subject name"
+// @Success      204          "Permission removed successfully"
+// @Failure      400          {object}  map[string]string  "Invalid request"
+// @Failure      401          {object}  map[string]string  "Unauthorized"
+// @Failure      500          {object}  map[string]string  "Internal server error"
+// @Router       /api/projects/{projectName}/permissions/{subjectType}/{subjectName} [delete]
 func RemoveProjectPermission(c *gin.Context) {
 	projectName := c.Param("projectName")
 	subjectType := strings.ToLower(c.Param("subjectType"))
@@ -236,6 +273,16 @@ func RemoveProjectPermission(c *gin.Context) {
 
 // ListProjectKeys handles GET /api/projects/:projectName/keys
 // Lists access keys (ServiceAccounts with label app=ambient-access-key)
+// @Summary      List project access keys
+// @Description  Returns all API access keys for a project
+// @Tags         projects
+// @Security     BearerAuth
+// @Produce      json
+// @Param        projectName  path      string             true  "Project name"
+// @Success      200          {object}  map[string]interface{}  "List of access keys"
+// @Failure      401          {object}  map[string]string  "Unauthorized"
+// @Failure      500          {object}  map[string]string  "Internal server error"
+// @Router       /api/projects/{projectName}/keys [get]
 func ListProjectKeys(c *gin.Context) {
 	projectName := c.Param("projectName")
 	reqK8s, _ := GetK8sClientsForRequest(c)
@@ -296,6 +343,19 @@ func ListProjectKeys(c *gin.Context) {
 
 // CreateProjectKey handles POST /api/projects/:projectName/keys
 // Creates a new access key (ServiceAccount with token and RoleBinding)
+// @Summary      Create project access key
+// @Description  Generates a new API access key (ServiceAccount) with specified role for a project
+// @Tags         projects
+// @Security     BearerAuth
+// @Accept       json
+// @Produce      json
+// @Param        projectName  path      string             true  "Project name"
+// @Param        key          body      object             true  "Key details (name, description, role)"
+// @Success      201          {object}  map[string]interface{}  "Access key created successfully with token"
+// @Failure      400          {object}  map[string]string  "Invalid request"
+// @Failure      401          {object}  map[string]string  "Unauthorized"
+// @Failure      500          {object}  map[string]string  "Internal server error"
+// @Router       /api/projects/{projectName}/keys [post]
 func CreateProjectKey(c *gin.Context) {
 	projectName := c.Param("projectName")
 	reqK8s, _ := GetK8sClientsForRequest(c)
@@ -393,6 +453,17 @@ func CreateProjectKey(c *gin.Context) {
 
 // DeleteProjectKey handles DELETE /api/projects/:projectName/keys/:keyId
 // Deletes an access key (ServiceAccount and associated RoleBindings)
+// @Summary      Delete project access key
+// @Description  Deletes an API access key (ServiceAccount) and revokes all associated permissions
+// @Tags         projects
+// @Security     BearerAuth
+// @Produce      json
+// @Param        projectName  path  string  true  "Project name"
+// @Param        keyId        path  string  true  "Access key ID (ServiceAccount name)"
+// @Success      204          "Access key deleted successfully"
+// @Failure      401          {object}  map[string]string  "Unauthorized"
+// @Failure      500          {object}  map[string]string  "Internal server error"
+// @Router       /api/projects/{projectName}/keys/{keyId} [delete]
 func DeleteProjectKey(c *gin.Context) {
 	projectName := c.Param("projectName")
 	keyID := c.Param("keyId")
