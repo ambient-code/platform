@@ -134,7 +134,8 @@ type Condition struct {
 
 // NormalizeRepo converts a legacy repo format to the new input/output structure.
 // If the repo already uses the new format, it returns the repo as-is.
-// Legacy: {url: "...", branch: "..."} -> New: {input: {url: "...", branch: "..."}, autoPush: false}
+// Legacy: {url: "...", branch: "..."} -> New: {input: {url: "...", branch: "..."}, autoPush: sessionDefaultAutoPush}
+// The autoPush field is set to the session's default value (sessionDefaultAutoPush parameter).
 // Returns an error if the repo has an empty URL.
 func (r *SimpleRepo) NormalizeRepo(sessionDefaultAutoPush bool) (SimpleRepo, error) {
 	// If already using new format, validate and return as-is
