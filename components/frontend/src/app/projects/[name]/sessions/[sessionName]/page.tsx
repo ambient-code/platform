@@ -750,12 +750,10 @@ export default function ProjectSessionDetailPage({
                       selectedWorkflow={workflowManagement.selectedWorkflow}
                       pendingWorkflow={workflowManagement.pendingWorkflow}
                       workflowActivating={workflowManagement.workflowActivating}
-                      workflowMetadata={workflowMetadata}
                       ootbWorkflows={ootbWorkflows}
                       isExpanded={openAccordionItems.includes("workflows")}
                       onWorkflowChange={handleWorkflowChange}
                       onActivateWorkflow={workflowManagement.activateWorkflow}
-                      onCommandClick={handleCommandClick}
                       onResume={handleContinue}
                     />
 

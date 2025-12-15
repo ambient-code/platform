@@ -8,23 +8,16 @@ import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, Sele
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import type { WorkflowConfig } from "../../lib/types";
 
-type WorkflowMetadata = {
-  commands: Array<{ id: string; name: string; slashCommand: string; description?: string }>;
-  agents: Array<{ id: string; name: string; description?: string }>;
-};
-
 type WorkflowsAccordionProps = {
   sessionPhase?: string;
   activeWorkflow: string | null;
   selectedWorkflow: string;
   pendingWorkflow: WorkflowConfig | null;
   workflowActivating: boolean;
-  workflowMetadata?: WorkflowMetadata;
   ootbWorkflows: WorkflowConfig[];
   isExpanded: boolean;
   onWorkflowChange: (value: string) => void;
   onActivateWorkflow: () => void;
-  onCommandClick: (slashCommand: string) => void;
   onResume?: () => void;
 };
 
@@ -34,12 +27,10 @@ export function WorkflowsAccordion({
   selectedWorkflow,
   pendingWorkflow,
   workflowActivating,
-  workflowMetadata,
   ootbWorkflows,
   isExpanded,
   onWorkflowChange,
   onActivateWorkflow,
-  onCommandClick,
   onResume,
 }: WorkflowsAccordionProps) {
   const isSessionStopped = sessionPhase === 'Stopped' || sessionPhase === 'Error' || sessionPhase === 'Completed';
