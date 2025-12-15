@@ -576,6 +576,20 @@ func CreateSession(c *gin.Context) {
 		session["spec"].(map[string]interface{})["autoPushOnComplete"] = *req.AutoPushOnComplete
 	}
 
+	// RunnerConfig for pluggable agents
+	if req.RunnerConfig != nil {
+		runnerConfig := make(map[string]interface{})
+		if req.RunnerConfig.Type != "" {
+			runnerConfig["type"] = req.RunnerConfig.Type
+		}
+		if req.RunnerConfig.Image != "" {
+			runnerConfig["image"] = req.RunnerConfig.Image
+		}
+		if len(runnerConfig) > 0 {
+			session["spec"].(map[string]interface{})["runnerConfig"] = runnerConfig
+		}
+	}
+
 	// Set multi-repo configuration on spec (simplified format)
 	{
 		spec := session["spec"].(map[string]interface{})

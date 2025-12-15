@@ -806,6 +806,15 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 	temperature, _, _ := unstructured.NestedFloat64(llmSettings, "temperature")
 	maxTokens, _, _ := unstructured.NestedInt64(llmSettings, "maxTokens")
 
+	// Extract runner configuration for pluggable agents
+	runnerConfig, _, _ := unstructured.NestedMap(spec, "runnerConfig")
+	runnerType, _, _ := unstructured.NestedString(runnerConfig, "type")
+	runnerImage, _, _ := unstructured.NestedString(runnerConfig, "image")
+	// Default to claude-sdk if not specified
+	if runnerType == "" {
+		runnerType = "claude-sdk"
+	}
+
 	// Hardcoded secret names (convention over configuration)
 	const runnerSecretsName = "ambient-runner-secrets"               // ANTHROPIC_API_KEY only (ignored when Vertex enabled)
 	const integrationSecretsName = "ambient-non-vertex-integrations" // GIT_*, JIRA_*, custom keys (optional)
@@ -1021,7 +1030,7 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 						},
 						{
 							Name:            "ambient-code-runner",
-							Image:           appConfig.AmbientCodeRunnerImage,
+							Image:           appConfig.GetRunnerImage(runnerType, runnerImage),
 							ImagePullPolicy: appConfig.ImagePullPolicy,
 							// 🔒 Container-level security (SCC-compatible, no privileged capabilities)
 							SecurityContext: &corev1.SecurityContext{
