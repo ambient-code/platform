@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import {
   Loader2,
   FolderTree,
@@ -108,8 +108,31 @@ import { useMutation } from "@tanstack/react-query";
 
 // Constants for artifact auto-refresh debouncing
 // Moved outside component to avoid unnecessary effect re-runs
-const ARTIFACTS_DEBOUNCE_MS = 1000; // Wait 1 second after last tool completion
-const COMPLETION_DELAY_MS = 2000;   // Wait 2 seconds after session completes for final writes
+const ARTIFACTS_DEBOUNCE_MS = 1000; // Wait 1 second after last tool completion - prevents excessive API calls during burst writes
+const COMPLETION_DELAY_MS = 2000;   // Wait 2 seconds after session completes for final writes - ensures final artifacts are written
+
+/**
+ * Type guard to check if a message is a completed ToolUseMessages with result.
+ * Extracted for testability and proper validation.
+ */
+function isCompletedToolUseMessage(msg: MessageObject | ToolUseMessages): msg is ToolUseMessages {
+  if (msg.type !== "tool_use_messages") {
+    return false;
+  }
+  
+  // Runtime validation of required properties
+  const toolMsg = msg as ToolUseMessages;
+  if (!("resultBlock" in toolMsg)) {
+    return false;
+  }
+  
+  // Ensure resultBlock has expected shape and content is not null
+  if (!toolMsg.resultBlock || typeof toolMsg.resultBlock !== "object") {
+    return false;
+  }
+  
+  return toolMsg.resultBlock.content !== null;
+}
 
 export default function ProjectSessionDetailPage({
   params,
@@ -396,7 +419,7 @@ export default function ProjectSessionDetailPage({
     basePath: "artifacts",
   });
 
-  const { data: artifactsFiles = [], refetch: refetchArtifactsFiles } =
+  const { data: artifactsFiles = [], refetch: refetchArtifactsFilesQuery } =
     useWorkspaceList(
       projectName,
       sessionName,
@@ -405,6 +428,12 @@ export default function ProjectSessionDetailPage({
         : "artifacts",
       { enabled: openAccordionItems.includes("artifacts") },
     );
+
+  // Stabilize refetchArtifactsFiles to prevent stale closures in useEffect cleanup
+  // React Query's refetch function is already stable, but wrapping in useCallback makes this explicit
+  const refetchArtifactsFiles = useCallback(() => {
+    return refetchArtifactsFilesQuery();
+  }, [refetchArtifactsFilesQuery]);
 
   // File uploads list (for Context accordion)
   const { data: fileUploadsList = [], refetch: refetchFileUploadsList } =
@@ -525,13 +554,9 @@ export default function ProjectSessionDetailPage({
   const hasRefreshedOnCompletionRef = useRef(false);
 
   // Memoize the completed tool count to avoid redundant filtering
-  // Inline the type guard to avoid unnecessary dependency
+  // Uses extracted type guard for testability and proper validation
   const completedToolCount = useMemo(() => {
-    return streamMessages.filter((msg): msg is ToolUseMessages => 
-      msg.type === "tool_use_messages" && 
-      "resultBlock" in msg && 
-      msg.resultBlock?.content !== null
-    ).length;
+    return streamMessages.filter(isCompletedToolUseMessage).length;
   }, [streamMessages]);
 
   useEffect(() => {
@@ -550,11 +575,13 @@ export default function ProjectSessionDetailPage({
       previousToolResultCount.current = completedToolCount;
     }
 
-    // Cleanup timeout on unmount
+    // Cleanup timeout on unmount and reset ref to prevent stale state
     return () => {
       if (artifactsRefreshTimeoutRef.current) {
         clearTimeout(artifactsRefreshTimeoutRef.current);
       }
+      // Reset count to prevent missed or duplicate refreshes on remount
+      previousToolResultCount.current = 0;
     };
   }, [completedToolCount, refetchArtifactsFiles]);
 

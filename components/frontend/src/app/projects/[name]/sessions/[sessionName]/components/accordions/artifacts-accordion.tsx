@@ -49,9 +49,10 @@ export function ArtifactsAccordion({
               variant="secondary" 
               className="ml-auto mr-2"
               aria-label={`${fileCount} ${fileCount === 1 ? 'file' : 'files'}`}
-              aria-live="polite"
             >
-              {fileCount}
+              <span aria-live="polite" aria-atomic="true">
+                {fileCount}
+              </span>
             </Badge>
           )}
         </div>
