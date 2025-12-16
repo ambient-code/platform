@@ -432,7 +432,6 @@ export default function ProjectSessionDetailPage({
       artifactsOps.currentSubPath
         ? `artifacts/${artifactsOps.currentSubPath}`
         : "artifacts",
-      { enabled: openAccordionItems.includes("artifacts") },
     );
 
   // Stabilize refetchArtifactsFiles with useCallback to prevent infinite re-renders
