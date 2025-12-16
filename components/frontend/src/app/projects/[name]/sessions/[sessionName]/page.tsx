@@ -508,6 +508,7 @@ export default function ProjectSessionDetailPage({
       setUserHasInteracted(true);
     }
   }, [aguiState.messages, userHasInteracted]);
+
   // Load active workflow and remotes from session
   useEffect(() => {
     if (initializedFromSessionRef.current || !session) return;

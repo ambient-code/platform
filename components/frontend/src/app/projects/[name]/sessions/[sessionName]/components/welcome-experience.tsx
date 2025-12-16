@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles } from "lucide-react";
+import { cn } from "@/lib/utils";
 import type { WorkflowConfig } from "../lib/types";
 
 type WelcomeExperienceProps = {
@@ -27,10 +27,12 @@ export function WelcomeExperience({
   const [isTypingComplete, setIsTypingComplete] = useState(false);
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null);
 
-  // Determine if we should show workflow cards (only for Pending/Creating phases)
+  // Determine if we should show workflow cards and animation
   const isInitialPhase = sessionPhase === "Pending" || sessionPhase === "Creating";
   const shouldShowAnimation = isInitialPhase && !userHasInteracted;
-  const shouldShowWorkflowCards = isInitialPhase && !userHasInteracted;
+  // Show workflow cards until user interacts (regardless of session phase, unless it's a terminal state)
+  const isTerminalPhase = sessionPhase === "Completed" || sessionPhase === "Failed" || sessionPhase === "Stopped";
+  const shouldShowWorkflowCards = !userHasInteracted && !isTerminalPhase;
 
   // Streaming text effect
   useEffect(() => {
@@ -50,7 +52,7 @@ export function WelcomeExperience({
         setIsTypingComplete(true);
         clearInterval(interval);
       }
-    }, 50); // 50ms per character
+    }, 25); // 25ms per character
 
     return () => clearInterval(interval);
   }, [shouldShowAnimation]);
@@ -66,20 +68,28 @@ export function WelcomeExperience({
   return (
     <div className="space-y-4">
       {/* Static welcome message styled like a chat message */}
-      <div className="flex items-start gap-3 px-4 py-3">
-        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-          <Sparkles className="h-4 w-4 text-primary" />
-        </div>
-        <div className="flex-1 space-y-2">
-          <div className="flex items-baseline gap-2">
-            <span className="text-sm font-semibold">Ambient AI</span>
-            <span className="text-xs text-muted-foreground">just now</span>
+      <div className="mb-4 mt-2">
+        <div className="flex space-x-3 items-start">
+          {/* Avatar */}
+          <div className="flex-shrink-0">
+            <div className="w-8 h-8 rounded-full flex items-center justify-center bg-blue-600">
+              <span className="text-white text-xs font-semibold">AI</span>
+            </div>
           </div>
-          <div className="text-sm text-foreground whitespace-pre-wrap">
-            {displayedText}
-            {shouldShowAnimation && !isTypingComplete && (
-              <span className="inline-block w-1 h-4 ml-0.5 bg-primary animate-pulse" />
-            )}
+
+          {/* Message Content */}
+          <div className="flex-1 min-w-0">
+            {/* Timestamp */}
+            <div className="text-[10px] text-muted-foreground/60 mb-1">just now</div>
+            <div className="rounded-lg p-3 bg-card">
+              {/* Content */}
+              <div className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                {displayedText}
+                {shouldShowAnimation && !isTypingComplete && (
+                  <span className="inline-block w-1 h-4 ml-0.5 bg-primary animate-pulse" />
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -90,7 +100,7 @@ export function WelcomeExperience({
           <p className="text-xs font-medium text-muted-foreground">
             Suggested workflows:
           </p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
             {enabledWorkflows.map((workflow) => (
               <Card
                 key={workflow.id}
