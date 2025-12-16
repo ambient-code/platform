@@ -44,7 +44,11 @@ export function ArtifactsAccordion({
           <NotepadText className="h-4 w-4" />
           <span>Artifacts</span>
           {fileCount > 0 && (
-            <Badge variant="secondary" className="ml-auto mr-2">
+            <Badge 
+              variant="secondary" 
+              className="ml-auto mr-2"
+              aria-label={`${fileCount} ${fileCount === 1 ? 'file' : 'files'}`}
+            >
               {fileCount}
             </Badge>
           )}
