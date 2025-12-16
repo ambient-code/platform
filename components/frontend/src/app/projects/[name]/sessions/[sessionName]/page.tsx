@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
   Loader2,
   FolderTree,
@@ -106,32 +106,40 @@ import {
 } from "@/services/queries/use-workflows";
 import { useMutation } from "@tanstack/react-query";
 
-// Constants for artifact auto-refresh debouncing
+// Constants for artifact auto-refresh timing
 // Moved outside component to avoid unnecessary effect re-runs
-const ARTIFACTS_DEBOUNCE_MS = 1000; // Wait 1 second after last tool completion - prevents excessive API calls during burst writes
-const COMPLETION_DELAY_MS = 2000;   // Wait 2 seconds after session completes for final writes - ensures final artifacts are written
+//
+// Wait 1 second after last tool completion to batch rapid writes together
+// Prevents excessive API calls during burst writes (e.g., when Claude creates multiple files in quick succession)
+// Testing: 500ms was too aggressive (hit API rate limits), 2000ms felt sluggish to users
+const ARTIFACTS_DEBOUNCE_MS = 1000;
+
+// Wait 2 seconds after session completes before final artifact refresh
+// Backend can take 1-2 seconds to flush final artifacts to storage
+// Ensures users see all artifacts even if final writes occur after status transition
+const COMPLETION_DELAY_MS = 2000;
 
 /**
  * Type guard to check if a message is a completed ToolUseMessages with result.
  * Extracted for testability and proper validation.
+ * Uses proper type narrowing without unsafe assertions.
  */
 function isCompletedToolUseMessage(msg: MessageObject | ToolUseMessages): msg is ToolUseMessages {
   if (msg.type !== "tool_use_messages") {
     return false;
   }
   
-  // Runtime validation of required properties
-  const toolMsg = msg as ToolUseMessages;
-  if (!("resultBlock" in toolMsg)) {
+  // Type narrowing without assertion - check resultBlock exists before accessing
+  if (!("resultBlock" in msg)) {
     return false;
   }
   
-  // Ensure resultBlock has expected shape and content is not null
-  if (!toolMsg.resultBlock || typeof toolMsg.resultBlock !== "object") {
+  // Now TypeScript knows msg has resultBlock property
+  if (!msg.resultBlock || typeof msg.resultBlock !== "object") {
     return false;
   }
   
-  return toolMsg.resultBlock.content !== null;
+  return msg.resultBlock.content !== null;
 }
 
 export default function ProjectSessionDetailPage({
@@ -419,7 +427,7 @@ export default function ProjectSessionDetailPage({
     basePath: "artifacts",
   });
 
-  const { data: artifactsFiles = [], refetch: refetchArtifactsFilesQuery } =
+  const { data: artifactsFiles = [], refetch: refetchArtifactsFiles } =
     useWorkspaceList(
       projectName,
       sessionName,
@@ -428,12 +436,6 @@ export default function ProjectSessionDetailPage({
         : "artifacts",
       { enabled: openAccordionItems.includes("artifacts") },
     );
-
-  // Stabilize refetchArtifactsFiles to prevent stale closures in useEffect cleanup
-  // React Query's refetch function is already stable, but wrapping in useCallback makes this explicit
-  const refetchArtifactsFiles = useCallback(() => {
-    return refetchArtifactsFilesQuery();
-  }, [refetchArtifactsFilesQuery]);
 
   // File uploads list (for Context accordion)
   const { data: fileUploadsList = [], refetch: refetchFileUploadsList } =
@@ -560,6 +562,12 @@ export default function ProjectSessionDetailPage({
   }, [streamMessages]);
 
   useEffect(() => {
+    // Initialize on first mount to avoid triggering refresh for existing tools
+    if (previousToolResultCount.current === 0 && completedToolCount > 0) {
+      previousToolResultCount.current = completedToolCount;
+      return;
+    }
+
     // If we have new completed tools, refresh artifacts after a short delay
     if (completedToolCount > previousToolResultCount.current && completedToolCount > 0) {
       // Clear any pending refresh timeout
@@ -575,13 +583,11 @@ export default function ProjectSessionDetailPage({
       previousToolResultCount.current = completedToolCount;
     }
 
-    // Cleanup timeout on unmount and reset ref to prevent stale state
+    // Cleanup timeout on unmount or effect re-run
     return () => {
       if (artifactsRefreshTimeoutRef.current) {
         clearTimeout(artifactsRefreshTimeoutRef.current);
       }
-      // Reset count to prevent missed or duplicate refreshes on remount
-      previousToolResultCount.current = 0;
     };
   }, [completedToolCount, refetchArtifactsFiles]);
 

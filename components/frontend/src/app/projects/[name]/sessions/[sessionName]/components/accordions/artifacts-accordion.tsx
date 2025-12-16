@@ -41,7 +41,7 @@ export function ArtifactsAccordion({
   return (
     <AccordionItem value="artifacts" className="border rounded-lg px-3 bg-card">
       <AccordionTrigger className="text-base font-semibold hover:no-underline py-3">
-        <div className="flex items-center gap-2 w-full">
+        <div className="flex items-center gap-2 w-full" aria-live="polite" aria-atomic="false">
           <NotepadText className="h-4 w-4" />
           <span>Artifacts</span>
           {fileCount > 0 && (
@@ -50,9 +50,7 @@ export function ArtifactsAccordion({
               className="ml-auto mr-2"
               aria-label={`${fileCount} ${fileCount === 1 ? 'file' : 'files'}`}
             >
-              <span aria-live="polite" aria-atomic="true">
-                {fileCount}
-              </span>
+              {fileCount}
             </Badge>
           )}
         </div>
