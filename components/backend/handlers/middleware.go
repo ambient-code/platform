@@ -1,12 +1,10 @@
 package handlers
 
 import (
-	"ambient-code-backend/server"
 	"encoding/base64"
 	"encoding/json"
 	"log"
 	"net/http"
-	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -24,7 +22,7 @@ import (
 // Dependencies injected from main package
 var (
 	BaseKubeConfig *rest.Config
-	K8sClientMw    *kubernetes.Clientset
+	K8sClientMw    kubernetes.Interface
 )
 
 // Helper functions and types
@@ -59,42 +57,13 @@ type ContentListItem struct {
 	ModifiedAt string `json:"modifiedAt"`
 }
 
-// GetK8sClientsForRequest returns K8s typed and dynamic clients using the caller's token when provided.
-// It supports both Authorization: Bearer and X-Forwarded-Access-Token and NEVER falls back to the backend service account.
-// Returns nil, nil if no valid user token is provided - all API operations require user authentication.
-func GetK8sClientsForRequest(c *gin.Context) (*kubernetes.Clientset, dynamic.Interface) {
-	// Prefer Authorization header (Bearer <token>)
-	rawAuth := c.GetHeader("Authorization")
-	rawFwd := c.GetHeader("X-Forwarded-Access-Token")
-	tokenSource := "none"
-	token := rawAuth
+// getK8sClientsDefault is the production implementation of GetK8sClientsForRequest
+func getK8sClientsDefault(c *gin.Context) (kubernetes.Interface, dynamic.Interface) {
+	token, tokenSource, hasAuthHeader, hasFwdToken := extractRequestToken(c)
 
-	if token != "" {
-		tokenSource = "authorization"
-		parts := strings.SplitN(token, " ", 2)
-		if len(parts) == 2 && strings.ToLower(parts[0]) == "bearer" {
-			token = strings.TrimSpace(parts[1])
-		} else {
-			token = strings.TrimSpace(token)
-		}
-	}
-	// Fallback to X-Forwarded-Access-Token
-	if token == "" {
-		if rawFwd != "" {
-			tokenSource = "x-forwarded-access-token"
-		}
-		token = rawFwd
-	}
-
-	// Debug: basic auth header state (do not log token)
-	hasAuthHeader := strings.TrimSpace(rawAuth) != ""
-	hasFwdToken := strings.TrimSpace(rawFwd) != ""
-
-	// In verified local dev environment, use dedicated local-dev-user service account
-	if isLocalDevEnvironment() && (token == "mock-token-for-local-dev" || os.Getenv("DISABLE_AUTH") == "true") {
-		log.Printf("Local dev mode detected - using local-dev-user service account for %s", c.FullPath())
-		return getLocalDevK8sClients()
-	}
+	// SECURITY: No authentication bypass in production code.
+	// All requests must provide a valid user token. No environment variable checks.
+	// No fallback to service account credentials.
 
 	if token != "" && BaseKubeConfig != nil {
 		cfg := *BaseKubeConfig
@@ -118,11 +87,65 @@ func GetK8sClientsForRequest(c *gin.Context) (*kubernetes.Clientset, dynamic.Int
 		// Token provided but client build failed – treat as invalid token
 		log.Printf("Failed to build user-scoped k8s clients (source=%s tokenLen=%d) typedErr=%v dynamicErr=%v for %s", tokenSource, len(token), err1, err2, c.FullPath())
 		return nil, nil
-	} else {
-		// No token provided
-		log.Printf("No user token found for %s (hasAuthHeader=%t hasFwdToken=%t)", c.FullPath(), hasAuthHeader, hasFwdToken)
+	}
+
+	if token != "" && BaseKubeConfig == nil {
+		// Token was provided but the backend is misconfigured; don't pretend it's a missing token.
+		log.Printf("Cannot build user-scoped k8s clients: BaseKubeConfig is nil (source=%s tokenLen=%d) for %s", tokenSource, len(token), c.FullPath())
 		return nil, nil
 	}
+
+	// No token provided (or headers present but parsed to empty token)
+	log.Printf("No user token found for %s (tokenSource=%s hasAuthHeader=%t hasFwdToken=%t)", c.FullPath(), tokenSource, hasAuthHeader, hasFwdToken)
+	return nil, nil
+}
+
+// extractRequestToken extracts a caller token from request headers with consistent semantics across
+// production and test builds.
+//
+// Supported sources (in priority order):
+//  1. Authorization: Bearer <token>  (or raw token)
+//  2. X-Forwarded-Access-Token: <token>
+//
+// Returns:
+//   - token: trimmed token ("" if none)
+//   - tokenSource: "authorization", "x-forwarded-access-token", or "none"
+//   - hasAuthHeader/hasFwdToken: basic presence booleans (safe for logging; never log token content)
+func extractRequestToken(c *gin.Context) (token string, tokenSource string, hasAuthHeader bool, hasFwdToken bool) {
+	rawAuth := c.GetHeader("Authorization")
+	rawFwd := c.GetHeader("X-Forwarded-Access-Token")
+
+	hasAuthHeader = strings.TrimSpace(rawAuth) != ""
+	hasFwdToken = strings.TrimSpace(rawFwd) != ""
+
+	// Prefer Authorization header (Bearer <token> or raw token)
+	if strings.TrimSpace(rawAuth) != "" {
+		tokenSource = "authorization"
+		parts := strings.SplitN(rawAuth, " ", 2)
+		if len(parts) == 2 && strings.ToLower(parts[0]) == "bearer" {
+			token = strings.TrimSpace(parts[1])
+		} else {
+			token = strings.TrimSpace(rawAuth)
+		}
+	}
+
+	// Fallback to X-Forwarded-Access-Token
+	if strings.TrimSpace(token) == "" && strings.TrimSpace(rawFwd) != "" {
+		tokenSource = "x-forwarded-access-token"
+		token = strings.TrimSpace(rawFwd)
+	}
+
+	if strings.TrimSpace(token) == "" {
+		// Preserve the source if the header existed but was malformed/empty after parsing.
+		if hasAuthHeader {
+			return "", "authorization", hasAuthHeader, hasFwdToken
+		}
+		if hasFwdToken {
+			return "", "x-forwarded-access-token", hasAuthHeader, hasFwdToken
+		}
+		return "", "none", hasAuthHeader, hasFwdToken
+	}
+	return token, tokenSource, hasAuthHeader, hasFwdToken
 }
 
 // updateAccessKeyLastUsedAnnotation attempts to update the ServiceAccount's last-used annotation
@@ -214,8 +237,24 @@ func updateAccessKeyLastUsedAnnotation(c *gin.Context) {
 }
 
 // ExtractServiceAccountFromAuth extracts namespace and ServiceAccount name from the Authorization Bearer JWT 'sub' claim
+// Also checks X-Remote-User header for service account format (OpenShift OAuth proxy format)
 // Returns (namespace, saName, true) when a SA subject is present, otherwise ("","",false)
 func ExtractServiceAccountFromAuth(c *gin.Context) (string, string, bool) {
+	// Check X-Remote-User header (OpenShift OAuth proxy format)
+	// This is a production feature, not just for tests
+	remoteUser := c.GetHeader("X-Remote-User")
+	if remoteUser != "" {
+		const prefix = "system:serviceaccount:"
+		if strings.HasPrefix(remoteUser, prefix) {
+			rest := strings.TrimPrefix(remoteUser, prefix)
+			parts := strings.SplitN(rest, ":", 2)
+			if len(parts) == 2 {
+				return parts[0], parts[1], true
+			}
+		}
+	}
+
+	// Standard Authorization Bearer JWT parsing
 	rawAuth := c.GetHeader("Authorization")
 	parts := strings.SplitN(rawAuth, " ", 2)
 	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
@@ -263,6 +302,8 @@ func ValidateProjectContext() gin.HandlerFunc {
 				c.Request.Header.Set("Authorization", "Bearer "+qp)
 			}
 		}
+
+		// SECURITY: Authentication is always required - no bypass mechanism
 		// Require user/API key token; do not fall back to service account
 		if c.GetHeader("Authorization") == "" && c.GetHeader("X-Forwarded-Access-Token") == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "User token required"})
@@ -323,62 +364,12 @@ func ValidateProjectContext() gin.HandlerFunc {
 	}
 }
 
-// isLocalDevEnvironment validates that we're in a safe local development environment
-// This prevents accidentally enabling dev mode in production
-func isLocalDevEnvironment() bool {
-	// Must have ENVIRONMENT=local or development
-	env := os.Getenv("ENVIRONMENT")
-	if env != "local" && env != "development" {
-		return false
-	}
-
-	// Must explicitly opt-in
-	if os.Getenv("DISABLE_AUTH") != "true" {
-		return false
-	}
-
-	// Additional safety: check we're not in a production namespace
-	namespace := os.Getenv("NAMESPACE")
-	if namespace == "" {
-		namespace = "default"
-	}
-
-	// SECURITY: Use allow-list approach to restrict dev mode to specific namespaces
-	// This prevents accidental activation in staging, qa, demo, or other non-production environments
-	allowedNamespaces := []string{
-		"ambient-code", // Default minikube namespace
-		"vteam-dev",    // Legacy local dev namespace
-	}
-
-	isAllowed := false
-	for _, allowed := range allowedNamespaces {
-		if namespace == allowed {
-			isAllowed = true
-			break
-		}
-	}
-
-	if !isAllowed {
-		log.Printf("Refusing dev mode in non-whitelisted namespace: %s", namespace)
-		log.Printf("Dev mode only allowed in: %v", allowedNamespaces)
-		log.Printf("SECURITY: Dev mode uses elevated permissions and should NEVER run outside local development")
-		return false
-	}
-
-	log.Printf("Local dev environment validated: env=%s namespace=%s (whitelisted)", env, namespace)
-	return true
-}
-
-// getLocalDevK8sClients returns clients for local development
-// Uses a dedicated local-dev-user service account with scoped permissions
-func getLocalDevK8sClients() (*kubernetes.Clientset, dynamic.Interface) {
-	// In local dev, we use the local-dev-user service account
-	// which has limited, namespace-scoped permissions
-	// This is safer than using the backend service account
-
-	// For now, use the server clients (which are the backend service account)
-	// TODO: Mint a token for the local-dev-user service account
-	// and create clients using that token for proper permission scoping
-
-	return server.K8sClient, server.DynamicClient
-}
+// SECURITY: Removed the previous local-dev authentication bypass helpers.
+// The removed implementation relied on environment variables (test/dev flags)
+// which could be accidentally set in production, creating an authentication bypass risk.
+//
+// Production code must NEVER bypass authentication based on environment variables.
+// All requests require valid user tokens. No exceptions.
+//
+// For local development, use proper authentication tokens or configure the cluster
+// to allow unauthenticated access only in development namespaces (not via code).

@@ -2,7 +2,7 @@
 
 import React from "react";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, FolderOpen, HardDrive } from "lucide-react";
+import { RefreshCw, FolderOpen, HardDrive, Upload } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { FileTree, type FileTreeNode } from "@/components/file-tree";
 import type { AgenticSession } from "@/types/agentic-session";
@@ -17,6 +17,7 @@ export type WorkspaceTabProps = {
   onRefresh: (background?: boolean) => void;
   onSelect: (node: FileTreeNode) => void;
   onToggle: (node: FileTreeNode) => void;
+  onUpload?: () => void;
   k8sResources?: {
     pvcName?: string;
     pvcExists?: boolean;
@@ -26,7 +27,7 @@ export type WorkspaceTabProps = {
   onRetrySpawn?: () => void;
 };
 
-const WorkspaceTab: React.FC<WorkspaceTabProps> = ({ session, wsLoading, wsUnavailable, wsTree, wsSelectedPath, onRefresh, onSelect, onToggle, k8sResources, contentPodError, onRetrySpawn }) => {
+const WorkspaceTab: React.FC<WorkspaceTabProps> = ({ session, wsLoading, wsUnavailable, wsTree, wsSelectedPath, onRefresh, onSelect, onToggle, onUpload, k8sResources, contentPodError, onRetrySpawn }) => {
   if (wsLoading) {
     return (
       <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">
@@ -90,9 +91,17 @@ const WorkspaceTab: React.FC<WorkspaceTabProps> = ({ session, wsLoading, wsUnava
               <p className="text-xs text-muted-foreground">{wsTree.length} items</p>
             )}
           </div>
-          <Button size="sm" variant="outline" onClick={() => onRefresh(false)} disabled={wsLoading} className="h-8">
-            <RefreshCw className="h-4 w-4" />
-          </Button>
+          <div className="flex gap-2">
+            {onUpload && (
+              <Button size="sm" variant="outline" onClick={onUpload} disabled={wsLoading} className="h-8">
+                <Upload className="h-4 w-4 mr-1" />
+                Upload
+              </Button>
+            )}
+            <Button size="sm" variant="outline" onClick={() => onRefresh(false)} disabled={wsLoading} className="h-8">
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
         <div className="p-2">
           {wsTree.length === 0 ? (

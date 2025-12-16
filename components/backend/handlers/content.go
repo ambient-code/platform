@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"ambient-code-backend/git"
+	"ambient-code-backend/pathutil"
 	"ambient-code-backend/types"
 
 	"github.com/gin-gonic/gin"
@@ -62,7 +63,7 @@ func ContentGitPush(c *gin.Context) {
 	}
 
 	// Basic safety: repoDir must be under StateBaseDir
-	if !strings.HasPrefix(repoDir+string(os.PathSeparator), StateBaseDir+string(os.PathSeparator)) && repoDir != StateBaseDir {
+	if !pathutil.IsPathWithinBase(repoDir, StateBaseDir) && repoDir != StateBaseDir {
 		log.Printf("contentGitPush: invalid repoPath resolved=%q stateBaseDir=%q", repoDir, StateBaseDir)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid repoPath"})
 		return
@@ -102,7 +103,7 @@ func ContentGitAbandon(c *gin.Context) {
 		repoDir = StateBaseDir
 	}
 
-	if !strings.HasPrefix(repoDir+string(os.PathSeparator), StateBaseDir+string(os.PathSeparator)) && repoDir != StateBaseDir {
+	if !pathutil.IsPathWithinBase(repoDir, StateBaseDir) && repoDir != StateBaseDir {
 		log.Printf("contentGitAbandon: invalid repoPath resolved=%q base=%q", repoDir, StateBaseDir)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid repoPath"})
 		return
@@ -127,7 +128,7 @@ func ContentGitDiff(c *gin.Context) {
 	}
 
 	repoDir := filepath.Clean(filepath.Join(StateBaseDir, repoPath))
-	if !strings.HasPrefix(repoDir+string(os.PathSeparator), StateBaseDir+string(os.PathSeparator)) && repoDir != StateBaseDir {
+	if !pathutil.IsPathWithinBase(repoDir, StateBaseDir) && repoDir != StateBaseDir {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid repoPath"})
 		return
 	}
@@ -160,12 +161,12 @@ func ContentGitDiff(c *gin.Context) {
 // ContentGitStatus handles GET /content/git-status?path=
 func ContentGitStatus(c *gin.Context) {
 	path := filepath.Clean("/" + strings.TrimSpace(c.Query("path")))
-	if path == "/" || strings.Contains(path, "..") {
+	abs := filepath.Join(StateBaseDir, path)
+	// Verify abs is within StateBaseDir to prevent path traversal
+	if !pathutil.IsPathWithinBase(abs, StateBaseDir) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid path"})
 		return
 	}
-
-	abs := filepath.Join(StateBaseDir, path)
 
 	// Check if directory exists
 	if info, err := os.Stat(abs); err != nil || !info.IsDir() {
@@ -225,12 +226,12 @@ func ContentGitConfigureRemote(c *gin.Context) {
 	}
 
 	path := filepath.Clean("/" + body.Path)
-	if path == "/" || strings.Contains(path, "..") {
+	abs := filepath.Join(StateBaseDir, path)
+	// Verify abs is within StateBaseDir to prevent path traversal
+	if !pathutil.IsPathWithinBase(abs, StateBaseDir) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid path"})
 		return
 	}
-
-	abs := filepath.Join(StateBaseDir, path)
 
 	// Check if directory exists
 	if info, err := os.Stat(abs); err != nil || !info.IsDir() {
@@ -302,12 +303,12 @@ func ContentGitSync(c *gin.Context) {
 	}
 
 	path := filepath.Clean("/" + body.Path)
-	if path == "/" || strings.Contains(path, "..") {
+	abs := filepath.Join(StateBaseDir, path)
+	// Verify abs is within StateBaseDir to prevent path traversal
+	if !pathutil.IsPathWithinBase(abs, StateBaseDir) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid path"})
 		return
 	}
-
-	abs := filepath.Join(StateBaseDir, path)
 
 	// Check if git repo exists
 	gitDir := filepath.Join(abs, ".git")
@@ -318,7 +319,9 @@ func ContentGitSync(c *gin.Context) {
 
 	// Perform git sync operations
 	if err := git.SyncRepo(c.Request.Context(), abs, body.Message, body.Branch); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		// Log actual error for debugging, but return generic message to avoid leaking internal details
+		log.Printf("Internal server error: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
 
@@ -344,12 +347,13 @@ func ContentWrite(c *gin.Context) {
 	log.Printf("ContentWrite: path=%q contentLen=%d encoding=%q StateBaseDir=%q", req.Path, len(req.Content), req.Encoding, StateBaseDir)
 
 	path := filepath.Clean("/" + strings.TrimSpace(req.Path))
-	if path == "/" || strings.Contains(path, "..") {
-		log.Printf("ContentWrite: invalid path rejected: path=%q", path)
+	abs := filepath.Join(StateBaseDir, path)
+	// Verify abs is within StateBaseDir to prevent path traversal
+	if !pathutil.IsPathWithinBase(abs, StateBaseDir) {
+		log.Printf("ContentWrite: path traversal attempt rejected: path=%q abs=%q", path, abs)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid path"})
 		return
 	}
-	abs := filepath.Join(StateBaseDir, path)
 	log.Printf("ContentWrite: absolute path=%q", abs)
 
 	if err := os.MkdirAll(filepath.Dir(abs), 0755); err != nil {
@@ -384,12 +388,13 @@ func ContentRead(c *gin.Context) {
 	log.Printf("ContentRead: requested path=%q StateBaseDir=%q", c.Query("path"), StateBaseDir)
 	log.Printf("ContentRead: cleaned path=%q", path)
 
-	if path == "/" || strings.Contains(path, "..") {
-		log.Printf("ContentRead: invalid path rejected: path=%q", path)
+	abs := filepath.Join(StateBaseDir, path)
+	// Verify abs is within StateBaseDir to prevent path traversal
+	if !pathutil.IsPathWithinBase(abs, StateBaseDir) {
+		log.Printf("ContentRead: path traversal attempt rejected: path=%q abs=%q", path, abs)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid path"})
 		return
 	}
-	abs := filepath.Join(StateBaseDir, path)
 	log.Printf("ContentRead: absolute path=%q", abs)
 
 	b, err := os.ReadFile(abs)
@@ -413,12 +418,13 @@ func ContentList(c *gin.Context) {
 	log.Printf("ContentList: cleaned path=%q", path)
 	log.Printf("ContentList: StateBaseDir=%q", StateBaseDir)
 
-	if path == "/" || strings.Contains(path, "..") {
-		log.Printf("ContentList: invalid path rejected: path=%q", path)
+	abs := filepath.Join(StateBaseDir, path)
+	// Verify abs is within StateBaseDir to prevent path traversal
+	if !pathutil.IsPathWithinBase(abs, StateBaseDir) {
+		log.Printf("ContentList: path traversal attempt rejected: path=%q abs=%q", path, abs)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid path"})
 		return
 	}
-	abs := filepath.Join(StateBaseDir, path)
 	log.Printf("ContentList: absolute path=%q", abs)
 
 	info, err := os.Stat(abs)
@@ -671,7 +677,9 @@ func ContentGitMergeStatus(c *gin.Context) {
 	path := filepath.Clean("/" + strings.TrimSpace(c.Query("path")))
 	branch := strings.TrimSpace(c.Query("branch"))
 
-	if path == "/" || strings.Contains(path, "..") {
+	abs := filepath.Join(StateBaseDir, path)
+	// Verify abs is within StateBaseDir to prevent path traversal
+	if !pathutil.IsPathWithinBase(abs, StateBaseDir) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid path"})
 		return
 	}
@@ -679,8 +687,6 @@ func ContentGitMergeStatus(c *gin.Context) {
 	if branch == "" {
 		branch = types.DefaultBranch
 	}
-
-	abs := filepath.Join(StateBaseDir, path)
 
 	// Check if git repo exists
 	gitDir := filepath.Join(abs, ".git")
@@ -698,7 +704,9 @@ func ContentGitMergeStatus(c *gin.Context) {
 	status, err := GitCheckMergeStatus(c.Request.Context(), abs, branch)
 	if err != nil {
 		log.Printf("ContentGitMergeStatus: check failed: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		// Log actual error for debugging, but return generic message to avoid leaking internal details
+		log.Printf("Internal server error: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
 
@@ -719,7 +727,9 @@ func ContentGitPull(c *gin.Context) {
 	}
 
 	path := filepath.Clean("/" + body.Path)
-	if path == "/" || strings.Contains(path, "..") {
+	abs := filepath.Join(StateBaseDir, path)
+	// Verify abs is within StateBaseDir to prevent path traversal
+	if !pathutil.IsPathWithinBase(abs, StateBaseDir) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid path"})
 		return
 	}
@@ -727,8 +737,6 @@ func ContentGitPull(c *gin.Context) {
 	if body.Branch == "" {
 		body.Branch = types.DefaultBranch
 	}
-
-	abs := filepath.Join(StateBaseDir, path)
 
 	if err := GitPullRepo(c.Request.Context(), abs, body.Branch); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -754,7 +762,9 @@ func ContentGitPushToBranch(c *gin.Context) {
 	}
 
 	path := filepath.Clean("/" + body.Path)
-	if path == "/" || strings.Contains(path, "..") {
+	abs := filepath.Join(StateBaseDir, path)
+	// Verify abs is within StateBaseDir to prevent path traversal
+	if !pathutil.IsPathWithinBase(abs, StateBaseDir) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid path"})
 		return
 	}
@@ -766,8 +776,6 @@ func ContentGitPushToBranch(c *gin.Context) {
 	if body.Message == "" {
 		body.Message = "Session artifacts update"
 	}
-
-	abs := filepath.Join(StateBaseDir, path)
 
 	if err := GitPushToRepo(c.Request.Context(), abs, body.Branch, body.Message); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -792,7 +800,9 @@ func ContentGitCreateBranch(c *gin.Context) {
 	}
 
 	path := filepath.Clean("/" + body.Path)
-	if path == "/" || strings.Contains(path, "..") {
+	abs := filepath.Join(StateBaseDir, path)
+	// Verify abs is within StateBaseDir to prevent path traversal
+	if !pathutil.IsPathWithinBase(abs, StateBaseDir) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid path"})
 		return
 	}
@@ -801,8 +811,6 @@ func ContentGitCreateBranch(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "branchName is required"})
 		return
 	}
-
-	abs := filepath.Join(StateBaseDir, path)
 
 	if err := GitCreateBranch(c.Request.Context(), abs, body.BranchName); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -817,18 +825,60 @@ func ContentGitCreateBranch(c *gin.Context) {
 func ContentGitListBranches(c *gin.Context) {
 	path := filepath.Clean("/" + strings.TrimSpace(c.Query("path")))
 
-	if path == "/" || strings.Contains(path, "..") {
+	abs := filepath.Join(StateBaseDir, path)
+	// Verify abs is within StateBaseDir to prevent path traversal
+	if !pathutil.IsPathWithinBase(abs, StateBaseDir) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid path"})
 		return
 	}
 
-	abs := filepath.Join(StateBaseDir, path)
-
 	branches, err := GitListRemoteBranches(c.Request.Context(), abs)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		// Log actual error for debugging, but return generic message to avoid leaking internal details
+		log.Printf("Internal server error: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"branches": branches})
+}
+
+// ContentDelete handles DELETE /content/delete when running in CONTENT_SERVICE_MODE
+func ContentDelete(c *gin.Context) {
+	var req struct {
+		Path string `json:"path"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Printf("ContentDelete: bind JSON failed: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	log.Printf("ContentDelete: path=%q StateBaseDir=%q", req.Path, StateBaseDir)
+
+	path := filepath.Clean("/" + strings.TrimSpace(req.Path))
+	abs := filepath.Join(StateBaseDir, path)
+	// Verify abs is within StateBaseDir to prevent path traversal
+	if !pathutil.IsPathWithinBase(abs, StateBaseDir) {
+		log.Printf("ContentDelete: path traversal attempt rejected: path=%q abs=%q", path, abs)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid path"})
+		return
+	}
+	log.Printf("ContentDelete: absolute path=%q", abs)
+
+	// Check if file exists
+	if _, err := os.Stat(abs); os.IsNotExist(err) {
+		log.Printf("ContentDelete: file not found: %q", abs)
+		c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
+		return
+	}
+
+	// Delete the file
+	if err := os.Remove(abs); err != nil {
+		log.Printf("ContentDelete: delete failed for %q: %v", abs, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete file"})
+		return
+	}
+
+	log.Printf("ContentDelete: successfully deleted %q", abs)
+	c.JSON(http.StatusOK, gin.H{"message": "file deleted successfully"})
 }
