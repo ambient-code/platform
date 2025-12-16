@@ -511,6 +511,58 @@ export default function ProjectSessionDetailPage({
     );
   }, [messages, session?.spec?.interactive]);
 
+  // Auto-refresh artifacts when messages complete
+  // This tracks completed tool results and refreshes artifacts when new ones arrive
+  const previousToolResultCount = useRef(0);
+  const artifactsRefreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const hasRefreshedOnCompletionRef = useRef(false);
+
+  useEffect(() => {
+    // Count completed tool use messages (tools with results)
+    const completedToolCount = streamMessages.filter(
+      (msg) => msg.type === "tool_use_messages" && 
+               (msg as ToolUseMessages).resultBlock?.content !== null
+    ).length;
+
+    // If we have new completed tools, refresh artifacts after a short delay
+    if (completedToolCount > previousToolResultCount.current && completedToolCount > 0) {
+      // Clear any pending refresh timeout
+      if (artifactsRefreshTimeoutRef.current) {
+        clearTimeout(artifactsRefreshTimeoutRef.current);
+      }
+
+      // Debounce refresh to avoid excessive calls during rapid tool completions
+      artifactsRefreshTimeoutRef.current = setTimeout(() => {
+        refetchArtifactsFiles();
+      }, 1000); // Wait 1 second after last tool completion
+
+      previousToolResultCount.current = completedToolCount;
+    }
+
+    // Cleanup timeout on unmount
+    return () => {
+      if (artifactsRefreshTimeoutRef.current) {
+        clearTimeout(artifactsRefreshTimeoutRef.current);
+      }
+    };
+  }, [streamMessages, refetchArtifactsFiles]);
+
+  // Also refresh artifacts when session completes (catch any final artifacts)
+  useEffect(() => {
+    const phase = session?.status?.phase;
+    if (phase === "Completed" && !hasRefreshedOnCompletionRef.current) {
+      // Refresh after a short delay to ensure all final writes are complete
+      setTimeout(() => {
+        refetchArtifactsFiles();
+      }, 2000);
+      hasRefreshedOnCompletionRef.current = true;
+    }
+    // Reset the flag if session starts running again
+    if (phase === "Running") {
+      hasRefreshedOnCompletionRef.current = false;
+    }
+  }, [session?.status?.phase, refetchArtifactsFiles]);
+
   // Session action handlers
   const handleStop = () => {
     stopMutation.mutate(
