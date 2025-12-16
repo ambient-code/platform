@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
   Loader2,
   FolderTree,
@@ -105,6 +105,11 @@ import {
   useWorkflowMetadata,
 } from "@/services/queries/use-workflows";
 import { useMutation } from "@tanstack/react-query";
+
+// Constants for artifact auto-refresh debouncing
+// Moved outside component to avoid unnecessary effect re-runs
+const ARTIFACTS_DEBOUNCE_MS = 1000; // Wait 1 second after last tool completion
+const COMPLETION_DELAY_MS = 2000;   // Wait 2 seconds after session completes for final writes
 
 export default function ProjectSessionDetailPage({
   params,
@@ -519,21 +524,15 @@ export default function ProjectSessionDetailPage({
   const completionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasRefreshedOnCompletionRef = useRef(false);
 
-  // Debounce delays to avoid excessive API calls during rapid tool completions
-  const ARTIFACTS_DEBOUNCE_MS = 1000; // Wait 1 second after last tool completion
-  const COMPLETION_DELAY_MS = 2000;   // Wait 2 seconds after session completes for final writes
-
-  // Helper to check if message is a completed tool use (with type guard)
-  const isCompletedToolUse = useCallback((msg: MessageObject | ToolUseMessages): msg is ToolUseMessages => {
-    return msg.type === "tool_use_messages" && 
-           "resultBlock" in msg && 
-           msg.resultBlock?.content !== null;
-  }, []);
-
   // Memoize the completed tool count to avoid redundant filtering
+  // Inline the type guard to avoid unnecessary dependency
   const completedToolCount = useMemo(() => {
-    return streamMessages.filter(isCompletedToolUse).length;
-  }, [streamMessages, isCompletedToolUse]);
+    return streamMessages.filter((msg): msg is ToolUseMessages => 
+      msg.type === "tool_use_messages" && 
+      "resultBlock" in msg && 
+      msg.resultBlock?.content !== null
+    ).length;
+  }, [streamMessages]);
 
   useEffect(() => {
     // If we have new completed tools, refresh artifacts after a short delay
@@ -557,9 +556,7 @@ export default function ProjectSessionDetailPage({
         clearTimeout(artifactsRefreshTimeoutRef.current);
       }
     };
-    // React Query guarantees refetchArtifactsFiles is stable, safe to omit from deps
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [completedToolCount, ARTIFACTS_DEBOUNCE_MS]);
+  }, [completedToolCount, refetchArtifactsFiles]);
 
   // Also refresh artifacts when session completes (catch any final artifacts)
   useEffect(() => {
@@ -570,9 +567,8 @@ export default function ProjectSessionDetailPage({
         refetchArtifactsFiles();
       }, COMPLETION_DELAY_MS);
       hasRefreshedOnCompletionRef.current = true;
-    }
-    // Reset the flag if session starts running again
-    if (phase === "Running") {
+    } else if (phase !== "Completed") {
+      // Reset flag whenever leaving Completed state (handles Running, Error, Cancelled, etc.)
       hasRefreshedOnCompletionRef.current = false;
     }
 
@@ -582,9 +578,7 @@ export default function ProjectSessionDetailPage({
         clearTimeout(completionTimeoutRef.current);
       }
     };
-    // React Query guarantees refetchArtifactsFiles is stable, safe to omit from deps
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.status?.phase, COMPLETION_DELAY_MS]);
+  }, [session?.status?.phase, refetchArtifactsFiles]);
 
   // Session action handlers
   const handleStop = () => {

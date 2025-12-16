@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { Folder, NotepadText, Download, FolderSync, Loader2 } from "lucide-react";
 import { AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
@@ -34,8 +35,8 @@ export function ArtifactsAccordion({
   onDownloadFile,
   onNavigateBack,
 }: ArtifactsAccordionProps) {
-  // Count total files (not directories)
-  const fileCount = files.filter((f) => !f.isDir).length;
+  // Count total files (not directories) - memoized to avoid recalculation on every render
+  const fileCount = useMemo(() => files.filter((f) => !f.isDir).length, [files]);
 
   return (
     <AccordionItem value="artifacts" className="border rounded-lg px-3 bg-card">
@@ -48,6 +49,7 @@ export function ArtifactsAccordion({
               variant="secondary" 
               className="ml-auto mr-2"
               aria-label={`${fileCount} ${fileCount === 1 ? 'file' : 'files'}`}
+              aria-live="polite"
             >
               {fileCount}
             </Badge>
