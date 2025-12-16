@@ -587,13 +587,13 @@ export default function ProjectSessionDetailPage({
 
   // Workflow change handler
   const handleWorkflowChange = (value: string) => {
-    workflowManagement.handleWorkflowChange(value, ootbWorkflows, () =>
+    const workflow = workflowManagement.handleWorkflowChange(value, ootbWorkflows, () =>
       setCustomWorkflowDialogOpen(true),
     );
-    // Automatically trigger activation after workflow change
-    setTimeout(() => {
-      workflowManagement.activateWorkflow();
-    }, 100);
+    // Automatically trigger activation with the workflow directly (avoids state timing issues)
+    if (workflow) {
+      workflowManagement.activateWorkflow(workflow);
+    }
   };
 
   // Handle workflow selection from welcome experience

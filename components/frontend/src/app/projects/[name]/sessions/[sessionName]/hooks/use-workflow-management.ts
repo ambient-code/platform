@@ -25,9 +25,10 @@ export function useWorkflowManagement({
     setPendingWorkflow(workflow);
   }, []);
 
-  // Activate the pending workflow
-  const activateWorkflow = useCallback(async () => {
-    if (!pendingWorkflow) return false;
+  // Activate the pending workflow (or a workflow passed directly)
+  const activateWorkflow = useCallback(async (workflowToActivate?: WorkflowConfig) => {
+    const workflow = workflowToActivate || pendingWorkflow;
+    if (!workflow) return false;
     
     setWorkflowActivating(true);
     
@@ -37,9 +38,9 @@ export function useWorkflowManagement({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          gitUrl: pendingWorkflow.gitUrl,
-          branch: pendingWorkflow.branch,
-          path: pendingWorkflow.path || "",
+          gitUrl: workflow.gitUrl,
+          branch: workflow.branch,
+          path: workflow.path || "",
         }),
       });
       
@@ -48,10 +49,19 @@ export function useWorkflowManagement({
         throw new Error(errorData.error || "Failed to update workflow");
       }
       
-      // Note: Workflow clone and restart handled by operator
-      // Initial workflow prompt auto-executed via AG-UI pattern (POST /agui/run)
+      // 2. Send WebSocket message to trigger workflow clone and restart
+      await fetch(`/api/projects/${projectName}/agentic-sessions/${sessionName}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "workflow_change",
+          gitUrl: workflow.gitUrl,
+          branch: workflow.branch,
+          path: workflow.path || "",
+        }),
+      });
       
-      setActiveWorkflow(pendingWorkflow.id);
+      setActiveWorkflow(workflow.id);
       setPendingWorkflow(null);
       
       // Wait for restart to complete (give runner time to clone and restart)
@@ -75,28 +85,29 @@ export function useWorkflowManagement({
     
     if (value === "none") {
       setPendingWorkflow(null);
-      return;
+      return null;
     }
     
     if (value === "custom") {
       onCustom();
-      return;
+      return null;
     }
     
     // Find the selected workflow from OOTB workflows
     const workflow = ootbWorkflows.find(w => w.id === value);
     if (!workflow) {
       errorToast(`Workflow ${value} not found`);
-      return;
+      return null;
     }
     
     if (!workflow.enabled) {
       errorToast(`Workflow ${workflow.name} is not yet available`);
-      return;
+      return null;
     }
     
     // Set as pending (user must click Activate)
     setPendingWorkflow(workflow);
+    return workflow;
   }, []);
 
   // Set custom workflow as pending

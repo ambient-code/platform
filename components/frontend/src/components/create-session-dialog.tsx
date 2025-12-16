@@ -35,7 +35,7 @@ import { Input } from "@/components/ui/input";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import type { CreateAgenticSessionRequest } from "@/types/agentic-session";
 import { useCreateSession } from "@/services/queries/use-sessions";
-import { successToast, errorToast } from "@/hooks/use-toast";
+import { errorToast } from "@/hooks/use-toast";
 
 const models = [
   { value: "claude-sonnet-4-5", label: "Claude Sonnet 4.5" },

@@ -14,7 +14,7 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Textarea } from "@/components/ui/textarea";
 import type { CreateAgenticSessionRequest } from "@/types/agentic-session";
 import { Checkbox } from "@/components/ui/checkbox";
-import { successToast, errorToast } from "@/hooks/use-toast";
+import { errorToast } from "@/hooks/use-toast";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { RepositoryDialog } from "./repository-dialog";
 import { RepositoryList } from "./repository-list";

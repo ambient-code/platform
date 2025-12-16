@@ -3,7 +3,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { MessageSquare, Loader2, Settings, Terminal, Users } from "lucide-react";
 import { StreamMessage } from "@/components/ui/stream-message";
 import { LoadingDots } from "@/components/ui/message";
