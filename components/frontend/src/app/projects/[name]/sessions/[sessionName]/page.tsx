@@ -1751,21 +1751,6 @@ export default function ProjectSessionDetailPage({
               <div className="flex-1 min-w-0 flex flex-col">
                 <Card className="relative flex-1 flex flex-col overflow-hidden py-0 border-0 rounded-none md:border-l">
                   <CardContent className="px-3 pt-0 pb-0 flex-1 flex flex-col overflow-hidden">
-                    {/* Workflow activation overlay */}
-                    {workflowManagement.workflowActivating && (
-                      <div className="absolute inset-0 bg-background/90 backdrop-blur-sm z-10 flex items-center justify-center rounded-lg">
-                        <Alert className="max-w-md mx-4">
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          <AlertTitle>Activating Workflow...</AlertTitle>
-                          <AlertDescription>
-                            <p>
-                              The new workflow is being loaded. Please wait...
-                            </p>
-                          </AlertDescription>
-                        </Alert>
-                      </div>
-                    )}
-
                     {/* Repository change overlay */}
                     {repoChanging && (
                       <div className="absolute inset-0 bg-background/90 backdrop-blur-sm z-10 flex items-center justify-center rounded-lg">
