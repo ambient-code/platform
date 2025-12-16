@@ -254,8 +254,18 @@ export default function ProjectSessionDetailPage({
   const workflowManagement = useWorkflowManagement({
     projectName,
     sessionName,
+    sessionPhase: session?.status?.phase,
     onWorkflowActivated: refetchSession,
   });
+
+  // Process queued workflow when session becomes Running
+  useEffect(() => {
+    const phase = session?.status?.phase;
+    if (phase === "Running" && workflowManagement.queuedWorkflow) {
+      // Session is now running, activate the queued workflow
+      workflowManagement.activateWorkflow(workflowManagement.queuedWorkflow, phase);
+    }
+  }, [session?.status?.phase, workflowManagement.queuedWorkflow]);
 
   // Repo management mutations
   const addRepoMutation = useMutation({
@@ -592,7 +602,7 @@ export default function ProjectSessionDetailPage({
     );
     // Automatically trigger activation with the workflow directly (avoids state timing issues)
     if (workflow) {
-      workflowManagement.activateWorkflow(workflow);
+      workflowManagement.activateWorkflow(workflow, session?.status?.phase);
     }
   };
 
