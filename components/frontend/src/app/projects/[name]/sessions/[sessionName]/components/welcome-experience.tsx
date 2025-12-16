@@ -12,6 +12,7 @@ type WelcomeExperienceProps = {
   onUserInteraction: () => void;
   userHasInteracted: boolean;
   sessionPhase?: string;
+  hasRealMessages: boolean;
 };
 
 const WELCOME_MESSAGE = `Welcome to Ambient AI! Your workspace and all of its context have been loaded. Please select a workflow below to get started, or type a message to begin chatting.`;
@@ -22,17 +23,19 @@ export function WelcomeExperience({
   onUserInteraction,
   userHasInteracted,
   sessionPhase,
+  hasRealMessages,
 }: WelcomeExperienceProps) {
   const [displayedText, setDisplayedText] = useState("");
   const [isTypingComplete, setIsTypingComplete] = useState(false);
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null);
+  const [cardsEverShown, setCardsEverShown] = useState(false);
 
   // Determine if we should show workflow cards and animation
   const isInitialPhase = sessionPhase === "Pending" || sessionPhase === "Creating";
   const shouldShowAnimation = isInitialPhase && !userHasInteracted;
-  // Show workflow cards until user interacts (regardless of session phase, unless it's a terminal state)
+  // Show workflow cards if they haven't been shown yet and session is not in terminal state
   const isTerminalPhase = sessionPhase === "Completed" || sessionPhase === "Failed" || sessionPhase === "Stopped";
-  const shouldShowWorkflowCards = !userHasInteracted && !isTerminalPhase;
+  const shouldShowWorkflowCards = (cardsEverShown || !hasRealMessages) && !isTerminalPhase;
 
   // Streaming text effect
   useEffect(() => {
@@ -57,6 +60,13 @@ export function WelcomeExperience({
     return () => clearInterval(interval);
   }, [shouldShowAnimation]);
 
+  // Track when cards are shown for the first time
+  useEffect(() => {
+    if (isTypingComplete && !hasRealMessages && !isTerminalPhase) {
+      setCardsEverShown(true);
+    }
+  }, [isTypingComplete, hasRealMessages, isTerminalPhase]);
+
   const handleWorkflowSelect = (workflowId: string) => {
     setSelectedWorkflowId(workflowId);
     onWorkflowSelect(workflowId);
@@ -66,6 +76,21 @@ export function WelcomeExperience({
   const enabledWorkflows = ootbWorkflows.filter((w) => w.enabled);
 
   return (
+    <>
+      <style dangerouslySetInnerHTML={{
+        __html: `
+          @keyframes fadeInUp {
+            from {
+              opacity: 0;
+              transform: translateY(20px);
+            }
+            to {
+              opacity: 1;
+              transform: translateY(0);
+            }
+          }
+        `
+      }} />
     <div className="space-y-4">
       {/* Static welcome message styled like a chat message */}
       <div className="mb-4 mt-2">
@@ -96,21 +121,25 @@ export function WelcomeExperience({
 
       {/* Workflow cards - show after typing completes (only for initial phases) */}
       {shouldShowWorkflowCards && isTypingComplete && enabledWorkflows.length > 0 && (
-        <div className="px-4 space-y-2">
+        <div className="px-4 space-y-2 animate-fade-in-up">
           <p className="text-xs font-medium text-muted-foreground">
             Suggested workflows:
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-            {enabledWorkflows.map((workflow) => (
+            {enabledWorkflows.map((workflow, index) => (
               <Card
                 key={workflow.id}
-                className={`cursor-pointer transition-all hover:shadow-md hover:border-primary/50 ${
+                className={cn(
+                  "cursor-pointer transition-all hover:shadow-md hover:border-primary/50",
                   selectedWorkflowId === workflow.id
                     ? "border-primary bg-primary/5"
                     : selectedWorkflowId !== null
                       ? "opacity-50 cursor-not-allowed"
                       : ""
-                }`}
+                )}
+                style={{
+                  animation: `fadeInUp 0.5s ease-out ${index * 0.1}s both`
+                }}
                 onClick={() => {
                   if (selectedWorkflowId === null) {
                     handleWorkflowSelect(workflow.id);
@@ -141,6 +170,7 @@ export function WelcomeExperience({
         </div>
       )}
     </div>
+    </>
   );
 }
 
