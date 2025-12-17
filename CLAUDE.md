@@ -426,6 +426,12 @@ Langfuse supports OpenTelemetry as of 2025:
    - REQUIRED: Always use `GetK8sClientsForRequest(c)` to get user-scoped K8s clients
    - REQUIRED: Return `401 Unauthorized` if user token is missing or invalid
    - Exception: Backend service account ONLY for CR writes and token minting (handlers/sessions.go:227, handlers/sessions.go:449)
+   - Exception: Operator service account for startup migrations (operator/internal/handlers/migration.go:29-47)
+     - V1→V2 repo format migration runs once at operator startup
+     - Updates existing CRs the operator already has RBAC access to
+     - Only modifies data structure format, not repository content
+     - Active sessions (Running/Creating) are skipped to avoid interference
+     - See ADR-0002 for detailed security model documentation
 
 2. **Never Panic in Production Code**
    - FORBIDDEN: `panic()` in handlers, reconcilers, or any production path

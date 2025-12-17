@@ -231,6 +231,14 @@ func migrateSession(session *unstructured.Unstructured, namespace, name string) 
 		return nil // No repos to migrate
 	}
 
+	// Read session-level autoPushOnComplete to use as default for per-repo autoPush
+	// This preserves existing behavior when migrating from v1 to v2 format.
+	// Defaults to false if the field is missing or has an invalid type (safe default).
+	defaultAutoPush := false
+	if autoPushOnComplete, found, err := unstructured.NestedBool(spec, "autoPushOnComplete"); err == nil && found {
+		defaultAutoPush = autoPushOnComplete
+	}
+
 	// Convert each repo from legacy to new format
 	// Handle mixed v1/v2 format (edge case from manual CR editing)
 	migratedRepos := make([]interface{}, 0, len(repos))
@@ -261,7 +269,7 @@ func migrateSession(session *unstructured.Unstructured, namespace, name string) 
 			"input": map[string]interface{}{
 				"url": url,
 			},
-			"autoPush": false, // Default to false for safety
+			"autoPush": defaultAutoPush, // Use session-level autoPushOnComplete as default
 		}
 
 		if branch != "" {

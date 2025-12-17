@@ -764,3 +764,253 @@ func TestMigrateAllSessions_SingleSessionMixedV1V2Repos(t *testing.T) {
 		t.Error("Expected MigrationCompleted event to be recorded")
 	}
 }
+
+// TestMigrateAllSessions_PreservesAutoPushOnCompleteTrue tests that migration preserves
+// autoPushOnComplete: true at session level by setting autoPush: true on migrated repos
+func TestMigrateAllSessions_PreservesAutoPushOnCompleteTrue(t *testing.T) {
+	session := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "vteam.ambient-code/v1alpha1",
+			"kind":       "AgenticSession",
+			"metadata": map[string]interface{}{
+				"name":      "autopush-enabled-session",
+				"namespace": "default",
+			},
+			"spec": map[string]interface{}{
+				"autoPushOnComplete": true,
+				"repos": []interface{}{
+					map[string]interface{}{
+						"url":    "https://github.com/org/repo.git",
+						"branch": "main",
+					},
+				},
+			},
+		},
+	}
+
+	setupTestDynamicClient(session)
+
+	err := handlers.MigrateAllSessions()
+	if err != nil {
+		t.Fatalf("MigrateAllSessions() failed: %v", err)
+	}
+
+	// Verify migrated repo inherited autoPushOnComplete value
+	gvr := types.GetAgenticSessionResource()
+	updated, err := config.DynamicClient.Resource(gvr).Namespace("default").Get(context.Background(), "autopush-enabled-session", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Failed to get updated session: %v", err)
+	}
+
+	spec, found, err := unstructured.NestedMap(updated.Object, "spec")
+	if err != nil || !found {
+		t.Fatal("Failed to get spec")
+	}
+
+	repos, found, err := unstructured.NestedSlice(spec, "repos")
+	if err != nil || !found {
+		t.Fatal("Failed to get repos")
+	}
+
+	repo, ok := repos[0].(map[string]interface{})
+	if !ok {
+		t.Fatal("Repo is not a map")
+	}
+
+	autoPush, found, err := unstructured.NestedBool(repo, "autoPush")
+	if err != nil || !found {
+		t.Fatal("Expected repo to have 'autoPush' field")
+	}
+	if !autoPush {
+		t.Error("Expected autoPush to inherit autoPushOnComplete=true, got false")
+	}
+
+	// Verify migration annotation was added
+	annotations := updated.GetAnnotations()
+	if annotations == nil || annotations["ambient-code.io/repos-migrated"] != "v2" {
+		t.Error("Expected migration annotation to be set")
+	}
+}
+
+// TestMigrateAllSessions_PreservesAutoPushOnCompleteFalse tests that migration preserves
+// autoPushOnComplete: false at session level by setting autoPush: false on migrated repos
+func TestMigrateAllSessions_PreservesAutoPushOnCompleteFalse(t *testing.T) {
+	session := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "vteam.ambient-code/v1alpha1",
+			"kind":       "AgenticSession",
+			"metadata": map[string]interface{}{
+				"name":      "autopush-disabled-session",
+				"namespace": "default",
+			},
+			"spec": map[string]interface{}{
+				"autoPushOnComplete": false,
+				"repos": []interface{}{
+					map[string]interface{}{
+						"url":    "https://github.com/org/repo.git",
+						"branch": "develop",
+					},
+				},
+			},
+		},
+	}
+
+	setupTestDynamicClient(session)
+
+	err := handlers.MigrateAllSessions()
+	if err != nil {
+		t.Fatalf("MigrateAllSessions() failed: %v", err)
+	}
+
+	// Verify migrated repo has autoPush: false
+	gvr := types.GetAgenticSessionResource()
+	updated, err := config.DynamicClient.Resource(gvr).Namespace("default").Get(context.Background(), "autopush-disabled-session", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Failed to get updated session: %v", err)
+	}
+
+	spec, found, err := unstructured.NestedMap(updated.Object, "spec")
+	if err != nil || !found {
+		t.Fatal("Failed to get spec")
+	}
+
+	repos, found, err := unstructured.NestedSlice(spec, "repos")
+	if err != nil || !found {
+		t.Fatal("Failed to get repos")
+	}
+
+	repo, ok := repos[0].(map[string]interface{})
+	if !ok {
+		t.Fatal("Repo is not a map")
+	}
+
+	autoPush, found, err := unstructured.NestedBool(repo, "autoPush")
+	if err != nil || !found {
+		t.Fatal("Expected repo to have 'autoPush' field")
+	}
+	if autoPush {
+		t.Error("Expected autoPush to inherit autoPushOnComplete=false, got true")
+	}
+}
+
+// TestMigrateAllSessions_DefaultsAutoPushWhenFieldMissing tests that migration defaults to
+// autoPush: false when autoPushOnComplete field is missing (safe default)
+func TestMigrateAllSessions_DefaultsAutoPushWhenFieldMissing(t *testing.T) {
+	session := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "vteam.ambient-code/v1alpha1",
+			"kind":       "AgenticSession",
+			"metadata": map[string]interface{}{
+				"name":      "no-autopush-field-session",
+				"namespace": "default",
+			},
+			"spec": map[string]interface{}{
+				// Note: autoPushOnComplete field intentionally omitted
+				"repos": []interface{}{
+					map[string]interface{}{
+						"url":    "https://github.com/org/repo.git",
+						"branch": "main",
+					},
+				},
+			},
+		},
+	}
+
+	setupTestDynamicClient(session)
+
+	err := handlers.MigrateAllSessions()
+	if err != nil {
+		t.Fatalf("MigrateAllSessions() failed: %v", err)
+	}
+
+	// Verify migrated repo defaults to autoPush: false
+	gvr := types.GetAgenticSessionResource()
+	updated, err := config.DynamicClient.Resource(gvr).Namespace("default").Get(context.Background(), "no-autopush-field-session", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Failed to get updated session: %v", err)
+	}
+
+	spec, found, err := unstructured.NestedMap(updated.Object, "spec")
+	if err != nil || !found {
+		t.Fatal("Failed to get spec")
+	}
+
+	repos, found, err := unstructured.NestedSlice(spec, "repos")
+	if err != nil || !found {
+		t.Fatal("Failed to get repos")
+	}
+
+	repo, ok := repos[0].(map[string]interface{})
+	if !ok {
+		t.Fatal("Repo is not a map")
+	}
+
+	autoPush, found, err := unstructured.NestedBool(repo, "autoPush")
+	if err != nil || !found {
+		t.Fatal("Expected repo to have 'autoPush' field")
+	}
+	if autoPush {
+		t.Error("Expected autoPush to default to false when autoPushOnComplete is missing, got true")
+	}
+}
+
+// TestMigrateAllSessions_HandlesInvalidAutoPushOnCompleteType tests that migration handles
+// gracefully when autoPushOnComplete has an invalid type (not a boolean)
+func TestMigrateAllSessions_HandlesInvalidAutoPushOnCompleteType(t *testing.T) {
+	session := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "vteam.ambient-code/v1alpha1",
+			"kind":       "AgenticSession",
+			"metadata": map[string]interface{}{
+				"name":      "invalid-autopush-type-session",
+				"namespace": "default",
+			},
+			"spec": map[string]interface{}{
+				"autoPushOnComplete": "not-a-bool", // Invalid type (string instead of bool)
+				"repos": []interface{}{
+					map[string]interface{}{
+						"url":    "https://github.com/org/repo.git",
+						"branch": "main",
+					},
+				},
+			},
+		},
+	}
+
+	setupTestDynamicClient(session)
+
+	err := handlers.MigrateAllSessions()
+	if err != nil {
+		t.Fatalf("MigrateAllSessions() failed: %v", err)
+	}
+
+	// Verify migration succeeded and defaulted to autoPush: false (safe default)
+	gvr := types.GetAgenticSessionResource()
+	updated, err := config.DynamicClient.Resource(gvr).Namespace("default").Get(context.Background(), "invalid-autopush-type-session", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Failed to get updated session: %v", err)
+	}
+
+	spec, found, err := unstructured.NestedMap(updated.Object, "spec")
+	if err != nil || !found {
+		t.Fatal("Failed to get spec")
+	}
+
+	repos, found, err := unstructured.NestedSlice(spec, "repos")
+	if err != nil || !found {
+		t.Fatal("Failed to get repos")
+	}
+
+	repo, ok := repos[0].(map[string]interface{})
+	if !ok {
+		t.Fatal("Repo is not a map")
+	}
+
+	autoPush, found, err := unstructured.NestedBool(repo, "autoPush")
+	if err != nil || !found {
+		t.Fatal("Expected repo to have 'autoPush' field")
+	}
+	if autoPush {
+		t.Error("Expected autoPush to default to false when autoPushOnComplete has invalid type, got true")
+	}
+}

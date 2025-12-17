@@ -49,6 +49,7 @@ Chosen option: "User token for all operations", because:
 * Updates existing CRs the operator already has RBAC access to
 * Only modifies data structure format, not repository content
 * Active sessions (Running/Creating) are skipped to avoid interference
+* Does NOT create new resources or access user repositories
 * See migration.go:29-47 for detailed security model documentation
 
 ### Consequences
