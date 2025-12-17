@@ -999,6 +999,17 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 	}
 	log.Printf("Session %s initiated by user: %s (userId: %s)", name, userName, userID)
 
+	// Determine runner token secret name for volume mount
+	runnerTokenSecretName := ""
+	if annotations := currentObj.GetAnnotations(); annotations != nil {
+		if v, ok := annotations["ambient-code.io/runner-token-secret"]; ok && strings.TrimSpace(v) != "" {
+			runnerTokenSecretName = strings.TrimSpace(v)
+		}
+	}
+	if runnerTokenSecretName == "" {
+		runnerTokenSecretName = fmt.Sprintf("ambient-runner-token-%s", name)
+	}
+
 	// Create the Job
 	job := &batchv1.Job{
 		ObjectMeta: v1.ObjectMeta{
@@ -1044,6 +1055,14 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 							VolumeSource: corev1.VolumeSource{
 								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
 									ClaimName: pvcName,
+								},
+							},
+						},
+						{
+							Name: "runner-token",
+							VolumeSource: corev1.VolumeSource{
+								Secret: &corev1.SecretVolumeSource{
+									SecretName: runnerTokenSecretName,
 								},
 							},
 						},
@@ -1105,6 +1124,8 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 								// Mount .claude directory for session state persistence
 								// This enables SDK's built-in resume functionality
 								{Name: "workspace", MountPath: "/app/.claude", SubPath: fmt.Sprintf("sessions/%s/.claude", name), ReadOnly: false},
+								// Mount runner token secret as volume for dynamic token refresh
+								{Name: "runner-token", MountPath: "/app/runner-token", ReadOnly: true},
 							},
 
 							Env: func() []corev1.EnvVar {
@@ -1226,26 +1247,12 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 									base = append(base, corev1.EnvVar{Name: "PARENT_SESSION_ID", Value: parentSessionID})
 									log.Printf("Session %s: passing PARENT_SESSION_ID=%s to runner", name, parentSessionID)
 								}
-								// If backend annotated the session with a runner token secret, inject only BOT_TOKEN
-								// Secret contains: 'k8s-token' (for CR updates)
-								// Prefer annotated secret name; fallback to deterministic name
-								secretName := ""
-								if meta, ok := currentObj.Object["metadata"].(map[string]interface{}); ok {
-									if anns, ok := meta["annotations"].(map[string]interface{}); ok {
-										if v, ok := anns["ambient-code.io/runner-token-secret"].(string); ok && strings.TrimSpace(v) != "" {
-											secretName = strings.TrimSpace(v)
-										}
-									}
-								}
-								if secretName == "" {
-									secretName = fmt.Sprintf("ambient-runner-token-%s", name)
-								}
+								// Inject BOT_TOKEN_PATH pointing to mounted secret volume
+								// Token is mounted from runnerTokenSecretName at /app/runner-token
+								// This allows the runner to read refreshed tokens without pod restart
 								base = append(base, corev1.EnvVar{
-									Name: "BOT_TOKEN",
-									ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{
-										LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
-										Key:                  "k8s-token",
-									}},
+									Name:  "BOT_TOKEN_PATH",
+									Value: "/app/runner-token/k8s-token",
 								})
 								// Add CR-provided envs last (override base when same key)
 								if spec, ok := currentObj.Object["spec"].(map[string]interface{}); ok {
