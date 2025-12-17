@@ -83,6 +83,19 @@ spec:
               name: ambient-admin-langfuse-secret
               key: LANGFUSE_SECRET_KEY
               optional: true  # Optional: only needed if Langfuse enabled
+        # Google OAuth client credentials for workspace-mcp
+        - name: GOOGLE_OAUTH_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: google-workflow-app-secret
+              key: GOOGLE_OAUTH_CLIENT_ID
+              optional: true
+        - name: GOOGLE_OAUTH_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: google-workflow-app-secret
+              key: GOOGLE_OAUTH_CLIENT_SECRET
+              optional: true
         resources:
           requests:
             cpu: 50m

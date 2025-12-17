@@ -35,6 +35,10 @@ func registerRoutes(r *gin.Engine) {
 
 		api.POST("/projects/:projectName/agentic-sessions/:sessionName/github/token", handlers.MintSessionGitHubToken)
 
+		// OAuth integration endpoints (no auth required - called by external OAuth providers)
+		// OAuth URL generation endpoint - returns signed OAuth URL with HMAC-protected state
+		api.GET("/projects/:projectName/agentic-sessions/:sessionName/oauth/:provider/url", handlers.GetOAuthURL)
+
 		projectGroup := api.Group("/projects/:projectName", handlers.ValidateProjectContext())
 		{
 			projectGroup.GET("/access", handlers.AccessCheck)
@@ -122,4 +126,10 @@ func registerRoutes(r *gin.Engine) {
 
 	// Health check endpoint
 	r.GET("/health", handlers.Health)
+
+	// Generic OAuth2 callback endpoint (outside /api for MCP compatibility)
+	r.GET("/oauth2callback", handlers.HandleOAuth2Callback)
+
+	// OAuth callback status endpoint (for checking OAuth flow status)
+	r.GET("/oauth2callback/status", handlers.GetOAuthCallbackEndpoint)
 }

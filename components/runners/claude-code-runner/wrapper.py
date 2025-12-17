@@ -51,6 +51,8 @@ class ClaudeCodeAdapter:
         """Initialize the adapter with context."""
         self.context = context
         logging.info(f"Initialized Claude Code adapter for session {context.session_id}")
+        # Copy Google OAuth credentials from mounted Secret to writable workspace location
+        await self._setup_google_credentials()
         # Prepare workspace from input repo if provided
         await self._prepare_workspace()
         # Initialize workflow if ACTIVE_WORKFLOW env vars are set
@@ -799,6 +801,28 @@ class ClaudeCodeAdapter:
             'project_id': project_id,
             'region': region,
         }
+
+    async def _setup_google_credentials(self):
+        """Copy Google OAuth credentials from mounted Secret to writable workspace location."""
+        # Check if Google OAuth secret is mounted
+        secret_path = Path("/app/.google_workspace_mcp/credentials/credentials.json")
+        if not secret_path.exists():
+            logging.debug("Google OAuth credentials not found at %s, skipping setup", secret_path)
+            return
+
+        # Create writable credentials directory in workspace
+        workspace_creds_dir = Path("/workspace/.google_workspace_mcp/credentials")
+        workspace_creds_dir.mkdir(parents=True, exist_ok=True)
+
+        # Copy credentials from read-only Secret mount to writable workspace
+        dest_path = workspace_creds_dir / "credentials.json"
+        try:
+            shutil.copy2(secret_path, dest_path)
+            # Make it writable so workspace-mcp can update tokens
+            dest_path.chmod(0o644)
+            logging.info("✓ Copied Google OAuth credentials from Secret to writable workspace at %s", dest_path)
+        except Exception as e:
+            logging.error("Failed to copy Google OAuth credentials: %s", e)
 
     async def _prepare_workspace(self):
         """Clone input repo/branch into workspace and configure git remotes."""
