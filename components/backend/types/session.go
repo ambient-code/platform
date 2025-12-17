@@ -24,6 +24,8 @@ type AgenticSessionSpec struct {
 	Repos []SimpleRepo `json:"repos,omitempty"`
 	// Active workflow for dynamic workflow switching
 	ActiveWorkflow *WorkflowSelection `json:"activeWorkflow,omitempty"`
+	// Runner configuration for pluggable agent support
+	RunnerConfig *RunnerConfig `json:"runnerConfig,omitempty"`
 }
 
 // SimpleRepo represents a simplified repository configuration
@@ -58,6 +60,7 @@ type CreateAgenticSessionRequest struct {
 	EnvironmentVariables map[string]string `json:"environmentVariables,omitempty"`
 	Labels               map[string]string `json:"labels,omitempty"`
 	Annotations          map[string]string `json:"annotations,omitempty"`
+	RunnerConfig         *RunnerConfig     `json:"runnerConfig,omitempty"`
 }
 
 type CloneSessionRequest struct {
@@ -84,6 +87,12 @@ type WorkflowSelection struct {
 	GitURL string `json:"gitUrl" binding:"required"`
 	Branch string `json:"branch,omitempty"`
 	Path   string `json:"path,omitempty"`
+}
+
+// RunnerConfig specifies which agent runner to use (enables pluggable agents)
+type RunnerConfig struct {
+	Type  string `json:"type,omitempty"`  // Runner type: "claude-sdk", "langgraph", "crewai", "custom"
+	Image string `json:"image,omitempty"` // Optional custom container image override
 }
 
 // ReconciledRepo captures reconciliation state for a repository

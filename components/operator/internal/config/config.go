@@ -25,6 +25,8 @@ type Config struct {
 	AmbientCodeRunnerImage string
 	ContentServiceImage    string
 	ImagePullPolicy        corev1.PullPolicy
+	// Runner type to image mappings for pluggable agents
+	RunnerImages map[string]string
 }
 
 // InitK8sClients initializes the Kubernetes clients
@@ -93,11 +95,48 @@ func LoadConfig() *Config {
 	}
 	imagePullPolicy := corev1.PullPolicy(imagePullPolicyStr)
 
+	// Initialize runner image mappings for pluggable agents
+	runnerImages := make(map[string]string)
+	runnerImages["claude-sdk"] = ambientCodeRunnerImage // Default Claude SDK runner
+
+	// Load additional runner images from environment variables
+	if langGraphImage := os.Getenv("LANGGRAPH_RUNNER_IMAGE"); langGraphImage != "" {
+		runnerImages["langgraph"] = langGraphImage
+	}
+	if crewAIImage := os.Getenv("CREWAI_RUNNER_IMAGE"); crewAIImage != "" {
+		runnerImages["crewai"] = crewAIImage
+	}
+	if customImage := os.Getenv("CUSTOM_RUNNER_IMAGE"); customImage != "" {
+		runnerImages["custom"] = customImage
+	}
+
 	return &Config{
 		Namespace:              namespace,
 		BackendNamespace:       backendNamespace,
 		AmbientCodeRunnerImage: ambientCodeRunnerImage,
 		ContentServiceImage:    contentServiceImage,
 		ImagePullPolicy:        imagePullPolicy,
+		RunnerImages:           runnerImages,
 	}
+}
+
+// GetRunnerImage returns the appropriate runner image based on runnerConfig
+// If custom image is specified, it takes precedence
+// Otherwise, looks up the runner type in the image registry
+// Falls back to default Claude SDK runner if not found
+func (c *Config) GetRunnerImage(runnerType string, customImage string) string {
+	// Custom image override takes precedence
+	if customImage != "" {
+		return customImage
+	}
+
+	// Look up runner type in registry
+	if runnerType != "" {
+		if image, ok := c.RunnerImages[runnerType]; ok {
+			return image
+		}
+	}
+
+	// Default to Claude SDK runner
+	return c.AmbientCodeRunnerImage
 }

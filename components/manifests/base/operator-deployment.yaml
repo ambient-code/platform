@@ -36,6 +36,13 @@ spec:
           value: "quay.io/ambient_code/vteam_backend:latest"
         - name: IMAGE_PULL_POLICY
           value: "Always"
+        # Pluggable agent runner images (optional - if not set, defaults to AMBIENT_CODE_RUNNER_IMAGE)
+        - name: LANGGRAPH_RUNNER_IMAGE
+          value: ""  # Example: "quay.io/ambient_code/vteam_langgraph_runner:latest"
+        - name: CREWAI_RUNNER_IMAGE
+          value: ""  # Example: "quay.io/ambient_code/vteam_crewai_runner:latest"
+        - name: CUSTOM_RUNNER_IMAGE
+          value: ""  # Example: "quay.io/your_org/custom_runner:latest"
         # Vertex AI configuration from ConfigMap
         - name: CLAUDE_CODE_USE_VERTEX
           valueFrom:

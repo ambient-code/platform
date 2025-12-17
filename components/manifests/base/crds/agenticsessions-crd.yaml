@@ -93,6 +93,22 @@ spec:
                   path:
                     type: string
                     description: "Optional path within repo (for repos with multiple workflows)"
+              runnerConfig:
+                type: object
+                description: "Configuration for the agent runner (enables pluggable agent support)"
+                properties:
+                  type:
+                    type: string
+                    description: "Runner type identifier (e.g., 'claude-sdk', 'langgraph', 'crewai')"
+                    default: "claude-sdk"
+                    enum:
+                    - "claude-sdk"
+                    - "langgraph"
+                    - "crewai"
+                    - "custom"
+                  image:
+                    type: string
+                    description: "Optional custom runner container image (overrides default for runner type)"
           status:
             type: object
             properties:
