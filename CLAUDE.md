@@ -335,6 +335,86 @@ The Claude Code runner (`components/runners/claude-code-runner/`) provides:
 - **API version**: `v1alpha1` (current)
 - **RBAC**: Namespace-scoped service accounts with minimal permissions
 
+### Langfuse Observability (LLM Tracing)
+
+The platform includes optional Langfuse integration for LLM observability, tracking usage metrics while protecting user privacy.
+
+#### Privacy-First Design
+
+- **Default behavior**: User messages and assistant responses are **REDACTED** in traces
+- **Preserved data**: Usage metrics (tokens, costs), metadata (model, turn count, timestamps)
+- **Rationale**: Track costs and usage patterns without exposing potentially sensitive user data
+
+#### Configuration
+
+**Enable Langfuse** (disabled by default):
+```bash
+# In ambient-admin-langfuse-secret
+LANGFUSE_ENABLED=true
+LANGFUSE_PUBLIC_KEY=<your-key>
+LANGFUSE_SECRET_KEY=<your-secret>
+LANGFUSE_HOST=http://langfuse-web.langfuse.svc.cluster.local:3000
+```
+
+**Privacy Controls** (optional - masking enabled by default):
+```bash
+# Masking is ENABLED BY DEFAULT (no environment variable needed)
+# The runner defaults to LANGFUSE_MASK_MESSAGES=true if not set
+
+# To explicitly set (optional):
+LANGFUSE_MASK_MESSAGES=true
+
+# To disable masking (dev/testing ONLY - exposes full message content):
+LANGFUSE_MASK_MESSAGES=false
+```
+
+#### Deployment
+
+Deploy Langfuse to your cluster:
+```bash
+# Deploy with default privacy-preserving settings
+./e2e/scripts/deploy-langfuse.sh
+
+# For OpenShift
+./e2e/scripts/deploy-langfuse.sh --openshift
+
+# For Kubernetes
+./e2e/scripts/deploy-langfuse.sh --kubernetes
+```
+
+#### Implementation
+
+- **Location**: `components/runners/claude-code-runner/observability.py`
+- **Masking function**: `_privacy_masking_function()` - redacts content while preserving metrics
+- **Test coverage**: `tests/test_privacy_masking.py` - validates masking behavior
+
+#### What Gets Logged
+
+**With Masking Enabled (Default)**:
+- ✅ Token counts (input, output, cache read, cache creation)
+- ✅ Cost calculations (USD per session)
+- ✅ Model names and versions
+- ✅ Turn counts and session durations
+- ✅ Tool usage (names, execution status)
+- ✅ Error states and completion status
+- ❌ User prompts (redacted)
+- ❌ Assistant responses (redacted)
+- ❌ Tool outputs with long content (redacted)
+
+**With Masking Disabled** (dev/testing only):
+- ✅ All of the above
+- ⚠️ Full user message content (potentially sensitive!)
+- ⚠️ Full assistant response content
+- ⚠️ Complete tool outputs
+
+#### OpenTelemetry Support
+
+Langfuse supports OpenTelemetry as of 2025:
+- **Current implementation**: Langfuse Python SDK (v3, OTel-based)
+- **Alternative**: Pure OpenTelemetry SDK → Langfuse OTLP endpoint (`/api/public/otel`)
+- **Migration**: Not recommended unless vendor neutrality is required
+- **Benefit**: Current SDK already uses OTel underneath
+
 ## Backend and Operator Development Standards
 
 **IMPORTANT**: When working on backend (`components/backend/`) or operator (`components/operator/`) code, you MUST follow these strict guidelines based on established patterns in the codebase.

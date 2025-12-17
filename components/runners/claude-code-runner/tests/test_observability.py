@@ -4,7 +4,7 @@ import pytest
 import os
 import logging
 from unittest.mock import Mock, patch
-from observability import ObservabilityManager
+from observability import ObservabilityManager, _privacy_masking_function
 
 
 @pytest.fixture
@@ -151,10 +151,12 @@ class TestLangfuseInitialization:
         assert manager.langfuse_client is not None
         assert manager._propagate_ctx is not None
 
+        # Verify Langfuse client was initialized with privacy masking enabled (default)
         mock_langfuse_class.assert_called_once_with(
             public_key="pk-lf-public",
             secret_key="sk-lf-secret",
             host="http://localhost:3000",
+            mask=_privacy_masking_function,
         )
 
         # Verify propagate_attributes was called

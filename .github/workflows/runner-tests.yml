@@ -38,11 +38,11 @@ jobs:
         run: |
           # Only run standalone unit tests that don't require runner_shell runtime
           # (test_model_mapping.py and test_wrapper_vertex.py require full runtime environment)
-          pytest tests/test_observability.py tests/test_security_utils.py -v --tb=short --color=yes
+          pytest tests/test_observability.py tests/test_security_utils.py tests/test_privacy_masking.py -v --tb=short --color=yes
 
       - name: Run tests with coverage
         run: |
-          pytest tests/test_observability.py tests/test_security_utils.py --cov=observability --cov=security_utils --cov-report=term-missing --cov-report=xml
+          pytest tests/test_observability.py tests/test_security_utils.py tests/test_privacy_masking.py --cov=observability --cov=security_utils --cov-report=term-missing --cov-report=xml
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4

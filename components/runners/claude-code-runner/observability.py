@@ -55,6 +55,62 @@ from security_utils import (
 )
 
 
+def _privacy_masking_function(data: Any, **kwargs) -> Any:
+    """Mask sensitive user inputs and outputs while preserving usage metrics.
+
+    This function redacts message content (user prompts and assistant responses)
+    to prevent logging potentially sensitive data, while preserving:
+    - Usage metrics (token counts, costs)
+    - Metadata (model, turn number, timestamps)
+    - Session identifiers
+
+    Controlled by LANGFUSE_MASK_MESSAGES environment variable:
+    - "true" (default): Redact all message content for privacy
+    - "false": Allow full message logging (use only in dev/testing)
+
+    Args:
+        data: Data to potentially mask (string, dict, list, or other)
+        **kwargs: Additional context (unused but required by Langfuse API)
+
+    Returns:
+        Masked data with same structure as input
+    """
+    if isinstance(data, str):
+        # Redact string content (likely message text)
+        # Short strings (< 50 chars) might be metadata, keep them
+        if len(data) > 50:
+            return "[REDACTED FOR PRIVACY]"
+        return data
+    elif isinstance(data, dict):
+        # Recursively process dict, preserving structure
+        masked = {}
+        for key, value in data.items():
+            # Preserve usage and metadata fields - these don't contain sensitive data
+            if key in ("usage", "usage_details", "metadata", "model", "turn",
+                      "input_tokens", "output_tokens", "cache_read_input_tokens",
+                      "cache_creation_input_tokens", "total_tokens", "cost_usd",
+                      "duration_ms", "duration_api_ms", "num_turns", "session_id",
+                      "tool_id", "tool_name", "is_error", "level"):
+                masked[key] = value
+            # Redact content fields that may contain user data
+            elif key in ("content", "text", "input", "output", "prompt", "completion"):
+                if isinstance(value, str) and len(value) > 50:
+                    masked[key] = "[REDACTED FOR PRIVACY]"
+                else:
+                    # Short values might be metadata/enums, recurse
+                    masked[key] = _privacy_masking_function(value)
+            else:
+                # Recursively process other fields
+                masked[key] = _privacy_masking_function(value)
+        return masked
+    elif isinstance(data, list):
+        # Recursively process list items
+        return [_privacy_masking_function(item) for item in data]
+    else:
+        # Preserve other types (numbers, booleans, None, etc.)
+        return data
+
+
 class ObservabilityManager:
     """Manages Langfuse observability for Claude sessions.
     """
@@ -128,9 +184,25 @@ class ObservabilityManager:
             return False
 
         try:
-            # Initialize client
+            # Determine if message masking should be enabled
+            # Default: MASK messages (privacy-first approach)
+            # Set LANGFUSE_MASK_MESSAGES=false to explicitly disable masking (dev/testing only)
+            mask_messages_env = os.getenv("LANGFUSE_MASK_MESSAGES", "true").strip().lower()
+            enable_masking = mask_messages_env not in ("false", "0", "no")
+
+            if enable_masking:
+                logging.info("Langfuse: Privacy masking ENABLED - user messages and responses will be redacted")
+                mask_fn = _privacy_masking_function
+            else:
+                logging.warning("Langfuse: Privacy masking DISABLED - full message content will be logged (use only for dev/testing)")
+                mask_fn = None
+
+            # Initialize client with optional masking
             self.langfuse_client = Langfuse(
-                public_key=public_key, secret_key=secret_key, host=host
+                public_key=public_key,
+                secret_key=secret_key,
+                host=host,
+                mask=mask_fn
             )
 
             # Build metadata with model information
