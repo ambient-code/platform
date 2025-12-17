@@ -11,7 +11,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -57,7 +56,7 @@ func getOAuthProvider(provider string) (*OAuthProvider, error) {
 		clientID := os.Getenv("GOOGLE_OAUTH_CLIENT_ID")
 		clientSecret := os.Getenv("GOOGLE_OAUTH_CLIENT_SECRET")
 		if clientID == "" || clientSecret == "" {
-			return nil, fmt.Errorf("Google OAuth not configured")
+			return nil, fmt.Errorf("google oauth not configured")
 		}
 		return &OAuthProvider{
 			Name:         "google",
@@ -491,13 +490,13 @@ func GetOAuthCallbackEndpoint(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-// Helper function for min
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
+// // Helper function for min
+// func min(a, b int) int {
+// 	if a < b {
+// 		return a
+// 	}
+// 	return b
+// }
 
 // OAuthStateData represents the session context passed in OAuth state parameter
 type OAuthStateData struct {
@@ -507,27 +506,27 @@ type OAuthStateData struct {
 	Timestamp   int64  `json:"timestamp"`
 }
 
-// parseOAuthState extracts session context from the base64-encoded state parameter
-// DEPRECATED: Use validateAndParseOAuthState for HMAC-signed states
-func parseOAuthState(state string) (*OAuthStateData, error) {
-	// Decode base64
-	decoded, err := base64.StdEncoding.DecodeString(state)
-	if err != nil {
-		// Try RawURLEncoding if standard fails
-		decoded, err = base64.RawURLEncoding.DecodeString(state)
-		if err != nil {
-			return nil, fmt.Errorf("failed to decode state: %w", err)
-		}
-	}
+// // parseOAuthState extracts session context from the base64-encoded state parameter
+// // DEPRECATED: Use validateAndParseOAuthState for HMAC-signed states
+// func parseOAuthState(state string) (*OAuthStateData, error) {
+// 	// Decode base64
+// 	decoded, err := base64.StdEncoding.DecodeString(state)
+// 	if err != nil {
+// 		// Try RawURLEncoding if standard fails
+// 		decoded, err = base64.RawURLEncoding.DecodeString(state)
+// 		if err != nil {
+// 			return nil, fmt.Errorf("failed to decode state: %w", err)
+// 		}
+// 	}
 
-	// Parse JSON
-	var stateData OAuthStateData
-	if err := json.Unmarshal(decoded, &stateData); err != nil {
-		return nil, fmt.Errorf("failed to parse state JSON: %w", err)
-	}
+// 	// Parse JSON
+// 	var stateData OAuthStateData
+// 	if err := json.Unmarshal(decoded, &stateData); err != nil {
+// 		return nil, fmt.Errorf("failed to parse state JSON: %w", err)
+// 	}
 
-	return &stateData, nil
-}
+// 	return &stateData, nil
+// }
 
 // validateAndParseOAuthState validates HMAC signature and extracts session context from signed state token
 // Expected format: base64(json) + "." + base64(signature)
@@ -589,46 +588,46 @@ func validateAndParseOAuthState(state string) (*OAuthStateData, error) {
 	return &stateData, nil
 }
 
-// writeCredentialsToSessionPVC writes OAuth credentials directly to the session runner pod's PVC
-// This stores credentials at /workspace/.google-oauth-credentials.json in the session pod
-func writeCredentialsToSessionPVC(ctx context.Context, projectName, sessionName, accessToken, refreshToken string, expiresIn int64) error {
-	// Construct workspace proxy path
-	// The workspace proxy mounts session PVCs at /workspace-proxy/{namespace}/{sessionName}
-	workspaceProxyBase := os.Getenv("WORKSPACE_PROXY_BASE")
-	if workspaceProxyBase == "" {
-		workspaceProxyBase = "/workspace-proxy"
-	}
+// // writeCredentialsToSessionPVC writes OAuth credentials directly to the session runner pod's PVC
+// // This stores credentials at /workspace/.google-oauth-credentials.json in the session pod
+// func writeCredentialsToSessionPVC(ctx context.Context, projectName, sessionName, accessToken, refreshToken string, expiresIn int64) error {
+// 	// Construct workspace proxy path
+// 	// The workspace proxy mounts session PVCs at /workspace-proxy/{namespace}/{sessionName}
+// 	workspaceProxyBase := os.Getenv("WORKSPACE_PROXY_BASE")
+// 	if workspaceProxyBase == "" {
+// 		workspaceProxyBase = "/workspace-proxy"
+// 	}
 
-	sessionWorkspacePath := filepath.Join(workspaceProxyBase, projectName, sessionName)
+// 	sessionWorkspacePath := filepath.Join(workspaceProxyBase, projectName, sessionName)
 
-	// Check if session workspace exists
-	if _, err := os.Stat(sessionWorkspacePath); os.IsNotExist(err) {
-		return fmt.Errorf("session workspace not found at %s (session pod may not be running yet)", sessionWorkspacePath)
-	}
+// 	// Check if session workspace exists
+// 	if _, err := os.Stat(sessionWorkspacePath); os.IsNotExist(err) {
+// 		return fmt.Errorf("session workspace not found at %s (session pod may not be running yet)", sessionWorkspacePath)
+// 	}
 
-	// Prepare credentials JSON
-	credentials := map[string]interface{}{
-		"access_token":  accessToken,
-		"refresh_token": refreshToken,
-		"token_type":    "Bearer",
-		"expires_in":    expiresIn,
-		"created_at":    time.Now().Unix(),
-	}
+// 	// Prepare credentials JSON
+// 	credentials := map[string]interface{}{
+// 		"access_token":  accessToken,
+// 		"refresh_token": refreshToken,
+// 		"token_type":    "Bearer",
+// 		"expires_in":    expiresIn,
+// 		"created_at":    time.Now().Unix(),
+// 	}
 
-	credentialsJSON, err := json.MarshalIndent(credentials, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal credentials: %w", err)
-	}
+// 	credentialsJSON, err := json.MarshalIndent(credentials, "", "  ")
+// 	if err != nil {
+// 		return fmt.Errorf("failed to marshal credentials: %w", err)
+// 	}
 
-	// Write credentials to session workspace
-	credentialsPath := filepath.Join(sessionWorkspacePath, ".google-oauth-credentials.json")
-	if err := os.WriteFile(credentialsPath, credentialsJSON, 0600); err != nil {
-		return fmt.Errorf("failed to write credentials to %s: %w", credentialsPath, err)
-	}
+// 	// Write credentials to session workspace
+// 	credentialsPath := filepath.Join(sessionWorkspacePath, ".google-oauth-credentials.json")
+// 	if err := os.WriteFile(credentialsPath, credentialsJSON, 0600); err != nil {
+// 		return fmt.Errorf("failed to write credentials to %s: %w", credentialsPath, err)
+// 	}
 
-	log.Printf("✓ Wrote Google OAuth credentials to session %s/%s PVC at %s", projectName, sessionName, credentialsPath)
-	return nil
-}
+// 	log.Printf("✓ Wrote Google OAuth credentials to session %s/%s PVC at %s", projectName, sessionName, credentialsPath)
+// 	return nil
+// }
 
 // storeCredentialsInSecret stores OAuth credentials in a Kubernetes Secret in the project namespace
 // Secret name: {sessionName}-{provider}-oauth (e.g., agentic-session-123-google-oauth)
@@ -690,10 +689,10 @@ func storeCredentialsInSecret(ctx context.Context, projectName, sessionName, pro
 			Name:      secretName,
 			Namespace: projectName,
 			Labels: map[string]string{
-				"app":                       "ambient-code",
-				"ambient-code.io/session":   sessionName,
-				"ambient-code.io/provider":  provider,
-				"ambient-code.io/oauth":     "true",
+				"app":                      "ambient-code",
+				"ambient-code.io/session":  sessionName,
+				"ambient-code.io/provider": provider,
+				"ambient-code.io/oauth":    "true",
 			},
 			OwnerReferences: []v1.OwnerReference{ownerRef},
 		},
