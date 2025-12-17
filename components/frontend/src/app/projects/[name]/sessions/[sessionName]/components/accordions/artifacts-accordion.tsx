@@ -1,8 +1,10 @@
 "use client";
 
+import { useMemo } from "react";
 import { Folder, NotepadText, Download, FolderSync, Loader2 } from "lucide-react";
 import { AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { FileTree, type FileTreeNode } from "@/components/file-tree";
 
 type WorkspaceFile = {
@@ -33,12 +35,26 @@ export function ArtifactsAccordion({
   onDownloadFile,
   onNavigateBack,
 }: ArtifactsAccordionProps) {
+  // Count total files (not directories) - memoized to avoid recalculation on every render
+  const fileCount = useMemo(() => files.filter((f) => !f.isDir).length, [files]);
+
   return (
     <AccordionItem value="artifacts" className="border rounded-lg px-3 bg-card">
       <AccordionTrigger className="text-base font-semibold hover:no-underline py-3">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 w-full">
           <NotepadText className="h-4 w-4" />
           <span>Artifacts</span>
+          {fileCount > 0 && (
+            <Badge 
+              variant="secondary" 
+              className="ml-auto mr-2"
+              aria-live="polite"
+              aria-atomic="true"
+            >
+              <span className="sr-only">{fileCount} {fileCount === 1 ? 'file' : 'files'}</span>
+              {fileCount}
+            </Badge>
+          )}
         </div>
       </AccordionTrigger>
       <AccordionContent className="pt-2 pb-3">

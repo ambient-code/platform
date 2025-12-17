@@ -1,19 +1,12 @@
 "use client";
 
-import { useState } from "react";
-import { Play, Loader2, Workflow, ChevronDown, ChevronRight, Info, AlertCircle } from "lucide-react";
+import { Play, Loader2, Workflow, AlertCircle } from "lucide-react";
 import { AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { WorkflowConfig } from "../../lib/types";
-
-type WorkflowMetadata = {
-  commands: Array<{ id: string; name: string; slashCommand: string; description?: string }>;
-  agents: Array<{ id: string; name: string; description?: string }>;
-};
 
 type WorkflowsAccordionProps = {
   sessionPhase?: string;
@@ -21,12 +14,10 @@ type WorkflowsAccordionProps = {
   selectedWorkflow: string;
   pendingWorkflow: WorkflowConfig | null;
   workflowActivating: boolean;
-  workflowMetadata?: WorkflowMetadata;
   ootbWorkflows: WorkflowConfig[];
   isExpanded: boolean;
   onWorkflowChange: (value: string) => void;
   onActivateWorkflow: () => void;
-  onCommandClick: (slashCommand: string) => void;
   onResume?: () => void;
 };
 
@@ -36,21 +27,12 @@ export function WorkflowsAccordion({
   selectedWorkflow,
   pendingWorkflow,
   workflowActivating,
-  workflowMetadata,
   ootbWorkflows,
   isExpanded,
   onWorkflowChange,
   onActivateWorkflow,
-  onCommandClick,
   onResume,
 }: WorkflowsAccordionProps) {
-  const [showCommandsList, setShowCommandsList] = useState(false);
-  const [showAgentsList, setShowAgentsList] = useState(false);
-  const [commandsScrollTop, setCommandsScrollTop] = useState(false);
-  const [commandsScrollBottom, setCommandsScrollBottom] = useState(true);
-  const [agentsScrollTop, setAgentsScrollTop] = useState(false);
-  const [agentsScrollBottom, setAgentsScrollBottom] = useState(true);
-
   const isSessionStopped = sessionPhase === 'Stopped' || sessionPhase === 'Error' || sessionPhase === 'Completed';
 
   return (
@@ -167,171 +149,7 @@ export function WorkflowsAccordion({
             
             {/* Show active workflow info */}
             {activeWorkflow && !workflowActivating && (
-              <>
-                {/* Commands Section */}
-                {workflowMetadata?.commands && workflowMetadata.commands.length > 0 && (
-                  <div className="space-y-2">
-                    <div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="w-full justify-between h-8 px-2"
-                        onClick={() => setShowCommandsList(!showCommandsList)}
-                      >
-                        <span className="text-xs font-medium">
-                          {showCommandsList ? 'Hide' : 'Show'} {workflowMetadata.commands.length} available command{workflowMetadata.commands.length !== 1 ? 's' : ''}
-                        </span>
-                        {showCommandsList ? (
-                          <ChevronDown className="h-3 w-3" />
-                        ) : (
-                          <ChevronRight className="h-3 w-3" />
-                        )}
-                      </Button>
-
-                      {showCommandsList && (
-                        <div className="relative mt-2">
-                          {commandsScrollTop && (
-                            <div className="absolute top-0 left-0 right-0 h-8 bg-gradient-to-b from-card to-transparent pointer-events-none z-10" />
-                          )}
-                          <div 
-                            className="max-h-[400px] overflow-y-auto space-y-2 pr-1"
-                            onScroll={(e) => {
-                              const target = e.currentTarget;
-                              const isScrolledFromTop = target.scrollTop > 10;
-                              const isScrolledToBottom = target.scrollHeight - target.scrollTop <= target.clientHeight + 10;
-                              setCommandsScrollTop(isScrolledFromTop);
-                              setCommandsScrollBottom(!isScrolledToBottom);
-                            }}
-                          >
-                            {workflowMetadata.commands.map((cmd) => {
-                              const commandTitle = cmd.name.includes('.') 
-                                ? cmd.name.split('.').pop() 
-                                : cmd.name;
-                              
-                              return (
-                                <div
-                                  key={cmd.id}
-                                  className="p-3 rounded-md border bg-muted/30"
-                                >
-                                  <div className="flex items-center justify-between mb-1">
-                                    <h3 className="text-sm font-bold capitalize">
-                                      {commandTitle}
-                                    </h3>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      className="flex-shrink-0 h-7 text-xs"
-                                      onClick={() => onCommandClick(cmd.slashCommand)}
-                                    >
-                                      Run {cmd.slashCommand.replace(/^\/speckit\./, '/')}
-                                    </Button>
-                                  </div>
-                                  {cmd.description && (
-                                    <p className="text-xs text-muted-foreground">
-                                      {cmd.description}
-                                    </p>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                          {commandsScrollBottom && (
-                            <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-card to-transparent pointer-events-none z-10" />
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {workflowMetadata?.commands?.length === 0 && (
-                  <p className="text-xs text-muted-foreground text-left py-2">
-                    No commands found in this workflow
-                  </p>
-                )}
-
-                {/* Agents Section */}
-                {workflowMetadata?.agents && workflowMetadata.agents.length > 0 && (
-                  <div className="space-y-2">
-                    <div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="w-full justify-between h-8 px-2"
-                        onClick={() => setShowAgentsList(!showAgentsList)}
-                      >
-                        <span className="text-xs font-medium">
-                          {showAgentsList ? 'Hide' : 'Show'} {workflowMetadata.agents.length} available agent{workflowMetadata.agents.length !== 1 ? 's' : ''}
-                        </span>
-                        {showAgentsList ? (
-                          <ChevronDown className="h-3 w-3" />
-                        ) : (
-                          <ChevronRight className="h-3 w-3" />
-                        )}
-                      </Button>
-
-                      {showAgentsList && (
-                        <div className="mt-2 pt-2 mx-3 space-y-2">
-                          {/* Scrollable agents list */}
-                          <div className="relative">
-                            {agentsScrollTop && (
-                              <div className="absolute top-0 left-0 right-0 h-8 bg-gradient-to-b from-card to-transparent pointer-events-none z-10" />
-                            )}
-                            <div
-                              className="max-h-48 overflow-y-auto space-y-1 pr-1"
-                              onScroll={(e) => {
-                                const target = e.currentTarget;
-                                const isScrolledFromTop = target.scrollTop > 10;
-                                const isScrolledToBottom = target.scrollHeight - target.scrollTop <= target.clientHeight + 10;
-                                setAgentsScrollTop(isScrolledFromTop);
-                                setAgentsScrollBottom(!isScrolledToBottom);
-                              }}
-                            >
-                              <div className="space-y-1 space-x-6">
-                                {workflowMetadata.agents.map((agent) => (
-                                  <div key={agent.id} className="flex items-center gap-2 group">
-                                    <span className="text-sm font-normal">
-                                      {agent.name}
-                                    </span>
-                                    <Popover>
-                                      <PopoverTrigger asChild>
-                                        <button
-                                          className="p-0.5 hover:bg-muted rounded flex-shrink-0"
-                                          onClick={(e) => {
-                                            e.preventDefault();
-                                            e.stopPropagation();
-                                          }}
-                                        >
-                                          <Info className="h-3.5 w-3.5 text-muted-foreground" />
-                                        </button>
-                                      </PopoverTrigger>
-                                      <PopoverContent className="max-w-xs" align="start">
-                                        <div className="space-y-2">
-                                          <p className="font-semibold text-sm">{agent.name}</p>
-                                          <p className="text-xs text-muted-foreground">{agent.description}</p>
-                                        </div>
-                                      </PopoverContent>
-                                    </Popover>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                            {agentsScrollBottom && (
-                              <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-card to-transparent pointer-events-none z-10" />
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {workflowMetadata?.agents?.length === 0 && (
-                  <p className="text-xs text-muted-foreground text-left py-2">
-                    No agents found in this workflow
-                  </p>
-                )}
-              </>
+              <></>
             )}
             
             {/* Show activating/switching state */}

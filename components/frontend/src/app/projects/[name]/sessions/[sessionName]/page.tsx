@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import {
   Loader2,
   FolderTree,
@@ -106,6 +106,40 @@ import {
   useWorkflowMetadata,
 } from "@/services/queries/use-workflows";
 import { useMutation } from "@tanstack/react-query";
+
+// Constants for artifact auto-refresh timing
+// Moved outside component to avoid unnecessary effect re-runs
+//
+// Wait 1 second after last tool completion to batch rapid writes together
+// Prevents excessive API calls during burst writes (e.g., when Claude creates multiple files in quick succession)
+// Testing: 500ms was too aggressive (hit API rate limits), 2000ms felt sluggish to users
+const ARTIFACTS_DEBOUNCE_MS = 1000;
+
+// Wait 2 seconds after session completes before final artifact refresh
+// Backend can take 1-2 seconds to flush final artifacts to storage
+// Ensures users see all artifacts even if final writes occur after status transition
+const COMPLETION_DELAY_MS = 2000;
+
+/**
+ * Type guard to check if a message is a completed ToolUseMessages with result.
+ * Extracted for testability and proper validation.
+ * Uses proper type assertion and validation.
+ */
+function isCompletedToolUseMessage(msg: MessageObject | ToolUseMessages): msg is ToolUseMessages {
+  if (msg.type !== "tool_use_messages") {
+    return false;
+  }
+  
+  // Cast to ToolUseMessages for proper type checking
+  const toolMsg = msg as ToolUseMessages;
+  
+  return (
+    toolMsg.resultBlock !== undefined &&
+    toolMsg.resultBlock !== null &&
+    typeof toolMsg.resultBlock === "object" &&
+    toolMsg.resultBlock.content !== null
+  );
+}
 
 export default function ProjectSessionDetailPage({
   params,
@@ -392,15 +426,25 @@ export default function ProjectSessionDetailPage({
     basePath: "artifacts",
   });
 
-  const { data: artifactsFiles = [], refetch: refetchArtifactsFiles } =
+  const { data: artifactsFiles = [], refetch: refetchArtifactsFilesRaw } =
     useWorkspaceList(
       projectName,
       sessionName,
       artifactsOps.currentSubPath
         ? `artifacts/${artifactsOps.currentSubPath}`
         : "artifacts",
-      { enabled: openAccordionItems.includes("artifacts") },
     );
+
+  // Stabilize refetchArtifactsFiles with useCallback to prevent infinite re-renders
+  // React Query's refetch is already stable, but this ensures proper dependency tracking
+  const refetchArtifactsFiles = useCallback(async () => {
+    try {
+      await refetchArtifactsFilesRaw();
+    } catch (error) {
+      console.error('Failed to refresh artifacts:', error);
+      // Silent fail - don't interrupt user experience
+    }
+  }, [refetchArtifactsFilesRaw]);
 
   // File uploads list (for Context accordion)
   const { data: fileUploadsList = [], refetch: refetchFileUploadsList } =
@@ -511,6 +555,77 @@ export default function ProjectSessionDetailPage({
       session?.spec?.interactive || false,
     );
   }, [messages, session?.spec?.interactive]);
+
+  // Auto-refresh artifacts when messages complete
+  // UX improvement: Automatically refresh the artifacts panel when Claude writes new files,
+  // so users can see their changes immediately without manually clicking the refresh button
+  const previousToolResultCount = useRef(0);
+  const artifactsRefreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const completionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const hasRefreshedOnCompletionRef = useRef(false);
+
+  // Memoize the completed tool count to avoid redundant filtering
+  // Uses extracted type guard for testability and proper validation
+  const completedToolCount = useMemo(() => {
+    return streamMessages.filter(isCompletedToolUseMessage).length;
+  }, [streamMessages]);
+
+  useEffect(() => {
+    // Initialize on first mount to avoid triggering refresh for existing tools
+    if (previousToolResultCount.current === 0 && completedToolCount > 0) {
+      previousToolResultCount.current = completedToolCount;
+      return;
+    }
+
+    // If we have new completed tools, refresh artifacts after a short delay
+    if (completedToolCount > previousToolResultCount.current && completedToolCount > 0) {
+      // Clear any pending refresh timeout
+      if (artifactsRefreshTimeoutRef.current) {
+        clearTimeout(artifactsRefreshTimeoutRef.current);
+      }
+
+      // Debounce refresh to avoid excessive calls during rapid tool completions
+      artifactsRefreshTimeoutRef.current = setTimeout(() => {
+        refetchArtifactsFiles();
+      }, ARTIFACTS_DEBOUNCE_MS);
+
+      previousToolResultCount.current = completedToolCount;
+    }
+
+    // Cleanup timeout on unmount or effect re-run
+    return () => {
+      if (artifactsRefreshTimeoutRef.current) {
+        clearTimeout(artifactsRefreshTimeoutRef.current);
+      }
+    };
+  }, [completedToolCount, refetchArtifactsFiles]);
+
+  // Also refresh artifacts when session completes (catch any final artifacts)
+  useEffect(() => {
+    const phase = session?.status?.phase;
+    if (phase === "Completed" && !hasRefreshedOnCompletionRef.current) {
+      // Refresh after a short delay to ensure all final writes are complete
+      completionTimeoutRef.current = setTimeout(() => {
+        refetchArtifactsFiles();
+      }, COMPLETION_DELAY_MS);
+      hasRefreshedOnCompletionRef.current = true;
+    } else if (phase !== "Completed") {
+      // Clear any pending completion refresh to avoid race conditions
+      if (completionTimeoutRef.current) {
+        clearTimeout(completionTimeoutRef.current);
+        completionTimeoutRef.current = null;
+      }
+      // Reset flag whenever leaving Completed state (handles Running, Error, Cancelled, etc.)
+      hasRefreshedOnCompletionRef.current = false;
+    }
+
+    // Cleanup timeout on unmount or phase change
+    return () => {
+      if (completionTimeoutRef.current) {
+        clearTimeout(completionTimeoutRef.current);
+      }
+    };
+  }, [session?.status?.phase, refetchArtifactsFiles]);
 
   // Session action handlers
   const handleStop = () => {
@@ -838,12 +953,10 @@ export default function ProjectSessionDetailPage({
                       selectedWorkflow={workflowManagement.selectedWorkflow}
                       pendingWorkflow={workflowManagement.pendingWorkflow}
                       workflowActivating={workflowManagement.workflowActivating}
-                      workflowMetadata={workflowMetadata}
                       ootbWorkflows={ootbWorkflows}
                       isExpanded={openAccordionItems.includes("workflows")}
                       onWorkflowChange={handleWorkflowChange}
                       onActivateWorkflow={workflowManagement.activateWorkflow}
-                      onCommandClick={handleCommandClick}
                       onResume={handleContinue}
                     />
 
