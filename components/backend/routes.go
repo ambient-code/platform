@@ -84,6 +84,9 @@ func registerRoutes(r *gin.Engine) {
 			projectGroup.DELETE("/agentic-sessions/:sessionName/repos/:repoName", handlers.RemoveRepo)
 			projectGroup.PUT("/agentic-sessions/:sessionName/displayname", handlers.UpdateSessionDisplayName)
 
+			// OAuth integration - requires user auth like all other session endpoints
+			projectGroup.GET("/agentic-sessions/:sessionName/oauth/:provider/url", handlers.GetOAuthURL)
+
 			projectGroup.GET("/sessions/:sessionId/ws", websocket.HandleSessionWebSocket)
 			projectGroup.GET("/sessions/:sessionId/messages", websocket.GetSessionMessagesWS)
 			// Removed: /messages/claude-format - Using SDK's built-in resume with persisted ~/.claude state

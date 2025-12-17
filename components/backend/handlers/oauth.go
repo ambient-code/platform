@@ -105,6 +105,35 @@ func GetOAuthURL(c *gin.Context) {
 		providerName = "google"
 	}
 
+	// Verify user has access to the session using user token
+	reqK8s, reqDyn := GetK8sClientsForRequest(c)
+	if reqK8s == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		return
+	}
+
+	// Verify session exists and user has access
+	gvr := schema.GroupVersionResource{
+		Group:    "vteam.ambient-code",
+		Version:  "v1alpha1",
+		Resource: "agenticsessions",
+	}
+
+	_, err := reqDyn.Resource(gvr).Namespace(projectName).Get(context.Background(), sessionName, v1.GetOptions{})
+	if errors.IsNotFound(err) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Session not found"})
+		return
+	}
+	if errors.IsForbidden(err) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied to session"})
+		return
+	}
+	if err != nil {
+		log.Printf("Failed to get session %s/%s: %v", projectName, sessionName, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify session"})
+		return
+	}
+
 	// Get OAuth provider config
 	provider, err := getOAuthProvider(providerName)
 	if err != nil {
