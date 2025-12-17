@@ -35,10 +35,6 @@ func registerRoutes(r *gin.Engine) {
 
 		api.POST("/projects/:projectName/agentic-sessions/:sessionName/github/token", handlers.MintSessionGitHubToken)
 
-		// OAuth integration endpoints (no auth required - called by external OAuth providers)
-		// OAuth URL generation endpoint - returns signed OAuth URL with HMAC-protected state
-		api.GET("/projects/:projectName/agentic-sessions/:sessionName/oauth/:provider/url", handlers.GetOAuthURL)
-
 		projectGroup := api.Group("/projects/:projectName", handlers.ValidateProjectContext())
 		{
 			projectGroup.GET("/access", handlers.AccessCheck)
@@ -83,6 +79,9 @@ func registerRoutes(r *gin.Engine) {
 			projectGroup.POST("/agentic-sessions/:sessionName/repos", handlers.AddRepo)
 			projectGroup.DELETE("/agentic-sessions/:sessionName/repos/:repoName", handlers.RemoveRepo)
 			projectGroup.PUT("/agentic-sessions/:sessionName/displayname", handlers.UpdateSessionDisplayName)
+
+			// OAuth integration - requires user auth like all other session endpoints
+			projectGroup.GET("/agentic-sessions/:sessionName/oauth/:provider/url", handlers.GetOAuthURL)
 
 			projectGroup.GET("/sessions/:sessionId/ws", websocket.HandleSessionWebSocket)
 			projectGroup.GET("/sessions/:sessionId/messages", websocket.GetSessionMessagesWS)
