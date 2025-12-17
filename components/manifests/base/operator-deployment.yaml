@@ -34,6 +34,8 @@ spec:
           value: "quay.io/ambient_code/vteam_claude_runner:latest"
         - name: CONTENT_SERVICE_IMAGE
           value: "quay.io/ambient_code/vteam_backend:latest"
+        - name: SESSION_PROXY_IMAGE
+          value: "quay.io/ambient_code/vteam_session_proxy:latest"
         - name: IMAGE_PULL_POLICY
           value: "Always"
         # Vertex AI configuration from ConfigMap

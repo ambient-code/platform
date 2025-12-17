@@ -16,6 +16,7 @@ import (
 var (
 	K8sClient     kubernetes.Interface
 	DynamicClient dynamic.Interface
+	RestConfig    *rest.Config // Exported for remotecommand (pod exec)
 )
 
 // Config holds the operator configuration
@@ -24,6 +25,7 @@ type Config struct {
 	BackendNamespace       string
 	AmbientCodeRunnerImage string
 	ContentServiceImage    string
+	SessionProxyImage      string // ADR-0006: Session proxy sidecar image
 	ImagePullPolicy        corev1.PullPolicy
 }
 
@@ -44,6 +46,9 @@ func InitK8sClients() error {
 			return fmt.Errorf("failed to create Kubernetes config: %v", err)
 		}
 	}
+
+	// Save rest config for remotecommand (pod exec)
+	RestConfig = config
 
 	// Create standard Kubernetes client
 	K8sClient, err = kubernetes.NewForConfig(config)
@@ -86,6 +91,12 @@ func LoadConfig() *Config {
 		contentServiceImage = "quay.io/ambient_code/vteam_backend:latest"
 	}
 
+	// ADR-0006: Session proxy sidecar image
+	sessionProxyImage := os.Getenv("SESSION_PROXY_IMAGE")
+	if sessionProxyImage == "" {
+		sessionProxyImage = "quay.io/ambient_code/vteam_session_proxy:latest"
+	}
+
 	// Get image pull policy from environment or use default
 	imagePullPolicyStr := os.Getenv("IMAGE_PULL_POLICY")
 	if imagePullPolicyStr == "" {
@@ -98,6 +109,7 @@ func LoadConfig() *Config {
 		BackendNamespace:       backendNamespace,
 		AmbientCodeRunnerImage: ambientCodeRunnerImage,
 		ContentServiceImage:    contentServiceImage,
+		SessionProxyImage:      sessionProxyImage,
 		ImagePullPolicy:        imagePullPolicy,
 	}
 }
