@@ -846,7 +846,7 @@ func CloneSession(c *gin.Context) {
     
     // Create new session with cloned spec
     newSession := map[string]interface{}{
-        "apiVersion": "vteam.ambient-code/v1alpha1",
+        "apiVersion": "acp.ambient-code/v1alpha1",
         "kind": "AgenticSession",
         "metadata": map[string]interface{}{
             "name": req.NewSessionName,

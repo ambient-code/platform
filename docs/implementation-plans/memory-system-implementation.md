@@ -428,7 +428,7 @@ func customRedactingFormatter(param gin.LogFormatterParams) string {
 ssar := &authv1.SelfSubjectAccessReview{
     Spec: authv1.SelfSubjectAccessReviewSpec{
         ResourceAttributes: &authv1.ResourceAttributes{
-            Group:     "vteam.ambient-code",
+            Group:     "acp.ambient-code",
             Resource:  "agenticsessions",
             Verb:      "list",
             Namespace: project,
@@ -1177,7 +1177,7 @@ Chosen option: "Multiple repos with mainRepoIndex", because:
 **AgenticSession Spec Structure:**
 
 ```yaml
-apiVersion: vteam.ambient-code/v1alpha1
+apiVersion: acp.ambient-code/v1alpha1
 kind: AgenticSession
 metadata:
   name: multi-repo-session
@@ -2240,7 +2240,7 @@ func CreateSession(c *gin.Context) {
 ssar := &authv1.SelfSubjectAccessReview{
     Spec: authv1.SelfSubjectAccessReviewSpec{
         ResourceAttributes: &authv1.ResourceAttributes{
-            Group:     "vteam.ambient-code",
+            Group:     "acp.ambient-code",
             Resource:  "agenticsessions",
             Verb:      "create",
             Namespace: projectName,
@@ -2578,7 +2578,7 @@ func CreateSession(c *gin.Context) {
     ssar := &authv1.SelfSubjectAccessReview{
         Spec: authv1.SelfSubjectAccessReviewSpec{
             ResourceAttributes: &authv1.ResourceAttributes{
-                Group:     "vteam.ambient-code",
+                Group:     "acp.ambient-code",
                 Resource:  "agenticsessions",
                 Verb:      "create",
                 Namespace: projectName,
@@ -2683,7 +2683,7 @@ func ListAllProjects(c *gin.Context) {
 
     // List namespaces user can access (use user token)
     nsList, err := reqK8s.CoreV1().Namespaces().List(ctx, v1.ListOptions{
-        LabelSelector: "vteam.ambient-code/project=true",
+        LabelSelector: "acp.ambient-code/project=true",
     })
     if err != nil {
         log.Printf("Failed to list namespaces: %v", err)

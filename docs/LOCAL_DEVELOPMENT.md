@@ -140,10 +140,10 @@ make local-delete            # Delete minikube cluster
 2. Rebuild images:
    ```bash
    # Build with Podman (default)
-   podman build -t vteam-backend:latest components/backend
+   podman build -t acp-backend:latest components/backend
    
    # Load into minikube
-   minikube image load vteam-backend:latest
+   minikube image load acp-backend:latest
    ```
 3. Restart deployment:
    ```bash

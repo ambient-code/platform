@@ -49,7 +49,7 @@ make dev-start
 This command will:
 
 - Start OpenShift Local if not running
-- Create the vteam-dev project/namespace
+- Create the acp-dev project/namespace
 - Deploy all components (frontend, backend, operator, runner)
 - Configure routes and services
 - Display the frontend URL when ready
@@ -74,7 +74,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: runner-secrets
-  namespace: vteam-dev
+  namespace: acp-dev
 type: Opaque
 stringData:
   ANTHROPIC_API_KEY: "sk-ant-api03-your-key-here"
@@ -82,11 +82,11 @@ EOF
 
 # Create the ProjectSettings referencing the Secret
 oc apply -f - <<EOF
-apiVersion: vteam.ambient-code/v1alpha1
+apiVersion: acp.ambient-code/v1alpha1
 kind: ProjectSettings
 metadata:
   name: projectsettings
-  namespace: vteam-dev
+  namespace: acp-dev
 spec:
   groupAccess:
     - groupName: "developers"
@@ -99,7 +99,7 @@ EOF
 
 ```bash
 # Get the frontend URL
-echo "https://$(oc get route vteam-frontend -n vteam-dev -o jsonpath='{.spec.host}')"
+echo "https://$(oc get route acp-frontend -n acp-dev -o jsonpath='{.spec.host}')"
 
 # Open in browser and start creating agentic sessions!
 ```
@@ -123,7 +123,7 @@ Now let's create your first agentic session to verify everything works:
 
 Ensure your installation is working correctly:
 
-- [ ] All pods are running: `oc get pods -n vteam-dev`
+- [ ] All pods are running: `oc get pods -n acp-dev`
 - [ ] Frontend is accessible via browser
 - [ ] Backend API health check passes: `/health` endpoint
 - [ ] AgenticSession CR can be created
@@ -148,13 +148,13 @@ Ensure your installation is working correctly:
 
 ```bash
 # Check pod status and events
-oc describe pod <pod-name> -n vteam-dev
+oc describe pod <pod-name> -n acp-dev
 
 # Check pod logs
-oc logs <pod-name> -n vteam-dev
+oc logs <pod-name> -n acp-dev
 
 # Verify images are accessible
-oc get pods -n vteam-dev -o jsonpath='{.items[*].spec.containers[*].image}'
+oc get pods -n acp-dev -o jsonpath='{.items[*].spec.containers[*].image}'
 ```
 
 ### Deployment Failures
@@ -165,14 +165,14 @@ oc get pods -n vteam-dev -o jsonpath='{.items[*].spec.containers[*].image}'
 1. Check CRC status: `crc status`
 2. Ensure CRC has enough resources (recommend 8GB RAM minimum)
 3. Check deployment logs: `make dev-logs`
-4. Verify all CRDs are installed: `oc get crd | grep vteam`
+4. Verify all CRDs are installed: `oc get crd | grep acp`
 
 ### Session Job Failures
 
 **Symptom**: AgenticSession jobs fail or timeout
 **Solution**:
 
-1. Check job logs: `oc logs job/<session-name> -n vteam-dev`
+1. Check job logs: `oc logs job/<session-name> -n acp-dev`
 2. Verify workspace PVC is accessible
 3. Check operator logs for errors: `make dev-logs-operator`
 4. Ensure sufficient cluster resources for job pods

@@ -1,10 +1,10 @@
-# Self-Hosted GitLab Configuration for vTeam
+# Self-Hosted GitLab Configuration for Ambient Code Platform
 
-This guide covers everything you need to configure vTeam with self-hosted GitLab instances (GitLab Community Edition or GitLab Enterprise Edition).
+This guide covers everything you need to configure Ambient Code Platform with self-hosted GitLab instances (GitLab Community Edition or GitLab Enterprise Edition).
 
 ## Overview
 
-vTeam fully supports self-hosted GitLab installations, including:
+Ambient Code Platform fully supports self-hosted GitLab installations, including:
 - ✅ GitLab Community Edition (CE)
 - ✅ GitLab Enterprise Edition (EE)
 - ✅ Custom domains and ports
@@ -18,14 +18,14 @@ vTeam fully supports self-hosted GitLab installations, including:
 
 ### Network Requirements
 
-**From vTeam Backend Pods**:
+**From Ambient Code Platform Backend Pods**:
 - HTTPS access to GitLab instance (typically port 443)
 - DNS resolution of GitLab hostname
 - No firewall blocking outbound connections
 
 **From GitLab Instance**:
-- No inbound access required from vTeam
-- All communication is outbound from vTeam to GitLab
+- No inbound access required from Ambient Code Platform
+- All communication is outbound from Ambient Code Platform to GitLab
 
 ### GitLab Requirements
 
@@ -56,14 +56,14 @@ vTeam fully supports self-hosted GitLab installations, including:
 
 ### Step 1: Verify GitLab Accessibility
 
-Before configuring vTeam, verify GitLab is accessible from Kubernetes cluster:
+Before configuring Ambient Code Platform, verify GitLab is accessible from Kubernetes cluster:
 
 ```bash
 # From your local machine (should work if GitLab is public)
 curl -I https://gitlab.company.com
 
-# From vTeam backend pod (critical test)
-kubectl exec -it <backend-pod-name> -n vteam-backend -- \
+# From Ambient Code Platform backend pod (critical test)
+kubectl exec -it <backend-pod-name> -n acp-backend -- \
   curl -I https://gitlab.company.com
 ```
 
@@ -146,7 +146,7 @@ curl -H "Authorization: Bearer glpat-your-token" \
 
 **Test from Backend Pod** (critical):
 ```bash
-kubectl exec -it <backend-pod> -n vteam-backend -- \
+kubectl exec -it <backend-pod> -n acp-backend -- \
   curl -H "Authorization: Bearer glpat-your-token" \
   https://gitlab.company.com/api/v4/user
 ```
@@ -155,14 +155,14 @@ If this fails but works from your machine, there's a network/firewall issue.
 
 ---
 
-### Step 4: Connect to vTeam
+### Step 4: Connect to Ambient Code Platform
 
 **Via API** (recommended for initial testing):
 
 ```bash
-curl -X POST http://vteam-backend:8080/api/auth/gitlab/connect \
+curl -X POST http://acp-backend:8080/api/auth/gitlab/connect \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <vteam-auth-token>" \
+  -H "Authorization: Bearer <acp-auth-token>" \
   -d '{
     "personalAccessToken": "glpat-your-gitlab-token",
     "instanceUrl": "https://gitlab.company.com"
@@ -190,8 +190,8 @@ curl -X POST http://vteam-backend:8080/api/auth/gitlab/connect \
 
 **Check Connection**:
 ```bash
-curl -X GET http://vteam-backend:8080/api/auth/gitlab/status \
-  -H "Authorization: Bearer <vteam-token>"
+curl -X GET http://acp-backend:8080/api/auth/gitlab/status \
+  -H "Authorization: Bearer <acp-token>"
 ```
 
 Expected:
@@ -222,7 +222,7 @@ curl https://gitlab.company.com
 
 ### Self-Signed SSL Certificates
 
-If your GitLab uses self-signed certificates, you must configure vTeam backend pods to trust them.
+If your GitLab uses self-signed certificates, you must configure Ambient Code Platform backend pods to trust them.
 
 #### Option 1: Add CA Certificate to Backend Pods
 
@@ -239,14 +239,14 @@ echo | openssl s_client -showcerts -connect gitlab.company.com:443 2>/dev/null |
 ```bash
 kubectl create configmap gitlab-ca-cert \
   --from-file=gitlab-ca.crt=gitlab-ca.crt \
-  -n vteam-backend
+  -n acp-backend
 ```
 
 **Step 3: Mount CA Certificate in Backend Deployment**
 
 Edit backend deployment:
 ```bash
-kubectl edit deployment vteam-backend -n vteam-backend
+kubectl edit deployment acp-backend -n acp-backend
 ```
 
 Add volume and volumeMount:
@@ -294,7 +294,7 @@ spec:
 
 ```bash
 # After pod restarts
-kubectl exec -it <backend-pod> -n vteam-backend -- \
+kubectl exec -it <backend-pod> -n acp-backend -- \
   curl https://gitlab.company.com
 # Should not show certificate errors
 ```
@@ -331,7 +331,7 @@ env:
 
 **Solutions**:
 1. Contact GitLab administrator to renew certificate
-2. Cannot be worked around from vTeam side
+2. Cannot be worked around from Ambient Code Platform side
 
 **Problem**: "x509: certificate is valid for gitlab.local, not gitlab.company.com"
 
@@ -348,9 +348,9 @@ env:
 
 ### Firewall Rules
 
-**Required Outbound Access** (from vTeam backend pods):
+**Required Outbound Access** (from Ambient Code Platform backend pods):
 ```
-Source: vTeam backend pods (namespace: vteam-backend)
+Source: Ambient Code Platform backend pods (namespace: acp-backend)
 Destination: GitLab instance
 Protocol: HTTPS (TCP)
 Port: 443 (or custom if GitLab uses different port)
@@ -361,17 +361,17 @@ Port: 443 (or custom if GitLab uses different port)
 ALLOW tcp from 10.0.0.0/8 (Kubernetes pod network) to 192.168.1.100 port 443
 ```
 
-**No Inbound Access Required**: GitLab doesn't need to reach vTeam.
+**No Inbound Access Required**: GitLab doesn't need to reach Ambient Code Platform.
 
 ---
 
 ### DNS Configuration
 
-vTeam backend pods must be able to resolve GitLab hostname.
+Ambient Code Platform backend pods must be able to resolve GitLab hostname.
 
 **Test DNS Resolution**:
 ```bash
-kubectl exec -it <backend-pod> -n vteam-backend -- \
+kubectl exec -it <backend-pod> -n acp-backend -- \
   nslookup gitlab.company.com
 ```
 
@@ -407,7 +407,7 @@ Address: 192.168.1.100
 
 ### Proxy Configuration
 
-If vTeam backend pods require HTTP proxy to reach GitLab:
+If Ambient Code Platform backend pods require HTTP proxy to reach GitLab:
 
 **Add Proxy Environment Variables**:
 ```yaml
@@ -447,7 +447,7 @@ If your GitLab instance runs on a non-standard port:
 GitLab URL: https://gitlab.company.com:8443
 ```
 
-**Configure in vTeam**:
+**Configure in Ambient Code Platform**:
 ```json
 {
   "personalAccessToken": "glpat-xxx",
@@ -461,7 +461,7 @@ Instance URL: https://gitlab.company.com:8443
 API URL: https://gitlab.company.com:8443/api/v4
 ```
 
-vTeam automatically preserves the custom port.
+Ambient Code Platform automatically preserves the custom port.
 
 ---
 
@@ -475,10 +475,10 @@ Self-hosted GitLab administrators can configure custom rate limits.
 1. Admin Area → Settings → Network → Rate Limits
 2. Default: Same as GitLab.com (300/min, 10000/hour)
 
-**Recommended Settings for vTeam**:
+**Recommended Settings for Ambient Code Platform**:
 - Authenticated API rate limit: 300 requests/minute (default)
 - Unauthenticated rate limit: Can be lower
-- Protected paths rate limit: Not applicable to vTeam
+- Protected paths rate limit: Not applicable to Ambient Code Platform
 
 **If Users Hit Rate Limits Frequently**:
 - Consider increasing limits for authenticated API calls
@@ -498,12 +498,12 @@ Administrators can restrict PAT creation and usage.
 
 **Recommended Settings**:
 - ✅ Personal Access Tokens: **Enabled**
-- ✅ Project Access Tokens: Can be disabled (not used by vTeam)
+- ✅ Project Access Tokens: Can be disabled (not used by Ambient Code Platform)
 - ⚠️ Token expiration: Enforce 90-day maximum (recommended)
 - ⚠️ Limit token lifetime: Yes (security best practice)
 
 **If PAT Creation is Disabled**:
-- Users cannot connect to vTeam
+- Users cannot connect to Ambient Code Platform
 - Administrator must enable PATs
 - Or use alternative authentication (not currently supported)
 
@@ -516,7 +516,7 @@ Administrators can restrict PAT creation and usage.
 2. Expand "Visibility and access controls"
 3. Check "Enable access to the GitLab API" is **ON**
 
-If disabled, vTeam cannot function.
+If disabled, Ambient Code Platform cannot function.
 
 ---
 
@@ -530,18 +530,18 @@ For completely air-gapped GitLab installations:
 - Accessible from Kubernetes cluster (internal network)
 - Does NOT need internet access
 
-**vTeam Backend**:
+**Ambient Code Platform Backend**:
 - Must reach GitLab instance (internal network)
 - Does NOT need internet access for GitLab operations
 
 ### Configuration
 
-Same as standard self-hosted setup - air-gap doesn't affect vTeam → GitLab communication.
+Same as standard self-hosted setup - air-gap doesn't affect Ambient Code Platform → GitLab communication.
 
 **Network Diagram**:
 ```
 ┌─────────────────────┐         ┌──────────────────┐
-│  vTeam Backend Pods │────────▶│  GitLab Instance │
+│  Ambient Code Platform Backend Pods │────────▶│  GitLab Instance │
 │   (Kubernetes)      │ HTTPS   │  (Self-Hosted)   │
 └─────────────────────┘         └──────────────────┘
        Internal Network Only
@@ -552,9 +552,9 @@ Same as standard self-hosted setup - air-gap doesn't affect vTeam → GitLab com
 
 ## Multi-Instance Support
 
-vTeam users can connect to multiple self-hosted GitLab instances simultaneously.
+Ambient Code Platform users can connect to multiple self-hosted GitLab instances simultaneously.
 
-**Limitation**: Each vTeam user can connect to **one** GitLab instance at a time.
+**Limitation**: Each Ambient Code Platform user can connect to **one** GitLab instance at a time.
 
 **Use Cases**:
 
@@ -566,7 +566,7 @@ vTeam users can connect to multiple self-hosted GitLab instances simultaneously.
 **Scenario 2: One User, Multiple Instances**
 - User needs access to both `gitlab-dev` and `gitlab-prod`
 - ❌ Not supported - must choose one instance per user
-- Workaround: Use different vTeam user accounts
+- Workaround: Use different Ambient Code Platform user accounts
 
 **Scenario 3: Mixed GitLab.com and Self-Hosted**
 - User connects to `https://gitlab.company.com` (self-hosted)
@@ -592,7 +592,7 @@ vTeam users can connect to multiple self-hosted GitLab instances simultaneously.
 
 2. **Test from backend pod**:
    ```bash
-   kubectl exec -it <backend-pod> -n vteam-backend -- \
+   kubectl exec -it <backend-pod> -n acp-backend -- \
      curl https://gitlab.company.com
    ```
    - If fails: Firewall or network issue
@@ -600,16 +600,16 @@ vTeam users can connect to multiple self-hosted GitLab instances simultaneously.
 
 3. **Test GitLab API**:
    ```bash
-   kubectl exec -it <backend-pod> -n vteam-backend -- \
+   kubectl exec -it <backend-pod> -n acp-backend -- \
      curl -H "Authorization: Bearer glpat-xxx" \
      https://gitlab.company.com/api/v4/user
    ```
    - If fails: API disabled or token invalid
-   - If succeeds: vTeam configuration issue
+   - If succeeds: Ambient Code Platform configuration issue
 
-4. **Check vTeam logs**:
+4. **Check Ambient Code Platform logs**:
    ```bash
-   kubectl logs -l app=vteam-backend -n vteam-backend | grep -i gitlab
+   kubectl logs -l app=acp-backend -n acp-backend | grep -i gitlab
    ```
 
 ---
@@ -655,7 +655,7 @@ curl https://gitlab.company.com/api/v4/version
 
 2. **Check network latency**:
    ```bash
-   kubectl exec -it <backend-pod> -n vteam-backend -- \
+   kubectl exec -it <backend-pod> -n acp-backend -- \
      ping -c 5 gitlab.company.com
    ```
    - Should be < 50ms for same datacenter
@@ -673,12 +673,12 @@ curl https://gitlab.company.com/api/v4/version
 ### Token Storage
 
 **Where Tokens Are Stored**:
-- Kubernetes Secret: `gitlab-user-tokens` in `vteam-backend` namespace
+- Kubernetes Secret: `gitlab-user-tokens` in `acp-backend` namespace
 - Encrypted at rest (Kubernetes default encryption)
 - Never logged in plaintext
 
 **Access Control**:
-- Only vTeam backend pods can read secret
+- Only Ambient Code Platform backend pods can read secret
 - Kubernetes RBAC enforced
 - Administrators can view secret but not decode tokens automatically
 
@@ -698,7 +698,7 @@ curl https://gitlab.company.com/api/v4/version
    - All tokens sent over HTTPS
 
 2. **Restrict Network Access**
-   - Firewall: Only allow vTeam backend pods → GitLab
+   - Firewall: Only allow Ambient Code Platform backend pods → GitLab
    - No direct user access from pods to GitLab UI needed
 
 3. **SSL/TLS Configuration**
@@ -725,11 +725,11 @@ For regulated environments (HIPAA, SOC 2, etc.):
 
 **Audit Trail**:
 - ✅ GitLab logs all API calls with user identity
-- ✅ vTeam logs all operations with redacted tokens
+- ✅ Ambient Code Platform logs all operations with redacted tokens
 - ✅ Kubernetes audit logs track secret access
 
 **Access Control**:
-- ✅ RBAC controls who can access vTeam
+- ✅ RBAC controls who can access Ambient Code Platform
 - ✅ GitLab permissions control repository access
 - ✅ No elevated privileges required
 
@@ -755,7 +755,7 @@ For regulated environments (HIPAA, SOC 2, etc.):
 
 4. **Maintain GitLab Version**
    - Keep GitLab up to date (security patches)
-   - Test vTeam compatibility before major upgrades
+   - Test Ambient Code Platform compatibility before major upgrades
    - Minimum: GitLab 13.0+
 
 5. **SSL Certificate Management**
@@ -765,11 +765,11 @@ For regulated environments (HIPAA, SOC 2, etc.):
 
 ---
 
-### For vTeam Users
+### For Ambient Code Platform Users
 
 1. **Use Strong Tokens**
-   - Create separate token for vTeam
-   - Use descriptive name: "vTeam Integration"
+   - Create separate token for Ambient Code Platform
+   - Use descriptive name: "Ambient Code Platform Integration"
    - Minimum required scopes only
 
 2. **Rotate Tokens Regularly**
@@ -791,9 +791,9 @@ For regulated environments (HIPAA, SOC 2, etc.):
 
 ## Reference
 
-### API Endpoints Used by vTeam
+### API Endpoints Used by Ambient Code Platform
 
-vTeam uses these GitLab API v4 endpoints:
+Ambient Code Platform uses these GitLab API v4 endpoints:
 
 **Authentication & User**:
 ```
@@ -833,9 +833,9 @@ git push https://oauth2:TOKEN@gitlab.company.com/owner/repo.git
 - Check GitLab logs: `/var/log/gitlab/`
 - GitLab Community Forum: https://forum.gitlab.com
 
-**For vTeam Integration Issues**:
-- vTeam GitHub Issues: https://github.com/natifridman/vTeam/issues
-- Check vTeam logs: `kubectl logs -l app=vteam-backend -n vteam-backend`
+**For Ambient Code Platform Integration Issues**:
+- Ambient Code Platform GitHub Issues: https://github.com/natifridman/Ambient Code Platform/issues
+- Check Ambient Code Platform logs: `kubectl logs -l app=acp-backend -n acp-backend`
 
 **For Network/Firewall Issues**:
 - Contact your network/infrastructure team
@@ -848,32 +848,32 @@ git push https://oauth2:TOKEN@gitlab.company.com/owner/repo.git
 **Test Connectivity**:
 ```bash
 # From backend pod
-kubectl exec -it <backend-pod> -n vteam-backend -- \
+kubectl exec -it <backend-pod> -n acp-backend -- \
   curl https://gitlab.company.com
 ```
 
 **Test API**:
 ```bash
-kubectl exec -it <backend-pod> -n vteam-backend -- \
+kubectl exec -it <backend-pod> -n acp-backend -- \
   curl -H "Authorization: Bearer glpat-xxx" \
   https://gitlab.company.com/api/v4/user
 ```
 
-**Connect to vTeam**:
+**Connect to Ambient Code Platform**:
 ```bash
-curl -X POST http://vteam-backend:8080/api/auth/gitlab/connect \
+curl -X POST http://acp-backend:8080/api/auth/gitlab/connect \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <vteam-token>" \
+  -H "Authorization: Bearer <acp-token>" \
   -d '{"personalAccessToken":"glpat-xxx","instanceUrl":"https://gitlab.company.com"}'
 ```
 
 **Check Status**:
 ```bash
-curl -X GET http://vteam-backend:8080/api/auth/gitlab/status \
-  -H "Authorization: Bearer <vteam-token>"
+curl -X GET http://acp-backend:8080/api/auth/gitlab/status \
+  -H "Authorization: Bearer <acp-token>"
 ```
 
 **View Logs**:
 ```bash
-kubectl logs -l app=vteam-backend -n vteam-backend | grep -i gitlab
+kubectl logs -l app=acp-backend -n acp-backend | grep -i gitlab
 ```

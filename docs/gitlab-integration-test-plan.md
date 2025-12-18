@@ -1,13 +1,13 @@
 # GitLab Integration Test Plan
 
-**Feature**: GitLab Support for vTeam
+**Feature**: GitLab Support for Ambient Code Platform
 **Branch**: `feature/gitlab-support`
 **Date**: 2025-11-05
 **Status**: Ready for Testing
 
 ## Overview
 
-This test plan validates the GitLab integration implemented in vTeam, covering User Story 1 (Configure GitLab Repository) and User Story 3 (Execute AgenticSession with GitLab).
+This test plan validates the GitLab integration implemented in Ambient Code Platform, covering User Story 1 (Configure GitLab Repository) and User Story 3 (Execute AgenticSession with GitLab).
 
 ## Prerequisites
 
@@ -29,9 +29,9 @@ This test plan validates the GitLab integration implemented in vTeam, covering U
      - `write_repository` (push to repositories)
    - Create at: https://gitlab.com/-/profile/personal_access_tokens
 
-4. **vTeam Environment**
-   - vTeam backend running with Kubernetes access
-   - Backend namespace: `vteam-backend`
+4. **Ambient Code Platform Environment**
+   - Ambient Code Platform backend running with Kubernetes access
+   - Backend namespace: `acp-backend`
    - kubectl access to backend namespace
    - Valid user authentication token
 
@@ -40,7 +40,7 @@ This test plan validates the GitLab integration implemented in vTeam, covering U
 **GitLab.com Test Repository**:
 ```
 URL: https://gitlab.com/<your-username>/<test-repo>.git
-Example: https://gitlab.com/testuser/vteam-test-repo.git
+Example: https://gitlab.com/testuser/acp-test-repo.git
 ```
 
 **Self-Hosted Test Repository** (if applicable):
@@ -55,7 +55,7 @@ Example: https://gitlab.example.com/dev/integration-test.git
 
 ### TC-001: GitLab Connection - Connect with Valid Token (GitLab.com)
 
-**User Story**: US1 - Configure vTeam Project with GitLab Repository
+**User Story**: US1 - Configure Ambient Code Platform Project with GitLab Repository
 **Priority**: P1 (Critical)
 
 **Setup**:
@@ -84,19 +84,19 @@ Example: https://gitlab.example.com/dev/integration-test.git
     "message": "GitLab account connected successfully"
   }
   ```
-- Kubernetes Secret `gitlab-user-tokens` created in `vteam-backend` namespace
+- Kubernetes Secret `gitlab-user-tokens` created in `acp-backend` namespace
 - Secret contains entry with key=`<user-id>`, value=`<token>`
-- ConfigMap `gitlab-connections` created in `vteam-backend` namespace
+- ConfigMap `gitlab-connections` created in `acp-backend` namespace
 - ConfigMap contains JSON entry with connection metadata
 
 **Validation**:
 ```bash
 # Check secret
-kubectl get secret gitlab-user-tokens -n vteam-backend -o json | \
+kubectl get secret gitlab-user-tokens -n acp-backend -o json | \
   jq '.data["<user-id>"]' | base64 -d
 
 # Check configmap
-kubectl get configmap gitlab-connections -n vteam-backend -o json | \
+kubectl get configmap gitlab-connections -n acp-backend -o json | \
   jq '.data["<user-id>"]'
 ```
 
@@ -226,11 +226,11 @@ kubectl get configmap gitlab-connections -n vteam-backend -o json | \
 **Validation**:
 ```bash
 # Verify token removed
-kubectl get secret gitlab-user-tokens -n vteam-backend -o json | \
+kubectl get secret gitlab-user-tokens -n acp-backend -o json | \
   jq '.data["<user-id>"]'  # Should return null
 
 # Verify connection removed
-kubectl get configmap gitlab-connections -n vteam-backend -o json | \
+kubectl get configmap gitlab-connections -n acp-backend -o json | \
   jq '.data["<user-id>"]'  # Should return null
 ```
 
@@ -277,14 +277,14 @@ kubectl get configmap gitlab-connections -n vteam-backend -o json | \
 
 **Setup**:
 1. Complete TC-001 (GitLab connected)
-2. Create or use existing vTeam project
+2. Create or use existing Ambient Code Platform project
 
 **Steps**:
 1. Update ProjectSettings CR with GitLab repository:
    ```yaml
    spec:
      repositories:
-       - url: "https://gitlab.com/testuser/vteam-test-repo.git"
+       - url: "https://gitlab.com/testuser/acp-test-repo.git"
          branch: "main"
    ```
 
@@ -506,8 +506,8 @@ curl -H "Authorization: Bearer <token>" \
 **Validation**:
 ```bash
 # Search backend logs for tokens
-kubectl logs <backend-pod> -n vteam-backend | grep -i "glpat-"  # Should find no matches
-kubectl logs <backend-pod> -n vteam-backend | grep "oauth2:" | grep -v "***"  # Should find no matches
+kubectl logs <backend-pod> -n acp-backend | grep -i "glpat-"  # Should find no matches
+kubectl logs <backend-pod> -n acp-backend | grep "oauth2:" | grep -v "***"  # Should find no matches
 
 # Search session logs
 kubectl logs <session-pod> -n <project> | grep -i "token" | grep -v "***"  # Should find no matches
@@ -642,8 +642,8 @@ kubectl logs <session-pod> -n <project> | grep -i "token" | grep -v "***"  # Sho
 ## Manual Testing Checklist
 
 ### Setup Phase
-- [ ] Deploy vTeam backend with GitLab support
-- [ ] Verify backend namespace exists (`vteam-backend`)
+- [ ] Deploy Ambient Code Platform backend with GitLab support
+- [ ] Verify backend namespace exists (`acp-backend`)
 - [ ] Create GitLab.com test account and repository
 - [ ] Generate GitLab PAT with required scopes
 - [ ] (Optional) Set up self-hosted GitLab instance
@@ -739,7 +739,7 @@ kubectl logs <session-pod> -n <project> | grep -i "token" | grep -v "***"  # Sho
 ## Support
 
 For issues or questions during testing:
-- Review backend logs: `kubectl logs -l app=vteam-backend -n vteam-backend`
+- Review backend logs: `kubectl logs -l app=acp-backend -n acp-backend`
 - Review session logs: `kubectl logs <session-pod> -n <project-namespace>`
 - Check GitLab API responses using curl with PAT
-- Verify Kubernetes resources: Secrets and ConfigMaps in `vteam-backend` namespace
+- Verify Kubernetes resources: Secrets and ConfigMaps in `acp-backend` namespace

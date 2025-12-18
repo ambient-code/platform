@@ -2,7 +2,7 @@
 
 ## Quick Start Guide for Testing GitLab Support
 
-This guide provides step-by-step instructions for manually testing the GitLab integration in vTeam.
+This guide provides step-by-step instructions for manually testing the GitLab integration in Ambient Code Platform.
 
 ---
 
@@ -21,7 +21,7 @@ This guide provides step-by-step instructions for manually testing the GitLab in
    - Or direct link: https://gitlab.com/-/profile/personal_access_tokens
 
 3. **Create New Token**:
-   - **Token name**: `vTeam Integration Test`
+   - **Token name**: `Ambient Code Platform Integration Test`
    - **Expiration date**: Set 30+ days from now
    - **Scopes** (select ALL of these):
      - ✅ `api` - Full API access
@@ -42,41 +42,41 @@ This guide provides step-by-step instructions for manually testing the GitLab in
 
 1. **Create Test Repository** (GitLab.com):
    - Go to https://gitlab.com/projects/new
-   - Project name: `vteam-test-repo`
+   - Project name: `acp-test-repo`
    - Visibility: Private or Public (your choice)
    - Initialize with README: ✅
    - Click "Create project"
 
 2. **Note Repository URL**:
    - Clone button → Copy HTTPS URL
-   - Example: `https://gitlab.com/yourusername/vteam-test-repo.git`
+   - Example: `https://gitlab.com/yourusername/acp-test-repo.git`
 
 3. **Verify Access**:
    ```bash
-   git clone https://oauth2:<your-token>@gitlab.com/yourusername/vteam-test-repo.git
+   git clone https://oauth2:<your-token>@gitlab.com/yourusername/acp-test-repo.git
    ```
    - Should clone successfully
    - Delete cloned folder after verification
 
 ---
 
-### 3. vTeam Environment Setup
+### 3. Ambient Code Platform Environment Setup
 
 1. **Verify Backend Running**:
    ```bash
-   kubectl get pods -n vteam-backend
+   kubectl get pods -n acp-backend
    ```
    - Should show backend pod in Running state
 
 2. **Get Backend URL**:
    ```bash
    # Get service URL (adjust for your environment)
-   kubectl get svc -n vteam-backend
+   kubectl get svc -n acp-backend
    ```
-   - Note the backend API URL (e.g., `http://vteam-backend.vteam-backend.svc.cluster.local:8080`)
+   - Note the backend API URL (e.g., `http://acp-backend.acp-backend.svc.cluster.local:8080`)
 
 3. **Get User Auth Token**:
-   - Log in to vTeam UI
+   - Log in to Ambient Code Platform UI
    - Open browser developer console
    - Find auth token in localStorage or cookies
    - Or use test user token if available
@@ -87,15 +87,15 @@ This guide provides step-by-step instructions for manually testing the GitLab in
 
 ### Test 1: Connect GitLab Account
 
-**Objective**: Verify user can connect their GitLab account to vTeam
+**Objective**: Verify user can connect their GitLab account to Ambient Code Platform
 
 **Steps**:
 
 1. **Send Connect Request**:
    ```bash
-   curl -X POST http://vteam-backend:8080/api/auth/gitlab/connect \
+   curl -X POST http://acp-backend:8080/api/auth/gitlab/connect \
      -H "Content-Type: application/json" \
-     -H "Authorization: Bearer <your-vteam-token>" \
+     -H "Authorization: Bearer <your-acp-token>" \
      -d '{
        "personalAccessToken": "glpat-your-actual-token-here",
        "instanceUrl": ""
@@ -117,10 +117,10 @@ This guide provides step-by-step instructions for manually testing the GitLab in
 3. **Verify in Kubernetes**:
    ```bash
    # Check secret created
-   kubectl get secret gitlab-user-tokens -n vteam-backend -o yaml
+   kubectl get secret gitlab-user-tokens -n acp-backend -o yaml
 
    # Check configmap created
-   kubectl get configmap gitlab-connections -n vteam-backend -o yaml
+   kubectl get configmap gitlab-connections -n acp-backend -o yaml
    ```
 
 **Success Criteria**:
@@ -140,8 +140,8 @@ This guide provides step-by-step instructions for manually testing the GitLab in
 
 1. **Send Status Request**:
    ```bash
-   curl -X GET http://vteam-backend:8080/api/auth/gitlab/status \
-     -H "Authorization: Bearer <your-vteam-token>"
+   curl -X GET http://acp-backend:8080/api/auth/gitlab/status \
+     -H "Authorization: Bearer <your-acp-token>"
    ```
 
 2. **Expected Response** (200 OK):
@@ -164,12 +164,12 @@ This guide provides step-by-step instructions for manually testing the GitLab in
 
 ### Test 3: Configure Project with GitLab Repository
 
-**Objective**: Add GitLab repository to vTeam project
+**Objective**: Add GitLab repository to Ambient Code Platform project
 
 **Steps**:
 
 1. **Create or Select Project**:
-   - Use existing vTeam project or create new one
+   - Use existing Ambient Code Platform project or create new one
    - Note project namespace (e.g., `my-project`)
 
 2. **Update ProjectSettings CR**:
@@ -181,7 +181,7 @@ This guide provides step-by-step instructions for manually testing the GitLab in
    ```yaml
    spec:
      repositories:
-       - url: "https://gitlab.com/yourusername/vteam-test-repo.git"
+       - url: "https://gitlab.com/yourusername/acp-test-repo.git"
          branch: "main"
    ```
 
@@ -214,7 +214,7 @@ This guide provides step-by-step instructions for manually testing the GitLab in
    spec:
      description: "Test GitLab integration by adding a comment to README"
      outputRepo:
-       url: "https://gitlab.com/yourusername/vteam-test-repo.git"
+       url: "https://gitlab.com/yourusername/acp-test-repo.git"
        branch: "test-branch"
    EOF
    ```
@@ -235,7 +235,7 @@ This guide provides step-by-step instructions for manually testing the GitLab in
    - GitLab branch URL in completion notification
 
 4. **Verify in GitLab UI**:
-   - Open repository in GitLab: https://gitlab.com/yourusername/vteam-test-repo
+   - Open repository in GitLab: https://gitlab.com/yourusername/acp-test-repo
    - Click "Branches" dropdown
    - Find `test-branch`
    - Verify commits appear from session
@@ -247,7 +247,7 @@ This guide provides step-by-step instructions for manually testing the GitLab in
 - ✅ Push to GitLab succeeds
 - ✅ Branch visible in GitLab UI
 - ✅ Completion notification includes GitLab URL format:
-  - `https://gitlab.com/yourusername/vteam-test-repo/-/tree/test-branch`
+  - `https://gitlab.com/yourusername/acp-test-repo/-/tree/test-branch`
 
 ---
 
@@ -266,9 +266,9 @@ This guide provides step-by-step instructions for manually testing the GitLab in
 
 2. **Connect with Read-Only Token**:
    ```bash
-   curl -X POST http://vteam-backend:8080/api/auth/gitlab/connect \
+   curl -X POST http://acp-backend:8080/api/auth/gitlab/connect \
      -H "Content-Type: application/json" \
-     -H "Authorization: Bearer <your-vteam-token>" \
+     -H "Authorization: Bearer <your-acp-token>" \
      -d '{
        "personalAccessToken": "glpat-readonly-token-here",
        "instanceUrl": ""
@@ -304,10 +304,10 @@ GitLab push failed: Insufficient permissions. Ensure your GitLab token has 'writ
 1. **Search Backend Logs**:
    ```bash
    # Should find NO raw tokens
-   kubectl logs -l app=vteam-backend -n vteam-backend | grep "glpat-"
+   kubectl logs -l app=acp-backend -n acp-backend | grep "glpat-"
 
    # Should only find redacted tokens (with ***)
-   kubectl logs -l app=vteam-backend -n vteam-backend | grep "oauth2:"
+   kubectl logs -l app=acp-backend -n acp-backend | grep "oauth2:"
    ```
 
 2. **Search Session Logs**:
@@ -335,8 +335,8 @@ GitLab push failed: Insufficient permissions. Ensure your GitLab token has 'writ
 
 1. **Send Disconnect Request**:
    ```bash
-   curl -X POST http://vteam-backend:8080/api/auth/gitlab/disconnect \
-     -H "Authorization: Bearer <your-vteam-token>"
+   curl -X POST http://acp-backend:8080/api/auth/gitlab/disconnect \
+     -H "Authorization: Bearer <your-acp-token>"
    ```
 
 2. **Expected Response** (200 OK):
@@ -350,18 +350,18 @@ GitLab push failed: Insufficient permissions. Ensure your GitLab token has 'writ
 3. **Verify Removal**:
    ```bash
    # Check token removed from secret
-   kubectl get secret gitlab-user-tokens -n vteam-backend -o json | \
+   kubectl get secret gitlab-user-tokens -n acp-backend -o json | \
      jq '.data | keys'
 
    # Check connection removed from configmap
-   kubectl get configmap gitlab-connections -n vteam-backend -o json | \
+   kubectl get configmap gitlab-connections -n acp-backend -o json | \
      jq '.data | keys'
    ```
 
 4. **Verify Status Shows Disconnected**:
    ```bash
-   curl -X GET http://vteam-backend:8080/api/auth/gitlab/status \
-     -H "Authorization: Bearer <your-vteam-token>"
+   curl -X GET http://acp-backend:8080/api/auth/gitlab/status \
+     -H "Authorization: Bearer <your-acp-token>"
    ```
 
    Expected: `{"connected": false}`
@@ -387,9 +387,9 @@ GitLab push failed: Insufficient permissions. Ensure your GitLab token has 'writ
 
 1. **Connect with Instance URL**:
    ```bash
-   curl -X POST http://vteam-backend:8080/api/auth/gitlab/connect \
+   curl -X POST http://acp-backend:8080/api/auth/gitlab/connect \
      -H "Content-Type: application/json" \
-     -H "Authorization: Bearer <your-vteam-token>" \
+     -H "Authorization: Bearer <your-acp-token>" \
      -d '{
        "personalAccessToken": "glpat-self-hosted-token",
        "instanceUrl": "https://gitlab.example.com"
@@ -471,7 +471,7 @@ GitLab push failed: Insufficient permissions. Ensure your GitLab token has 'writ
    ```
 4. Check backend logs:
    ```bash
-   kubectl logs -l app=vteam-backend -n vteam-backend | grep -i "gitlab"
+   kubectl logs -l app=acp-backend -n acp-backend | grep -i "gitlab"
    ```
 
 ---
@@ -485,14 +485,14 @@ GitLab push failed: Insufficient permissions. Ensure your GitLab token has 'writ
 **Solutions**:
 1. Verify GitLab account connected:
    ```bash
-   curl -X GET http://vteam-backend:8080/api/auth/gitlab/status \
+   curl -X GET http://acp-backend:8080/api/auth/gitlab/status \
      -H "Authorization: Bearer <token>"
    ```
 2. Check token exists in Secret:
    ```bash
-   kubectl get secret gitlab-user-tokens -n vteam-backend -o yaml
+   kubectl get secret gitlab-user-tokens -n acp-backend -o yaml
    ```
-3. Verify namespace is correct (`vteam-backend`)
+3. Verify namespace is correct (`acp-backend`)
 4. Check session logs for detailed error:
    ```bash
    kubectl logs <session-pod> -n <project-namespace>
@@ -514,11 +514,11 @@ GitLab push failed: Insufficient permissions. Ensure your GitLab token has 'writ
 3. Reconnect account:
    ```bash
    # Disconnect
-   curl -X POST http://vteam-backend:8080/api/auth/gitlab/disconnect \
+   curl -X POST http://acp-backend:8080/api/auth/gitlab/disconnect \
      -H "Authorization: Bearer <token>"
 
    # Reconnect with new token
-   curl -X POST http://vteam-backend:8080/api/auth/gitlab/connect \
+   curl -X POST http://acp-backend:8080/api/auth/gitlab/connect \
      -H "Content-Type: application/json" \
      -H "Authorization: Bearer <token>" \
      -d '{"personalAccessToken": "glpat-new-token", "instanceUrl": ""}'
@@ -560,7 +560,7 @@ GitLab push failed: Insufficient permissions. Ensure your GitLab token has 'writ
 2. Rotate all affected tokens in GitLab
 3. Check backend logs for redaction failures:
    ```bash
-   kubectl logs -l app=vteam-backend -n vteam-backend | grep -E "(glpat-|oauth2:)" | grep -v "***"
+   kubectl logs -l app=acp-backend -n acp-backend | grep -E "(glpat-|oauth2:)" | grep -v "***"
    ```
 
 ---
@@ -609,7 +609,7 @@ After completing all tests, verify:
 
 ### Backend Logs
 ```bash
-kubectl logs -l app=vteam-backend -n vteam-backend -f
+kubectl logs -l app=acp-backend -n acp-backend -f
 ```
 
 ### Session Logs
@@ -619,12 +619,12 @@ kubectl logs -l agenticsession=<session-name> -n <project-namespace> -f
 
 ### Check Secrets
 ```bash
-kubectl get secret gitlab-user-tokens -n vteam-backend -o yaml
+kubectl get secret gitlab-user-tokens -n acp-backend -o yaml
 ```
 
 ### Check ConfigMaps
 ```bash
-kubectl get configmap gitlab-connections -n vteam-backend -o yaml
+kubectl get configmap gitlab-connections -n acp-backend -o yaml
 ```
 
 ### GitLab API Test
@@ -640,7 +640,7 @@ curl -H "Authorization: Bearer glpat-..." \
 kubectl delete agenticsession test-gitlab-session -n <project-namespace>
 
 # Disconnect GitLab
-curl -X POST http://vteam-backend:8080/api/auth/gitlab/disconnect \
+curl -X POST http://acp-backend:8080/api/auth/gitlab/disconnect \
   -H "Authorization: Bearer <token>"
 ```
 
@@ -667,5 +667,5 @@ For production deployment:
 
 - **GitLab API Docs**: https://docs.gitlab.com/ee/api/
 - **GitLab PAT Docs**: https://docs.gitlab.com/ee/user/profile/personal_access_tokens.html
-- **vTeam GitLab Test Plan**: `/docs/gitlab-integration-test-plan.md`
+- **Ambient Code Platform GitLab Test Plan**: `/docs/gitlab-integration-test-plan.md`
 - **GitLab Integration Spec**: `specs/001-gitlab-support/spec.md`

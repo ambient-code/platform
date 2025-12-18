@@ -1,0 +1,57 @@
+---
+title: Agentic Session Flow - Sequence Diagram
+---
+
+%%{init: {'theme':'dark', 'sequence': {'actorMargin': 50, 'participantMargin': 30, 'messageMargin': 30}}}%%
+
+sequenceDiagram
+    participant User as 👤 User
+    participant UI as 🎨 Frontend<br/>(NextJS)
+    participant API as ⚡ Backend API<br/>(Go)
+    participant K8s as ☸️ Kubernetes
+    participant Op as ⚙️ Operator<br/>(Go)
+    participant Job as 📋 K8s Job
+    participant Pod as 🏃 Execution Pod
+    participant AI as 🤖 Claude Runner<br/>(Python + MCP)
+    participant CR as 📄 Custom Resource<br/>(AgenticSession)
+    
+    User->>UI: Create new agentic session
+    Note over UI: User specifies task<br/>and parameters
+    
+    UI->>API: POST /sessions<br/>(session details)
+    Note over API: Validate request<br/>Create session object
+    
+    API->>K8s: Create AgenticSession CR
+    K8s->>CR: Store Custom Resource
+    CR-->>API: CR created successfully
+    API-->>UI: Session ID returned
+    UI-->>User: Session created<br/>(show status)
+    
+    Note over Op: Watching for new CRs
+    Op->>CR: Detect new AgenticSession
+    Op->>K8s: Create Kubernetes Job
+    K8s->>Job: Job scheduled
+    
+    Job->>K8s: Request Pod creation
+    K8s->>Pod: Spawn execution pod
+    Note over Pod: Container with:<br/>- AI CLI<br/>- Playwright MCP server
+    
+    Pod->>AI: Initialize Claude Runner
+    AI->>AI: Setup MCP capabilities
+    Note over AI: Browser automation<br/>Code execution<br/>File operations
+    
+    AI->>Pod: Execute specified task
+    Note over Pod: Task execution<br/>using MCP tools
+    
+    Pod->>CR: Store execution results
+    CR->>CR: Update status: completed
+    
+    Op->>CR: Detect status change
+    Op->>K8s: Clean up Job
+    
+    API->>CR: Poll for updates
+    CR-->>API: Return results
+    API-->>UI: Send results via WebSocket/polling
+    UI-->>User: Display completed session<br/>with results
+    
+    Note over User: View results<br/>Download artifacts<br/>Create follow-up tasks
