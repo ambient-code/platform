@@ -833,15 +833,29 @@ func loadRunsFromDisk(sessionID string) []types.AGUIRunMetadata {
 
 // loadEventsForRun loads all events for a session (thread) from disk
 // Per AG-UI spec: all runs in a thread share the same event log
+// Includes automatic migration from legacy message format
 func loadEventsForRun(sessionID, runID string) ([]map[string]interface{}, error) {
 	path := fmt.Sprintf("%s/sessions/%s/agui-events.jsonl", StateBaseDir, sessionID)
 
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return []map[string]interface{}{}, nil
+			// Check if legacy messages.json exists and migrate
+			if err := MigrateLegacySessionToAGUI(sessionID); err != nil {
+				log.Printf("LegacyMigration: Failed to migrate session %s: %v", sessionID, err)
+			} else {
+				// Try reading again after migration
+				data, err = os.ReadFile(path)
+				if err != nil {
+					return []map[string]interface{}{}, nil
+				}
+			}
+			if len(data) == 0 {
+				return []map[string]interface{}{}, nil
+			}
+		} else {
+			return nil, err
 		}
-		return nil, err
 	}
 
 	events := make([]map[string]interface{}, 0)
@@ -852,6 +866,13 @@ func loadEventsForRun(sessionID, runID string) ([]map[string]interface{}, error)
 		}
 		var event map[string]interface{}
 		if err := json.Unmarshal(line, &event); err == nil {
+			// Filter by runID if specified
+			if runID != "" {
+				eventRunID, ok := event["runId"].(string)
+				if !ok || eventRunID != runID {
+					continue
+				}
+			}
 			events = append(events, event)
 		}
 	}
