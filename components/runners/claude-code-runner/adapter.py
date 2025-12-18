@@ -75,10 +75,6 @@ class ClaudeCodeAdapter:
         self._current_tool_id: Optional[str] = None
         self._current_run_id: Optional[str] = None
         self._current_thread_id: Optional[str] = None
-        
-        # Active Claude SDK client for interrupt support
-        self._active_client: Optional[Any] = None
-        self._active_client_ctx: Optional[Any] = None
 
     async def initialize(self, context: RunnerContext):
         """Initialize the adapter with context."""
@@ -489,10 +485,6 @@ class ClaudeCodeAdapter:
                 else:
                     raise
 
-            # Store active client for interrupt support
-            self._active_client = client
-            self._active_client_ctx = client_ctx
-
             try:
                 if not self._first_run:
                     yield RawEvent(
@@ -715,18 +707,12 @@ class ClaudeCodeAdapter:
 
             finally:
                 await client_ctx.__aexit__(None, None, None)
-                # Clear active client reference
-                self._active_client = None
-                self._active_client_ctx = None
-
+            
             # Finalize observability
             await obs.finalize()
 
         except Exception as e:
             logger.error(f"Failed to run Claude Code SDK: {e}")
-            # Clear active client on error
-            self._active_client = None
-            self._active_client_ctx = None
             if 'obs' in locals():
                 await obs.cleanup_on_error(e)
             raise
@@ -734,20 +720,14 @@ class ClaudeCodeAdapter:
     async def interrupt(self) -> None:
         """
         Interrupt the active Claude SDK execution.
-        
-        Sends interrupt signal to stop Claude mid-execution.
-        See: https://platform.claude.com/docs/en/agent-sdk/python#methods
         """
-        if not self._active_client:
-            logger.warning("Interrupt requested but no active client")
-            return
-        
         try:
             logger.info("Sending interrupt signal to Claude SDK client...")
             await self._active_client.interrupt()
             logger.info("Interrupt signal sent successfully")
         except Exception as e:
             logger.error(f"Failed to interrupt Claude SDK: {e}")
+
 
     def _setup_workflow_paths(self, active_workflow_url: str, repos_cfg: list) -> tuple[str, list, str]:
         """Setup paths for workflow mode."""

@@ -95,14 +95,19 @@ async def lifespan(app: FastAPI):
     adapter = ClaudeCodeAdapter()
     adapter.context = context
     
-    # Check for INITIAL_PROMPT and auto-execute on startup
-    # Runner knows when it's ready, so this is more reliable than backend timing
+    # Check for INITIAL_PROMPT and auto-execute (only if this is first run)
+    # Skip if conversation history already exists (session restart)
     initial_prompt = os.getenv("INITIAL_PROMPT", "").strip()
     if initial_prompt:
-        logger.info(f"INITIAL_PROMPT detected ({len(initial_prompt)} chars), will auto-execute after server starts")
-        # Schedule auto-execution after server is ready
-        import asyncio
-        asyncio.create_task(auto_execute_initial_prompt(initial_prompt, session_id))
+        # Check if there's already conversation history
+        from pathlib import Path
+        history_marker = Path(workspace_path) / ".claude" / "state"
+        
+        if history_marker.exists():
+            logger.info(f"INITIAL_PROMPT detected but conversation history exists - skipping auto-execution (session restart)")
+        else:
+            logger.info(f"INITIAL_PROMPT detected ({len(initial_prompt)} chars), will auto-execute")
+            asyncio.create_task(auto_execute_initial_prompt(initial_prompt, session_id))
     
     logger.info(f"AG-UI server ready for session {session_id}")
     
@@ -113,58 +118,80 @@ async def lifespan(app: FastAPI):
 
 
 async def auto_execute_initial_prompt(prompt: str, session_id: str):
-    """Auto-execute INITIAL_PROMPT by POSTing to backend after server is ready."""
+    """Auto-execute INITIAL_PROMPT by POSTing to backend (via Service).
+    
+    We POST to the backend so events flow through the proxy and are visible in the UI.
+    Retries handle Service DNS propagation delays naturally.
+    """
     import uuid
     import aiohttp
     
-    # Wait for FastAPI server to be fully ready
-    await asyncio.sleep(2)
+    logger.info("Auto-executing INITIAL_PROMPT via backend POST (will retry until Service DNS is ready)...")
     
-    logger.info(f"Auto-executing INITIAL_PROMPT via backend POST...")
+    # Get backend URL from environment
+    backend_url = os.getenv("BACKEND_API_URL", "").rstrip("/")
+    project_name = os.getenv("PROJECT_NAME", "").strip() or os.getenv("AGENTIC_SESSION_NAMESPACE", "").strip()
     
-    try:
-        # Get backend URL from environment
-        backend_url = os.getenv("BACKEND_API_URL", "").rstrip("/")
-        project_name = os.getenv("PROJECT_NAME", "").strip() or os.getenv("AGENTIC_SESSION_NAMESPACE", "").strip()
-        
-        if not backend_url or not project_name:
-            logger.error("Cannot auto-execute INITIAL_PROMPT: BACKEND_API_URL or PROJECT_NAME not set")
-            return
-        
-        url = f"{backend_url}/projects/{project_name}/agentic-sessions/{session_id}/agui/run"
-        
-        payload = {
-            "threadId": session_id,
-            "runId": str(uuid.uuid4()),
-            "messages": [{
-                "id": str(uuid.uuid4()),
-                "role": "user",
-                "content": prompt,
-                "metadata": {
-                    "hidden": True,
-                    "autoSent": True,
-                    "source": "runner_auto_execute"
-                }
-            }]
-        }
-        
-        # Get BOT_TOKEN for auth
-        bot_token = os.getenv("BOT_TOKEN", "").strip()
-        headers = {"Content-Type": "application/json"}
-        if bot_token:
-            headers["Authorization"] = f"Bearer {bot_token}"
-        
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload, headers=headers) as resp:
-                if resp.status == 200:
-                    result = await resp.json()
-                    logger.info(f"INITIAL_PROMPT auto-execution started: {result}")
-                else:
-                    error_text = await resp.text()
-                    logger.error(f"INITIAL_PROMPT auto-execution failed: {resp.status} - {error_text}")
+    if not backend_url or not project_name:
+        logger.error("Cannot auto-execute INITIAL_PROMPT: BACKEND_API_URL or PROJECT_NAME not set")
+        logger.error(f"  BACKEND_API_URL={os.getenv('BACKEND_API_URL', '(not set)')}")
+        logger.error(f"  PROJECT_NAME={os.getenv('PROJECT_NAME', '(not set)')}")
+        logger.error(f"  AGENTIC_SESSION_NAMESPACE={os.getenv('AGENTIC_SESSION_NAMESPACE', '(not set)')}")
+        return
     
-    except Exception as e:
-        logger.error(f"Failed to auto-execute INITIAL_PROMPT: {e}")
+    # BACKEND_API_URL already includes /api suffix from operator
+    url = f"{backend_url}/projects/{project_name}/agentic-sessions/{session_id}/agui/run"
+    logger.info(f"Auto-execution URL: {url}")
+    
+    payload = {
+        "threadId": session_id,
+        "runId": str(uuid.uuid4()),
+        "messages": [{
+            "id": str(uuid.uuid4()),
+            "role": "user",
+            "content": prompt,
+            "metadata": {
+                "hidden": True,
+                "autoSent": True,
+                "source": "runner_auto_execute"
+            }
+        }]
+    }
+    
+    # Get BOT_TOKEN for auth
+    bot_token = os.getenv("BOT_TOKEN", "").strip()
+    headers = {"Content-Type": "application/json"}
+    if bot_token:
+        headers["Authorization"] = f"Bearer {bot_token}"
+    
+    # Retry aggressively - Service DNS can take 10-20 seconds to propagate
+    # First retry happens immediately, then we back off
+    max_retries = 10
+    
+    for attempt in range(max_retries):
+        # Exponential backoff: 0, 2, 3, 4, 5, 5, 5... seconds
+        if attempt > 0:
+            delay = min(2 + attempt, 5)
+            await asyncio.sleep(delay)
+        
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=30)) as resp:
+                    if resp.status == 200:
+                        result = await resp.json()
+                        logger.info(f"INITIAL_PROMPT auto-execution started: {result}")
+                        return
+                    else:
+                        error_text = await resp.text()
+                        logger.warning(f"INITIAL_PROMPT attempt {attempt + 1}/{max_retries} failed: {resp.status} - {error_text[:200]}")
+        
+        except aiohttp.ClientConnectorError as e:
+            # Connection error - likely Service DNS not ready yet
+            logger.info(f"INITIAL_PROMPT attempt {attempt + 1}/{max_retries}: Service not ready yet, will retry...")
+        except Exception as e:
+            logger.warning(f"INITIAL_PROMPT attempt {attempt + 1}/{max_retries} error: {e}")
+    
+    logger.error(f"Failed to auto-execute INITIAL_PROMPT after {max_retries} attempts (Service DNS may not have propagated)")
 
 
 app = FastAPI(
@@ -296,7 +323,7 @@ async def change_workflow(request: Request):
     _adapter_initialized = False
     adapter._first_run = True
     
-    logger.info("Workflow updated, triggering new run with workflow greeting")
+    logger.info("Workflow updated, adapter will reinitialize on next run")
     
     # Trigger a new run to greet user with workflow context
     # This runs in background via backend POST
