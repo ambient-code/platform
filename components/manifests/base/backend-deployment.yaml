@@ -94,6 +94,12 @@ spec:
               name: google-workflow-app-secret
               key: OAUTH_STATE_SECRET
               optional: true
+        - name: BACKEND_URL
+          valueFrom:
+            secretKeyRef:
+              name: google-workflow-app-secret
+              key: BACKEND_URL
+              optional: true
         # OOTB Workflows Configuration
         - name: OOTB_WORKFLOWS_REPO
           value: "https://github.com/ambient-code/ootb-ambient-workflows.git"
