@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	authv1 "k8s.io/api/authorization/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -30,10 +29,6 @@ var (
 	// Thread-level subscribers: sessionID -> channels for ALL runs in thread
 	threadSubscribers   = make(map[string]map[chan interface{}]bool)
 	threadSubscribersMu sync.RWMutex
-
-	// Direct event routing: sessionID -> list of channels listening for AG-UI events
-	aguiEventChannels   = make(map[string][]chan map[string]interface{})
-	aguiEventChannelsMu sync.RWMutex
 )
 
 // AGUIRunState tracks the state of an AG-UI run
@@ -104,49 +99,6 @@ func (r *AGUIRunState) BroadcastFull(event interface{}) {
 			}
 		}
 	}
-}
-
-// createInitialAGUIRun creates an initial run when the runner connects
-// This ensures the runner's bootstrap messages have a run to be associated with
-func createInitialAGUIRun(sessionID string) {
-	// Wait a moment for WebSocket to fully establish
-	time.Sleep(100 * time.Millisecond)
-
-	threadID := sessionID
-	runID := uuid.New().String()
-
-	// Check if run already exists
-	aguiRunsMu.RLock()
-	for _, state := range aguiRuns {
-		if state.SessionID == sessionID {
-			aguiRunsMu.RUnlock()
-			return
-		}
-	}
-	aguiRunsMu.RUnlock()
-
-	runState := &AGUIRunState{
-		ThreadID:     threadID,
-		RunID:        runID,
-		SessionID:    sessionID,
-		Status:       "running",
-		StartedAt:    time.Now(),
-		subscribers:  make(map[chan *types.BaseEvent]bool),
-		fullEventSub: make(map[chan interface{}]bool),
-	}
-
-	aguiRunsMu.Lock()
-	aguiRuns[runID] = runState
-	aguiRunsMu.Unlock()
-
-	// Persist run metadata
-	go persistRunMetadata(sessionID, types.AGUIRunMetadata{
-		ThreadID:    threadID,
-		RunID:       runID,
-		SessionName: sessionID,
-		StartedAt:   runState.StartedAt.Format(time.RFC3339),
-		Status:      "running",
-	})
 }
 
 // RouteAGUIEvent routes an AG-UI event directly from WebSocket to subscribers
@@ -341,16 +293,6 @@ func extractBaseEvent(event interface{}) (*types.BaseEvent, bool) {
 	}
 }
 
-// convertToFullEvent converts BaseEvent to the appropriate full event type
-func convertToFullEvent(base *types.BaseEvent) interface{} {
-	if base == nil {
-		return nil
-	}
-	// BaseEvent already has all fields from the original event
-	// Just return it as-is; JSON marshaling will include all fields
-	return base
-}
-
 // LEGACY: Old HandleAGUIRun function removed - replaced by HandleAGUIRunProxy
 // The new proxy forwards requests to the runner's FastAPI server instead of using WebSocket
 
@@ -491,7 +433,7 @@ func streamThreadEvents(c *gin.Context, projectName, sessionName string) {
 					BaseEvent: types.NewBaseEvent(types.EventTypeRunStarted, threadID, activeRunState.RunID),
 				}
 				if activeRunState.ParentRunID != "" {
-					runStarted.BaseEvent.ParentRunID = activeRunState.ParentRunID
+					runStarted.ParentRunID = activeRunState.ParentRunID
 				}
 				writeSSEEvent(c.Writer, runStarted)
 
@@ -670,7 +612,7 @@ func sendInitialSyncEvents(c *gin.Context, runState *AGUIRunState, projectName, 
 		BaseEvent: types.NewBaseEvent(types.EventTypeRunStarted, threadID, runID),
 	}
 	if runState.ParentRunID != "" {
-		runStarted.BaseEvent.ParentRunID = runState.ParentRunID
+		runStarted.ParentRunID = runState.ParentRunID
 	}
 	writeSSEEvent(c.Writer, runStarted)
 
@@ -733,44 +675,6 @@ func writeSSEEvent(w http.ResponseWriter, event interface{}) {
 	if f, ok := w.(http.Flusher); ok {
 		f.Flush()
 	}
-}
-
-// isAGUIEventType checks if a string is a valid AG-UI event type
-func isAGUIEventType(t string) bool {
-	switch t {
-	case types.EventTypeRunStarted,
-		types.EventTypeRunFinished,
-		types.EventTypeRunError,
-		types.EventTypeTextMessageStart,
-		types.EventTypeTextMessageContent,
-		types.EventTypeTextMessageEnd,
-		types.EventTypeToolCallStart,
-		types.EventTypeToolCallArgs,
-		types.EventTypeToolCallEnd,
-		types.EventTypeStepStarted,
-		types.EventTypeStepFinished,
-		types.EventTypeStateSnapshot,
-		types.EventTypStateDelta,
-		types.EventTypeMessagesSnapshot,
-		types.EventTypeActivitySnapshot,
-		types.EventTypeActivityDelta,
-		types.EventTypeRaw:
-		return true
-	}
-	return false
-}
-
-// isNativeTerminalEvent checks if a native AG-UI event is a terminal event
-func isNativeTerminalEvent(event *types.BaseEvent) bool {
-	return event.Type == types.EventTypeRunFinished || event.Type == types.EventTypeRunError
-}
-
-// getNativeTerminalStatus returns the status for a native terminal event
-func getNativeTerminalStatus(event *types.BaseEvent) string {
-	if event.Type == types.EventTypeRunError {
-		return "error"
-	}
-	return "completed"
 }
 
 // scheduleRunCleanup removes a run from the active runs map after a delay
@@ -875,40 +779,6 @@ func getSessionState(projectName, sessionName string) (map[string]interface{}, e
 // AG-UI event persistence
 // Implements append-only event log per AG-UI serialization guidance:
 // https://docs.ag-ui.com/concepts/serialization#serialization
-
-// persistAGUIEventFull persists the full event with all type-specific fields
-func persistAGUIEventFull(sessionID, runID string, event interface{}) {
-	// Persist to JSONL file - ONE file per session (thread), not per run
-	// Per AG-UI spec: all runs in a thread share the same append-only log
-	// https://docs.ag-ui.com/concepts/serialization
-	path := fmt.Sprintf("%s/sessions/%s/agui-events.jsonl", StateBaseDir, sessionID)
-
-	// Ensure directory exists
-	_ = ensureDir(fmt.Sprintf("%s/sessions/%s", StateBaseDir, sessionID))
-
-	// Marshal the full event (preserves Delta, ToolCallID, Result, etc.)
-	data, err := json.Marshal(event)
-	if err != nil {
-		log.Printf("AGUI: failed to marshal event for persistence: %v", err)
-		return
-	}
-
-	f, err := openFileAppend(path)
-	if err != nil {
-		log.Printf("AGUI: failed to open event log: %v", err)
-		return
-	}
-	defer f.Close()
-
-	if _, err := f.Write(append(data, '\n')); err != nil {
-		log.Printf("AGUI: failed to write event: %v", err)
-	}
-}
-
-// Legacy function - deprecated, kept for compatibility
-func persistAGUIEvent(sessionID, runID string, event *types.BaseEvent) {
-	persistAGUIEventFull(sessionID, runID, event)
-}
 
 // persistRunMetadata saves run metadata for indexing
 func persistRunMetadata(sessionID string, meta types.AGUIRunMetadata) {

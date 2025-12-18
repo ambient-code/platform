@@ -251,9 +251,10 @@ func handleStreamedEvent(sessionID, runID, threadID, jsonData string, runState *
 	}
 
 	// Check for terminal events
-	if eventType == types.EventTypeRunFinished {
+	switch eventType {
+	case types.EventTypeRunFinished:
 		updateRunStatus(runID, "completed")
-	} else if eventType == types.EventTypeRunError {
+	case types.EventTypeRunError:
 		updateRunStatus(runID, "error")
 	}
 

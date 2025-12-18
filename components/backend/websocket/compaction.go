@@ -105,7 +105,7 @@ func (c *MessageCompactor) GetMessages() []types.Message {
 		}
 		visibleMessages = append(visibleMessages, msg)
 	}
-	
+
 	if hiddenCount > 0 {
 		log.Printf("Compaction: Filtered %d hidden messages, returning %d visible", hiddenCount, len(visibleMessages))
 	}
