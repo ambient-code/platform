@@ -51,9 +51,6 @@ func SetupHandlerDependencies(k8sUtils *test_utils.K8sTestUtils) {
 		}
 		return "repo"
 	}
-	SendMessageToSession = func(sessionID, userID string, message map[string]interface{}) {
-		// no-op in unit tests
-	}
 
 	logger.Log("Handler dependencies set up with fake clients")
 }

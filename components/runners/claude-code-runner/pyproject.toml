@@ -1,19 +1,34 @@
 [project]
 name = "claude-code-runner"
-version = "0.1.0"
-description = "Runner that streams via Claude Code SDK and syncs workspace via PVC proxy"
+version = "0.2.0"
+description = "AG-UI Server for Claude Code SDK"
 readme = "CLAUDE.md"
 requires-python = ">=3.11"
 authors = [
   { name = "vTeam" }
 ]
 dependencies = [
-  "requests>=2.31.0",
-  "aiohttp>=3.8.0",
-  "pyjwt>=2.8.0",
+  # AG-UI Server
+  "fastapi>=0.100.0",
+  "uvicorn[standard]>=0.23.0",
+  
+  # AG-UI Protocol SDK (official)
+  "ag-ui-protocol>=0.1.0",
+  
+  # Claude SDK
   "anthropic[vertex]>=0.68.0",
   "claude-agent-sdk>=0.1.12",
+  
+  # Observability
   "langfuse>=3.0.0",
+  
+  # Utilities
+  "pydantic>=2.0.0",
+  "aiohttp>=3.8.0",
+  "requests>=2.31.0",
+  "pyjwt>=2.8.0",
+  
+  # MCP integrations
   "mcp-atlassian>=0.11.9",
 ]
 
@@ -24,10 +39,11 @@ dev-dependencies = [
   "pytest-cov>=4.1.0",
   "ruff>=0.1.0",
   "black>=23.0.0",
+  "httpx>=0.24.0",
 ]
 
 [tool.setuptools]
-py-modules = ["wrapper", "observability", "security_utils"]
+py-modules = ["main", "adapter", "context", "observability", "security_utils"]
 
 [build-system]
 requires = ["setuptools>=61.0"]

@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { MessageObject, ToolUseMessages } from "@/types/agentic-session";
+import { MessageObject, ToolUseMessages, HierarchicalToolMessage } from "@/types/agentic-session";
 import { LoadingDots, Message } from "@/components/ui/message";
 import { ToolMessage } from "@/components/ui/tool-message";
 import { ThinkingMessage } from "@/components/ui/thinking-message";
@@ -9,7 +9,7 @@ import { SystemMessage } from "@/components/ui/system-message";
 import { Button } from "@/components/ui/button";
 
 export type StreamMessageProps = {
-  message: MessageObject | ToolUseMessages;
+  message: (MessageObject | ToolUseMessages | HierarchicalToolMessage) & { streaming?: boolean };
   onGoToResults?: () => void;
   plainCard?: boolean;
   isNewest?: boolean;
@@ -32,11 +32,20 @@ const getRandomAgentMessage = () => {
 };
 
 export const StreamMessage: React.FC<StreamMessageProps> = ({ message, onGoToResults, plainCard=false, isNewest=false }) => {
-  const isToolUsePair = (m: MessageObject | ToolUseMessages): m is ToolUseMessages =>
+  const isToolUsePair = (m: MessageObject | ToolUseMessages | HierarchicalToolMessage): m is ToolUseMessages | HierarchicalToolMessage =>
     m != null && typeof m === "object" && "toolUseBlock" in m && "resultBlock" in m;
 
   if (isToolUsePair(message)) {
-    return <ToolMessage toolUseBlock={message.toolUseBlock} resultBlock={message.resultBlock} timestamp={message.timestamp} />;
+    // Check if this is a hierarchical message with children
+    const hierarchical = message as HierarchicalToolMessage;
+    return (
+      <ToolMessage 
+        toolUseBlock={message.toolUseBlock} 
+        resultBlock={message.resultBlock} 
+        timestamp={message.timestamp}
+        childToolCalls={hierarchical.children}
+      />
+    );
   }
 
   const m = message as MessageObject;
@@ -53,14 +62,15 @@ export const StreamMessage: React.FC<StreamMessageProps> = ({ message, onGoToRes
     }
     case "user_message":
     case "agent_message": {
+      const isStreaming = 'streaming' in message && message.streaming;
       if (typeof m.content === "string") {
-        return <Message role={m.type === "agent_message" ? "bot" : "user"} content={m.content} name="Claude AI" borderless={plainCard} timestamp={m.timestamp}/>;
+        return <Message role={m.type === "agent_message" ? "bot" : "user"} content={m.content} name="Claude AI" borderless={plainCard} timestamp={m.timestamp} streaming={isStreaming}/>;
       }
       switch (m.content.type) {
         case "thinking_block":
           return <ThinkingMessage block={m.content} />
         case "text_block":
-          return <Message role={m.type === "agent_message" ? "bot" : "user"} content={m.content.text} name="Claude AI" borderless={plainCard} timestamp={m.timestamp}/>
+          return <Message role={m.type === "agent_message" ? "bot" : "user"} content={m.content.text} name="Claude AI" borderless={plainCard} timestamp={m.timestamp} streaming={isStreaming}/>
         case "tool_use_block":
           return <ToolMessage toolUseBlock={m.content} borderless={plainCard}/>
         case "tool_result_block":

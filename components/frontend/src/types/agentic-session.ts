@@ -102,6 +102,11 @@ export type ToolUseMessages = {
 	resultBlock: ToolResultBlock;
 	timestamp: string;
 }
+
+// Hierarchical tool message with nested children (for subagent rendering)
+export type HierarchicalToolMessage = ToolUseMessages & {
+	children?: ToolUseMessages[];
+}
 	
 // -----------------------------
 // Message Types

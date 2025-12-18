@@ -20,6 +20,7 @@ export type MessageProps = {
   borderless?: boolean;
   actions?: React.ReactNode;
   timestamp?: string;
+  streaming?: boolean;
 };
 
 const defaultComponents: Components = {
@@ -171,13 +172,14 @@ export const LoadingDots = () => {
 
 export const Message = React.forwardRef<HTMLDivElement, MessageProps>(
   (
-    { role, content, isLoading, className, components, borderless, actions, timestamp, ...props },
+    { role, content, isLoading, className, components, borderless, actions, timestamp, streaming, ...props },
     ref
   ) => {
     const isBot = role === "bot";
     const avatarBg = isBot ? "bg-blue-600" : "bg-green-600";
     const avatarText = isBot ? "AI" : "U";
     const formattedTime = formatTimestamp(timestamp);
+    const isActivelyStreaming = streaming && isBot;
 
     const avatar = (
       <div className="flex-shrink-0">
@@ -185,7 +187,7 @@ export const Message = React.forwardRef<HTMLDivElement, MessageProps>(
         className={cn(
           "w-8 h-8 rounded-full flex items-center justify-center",
           avatarBg,
-          isLoading && "animate-pulse"
+          (isLoading || isActivelyStreaming) && "animate-pulse"
         )}
       >
         <span className="text-white text-xs font-semibold">
@@ -221,12 +223,17 @@ export const Message = React.forwardRef<HTMLDivElement, MessageProps>(
                     <LoadingDots />
                   </div>
                 ) : (
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm]}
-                    components={components || defaultComponents}
-                  >
-                    {content}
-                  </ReactMarkdown>
+                  <div className="inline">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={components || defaultComponents}
+                    >
+                      {content}
+                    </ReactMarkdown>
+                    {isActivelyStreaming && (
+                      <span className="inline-block w-2 h-4 bg-primary/70 animate-pulse ml-0.5 align-middle" />
+                    )}
+                  </div>
                 )}
               </div>
 

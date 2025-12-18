@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { MessageSquare, Loader2, Settings, Terminal, Users } from "lucide-react";
 import { StreamMessage } from "@/components/ui/stream-message";
+import { LoadingDots } from "@/components/ui/message";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,10 +29,11 @@ export type MessagesTabProps = {
   onContinue: () => void;
   workflowMetadata?: WorkflowMetadata;
   onCommandClick?: (slashCommand: string) => void;
+  isRunActive?: boolean;  // NEW: Track if agent is actively processing
 };
 
 
-const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chatInput, setChatInput, onSendChat, onInterrupt, onEndSession, onGoToResults, onContinue, workflowMetadata, onCommandClick }) => {
+const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chatInput, setChatInput, onSendChat, onInterrupt, onEndSession, onGoToResults, onContinue, workflowMetadata, onCommandClick, isRunActive = false }) => {
   const [sendingChat, setSendingChat] = useState(false);
   const [interrupting, setInterrupting] = useState(false);
   const [ending, setEnding] = useState(false);
@@ -277,6 +279,13 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
           <StreamMessage key={`sm-${idx}`} message={m} isNewest={idx === filteredMessages.length - 1} onGoToResults={onGoToResults} />
         ))}
 
+        {/* Show loading indicator when agent is actively processing */}
+        {isRunActive && filteredMessages.length > 0 && (
+          <div className="pl-12 pr-4 py-2">
+            <LoadingDots />
+          </div>
+        )}
+
         {filteredMessages.length === 0 && isCreating && (
           <div className="flex items-center justify-center py-12">
             <Alert className="max-w-md mx-4">
@@ -337,7 +346,7 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
                 <textarea
                   ref={textareaRef}
                   className="w-full border rounded p-2 text-sm"
-                  placeholder="Type a message to the agent... (Press Enter to send, Shift+Enter for new line)"
+                  placeholder={isRunActive ? "Agent is processing... (click Stop to interrupt)" : "Type a message to the agent... (Press Enter to send, Shift+Enter for new line)"}
                   value={chatInput}
                   onChange={handleChatInputChange}
                   onKeyDown={(e) => {
@@ -378,7 +387,7 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
                     }
                   }}
                   rows={3}
-                  disabled={sendingChat}
+                  disabled={sendingChat || isRunActive}
                 />
                 
                 {/* Autocomplete popup */}
@@ -608,15 +617,27 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
                   )}
                 </div>
                 <div className="flex gap-2">
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={handleInterrupt}
-                    disabled={interrupting || sendingChat || ending}
-                  >
-                    {interrupting && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
-                    Interrupt agent
-                  </Button>
+                  {/* Show Stop button when run is active, otherwise show Send */}
+                  {isRunActive ? (
+                    <Button 
+                      variant="destructive" 
+                      size="sm" 
+                      onClick={handleInterrupt}
+                      disabled={interrupting}
+                    >
+                      {interrupting && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
+                      Stop
+                    </Button>
+                  ) : (
+                    <Button 
+                      size="sm" 
+                      onClick={handleSendChat} 
+                      disabled={!chatInput.trim() || sendingChat || ending}
+                    >
+                      {sendingChat && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
+                      Send
+                    </Button>
+                  )}
                   <Button 
                     variant="secondary" 
                     size="sm" 
@@ -625,14 +646,6 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
                   >
                     {ending && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
                     End session
-                  </Button>
-                  <Button 
-                    size="sm" 
-                    onClick={handleSendChat} 
-                    disabled={!chatInput.trim() || sendingChat || interrupting || ending}
-                  >
-                    {sendingChat && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
-                    Send
                   </Button>
                 </div>
               </div>

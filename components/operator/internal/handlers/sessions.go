@@ -532,7 +532,6 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 
 	// Handle Running phase - check for generation changes (spec updates)
 	if phase == "Running" {
-		log.Printf("[Reconcile] Session %s/%s is Running, checking for spec changes", sessionNamespace, name)
 
 		currentGeneration := currentObj.GetGeneration()
 		observedGeneration := int64(0)
@@ -545,9 +544,6 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 		}
 
 		if currentGeneration > observedGeneration {
-			log.Printf("[Reconcile] Session %s/%s: detected spec change (generation %d > observed %d), reconciling repos and workflow",
-				sessionNamespace, name, currentGeneration, observedGeneration)
-
 			spec, _, _ := unstructured.NestedMap(currentObj.Object, "spec")
 			reposErr := reconcileSpecReposWithPatch(sessionNamespace, name, spec, currentObj, statusPatch)
 			if reposErr != nil {
@@ -588,9 +584,6 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 			if err := statusPatch.Apply(); err != nil {
 				log.Printf("[Reconcile] Warning: failed to apply status patch: %v", err)
 			}
-			log.Printf("[Reconcile] Session %s/%s: updated observedGeneration to %d after successful reconciliation", sessionNamespace, name, currentGeneration)
-		} else {
-			log.Printf("[Reconcile] Session %s/%s: no spec changes detected (generation %d == observed %d)", sessionNamespace, name, currentGeneration, observedGeneration)
 		}
 
 		return nil
@@ -1200,6 +1193,13 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 								},
 							},
 
+							// Expose AG-UI server port for backend proxy
+							Ports: []corev1.ContainerPort{{
+								Name:          "agui",
+								ContainerPort: 8000,
+								Protocol:      corev1.ProtocolTCP,
+							}},
+
 							VolumeMounts: []corev1.VolumeMount{
 								{Name: "workspace", MountPath: "/workspace", ReadOnly: false},
 								// Mount .claude directory for session state persistence
@@ -1250,12 +1250,12 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 									corev1.EnvVar{Name: "LLM_MODEL", Value: model},
 									corev1.EnvVar{Name: "LLM_TEMPERATURE", Value: fmt.Sprintf("%.2f", temperature)},
 									corev1.EnvVar{Name: "LLM_MAX_TOKENS", Value: fmt.Sprintf("%d", maxTokens)},
+									corev1.EnvVar{Name: "USE_AGUI", Value: "true"},
 									corev1.EnvVar{Name: "TIMEOUT", Value: fmt.Sprintf("%d", timeout)},
 									corev1.EnvVar{Name: "AUTO_PUSH_ON_COMPLETE", Value: fmt.Sprintf("%t", autoPushOnComplete)},
 									corev1.EnvVar{Name: "BACKEND_API_URL", Value: fmt.Sprintf("http://backend-service.%s.svc.cluster.local:8080/api", appConfig.BackendNamespace)},
-									// WebSocket URL used by runner-shell to connect back to backend
-									corev1.EnvVar{Name: "WEBSOCKET_URL", Value: fmt.Sprintf("ws://backend-service.%s.svc.cluster.local:8080/api/projects/%s/sessions/%s/ws", appConfig.BackendNamespace, sessionNamespace, name)},
-									// S3 disabled; backend persists messages
+									// LEGACY: WEBSOCKET_URL removed - runner now uses AG-UI server pattern (FastAPI)
+									// Backend proxies to runner's HTTP endpoint instead of WebSocket
 								)
 
 								// Platform-wide Langfuse observability configuration
@@ -1579,6 +1579,41 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 		log.Printf("Failed to create per-job content service for %s: %v", name, serr)
 	}
 
+	// Create AG-UI Service pointing to the runner's FastAPI server
+	// Backend proxies AG-UI requests to this service endpoint
+	aguiSvc := &corev1.Service{
+		ObjectMeta: v1.ObjectMeta{
+			Name:      fmt.Sprintf("session-%s", name),
+			Namespace: sessionNamespace,
+			Labels: map[string]string{
+				"app":             "ambient-code",
+				"agentic-session": name,
+			},
+			OwnerReferences: []v1.OwnerReference{{
+				APIVersion: "batch/v1",
+				Kind:       "Job",
+				Name:       jobName,
+				UID:        createdJob.UID,
+				Controller: boolPtr(true),
+			}},
+		},
+		Spec: corev1.ServiceSpec{
+			Type:     corev1.ServiceTypeClusterIP,
+			Selector: map[string]string{"job-name": jobName},
+			Ports: []corev1.ServicePort{{
+				Name:       "agui",
+				Protocol:   corev1.ProtocolTCP,
+				Port:       8000,
+				TargetPort: intstr.FromInt(8000),
+			}},
+		},
+	}
+	if _, serr := config.K8sClient.CoreV1().Services(sessionNamespace).Create(context.TODO(), aguiSvc, v1.CreateOptions{}); serr != nil && !errors.IsAlreadyExists(serr) {
+		log.Printf("Failed to create AG-UI service for %s: %v", name, serr)
+	} else {
+		log.Printf("Created AG-UI service session-%s for AgenticSession %s", name, name)
+	}
+
 	// Start monitoring the job (only if not already being monitored)
 	monitorKey := fmt.Sprintf("%s/%s", sessionNamespace, jobName)
 	monitoredJobsMu.Lock()
@@ -1600,7 +1635,6 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 func reconcileSpecReposWithPatch(sessionNamespace, sessionName string, spec map[string]interface{}, session *unstructured.Unstructured, statusPatch *StatusPatch) error {
 	repoSlice, found, _ := unstructured.NestedSlice(spec, "repos")
 	if !found {
-		log.Printf("[Reconcile] Session %s/%s: no repos defined in spec", sessionNamespace, sessionName)
 		statusPatch.DeleteField("reconciledRepos")
 		statusPatch.AddCondition(conditionUpdate{
 			Type:    conditionReposReconciled,
@@ -1680,52 +1714,70 @@ func reconcileSpecReposWithPatch(sessionNamespace, sessionName string, spec map[
 	}
 
 	if len(toAdd) == 0 && len(toRemove) == 0 {
-		log.Printf("[Reconcile] Session %s/%s: repos already reconciled (%d repos)", sessionNamespace, sessionName, len(specRepos))
 		return nil
 	}
 
-	log.Printf("[Reconcile] Session %s/%s: detected repo drift - adding %d, removing %d", sessionNamespace, sessionName, len(toAdd), len(toRemove))
-
-	// Send WebSocket messages via backend to trigger runner actions
-	backendURL := getBackendAPIURL(sessionNamespace)
+	// AG-UI pattern: Call runner's REST endpoints to update configuration
+	// Runner will restart Claude SDK client with new repo configuration
+	runnerBaseURL := fmt.Sprintf("http://session-%s.%s.svc.cluster.local:8000", sessionName, sessionNamespace)
 
 	// Add repos
 	for _, repo := range toAdd {
 		repoName := deriveRepoNameFromURL(repo["url"])
-		log.Printf("[Reconcile] Session %s/%s: sending repo_added message for %s (%s@%s)", sessionNamespace, sessionName, repoName, repo["url"], repo["branch"])
-		if err := sendWebSocketMessageViaBackend(sessionNamespace, sessionName, backendURL, map[string]interface{}{
-			"type":   "repo_added",
+
+		payload := map[string]interface{}{
 			"url":    repo["url"],
 			"branch": repo["branch"],
 			"name":   repoName,
-		}); err != nil {
-			log.Printf("[Reconcile] Failed to send repo_added message: %v", err)
-			statusPatch.AddCondition(conditionUpdate{
-				Type:    conditionReposReconciled,
-				Status:  "False",
-				Reason:  "MessageFailed",
-				Message: fmt.Sprintf("Failed to notify runner: %v", err),
-			})
-			return fmt.Errorf("failed to send repo_added message: %w", err)
+		}
+		payloadBytes, _ := json.Marshal(payload)
+
+		req, err := http.NewRequest("POST", runnerBaseURL+"/repos/add", bytes.NewReader(payloadBytes))
+		if err != nil {
+			log.Printf("[Reconcile] Failed to create repo add request: %v", err)
+			continue
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		client := &http.Client{Timeout: 10 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			log.Printf("[Reconcile] Failed to add repo via runner: %v", err)
+			continue
+		}
+		resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			log.Printf("[Reconcile] Runner returned %d for repo add", resp.StatusCode)
 		}
 	}
 
 	// Remove repos
 	for _, repo := range toRemove {
 		repoName := deriveRepoNameFromURL(repo["url"])
-		log.Printf("[Reconcile] Session %s/%s: sending repo_removed message for %s", sessionNamespace, sessionName, repoName)
-		if err := sendWebSocketMessageViaBackend(sessionNamespace, sessionName, backendURL, map[string]interface{}{
-			"type": "repo_removed",
+
+		payload := map[string]interface{}{
 			"name": repoName,
-		}); err != nil {
-			log.Printf("[Reconcile] Failed to send repo_removed message: %v", err)
-			statusPatch.AddCondition(conditionUpdate{
-				Type:    conditionReposReconciled,
-				Status:  "False",
-				Reason:  "MessageFailed",
-				Message: fmt.Sprintf("Failed to notify runner: %v", err),
-			})
-			return fmt.Errorf("failed to send repo_removed message: %w", err)
+		}
+		payloadBytes, _ := json.Marshal(payload)
+
+		req, err := http.NewRequest("POST", runnerBaseURL+"/repos/remove", bytes.NewReader(payloadBytes))
+		if err != nil {
+			log.Printf("[Reconcile] Failed to create repo remove request: %v", err)
+			continue
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		client := &http.Client{Timeout: 10 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			log.Printf("[Reconcile] Failed to remove repo via runner: %v", err)
+			continue
+		}
+		resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			log.Printf("[Reconcile] Runner returned %d for repo remove", resp.StatusCode)
 		}
 	}
 
@@ -1747,7 +1799,6 @@ func reconcileSpecReposWithPatch(sessionNamespace, sessionName string, spec map[
 		Message: fmt.Sprintf("Reconciled %d repos (added: %d, removed: %d)", len(specRepos), len(toAdd), len(toRemove)),
 	})
 
-	log.Printf("[Reconcile] Session %s/%s: successfully reconciled repos", sessionNamespace, sessionName)
 	return nil
 }
 
@@ -1755,7 +1806,6 @@ func reconcileSpecReposWithPatch(sessionNamespace, sessionName string, spec map[
 func reconcileActiveWorkflowWithPatch(sessionNamespace, sessionName string, spec map[string]interface{}, session *unstructured.Unstructured, statusPatch *StatusPatch) error {
 	workflow, found, _ := unstructured.NestedMap(spec, "activeWorkflow")
 	if !found || len(workflow) == 0 {
-		log.Printf("[Reconcile] Session %s/%s: no workflow defined in spec", sessionNamespace, sessionName)
 		statusPatch.DeleteField("reconciledWorkflow")
 		statusPatch.AddCondition(conditionUpdate{
 			Type:    conditionWorkflowReconciled,
@@ -1774,7 +1824,6 @@ func reconcileActiveWorkflowWithPatch(sessionNamespace, sessionName string, spec
 	path, _ := workflow["path"].(string)
 
 	if strings.TrimSpace(gitURL) == "" {
-		log.Printf("[Reconcile] Session %s/%s: workflow gitUrl is empty", sessionNamespace, sessionName)
 		return nil
 	}
 
@@ -1786,31 +1835,51 @@ func reconcileActiveWorkflowWithPatch(sessionNamespace, sessionName string, spec
 
 	// Detect drift: workflow changed
 	if reconciledGitURL == gitURL && reconciledBranch == branch {
-		log.Printf("[Reconcile] Session %s/%s: workflow already reconciled (%s@%s)", sessionNamespace, sessionName, gitURL, branch)
 		return nil
 	}
 
-	log.Printf("[Reconcile] Session %s/%s: detected workflow drift - switching from %s@%s to %s@%s",
-		sessionNamespace, sessionName, reconciledGitURL, reconciledBranch, gitURL, branch)
+	// AG-UI pattern: Call runner's /workflow endpoint to update configuration
+	// Runner will restart Claude SDK client with new workflow
+	runnerURL := fmt.Sprintf("http://session-%s.%s.svc.cluster.local:8000/workflow", sessionName, sessionNamespace)
 
-	// Send WebSocket message via backend to trigger runner workflow switch
-	backendURL := getBackendAPIURL(sessionNamespace)
-	log.Printf("[Reconcile] Session %s/%s: sending workflow_change message for %s@%s (path: %s)", sessionNamespace, sessionName, gitURL, branch, path)
-
-	if err := sendWebSocketMessageViaBackend(sessionNamespace, sessionName, backendURL, map[string]interface{}{
-		"type":   "workflow_change",
+	payload := map[string]interface{}{
 		"gitUrl": gitURL,
 		"branch": branch,
 		"path":   path,
-	}); err != nil {
-		log.Printf("[Reconcile] Failed to send workflow_change message: %v", err)
+	}
+	payloadBytes, _ := json.Marshal(payload)
+
+	req, err := http.NewRequest("POST", runnerURL, bytes.NewReader(payloadBytes))
+	if err != nil {
+		log.Printf("[Reconcile] Failed to create workflow request: %v", err)
+		return fmt.Errorf("failed to create workflow request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("[Reconcile] Failed to send workflow change to runner: %v", err)
 		statusPatch.AddCondition(conditionUpdate{
 			Type:    conditionWorkflowReconciled,
 			Status:  "False",
-			Reason:  "MessageFailed",
+			Reason:  "UpdateFailed",
 			Message: fmt.Sprintf("Failed to notify runner: %v", err),
 		})
-		return fmt.Errorf("failed to send workflow_selected message: %w", err)
+		return fmt.Errorf("failed to update runner workflow: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		log.Printf("[Reconcile] Runner returned non-200 for workflow change: %d - %s", resp.StatusCode, string(body))
+		statusPatch.AddCondition(conditionUpdate{
+			Type:    conditionWorkflowReconciled,
+			Status:  "False",
+			Reason:  "UpdateFailed",
+			Message: fmt.Sprintf("Runner returned %d", resp.StatusCode),
+		})
+		return fmt.Errorf("runner workflow update failed: %d", resp.StatusCode)
 	}
 
 	// Update status to reflect the reconciled state (via statusPatch)
@@ -1828,7 +1897,6 @@ func reconcileActiveWorkflowWithPatch(sessionNamespace, sessionName string, spec
 		Message: fmt.Sprintf("Switched to workflow %s@%s", gitURL, branch),
 	})
 
-	log.Printf("[Reconcile] Session %s/%s: successfully reconciled workflow", sessionNamespace, sessionName)
 	return nil
 }
 
@@ -2473,58 +2541,8 @@ func reconcileTempContentPodWithPatch(sessionNamespace, sessionName, tempPodName
 	return nil
 }
 
-// getBackendAPIURL returns the backend API URL for the given namespace
-func getBackendAPIURL(namespace string) string {
-	appConfig := config.LoadConfig()
-	return fmt.Sprintf("http://backend-service.%s.svc.cluster.local:8080/api", appConfig.BackendNamespace)
-}
-
-// sendWebSocketMessageViaBackend sends a WebSocket message to the runner via the backend's message endpoint
-func sendWebSocketMessageViaBackend(namespace, sessionName, backendURL string, message map[string]interface{}) error {
-	// The backend exposes POST /api/projects/:project/sessions/:sessionName/messages
-	// Format: { "type": "repo_added", "payload": {...}, ...other fields }
-	// Backend will extract "type" and wrap remaining fields under "payload" if needed
-	url := fmt.Sprintf("%s/projects/%s/sessions/%s/messages", backendURL, namespace, sessionName)
-
-	payload, err := json.Marshal(message)
-	if err != nil {
-		return fmt.Errorf("failed to marshal message: %w", err)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	// Use operator's service account token for authentication
-	// The backend accepts internal calls from the operator namespace
-	// Get the operator's SA token from the mounted service account
-	tokenBytes, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/token")
-	if err == nil && len(tokenBytes) > 0 {
-		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", string(tokenBytes)))
-	} else {
-		log.Printf("[WebSocket] Warning: could not read operator SA token, request may fail: %v", err)
-	}
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to send request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("backend returned status %d: %s", resp.StatusCode, string(body))
-	}
-
-	log.Printf("[WebSocket] Successfully sent message type=%s to session %s/%s via backend", message["type"], namespace, sessionName)
-	return nil
-}
+// LEGACY: getBackendAPIURL removed - AG-UI migration
+// Workflow and repo changes now call runner's REST endpoints directly
 
 // deriveRepoNameFromURL extracts the repository name from a git URL
 func deriveRepoNameFromURL(repoURL string) string {

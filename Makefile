@@ -32,10 +32,20 @@ QUIET_REDIRECT := >/dev/null 2>&1
 endif
 
 # Image tags
-FRONTEND_IMAGE ?= vteam-frontend:latest
-BACKEND_IMAGE ?= vteam-backend:latest
-OPERATOR_IMAGE ?= vteam-operator:latest
-RUNNER_IMAGE ?= vteam-claude-runner:latest
+FRONTEND_IMAGE ?= vteam_frontend:latest
+BACKEND_IMAGE ?= vteam_backend:latest
+OPERATOR_IMAGE ?= vteam_operator:latest
+RUNNER_IMAGE ?= vteam_claude_runner:latest
+
+# Build metadata (captured at build time)
+GIT_COMMIT := $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
+GIT_COMMIT_SHORT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+GIT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+GIT_REPO := $(shell git remote get-url origin 2>/dev/null || echo "local")
+GIT_DIRTY := $(shell git diff --quiet 2>/dev/null || echo "-dirty")
+GIT_VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+BUILD_DATE := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
+BUILD_USER := $(shell whoami)@$(shell hostname)
 
 # Colors for output (use printf to properly interpret escape sequences)
 # Use like: @printf "$(COLOR_BLUE)Text here$(COLOR_RESET)\n"
@@ -102,22 +112,54 @@ build-all: build-frontend build-backend build-operator build-runner ## Build all
 
 build-frontend: ## Build frontend image
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building frontend with $(CONTAINER_ENGINE)..."
-	@cd components/frontend && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) -t $(FRONTEND_IMAGE) .
+	@echo "  Git: $(GIT_BRANCH)@$(GIT_COMMIT_SHORT)$(GIT_DIRTY)"
+	@cd components/frontend && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
+		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
+		--build-arg GIT_BRANCH=$(GIT_BRANCH) \
+		--build-arg GIT_REPO=$(GIT_REPO) \
+		--build-arg GIT_VERSION=$(GIT_VERSION)$(GIT_DIRTY) \
+		--build-arg BUILD_DATE=$(BUILD_DATE) \
+		--build-arg BUILD_USER=$(BUILD_USER) \
+		-t $(FRONTEND_IMAGE) .
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Frontend built: $(FRONTEND_IMAGE)"
 
 build-backend: ## Build backend image
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building backend with $(CONTAINER_ENGINE)..."
-	@cd components/backend && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) -t $(BACKEND_IMAGE) .
+	@echo "  Git: $(GIT_BRANCH)@$(GIT_COMMIT_SHORT)$(GIT_DIRTY)"
+	@cd components/backend && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
+		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
+		--build-arg GIT_BRANCH=$(GIT_BRANCH) \
+		--build-arg GIT_REPO=$(GIT_REPO) \
+		--build-arg GIT_VERSION=$(GIT_VERSION)$(GIT_DIRTY) \
+		--build-arg BUILD_DATE=$(BUILD_DATE) \
+		--build-arg BUILD_USER=$(BUILD_USER) \
+		-t $(BACKEND_IMAGE) .
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Backend built: $(BACKEND_IMAGE)"
 
 build-operator: ## Build operator image
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building operator with $(CONTAINER_ENGINE)..."
-	@cd components/operator && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) -t $(OPERATOR_IMAGE) .
+	@echo "  Git: $(GIT_BRANCH)@$(GIT_COMMIT_SHORT)$(GIT_DIRTY)"
+	@cd components/operator && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
+		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
+		--build-arg GIT_BRANCH=$(GIT_BRANCH) \
+		--build-arg GIT_REPO=$(GIT_REPO) \
+		--build-arg GIT_VERSION=$(GIT_VERSION)$(GIT_DIRTY) \
+		--build-arg BUILD_DATE=$(BUILD_DATE) \
+		--build-arg BUILD_USER=$(BUILD_USER) \
+		-t $(OPERATOR_IMAGE) .
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Operator built: $(OPERATOR_IMAGE)"
 
 build-runner: ## Build Claude Code runner image
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building runner with $(CONTAINER_ENGINE)..."
-	@cd components/runners && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) -t $(RUNNER_IMAGE) -f claude-code-runner/Dockerfile .
+	@echo "  Git: $(GIT_BRANCH)@$(GIT_COMMIT_SHORT)$(GIT_DIRTY)"
+	@cd components/runners && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
+		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
+		--build-arg GIT_BRANCH=$(GIT_BRANCH) \
+		--build-arg GIT_REPO=$(GIT_REPO) \
+		--build-arg GIT_VERSION=$(GIT_VERSION)$(GIT_DIRTY) \
+		--build-arg BUILD_DATE=$(BUILD_DATE) \
+		--build-arg BUILD_USER=$(BUILD_USER) \
+		-t $(RUNNER_IMAGE) -f claude-code-runner/Dockerfile .
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Runner built: $(RUNNER_IMAGE)"
 
 ##@ Git Hooks
@@ -253,7 +295,15 @@ local-rebuild: ## Rebuild and reload all components
 
 local-reload-backend: ## Rebuild and reload backend only
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rebuilding backend..."
-	@cd components/backend && $(CONTAINER_ENGINE) build -t $(BACKEND_IMAGE) . >/dev/null 2>&1
+	@echo "  Git: $(GIT_BRANCH)@$(GIT_COMMIT_SHORT)$(GIT_DIRTY)"
+	@cd components/backend && $(CONTAINER_ENGINE) build -t $(BACKEND_IMAGE) \
+		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
+		--build-arg GIT_BRANCH=$(GIT_BRANCH) \
+		--build-arg GIT_REPO=$(GIT_REPO) \
+		--build-arg GIT_VERSION=$(GIT_VERSION)$(GIT_DIRTY) \
+		--build-arg BUILD_DATE=$(BUILD_DATE) \
+		--build-arg BUILD_USER=$(BUILD_USER) \
+		. >/dev/null 2>&1
 	@$(CONTAINER_ENGINE) tag $(BACKEND_IMAGE) localhost/$(BACKEND_IMAGE) 2>/dev/null || true
 	@$(CONTAINER_ENGINE) save -o /tmp/backend-reload.tar localhost/$(BACKEND_IMAGE)
 	@minikube image load /tmp/backend-reload.tar >/dev/null 2>&1
@@ -276,7 +326,15 @@ local-reload-backend: ## Rebuild and reload backend only
 
 local-reload-frontend: ## Rebuild and reload frontend only
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rebuilding frontend..."
-	@cd components/frontend && $(CONTAINER_ENGINE) build -t $(FRONTEND_IMAGE) . >/dev/null 2>&1
+	@echo "  Git: $(GIT_BRANCH)@$(GIT_COMMIT_SHORT)$(GIT_DIRTY)"
+	@cd components/frontend && $(CONTAINER_ENGINE) build -t $(FRONTEND_IMAGE) \
+		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
+		--build-arg GIT_BRANCH=$(GIT_BRANCH) \
+		--build-arg GIT_REPO=$(GIT_REPO) \
+		--build-arg GIT_VERSION=$(GIT_VERSION)$(GIT_DIRTY) \
+		--build-arg BUILD_DATE=$(BUILD_DATE) \
+		--build-arg BUILD_USER=$(BUILD_USER) \
+		. >/dev/null 2>&1
 	@$(CONTAINER_ENGINE) tag $(FRONTEND_IMAGE) localhost/$(FRONTEND_IMAGE) 2>/dev/null || true
 	@$(CONTAINER_ENGINE) save -o /tmp/frontend-reload.tar localhost/$(FRONTEND_IMAGE)
 	@minikube image load /tmp/frontend-reload.tar >/dev/null 2>&1
@@ -300,7 +358,15 @@ local-reload-frontend: ## Rebuild and reload frontend only
 
 local-reload-operator: ## Rebuild and reload operator only
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rebuilding operator..."
-	@cd components/operator && $(CONTAINER_ENGINE) build -t $(OPERATOR_IMAGE) . >/dev/null 2>&1
+	@echo "  Git: $(GIT_BRANCH)@$(GIT_COMMIT_SHORT)$(GIT_DIRTY)"
+	@cd components/operator && $(CONTAINER_ENGINE) build -t $(OPERATOR_IMAGE) \
+		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
+		--build-arg GIT_BRANCH=$(GIT_BRANCH) \
+		--build-arg GIT_REPO=$(GIT_REPO) \
+		--build-arg GIT_VERSION=$(GIT_VERSION)$(GIT_DIRTY) \
+		--build-arg BUILD_DATE=$(BUILD_DATE) \
+		--build-arg BUILD_USER=$(BUILD_USER) \
+		. >/dev/null 2>&1
 	@$(CONTAINER_ENGINE) tag $(OPERATOR_IMAGE) localhost/$(OPERATOR_IMAGE) 2>/dev/null || true
 	@$(CONTAINER_ENGINE) save -o /tmp/operator-reload.tar localhost/$(OPERATOR_IMAGE)
 	@minikube image load /tmp/operator-reload.tar >/dev/null 2>&1

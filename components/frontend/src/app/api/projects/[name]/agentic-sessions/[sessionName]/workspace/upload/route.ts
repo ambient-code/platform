@@ -256,9 +256,6 @@ async function compressImageIfNeeded(
     }
 
     const finalSize = compressed.byteLength;
-    console.log(
-      `Compressed ${contentType} image: ${originalSize} bytes -> ${finalSize} bytes (${Math.round((finalSize / originalSize) * 100)}%)`
-    );
 
     // Convert Node.js Buffer to ArrayBuffer by creating a new ArrayBuffer and copying data
     const arrayBuffer = new ArrayBuffer(finalSize);

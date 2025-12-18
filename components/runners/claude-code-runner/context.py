@@ -36,3 +36,4 @@ class RunnerContext:
     def get_metadata(self, key: str, default: Any = None) -> Any:
         """Get metadata value."""
         return self.metadata.get(key, default)
+

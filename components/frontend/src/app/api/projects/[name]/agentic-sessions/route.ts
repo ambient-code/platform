@@ -31,14 +31,6 @@ export async function POST(
     const body = await request.text();
     const headers = await buildForwardHeadersAsync(request);
     
-    console.log('[API Route] Creating session for project:', name);
-    console.log('[API Route] Auth headers present:', {
-      hasUser: !!headers['X-Forwarded-User'],
-      hasUsername: !!headers['X-Forwarded-Preferred-Username'],
-      hasToken: !!headers['X-Forwarded-Access-Token'],
-      hasEmail: !!headers['X-Forwarded-Email'],
-    });
-    
     const response = await fetch(`${BACKEND_URL}/projects/${encodeURIComponent(name)}/agentic-sessions`, {
       method: 'POST',
       headers,
@@ -46,7 +38,6 @@ export async function POST(
     });
     
     const text = await response.text();
-    console.log('[API Route] Backend response status:', response.status);
     if (!response.ok) {
       console.error('[API Route] Backend error:', text);
     }

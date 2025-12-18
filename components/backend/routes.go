@@ -87,10 +87,14 @@ func registerRoutes(r *gin.Engine) {
 			// OAuth integration - requires user auth like all other session endpoints
 			projectGroup.GET("/agentic-sessions/:sessionName/oauth/:provider/url", handlers.GetOAuthURL)
 
-			projectGroup.GET("/sessions/:sessionId/ws", websocket.HandleSessionWebSocket)
-			projectGroup.GET("/sessions/:sessionId/messages", websocket.GetSessionMessagesWS)
-			// Removed: /messages/claude-format - Using SDK's built-in resume with persisted ~/.claude state
-			projectGroup.POST("/sessions/:sessionId/messages", websocket.PostSessionMessageWS)
+			// AG-UI Protocol endpoints (HttpAgent-compatible)
+			// See: https://docs.ag-ui.com/quickstart/introduction
+			// Runner is a FastAPI server - backend proxies requests and streams SSE responses
+			projectGroup.POST("/agentic-sessions/:sessionName/agui/run", websocket.HandleAGUIRunProxy)
+			projectGroup.POST("/agentic-sessions/:sessionName/agui/interrupt", websocket.HandleAGUIInterrupt)
+			projectGroup.GET("/agentic-sessions/:sessionName/agui/events", websocket.HandleAGUIEvents)
+			projectGroup.GET("/agentic-sessions/:sessionName/agui/history", websocket.HandleAGUIHistory)
+			projectGroup.GET("/agentic-sessions/:sessionName/agui/runs", websocket.HandleAGUIRuns)
 
 			projectGroup.GET("/permissions", handlers.ListProjectPermissions)
 			projectGroup.POST("/permissions", handlers.AddProjectPermission)

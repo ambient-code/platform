@@ -41,7 +41,7 @@ var (
 	DynamicClient                     dynamic.Interface
 	GetGitHubToken                    func(context.Context, kubernetes.Interface, dynamic.Interface, string, string) (string, error)
 	DeriveRepoFolderFromURL           func(string) string
-	SendMessageToSession              func(string, string, map[string]interface{})
+	// LEGACY: SendMessageToSession removed - AG-UI server uses HTTP/SSE instead of WebSocket
 )
 
 const runnerTokenRefreshedAtAnnotation = "ambient-code.io/token-refreshed-at"
@@ -2103,6 +2103,10 @@ func StartSession(c *gin.Context) {
 
 	if spec, ok := updated.Object["spec"].(map[string]interface{}); ok {
 		session.Spec = parseSpec(spec)
+
+		// NOTE: INITIAL_PROMPT auto-execution handled by runner on startup
+		// Runner POSTs to /agui/run when ready, events flow through backend
+		// This works for both UI and headless/API usage
 	}
 
 	if status, ok := updated.Object["status"].(map[string]interface{}); ok {
@@ -3936,3 +3940,7 @@ func GitListBranchesSession(c *gin.Context) {
 	}
 	c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), bodyBytes)
 }
+
+// NOTE: autoTriggerInitialPrompt removed - runner handles INITIAL_PROMPT auto-execution
+// Runner POSTs to backend's /agui/run when ready, events flow through middleware
+// See: components/runners/claude-code-runner/main.py auto_execute_initial_prompt()

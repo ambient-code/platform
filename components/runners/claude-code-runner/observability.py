@@ -339,8 +339,12 @@ class ObservabilityManager:
             message: AssistantMessage from Claude SDK
             usage: Usage dict from ResultMessage with input_tokens, output_tokens, cache tokens, etc.
         """
+        # Return silently if Langfuse not initialized
+        if not self.langfuse_client:
+            return
+            
         if not self._current_turn_generation:
-            logging.warning(f"Langfuse: end_turn called but no active turn for turn {turn_count}")
+            logging.debug(f"Langfuse: end_turn called but no active turn for turn {turn_count} (may not be initialized)")
             return
 
         try:

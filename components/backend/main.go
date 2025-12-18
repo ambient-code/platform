@@ -15,10 +15,42 @@ import (
 	"github.com/joho/godotenv"
 )
 
+// Build-time metadata (set via -ldflags -X during build)
+// These are embedded directly in the binary, so they're always accurate
+var (
+	GitCommit  = "unknown"
+	GitBranch  = "unknown"
+	GitVersion = "unknown"
+	BuildDate  = "unknown"
+)
+
+func logBuildInfo() {
+	log.Println("==============================================")
+	log.Println("Backend API - Build Information")
+	log.Println("==============================================")
+	log.Printf("Version:     %s", GitVersion)
+	log.Printf("Commit:      %s", GitCommit)
+	log.Printf("Branch:      %s", GitBranch)
+	log.Printf("Repository:  %s", getEnvOrDefault("GIT_REPO", "unknown"))
+	log.Printf("Built:       %s", BuildDate)
+	log.Printf("Built by:    %s", getEnvOrDefault("BUILD_USER", "unknown"))
+	log.Println("==============================================")
+}
+
+func getEnvOrDefault(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
+}
+
 func main() {
 	// Load environment from .env in development if present
 	_ = godotenv.Overload(".env.local")
 	_ = godotenv.Overload(".env")
+
+	// Log build information
+	logBuildInfo()
 
 	// Content service mode - minimal initialization, no K8s access needed
 	if os.Getenv("CONTENT_SERVICE_MODE") == "true" {
@@ -94,7 +126,7 @@ func main() {
 	handlers.DynamicClient = server.DynamicClient
 	handlers.GetGitHubToken = handlers.WrapGitHubTokenForRepo(git.GetGitHubToken)
 	handlers.DeriveRepoFolderFromURL = git.DeriveRepoFolderFromURL
-	handlers.SendMessageToSession = websocket.SendMessageToSession
+	// LEGACY: SendMessageToSession removed - AG-UI server uses HTTP/SSE instead of WebSocket
 
 	// Initialize repo handlers (default implementation already set in client_selection.go)
 	// GetK8sClientsForRequestRepoFunc uses getK8sClientsForRequestRepoDefault by default

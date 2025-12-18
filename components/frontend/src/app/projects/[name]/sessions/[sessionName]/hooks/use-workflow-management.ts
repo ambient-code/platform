@@ -48,17 +48,8 @@ export function useWorkflowManagement({
         throw new Error(errorData.error || "Failed to update workflow");
       }
       
-      // 2. Send WebSocket message to trigger workflow clone and restart
-      await fetch(`/api/projects/${projectName}/agentic-sessions/${sessionName}/messages`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "workflow_change",
-          gitUrl: pendingWorkflow.gitUrl,
-          branch: pendingWorkflow.branch,
-          path: pendingWorkflow.path || "",
-        }),
-      });
+      // Note: Workflow clone and restart handled by operator
+      // Initial workflow prompt auto-executed via AG-UI pattern (POST /agui/run)
       
       successToast(`Activating workflow: ${pendingWorkflow.name}`);
       setActiveWorkflow(pendingWorkflow.id);

@@ -59,6 +59,8 @@ export function useSession(projectName: string, sessionName: string) {
     queryKey: sessionKeys.detail(projectName, sessionName),
     queryFn: () => sessionsApi.getSession(projectName, sessionName),
     enabled: !!projectName && !!sessionName,
+    retry: 3, // Retry failed requests (useful during backend rollouts)
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000), // Exponential backoff
     // Poll for status updates based on session phase
     refetchInterval: (query) => {
       const session = query.state.data as AgenticSession | undefined;
@@ -90,33 +92,7 @@ export function useSession(projectName: string, sessionName: string) {
   });
 }
 
-/**
- * Hook to fetch session messages
- */
-export function useSessionMessages(projectName: string, sessionName: string, sessionPhase?: string) {
-  return useQuery({
-    queryKey: sessionKeys.messages(projectName, sessionName),
-    queryFn: () => sessionsApi.getSessionMessages(projectName, sessionName),
-    enabled: !!projectName && !!sessionName,
-    // Messages are typically handled via WebSocket, so longer stale time
-    staleTime: 5 * 1000, // 5 seconds
-    // Poll for message updates based on session phase
-    refetchInterval: () => {
-      // Transitional states - poll aggressively (every 1 second)
-      const isTransitioning =
-        sessionPhase === 'Stopping' ||
-        sessionPhase === 'Pending' ||
-        sessionPhase === 'Creating';
-      if (isTransitioning) return 1000;
-      
-      // Running state - poll normally (every 5 seconds)
-      if (sessionPhase === 'Running') return 5000;
-      
-      // Terminal states - no polling
-      return false;
-    },
-  });
-}
+// useSessionMessages removed - replaced by AG-UI protocol (useAGUIStream)
 
 /**
  * Hook to create a session
@@ -256,63 +232,7 @@ export function useDeleteSession() {
   });
 }
 
-/**
- * Hook to send chat message to interactive session
- */
-export function useSendChatMessage() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: ({
-      projectName,
-      sessionName,
-      content,
-    }: {
-      projectName: string;
-      sessionName: string;
-      content: string;
-    }) => sessionsApi.sendChatMessage(projectName, sessionName, content),
-    onSuccess: (_data, { projectName, sessionName }) => {
-      // Invalidate messages to refetch
-      queryClient.invalidateQueries({
-        queryKey: sessionKeys.messages(projectName, sessionName),
-      });
-      // Invalidate session to update status
-      queryClient.invalidateQueries({
-        queryKey: sessionKeys.detail(projectName, sessionName),
-      });
-    },
-  });
-}
-
-/**
- * Hook to send control message (interrupt, end_session)
- */
-export function useSendControlMessage() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: ({
-      projectName,
-      sessionName,
-      type,
-    }: {
-      projectName: string;
-      sessionName: string;
-      type: 'interrupt' | 'end_session';
-    }) => sessionsApi.sendControlMessage(projectName, sessionName, type),
-    onSuccess: (_data, { projectName, sessionName }) => {
-      // Invalidate messages to refetch
-      queryClient.invalidateQueries({
-        queryKey: sessionKeys.messages(projectName, sessionName),
-      });
-      // Invalidate session to update status
-      queryClient.invalidateQueries({
-        queryKey: sessionKeys.detail(projectName, sessionName),
-      });
-    },
-  });
-}
+// useSendChatMessage and useSendControlMessage removed - replaced by AG-UI protocol
 
 /**
  * Hook to fetch K8s resources (job, pods, PVC) for a session

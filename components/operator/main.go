@@ -9,7 +9,39 @@ import (
 	"ambient-code-operator/internal/preflight"
 )
 
+// Build-time metadata (set via -ldflags -X during build)
+// These are embedded directly in the binary, so they're always accurate
+var (
+	GitCommit  = "unknown"
+	GitBranch  = "unknown"
+	GitVersion = "unknown"
+	BuildDate  = "unknown"
+)
+
+func logBuildInfo() {
+	log.Println("==============================================")
+	log.Println("Agentic Session Operator - Build Information")
+	log.Println("==============================================")
+	log.Printf("Version:     %s", GitVersion)
+	log.Printf("Commit:      %s", GitCommit)
+	log.Printf("Branch:      %s", GitBranch)
+	log.Printf("Repository:  %s", getEnvOrDefault("GIT_REPO", "unknown"))
+	log.Printf("Built:       %s", BuildDate)
+	log.Printf("Built by:    %s", getEnvOrDefault("BUILD_USER", "unknown"))
+	log.Println("==============================================")
+}
+
+func getEnvOrDefault(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
+}
+
 func main() {
+	// Log build information
+	logBuildInfo()
+
 	// Initialize Kubernetes clients
 	if err := config.InitK8sClients(); err != nil {
 		log.Fatalf("Failed to initialize Kubernetes clients: %v", err)

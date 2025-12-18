@@ -79,20 +79,19 @@ import { McpIntegrationsAccordion } from "./components/accordions/mcp-integratio
 import { useGitOperations } from "./hooks/use-git-operations";
 import { useWorkflowManagement } from "./hooks/use-workflow-management";
 import { useFileOperations } from "./hooks/use-file-operations";
-import { adaptSessionMessages } from "./lib/message-adapter";
 import type { DirectoryOption, DirectoryRemote } from "./lib/types";
 
-import type { SessionMessage } from "@/types";
-import type { MessageObject, ToolUseMessages } from "@/types/agentic-session";
+import type { MessageObject, ToolUseMessages, HierarchicalToolMessage } from "@/types/agentic-session";
+import type { AGUIToolCall } from "@/types/agui";
+
+// AG-UI streaming
+import { useAGUIStream } from "@/hooks/use-agui-stream";
 
 // React Query hooks
 import {
   useSession,
-  useSessionMessages,
   useStopSession,
   useDeleteSession,
-  useSendChatMessage,
-  useSendControlMessage,
   useSessionK8sResources,
   useContinueSession,
 } from "@/services/queries";
@@ -192,11 +191,6 @@ export default function ProjectSessionDetailPage({
     error,
     refetch: refetchSession,
   } = useSession(projectName, sessionName);
-  const { data: messages = [] } = useSessionMessages(
-    projectName,
-    sessionName,
-    session?.status?.phase,
-  );
   const { data: k8sResources } = useSessionK8sResources(
     projectName,
     sessionName,
@@ -204,8 +198,60 @@ export default function ProjectSessionDetailPage({
   const stopMutation = useStopSession();
   const deleteMutation = useDeleteSession();
   const continueMutation = useContinueSession();
-  const sendChatMutation = useSendChatMessage();
-  const sendControlMutation = useSendControlMessage();
+
+  // AG-UI streaming hook - replaces useSessionMessages and useSendChatMessage
+  // Note: autoConnect is intentionally false to avoid SSR hydration mismatch
+  // Connection is triggered manually in useEffect after client hydration
+  const aguiStream = useAGUIStream({
+    projectName: projectName || "",
+    sessionName: sessionName || "",
+    autoConnect: false, // Manual connection after hydration
+    onError: (err) => console.error("AG-UI stream error:", err),
+  });
+  const aguiState = aguiStream.state;
+  const aguiSendMessage = aguiStream.sendMessage;
+  const aguiInterrupt = aguiStream.interrupt;
+  const isRunActive = aguiStream.isRunActive;
+  const aguiConnectRef = useRef(aguiStream.connect);
+  
+  // Keep connect ref up to date
+  useEffect(() => {
+    aguiConnectRef.current = aguiStream.connect;
+  }, [aguiStream.connect]);
+
+  // Connect to AG-UI event stream for history and live updates
+  // AG-UI pattern: GET /agui/events streams ALL thread events (past + future)
+  // POST /agui/run creates runs, events broadcast to GET subscribers
+  const hasConnectedRef = useRef(false);
+  useEffect(() => {
+    if (!projectName || !sessionName) return;
+    
+    // Connect once on mount and keep connection open
+    if (!hasConnectedRef.current) {
+      hasConnectedRef.current = true;
+      aguiConnectRef.current();
+    }
+  }, [projectName, sessionName]);
+
+  // Auto-send initial prompt (handles session start, workflow activation, restarts)
+  // AG-UI pattern: Client (or backend) initiates runs via POST /agui/run
+  const lastProcessedPromptRef = useRef<string>("");
+  
+  useEffect(() => {
+    if (!session || !aguiSendMessage) return;
+    
+    const initialPrompt = session?.spec?.initialPrompt;
+    
+    // NOTE: Initial prompt execution handled by backend auto-trigger (StartSession handler)
+    // Backend waits for subscriber before executing, ensuring events are received
+    // This works for both UI and headless/API usage
+    
+    // Track that we've seen this prompt (for workflow changes)
+    if (initialPrompt && lastProcessedPromptRef.current !== initialPrompt) {
+      lastProcessedPromptRef.current = initialPrompt;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.spec?.initialPrompt, session?.status?.phase, aguiState.messages.length, aguiState.status]);
 
   // Workflow management hook
   const workflowManagement = useWorkflowManagement({
@@ -461,10 +507,10 @@ export default function ProjectSessionDetailPage({
 
   // Track when first message loads
   useEffect(() => {
-    if (messages && messages.length > 0 && !firstMessageLoaded) {
+    if (aguiState.messages && aguiState.messages.length > 0 && !firstMessageLoaded) {
       setFirstMessageLoaded(true);
     }
-  }, [messages, firstMessageLoaded]);
+  }, [aguiState.messages, firstMessageLoaded]);
 
   // Load active workflow and remotes from session
   useEffect(() => {
@@ -549,13 +595,365 @@ export default function ProjectSessionDetailPage({
     );
   };
 
-  // Convert messages using extracted adapter
-  const streamMessages: Array<MessageObject | ToolUseMessages> = useMemo(() => {
-    return adaptSessionMessages(
-      messages as SessionMessage[],
-      session?.spec?.interactive || false,
-    );
-  }, [messages, session?.spec?.interactive]);
+  // Convert AG-UI messages to display format with hierarchical tool call rendering
+  const streamMessages: Array<MessageObject | ToolUseMessages | HierarchicalToolMessage> = useMemo(() => {
+    
+    // Helper function to parse tool arguments
+    const parseToolArgs = (args: string | undefined): Record<string, unknown> => {
+      if (!args) return {};
+      try {
+        const parsed = JSON.parse(args);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          return parsed as Record<string, unknown>;
+        }
+        return { value: parsed };
+      } catch {
+        return { _raw: String(args || '') };
+      }
+    };
+
+    // Helper function to create a tool message from a tool call
+    const createToolMessage = (
+      tc: AGUIToolCall,
+      timestamp: string
+    ): ToolUseMessages => {
+      const toolInput = parseToolArgs(tc.args);
+      return {
+        type: "tool_use_messages",
+        timestamp,
+        toolUseBlock: {
+          type: "tool_use_block",
+          id: tc.id,
+          name: tc.name,
+          input: toolInput,
+        },
+        resultBlock: {
+          type: "tool_result_block",
+          tool_use_id: tc.id,
+          content: tc.result || null,
+          is_error: tc.status === "error",
+        },
+      };
+    };
+
+    const result: Array<MessageObject | ToolUseMessages | HierarchicalToolMessage> = [];
+    
+    // Phase A: Collect all tool calls from all messages for hierarchy building
+    const allToolCalls = new Map<string, { tc: AGUIToolCall; timestamp: string }>();
+    
+    for (const msg of aguiState.messages) {
+      const timestamp = msg.timestamp || new Date().toISOString();
+      
+      if (msg.toolCalls && Array.isArray(msg.toolCalls)) {
+        for (const tc of msg.toolCalls) {
+          if (tc && tc.id && tc.name) {
+            allToolCalls.set(tc.id, { tc, timestamp });
+          }
+        }
+      }
+    }
+    
+    // Add currently streaming tool call to the map if present
+    // This ensures streaming tools (both parents and children) are included in hierarchy
+    // CRITICAL: Don't require name - add even if name is null to prevent orphaned children
+    if (aguiState.currentToolCall?.id) {
+      const streamingToolId = aguiState.currentToolCall.id;
+      const streamingParentId = aguiState.currentToolCall.parentToolUseId;
+      const toolName = aguiState.currentToolCall.name || "unknown_tool";  // Default if null
+      
+      // Create a pseudo-tool-call for the streaming tool
+      const streamingTC: AGUIToolCall = {
+        id: streamingToolId,
+        name: toolName,
+        args: aguiState.currentToolCall.args || "",
+        type: "function",
+        parentToolUseId: streamingParentId,
+        status: "running",
+      };
+      
+      if (!allToolCalls.has(streamingToolId)) {
+        allToolCalls.set(streamingToolId, { 
+          tc: streamingTC, 
+          timestamp: new Date().toISOString() 
+        });
+      }
+    }
+    
+    // Add pending children to render map so they show during streaming!
+    // These are children that finished before their parent tool finished
+    if (aguiState.pendingChildren && aguiState.pendingChildren.size > 0) {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      for (const [parentId, children] of aguiState.pendingChildren.entries()) {
+        for (const childMsg of children) {
+          if (childMsg.toolCalls) {
+            for (const tc of childMsg.toolCalls) {
+              if (!allToolCalls.has(tc.id)) {
+                allToolCalls.set(tc.id, {
+                  tc: tc,
+                  timestamp: new Date().toISOString(),
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    // Phase B: Build parent-child relationships
+    const topLevelTools = new Set<string>();
+    const childrenByParent = new Map<string, string[]>();
+    
+    for (const [toolId, { tc }] of allToolCalls) {
+      if (tc.parentToolUseId) {
+        // This is a child tool call
+        if (!childrenByParent.has(tc.parentToolUseId)) {
+          childrenByParent.set(tc.parentToolUseId, []);
+        }
+        childrenByParent.get(tc.parentToolUseId)!.push(toolId);
+      } else {
+        // This is a top-level tool call
+        topLevelTools.add(toolId);
+      }
+    }
+    
+    // Handle orphaned children - but DON'T promote to top-level if parent is streaming
+    for (const [toolId, { tc }] of allToolCalls) {
+      if (tc.parentToolUseId && !allToolCalls.has(tc.parentToolUseId)) {
+        // Check if parent is the currently streaming tool
+        if (aguiState.currentToolCall?.id === tc.parentToolUseId) {
+          // Don't promote to top-level - parent is streaming and will appear
+        } else {
+          // Parent truly not found, render as top-level (fallback)
+          console.warn(`  ⚠️ Orphaned child: ${tc.name} (${toolId.substring(0, 8)}) - parent ${tc.parentToolUseId.substring(0, 8)} not found`);
+          topLevelTools.add(toolId);
+        }
+      }
+    }
+    
+    // Track which tool calls we've already rendered
+    const renderedToolCalls = new Set<string>();
+    
+    // Phase C: Process messages and build hierarchical structure
+    for (const msg of aguiState.messages) {
+      const timestamp = msg.timestamp || new Date().toISOString();
+      
+      // Handle text content by role
+      if (msg.role === "user") {
+        result.push({
+          type: "user_message",
+          content: { type: "text_block", text: msg.content || "" },
+          timestamp,
+        });
+      } else if (msg.role === "assistant") {
+        // Check if this is a thinking block (from RAW event)
+        const metadata = msg.metadata as Record<string, unknown> | undefined;
+        if (metadata?.type === "thinking_block") {
+          result.push({
+            type: "agent_message",
+            content: {
+              type: "thinking_block",
+              thinking: metadata.thinking as string || "",
+              signature: metadata.signature as string || "",
+            },
+            model: "claude",
+            timestamp,
+          });
+        } else if (msg.content) {
+          // Only push text message if there's actual content
+          result.push({
+            type: "agent_message",
+            content: { type: "text_block", text: msg.content },
+            model: "claude",
+            timestamp,
+          });
+        }
+      } else if (msg.role === "tool") {
+        // Standalone tool results (not from toolCalls array)
+        if (msg.toolCallId && !allToolCalls.has(msg.toolCallId)) {
+          result.push({
+            type: "tool_use_messages",
+            timestamp,
+            toolUseBlock: {
+              type: "tool_use_block",
+              id: msg.toolCallId,
+              name: msg.name || "tool",
+              input: {},
+            },
+            resultBlock: {
+              type: "tool_result_block",
+              tool_use_id: msg.toolCallId,
+              content: msg.content || null,
+              is_error: false,
+            },
+          });
+        }
+      } else if (msg.role === "system") {
+        result.push({
+          type: "system_message",
+          subtype: "system.message",
+          data: { message: msg.content || "" },
+          timestamp,
+        });
+      }
+      
+      // Handle tool calls embedded in this message
+      if (msg.toolCalls && Array.isArray(msg.toolCalls)) {
+        for (const tc of msg.toolCalls) {
+          if (!tc || !tc.id || !tc.name) continue;
+          
+          // Skip if already rendered or if it's a child (will be rendered inside parent)
+          if (renderedToolCalls.has(tc.id)) {
+            continue;
+          }
+          if (!topLevelTools.has(tc.id)) {
+            continue;
+          }
+          
+          // Build children array for this tool call
+          const childIds = childrenByParent.get(tc.id) || [];
+          
+          const children: ToolUseMessages[] = childIds
+            .map(childId => {
+              const childData = allToolCalls.get(childId);
+              if (!childData) return null;
+              renderedToolCalls.add(childId);
+              return createToolMessage(childData.tc, childData.timestamp);
+            })
+            .filter((c): c is ToolUseMessages => c !== null);
+          
+          // Create the hierarchical tool message
+          const toolInput = parseToolArgs(tc.args);
+          
+          const toolMessage: HierarchicalToolMessage = {
+            type: "tool_use_messages",
+            timestamp,
+            toolUseBlock: {
+              type: "tool_use_block",
+              id: tc.id,
+              name: tc.name,
+              input: toolInput,
+            },
+            resultBlock: {
+              type: "tool_result_block",
+              tool_use_id: tc.id,
+              content: tc.result || null,
+              is_error: tc.status === "error",
+            },
+            children: children.length > 0 ? children : undefined,
+          };
+          
+          result.push(toolMessage);
+          renderedToolCalls.add(tc.id);
+        }
+      }
+    }
+    
+    // Add streaming message if currently streaming
+    if (aguiState.currentMessage?.content) {
+      result.push({
+        type: "agent_message",
+        content: { type: "text_block", text: aguiState.currentMessage.content },
+        model: "claude",
+        timestamp: new Date().toISOString(),
+        streaming: true,
+      } as MessageObject & { streaming?: boolean });
+    }
+    
+    // Render ALL currently streaming tool calls (supports parallel tool execution)
+    // CRITICAL: This renders tools immediately when TOOL_CALL_START arrives,
+    // not waiting until TOOL_CALL_END like the allToolCalls map approach does
+    const pendingToolCalls = aguiState.pendingToolCalls || new Map();
+    
+    for (const [toolId, pendingTool] of pendingToolCalls) {
+      if (renderedToolCalls.has(toolId)) continue;
+      
+      const toolName = pendingTool.name || "unknown_tool";
+      const toolArgs = pendingTool.args || "";
+      const streamingParentId = pendingTool.parentToolUseId;
+      
+      // Only render if this is a top-level tool (not a child waiting for parent)
+      // Children will be rendered nested inside their parent
+      const isTopLevel = !streamingParentId || !pendingToolCalls.has(streamingParentId);
+      
+      if (isTopLevel) {
+        const toolInput = parseToolArgs(toolArgs);
+        
+        // Get any pending children for this tool (children that finished before parent)
+        const pendingForThis = aguiState.pendingChildren?.get(toolId) || [];
+        const children: ToolUseMessages[] = pendingForThis
+          .map(childMsg => {
+            const childTC = childMsg.toolCalls?.[0];
+            if (!childTC) return null;
+            return createToolMessage(childTC, new Date().toISOString());
+          })
+          .filter((c): c is ToolUseMessages => c !== null);
+        
+        // Also include any streaming children from pendingToolCalls
+        for (const [childId, childTool] of pendingToolCalls) {
+          if (childTool.parentToolUseId === toolId && !renderedToolCalls.has(childId)) {
+            const childInput = parseToolArgs(childTool.args || "");
+            children.push({
+              type: "tool_use_messages",
+              timestamp: new Date().toISOString(),
+              toolUseBlock: {
+                type: "tool_use_block",
+                id: childId,
+                name: childTool.name,
+                input: childInput,
+              },
+              resultBlock: {
+                type: "tool_result_block",
+                tool_use_id: childId,
+                content: null,  // Still streaming
+                is_error: false,
+              },
+            });
+            renderedToolCalls.add(childId);
+          }
+        }
+        
+        // Also include any children from the childrenByParent map
+        const childIds = childrenByParent.get(toolId) || [];
+        for (const childId of childIds) {
+          if (renderedToolCalls.has(childId)) continue;
+          const childData = allToolCalls.get(childId);
+          if (childData) {
+            children.push(createToolMessage(childData.tc, childData.timestamp));
+            renderedToolCalls.add(childId);
+          }
+        }
+        
+        const streamingToolMessage: HierarchicalToolMessage = {
+          type: "tool_use_messages",
+          timestamp: new Date().toISOString(),
+          toolUseBlock: {
+            type: "tool_use_block",
+            id: toolId,
+            name: toolName,
+            input: toolInput,
+          },
+          resultBlock: {
+            type: "tool_result_block",
+            tool_use_id: toolId,
+            content: null,  // No result yet - still running!
+            is_error: false,
+          },
+          children: children.length > 0 ? children : undefined,
+        };
+        
+        result.push(streamingToolMessage);
+        renderedToolCalls.add(toolId);
+      }
+    }
+    
+    return result;
+  }, [
+    aguiState.messages,
+    aguiState.currentMessage,
+    aguiState.currentToolCall,
+    aguiState.pendingToolCalls,  // CRITICAL: Include so UI updates when new tools start
+    aguiState.pendingChildren,   // CRITICAL: Include so UI updates when children finish
+  ]);
 
   // Auto-refresh artifacts when messages complete
   // UX improvement: Automatically refresh the artifacts panel when Claude writes new files,
@@ -683,58 +1081,35 @@ export default function ProjectSessionDetailPage({
     );
   };
 
-  const sendChat = () => {
+  const sendChat = async () => {
     if (!chatInput.trim()) return;
 
     const finalMessage = chatInput.trim();
+    setChatInput("");
 
-    sendChatMutation.mutate(
-      { projectName, sessionName, content: finalMessage },
-      {
-        onSuccess: () => {
-          setChatInput("");
-        },
-        onError: (err) =>
-          errorToast(
-            err instanceof Error ? err.message : "Failed to send message",
-          ),
-      },
-    );
+    try {
+      await aguiSendMessage(finalMessage);
+    } catch (err) {
+      errorToast(err instanceof Error ? err.message : "Failed to send message");
+    }
   };
 
-  const handleCommandClick = (slashCommand: string) => {
-    const finalMessage = slashCommand;
-
-    sendChatMutation.mutate(
-      { projectName, sessionName, content: finalMessage },
-      {
-        onSuccess: () => {
-          successToast(`Command ${slashCommand} sent`);
-        },
-        onError: (err) =>
-          errorToast(
-            err instanceof Error ? err.message : "Failed to send command",
-          ),
-      },
-    );
+  const handleCommandClick = async (slashCommand: string) => {
+    try {
+      await aguiSendMessage(slashCommand);
+      successToast(`Command ${slashCommand} sent`);
+    } catch (err) {
+      errorToast(err instanceof Error ? err.message : "Failed to send command");
+    }
   };
 
-  const handleInterrupt = () => {
-    sendControlMutation.mutate(
-      { projectName, sessionName, type: "interrupt" },
-      {
-        onSuccess: () => successToast("Agent interrupted"),
-        onError: (err) =>
-          errorToast(
-            err instanceof Error ? err.message : "Failed to interrupt agent",
-          ),
-      },
-    );
-  };
+  // LEGACY: Old handleInterrupt removed - now using aguiInterrupt from useAGUIStream
+  // which calls the proper AG-UI interrupt endpoint that signals Claude SDK
 
   const handleEndSession = () => {
-    sendControlMutation.mutate(
-      { projectName, sessionName, type: "end_session" },
+    // Use stop API to end the session
+    stopMutation.mutate(
+      { projectName, sessionName, data: { reason: "end_session" } },
       {
         onSuccess: () => successToast("Session ended successfully"),
         onError: (err) =>
@@ -874,7 +1249,7 @@ export default function ProjectSessionDetailPage({
                   onDelete={handleDelete}
                   durationMs={durationMs}
                   k8sResources={k8sResources}
-                  messageCount={messages.length}
+                  messageCount={aguiState.messages.length}
                   renderMode="kebab-only"
                 />
               </div>
@@ -1446,12 +1821,13 @@ export default function ProjectSessionDetailPage({
                         chatInput={chatInput}
                         setChatInput={setChatInput}
                         onSendChat={() => Promise.resolve(sendChat())}
-                        onInterrupt={() => Promise.resolve(handleInterrupt())}
+                        onInterrupt={aguiInterrupt}
                         onEndSession={() => Promise.resolve(handleEndSession())}
                         onGoToResults={() => {}}
                         onContinue={handleContinue}
                         workflowMetadata={workflowMetadata}
                         onCommandClick={handleCommandClick}
+                        isRunActive={isRunActive}
                       />
                     </div>
                   </CardContent>
