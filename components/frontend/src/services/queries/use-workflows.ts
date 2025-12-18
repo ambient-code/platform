@@ -11,7 +11,11 @@ export const workflowKeys = {
 export function useOOTBWorkflows(projectName?: string) {
   return useQuery({
     queryKey: workflowKeys.ootb(projectName),
-    queryFn: () => workflowsApi.listOOTBWorkflows(projectName),
+    queryFn: async () => {
+      const workflows = await workflowsApi.listOOTBWorkflows(projectName);
+      // Filter out the Template workflow from the default workflows
+      return workflows.filter((workflow) => workflow.name !== "Template");
+    },
     enabled: !!projectName, // Only fetch when projectName is available
     staleTime: 5 * 60 * 1000, // 5 minutes - workflows don't change often
   });
