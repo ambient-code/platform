@@ -19,7 +19,7 @@ When a session is running, users can make dynamic changes:
 ### Spec vs Status vs Annotations
 
 ```yaml
-apiVersion: vteam.ambient-code/v1alpha1
+apiVersion: acp.ambient-code/v1alpha1
 kind: AgenticSession
 metadata:
   name: session-123

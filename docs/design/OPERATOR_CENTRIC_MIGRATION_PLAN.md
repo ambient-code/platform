@@ -615,13 +615,13 @@ func (r *SessionReconciler) handleContainerTerminated(ctx, session, cs) (ctrl.Re
 ```yaml
 # BEFORE
 rules:
-  - apiGroups: ["vteam.ambient-code"]
+  - apiGroups: ["acp.ambient-code"]
     resources: ["agenticsessions/status"]
     verbs: ["get", "update", "patch"]
 
 # AFTER
 rules:
-  - apiGroups: ["vteam.ambient-code"]
+  - apiGroups: ["acp.ambient-code"]
     resources: ["agenticsessions"]
     verbs: ["get", "patch"]  # Only for annotations
 ```

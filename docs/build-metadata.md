@@ -44,7 +44,7 @@ podman build \
   --build-arg GIT_VERSION=v1.2.3-dirty \
   --build-arg BUILD_DATE=2025-12-15T10:30:00Z \
   --build-arg BUILD_USER=gkrumbac@MacBook \
-  -t vteam-backend:latest .
+  -t acp-backend:latest .
 ```
 
 ### 2. Build Time: Dockerfiles Embed Metadata as Environment Variables
@@ -131,7 +131,7 @@ Backend API - Build Information
 Version:     v1.2.3-dirty
 Commit:      abc123def456789...
 Branch:      feature/build-metadata
-Repository:  https://github.com/ambient-code/vteam.git
+Repository:  https://github.com/ambient-code/platform.git
 Built:       2025-12-15T10:30:45Z
 Built by:    gkrumbac@MacBook-Pro.local
 ==============================================
@@ -161,7 +161,7 @@ oc logs job/session-abc123 -n project-namespace | head -20
 
 ```bash
 # Using podman/docker
-podman run --rm vteam-backend:latest env | grep GIT
+podman run --rm acp-backend:latest env | grep GIT
 
 # In Kubernetes
 kubectl exec deployment/backend-api -n ambient-code -- env | grep GIT
@@ -172,7 +172,7 @@ kubectl exec deployment/backend-api -n ambient-code -- env | grep GIT
 You can also add this metadata as image labels for inspection without running the container:
 
 ```bash
-podman inspect vteam-backend:latest | jq '.[0].Config.Labels'
+podman inspect acp-backend:latest | jq '.[0].Config.Labels'
 ```
 
 ## Development Workflow

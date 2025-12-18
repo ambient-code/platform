@@ -4,6 +4,14 @@ This directory contains the core components of the Ambient Code Platform.
 
 See the main [README.md](../README.md) for complete documentation, deployment instructions, and usage examples.
 
+## 📊 Architecture Diagrams
+
+View the platform architecture in detail:
+- [Platform Architecture](../docs/platform-architecture.mmd) - Overall system architecture and data flow
+- [Component Structure](../docs/component-structure.mmd) - Directory structure and development workflow
+- [Agentic Session Flow](../docs/agentic-session-flow.mmd) - Detailed sequence diagram of session execution
+- [Deployment Stack](../docs/deployment-stack.mmd) - Technology stack and deployment options
+
 ## Component Directory Structure
 
 ```
@@ -41,7 +49,7 @@ make dev-start
 
 **What you get:**
 - ✅ Complete OpenShift development environment
-- ✅ Frontend: `https://vteam-frontend-vteam-dev.apps-crc.testing`
+- ✅ Frontend: `https://acp-frontend-acp-dev.apps-crc.testing`
 - ✅ Backend API working with authentication
 - ✅ OpenShift console access
 - ✅ Ready for project creation and agentic sessions

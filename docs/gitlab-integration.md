@@ -1,6 +1,6 @@
-# GitLab Integration for vTeam
+# GitLab Integration for Ambient Code Platform
 
-vTeam now supports GitLab repositories alongside GitHub, enabling you to use your GitLab projects with AgenticSessions. This guide covers everything you need to know about using GitLab with vTeam.
+Ambient Code Platform now supports GitLab repositories alongside GitHub, enabling you to use your GitLab projects with AgenticSessions. This guide covers everything you need to know about using GitLab with Ambient Code Platform.
 
 ## Overview
 
@@ -16,7 +16,7 @@ vTeam now supports GitLab repositories alongside GitHub, enabling you to use you
 **Requirements:**
 - GitLab Personal Access Token with appropriate scopes
 - Repository with write access (for AgenticSessions)
-- vTeam backend v1.1.0 or higher
+- Ambient Code Platform backend v1.1.0 or higher
 
 ---
 
@@ -32,7 +32,7 @@ vTeam now supports GitLab repositories alongside GitHub, enabling you to use you
    - Or visit: https://gitlab.com/-/profile/personal_access_tokens
 
 3. **Create Token**:
-   - **Token name**: `vTeam Integration`
+   - **Token name**: `Ambient Code Platform Integration`
    - **Expiration**: Set 90+ days from now
    - **Select scopes**:
      - ✅ `api` - Full API access (required)
@@ -46,9 +46,9 @@ vTeam now supports GitLab repositories alongside GitHub, enabling you to use you
 
 ---
 
-### 2. Connect GitLab Account to vTeam
+### 2. Connect GitLab Account to Ambient Code Platform
 
-**Via vTeam UI** (if available):
+**Via Ambient Code Platform UI** (if available):
 1. Navigate to Settings → Integrations
 2. Click "Connect GitLab"
 3. Paste your Personal Access Token
@@ -57,9 +57,9 @@ vTeam now supports GitLab repositories alongside GitHub, enabling you to use you
 
 **Via API**:
 ```bash
-curl -X POST http://vteam-backend:8080/api/auth/gitlab/connect \
+curl -X POST http://acp-backend:8080/api/auth/gitlab/connect \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <your-vteam-auth-token>" \
+  -H "Authorization: Bearer <your-acp-auth-token>" \
   -d '{
     "personalAccessToken": "glpat-your-token-here",
     "instanceUrl": ""
@@ -90,8 +90,8 @@ curl -X POST http://vteam-backend:8080/api/auth/gitlab/connect \
 
 ### 3. Configure Project with GitLab Repository
 
-**Option A: Via vTeam UI**
-1. Open your vTeam project
+**Option A: Via Ambient Code Platform UI**
+1. Open your Ambient Code Platform project
 2. Navigate to Project Settings
 3. Under "Repositories", click "Add Repository"
 4. Enter GitLab repository URL:
@@ -171,7 +171,7 @@ https://gitlab.com/myteam/backend/-/tree/feature/add-feature-x
 
 ## Supported URL Formats
 
-vTeam automatically detects and normalizes GitLab URLs:
+Ambient Code Platform automatically detects and normalizes GitLab URLs:
 
 ### HTTPS URLs (Recommended)
 ```
@@ -196,7 +196,7 @@ vTeam automatically detects and normalizes GitLab URLs:
 
 ## Repository Access Validation
 
-vTeam validates your access to GitLab repositories before allowing operations:
+Ambient Code Platform validates your access to GitLab repositories before allowing operations:
 
 **Validation Checks**:
 1. ✅ Token is valid and not expired
@@ -226,8 +226,8 @@ vTeam validates your access to GitLab repositories before allowing operations:
 
 **Via API**:
 ```bash
-curl -X GET http://vteam-backend:8080/api/auth/gitlab/status \
-  -H "Authorization: Bearer <your-vteam-token>"
+curl -X GET http://acp-backend:8080/api/auth/gitlab/status \
+  -H "Authorization: Bearer <your-acp-token>"
 ```
 
 **Response (Connected)**:
@@ -251,12 +251,12 @@ curl -X GET http://vteam-backend:8080/api/auth/gitlab/status \
 
 **Via API**:
 ```bash
-curl -X POST http://vteam-backend:8080/api/auth/gitlab/disconnect \
-  -H "Authorization: Bearer <your-vteam-token>"
+curl -X POST http://acp-backend:8080/api/auth/gitlab/disconnect \
+  -H "Authorization: Bearer <your-acp-token>"
 ```
 
 This removes:
-- Your GitLab PAT from vTeam secrets
+- Your GitLab PAT from Ambient Code Platform secrets
 - Connection metadata
 - Access to GitLab repositories (AgenticSessions will fail)
 
@@ -274,11 +274,11 @@ To update your token (when expired or scopes changed):
 
 ## Self-Hosted GitLab
 
-vTeam fully supports self-hosted GitLab instances (Community and Enterprise editions).
+Ambient Code Platform fully supports self-hosted GitLab instances (Community and Enterprise editions).
 
 ### Requirements
 
-- GitLab instance accessible from vTeam backend pods
+- GitLab instance accessible from Ambient Code Platform backend pods
 - Personal Access Token from your GitLab instance
 - Network connectivity to GitLab API (default: port 443)
 
@@ -287,9 +287,9 @@ vTeam fully supports self-hosted GitLab instances (Community and Enterprise edit
 When connecting, provide your instance URL:
 
 ```bash
-curl -X POST http://vteam-backend:8080/api/auth/gitlab/connect \
+curl -X POST http://acp-backend:8080/api/auth/gitlab/connect \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <vteam-token>" \
+  -H "Authorization: Bearer <acp-token>" \
   -d '{
     "personalAccessToken": "glpat-xxx",
     "instanceUrl": "https://gitlab.company.com"
@@ -312,7 +312,7 @@ curl -X POST http://vteam-backend:8080/api/auth/gitlab/connect \
 
 ### API URL Construction
 
-vTeam automatically constructs the correct API URL:
+Ambient Code Platform automatically constructs the correct API URL:
 
 | Instance URL | API URL |
 |--------------|---------|
@@ -328,7 +328,7 @@ vTeam automatically constructs the correct API URL:
 1. Verify instance URL is correct and accessible
 2. Check network connectivity from backend pods:
    ```bash
-   kubectl exec -it <backend-pod> -n vteam-backend -- curl https://gitlab.company.com
+   kubectl exec -it <backend-pod> -n acp-backend -- curl https://gitlab.company.com
    ```
 3. Verify SSL certificate is valid (or configure trust for self-signed)
 4. Check firewall rules allow traffic from Kubernetes cluster
@@ -394,7 +394,7 @@ vTeam automatically constructs the correct API URL:
 **Process**:
 1. Create new token in GitLab with same scopes
 2. Test new token works (curl to GitLab API)
-3. Disconnect vTeam GitLab connection
+3. Disconnect Ambient Code Platform GitLab connection
 4. Reconnect with new token
 5. Revoke old token in GitLab
 
@@ -440,7 +440,7 @@ vTeam automatically constructs the correct API URL:
    - `read_repository` ✅
    - `write_repository` ✅
 2. Recreate token with correct scopes
-3. Reconnect vTeam with new token
+3. Reconnect Ambient Code Platform with new token
 
 ---
 
@@ -476,7 +476,7 @@ vTeam automatically constructs the correct API URL:
 1. Verify GitLab account is connected
 2. Check token stored in secret:
    ```bash
-   kubectl get secret gitlab-user-tokens -n vteam-backend
+   kubectl get secret gitlab-user-tokens -n acp-backend
    ```
 3. Verify repository URL is correct
 4. Check session logs:
@@ -516,7 +516,7 @@ your GitLab account with the required permissions.
 - 300 requests per minute per user
 - 10,000 requests per hour per user
 
-**How vTeam Handles Rate Limits**:
+**How Ambient Code Platform Handles Rate Limits**:
 - Errors returned with clear message
 - Recommended wait time provided
 - No automatic retry (to avoid making it worse)
@@ -535,7 +535,7 @@ Self-hosted instances may have different limits configured by admins. Check with
 
 ## Mixing GitHub and GitLab
 
-vTeam supports projects with both GitHub and GitLab repositories.
+Ambient Code Platform supports projects with both GitHub and GitLab repositories.
 
 **Example Multi-Provider Project**:
 ```yaml
@@ -576,7 +576,7 @@ spec:
 ```http
 POST /api/auth/gitlab/connect
 Content-Type: application/json
-Authorization: Bearer <vteam-token>
+Authorization: Bearer <acp-token>
 
 {
   "personalAccessToken": "glpat-xxx",
@@ -602,7 +602,7 @@ Authorization: Bearer <vteam-token>
 
 ```http
 GET /api/auth/gitlab/status
-Authorization: Bearer <vteam-token>
+Authorization: Bearer <acp-token>
 ```
 
 **Response (200 OK - Connected)**:
@@ -628,7 +628,7 @@ Authorization: Bearer <vteam-token>
 
 ```http
 POST /api/auth/gitlab/disconnect
-Authorization: Bearer <vteam-token>
+Authorization: Bearer <acp-token>
 ```
 
 **Response (200 OK)**:
@@ -643,8 +643,8 @@ Authorization: Bearer <vteam-token>
 
 ## FAQ
 
-**Q: Can I use the same token for multiple vTeam users?**
-A: No. Each vTeam user should connect their own GitLab account with their own PAT. This ensures:
+**Q: Can I use the same token for multiple Ambient Code Platform users?**
+A: No. Each Ambient Code Platform user should connect their own GitLab account with their own PAT. This ensures:
 - Audit trail shows real user
 - Correct permissions enforcement
 - Individual token rotation
@@ -653,21 +653,21 @@ A: No. Each vTeam user should connect their own GitLab account with their own PA
 A: AgenticSessions will fail with "Authentication failed" error. Reconnect with a new token.
 
 **Q: Can I use SSH URLs?**
-A: Yes, vTeam accepts SSH URLs and automatically converts them to HTTPS for authentication.
+A: Yes, Ambient Code Platform accepts SSH URLs and automatically converts them to HTTPS for authentication.
 
 **Q: Do I need to configure SSH keys?**
-A: No. vTeam uses HTTPS + Personal Access Token authentication exclusively.
+A: No. Ambient Code Platform uses HTTPS + Personal Access Token authentication exclusively.
 
 **Q: Can I use Deploy Tokens instead of PATs?**
 A: Not currently. Only Personal Access Tokens are supported.
 
-**Q: Does vTeam support GitLab Groups/Subgroups?**
+**Q: Does Ambient Code Platform support GitLab Groups/Subgroups?**
 A: Yes. URLs like `https://gitlab.com/group/subgroup/project.git` work correctly.
 
 **Q: What if I don't have a GitLab account?**
 A: Create one at https://gitlab.com - it's free for public and private repositories.
 
-**Q: Can I use vTeam with GitLab Enterprise?**
+**Q: Can I use Ambient Code Platform with GitLab Enterprise?**
 A: Yes. Self-hosted GitLab Enterprise Edition is fully supported.
 
 **Q: How do I know if my token has the right scopes?**
@@ -695,13 +695,13 @@ A: No. GitHub and GitLab integrations are independent and work side-by-side.
 - [GitLab Permissions](https://docs.gitlab.com/ee/user/permissions.html)
 
 **Troubleshooting**:
-- Check backend logs: `kubectl logs -l app=vteam-backend -n vteam-backend`
+- Check backend logs: `kubectl logs -l app=acp-backend -n acp-backend`
 - Check session logs: `kubectl logs <session-pod> -n <project-namespace>`
 - Verify GitLab status: https://status.gitlab.com (for GitLab.com)
 
 **Getting Help**:
-- vTeam GitHub Issues: [Create an issue](https://github.com/natifridman/vTeam/issues)
-- vTeam Documentation: [Main README](https://github.com/ambient-code/platform/blob/main/README.md)
+- Ambient Code Platform GitHub Issues: [Create an issue](https://github.com/natifridman/Ambient Code Platform/issues)
+- Ambient Code Platform Documentation: [Main README](https://github.com/ambient-code/platform/blob/main/README.md)
 
 ---
 

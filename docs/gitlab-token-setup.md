@@ -1,14 +1,14 @@
 # GitLab Personal Access Token Setup Guide
 
-This guide provides step-by-step instructions for creating a GitLab Personal Access Token (PAT) for use with vTeam.
+This guide provides step-by-step instructions for creating a GitLab Personal Access Token (PAT) for use with Ambient Code Platform.
 
 ## Overview
 
 **What is a Personal Access Token?**
-A Personal Access Token (PAT) is a secure credential that allows vTeam to access your GitLab repositories on your behalf without needing your password.
+A Personal Access Token (PAT) is a secure credential that allows Ambient Code Platform to access your GitLab repositories on your behalf without needing your password.
 
 **Why do I need one?**
-vTeam uses your PAT to:
+Ambient Code Platform uses your PAT to:
 - Validate your access to repositories
 - Clone repositories for AgenticSessions
 - Commit and push changes to your GitLab repositories
@@ -46,20 +46,20 @@ vTeam uses your PAT to:
 On the Personal Access Tokens page, you'll see a form to create a new token:
 
 **1. Token Name**
-- Enter: `vTeam Integration` (or any descriptive name)
+- Enter: `Ambient Code Platform Integration` (or any descriptive name)
 - This helps you identify the token later
 
 **2. Expiration Date**
 - **Recommended**: Set 90 days from today
 - **Maximum**: GitLab allows up to 1 year
-- **Important**: You'll need to create a new token and reconnect vTeam before expiration
+- **Important**: You'll need to create a new token and reconnect Ambient Code Platform before expiration
 
 **3. Select Scopes** (IMPORTANT - must select all of these):
 
 Check the following scopes:
 
 - ✅ **`api`** - Full API access
-  - *Required*: Allows vTeam to access GitLab API endpoints
+  - *Required*: Allows Ambient Code Platform to access GitLab API endpoints
   - Grants read and write access to repositories, merge requests, etc.
 
 - ✅ **`read_api`** - Read API
@@ -67,11 +67,11 @@ Check the following scopes:
   - Used for validation and repository browsing
 
 - ✅ **`read_user`** - Read user information
-  - *Required*: Allows vTeam to verify your identity
+  - *Required*: Allows Ambient Code Platform to verify your identity
   - Used to get your GitLab username and user ID
 
 - ✅ **`write_repository`** - Write to repository
-  - *Required*: Allows vTeam to push changes
+  - *Required*: Allows Ambient Code Platform to push changes
   - Essential for AgenticSessions to commit and push code
 
 **DO NOT SELECT** (not needed, grants excessive privileges):
@@ -143,7 +143,7 @@ Follow Steps 3-4 from the GitLab.com instructions above.
 
 ## Verifying Your Token
 
-Before using the token with vTeam, verify it works:
+Before using the token with Ambient Code Platform, verify it works:
 
 ### Using cURL (Command Line)
 
@@ -203,7 +203,7 @@ curl -H "Authorization: Bearer glpat-your-token-here" \
 ```json
 {
   "id": 123456,
-  "name": "vTeam Integration",
+  "name": "Ambient Code Platform Integration",
   "revoked": false,
   "created_at": "2025-11-05T10:00:00.000Z",
   "scopes": ["api", "read_api", "read_user", "write_repository"],
@@ -261,11 +261,11 @@ curl -H "Authorization: Bearer glpat-xxx" \
 
 ---
 
-## Using Your Token with vTeam
+## Using Your Token with Ambient Code Platform
 
-Once you have your token, connect it to vTeam:
+Once you have your token, connect it to Ambient Code Platform:
 
-### Via vTeam UI
+### Via Ambient Code Platform UI
 
 1. Navigate to **Settings** → **Integrations**
 2. Find **GitLab** section
@@ -280,9 +280,9 @@ Once you have your token, connect it to vTeam:
 
 **For GitLab.com**:
 ```bash
-curl -X POST http://vteam-backend:8080/api/auth/gitlab/connect \
+curl -X POST http://acp-backend:8080/api/auth/gitlab/connect \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <your-vteam-auth-token>" \
+  -H "Authorization: Bearer <your-acp-auth-token>" \
   -d '{
     "personalAccessToken": "glpat-your-gitlab-token-here",
     "instanceUrl": ""
@@ -291,9 +291,9 @@ curl -X POST http://vteam-backend:8080/api/auth/gitlab/connect \
 
 **For Self-Hosted GitLab**:
 ```bash
-curl -X POST http://vteam-backend:8080/api/auth/gitlab/connect \
+curl -X POST http://acp-backend:8080/api/auth/gitlab/connect \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <your-vteam-auth-token>" \
+  -H "Authorization: Bearer <your-acp-auth-token>" \
   -d '{
     "personalAccessToken": "glpat-your-gitlab-token-here",
     "instanceUrl": "https://gitlab.company.com"
@@ -360,7 +360,7 @@ Token rotation improves security by limiting exposure if a token is compromised.
 
 1. **Create New Token**:
    - Follow steps above to create new token
-   - Use same name with date: `vTeam Integration (Nov 2025)`
+   - Use same name with date: `Ambient Code Platform Integration (Nov 2025)`
    - Select same scopes
 
 2. **Test New Token**:
@@ -369,12 +369,12 @@ Token rotation improves security by limiting exposure if a token is compromised.
      https://gitlab.com/api/v4/user
    ```
 
-3. **Update vTeam**:
-   - Disconnect current GitLab connection in vTeam
+3. **Update Ambient Code Platform**:
+   - Disconnect current GitLab connection in Ambient Code Platform
    - Reconnect with new token
 
-4. **Verify vTeam Works**:
-   - Check connection status in vTeam
+4. **Verify Ambient Code Platform Works**:
+   - Check connection status in Ambient Code Platform
    - Test with a simple AgenticSession
 
 5. **Revoke Old Token**:
@@ -387,9 +387,9 @@ Token rotation improves security by limiting exposure if a token is compromised.
 
 ## Troubleshooting
 
-### Token Not Working with vTeam
+### Token Not Working with Ambient Code Platform
 
-**Problem**: vTeam shows "Invalid token" error
+**Problem**: Ambient Code Platform shows "Invalid token" error
 
 **Solutions**:
 1. **Verify token copied correctly**:
@@ -418,7 +418,7 @@ Token rotation improves security by limiting exposure if a token is compromised.
 
 ### Insufficient Permissions Error
 
-**Problem**: vTeam shows "Insufficient permissions" when pushing
+**Problem**: Ambient Code Platform shows "Insufficient permissions" when pushing
 
 **Solutions**:
 1. **Check token scopes**:
@@ -435,7 +435,7 @@ Token rotation improves security by limiting exposure if a token is compromised.
 
 3. **Recreate token with correct scopes**:
    - Create new token with all scopes
-   - Update vTeam connection
+   - Update Ambient Code Platform connection
    - Revoke old token
 
 4. **Check repository access**:
@@ -496,7 +496,7 @@ Token rotation improves security by limiting exposure if a token is compromised.
    - Immediately if compromised
 
 5. **Use Separate Tokens**
-   - Different token for vTeam vs other applications
+   - Different token for Ambient Code Platform vs other applications
    - Easier to identify in audit logs
    - Can revoke individually
 
@@ -514,11 +514,11 @@ Token rotation improves security by limiting exposure if a token is compromised.
 
 2. **Never Share Tokens**
    - Each user should have their own token
-   - Team members need individual vTeam connections
+   - Team members need individual Ambient Code Platform connections
 
 3. **Never Use Sudo Scope**
    - Grants excessive admin privileges
-   - Not needed for vTeam
+   - Not needed for Ambient Code Platform
 
 4. **Never Set "No Expiration"**
    - Security risk if token leaks
@@ -527,7 +527,7 @@ Token rotation improves security by limiting exposure if a token is compromised.
 5. **Never Log Tokens**
    - Don't print tokens in application logs
    - Don't include in error messages
-   - vTeam automatically redacts tokens
+   - Ambient Code Platform automatically redacts tokens
 
 6. **Never Hardcode Tokens**
    ```python
@@ -543,13 +543,13 @@ Token rotation improves security by limiting exposure if a token is compromised.
 A: **90 days** is recommended. This balances security (shorter is better) with convenience (longer reduces rotation overhead).
 
 **Q: What if I lose my token?**
-A: Create a new token and update vTeam. You cannot retrieve a lost token - GitLab only shows it once during creation.
+A: Create a new token and update Ambient Code Platform. You cannot retrieve a lost token - GitLab only shows it once during creation.
 
-**Q: Can I use the same token for multiple vTeam projects?**
-A: Yes, one token works for all vTeam projects under your user account.
+**Q: Can I use the same token for multiple Ambient Code Platform projects?**
+A: Yes, one token works for all Ambient Code Platform projects under your user account.
 
 **Q: Can multiple team members share one token?**
-A: **No**. Each person should create their own token and connect individually to vTeam. This ensures proper audit trails.
+A: **No**. Each person should create their own token and connect individually to Ambient Code Platform. This ensures proper audit trails.
 
 **Q: What's the difference between `api` and `write_repository` scopes?**
 A: `api` grants full API access (read + write). `write_repository` specifically grants push access to git repositories. Both are needed.
@@ -558,7 +558,7 @@ A: `api` grants full API access (read + write). `write_repository` specifically 
 A: No. One token works for all repositories you have access to.
 
 **Q: What happens when my token expires?**
-A: AgenticSessions will fail with "Authentication failed" error. Create a new token and reconnect to vTeam.
+A: AgenticSessions will fail with "Authentication failed" error. Create a new token and reconnect to Ambient Code Platform.
 
 **Q: Can I extend a token's expiration date?**
 A: No. You must create a new token with a new expiration date.
@@ -570,10 +570,10 @@ A: Check "Last Used" date in GitLab. If it shows activity you didn't perform, re
 A: No. GitLab doesn't show token values to anyone, including admins. However, admins can revoke tokens on self-hosted instances.
 
 **Q: What's the difference between Personal Access Token and Deploy Token?**
-A: Personal Access Tokens are tied to your user account. Deploy Tokens are scoped to specific projects and have limited permissions. vTeam requires Personal Access Tokens.
+A: Personal Access Tokens are tied to your user account. Deploy Tokens are scoped to specific projects and have limited permissions. Ambient Code Platform requires Personal Access Tokens.
 
 **Q: Can I use OAuth instead of PAT?**
-A: Not currently. vTeam only supports Personal Access Token authentication for GitLab.
+A: Not currently. Ambient Code Platform only supports Personal Access Token authentication for GitLab.
 
 ---
 
@@ -584,7 +584,7 @@ A: Not currently. vTeam only supports Personal Access Token authentication for G
 - [GitLab API Authentication](https://docs.gitlab.com/ee/api/index.html#authentication)
 - [Token Security](https://docs.gitlab.com/ee/security/token_overview.html)
 
-**vTeam Documentation**:
+**Ambient Code Platform Documentation**:
 - [GitLab Integration Guide](./gitlab-integration.md)
 - [Self-Hosted GitLab Configuration](./gitlab-self-hosted.md)
 - [Troubleshooting Guide](./gitlab-integration.md#troubleshooting)
@@ -607,9 +607,9 @@ Need help with token creation?
 - Contact your GitLab administrator
 - Check your organization's GitLab documentation
 
-**For vTeam Integration Issues**:
-- vTeam GitHub Issues: https://github.com/natifridman/vTeam/issues
-- vTeam Documentation: [Main README](https://github.com/ambient-code/platform/blob/main/README.md)
+**For Ambient Code Platform Integration Issues**:
+- Ambient Code Platform GitHub Issues: https://github.com/natifridman/Ambient Code Platform/issues
+- Ambient Code Platform Documentation: [Main README](https://github.com/ambient-code/platform/blob/main/README.md)
 
 ---
 
@@ -634,16 +634,16 @@ curl -H "Authorization: Bearer glpat-xxx" \
   https://gitlab.com/api/v4/user
 ```
 
-**Connect to vTeam**:
+**Connect to Ambient Code Platform**:
 ```bash
-curl -X POST http://vteam-backend:8080/api/auth/gitlab/connect \
+curl -X POST http://acp-backend:8080/api/auth/gitlab/connect \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <vteam-token>" \
+  -H "Authorization: Bearer <acp-token>" \
   -d '{"personalAccessToken":"glpat-xxx","instanceUrl":""}'
 ```
 
-**Check vTeam Connection**:
+**Check Ambient Code Platform Connection**:
 ```bash
-curl -X GET http://vteam-backend:8080/api/auth/gitlab/status \
-  -H "Authorization: Bearer <vteam-token>"
+curl -X GET http://acp-backend:8080/api/auth/gitlab/status \
+  -H "Authorization: Bearer <acp-token>"
 ```

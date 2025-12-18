@@ -263,7 +263,7 @@ status:
   - type: RunnerStarted
     status: "False"
     reason: ImagePullBackOff
-    message: "Failed to pull image: quay.io/ambient_code/vteam_claude_runner:bad-tag"
+    message: "Failed to pull image: quay.io/ambient_code/acp_claude_runner:bad-tag"
   - type: Failed
     status: "True"
     reason: ImagePullBackOff

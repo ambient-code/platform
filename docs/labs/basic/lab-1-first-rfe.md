@@ -39,7 +39,7 @@ You're a developer who wants to automate code analysis and documentation tasks. 
 2. **Get the frontend URL**:
 
    ```bash
-   echo "https://$(oc get route vteam-frontend -n vteam-dev -o jsonpath='{.spec.host}')"
+   echo "https://$(oc get route acp-frontend -n acp-dev -o jsonpath='{.spec.host}')"
    ```
 
 3. **Open your browser** to the frontend URL
@@ -278,7 +278,7 @@ A successful AgenticSession should have:
 - **Cause**: Operator not running or Job creation failed
 - **Solution**: Check operator logs and RBAC permissions
   ```bash
-  oc logs deployment/vteam-operator -n vteam-dev
+  oc logs deployment/acp-operator -n acp-dev
   oc describe job <session-name> -n <project-name>
   ```
 
