@@ -410,9 +410,9 @@ func HandleAGUIInterrupt(c *gin.Context) {
 // The operator creates a Service named "session-{sessionName}" in the project namespace
 func getRunnerEndpoint(projectName, sessionName string) (string, error) {
 	// Use naming convention for service discovery
-	// Format: http://session-{sessionName}.{projectName}.svc.cluster.local:8001/
+	// Format: http://session-{sessionName}.{projectName}.svc.cluster.local:8000/
 	// The operator creates this Service automatically when spawning the runner Job
-	return fmt.Sprintf("http://session-%s.%s.svc.cluster.local:8001/", sessionName, projectName), nil
+	return fmt.Sprintf("http://session-%s.%s.svc.cluster.local:8000/", sessionName, projectName), nil
 }
 
 // broadcastToThread sends event to all thread-level subscribers

@@ -1096,7 +1096,7 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 							// Expose AG-UI server port for backend proxy
 							Ports: []corev1.ContainerPort{{
 								Name:          "agui",
-								ContainerPort: 8001,
+								ContainerPort: 8000,
 								Protocol:      corev1.ProtocolTCP,
 							}},
 
@@ -1537,8 +1537,8 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 			Ports: []corev1.ServicePort{{
 				Name:       "agui",
 				Protocol:   corev1.ProtocolTCP,
-				Port:       8001,
-				TargetPort: intstr.FromInt(8001),
+				Port:       8000,
+				TargetPort: intstr.FromInt(8000),
 			}},
 		},
 	}
@@ -1653,7 +1653,7 @@ func reconcileSpecReposWithPatch(sessionNamespace, sessionName string, spec map[
 
 	// AG-UI pattern: Call runner's REST endpoints to update configuration
 	// Runner will restart Claude SDK client with new repo configuration
-	runnerBaseURL := fmt.Sprintf("http://session-%s.%s.svc.cluster.local:8001", sessionName, sessionNamespace)
+	runnerBaseURL := fmt.Sprintf("http://session-%s.%s.svc.cluster.local:8000", sessionName, sessionNamespace)
 
 	// Add repos
 	for _, repo := range toAdd {
@@ -1774,7 +1774,7 @@ func reconcileActiveWorkflowWithPatch(sessionNamespace, sessionName string, spec
 
 	// AG-UI pattern: Call runner's /workflow endpoint to update configuration
 	// Runner will restart Claude SDK client with new workflow
-	runnerURL := fmt.Sprintf("http://session-%s.%s.svc.cluster.local:8001/workflow", sessionName, sessionNamespace)
+	runnerURL := fmt.Sprintf("http://session-%s.%s.svc.cluster.local:8000/workflow", sessionName, sessionNamespace)
 
 	payload := map[string]interface{}{
 		"gitUrl": gitURL,
