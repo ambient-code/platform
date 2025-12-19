@@ -26,7 +26,9 @@ type WelcomeExperienceProps = {
   onLoadWorkflow?: () => void;
 };
 
-const WELCOME_MESSAGE = `Welcome to Ambient AI! Your workspace and all of its context is being loaded. Please select a workflow below to get started, or type a message to begin chatting.`;
+const WELCOME_MESSAGE = `Welcome to Ambient AI! Your workspace and your team's context is being loaded.
+
+Please select a workflow or type a message to get started.`;
 const SETUP_MESSAGE = `Great! Give me a moment to get set up`;
 
 export function WelcomeExperience({
