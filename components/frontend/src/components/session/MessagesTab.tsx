@@ -291,34 +291,36 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
           <StreamMessage key={`sm-${idx}`} message={m} isNewest={idx === filteredMessages.length - 1} onGoToResults={onGoToResults} />
         ))}
 
+        {/* Show queued messages as regular user messages */}
+        {queuedMessages.length > 0 && queuedMessages.map((msg, idx) => {
+          const queuedUserMessage: MessageObject = {
+            type: "user_message",
+            content: { type: "text_block", text: msg },
+            timestamp: new Date().toISOString(),
+          };
+          return (
+            <StreamMessage 
+              key={`queued-${idx}`} 
+              message={queuedUserMessage} 
+              isNewest={false}
+              onGoToResults={onGoToResults}
+            />
+          );
+        })}
+
+        {/* Show "Please wait" message after queued messages */}
+        {queuedMessages.length > 0 && (
+          <div className="pl-12 pr-4 py-2">
+            <div className="text-sm text-muted-foreground">
+              Please wait one moment<LoadingDots />
+            </div>
+          </div>
+        )}
+
         {/* Show loading indicator when agent is actively processing */}
         {shouldShowMessages && isRunActive && filteredMessages.length > 0 && (
           <div className="pl-12 pr-4 py-2">
             <LoadingDots />
-          </div>
-        )}
-
-        {/* Show queued messages indicator */}
-        {queuedMessages.length > 0 && (
-          <div className="mx-4 my-2">
-            <div className="border border-yellow-300 bg-yellow-50 dark:bg-yellow-950/30 dark:border-yellow-800 rounded-lg p-3">
-              <div className="flex items-center gap-2 mb-2">
-                <Loader2 className="h-4 w-4 animate-spin text-yellow-600 dark:text-yellow-400" />
-                <span className="text-sm font-medium text-yellow-800 dark:text-yellow-300">
-                  {queuedMessages.length} {queuedMessages.length === 1 ? 'message' : 'messages'} queued
-                </span>
-              </div>
-              <p className="text-xs text-yellow-700 dark:text-yellow-400 mb-2">
-                Session is starting up. Your {queuedMessages.length === 1 ? 'message' : 'messages'} will be sent automatically once the session is running.
-              </p>
-              <div className="space-y-1">
-                {queuedMessages.map((msg, idx) => (
-                  <div key={idx} className="text-xs text-yellow-800 dark:text-yellow-300 bg-yellow-100 dark:bg-yellow-900/30 rounded px-2 py-1 truncate">
-                    {msg}
-                  </div>
-                ))}
-              </div>
-            </div>
           </div>
         )}
 
