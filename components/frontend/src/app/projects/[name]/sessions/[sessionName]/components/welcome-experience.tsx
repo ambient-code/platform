@@ -124,12 +124,22 @@ export function WelcomeExperience({
   };
 
   // Filter out template workflows and only show enabled ones for the welcome cards
-  const enabledWorkflows = ootbWorkflows.filter((w) => {
-    const nameLower = (w.name || "").toLowerCase().trim();
-    const idLower = (w.id || "").toLowerCase().trim();
-    const isTemplate = nameLower.includes("template") || idLower.includes("template");
-    return w.enabled && !isTemplate;
-  });
+  const enabledWorkflows = ootbWorkflows
+    .filter((w) => {
+      const nameLower = (w.name || "").toLowerCase().trim();
+      const idLower = (w.id || "").toLowerCase().trim();
+      const isTemplate = nameLower.includes("template") || idLower.includes("template");
+      return w.enabled && !isTemplate;
+    })
+    .sort((a, b) => {
+      // Custom order: PRD workflows first, then the rest
+      const aHasPRD = a.name.toLowerCase().includes("prd");
+      const bHasPRD = b.name.toLowerCase().includes("prd");
+      
+      if (aHasPRD && !bHasPRD) return -1;
+      if (!aHasPRD && bHasPRD) return 1;
+      return 0; // Keep original order for items in the same category
+    });
 
   // Filter workflows based on search query (for dropdown - includes all workflows)
   const filteredWorkflows = ootbWorkflows.filter((workflow) => {
