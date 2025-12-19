@@ -3,6 +3,14 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import type { WorkflowConfig } from "../lib/types";
 
@@ -205,6 +213,60 @@ export function WelcomeExperience({
                 </CardContent>
               </Card>
             ))}
+          </div>
+
+          {/* View all workflows button */}
+          <div className="mt-3 flex justify-start">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  className="text-sm text-primary hover:text-primary/80 hover:bg-transparent p-0 h-auto cursor-pointer"
+                  disabled={selectedWorkflowId !== null}
+                >
+                  View all workflows
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="center" className="w-[450px]">
+                <DropdownMenuItem
+                  onClick={() => handleWorkflowSelect("none")}
+                  disabled={selectedWorkflowId !== null}
+                >
+                  <div className="flex flex-col items-start gap-0.5 py-1 w-full">
+                    <span>General chat</span>
+                    <span className="text-xs text-muted-foreground font-normal line-clamp-2">
+                      A general chat session with no structured workflow.
+                    </span>
+                  </div>
+                </DropdownMenuItem>
+                {ootbWorkflows.map((workflow) => (
+                  <DropdownMenuItem
+                    key={workflow.id}
+                    onClick={() => workflow.enabled && handleWorkflowSelect(workflow.id)}
+                    disabled={!workflow.enabled || selectedWorkflowId !== null}
+                  >
+                    <div className="flex flex-col items-start gap-0.5 py-1 w-full">
+                      <span>{workflow.name}</span>
+                      <span className="text-xs text-muted-foreground font-normal line-clamp-2">
+                        {workflow.description}
+                      </span>
+                    </div>
+                  </DropdownMenuItem>
+                ))}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => handleWorkflowSelect("custom")}
+                  disabled={selectedWorkflowId !== null}
+                >
+                  <div className="flex flex-col items-start gap-0.5 py-1 w-full">
+                    <span>Custom workflow...</span>
+                    <span className="text-xs text-muted-foreground font-normal line-clamp-2">
+                      Load a workflow from a custom Git repository
+                    </span>
+                  </div>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       )}
