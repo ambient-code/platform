@@ -52,7 +52,7 @@ const defaultComponents: Components = {
     
     // Full code blocks for longer content
     return (
-      <pre className="bg-muted text-foreground p-3 rounded text-xs overflow-x-auto border my-2">
+      <pre className="bg-muted text-foreground py-3 rounded text-xs overflow-x-auto border my-2">
         <code
           className={className}
           {...(props as React.HTMLAttributes<HTMLElement>)}
@@ -212,7 +212,7 @@ export const Message = React.forwardRef<HTMLDivElement, MessageProps>(
               </div>
             )}
             <div className={cn(
-              borderless ? "p-0" : "rounded-lg p-3",
+              borderless ? "p-0" : "rounded-lg py-3",
               !borderless && (isBot ? "bg-card" : "bg-border/30")
             )}>
               {/* Content */}
