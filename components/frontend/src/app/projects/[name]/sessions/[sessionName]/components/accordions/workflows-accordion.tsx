@@ -152,9 +152,9 @@ export function WorkflowsAccordion({
                       </div>
                     ) : (
                       <div className="flex items-start justify-between w-full gap-2">
-                        <div className="flex flex-col items-start gap-0.5 text-left">
-                          <span className="font-medium">{getSelectedWorkflowInfo().name}</span>
-                          <span className="text-xs text-muted-foreground font-normal line-clamp-2">
+                        <div className="flex flex-col items-start gap-0.5 text-left flex-1 min-w-0">
+                          <span className="font-medium truncate w-full">{getSelectedWorkflowInfo().name}</span>
+                          <span className="text-xs text-muted-foreground font-normal line-clamp-2 w-full">
                             {getSelectedWorkflowInfo().description}
                           </span>
                         </div>
