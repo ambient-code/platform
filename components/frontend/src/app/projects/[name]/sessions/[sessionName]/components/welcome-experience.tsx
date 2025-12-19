@@ -172,32 +172,6 @@ export function WelcomeExperience({
     "load a workflow from a custom git repository".toLowerCase().includes(workflowSearch.toLowerCase());
 
   return (
-    <>
-      <style dangerouslySetInnerHTML={{
-        __html: `
-          @keyframes fadeInUp {
-            from {
-              opacity: 0;
-              transform: translateY(20px);
-            }
-            to {
-              opacity: 1;
-              transform: translateY(0);
-            }
-          }
-          @keyframes fadeInChar {
-            from {
-              opacity: 0;
-            }
-            to {
-              opacity: 1;
-            }
-          }
-          .char-fade-in {
-            animation: fadeInChar 0.15s ease-in;
-          }
-        `
-      }} />
     <div className="space-y-4">
       {/* Static welcome message styled like a chat message */}
       <div className="mb-4 mt-6">
@@ -220,7 +194,7 @@ export function WelcomeExperience({
                   <>
                     {displayedText.slice(0, -3)}
                     {displayedText.slice(-3).split('').map((char, idx) => (
-                      <span key={displayedText.length - 3 + idx} className="char-fade-in">
+                      <span key={displayedText.length - 3 + idx} className="animate-fade-in-char">
                         {char}
                       </span>
                     ))}
@@ -250,7 +224,7 @@ export function WelcomeExperience({
                       : ""
                 )}
                 style={{
-                  animation: `fadeInUp 0.5s ease-out ${index * 0.1}s both`
+                  animation: `fade-in-up 0.5s ease-out ${index * 0.1}s both`
                 }}
                 onClick={() => {
                   if (selectedWorkflowId === null) {
@@ -282,7 +256,7 @@ export function WelcomeExperience({
           <div 
             className="mt-6 flex justify-start items-center gap-4"
             style={{
-              animation: `fadeInUp 0.5s ease-out ${enabledWorkflows.length * 0.1}s both`
+              animation: `fade-in-up 0.5s ease-out ${enabledWorkflows.length * 0.1}s both`
             }}
           >
             <DropdownMenu onOpenChange={(open) => {
@@ -411,7 +385,7 @@ export function WelcomeExperience({
                     <>
                       {setupDisplayedText.slice(0, -3)}
                       {setupDisplayedText.slice(-3).split('').map((char, idx) => (
-                        <span key={setupDisplayedText.length - 3 + idx} className="char-fade-in">
+                        <span key={setupDisplayedText.length - 3 + idx} className="animate-fade-in-char">
                           {char}
                         </span>
                       ))}
@@ -429,7 +403,6 @@ export function WelcomeExperience({
         </div>
       )}
     </div>
-    </>
   );
 }
 
