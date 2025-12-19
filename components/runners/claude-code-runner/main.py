@@ -7,7 +7,6 @@ import os
 import json
 import logging
 from contextlib import asynccontextmanager
-from pathlib import Path
 from typing import Optional, List, Dict, Any, Union
 
 from fastapi import FastAPI, Request, HTTPException
@@ -98,21 +97,17 @@ async def lifespan(app: FastAPI):
     
     logger.info("Adapter initialized - fresh client will be created for each run")
     
-    # Check if this is a restart/resume or continuation
-    # - Marker file: session was already initialized (resume)
-    # - Parent session ID: this is a child session continuing from parent
-    initial_prompt_marker = Path(workspace_path) / ".initial_prompt_sent"
+    # Check if this is a continuation (has parent session)
+    # PARENT_SESSION_ID is set when continuing from another session
     parent_session_id = os.getenv("PARENT_SESSION_ID", "").strip()
     
-    # Check for INITIAL_PROMPT and auto-execute (only if this is a fresh start)
+    # Check for INITIAL_PROMPT and auto-execute (only if no parent session)
     initial_prompt = os.getenv("INITIAL_PROMPT", "").strip()
-    if initial_prompt and not initial_prompt_marker.exists() and not parent_session_id:
+    if initial_prompt and not parent_session_id:
         logger.info(f"INITIAL_PROMPT detected ({len(initial_prompt)} chars), will auto-execute after 3s delay")
-        asyncio.create_task(auto_execute_initial_prompt(initial_prompt, session_id, initial_prompt_marker))
-    elif initial_prompt and parent_session_id:
-        logger.info(f"INITIAL_PROMPT detected but this is a continuation (parent={parent_session_id[:12]}...) - skipping")
+        asyncio.create_task(auto_execute_initial_prompt(initial_prompt, session_id))
     elif initial_prompt:
-        logger.info(f"INITIAL_PROMPT detected but marker exists - skipping auto-execution (session resume)")
+        logger.info(f"INITIAL_PROMPT detected but has parent session ({parent_session_id[:12]}...) - skipping")
     
     logger.info(f"AG-UI server ready for session {session_id}")
     
@@ -122,13 +117,13 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down AG-UI server...")
 
 
-async def auto_execute_initial_prompt(prompt: str, session_id: str, marker_path: Path):
+async def auto_execute_initial_prompt(prompt: str, session_id: str):
     """Auto-execute INITIAL_PROMPT by POSTing to backend after short delay.
     
     The 3-second delay gives the runner time to fully start. Backend has retry
     logic to handle if Service DNS isn't ready yet.
     
-    Creates a marker file on success to prevent re-sending on session resume.
+    Only called for fresh sessions (no PARENT_SESSION_ID set).
     """
     import uuid
     import aiohttp
@@ -178,13 +173,6 @@ async def auto_execute_initial_prompt(prompt: str, session_id: str, marker_path:
                 if resp.status == 200:
                     result = await resp.json()
                     logger.info(f"INITIAL_PROMPT auto-execution started: {result}")
-                    # Create marker file to prevent re-sending on resume
-                    try:
-                        marker_path.parent.mkdir(parents=True, exist_ok=True)
-                        marker_path.write_text(f"sent_at={asyncio.get_event_loop().time()}\n")
-                        logger.info(f"Created initial prompt marker: {marker_path}")
-                    except Exception as marker_err:
-                        logger.warning(f"Failed to create initial prompt marker: {marker_err}")
                 else:
                     error_text = await resp.text()
                     logger.warning(f"INITIAL_PROMPT failed with status {resp.status}: {error_text[:200]}")
