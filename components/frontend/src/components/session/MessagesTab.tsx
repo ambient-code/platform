@@ -31,10 +31,11 @@ export type MessagesTabProps = {
   isRunActive?: boolean;  // Track if agent is actively processing
   showWelcomeExperience?: boolean;
   welcomeExperienceComponent?: React.ReactNode;
+  activeWorkflow?: string | null;  // Track if workflow has been selected
 };
 
 
-const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chatInput, setChatInput, onSendChat, onInterrupt, onEndSession, onGoToResults, onContinue, workflowMetadata, onCommandClick, isRunActive = false, showWelcomeExperience, welcomeExperienceComponent }) => {
+const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chatInput, setChatInput, onSendChat, onInterrupt, onEndSession, onGoToResults, onContinue, workflowMetadata, onCommandClick, isRunActive = false, showWelcomeExperience, welcomeExperienceComponent, activeWorkflow }) => {
   const [interrupting, setInterrupting] = useState(false);
   const [ending, setEnding] = useState(false);
   const [sendingChat, setSendingChat] = useState(false);
@@ -269,6 +270,10 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
     }
   };
 
+  // Determine if we should show messages
+  // Messages should be hidden until workflow is selected when welcome experience is active
+  const shouldShowMessages = !showWelcomeExperience || activeWorkflow;
+
   return (
     <div className="flex flex-col h-full">
       <div 
@@ -279,13 +284,13 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
         {/* Show welcome experience if active */}
         {showWelcomeExperience && welcomeExperienceComponent}
 
-        {/* Show filtered messages */}
-        {filteredMessages.map((m, idx) => (
+        {/* Show filtered messages only if workflow is selected or welcome experience is not shown */}
+        {shouldShowMessages && filteredMessages.map((m, idx) => (
           <StreamMessage key={`sm-${idx}`} message={m} isNewest={idx === filteredMessages.length - 1} onGoToResults={onGoToResults} />
         ))}
 
         {/* Show loading indicator when agent is actively processing */}
-        {isRunActive && filteredMessages.length > 0 && (
+        {shouldShowMessages && isRunActive && filteredMessages.length > 0 && (
           <div className="pl-12 pr-4 py-2">
             <LoadingDots />
           </div>

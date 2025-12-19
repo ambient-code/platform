@@ -1801,6 +1801,7 @@ export default function ProjectSessionDetailPage({
                         onCommandClick={handleCommandClick}
                         isRunActive={isRunActive}
                         showWelcomeExperience={true}
+                        activeWorkflow={workflowManagement.activeWorkflow}
                         welcomeExperienceComponent={
                           <WelcomeExperience
                             ootbWorkflows={ootbWorkflows}
