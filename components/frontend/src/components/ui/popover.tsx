@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils"
 interface PopoverContextType {
   open: boolean
   setOpen: (open: boolean) => void
-  triggerRef: React.RefObject<HTMLElement>
+  triggerRef: React.RefObject<HTMLElement | null>
 }
 
 const PopoverContext = React.createContext<PopoverContextType | undefined>(undefined)
@@ -24,10 +24,9 @@ interface PopoverProps {
   children: React.ReactNode
   open?: boolean
   onOpenChange?: (open: boolean) => void
-  modal?: boolean
 }
 
-export function Popover({ children, open: controlledOpen, onOpenChange, modal }: PopoverProps) {
+export function Popover({ children, open: controlledOpen, onOpenChange }: PopoverProps) {
   const [uncontrolledOpen, setUncontrolledOpen] = React.useState(false)
   const triggerRef = React.useRef<HTMLElement>(null)
   
@@ -58,8 +57,8 @@ export function PopoverTrigger({ children, asChild, className }: PopoverTriggerP
   }
 
   if (asChild && React.isValidElement(children)) {
-    return React.cloneElement(children as React.ReactElement<React.HTMLAttributes<HTMLElement>>, {
-      ref: triggerRef,
+    return React.cloneElement(children as React.ReactElement<React.HTMLAttributes<HTMLElement> & { ref?: React.Ref<HTMLElement> }>, {
+      ref: triggerRef as React.Ref<HTMLElement>,
       onClick: handleClick,
       className: cn((children as React.ReactElement<React.HTMLAttributes<HTMLElement>>).props?.className, className),
     })
