@@ -12,12 +12,12 @@ from pathlib import Path
 import sys
 from unittest.mock import Mock, patch
 
-# Add parent directory to path for importing wrapper module
-wrapper_dir = Path(__file__).parent.parent
-if str(wrapper_dir) not in sys.path:
-    sys.path.insert(0, str(wrapper_dir))
+# Add parent directory to path for importing adapter module
+adapter_dir = Path(__file__).parent.parent
+if str(adapter_dir) not in sys.path:
+    sys.path.insert(0, str(adapter_dir))
 
-from wrapper import ClaudeCodeAdapter  # type: ignore[import]
+from adapter import ClaudeCodeAdapter  # type: ignore[import]
 
 
 class TestGetReposConfig:
@@ -39,11 +39,10 @@ class TestGetReposConfig:
             mock_context = Mock()
             mock_context.workspace_path = "/tmp/workspace"
             mock_context.session_id = "test-session-123"
-            mock_context.model_name = "claude-sonnet-4-5"
-            mock_context.system_prompt = None
             mock_context.get_env = lambda k, d=None: os.getenv(k, d)
 
-            adapter = ClaudeCodeAdapter(mock_context)
+            adapter = ClaudeCodeAdapter()
+            adapter.context = mock_context
             result = adapter._get_repos_config()
 
             assert len(result) == 1
@@ -64,11 +63,10 @@ class TestGetReposConfig:
             mock_context = Mock()
             mock_context.workspace_path = "/tmp/workspace"
             mock_context.session_id = "test-session-456"
-            mock_context.model_name = "claude-sonnet-4-5"
-            mock_context.system_prompt = None
             mock_context.get_env = lambda k, d=None: os.getenv(k, d)
 
-            adapter = ClaudeCodeAdapter(mock_context)
+            adapter = ClaudeCodeAdapter()
+            adapter.context = mock_context
             result = adapter._get_repos_config()
 
             assert len(result) == 1
@@ -89,11 +87,12 @@ class TestGetReposConfig:
             mock_context = Mock()
             mock_context.workspace_path = "/tmp/workspace"
             mock_context.session_id = "test-session-789"
-            mock_context.model_name = "claude-sonnet-4-5"
-            mock_context.system_prompt = None
+            # mock_context.model_name removed
+            # mock_context.system_prompt removed
             mock_context.get_env = lambda k, d=None: os.getenv(k, d)
 
-            adapter = ClaudeCodeAdapter(mock_context)
+            adapter = ClaudeCodeAdapter()
+            adapter.context = mock_context
             result = adapter._get_repos_config()
 
             assert len(result) == 1
@@ -124,11 +123,12 @@ class TestGetReposConfig:
             mock_context = Mock()
             mock_context.workspace_path = "/tmp/workspace"
             mock_context.session_id = "test-session-multi"
-            mock_context.model_name = "claude-sonnet-4-5"
-            mock_context.system_prompt = None
+            # mock_context.model_name removed
+            # mock_context.system_prompt removed
             mock_context.get_env = lambda k, d=None: os.getenv(k, d)
 
-            adapter = ClaudeCodeAdapter(mock_context)
+            adapter = ClaudeCodeAdapter()
+            adapter.context = mock_context
             result = adapter._get_repos_config()
 
             assert len(result) == 3
@@ -157,11 +157,12 @@ class TestGetReposConfig:
             mock_context = Mock()
             mock_context.workspace_path = "/tmp/workspace"
             mock_context.session_id = "test-session-legacy"
-            mock_context.model_name = "claude-sonnet-4-5"
-            mock_context.system_prompt = None
+            # mock_context.model_name removed
+            # mock_context.system_prompt removed
             mock_context.get_env = lambda k, d=None: os.getenv(k, d)
 
-            adapter = ClaudeCodeAdapter(mock_context)
+            adapter = ClaudeCodeAdapter()
+            adapter.context = mock_context
             result = adapter._get_repos_config()
 
             # Legacy format without input/output structure is intentionally filtered out
@@ -174,11 +175,12 @@ class TestGetReposConfig:
             mock_context = Mock()
             mock_context.workspace_path = "/tmp/workspace"
             mock_context.session_id = "test-session-empty"
-            mock_context.model_name = "claude-sonnet-4-5"
-            mock_context.system_prompt = None
+            # mock_context.model_name removed
+            # mock_context.system_prompt removed
             mock_context.get_env = lambda k, d=None: os.getenv(k, d)
 
-            adapter = ClaudeCodeAdapter(mock_context)
+            adapter = ClaudeCodeAdapter()
+            adapter.context = mock_context
             result = adapter._get_repos_config()
 
             assert result == []
@@ -189,11 +191,12 @@ class TestGetReposConfig:
             mock_context = Mock()
             mock_context.workspace_path = "/tmp/workspace"
             mock_context.session_id = "test-session-invalid"
-            mock_context.model_name = "claude-sonnet-4-5"
-            mock_context.system_prompt = None
+            # mock_context.model_name removed
+            # mock_context.system_prompt removed
             mock_context.get_env = lambda k, d=None: os.getenv(k, d)
 
-            adapter = ClaudeCodeAdapter(mock_context)
+            adapter = ClaudeCodeAdapter()
+            adapter.context = mock_context
             result = adapter._get_repos_config()
 
             # Should return empty list on parse error
@@ -217,11 +220,12 @@ class TestSystemPromptInjection:
         mock_context = Mock()
         mock_context.workspace_path = "/tmp/workspace"
         mock_context.session_id = "test-session"
-        mock_context.model_name = "claude-sonnet-4-5"
-        mock_context.system_prompt = None
+        # mock_context.model_name removed
+        # mock_context.system_prompt removed
         mock_context.get_env = lambda k, d=None: None
 
-        adapter = ClaudeCodeAdapter(mock_context)
+        adapter = ClaudeCodeAdapter()
+        adapter.context = mock_context
         prompt = adapter._build_workspace_context_prompt(
             repos_cfg=repos_cfg,
             workflow_name=None,
@@ -242,7 +246,7 @@ class TestSystemPromptInjection:
         assert "Only retry on network errors (up to 4 times with backoff)" in prompt
 
         # Verify repo list is correct
-        assert "Repositories with auto-push enabled: repo-with-autopush" in prompt
+        assert "Repositories configured for auto-push: repo-with-autopush" in prompt
 
     def test_git_instructions_omitted_when_autopush_disabled(self):
         """Test that git push instructions are NOT included when all repos have autoPush=false"""
@@ -257,11 +261,12 @@ class TestSystemPromptInjection:
         mock_context = Mock()
         mock_context.workspace_path = "/tmp/workspace"
         mock_context.session_id = "test-session"
-        mock_context.model_name = "claude-sonnet-4-5"
-        mock_context.system_prompt = None
+        # mock_context.model_name removed
+        # mock_context.system_prompt removed
         mock_context.get_env = lambda k, d=None: None
 
-        adapter = ClaudeCodeAdapter(mock_context)
+        adapter = ClaudeCodeAdapter()
+        adapter.context = mock_context
         prompt = adapter._build_workspace_context_prompt(
             repos_cfg=repos_cfg,
             workflow_name=None,
@@ -272,7 +277,7 @@ class TestSystemPromptInjection:
         # Verify git instructions section is NOT present
         assert "## Git Operations - IMPORTANT" not in prompt
         assert "When you complete your work:" not in prompt
-        assert "Repositories with auto-push enabled:" not in prompt
+        assert "Repositories configured for auto-push:" not in prompt
 
     def test_git_instructions_with_multiple_autopush_repos(self):
         """Test that all repos with autoPush=true are listed in the system prompt"""
@@ -299,11 +304,12 @@ class TestSystemPromptInjection:
         mock_context = Mock()
         mock_context.workspace_path = "/tmp/workspace"
         mock_context.session_id = "test-session"
-        mock_context.model_name = "claude-sonnet-4-5"
-        mock_context.system_prompt = None
+        # mock_context.model_name removed
+        # mock_context.system_prompt removed
         mock_context.get_env = lambda k, d=None: None
 
-        adapter = ClaudeCodeAdapter(mock_context)
+        adapter = ClaudeCodeAdapter()
+        adapter.context = mock_context
         prompt = adapter._build_workspace_context_prompt(
             repos_cfg=repos_cfg,
             workflow_name=None,
@@ -315,20 +321,21 @@ class TestSystemPromptInjection:
         assert "## Git Operations - IMPORTANT" in prompt
 
         # Verify repo list includes ONLY repos with autoPush=true
-        assert "Repositories with auto-push enabled: repo1, repo3" in prompt
+        assert "Repositories configured for auto-push: repo1, repo3" in prompt
         # Verify repo2 (autoPush=false) is NOT listed
-        assert "repo2" not in prompt.split("Repositories with auto-push enabled:")[1].split("\n")[0]
+        assert "repo2" not in prompt.split("Repositories configured for auto-push:")[1].split("\n")[0]
 
     def test_git_instructions_omitted_when_no_repos(self):
         """Test that git push instructions are NOT included when repos_cfg is empty"""
         mock_context = Mock()
         mock_context.workspace_path = "/tmp/workspace"
         mock_context.session_id = "test-session"
-        mock_context.model_name = "claude-sonnet-4-5"
-        mock_context.system_prompt = None
+        # mock_context.model_name removed
+        # mock_context.system_prompt removed
         mock_context.get_env = lambda k, d=None: None
 
-        adapter = ClaudeCodeAdapter(mock_context)
+        adapter = ClaudeCodeAdapter()
+        adapter.context = mock_context
         prompt = adapter._build_workspace_context_prompt(
             repos_cfg=[],
             workflow_name=None,
@@ -338,7 +345,7 @@ class TestSystemPromptInjection:
 
         # Verify git instructions section is NOT present
         assert "## Git Operations - IMPORTANT" not in prompt
-        assert "Repositories with auto-push enabled:" not in prompt
+        assert "Repositories configured for auto-push:" not in prompt
 
 
 class TestPushBehavior:
@@ -350,11 +357,12 @@ class TestPushBehavior:
         mock_context = Mock()
         mock_context.workspace_path = "/tmp/workspace"
         mock_context.session_id = "test-session"
-        mock_context.model_name = "claude-sonnet-4-5"
-        mock_context.system_prompt = None
+        # mock_context.model_name removed
+        # mock_context.system_prompt removed
         mock_context.get_env = lambda k, d=None: None
 
-        adapter = ClaudeCodeAdapter(mock_context)
+        adapter = ClaudeCodeAdapter()
+        adapter.context = mock_context
 
         # Mock _run_cmd to track calls
         run_cmd_calls = []
@@ -397,11 +405,12 @@ class TestPushBehavior:
         mock_context = Mock()
         mock_context.workspace_path = "/tmp/workspace"
         mock_context.session_id = "test-session"
-        mock_context.model_name = "claude-sonnet-4-5"
-        mock_context.system_prompt = None
+        # mock_context.model_name removed
+        # mock_context.system_prompt removed
         mock_context.get_env = lambda k, d=None: None
 
-        adapter = ClaudeCodeAdapter(mock_context)
+        adapter = ClaudeCodeAdapter()
+        adapter.context = mock_context
 
         # Mock _run_cmd to track calls
         run_cmd_calls = []
@@ -450,11 +459,12 @@ class TestPushBehavior:
         mock_context = Mock()
         mock_context.workspace_path = "/tmp/workspace"
         mock_context.session_id = "test-session"
-        mock_context.model_name = "claude-sonnet-4-5"
-        mock_context.system_prompt = None
+        # mock_context.model_name removed
+        # mock_context.system_prompt removed
         mock_context.get_env = lambda k, d=None: None
 
-        adapter = ClaudeCodeAdapter(mock_context)
+        adapter = ClaudeCodeAdapter()
+        adapter.context = mock_context
 
         # Track which repos were pushed
         pushed_repos = []

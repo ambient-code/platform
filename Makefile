@@ -1,4 +1,4 @@
-.PHONY: help setup build-all build-frontend build-backend build-operator build-runner deploy clean
+.PHONY: help setup build-all build-frontend build-backend build-operator build-runner deploy clean test-runner test-runner-autopush
 .PHONY: local-up local-down local-clean local-status local-rebuild local-reload-backend local-reload-frontend local-reload-operator local-sync-version
 .PHONY: local-dev-token
 .PHONY: local-logs local-logs-backend local-logs-frontend local-logs-operator local-shell local-shell-frontend
@@ -161,6 +161,24 @@ build-runner: ## Build Claude Code runner image
 		--build-arg BUILD_USER=$(BUILD_USER) \
 		-t $(RUNNER_IMAGE) -f claude-code-runner/Dockerfile .
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Runner built: $(RUNNER_IMAGE)"
+
+test-runner: build-runner ## Run runner tests in container
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Running runner tests in container..."
+	@$(CONTAINER_ENGINE) run --rm \
+		-v $(PWD)/components/runners/claude-code-runner:/app/test-runner:Z \
+		-w /app/test-runner \
+		$(RUNNER_IMAGE) \
+		bash -c "pip install pytest pytest-asyncio && python -m pytest tests/ -v"
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Runner tests passed"
+
+test-runner-autopush: build-runner ## Run autoPush tests in container
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Running autoPush tests in container..."
+	@$(CONTAINER_ENGINE) run --rm \
+		-v $(PWD)/components/runners/claude-code-runner:/app/test-runner:Z \
+		-w /app/test-runner \
+		$(RUNNER_IMAGE) \
+		bash -c "pip install pytest pytest-asyncio && python -m pytest tests/test_repo_autopush.py -v"
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) autoPush tests passed"
 
 ##@ Git Hooks
 

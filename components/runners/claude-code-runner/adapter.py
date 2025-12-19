@@ -213,14 +213,26 @@ class ClaudeCodeAdapter:
             async for event in self._run_claude_agent_sdk(user_message, thread_id, run_id):
                 yield event
             logger.info(f"Claude SDK processing completed for run {run_id}")
-            
+
+            # Check if AUTO_PUSH_ON_COMPLETE is enabled
+            try:
+                auto_push_on_complete = str(os.getenv('AUTO_PUSH_ON_COMPLETE', 'false')).strip().lower() in ('1', 'true', 'yes')
+            except Exception:
+                auto_push_on_complete = False
+
+            if auto_push_on_complete:
+                logger.info("AUTO_PUSH_ON_COMPLETE enabled, pushing results...")
+                async for event in self._push_results_if_any():
+                    yield event
+                logger.info("Auto-push completed")
+
             # Emit RUN_FINISHED
             yield RunFinishedEvent(
                 type=EventType.RUN_FINISHED,
                 thread_id=thread_id,
                 run_id=run_id,
             )
-            
+
             self.last_exit_code = 0
             
         except PrerequisiteError as e:
@@ -1337,6 +1349,283 @@ class ClaudeCodeAdapter:
             return "", "", host
         return "", "", host
 
+    async def _create_pull_request(self, upstream_repo: str, fork_repo: str,
+                                     head_branch: str, base_branch: str) -> str:
+        """Create a pull request (NOT YET IMPLEMENTED in adapter.py).
+
+        Args:
+            upstream_repo: URL of the upstream repository
+            fork_repo: URL of the fork repository
+            head_branch: Branch name with changes
+            base_branch: Target branch for PR
+
+        Returns:
+            PR URL if created, empty string otherwise
+        """
+        logger.warning("PR creation not yet implemented in adapter.py - skipping")
+        # TODO: Port PR creation logic from wrapper.py or implement via GitHub API
+        return ""
+
+    async def _push_results_if_any(self) -> AsyncIterator[BaseEvent]:
+        """Commit and push changes to output repo/branch if configured (respects per-repo autoPush flag)."""
+        # Get GitHub token once for all repos
+        token = os.getenv("GITHUB_TOKEN") or await self._fetch_github_token()
+        if token:
+            logger.info("GitHub token obtained for push operations")
+        else:
+            logger.warning("No GitHub token available - push may fail for private repos")
+
+        repos_cfg = self._get_repos_config()
+        if repos_cfg:
+            # Multi-repo flow
+            try:
+                for r in repos_cfg:
+                    name = (r.get('name') or '').strip()
+                    if not name:
+                        continue
+
+                    # Check per-repo autoPush flag FIRST (cheapest check)
+                    auto_push = r.get('autoPush', False)
+                    if not auto_push:
+                        logger.info(f"autoPush disabled for {name}, skipping push")
+                        continue
+
+                    # Check output URL configured SECOND (before expensive git operations)
+                    out = r.get('output') or {}
+                    out_url_raw = (out.get('url') or '').strip()
+                    if not out_url_raw:
+                        logger.warning(f"No output URL configured for {name}, skipping push")
+                        continue
+
+                    # Verify repository directory exists
+                    repo_dir = Path(self.context.workspace_path) / name
+                    if not repo_dir.exists() or not repo_dir.is_dir():
+                        logger.warning(f"Repository directory not found: {repo_dir}, skipping push")
+                        continue
+
+                    # Check for changes LAST (most expensive operation)
+                    status = await self._run_cmd(["git", "status", "--porcelain"], cwd=str(repo_dir), capture_stdout=True)
+                    if not status.strip():
+                        logger.info(f"No changes detected for {name}, skipping push")
+                        continue
+
+                    # Add token to output URL
+                    out_url = self._url_with_token(out_url_raw, token) if token else out_url_raw
+
+                    in_ = r.get('input') or {}
+                    in_branch = (in_.get('branch') or '').strip()
+                    out_branch = (out.get('branch') or '').strip() or f"sessions/{self.context.session_id}"
+
+                    yield RawEvent(
+                        type=EventType.RAW,
+                        thread_id=self._current_thread_id or self.context.session_id,
+                        run_id=self._current_run_id or "push",
+                        event={"type": "system_log", "message": f"📤 Pushing changes for {name}..."}
+                    )
+                    logger.info(f"Configuring output remote with authentication for {name}")
+
+                    # Reconfigure output remote with token before push
+                    await self._run_cmd(["git", "remote", "remove", "output"], cwd=str(repo_dir), ignore_errors=True)
+                    await self._run_cmd(["git", "remote", "add", "output", out_url], cwd=str(repo_dir))
+
+                    logger.info(f"Checking out branch {out_branch} for {name}")
+                    await self._run_cmd(["git", "checkout", "-B", out_branch], cwd=str(repo_dir))
+
+                    logger.info(f"Staging all changes for {name}")
+                    await self._run_cmd(["git", "add", "-A"], cwd=str(repo_dir))
+
+                    logger.info(f"Committing changes for {name}")
+                    try:
+                        await self._run_cmd(["git", "commit", "-m", f"Session {self.context.session_id}: update"], cwd=str(repo_dir))
+                    except RuntimeError as e:
+                        if "nothing to commit" in str(e).lower():
+                            logger.info(f"No changes to commit for {name}")
+                            continue
+                        else:
+                            logger.error(f"Commit failed for {name}: {e}")
+                            raise
+
+                    # Verify we have a valid output remote
+                    logger.info(f"Verifying output remote for {name}")
+                    remotes_output = await self._run_cmd(["git", "remote", "-v"], cwd=str(repo_dir), capture_stdout=True)
+                    logger.info(f"Git remotes for {name}:\n{self._redact_secrets(remotes_output)}")
+
+                    if "output" not in remotes_output:
+                        raise RuntimeError(f"Output remote not configured for {name}")
+
+                    logger.info(f"Pushing to output remote: {out_branch} for {name}")
+                    yield RawEvent(
+                        type=EventType.RAW,
+                        thread_id=self._current_thread_id or self.context.session_id,
+                        run_id=self._current_run_id or "push",
+                        event={"type": "system_log", "message": f"Pushing {name} to {out_branch}..."}
+                    )
+                    # Note: We use "output" remote (configured above) not "origin" (which Claude uses for manual pushes)
+                    await self._run_cmd(["git", "push", "-u", "output", f"HEAD:{out_branch}"], cwd=str(repo_dir))
+
+                    logger.info(f"Push completed for {name}")
+                    yield RawEvent(
+                        type=EventType.RAW,
+                        thread_id=self._current_thread_id or self.context.session_id,
+                        run_id=self._current_run_id or "push",
+                        event={"type": "system_log", "message": f"✓ Push completed for {name}"}
+                    )
+
+                    # PR creation (if configured)
+                    create_pr_flag = (os.getenv("CREATE_PR", "").strip().lower() == "true")
+                    if create_pr_flag and in_branch and out_branch and out_branch != in_branch and out_url:
+                        upstream_url = (in_.get('url') or '').strip() or out_url
+                        target_branch = os.getenv("PR_TARGET_BRANCH", "").strip() or in_branch
+                        try:
+                            pr_url = await self._create_pull_request(upstream_repo=upstream_url, fork_repo=out_url, head_branch=out_branch, base_branch=target_branch)
+                            if pr_url:
+                                yield RawEvent(
+                                    type=EventType.RAW,
+                                    thread_id=self._current_thread_id or self.context.session_id,
+                                    run_id=self._current_run_id or "push",
+                                    event={"type": "system_log", "message": f"Pull request created for {name}: {pr_url}"}
+                                )
+                        except Exception as e:
+                            yield RawEvent(
+                                type=EventType.RAW,
+                                thread_id=self._current_thread_id or self.context.session_id,
+                                run_id=self._current_run_id or "push",
+                                event={"type": "system_log", "message": f"⚠️ PR creation failed for {name}: {e}"}
+                            )
+            # NOTE: Push failures are non-fatal - session completes successfully even if git push fails.
+            # This allows users to manually push via workspace access if automatic push encounters errors.
+            except Exception as e:
+                logger.error(f"Failed to push results: {e}")
+                yield RawEvent(
+                    type=EventType.RAW,
+                    thread_id=self._current_thread_id or self.context.session_id,
+                    run_id=self._current_run_id or "push",
+                    event={"type": "system_log", "message": f"⚠️ Push failed: {e}"}
+                )
+            return
+
+        # Single-repo legacy flow
+        # Note: Legacy flow does not support per-repo autoPush flags - honors global AUTO_PUSH_ON_COMPLETE only
+        output_repo_raw = os.getenv("OUTPUT_REPO_URL", "").strip()
+        if not output_repo_raw:
+            logger.info("No OUTPUT_REPO_URL configured, skipping legacy single-repo push")
+            return
+
+        # Add token to output URL
+        output_repo = self._url_with_token(output_repo_raw, token) if token else output_repo_raw
+
+        output_branch = os.getenv("OUTPUT_BRANCH", "").strip() or f"sessions/{self.context.session_id}"
+        input_repo = os.getenv("INPUT_REPO_URL", "").strip()
+        input_branch = os.getenv("INPUT_BRANCH", "").strip()
+        workspace = Path(self.context.workspace_path)
+
+        # Verify workspace directory exists
+        if not workspace.exists() or not workspace.is_dir():
+            logger.warning(f"Workspace directory not found: {workspace}, skipping push")
+            return
+
+        try:
+            status = await self._run_cmd(["git", "status", "--porcelain"], cwd=str(workspace), capture_stdout=True)
+            if not status.strip():
+                yield RawEvent(
+                    type=EventType.RAW,
+                    thread_id=self._current_thread_id or self.context.session_id,
+                    run_id=self._current_run_id or "push",
+                    event={"type": "system_log", "message": "No changes to push"}
+                )
+                return
+
+            yield RawEvent(
+                type=EventType.RAW,
+                thread_id=self._current_thread_id or self.context.session_id,
+                run_id=self._current_run_id or "push",
+                event={"type": "system_log", "message": "📤 Committing and pushing changes..."}
+            )
+            logger.info("Configuring output remote with authentication")
+
+            # Reconfigure output remote with token before push
+            await self._run_cmd(["git", "remote", "remove", "output"], cwd=str(workspace), ignore_errors=True)
+            await self._run_cmd(["git", "remote", "add", "output", output_repo], cwd=str(workspace))
+
+            logger.info(f"Checking out branch {output_branch}")
+            await self._run_cmd(["git", "checkout", "-B", output_branch], cwd=str(workspace))
+
+            logger.info("Staging all changes")
+            await self._run_cmd(["git", "add", "-A"], cwd=str(workspace))
+
+            logger.info("Committing changes")
+            try:
+                await self._run_cmd(["git", "commit", "-m", f"Session {self.context.session_id}: update"], cwd=str(workspace))
+            except RuntimeError as e:
+                if "nothing to commit" in str(e).lower():
+                    logger.info("No changes to commit")
+                    yield RawEvent(
+                        type=EventType.RAW,
+                        thread_id=self._current_thread_id or self.context.session_id,
+                        run_id=self._current_run_id or "push",
+                        event={"type": "system_log", "message": "No new changes to commit"}
+                    )
+                    return
+                else:
+                    logger.error(f"Commit failed: {e}")
+                    raise
+
+            # Verify we have a valid output remote
+            logger.info("Verifying output remote")
+            remotes_output = await self._run_cmd(["git", "remote", "-v"], cwd=str(workspace), capture_stdout=True)
+            logger.info(f"Git remotes:\n{self._redact_secrets(remotes_output)}")
+
+            if "output" not in remotes_output:
+                raise RuntimeError("Output remote not configured")
+
+            logger.info(f"Pushing to output remote: {output_branch}")
+            yield RawEvent(
+                type=EventType.RAW,
+                thread_id=self._current_thread_id or self.context.session_id,
+                run_id=self._current_run_id or "push",
+                event={"type": "system_log", "message": f"Pushing to {output_branch}..."}
+            )
+            await self._run_cmd(["git", "push", "-u", "output", f"HEAD:{output_branch}"], cwd=str(workspace))
+
+            yield RawEvent(
+                type=EventType.RAW,
+                thread_id=self._current_thread_id or self.context.session_id,
+                run_id=self._current_run_id or "push",
+                event={"type": "system_log", "message": "✓ Push completed"}
+            )
+
+            # PR creation (if configured)
+            create_pr_flag = (os.getenv("CREATE_PR", "").strip().lower() == "true")
+            if create_pr_flag and input_repo and input_branch and output_branch != input_branch:
+                try:
+                    target_branch = os.getenv("PR_TARGET_BRANCH", "").strip() or input_branch
+                    pr_url = await self._create_pull_request(upstream_repo=input_repo, fork_repo=output_repo, head_branch=output_branch, base_branch=target_branch)
+                    if pr_url:
+                        yield RawEvent(
+                            type=EventType.RAW,
+                            thread_id=self._current_thread_id or self.context.session_id,
+                            run_id=self._current_run_id or "push",
+                            event={"type": "system_log", "message": f"Pull request created: {pr_url}"}
+                        )
+                except Exception as e:
+                    yield RawEvent(
+                        type=EventType.RAW,
+                        thread_id=self._current_thread_id or self.context.session_id,
+                        run_id=self._current_run_id or "push",
+                        event={"type": "system_log", "message": f"⚠️ PR creation failed: {e}"}
+                    )
+
+        # NOTE: Push failures are non-fatal - session completes successfully even if git push fails.
+        # This allows users to manually push via workspace access if automatic push encounters errors.
+        except Exception as e:
+            logger.error(f"Failed to push results: {e}")
+            yield RawEvent(
+                type=EventType.RAW,
+                thread_id=self._current_thread_id or self.context.session_id,
+                run_id=self._current_run_id or "push",
+                event={"type": "system_log", "message": f"⚠️ Push failed: {e}"}
+            )
+
     def _get_repos_config(self) -> list[dict]:
         """Read repos mapping from REPOS_JSON env if present."""
         try:
@@ -1352,6 +1641,7 @@ class ClaudeCodeAdapter:
                     name = str(it.get('name') or '').strip()
                     input_obj = it.get('input') or {}
                     output_obj = it.get('output') or None
+                    auto_push = it.get('autoPush', False)
                     url = str((input_obj or {}).get('url') or '').strip()
                     if not name and url:
                         try:
@@ -1366,7 +1656,7 @@ class ClaudeCodeAdapter:
                         except Exception:
                             name = ''
                     if name and isinstance(input_obj, dict) and url:
-                        out.append({'name': name, 'input': input_obj, 'output': output_obj})
+                        out.append({'name': name, 'input': input_obj, 'output': output_obj, 'autoPush': auto_push})
                 return out
         except Exception:
             return []
@@ -1449,7 +1739,27 @@ class ClaudeCodeAdapter:
             for i, repo in enumerate(repos_cfg):
                 name = repo.get('name', f'repo-{i}')
                 prompt += f"- {name}/\n"
-            prompt += "\nThese repositories contain source code you can read or modify.\n\n"
+            prompt += "\nThese repositories contain source code you can read or modify.\n"
+            prompt += "Each has its own git configuration and remote.\n\n"
+
+            # Add git push instructions if any repo has autoPush enabled
+            auto_push_repos = []
+            for repo in repos_cfg:
+                if repo.get('autoPush', False):
+                    auto_push_repos.append(repo.get('name', 'unknown'))
+
+            if auto_push_repos:
+                prompt += "## Git Operations - IMPORTANT\n"
+                prompt += "When you complete your work:\n"
+                prompt += "1. Commit your changes with a clear, descriptive message\n"
+                prompt += "2. Push changes to the configured output branch\n"
+                prompt += "3. Confirm the push succeeded\n\n"
+                prompt += "Git push best practices:\n"
+                prompt += "- Use: git push -u origin <branch-name>\n"
+                prompt += "- Only retry on network errors (up to 4 times with backoff)\n"
+                prompt += "- Do not force push unless explicitly requested by the user\n"
+                prompt += "- Check git status before and after pushing\n\n"
+                prompt += f"Repositories configured for auto-push: {', '.join(auto_push_repos)}\n\n"
 
         if ambient_config.get("systemPrompt"):
             prompt += f"## Workflow Instructions\n{ambient_config['systemPrompt']}\n\n"
