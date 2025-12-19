@@ -97,8 +97,6 @@ export function useWorkflowManagement({
 
   // Handle workflow selection change
   const handleWorkflowChange = useCallback((value: string, ootbWorkflows: WorkflowConfig[], onCustom: () => void) => {
-    console.log('[WorkflowManagement] handleWorkflowChange called with:', value);
-    console.log('[WorkflowManagement] Available workflows:', ootbWorkflows.map(w => ({ id: w.id, name: w.name })));
     setSelectedWorkflow(value);
     
     if (value === "none") {
@@ -113,7 +111,6 @@ export function useWorkflowManagement({
     
     // Find the selected workflow from OOTB workflows
     const workflow = ootbWorkflows.find(w => w.id === value);
-    console.log('[WorkflowManagement] Found workflow:', workflow ? { id: workflow.id, name: workflow.name } : 'NOT FOUND');
     if (!workflow) {
       errorToast(`Workflow ${value} not found`);
       return null;

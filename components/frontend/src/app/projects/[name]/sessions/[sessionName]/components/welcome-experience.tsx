@@ -115,7 +115,6 @@ export function WelcomeExperience({
   }, [isSetupTypingComplete, hasRealMessages]);
 
   const handleWorkflowSelect = (workflowId: string) => {
-    console.log('[WelcomeExperience] Workflow selected:', workflowId);
     setSelectedWorkflowId(workflowId);
     onWorkflowSelect(workflowId);
     onUserInteraction();
@@ -139,17 +138,6 @@ export function WelcomeExperience({
       return 0; // Keep original order for items in the same category
     });
 
-  // Debug logging to trace workflow rendering
-  useEffect(() => {
-    if (enabledWorkflows.length > 0) {
-      console.log('[WelcomeExperience] Enabled workflows:', enabledWorkflows.map((w, idx) => ({
-        index: idx,
-        id: w.id,
-        name: w.name,
-        description: w.description?.substring(0, 50) + '...'
-      })));
-    }
-  }, [enabledWorkflows]);
 
   // Filter workflows based on search query (for dropdown - includes all workflows)
   const filteredWorkflows = ootbWorkflows.filter((workflow) => {
