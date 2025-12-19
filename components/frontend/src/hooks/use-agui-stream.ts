@@ -761,7 +761,7 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
         throw error
       }
     },
-    [projectName, sessionName, state.threadId, state.runId, state.status, connect],
+    [projectName, sessionName, state.threadId, state.runId, state.status, processEvent, connect],
   )
 
   // Auto-connect on mount if enabled (client-side only)
