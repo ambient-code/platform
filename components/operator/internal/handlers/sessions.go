@@ -982,6 +982,7 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 	// Extract userContext for observability and auditing
 	userID := ""
 	userName := ""
+	userEmail := ""
 	if userContext, found, _ := unstructured.NestedMap(spec, "userContext"); found {
 		if v, ok := userContext["userId"].(string); ok {
 			userID = strings.TrimSpace(v)
@@ -989,8 +990,11 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 		if v, ok := userContext["displayName"].(string); ok {
 			userName = strings.TrimSpace(v)
 		}
+		if v, ok := userContext["email"].(string); ok {
+			userEmail = strings.TrimSpace(v)
+		}
 	}
-	log.Printf("Session %s initiated by user: %s (userId: %s)", name, userName, userID)
+	log.Printf("Session %s initiated by user: %s (userId: %s, email: %s)", name, userName, userID, userEmail)
 
 	// Create the Job
 	job := &batchv1.Job{
@@ -1108,6 +1112,29 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 							},
 
 							Env: func() []corev1.EnvVar {
+								// Determine Google email priority:
+								// 1. From OAuth secret (if user completed OAuth flow)
+								// 2. From session userContext (if provided at creation)
+								// 3. Default to user@example.com
+								googleEmail := "user@example.com"
+
+								// Try to read email from OAuth secret first
+								googleOAuthSecretName := fmt.Sprintf("%s-google-oauth", name)
+								if oauthSecret, err := config.K8sClient.CoreV1().Secrets(sessionNamespace).Get(context.TODO(), googleOAuthSecretName, v1.GetOptions{}); err == nil {
+									if oauthSecret.Data != nil {
+										if emailBytes, ok := oauthSecret.Data["user_email"]; ok && len(emailBytes) > 0 {
+											googleEmail = string(emailBytes)
+											log.Printf("Using Google email from OAuth secret for session %s: %s", name, googleEmail)
+										}
+									}
+								}
+
+								// Fallback to session userContext email if OAuth email not available
+								if googleEmail == "user@example.com" && userEmail != "" {
+									googleEmail = userEmail
+									log.Printf("Using Google email from session userContext for session %s: %s", name, googleEmail)
+								}
+
 								base := []corev1.EnvVar{
 									{Name: "DEBUG", Value: "true"},
 									{Name: "INTERACTIVE", Value: fmt.Sprintf("%t", interactive)},
@@ -1122,6 +1149,8 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 									// Google OAuth client credentials for workspace-mcp
 									{Name: "GOOGLE_OAUTH_CLIENT_ID", Value: os.Getenv("GOOGLE_OAUTH_CLIENT_ID")},
 									{Name: "GOOGLE_OAUTH_CLIENT_SECRET", Value: os.Getenv("GOOGLE_OAUTH_CLIENT_SECRET")},
+									// User email for Google Workspace MCP tools (defaults to user@example.com)
+									{Name: "USER_GOOGLE_EMAIL", Value: googleEmail},
 								}
 
 								// Add user context for observability and auditing (Langfuse userId, logs, etc.)

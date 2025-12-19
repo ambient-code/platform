@@ -84,6 +84,13 @@ class ClaudeCodeAdapter:
         self.context = context
         logger.info(f"Initialized Claude Code adapter for session {context.session_id}")
 
+        # Set default USER_GOOGLE_EMAIL if not provided
+        if not os.getenv("USER_GOOGLE_EMAIL"):
+            os.environ["USER_GOOGLE_EMAIL"] = "user@example.com"
+            logger.info("USER_GOOGLE_EMAIL not set, using default: user@example.com")
+        else:
+            logger.info(f"USER_GOOGLE_EMAIL set to: {os.getenv('USER_GOOGLE_EMAIL')}")
+
         # Copy Google OAuth credentials from mounted Secret to writable workspace location
         await self._setup_google_credentials()
         
@@ -1520,19 +1527,21 @@ class ClaudeCodeAdapter:
 
     async def refresh_google_credentials(self) -> bool:
         """Check for and copy new Google OAuth credentials.
-        
+
         Call this method periodically (e.g., before processing a message) to detect
         when a user completes the OAuth flow and credentials become available.
-        
+
         Kubernetes automatically updates the mounted secret volume when the secret
         changes (typically within ~60 seconds), so this will pick up new credentials
         without requiring a pod restart.
-        
+
+        Also updates USER_GOOGLE_EMAIL environment variable from credentials if available.
+
         Returns:
             True if new credentials were found and copied, False otherwise.
         """
         dest_path = Path("/workspace/.google_workspace_mcp/credentials/credentials.json")
-        
+
         # If we already have credentials in workspace, check if source is newer
         if dest_path.exists():
             secret_path = Path("/app/.google_workspace_mcp/credentials/credentials.json")
@@ -1541,13 +1550,54 @@ class ClaudeCodeAdapter:
                     # Compare modification times - secret mount updates when K8s syncs
                     if secret_path.stat().st_mtime > dest_path.stat().st_mtime:
                         logging.info("Detected updated Google OAuth credentials, refreshing...")
-                        return await self._try_copy_google_credentials()
+                        if await self._try_copy_google_credentials():
+                            # Update USER_GOOGLE_EMAIL from the new credentials
+                            self._update_email_from_credentials(dest_path)
+                            return True
                 except OSError:
                     pass
+            # Always try to update email even if file didn't change (in case env var is still default)
+            self._update_email_from_credentials(dest_path)
             return False
-        
+
         # No credentials yet, try to copy
         if await self._try_copy_google_credentials():
             logging.info("✓ Google OAuth credentials now available (user completed authentication)")
+            # Update USER_GOOGLE_EMAIL from the new credentials
+            self._update_email_from_credentials(dest_path)
             return True
         return False
+
+    def _update_email_from_credentials(self, creds_path: Path):
+        """Read user email from credentials file and update USER_GOOGLE_EMAIL env var.
+
+        The email is extracted from the OAuth credentials stored by the backend.
+        """
+        try:
+            # First check if there's a user_email file in the secret mount
+            secret_email_path = Path("/app/.google_workspace_mcp/credentials/user_email")
+            if secret_email_path.exists():
+                email = secret_email_path.read_text().strip()
+                if email and email != "user@example.com":
+                    current_email = os.getenv("USER_GOOGLE_EMAIL", "")
+                    if current_email != email:
+                        os.environ["USER_GOOGLE_EMAIL"] = email
+                        logging.info(f"Updated USER_GOOGLE_EMAIL from secret: {email}")
+                    return
+
+            # Fallback: try to parse email from credentials.json (some OAuth providers include it)
+            if creds_path.exists() and creds_path.stat().st_size > 0:
+                try:
+                    with open(creds_path, 'r') as f:
+                        creds = _json.load(f)
+                        # Some OAuth responses include email in the credentials
+                        email = creds.get('email') or creds.get('user_email')
+                        if email and email != "user@example.com":
+                            current_email = os.getenv("USER_GOOGLE_EMAIL", "")
+                            if current_email != email:
+                                os.environ["USER_GOOGLE_EMAIL"] = email
+                                logging.info(f"Updated USER_GOOGLE_EMAIL from credentials.json: {email}")
+                except (_json.JSONDecodeError, KeyError):
+                    pass
+        except Exception as e:
+            logging.debug(f"Could not update USER_GOOGLE_EMAIL from credentials: {e}")

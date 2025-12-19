@@ -663,6 +663,19 @@ func CreateSession(c *gin.Context) {
 					displayName = s
 				}
 			}
+
+			// Extract email from authenticated user
+			email := ""
+			if v, ok := c.Get("userEmail"); ok {
+				if s, ok2 := v.(string); ok2 {
+					email = strings.TrimSpace(s)
+				}
+			}
+			// Fallback to userID if no explicit email (userID is often the email)
+			if email == "" {
+				email = uid
+			}
+
 			groups := []string{}
 			if v, ok := c.Get("userGroups"); ok {
 				if gg, ok2 := v.([]string); ok2 {
@@ -679,6 +692,7 @@ func CreateSession(c *gin.Context) {
 			session["spec"].(map[string]interface{})["userContext"] = map[string]interface{}{
 				"userId":      uid,
 				"displayName": displayName,
+				"email":       email,
 				"groups":      groups,
 			}
 		}
