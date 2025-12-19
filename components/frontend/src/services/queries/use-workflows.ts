@@ -13,18 +13,8 @@ export function useOOTBWorkflows(projectName?: string) {
     queryKey: workflowKeys.ootb(projectName),
     queryFn: async () => {
       const workflows = await workflowsApi.listOOTBWorkflows(projectName);
-      // Filter out the Template workflow from the default workflows
-      // Check both name and id fields, case-insensitive
-      // Also check for common variations like "Template", "template-workflow", etc.
-      return workflows.filter((workflow) => {
-        const nameLower = (workflow.name || "").toLowerCase().trim();
-        const idLower = (workflow.id || "").toLowerCase().trim();
-        
-        // Filter out anything containing "template" in name or id
-        const isTemplate = nameLower.includes("template") || idLower.includes("template");
-        
-        return !isTemplate;
-      });
+      // Return all workflows - filtering should be done at the component level if needed
+      return workflows;
     },
     enabled: !!projectName, // Only fetch when projectName is available
     staleTime: 5 * 60 * 1000, // 5 minutes - workflows don't change often

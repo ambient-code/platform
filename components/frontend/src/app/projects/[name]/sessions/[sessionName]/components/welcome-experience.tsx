@@ -123,9 +123,15 @@ export function WelcomeExperience({
     onUserInteraction();
   };
 
-  const enabledWorkflows = ootbWorkflows.filter((w) => w.enabled);
+  // Filter out template workflows and only show enabled ones for the welcome cards
+  const enabledWorkflows = ootbWorkflows.filter((w) => {
+    const nameLower = (w.name || "").toLowerCase().trim();
+    const idLower = (w.id || "").toLowerCase().trim();
+    const isTemplate = nameLower.includes("template") || idLower.includes("template");
+    return w.enabled && !isTemplate;
+  });
 
-  // Filter workflows based on search query
+  // Filter workflows based on search query (for dropdown - includes all workflows)
   const filteredWorkflows = ootbWorkflows.filter((workflow) => {
     if (!workflowSearch) return true;
     const searchLower = workflowSearch.toLowerCase();
