@@ -257,7 +257,12 @@ export function WelcomeExperience({
           </div>
 
           {/* View all workflows button */}
-          <div className="mt-6 flex justify-start items-center gap-4">
+          <div 
+            className="mt-6 flex justify-start items-center gap-4"
+            style={{
+              animation: `fadeInUp 0.5s ease-out ${enabledWorkflows.length * 0.1}s both`
+            }}
+          >
             <DropdownMenu onOpenChange={(open) => {
               if (open) {
                 setWorkflowSearch("");
