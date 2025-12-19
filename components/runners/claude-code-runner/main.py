@@ -7,6 +7,7 @@ import os
 import json
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Optional, List, Dict, Any, Union
 
 from fastapi import FastAPI, Request, HTTPException
@@ -80,7 +81,6 @@ async def lifespan(app: FastAPI):
     
     # Import adapter here to avoid circular imports
     from adapter import ClaudeCodeAdapter
-    from pathlib import Path
     
     # Initialize context from environment
     session_id = os.getenv("SESSION_ID", "unknown")
@@ -98,16 +98,17 @@ async def lifespan(app: FastAPI):
     
     logger.info("Adapter initialized - fresh client will be created for each run")
     
-    # Check if this is a restart (conversation history exists)
-    history_marker = Path(workspace_path) / ".claude" / "state"
+    # Check if this is a restart/resume (initial prompt was already sent)
+    # We use our own marker file since Claude SDK's internal state location varies
+    initial_prompt_marker = Path(workspace_path) / ".initial_prompt_sent"
     
     # Check for INITIAL_PROMPT and auto-execute (only if this is first run)
     initial_prompt = os.getenv("INITIAL_PROMPT", "").strip()
-    if initial_prompt and not history_marker.exists():
+    if initial_prompt and not initial_prompt_marker.exists():
         logger.info(f"INITIAL_PROMPT detected ({len(initial_prompt)} chars), will auto-execute after 3s delay")
-        asyncio.create_task(auto_execute_initial_prompt(initial_prompt, session_id))
+        asyncio.create_task(auto_execute_initial_prompt(initial_prompt, session_id, initial_prompt_marker))
     elif initial_prompt:
-        logger.info(f"INITIAL_PROMPT detected but conversation history exists - skipping auto-execution (session restart)")
+        logger.info(f"INITIAL_PROMPT detected but marker exists - skipping auto-execution (session resume)")
     
     logger.info(f"AG-UI server ready for session {session_id}")
     
@@ -117,11 +118,13 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down AG-UI server...")
 
 
-async def auto_execute_initial_prompt(prompt: str, session_id: str):
+async def auto_execute_initial_prompt(prompt: str, session_id: str, marker_path: Path):
     """Auto-execute INITIAL_PROMPT by POSTing to backend after short delay.
     
     The 3-second delay gives the runner time to fully start. Backend has retry
     logic to handle if Service DNS isn't ready yet.
+    
+    Creates a marker file on success to prevent re-sending on session resume.
     """
     import uuid
     import aiohttp
@@ -171,6 +174,13 @@ async def auto_execute_initial_prompt(prompt: str, session_id: str):
                 if resp.status == 200:
                     result = await resp.json()
                     logger.info(f"INITIAL_PROMPT auto-execution started: {result}")
+                    # Create marker file to prevent re-sending on resume
+                    try:
+                        marker_path.parent.mkdir(parents=True, exist_ok=True)
+                        marker_path.write_text(f"sent_at={asyncio.get_event_loop().time()}\n")
+                        logger.info(f"Created initial prompt marker: {marker_path}")
+                    except Exception as marker_err:
+                        logger.warning(f"Failed to create initial prompt marker: {marker_err}")
                 else:
                     error_text = await resp.text()
                     logger.warning(f"INITIAL_PROMPT failed with status {resp.status}: {error_text[:200]}")
