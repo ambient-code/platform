@@ -204,7 +204,7 @@ export function WelcomeExperience({
               <Card
                 key={workflow.id}
                 className={cn(
-                  "cursor-pointer transition-all hover:shadow-md hover:border-primary/50",
+                  "py-2 cursor-pointer transition-all hover:shadow-md hover:border-primary/50",
                   selectedWorkflowId === workflow.id
                     ? "border-primary bg-primary/5"
                     : selectedWorkflowId !== null
