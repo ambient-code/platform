@@ -35,6 +35,7 @@ func registerRoutes(r *gin.Engine) {
 
 		api.POST("/projects/:projectName/agentic-sessions/:sessionName/github/token", handlers.MintSessionGitHubToken)
 
+
 		projectGroup := api.Group("/projects/:projectName", handlers.ValidateProjectContext())
 		{
 			projectGroup.GET("/access", handlers.AccessCheck)

@@ -3,6 +3,22 @@
  * These types align with the backend Go structs and Kubernetes CRD
  */
 
+// Import shared types from agentic-session to avoid duplication
+import type {
+  SessionRepo,
+  RepoLocation,
+  AgenticSessionPhase,
+  LLMSettings,
+} from '../agentic-session';
+
+// Re-export for convenience
+export type {
+  SessionRepo,
+  RepoLocation,
+  AgenticSessionPhase,
+  LLMSettings,
+};
+
 export type UserContext = {
   userId: string;
   displayName: string;
@@ -18,26 +34,6 @@ export type ResourceOverrides = {
   memory?: string;
   storageClass?: string;
   priorityClass?: string;
-};
-
-export type AgenticSessionPhase =
-  | 'Pending'
-  | 'Creating'
-  | 'Running'
-  | 'Stopping'
-  | 'Stopped'
-  | 'Completed'
-  | 'Failed';
-
-export type LLMSettings = {
-  model: string;
-  temperature: number;
-  maxTokens: number;
-};
-
-export type SessionRepo = {
-  url: string;
-  branch?: string;
 };
 
 export type AgenticSessionSpec = {
@@ -62,6 +58,7 @@ export type ReconciledRepo = {
   name?: string;
   status?: 'Cloning' | 'Ready' | 'Failed';
   clonedAt?: string;
+  pushed?: boolean;  // Whether autoPush successfully pushed changes
 };
 
 export type ReconciledWorkflow = {
@@ -117,6 +114,10 @@ export type CreateAgenticSessionRequest = {
   environmentVariables?: Record<string, string>;
   interactive?: boolean;
   repos?: SessionRepo[];
+  /**
+   * @deprecated Use per-repo autoPush flags in SessionRepo instead.
+   * This global flag is kept for backward compatibility only.
+   */
   autoPushOnComplete?: boolean;
   userContext?: UserContext;
   labels?: Record<string, string>;

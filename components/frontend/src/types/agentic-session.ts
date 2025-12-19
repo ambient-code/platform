@@ -12,10 +12,18 @@ export type GitRepository = {
     branch?: string;
 };
 
-// Simplified multi-repo session mapping
-export type SessionRepo = {
+// Repository input/output configuration for new structured format
+export type RepoLocation = {
     url: string;
     branch?: string;
+};
+
+// Multi-repo session mapping - structured format with input/output/autoPush
+export type SessionRepo = {
+    name?: string;
+    input: RepoLocation;
+    output?: RepoLocation;
+    autoPush?: boolean;
 };
 
 export type AgenticSessionSpec = {
@@ -41,6 +49,7 @@ export type ReconciledRepo = {
 	name?: string;
 	status?: "Cloning" | "Ready" | "Failed";
 	clonedAt?: string;
+	pushed?: boolean;  // Whether autoPush successfully pushed changes
 };
 
 export type ReconciledWorkflow = {
@@ -184,6 +193,10 @@ export type CreateAgenticSessionRequest = {
 	interactive?: boolean;
 	// Multi-repo support
 	repos?: SessionRepo[];
+	/**
+	 * @deprecated Use per-repo autoPush flags in SessionRepo instead.
+	 * This global flag is kept for backward compatibility only.
+	 */
 	autoPushOnComplete?: boolean;
 	labels?: Record<string, string>;
 	annotations?: Record<string, string>;

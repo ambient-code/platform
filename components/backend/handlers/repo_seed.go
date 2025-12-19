@@ -312,7 +312,7 @@ func SeedRepositoryEndpoint(c *gin.Context) {
 	}
 
 	if req.Branch == "" {
-		req.Branch = "main"
+		req.Branch = types.DefaultBranch
 	}
 
 	userID, _ := c.Get("userID")

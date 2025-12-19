@@ -1,4 +1,4 @@
-.PHONY: help setup build-all build-frontend build-backend build-operator build-runner deploy clean
+.PHONY: help setup build-all build-frontend build-backend build-operator build-runner deploy clean test-runner test-runner-autopush
 .PHONY: local-up local-down local-clean local-status local-rebuild local-reload-backend local-reload-frontend local-reload-operator local-sync-version
 .PHONY: local-dev-token
 .PHONY: local-logs local-logs-backend local-logs-frontend local-logs-operator local-shell local-shell-frontend
@@ -47,13 +47,19 @@ GIT_VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo 
 BUILD_DATE := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 BUILD_USER := $(shell whoami)@$(shell hostname)
 
-# Colors for output
+# Colors for output (use printf to properly interpret escape sequences)
+# Use like: @printf "$(COLOR_BLUE)Text here$(COLOR_RESET)\n"
 COLOR_RESET := \033[0m
 COLOR_BOLD := \033[1m
 COLOR_GREEN := \033[32m
 COLOR_YELLOW := \033[33m
 COLOR_BLUE := \033[34m
 COLOR_RED := \033[31m
+
+# Helper to echo with colors (use this instead of echo)
+define echo_color
+	@echo "$(1)"
+endef
 
 # Platform flag
 ifneq ($(PLATFORM),)
@@ -64,30 +70,41 @@ endif
 
 ##@ General
 
+test-colors: ## Test color output rendering
+	@echo "$(COLOR_BOLD)Testing Color Output$(COLOR_RESET)"
+	@echo ""
+	@echo "$(COLOR_RED)✗ Red text (errors)$(COLOR_RESET)"
+	@echo "$(COLOR_GREEN)✓ Green text (success)$(COLOR_RESET)"
+	@echo "$(COLOR_BLUE)▶ Blue text (info)$(COLOR_RESET)"
+	@echo "$(COLOR_YELLOW)⚠ Yellow text (warnings)$(COLOR_RESET)"
+	@echo "$(COLOR_BOLD)Bold text$(COLOR_RESET)"
+	@echo ""
+	@echo "If you see color codes like \033[1m instead of colors, your terminal may not support ANSI colors"
+
 help: ## Display this help message
-	@echo '$(COLOR_BOLD)Ambient Code Platform - Development Makefile$(COLOR_RESET)'
-	@echo ''
-	@echo '$(COLOR_BOLD)Quick Start:$(COLOR_RESET)'
-	@echo '  $(COLOR_GREEN)make local-up$(COLOR_RESET)            Start local development environment'
-	@echo '  $(COLOR_GREEN)make local-status$(COLOR_RESET)        Check status of local environment'
-	@echo '  $(COLOR_GREEN)make local-logs$(COLOR_RESET)          View logs from all components'
-	@echo '  $(COLOR_GREEN)make local-down$(COLOR_RESET)          Stop local environment'
-	@echo ''
-	@echo '$(COLOR_BOLD)Quality Assurance:$(COLOR_RESET)'
-	@echo '  $(COLOR_GREEN)make validate-makefile$(COLOR_RESET)   Validate Makefile quality (runs in CI)'
-	@echo '  $(COLOR_GREEN)make makefile-health$(COLOR_RESET)     Run comprehensive health check'
-	@echo ''
+	@echo "$(COLOR_BOLD)Ambient Code Platform - Development Makefile$(COLOR_RESET)"
+	@echo ""
+	@echo "$(COLOR_BOLD)Quick Start:$(COLOR_RESET)"
+	@echo "  $(COLOR_GREEN)make local-up$(COLOR_RESET)            Start local development environment"
+	@echo "  $(COLOR_GREEN)make local-status$(COLOR_RESET)        Check status of local environment"
+	@echo "  $(COLOR_GREEN)make local-logs$(COLOR_RESET)          View logs from all components"
+	@echo "  $(COLOR_GREEN)make local-down$(COLOR_RESET)          Stop local environment"
+	@echo ""
+	@echo "$(COLOR_BOLD)Quality Assurance:$(COLOR_RESET)"
+	@echo "  $(COLOR_GREEN)make validate-makefile$(COLOR_RESET)   Validate Makefile quality (runs in CI)"
+	@echo "  $(COLOR_GREEN)make makefile-health$(COLOR_RESET)     Run comprehensive health check"
+	@echo ""
 	@awk 'BEGIN {FS = ":.*##"; printf "$(COLOR_BOLD)Available Targets:$(COLOR_RESET)\n"} /^[a-zA-Z_-]+:.*?##/ { printf "  $(COLOR_BLUE)%-20s$(COLOR_RESET) %s\n", $$1, $$2 } /^##@/ { printf "\n$(COLOR_BOLD)%s$(COLOR_RESET)\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
-	@echo ''
-	@echo '$(COLOR_BOLD)Configuration Variables:$(COLOR_RESET)'
-	@echo '  CONTAINER_ENGINE=$(CONTAINER_ENGINE)  (docker or podman)'
-	@echo '  NAMESPACE=$(NAMESPACE)'
-	@echo '  PLATFORM=$(PLATFORM)'
-	@echo ''
-	@echo '$(COLOR_BOLD)Examples:$(COLOR_RESET)'
-	@echo '  make local-up CONTAINER_ENGINE=docker'
-	@echo '  make local-reload-backend'
-	@echo '  make build-all PLATFORM=linux/arm64'
+	@echo ""
+	@echo "$(COLOR_BOLD)Configuration Variables:$(COLOR_RESET)"
+	@echo "  CONTAINER_ENGINE=$(CONTAINER_ENGINE)  (docker or podman)"
+	@echo "  NAMESPACE=$(NAMESPACE)"
+	@echo "  PLATFORM=$(PLATFORM)"
+	@echo ""
+	@echo "$(COLOR_BOLD)Examples:$(COLOR_RESET)"
+	@echo "  make local-up CONTAINER_ENGINE=docker"
+	@echo "  make local-reload-backend"
+	@echo "  make build-all PLATFORM=linux/arm64"
 
 ##@ Building
 
@@ -144,6 +161,24 @@ build-runner: ## Build Claude Code runner image
 		--build-arg BUILD_USER=$(BUILD_USER) \
 		-t $(RUNNER_IMAGE) -f claude-code-runner/Dockerfile .
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Runner built: $(RUNNER_IMAGE)"
+
+test-runner: build-runner ## Run runner tests in container
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Running runner tests in container..."
+	@$(CONTAINER_ENGINE) run --rm \
+		-v $(PWD)/components/runners/claude-code-runner:/app/test-runner:Z \
+		-w /app/test-runner \
+		$(RUNNER_IMAGE) \
+		bash -c "pip install pytest pytest-asyncio && python -m pytest tests/ -v"
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Runner tests passed"
+
+test-runner-autopush: build-runner ## Run autoPush tests in container
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Running autoPush tests in container..."
+	@$(CONTAINER_ENGINE) run --rm \
+		-v $(PWD)/components/runners/claude-code-runner:/app/test-runner:Z \
+		-w /app/test-runner \
+		$(RUNNER_IMAGE) \
+		bash -c "pip install pytest pytest-asyncio && python -m pytest tests/test_repo_autopush.py -v"
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) autoPush tests passed"
 
 ##@ Git Hooks
 

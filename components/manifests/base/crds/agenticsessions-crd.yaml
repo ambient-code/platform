@@ -2,6 +2,11 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   name: agenticsessions.vteam.ambient-code
+  # Migration Annotations:
+  # - ambient-code.io/repos-migrated: "v2" - Marks sessions migrated from legacy repo format.
+  #   Added by operator during startup migration. Prevents re-migration on subsequent restarts.
+  # - ambient-code.io/migration-skipped-active: "Running|Creating" - Marks active sessions skipped during migration.
+  #   Allows tracking which sessions need migration once they complete. Value indicates phase at skip time.
 spec:
   group: vteam.ambient-code
   versions:
@@ -23,16 +28,40 @@ spec:
                 description: "List of Git repositories to clone and work with"
                 items:
                   type: object
-                  required:
-                  - url
                   properties:
+                    # New structure (preferred)
+                    input:
+                      type: object
+                      description: "Input repository configuration (source to clone)"
+                      properties:
+                        url:
+                          type: string
+                          description: "Git repository URL"
+                        branch:
+                          type: string
+                          description: "Branch to checkout"
+                          default: "main"
+                    output:
+                      type: object
+                      description: "Output repository configuration (target for push). If not specified, pushes to input repo."
+                      properties:
+                        url:
+                          type: string
+                          description: "Git repository URL (typically a fork)"
+                        branch:
+                          type: string
+                          description: "Branch to push to"
+                    autoPush:
+                      type: boolean
+                      default: false
+                      description: "When true, automatically commit and push changes to this repository after session completion. Overrides session-level autoPushOnComplete for this repo."
+                    # Legacy structure (deprecated, for backwards compatibility)
                     url:
                       type: string
-                      description: "Git repository URL"
+                      description: "[DEPRECATED] Git repository URL. Use 'input.url' instead."
                     branch:
                       type: string
-                      description: "Branch to checkout"
-                      default: "main"
+                      description: "[DEPRECATED] Branch to checkout. Use 'input.branch' instead."
               interactive:
                 type: boolean
                 description: "When true, run session in interactive chat mode using inbox/outbox files"
