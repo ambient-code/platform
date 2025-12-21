@@ -298,6 +298,18 @@ func HandleOAuth2Callback(c *gin.Context) {
 	callbackData.ExpiresIn = tokenData.ExpiresIn
 	callbackData.TokenType = tokenData.TokenType
 
+	// Fetch user email from provider (if supported)
+	userEmail := ""
+	if provider == "google" {
+		email, err := fetchGoogleUserEmail(c.Request.Context(), tokenData.AccessToken)
+		if err != nil {
+			log.Printf("Warning: Failed to fetch user email from Google: %v", err)
+		} else {
+			userEmail = email
+			log.Printf("Fetched user email from Google OAuth: %s", userEmail)
+		}
+	}
+
 	// Parse and validate session context from signed state parameter
 	stateData, err := validateAndParseOAuthState(state)
 	if err != nil {
@@ -319,6 +331,7 @@ func HandleOAuth2Callback(c *gin.Context) {
 			tokenData.AccessToken,
 			tokenData.RefreshToken,
 			tokenData.ExpiresIn,
+			userEmail,
 		)
 		if err != nil {
 			log.Printf("Failed to store credentials in Secret: %v", err)
@@ -395,6 +408,45 @@ func exchangeOAuthCode(ctx context.Context, provider *OAuthProvider, code string
 	}
 
 	return &tokenResp, nil
+}
+
+// GoogleUserInfo represents the minimal user info response from Google (email only)
+type GoogleUserInfo struct {
+	Email         string `json:"email"`
+	VerifiedEmail bool   `json:"verified_email"`
+}
+
+// fetchGoogleUserEmail fetches the user's email from Google's userinfo endpoint
+func fetchGoogleUserEmail(ctx context.Context, accessToken string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://www.googleapis.com/oauth2/v2/userinfo", nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", accessToken))
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch user info: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("userinfo request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var userInfo GoogleUserInfo
+	if err := json.NewDecoder(resp.Body).Decode(&userInfo); err != nil {
+		return "", fmt.Errorf("failed to decode user info: %w", err)
+	}
+
+	if userInfo.Email == "" {
+		return "", fmt.Errorf("no email in user info response")
+	}
+
+	return userInfo.Email, nil
 }
 
 // storeOAuthCallback stores OAuth callback data in a Secret for retrieval by MCP or other consumers
@@ -662,7 +714,7 @@ func validateAndParseOAuthState(state string) (*OAuthStateData, error) {
 // Secret name: {sessionName}-{provider}-oauth (e.g., agentic-session-123-google-oauth)
 // This allows the session pod to mount or read the credentials from its own namespace
 // The Secret is owned by the AgenticSession CR, so it's automatically deleted when the session is deleted
-func storeCredentialsInSecret(ctx context.Context, projectName, sessionName, provider, accessToken, refreshToken string, expiresIn int64) error {
+func storeCredentialsInSecret(ctx context.Context, projectName, sessionName, provider, accessToken, refreshToken string, expiresIn int64, userEmail string) error {
 	secretName := fmt.Sprintf("%s-%s-oauth", sessionName, provider)
 
 	// Get OAuth provider config for client_id and client_secret
@@ -733,6 +785,11 @@ func storeCredentialsInSecret(ctx context.Context, projectName, sessionName, pro
 		},
 	}
 
+	// Add user email to Secret data if available
+	if userEmail != "" {
+		secret.Data["user_email"] = []byte(userEmail)
+	}
+
 	// Try to create the Secret
 	_, err = K8sClient.CoreV1().Secrets(projectName).Create(ctx, secret, v1.CreateOptions{})
 	if err != nil {
@@ -742,12 +799,12 @@ func storeCredentialsInSecret(ctx context.Context, projectName, sessionName, pro
 			if err != nil {
 				return fmt.Errorf("failed to update Secret %s/%s: %w", projectName, secretName, err)
 			}
-			log.Printf("✓ Updated OAuth credentials Secret %s/%s", projectName, secretName)
+			log.Printf("✓ Updated OAuth credentials Secret %s/%s (email: %s)", projectName, secretName, userEmail)
 		} else {
 			return fmt.Errorf("failed to create Secret %s/%s: %w", projectName, secretName, err)
 		}
 	} else {
-		log.Printf("✓ Created OAuth credentials Secret %s/%s", projectName, secretName)
+		log.Printf("✓ Created OAuth credentials Secret %s/%s (email: %s)", projectName, secretName, userEmail)
 	}
 
 	return nil

@@ -12,6 +12,7 @@ type GitRepository struct {
 type UserContext struct {
 	UserID      string   `json:"userId" binding:"required"`
 	DisplayName string   `json:"displayName" binding:"required"`
+	Email       string   `json:"email,omitempty"`
 	Groups      []string `json:"groups" binding:"required"`
 }
 
