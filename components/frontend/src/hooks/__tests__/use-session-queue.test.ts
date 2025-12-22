@@ -84,6 +84,11 @@ describe('useSessionQueue', () => {
       });
 
       expect(result.current.messages).toHaveLength(0);
+      
+      // Verify localStorage key is removed (not just empty array)
+      const key = `vteam:queue:${projectName}:${sessionName}:messages`;
+      const stored = localStorage.getItem(key);
+      expect(stored).toBeNull();
     });
 
     it('should persist messages to localStorage', () => {

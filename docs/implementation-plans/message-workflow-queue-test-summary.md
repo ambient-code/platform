@@ -7,6 +7,7 @@
 - Implemented localStorage persistence with error handling
 - Added cleanup logic for old entries (24h+ removal)
 - Max message limit: 100 messages per session
+- **Cleanup optimization**: Empty message arrays remove the localStorage key entirely (not just storing empty array)
 
 ✅ **Phase 2: Update session page component** - `page.tsx`
 - Replaced in-memory state (`queuedMessages`, `queuedMessagesSent`, `sentMessageCount`) with `useSessionQueue` hook
@@ -59,9 +60,11 @@ Based on the implementation plan, here's what should be tested manually:
 
 ### localStorage Verification
 - [ ] Open browser DevTools → Application → Local Storage
-- [ ] Verify keys exist: `vteam:queue:messages:<project>:<session>`
-- [ ] Verify keys exist: `vteam:queue:workflow:<project>:<session>`
+- [ ] Verify keys exist: `vteam:queue:messages:<project>:<session>` (only when messages are queued)
+- [ ] Verify keys exist: `vteam:queue:workflow:<project>:<session>` (only when workflow is queued)
 - [ ] Verify data is valid JSON
+- [ ] **After messages are sent**: Verify message key is removed entirely (not just empty array)
+- [ ] **After workflow is activated**: Verify workflow key is removed entirely
 - [ ] Clear localStorage manually → verify app recovers gracefully
 
 ### Cross-Session Testing
@@ -151,6 +154,7 @@ interface QueuedWorkflowItem {
 2. **Auto-cleanup**: Entries older than 24h automatically removed
 3. **Quota Handling**: Gracefully handles localStorage quota exceeded
 4. **Batch Updates**: State updates batched to minimize re-renders
+5. **Storage Cleanup**: Empty queues remove localStorage keys entirely (prevents storage bloat)
 
 ## Future Enhancements
 

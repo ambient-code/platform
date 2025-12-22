@@ -136,7 +136,12 @@ export function useSessionQueue(projectName: string, sessionName: string) {
 
     try {
       if (newMessages !== undefined) {
-        localStorage.setItem(keys.messages, JSON.stringify(newMessages));
+        // Remove key if messages array is empty, otherwise store it
+        if (newMessages.length === 0) {
+          localStorage.removeItem(keys.messages);
+        } else {
+          localStorage.setItem(keys.messages, JSON.stringify(newMessages));
+        }
       }
       if (newWorkflow !== undefined) {
         if (newWorkflow === null) {
