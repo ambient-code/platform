@@ -665,7 +665,7 @@ func validateAndParseOAuthState(state string) (*OAuthStateData, error) {
 func storeCredentialsInSecret(ctx context.Context, projectName, sessionName, provider, accessToken, refreshToken string, expiresIn int64) error {
 	secretName := fmt.Sprintf("%s-%s-oauth", sessionName, provider)
 
-	// Get OAuth provider config for client_id and client_secret
+	// Get OAuth provider config for scopes
 	providerConfig, err := getOAuthProvider(provider)
 	if err != nil {
 		return fmt.Errorf("failed to get OAuth provider config: %w", err)
@@ -675,13 +675,14 @@ func storeCredentialsInSecret(ctx context.Context, projectName, sessionName, pro
 	// workspace-mcp expects timezone-naive format like Python's datetime.isoformat()
 	expiryTime := time.Now().Add(time.Duration(expiresIn) * time.Second)
 
-	// Prepare credentials JSON in the format expected by workspace-mcp
+	// Prepare credentials JSON with only the token, scopes, and expiry
+	// client_id, client_secret, token_uri, and refresh_token are empty strings to minimize stored secrets
 	credentials := map[string]interface{}{
 		"token":         accessToken,
-		"refresh_token": refreshToken,
-		"token_uri":     providerConfig.TokenURL,
-		"client_id":     providerConfig.ClientID,
-		"client_secret": providerConfig.ClientSecret,
+		"refresh_token": "",
+		"token_uri":     "",
+		"client_id":     "",
+		"client_secret": "",
 		"scopes":        providerConfig.Scopes,
 		"expiry":        expiryTime.Format("2006-01-02T15:04:05"), // Timezone-naive format for Python compatibility
 	}
@@ -729,7 +730,7 @@ func storeCredentialsInSecret(ctx context.Context, projectName, sessionName, pro
 		Data: map[string][]byte{
 			"credentials.json": credentialsJSON,
 			"access_token":     []byte(accessToken),
-			"refresh_token":    []byte(refreshToken),
+			"refresh_token":    []byte(""),
 		},
 	}
 
