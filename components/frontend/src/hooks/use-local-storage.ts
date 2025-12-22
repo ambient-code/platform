@@ -42,7 +42,12 @@ export function useLocalStorage<T>(
         setStoredValue(valueToStore);
 
         if (typeof window !== 'undefined') {
-          window.localStorage.setItem(key, JSON.stringify(valueToStore));
+          // Clean up key if value is null or undefined
+          if (valueToStore === null || valueToStore === undefined) {
+            window.localStorage.removeItem(key);
+          } else {
+            window.localStorage.setItem(key, JSON.stringify(valueToStore));
+          }
         }
       } catch (error) {
         console.warn(`Error setting localStorage key "${key}":`, error);
