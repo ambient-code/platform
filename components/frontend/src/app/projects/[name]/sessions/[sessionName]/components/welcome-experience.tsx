@@ -203,6 +203,7 @@ export function WelcomeExperience({
             {enabledWorkflows.map((workflow, index) => (
               <Card
                 key={workflow.id}
+                title={workflow.description}
                 className={cn(
                   "py-2 cursor-pointer transition-all hover:shadow-md hover:border-primary/50",
                   selectedWorkflowId === workflow.id
