@@ -149,7 +149,12 @@ export function useSessionQueue(
   useEffect(() => {
     if (typeof window === 'undefined') return;
     try {
-      localStorage.setItem(metadataKey, JSON.stringify(metadata));
+      // Clean up if metadata is empty
+      if (Object.keys(metadata).length === 0) {
+        localStorage.removeItem(metadataKey);
+      } else {
+        localStorage.setItem(metadataKey, JSON.stringify(metadata));
+      }
     } catch (error) {
       console.warn('Failed to persist metadata to localStorage:', error);
     }
