@@ -34,10 +34,11 @@ export type MessagesTabProps = {
   activeWorkflow?: string | null;  // Track if workflow has been selected
   userHasInteracted?: boolean;  // Track if user has sent any messages
   queuedMessages?: string[];  // Messages queued while session wasn't running
+  queuedMessagesSent?: boolean;  // Track if queued messages have been sent
 };
 
 
-const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chatInput, setChatInput, onSendChat, onInterrupt, onEndSession, onGoToResults, onContinue, workflowMetadata, onCommandClick, isRunActive = false, showWelcomeExperience, welcomeExperienceComponent, activeWorkflow, userHasInteracted = false, queuedMessages = [] }) => {
+const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chatInput, setChatInput, onSendChat, onInterrupt, onEndSession, onGoToResults, onContinue, workflowMetadata, onCommandClick, isRunActive = false, showWelcomeExperience, welcomeExperienceComponent, activeWorkflow, userHasInteracted = false, queuedMessages = [], queuedMessagesSent = false }) => {
   const [interrupting, setInterrupting] = useState(false);
   const [ending, setEnding] = useState(false);
   const [sendingChat, setSendingChat] = useState(false);
@@ -303,8 +304,8 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
           <StreamMessage key={`sm-${idx}`} message={m} isNewest={idx === filteredMessages.length - 1} onGoToResults={onGoToResults} />
         ))}
 
-        {/* Show queued messages as regular user messages */}
-        {queuedMessages.length > 0 && queuedMessages.map((msg, idx) => {
+        {/* Show queued messages as regular user messages (only if not yet sent) */}
+        {queuedMessages.length > 0 && !queuedMessagesSent && queuedMessages.map((msg, idx) => {
           const queuedUserMessage: MessageObject = {
             type: "user_message",
             content: { type: "text_block", text: msg },
@@ -320,7 +321,7 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
           );
         })}
 
-        {/* Show "Please wait" message after queued messages */}
+        {/* Show "Please wait" message while queued messages are waiting */}
         {queuedMessages.length > 0 && (
           <div className="mb-4 mt-2">
             <div className="flex space-x-3 items-start">

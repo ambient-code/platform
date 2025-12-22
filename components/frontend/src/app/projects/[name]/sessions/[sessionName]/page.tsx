@@ -1912,6 +1912,7 @@ export default function ProjectSessionDetailPage({
                         activeWorkflow={workflowManagement.activeWorkflow}
                         userHasInteracted={userHasInteracted}
                         queuedMessages={queuedMessages}
+                        queuedMessagesSent={queuedMessagesSent}
                         welcomeExperienceComponent={
                           <WelcomeExperience
                             ootbWorkflows={ootbWorkflows}
