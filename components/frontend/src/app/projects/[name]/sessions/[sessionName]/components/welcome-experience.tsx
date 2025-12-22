@@ -75,17 +75,27 @@ export function WelcomeExperience({
     }
 
     let currentIndex = 0;
-    const interval = setInterval(() => {
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    
+    intervalId = setInterval(() => {
       if (currentIndex < WELCOME_MESSAGE.length) {
         setDisplayedText(WELCOME_MESSAGE.slice(0, currentIndex + 1));
         currentIndex++;
       } else {
         setIsTypingComplete(true);
-        clearInterval(interval);
+        if (intervalId !== null) {
+          clearInterval(intervalId);
+          intervalId = null;
+        }
       }
     }, 25); // 25ms per character
 
-    return () => clearInterval(interval);
+    return () => {
+      if (intervalId !== null) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+    };
   }, [shouldShowAnimation]);
 
   // Setup message typing effect (after workflow selected)
@@ -93,28 +103,45 @@ export function WelcomeExperience({
     if (!selectedWorkflowId) return;
 
     let currentIndex = 0;
-    const interval = setInterval(() => {
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    
+    intervalId = setInterval(() => {
       if (currentIndex < SETUP_MESSAGE.length) {
         setSetupDisplayedText(SETUP_MESSAGE.slice(0, currentIndex + 1));
         currentIndex++;
       } else {
         setIsSetupTypingComplete(true);
-        clearInterval(interval);
+        if (intervalId !== null) {
+          clearInterval(intervalId);
+          intervalId = null;
+        }
       }
     }, 25); // 25ms per character
 
-    return () => clearInterval(interval);
+    return () => {
+      if (intervalId !== null) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+    };
   }, [selectedWorkflowId]);
 
   // Animate dots after setup message completes (stop when real messages appear)
   useEffect(() => {
     if (!isSetupTypingComplete || hasRealMessages) return;
 
-    const interval = setInterval(() => {
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    
+    intervalId = setInterval(() => {
       setDotCount((prev) => (prev + 1) % 4); // Cycles 0, 1, 2, 3
     }, 500); // Change dot every 500ms
 
-    return () => clearInterval(interval);
+    return () => {
+      if (intervalId !== null) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+    };
   }, [isSetupTypingComplete, hasRealMessages]);
 
   const handleWorkflowSelect = (workflowId: string) => {

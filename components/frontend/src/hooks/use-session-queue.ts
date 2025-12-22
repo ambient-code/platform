@@ -32,7 +32,10 @@ export interface QueuedWorkflowItem {
 export interface QueueMetadata {
   sessionPhase?: string;
   processing?: boolean;
-  [key: string]: unknown;
+  lastProcessedAt?: number;
+  retryCount?: number;
+  errorCount?: number;
+  lastError?: string;
 }
 
 interface UseSessionQueueReturn {
