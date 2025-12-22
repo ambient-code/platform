@@ -155,6 +155,8 @@ export default function ProjectSessionDetailPage({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userHasInteracted, setUserHasInteracted] = useState(false);
   const [queuedMessages, setQueuedMessages] = useState<string[]>([]);
+  const [queuedMessagesSent, setQueuedMessagesSent] = useState(false);
+  const [sentMessageCount, setSentMessageCount] = useState(0);
 
   // Directory browser state (unified for artifacts, repos, and workflow)
   const [selectedDirectory, setSelectedDirectory] = useState<DirectoryOption>({
@@ -303,10 +305,18 @@ export default function ProjectSessionDetailPage({
     return () => clearInterval(pollInterval);
   }, [queuedMessages.length, session?.status?.phase, refetchSession]);
 
+  // Reset sent flag if new messages are added after sending
+  useEffect(() => {
+    if (queuedMessagesSent && queuedMessages.length > sentMessageCount) {
+      // New messages added to queue, allow them to be sent
+      setQueuedMessagesSent(false);
+    }
+  }, [queuedMessages.length, queuedMessagesSent, sentMessageCount]);
+
   // Process queued messages when session becomes Running
   useEffect(() => {
     const phase = session?.status?.phase;
-    if (phase === "Running" && queuedMessages.length > 0) {
+    if (phase === "Running" && queuedMessages.length > 0 && !queuedMessagesSent) {
       // Session is now running, send all queued messages
       const processMessages = async () => {
         for (const message of queuedMessages) {
@@ -318,14 +328,15 @@ export default function ProjectSessionDetailPage({
             errorToast(err instanceof Error ? err.message : "Failed to send queued message");
           }
         }
-        // Clear the queue after processing
-        setQueuedMessages([]);
+        // Mark messages as sent, but don't clear yet - wait for agent response
+        setSentMessageCount(queuedMessages.length);
+        setQueuedMessagesSent(true);
       };
       
       processMessages();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.status?.phase, queuedMessages.length]);
+  }, [session?.status?.phase, queuedMessages.length, queuedMessagesSent]);
 
   // Repo management mutations
   const addRepoMutation = useMutation({
@@ -1019,6 +1030,22 @@ export default function ProjectSessionDetailPage({
       (msg) => msg.type === "user_message" || msg.type === "agent_message"
     );
   }, [streamMessages]);
+
+  // Clear queued messages when first agent response arrives
+  useEffect(() => {
+    if (queuedMessagesSent && streamMessages.length > 0) {
+      // Check if there's at least one agent message (response to our queued messages)
+      const hasAgentResponse = streamMessages.some(
+        msg => msg.type === "agent_message" || msg.type === "tool_use_messages"
+      );
+      
+      if (hasAgentResponse) {
+        setQueuedMessages([]);
+        setQueuedMessagesSent(false);
+        setSentMessageCount(0);
+      }
+    }
+  }, [queuedMessagesSent, streamMessages]);
 
   // Load workflow from session for existing sessions (with messages)
   // Placed here after hasRealMessages is defined
