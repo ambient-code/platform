@@ -15,6 +15,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { AgenticSession, MessageObject, ToolUseMessages } from "@/types/agentic-session";
 import type { WorkflowMetadata } from "@/app/projects/[name]/sessions/[sessionName]/lib/types";
+import type { QueuedMessageItem } from "@/hooks/use-session-queue";
 
 export type MessagesTabProps = {
   session: AgenticSession;
@@ -33,13 +34,12 @@ export type MessagesTabProps = {
   welcomeExperienceComponent?: React.ReactNode;
   activeWorkflow?: string | null;  // Track if workflow has been selected
   userHasInteracted?: boolean;  // Track if user has sent any messages
-  queuedMessages?: string[];  // Messages queued while session wasn't running
-  queuedMessagesSent?: boolean;  // Track if queued messages have been sent
+  queuedMessages?: QueuedMessageItem[];  // Messages queued while session wasn't running
   hasRealMessages?: boolean;  // Track if there are real user/agent messages
 };
 
 
-const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chatInput, setChatInput, onSendChat, onInterrupt, onEndSession, onGoToResults, onContinue, workflowMetadata, onCommandClick, isRunActive = false, showWelcomeExperience, welcomeExperienceComponent, activeWorkflow, userHasInteracted = false, queuedMessages = [], queuedMessagesSent = false, hasRealMessages = false }) => {
+const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chatInput, setChatInput, onSendChat, onInterrupt, onEndSession, onGoToResults, onContinue, workflowMetadata, onCommandClick, isRunActive = false, showWelcomeExperience, welcomeExperienceComponent, activeWorkflow, userHasInteracted = false, queuedMessages = [], hasRealMessages = false }) => {
   const [interrupting, setInterrupting] = useState(false);
   const [ending, setEnding] = useState(false);
   const [sendingChat, setSendingChat] = useState(false);
@@ -121,14 +121,15 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
 
   // Animate dots for "Please wait one moment" message
   useEffect(() => {
-    if (queuedMessages.length === 0) return;
+    const unsentCount = queuedMessages.filter(m => !m.sentAt).length;
+    if (unsentCount === 0) return;
 
     const interval = setInterval(() => {
       setWaitingDotCount((prev) => (prev + 1) % 4); // Cycles 0, 1, 2, 3
     }, 500); // Change dot every 500ms
 
     return () => clearInterval(interval);
-  }, [queuedMessages.length]);
+  }, [queuedMessages]);
 
   // Click outside to close autocomplete
   useEffect(() => {
@@ -307,15 +308,15 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
         ))}
 
         {/* Show queued messages as regular user messages (only if not yet sent) */}
-        {queuedMessages.length > 0 && !queuedMessagesSent && queuedMessages.map((msg, idx) => {
+        {queuedMessages.length > 0 && queuedMessages.filter(m => !m.sentAt).map((item) => {
           const queuedUserMessage: MessageObject = {
             type: "user_message",
-            content: { type: "text_block", text: msg },
-            timestamp: new Date().toISOString(),
+            content: { type: "text_block", text: item.content },
+            timestamp: new Date(item.timestamp).toISOString(),
           };
           return (
             <StreamMessage 
-              key={`queued-${idx}`} 
+              key={`queued-${item.id}`} 
               message={queuedUserMessage} 
               isNewest={false}
               onGoToResults={onGoToResults}
@@ -324,7 +325,7 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
         })}
 
         {/* Show "Please wait" message while queued messages are waiting */}
-        {queuedMessages.length > 0 && (
+        {queuedMessages.filter(m => !m.sentAt).length > 0 && (
           <div className="mb-4 mt-2">
             <div className="flex space-x-3 items-start">
               {/* Avatar */}

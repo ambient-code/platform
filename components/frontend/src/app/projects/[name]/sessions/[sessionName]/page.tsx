@@ -76,6 +76,7 @@ import { WelcomeExperience } from "./components/welcome-experience";
 import { useGitOperations } from "./hooks/use-git-operations";
 import { useWorkflowManagement } from "./hooks/use-workflow-management";
 import { useFileOperations } from "./hooks/use-file-operations";
+import { useSessionQueue } from "@/hooks/use-session-queue";
 import type { DirectoryOption, DirectoryRemote } from "./lib/types";
 
 import type { MessageObject, ToolUseMessages, HierarchicalToolMessage } from "@/types/agentic-session";
@@ -154,9 +155,6 @@ export default function ProjectSessionDetailPage({
   const [repoChanging, setRepoChanging] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userHasInteracted, setUserHasInteracted] = useState(false);
-  const [queuedMessages, setQueuedMessages] = useState<string[]>([]);
-  const [queuedMessagesSent, setQueuedMessagesSent] = useState(false);
-  const [sentMessageCount, setSentMessageCount] = useState(0);
 
   // Directory browser state (unified for artifacts, repos, and workflow)
   const [selectedDirectory, setSelectedDirectory] = useState<DirectoryOption>({
@@ -183,6 +181,9 @@ export default function ProjectSessionDetailPage({
       } catch {}
     });
   }, [params]);
+
+  // Session queue hook (localStorage-backed)
+  const sessionQueue = useSessionQueue(projectName, sessionName);
 
   // React Query hooks
   const {
@@ -281,15 +282,25 @@ export default function ProjectSessionDetailPage({
   // Process queued workflow when session becomes Running
   useEffect(() => {
     const phase = session?.status?.phase;
-    if (phase === "Running" && workflowManagement.queuedWorkflow) {
+    const queuedWorkflow = workflowManagement.queuedWorkflow;
+    if (phase === "Running" && queuedWorkflow && !queuedWorkflow.activatedAt) {
       // Session is now running, activate the queued workflow
-      workflowManagement.activateWorkflow(workflowManagement.queuedWorkflow, phase);
+      workflowManagement.activateWorkflow({
+        id: queuedWorkflow.id,
+        name: "Queued workflow",
+        description: "",
+        gitUrl: queuedWorkflow.gitUrl,
+        branch: queuedWorkflow.branch,
+        path: queuedWorkflow.path,
+        enabled: true,
+      }, phase);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.status?.phase, workflowManagement.queuedWorkflow]);
 
   // Poll session status when messages are queued
   useEffect(() => {
+    const queuedMessages = sessionQueue.messages.filter(m => !m.sentAt);
     if (queuedMessages.length === 0) return;
     
     const phase = session?.status?.phase;
@@ -303,40 +314,32 @@ export default function ProjectSessionDetailPage({
     }, 2000);
     
     return () => clearInterval(pollInterval);
-  }, [queuedMessages.length, session?.status?.phase, refetchSession]);
-
-  // Reset sent flag if new messages are added after sending
-  useEffect(() => {
-    if (queuedMessagesSent && queuedMessages.length > sentMessageCount) {
-      // New messages added to queue, allow them to be sent
-      setQueuedMessagesSent(false);
-    }
-  }, [queuedMessages.length, queuedMessagesSent, sentMessageCount]);
+  }, [sessionQueue.messages, session?.status?.phase, refetchSession]);
 
   // Process queued messages when session becomes Running
   useEffect(() => {
     const phase = session?.status?.phase;
-    if (phase === "Running" && queuedMessages.length > 0 && !queuedMessagesSent) {
+    const unsentMessages = sessionQueue.messages.filter(m => !m.sentAt);
+    
+    if (phase === "Running" && unsentMessages.length > 0) {
       // Session is now running, send all queued messages
       const processMessages = async () => {
-        for (const message of queuedMessages) {
+        for (const messageItem of unsentMessages) {
           try {
-            await aguiSendMessage(message);
+            await aguiSendMessage(messageItem.content);
+            sessionQueue.markMessageSent(messageItem.id);
             // Small delay between messages to avoid overwhelming the system
             await new Promise(resolve => setTimeout(resolve, 100));
           } catch (err) {
             errorToast(err instanceof Error ? err.message : "Failed to send queued message");
           }
         }
-        // Mark messages as sent, but don't clear yet - wait for agent response
-        setSentMessageCount(queuedMessages.length);
-        setQueuedMessagesSent(true);
       };
       
       processMessages();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.status?.phase, queuedMessages.length, queuedMessagesSent]);
+  }, [session?.status?.phase, sessionQueue.messages.length]);
 
   // Repo management mutations
   const addRepoMutation = useMutation({
@@ -1033,19 +1036,18 @@ export default function ProjectSessionDetailPage({
 
   // Clear queued messages when first agent response arrives
   useEffect(() => {
-    if (queuedMessagesSent && streamMessages.length > 0) {
+    const sentMessages = sessionQueue.messages.filter(m => m.sentAt);
+    if (sentMessages.length > 0 && streamMessages.length > 0) {
       // Check if there's at least one agent message (response to our queued messages)
       const hasAgentResponse = streamMessages.some(
         msg => msg.type === "agent_message" || msg.type === "tool_use_messages"
       );
       
       if (hasAgentResponse) {
-        setQueuedMessages([]);
-        setQueuedMessagesSent(false);
-        setSentMessageCount(0);
+        sessionQueue.clearMessages();
       }
     }
-  }, [queuedMessagesSent, streamMessages]);
+  }, [sessionQueue, streamMessages]);
 
   // Load workflow from session when session data and workflows are available
   // Syncs the workflow panel with the workflow reported by the API
@@ -1217,7 +1219,7 @@ export default function ProjectSessionDetailPage({
     // If session is not yet running, queue the message for later
     // This includes: undefined (loading), "Pending", "Creating", or any other non-Running state
     if (!phase || phase !== "Running") {
-      setQueuedMessages(prev => [...prev, finalMessage]);
+      sessionQueue.addMessage(finalMessage);
       return;
     }
 
@@ -1911,8 +1913,7 @@ export default function ProjectSessionDetailPage({
                         showWelcomeExperience={true}
                         activeWorkflow={workflowManagement.activeWorkflow}
                         userHasInteracted={userHasInteracted}
-                        queuedMessages={queuedMessages}
-                        queuedMessagesSent={queuedMessagesSent}
+                        queuedMessages={sessionQueue.messages}
                         hasRealMessages={hasRealMessages}
                         welcomeExperienceComponent={
                           <WelcomeExperience

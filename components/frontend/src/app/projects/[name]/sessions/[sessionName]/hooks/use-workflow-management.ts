@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { errorToast } from "@/hooks/use-toast";
+import { useSessionQueue } from "@/hooks/use-session-queue";
 import type { WorkflowConfig } from "../lib/types";
 
 type UseWorkflowManagementProps = {
@@ -19,9 +20,11 @@ export function useWorkflowManagement({
 }: UseWorkflowManagementProps) {
   const [selectedWorkflow, setSelectedWorkflow] = useState<string>("none");
   const [pendingWorkflow, setPendingWorkflow] = useState<WorkflowConfig | null>(null);
-  const [queuedWorkflow, setQueuedWorkflow] = useState<WorkflowConfig | null>(null);
   const [activeWorkflow, setActiveWorkflow] = useState<string | null>(null);
   const [workflowActivating, setWorkflowActivating] = useState(false);
+
+  // Use session queue for workflow persistence
+  const sessionQueue = useSessionQueue(projectName, sessionName);
 
   // Set pending workflow (user selected but not yet activated)
   const setPending = useCallback((workflow: WorkflowConfig | null) => {
@@ -38,7 +41,12 @@ export function useWorkflowManagement({
     // If session is not yet running, queue the workflow for later
     // This includes: undefined (loading), "Pending", "Creating", or any other non-Running state
     if (!phase || phase !== "Running") {
-      setQueuedWorkflow(workflow);
+      sessionQueue.setWorkflow({
+        id: workflow.id,
+        gitUrl: workflow.gitUrl,
+        branch: workflow.branch,
+        path: workflow.path || "",
+      });
       setSelectedWorkflow(workflow.id);
       setWorkflowActivating(true); // Show loading state
       return true; // Don't return false - we've queued it successfully
@@ -65,7 +73,7 @@ export function useWorkflowManagement({
       
       setActiveWorkflow(workflow.id);
       setPendingWorkflow(null);
-      setQueuedWorkflow(null);
+      sessionQueue.clearWorkflow();
       
       // Wait for restart to complete (give runner time to clone and restart)
       await new Promise(resolve => setTimeout(resolve, 3000));
@@ -76,13 +84,13 @@ export function useWorkflowManagement({
     } catch (error) {
       console.error("Failed to activate workflow:", error);
       errorToast(error instanceof Error ? error.message : "Failed to activate workflow");
-      setQueuedWorkflow(null);
+      sessionQueue.clearWorkflow();
       setWorkflowActivating(false);
       return false;
     } finally {
       setWorkflowActivating(false);
     }
-  }, [pendingWorkflow, projectName, sessionName, sessionPhase, onWorkflowActivated]);
+  }, [pendingWorkflow, projectName, sessionName, sessionPhase, sessionQueue, onWorkflowActivated]);
 
   // Handle workflow selection change
   const handleWorkflowChange = useCallback((value: string, ootbWorkflows: WorkflowConfig[], onCustom: () => void) => {
@@ -134,7 +142,7 @@ export function useWorkflowManagement({
     setSelectedWorkflow,
     pendingWorkflow,
     setPending,
-    queuedWorkflow,
+    queuedWorkflow: sessionQueue.workflow,
     activeWorkflow,
     setActiveWorkflow,
     workflowActivating,
