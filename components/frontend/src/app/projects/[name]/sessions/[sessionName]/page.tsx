@@ -1047,26 +1047,29 @@ export default function ProjectSessionDetailPage({
     }
   }, [queuedMessagesSent, streamMessages]);
 
-  // Load workflow from session for existing sessions (with messages)
-  // Placed here after hasRealMessages is defined
+  // Load workflow from session when session data and workflows are available
+  // Syncs the workflow panel with the workflow reported by the API
   useEffect(() => {
     if (workflowLoadedFromSessionRef.current || !session) return;
     if (session.spec?.activeWorkflow && ootbWorkflows.length === 0) return;
 
-    // Auto-load workflow only if there are already messages (existing session)
-    // For new sessions, wait for explicit user selection from welcome screen
-    if (session.spec?.activeWorkflow && hasRealMessages) {
+    // Sync workflow from session whenever it's set in the API
+    if (session.spec?.activeWorkflow) {
       const gitUrl = session.spec.activeWorkflow.gitUrl;
       const matchingWorkflow = ootbWorkflows.find((w) => w.gitUrl === gitUrl);
       if (matchingWorkflow) {
         workflowManagement.setActiveWorkflow(matchingWorkflow.id);
         workflowManagement.setSelectedWorkflow(matchingWorkflow.id);
-        // Mark as interacted for existing sessions
-        setUserHasInteracted(true);
+        // Mark as interacted for existing sessions with messages
+        if (hasRealMessages) {
+          setUserHasInteracted(true);
+        }
       } else {
         workflowManagement.setActiveWorkflow("custom");
         workflowManagement.setSelectedWorkflow("custom");
-        setUserHasInteracted(true);
+        if (hasRealMessages) {
+          setUserHasInteracted(true);
+        }
       }
       workflowLoadedFromSessionRef.current = true;
     }
