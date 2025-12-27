@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Loader2 } from "lucide-react";
+import { Loader2, Sparkles } from "lucide-react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -88,9 +88,46 @@ export default function NewProjectSessionPage({ params }: { params: Promise<{ na
   // Watch interactive to adjust prompt field hints
   const isInteractive = form.watch("interactive");
 
+  // Refine prompt state
+  const [refining, setRefining] = useState(false);
+
+  const refinePrompt = () => {
+    const currentPrompt = form.getValues("initialPrompt");
+    if (!currentPrompt || currentPrompt.trim().length < 5) {
+      errorToast("Please enter a prompt first");
+      return;
+    }
+
+    setRefining(true);
+
+    // Simple heuristic-based prompt refinement
+    setTimeout(() => {
+      const trimmed = currentPrompt.trim();
+      let refined = trimmed;
+
+      // Add context if prompt is very short
+      if (trimmed.length < 50) {
+        refined = `Please ${trimmed.toLowerCase()}. Provide detailed analysis and specific recommendations.`;
+      }
+      // Improve clarity if prompt lacks detail
+      else if (!trimmed.includes("analyze") && !trimmed.includes("review") && !trimmed.includes("explain")) {
+        refined = `Analyze and ${trimmed.toLowerCase()}. Include specific examples and actionable recommendations.`;
+      }
+      // Add structure to longer prompts
+      else {
+        const lines = trimmed.split("\n");
+        if (lines.length === 1) {
+          refined = `${trimmed}\n\nPlease provide:\n- Detailed analysis\n- Specific findings\n- Actionable recommendations`;
+        }
+      }
+
+      form.setValue("initialPrompt", refined);
+      successToast("Prompt refined successfully");
+      setRefining(false);
+    }, 800); // Simulate processing time
+  };
 
 
-  
 
   const onSubmit = async (values: FormValues) => {
     if (!projectName) return;
@@ -189,6 +226,27 @@ export default function NewProjectSessionPage({ params }: { params: Promise<{ na
                         <Textarea placeholder="Describe what you want Claude to analyze on the website..." className="min-h-[100px]" {...field} />
                       </FormControl>
                       <FormDescription>Provide a detailed prompt about what you want Claude to analyze on the website</FormDescription>
+                      <div className="mt-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={refinePrompt}
+                          disabled={refining || !field.value || field.value.trim().length < 5}
+                        >
+                          {refining ? (
+                            <>
+                              <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                              Refining...
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles className="mr-2 h-3 w-3" />
+                              Refine Prompt
+                            </>
+                          )}
+                        </Button>
+                      </div>
                       <FormMessage />
                     </FormItem>
                   )}
