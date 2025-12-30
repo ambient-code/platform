@@ -1,0 +1,72 @@
+---
+title: Ambient Code Platform Architecture
+---
+
+%%{init: {'theme':'dark', 'themeVariables': { 'primaryColor': '#1f2937', 'primaryTextColor': '#fff', 'primaryBorderColor': '#4b5563', 'lineColor': '#6b7280', 'secondaryColor': '#374151', 'tertiaryColor': '#111827', 'background': '#0f172a'}}}%%
+
+graph TB
+    subgraph "User Layer"
+        User[👤 User]
+        Browser[🌐 Web Browser]
+    end
+    
+    subgraph "Frontend Layer"
+        UI[NextJS Frontend<br/>with Shadcn UI]
+    end
+    
+    subgraph "API Layer"
+        Backend[Go Backend API<br/>K8s CRD Management]
+    end
+    
+    subgraph "Kubernetes Control Plane"
+        Operator[Kubernetes Operator<br/>Go]
+        CR[AgenticSession<br/>Custom Resource]
+    end
+    
+    subgraph "Execution Layer"
+        Job[Kubernetes Job]
+        Pod[Execution Pod<br/>AI CLI + MCP Server]
+        Runner[Claude Code Runner<br/>Python Service]
+    end
+    
+    subgraph "Storage Layer"
+        Storage[(Results Storage)]
+    end
+    
+    %% User interactions
+    User --> Browser
+    Browser --> UI
+    
+    %% Session creation flow
+    UI -->|1. Create Session| Backend
+    Backend -->|2. Create CR| CR
+    Operator -->|3. Watch CR| CR
+    Operator -->|4. Create Job| Job
+    Job -->|5. Spawn Pod| Pod
+    Pod --> Runner
+    Runner -->|6. Execute Task<br/>via MCP| Pod
+    Pod -->|7. Store Results| Storage
+    Storage -->|8. Update CR| CR
+    CR -->|9. Read Status| Backend
+    Backend -->|10. Display Results| UI
+    UI -->|11. Show to User| Browser
+    
+    %% Component relationships
+    Backend -.->|Manages| CR
+    Operator -.->|Monitors| CR
+    Runner -.->|MCP Capabilities| Pod
+    
+    %% Styling
+    classDef frontend fill:#3b82f6,stroke:#2563eb,stroke-width:2px,color:#fff
+    classDef backend fill:#8b5cf6,stroke:#7c3aed,stroke-width:2px,color:#fff
+    classDef kubernetes fill:#10b981,stroke:#059669,stroke-width:2px,color:#fff
+    classDef execution fill:#f59e0b,stroke:#d97706,stroke-width:2px,color:#fff
+    classDef storage fill:#6b7280,stroke:#4b5563,stroke-width:2px,color:#fff
+    classDef user fill:#06b6d4,stroke:#0891b2,stroke-width:2px,color:#fff
+    
+    class User,Browser user
+    class UI frontend
+    class Backend backend
+    class Operator,CR,Job kubernetes
+    class Pod,Runner execution
+    class Storage storage

@@ -164,7 +164,7 @@ status:
   - type: RunnerStarted
     status: "False"
     reason: ImagePullBackOff
-    message: "Failed to pull image: quay.io/ambient_code/vteam_claude_runner:latest"
+    message: "Failed to pull image: quay.io/ambient_code/acp_claude_runner:latest"
     lastTransitionTime: "2025-11-15T12:02:00Z"
   - type: Failed
     status: "True"

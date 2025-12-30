@@ -73,7 +73,7 @@ cd platform
 make dev-start
 
 # Access the frontend
-echo "https://$(oc get route vteam-frontend -n vteam-dev -o jsonpath='{.spec.host}')"
+echo "https://$(oc get route acp-frontend -n acp-dev -o jsonpath='{.spec.host}')"
 ```
 
 See the [Getting Started Guide](../user-guide/getting-started.md) for detailed deployment instructions.
