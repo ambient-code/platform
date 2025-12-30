@@ -113,6 +113,12 @@ func registerRoutes(r *gin.Engine) {
 			projectGroup.POST("/auth/gitlab/connect", handlers.ConnectGitLabGlobal)
 			projectGroup.GET("/auth/gitlab/status", handlers.GetGitLabStatusGlobal)
 			projectGroup.POST("/auth/gitlab/disconnect", handlers.DisconnectGitLabGlobal)
+
+			// Push notification endpoints (project-scoped)
+			projectGroup.POST("/push-subscriptions", handlers.CreatePushSubscription)
+			projectGroup.GET("/push-subscriptions/current", handlers.GetCurrentPushSubscription)
+			projectGroup.PUT("/push-subscriptions/:subscriptionId", handlers.UpdatePushSubscription)
+			projectGroup.DELETE("/push-subscriptions/:subscriptionId", handlers.DeletePushSubscription)
 		}
 
 		api.POST("/auth/github/install", handlers.LinkGitHubInstallationGlobal)
@@ -122,6 +128,9 @@ func registerRoutes(r *gin.Engine) {
 
 		// Cluster info endpoint (public, no auth required)
 		api.GET("/cluster-info", handlers.GetClusterInfo)
+
+		// Push notification public endpoints
+		api.GET("/push-notifications/vapid-public-key", handlers.GetVapidPublicKey)
 
 		api.GET("/projects", handlers.ListProjects)
 		api.POST("/projects", handlers.CreateProject)
