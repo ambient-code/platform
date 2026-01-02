@@ -12,6 +12,11 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v5
 
+    - name: Cleanup Diskspace
+      id: cleanup
+      uses: kubeflow/pipelines/.github/actions/github-disk-cleanup@master
+      if: (!cancelled())
+
     - name: Set up Go
       uses: actions/setup-go@v6
       with:
@@ -50,6 +55,10 @@ jobs:
           echo "⚠️  Backend deployment timeout - showing status"
           kubectl get pods -n ambient-code -o wide
           kubectl describe deployment backend-api -n ambient-code | tail -50
+          echo "⚠️  Backend pod events:"
+          kubectl get events -n ambient-code --field-selector involvedObject.kind=Pod,involvedObject.name!='' --sort-by='.lastTimestamp' | grep backend-api || echo "(No backend-api pod events found)"
+          echo "⚠️  Backend pod details:"
+          kubectl get pods -n ambient-code -l app=backend-api -o yaml | grep -A 20 -B 5 "conditions:\|events:\|status:" || true
           exit 1
         }
         kubectl wait --for=condition=available --timeout=180s deployment/frontend -n ambient-code || {

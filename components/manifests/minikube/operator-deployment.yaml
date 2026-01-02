@@ -27,7 +27,7 @@ spec:
           optional: true
       containers:
       - name: agentic-operator
-        image: localhost/vteam-operator:latest
+        image: localhost/vteam_operator:latest
         imagePullPolicy: Never
         securityContext:
           allowPrivilegeEscalation: false
@@ -51,9 +51,9 @@ spec:
         - name: BACKEND_API_URL
           value: "http://backend-service:8080/api"
         - name: AMBIENT_CODE_RUNNER_IMAGE
-          value: "localhost/vteam-claude-runner:latest"
+          value: "localhost/vteam_claude_runner:latest"
         - name: CONTENT_SERVICE_IMAGE
-          value: "localhost/vteam-backend:latest"
+          value: "localhost/vteam_backend:latest"
         - name: IMAGE_PULL_POLICY
           value: "Never"
         envFrom:

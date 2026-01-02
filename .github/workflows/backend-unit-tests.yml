@@ -25,7 +25,7 @@ on:
   pull_request:
     paths:
       - '.github/workflows/backend-unit-tests.yml'
-      - './components/backend/**'
+      - 'components/backend/**'
       - '!**/*.md'
 
 concurrency:
