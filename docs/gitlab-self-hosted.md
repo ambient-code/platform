@@ -834,7 +834,7 @@ git push https://oauth2:TOKEN@gitlab.company.com/owner/repo.git
 - GitLab Community Forum: https://forum.gitlab.com
 
 **For Ambient Code Platform Integration Issues**:
-- Ambient Code Platform GitHub Issues: https://github.com/natifridman/Ambient Code Platform/issues
+- Ambient Code Platform GitHub Issues: https://github.com/ambient-code/platform/issues
 - Check Ambient Code Platform logs: `kubectl logs -l app=vteam-backend -n vteam-backend`
 
 **For Network/Firewall Issues**:
