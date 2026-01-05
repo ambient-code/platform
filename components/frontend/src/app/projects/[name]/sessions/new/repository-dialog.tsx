@@ -162,8 +162,8 @@ export function RepositoryDialog({
                     onChange={(e) => onRepoChange({
                       ...repo,
                       output: e.target.value ? {
-                        ...repo.output,
-                        url: e.target.value
+                        url: e.target.value,
+                        ...(repo.output?.branch && { branch: repo.output.branch })
                       } : undefined
                     })}
                   />
