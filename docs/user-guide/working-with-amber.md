@@ -50,7 +50,7 @@ Amber is the Ambient Code Platform's AI colleague—an expert in your codebase w
 ### On-Demand via kubectl
 
 ```yaml
-apiVersion: acp.ambient-code/v1alpha1
+apiVersion: vteam.ambient-code/v1alpha1
 kind: AgenticSession
 metadata:
   name: amber-analysis
@@ -147,7 +147,7 @@ Amber can operate autonomously to manage your backlog and prevent issue accumula
 **Automatic Issue Triage (GitHub Webhook):**
 ```yaml
 # Webhook creates AgenticSession on issue creation
-apiVersion: acp.ambient-code/v1alpha1
+apiVersion: vteam.ambient-code/v1alpha1
 kind: AgenticSession
 metadata:
   name: amber-triage-{{ issue.number }}
@@ -195,7 +195,7 @@ spec:
                 - -c
                 - |
                   cat <<EOF | kubectl apply -f -
-                  apiVersion: acp.ambient-code/v1alpha1
+                  apiVersion: vteam.ambient-code/v1alpha1
                   kind: AgenticSession
                   metadata:
                     name: amber-backlog-$(date +%Y%m%d-%H)
@@ -313,7 +313,7 @@ spec:
                 - -c
                 - |
                   cat <<EOF | kubectl apply -f -
-                  apiVersion: acp.ambient-code/v1alpha1
+                  apiVersion: vteam.ambient-code/v1alpha1
                   kind: AgenticSession
                   metadata:
                     name: amber-health-$(date +%Y%m%d)
@@ -363,7 +363,7 @@ spec:
                 - -c
                 - |
                   cat <<EOF | kubectl apply -f -
-                  apiVersion: acp.ambient-code/v1alpha1
+                  apiVersion: vteam.ambient-code/v1alpha1
                   kind: AgenticSession
                   metadata:
                     name: amber-sprint-$(date +%Y-%W)
@@ -626,7 +626,7 @@ kubectl get jobs -n <project> | grep <session-name>
 
 **Common causes:**
 1. Missing API key: `kubectl get projectsettings -n <project> -o yaml`
-2. RBAC permissions: `kubectl auth can-i create agenticsessions.acp.ambient-code -n <project>`
+2. RBAC permissions: `kubectl auth can-i create agenticsessions.vteam.ambient-code -n <project>`
 3. Operator not running: `kubectl get pods -n ambient-code -l app=operator`
 
 **View logs:**

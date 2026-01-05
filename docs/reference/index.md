@@ -15,7 +15,7 @@ The platform uses Kubernetes Custom Resource Definitions (CRDs) for declarative 
 
 The primary Custom Resource for AI-powered automation tasks.
 
-**API Version**: `acp.ambient-code/v1alpha1`
+**API Version**: `vteam.ambient-code/v1alpha1`
 **Kind**: `AgenticSession`
 
 **Key Spec Fields:**
@@ -41,7 +41,7 @@ The primary Custom Resource for AI-powered automation tasks.
 **Example AgenticSession:**
 
 ```yaml
-apiVersion: acp.ambient-code/v1alpha1
+apiVersion: vteam.ambient-code/v1alpha1
 kind: AgenticSession
 metadata:
   name: analyze-codebase
@@ -63,7 +63,7 @@ spec:
 
 Namespace-scoped configuration for platform projects, managing API keys, access control, and default settings.
 
-**API Version**: `acp.ambient-code/v1alpha1`
+**API Version**: `vteam.ambient-code/v1alpha1`
 **Kind**: `ProjectSettings`
 
 **Key Spec Fields:**
@@ -85,7 +85,7 @@ type: Opaque
 stringData:
   ANTHROPIC_API_KEY: "sk-ant-api03-your-key-here"
 ---
-apiVersion: acp.ambient-code/v1alpha1
+apiVersion: vteam.ambient-code/v1alpha1
 kind: ProjectSettings
 metadata:
   name: projectsettings
@@ -103,7 +103,7 @@ spec:
 
 Specialized Custom Resource for Request for Enhancement workflows using a 7-agent council process. This is an advanced feature for structured engineering refinement.
 
-**API Version**: `acp.ambient-code/v1alpha1`
+**API Version**: `vteam.ambient-code/v1alpha1`
 **Kind**: `RFEWorkflow`
 
 This is an advanced feature not covered in the standard user documentation. For implementation details, see the project's CLAUDE.md file in the repository root.
@@ -115,7 +115,7 @@ The backend API provides HTTP endpoints for managing projects and sessions.
 ### Base URLs
 
 - **Development**: `http://localhost:8080`
-- **Production**: `https://acp-backend.<apps-domain>`
+- **Production**: `https://vteam-backend.<apps-domain>`
 
 ### Authentication
 
@@ -161,7 +161,7 @@ Content-Type: application/json
 
 ```bash
 curl -X POST \
-  https://acp-backend.apps.example.com/api/projects/my-project/agentic-sessions \
+  https://vteam-backend.apps.example.com/api/projects/my-project/agentic-sessions \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -186,7 +186,7 @@ curl -X POST \
 
 Real-time session updates are available via WebSocket connection to the backend. This enables live status monitoring in the web interface.
 
-**Connection URL**: `wss://acp-backend.<apps-domain>/ws`
+**Connection URL**: `wss://vteam-backend.<apps-domain>/ws`
 
 Messages are broadcasted when AgenticSession status changes (phase transitions, completion, errors).
 

@@ -280,7 +280,7 @@ Once you have your token, connect it to Ambient Code Platform:
 
 **For GitLab.com**:
 ```bash
-curl -X POST http://acp-backend:8080/api/auth/gitlab/connect \
+curl -X POST http://vteam-backend:8080/api/auth/gitlab/connect \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <your-acp-auth-token>" \
   -d '{
@@ -291,7 +291,7 @@ curl -X POST http://acp-backend:8080/api/auth/gitlab/connect \
 
 **For Self-Hosted GitLab**:
 ```bash
-curl -X POST http://acp-backend:8080/api/auth/gitlab/connect \
+curl -X POST http://vteam-backend:8080/api/auth/gitlab/connect \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <your-acp-auth-token>" \
   -d '{
@@ -637,7 +637,7 @@ curl -H "Authorization: Bearer glpat-xxx" \
 
 **Connect to Ambient Code Platform**:
 ```bash
-curl -X POST http://acp-backend:8080/api/auth/gitlab/connect \
+curl -X POST http://vteam-backend:8080/api/auth/gitlab/connect \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <acp-token>" \
   -d '{"personalAccessToken":"glpat-xxx","instanceUrl":""}'
@@ -645,6 +645,6 @@ curl -X POST http://acp-backend:8080/api/auth/gitlab/connect \
 
 **Check Ambient Code Platform Connection**:
 ```bash
-curl -X GET http://acp-backend:8080/api/auth/gitlab/status \
+curl -X GET http://vteam-backend:8080/api/auth/gitlab/status \
   -H "Authorization: Bearer <acp-token>"
 ```

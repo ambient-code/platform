@@ -57,7 +57,7 @@ Ambient Code Platform now supports GitLab repositories alongside GitHub, enablin
 
 **Via API**:
 ```bash
-curl -X POST http://acp-backend:8080/api/auth/gitlab/connect \
+curl -X POST http://vteam-backend:8080/api/auth/gitlab/connect \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <your-acp-auth-token>" \
   -d '{
@@ -226,7 +226,7 @@ Ambient Code Platform validates your access to GitLab repositories before allowi
 
 **Via API**:
 ```bash
-curl -X GET http://acp-backend:8080/api/auth/gitlab/status \
+curl -X GET http://vteam-backend:8080/api/auth/gitlab/status \
   -H "Authorization: Bearer <your-acp-token>"
 ```
 
@@ -251,7 +251,7 @@ curl -X GET http://acp-backend:8080/api/auth/gitlab/status \
 
 **Via API**:
 ```bash
-curl -X POST http://acp-backend:8080/api/auth/gitlab/disconnect \
+curl -X POST http://vteam-backend:8080/api/auth/gitlab/disconnect \
   -H "Authorization: Bearer <your-acp-token>"
 ```
 
@@ -287,7 +287,7 @@ Ambient Code Platform fully supports self-hosted GitLab instances (Community and
 When connecting, provide your instance URL:
 
 ```bash
-curl -X POST http://acp-backend:8080/api/auth/gitlab/connect \
+curl -X POST http://vteam-backend:8080/api/auth/gitlab/connect \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <acp-token>" \
   -d '{
@@ -328,7 +328,7 @@ Ambient Code Platform automatically constructs the correct API URL:
 1. Verify instance URL is correct and accessible
 2. Check network connectivity from backend pods:
    ```bash
-   kubectl exec -it <backend-pod> -n acp-backend -- curl https://gitlab.company.com
+   kubectl exec -it <backend-pod> -n vteam-backend -- curl https://gitlab.company.com
    ```
 3. Verify SSL certificate is valid (or configure trust for self-signed)
 4. Check firewall rules allow traffic from Kubernetes cluster
@@ -476,7 +476,7 @@ Ambient Code Platform automatically constructs the correct API URL:
 1. Verify GitLab account is connected
 2. Check token stored in secret:
    ```bash
-   kubectl get secret gitlab-user-tokens -n acp-backend
+   kubectl get secret gitlab-user-tokens -n vteam-backend
    ```
 3. Verify repository URL is correct
 4. Check session logs:
@@ -695,7 +695,7 @@ A: No. GitHub and GitLab integrations are independent and work side-by-side.
 - [GitLab Permissions](https://docs.gitlab.com/ee/user/permissions.html)
 
 **Troubleshooting**:
-- Check backend logs: `kubectl logs -l app=acp-backend -n acp-backend`
+- Check backend logs: `kubectl logs -l app=vteam-backend -n vteam-backend`
 - Check session logs: `kubectl logs <session-pod> -n <project-namespace>`
 - Verify GitLab status: https://status.gitlab.com (for GitLab.com)
 

@@ -64,16 +64,16 @@ This guide provides step-by-step instructions for manually testing the GitLab in
 
 1. **Verify Backend Running**:
    ```bash
-   kubectl get pods -n acp-backend
+   kubectl get pods -n vteam-backend
    ```
    - Should show backend pod in Running state
 
 2. **Get Backend URL**:
    ```bash
    # Get service URL (adjust for your environment)
-   kubectl get svc -n acp-backend
+   kubectl get svc -n vteam-backend
    ```
-   - Note the backend API URL (e.g., `http://acp-backend.acp-backend.svc.cluster.local:8080`)
+   - Note the backend API URL (e.g., `http://vteam-backend.vteam-backend.svc.cluster.local:8080`)
 
 3. **Get User Auth Token**:
    - Log in to Ambient Code Platform UI
@@ -93,7 +93,7 @@ This guide provides step-by-step instructions for manually testing the GitLab in
 
 1. **Send Connect Request**:
    ```bash
-   curl -X POST http://acp-backend:8080/api/auth/gitlab/connect \
+   curl -X POST http://vteam-backend:8080/api/auth/gitlab/connect \
      -H "Content-Type: application/json" \
      -H "Authorization: Bearer <your-acp-token>" \
      -d '{
@@ -117,10 +117,10 @@ This guide provides step-by-step instructions for manually testing the GitLab in
 3. **Verify in Kubernetes**:
    ```bash
    # Check secret created
-   kubectl get secret gitlab-user-tokens -n acp-backend -o yaml
+   kubectl get secret gitlab-user-tokens -n vteam-backend -o yaml
 
    # Check configmap created
-   kubectl get configmap gitlab-connections -n acp-backend -o yaml
+   kubectl get configmap gitlab-connections -n vteam-backend -o yaml
    ```
 
 **Success Criteria**:
@@ -140,7 +140,7 @@ This guide provides step-by-step instructions for manually testing the GitLab in
 
 1. **Send Status Request**:
    ```bash
-   curl -X GET http://acp-backend:8080/api/auth/gitlab/status \
+   curl -X GET http://vteam-backend:8080/api/auth/gitlab/status \
      -H "Authorization: Bearer <your-acp-token>"
    ```
 
@@ -266,7 +266,7 @@ This guide provides step-by-step instructions for manually testing the GitLab in
 
 2. **Connect with Read-Only Token**:
    ```bash
-   curl -X POST http://acp-backend:8080/api/auth/gitlab/connect \
+   curl -X POST http://vteam-backend:8080/api/auth/gitlab/connect \
      -H "Content-Type: application/json" \
      -H "Authorization: Bearer <your-acp-token>" \
      -d '{
@@ -304,10 +304,10 @@ GitLab push failed: Insufficient permissions. Ensure your GitLab token has 'writ
 1. **Search Backend Logs**:
    ```bash
    # Should find NO raw tokens
-   kubectl logs -l app=acp-backend -n acp-backend | grep "glpat-"
+   kubectl logs -l app=vteam-backend -n vteam-backend | grep "glpat-"
 
    # Should only find redacted tokens (with ***)
-   kubectl logs -l app=acp-backend -n acp-backend | grep "oauth2:"
+   kubectl logs -l app=vteam-backend -n vteam-backend | grep "oauth2:"
    ```
 
 2. **Search Session Logs**:
@@ -335,7 +335,7 @@ GitLab push failed: Insufficient permissions. Ensure your GitLab token has 'writ
 
 1. **Send Disconnect Request**:
    ```bash
-   curl -X POST http://acp-backend:8080/api/auth/gitlab/disconnect \
+   curl -X POST http://vteam-backend:8080/api/auth/gitlab/disconnect \
      -H "Authorization: Bearer <your-acp-token>"
    ```
 
@@ -350,17 +350,17 @@ GitLab push failed: Insufficient permissions. Ensure your GitLab token has 'writ
 3. **Verify Removal**:
    ```bash
    # Check token removed from secret
-   kubectl get secret gitlab-user-tokens -n acp-backend -o json | \
+   kubectl get secret gitlab-user-tokens -n vteam-backend -o json | \
      jq '.data | keys'
 
    # Check connection removed from configmap
-   kubectl get configmap gitlab-connections -n acp-backend -o json | \
+   kubectl get configmap gitlab-connections -n vteam-backend -o json | \
      jq '.data | keys'
    ```
 
 4. **Verify Status Shows Disconnected**:
    ```bash
-   curl -X GET http://acp-backend:8080/api/auth/gitlab/status \
+   curl -X GET http://vteam-backend:8080/api/auth/gitlab/status \
      -H "Authorization: Bearer <your-acp-token>"
    ```
 
@@ -387,7 +387,7 @@ GitLab push failed: Insufficient permissions. Ensure your GitLab token has 'writ
 
 1. **Connect with Instance URL**:
    ```bash
-   curl -X POST http://acp-backend:8080/api/auth/gitlab/connect \
+   curl -X POST http://vteam-backend:8080/api/auth/gitlab/connect \
      -H "Content-Type: application/json" \
      -H "Authorization: Bearer <your-acp-token>" \
      -d '{
@@ -471,7 +471,7 @@ GitLab push failed: Insufficient permissions. Ensure your GitLab token has 'writ
    ```
 4. Check backend logs:
    ```bash
-   kubectl logs -l app=acp-backend -n acp-backend | grep -i "gitlab"
+   kubectl logs -l app=vteam-backend -n vteam-backend | grep -i "gitlab"
    ```
 
 ---
@@ -485,14 +485,14 @@ GitLab push failed: Insufficient permissions. Ensure your GitLab token has 'writ
 **Solutions**:
 1. Verify GitLab account connected:
    ```bash
-   curl -X GET http://acp-backend:8080/api/auth/gitlab/status \
+   curl -X GET http://vteam-backend:8080/api/auth/gitlab/status \
      -H "Authorization: Bearer <token>"
    ```
 2. Check token exists in Secret:
    ```bash
-   kubectl get secret gitlab-user-tokens -n acp-backend -o yaml
+   kubectl get secret gitlab-user-tokens -n vteam-backend -o yaml
    ```
-3. Verify namespace is correct (`acp-backend`)
+3. Verify namespace is correct (`vteam-backend`)
 4. Check session logs for detailed error:
    ```bash
    kubectl logs <session-pod> -n <project-namespace>
@@ -514,11 +514,11 @@ GitLab push failed: Insufficient permissions. Ensure your GitLab token has 'writ
 3. Reconnect account:
    ```bash
    # Disconnect
-   curl -X POST http://acp-backend:8080/api/auth/gitlab/disconnect \
+   curl -X POST http://vteam-backend:8080/api/auth/gitlab/disconnect \
      -H "Authorization: Bearer <token>"
 
    # Reconnect with new token
-   curl -X POST http://acp-backend:8080/api/auth/gitlab/connect \
+   curl -X POST http://vteam-backend:8080/api/auth/gitlab/connect \
      -H "Content-Type: application/json" \
      -H "Authorization: Bearer <token>" \
      -d '{"personalAccessToken": "glpat-new-token", "instanceUrl": ""}'
@@ -560,7 +560,7 @@ GitLab push failed: Insufficient permissions. Ensure your GitLab token has 'writ
 2. Rotate all affected tokens in GitLab
 3. Check backend logs for redaction failures:
    ```bash
-   kubectl logs -l app=acp-backend -n acp-backend | grep -E "(glpat-|oauth2:)" | grep -v "***"
+   kubectl logs -l app=vteam-backend -n vteam-backend | grep -E "(glpat-|oauth2:)" | grep -v "***"
    ```
 
 ---
@@ -609,7 +609,7 @@ After completing all tests, verify:
 
 ### Backend Logs
 ```bash
-kubectl logs -l app=acp-backend -n acp-backend -f
+kubectl logs -l app=vteam-backend -n vteam-backend -f
 ```
 
 ### Session Logs
@@ -619,12 +619,12 @@ kubectl logs -l agenticsession=<session-name> -n <project-namespace> -f
 
 ### Check Secrets
 ```bash
-kubectl get secret gitlab-user-tokens -n acp-backend -o yaml
+kubectl get secret gitlab-user-tokens -n vteam-backend -o yaml
 ```
 
 ### Check ConfigMaps
 ```bash
-kubectl get configmap gitlab-connections -n acp-backend -o yaml
+kubectl get configmap gitlab-connections -n vteam-backend -o yaml
 ```
 
 ### GitLab API Test
@@ -640,7 +640,7 @@ curl -H "Authorization: Bearer glpat-..." \
 kubectl delete agenticsession test-gitlab-session -n <project-namespace>
 
 # Disconnect GitLab
-curl -X POST http://acp-backend:8080/api/auth/gitlab/disconnect \
+curl -X POST http://vteam-backend:8080/api/auth/gitlab/disconnect \
   -H "Authorization: Bearer <token>"
 ```
 

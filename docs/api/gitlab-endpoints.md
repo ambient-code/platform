@@ -5,7 +5,7 @@ This document describes the GitLab integration API endpoints available in ACP.
 ## Base URL
 
 ```
-http://acp-backend:8080/api
+http://vteam-backend:8080/api
 ```
 
 For production deployments, replace with your actual backend URL.
@@ -51,7 +51,7 @@ Authorization: Bearer <acp-auth-token>
 
 **Example Request**:
 ```bash
-curl -X POST http://acp-backend:8080/api/auth/gitlab/connect \
+curl -X POST http://vteam-backend:8080/api/auth/gitlab/connect \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <acp-token>" \
   -d '{
@@ -119,7 +119,7 @@ Authorization: Bearer <acp-auth-token>
 
 **Example Request**:
 ```bash
-curl -X GET http://acp-backend:8080/api/auth/gitlab/status \
+curl -X GET http://vteam-backend:8080/api/auth/gitlab/status \
   -H "Authorization: Bearer <acp-token>"
 ```
 
@@ -173,7 +173,7 @@ Authorization: Bearer <acp-auth-token>
 
 **Example Request**:
 ```bash
-curl -X POST http://acp-backend:8080/api/auth/gitlab/disconnect \
+curl -X POST http://vteam-backend:8080/api/auth/gitlab/disconnect \
   -H "Authorization: Bearer <acp-token>"
 ```
 
@@ -371,7 +371,7 @@ When GitLab token validation fails, error messages include specific remediation:
 #### 1. Check if Connected
 
 ```bash
-curl -X GET http://acp-backend:8080/api/auth/gitlab/status \
+curl -X GET http://vteam-backend:8080/api/auth/gitlab/status \
   -H "Authorization: Bearer $ACP_TOKEN"
 ```
 
@@ -383,7 +383,7 @@ Response:
 #### 2. Connect Account
 
 ```bash
-curl -X POST http://acp-backend:8080/api/auth/gitlab/connect \
+curl -X POST http://vteam-backend:8080/api/auth/gitlab/connect \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $ACP_TOKEN" \
   -d '{
@@ -407,7 +407,7 @@ Response:
 #### 3. Verify Connection
 
 ```bash
-curl -X GET http://acp-backend:8080/api/auth/gitlab/status \
+curl -X GET http://vteam-backend:8080/api/auth/gitlab/status \
   -H "Authorization: Bearer $ACP_TOKEN"
 ```
 
@@ -424,7 +424,7 @@ Response:
 #### 4. Disconnect (if needed)
 
 ```bash
-curl -X POST http://acp-backend:8080/api/auth/gitlab/disconnect \
+curl -X POST http://vteam-backend:8080/api/auth/gitlab/disconnect \
   -H "Authorization: Bearer $ACP_TOKEN"
 ```
 
@@ -442,7 +442,7 @@ Response:
 
 ```bash
 # Connect to self-hosted instance
-curl -X POST http://acp-backend:8080/api/auth/gitlab/connect \
+curl -X POST http://vteam-backend:8080/api/auth/gitlab/connect \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $ACP_TOKEN" \
   -d '{

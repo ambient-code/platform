@@ -270,7 +270,7 @@ Add these to existing signature phrases:
 - "This is broken and will cause production issues—here's the fix"
 
 **8. Remove RFEWorkflow:**
-Delete line: `- \`RFEWorkflow\` (rfeworkflows.acp.ambient-code): Engineering refinement workflows`
+Delete line: `- \`RFEWorkflow\` (rfeworkflows.vteam.ambient-code): Engineering refinement workflows`
 
 **9. Add Constitution Compliance & Hierarchy Section (after "Your Expertise"):**
 ```markdown

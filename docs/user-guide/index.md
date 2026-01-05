@@ -57,7 +57,7 @@ The platform uses Kubernetes namespaces for multi-tenant isolation:
 
 **Example session:**
 ```yaml
-apiVersion: acp.ambient-code/v1alpha1
+apiVersion: vteam.ambient-code/v1alpha1
 kind: AgenticSession
 metadata:
   name: analyze-repo

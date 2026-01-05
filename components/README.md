@@ -49,7 +49,7 @@ make dev-start
 
 **What you get:**
 - ✅ Complete OpenShift development environment
-- ✅ Frontend: `https://acp-frontend-acp-dev.apps-crc.testing`
+- ✅ Frontend: `https://vteam-frontend-vteam-dev.apps-crc.testing`
 - ✅ Backend API working with authentication
 - ✅ OpenShift console access
 - ✅ Ready for project creation and agentic sessions

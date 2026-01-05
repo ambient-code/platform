@@ -25,7 +25,7 @@ This is **declarative** (what should exist) vs **imperative** (do this action no
 ### The CR Structure
 
 ```yaml
-apiVersion: acp.ambient-code/v1alpha1
+apiVersion: vteam.ambient-code/v1alpha1
 kind: AgenticSession
 metadata:
   name: session-123

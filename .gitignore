@@ -136,3 +136,7 @@ e2e/langfuse/.env.langfuse-keys
 # Test Reporting
 logs/
 reports/
+
+# Security scan artifacts (transient)
+.security-scan/
+.security-scan.zip

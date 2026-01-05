@@ -71,7 +71,7 @@ Chosen option: "Multiple repos with mainRepoIndex", because:
 **AgenticSession Spec Structure:**
 
 ```yaml
-apiVersion: acp.ambient-code/v1alpha1
+apiVersion: vteam.ambient-code/v1alpha1
 kind: AgenticSession
 metadata:
   name: multi-repo-session

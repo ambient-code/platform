@@ -63,7 +63,7 @@ Before configuring Ambient Code Platform, verify GitLab is accessible from Kuber
 curl -I https://gitlab.company.com
 
 # From Ambient Code Platform backend pod (critical test)
-kubectl exec -it <backend-pod-name> -n acp-backend -- \
+kubectl exec -it <backend-pod-name> -n vteam-backend -- \
   curl -I https://gitlab.company.com
 ```
 
@@ -146,7 +146,7 @@ curl -H "Authorization: Bearer glpat-your-token" \
 
 **Test from Backend Pod** (critical):
 ```bash
-kubectl exec -it <backend-pod> -n acp-backend -- \
+kubectl exec -it <backend-pod> -n vteam-backend -- \
   curl -H "Authorization: Bearer glpat-your-token" \
   https://gitlab.company.com/api/v4/user
 ```
@@ -160,7 +160,7 @@ If this fails but works from your machine, there's a network/firewall issue.
 **Via API** (recommended for initial testing):
 
 ```bash
-curl -X POST http://acp-backend:8080/api/auth/gitlab/connect \
+curl -X POST http://vteam-backend:8080/api/auth/gitlab/connect \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <acp-auth-token>" \
   -d '{
@@ -190,7 +190,7 @@ curl -X POST http://acp-backend:8080/api/auth/gitlab/connect \
 
 **Check Connection**:
 ```bash
-curl -X GET http://acp-backend:8080/api/auth/gitlab/status \
+curl -X GET http://vteam-backend:8080/api/auth/gitlab/status \
   -H "Authorization: Bearer <acp-token>"
 ```
 
@@ -239,14 +239,14 @@ echo | openssl s_client -showcerts -connect gitlab.company.com:443 2>/dev/null |
 ```bash
 kubectl create configmap gitlab-ca-cert \
   --from-file=gitlab-ca.crt=gitlab-ca.crt \
-  -n acp-backend
+  -n vteam-backend
 ```
 
 **Step 3: Mount CA Certificate in Backend Deployment**
 
 Edit backend deployment:
 ```bash
-kubectl edit deployment acp-backend -n acp-backend
+kubectl edit deployment vteam-backend -n vteam-backend
 ```
 
 Add volume and volumeMount:
@@ -294,7 +294,7 @@ spec:
 
 ```bash
 # After pod restarts
-kubectl exec -it <backend-pod> -n acp-backend -- \
+kubectl exec -it <backend-pod> -n vteam-backend -- \
   curl https://gitlab.company.com
 # Should not show certificate errors
 ```
@@ -350,7 +350,7 @@ env:
 
 **Required Outbound Access** (from Ambient Code Platform backend pods):
 ```
-Source: Ambient Code Platform backend pods (namespace: acp-backend)
+Source: Ambient Code Platform backend pods (namespace: vteam-backend)
 Destination: GitLab instance
 Protocol: HTTPS (TCP)
 Port: 443 (or custom if GitLab uses different port)
@@ -371,7 +371,7 @@ Ambient Code Platform backend pods must be able to resolve GitLab hostname.
 
 **Test DNS Resolution**:
 ```bash
-kubectl exec -it <backend-pod> -n acp-backend -- \
+kubectl exec -it <backend-pod> -n vteam-backend -- \
   nslookup gitlab.company.com
 ```
 
@@ -592,7 +592,7 @@ Ambient Code Platform users can connect to multiple self-hosted GitLab instances
 
 2. **Test from backend pod**:
    ```bash
-   kubectl exec -it <backend-pod> -n acp-backend -- \
+   kubectl exec -it <backend-pod> -n vteam-backend -- \
      curl https://gitlab.company.com
    ```
    - If fails: Firewall or network issue
@@ -600,7 +600,7 @@ Ambient Code Platform users can connect to multiple self-hosted GitLab instances
 
 3. **Test GitLab API**:
    ```bash
-   kubectl exec -it <backend-pod> -n acp-backend -- \
+   kubectl exec -it <backend-pod> -n vteam-backend -- \
      curl -H "Authorization: Bearer glpat-xxx" \
      https://gitlab.company.com/api/v4/user
    ```
@@ -609,7 +609,7 @@ Ambient Code Platform users can connect to multiple self-hosted GitLab instances
 
 4. **Check Ambient Code Platform logs**:
    ```bash
-   kubectl logs -l app=acp-backend -n acp-backend | grep -i gitlab
+   kubectl logs -l app=vteam-backend -n vteam-backend | grep -i gitlab
    ```
 
 ---
@@ -655,7 +655,7 @@ curl https://gitlab.company.com/api/v4/version
 
 2. **Check network latency**:
    ```bash
-   kubectl exec -it <backend-pod> -n acp-backend -- \
+   kubectl exec -it <backend-pod> -n vteam-backend -- \
      ping -c 5 gitlab.company.com
    ```
    - Should be < 50ms for same datacenter
@@ -673,7 +673,7 @@ curl https://gitlab.company.com/api/v4/version
 ### Token Storage
 
 **Where Tokens Are Stored**:
-- Kubernetes Secret: `gitlab-user-tokens` in `acp-backend` namespace
+- Kubernetes Secret: `gitlab-user-tokens` in `vteam-backend` namespace
 - Encrypted at rest (Kubernetes default encryption)
 - Never logged in plaintext
 
@@ -835,7 +835,7 @@ git push https://oauth2:TOKEN@gitlab.company.com/owner/repo.git
 
 **For Ambient Code Platform Integration Issues**:
 - Ambient Code Platform GitHub Issues: https://github.com/natifridman/Ambient Code Platform/issues
-- Check Ambient Code Platform logs: `kubectl logs -l app=acp-backend -n acp-backend`
+- Check Ambient Code Platform logs: `kubectl logs -l app=vteam-backend -n vteam-backend`
 
 **For Network/Firewall Issues**:
 - Contact your network/infrastructure team
@@ -848,20 +848,20 @@ git push https://oauth2:TOKEN@gitlab.company.com/owner/repo.git
 **Test Connectivity**:
 ```bash
 # From backend pod
-kubectl exec -it <backend-pod> -n acp-backend -- \
+kubectl exec -it <backend-pod> -n vteam-backend -- \
   curl https://gitlab.company.com
 ```
 
 **Test API**:
 ```bash
-kubectl exec -it <backend-pod> -n acp-backend -- \
+kubectl exec -it <backend-pod> -n vteam-backend -- \
   curl -H "Authorization: Bearer glpat-xxx" \
   https://gitlab.company.com/api/v4/user
 ```
 
 **Connect to Ambient Code Platform**:
 ```bash
-curl -X POST http://acp-backend:8080/api/auth/gitlab/connect \
+curl -X POST http://vteam-backend:8080/api/auth/gitlab/connect \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <acp-token>" \
   -d '{"personalAccessToken":"glpat-xxx","instanceUrl":"https://gitlab.company.com"}'
@@ -869,11 +869,11 @@ curl -X POST http://acp-backend:8080/api/auth/gitlab/connect \
 
 **Check Status**:
 ```bash
-curl -X GET http://acp-backend:8080/api/auth/gitlab/status \
+curl -X GET http://vteam-backend:8080/api/auth/gitlab/status \
   -H "Authorization: Bearer <acp-token>"
 ```
 
 **View Logs**:
 ```bash
-kubectl logs -l app=acp-backend -n acp-backend | grep -i gitlab
+kubectl logs -l app=vteam-backend -n vteam-backend | grep -i gitlab
 ```
