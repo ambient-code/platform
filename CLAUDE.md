@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 The **Ambient Code Platform** is a Kubernetes-native AI automation platform that orchestrates intelligent agentic sessions through containerized microservices. The platform enables AI-powered automation for analysis, research, development, and content creation tasks via a modern web interface.
 
-> **Note:** This project was formerly known as "vTeam". Technical artifacts (image names, namespaces, API groups) still use "vteam" for backward compatibility.
+> **Note:** This project was formerly known as "vTeam". Technical artifacts (image names, namespaces, API groups, routes) still use "vteam" for backward compatibility. The docs use ACP naming.
 
 ### Amber Background Agent
 
