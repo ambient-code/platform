@@ -700,7 +700,7 @@ A: No. GitHub and GitLab integrations are independent and work side-by-side.
 - Verify GitLab status: https://status.gitlab.com (for GitLab.com)
 
 **Getting Help**:
-- Ambient Code Platform GitHub Issues: [Create an issue](https://github.com/natifridman/Ambient Code Platform/issues)
+- Ambient Code Platform GitHub Issues: [Create an issue](https://github.com/ambient-code/platform/issues)
 - Ambient Code Platform Documentation: [Main README](https://github.com/ambient-code/platform/blob/main/README.md)
 
 ---
