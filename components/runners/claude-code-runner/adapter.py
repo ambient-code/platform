@@ -49,6 +49,9 @@ from context import RunnerContext
 
 logger = logging.getLogger(__name__)
 
+# Git remote name for output repository
+GIT_OUTPUT_REMOTE_NAME = "output"
+
 
 class PrerequisiteError(RuntimeError):
     """Raised when slash-command prerequisites are missing."""
@@ -58,7 +61,7 @@ class PrerequisiteError(RuntimeError):
 class ClaudeCodeAdapter:
     """
     Adapter that wraps the Claude Code SDK for AG-UI server.
-    
+
     Produces AG-UI events via async generator instead of WebSocket.
     """
 
@@ -75,9 +78,10 @@ class ClaudeCodeAdapter:
         self._current_tool_id: Optional[str] = None
         self._current_run_id: Optional[str] = None
         self._current_thread_id: Optional[str] = None
-        
-        # Active client reference for interrupt support
+
+        # Active Claude SDK client for interrupt support
         self._active_client: Optional[Any] = None
+        self._active_client_ctx: Optional[Any] = None
 
     async def initialize(self, context: RunnerContext):
         """Initialize the adapter with context."""
@@ -86,15 +90,15 @@ class ClaudeCodeAdapter:
 
         # Copy Google OAuth credentials from mounted Secret to writable workspace location
         await self._setup_google_credentials()
-        
+
         # Prepare workspace from input repo if provided
         async for event in self._prepare_workspace():
             yield event
-            
+
         # Initialize workflow if ACTIVE_WORKFLOW env vars are set
         async for event in self._initialize_workflow_if_set():
             yield event
-            
+
         # Validate prerequisite files exist for phase-based commands
         try:
             await self._validate_prerequisites()
@@ -110,26 +114,21 @@ class ClaudeCodeAdapter:
     async def process_run(self, input_data: RunAgentInput) -> AsyncIterator[BaseEvent]:
         """
         Process a run and yield AG-UI events.
-        
+
         This is the main entry point called by the FastAPI server.
-        
+
         Args:
             input_data: RunAgentInput with thread_id, run_id, messages, tools
-            app_state: Optional FastAPI app.state for persistent client storage/reuse
-            
+
         Yields:
             AG-UI events (RunStartedEvent, TextMessageContentEvent, etc.)
         """
         thread_id = input_data.thread_id or self.context.session_id
         run_id = input_data.run_id or str(uuid.uuid4())
-        
+
         self._current_thread_id = thread_id
         self._current_run_id = run_id
-        
-        # Check for newly available Google OAuth credentials (user may have authenticated mid-session)
-        # This picks up credentials after K8s syncs the mounted secret (~60s after OAuth completes)
-        await self.refresh_google_credentials()
-        
+
         try:
             # Emit RUN_STARTED
             yield RunStartedEvent(
@@ -137,22 +136,22 @@ class ClaudeCodeAdapter:
                 thread_id=thread_id,
                 run_id=run_id,
             )
-            
+
             # Echo user messages as events (for history/display)
             for msg in input_data.messages or []:
                 msg_dict = msg if isinstance(msg, dict) else (msg.model_dump() if hasattr(msg, 'model_dump') else {})
                 role = msg_dict.get('role', '')
-                
+
                 if role == 'user':
                     msg_id = msg_dict.get('id', str(uuid.uuid4()))
                     content = msg_dict.get('content', '')
                     msg_metadata = msg_dict.get('metadata', {})
-                    
+
                     # Check if message should be hidden from UI
                     is_hidden = isinstance(msg_metadata, dict) and msg_metadata.get('hidden', False)
                     if is_hidden:
                         logger.info(f"Message {msg_id[:8]} marked as hidden (auto-sent initial/workflow prompt)")
-                    
+
                     # Emit user message as TEXT_MESSAGE events
                     # Include metadata in RAW event for frontend filtering
                     if is_hidden:
@@ -167,7 +166,7 @@ class ClaudeCodeAdapter:
                                 "hidden": True,
                             }
                         )
-                    
+
                     yield TextMessageStartEvent(
                         type=EventType.TEXT_MESSAGE_START,
                         thread_id=thread_id,
@@ -175,7 +174,7 @@ class ClaudeCodeAdapter:
                         message_id=msg_id,
                         role='user',
                     )
-                    
+
                     if content:
                         yield TextMessageContentEvent(
                             type=EventType.TEXT_MESSAGE_CONTENT,
@@ -184,19 +183,19 @@ class ClaudeCodeAdapter:
                             message_id=msg_id,
                             delta=content,
                         )
-                    
+
                     yield TextMessageEndEvent(
                         type=EventType.TEXT_MESSAGE_END,
                         thread_id=thread_id,
                         run_id=run_id,
                         message_id=msg_id,
                     )
-            
+
             # Extract user message from input
             logger.info(f"Extracting user message from {len(input_data.messages)} messages")
             user_message = self._extract_user_message(input_data)
             logger.info(f"Extracted user message: '{user_message[:100] if user_message else '(empty)'}...'")
-            
+
             if not user_message:
                 logger.warning("No user message found in input")
                 yield RawEvent(
@@ -211,7 +210,7 @@ class ClaudeCodeAdapter:
                     run_id=run_id,
                 )
                 return
-            
+
             # Run Claude SDK and yield events
             logger.info(f"Starting Claude SDK with prompt: '{user_message[:50]}...'")
             async for event in self._run_claude_agent_sdk(user_message, thread_id, run_id):
@@ -225,10 +224,10 @@ class ClaudeCodeAdapter:
                 auto_push_on_complete = False
 
             if auto_push_on_complete:
-                logger.info("AUTO_PUSH_ON_COMPLETE enabled, pushing results...")
-                async for event in self._push_results_if_any():
+                logger.info("AUTO_PUSH_ON_COMPLETE enabled, verifying pushes...")
+                async for event in self._ensure_autopush_repos_pushed():
                     yield event
-                logger.info("Auto-push completed")
+                logger.info("Auto-push verification completed")
 
             # Emit RUN_FINISHED
             yield RunFinishedEvent(
@@ -238,7 +237,7 @@ class ClaudeCodeAdapter:
             )
 
             self.last_exit_code = 0
-            
+
         except PrerequisiteError as e:
             self.last_exit_code = 2
             logger.error(f"Prerequisite validation failed: {e}")
@@ -262,11 +261,11 @@ class ClaudeCodeAdapter:
         """Extract user message text from RunAgentInput."""
         messages = input_data.messages or []
         logger.info(f"Extracting from {len(messages)} messages, types: {[type(m).__name__ for m in messages]}")
-        
+
         # Find the last user message
         for msg in reversed(messages):
             logger.debug(f"Checking message: type={type(msg).__name__}, hasattr(role)={hasattr(msg, 'role')}")
-            
+
             if hasattr(msg, 'role') and msg.role == 'user':
                 # Handle different content formats
                 content = getattr(msg, 'content', '')
@@ -287,29 +286,21 @@ class ClaudeCodeAdapter:
                     if isinstance(content, str):
                         logger.info(f"Found user message (dict format): '{content[:50]}...'")
                         return content
-        
+
         logger.warning("No user message found!")
         return ""
 
     async def _run_claude_agent_sdk(
         self, prompt: str, thread_id: str, run_id: str
     ) -> AsyncIterator[BaseEvent]:
-        """Execute the Claude Code SDK with the given prompt and yield AG-UI events.
-        
-        Creates a fresh client for each run - simpler and more reliable than client reuse.
-        
-        Args:
-            prompt: The user prompt to send to Claude
-            thread_id: AG-UI thread identifier
-            run_id: AG-UI run identifier
-        """
-        logger.info(f"_run_claude_agent_sdk called with prompt length={len(prompt)}, will create fresh client")
+        """Execute the Claude Code SDK with the given prompt and yield AG-UI events."""
+        logger.info(f"_run_claude_agent_sdk called with prompt length={len(prompt)}")
         try:
             # Check for authentication method
             logger.info("Checking authentication configuration...")
             api_key = self.context.get_env('ANTHROPIC_API_KEY', '')
             use_vertex = self.context.get_env('CLAUDE_CODE_USE_VERTEX', '').strip() == '1'
-            
+
             logger.info(f"Auth config: api_key={'set' if api_key else 'not set'}, use_vertex={use_vertex}")
 
             if not api_key and not use_vertex:
@@ -491,15 +482,13 @@ class ClaudeCodeAdapter:
                     opts.continue_conversation = False
                 return ClaudeSDKClient(options=opts)
 
-            # Always create a fresh client for each run (simple and reliable)
-            logger.info("Creating new ClaudeSDKClient for this run...")
-            
+            # Create SDK client with retry logic
             try:
-                logger.info("Creating ClaudeSDKClient...")
-                client = create_sdk_client(options)
-                logger.info("Connecting ClaudeSDKClient (initializing subprocess)...")
-                await client.connect()
-                logger.info("ClaudeSDKClient connected successfully!")
+                logger.info("Creating ClaudeSDKClient context manager...")
+                client_ctx = create_sdk_client(options)
+                logger.info("Entering ClaudeSDKClient context (initializing subprocess)...")
+                client = await client_ctx.__aenter__()
+                logger.info("ClaudeSDKClient initialized successfully!")
             except Exception as resume_error:
                 error_str = str(resume_error).lower()
                 if "no conversation found" in error_str or "session" in error_str:
@@ -510,15 +499,16 @@ class ClaudeCodeAdapter:
                         run_id=run_id,
                         event={"type": "system_log", "message": "⚠️ Could not continue conversation, starting fresh..."}
                     )
-                    client = create_sdk_client(options, disable_continue=True)
-                    await client.connect()
+                    client_ctx = create_sdk_client(options, disable_continue=True)
+                    client = await client_ctx.__aenter__()
                 else:
                     raise
 
+            # Store active client for interrupt support
+            self._active_client = client
+            self._active_client_ctx = client_ctx
+
             try:
-                # Store client reference for interrupt support
-                self._active_client = client
-                
                 if not self._first_run:
                     yield RawEvent(
                         type=EventType.RAW,
@@ -739,38 +729,40 @@ class ClaudeCodeAdapter:
                 self._first_run = False
 
             finally:
-                # Clear active client reference (interrupt no longer valid for this run)
+                await client_ctx.__aexit__(None, None, None)
+                # Clear active client reference
                 self._active_client = None
-                
-                # Always disconnect client at end of run (no persistence)
-                if client is not None:
-                    logger.info("Disconnecting client (end of run)")
-                    await client.disconnect()
-            
+                self._active_client_ctx = None
+
             # Finalize observability
             await obs.finalize()
 
         except Exception as e:
             logger.error(f"Failed to run Claude Code SDK: {e}")
+            # Clear active client on error
+            self._active_client = None
+            self._active_client_ctx = None
             if 'obs' in locals():
                 await obs.cleanup_on_error(e)
             raise
-    
+
     async def interrupt(self) -> None:
         """
         Interrupt the active Claude SDK execution.
+
+        Sends interrupt signal to stop Claude mid-execution.
+        See: https://platform.claude.com/docs/en/agent-sdk/python#methods
         """
-        if self._active_client is None:
+        if not self._active_client:
             logger.warning("Interrupt requested but no active client")
             return
-            
+
         try:
             logger.info("Sending interrupt signal to Claude SDK client...")
             await self._active_client.interrupt()
             logger.info("Interrupt signal sent successfully")
         except Exception as e:
             logger.error(f"Failed to interrupt Claude SDK: {e}")
-
 
     def _setup_workflow_paths(self, active_workflow_url: str, repos_cfg: list) -> tuple[str, list, str]:
         """Setup paths for workflow mode."""
@@ -824,7 +816,7 @@ class ClaudeCodeAdapter:
     def _setup_multi_repo_paths(self, repos_cfg: list) -> tuple[str, list]:
         """Setup paths for multi-repo mode."""
         add_dirs = []
-        
+
         main_name = (os.getenv('MAIN_REPO_NAME') or '').strip()
         if not main_name:
             idx_raw = (os.getenv('MAIN_REPO_INDEX') or '').strip()
@@ -976,8 +968,8 @@ class ClaudeCodeAdapter:
 
             if output_repo:
                 out_url = self._url_with_token(output_repo, token) if token else output_repo
-                await self._run_cmd(["git", "remote", "remove", "output"], cwd=str(workspace), ignore_errors=True)
-                await self._run_cmd(["git", "remote", "add", "output", out_url], cwd=str(workspace))
+                await self._run_cmd(["git", "remote", "remove", GIT_OUTPUT_REMOTE_NAME], cwd=str(workspace), ignore_errors=True)
+                await self._run_cmd(["git", "remote", "add", GIT_OUTPUT_REMOTE_NAME, out_url], cwd=str(workspace))
 
         except Exception as e:
             logger.error(f"Failed to prepare workspace: {e}")
@@ -1053,8 +1045,8 @@ class ClaudeCodeAdapter:
                 out_url_raw = (out.get('url') or '').strip()
                 if out_url_raw:
                     out_url = self._url_with_token(out_url_raw, token) if token else out_url_raw
-                    await self._run_cmd(["git", "remote", "remove", "output"], cwd=str(repo_dir), ignore_errors=True)
-                    await self._run_cmd(["git", "remote", "add", "output", out_url], cwd=str(repo_dir))
+                    await self._run_cmd(["git", "remote", "remove", GIT_OUTPUT_REMOTE_NAME], cwd=str(repo_dir), ignore_errors=True)
+                    await self._run_cmd(["git", "remote", "add", GIT_OUTPUT_REMOTE_NAME, out_url], cwd=str(repo_dir))
 
         except Exception as e:
             logger.error(f"Failed to prepare multi-repo workspace: {e}")
@@ -1253,7 +1245,7 @@ class ClaudeCodeAdapter:
         text = re.sub(r'oauth2:[^@\s]+@', 'oauth2:***REDACTED***@', text)
         text = re.sub(r'://[^:@\s]+:[^@\s]+@', '://***REDACTED***@', text)
         text = re.sub(
-            r'(ANTHROPIC_API_KEY|LANGFUSE_SECRET_KEY|LANGFUSE_PUBLIC_KEY|BOT_TOKEN|GIT_TOKEN)\s*=\s*[^\s\'"]+',
+            r'(ANTHROPIC_API_KEY|LANGFUSE_SECRET_KEY|LANGFUSE_PUBLIC_KEY|BOT_TOKEN|GIT_TOKEN)\s*=\s*[^\s\'\"]+',
             r'\1=***REDACTED***',
             text
         )
@@ -1377,265 +1369,274 @@ class ClaudeCodeAdapter:
         # TODO: Port PR creation logic from wrapper.py or implement via GitHub API
         return ""
 
-    async def _push_results_if_any(self) -> AsyncIterator[BaseEvent]:
-        """Commit and push changes to output repo/branch if configured (respects per-repo autoPush flag)."""
-        # Get GitHub token once for all repos
+    async def _fallback_push_repo(
+        self, repo_dir: Path, output_url: str, output_branch: str, repo_name: str
+    ) -> AsyncIterator[BaseEvent]:
+        """Execute minimal fallback push for a single repository.
+
+        Assumes Claude already committed changes. Just configures remote and pushes.
+
+        Args:
+            repo_dir: Path to repository directory
+            output_url: Git remote URL (with token if needed)
+            output_branch: Target branch name
+            repo_name: Repository name for logging/events
+
+        Yields:
+            Success or error events
+
+        Raises:
+            Exception: If push fails
+        """
+        try:
+            # Minimal fallback push - assume Claude already committed
+            # Just ensure remote is configured with token and push
+            await self._run_cmd(["git", "remote", "remove", GIT_OUTPUT_REMOTE_NAME], cwd=str(repo_dir), ignore_errors=True)
+            await self._run_cmd(["git", "remote", "add", GIT_OUTPUT_REMOTE_NAME, output_url], cwd=str(repo_dir))
+            await self._run_cmd(["git", "push", "-u", GIT_OUTPUT_REMOTE_NAME, f"HEAD:{output_branch}"], cwd=str(repo_dir))
+
+            logger.info(f"✓ Fallback push completed for {repo_name}")
+            yield RawEvent(
+                type=EventType.RAW,
+                thread_id=self._current_thread_id or self.context.session_id,
+                run_id=self._current_run_id or "push",
+                event={"type": "autopush_success", "repo": repo_name, "agent": "fallback", "message": f"✓ Fallback push completed for {repo_name}"}
+            )
+        except Exception as e:
+            logger.error(f"Fallback push failed for {repo_name}: {e}")
+            yield RawEvent(
+                type=EventType.RAW,
+                thread_id=self._current_thread_id or self.context.session_id,
+                run_id=self._current_run_id or "push",
+                event={"type": "autopush_error", "repo": repo_name, "error": str(e), "message": f"⚠️ Fallback push failed for {repo_name}: {e}"}
+            )
+            raise  # Re-raise so caller can track failures
+
+    async def _check_if_has_unpushed_commits(self, repo_dir: Path) -> bool:
+        """Check if current branch has unpushed commits.
+
+        Returns True if there are commits that haven't been pushed to origin.
+        This is used to detect if Claude forgot to push after committing.
+        """
+        try:
+            # Get current branch
+            current_branch = await self._run_cmd(
+                ["git", "branch", "--show-current"],
+                cwd=str(repo_dir),
+                capture_stdout=True,
+                ignore_errors=True
+            )
+            current_branch = current_branch.strip()
+
+            if not current_branch:
+                # Detached HEAD state - this can occur when:
+                # 1. Claude checks out a specific commit during investigation
+                # 2. User manually detached HEAD
+                # Conservative approach: assume unpushed to avoid missing changes.
+                # Note: Fallback push will fail gracefully if there's no branch to push to.
+                logger.warning(f"{repo_dir}: Detached HEAD state, assuming unpushed")
+                return True
+
+            # Check if branch exists on remote and count unpushed commits
+            try:
+                result = await self._run_cmd(
+                    ["git", "rev-list", f"origin/{current_branch}..HEAD", "--count"],
+                    cwd=str(repo_dir),
+                    capture_stdout=True
+                )
+                unpushed_count = int(result.strip() or "0")
+
+                if unpushed_count > 0:
+                    logger.info(f"{repo_dir}: {unpushed_count} unpushed commit(s) detected")
+                    return True
+                else:
+                    logger.info(f"{repo_dir}: All commits pushed to origin/{current_branch}")
+                    return False
+
+            except Exception as e:
+                # Branch might not exist on remote yet - common scenarios:
+                # 1. Claude created a new feature branch that hasn't been pushed
+                # 2. Local-only branch (ephemeral testing branches)
+                # 3. Git command error (corrupt repo, permissions issue)
+                # Conservative approach: assume unpushed to ensure changes aren't lost.
+                # Fallback will attempt push, which will create the remote branch if needed.
+                logger.warning(f"{repo_dir}: Branch '{current_branch}' may not exist on remote: {e}")
+                return True  # Assume unpushed if we can't verify
+
+        except Exception as e:
+            logger.warning(f"Failed to check unpushed commits for {repo_dir}: {e}")
+            return True  # Assume unpushed to be safe
+
+    async def _ensure_autopush_repos_pushed(self) -> AsyncIterator[BaseEvent]:
+        """Verify autoPush repos were pushed by Claude. Push only if Claude didn't.
+
+        This is a lightweight fallback that assumes Claude already committed changes
+        via the system prompt instructions. We only push if Claude forgot to.
+
+        PHILOSOPHY: Let Claude (the agent) do the work. We just verify and provide
+        a safety net for the rare case where Claude forgets to push.
+        """
         token = os.getenv("GITHUB_TOKEN") or await self._fetch_github_token()
         if token:
-            logger.info("GitHub token obtained for push operations")
+            logger.info("GitHub token obtained for push verification")
         else:
-            logger.warning("No GitHub token available - push may fail for private repos")
+            logger.warning("No GitHub token available - fallback push may fail for private repos")
+            yield RawEvent(
+                type=EventType.RAW,
+                thread_id=self._current_thread_id or self.context.session_id,
+                run_id=self._current_run_id or "push",
+                event={"type": "system_log", "message": "⚠️ No GitHub token available - autoPush may fail for private repos"}
+            )
 
         repos_cfg = self._get_repos_config()
         if repos_cfg:
             # Multi-repo flow
-            try:
-                for r in repos_cfg:
-                    name = (r.get('name') or '').strip()
-                    if not name:
-                        continue
+            # Track outcomes for summary
+            claude_success = []
+            fallback_success = []
+            fallback_failures = []
 
-                    # Check per-repo autoPush flag FIRST (cheapest check)
-                    auto_push = r.get('autoPush', False)
-                    if not auto_push:
-                        logger.info(f"autoPush disabled for {name}, skipping push")
-                        continue
+            for r in repos_cfg:
+                name = (r.get('name') or '').strip()
+                if not name:
+                    continue
 
-                    # Check output URL configured SECOND (before expensive git operations)
-                    out = r.get('output') or {}
-                    out_url_raw = (out.get('url') or '').strip()
-                    if not out_url_raw:
-                        logger.warning(f"No output URL configured for {name}, skipping push")
-                        continue
+                # Only process repos with autoPush enabled
+                auto_push = r.get('autoPush', False)
+                if not auto_push:
+                    logger.info(f"autoPush disabled for {name}, skipping verification")
+                    continue
 
-                    # Verify repository directory exists
-                    repo_dir = Path(self.context.workspace_path) / name
-                    if not repo_dir.exists() or not repo_dir.is_dir():
-                        logger.warning(f"Repository directory not found: {repo_dir}, skipping push")
-                        continue
+                repo_dir = Path(self.context.workspace_path) / name
+                if not repo_dir.exists() or not repo_dir.is_dir():
+                    logger.warning(f"Repository directory not found: {repo_dir}")
+                    continue
 
-                    # Check for changes LAST (most expensive operation)
-                    status = await self._run_cmd(["git", "status", "--porcelain"], cwd=str(repo_dir), capture_stdout=True)
-                    if not status.strip():
-                        logger.info(f"No changes detected for {name}, skipping push")
-                        continue
+                # Check if Claude already pushed
+                has_unpushed = await self._check_if_has_unpushed_commits(repo_dir)
 
-                    # Add token to output URL
-                    out_url = self._url_with_token(out_url_raw, token) if token else out_url_raw
-
-                    in_ = r.get('input') or {}
-                    in_branch = (in_.get('branch') or '').strip()
-                    out_branch = (out.get('branch') or '').strip() or f"sessions/{self.context.session_id}"
-
+                if not has_unpushed:
+                    # Claude successfully pushed
+                    logger.info(f"✓ Claude already pushed {name}")
+                    claude_success.append(name)
                     yield RawEvent(
                         type=EventType.RAW,
                         thread_id=self._current_thread_id or self.context.session_id,
                         run_id=self._current_run_id or "push",
-                        event={"type": "system_log", "message": f"📤 Pushing changes for {name}..."}
+                        event={"type": "autopush_success", "repo": name, "agent": "claude", "message": f"✓ {name} pushed by Claude"}
                     )
-                    logger.info(f"Configuring output remote with authentication for {name}")
+                    continue
 
-                    # Reconfigure output remote with token before push
-                    await self._run_cmd(["git", "remote", "remove", "output"], cwd=str(repo_dir), ignore_errors=True)
-                    await self._run_cmd(["git", "remote", "add", "output", out_url], cwd=str(repo_dir))
-
-                    logger.info(f"Checking out branch {out_branch} for {name}")
-                    await self._run_cmd(["git", "checkout", "-B", out_branch], cwd=str(repo_dir))
-
-                    logger.info(f"Staging all changes for {name}")
-                    await self._run_cmd(["git", "add", "-A"], cwd=str(repo_dir))
-
-                    logger.info(f"Committing changes for {name}")
-                    try:
-                        await self._run_cmd(["git", "commit", "-m", f"Session {self.context.session_id}: update"], cwd=str(repo_dir))
-                    except RuntimeError as e:
-                        if "nothing to commit" in str(e).lower():
-                            logger.info(f"No changes to commit for {name}")
-                            continue
-                        else:
-                            logger.error(f"Commit failed for {name}: {e}")
-                            raise
-
-                    # Verify we have a valid output remote
-                    logger.info(f"Verifying output remote for {name}")
-                    remotes_output = await self._run_cmd(["git", "remote", "-v"], cwd=str(repo_dir), capture_stdout=True)
-                    logger.info(f"Git remotes for {name}:\n{self._redact_secrets(remotes_output)}")
-
-                    if "output" not in remotes_output:
-                        raise RuntimeError(f"Output remote not configured for {name}")
-
-                    logger.info(f"Pushing to output remote: {out_branch} for {name}")
-                    yield RawEvent(
-                        type=EventType.RAW,
-                        thread_id=self._current_thread_id or self.context.session_id,
-                        run_id=self._current_run_id or "push",
-                        event={"type": "system_log", "message": f"Pushing {name} to {out_branch}..."}
-                    )
-                    # Note: We use "output" remote (configured above) not "origin" (which Claude uses for manual pushes)
-                    await self._run_cmd(["git", "push", "-u", "output", f"HEAD:{out_branch}"], cwd=str(repo_dir))
-
-                    logger.info(f"Push completed for {name}")
-                    yield RawEvent(
-                        type=EventType.RAW,
-                        thread_id=self._current_thread_id or self.context.session_id,
-                        run_id=self._current_run_id or "push",
-                        event={"type": "system_log", "message": f"✓ Push completed for {name}"}
-                    )
-
-                    # PR creation (if configured)
-                    create_pr_flag = (os.getenv("CREATE_PR", "").strip().lower() == "true")
-                    if create_pr_flag and in_branch and out_branch and out_branch != in_branch and out_url:
-                        upstream_url = (in_.get('url') or '').strip() or out_url
-                        target_branch = os.getenv("PR_TARGET_BRANCH", "").strip() or in_branch
-                        try:
-                            pr_url = await self._create_pull_request(upstream_repo=upstream_url, fork_repo=out_url, head_branch=out_branch, base_branch=target_branch)
-                            if pr_url:
-                                yield RawEvent(
-                                    type=EventType.RAW,
-                                    thread_id=self._current_thread_id or self.context.session_id,
-                                    run_id=self._current_run_id or "push",
-                                    event={"type": "system_log", "message": f"Pull request created for {name}: {pr_url}"}
-                                )
-                        except Exception as e:
-                            yield RawEvent(
-                                type=EventType.RAW,
-                                thread_id=self._current_thread_id or self.context.session_id,
-                                run_id=self._current_run_id or "push",
-                                event={"type": "system_log", "message": f"⚠️ PR creation failed for {name}: {e}"}
-                            )
-            # NOTE: Push failures are non-fatal - session completes successfully even if git push fails.
-            # This allows users to manually push via workspace access if automatic push encounters errors.
-            except Exception as e:
-                logger.error(f"Failed to push results: {e}")
+                # Fallback: Claude didn't push, we'll do it
+                logger.warning(f"Claude didn't push {name}, pushing as fallback")
                 yield RawEvent(
                     type=EventType.RAW,
                     thread_id=self._current_thread_id or self.context.session_id,
                     run_id=self._current_run_id or "push",
-                    event={"type": "system_log", "message": f"⚠️ Push failed: {e}"}
+                    event={"type": "autopush_fallback", "repo": name, "message": f"⚠️ Fallback push for {name}"}
+                )
+
+                out = r.get('output') or {}
+                out_url_raw = (out.get('url') or '').strip()
+                if not out_url_raw:
+                    logger.warning(f"No output URL configured for {name}, cannot push")
+                    yield RawEvent(
+                        type=EventType.RAW,
+                        thread_id=self._current_thread_id or self.context.session_id,
+                        run_id=self._current_run_id or "push",
+                        event={"type": "system_log", "message": f"⚠️ {name}: autoPush enabled but no output URL configured"}
+                    )
+                    continue
+
+                out_url = self._url_with_token(out_url_raw, token) if token else out_url_raw
+                out_branch = (out.get('branch') or '').strip() or f"sessions/{self.context.session_id}"
+
+                # Execute fallback push
+                try:
+                    async for event in self._fallback_push_repo(repo_dir, out_url, out_branch, name):
+                        yield event
+                    fallback_success.append(name)
+                except Exception:
+                    fallback_failures.append(name)
+
+            # Emit summary event
+            total_processed = len(claude_success) + len(fallback_success) + len(fallback_failures)
+            if total_processed > 0:
+                summary_parts = []
+                if claude_success:
+                    summary_parts.append(f"{len(claude_success)} pushed by Claude")
+                if fallback_success:
+                    summary_parts.append(f"{len(fallback_success)} pushed by fallback")
+                if fallback_failures:
+                    summary_parts.append(f"{len(fallback_failures)} failed")
+
+                summary_message = f"AutoPush summary: {', '.join(summary_parts)}"
+                logger.info(summary_message)
+                yield RawEvent(
+                    type=EventType.RAW,
+                    thread_id=self._current_thread_id or self.context.session_id,
+                    run_id=self._current_run_id or "push",
+                    event={
+                        "type": "autopush_summary",
+                        "claude_success": len(claude_success),
+                        "fallback_success": len(fallback_success),
+                        "failures": len(fallback_failures),
+                        "claude_success_repos": claude_success,
+                        "fallback_success_repos": fallback_success,
+                        "failed_repos": fallback_failures,
+                        "message": summary_message
+                    }
                 )
             return
 
         # Single-repo legacy flow
-        # Note: Legacy flow does not support per-repo autoPush flags - honors global AUTO_PUSH_ON_COMPLETE only
         output_repo_raw = os.getenv("OUTPUT_REPO_URL", "").strip()
         if not output_repo_raw:
-            logger.info("No OUTPUT_REPO_URL configured, skipping legacy single-repo push")
+            logger.info("No OUTPUT_REPO_URL configured, skipping legacy push verification")
             return
 
-        # Add token to output URL
-        output_repo = self._url_with_token(output_repo_raw, token) if token else output_repo_raw
+        # Emit deprecation warning for legacy flow
+        logger.warning("Using legacy single-repo autoPush flow - consider migrating to REPOS_JSON format")
+        yield RawEvent(
+            type=EventType.RAW,
+            thread_id=self._current_thread_id or self.context.session_id,
+            run_id=self._current_run_id or "push",
+            event={"type": "system_log", "message": "⚠️ Using deprecated single-repo autoPush (migrate to multi-repo REPOS_JSON format)"}
+        )
 
-        output_branch = os.getenv("OUTPUT_BRANCH", "").strip() or f"sessions/{self.context.session_id}"
-        input_repo = os.getenv("INPUT_REPO_URL", "").strip()
-        input_branch = os.getenv("INPUT_BRANCH", "").strip()
         workspace = Path(self.context.workspace_path)
-
-        # Verify workspace directory exists
         if not workspace.exists() or not workspace.is_dir():
-            logger.warning(f"Workspace directory not found: {workspace}, skipping push")
+            logger.warning(f"Workspace directory not found: {workspace}")
             return
 
-        try:
-            status = await self._run_cmd(["git", "status", "--porcelain"], cwd=str(workspace), capture_stdout=True)
-            if not status.strip():
-                yield RawEvent(
-                    type=EventType.RAW,
-                    thread_id=self._current_thread_id or self.context.session_id,
-                    run_id=self._current_run_id or "push",
-                    event={"type": "system_log", "message": "No changes to push"}
-                )
-                return
+        # Check if Claude already pushed
+        has_unpushed = await self._check_if_has_unpushed_commits(workspace)
 
+        if not has_unpushed:
+            logger.info("✓ Claude already pushed workspace")
             yield RawEvent(
                 type=EventType.RAW,
                 thread_id=self._current_thread_id or self.context.session_id,
                 run_id=self._current_run_id or "push",
-                event={"type": "system_log", "message": "📤 Committing and pushing changes..."}
+                event={"type": "autopush_success", "repo": "workspace", "agent": "claude", "message": "✓ Changes pushed by Claude"}
             )
-            logger.info("Configuring output remote with authentication")
+            return
 
-            # Reconfigure output remote with token before push
-            await self._run_cmd(["git", "remote", "remove", "output"], cwd=str(workspace), ignore_errors=True)
-            await self._run_cmd(["git", "remote", "add", "output", output_repo], cwd=str(workspace))
+        # Fallback: Claude didn't push
+        logger.warning("Claude didn't push workspace, pushing as fallback")
+        yield RawEvent(
+            type=EventType.RAW,
+            thread_id=self._current_thread_id or self.context.session_id,
+            run_id=self._current_run_id or "push",
+            event={"type": "autopush_fallback", "repo": "workspace", "message": "⚠️ Fallback push for workspace"}
+        )
 
-            logger.info(f"Checking out branch {output_branch}")
-            await self._run_cmd(["git", "checkout", "-B", output_branch], cwd=str(workspace))
+        output_repo = self._url_with_token(output_repo_raw, token) if token else output_repo_raw
+        output_branch = os.getenv("OUTPUT_BRANCH", "").strip() or f"sessions/{self.context.session_id}"
 
-            logger.info("Staging all changes")
-            await self._run_cmd(["git", "add", "-A"], cwd=str(workspace))
-
-            logger.info("Committing changes")
-            try:
-                await self._run_cmd(["git", "commit", "-m", f"Session {self.context.session_id}: update"], cwd=str(workspace))
-            except RuntimeError as e:
-                if "nothing to commit" in str(e).lower():
-                    logger.info("No changes to commit")
-                    yield RawEvent(
-                        type=EventType.RAW,
-                        thread_id=self._current_thread_id or self.context.session_id,
-                        run_id=self._current_run_id or "push",
-                        event={"type": "system_log", "message": "No new changes to commit"}
-                    )
-                    return
-                else:
-                    logger.error(f"Commit failed: {e}")
-                    raise
-
-            # Verify we have a valid output remote
-            logger.info("Verifying output remote")
-            remotes_output = await self._run_cmd(["git", "remote", "-v"], cwd=str(workspace), capture_stdout=True)
-            logger.info(f"Git remotes:\n{self._redact_secrets(remotes_output)}")
-
-            if "output" not in remotes_output:
-                raise RuntimeError("Output remote not configured")
-
-            logger.info(f"Pushing to output remote: {output_branch}")
-            yield RawEvent(
-                type=EventType.RAW,
-                thread_id=self._current_thread_id or self.context.session_id,
-                run_id=self._current_run_id or "push",
-                event={"type": "system_log", "message": f"Pushing to {output_branch}..."}
-            )
-            await self._run_cmd(["git", "push", "-u", "output", f"HEAD:{output_branch}"], cwd=str(workspace))
-
-            yield RawEvent(
-                type=EventType.RAW,
-                thread_id=self._current_thread_id or self.context.session_id,
-                run_id=self._current_run_id or "push",
-                event={"type": "system_log", "message": "✓ Push completed"}
-            )
-
-            # PR creation (if configured)
-            create_pr_flag = (os.getenv("CREATE_PR", "").strip().lower() == "true")
-            if create_pr_flag and input_repo and input_branch and output_branch != input_branch:
-                try:
-                    target_branch = os.getenv("PR_TARGET_BRANCH", "").strip() or input_branch
-                    pr_url = await self._create_pull_request(upstream_repo=input_repo, fork_repo=output_repo, head_branch=output_branch, base_branch=target_branch)
-                    if pr_url:
-                        yield RawEvent(
-                            type=EventType.RAW,
-                            thread_id=self._current_thread_id or self.context.session_id,
-                            run_id=self._current_run_id or "push",
-                            event={"type": "system_log", "message": f"Pull request created: {pr_url}"}
-                        )
-                except Exception as e:
-                    yield RawEvent(
-                        type=EventType.RAW,
-                        thread_id=self._current_thread_id or self.context.session_id,
-                        run_id=self._current_run_id or "push",
-                        event={"type": "system_log", "message": f"⚠️ PR creation failed: {e}"}
-                    )
-
-        # NOTE: Push failures are non-fatal - session completes successfully even if git push fails.
-        # This allows users to manually push via workspace access if automatic push encounters errors.
-        except Exception as e:
-            logger.error(f"Failed to push results: {e}")
-            yield RawEvent(
-                type=EventType.RAW,
-                thread_id=self._current_thread_id or self.context.session_id,
-                run_id=self._current_run_id or "push",
-                event={"type": "system_log", "message": f"⚠️ Push failed: {e}"}
-            )
+        # Execute fallback push using shared method
+        async for event in self._fallback_push_repo(workspace, output_repo, output_branch, "workspace"):
+            yield event
 
     def _get_repos_config(self) -> list[dict]:
         """Read repos mapping from REPOS_JSON env if present."""
@@ -1766,11 +1767,22 @@ class ClaudeCodeAdapter:
                 prompt += "2. Push changes to the configured output branch\n"
                 prompt += "3. Confirm the push succeeded\n\n"
                 prompt += "Git push best practices:\n"
-                prompt += "- Use: git push -u origin <branch-name>\n"
+                prompt += f"- Use: git push -u {GIT_OUTPUT_REMOTE_NAME} <branch-name>\n"
+                prompt += f"- For repos with output URLs, push to the '{GIT_OUTPUT_REMOTE_NAME}' remote\n"
                 prompt += "- Only retry on network errors (up to 4 times with backoff)\n"
                 prompt += "- Do not force push unless explicitly requested by the user\n"
                 prompt += "- Check git status before and after pushing\n\n"
-                prompt += f"Repositories configured for auto-push: {', '.join(auto_push_repos)}\n\n"
+                prompt += f"Repositories configured for auto-push:\n"
+
+                # Add per-repo branch guidance
+                for repo in repos_cfg:
+                    if repo.get('autoPush', False):
+                        name = repo.get('name', 'unknown')
+                        out = repo.get('output') or {}
+                        out_branch = (out.get('branch') or '').strip() or f"sessions/{self.context.session_id}"
+                        prompt += f"  - {name}: push to branch '{out_branch}'\n"
+
+                prompt += "Note: Only push repositories listed above. Other repos are read-only for this session.\n\n"
 
         if ambient_config.get("systemPrompt"):
             prompt += f"## Workflow Instructions\n{ambient_config['systemPrompt']}\n\n"
@@ -1782,35 +1794,12 @@ class ClaudeCodeAdapter:
 
 
     async def _setup_google_credentials(self):
-        """Copy Google OAuth credentials from mounted Secret to writable workspace location.
-        
-        The secret is always mounted (as placeholder if user hasn't authenticated).
-        This method checks if credentials.json exists and has content.
-        Call refresh_google_credentials() periodically to pick up new credentials after OAuth.
-        """
-        await self._try_copy_google_credentials()
-
-    async def _try_copy_google_credentials(self) -> bool:
-        """Attempt to copy Google credentials from mounted secret.
-        
-        Returns:
-            True if credentials were successfully copied, False otherwise.
-        """
+        """Copy Google OAuth credentials from mounted Secret to writable workspace location."""
+        # Check if Google OAuth secret is mounted
         secret_path = Path("/app/.google_workspace_mcp/credentials/credentials.json")
-        
-        # Check if secret file exists
         if not secret_path.exists():
-            logging.debug("Google OAuth credentials not found at %s (placeholder secret or not mounted)", secret_path)
-            return False
-        
-        # Check if file has content (not empty placeholder)
-        try:
-            if secret_path.stat().st_size == 0:
-                logging.debug("Google OAuth credentials file is empty (user hasn't authenticated yet)")
-                return False
-        except OSError as e:
-            logging.debug("Could not stat Google OAuth credentials file: %s", e)
-            return False
+            logging.debug("Google OAuth credentials not found at %s, skipping setup", secret_path)
+            return
 
         # Create writable credentials directory in workspace
         workspace_creds_dir = Path("/workspace/.google_workspace_mcp/credentials")
@@ -1823,41 +1812,5 @@ class ClaudeCodeAdapter:
             # Make it writable so workspace-mcp can update tokens
             dest_path.chmod(0o644)
             logging.info("✓ Copied Google OAuth credentials from Secret to writable workspace at %s", dest_path)
-            return True
         except Exception as e:
             logging.error("Failed to copy Google OAuth credentials: %s", e)
-            return False
-
-    async def refresh_google_credentials(self) -> bool:
-        """Check for and copy new Google OAuth credentials.
-        
-        Call this method periodically (e.g., before processing a message) to detect
-        when a user completes the OAuth flow and credentials become available.
-        
-        Kubernetes automatically updates the mounted secret volume when the secret
-        changes (typically within ~60 seconds), so this will pick up new credentials
-        without requiring a pod restart.
-        
-        Returns:
-            True if new credentials were found and copied, False otherwise.
-        """
-        dest_path = Path("/workspace/.google_workspace_mcp/credentials/credentials.json")
-        
-        # If we already have credentials in workspace, check if source is newer
-        if dest_path.exists():
-            secret_path = Path("/app/.google_workspace_mcp/credentials/credentials.json")
-            if secret_path.exists():
-                try:
-                    # Compare modification times - secret mount updates when K8s syncs
-                    if secret_path.stat().st_mtime > dest_path.stat().st_mtime:
-                        logging.info("Detected updated Google OAuth credentials, refreshing...")
-                        return await self._try_copy_google_credentials()
-                except OSError:
-                    pass
-            return False
-        
-        # No credentials yet, try to copy
-        if await self._try_copy_google_credentials():
-            logging.info("✓ Google OAuth credentials now available (user completed authentication)")
-            return True
-        return False

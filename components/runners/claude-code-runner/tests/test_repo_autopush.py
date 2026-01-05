@@ -242,11 +242,14 @@ class TestSystemPromptInjection:
 
         # Verify best practices are included
         assert "Git push best practices:" in prompt
-        assert "Use: git push -u origin <branch-name>" in prompt
+        assert "Use: git push -u output <branch-name>" in prompt
+        assert "For repos with output URLs, push to the 'output' remote" in prompt
         assert "Only retry on network errors (up to 4 times with backoff)" in prompt
 
-        # Verify repo list is correct
-        assert "Repositories configured for auto-push: repo-with-autopush" in prompt
+        # Verify repo list is correct (now in bulleted format with branch info)
+        assert "Repositories configured for auto-push:" in prompt
+        assert "- repo-with-autopush: push to branch 'feature'" in prompt
+        assert "Note: Only push repositories listed above" in prompt
 
     def test_git_instructions_omitted_when_autopush_disabled(self):
         """Test that git push instructions are NOT included when all repos have autoPush=false"""
@@ -320,10 +323,13 @@ class TestSystemPromptInjection:
         # Verify git instructions section is present
         assert "## Git Operations - IMPORTANT" in prompt
 
-        # Verify repo list includes ONLY repos with autoPush=true
-        assert "Repositories configured for auto-push: repo1, repo3" in prompt
-        # Verify repo2 (autoPush=false) is NOT listed
-        assert "repo2" not in prompt.split("Repositories configured for auto-push:")[1].split("\n")[0]
+        # Verify repo list includes ONLY repos with autoPush=true (now in bulleted format)
+        assert "Repositories configured for auto-push:" in prompt
+        assert "- repo1: push to branch 'feature'" in prompt
+        assert "- repo3: push to branch 'feature'" in prompt
+        # Verify repo2 (autoPush=false) is NOT listed in the autopush section
+        autopush_section = prompt.split("Repositories configured for auto-push:")[1].split("Note:")[0]
+        assert "repo2" not in autopush_section, "repo2 should not appear in autopush repos list"
 
     def test_git_instructions_omitted_when_no_repos(self):
         """Test that git push instructions are NOT included when repos_cfg is empty"""
@@ -349,147 +355,308 @@ class TestSystemPromptInjection:
 
 
 class TestPushBehavior:
-    """Test suite for git push behavior based on autoPush flag"""
+    """Test suite for agentic git push with lightweight fallback"""
 
     @pytest.mark.asyncio
-    async def test_push_skipped_when_autopush_false(self):
-        """Test that git push is NOT called when autoPush=false"""
+    async def test_verification_skipped_when_autopush_false(self):
+        """Test that verification is skipped when autoPush=false"""
         mock_context = Mock()
         mock_context.workspace_path = "/tmp/workspace"
         mock_context.session_id = "test-session"
-        # mock_context.model_name removed
-        # mock_context.system_prompt removed
         mock_context.get_env = lambda k, d=None: None
 
         adapter = ClaudeCodeAdapter()
         adapter.context = mock_context
 
-        # Mock _run_cmd to track calls
+        # Track git commands
         run_cmd_calls = []
         async def mock_run_cmd(cmd, **kwargs):
             run_cmd_calls.append(cmd)
-            # Return empty string for git status (no changes)
-            if cmd[0] == 'git' and cmd[1] == 'status':
-                return "?? test-file.txt"  # Simulate changes
             return ""
-
         adapter._run_cmd = mock_run_cmd
 
         # Mock _get_repos_config to return repo with autoPush=false
-        def mock_get_repos_config():
-            return [
-                {
-                    'name': 'repo-no-push',
-                    'input': {'url': 'https://github.com/org/repo', 'branch': 'main'},
-                    'output': {'url': 'https://github.com/user/fork', 'branch': 'feature'},
-                    'autoPush': False
-                }
-            ]
-        adapter._get_repos_config = mock_get_repos_config
+        adapter._get_repos_config = lambda: [
+            {
+                'name': 'repo-no-push',
+                'input': {'url': 'https://github.com/org/repo', 'branch': 'main'},
+                'output': {'url': 'https://github.com/user/fork', 'branch': 'feature'},
+                'autoPush': False
+            }
+        ]
 
-        # Mock _fetch_token_for_url to avoid actual token fetching
-        async def mock_fetch_token(url):
+        # Mock token fetching
+        async def mock_fetch_token():
             return "fake-token"
-        adapter._fetch_token_for_url = mock_fetch_token
+        adapter._fetch_github_token = mock_fetch_token
 
-        # Call _push_results_if_any
-        await adapter._push_results_if_any()
+        # Consume events
+        events = []
+        async for event in adapter._ensure_autopush_repos_pushed():
+            events.append(event)
 
-        # Verify git push was NOT called
-        push_commands = [cmd for cmd in run_cmd_calls if 'push' in cmd]
-        assert len(push_commands) == 0, "git push should not be called when autoPush=false"
+        # Verify no git commands were called (verification skipped)
+        assert len(run_cmd_calls) == 0, "No git commands should run when autoPush=false"
 
     @pytest.mark.asyncio
-    async def test_push_executed_when_autopush_true(self):
-        """Test that git push IS called when autoPush=true"""
+    async def test_no_fallback_when_claude_already_pushed(self):
+        """Test that no fallback push occurs when Claude already pushed"""
+        from pathlib import Path
+
         mock_context = Mock()
         mock_context.workspace_path = "/tmp/workspace"
         mock_context.session_id = "test-session"
-        # mock_context.model_name removed
-        # mock_context.system_prompt removed
         mock_context.get_env = lambda k, d=None: None
 
         adapter = ClaudeCodeAdapter()
         adapter.context = mock_context
 
-        # Mock _run_cmd to track calls
+        # Mock: Claude already pushed (no unpushed commits)
+        async def mock_check_unpushed(repo_dir):
+            return False  # No unpushed commits
+        adapter._check_if_has_unpushed_commits = mock_check_unpushed
+
+        # Track git commands
         run_cmd_calls = []
         async def mock_run_cmd(cmd, **kwargs):
             run_cmd_calls.append(cmd)
-            # Return appropriate responses for different git commands
-            if cmd[0] == 'git':
-                if cmd[1] == 'status' and '--porcelain' in cmd:
-                    return "?? test-file.txt"  # Simulate changes
-                elif cmd[1] == 'remote':
-                    return "output"  # Simulate remote exists
             return ""
-
         adapter._run_cmd = mock_run_cmd
 
-        # Mock _get_repos_config to return repo with autoPush=true
-        def mock_get_repos_config():
-            return [
+        # Mock Path methods to simulate repo directory exists
+        original_exists = Path.exists
+        original_is_dir = Path.is_dir
+        Path.exists = lambda self: True
+        Path.is_dir = lambda self: True
+
+        try:
+            # Mock config
+            adapter._get_repos_config = lambda: [
                 {
-                    'name': 'repo-with-push',
+                    'name': 'repo-already-pushed',
                     'input': {'url': 'https://github.com/org/repo', 'branch': 'main'},
                     'output': {'url': 'https://github.com/user/fork', 'branch': 'feature'},
                     'autoPush': True
                 }
             ]
-        adapter._get_repos_config = mock_get_repos_config
 
-        # Mock _fetch_token_for_url to avoid actual token fetching
-        async def mock_fetch_token(url):
-            return "fake-token"
-        adapter._fetch_token_for_url = mock_fetch_token
+            # Mock token
+            async def mock_fetch_token():
+                return "fake-token"
+            adapter._fetch_github_token = mock_fetch_token
 
-        # Mock _url_with_token
-        adapter._url_with_token = lambda url, token: url
+            # Consume events
+            events = []
+            async for event in adapter._ensure_autopush_repos_pushed():
+                events.append(event)
 
-        # Call _push_results_if_any
-        await adapter._push_results_if_any()
+            # Verify no push commands (Claude already pushed)
+            push_commands = [cmd for cmd in run_cmd_calls if 'push' in cmd]
+            assert len(push_commands) == 0, "No fallback push should occur when Claude already pushed"
 
-        # Verify git push WAS called
-        push_commands = [cmd for cmd in run_cmd_calls if 'git' in cmd and 'push' in cmd]
-        assert len(push_commands) > 0, "git push should be called when autoPush=true"
+            # Verify success event was emitted
+            success_events = [e for e in events if hasattr(e, 'event') and e.event.get('type') == 'autopush_success']
+            assert len(success_events) > 0, "Should emit autopush_success event when Claude pushed"
+            assert success_events[0].event.get('agent') == 'claude', "Success should be attributed to Claude"
+
+        finally:
+            Path.exists = original_exists
+            Path.is_dir = original_is_dir
 
     @pytest.mark.asyncio
-    async def test_mixed_autopush_settings(self):
-        """Test that only repos with autoPush=true are pushed"""
+    async def test_fallback_push_when_claude_forgot(self):
+        """Test that fallback push executes when Claude didn't push"""
+        from pathlib import Path
+
         mock_context = Mock()
         mock_context.workspace_path = "/tmp/workspace"
         mock_context.session_id = "test-session"
-        # mock_context.model_name removed
-        # mock_context.system_prompt removed
         mock_context.get_env = lambda k, d=None: None
 
         adapter = ClaudeCodeAdapter()
         adapter.context = mock_context
 
-        # Track which repos were pushed
-        pushed_repos = []
-        run_cmd_calls = []
+        # Mock: Claude forgot to push (has unpushed commits)
+        async def mock_check_unpushed(repo_dir):
+            return True  # Has unpushed commits
+        adapter._check_if_has_unpushed_commits = mock_check_unpushed
 
+        # Track git commands
+        run_cmd_calls = []
+        async def mock_run_cmd(cmd, **kwargs):
+            run_cmd_calls.append(cmd)
+            return ""
+        adapter._run_cmd = mock_run_cmd
+
+        # Mock Path.exists to simulate repo directory exists
+        original_exists = Path.exists
+        def mock_exists(self):
+            if str(self).endswith('repo-forgot-push'):
+                return True
+            return original_exists(self)
+        Path.exists = mock_exists
+
+        # Mock Path.is_dir
+        original_is_dir = Path.is_dir
+        def mock_is_dir(self):
+            if str(self).endswith('repo-forgot-push'):
+                return True
+            return original_is_dir(self)
+        Path.is_dir = mock_is_dir
+
+        try:
+            # Mock config
+            adapter._get_repos_config = lambda: [
+                {
+                    'name': 'repo-forgot-push',
+                    'input': {'url': 'https://github.com/org/repo', 'branch': 'main'},
+                    'output': {'url': 'https://github.com/user/fork', 'branch': 'feature'},
+                    'autoPush': True
+                }
+            ]
+
+            # Mock token
+            async def mock_fetch_token():
+                return "fake-token"
+            adapter._fetch_github_token = mock_fetch_token
+            adapter._url_with_token = lambda url, token: url
+
+            # Consume events
+            events = []
+            async for event in adapter._ensure_autopush_repos_pushed():
+                events.append(event)
+
+            # Verify fallback push was called
+            push_commands = [cmd for cmd in run_cmd_calls if 'push' in cmd]
+            assert len(push_commands) > 0, "Fallback should push when Claude forgot"
+
+            # Verify remote configuration commands were called
+            remote_commands = [cmd for cmd in run_cmd_calls if 'remote' in cmd]
+            assert len(remote_commands) > 0, "Fallback should configure remote"
+
+            # Verify fallback event was emitted
+            fallback_events = [e for e in events if hasattr(e, 'event') and e.event.get('type') == 'autopush_fallback']
+            assert len(fallback_events) > 0, "Should emit autopush_fallback event when Claude forgot to push"
+
+            # Verify success event after fallback completes
+            success_events = [e for e in events if hasattr(e, 'event') and e.event.get('type') == 'autopush_success']
+            assert len(success_events) > 0, "Should emit autopush_success event after fallback completes"
+            fallback_success = [e for e in success_events if e.event.get('agent') == 'fallback']
+            assert len(fallback_success) > 0, "Fallback success should be attributed to 'fallback' agent"
+
+        finally:
+            # Restore Path methods
+            Path.exists = original_exists
+            Path.is_dir = original_is_dir
+
+    @pytest.mark.asyncio
+    async def test_fallback_does_not_commit(self):
+        """Test that fallback only pushes, does NOT stage or commit"""
+        from pathlib import Path
+
+        mock_context = Mock()
+        mock_context.workspace_path = "/tmp/workspace"
+        mock_context.session_id = "test-session"
+        mock_context.get_env = lambda k, d=None: None
+
+        adapter = ClaudeCodeAdapter()
+        adapter.context = mock_context
+
+        # Mock: Claude forgot to push
+        async def mock_check_unpushed(repo_dir):
+            return True
+        adapter._check_if_has_unpushed_commits = mock_check_unpushed
+
+        # Track git commands
+        run_cmd_calls = []
+        async def mock_run_cmd(cmd, **kwargs):
+            run_cmd_calls.append(cmd)
+            return ""
+        adapter._run_cmd = mock_run_cmd
+
+        # Mock Path.exists and is_dir
+        original_exists = Path.exists
+        original_is_dir = Path.is_dir
+        Path.exists = lambda self: True if str(self).endswith('repo-test') else original_exists(self)
+        Path.is_dir = lambda self: True if str(self).endswith('repo-test') else original_is_dir(self)
+
+        try:
+            # Mock config
+            adapter._get_repos_config = lambda: [
+                {
+                    'name': 'repo-test',
+                    'input': {'url': 'https://github.com/org/repo', 'branch': 'main'},
+                    'output': {'url': 'https://github.com/user/fork', 'branch': 'feature'},
+                    'autoPush': True
+                }
+            ]
+
+            # Mock token
+            async def mock_fetch_token():
+                return "fake-token"
+            adapter._fetch_github_token = mock_fetch_token
+            adapter._url_with_token = lambda url, token: url
+
+            # Consume events
+            events = []
+            async for event in adapter._ensure_autopush_repos_pushed():
+                events.append(event)
+
+            # Verify NO staging or committing (fallback assumes Claude committed)
+            # Note: 'git remote add' is NOT staging - check for 'git add <files>' specifically
+            add_commands = [cmd for cmd in run_cmd_calls if len(cmd) >= 2 and cmd[0] == 'git' and cmd[1] == 'add']
+            commit_commands = [cmd for cmd in run_cmd_calls if len(cmd) >= 2 and cmd[0] == 'git' and cmd[1] == 'commit']
+
+            assert len(add_commands) == 0, "Fallback should NOT stage files (assumes Claude committed)"
+            assert len(commit_commands) == 0, "Fallback should NOT commit (assumes Claude committed)"
+
+            # Verify push WAS called
+            push_commands = [cmd for cmd in run_cmd_calls if 'push' in cmd]
+            assert len(push_commands) > 0, "Fallback should push"
+
+        finally:
+            Path.exists = original_exists
+            Path.is_dir = original_is_dir
+
+    @pytest.mark.asyncio
+    async def test_mixed_autopush_only_pushes_enabled_repos(self):
+        """Test that only repos with autoPush=true trigger fallback"""
+        from pathlib import Path
+
+        mock_context = Mock()
+        mock_context.workspace_path = "/tmp/workspace"
+        mock_context.session_id = "test-session"
+        mock_context.get_env = lambda k, d=None: None
+
+        adapter = ClaudeCodeAdapter()
+        adapter.context = mock_context
+
+        # Track which repos were checked
+        checked_repos = []
+        async def mock_check_unpushed(repo_dir):
+            repo_name = str(repo_dir).split('/')[-1]
+            checked_repos.append(repo_name)
+            return True  # All have unpushed commits
+        adapter._check_if_has_unpushed_commits = mock_check_unpushed
+
+        # Track push commands
+        pushed_repos = []
         async def mock_run_cmd(cmd, cwd=None, **kwargs):
-            run_cmd_calls.append({'cmd': cmd, 'cwd': cwd})
-            # Track push commands by the working directory
             if cmd[0] == 'git' and 'push' in cmd and cwd:
                 repo_name = cwd.split('/')[-1]
                 pushed_repos.append(repo_name)
-
-            # Return appropriate responses
-            if cmd[0] == 'git':
-                if cmd[1] == 'status' and '--porcelain' in cmd:
-                    return "?? test-file.txt"  # Simulate changes
-                elif cmd[1] == 'remote':
-                    return "output"  # Simulate remote exists
             return ""
-
         adapter._run_cmd = mock_run_cmd
 
-        # Mock _get_repos_config with mixed autoPush settings
-        def mock_get_repos_config():
-            return [
+        # Mock Path methods
+        original_exists = Path.exists
+        original_is_dir = Path.is_dir
+        Path.exists = lambda self: True
+        Path.is_dir = lambda self: True
+
+        try:
+            # Mock config with mixed autoPush settings
+            adapter._get_repos_config = lambda: [
                 {
                     'name': 'repo-push',
                     'input': {'url': 'https://github.com/org/repo1', 'branch': 'main'},
@@ -509,20 +676,34 @@ class TestPushBehavior:
                     'autoPush': True
                 }
             ]
-        adapter._get_repos_config = mock_get_repos_config
 
-        # Mock _fetch_token_for_url
-        async def mock_fetch_token(url):
-            return "fake-token"
-        adapter._fetch_token_for_url = mock_fetch_token
+            # Mock token
+            async def mock_fetch_token():
+                return "fake-token"
+            adapter._fetch_github_token = mock_fetch_token
+            adapter._url_with_token = lambda url, token: url
 
-        # Mock _url_with_token
-        adapter._url_with_token = lambda url, token: url
+            # Consume events
+            events = []
+            async for event in adapter._ensure_autopush_repos_pushed():
+                events.append(event)
 
-        # Call _push_results_if_any
-        await adapter._push_results_if_any()
+            # Verify only repos with autoPush=true were checked and pushed
+            assert 'repo-push' in checked_repos, "repo-push should be checked (autoPush=true)"
+            assert 'repo-push-2' in checked_repos, "repo-push-2 should be checked (autoPush=true)"
+            assert 'repo-no-push' not in checked_repos, "repo-no-push should NOT be checked (autoPush=false)"
 
-        # Verify only repos with autoPush=true were pushed
-        assert 'repo-push' in pushed_repos, "repo-push should be pushed (autoPush=true)"
-        assert 'repo-push-2' in pushed_repos, "repo-push-2 should be pushed (autoPush=true)"
-        assert 'repo-no-push' not in pushed_repos, "repo-no-push should NOT be pushed (autoPush=false)"
+            assert 'repo-push' in pushed_repos, "repo-push should be pushed (autoPush=true)"
+            assert 'repo-push-2' in pushed_repos, "repo-push-2 should be pushed (autoPush=true)"
+            assert 'repo-no-push' not in pushed_repos, "repo-no-push should NOT be pushed (autoPush=false)"
+
+            # Verify summary event was emitted
+            summary_events = [e for e in events if hasattr(e, 'event') and e.event.get('type') == 'autopush_summary']
+            assert len(summary_events) > 0, "Should emit autopush_summary event after processing multiple repos"
+            summary = summary_events[0].event
+            # Should have 2 fallback successes (both repos unpushed and pushed by fallback)
+            assert summary.get('fallback_success') == 2, f"Expected 2 fallback successes, got {summary.get('fallback_success')}"
+
+        finally:
+            Path.exists = original_exists
+            Path.is_dir = original_is_dir
