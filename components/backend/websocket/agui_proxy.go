@@ -147,26 +147,58 @@ func HandleAGUIRunProxy(c *gin.Context) {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Hour)
 		defer cancel()
 
-		proxyReq, err := http.NewRequestWithContext(ctx, "POST", runnerURL, bytes.NewReader(bodyBytes))
-		if err != nil {
-			log.Printf("AGUI Proxy: Failed to create request in background: %v", err)
-			updateRunStatus(runID, "error")
-			return
-		}
-
-		// Forward headers
-		proxyReq.Header.Set("Content-Type", "application/json")
-		proxyReq.Header.Set("Accept", "text/event-stream")
-
-		// Execute request
+		// Execute request with retries (runner may not be ready immediately after startup)
 		client := &http.Client{
 			Timeout: 0, // No timeout, context handles it
 		}
-		resp, err := client.Do(proxyReq)
-		if err != nil {
-			log.Printf("AGUI Proxy: Background request failed: %v", err)
-			updateRunStatus(runID, "error")
-			return
+
+		var resp *http.Response
+		maxRetries := 15
+		retryDelay := 500 * time.Millisecond
+
+		for attempt := 1; attempt <= maxRetries; attempt++ {
+			// Create fresh request for each attempt (body reader needs reset)
+			proxyReq, err := http.NewRequestWithContext(ctx, "POST", runnerURL, bytes.NewReader(bodyBytes))
+			if err != nil {
+				log.Printf("AGUI Proxy: Failed to create request in background: %v", err)
+				updateRunStatus(runID, "error")
+				return
+			}
+
+			// Forward headers
+			proxyReq.Header.Set("Content-Type", "application/json")
+			proxyReq.Header.Set("Accept", "text/event-stream")
+
+			resp, err = client.Do(proxyReq)
+			if err == nil {
+				break // Success!
+			}
+
+			// Check if it's a connection refused error (runner not ready yet)
+			errStr := err.Error()
+			isConnectionRefused := strings.Contains(errStr, "connection refused") ||
+				strings.Contains(errStr, "no such host") ||
+				strings.Contains(errStr, "dial tcp")
+
+			if !isConnectionRefused || attempt == maxRetries {
+				log.Printf("AGUI Proxy: Background request failed after %d attempts: %v", attempt, err)
+				updateRunStatus(runID, "error")
+				return
+			}
+
+			log.Printf("AGUI Proxy: Runner not ready (attempt %d/%d), retrying in %v...", attempt, maxRetries, retryDelay)
+
+			select {
+			case <-ctx.Done():
+				log.Printf("AGUI Proxy: Context cancelled during retry for run %s", runID)
+				return
+			case <-time.After(retryDelay):
+				// Exponential backoff with cap at 5 seconds
+				retryDelay = time.Duration(float64(retryDelay) * 1.5)
+				if retryDelay > 5*time.Second {
+					retryDelay = 5 * time.Second
+				}
+			}
 		}
 		defer resp.Body.Close()
 
@@ -378,9 +410,9 @@ func HandleAGUIInterrupt(c *gin.Context) {
 // The operator creates a Service named "session-{sessionName}" in the project namespace
 func getRunnerEndpoint(projectName, sessionName string) (string, error) {
 	// Use naming convention for service discovery
-	// Format: http://session-{sessionName}.{projectName}.svc.cluster.local:8000/
+	// Format: http://session-{sessionName}.{projectName}.svc.cluster.local:8001/
 	// The operator creates this Service automatically when spawning the runner Job
-	return fmt.Sprintf("http://session-%s.%s.svc.cluster.local:8000/", sessionName, projectName), nil
+	return fmt.Sprintf("http://session-%s.%s.svc.cluster.local:8001/", sessionName, projectName), nil
 }
 
 // broadcastToThread sends event to all thread-level subscribers

@@ -25,6 +25,8 @@ export const sessionKeys = {
     [...sessionKeys.details(), projectName, sessionName] as const,
   messages: (projectName: string, sessionName: string) =>
     [...sessionKeys.detail(projectName, sessionName), 'messages'] as const,
+  export: (projectName: string, sessionName: string) =>
+    [...sessionKeys.detail(projectName, sessionName), 'export'] as const,
 };
 
 /**
@@ -306,5 +308,17 @@ export function useUpdateSessionDisplayName() {
         refetchType: 'all',
       });
     },
+  });
+}
+
+/**
+ * Hook to fetch session export data (AG-UI events + legacy messages)
+ */
+export function useSessionExport(projectName: string, sessionName: string, enabled: boolean) {
+  return useQuery({
+    queryKey: sessionKeys.export(projectName, sessionName),
+    queryFn: () => sessionsApi.getSessionExport(projectName, sessionName),
+    enabled: enabled && !!projectName && !!sessionName,
+    staleTime: 60000, // Cache for 1 minute
   });
 }

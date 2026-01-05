@@ -76,9 +76,8 @@ class ClaudeCodeAdapter:
         self._current_run_id: Optional[str] = None
         self._current_thread_id: Optional[str] = None
         
-        # Active Claude SDK client for interrupt support
+        # Active client reference for interrupt support
         self._active_client: Optional[Any] = None
-        self._active_client_ctx: Optional[Any] = None
 
     async def initialize(self, context: RunnerContext):
         """Initialize the adapter with context."""
@@ -116,6 +115,7 @@ class ClaudeCodeAdapter:
         
         Args:
             input_data: RunAgentInput with thread_id, run_id, messages, tools
+            app_state: Optional FastAPI app.state for persistent client storage/reuse
             
         Yields:
             AG-UI events (RunStartedEvent, TextMessageContentEvent, etc.)
@@ -125,6 +125,10 @@ class ClaudeCodeAdapter:
         
         self._current_thread_id = thread_id
         self._current_run_id = run_id
+        
+        # Check for newly available Google OAuth credentials (user may have authenticated mid-session)
+        # This picks up credentials after K8s syncs the mounted secret (~60s after OAuth completes)
+        await self.refresh_google_credentials()
         
         try:
             # Emit RUN_STARTED
@@ -290,8 +294,16 @@ class ClaudeCodeAdapter:
     async def _run_claude_agent_sdk(
         self, prompt: str, thread_id: str, run_id: str
     ) -> AsyncIterator[BaseEvent]:
-        """Execute the Claude Code SDK with the given prompt and yield AG-UI events."""
-        logger.info(f"_run_claude_agent_sdk called with prompt length={len(prompt)}")
+        """Execute the Claude Code SDK with the given prompt and yield AG-UI events.
+        
+        Creates a fresh client for each run - simpler and more reliable than client reuse.
+        
+        Args:
+            prompt: The user prompt to send to Claude
+            thread_id: AG-UI thread identifier
+            run_id: AG-UI run identifier
+        """
+        logger.info(f"_run_claude_agent_sdk called with prompt length={len(prompt)}, will create fresh client")
         try:
             # Check for authentication method
             logger.info("Checking authentication configuration...")
@@ -479,13 +491,15 @@ class ClaudeCodeAdapter:
                     opts.continue_conversation = False
                 return ClaudeSDKClient(options=opts)
 
-            # Create SDK client with retry logic
+            # Always create a fresh client for each run (simple and reliable)
+            logger.info("Creating new ClaudeSDKClient for this run...")
+            
             try:
-                logger.info("Creating ClaudeSDKClient context manager...")
-                client_ctx = create_sdk_client(options)
-                logger.info("Entering ClaudeSDKClient context (initializing subprocess)...")
-                client = await client_ctx.__aenter__()
-                logger.info("ClaudeSDKClient initialized successfully!")
+                logger.info("Creating ClaudeSDKClient...")
+                client = create_sdk_client(options)
+                logger.info("Connecting ClaudeSDKClient (initializing subprocess)...")
+                await client.connect()
+                logger.info("ClaudeSDKClient connected successfully!")
             except Exception as resume_error:
                 error_str = str(resume_error).lower()
                 if "no conversation found" in error_str or "session" in error_str:
@@ -496,16 +510,15 @@ class ClaudeCodeAdapter:
                         run_id=run_id,
                         event={"type": "system_log", "message": "⚠️ Could not continue conversation, starting fresh..."}
                     )
-                    client_ctx = create_sdk_client(options, disable_continue=True)
-                    client = await client_ctx.__aenter__()
+                    client = create_sdk_client(options, disable_continue=True)
+                    await client.connect()
                 else:
                     raise
 
-            # Store active client for interrupt support
-            self._active_client = client
-            self._active_client_ctx = client_ctx
-
             try:
+                # Store client reference for interrupt support
+                self._active_client = client
+                
                 if not self._first_run:
                     yield RawEvent(
                         type=EventType.RAW,
@@ -726,19 +739,19 @@ class ClaudeCodeAdapter:
                 self._first_run = False
 
             finally:
-                await client_ctx.__aexit__(None, None, None)
-                # Clear active client reference
+                # Clear active client reference (interrupt no longer valid for this run)
                 self._active_client = None
-                self._active_client_ctx = None
-
+                
+                # Always disconnect client at end of run (no persistence)
+                if client is not None:
+                    logger.info("Disconnecting client (end of run)")
+                    await client.disconnect()
+            
             # Finalize observability
             await obs.finalize()
 
         except Exception as e:
             logger.error(f"Failed to run Claude Code SDK: {e}")
-            # Clear active client on error
-            self._active_client = None
-            self._active_client_ctx = None
             if 'obs' in locals():
                 await obs.cleanup_on_error(e)
             raise
@@ -746,20 +759,18 @@ class ClaudeCodeAdapter:
     async def interrupt(self) -> None:
         """
         Interrupt the active Claude SDK execution.
-        
-        Sends interrupt signal to stop Claude mid-execution.
-        See: https://platform.claude.com/docs/en/agent-sdk/python#methods
         """
-        if not self._active_client:
+        if self._active_client is None:
             logger.warning("Interrupt requested but no active client")
             return
-        
+            
         try:
             logger.info("Sending interrupt signal to Claude SDK client...")
             await self._active_client.interrupt()
             logger.info("Interrupt signal sent successfully")
         except Exception as e:
             logger.error(f"Failed to interrupt Claude SDK: {e}")
+
 
     def _setup_workflow_paths(self, active_workflow_url: str, repos_cfg: list) -> tuple[str, list, str]:
         """Setup paths for workflow mode."""
@@ -1771,12 +1782,35 @@ class ClaudeCodeAdapter:
 
 
     async def _setup_google_credentials(self):
-        """Copy Google OAuth credentials from mounted Secret to writable workspace location."""
-        # Check if Google OAuth secret is mounted
+        """Copy Google OAuth credentials from mounted Secret to writable workspace location.
+        
+        The secret is always mounted (as placeholder if user hasn't authenticated).
+        This method checks if credentials.json exists and has content.
+        Call refresh_google_credentials() periodically to pick up new credentials after OAuth.
+        """
+        await self._try_copy_google_credentials()
+
+    async def _try_copy_google_credentials(self) -> bool:
+        """Attempt to copy Google credentials from mounted secret.
+        
+        Returns:
+            True if credentials were successfully copied, False otherwise.
+        """
         secret_path = Path("/app/.google_workspace_mcp/credentials/credentials.json")
+        
+        # Check if secret file exists
         if not secret_path.exists():
-            logging.debug("Google OAuth credentials not found at %s, skipping setup", secret_path)
-            return
+            logging.debug("Google OAuth credentials not found at %s (placeholder secret or not mounted)", secret_path)
+            return False
+        
+        # Check if file has content (not empty placeholder)
+        try:
+            if secret_path.stat().st_size == 0:
+                logging.debug("Google OAuth credentials file is empty (user hasn't authenticated yet)")
+                return False
+        except OSError as e:
+            logging.debug("Could not stat Google OAuth credentials file: %s", e)
+            return False
 
         # Create writable credentials directory in workspace
         workspace_creds_dir = Path("/workspace/.google_workspace_mcp/credentials")
@@ -1789,5 +1823,41 @@ class ClaudeCodeAdapter:
             # Make it writable so workspace-mcp can update tokens
             dest_path.chmod(0o644)
             logging.info("✓ Copied Google OAuth credentials from Secret to writable workspace at %s", dest_path)
+            return True
         except Exception as e:
             logging.error("Failed to copy Google OAuth credentials: %s", e)
+            return False
+
+    async def refresh_google_credentials(self) -> bool:
+        """Check for and copy new Google OAuth credentials.
+        
+        Call this method periodically (e.g., before processing a message) to detect
+        when a user completes the OAuth flow and credentials become available.
+        
+        Kubernetes automatically updates the mounted secret volume when the secret
+        changes (typically within ~60 seconds), so this will pick up new credentials
+        without requiring a pod restart.
+        
+        Returns:
+            True if new credentials were found and copied, False otherwise.
+        """
+        dest_path = Path("/workspace/.google_workspace_mcp/credentials/credentials.json")
+        
+        # If we already have credentials in workspace, check if source is newer
+        if dest_path.exists():
+            secret_path = Path("/app/.google_workspace_mcp/credentials/credentials.json")
+            if secret_path.exists():
+                try:
+                    # Compare modification times - secret mount updates when K8s syncs
+                    if secret_path.stat().st_mtime > dest_path.stat().st_mtime:
+                        logging.info("Detected updated Google OAuth credentials, refreshing...")
+                        return await self._try_copy_google_credentials()
+                except OSError:
+                    pass
+            return False
+        
+        # No credentials yet, try to copy
+        if await self._try_copy_google_credentials():
+            logging.info("✓ Google OAuth credentials now available (user completed authentication)")
+            return True
+        return False

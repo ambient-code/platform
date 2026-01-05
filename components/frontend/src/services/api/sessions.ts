@@ -175,3 +175,22 @@ export async function updateSessionDisplayName(
     { displayName }
   );
 }
+
+/**
+ * Export session chat data
+ */
+export type SessionExportResponse = {
+  sessionId: string;
+  projectName: string;
+  exportDate: string;
+  aguiEvents: unknown[];
+  legacyMessages?: unknown[];
+  hasLegacy: boolean;
+};
+
+export async function getSessionExport(
+  projectName: string,
+  sessionName: string
+): Promise<SessionExportResponse> {
+  return apiClient.get(`/projects/${projectName}/agentic-sessions/${sessionName}/export`);
+}

@@ -213,10 +213,9 @@ jobs:
           oc_version: 'latest'
 
       - name: Install kustomize
-        run: |
-          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
-          sudo mv kustomize /usr/local/bin/
-          kustomize version
+        uses: imranismail/setup-kustomize@v2
+        with:
+          kustomize-version: '5.4.3'
 
       - name: Log in to OpenShift Cluster
         run: |
@@ -244,12 +243,17 @@ jobs:
 
       - name: Update frontend environment variables
         run: |
-          oc patch deployment frontend -n ambient-code --type=json -p='[{"op": "replace", "path": "/spec/template/spec/containers/0/env", "value": [{"name":"BACKEND_URL","value":"http://backend-service:8080/api"},{"name":"NODE_ENV","value":"production"},{"name":"GITHUB_APP_SLUG","value":"ambient-code"},{"name":"VTEAM_VERSION","value":"${{ needs.release.outputs.new_tag }}"}]}]'
+          oc set env deployment/frontend -n ambient-code -c frontend \
+            GITHUB_APP_SLUG="ambient-code" \
+            VTEAM_VERSION="${{ needs.release.outputs.new_tag }}"
 
       - name: Update backend environment variables
         run: |
-          oc patch deployment backend-api -n ambient-code --type=json -p='[{"op": "replace", "path": "/spec/template/spec/containers/0/env", "value": [{"name":"NAMESPACE","valueFrom":{"fieldRef":{"fieldPath":"metadata.namespace"}}},{"name":"PORT","value":"8080"},{"name":"STATE_BASE_DIR","value":"/workspace"},{"name":"SPEC_KIT_REPO","value":"ambient-code/spec-kit-rh"},{"name":"SPEC_KIT_VERSION","value":"main"},{"name":"SPEC_KIT_TEMPLATE","value":"spec-kit-template-claude-sh"},{"name":"CONTENT_SERVICE_IMAGE","value":"quay.io/ambient_code/vteam_backend:${{ needs.release.outputs.new_tag }}"},{"name":"IMAGE_PULL_POLICY","value":"Always"},{"name":"OOTB_WORKFLOWS_REPO","value":"https://github.com/ambient-code/ootb-ambient-workflows.git"},{"name":"OOTB_WORKFLOWS_BRANCH","value":"main"},{"name":"OOTB_WORKFLOWS_PATH","value":"workflows"},{"name":"CLAUDE_CODE_USE_VERTEX","valueFrom":{"configMapKeyRef":{"name":"operator-config","key":"CLAUDE_CODE_USE_VERTEX"}}},{"name":"GITHUB_APP_ID","valueFrom":{"secretKeyRef":{"name":"github-app-secret","key":"GITHUB_APP_ID","optional":true}}},{"name":"GITHUB_PRIVATE_KEY","valueFrom":{"secretKeyRef":{"name":"github-app-secret","key":"GITHUB_PRIVATE_KEY","optional":true}}},{"name":"GITHUB_CLIENT_ID","valueFrom":{"secretKeyRef":{"name":"github-app-secret","key":"GITHUB_CLIENT_ID","optional":true}}},{"name":"GITHUB_CLIENT_SECRET","valueFrom":{"secretKeyRef":{"name":"github-app-secret","key":"GITHUB_CLIENT_SECRET","optional":true}}},{"name":"GITHUB_STATE_SECRET","valueFrom":{"secretKeyRef":{"name":"github-app-secret","key":"GITHUB_STATE_SECRET","optional":true}}}]}]'
+          oc set env deployment/backend-api -n ambient-code -c backend-api \
+            CONTENT_SERVICE_IMAGE="quay.io/ambient_code/vteam_backend:${{ needs.release.outputs.new_tag }}"
 
       - name: Update operator environment variables
         run: |
-          oc patch deployment agentic-operator -n ambient-code --type=json -p='[{"op": "replace", "path": "/spec/template/spec/containers/0/env", "value": [{"name":"NAMESPACE","valueFrom":{"fieldRef":{"fieldPath":"metadata.namespace"}}},{"name":"BACKEND_NAMESPACE","valueFrom":{"fieldRef":{"fieldPath":"metadata.namespace"}}},{"name":"BACKEND_API_URL","value":"http://backend-service:8080/api"},{"name":"AMBIENT_CODE_RUNNER_IMAGE","value":"quay.io/ambient_code/vteam_claude_runner:${{ needs.release.outputs.new_tag }}"},{"name":"CONTENT_SERVICE_IMAGE","value":"quay.io/ambient_code/vteam_backend:${{ needs.release.outputs.new_tag }}"},{"name":"IMAGE_PULL_POLICY","value":"Always"},{"name":"CLAUDE_CODE_USE_VERTEX","valueFrom":{"configMapKeyRef":{"name":"operator-config","key":"CLAUDE_CODE_USE_VERTEX"}}},{"name":"CLOUD_ML_REGION","valueFrom":{"configMapKeyRef":{"name":"operator-config","key":"CLOUD_ML_REGION"}}},{"name":"ANTHROPIC_VERTEX_PROJECT_ID","valueFrom":{"configMapKeyRef":{"name":"operator-config","key":"ANTHROPIC_VERTEX_PROJECT_ID"}}},{"name":"GOOGLE_APPLICATION_CREDENTIALS","valueFrom":{"configMapKeyRef":{"name":"operator-config","key":"GOOGLE_APPLICATION_CREDENTIALS"}}},{"name":"LANGFUSE_ENABLED","valueFrom":{"secretKeyRef":{"name":"ambient-admin-langfuse-secret","key":"LANGFUSE_ENABLED","optional":true}}},{"name":"LANGFUSE_HOST","valueFrom":{"secretKeyRef":{"name":"ambient-admin-langfuse-secret","key":"LANGFUSE_HOST","optional":true}}},{"name":"LANGFUSE_PUBLIC_KEY","valueFrom":{"secretKeyRef":{"name":"ambient-admin-langfuse-secret","key":"LANGFUSE_PUBLIC_KEY","optional":true}}},{"name":"LANGFUSE_SECRET_KEY","valueFrom":{"secretKeyRef":{"name":"ambient-admin-langfuse-secret","key":"LANGFUSE_SECRET_KEY","optional":true}}}]}]'
+          oc set env deployment/agentic-operator -n ambient-code -c agentic-operator \
+            AMBIENT_CODE_RUNNER_IMAGE="quay.io/ambient_code/vteam_claude_runner:${{ needs.release.outputs.new_tag }}" \
+            CONTENT_SERVICE_IMAGE="quay.io/ambient_code/vteam_backend:${{ needs.release.outputs.new_tag }}"

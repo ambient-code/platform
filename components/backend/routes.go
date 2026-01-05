@@ -93,6 +93,9 @@ func registerRoutes(r *gin.Engine) {
 			projectGroup.GET("/agentic-sessions/:sessionName/agui/history", websocket.HandleAGUIHistory)
 			projectGroup.GET("/agentic-sessions/:sessionName/agui/runs", websocket.HandleAGUIRuns)
 
+			// Session export
+			projectGroup.GET("/agentic-sessions/:sessionName/export", websocket.HandleExportSession)
+
 			projectGroup.GET("/permissions", handlers.ListProjectPermissions)
 			projectGroup.POST("/permissions", handlers.AddProjectPermission)
 			projectGroup.DELETE("/permissions/:subjectType/:subjectName", handlers.RemoveProjectPermission)

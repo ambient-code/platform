@@ -386,7 +386,7 @@ const ChildToolCall: React.FC<ChildToolCallProps> = ({ toolUseBlock, resultBlock
   
   const isError = resultBlock?.is_error === true;
   const isSuccess = hasActualResult && !isError;
-  const isPending = !hasActualResult;
+  const isPending = !hasActualResult && !isError;
   
   const toolName = toolUseBlock?.name || "unknown_tool";
   
@@ -497,8 +497,8 @@ export const ToolMessage = React.forwardRef<HTMLDivElement, ToolMessageProps>(
 
     // For tool calls/results, show collapsible interface
     const toolName = formatToolName(toolUseBlock?.name);
-    const isLoading = isToolCall; // Tool call without result is loading
     const isError = toolResultBlock?.is_error === true;
+    const isLoading = isToolCall && !isError; // Tool call without result is loading, unless there's an error
     const isSuccess = isToolResult && !isError;
 
     // Subagent detection and data

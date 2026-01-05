@@ -1,23 +1,23 @@
 "use client";
 
-import { Play, Loader2, Workflow, AlertCircle } from "lucide-react";
+import { useState, useRef } from "react";
+import { Play, Loader2, Workflow, Search, ChevronDown } from "lucide-react";
 import { AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 import type { WorkflowConfig } from "../../lib/types";
 
 type WorkflowsAccordionProps = {
   sessionPhase?: string;
   activeWorkflow: string | null;
   selectedWorkflow: string;
-  pendingWorkflow: WorkflowConfig | null;
   workflowActivating: boolean;
   ootbWorkflows: WorkflowConfig[];
   isExpanded: boolean;
   onWorkflowChange: (value: string) => void;
-  onActivateWorkflow: () => void;
   onResume?: () => void;
 };
 
@@ -25,15 +25,63 @@ export function WorkflowsAccordion({
   sessionPhase,
   activeWorkflow,
   selectedWorkflow,
-  pendingWorkflow,
   workflowActivating,
   ootbWorkflows,
   isExpanded,
   onWorkflowChange,
-  onActivateWorkflow,
   onResume,
 }: WorkflowsAccordionProps) {
+  const [workflowSearch, setWorkflowSearch] = useState("");
+  const [popoverOpen, setPopoverOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const isSessionStopped = sessionPhase === 'Stopped' || sessionPhase === 'Error' || sessionPhase === 'Completed';
+
+  // Filter workflows based on search query
+  const filteredWorkflows = ootbWorkflows
+    .filter((workflow) => {
+      if (!workflowSearch) return true;
+      const searchLower = workflowSearch.toLowerCase();
+      return (
+        workflow.name.toLowerCase().includes(searchLower) ||
+        workflow.description.toLowerCase().includes(searchLower)
+      );
+    })
+    .sort((a, b) => a.name.localeCompare(b.name)); // Sort alphabetically by display name
+
+  // Filter for general chat based on search
+  const showGeneralChat = !workflowSearch || 
+    "general chat".includes(workflowSearch.toLowerCase()) ||
+    "A general chat session with no structured workflow.".toLowerCase().includes(workflowSearch.toLowerCase());
+
+  // Filter for custom workflow based on search
+  const showCustomWorkflow = !workflowSearch ||
+    "custom workflow".toLowerCase().includes(workflowSearch.toLowerCase()) ||
+    "load a workflow from a custom git repository".toLowerCase().includes(workflowSearch.toLowerCase());
+
+  // Get display info for selected workflow
+  const getSelectedWorkflowInfo = () => {
+    if (selectedWorkflow === "none") {
+      return {
+        name: "General chat",
+        description: "A general chat session with no structured workflow."
+      };
+    }
+    if (selectedWorkflow === "custom") {
+      return {
+        name: "Custom workflow...",
+        description: "Load a workflow from a custom Git repository"
+      };
+    }
+    const workflow = ootbWorkflows.find(w => w.id === selectedWorkflow);
+    return workflow 
+      ? { name: workflow.name, description: workflow.description }
+      : { name: "Select workflow...", description: "" };
+  };
+
+  const handleWorkflowSelect = (value: string) => {
+    onWorkflowChange(value);
+    setPopoverOpen(false);
+  };
 
   return (
     <AccordionItem value="workflows" className="border rounded-lg px-3 bg-card">
@@ -72,97 +120,143 @@ export function WorkflowsAccordion({
           </div>
         ) : (
           <div className="space-y-3">
-            {/* Workflow selector - always visible except when activating */}
-            {!workflowActivating && (
-              <>
-                <p className="text-sm text-muted-foreground">
-                  Workflows provide agents with pre-defined context and structured steps to follow.
-                </p>
-                
-                <div>
-                  <Select value={selectedWorkflow} onValueChange={onWorkflowChange} disabled={workflowActivating}>
-                    <SelectTrigger className="w-full h-auto py-8">
-                      <SelectValue placeholder="Generic chat" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">
-                        <div className="flex flex-col items-start gap-0.5 py-1 max-w-[400px]">
-                          <span>General chat</span>
-                          <span className="text-xs text-muted-foreground font-normal line-clamp-2">
-                            A general chat session with no structured workflow.
+            {/* Workflow selector - always visible */}
+            <p className="text-sm text-muted-foreground">
+              Workflows provide agents with pre-defined context and structured steps to follow.
+            </p>
+            
+            <div>
+              <Popover open={popoverOpen} onOpenChange={(open) => {
+                setPopoverOpen(open);
+                if (open) {
+                  setWorkflowSearch("");
+                  // Focus the search input after a brief delay to ensure it's rendered
+                  setTimeout(() => searchInputRef.current?.focus(), 0);
+                }
+              }}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={popoverOpen}
+                    className="w-full h-auto py-3 justify-between"
+                    disabled={workflowActivating}
+                  >
+                    {workflowActivating ? (
+                      <div className="flex flex-col items-start gap-0.5 w-full">
+                        <div className="flex items-center gap-2">
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          <span>Switching workflow...</span>
+                        </div>
+                        <span className="text-xs text-muted-foreground font-normal">
+                          This may take a few seconds...
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="flex items-start justify-between w-full gap-2">
+                        <div className="flex flex-col items-start gap-0.5 text-left flex-1 min-w-0">
+                          <span className="font-medium truncate w-full">{getSelectedWorkflowInfo().name}</span>
+                          <span className="text-xs text-muted-foreground font-normal line-clamp-2 w-full">
+                            {getSelectedWorkflowInfo().description}
                           </span>
                         </div>
-                      </SelectItem>
-                      {ootbWorkflows.map((workflow) => (
-                        <SelectItem 
-                          key={workflow.id} 
-                          value={workflow.id}
-                          disabled={!workflow.enabled}
+                        <ChevronDown className="h-4 w-4 shrink-0 opacity-50 mt-1" />
+                      </div>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[450px] p-0" align="start" sideOffset={4}>
+                  {/* Search box */}
+                  <div className="px-2 py-2 border-b sticky top-0 bg-popover z-10">
+                    <div className="relative">
+                      <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        ref={searchInputRef}
+                        type="text"
+                        placeholder="Search workflows..."
+                        value={workflowSearch}
+                        onChange={(e) => setWorkflowSearch(e.target.value)}
+                        className="pl-8 h-9"
+                        onKeyDown={(e) => {
+                          // Prevent popover from closing on keyboard interaction
+                          e.stopPropagation();
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Workflow items */}
+                  <div className="max-h-[400px] overflow-y-auto">
+                    {showGeneralChat && (
+                      <>
+                        <button
+                          onClick={() => handleWorkflowSelect("none")}
+                          className={cn(
+                            "w-full text-left px-2 py-2 hover:bg-accent hover:text-accent-foreground cursor-pointer",
+                            selectedWorkflow === "none" && "bg-accent"
+                          )}
                         >
-                          <div className="flex flex-col items-start gap-0.5 py-1 max-w-[400px]">
-                            <span>{workflow.name}</span>
+                          <div className="flex flex-col items-start gap-0.5 py-1">
+                            <span className="text-sm">General chat</span>
                             <span className="text-xs text-muted-foreground font-normal line-clamp-2">
-                              {workflow.description}
+                              A general chat session with no structured workflow.
                             </span>
                           </div>
-                        </SelectItem>
-                      ))}
-                      <SelectSeparator />
-                      <SelectItem value="custom">
-                        <div className="flex flex-col items-start gap-0.5 py-1 max-w-[400px]">
-                          <span>Custom workflow...</span>
+                        </button>
+                        {filteredWorkflows.length > 0 && <div className="border-t my-1" />}
+                      </>
+                    )}
+                    {filteredWorkflows.map((workflow) => (
+                      <button
+                        key={workflow.id}
+                        onClick={() => workflow.enabled && handleWorkflowSelect(workflow.id)}
+                        disabled={!workflow.enabled}
+                        className={cn(
+                          "w-full text-left px-2 py-2 hover:bg-accent hover:text-accent-foreground cursor-pointer",
+                          selectedWorkflow === workflow.id && "bg-accent",
+                          !workflow.enabled && "opacity-50 cursor-not-allowed"
+                        )}
+                      >
+                        <div className="flex flex-col items-start gap-0.5 py-1">
+                          <span className="text-sm">{workflow.name}</span>
+                          <span className="text-xs text-muted-foreground font-normal line-clamp-2">
+                            {workflow.description}
+                          </span>
+                        </div>
+                      </button>
+                    ))}
+                    {(showGeneralChat || filteredWorkflows.length > 0) && showCustomWorkflow && (
+                      <div className="border-t my-1" />
+                    )}
+                    {showCustomWorkflow && (
+                      <button
+                        onClick={() => handleWorkflowSelect("custom")}
+                        className={cn(
+                          "w-full text-left px-2 py-2 hover:bg-accent hover:text-accent-foreground cursor-pointer",
+                          selectedWorkflow === "custom" && "bg-accent"
+                        )}
+                      >
+                        <div className="flex flex-col items-start gap-0.5 py-1">
+                          <span className="text-sm">Custom workflow...</span>
                           <span className="text-xs text-muted-foreground font-normal line-clamp-2">
                             Load a workflow from a custom Git repository
                           </span>
                         </div>
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                {/* Show workflow preview and activate/switch button */}
-                {pendingWorkflow && (
-                  <Alert variant="info">
-                    <AlertCircle />
-                    <AlertTitle>
-                      Reload required
-                    </AlertTitle>
-                    <AlertDescription>
-                      <div className="space-y-2 mt-2">
-                        <p className="text-sm">
-                          Please reload this chat session to switch to the new workflow. Your chat history will be preserved.
-                        </p>
-                        <Button 
-                          onClick={onActivateWorkflow}
-                          className="w-full mt-3"
-                          size="sm"
-                        >
-                          <Play className="mr-2 h-4 w-4" />
-                          Load new workflow
-                        </Button>
+                      </button>
+                    )}
+                    {!showGeneralChat && filteredWorkflows.length === 0 && !showCustomWorkflow && (
+                      <div className="px-2 py-6 text-center text-sm text-muted-foreground">
+                        No workflows found
                       </div>
-                    </AlertDescription>
-                  </Alert>
-                )}
-              </>
-            )}
+                    )}
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
             
             {/* Show active workflow info */}
             {activeWorkflow && !workflowActivating && (
               <></>
-            )}
-            
-            {/* Show activating/switching state */}
-            {workflowActivating && (
-              <Alert>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <AlertTitle>{activeWorkflow ? 'Switching Workflow...' : 'Activating Workflow...'}</AlertTitle>
-                <AlertDescription>
-                  <div className="space-y-2">
-                    <p>Please wait. This may take 10-20 seconds...</p>
-                  </div>
-                </AlertDescription>
-              </Alert>
             )}
           </div>
         )}
@@ -170,4 +264,3 @@ export function WorkflowsAccordion({
     </AccordionItem>
   );
 }
-

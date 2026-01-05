@@ -52,7 +52,7 @@ const defaultComponents: Components = {
     
     // Full code blocks for longer content
     return (
-      <pre className="bg-muted text-foreground p-3 rounded text-xs overflow-x-auto border my-2">
+      <pre className="bg-muted text-foreground py-3 rounded text-xs overflow-x-auto border my-2">
         <code
           className={className}
           {...(props as React.HTMLAttributes<HTMLElement>)}
@@ -63,7 +63,7 @@ const defaultComponents: Components = {
     );
   },
   p: ({ children }) => (
-    <p className="text-muted-foreground leading-relaxed mb-0 text-sm">{children}</p>
+    <p className="text-muted-foreground leading-relaxed mb-[0.2rem] text-sm">{children}</p>
   ),
   h1: ({ children }) => (
     <h1 className="text-lg font-bold text-foreground mb-2">{children}</h1>
@@ -212,11 +212,11 @@ export const Message = React.forwardRef<HTMLDivElement, MessageProps>(
               </div>
             )}
             <div className={cn(
-              borderless ? "p-0" : "rounded-lg p-3",
+              borderless ? "p-0" : "rounded-lg",
               !borderless && (isBot ? "bg-card" : "bg-border/30")
             )}>
               {/* Content */}
-              <div className="text-sm text-foreground">
+              <div className={cn("text-sm text-foreground", !isBot && "py-2 px-4")}>
                 {isLoading ? (
                   <div>
                     <div className="text-sm text-muted-foreground mb-2">{content}</div>

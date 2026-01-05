@@ -43,7 +43,7 @@ ENV RUNNER_TYPE=claude
 ENV HOME=/app
 ENV SHELL=/bin/bash
 ENV TERM=xterm-256color
-ENV AGUI_PORT=8000
+ENV AGUI_PORT=8001
 
 # Build metadata as environment variables
 ENV GIT_COMMIT=${GIT_COMMIT}
@@ -64,9 +64,9 @@ RUN chmod -R g=u /app && chmod -R g=u /usr/local && chmod g=u /etc/passwd
 # Run as UID 1001 to match content service (fixes permission issues)
 USER 1001
 
-# Expose AG-UI server port
-EXPOSE 8000
+# Expose AG-UI server port (8001 to avoid conflict with workspace-mcp OAuth on 8000)
+EXPOSE 8001
 
 # Start FastAPI AG-UI server using uvicorn
 # The main module is installed as part of the package
-CMD ["/bin/bash", "-c", "umask 0022 && cd /app/claude-runner && uvicorn main:app --host 0.0.0.0 --port 8000"]
+CMD ["/bin/bash", "-c", "umask 0022 && cd /app/claude-runner && uvicorn main:app --host 0.0.0.0 --port 8001"]

@@ -143,6 +143,7 @@ export function SessionHeader({
         
         <SessionDetailsModal
           session={session}
+          projectName={projectName}
           open={detailsModalOpen}
           onOpenChange={setDetailsModalOpen}
           durationMs={durationMs}
@@ -283,6 +284,7 @@ export function SessionHeader({
 
       <SessionDetailsModal
         session={session}
+        projectName={projectName}
         open={detailsModalOpen}
         onOpenChange={setDetailsModalOpen}
         durationMs={durationMs}

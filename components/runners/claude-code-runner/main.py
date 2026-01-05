@@ -95,76 +95,90 @@ async def lifespan(app: FastAPI):
     adapter = ClaudeCodeAdapter()
     adapter.context = context
     
-    # Check for INITIAL_PROMPT and auto-execute on startup
-    # Runner knows when it's ready, so this is more reliable than backend timing
+    logger.info("Adapter initialized - fresh client will be created for each run")
+    
+    # Check if this is a continuation (has parent session)
+    # PARENT_SESSION_ID is set when continuing from another session
+    parent_session_id = os.getenv("PARENT_SESSION_ID", "").strip()
+    
+    # Check for INITIAL_PROMPT and auto-execute (only if no parent session)
     initial_prompt = os.getenv("INITIAL_PROMPT", "").strip()
-    if initial_prompt:
-        logger.info(f"INITIAL_PROMPT detected ({len(initial_prompt)} chars), will auto-execute after server starts")
-        # Schedule auto-execution after server is ready
-        import asyncio
+    if initial_prompt and not parent_session_id:
+        logger.info(f"INITIAL_PROMPT detected ({len(initial_prompt)} chars), will auto-execute after 3s delay")
         asyncio.create_task(auto_execute_initial_prompt(initial_prompt, session_id))
+    elif initial_prompt:
+        logger.info(f"INITIAL_PROMPT detected but has parent session ({parent_session_id[:12]}...) - skipping")
     
     logger.info(f"AG-UI server ready for session {session_id}")
     
     yield
     
     # Cleanup
-    logger.info("Shutting down AG-UI server")
+    logger.info("Shutting down AG-UI server...")
 
 
 async def auto_execute_initial_prompt(prompt: str, session_id: str):
-    """Auto-execute INITIAL_PROMPT by POSTing to backend after server is ready."""
+    """Auto-execute INITIAL_PROMPT by POSTing to backend after short delay.
+    
+    The 3-second delay gives the runner time to fully start. Backend has retry
+    logic to handle if Service DNS isn't ready yet.
+    
+    Only called for fresh sessions (no PARENT_SESSION_ID set).
+    """
     import uuid
     import aiohttp
     
-    # Wait for FastAPI server to be fully ready
-    await asyncio.sleep(2)
+    # Give runner time to fully start before backend tries to reach us
+    logger.info("Waiting 3s before auto-executing INITIAL_PROMPT (allow Service DNS to propagate)...")
+    await asyncio.sleep(3)
     
-    logger.info(f"Auto-executing INITIAL_PROMPT via backend POST...")
+    logger.info("Auto-executing INITIAL_PROMPT via backend POST...")
+    
+    # Get backend URL from environment
+    backend_url = os.getenv("BACKEND_API_URL", "").rstrip("/")
+    project_name = os.getenv("PROJECT_NAME", "").strip() or os.getenv("AGENTIC_SESSION_NAMESPACE", "").strip()
+    
+    if not backend_url or not project_name:
+        logger.error("Cannot auto-execute INITIAL_PROMPT: BACKEND_API_URL or PROJECT_NAME not set")
+        return
+    
+    # BACKEND_API_URL already includes /api suffix from operator
+    url = f"{backend_url}/projects/{project_name}/agentic-sessions/{session_id}/agui/run"
+    logger.info(f"Auto-execution URL: {url}")
+    
+    payload = {
+        "threadId": session_id,
+        "runId": str(uuid.uuid4()),
+        "messages": [{
+            "id": str(uuid.uuid4()),
+            "role": "user",
+            "content": prompt,
+            "metadata": {
+                "hidden": True,
+                "autoSent": True,
+                "source": "runner_initial_prompt"
+            }
+        }]
+    }
+    
+    # Get BOT_TOKEN for auth
+    bot_token = os.getenv("BOT_TOKEN", "").strip()
+    headers = {"Content-Type": "application/json"}
+    if bot_token:
+        headers["Authorization"] = f"Bearer {bot_token}"
     
     try:
-        # Get backend URL from environment
-        backend_url = os.getenv("BACKEND_API_URL", "").rstrip("/")
-        project_name = os.getenv("PROJECT_NAME", "").strip() or os.getenv("AGENTIC_SESSION_NAMESPACE", "").strip()
-        
-        if not backend_url or not project_name:
-            logger.error("Cannot auto-execute INITIAL_PROMPT: BACKEND_API_URL or PROJECT_NAME not set")
-            return
-        
-        url = f"{backend_url}/projects/{project_name}/agentic-sessions/{session_id}/agui/run"
-        
-        payload = {
-            "threadId": session_id,
-            "runId": str(uuid.uuid4()),
-            "messages": [{
-                "id": str(uuid.uuid4()),
-                "role": "user",
-                "content": prompt,
-                "metadata": {
-                    "hidden": True,
-                    "autoSent": True,
-                    "source": "runner_auto_execute"
-                }
-            }]
-        }
-        
-        # Get BOT_TOKEN for auth
-        bot_token = os.getenv("BOT_TOKEN", "").strip()
-        headers = {"Content-Type": "application/json"}
-        if bot_token:
-            headers["Authorization"] = f"Bearer {bot_token}"
-        
         async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload, headers=headers) as resp:
+            async with session.post(url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=30)) as resp:
                 if resp.status == 200:
                     result = await resp.json()
                     logger.info(f"INITIAL_PROMPT auto-execution started: {result}")
                 else:
                     error_text = await resp.text()
-                    logger.error(f"INITIAL_PROMPT auto-execution failed: {resp.status} - {error_text}")
-    
+                    logger.warning(f"INITIAL_PROMPT failed with status {resp.status}: {error_text[:200]}")
     except Exception as e:
-        logger.error(f"Failed to auto-execute INITIAL_PROMPT: {e}")
+        logger.warning(f"INITIAL_PROMPT auto-execution error (backend will retry): {e}")
+
 
 
 app = FastAPI(
@@ -218,7 +232,8 @@ async def run_agent(input_data: RunnerInput, request: Request):
                 _adapter_initialized = True
             
             logger.info("Starting adapter.process_run()...")
-            # Process the actual run
+            
+            # Process the run (creates fresh client each time)
             async for event in adapter.process_run(run_agent_input):
                 logger.debug(f"Yielding run event: {event.type}")
                 yield encoder.encode(event)
@@ -296,7 +311,7 @@ async def change_workflow(request: Request):
     _adapter_initialized = False
     adapter._first_run = True
     
-    logger.info("Workflow updated, triggering new run with workflow greeting")
+    logger.info("Workflow updated, adapter will reinitialize on next run")
     
     # Trigger a new run to greet user with workflow context
     # This runs in background via backend POST
