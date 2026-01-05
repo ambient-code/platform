@@ -608,7 +608,8 @@ Need help with token creation?
 - Check your organization's GitLab documentation
 
 **For Ambient Code Platform Integration Issues**:
-- Ambient Code Platform GitHub Issues: https://github.com/natifridman/Ambient Code Platform/issues
+
+- Ambient Code Platform GitHub Issues: [Ambient Code Platform GitHub Issues](https://github.com/ambient-code/platform/issues)
 - Ambient Code Platform Documentation: [Main README](https://github.com/ambient-code/platform/blob/main/README.md)
 
 ---
