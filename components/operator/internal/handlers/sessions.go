@@ -25,20 +25,25 @@ import (
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	intstr "k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/util/retry"
 )
 
 // Track which pods are currently being monitored to prevent duplicate goroutines
-// NOTE: This is used by the legacy handleAgenticSessionEvent function which is
-// kept for reference but no longer actively called by the operator.
-// The controller-runtime based reconciler in internal/controller/ handles all
-// AgenticSession reconciliation now.
 var (
 	monitoredPods   = make(map[string]bool)
 	monitoredPodsMu sync.Mutex
 )
 
+// handleAgenticSessionEvent is the legacy reconciliation function containing all session
+// lifecycle logic (~2,300 lines). It's called by ReconcilePendingSession() wrapper.
+//
+// TODO(controller-runtime-migration): This function should be refactored into smaller,
+// phase-specific reconcilers that use controller-runtime patterns. Current architecture:
+// - ✅ Controller-runtime framework adopted (work queue, leader election, metrics)
+// - ⚠️ Business logic still uses legacy patterns (direct API calls, manual status updates)
+// - 🔜 Future: Break into ReconcilePending, ReconcileRunning, ReconcileStopped functions
+//
+// This transitional approach allows framework adoption without rewriting 2,300 lines at once.
 func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 	name := obj.GetName()
 	sessionNamespace := obj.GetNamespace()
@@ -679,35 +684,6 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 			Reason:  "OptionalSecretFound",
 			Message: fmt.Sprintf("Secret %s present", integrationSecretsName),
 		})
-	}
-
-	// Extract repos configuration (simplified format: url and branch)
-	type RepoConfig struct {
-		URL    string
-		Branch string
-	}
-
-	var repos []RepoConfig
-
-	// Read repos[] array format
-	if reposArr, found, _ := unstructured.NestedSlice(spec, "repos"); found && len(reposArr) > 0 {
-		repos = make([]RepoConfig, 0, len(reposArr))
-		for _, repoItem := range reposArr {
-			if repoMap, ok := repoItem.(map[string]interface{}); ok {
-				repo := RepoConfig{}
-				if url, ok := repoMap["url"].(string); ok {
-					repo.URL = url
-				}
-				if branch, ok := repoMap["branch"].(string); ok {
-					repo.Branch = branch
-				} else {
-					repo.Branch = "main"
-				}
-				if repo.URL != "" {
-					repos = append(repos, repo)
-				}
-			}
-		}
 	}
 
 	// Read autoPushOnComplete flag

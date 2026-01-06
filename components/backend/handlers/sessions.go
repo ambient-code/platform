@@ -748,10 +748,18 @@ func GetSession(c *gin.Context) {
 		return
 	}
 
+	// Safely extract metadata using type-safe pattern
+	metadata, ok := item.Object["metadata"].(map[string]interface{})
+	if !ok {
+		log.Printf("GetSession: invalid metadata for session %s", sessionName)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid session metadata"})
+		return
+	}
+
 	session := types.AgenticSession{
 		APIVersion: item.GetAPIVersion(),
 		Kind:       item.GetKind(),
-		Metadata:   item.Object["metadata"].(map[string]interface{}),
+		Metadata:   metadata,
 	}
 
 	if spec, ok := item.Object["spec"].(map[string]interface{}); ok {
@@ -2100,27 +2108,6 @@ func StopSession(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusAccepted, session)
-}
-
-// EnableWorkspaceAccess is deprecated - temporary content pods have been removed
-// POST /api/projects/:projectName/agentic-sessions/:sessionName/workspace/enable
-func EnableWorkspaceAccess(c *gin.Context) {
-	c.JSON(http.StatusGone, gin.H{
-		"error":   "Temporary workspace access has been removed",
-		"message": "Session artifacts are now stored in S3. Access artifacts directly from your S3 bucket.",
-		"hint":    "Configure S3 storage in project settings to persist session state and artifacts.",
-		"s3Path":  fmt.Sprintf("s3://{bucket}/{namespace}/%s/", c.Param("sessionName")),
-	})
-}
-
-// TouchWorkspaceAccess updates the last-accessed timestamp to keep temp pod alive
-// POST /api/projects/:projectName/agentic-sessions/:sessionName/workspace/touch
-func TouchWorkspaceAccess(c *gin.Context) {
-	// Deprecated: Temp-content pods no longer exist
-	c.JSON(http.StatusGone, gin.H{
-		"error":   "Temporary workspace access has been removed",
-		"message": "Session artifacts are stored in S3 and do not require touch/keepalive.",
-	})
 }
 
 // GetSessionK8sResources returns job, pod, and PVC information for a session

@@ -10,15 +10,20 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	"ambient-code-operator/internal/config"
-	"ambient-code-operator/internal/types"
 )
 
 // ReconcilePendingSession handles the Pending phase - creates pod and services.
 // This is the main entry point called from the controller for pending sessions.
+//
+// TODO(controller-runtime-migration): This is a transitional wrapper around the legacy
+// handleAgenticSessionEvent() function (2,300+ lines). Future work should:
+// 1. Extract phase-specific logic into separate functions (ReconcilePending, ReconcileRunning, etc.)
+// 2. Use controller-runtime patterns (Patch, StatusWriter, etc.) instead of direct API calls
+// 3. Remove handleAgenticSessionEvent() entirely
+// This approach allows adopting controller-runtime framework without rewriting all logic at once.
 func ReconcilePendingSession(ctx context.Context, session *unstructured.Unstructured, appConfig *config.Config) error {
 	// Delegate to existing handleAgenticSessionEvent logic
 	// This is a wrapper that allows the existing code to be called from the controller
