@@ -159,7 +159,7 @@ jobs:
             image: quay.io/ambient_code/vteam_claude_runner
             dockerfile: ./components/runners/claude-code-runner/Dockerfile
           - name: state-sync
-            context: ./components/runners
+            context: ./components/runners/state-sync
             image: quay.io/ambient_code/vteam_state_sync
             dockerfile: ./components/runners/state-sync/Dockerfile
     steps:

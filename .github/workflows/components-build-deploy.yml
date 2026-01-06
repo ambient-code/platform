@@ -85,7 +85,7 @@ jobs:
             dockerfile: ./components/runners/claude-code-runner/Dockerfile
             changed: ${{ needs.detect-changes.outputs.claude-runner }}
           - name: state-sync
-            context: ./components/runners
+            context: ./components/runners/state-sync
             image: quay.io/ambient_code/vteam_state_sync
             dockerfile: ./components/runners/state-sync/Dockerfile
             changed: ${{ needs.detect-changes.outputs.claude-runner }}
