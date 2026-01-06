@@ -36,7 +36,7 @@ jobs:
       claude-runner: ${{ steps.filter.outputs.claude-runner }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Check for component changes
         uses: dorny/paths-filter@v3
@@ -60,7 +60,7 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
 
     - name: Cleanup Diskspace
       id: cleanup
