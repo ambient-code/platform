@@ -624,10 +624,11 @@ export default function ProjectSessionDetailPage({
     if (session?.spec?.repos) {
       session.spec.repos.forEach((repo, idx) => {
         const repoName = repo.url.split('/').pop()?.replace('.git', '') || `repo-${idx}`;
+        // Repos are cloned to /workspace/repos/{name}
         options.push({
           type: "repo",
           name: repoName,
-          path: repoName,
+          path: `repos/${repoName}`,
         });
       });
     }
@@ -1905,7 +1906,7 @@ export default function ProjectSessionDetailPage({
                         workflowMetadata={workflowMetadata}
                         onCommandClick={handleCommandClick}
                         isRunActive={isRunActive}
-                        showWelcomeExperience={true}
+                        showWelcomeExperience={!["Completed", "Failed", "Stopped", "Stopping"].includes(session?.status?.phase || "")}
                         activeWorkflow={workflowManagement.activeWorkflow}
                         userHasInteracted={userHasInteracted}
                         queuedMessages={sessionQueue.messages}
