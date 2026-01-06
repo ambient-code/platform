@@ -23,8 +23,8 @@ export function GoogleDriveConnectionCard({ showManageButton = true }: Props) {
       // Currently MCP integrations are per-session, but should be project-level
       errorToast('Google Drive integration setup coming soon. Currently available per-session.')
       setConnecting(false)
-    } catch (error) {
-      console.error('Failed to initiate Google OAuth:', error)
+    } catch (err) {
+      console.error('Failed to initiate Google OAuth:', err)
       errorToast('Failed to connect Google Drive')
       setConnecting(false)
     }
@@ -35,7 +35,7 @@ export function GoogleDriveConnectionCard({ showManageButton = true }: Props) {
       // TODO: Implement disconnect - remove credentials
       setGoogleConnected(false)
       successToast('Google Drive disconnected successfully')
-    } catch (error) {
+    } catch {
       errorToast('Failed to disconnect Google Drive')
     }
   }

@@ -7,35 +7,21 @@ import {
   AccordionContent,
 } from '@/components/ui/accordion'
 import { Badge } from '@/components/ui/badge'
+import { useMcpStatus } from '@/services/queries/use-mcp'
 
 type McpIntegrationsAccordionProps = {
   projectName: string
   sessionName: string
 }
 
-// MCP Server status - hardcoded for now
-// TODO: Fetch from backend API based on session's MCP configuration
-type McpServer = {
-  name: string
-  displayName: string
-  status: 'connected' | 'disconnected' | 'error'
-  icon?: string
-}
-
-const mcpServers: McpServer[] = [
-  {
-    name: 'google-workspace-mcp',
-    displayName: 'Google Workspace MCP',
-    status: 'connected',
-  },
-  // Add more servers as they're configured
-]
-
 export function McpIntegrationsAccordion({
   projectName,
   sessionName,
 }: McpIntegrationsAccordionProps) {
-  const getStatusIcon = (status: McpServer['status']) => {
+  // Fetch real MCP status from runner
+  const { data: mcpStatus } = useMcpStatus(projectName, sessionName)
+  const mcpServers = mcpStatus?.servers || []
+  const getStatusIcon = (status: 'connected' | 'disconnected' | 'error') => {
     switch (status) {
       case 'connected':
         return <CheckCircle2 className="h-4 w-4 text-green-600" />
@@ -47,7 +33,7 @@ export function McpIntegrationsAccordion({
     }
   }
 
-  const getStatusBadge = (status: McpServer['status']) => {
+  const getStatusBadge = (status: 'connected' | 'disconnected' | 'error') => {
     switch (status) {
       case 'connected':
         return (

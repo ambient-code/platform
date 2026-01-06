@@ -1476,7 +1476,7 @@ export default function ProjectSessionDetailPage({
                       onNavigateBack={artifactsOps.navigateBack}
                     />
 
-                    <McpIntegrationsAccordion
+                    <McpIntegrationsAccordion 
                       projectName={projectName}
                       sessionName={sessionName}
                     />

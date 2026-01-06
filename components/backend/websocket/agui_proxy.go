@@ -406,6 +406,88 @@ func HandleAGUIInterrupt(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Interrupt signal sent"})
 }
 
+// HandleMCPStatus proxies MCP status requests to runner
+// GET /api/projects/:projectName/agentic-sessions/:sessionName/mcp/status
+func HandleMCPStatus(c *gin.Context) {
+	projectName := c.Param("projectName")
+	sessionName := c.Param("sessionName")
+
+	// SECURITY: Authenticate user and get user-scoped K8s client
+	reqK8s, _ := handlers.GetK8sClientsForRequest(c)
+	if reqK8s == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
+
+	// SECURITY: Verify user has permission to read this session
+	ctx := context.Background()
+	ssar := &authv1.SelfSubjectAccessReview{
+		Spec: authv1.SelfSubjectAccessReviewSpec{
+			ResourceAttributes: &authv1.ResourceAttributes{
+				Group:     "vteam.ambient-code",
+				Resource:  "agenticsessions",
+				Verb:      "get",
+				Namespace: projectName,
+				Name:      sessionName,
+			},
+		},
+	}
+	res, err := reqK8s.AuthorizationV1().SelfSubjectAccessReviews().Create(ctx, ssar, metav1.CreateOptions{})
+	if err != nil || !res.Status.Allowed {
+		log.Printf("MCP Status: User not authorized to read session %s/%s", projectName, sessionName)
+		c.JSON(http.StatusForbidden, gin.H{"error": "Unauthorized"})
+		c.Abort()
+		return
+	}
+
+	// Get runner endpoint
+	runnerURL, err := getRunnerEndpoint(projectName, sessionName)
+	if err != nil {
+		log.Printf("MCP Status: Failed to get runner endpoint: %v", err)
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Runner not available"})
+		return
+	}
+
+	mcpStatusURL := strings.TrimSuffix(runnerURL, "/") + "/mcp/status"
+	log.Printf("MCP Status: Forwarding to runner: %s", mcpStatusURL)
+
+	// GET from runner's MCP status endpoint
+	req, err := http.NewRequest("GET", mcpStatusURL, nil)
+	if err != nil {
+		log.Printf("MCP Status: Failed to create request: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("MCP Status: Request failed: %v", err)
+		// Runner might not be running yet - return empty list
+		c.JSON(http.StatusOK, gin.H{"servers": []interface{}{}, "totalCount": 0})
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		log.Printf("MCP Status: Runner returned %d: %s", resp.StatusCode, string(body))
+		c.JSON(http.StatusOK, gin.H{"servers": []interface{}{}, "totalCount": 0})
+		return
+	}
+
+	// Forward runner response to client
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		log.Printf("MCP Status: Failed to decode response: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse runner response"})
+		return
+	}
+
+	c.JSON(http.StatusOK, result)
+}
+
 // getRunnerEndpoint returns the AG-UI server endpoint for a session
 // The operator creates a Service named "session-{sessionName}" in the project namespace
 func getRunnerEndpoint(projectName, sessionName string) (string, error) {
