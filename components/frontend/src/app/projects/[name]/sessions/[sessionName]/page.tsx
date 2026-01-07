@@ -91,7 +91,6 @@ import {
   useSession,
   useStopSession,
   useDeleteSession,
-  useSessionK8sResources,
   useContinueSession,
 } from "@/services/queries";
 import {
@@ -193,10 +192,6 @@ export default function ProjectSessionDetailPage({
     error,
     refetch: refetchSession,
   } = useSession(projectName, sessionName);
-  const { data: k8sResources } = useSessionK8sResources(
-    projectName,
-    sessionName,
-  );
   const stopMutation = useStopSession();
   const deleteMutation = useDeleteSession();
   const continueMutation = useContinueSession();
@@ -1257,9 +1252,6 @@ export default function ProjectSessionDetailPage({
     );
   };
 
-  // Duration calculation removed - startTime/completionTime no longer in status
-  const durationMs = undefined;
-
   // Loading state
   if (isLoading || !projectName || !sessionName) {
     return (
@@ -1384,9 +1376,6 @@ export default function ProjectSessionDetailPage({
                   onStop={handleStop}
                   onContinue={handleContinue}
                   onDelete={handleDelete}
-                  durationMs={durationMs}
-                  k8sResources={k8sResources}
-                  messageCount={aguiState.messages.length}
                   renderMode="kebab-only"
                 />
               </div>
