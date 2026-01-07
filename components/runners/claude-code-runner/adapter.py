@@ -398,22 +398,10 @@ class ClaudeCodeAdapter:
             logger.info(f"Claude SDK CWD: {cwd_path}")
             logger.info(f"Claude SDK additional directories: {add_dirs}")
 
-            # Load MCP server configuration
-            mcp_servers = self._load_mcp_config(cwd_path)
+            # Load MCP server configuration (webfetch is included in static .mcp.json)
+            mcp_servers = self._load_mcp_config(cwd_path) or {}
             
-            # Add WebFetch.MCP as default if no MCP config exists
-            if not mcp_servers:
-                mcp_servers = {}
-            
-            # Always include WebFetch.MCP for better web content extraction
-            if "webfetch" not in mcp_servers:
-                mcp_servers["webfetch"] = {
-                    "command": "npx",
-                    "args": ["-y", "@manooll/webfetch-mcp"]
-                }
-                logger.info("Added WebFetch.MCP as default web fetch provider")
-            
-            # Disable built-in WebFetch in favor of WebFetch.MCP
+            # Disable built-in WebFetch in favor of WebFetch.MCP from config
             allowed_tools = ["Read", "Write", "Bash", "Glob", "Grep", "Edit", "MultiEdit", "WebSearch"]
             if mcp_servers:
                 for server_name in mcp_servers.keys():

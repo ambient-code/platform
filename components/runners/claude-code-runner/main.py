@@ -284,14 +284,54 @@ async def interrupt_run():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _check_mcp_authentication(server_name: str) -> tuple[bool | None, str | None]:
+    """
+    Check if credentials are available for known MCP servers.
+    
+    Returns:
+        Tuple of (is_authenticated, auth_message)
+        Returns (None, None) for servers we don't know how to check
+    """
+    from pathlib import Path
+    
+    # Google Workspace MCP - we know how to check this
+    if server_name == "google-workspace":
+        # Check mounted secret location first, then workspace copy
+        secret_path = Path("/app/.google_workspace_mcp/credentials/credentials.json")
+        workspace_path = Path("/workspace/.google_workspace_mcp/credentials/credentials.json")
+        
+        for cred_path in [workspace_path, secret_path]:
+            if cred_path.exists():
+                try:
+                    if cred_path.stat().st_size > 0:
+                        return True, "Google OAuth credentials available"
+                except OSError:
+                    pass
+        return False, "Google OAuth not configured - authenticate via Integrations page"
+    
+    # Jira/Atlassian MCP - we know how to check this
+    if server_name in ("mcp-atlassian", "jira"):
+        jira_url = os.getenv("JIRA_URL", "").strip()
+        jira_token = os.getenv("JIRA_API_TOKEN", "").strip()
+        
+        if jira_url and jira_token:
+            return True, "Jira credentials configured"
+        elif jira_url:
+            return False, "Jira URL set but API token missing"
+        else:
+            return False, "Jira not configured - set credentials in Workspace Settings"
+    
+    # For all other servers (webfetch, unknown) - don't claim to know auth status
+    return None, None
+
+
 @app.get("/mcp/status")
 async def get_mcp_status():
     """
-    Returns MCP servers configured for this session.
+    Returns MCP servers configured for this session with authentication status.
     Goes straight to the source - uses adapter's _load_mcp_config() method.
     
-    Note: Status is "configured" not "connected" - we can't verify runtime state
-    without introspecting the Claude SDK's internal MCP server processes.
+    For known integrations (Google, Jira), also checks if credentials are present.
     """
     try:
         global adapter
@@ -323,21 +363,31 @@ async def get_mcp_status():
         
         if mcp_config:
             for server_name, server_config in mcp_config.items():
-                # Check if this is WebFetch (auto-added by adapter)
-                is_webfetch = server_name == "webfetch"
+                # Check authentication status for known servers (Google, Jira)
+                is_authenticated, auth_message = _check_mcp_authentication(server_name)
                 
-                mcp_servers_list.append({
+                # Platform servers are built-in (webfetch), workflow servers come from config
+                is_platform = server_name == "webfetch"
+                
+                server_info = {
                     "name": server_name,
                     "displayName": server_name.replace('-', ' ').replace('_', ' ').title(),
-                    "status": "configured",  # Honest: we know it's configured, not if it's actually running
+                    "status": "configured",
                     "command": server_config.get("command", ""),
-                    "source": "platform" if is_webfetch else "workflow"
-                })
+                    "source": "platform" if is_platform else "workflow"
+                }
+                
+                # Only include auth fields for servers we know how to check
+                if is_authenticated is not None:
+                    server_info["authenticated"] = is_authenticated
+                    server_info["authMessage"] = auth_message
+                
+                mcp_servers_list.append(server_info)
         
         return {
             "servers": mcp_servers_list,
             "totalCount": len(mcp_servers_list),
-            "note": "Status shows 'configured' - actual runtime state requires SDK introspection"
+            "note": "Status shows 'configured' - check 'authenticated' field for credential status"
         }
         
     except Exception as e:

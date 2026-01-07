@@ -1,13 +1,20 @@
 'use client'
 
-import { Plug, CheckCircle2, XCircle, AlertCircle } from 'lucide-react'
+import { Plug, CheckCircle2, XCircle, AlertCircle, KeyRound, KeyRoundIcon } from 'lucide-react'
 import {
   AccordionItem,
   AccordionTrigger,
   AccordionContent,
 } from '@/components/ui/accordion'
 import { Badge } from '@/components/ui/badge'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { useMcpStatus } from '@/services/queries/use-mcp'
+import type { McpServer } from '@/services/api/sessions'
 
 type McpIntegrationsAccordionProps = {
   projectName: string
@@ -21,8 +28,19 @@ export function McpIntegrationsAccordion({
   // Fetch real MCP status from runner
   const { data: mcpStatus } = useMcpStatus(projectName, sessionName)
   const mcpServers = mcpStatus?.servers || []
-  const getStatusIcon = (status: 'configured' | 'connected' | 'disconnected' | 'error') => {
-    switch (status) {
+
+  const getStatusIcon = (server: McpServer) => {
+    // If we have auth info, use that for the icon
+    if (server.authenticated !== undefined) {
+      if (server.authenticated) {
+        return <CheckCircle2 className="h-4 w-4 text-green-600" />
+      } else {
+        return <KeyRound className="h-4 w-4 text-amber-500" />
+      }
+    }
+    
+    // Fall back to status-based icons
+    switch (server.status) {
       case 'configured':
       case 'connected':
         return <CheckCircle2 className="h-4 w-4 text-blue-600" />
@@ -34,8 +52,28 @@ export function McpIntegrationsAccordion({
     }
   }
 
-  const getStatusBadge = (status: 'configured' | 'connected' | 'disconnected' | 'error') => {
-    switch (status) {
+  const getAuthBadge = (server: McpServer) => {
+    // If auth info is available, show auth status
+    if (server.authenticated !== undefined) {
+      if (server.authenticated) {
+        return (
+          <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
+            <KeyRoundIcon className="h-3 w-3 mr-1" />
+            Authenticated
+          </Badge>
+        )
+      } else {
+        return (
+          <Badge variant="outline" className="text-xs bg-amber-50 text-amber-700 border-amber-200">
+            <KeyRound className="h-3 w-3 mr-1" />
+            Not Authenticated
+          </Badge>
+        )
+      }
+    }
+    
+    // Fall back to status-based badges
+    switch (server.status) {
       case 'configured':
         return (
           <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
@@ -82,17 +120,28 @@ export function McpIntegrationsAccordion({
               >
                 <div className="flex items-center gap-3">
                   <div className="flex-shrink-0">
-                    {getStatusIcon(server.status)}
+                    {getStatusIcon(server)}
                   </div>
                   <div className="flex-1">
                     <h4 className="font-medium text-sm">{server.displayName}</h4>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      {server.name}
+                      {server.authMessage || server.name}
                     </p>
                   </div>
                 </div>
                 <div className="flex-shrink-0">
-                  {getStatusBadge(server.status)}
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        {getAuthBadge(server)}
+                      </TooltipTrigger>
+                      {server.authMessage && (
+                        <TooltipContent>
+                          <p>{server.authMessage}</p>
+                        </TooltipContent>
+                      )}
+                    </Tooltip>
+                  </TooltipProvider>
                 </div>
               </div>
             ))

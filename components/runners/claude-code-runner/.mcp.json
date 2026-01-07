@@ -1,5 +1,9 @@
 {
   "mcpServers": {
+    "webfetch": {
+      "command": "uvx",
+      "args": ["mcp-server-fetch"]
+    },
     "mcp-atlassian": {
       "command": "mcp-atlassian",
       "args": [],
