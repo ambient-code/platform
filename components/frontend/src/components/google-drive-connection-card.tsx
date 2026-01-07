@@ -13,7 +13,7 @@ type Props = {
 }
 
 export function GoogleDriveConnectionCard({ showManageButton = true }: Props) {
-  const { data: status, isLoading, refetch } = useGoogleStatus()
+  const { data: status, isLoading, error, refetch } = useGoogleStatus()
   const disconnectMutation = useDisconnectGoogle()
   const [connecting, setConnecting] = useState(false)
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -128,9 +128,11 @@ export function GoogleDriveConnectionCard({ showManageButton = true }: Props) {
         {/* Status section */}
         <div className="mb-4">
           <div className="flex items-center gap-2 mb-2">
-            <span className={`w-2 h-2 rounded-full ${status?.connected ? 'bg-green-500' : 'bg-gray-400'}`}></span>
+            <span className={`w-2 h-2 rounded-full ${error ? 'bg-red-500' : status?.connected ? 'bg-green-500' : 'bg-gray-400'}`}></span>
             <span className="text-sm font-medium text-foreground/80">
-              {status?.connected ? (
+              {error ? (
+                'Connection Error'
+              ) : status?.connected ? (
                 <>Connected{status.email ? ` as ${status.email}` : ''}</>
               ) : (
                 'Not Connected'
@@ -138,7 +140,10 @@ export function GoogleDriveConnectionCard({ showManageButton = true }: Props) {
             </span>
           </div>
           <p className="text-muted-foreground">
-            Connect to Google Drive to access files in all your sessions via MCP
+            {error 
+              ? 'Failed to check connection status. Please try again.'
+              : 'Connect to Google Drive to access files in all your sessions via MCP'
+            }
           </p>
         </div>
 
