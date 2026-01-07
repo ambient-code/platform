@@ -93,9 +93,6 @@ func registerRoutes(r *gin.Engine) {
 			// MCP status endpoint
 			projectGroup.GET("/agentic-sessions/:sessionName/mcp/status", websocket.HandleMCPStatus)
 
-			// MCP status endpoint
-			projectGroup.GET("/agentic-sessions/:sessionName/mcp/status", websocket.HandleMCPStatus)
-
 			// Session export
 			projectGroup.GET("/agentic-sessions/:sessionName/export", websocket.HandleExportSession)
 
