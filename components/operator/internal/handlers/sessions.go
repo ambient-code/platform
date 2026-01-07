@@ -2115,6 +2115,7 @@ func copySecretToNamespace(ctx context.Context, sourceSecret *corev1.Secret, tar
 }
 
 // deleteAmbientVertexSecret deletes the ambient-vertex secret from a namespace if it was copied
+// and no other active sessions in the namespace still need it.
 func deleteAmbientVertexSecret(ctx context.Context, namespace string) error {
 	secret, err := config.K8sClient.CoreV1().Secrets(namespace).Get(ctx, types.AmbientVertexSecretName, v1.GetOptions{})
 	if err != nil {
@@ -2131,7 +2132,36 @@ func deleteAmbientVertexSecret(ctx context.Context, namespace string) error {
 		return nil
 	}
 
-	log.Printf("Deleting copied %s secret from namespace %s", types.AmbientVertexSecretName, namespace)
+	// Check if there are other active sessions in this namespace that might need this secret
+	// Don't delete the shared secret if other sessions are Running, Creating, or Pending
+	gvr := types.GetAgenticSessionResource()
+	sessions, err := config.DynamicClient.Resource(gvr).Namespace(namespace).List(ctx, v1.ListOptions{})
+	if err != nil {
+		log.Printf("Warning: failed to list sessions in namespace %s, skipping secret deletion: %v", namespace, err)
+		return nil // Don't delete if we can't verify no other sessions need it
+	}
+
+	activeCount := 0
+	for _, session := range sessions.Items {
+		status, _, _ := unstructured.NestedMap(session.Object, "status")
+		phase := ""
+		if status != nil {
+			if p, ok := status["phase"].(string); ok {
+				phase = p
+			}
+		}
+		// Count sessions that are active and might need the vertex secret
+		if phase == "Running" || phase == "Creating" || phase == "Pending" {
+			activeCount++
+		}
+	}
+
+	if activeCount > 0 {
+		log.Printf("Skipping %s secret deletion in namespace %s: %d active session(s) may still need it", types.AmbientVertexSecretName, namespace, activeCount)
+		return nil
+	}
+
+	log.Printf("Deleting copied %s secret from namespace %s (no active sessions)", types.AmbientVertexSecretName, namespace)
 	err = config.K8sClient.CoreV1().Secrets(namespace).Delete(ctx, types.AmbientVertexSecretName, v1.DeleteOptions{})
 	if err != nil && !errors.IsNotFound(err) {
 		return fmt.Errorf("failed to delete %s secret: %w", types.AmbientVertexSecretName, err)
@@ -2141,6 +2171,7 @@ func deleteAmbientVertexSecret(ctx context.Context, namespace string) error {
 }
 
 // deleteAmbientLangfuseSecret deletes the ambient-admin-langfuse-secret from a namespace if it was copied
+// and no other active sessions in the namespace still need it.
 func deleteAmbientLangfuseSecret(ctx context.Context, namespace string) error {
 	const langfuseSecretName = "ambient-admin-langfuse-secret"
 	secret, err := config.K8sClient.CoreV1().Secrets(namespace).Get(ctx, langfuseSecretName, v1.GetOptions{})
@@ -2158,7 +2189,36 @@ func deleteAmbientLangfuseSecret(ctx context.Context, namespace string) error {
 		return nil
 	}
 
-	log.Printf("Deleting copied %s secret from namespace %s", langfuseSecretName, namespace)
+	// Check if there are other active sessions in this namespace that might need this secret
+	// Don't delete the shared secret if other sessions are Running, Creating, or Pending
+	gvr := types.GetAgenticSessionResource()
+	sessions, err := config.DynamicClient.Resource(gvr).Namespace(namespace).List(ctx, v1.ListOptions{})
+	if err != nil {
+		log.Printf("Warning: failed to list sessions in namespace %s, skipping secret deletion: %v", namespace, err)
+		return nil // Don't delete if we can't verify no other sessions need it
+	}
+
+	activeCount := 0
+	for _, session := range sessions.Items {
+		status, _, _ := unstructured.NestedMap(session.Object, "status")
+		phase := ""
+		if status != nil {
+			if p, ok := status["phase"].(string); ok {
+				phase = p
+			}
+		}
+		// Count sessions that are active and might need the langfuse secret
+		if phase == "Running" || phase == "Creating" || phase == "Pending" {
+			activeCount++
+		}
+	}
+
+	if activeCount > 0 {
+		log.Printf("Skipping %s secret deletion in namespace %s: %d active session(s) may still need it", langfuseSecretName, namespace, activeCount)
+		return nil
+	}
+
+	log.Printf("Deleting copied %s secret from namespace %s (no active sessions)", langfuseSecretName, namespace)
 	err = config.K8sClient.CoreV1().Secrets(namespace).Delete(ctx, langfuseSecretName, v1.DeleteOptions{})
 	if err != nil && !errors.IsNotFound(err) {
 		return fmt.Errorf("failed to delete %s secret: %w", langfuseSecretName, err)
