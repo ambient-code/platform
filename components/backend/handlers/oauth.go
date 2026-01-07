@@ -311,8 +311,9 @@ func HandleOAuth2Callback(c *gin.Context) {
 				// Handle cluster-level Google OAuth
 				if err := HandleGoogleOAuthCallback(c.Request.Context(), code, stateMap); err != nil {
 					log.Printf("Cluster-level OAuth failed: %v", err)
+					// Return generic error to client, details logged server-side only
 					c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(
-						"<html><body><h1>Authorization Error</h1><p>Provider: "+provider+"</p><p><strong>Error:</strong> "+err.Error()+"</p><p>You can close this window.</p><script>window.close();</script></body></html>",
+						"<html><body><h1>Authorization Error</h1><p>Failed to connect Google Drive. Please try again.</p><p>You can close this window.</p><script>window.close();</script></body></html>",
 					))
 					return
 				}
