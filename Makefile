@@ -594,22 +594,77 @@ clean: ## Clean up Kubernetes resources
 	@cd components/manifests && ./deploy.sh clean
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Cleanup complete"
 
-##@ E2E Testing (kind-based)
+##@ Kind Local Development
 
-e2e-test: ## Run complete e2e test suite (setup, deploy, test, cleanup)
+kind-up: ## Start kind cluster with Quay.io images (production-like)
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Starting kind cluster..."
+	@cd e2e && CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/setup-kind.sh
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for ingress admission webhook..."
+	@sleep 5
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Deploying with Quay.io images..."
+	@kubectl apply -k components/manifests/overlays/kind/
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for pods..."
+	@cd e2e && ./scripts/wait-for-ready.sh
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Initializing MinIO..."
+	@cd e2e && ./scripts/init-minio.sh
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Extracting test token..."
+	@cd e2e && CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/extract-token.sh
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Kind cluster ready!"
+	@echo ""
+	@echo "Access the platform:"
+	@echo "  Frontend: http://localhost:8080 (podman) or http://localhost (docker)"
+	@echo "  Get test token: kubectl get secret test-user-token -n ambient-code -o jsonpath='{.data.token}' | base64 -d"
+	@echo ""
+	@echo "Run tests:"
+	@echo "  make test-e2e"
+
+kind-refresh: ## Reload e2e/.env changes to running cluster (update images/secrets)
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Refreshing kind cluster with .env changes..."
+	@if ! kubectl get ns ambient-code >/dev/null 2>&1; then \
+		echo "$(COLOR_RED)✗$(COLOR_RESET) No kind cluster running. Run 'make kind-up' first."; \
+		exit 1; \
+	fi
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Updating secrets and deployments..."
+	@cd e2e && ./scripts/refresh-env.sh
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for pods to restart..."
+	@cd e2e && ./scripts/wait-for-ready.sh
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Cluster refreshed!"
+	@echo ""
+	@echo "Test changes:"
+	@echo "  make test-e2e"
+
+kind-down: ## Stop and delete kind cluster
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Cleaning up kind cluster..."
+	@cd e2e && CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/cleanup.sh
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Kind cluster deleted"
+
+##@ E2E Testing (Portable)
+
+test-e2e: ## Run e2e tests against current CYPRESS_BASE_URL
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Running e2e tests..."
-	@cd e2e && CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/cleanup.sh 2>/dev/null || true
-	cd e2e && CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/setup-kind.sh
-	cd e2e && CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/deploy.sh
+	@if [ ! -f e2e/.env.test ] && [ -z "$(CYPRESS_BASE_URL)" ]; then \
+		echo "$(COLOR_RED)✗$(COLOR_RESET) No .env.test found and CYPRESS_BASE_URL not set"; \
+		echo "   Run 'make kind-up' first or set CYPRESS_BASE_URL"; \
+		exit 1; \
+	fi
+	cd e2e && ./scripts/run-tests.sh
+
+test-e2e-local: ## Run complete e2e test suite with kind (setup, deploy, test, cleanup)
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Running e2e tests with kind (local)..."
+	@$(MAKE) kind-dev CONTAINER_ENGINE=$(CONTAINER_ENGINE)
 	@cd e2e && trap 'CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/cleanup.sh' EXIT; ./scripts/run-tests.sh
 
-e2e-setup: ## Install e2e test dependencies
+e2e-test: test-e2e-local ## Alias for test-e2e-local (backward compatibility)
+
+test-e2e-setup: ## Install e2e test dependencies
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Installing e2e test dependencies..."
 	cd e2e && npm install
 
-e2e-clean: ## Clean up e2e test environment
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Cleaning up e2e environment..."
-	cd e2e && CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/cleanup.sh
+e2e-setup: test-e2e-setup ## Alias for test-e2e-setup (backward compatibility)
+
+kind-clean: kind-down ## Alias for kind-down
+
+e2e-clean: kind-down ## Alias for kind-down (backward compatibility)
 
 deploy-langfuse-openshift: ## Deploy Langfuse to OpenShift/ROSA cluster
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Deploying Langfuse to OpenShift cluster..."

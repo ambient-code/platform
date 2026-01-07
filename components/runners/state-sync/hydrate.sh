@@ -59,13 +59,18 @@ echo "========================================="
 echo "Creating workspace structure..."
 # .claude is mounted at /app/.claude via SubPath (same location as runner container)
 mkdir -p "${CLAUDE_DATA_PATH}" || error_exit "Failed to create .claude directory"
+mkdir -p "${CLAUDE_DATA_PATH}/debug" || error_exit "Failed to create .claude/debug directory"
 mkdir -p /workspace/artifacts || error_exit "Failed to create artifacts directory"
 mkdir -p /workspace/file-uploads || error_exit "Failed to create file-uploads directory"
 mkdir -p /workspace/repos || error_exit "Failed to create repos directory"
 
-# Set permissions on created directories (not root workspace which may be owned by different user)
-# Use 755 instead of 777 - readable by all, writable only by owner
-chmod 755 "${CLAUDE_DATA_PATH}" /workspace/artifacts /workspace/file-uploads /workspace/repos 2>/dev/null || true
+# Set permissions for .claude (must be writable by user 1001)
+# Use 777 since we can't chown without root privileges
+# fsGroup:0 ensures files created by any container are in group 0
+chmod -R 777 "${CLAUDE_DATA_PATH}" || error_exit "Failed to set permissions on .claude"
+
+# Other directories - standard permissions
+chmod 755 /workspace/artifacts /workspace/file-uploads /workspace/repos 2>/dev/null || true
 
 # Check if S3 is configured
 if [ -z "${S3_ENDPOINT}" ] || [ -z "${S3_BUCKET}" ] || [ -z "${AWS_ACCESS_KEY_ID}" ] || [ -z "${AWS_SECRET_ACCESS_KEY}" ]; then
@@ -123,9 +128,11 @@ else
     echo "No existing state found, starting fresh session"
 fi
 
-# Set permissions on subdirectories (EmptyDir root may not be chmodable)
+# Set permissions on subdirectories after S3 download (EmptyDir root may not be chmodable)
 echo "Setting permissions on subdirectories..."
-chmod -R 755 "${CLAUDE_DATA_PATH}" /workspace/artifacts /workspace/file-uploads /workspace/repos 2>/dev/null || true
+# .claude needs to be writable by user 1001 (runner container) - use 777
+chmod -R 777 "${CLAUDE_DATA_PATH}" 2>/dev/null || true
+chmod -R 755 /workspace/artifacts /workspace/file-uploads /workspace/repos 2>/dev/null || true
 
 # ========================================
 # Clone repositories and workflows

@@ -86,4 +86,4 @@ make deploy
 make deploy NAMESPACE=my-namespace
 ```
 
-For detailed deployment instructions, see [../docs/OPENSHIFT_DEPLOY.md](../docs/OPENSHIFT_DEPLOY.md).
+For detailed deployment instructions, see [../docs/deployment/OPENSHIFT_DEPLOY.md](../docs/deployment/OPENSHIFT_DEPLOY.md).

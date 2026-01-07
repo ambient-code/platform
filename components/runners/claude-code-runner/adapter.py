@@ -1293,19 +1293,21 @@ class ClaudeCodeAdapter:
     def _load_mcp_config(self, cwd_path: str) -> Optional[dict]:
         """Load MCP server configuration from the ambient runner's .mcp.json file."""
         try:
-            runner_mcp_file = Path("/app/claude-runner/.mcp.json")
+            # Allow override via MCP_CONFIG_FILE env var (useful for e2e with minimal MCPs)
+            mcp_config_file = self.context.get_env('MCP_CONFIG_FILE', '/app/claude-runner/.mcp.json')
+            runner_mcp_file = Path(mcp_config_file)
 
             if runner_mcp_file.exists() and runner_mcp_file.is_file():
-                logger.info(f"Loading MCP config from runner directory: {runner_mcp_file}")
+                logger.info(f"Loading MCP config from: {runner_mcp_file}")
                 with open(runner_mcp_file, 'r') as f:
                     config = _json.load(f)
                     return config.get('mcpServers', {})
             else:
-                logger.info("No .mcp.json file found in runner directory")
+                logger.info(f"No MCP config file found at: {runner_mcp_file}")
                 return None
 
         except _json.JSONDecodeError as e:
-            logger.error(f"Failed to parse .mcp.json: {e}")
+            logger.error(f"Failed to parse MCP config: {e}")
             return None
         except Exception as e:
             logger.error(f"Error loading MCP config: {e}")

@@ -1,6 +1,12 @@
-# Quick Start Guide
+# Quick Start Guide - Minikube
 
-Get Ambient Code Platform running locally in **under 5 minutes**! 
+> ⚠️ **Note:** This guide uses Minikube, which is an older approach. We now recommend using **[Kind](docs/developer/local-development/kind.md)** for faster startup (~30 seconds vs 2-3 minutes) and better CI/CD compatibility.
+> 
+> **Use Kind instead:** [Kind Quick Start](docs/developer/local-development/kind.md)
+>
+> This Minikube guide is still supported but considered deprecated for new development.
+
+Get Ambient Code Platform running locally with Minikube: 
 
 ## Prerequisites
 
@@ -426,7 +432,7 @@ These are set automatically in `components/manifests/minikube/` deployment files
 ### Optional Integrations
 
 **GitHub App** (for OAuth login and repo browser):
-- Follow: [docs/GITHUB_APP_SETUP.md](docs/GITHUB_APP_SETUP.md)
+- Follow: [docs/integrations/GITHUB_APP_SETUP.md](docs/integrations/GITHUB_APP_SETUP.md)
 - Create secret: `kubectl create secret generic github-app-secret --from-literal=GITHUB_APP_ID=... -n ambient-code`
 - Restart backend: `make local-reload-backend`
 - **Note**: Not required for basic Git operations (use tokens in workspace settings)

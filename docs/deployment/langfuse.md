@@ -1,6 +1,6 @@
-# Langfuse Deployment Scripts
+# Langfuse Deployment
 
-This directory contains scripts for deploying and configuring Langfuse for LLM observability in the Ambient Code Platform.
+This guide covers deploying Langfuse for LLM observability in the Ambient Code Platform.
 
 ## Quick Start
 
@@ -8,11 +8,11 @@ Deploy Langfuse to your cluster:
 
 ```bash
 # Auto-detect platform (OpenShift or Kubernetes)
-./deploy-langfuse.sh
+./e2e/scripts/deploy-langfuse.sh
 
 # Or explicitly specify platform
-./deploy-langfuse.sh --openshift
-./deploy-langfuse.sh --kubernetes
+./e2e/scripts/deploy-langfuse.sh --openshift
+./e2e/scripts/deploy-langfuse.sh --kubernetes
 ```
 
 ## What Gets Deployed
@@ -126,6 +126,7 @@ The `configure-clickhouse-ttl.sh` script sets retention policies on remaining sy
 
 **Manual TTL configuration**:
 ```bash
+cd e2e/scripts
 ./configure-clickhouse-ttl.sh \
   --namespace langfuse \
   --password <clickhouse-password> \
@@ -166,7 +167,7 @@ kubectl logs -n langfuse deployment/langfuse-worker -f
 
 **ClickHouse Disk Space**:
 - Check if TTL configuration succeeded: `kubectl logs -n langfuse <langfuse-web-pod> | grep TTL`
-- Manually run: `./configure-clickhouse-ttl.sh`
+- Manually run: `./e2e/scripts/configure-clickhouse-ttl.sh`
 - Verify minimal logging is enabled in values file
 
 **Masking Not Working**:
@@ -219,6 +220,7 @@ kubectl delete namespace langfuse
 ## References
 
 - **Langfuse Documentation**: https://langfuse.com/docs
-- **Platform Docs**: See `CLAUDE.md` - "Langfuse Observability" section
+- **Platform Docs**: See [CLAUDE.md](../../CLAUDE.md) - "Langfuse Observability" section
 - **Implementation**: `components/runners/claude-code-runner/observability.py`
 - **Tests**: `components/runners/claude-code-runner/tests/test_privacy_masking.py`
+- **Deployment Script**: `e2e/scripts/deploy-langfuse.sh`

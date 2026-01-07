@@ -8,8 +8,8 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-  - host: vteam.local
-    http:
+  # No host specified - accepts requests on any hostname (localhost, vteam.local, etc.)
+  - http:
       paths:
       - path: /
         pathType: Prefix

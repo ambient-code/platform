@@ -2,7 +2,7 @@
 set -euo pipefail
 
 echo "======================================"
-echo "Setting up kind cluster for vTeam E2E"
+echo "Setting up kind cluster for Ambient"
 echo "======================================"
 
 # Detect container runtime (prefer explicit CONTAINER_ENGINE, then Docker, then Podman)
@@ -38,8 +38,8 @@ if [ "$CONTAINER_ENGINE" = "podman" ]; then
 fi
 
 # Check if kind cluster already exists
-if kind get clusters 2>/dev/null | grep -q "^vteam-e2e$"; then
-  echo "⚠️  Kind cluster 'vteam-e2e' already exists"
+if kind get clusters 2>/dev/null | grep -q "^ambient-local$"; then
+  echo "⚠️  Kind cluster 'ambient-local' already exists"
   echo "   Run './scripts/cleanup.sh' first to remove it"
   exit 1
 fi
@@ -57,7 +57,7 @@ else
   HTTPS_PORT=443
 fi
 
-cat <<EOF | kind create cluster --name vteam-e2e --config=-
+cat <<EOF | kind create cluster --name ambient-local --config=-
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 nodes:
@@ -79,7 +79,9 @@ EOF
 
 echo ""
 echo "Installing nginx-ingress controller..."
-kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+# Use --validate=false to work around API server connectivity issues with remote podman
+# (API server may not be accessible from host immediately after cluster creation)
+kubectl apply --validate=false -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
 
 echo ""
 echo "Waiting for ingress controller to be ready..."
@@ -121,28 +123,12 @@ kubectl wait --namespace ingress-nginx \
   --timeout=120s
 
 echo ""
-echo "Adding vteam.local to /etc/hosts..."
-if grep -q "vteam.local" /etc/hosts 2>/dev/null; then
-  echo "   vteam.local already in /etc/hosts"
-else
-  # In CI, sudo typically doesn't require password (NOPASSWD configured)
-  # Locally, user will be prompted for password
-  if echo "127.0.0.1 vteam.local" | sudo tee -a /etc/hosts > /dev/null 2>&1; then
-    echo "   ✓ Added vteam.local to /etc/hosts"
-  else
-    echo "   ⚠️  Warning: Could not modify /etc/hosts (permission denied)"
-    echo "   Tests may fail if DNS resolution doesn't work"
-    echo "   Manual fix: Add '127.0.0.1 vteam.local' to /etc/hosts"
-  fi
-fi
-
-echo ""
 echo "✅ Kind cluster ready!"
-echo "   Cluster: vteam-e2e"
+echo "   Cluster: ambient-local"
 echo "   Ingress: nginx"
 if [ "$CONTAINER_ENGINE" = "podman" ]; then
-  echo "   Access: http://vteam.local:8080"
+  echo "   Access: http://localhost:8080"
 else
-  echo "   Access: http://vteam.local"
+  echo "   Access: http://localhost"
 fi
 

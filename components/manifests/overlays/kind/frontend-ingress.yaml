@@ -1,21 +1,21 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: backend-ingress
+  name: frontend-ingress
   namespace: ambient-code
   labels:
-    app: backend-api
+    app: frontend
 spec:
   ingressClassName: nginx
   rules:
-  - host: vteam.local
-    http:
+  # No host specified - accepts requests on any hostname (localhost, vteam.local, etc.)
+  - http:
       paths:
-      - path: /api
+      - path: /
         pathType: Prefix
         backend:
           service:
-            name: backend-service
+            name: frontend-service
             port:
               name: http
 

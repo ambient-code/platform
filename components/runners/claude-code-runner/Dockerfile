@@ -33,6 +33,7 @@ WORKDIR /app
 # Copy claude-runner package (no separate runner-shell needed)
 COPY claude-code-runner /app/claude-runner
 
+
 # Install runner as a package (pulls dependencies including AG-UI SDK)
 RUN pip install --no-cache-dir /app/claude-runner
 
@@ -60,6 +61,9 @@ RUN echo "umask 0022" >> /etc/profile && \
 
 # OpenShift compatibility
 RUN chmod -R g=u /app && chmod -R g=u /usr/local && chmod g=u /etc/passwd
+
+# Note: .claude directory is mounted as a volume (managed by operator)
+# Permissions are handled via fsGroup in pod SecurityContext
 
 # Run as UID 1001 to match content service (fixes permission issues)
 USER 1001
