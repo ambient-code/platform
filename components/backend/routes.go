@@ -12,15 +12,13 @@ func registerContentRoutes(r *gin.Engine) {
 	r.GET("/content/file", handlers.ContentRead)
 	r.GET("/content/list", handlers.ContentList)
 	r.DELETE("/content/delete", handlers.ContentDelete)
-	r.POST("/content/github/push", handlers.ContentGitPush)
-	r.POST("/content/github/abandon", handlers.ContentGitAbandon)
-	r.GET("/content/github/diff", handlers.ContentGitDiff)
 	r.GET("/content/git-status", handlers.ContentGitStatus)
 	r.POST("/content/git-configure-remote", handlers.ContentGitConfigureRemote)
 	r.GET("/content/workflow-metadata", handlers.ContentWorkflowMetadata)
-	// Removed: /content/git-pull, /content/git-push, /content/git-sync - agent handles all git operations
-	r.POST("/content/git-create-branch", handlers.ContentGitCreateBranch)
-	r.GET("/content/git-list-branches", handlers.ContentGitListBranches)
+	// Removed: All manual git operation endpoints - agent handles all git operations
+	// - /content/github/push, /content/github/abandon, /content/github/diff
+	// - /content/git-pull, /content/git-push, /content/git-sync
+	// - /content/git-create-branch, /content/git-list-branches
 }
 
 func registerRoutes(r *gin.Engine) {
