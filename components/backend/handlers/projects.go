@@ -989,19 +989,24 @@ func getUserSubjectNamespace(subject string) string {
 // GET /api/projects/:projectName/integration-status
 func GetProjectIntegrationStatus(c *gin.Context) {
 	project := c.GetString("project")
-	k8sClt, k8sDyn := GetK8sClientsForRequest(c)
-	if k8sClt == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
-		return
-	}
-
+	
+	// Verify user has access to project (handled by ValidateProjectContext middleware)
+	// But use backend service account to check secret existence (users can't read secrets directly)
+	
 	ctx := c.Request.Context()
 
-	// Check GitHub integration (GitHub App or GITHUB_TOKEN)
-	// Use a probe userId to check if token can be retrieved
+	// Check GitHub integration (GITHUB_TOKEN in integration secret)
+	// Use backend SA client since users don't typically have permission to read secrets
 	githubConfigured := false
-	if _, err := GetGitHubToken(ctx, k8sClt, k8sDyn, project, "probe"); err == nil {
-		githubConfigured = true
+	const secretName = "ambient-non-vertex-integrations"
+	
+	if K8sClientProjects != nil {
+		secret, err := K8sClientProjects.CoreV1().Secrets(project).Get(ctx, secretName, v1.GetOptions{})
+		if err == nil && secret.Data != nil {
+			if token, ok := secret.Data["GITHUB_TOKEN"]; ok && len(token) > 0 {
+				githubConfigured = true
+			}
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{

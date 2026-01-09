@@ -29,10 +29,11 @@ var (
 	GitAbandonRepo        func(ctx context.Context, repoDir string) error
 	GitDiffRepo           func(ctx context.Context, repoDir string) (*git.DiffSummary, error)
 	GitCheckMergeStatus   func(ctx context.Context, repoDir, branch, githubToken string) (*git.MergeStatus, error)
-	GitPullRepo           func(ctx context.Context, repoDir, branch string) error
-	GitPushToRepo         func(ctx context.Context, repoDir, branch, commitMessage string) error
+	GitPullRepo           func(ctx context.Context, repoDir, branch, githubToken string) error
+	GitPushToRepo         func(ctx context.Context, repoDir, branch, commitMessage, githubToken string) error
 	GitCreateBranch       func(ctx context.Context, repoDir, branchName string) error
 	GitListRemoteBranches func(ctx context.Context, repoDir string) ([]string, error)
+	GitSyncRepo           func(ctx context.Context, repoDir, commitMessage, branch, githubToken string) error
 )
 
 // getGitHubTokenFromContext extracts GitHub token from request header or environment
@@ -196,6 +197,19 @@ func ContentGitStatus(c *gin.Context) {
 		return
 	}
 
+	// Get current branch
+	branchCmd := exec.CommandContext(c.Request.Context(), "git", "rev-parse", "--abbrev-ref", "HEAD")
+	branchCmd.Dir = abs
+	branchOut, _ := branchCmd.Output()
+	currentBranch := strings.TrimSpace(string(branchOut))
+
+	// Check if remote is configured
+	remoteCmd := exec.CommandContext(c.Request.Context(), "git", "remote", "get-url", "origin")
+	remoteCmd.Dir = abs
+	remoteOut, remoteErr := remoteCmd.Output()
+	remoteURL := strings.TrimSpace(string(remoteOut))
+	hasRemote := remoteErr == nil && remoteURL != ""
+
 	// Get git status using existing git package
 	summary, err := GitDiffRepo(c.Request.Context(), abs)
 	if err != nil {
@@ -203,6 +217,9 @@ func ContentGitStatus(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"initialized": true,
 			"hasChanges":  false,
+			"branch":      currentBranch,
+			"remoteUrl":   remoteURL,
+			"hasRemote":   hasRemote,
 		})
 		return
 	}
@@ -212,6 +229,9 @@ func ContentGitStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"initialized":      true,
 		"hasChanges":       hasChanges,
+		"branch":           currentBranch,
+		"remoteUrl":        remoteURL,
+		"hasRemote":        hasRemote,
 		"filesAdded":       summary.FilesAdded,
 		"filesRemoved":     summary.FilesRemoved,
 		"uncommittedFiles": summary.FilesAdded + summary.FilesRemoved,
@@ -326,8 +346,9 @@ func ContentGitSync(c *gin.Context) {
 		return
 	}
 
-	// Perform git sync operations
-	if err := git.SyncRepo(c.Request.Context(), abs, body.Message, body.Branch); err != nil {
+	// Perform git sync operations with authentication
+	githubToken := getGitHubTokenFromContext(c)
+	if err := GitSyncRepo(c.Request.Context(), abs, body.Message, body.Branch, githubToken); err != nil {
 		// Log actual error for debugging, but return generic message to avoid leaking internal details
 		log.Printf("Internal server error: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
@@ -743,7 +764,8 @@ func ContentGitPull(c *gin.Context) {
 		body.Branch = "main"
 	}
 
-	if err := GitPullRepo(c.Request.Context(), abs, body.Branch); err != nil {
+	githubToken := getGitHubTokenFromContext(c)
+	if err := GitPullRepo(c.Request.Context(), abs, body.Branch, githubToken); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -782,7 +804,8 @@ func ContentGitPushToBranch(c *gin.Context) {
 		body.Message = "Session artifacts update"
 	}
 
-	if err := GitPushToRepo(c.Request.Context(), abs, body.Branch, body.Message); err != nil {
+	githubToken := getGitHubTokenFromContext(c)
+	if err := GitPushToRepo(c.Request.Context(), abs, body.Branch, body.Message, githubToken); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}

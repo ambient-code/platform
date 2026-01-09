@@ -649,7 +649,7 @@ var _ = Describe("Content Handler", Label(test_constants.LabelUnit, test_constan
 	Context("Git Synchronization Operations", func() {
 		Describe("ContentGitPull", func() {
 			It("Should pull changes successfully", func() {
-				GitPullRepo = func(ctx context.Context, repoDir, branch string) error {
+				GitPullRepo = func(ctx context.Context, repoDir, branch, githubToken string) error {
 					Expect(repoDir).To(Equal(filepath.Join(tempStateDir, "test-repo")))
 					Expect(branch).To(Equal("main"))
 					return nil
@@ -672,7 +672,7 @@ var _ = Describe("Content Handler", Label(test_constants.LabelUnit, test_constan
 			})
 
 			It("Should default to main branch when not specified", func() {
-				GitPullRepo = func(ctx context.Context, repoDir, branch string) error {
+				GitPullRepo = func(ctx context.Context, repoDir, branch, githubToken string) error {
 					Expect(branch).To(Equal("main"))
 					return nil
 				}
@@ -691,7 +691,7 @@ var _ = Describe("Content Handler", Label(test_constants.LabelUnit, test_constan
 
 		Describe("ContentGitPushToBranch", func() {
 			It("Should push to branch successfully", func() {
-				GitPushToRepo = func(ctx context.Context, repoDir, branch, commitMessage string) error {
+				GitPushToRepo = func(ctx context.Context, repoDir, branch, commitMessage, githubToken string) error {
 					Expect(repoDir).To(Equal(filepath.Join(tempStateDir, "test-repo")))
 					Expect(branch).To(Equal("feature"))
 					Expect(commitMessage).To(Equal("Custom commit"))
@@ -716,7 +716,7 @@ var _ = Describe("Content Handler", Label(test_constants.LabelUnit, test_constan
 			})
 
 			It("Should use default values when not specified", func() {
-				GitPushToRepo = func(ctx context.Context, repoDir, branch, commitMessage string) error {
+				GitPushToRepo = func(ctx context.Context, repoDir, branch, commitMessage, githubToken string) error {
 					Expect(branch).To(Equal("main"))
 					Expect(commitMessage).To(Equal("Session artifacts update"))
 					return nil

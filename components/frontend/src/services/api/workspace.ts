@@ -218,11 +218,6 @@ export async function gitListBranches(
 export type GitStatus = {
   branch?: string;
   remoteUrl?: string;
-  ahead?: number;
-  behind?: number;
-  staged?: number;
-  unstaged?: number;
-  untracked?: number;
   hasRemote?: boolean;
   initialized?: boolean;
   hasChanges?: boolean;
