@@ -542,12 +542,13 @@ async def change_workflow(request: Request):
     return {"message": "Workflow updated", "gitUrl": git_url, "branch": branch, "path": path}
 
 
-async def clone_repo_at_runtime(git_url: str, branch: str, name: str) -> tuple[bool, str]:
+async def clone_repo_at_runtime(git_url: str, branch: str, name: str) -> tuple[bool, str, bool]:
     """
-    Clone a repository at runtime.
+    Clone a repository at runtime and create a feature branch.
     
     This mirrors the logic in hydrate.sh but runs when repos are added
-    after the pod has started.
+    after the pod has started. After cloning, creates and checks out a
+    feature branch named 'ambient/<session-id>'.
     
     Args:
         git_url: Git repository URL
@@ -555,14 +556,17 @@ async def clone_repo_at_runtime(git_url: str, branch: str, name: str) -> tuple[b
         name: Name for the cloned directory (derived from URL if empty)
     
     Returns:
-        (success, repo_dir_path) tuple
+        (success, repo_dir_path, was_newly_cloned) tuple
+        - success: True if repo is available (either newly cloned or already existed)
+        - repo_dir_path: Path to the repo directory
+        - was_newly_cloned: True only if the repo was actually cloned this time
     """
     import tempfile
     import shutil
     from pathlib import Path
     
     if not git_url:
-        return False, ""
+        return False, "", False
     
     # Derive repo name from URL if not provided
     if not name:
@@ -576,10 +580,10 @@ async def clone_repo_at_runtime(git_url: str, branch: str, name: str) -> tuple[b
     
     logger.info(f"Cloning repo '{name}' from {git_url}@{branch}")
     
-    # Skip if already cloned
+    # Skip if already cloned - not newly cloned
     if repo_final.exists():
         logger.info(f"Repo '{name}' already exists at {repo_final}, skipping clone")
-        return True, str(repo_final)
+        return True, str(repo_final), False  # Already existed, not newly cloned
     
     # Create temp directory for clone
     temp_dir = Path(tempfile.mkdtemp(prefix="repo-clone-"))
@@ -600,9 +604,9 @@ async def clone_repo_at_runtime(git_url: str, branch: str, name: str) -> tuple[b
             clone_url = git_url.replace("https://", f"https://oauth2:{gitlab_token}@")
             logger.info("Using GITLAB_TOKEN for authentication")
         
-        # Clone the repository
+        # Clone the repository (no --depth 1 to allow full branch operations)
         process = await asyncio.create_subprocess_exec(
-            "git", "clone", "--branch", branch, "--single-branch", "--depth", "1",
+            "git", "clone", "--branch", branch, "--single-branch",
             clone_url, str(temp_dir),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
@@ -617,20 +621,41 @@ async def clone_repo_at_runtime(git_url: str, branch: str, name: str) -> tuple[b
             if gitlab_token:
                 error_msg = error_msg.replace(gitlab_token, "***REDACTED***")
             logger.error(f"Failed to clone repo: {error_msg}")
-            return False, ""
+            return False, "", False
         
-        logger.info("Clone successful, moving to final location...")
+        logger.info("Clone successful, creating feature branch...")
+        
+        # Create and checkout feature branch: ambient/<session-id>
+        session_id = os.getenv("AGENTIC_SESSION_NAME", "").strip()
+        if session_id:
+            feature_branch = f"ambient/{session_id}"
+            checkout_process = await asyncio.create_subprocess_exec(
+                "git", "checkout", "-b", feature_branch,
+                cwd=str(temp_dir),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            checkout_stdout, checkout_stderr = await checkout_process.communicate()
+            
+            if checkout_process.returncode != 0:
+                logger.warning(f"Failed to create feature branch '{feature_branch}': {checkout_stderr.decode()}")
+                # Continue anyway - repo is still usable on the original branch
+            else:
+                logger.info(f"Created and checked out feature branch: {feature_branch}")
+        else:
+            logger.warning("AGENTIC_SESSION_NAME not set, skipping feature branch creation")
         
         # Move to final location
+        logger.info("Moving to final location...")
         repo_final.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(temp_dir), str(repo_final))
         
         logger.info(f"Repo '{name}' ready at {repo_final}")
-        return True, str(repo_final)
+        return True, str(repo_final), True  # Newly cloned
         
     except Exception as e:
         logger.error(f"Error cloning repo: {e}")
-        return False, ""
+        return False, "", False
     finally:
         # Cleanup temp directory if it still exists
         if temp_dir.exists():
@@ -725,38 +750,43 @@ async def add_repo(request: Request):
         name = url.split("/")[-1].removesuffix(".git")
     
     # Clone the repository at runtime
-    success, repo_path = await clone_repo_at_runtime(url, branch, name)
+    success, repo_path, was_newly_cloned = await clone_repo_at_runtime(url, branch, name)
     if not success:
         raise HTTPException(status_code=500, detail=f"Failed to clone repository: {url}")
     
-    # Update REPOS_JSON env var
-    repos_json = os.getenv("REPOS_JSON", "[]")
-    try:
-        repos = json.loads(repos_json) if repos_json else []
-    except:
-        repos = []
+    # Only update state and trigger notification if repo was newly cloned
+    # This prevents duplicate notifications when both backend and operator call this endpoint
+    if was_newly_cloned:
+        # Update REPOS_JSON env var
+        repos_json = os.getenv("REPOS_JSON", "[]")
+        try:
+            repos = json.loads(repos_json) if repos_json else []
+        except:
+            repos = []
+        
+        # Add new repo
+        repos.append({
+            "name": name,
+            "input": {
+                "url": url,
+                "branch": branch
+            }
+        })
+        
+        os.environ["REPOS_JSON"] = json.dumps(repos)
+        
+        # Reset adapter state to force reinitialization on next run
+        _adapter_initialized = False
+        adapter._first_run = True
+        
+        logger.info(f"Repo '{name}' added and cloned, adapter will reinitialize on next run")
+        
+        # Trigger a notification to Claude about the new repository
+        asyncio.create_task(trigger_repo_added_notification(name, url))
+    else:
+        logger.info(f"Repo '{name}' already existed, skipping notification (idempotent call)")
     
-    # Add new repo
-    repos.append({
-        "name": name,
-        "input": {
-            "url": url,
-            "branch": branch
-        }
-    })
-    
-    os.environ["REPOS_JSON"] = json.dumps(repos)
-    
-    # Reset adapter state to force reinitialization on next run
-    _adapter_initialized = False
-    adapter._first_run = True
-    
-    logger.info(f"Repo '{name}' added and cloned, adapter will reinitialize on next run")
-    
-    # Trigger a notification to Claude about the new repository
-    asyncio.create_task(trigger_repo_added_notification(name, url))
-    
-    return {"message": "Repository added", "name": name, "path": repo_path}
+    return {"message": "Repository added", "name": name, "path": repo_path, "newly_cloned": was_newly_cloned}
 
 
 async def trigger_repo_added_notification(repo_name: str, repo_url: str):
