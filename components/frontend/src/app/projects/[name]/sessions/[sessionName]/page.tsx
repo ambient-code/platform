@@ -341,7 +341,7 @@ export default function ProjectSessionDetailPage({
 
   // Repo management mutations
   const addRepoMutation = useMutation({
-    mutationFn: async (repo: { url: string; branch: string }) => {
+    mutationFn: async (repo: { url: string; branch: string; autoPush?: boolean }) => {
       setRepoChanging(true);
       const response = await fetch(
         `/api/projects/${projectName}/agentic-sessions/${sessionName}/repos`,
@@ -2041,8 +2041,8 @@ export default function ProjectSessionDetailPage({
       <AddContextModal
         open={contextModalOpen}
         onOpenChange={setContextModalOpen}
-        onAddRepository={async (url, branch) => {
-          await addRepoMutation.mutateAsync({ url, branch });
+        onAddRepository={async (url, branch, autoPush) => {
+          await addRepoMutation.mutateAsync({ url, branch, autoPush });
           setContextModalOpen(false);
         }}
         onUploadFile={() => setUploadModalOpen(true)}

@@ -38,6 +38,7 @@ export type LLMSettings = {
 export type SessionRepo = {
   url: string;
   branch?: string;
+  autoPush?: boolean;
 };
 
 export type AgenticSessionSpec = {
@@ -117,7 +118,6 @@ export type CreateAgenticSessionRequest = {
   environmentVariables?: Record<string, string>;
   interactive?: boolean;
   repos?: SessionRepo[];
-  autoPushOnComplete?: boolean;
   userContext?: UserContext;
   labels?: Record<string, string>;
   annotations?: Record<string, string>;

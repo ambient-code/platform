@@ -179,6 +179,11 @@ func parseSpec(spec map[string]interface{}) types.AgenticSessionSpec {
 			if branch, ok := m["branch"].(string); ok && strings.TrimSpace(branch) != "" {
 				r.Branch = types.StringPtr(branch)
 			}
+			// Parse autoPush as optional boolean. Preserve nil to allow CRD default.
+			// nil = use default (false), false = explicit no-push, true = explicit push
+			if autoPush, ok := m["autoPush"].(bool); ok {
+				r.AutoPush = types.BoolPtr(autoPush)
+			}
 			if strings.TrimSpace(r.URL) != "" {
 				repos = append(repos, r)
 			}
@@ -626,11 +631,6 @@ func CreateSession(c *gin.Context) {
 		session["spec"].(map[string]interface{})["interactive"] = *req.Interactive
 	}
 
-	// AutoPushOnComplete flag
-	if req.AutoPushOnComplete != nil {
-		session["spec"].(map[string]interface{})["autoPushOnComplete"] = *req.AutoPushOnComplete
-	}
-
 	// Set multi-repo configuration on spec (simplified format)
 	{
 		spec := session["spec"].(map[string]interface{})
@@ -640,6 +640,9 @@ func CreateSession(c *gin.Context) {
 				m := map[string]interface{}{"url": r.URL}
 				if r.Branch != nil {
 					m["branch"] = *r.Branch
+				}
+				if r.AutoPush != nil {
+					m["autoPush"] = *r.AutoPush
 				}
 				arr = append(arr, m)
 			}
@@ -1296,8 +1299,9 @@ func AddRepo(c *gin.Context) {
 	}
 
 	var req struct {
-		URL    string `json:"url" binding:"required"`
-		Branch string `json:"branch"`
+		URL      string `json:"url" binding:"required"`
+		Branch   string `json:"branch"`
+		AutoPush *bool  `json:"autoPush,omitempty"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -1386,6 +1390,9 @@ func AddRepo(c *gin.Context) {
 	newRepo := map[string]interface{}{
 		"url":    req.URL,
 		"branch": req.Branch,
+	}
+	if req.AutoPush != nil {
+		newRepo["autoPush"] = *req.AutoPush
 	}
 	repos = append(repos, newRepo)
 	spec["repos"] = repos

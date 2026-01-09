@@ -686,9 +686,6 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 		})
 	}
 
-	// Read autoPushOnComplete flag
-	autoPushOnComplete, _, _ := unstructured.NestedBool(spec, "autoPushOnComplete")
-
 	// Extract userContext for observability and auditing
 	userID := ""
 	userName := ""
@@ -924,7 +921,6 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 							corev1.EnvVar{Name: "LLM_MAX_TOKENS", Value: fmt.Sprintf("%d", maxTokens)},
 							corev1.EnvVar{Name: "USE_AGUI", Value: "true"},
 							corev1.EnvVar{Name: "TIMEOUT", Value: fmt.Sprintf("%d", timeout)},
-							corev1.EnvVar{Name: "AUTO_PUSH_ON_COMPLETE", Value: fmt.Sprintf("%t", autoPushOnComplete)},
 							corev1.EnvVar{Name: "BACKEND_API_URL", Value: fmt.Sprintf("http://backend-service.%s.svc.cluster.local:8080/api", appConfig.BackendNamespace)},
 							// LEGACY: WEBSOCKET_URL removed - runner now uses AG-UI server pattern (FastAPI)
 							// Backend proxies to runner's HTTP endpoint instead of WebSocket

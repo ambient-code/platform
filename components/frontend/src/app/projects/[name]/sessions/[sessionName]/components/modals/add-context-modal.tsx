@@ -6,13 +6,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 
 type AddContextModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onAddRepository: (url: string, branch: string) => Promise<void>;
+  onAddRepository: (url: string, branch: string, autoPush?: boolean) => Promise<void>;
   onUploadFile?: () => void;
   isLoading?: boolean;
 };
@@ -26,20 +27,23 @@ export function AddContextModal({
 }: AddContextModalProps) {
   const [contextUrl, setContextUrl] = useState("");
   const [contextBranch, setContextBranch] = useState("main");
+  const [autoPush, setAutoPush] = useState(false);
 
   const handleSubmit = async () => {
     if (!contextUrl.trim()) return;
-    
-    await onAddRepository(contextUrl.trim(), contextBranch.trim() || 'main');
-    
+
+    await onAddRepository(contextUrl.trim(), contextBranch.trim() || 'main', autoPush);
+
     // Reset form
     setContextUrl("");
     setContextBranch("main");
+    setAutoPush(false);
   };
 
   const handleCancel = () => {
     setContextUrl("");
     setContextBranch("main");
+    setAutoPush(false);
     onOpenChange(false);
   };
 
@@ -85,6 +89,27 @@ export function AddContextModal({
             <p className="text-xs text-muted-foreground">
               Leave empty to use the default branch
             </p>
+          </div>
+
+          <div className="flex items-start space-x-2">
+            <Checkbox
+              id="auto-push"
+              checked={autoPush}
+              onCheckedChange={(checked) => setAutoPush(checked === true)}
+            />
+            <div className="space-y-1">
+              <Label
+                htmlFor="auto-push"
+                className="text-sm font-normal cursor-pointer"
+              >
+                Enable auto-push
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Instructs Claude to commit and push changes made to this
+                repository during the session. Requires git credentials to be
+                configured.
+              </p>
+            </div>
           </div>
 
           {onUploadFile && (

@@ -16,6 +16,7 @@ export type GitRepository = {
 export type SessionRepo = {
     url: string;
     branch?: string;
+    autoPush?: boolean;
 };
 
 export type AgenticSessionSpec = {
@@ -184,7 +185,6 @@ export type CreateAgenticSessionRequest = {
 	interactive?: boolean;
 	// Multi-repo support
 	repos?: SessionRepo[];
-	autoPushOnComplete?: boolean;
 	labels?: Record<string, string>;
 	annotations?: Record<string, string>;
 };

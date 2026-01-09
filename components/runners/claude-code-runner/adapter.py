@@ -1176,7 +1176,11 @@ class ClaudeCodeAdapter:
         return "", "", host
 
     def _get_repos_config(self) -> list[dict]:
-        """Read repos mapping from REPOS_JSON env if present."""
+        """Read repos mapping from REPOS_JSON env if present.
+
+        Expected format: [{"url": "...", "branch": "main", "autoPush": true}, ...]
+        Returns: [{"name": "repo-name", "url": "...", "branch": "...", "autoPush": bool}, ...]
+        """
         try:
             raw = os.getenv('REPOS_JSON', '').strip()
             if not raw:
@@ -1187,11 +1191,20 @@ class ClaudeCodeAdapter:
                 for it in data:
                     if not isinstance(it, dict):
                         continue
+
+                    # Extract simple format fields
+                    url = str(it.get('url') or '').strip()
+                    branch = str(it.get('branch') or 'main').strip()
+                    # Parse autoPush as boolean, defaulting to False for invalid types
+                    auto_push_raw = it.get('autoPush', False)
+                    auto_push = auto_push_raw if isinstance(auto_push_raw, bool) else False
+
+                    if not url:
+                        continue
+
+                    # Derive repo name from URL if not provided
                     name = str(it.get('name') or '').strip()
-                    input_obj = it.get('input') or {}
-                    output_obj = it.get('output') or None
-                    url = str((input_obj or {}).get('url') or '').strip()
-                    if not name and url:
+                    if not name:
                         try:
                             owner, repo, _ = self._parse_owner_repo(url)
                             derived = repo or ''
@@ -1203,8 +1216,14 @@ class ClaudeCodeAdapter:
                             name = (derived or '').removesuffix('.git').strip()
                         except Exception:
                             name = ''
-                    if name and isinstance(input_obj, dict) and url:
-                        out.append({'name': name, 'input': input_obj, 'output': output_obj})
+
+                    if name and url:
+                        out.append({
+                            'name': name,
+                            'url': url,
+                            'branch': branch,
+                            'autoPush': auto_push
+                        })
                 return out
         except Exception:
             return []
@@ -1286,6 +1305,20 @@ class ClaudeCodeAdapter:
                 prompt += f"**Repositories**: {', '.join([f'repos/{name}/' for name in repo_names])}\n\n"
             else:
                 prompt += f"**Repositories** ({len(repo_names)} total): {', '.join([f'repos/{name}/' for name in repo_names[:5]])}, and {len(repo_names) - 5} more\n\n"
+
+            # Add git push instructions for repos with autoPush enabled
+            auto_push_repos = [repo for repo in repos_cfg if repo.get('autoPush', False)]
+            if auto_push_repos:
+                prompt += "## Git Push Instructions\n\n"
+                prompt += "The following repositories have auto-push enabled. When you make changes to these repositories, you MUST commit and push your changes:\n\n"
+                for repo in auto_push_repos:
+                    repo_name = repo.get('name', 'unknown')
+                    repo_branch = repo.get('branch', 'main')
+                    prompt += f"- **repos/{repo_name}/** (branch: {repo_branch})\n"
+                prompt += "\nAfter making changes to any auto-push repository:\n"
+                prompt += "1. Use `git add` to stage your changes\n"
+                prompt += "2. Use `git commit -m \"description\"` to commit with a descriptive message\n"
+                prompt += "3. Use `git push origin <branch>` to push to the remote repository\n\n"
 
         # MCP Integration Setup Instructions
         prompt += "## MCP Integrations\n"
