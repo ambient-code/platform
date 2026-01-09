@@ -17,11 +17,8 @@ func registerContentRoutes(r *gin.Engine) {
 	r.GET("/content/github/diff", handlers.ContentGitDiff)
 	r.GET("/content/git-status", handlers.ContentGitStatus)
 	r.POST("/content/git-configure-remote", handlers.ContentGitConfigureRemote)
-	r.POST("/content/git-sync", handlers.ContentGitSync)
 	r.GET("/content/workflow-metadata", handlers.ContentWorkflowMetadata)
-	r.GET("/content/git-merge-status", handlers.ContentGitMergeStatus)
-	r.POST("/content/git-pull", handlers.ContentGitPull)
-	r.POST("/content/git-push", handlers.ContentGitPushToBranch)
+	// Removed: /content/git-pull, /content/git-push, /content/git-sync - agent handles all git operations
 	r.POST("/content/git-create-branch", handlers.ContentGitCreateBranch)
 	r.GET("/content/git-list-branches", handlers.ContentGitListBranches)
 }
@@ -61,16 +58,10 @@ func registerRoutes(r *gin.Engine) {
 			projectGroup.GET("/agentic-sessions/:sessionName/workspace/*path", handlers.GetSessionWorkspaceFile)
 			projectGroup.PUT("/agentic-sessions/:sessionName/workspace/*path", handlers.PutSessionWorkspaceFile)
 			projectGroup.DELETE("/agentic-sessions/:sessionName/workspace/*path", handlers.DeleteSessionWorkspaceFile)
-			projectGroup.POST("/agentic-sessions/:sessionName/github/push", handlers.PushSessionRepo)
-			projectGroup.POST("/agentic-sessions/:sessionName/github/abandon", handlers.AbandonSessionRepo)
-			projectGroup.GET("/agentic-sessions/:sessionName/github/diff", handlers.DiffSessionRepo)
+			// Removed: github/push, github/abandon, github/diff - agent handles all git operations
 			projectGroup.GET("/agentic-sessions/:sessionName/git/status", handlers.GetGitStatus)
 			projectGroup.POST("/agentic-sessions/:sessionName/git/configure-remote", handlers.ConfigureGitRemote)
-			projectGroup.POST("/agentic-sessions/:sessionName/git/synchronize", handlers.SynchronizeGit)
-			projectGroup.GET("/agentic-sessions/:sessionName/git/merge-status", handlers.GetGitMergeStatus)
-			projectGroup.POST("/agentic-sessions/:sessionName/git/pull", handlers.GitPullSession)
-			projectGroup.POST("/agentic-sessions/:sessionName/git/push", handlers.GitPushSession)
-			projectGroup.POST("/agentic-sessions/:sessionName/git/create-branch", handlers.GitCreateBranchSession)
+			// Removed: git/pull, git/push, git/synchronize, git/create-branch, git/list-branches - agent handles all git operations
 			projectGroup.GET("/agentic-sessions/:sessionName/git/list-branches", handlers.GitListBranchesSession)
 			projectGroup.GET("/agentic-sessions/:sessionName/k8s-resources", handlers.GetSessionK8sResources)
 			projectGroup.POST("/agentic-sessions/:sessionName/workflow", handlers.SelectWorkflow)

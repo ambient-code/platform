@@ -989,17 +989,17 @@ func getUserSubjectNamespace(subject string) string {
 // GET /api/projects/:projectName/integration-status
 func GetProjectIntegrationStatus(c *gin.Context) {
 	project := c.GetString("project")
-	
+
 	// Verify user has access to project (handled by ValidateProjectContext middleware)
 	// But use backend service account to check secret existence (users can't read secrets directly)
-	
+
 	ctx := c.Request.Context()
 
 	// Check GitHub integration (GITHUB_TOKEN in integration secret)
 	// Use backend SA client since users don't typically have permission to read secrets
 	githubConfigured := false
 	const secretName = "ambient-non-vertex-integrations"
-	
+
 	if K8sClientProjects != nil {
 		secret, err := K8sClientProjects.CoreV1().Secrets(project).Get(ctx, secretName, v1.GetOptions{})
 		if err == nil && secret.Data != nil {

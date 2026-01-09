@@ -843,38 +843,38 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 
 			// Flip roles so the content writer is the main container that keeps the pod alive
 			Containers: []corev1.Container{
-			{
-				Name:            "ambient-content",
-				Image:           appConfig.ContentServiceImage,
-				ImagePullPolicy: appConfig.ImagePullPolicy,
-				Env: []corev1.EnvVar{
-					{Name: "CONTENT_SERVICE_MODE", Value: "true"},
-					{Name: "STATE_BASE_DIR", Value: "/workspace"},
-				},
-				// Import integration secrets as environment variables (GITHUB_TOKEN, GITLAB_TOKEN, etc.)
-				EnvFrom: func() []corev1.EnvFromSource {
-					if integrationSecretsExist {
-						return []corev1.EnvFromSource{{
-							SecretRef: &corev1.SecretEnvSource{
-								LocalObjectReference: corev1.LocalObjectReference{Name: integrationSecretsName},
-							},
-						}}
-					}
-					return nil
-				}(),
-				Ports: []corev1.ContainerPort{{ContainerPort: 8080, Name: "http"}},
-				ReadinessProbe: &corev1.Probe{
-					ProbeHandler: corev1.ProbeHandler{
-						HTTPGet: &corev1.HTTPGetAction{
-							Path: "/health",
-							Port: intstr.FromString("http"),
-						},
+				{
+					Name:            "ambient-content",
+					Image:           appConfig.ContentServiceImage,
+					ImagePullPolicy: appConfig.ImagePullPolicy,
+					Env: []corev1.EnvVar{
+						{Name: "CONTENT_SERVICE_MODE", Value: "true"},
+						{Name: "STATE_BASE_DIR", Value: "/workspace"},
 					},
-					InitialDelaySeconds: 5,
-					PeriodSeconds:       5,
+					// Import integration secrets as environment variables (GITHUB_TOKEN, GITLAB_TOKEN, etc.)
+					EnvFrom: func() []corev1.EnvFromSource {
+						if integrationSecretsExist {
+							return []corev1.EnvFromSource{{
+								SecretRef: &corev1.SecretEnvSource{
+									LocalObjectReference: corev1.LocalObjectReference{Name: integrationSecretsName},
+								},
+							}}
+						}
+						return nil
+					}(),
+					Ports: []corev1.ContainerPort{{ContainerPort: 8080, Name: "http"}},
+					ReadinessProbe: &corev1.Probe{
+						ProbeHandler: corev1.ProbeHandler{
+							HTTPGet: &corev1.HTTPGetAction{
+								Path: "/health",
+								Port: intstr.FromString("http"),
+							},
+						},
+						InitialDelaySeconds: 5,
+						PeriodSeconds:       5,
+					},
+					VolumeMounts: []corev1.VolumeMount{{Name: "workspace", MountPath: "/workspace"}},
 				},
-				VolumeMounts: []corev1.VolumeMount{{Name: "workspace", MountPath: "/workspace"}},
-			},
 				{
 					Name:            "ambient-code-runner",
 					Image:           appConfig.AmbientCodeRunnerImage,

@@ -1704,7 +1704,7 @@ func CheckMergeStatus(ctx context.Context, repoDir, branch, githubToken string) 
 		// Check for conflict markers in output
 		if strings.Contains(mergeTreeOut, "<<<<<<<") || strings.Contains(mergeTreeOut, "CONFLICT") {
 			status.CanMergeClean = false
-			
+
 			// Parse conflicting files from merge-tree output
 			// Look for diff headers (--- a/ and +++ b/) or CONFLICT markers
 			seenFiles := make(map[string]bool)
@@ -1735,7 +1735,7 @@ func CheckMergeStatus(ctx context.Context, repoDir, branch, githubToken string) 
 					}
 				}
 			}
-			
+
 			log.Printf("CheckMergeStatus: detected conflicts in %d files: %v", len(status.ConflictingFiles), status.ConflictingFiles)
 		} else {
 			status.CanMergeClean = true
@@ -1758,7 +1758,7 @@ func configureGitIdentity(ctx context.Context, repoDir, githubToken string) {
 		req, _ := http.NewRequest("GET", "https://api.github.com/user", nil)
 		req.Header.Set("Authorization", "token "+githubToken)
 		req.Header.Set("Accept", "application/vnd.github+json")
-		
+
 		if resp, err := http.DefaultClient.Do(req); err == nil {
 			defer resp.Body.Close()
 			if resp.StatusCode == 200 {
@@ -1795,11 +1795,11 @@ func configureGitIdentity(ctx context.Context, repoDir, githubToken string) {
 	cmd := exec.CommandContext(ctx, "git", "config", "user.name", gitUserName)
 	cmd.Dir = repoDir
 	cmd.Run()
-	
+
 	cmd = exec.CommandContext(ctx, "git", "config", "user.email", gitUserEmail)
 	cmd.Dir = repoDir
 	cmd.Run()
-	
+
 	log.Printf("Configured git identity name=%q email=%q", gitUserName, gitUserEmail)
 }
 
