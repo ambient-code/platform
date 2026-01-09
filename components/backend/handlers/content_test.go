@@ -27,9 +27,9 @@ var _ = Describe("Content Handler", Label(test_constants.LabelUnit, test_constan
 		originalGitPushRepo           func(ctx context.Context, repoDir, commitMessage, outputRepoURL, branch, githubToken string) (string, error)
 		originalGitAbandonRepo        func(ctx context.Context, repoDir string) error
 		originalGitDiffRepo           func(ctx context.Context, repoDir string) (*git.DiffSummary, error)
-		originalGitCheckMergeStatus   func(ctx context.Context, repoDir, branch string) (*git.MergeStatus, error)
-		originalGitPullRepo           func(ctx context.Context, repoDir, branch string) error
-		originalGitPushToRepo         func(ctx context.Context, repoDir, branch, commitMessage string) error
+		originalGitCheckMergeStatus   func(ctx context.Context, repoDir, branch, githubToken string) (*git.MergeStatus, error)
+		originalGitPullRepo           func(ctx context.Context, repoDir, branch, githubToken string) error
+		originalGitPushToRepo         func(ctx context.Context, repoDir, branch, commitMessage, githubToken string) error
 		originalGitCreateBranch       func(ctx context.Context, repoDir, branchName string) error
 		originalGitListRemoteBranches func(ctx context.Context, repoDir string) ([]string, error)
 	)
