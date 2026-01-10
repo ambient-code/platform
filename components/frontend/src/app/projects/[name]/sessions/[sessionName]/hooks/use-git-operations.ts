@@ -37,7 +37,7 @@ export function useGitOperations({
         sessionName,
         path: directoryPath,
         remoteUrl: remoteUrl.trim(),
-        branch: branch.trim() || "main",
+        branch: branch.trim(),
       });
       
       successToast("Remote configured successfully");

@@ -16,6 +16,7 @@ type AddContextModalProps = {
   onAddRepository: (url: string, branch: string, autoPush?: boolean) => Promise<void>;
   onUploadFile?: () => void;
   isLoading?: boolean;
+  sessionName?: string;
 };
 
 export function AddContextModal({
@@ -24,6 +25,7 @@ export function AddContextModal({
   onAddRepository,
   onUploadFile,
   isLoading = false,
+  sessionName,
 }: AddContextModalProps) {
   const [contextUrl, setContextUrl] = useState("");
   const [contextBranch, setContextBranch] = useState("main");
@@ -32,7 +34,8 @@ export function AddContextModal({
   const handleSubmit = async () => {
     if (!contextUrl.trim()) return;
 
-    await onAddRepository(contextUrl.trim(), contextBranch.trim() || 'main', autoPush);
+    const defaultBranch = sessionName ? `sessions/${sessionName}` : 'main';
+    await onAddRepository(contextUrl.trim(), contextBranch.trim() || defaultBranch, autoPush);
 
     // Reset form
     setContextUrl("");
@@ -82,12 +85,12 @@ export function AddContextModal({
             <Label htmlFor="context-branch">Branch (optional)</Label>
             <Input
               id="context-branch"
-              placeholder="main"
+              placeholder={sessionName ? `sessions/${sessionName}` : "main"}
               value={contextBranch}
               onChange={(e) => setContextBranch(e.target.value)}
             />
             <p className="text-xs text-muted-foreground">
-              Leave empty to use the default branch
+              If left empty, a unique feature branch will be created for this session
             </p>
           </div>
 

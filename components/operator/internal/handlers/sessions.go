@@ -909,6 +909,8 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 							{Name: "SESSION_ID", Value: name},
 							{Name: "WORKSPACE_PATH", Value: "/workspace"},
 							{Name: "ARTIFACTS_DIR", Value: "artifacts"},
+							// AG-UI server port (must match containerPort and Service)
+							{Name: "AGUI_PORT", Value: "8001"},
 							// Google MCP credentials directory for workspace-mcp server (writable workspace location)
 							{Name: "GOOGLE_MCP_CREDENTIALS_DIR", Value: "/workspace/.google_workspace_mcp/credentials"},
 							// Google OAuth client credentials for workspace-mcp
@@ -1423,8 +1425,10 @@ func reconcileSpecReposWithPatch(sessionNamespace, sessionName string, spec map[
 		return nil
 	}
 
-	// Parse spec repos
-	specRepos := make([]map[string]string, 0, len(repoSlice))
+	// Parse spec repos and deduplicate by URL (keep last occurrence)
+	// When the same repo URL appears multiple times with different branches,
+	// we only keep one entry (the last one) since we only have one physical clone
+	specReposMap := make(map[string]map[string]string)
 	for _, entry := range repoSlice {
 		if repoMap, ok := entry.(map[string]interface{}); ok {
 			url, _ := repoMap["url"].(string)
@@ -1435,11 +1439,18 @@ func reconcileSpecReposWithPatch(sessionNamespace, sessionName string, spec map[
 			if b, ok := repoMap["branch"].(string); ok && strings.TrimSpace(b) != "" {
 				branch = b
 			}
-			specRepos = append(specRepos, map[string]string{
+			// Use URL as key to deduplicate - last branch wins
+			specReposMap[url] = map[string]string{
 				"url":    url,
 				"branch": branch,
-			})
+			}
 		}
+	}
+
+	// Convert map back to slice
+	specRepos := make([]map[string]string, 0, len(specReposMap))
+	for _, repo := range specReposMap {
+		specRepos = append(specRepos, repo)
 	}
 
 	// Get current reconciled repos from status
@@ -1459,16 +1470,22 @@ func reconcileSpecReposWithPatch(sessionNamespace, sessionName string, spec map[
 		}
 	}
 
-	// Detect drift: repos added or removed
+	// Detect drift: repos added, removed, or branch changed
 	toAdd := []map[string]string{}
 	toRemove := []map[string]string{}
+	branchChanged := []map[string]string{}
 
 	// Find repos in spec but not in reconciled (need to add)
+	// Also detect branch changes for existing repos
 	for _, specRepo := range specRepos {
 		found := false
 		for _, reconciledRepo := range reconciledRepos {
 			if specRepo["url"] == reconciledRepo["url"] {
 				found = true
+				// Check if branch changed
+				if specRepo["branch"] != reconciledRepo["branch"] {
+					branchChanged = append(branchChanged, specRepo)
+				}
 				break
 			}
 		}
@@ -1491,7 +1508,7 @@ func reconcileSpecReposWithPatch(sessionNamespace, sessionName string, spec map[
 		}
 	}
 
-	if len(toAdd) == 0 && len(toRemove) == 0 {
+	if len(toAdd) == 0 && len(toRemove) == 0 && len(branchChanged) == 0 {
 		return nil
 	}
 
@@ -1499,7 +1516,7 @@ func reconcileSpecReposWithPatch(sessionNamespace, sessionName string, spec map[
 	// Runner will restart Claude SDK client with new repo configuration
 	runnerBaseURL := fmt.Sprintf("http://session-%s.%s.svc.cluster.local:8001", sessionName, sessionNamespace)
 
-	// Add repos
+	// Add new repos
 	for _, repo := range toAdd {
 		repoName := deriveRepoNameFromURL(repo["url"])
 
@@ -1527,6 +1544,38 @@ func reconcileSpecReposWithPatch(sessionNamespace, sessionName string, spec map[
 
 		if resp.StatusCode != http.StatusOK {
 			log.Printf("[Reconcile] Runner returned %d for repo add", resp.StatusCode)
+		}
+	}
+
+	// Handle branch changes for existing repos (checkout different branch)
+	for _, repo := range branchChanged {
+		repoName := deriveRepoNameFromURL(repo["url"])
+		log.Printf("[Reconcile] Branch changed for repo '%s' to '%s', checking out new branch", repoName, repo["branch"])
+
+		payload := map[string]interface{}{
+			"url":    repo["url"],
+			"branch": repo["branch"],
+			"name":   repoName,
+		}
+		payloadBytes, _ := json.Marshal(payload)
+
+		req, err := http.NewRequest("POST", runnerBaseURL+"/repos/add", bytes.NewReader(payloadBytes))
+		if err != nil {
+			log.Printf("[Reconcile] Failed to create branch change request: %v", err)
+			continue
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		client := &http.Client{Timeout: 10 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			log.Printf("[Reconcile] Failed to change branch via runner: %v", err)
+			continue
+		}
+		resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			log.Printf("[Reconcile] Runner returned %d for branch change", resp.StatusCode)
 		}
 	}
 
@@ -1559,22 +1608,25 @@ func reconcileSpecReposWithPatch(sessionNamespace, sessionName string, spec map[
 		}
 	}
 
-	// Update status to reflect the reconciled state (via statusPatch)
+	// Build simple reconciled status (frontend now polls runner directly for real-time branch info)
 	reconciled := make([]interface{}, 0, len(specRepos))
 	for _, repo := range specRepos {
-		reconciled = append(reconciled, map[string]interface{}{
+		repoName := deriveRepoNameFromURL(repo["url"])
+		reconciledEntry := map[string]interface{}{
 			"url":      repo["url"],
-			"branch":   repo["branch"],
-			"status":   "Ready",
+			"name":     repoName,
+			"branch":   repo["branch"], // Intended branch from spec (deprecated)
 			"clonedAt": time.Now().UTC().Format(time.RFC3339),
-		})
+			"status":   "Ready", // Simplified - frontend polls runner for detailed status
+		}
+		reconciled = append(reconciled, reconciledEntry)
 	}
 	statusPatch.SetField("reconciledRepos", reconciled)
 	statusPatch.AddCondition(conditionUpdate{
 		Type:    conditionReposReconciled,
 		Status:  "True",
 		Reason:  "Reconciled",
-		Message: fmt.Sprintf("Reconciled %d repos (added: %d, removed: %d)", len(specRepos), len(toAdd), len(toRemove)),
+		Message: fmt.Sprintf("Reconciled %d repos (added: %d, removed: %d, branch changed: %d)", len(specRepos), len(toAdd), len(toRemove), len(branchChanged)),
 	})
 
 	return nil
@@ -2250,6 +2302,9 @@ func deriveRepoNameFromURL(repoURL string) string {
 
 	return "repo"
 }
+
+// pollRunnerReposStatus removed - frontend now polls runner directly via backend API
+// for real-time branch information. Operator no longer needs to maintain this in CR status.
 
 // regenerateRunnerToken provisions a fresh ServiceAccount, Role, RoleBinding, and token Secret for a session.
 // This is called when restarting sessions to ensure fresh tokens.

@@ -27,6 +27,8 @@ export const sessionKeys = {
     [...sessionKeys.detail(projectName, sessionName), 'messages'] as const,
   export: (projectName: string, sessionName: string) =>
     [...sessionKeys.detail(projectName, sessionName), 'export'] as const,
+  reposStatus: (projectName: string, sessionName: string) =>
+    [...sessionKeys.detail(projectName, sessionName), 'repos-status'] as const,
 };
 
 /**
@@ -320,5 +322,19 @@ export function useSessionExport(projectName: string, sessionName: string, enabl
     queryFn: () => sessionsApi.getSessionExport(projectName, sessionName),
     enabled: enabled && !!projectName && !!sessionName,
     staleTime: 60000, // Cache for 1 minute
+  });
+}
+
+/**
+ * Hook to fetch repository status (branches, current branch) from runner
+ * Polls every 30 seconds for real-time updates
+ */
+export function useReposStatus(projectName: string, sessionName: string, enabled: boolean = true) {
+  return useQuery({
+    queryKey: sessionKeys.reposStatus(projectName, sessionName),
+    queryFn: () => sessionsApi.getReposStatus(projectName, sessionName),
+    enabled: enabled && !!projectName && !!sessionName,
+    refetchInterval: 30000, // Poll every 30 seconds
+    staleTime: 25000, // Consider stale after 25 seconds
   });
 }

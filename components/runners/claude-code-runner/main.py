@@ -542,75 +542,207 @@ async def change_workflow(request: Request):
     return {"message": "Workflow updated", "gitUrl": git_url, "branch": branch, "path": path}
 
 
+async def get_default_branch(repo_path: str) -> str:
+    """
+    Get the default branch of a repository with robust fallback.
+
+    Tries multiple methods in order:
+    1. symbolic-ref on origin/HEAD
+    2. git remote show origin (more reliable but slower)
+    3. Fallback to common defaults: main, master, develop
+
+    Args:
+        repo_path: Path to the git repository
+
+    Returns:
+        The default branch name
+    """
+    # Method 1: symbolic-ref (fast but may not be set)
+    process = await asyncio.create_subprocess_exec(
+        "git", "-C", str(repo_path), "symbolic-ref", "refs/remotes/origin/HEAD",
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE
+    )
+    stdout, stderr = await process.communicate()
+    if process.returncode == 0:
+        # Output is like "refs/remotes/origin/main"
+        default_branch = stdout.decode().strip().split("/")[-1]
+        if default_branch:
+            logger.info(f"Default branch from symbolic-ref: {default_branch}")
+            return default_branch
+
+    # Method 2: remote show origin (more reliable)
+    process = await asyncio.create_subprocess_exec(
+        "git", "-C", str(repo_path), "remote", "show", "origin",
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE
+    )
+    stdout, stderr = await process.communicate()
+    if process.returncode == 0:
+        # Look for line like "  HEAD branch: main"
+        for line in stdout.decode().split("\n"):
+            if "HEAD branch:" in line:
+                default_branch = line.split(":")[-1].strip()
+                if default_branch and default_branch != "(unknown)":
+                    logger.info(f"Default branch from remote show: {default_branch}")
+                    return default_branch
+
+    # Method 3: Try common default branch names
+    for candidate in ["main", "master", "develop"]:
+        process = await asyncio.create_subprocess_exec(
+            "git", "-C", str(repo_path), "rev-parse", "--verify", f"origin/{candidate}",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        await process.communicate()
+        if process.returncode == 0:
+            logger.info(f"Default branch found by trying common names: {candidate}")
+            return candidate
+
+    # Final fallback
+    logger.warning("Could not determine default branch, falling back to 'main'")
+    return "main"
+
+
 async def clone_repo_at_runtime(git_url: str, branch: str, name: str) -> tuple[bool, str]:
     """
-    Clone a repository at runtime.
-    
-    This mirrors the logic in hydrate.sh but runs when repos are added
-    after the pod has started.
-    
+    Clone a repository at runtime or add a new branch to existing repo.
+
+    Behavior:
+    - If repo doesn't exist: clone it (no --single-branch to support multi-branch)
+    - If repo exists: fetch and checkout the new branch
+    - If branch is empty/None: create unique ambient-session-{uuid} branch
+    - If branch doesn't exist remotely: create it from default branch
+
     Args:
         git_url: Git repository URL
-        branch: Branch to clone
+        branch: Branch to checkout (or empty/None to auto-generate)
         name: Name for the cloned directory (derived from URL if empty)
-    
+
     Returns:
         (success, repo_dir_path) tuple
     """
     import tempfile
     import shutil
+    import uuid
     from pathlib import Path
-    
+
     if not git_url:
         return False, ""
-    
+
     # Derive repo name from URL if not provided
     if not name:
         name = git_url.split("/")[-1].removesuffix(".git")
-    
+
+    # Generate unique branch name if not specified
+    if not branch or branch.strip() == "":
+        session_id = os.getenv("SESSION_ID", "unknown")
+        branch = f"ambient/{session_id}"
+        logger.info(f"No branch specified, generated: {branch}")
+
     # Repos are stored in /workspace/repos/{name} (matching hydrate.sh)
     workspace_path = os.getenv("WORKSPACE_PATH", "/workspace")
     repos_dir = Path(workspace_path) / "repos"
     repos_dir.mkdir(parents=True, exist_ok=True)
     repo_final = repos_dir / name
-    
-    logger.info(f"Cloning repo '{name}' from {git_url}@{branch}")
-    
-    # Skip if already cloned
+
+    # Build clone URL with auth token
+    github_token = os.getenv("GITHUB_TOKEN", "").strip()
+    gitlab_token = os.getenv("GITLAB_TOKEN", "").strip()
+    clone_url = git_url
+    if github_token and "github" in git_url.lower():
+        clone_url = git_url.replace("https://", f"https://x-access-token:{github_token}@")
+        logger.info("Using GITHUB_TOKEN for authentication")
+    elif gitlab_token and "gitlab" in git_url.lower():
+        clone_url = git_url.replace("https://", f"https://oauth2:{gitlab_token}@")
+        logger.info("Using GITLAB_TOKEN for authentication")
+
+    # Case 1: Repo already exists - add new branch
     if repo_final.exists():
-        logger.info(f"Repo '{name}' already exists at {repo_final}, skipping clone")
-        return True, str(repo_final)
-    
-    # Create temp directory for clone
+        logger.info(f"Repo '{name}' already exists at {repo_final}, adding branch '{branch}'")
+        try:
+            # Fetch latest refs
+            process = await asyncio.create_subprocess_exec(
+                "git", "-C", str(repo_final), "fetch", "origin",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            await process.communicate()
+
+            # Try to checkout the branch
+            process = await asyncio.create_subprocess_exec(
+                "git", "-C", str(repo_final), "checkout", branch,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await process.communicate()
+
+            if process.returncode == 0:
+                logger.info(f"Checked out existing branch '{branch}'")
+                return True, str(repo_final)
+
+            # Branch doesn't exist locally, try to checkout from remote
+            logger.info(f"Branch '{branch}' not found locally, trying origin/{branch}")
+            process = await asyncio.create_subprocess_exec(
+                "git", "-C", str(repo_final), "checkout", "-b", branch, f"origin/{branch}",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await process.communicate()
+
+            if process.returncode == 0:
+                logger.info(f"Checked out branch '{branch}' from origin")
+                return True, str(repo_final)
+
+            # Branch doesn't exist remotely, create from default branch
+            logger.info(f"Branch '{branch}' not found on remote, creating from default branch")
+
+            # Get default branch using robust detection
+            default_branch = await get_default_branch(str(repo_final))
+
+            # Checkout default branch first
+            process = await asyncio.create_subprocess_exec(
+                "git", "-C", str(repo_final), "checkout", default_branch,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            await process.communicate()
+
+            # Create new branch from default
+            process = await asyncio.create_subprocess_exec(
+                "git", "-C", str(repo_final), "checkout", "-b", branch,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await process.communicate()
+
+            if process.returncode == 0:
+                logger.info(f"Created new branch '{branch}' from '{default_branch}'")
+                return True, str(repo_final)
+            else:
+                logger.error(f"Failed to create branch: {stderr.decode()}")
+                return False, ""
+
+        except Exception as e:
+            logger.error(f"Error adding branch to existing repo: {e}")
+            return False, ""
+
+    # Case 2: Repo doesn't exist - clone it
+    logger.info(f"Cloning repo '{name}' from {git_url}")
     temp_dir = Path(tempfile.mkdtemp(prefix="repo-clone-"))
-    
+
     try:
-        # Build git clone command with optional auth token
-        github_token = os.getenv("GITHUB_TOKEN", "").strip()
-        gitlab_token = os.getenv("GITLAB_TOKEN", "").strip()
-        
-        # Determine which token to use based on URL
-        clone_url = git_url
-        if github_token and "github" in git_url.lower():
-            # Add GitHub token to URL
-            clone_url = git_url.replace("https://", f"https://x-access-token:{github_token}@")
-            logger.info("Using GITHUB_TOKEN for authentication")
-        elif gitlab_token and "gitlab" in git_url.lower():
-            # Add GitLab token to URL
-            clone_url = git_url.replace("https://", f"https://oauth2:{gitlab_token}@")
-            logger.info("Using GITLAB_TOKEN for authentication")
-        
-        # Clone the repository
+        # Clone without --single-branch and without --depth to support multi-branch workflows
+        # Note: --depth=1 prevents checking out other branches
         process = await asyncio.create_subprocess_exec(
-            "git", "clone", "--branch", branch, "--single-branch", "--depth", "1",
+            "git", "clone",
             clone_url, str(temp_dir),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
         stdout, stderr = await process.communicate()
-        
+
         if process.returncode != 0:
-            # Redact tokens from error message
             error_msg = stderr.decode()
             if github_token:
                 error_msg = error_msg.replace(github_token, "***REDACTED***")
@@ -618,21 +750,38 @@ async def clone_repo_at_runtime(git_url: str, branch: str, name: str) -> tuple[b
                 error_msg = error_msg.replace(gitlab_token, "***REDACTED***")
             logger.error(f"Failed to clone repo: {error_msg}")
             return False, ""
-        
-        logger.info("Clone successful, moving to final location...")
-        
+
+        logger.info("Clone successful, checking out requested branch...")
+
+        # Try to checkout requested branch
+        process = await asyncio.create_subprocess_exec(
+            "git", "-C", str(temp_dir), "checkout", branch,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        stdout, stderr = await process.communicate()
+
+        if process.returncode != 0:
+            # Branch doesn't exist, create it from default branch
+            logger.info(f"Branch '{branch}' not found, creating from default branch")
+            process = await asyncio.create_subprocess_exec(
+                "git", "-C", str(temp_dir), "checkout", "-b", branch,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            await process.communicate()
+
         # Move to final location
         repo_final.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(temp_dir), str(repo_final))
-        
-        logger.info(f"Repo '{name}' ready at {repo_final}")
+
+        logger.info(f"Repo '{name}' ready at {repo_final} on branch '{branch}'")
         return True, str(repo_final)
-        
+
     except Exception as e:
         logger.error(f"Error cloning repo: {e}")
         return False, ""
     finally:
-        # Cleanup temp directory if it still exists
         if temp_dir.exists():
             shutil.rmtree(temp_dir, ignore_errors=True)
 
@@ -735,16 +884,35 @@ async def add_repo(request: Request):
         repos = json.loads(repos_json) if repos_json else []
     except:
         repos = []
-    
-    # Add new repo
-    repos.append({
-        "name": name,
-        "input": {
-            "url": url,
-            "branch": branch
-        }
-    })
-    
+
+    # Update or add repo (deduplicate by URL)
+    # Find existing entry by URL
+    found = False
+    for i, repo in enumerate(repos):
+        if repo.get("input", {}).get("url") == url:
+            # Update existing entry with new branch
+            repos[i] = {
+                "name": name,
+                "input": {
+                    "url": url,
+                    "branch": branch
+                }
+            }
+            found = True
+            logger.info(f"Updated existing repo '{name}' to branch '{branch}'")
+            break
+
+    if not found:
+        # Add new repo
+        repos.append({
+            "name": name,
+            "input": {
+                "url": url,
+                "branch": branch
+            }
+        })
+        logger.info(f"Added new repo '{name}' with branch '{branch}'")
+
     os.environ["REPOS_JSON"] = json.dumps(repos)
     
     # Reset adapter state to force reinitialization on next run
@@ -819,37 +987,137 @@ async def trigger_repo_added_notification(repo_name: str, repo_url: str):
 async def remove_repo(request: Request):
     """
     Remove repository - triggers Claude SDK client restart.
-    
+
     Accepts: {"name": "..."}
     """
+    import shutil
+    from pathlib import Path
+
     global _adapter_initialized
-    
+
     if not adapter:
         raise HTTPException(status_code=503, detail="Adapter not initialized")
-    
+
     body = await request.json()
     repo_name = body.get("name", "")
     logger.info(f"Remove repo request: {repo_name}")
-    
+
+    # Delete repository from filesystem
+    workspace_path = os.getenv("WORKSPACE_PATH", "/workspace")
+    repo_path = Path(workspace_path) / "repos" / repo_name
+
+    if repo_path.exists():
+        try:
+            shutil.rmtree(repo_path)
+            logger.info(f"Deleted repository directory: {repo_path}")
+        except Exception as e:
+            logger.error(f"Failed to delete repository directory {repo_path}: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to delete repository: {e}")
+    else:
+        logger.warning(f"Repository directory not found: {repo_path}")
+
     # Update REPOS_JSON env var
     repos_json = os.getenv("REPOS_JSON", "[]")
     try:
         repos = json.loads(repos_json) if repos_json else []
     except:
         repos = []
-    
+
     # Remove repo by name
     repos = [r for r in repos if r.get("name") != repo_name]
-    
+
     os.environ["REPOS_JSON"] = json.dumps(repos)
-    
+
     # Reset adapter state
     _adapter_initialized = False
     adapter._first_run = True
-    
+
     logger.info(f"Repo removed, adapter will reinitialize on next run")
-    
+
     return {"message": "Repository removed"}
+
+
+@app.get("/repos/status")
+async def get_repos_status():
+    """
+    Get current status of all repositories in the workspace.
+
+    Returns for each repo:
+    - url: Repository URL
+    - name: Directory name
+    - branches: All local branches
+    - currentActiveBranch: Currently checked out branch
+    - defaultBranch: Default branch of remote
+    """
+    if not adapter:
+        raise HTTPException(status_code=503, detail="Adapter not initialized")
+
+    import re
+    from pathlib import Path
+
+    workspace_path = os.getenv("WORKSPACE_PATH", "/workspace")
+    repos_dir = Path(workspace_path) / "repos"
+
+    if not repos_dir.exists():
+        return {"repos": []}
+
+    repos_status = []
+
+    # Iterate through all directories in repos/
+    for repo_path in repos_dir.iterdir():
+        if not repo_path.is_dir() or not (repo_path / ".git").exists():
+            continue
+
+        try:
+            repo_name = repo_path.name
+
+            # Get remote URL
+            process = await asyncio.create_subprocess_exec(
+                "git", "-C", str(repo_path), "config", "--get", "remote.origin.url",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await process.communicate()
+            repo_url = stdout.decode().strip() if process.returncode == 0 else ""
+
+            # Strip any embedded tokens from URL before returning (security)
+            # Remove patterns like: https://x-access-token:TOKEN@github.com -> https://github.com
+            repo_url = re.sub(r'https://[^:]+:[^@]+@', 'https://', repo_url)
+
+            # Get current active branch
+            process = await asyncio.create_subprocess_exec(
+                "git", "-C", str(repo_path), "rev-parse", "--abbrev-ref", "HEAD",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await process.communicate()
+            current_branch = stdout.decode().strip() if process.returncode == 0 else "unknown"
+
+            # Get all local branches
+            process = await asyncio.create_subprocess_exec(
+                "git", "-C", str(repo_path), "branch", "--format=%(refname:short)",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await process.communicate()
+            branches = [b.strip() for b in stdout.decode().split("\n") if b.strip()] if process.returncode == 0 else []
+
+            # Get default branch using robust detection
+            default_branch = await get_default_branch(str(repo_path))
+
+            repos_status.append({
+                "url": repo_url,
+                "name": repo_name,
+                "branches": branches,
+                "currentActiveBranch": current_branch,
+                "defaultBranch": default_branch,
+            })
+
+        except Exception as e:
+            logger.error(f"Error getting status for repo {repo_path}: {e}")
+            continue
+
+    return {"repos": repos_status}
 
 
 @app.get("/health")

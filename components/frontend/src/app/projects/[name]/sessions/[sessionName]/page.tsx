@@ -69,7 +69,7 @@ import { useFileOperations } from "./hooks/use-file-operations";
 import { useSessionQueue } from "@/hooks/use-session-queue";
 import type { DirectoryOption, DirectoryRemote } from "./lib/types";
 
-import type { MessageObject, ToolUseMessages, HierarchicalToolMessage } from "@/types/agentic-session";
+import type { MessageObject, ToolUseMessages, HierarchicalToolMessage, ReconciledRepo, SessionRepo } from "@/types/agentic-session";
 import type { AGUIToolCall } from "@/types/agui";
 
 // AG-UI streaming
@@ -81,6 +81,7 @@ import {
   useStopSession,
   useDeleteSession,
   useContinueSession,
+  useReposStatus,
 } from "@/services/queries";
 import {
   useWorkspaceList,
@@ -189,6 +190,13 @@ export default function ProjectSessionDetailPage({
 
   // Extract phase for sidebar state management
   const phase = session?.status?.phase || "Pending";
+
+  // Fetch repos status directly from runner (real-time branch info)
+  const { data: reposStatus } = useReposStatus(
+    projectName,
+    sessionName,
+    phase === "Running" // Only poll when session is running
+  );
 
   // AG-UI streaming hook - replaces useSessionMessages and useSendChatMessage
   // Note: autoConnect is intentionally false to avoid SSR hydration mismatch
@@ -500,7 +508,7 @@ export default function ProjectSessionDetailPage({
 
   // Git operations for selected directory
   const currentRemote = directoryRemotes[selectedDirectory.path];
-  
+
   // Removed: mergeStatus and remoteBranches - agent handles all git operations now
 
   // Git operations hook
@@ -510,6 +518,26 @@ export default function ProjectSessionDetailPage({
     directoryPath: selectedDirectory.path,
     remoteBranch: currentRemote?.branch || "main",
   });
+
+  // Get repo info from reposStatus for repo-type directories
+  const repoInfo = selectedDirectory.type === "repo"
+    ? reposStatus?.repos?.find((r) => r.name === selectedDirectory.name)
+    : undefined;
+
+  // Get current branch for selected directory (use real-time reposStatus for repos)
+  const currentBranch = selectedDirectory.type === "repo"
+    ? repoInfo?.currentActiveBranch || gitOps.gitStatus?.branch || "main"
+    : gitOps.gitStatus?.branch || "main";
+
+  // Get hasRemote status for selected directory (use real-time reposStatus for repos)
+  const hasRemote = selectedDirectory.type === "repo"
+    ? !!repoInfo?.url
+    : gitOps.gitStatus?.hasRemote ?? false;
+
+  // Get remote URL for selected directory (use real-time reposStatus for repos)
+  const remoteUrl = selectedDirectory.type === "repo"
+    ? repoInfo?.url
+    : gitOps.gitStatus?.remoteUrl;
 
   // File operations for directory explorer
   const fileOps = useFileOperations({
@@ -605,17 +633,27 @@ export default function ProjectSessionDetailPage({
       { type: "file-uploads", name: "File Uploads", path: "file-uploads" },
     ];
 
-    if (session?.spec?.repos) {
-      session.spec.repos.forEach((repo, idx) => {
-        const repoName = repo.url.split('/').pop()?.replace('.git', '') || `repo-${idx}`;
-        // Repos are cloned to /workspace/repos/{name}
-        options.push({
-          type: "repo",
-          name: repoName,
-          path: `repos/${repoName}`,
-        });
+    // Use real-time repos status from runner when available, otherwise fall back to CR status
+    const reposToDisplay = reposStatus?.repos || session?.status?.reconciledRepos || session?.spec?.repos || [];
+
+    // Deduplicate repos by name - only show one entry per repo directory
+    const seenRepos = new Set<string>();
+    reposToDisplay.forEach((repo: ReconciledRepo | SessionRepo) => {
+      const repoName = ('name' in repo ? repo.name : undefined) || repo.url?.split('/').pop()?.replace('.git', '') || 'repo';
+
+      // Skip if we've already added this repo
+      if (seenRepos.has(repoName)) {
+        return;
+      }
+      seenRepos.add(repoName);
+
+      // Repos are cloned to /workspace/repos/{name}
+      options.push({
+        type: "repo",
+        name: repoName,
+        path: `repos/${repoName}`,
       });
-    }
+    });
 
     if (workflowManagement.activeWorkflow && session?.spec?.activeWorkflow) {
       const workflowName =
@@ -631,7 +669,7 @@ export default function ProjectSessionDetailPage({
     }
 
     return options;
-  }, [session, workflowManagement.activeWorkflow]);
+  }, [session, workflowManagement.activeWorkflow, reposStatus]);
 
   // Workflow change handler
   const handleWorkflowChange = (value: string) => {
@@ -1533,7 +1571,7 @@ export default function ProjectSessionDetailPage({
                     />
 
                     <RepositoriesAccordion
-                      repositories={session?.spec?.repos || []}
+                      repositories={reposStatus?.repos || session?.status?.reconciledRepos || session?.spec?.repos || []}
                       uploadedFiles={fileUploadsList.map((f) => ({
                         name: f.name,
                         path: f.path,
@@ -1632,30 +1670,61 @@ export default function ProjectSessionDetailPage({
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
-                                {directoryOptions.map((opt) => (
-                                  <SelectItem
-                                    key={`${opt.type}:${opt.path}`}
-                                    value={`${opt.type}:${opt.path}`}
-                                  >
-                                    <div className="flex items-center gap-2">
-                                      {opt.type === "artifacts" && (
-                                        <Folder className="h-3 w-3" />
-                                      )}
-                                      {opt.type === "file-uploads" && (
-                                        <CloudUpload className="h-3 w-3" />
-                                      )}
-                                      {opt.type === "repo" && (
-                                        <GitBranch className="h-3 w-3" />
-                                      )}
-                                      {opt.type === "workflow" && (
-                                        <Sparkles className="h-3 w-3" />
-                                      )}
-                                      <span className="text-xs">
-                                        {opt.name}
-                                      </span>
-                                    </div>
-                                  </SelectItem>
-                                ))}
+                                {directoryOptions.map((opt) => {
+                                  // Find branch info for repo directories from real-time status
+                                  let branchName: string | undefined;
+                                  if (opt.type === "repo") {
+                                    // Extract repo name from path (repos/repoName -> repoName)
+                                    const repoName = opt.path.replace(/^repos\//, "");
+
+                                    // Try real-time repos status first
+                                    const realtimeRepo = reposStatus?.repos?.find(
+                                      (r) => r.name === repoName
+                                    );
+
+                                    // Fall back to CR status
+                                    const reconciledRepo = session?.status?.reconciledRepos?.find(
+                                      (r: ReconciledRepo) => {
+                                        const rName = r.name || r.url?.split("/").pop()?.replace(".git", "");
+                                        return rName === repoName;
+                                      }
+                                    );
+
+                                    branchName = realtimeRepo?.currentActiveBranch
+                                      || reconciledRepo?.currentActiveBranch
+                                      || reconciledRepo?.branch;
+                                  }
+
+                                  return (
+                                    <SelectItem
+                                      key={`${opt.type}:${opt.path}`}
+                                      value={`${opt.type}:${opt.path}`}
+                                    >
+                                      <div className="flex items-center gap-2">
+                                        {opt.type === "artifacts" && (
+                                          <Folder className="h-3 w-3" />
+                                        )}
+                                        {opt.type === "file-uploads" && (
+                                          <CloudUpload className="h-3 w-3" />
+                                        )}
+                                        {opt.type === "repo" && (
+                                          <GitBranch className="h-3 w-3" />
+                                        )}
+                                        {opt.type === "workflow" && (
+                                          <Sparkles className="h-3 w-3" />
+                                        )}
+                                        <span className="text-xs">
+                                          {opt.name}
+                                        </span>
+                                        {branchName && (
+                                          <Badge variant="outline" className="text-xs px-1.5 py-0 h-5 bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
+                                            {branchName}
+                                          </Badge>
+                                        )}
+                                      </div>
+                                    </SelectItem>
+                                  );
+                                })}
                               </SelectContent>
                             </Select>
                           </div>
@@ -1769,14 +1838,21 @@ export default function ProjectSessionDetailPage({
                               ) : (
                                 <FileTree
                                   nodes={directoryFiles.map(
-                                    (item): FileTreeNode => ({
-                                      name: item.name,
-                                      path: item.path,
-                                      type: item.isDir ? "folder" : "file",
-                                      sizeKb: item.size
-                                        ? item.size / 1024
-                                        : undefined,
-                                    }),
+                                    (item): FileTreeNode => {
+                                      const node: FileTreeNode = {
+                                        name: item.name,
+                                        path: item.path,
+                                        type: item.isDir ? "folder" : "file",
+                                        sizeKb: item.size
+                                          ? item.size / 1024
+                                          : undefined,
+                                      };
+
+                                      // Don't add branch badges to individual files/folders
+                                      // The branch is already shown in the directory selector dropdown
+
+                                      return node;
+                                    },
                                   )}
                                   onSelect={fileOps.handleFileOrFolderSelect}
                                 />
@@ -1810,13 +1886,13 @@ export default function ProjectSessionDetailPage({
                               <div className="text-sm text-muted-foreground py-2">
                                 <p>No git repository. Ask the agent to initialize git if needed.</p>
                               </div>
-                            ) : !gitOps.gitStatus?.hasRemote ? (
+                            ) : !hasRemote ? (
                               /* State 2: Has Git, No Remote */
                               <div className="space-y-2">
                                 <div className="border rounded-md px-2 py-1.5 text-xs">
                                   <div className="flex items-center gap-1.5 text-muted-foreground">
                                     <GitBranch className="h-3 w-3" />
-                                    <span>{gitOps.gitStatus?.branch || "main"}</span>
+                                    <span>{currentBranch}</span>
                                     <span className="text-muted-foreground/50">(local only)</span>
                                   </div>
                                 </div>
@@ -1838,19 +1914,19 @@ export default function ProjectSessionDetailPage({
                                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                                   <Cloud className="h-3 w-3 flex-shrink-0" />
                                   <span className="truncate">
-                                    {gitOps.gitStatus?.remoteUrl
+                                    {remoteUrl
                                       ?.split("/")
                                       .slice(-2)
                                       .join("/")
                                       .replace(".git", "") || ""}
                                   </span>
                                 </div>
-                                
-                                {/* Branch Tracking - only show arrow if different */}
+
+                                {/* Branch Tracking */}
                                 <div className="flex items-center gap-1.5 text-xs">
                                   <GitBranch className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
                                   <span className="text-muted-foreground">
-                                    {gitOps.gitStatus?.branch || "main"}
+                                    {currentBranch}
                                   </span>
                                 </div>
                               </div>
@@ -1937,6 +2013,7 @@ export default function ProjectSessionDetailPage({
         }}
         onUploadFile={() => setUploadModalOpen(true)}
         isLoading={addRepoMutation.isPending}
+        sessionName={sessionName}
       />
 
       <UploadFileModal

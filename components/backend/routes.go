@@ -65,6 +65,8 @@ func registerRoutes(r *gin.Engine) {
 			projectGroup.POST("/agentic-sessions/:sessionName/workflow", handlers.SelectWorkflow)
 			projectGroup.GET("/agentic-sessions/:sessionName/workflow/metadata", handlers.GetWorkflowMetadata)
 			projectGroup.POST("/agentic-sessions/:sessionName/repos", handlers.AddRepo)
+			// NOTE: /repos/status must come BEFORE /repos/:repoName to avoid wildcard matching
+			projectGroup.GET("/agentic-sessions/:sessionName/repos/status", handlers.GetReposStatus)
 			projectGroup.DELETE("/agentic-sessions/:sessionName/repos/:repoName", handlers.RemoveRepo)
 			projectGroup.PUT("/agentic-sessions/:sessionName/displayname", handlers.UpdateSessionDisplayName)
 

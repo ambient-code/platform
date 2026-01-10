@@ -59,8 +59,11 @@ export type AgenticSessionSpec = {
 
 export type ReconciledRepo = {
   url: string;
-  branch: string;
+  branch: string; // DEPRECATED: Use currentActiveBranch instead
   name?: string;
+  branches?: string[]; // All local branches available
+  currentActiveBranch?: string; // Currently checked out branch
+  defaultBranch?: string; // Default branch of remote
   status?: 'Cloning' | 'Ready' | 'Failed';
   clonedAt?: string;
 };
