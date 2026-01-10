@@ -17,6 +17,8 @@ The platform follows a cloud-native microservices architecture:
 - Custom Resource Definitions (AgenticSession, ProjectSettings, RFEWorkflow)
 - Operator-based reconciliation for declarative session management
 
+📐 **[Architecture Diagrams](architecture/index.md)** - Visual guides to system design, component interactions, and data flows
+
 ## Quick Start
 
 ### Local Development
@@ -63,6 +65,13 @@ For production OpenShift clusters:
 - Comprehensive logging and troubleshooting
 
 ## Documentation Structure
+
+### [📐 Architecture](architecture/index.md)
+Visual guides and detailed explanations of the platform's design:
+- [Core System Architecture](architecture/core-system-architecture.md) - 4-component system overview
+- [Agentic Session Lifecycle](architecture/agentic-session-lifecycle.md) - State machine and reconciliation
+- [Multi-Tenancy Architecture](architecture/multi-tenancy-architecture.md) - Project isolation and RBAC
+- [Kubernetes Resources](architecture/kubernetes-resources.md) - CRD structures and schemas
 
 ### [📘 User Guide](user-guide/index.md)
 Learn how to use the Ambient Code Platform for AI-powered automation:
