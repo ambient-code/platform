@@ -7,7 +7,7 @@
 .PHONY: e2e-test e2e-setup e2e-clean deploy-langfuse-openshift
 .PHONY: setup-minio minio-console minio-logs minio-status
 .PHONY: validate-makefile lint-makefile check-shell makefile-health
-.PHONY: _create-operator-config _auto-port-forward _show-access-info _build-and-load
+.PHONY: _create-operator-config _auto-port-forward _show-access-info _build-and-load _setup-local-dev-auth
 
 # Default target
 .DEFAULT_GOAL := help
@@ -254,7 +254,9 @@ local-up: check-minikube check-kubectl ## Start local development environment (m
 	@kubectl apply -f components/manifests/minikube/local-dev-rbac.yaml $(QUIET_REDIRECT) || true
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 6/8: Creating storage..."
 	@kubectl apply -f components/manifests/base/workspace-pvc.yaml -n $(NAMESPACE) $(QUIET_REDIRECT) || true
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 6.5/8: Configuring operator..."
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 6.5/8: Setting up local dev authentication..."
+	@$(MAKE) --no-print-directory _setup-local-dev-auth
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 6.6/8: Configuring operator..."
 	@$(MAKE) --no-print-directory _create-operator-config
 	@$(MAKE) --no-print-directory local-sync-version
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 7/8: Deploying services..."
@@ -693,6 +695,22 @@ local-dev-token: check-kubectl ## Print a TokenRequest token for local-dev-user 
 		exit 1; \
 	fi; \
 	echo "$$TOKEN"
+
+_setup-local-dev-auth: ## Internal: Set up local dev authentication with ServiceAccount token
+	@echo "  Creating local-dev-token secret..."
+	@TOKEN=$$(kubectl -n $(NAMESPACE) create token local-dev-user --duration=8760h 2>/dev/null); \
+	if [ -z "$$TOKEN" ]; then \
+		echo "$(COLOR_RED)✗$(COLOR_RESET) Failed to create token for local-dev-user"; \
+		exit 1; \
+	fi; \
+	kubectl delete secret local-dev-token -n $(NAMESPACE) $(QUIET_REDIRECT) 2>/dev/null || true; \
+	kubectl create secret generic local-dev-token -n $(NAMESPACE) --from-literal=token="$$TOKEN" $(QUIET_REDIRECT)
+	@echo "  $(COLOR_GREEN)✓$(COLOR_RESET) local-dev-token secret created"
+	@echo "  Granting cluster-admin to local-dev-user..."
+	@kubectl create clusterrolebinding local-dev-admin \
+		--clusterrole=cluster-admin \
+		--serviceaccount=$(NAMESPACE):local-dev-user $(QUIET_REDIRECT) 2>/dev/null || true
+	@echo "  $(COLOR_GREEN)✓$(COLOR_RESET) cluster-admin permissions granted"
 
 _create-operator-config: ## Internal: Create operator config from environment variables
 	@VERTEX_PROJECT_ID=$${ANTHROPIC_VERTEX_PROJECT_ID:-""}; \

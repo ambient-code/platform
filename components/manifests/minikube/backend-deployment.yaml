@@ -53,8 +53,6 @@ spec:
           value: "localhost/vteam_backend:latest"
         - name: IMAGE_PULL_POLICY
           value: "Never"
-        - name: DISABLE_AUTH
-          value: "true"
         - name: ENVIRONMENT
           value: "local"
         - name: GITHUB_APP_ID

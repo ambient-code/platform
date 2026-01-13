@@ -41,11 +41,17 @@ spec:
         - name: GITHUB_APP_SLUG
           value: "ambient-code"
         - name: VTEAM_VERSION
-          value: "v0.0.12-22-g5553056"
-        - name: DISABLE_AUTH
-          value: "true"
-        - name: MOCK_USER
-          value: "developer"
+          value: "v0.0.16-3-gd061526"
+        # Local dev auth using ServiceAccount token
+        - name: OC_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: local-dev-token
+              key: token
+        - name: OC_USER
+          value: "system:serviceaccount:ambient-code:local-dev-user"
+        - name: OC_EMAIL
+          value: "local-dev@ambient-code.local"
         resources:
           requests:
             cpu: 100m
