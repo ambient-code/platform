@@ -15,6 +15,7 @@ import { DestructiveConfirmationDialog } from '@/components/confirmation-dialog'
 
 import { useProjectPermissions, useAddProjectPermission, useRemoveProjectPermission } from '@/services/queries';
 import { successToast, errorToast } from '@/hooks/use-toast';
+import { useOptimisticDelete } from '@/hooks/use-optimistic-delete';
 import type { PermissionRole, SubjectType } from '@/types/project';
 import { ROLE_DEFINITIONS } from '@/lib/role-colors';
 
@@ -32,6 +33,20 @@ export function SharingSection({ projectName }: SharingSectionProps) {
   const { data: permissions = [], isLoading, refetch } = useProjectPermissions(projectName);
   const addPermissionMutation = useAddProjectPermission();
   const removePermissionMutation = useRemoveProjectPermission();
+
+  type Permission = { subjectType: SubjectType; subjectName: string; role: PermissionRole };
+  const { confirmDelete: confirmRevokePermission, isDeleting } = useOptimisticDelete<Permission, { projectName: string; subjectType: SubjectType; subjectName: string }>({
+    getId: (permission) => `${permission.subjectType}:${permission.subjectName}`,
+    getDisplayName: (permission) => permission.subjectName,
+    getMutationVariables: (permission) => ({
+      projectName,
+      subjectType: permission.subjectType,
+      subjectName: permission.subjectName,
+    }),
+    mutation: removePermissionMutation,
+    deletingMessage: 'Revoking permission...',
+    successMessage: (displayName) => `Permission for "${displayName}" revoked successfully`,
+  });
 
   const [showGrantDialog, setShowGrantDialog] = useState(false);
   const [grantForm, setGrantForm] = useState<GrantPermissionForm>({
@@ -87,24 +102,13 @@ export function SharingSection({ projectName }: SharingSectionProps) {
   const handleRevoke = useCallback(() => {
     if (!toRevoke) return;
 
-    removePermissionMutation.mutate(
-      {
-        projectName,
-        subjectType: toRevoke.subjectType,
-        subjectName: toRevoke.subjectName,
-      },
-      {
-        onSuccess: () => {
-          successToast(`Permission revoked from ${toRevoke.subjectName} successfully`);
-          setShowRevokeDialog(false);
-          setToRevoke(null);
-        },
-        onError: (error) => {
-          errorToast(error instanceof Error ? error.message : 'Failed to revoke permission');
-        },
-      }
-    );
-  }, [toRevoke, projectName, removePermissionMutation]);
+    // Close dialog immediately
+    setShowRevokeDialog(false);
+    setToRevoke(null);
+
+    // Use hook's confirmDelete
+    confirmRevokePermission(toRevoke);
+  }, [toRevoke, confirmRevokePermission]);
 
   const emptyState = useMemo(
     () => (
@@ -173,10 +177,7 @@ export function SharingSection({ projectName }: SharingSectionProps) {
                 {permissions.map((p) => {
                   const roleConfig = ROLE_DEFINITIONS[p.role];
                   const RoleIcon = roleConfig.icon;
-                  const isRevokingThis =
-                    removePermissionMutation.isPending &&
-                    removePermissionMutation.variables?.subjectName === p.subjectName &&
-                    removePermissionMutation.variables?.subjectType === p.subjectType;
+                  const isRevokingThis = isDeleting(p);
 
                   return (
                     <TableRow key={`${p.subjectType}:${p.subjectName}:${p.role}`}>
@@ -328,7 +329,6 @@ export function SharingSection({ projectName }: SharingSectionProps) {
         title="Revoke Permission"
         description={`Are you sure you want to revoke access for "${toRevoke?.subjectName}" (${toRevoke?.subjectType})? They will immediately lose access to this workspace.`}
         confirmText="Revoke"
-        loading={removePermissionMutation.isPending}
       />
     </>
   );

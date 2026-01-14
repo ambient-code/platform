@@ -20,6 +20,7 @@ import { Breadcrumbs } from '@/components/breadcrumbs';
 
 import { useKeys, useCreateKey, useDeleteKey } from '@/services/queries';
 import { successToast, errorToast } from '@/hooks/use-toast';
+import { useOptimisticDelete } from '@/hooks/use-optimistic-delete';
 import type { CreateKeyRequest } from '@/services/api/keys';
 import { ROLE_DEFINITIONS } from '@/lib/role-colors';
 
@@ -31,6 +32,15 @@ export default function ProjectKeysPage() {
   const { data: keys = [], isLoading, error, refetch } = useKeys(projectName);
   const createKeyMutation = useCreateKey();
   const deleteKeyMutation = useDeleteKey();
+
+  const { confirmDelete: confirmDeleteKey, isDeleting } = useOptimisticDelete({
+    getId: (key: { id: string; name: string }) => key.id,
+    getDisplayName: (key: { id: string; name: string }) => key.name || key.id,
+    getMutationVariables: (key: { id: string; name: string }) => ({ projectName, keyId: key.id }),
+    mutation: deleteKeyMutation,
+    deletingMessage: 'Deleting key...',
+    successMessage: (displayName) => `Access key "${displayName}" deleted successfully`,
+  });
 
   // Local UI state
   const [showCreate, setShowCreate] = useState(false);
@@ -69,25 +79,16 @@ export default function ProjectKeysPage() {
     );
   }, [newKeyName, newKeyDesc, newKeyRole, projectName, createKeyMutation]);
 
-  const openDeleteDialog = useCallback((keyId: string, keyName: string) => {
-    setKeyToDelete({ id: keyId, name: keyName });
-    setShowDeleteDialog(true);
-  }, []);
-
   const confirmDelete = useCallback(() => {
     if (!keyToDelete) return;
-    deleteKeyMutation.mutate(
-      { projectName, keyId: keyToDelete.id },
-      {
-        onSuccess: () => {
-          successToast(`Access key "${keyToDelete.name}" deleted successfully`);
 
-          setShowDeleteDialog(false);
-          setKeyToDelete(null);
-        },
-      }
-    );
-  }, [keyToDelete, projectName, deleteKeyMutation]);
+    // Close dialog immediately
+    setShowDeleteDialog(false);
+    setKeyToDelete(null);
+
+    // Use hook's confirmDelete
+    confirmDeleteKey(keyToDelete);
+  }, [keyToDelete, confirmDeleteKey]);
 
   const copy = async (text: string) => {
     try {
@@ -176,7 +177,7 @@ export default function ProjectKeysPage() {
               </TableHeader>
               <TableBody>
                 {keys.map((k) => {
-                  const isDeletingThis = deleteKeyMutation.isPending && deleteKeyMutation.variables?.keyId === k.id;
+                  const isDeletingThis = isDeleting(k);
                   return (
                     <TableRow key={k.id}>
                       <TableCell className="font-medium">{k.name}</TableCell>
@@ -220,7 +221,10 @@ export default function ProjectKeysPage() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => openDeleteDialog(k.id, k.name)}
+                          onClick={() => {
+                            setKeyToDelete({ id: k.id, name: k.name });
+                            setShowDeleteDialog(true);
+                          }}
                           disabled={isDeletingThis}
                         >
                           {isDeletingThis ? (
@@ -360,7 +364,6 @@ export default function ProjectKeysPage() {
         title="Delete Access Key"
         description={`Are you sure you want to delete the access key "${keyToDelete?.name}"? This action cannot be undone and any systems using this key will lose access.`}
         confirmText="Delete Key"
-        loading={deleteKeyMutation.isPending}
       />
     </div>
   );

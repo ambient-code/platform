@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter, usePathname } from 'next/navigation';
 import { formatDistanceToNow } from 'date-fns';
 import { Plus, RefreshCw, Trash2, FolderOpen, Loader2, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 
@@ -33,8 +34,17 @@ import { successToast, errorToast } from '@/hooks/use-toast';
 import type { Project } from '@/types/api';
 import { DEFAULT_PAGE_SIZE } from '@/types/api';
 import { useDebounce } from '@/hooks/use-debounce';
+import { useOptimisticDelete } from '@/hooks/use-optimistic-delete';
+
+const getProjectDisplayName = (project: Project | null | undefined) => {
+  if (!project) return '';
+  return project.displayName || project.name;
+};
 
 export default function ProjectsPage() {
+  const router = useRouter();
+  const pathname = usePathname();
+
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -73,6 +83,21 @@ export default function ProjectsPage() {
 
   const deleteProjectMutation = useDeleteProject();
 
+  const { confirmDelete: confirmDeleteProject, isDeleting } = useOptimisticDelete({
+    getId: (project: Project) => project.name,
+    getDisplayName: (project: Project) => project.displayName || project.name,
+    getMutationVariables: (project: Project) => project.name,
+    mutation: deleteProjectMutation,
+    deletingMessage: 'Deleting workspace...',
+    successMessage: (displayName) => `Workspace "${displayName}" deleted successfully`,
+    onSuccess: (project, projectName) => {
+      // Redirect if viewing deleted workspace
+      if (pathname.startsWith(`/projects/${projectName}`)) {
+        router.push('/projects');
+      }
+    },
+  });
+
   const handleRefreshClick = () => {
     refetch();
   };
@@ -93,28 +118,15 @@ export default function ProjectsPage() {
     setSearchInput(e.target.value);
   };
 
-  const openDeleteDialog = (project: Project) => {
-    setProjectToDelete(project);
-    setShowDeleteDialog(true);
-  };
-
-  const closeDeleteDialog = () => {
-    setShowDeleteDialog(false);
-    setProjectToDelete(null);
-  };
-
   const confirmDelete = async () => {
     if (!projectToDelete) return;
 
-    deleteProjectMutation.mutate(projectToDelete.name, {
-      onSuccess: () => {
-        successToast(`Project "${projectToDelete.displayName || projectToDelete.name}" deleted successfully`);
-        closeDeleteDialog();
-      },
-      onError: (error) => {
-        errorToast(error instanceof Error ? error.message : 'Failed to delete project');
-      },
-    });
+    // Close dialog immediately
+    setShowDeleteDialog(false);
+    setProjectToDelete(null);
+
+    // Use hook's confirmDelete (handles mutation, toasts, and redirect)
+    confirmDeleteProject(projectToDelete);
   };
 
   // Initial loading state (no data yet)
@@ -239,7 +251,7 @@ export default function ProjectsPage() {
                             >
                               <div>
                                 <div className="font-medium">
-                                  {project.displayName || project.name}
+                                  {getProjectDisplayName(project)}
                                 </div>
                                 <div className="text-xs text-muted-foreground font-normal">
                                   {project.name}
@@ -272,9 +284,17 @@ export default function ProjectsPage() {
                               variant="ghost"
                               size="sm"
                               className="h-8 w-8 p-0"
-                              onClick={() => openDeleteDialog(project)}
+                              onClick={() => {
+                                setProjectToDelete(project);
+                                setShowDeleteDialog(true);
+                              }}
+                              disabled={isDeleting(project)}
                             >
-                              <Trash2 className="h-4 w-4" />
+                              {isDeleting(project) ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Trash2 className="h-4 w-4" />
+                              )}
                             </Button>
                           </TableCell>
                         </TableRow>
@@ -326,7 +346,7 @@ export default function ProjectsPage() {
           onOpenChange={setShowDeleteDialog}
           onConfirm={confirmDelete}
           title="Delete workspace"
-          description={`Are you sure you want to delete workspace "${projectToDelete?.name}"? This will permanently remove the workspace and all related resources. This action cannot be undone.`}
+          description={`Are you sure you want to delete workspace "${getProjectDisplayName(projectToDelete)}"? This will permanently remove the workspace and all related resources. This action cannot be undone.`}
           confirmText="Delete"
           loading={deleteProjectMutation.isPending}
         />

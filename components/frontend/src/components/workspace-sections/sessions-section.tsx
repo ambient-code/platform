@@ -17,7 +17,9 @@ import { EditSessionNameDialog } from '@/components/edit-session-name-dialog';
 
 import { useSessionsPaginated, useStopSession, useDeleteSession, useContinueSession, useUpdateSessionDisplayName } from '@/services/queries';
 import { successToast, errorToast } from '@/hooks/use-toast';
+import { useOptimisticDelete } from '@/hooks/use-optimistic-delete';
 import { useDebounce } from '@/hooks/use-debounce';
+import { DestructiveConfirmationDialog } from '@/components/confirmation-dialog';
 import { DEFAULT_PAGE_SIZE } from '@/types/api';
 
 type SessionsSectionProps = {
@@ -59,9 +61,21 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
   const deleteSessionMutation = useDeleteSession();
   const continueSessionMutation = useContinueSession();
   const updateDisplayNameMutation = useUpdateSessionDisplayName();
-  
-  // State for edit name dialog
+
+  type Session = { name: string; displayName: string };
+  const { confirmDelete: confirmDeleteSession, isDeleting } = useOptimisticDelete<Session, { projectName: string; sessionName: string }>({
+    getId: (session) => session.name,
+    getDisplayName: (session) => session.displayName || session.name,
+    getMutationVariables: (session) => ({ projectName, sessionName: session.name }),
+    mutation: deleteSessionMutation,
+    deletingMessage: 'Deleting session...',
+    successMessage: (displayName) => `Session "${displayName}" deleted successfully`,
+  });
+
+  // State for dialogs
   const [editingSession, setEditingSession] = useState<{ name: string; displayName: string } | null>(null);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [sessionToDelete, setSessionToDelete] = useState<{ name: string; displayName: string } | null>(null);
 
   const handleStop = async (sessionName: string) => {
     stopSessionMutation.mutate(
@@ -77,19 +91,20 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
     );
   };
 
-  const handleDelete = async (sessionName: string) => {
-    if (!confirm(`Delete agentic session "${sessionName}"? This action cannot be undone.`)) return;
-    deleteSessionMutation.mutate(
-      { projectName, sessionName },
-      {
-        onSuccess: () => {
-          successToast(`Session "${sessionName}" deleted successfully`);
-        },
-        onError: (error) => {
-          errorToast(error instanceof Error ? error.message : 'Failed to delete session');
-        },
-      }
-    );
+  const handleDelete = async (sessionName: string, displayName: string) => {
+    setSessionToDelete({ name: sessionName, displayName });
+    setShowDeleteDialog(true);
+  };
+
+  const confirmDelete = () => {
+    if (!sessionToDelete) return;
+
+    // Close dialog immediately
+    setShowDeleteDialog(false);
+    setSessionToDelete(null);
+
+    // Use hook's confirmDelete
+    confirmDeleteSession(sessionToDelete);
   };
 
   const handleContinue = async (sessionName: string) => {
@@ -325,6 +340,16 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
         onSave={handleSaveEditName}
         isLoading={updateDisplayNameMutation.isPending}
       />
+
+      {/* Delete confirmation dialog */}
+      <DestructiveConfirmationDialog
+        open={showDeleteDialog}
+        onOpenChange={setShowDeleteDialog}
+        onConfirm={confirmDelete}
+        title="Delete Session"
+        description={`Are you sure you want to delete session "${sessionToDelete?.displayName || sessionToDelete?.name}"? This action cannot be undone.`}
+        confirmText="Delete"
+      />
     </Card>
   );
 }
@@ -335,7 +360,7 @@ type SessionActionsProps = {
   phase: string;
   onStop: (sessionName: string) => void;
   onContinue: (sessionName: string) => void;
-  onDelete: (sessionName: string) => void;
+  onDelete: (sessionName: string, displayName: string) => void;
   onEditName: (sessionName: string, currentDisplayName: string) => void;
 };
 
@@ -382,7 +407,7 @@ function SessionActions({ sessionName, displayName, phase, onStop, onContinue, o
     actions.push({
       key: 'delete',
       label: 'Delete',
-      onClick: () => onDelete(sessionName),
+      onClick: () => onDelete(sessionName, displayName),
       icon: <Trash2 className="h-4 w-4" />,
       className: 'text-red-600',
     });
