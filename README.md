@@ -124,7 +124,19 @@ That's it! Access the app at `http://$(minikube ip):30030` (get IP with `make lo
 
 ## Quick Start
 
-### 1. Deploy to OpenShift
+### 1. Prepare MinIO Credentials (Required)
+
+Before deploying, create MinIO credentials for S3 storage:
+
+```bash
+cd components/manifests/base
+cp minio-credentials-secret.yaml.example minio-credentials-secret.yaml
+# Edit credentials (change admin/changeme123 for production)
+vi minio-credentials-secret.yaml
+cd ../..
+```
+
+### 2. Deploy to OpenShift
 
 Deploy using the default images from `quay.io/ambient_code`:
 
@@ -134,13 +146,20 @@ cp components/manifests/env.example components/manifests/.env
 # Edit .env and set at least ANTHROPIC_API_KEY
 
 # Deploy to ambient-code namespace (default)
+# This automatically sets up MinIO and creates the session storage bucket
 make deploy
 
 # Or deploy to custom namespace
 make deploy NAMESPACE=my-namespace
 ```
 
-### 2. Verify Deployment
+**What happens during deployment:**
+- MinIO is deployed with your credentials
+- The `ambient-sessions` bucket is automatically created
+- Versioning and privacy policies are configured
+- All components wait for dependencies to be ready
+
+### 3. Verify Deployment
 
 ```bash
 # Check pod status
@@ -150,7 +169,7 @@ oc get pods -n ambient-code
 oc get services,routes -n ambient-code
 ```
 
-### 3. Access the Web Interface
+### 4. Access the Web Interface
 
 ```bash
 # Get the route URL
