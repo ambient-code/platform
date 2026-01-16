@@ -230,7 +230,14 @@ export default function ProjectSessionDetailPage({
       hasConnectedRef.current = true;
       aguiConnectRef.current();
     }
-  }, [projectName, sessionName]);
+    
+    // CRITICAL: Disconnect when navigating away to prevent hung connections
+    return () => {
+      console.log('[Session Detail] Unmounting, disconnecting AG-UI stream');
+      aguiStream.disconnect();
+      hasConnectedRef.current = false;
+    };
+  }, [projectName, sessionName, aguiStream]);
 
   // Auto-send initial prompt (handles session start, workflow activation, restarts)
   // AG-UI pattern: Client (or backend) initiates runs via POST /agui/run
