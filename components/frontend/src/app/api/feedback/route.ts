@@ -15,6 +15,7 @@ import { getLangfuseClient } from '@/lib/langfuseClient';
  * - username: string
  * - projectName: string
  * - sessionName: string
+ * - workflow?: string (optional - active workflow name)
  * - context?: string (what the user was working on)
  * - includeTranscript?: boolean
  * - transcript?: Array<{ role: string; content: string; timestamp?: string }>
@@ -27,6 +28,7 @@ type FeedbackRequest = {
   username: string;
   projectName: string;
   sessionName: string;
+  workflow?: string;
   context?: string;
   includeTranscript?: boolean;
   transcript?: Array<{ role: string; content: string; timestamp?: string }>;
@@ -43,6 +45,7 @@ export async function POST(request: NextRequest) {
       username,
       projectName,
       sessionName,
+      workflow,
       context,
       includeTranscript,
       transcript,
@@ -75,7 +78,7 @@ export async function POST(request: NextRequest) {
     }
     
     if (context) {
-      commentParts.push(`Context: ${context}`);
+      commentParts.push(`\nMessage:\n${context}`);
     }
     
     if (includeTranscript && transcript && transcript.length > 0) {
@@ -96,6 +99,10 @@ export async function POST(request: NextRequest) {
       session: sessionName,
       user: username,
     };
+    
+    if (workflow) {
+      metadata.workflow = workflow;
+    }
 
     // Send feedback using LangfuseWeb SDK
     langfuse.score({

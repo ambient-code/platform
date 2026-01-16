@@ -83,12 +83,8 @@ export function FeedbackModal({
         contextParts.push(`Initial prompt: ${feedbackContext.initialPrompt.substring(0, 200)}`);
       }
       
-      if (feedbackContext.activeWorkflow) {
-        contextParts.push(`Workflow: ${feedbackContext.activeWorkflow}`);
-      }
-      
       if (messageContent) {
-        contextParts.push(`Response being rated: ${messageContent.substring(0, 500)}`);
+        contextParts.push(messageContent.substring(0, 500));
       }
 
       const transcript = includeTranscript
@@ -104,6 +100,7 @@ export function FeedbackModal({
           username: feedbackContext.username,
           projectName: feedbackContext.projectName,
           sessionName: feedbackContext.sessionName,
+          workflow: feedbackContext.activeWorkflow || undefined,
           context: contextParts.join("; "),
           includeTranscript,
           transcript,
