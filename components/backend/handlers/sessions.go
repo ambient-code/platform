@@ -1210,45 +1210,6 @@ func SelectWorkflow(c *gin.Context) {
 		branch = "main"
 	}
 
-	// Call runner to clone and activate the workflow (if session is running)
-	status, _ := item.Object["status"].(map[string]interface{})
-	phase, _ := status["phase"].(string)
-	if phase == "Running" {
-		runnerURL := fmt.Sprintf("http://session-%s.%s.svc.cluster.local:8001/workflow", sessionName, project)
-		runnerReq := map[string]string{
-			"gitUrl": req.GitURL,
-			"branch": branch,
-			"path":   req.Path,
-		}
-		reqBody, _ := json.Marshal(runnerReq)
-
-		log.Printf("Calling runner to activate workflow: %s@%s (path: %s) -> %s", req.GitURL, branch, req.Path, runnerURL)
-		httpReq, err := http.NewRequestWithContext(c.Request.Context(), "POST", runnerURL, bytes.NewReader(reqBody))
-		if err != nil {
-			log.Printf("Failed to create runner request: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create runner request"})
-			return
-		}
-		httpReq.Header.Set("Content-Type", "application/json")
-
-		client := &http.Client{Timeout: 120 * time.Second} // Allow time for clone
-		resp, err := client.Do(httpReq)
-		if err != nil {
-			log.Printf("Failed to call runner to activate workflow: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to activate workflow (runner not reachable)"})
-			return
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(resp.Body)
-			log.Printf("Runner failed to activate workflow (status %d): %s", resp.StatusCode, string(body))
-			c.JSON(resp.StatusCode, gin.H{"error": fmt.Sprintf("Failed to activate workflow: %s", string(body))})
-			return
-		}
-		log.Printf("Runner successfully activated workflow %s@%s for session %s", req.GitURL, branch, sessionName)
-	}
-
 	// Update activeWorkflow in spec
 	spec, ok := item.Object["spec"].(map[string]interface{})
 	if !ok {

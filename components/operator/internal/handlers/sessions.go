@@ -1662,9 +1662,10 @@ func reconcileActiveWorkflowWithPatch(sessionNamespace, sessionName string, spec
 	reconciledWorkflowRaw, _, _ := unstructured.NestedMap(status, "reconciledWorkflow")
 	reconciledGitURL, _ := reconciledWorkflowRaw["gitUrl"].(string)
 	reconciledBranch, _ := reconciledWorkflowRaw["branch"].(string)
+	reconciledPath, _ := reconciledWorkflowRaw["path"].(string)
 
 	// Detect drift: workflow changed
-	if reconciledGitURL == gitURL && reconciledBranch == branch {
+	if reconciledGitURL == gitURL && reconciledBranch == branch && reconciledPath == path {
 		return nil
 	}
 

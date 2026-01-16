@@ -193,6 +193,8 @@ app = FastAPI(
 
 # Track if adapter has been initialized
 _adapter_initialized = False
+# Prevent duplicate workflow updates/greetings from concurrent calls
+_workflow_change_lock = asyncio.Lock()
 
 
 @app.post("/")
@@ -511,35 +513,48 @@ async def change_workflow(request: Request):
         raise HTTPException(status_code=503, detail="Adapter not initialized")
     
     body = await request.json()
-    git_url = body.get("gitUrl", "")
-    branch = body.get("branch", "main")
-    path = body.get("path", "")
+    git_url = (body.get("gitUrl") or "").strip()
+    branch = (body.get("branch") or "main").strip() or "main"
+    path = (body.get("path") or "").strip()
     
     logger.info(f"Workflow change request: {git_url}@{branch} (path: {path})")
-    
-    # Clone the workflow repository at runtime
-    # This is needed because the init container only runs once at pod startup
-    if git_url:
-        success, workflow_path = await clone_workflow_at_runtime(git_url, branch, path)
-        if not success:
-            logger.warning("Failed to clone workflow, will use default workflow directory")
-    
-    # Update environment variables
-    os.environ["ACTIVE_WORKFLOW_GIT_URL"] = git_url
-    os.environ["ACTIVE_WORKFLOW_BRANCH"] = branch
-    os.environ["ACTIVE_WORKFLOW_PATH"] = path
-    
-    # Reset adapter state to force reinitialization on next run
-    _adapter_initialized = False
-    adapter._first_run = True
-    
-    logger.info("Workflow updated, adapter will reinitialize on next run")
-    
-    # Trigger a new run to greet user with workflow context
-    # This runs in background via backend POST
-    asyncio.create_task(trigger_workflow_greeting(git_url, branch, path))
-    
-    return {"message": "Workflow updated", "gitUrl": git_url, "branch": branch, "path": path}
+
+    async with _workflow_change_lock:
+        current_git_url = os.getenv("ACTIVE_WORKFLOW_GIT_URL", "").strip()
+        current_branch = os.getenv("ACTIVE_WORKFLOW_BRANCH", "main").strip() or "main"
+        current_path = os.getenv("ACTIVE_WORKFLOW_PATH", "").strip()
+
+        if (
+            current_git_url == git_url
+            and current_branch == branch
+            and current_path == path
+        ):
+            logger.info("Workflow unchanged; skipping reinit and greeting")
+            return {"message": "Workflow already active", "gitUrl": git_url, "branch": branch, "path": path}
+
+        # Clone the workflow repository at runtime
+        # This is needed because the init container only runs once at pod startup
+        if git_url:
+            success, workflow_path = await clone_workflow_at_runtime(git_url, branch, path)
+            if not success:
+                logger.warning("Failed to clone workflow, will use default workflow directory")
+
+        # Update environment variables
+        os.environ["ACTIVE_WORKFLOW_GIT_URL"] = git_url
+        os.environ["ACTIVE_WORKFLOW_BRANCH"] = branch
+        os.environ["ACTIVE_WORKFLOW_PATH"] = path
+
+        # Reset adapter state to force reinitialization on next run
+        _adapter_initialized = False
+        adapter._first_run = True
+
+        logger.info("Workflow updated, adapter will reinitialize on next run")
+
+        # Trigger a new run to greet user with workflow context
+        # This runs in background via backend POST
+        asyncio.create_task(trigger_workflow_greeting(git_url, branch, path))
+
+        return {"message": "Workflow updated", "gitUrl": git_url, "branch": branch, "path": path}
 
 
 async def get_default_branch(repo_path: str) -> str:
