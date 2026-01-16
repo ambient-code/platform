@@ -83,12 +83,10 @@ export async function POST(request: NextRequest) {
     }
     
     if (includeTranscript && transcript && transcript.length > 0) {
-      // Limit transcript to last 10 messages to avoid huge payloads
-      const recentMessages = transcript.slice(-10);
-      const transcriptSummary = recentMessages
-        .map(m => `[${m.role}]: ${m.content.substring(0, 200)}${m.content.length > 200 ? '...' : ''}`)
+      const transcriptText = transcript
+        .map(m => `[${m.role}]: ${m.content}`)
         .join('\n');
-      feedbackParts.push(`\nRecent Transcript:\n${transcriptSummary}`);
+      feedbackParts.push(`\nFull Transcript:\n${transcriptText}`);
     }
 
     const fullComment = feedbackParts.join('\n');
