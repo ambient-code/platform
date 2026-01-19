@@ -222,6 +222,13 @@ export default function ProjectSessionDetailPage({
   // AG-UI pattern: GET /agui/events streams ALL thread events (past + future)
   // POST /agui/run creates runs, events broadcast to GET subscribers
   const hasConnectedRef = useRef(false);
+  const disconnectRef = useRef(aguiStream.disconnect);
+  
+  // Keep disconnect ref up to date without triggering re-renders
+  useEffect(() => {
+    disconnectRef.current = aguiStream.disconnect;
+  }, [aguiStream.disconnect]);
+  
   useEffect(() => {
     if (!projectName || !sessionName) return;
     
@@ -234,10 +241,12 @@ export default function ProjectSessionDetailPage({
     // CRITICAL: Disconnect when navigating away to prevent hung connections
     return () => {
       console.log('[Session Detail] Unmounting, disconnecting AG-UI stream');
-      aguiStream.disconnect();
+      disconnectRef.current();
       hasConnectedRef.current = false;
     };
-  }, [projectName, sessionName, aguiStream]);
+    // NOTE: Only depend on projectName and sessionName - NOT aguiStream
+    // aguiStream is an object that changes every render, which would cause infinite reconnects
+  }, [projectName, sessionName]);
 
   // Auto-send initial prompt (handles session start, workflow activation, restarts)
   // AG-UI pattern: Client (or backend) initiates runs via POST /agui/run

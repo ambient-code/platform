@@ -88,7 +88,12 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
   const currentRunIdRef = useRef<string | null>(null)
   const eventSourceRef = useRef<EventSource | null>(null)
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const reconnectAttemptsRef = useRef(0)
   const mountedRef = useRef(false)
+  
+  // Exponential backoff config for reconnection
+  const MAX_RECONNECT_DELAY = 30000 // 30 seconds max
+  const BASE_RECONNECT_DELAY = 1000 // 1 second base
   
   // Track mounted state without causing re-renders
   useEffect(() => {
@@ -598,6 +603,8 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
       eventSourceRef.current = eventSource
 
       eventSource.onopen = () => {
+        // Reset reconnect attempts on successful connection
+        reconnectAttemptsRef.current = 0
         setState((prev) => ({
           ...prev,
           status: 'connected',
@@ -614,8 +621,22 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
         }
       }
 
-      eventSource.onerror = (err) => {
-        console.error('AG-UI EventSource error:', err)
+      eventSource.onerror = () => {
+        // IMPORTANT: Close the EventSource immediately to prevent browser's native reconnect
+        // from firing alongside our custom reconnect logic
+        eventSource.close()
+        
+        // Only proceed if this is still our active EventSource
+        if (eventSourceRef.current !== eventSource) {
+          return
+        }
+        eventSourceRef.current = null
+        
+        // Don't reconnect if component is unmounted
+        if (!mountedRef.current) {
+          return
+        }
+        
         setState((prev) => ({
           ...prev,
           status: 'error',
@@ -624,15 +645,25 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
         onError?.('Connection error')
         onDisconnected?.()
 
-        // Attempt to reconnect after a delay
+        // Clear any existing reconnect timeout
         if (reconnectTimeoutRef.current) {
           clearTimeout(reconnectTimeoutRef.current)
         }
+        
+        // Exponential backoff: 1s, 2s, 4s, 8s, 16s, 30s (max)
+        reconnectAttemptsRef.current++
+        const delay = Math.min(
+          BASE_RECONNECT_DELAY * Math.pow(2, reconnectAttemptsRef.current - 1),
+          MAX_RECONNECT_DELAY
+        )
+        
+        console.log(`[useAGUIStream] Reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current})`)
+        
         reconnectTimeoutRef.current = setTimeout(() => {
-          if (eventSourceRef.current === eventSource) {
+          if (mountedRef.current) {
             connect(runId)
           }
-        }, 3000)
+        }, delay)
       }
     },
     [projectName, sessionName, processEvent, onConnected, onError, onDisconnected],
