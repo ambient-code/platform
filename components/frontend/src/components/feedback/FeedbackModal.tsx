@@ -92,20 +92,20 @@ export function FeedbackModal({
         ? extractMessageText(feedbackContext.messages)
         : undefined;
 
-      const response = await fetch("/api/feedback", {
+      // Send feedback to backend (which forwards to runner for Langfuse logging)
+      // This follows the AG-UI META event pattern for user feedback
+      const feedbackUrl = `/api/projects/${encodeURIComponent(feedbackContext.projectName)}/agentic-sessions/${encodeURIComponent(feedbackContext.sessionName)}/agui/feedback`;
+      
+      const response = await fetch(feedbackUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          value: feedbackType === "positive" ? 1 : 0,
+          feedbackType: feedbackType === "positive" ? "thumbs_up" : "thumbs_down",
           comment: comment || undefined,
-          username: feedbackContext.username,
-          projectName: feedbackContext.projectName,
-          sessionName: feedbackContext.sessionName,
           workflow: feedbackContext.activeWorkflow || undefined,
           context: contextParts.join("; "),
           includeTranscript,
           transcript,
-          traceId: feedbackContext.traceId,
         }),
       });
 

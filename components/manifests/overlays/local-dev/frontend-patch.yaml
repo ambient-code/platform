@@ -25,19 +25,7 @@ spec:
               key: token
         - name: NODE_TLS_REJECT_UNAUTHORIZED
           value: "0"
-        # Langfuse configuration for user feedback collection
-        - name: LANGFUSE_HOST
-          valueFrom:
-            secretKeyRef:
-              name: ambient-admin-langfuse-secret
-              key: LANGFUSE_HOST
-              optional: true
-        - name: LANGFUSE_PUBLIC_KEY
-          valueFrom:
-            secretKeyRef:
-              name: ambient-admin-langfuse-secret
-              key: LANGFUSE_PUBLIC_KEY
-              optional: true
+        # Note: Langfuse feedback now handled by runner, not frontend
         resources:
           limits:
             memory: "1Gi"

@@ -31,20 +31,7 @@ spec:
           value: "ambient-code"
         - name: VTEAM_VERSION
           value: "v0.0.7"
-        # Langfuse configuration for user feedback collection
-        # Reads from ambient-admin-langfuse-secret if available
-        - name: LANGFUSE_HOST
-          valueFrom:
-            secretKeyRef:
-              name: ambient-admin-langfuse-secret
-              key: LANGFUSE_HOST
-              optional: true
-        - name: LANGFUSE_PUBLIC_KEY
-          valueFrom:
-            secretKeyRef:
-              name: ambient-admin-langfuse-secret
-              key: LANGFUSE_PUBLIC_KEY
-              optional: true
+        # Note: Langfuse feedback now handled by runner, not frontend
         resources:
           requests:
             cpu: 100m

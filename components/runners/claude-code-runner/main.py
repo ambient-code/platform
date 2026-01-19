@@ -284,6 +284,134 @@ async def interrupt_run():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class FeedbackEvent(BaseModel):
+    """AG-UI META event for user feedback (thumbs up/down)."""
+    type: str  # "META"
+    metaType: str  # "thumbs_up" or "thumbs_down"
+    payload: Dict[str, Any]
+    threadId: Optional[str] = None
+    ts: Optional[int] = None
+
+
+@app.post("/feedback")
+async def handle_feedback(event: FeedbackEvent):
+    """
+    Handle user feedback META events and send to Langfuse.
+    
+    This endpoint receives thumbs up/down feedback from the frontend (via backend)
+    and logs it to Langfuse for observability tracking.
+    
+    See: https://docs.ag-ui.com/drafts/meta-events#user-feedback
+    """
+    logger.info(f"Feedback received: {event.metaType} from {event.payload.get('userId', 'unknown')}")
+    
+    if event.type != "META":
+        raise HTTPException(status_code=400, detail="Expected META event type")
+    
+    if event.metaType not in ("thumbs_up", "thumbs_down"):
+        raise HTTPException(status_code=400, detail="metaType must be 'thumbs_up' or 'thumbs_down'")
+    
+    try:
+        # Extract payload fields
+        payload = event.payload
+        user_id = payload.get("userId", "unknown")
+        project_name = payload.get("projectName", "")
+        session_name = payload.get("sessionName", "")
+        message_id = payload.get("messageId", "")
+        comment = payload.get("comment", "")
+        reason = payload.get("reason", "")
+        workflow = payload.get("workflow", "")
+        context_str = payload.get("context", "")
+        include_transcript = payload.get("includeTranscript", False)
+        transcript = payload.get("transcript", [])
+        
+        # Map metaType to numeric value (1 = positive, 0 = negative)
+        value = 1 if event.metaType == "thumbs_up" else 0
+        
+        # Build comment string with context
+        comment_parts = []
+        if comment:
+            comment_parts.append(comment)
+        if reason:
+            comment_parts.append(f"Reason: {reason}")
+        if context_str:
+            comment_parts.append(f"\nMessage:\n{context_str}")
+        if include_transcript and transcript:
+            transcript_text = "\n".join(
+                f"[{m.get('role', 'unknown')}]: {m.get('content', '')}"
+                for m in transcript
+            )
+            comment_parts.append(f"\nFull Transcript:\n{transcript_text}")
+        
+        feedback_comment = "\n".join(comment_parts) if comment_parts else None
+        
+        # Send to Langfuse if configured
+        langfuse_enabled = os.getenv("LANGFUSE_ENABLED", "").strip().lower() in ("1", "true", "yes")
+        
+        if langfuse_enabled:
+            try:
+                from langfuse import Langfuse
+                
+                public_key = os.getenv("LANGFUSE_PUBLIC_KEY", "").strip()
+                secret_key = os.getenv("LANGFUSE_SECRET_KEY", "").strip()
+                host = os.getenv("LANGFUSE_HOST", "").strip()
+                
+                if public_key and secret_key and host:
+                    langfuse = Langfuse(
+                        public_key=public_key,
+                        secret_key=secret_key,
+                        host=host,
+                    )
+                    
+                    # Generate trace ID if not provided
+                    # Use session name as base for trace ID to group feedback with session traces
+                    trace_id = f"feedback-{session_name}-{event.ts or int(__import__('time').time() * 1000)}"
+                    
+                    # Build metadata for structured filtering in Langfuse UI
+                    metadata = {
+                        "project": project_name,
+                        "session": session_name,
+                        "user": user_id,
+                        "feedbackType": event.metaType,
+                    }
+                    if workflow:
+                        metadata["workflow"] = workflow
+                    if message_id:
+                        metadata["messageId"] = message_id
+                    
+                    # Send score to Langfuse
+                    langfuse.score(
+                        trace_id=trace_id,
+                        name="user-feedback",
+                        value=value,
+                        comment=feedback_comment,
+                        metadata=metadata,
+                    )
+                    
+                    # Flush immediately to ensure feedback is sent
+                    langfuse.flush()
+                    
+                    logger.info(f"Langfuse: Feedback score sent (trace_id={trace_id}, value={value})")
+                else:
+                    logger.warning("Langfuse enabled but missing credentials")
+            except ImportError:
+                logger.warning("Langfuse not available - feedback will not be recorded")
+            except Exception as e:
+                logger.error(f"Failed to send feedback to Langfuse: {e}")
+        else:
+            logger.info("Langfuse not enabled - feedback logged but not sent to Langfuse")
+        
+        return {
+            "message": "Feedback received",
+            "metaType": event.metaType,
+            "recorded": langfuse_enabled,
+        }
+        
+    except Exception as e:
+        logger.error(f"Error processing feedback: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 def _check_mcp_authentication(server_name: str) -> tuple[bool | None, str | None]:
     """
     Check if credentials are available for known MCP servers.
