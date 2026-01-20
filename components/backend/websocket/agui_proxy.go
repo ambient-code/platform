@@ -586,28 +586,9 @@ func truncateForLog(s string, maxLen int) string {
 	return s[:maxLen] + "..."
 }
 
-// FeedbackRequest represents the input for submitting user feedback
-type FeedbackRequest struct {
-	// Type of feedback: "thumbs_up" or "thumbs_down"
-	FeedbackType string `json:"feedbackType" binding:"required,oneof=thumbs_up thumbs_down"`
-	// Optional message ID being rated
-	MessageID string `json:"messageId,omitempty"`
-	// Optional reason for negative feedback
-	Reason string `json:"reason,omitempty"`
-	// Optional additional comment
-	Comment string `json:"comment,omitempty"`
-	// Optional workflow name
-	Workflow string `json:"workflow,omitempty"`
-	// Optional context about what user was working on
-	Context string `json:"context,omitempty"`
-	// Whether to include transcript
-	IncludeTranscript bool `json:"includeTranscript,omitempty"`
-	// Optional transcript of conversation
-	Transcript []types.FeedbackTranscriptItem `json:"transcript,omitempty"`
-}
-
-// HandleAGUIFeedback sends user feedback as a META event to the runner
+// HandleAGUIFeedback forwards AG-UI META events (user feedback) to the runner
 // POST /api/projects/:projectName/agentic-sessions/:sessionName/agui/feedback
+// Frontend constructs the full META event, backend validates and forwards
 // See: https://docs.ag-ui.com/drafts/meta-events#user-feedback
 func HandleAGUIFeedback(c *gin.Context) {
 	// SECURITY: Sanitize URL path params to prevent log injection
@@ -643,23 +624,28 @@ func HandleAGUIFeedback(c *gin.Context) {
 		return
 	}
 
-	// Extract username from request (forwarded by auth proxy)
-	// SECURITY: Sanitize to prevent log injection via control characters (newlines, etc.)
-	username := handlers.SanitizeForLog(c.GetHeader("X-Forwarded-User"))
-	if username == "" {
-		username = "unknown"
-	}
-
-	var input FeedbackRequest
-	if err := c.ShouldBindJSON(&input); err != nil {
-		log.Printf("AGUI Feedback: Failed to parse input: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid input: %v", err)})
+	// Parse AG-UI META event from frontend
+	// Frontend constructs the full event, we just validate and forward
+	var metaEvent map[string]interface{}
+	if err := c.ShouldBindJSON(&metaEvent); err != nil {
+		log.Printf("AGUI Feedback: Failed to parse META event: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid META event: %v", err)})
 		return
 	}
 
-	// SECURITY: Sanitize user input before logging (FeedbackType is validated but sanitize for defense-in-depth)
+	// Validate it's a META event
+	eventType, ok := metaEvent["type"].(string)
+	if !ok || eventType != types.EventTypeMeta {
+		log.Printf("AGUI Feedback: Invalid event type: %v", eventType)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Expected META event type"})
+		return
+	}
+
+	// Extract metaType for logging
+	metaType, _ := metaEvent["metaType"].(string)
+	username := handlers.SanitizeForLog(c.GetHeader("X-Forwarded-User"))
 	log.Printf("AGUI Feedback: Received %s feedback from %s for session %s/%s",
-		handlers.SanitizeForLog(input.FeedbackType), username, projectName, sessionName)
+		handlers.SanitizeForLog(metaType), username, projectName, sessionName)
 
 	// Get runner endpoint
 	runnerURL, err := getRunnerEndpoint(projectName, sessionName)
@@ -669,42 +655,7 @@ func HandleAGUIFeedback(c *gin.Context) {
 		return
 	}
 
-	// Build AG-UI META event payload
-	payload := map[string]interface{}{
-		"userId":      username,
-		"projectName": projectName,
-		"sessionName": sessionName,
-	}
-	if input.MessageID != "" {
-		payload["messageId"] = input.MessageID
-	}
-	if input.Reason != "" {
-		payload["reason"] = input.Reason
-	}
-	if input.Comment != "" {
-		payload["comment"] = input.Comment
-	}
-	if input.Workflow != "" {
-		payload["workflow"] = input.Workflow
-	}
-	if input.Context != "" {
-		payload["context"] = input.Context
-	}
-	if input.IncludeTranscript && len(input.Transcript) > 0 {
-		payload["includeTranscript"] = true
-		payload["transcript"] = input.Transcript
-	}
-
-	// Create META event following AG-UI spec
-	metaEvent := map[string]interface{}{
-		"type":     types.EventTypeMeta,
-		"metaType": input.FeedbackType,
-		"payload":  payload,
-		"threadId": sessionName,
-		"ts":       time.Now().UnixMilli(),
-	}
-
-	// Serialize event for POST to runner
+	// Serialize event for POST to runner (forward as-is)
 	bodyBytes, err := json.Marshal(metaEvent)
 	if err != nil {
 		log.Printf("AGUI Feedback: Failed to serialize META event: %v", err)
@@ -714,7 +665,7 @@ func HandleAGUIFeedback(c *gin.Context) {
 
 	// POST to runner's feedback endpoint
 	feedbackURL := strings.TrimSuffix(runnerURL, "/") + "/feedback"
-	log.Printf("AGUI Feedback: Forwarding to runner: %s", feedbackURL)
+	log.Printf("AGUI Feedback: Forwarding META event to runner: %s", feedbackURL)
 
 	req, err := http.NewRequest("POST", feedbackURL, bytes.NewReader(bodyBytes))
 	if err != nil {
@@ -744,7 +695,12 @@ func HandleAGUIFeedback(c *gin.Context) {
 		return
 	}
 
-	log.Printf("AGUI Feedback: Successfully sent %s feedback to runner", handlers.SanitizeForLog(input.FeedbackType))
+	log.Printf("AGUI Feedback: Successfully forwarded %s feedback to runner", handlers.SanitizeForLog(metaType))
+	
+	// Broadcast the META event on the event stream so UI can see feedback submissions
+	// This allows the frontend to display "Feedback submitted" or track which traces have feedback
+	broadcastToThread(sessionName, metaEvent)
+	
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Feedback submitted successfully",
 		"status":  "sent",

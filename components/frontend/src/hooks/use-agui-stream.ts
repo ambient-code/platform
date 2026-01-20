@@ -41,6 +41,7 @@ type UseAGUIStreamOptions = {
   onError?: (error: string) => void
   onConnected?: () => void
   onDisconnected?: () => void
+  onTraceId?: (traceId: string) => void  // Called when Langfuse trace_id is received
 }
 
 type UseAGUIStreamReturn = {
@@ -81,6 +82,7 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
     onError,
     onConnected,
     onDisconnected,
+    onTraceId,
   } = options
 
   const [state, setState] = useState<AGUIClientState>(initialState)
@@ -515,6 +517,13 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
             if (messageId) {
               hiddenMessageIdsRef.current.add(messageId)
             }
+            return newState
+          }
+          
+          // Handle Langfuse trace_id for feedback association
+          if (rawData?.type === 'langfuse_trace' && rawData?.traceId) {
+            const traceId = rawData.traceId as string
+            onTraceId?.(traceId)
             return newState
           }
           

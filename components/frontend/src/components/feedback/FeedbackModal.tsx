@@ -92,21 +92,46 @@ export function FeedbackModal({
         ? extractMessageText(feedbackContext.messages)
         : undefined;
 
-      // Send feedback to backend (which forwards to runner for Langfuse logging)
-      // This follows the AG-UI META event pattern for user feedback
+      // Build AG-UI META event following the spec
+      // See: https://docs.ag-ui.com/drafts/meta-events#user-feedback
+      const payload: Record<string, unknown> = {
+        userId: feedbackContext.username,
+        projectName: feedbackContext.projectName,
+        sessionName: feedbackContext.sessionName,
+      };
+      
+      if (feedbackContext.traceId) {
+        payload.traceId = feedbackContext.traceId;
+      }
+      if (comment) {
+        payload.comment = comment;
+      }
+      if (feedbackContext.activeWorkflow) {
+        payload.workflow = feedbackContext.activeWorkflow;
+      }
+      if (contextParts.length > 0) {
+        payload.context = contextParts.join("; ");
+      }
+      if (includeTranscript && transcript && transcript.length > 0) {
+        payload.includeTranscript = true;
+        payload.transcript = transcript;
+      }
+      
+      const metaEvent = {
+        type: "META",
+        metaType: feedbackType === "positive" ? "thumbs_up" : "thumbs_down",
+        payload,
+        threadId: feedbackContext.sessionName,
+        ts: Date.now(),
+      };
+      
+      // Send to backend (which forwards to runner and broadcasts on event stream)
       const feedbackUrl = `/api/projects/${encodeURIComponent(feedbackContext.projectName)}/agentic-sessions/${encodeURIComponent(feedbackContext.sessionName)}/agui/feedback`;
       
       const response = await fetch(feedbackUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          feedbackType: feedbackType === "positive" ? "thumbs_up" : "thumbs_down",
-          comment: comment || undefined,
-          workflow: feedbackContext.activeWorkflow || undefined,
-          context: contextParts.join("; "),
-          includeTranscript,
-          transcript,
-        }),
+        body: JSON.stringify(metaEvent),
       });
 
       if (!response.ok) {

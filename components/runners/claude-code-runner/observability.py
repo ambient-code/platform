@@ -323,10 +323,25 @@ class ObservabilityManager:
                 metadata={},  # Turn number will be added in end_turn()
             )
             self._current_turn_generation = self._current_turn_ctx.__enter__()
-            logging.info(f"Langfuse: Created new trace (model={model})")
+            logging.info(f"Langfuse: Created new trace (model={model}, trace_id={self.get_current_trace_id()})")
 
         except Exception as e:
             logging.error(f"Langfuse: Failed to start turn: {e}", exc_info=True)
+
+    def get_current_trace_id(self) -> str | None:
+        """Get the current turn's trace ID for feedback association.
+
+        Returns:
+            The Langfuse trace ID if a turn is active, None otherwise.
+        """
+        if not self._current_turn_generation:
+            return None
+        
+        # The generation object has a trace_id attribute
+        try:
+            return getattr(self._current_turn_generation, 'trace_id', None)
+        except Exception:
+            return None
 
     def end_turn(self, turn_count: int, message: Any, usage: dict | None = None) -> None:
         """Complete turn tracking with output and usage data (called when ResultMessage arrives).

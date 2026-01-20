@@ -406,6 +406,16 @@ func streamThreadEvents(c *gin.Context, projectName, sessionName string) {
 				writeSSEEvent(c.Writer, snapshot)
 				c.Writer.(http.Flusher).Flush()
 			}
+
+			// Replay META events from completed runs (feedback, tags, annotations)
+			// META events are not part of MESSAGES_SNAPSHOT, so replay them separately
+			for _, event := range completedEvents {
+				eventType, _ := event["type"].(string)
+				if eventType == types.EventTypeMeta {
+					writeSSEEvent(c.Writer, event)
+				}
+			}
+			c.Writer.(http.Flusher).Flush()
 		}
 	} else if err != nil {
 		log.Printf("AGUI: Failed to load events: %v", err)

@@ -203,6 +203,9 @@ export default function ProjectSessionDetailPage({
     phase === "Running" // Only poll when session is running
   );
 
+  // Track the current Langfuse trace ID for feedback association
+  const [langfuseTraceId, setLangfuseTraceId] = useState<string | null>(null);
+  
   // AG-UI streaming hook - replaces useSessionMessages and useSendChatMessage
   // Note: autoConnect is intentionally false to avoid SSR hydration mismatch
   // Connection is triggered manually in useEffect after client hydration
@@ -211,6 +214,7 @@ export default function ProjectSessionDetailPage({
     sessionName: sessionName || "",
     autoConnect: false, // Manual connection after hydration
     onError: (err) => console.error("AG-UI stream error:", err),
+    onTraceId: (traceId) => setLangfuseTraceId(traceId),  // Capture Langfuse trace ID for feedback
   });
   const aguiState = aguiStream.state;
   const aguiSendMessage = aguiStream.sendMessage;
@@ -1978,7 +1982,7 @@ export default function ProjectSessionDetailPage({
                         initialPrompt={session?.spec?.initialPrompt}
                         activeWorkflow={workflowManagement.activeWorkflow || undefined}
                         messages={streamMessages}
-                        traceId={session?.status?.sdkSessionId}
+                        traceId={langfuseTraceId || undefined}
                       >
                         <MessagesTab
                           session={session}

@@ -162,7 +162,6 @@ VALUES_FILE="$SCRIPT_DIR/langfuse-values-clickhouse-minimal-logging.yaml"
 
 helm upgrade --install langfuse langfuse/langfuse \
   --namespace langfuse \
-  --version ">= 3.63.0" \
   --values "$VALUES_FILE" \
   --set langfuse.nextauth.secret.value="$NEXTAUTH_SECRET" \
   --set langfuse.salt.value="$SALT" \

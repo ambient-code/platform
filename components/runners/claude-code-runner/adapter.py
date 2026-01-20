@@ -600,6 +600,20 @@ class ClaudeCodeAdapter:
                         if isinstance(message, AssistantMessage):
                             current_message = message
                             obs.start_turn(configured_model, user_input=prompt)
+                            
+                            # Emit trace_id for feedback association
+                            # Frontend can use this to link feedback to specific Langfuse traces
+                            trace_id = obs.get_current_trace_id()
+                            if trace_id:
+                                yield RawEvent(
+                                    type=EventType.RAW,
+                                    thread_id=thread_id,
+                                    run_id=run_id,
+                                    event={
+                                        "type": "langfuse_trace",
+                                        "traceId": trace_id,
+                                    }
+                                )
 
                         # Process all blocks in the message
                         for block in getattr(message, 'content', []) or []:
