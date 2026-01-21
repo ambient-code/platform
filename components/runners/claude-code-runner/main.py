@@ -379,12 +379,10 @@ async def handle_feedback(event: FeedbackEvent):
                     # Create score directly using create_score() API
                     # Prefer trace_id (specific turn) over session_id (whole session)
                     # Langfuse expects trace_id OR session_id, not both
-                    # if trace_id:
                     langfuse.create_score(
                         name="user-feedback",
                         value=value,
                         trace_id=trace_id,
-                        session_id=session_name,
                         data_type="BOOLEAN",
                         comment=feedback_comment,
                         metadata=metadata,
