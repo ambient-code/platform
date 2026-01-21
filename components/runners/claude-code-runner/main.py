@@ -326,8 +326,8 @@ async def handle_feedback(event: FeedbackEvent):
         include_transcript = payload.get("includeTranscript", False)
         transcript = payload.get("transcript", [])
         
-        # Map metaType to numeric value (1 = positive, 0 = negative)
-        value = 1 if event.metaType == "thumbs_up" else 0
+        # Map metaType to boolean value (True = positive, False = negative)
+        value = True if event.metaType == "thumbs_up" else False
         
         # Build comment string with context
         comment_parts = []
@@ -385,19 +385,10 @@ async def handle_feedback(event: FeedbackEvent):
                         value=value,
                         trace_id=trace_id,
                         session_id=session_name,
-                        data_type="NUMERIC",
+                        data_type="BOOLEAN",
                         comment=feedback_comment,
                         metadata=metadata,
                     )
-                    # else:
-                    #     langfuse.create_score(
-                    #         name="user-feedback",
-                    #         value=value,
-                    #         session_id=session_name,  # Fallback to session-level
-                    #         data_type="NUMERIC",
-                    #         comment=feedback_comment,
-                    #         metadata=metadata,
-                    #     )
                     
                     # Flush immediately to ensure feedback is sent
                     langfuse.flush()
