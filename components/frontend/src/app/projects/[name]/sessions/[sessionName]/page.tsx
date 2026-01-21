@@ -842,6 +842,7 @@ export default function ProjectSessionDetailPage({
       if (msg.role === "user") {
         result.push({
           type: "user_message",
+          id: msg.id,  // Preserve message ID for feedback association
           content: { type: "text_block", text: msg.content || "" },
           timestamp,
         });
@@ -851,6 +852,7 @@ export default function ProjectSessionDetailPage({
         if (metadata?.type === "thinking_block") {
           result.push({
             type: "agent_message",
+            id: msg.id,  // Preserve message ID for feedback association
             content: {
               type: "thinking_block",
               thinking: metadata.thinking as string || "",
@@ -863,6 +865,7 @@ export default function ProjectSessionDetailPage({
           // Only push text message if there's actual content
           result.push({
             type: "agent_message",
+            id: msg.id,  // Preserve message ID for feedback association
             content: { type: "text_block", text: msg.content },
             model: "claude",
             timestamp,
@@ -1983,6 +1986,7 @@ export default function ProjectSessionDetailPage({
                         activeWorkflow={workflowManagement.activeWorkflow || undefined}
                         messages={streamMessages}
                         traceId={langfuseTraceId || undefined}
+                        messageFeedback={aguiState.messageFeedback}
                       >
                         <MessagesTab
                           session={session}

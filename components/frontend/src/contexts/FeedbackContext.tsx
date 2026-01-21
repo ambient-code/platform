@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useMemo } from "react";
 import type { MessageObject, ToolUseMessages } from "@/types/agentic-session";
+import type { MessageFeedback } from "@/types/agui";
 
 export type FeedbackContextValue = {
   projectName: string;
@@ -12,6 +13,8 @@ export type FeedbackContextValue = {
   messages: Array<MessageObject | ToolUseMessages>;
   // traceId from Langfuse if available (from session status)
   traceId?: string;
+  // Track which messages have received feedback (messageId -> feedback type)
+  messageFeedback?: Map<string, MessageFeedback>;
 };
 
 const FeedbackContext = createContext<FeedbackContextValue | null>(null);
@@ -24,6 +27,7 @@ type FeedbackProviderProps = {
   activeWorkflow?: string;
   messages: Array<MessageObject | ToolUseMessages>;
   traceId?: string;
+  messageFeedback?: Map<string, MessageFeedback>;
   children: React.ReactNode;
 };
 
@@ -35,6 +39,7 @@ export function FeedbackProvider({
   activeWorkflow,
   messages,
   traceId,
+  messageFeedback,
   children,
 }: FeedbackProviderProps) {
   const value = useMemo(
@@ -46,8 +51,9 @@ export function FeedbackProvider({
       activeWorkflow,
       messages,
       traceId,
+      messageFeedback,
     }),
-    [projectName, sessionName, username, initialPrompt, activeWorkflow, messages, traceId]
+    [projectName, sessionName, username, initialPrompt, activeWorkflow, messages, traceId, messageFeedback]
   );
 
   return (

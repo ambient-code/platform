@@ -77,6 +77,7 @@ export const StreamMessage: React.FC<StreamMessageProps> = ({ message, onGoToRes
       // Feedback buttons for agent text messages (not tool use/result, not streaming)
       const feedbackElement = isAgent && !isStreaming ? (
         <FeedbackButtons 
+          messageId={m.id}  // Pass message ID for feedback association
           messageContent={getContentText()} 
           messageTimestamp={m.timestamp}
         />

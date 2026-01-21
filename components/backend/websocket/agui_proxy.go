@@ -696,11 +696,28 @@ func HandleAGUIFeedback(c *gin.Context) {
 	}
 
 	log.Printf("AGUI Feedback: Successfully forwarded %s feedback to runner", handlers.SanitizeForLog(metaType))
-	
+
 	// Broadcast the META event on the event stream so UI can see feedback submissions
 	// This allows the frontend to display "Feedback submitted" or track which traces have feedback
 	broadcastToThread(sessionName, metaEvent)
-	
+
+	// CRITICAL: Persist the META event so it survives reconnects and session restarts
+	// Without this, feedback events are lost when clients disconnect
+	// Extract runId from event payload if present (feedback is associated with a specific run/message)
+	runID := ""
+	if payload, ok := metaEvent["payload"].(map[string]interface{}); ok {
+		if rid, ok := payload["runId"].(string); ok {
+			runID = rid
+		}
+	}
+	// Fallback: try top-level runId
+	if runID == "" {
+		if rid, ok := metaEvent["runId"].(string); ok {
+			runID = rid
+		}
+	}
+	go persistAGUIEventMap(sessionName, runID, metaEvent)
+
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Feedback submitted successfully",
 		"status":  "sent",

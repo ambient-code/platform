@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { ThumbsUp, ThumbsDown, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FeedbackModal, FeedbackType } from "./FeedbackModal";
@@ -13,21 +13,35 @@ import {
 } from "@/components/ui/tooltip";
 
 type FeedbackButtonsProps = {
+  messageId?: string;  // Message ID for feedback association
   messageContent?: string;
   messageTimestamp?: string;
   className?: string;
 };
 
 export function FeedbackButtons({
+  messageId,
   messageContent,
   messageTimestamp,
   className,
 }: FeedbackButtonsProps) {
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
   const [selectedFeedback, setSelectedFeedback] = useState<FeedbackType | null>(null);
-  const [submittedFeedback, setSubmittedFeedback] = useState<FeedbackType | null>(null);
+  const [localSubmittedFeedback, setLocalSubmittedFeedback] = useState<FeedbackType | null>(null);
   
   const feedbackContext = useFeedbackContextOptional();
+  
+  // Check if this message already has feedback from context (e.g., from replayed META events)
+  const existingFeedback = useMemo(() => {
+    if (!messageId || !feedbackContext?.messageFeedback) return null;
+    const feedback = feedbackContext.messageFeedback.get(messageId);
+    if (feedback === 'thumbs_up') return 'positive' as FeedbackType;
+    if (feedback === 'thumbs_down') return 'negative' as FeedbackType;
+    return null;
+  }, [messageId, feedbackContext?.messageFeedback]);
+  
+  // Use existing feedback from context OR local submission state
+  const submittedFeedback = existingFeedback ?? localSubmittedFeedback;
   
   // Don't render if no context available
   if (!feedbackContext) {
@@ -45,7 +59,7 @@ export function FeedbackButtons({
   };
 
   const handleSubmitSuccess = () => {
-    setSubmittedFeedback(selectedFeedback);
+    setLocalSubmittedFeedback(selectedFeedback);
   };
 
   const isPositiveSubmitted = submittedFeedback === "positive";
@@ -123,6 +137,7 @@ export function FeedbackButtons({
           open={feedbackModalOpen}
           onOpenChange={setFeedbackModalOpen}
           feedbackType={selectedFeedback}
+          messageId={messageId}
           messageContent={messageContent}
           messageTimestamp={messageTimestamp}
           onSubmitSuccess={handleSubmitSuccess}

@@ -369,10 +369,20 @@ func streamThreadEvents(c *gin.Context, projectName, sessionName string) {
 		aguiRunsMu.Unlock()
 
 		// Filter to only events from COMPLETED runs (have terminal event)
+		// Also collect session-level META events (feedback, etc.) which may not have runId
 		completedEvents := make([]map[string]interface{}, 0)
+		sessionMetaEvents := make([]map[string]interface{}, 0)
 		skippedCount := 0
 		for _, event := range events {
+			eventType, _ := event["type"].(string)
 			eventRunID, ok := event["runId"].(string)
+
+			// META events may not have runId (session-level feedback) - collect them separately
+			if eventType == types.EventTypeMeta {
+				sessionMetaEvents = append(sessionMetaEvents, event)
+				continue
+			}
+
 			if !ok {
 				continue
 			}
@@ -406,14 +416,14 @@ func streamThreadEvents(c *gin.Context, projectName, sessionName string) {
 				writeSSEEvent(c.Writer, snapshot)
 				c.Writer.(http.Flusher).Flush()
 			}
+		}
 
-			// Replay META events from completed runs (feedback, tags, annotations)
-			// META events are not part of MESSAGES_SNAPSHOT, so replay them separately
-			for _, event := range completedEvents {
-				eventType, _ := event["type"].(string)
-				if eventType == types.EventTypeMeta {
-					writeSSEEvent(c.Writer, event)
-				}
+		// Replay ALL session META events (feedback, tags, annotations)
+		// META events are session-level and not part of MESSAGES_SNAPSHOT
+		// They must be replayed regardless of runId to survive reconnects
+		if len(sessionMetaEvents) > 0 {
+			for _, event := range sessionMetaEvents {
+				writeSSEEvent(c.Writer, event)
 			}
 			c.Writer.(http.Flusher).Flush()
 		}

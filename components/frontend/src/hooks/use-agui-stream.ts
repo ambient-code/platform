@@ -67,6 +67,7 @@ type UseAGUIStreamReturn = {
     pendingToolCalls: new Map(),  // NEW: tracks ALL in-progress tool calls
     pendingChildren: new Map(),
     error: null,
+    messageFeedback: new Map(),  // Track feedback for messages
   }
 
 export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamReturn {
@@ -572,6 +573,19 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
             }
             newState.messages = [...newState.messages, msg]
             onMessage?.(msg)
+          }
+          return newState
+        }
+
+        // Handle META events (user feedback: thumbs_up / thumbs_down)
+        if (event.type === AGUIEventType.META) {
+          const metaType = event.metaType
+          const messageId = event.payload?.messageId as string | undefined
+          
+          if (messageId && (metaType === 'thumbs_up' || metaType === 'thumbs_down')) {
+            const feedbackMap = new Map(newState.messageFeedback)
+            feedbackMap.set(messageId, metaType)
+            newState.messageFeedback = feedbackMap
           }
           return newState
         }

@@ -11,11 +11,9 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { ThumbsUp, ThumbsDown, Loader2, Info } from "lucide-react";
 import { useFeedbackContextOptional } from "@/contexts/FeedbackContext";
-import type { MessageObject, ToolUseMessages } from "@/types/agentic-session";
 
 export type FeedbackType = "positive" | "negative";
 
@@ -23,44 +21,21 @@ type FeedbackModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   feedbackType: FeedbackType;
+  messageId?: string;  // Message ID for feedback association (matches messages in MESSAGES_SNAPSHOT)
   messageContent?: string;
   messageTimestamp?: string;
   onSubmitSuccess?: () => void;
 };
 
-// Helper to extract text content from messages
-function extractMessageText(
-  messages: Array<MessageObject | ToolUseMessages>
-): Array<{ role: string; content: string; timestamp?: string }> {
-  return messages
-    .filter((m): m is MessageObject => "type" in m && m.type !== undefined)
-    .filter((m) => m.type === "user_message" || m.type === "agent_message")
-    .map((m) => {
-      let content = "";
-      if (typeof m.content === "string") {
-        content = m.content;
-      } else if ("text" in m.content) {
-        content = m.content.text;
-      } else if ("thinking" in m.content) {
-        content = m.content.thinking;
-      }
-      return {
-        role: m.type === "user_message" ? "user" : "assistant",
-        content,
-        timestamp: m.timestamp,
-      };
-    });
-}
-
 export function FeedbackModal({
   open,
   onOpenChange,
   feedbackType,
+  messageId,
   messageContent,
   onSubmitSuccess,
 }: FeedbackModalProps) {
   const [comment, setComment] = useState("");
-  const [includeTranscript, setIncludeTranscript] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -87,11 +62,6 @@ export function FeedbackModal({
         contextParts.push(messageContent);
       }
 
-      // Extract all messages for the transcript
-      const transcript = includeTranscript
-        ? extractMessageText(feedbackContext.messages)
-        : undefined;
-
       // Build AG-UI META event following the spec
       // See: https://docs.ag-ui.com/drafts/meta-events#user-feedback
       const payload: Record<string, unknown> = {
@@ -100,6 +70,10 @@ export function FeedbackModal({
         sessionName: feedbackContext.sessionName,
       };
       
+      // Include messageId so frontend can match feedback to specific messages
+      if (messageId) {
+        payload.messageId = messageId;
+      }
       if (feedbackContext.traceId) {
         payload.traceId = feedbackContext.traceId;
       }
@@ -111,10 +85,6 @@ export function FeedbackModal({
       }
       if (contextParts.length > 0) {
         payload.context = contextParts.join("; ");
-      }
-      if (includeTranscript && transcript && transcript.length > 0) {
-        payload.includeTranscript = true;
-        payload.transcript = transcript;
       }
       
       const metaEvent = {
@@ -141,7 +111,6 @@ export function FeedbackModal({
 
       // Success - close modal and reset
       setComment("");
-      setIncludeTranscript(false);
       onOpenChange(false);
       onSubmitSuccess?.();
     } catch (err) {
@@ -153,7 +122,6 @@ export function FeedbackModal({
 
   const handleCancel = () => {
     setComment("");
-    setIncludeTranscript(false);
     setError(null);
     onOpenChange(false);
   };
@@ -199,26 +167,6 @@ export function FeedbackModal({
             />
           </div>
 
-          {/* Include transcript checkbox */}
-          <div className="flex items-start space-x-3">
-            <Checkbox
-              id="include-transcript"
-              checked={includeTranscript}
-              onCheckedChange={(checked) => setIncludeTranscript(checked === true)}
-            />
-            <div className="space-y-1">
-              <Label
-                htmlFor="include-transcript"
-                className="text-sm font-medium cursor-pointer"
-              >
-                Include all messages
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                This helps us understand the full context of your experience.
-              </p>
-            </div>
-          </div>
-
           {/* Privacy disclaimer */}
           <div className="rounded-md border border-border/50 bg-muted/30 px-3 py-2.5 text-xs text-muted-foreground">
             <div className="flex items-center gap-1.5 mb-1">
@@ -226,9 +174,7 @@ export function FeedbackModal({
               <span className="font-medium">Privacy</span>
             </div>
             <p>
-              {includeTranscript
-                ? "Your feedback and all messages in this session will be stored to help improve the platform."
-                : "Your feedback and this message will be stored to help improve the platform."}
+              Your feedback and this message will be stored to help improve the platform.
             </p>
           </div>
 

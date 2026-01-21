@@ -119,11 +119,13 @@ export type AgentWaitingMessage = {
 
 export type UserMessage = {
 	type: "user_message";
+	id?: string;  // Message ID for feedback association
 	content: ContentBlock | string;
 	timestamp: string;
 }
 export type AgentMessage = {
 	type: "agent_message";
+	id?: string;  // Message ID for feedback association
 	content: ContentBlock;
 	model: string;
 	timestamp: string;
