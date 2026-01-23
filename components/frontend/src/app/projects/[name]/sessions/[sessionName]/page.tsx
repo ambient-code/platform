@@ -759,6 +759,8 @@ export default function ProjectSessionDetailPage({
     const allToolCalls = new Map<string, { tc: AGUIToolCall; timestamp: string }>();
     
     for (const msg of aguiState.messages) {
+      // Use msg.timestamp from backend, fallback to current time for legacy messages
+      // Note: After backend fix, new messages will have proper timestamps
       const timestamp = msg.timestamp || new Date().toISOString();
       
       if (msg.toolCalls && Array.isArray(msg.toolCalls)) {
@@ -852,6 +854,7 @@ export default function ProjectSessionDetailPage({
     
     // Phase C: Process messages and build hierarchical structure
     for (const msg of aguiState.messages) {
+      // Use msg.timestamp from backend, fallback to current time for legacy messages
       const timestamp = msg.timestamp || new Date().toISOString();
       
       // Handle text content by role
