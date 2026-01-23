@@ -26,7 +26,16 @@ if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
     -n ambient-code \
     --from-literal=ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}" \
     --dry-run=client -o yaml | kubectl apply -f -
-  echo "   ✅ Secret updated"
+  echo "   ✅ Secret updated in ambient-code"
+  
+  # Also update test-project namespace if it exists (for manual local dev)
+  if kubectl get namespace test-project >/dev/null 2>&1; then
+    kubectl create secret generic ambient-runner-secrets \
+      -n test-project \
+      --from-literal=ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}" \
+      --dry-run=client -o yaml | kubectl apply -f - >/dev/null 2>&1
+    echo "   ✅ Secret updated in test-project"
+  fi
 fi
 
 # Update deployment images if IMAGE_* vars are set

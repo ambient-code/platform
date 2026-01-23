@@ -95,6 +95,15 @@ if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
     --from-literal=ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}" \
     --dry-run=client -o yaml | kubectl apply -f -
   echo "   ✓ ANTHROPIC_API_KEY injected (agent testing enabled)"
+  
+  # Also create a default test project namespace with the secret for manual local dev
+  # This allows users to immediately test without going through the API/UI
+  echo "   Creating default 'test-project' namespace with API key..."
+  kubectl create namespace test-project --dry-run=client -o yaml | kubectl apply -f - >/dev/null 2>&1
+  kubectl create secret generic ambient-runner-secrets -n test-project \
+    --from-literal=ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}" \
+    --dry-run=client -o yaml | kubectl apply -f - >/dev/null 2>&1
+  echo "   ✓ test-project namespace ready for manual testing"
 else
   echo ""
   echo "⚠️  No ANTHROPIC_API_KEY found - agent testing will be limited"
