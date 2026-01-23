@@ -15,7 +15,7 @@
 # Configuration
 CONTAINER_ENGINE ?= podman
 PLATFORM ?= linux/amd64
-BUILD_FLAGS ?= 
+BUILD_FLAGS ?=
 NAMESPACE ?= ambient-code
 REGISTRY ?= quay.io/your-org
 CI_MODE ?= false
@@ -49,13 +49,14 @@ GIT_VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo 
 BUILD_DATE := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 BUILD_USER := $(shell whoami)@$(shell hostname)
 
-# Colors for output
-COLOR_RESET := \033[0m
-COLOR_BOLD := \033[1m
-COLOR_GREEN := \033[32m
-COLOR_YELLOW := \033[33m
-COLOR_BLUE := \033[34m
-COLOR_RED := \033[31m
+# Colors for output (using tput for better compatibility, with fallback to printf-compatible codes)
+# Use shell assignment to evaluate tput at runtime if available
+COLOR_RESET := $(shell tput sgr0 2>/dev/null || printf '\033[0m')
+COLOR_BOLD := $(shell tput bold 2>/dev/null || printf '\033[1m')
+COLOR_GREEN := $(shell tput setaf 2 2>/dev/null || printf '\033[32m')
+COLOR_YELLOW := $(shell tput setaf 3 2>/dev/null || printf '\033[33m')
+COLOR_BLUE := $(shell tput setaf 4 2>/dev/null || printf '\033[34m')
+COLOR_RED := $(shell tput setaf 1 2>/dev/null || printf '\033[31m')
 
 # Platform flag
 ifneq ($(PLATFORM),)
