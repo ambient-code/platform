@@ -169,10 +169,10 @@ jobs:
         echo "======================================"
         echo "Loading images into kind cluster..."
         echo "======================================"
-        kind load docker-image quay.io/ambient_code/vteam_frontend:e2e-test --name vteam-e2e
-        kind load docker-image quay.io/ambient_code/vteam_backend:e2e-test --name vteam-e2e
-        kind load docker-image quay.io/ambient_code/vteam_operator:e2e-test --name vteam-e2e
-        kind load docker-image quay.io/ambient_code/vteam_claude_runner:e2e-test --name vteam-e2e
+        kind load docker-image quay.io/ambient_code/vteam_frontend:e2e-test --name ambient-local
+        kind load docker-image quay.io/ambient_code/vteam_backend:e2e-test --name ambient-local
+        kind load docker-image quay.io/ambient_code/vteam_operator:e2e-test --name ambient-local
+        kind load docker-image quay.io/ambient_code/vteam_claude_runner:e2e-test --name ambient-local
         echo "✅ All images loaded into kind cluster"
 
     - name: Update kustomization to use e2e-test images
@@ -192,9 +192,6 @@ jobs:
         echo ""
         echo "Checking services..."
         kubectl get svc -n ambient-code
-        echo ""
-        echo "Checking ingress..."
-        kubectl get ingress -n ambient-code
         
     - name: Run Cypress tests
       working-directory: e2e

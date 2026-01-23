@@ -18,7 +18,7 @@ make kind-down        # Cleanup
 ```bash
 make kind-up
 # Edit e2e/.env to override images
-make kind-refresh     # Apply changes (fast)
+make kind-down && make kind-up
 make test-e2e
 ```
 
@@ -143,9 +143,9 @@ npm run test:headed
 **Required:**
 - `CYPRESS_BASE_URL`: Frontend URL (e.g., `http://localhost:8080`)
 - `TEST_TOKEN`: Bearer token for API authentication
+- `ANTHROPIC_API_KEY`: Claude API key (required for agent session test)
 
 **Optional:**
-- `AGENT_TESTING_ENABLED`: Set to `true` to run test 7 (requires proper API key config via UI)
 - `KEEP_WORKSPACES`: Set to `true` to keep test workspaces after run (debugging)
 
 ### For Kind (Local Docker/Podman)
@@ -155,10 +155,9 @@ npm run test:headed
 ```bash
 TEST_TOKEN=eyJhbGc...
 CYPRESS_BASE_URL=http://localhost:8080
-AGENT_TESTING_ENABLED=false  # Agent test skipped by default
 ```
 
-Tests auto-load this file.
+Tests auto-load this file. Agent test requires `ANTHROPIC_API_KEY` in `e2e/.env`.
 
 ### For External Cluster
 
@@ -286,10 +285,6 @@ GitHub Actions runs tests automatically:
 | MinIO init | ~5 sec | Create bucket |
 | Test execution | ~10 sec | All 12 tests |
 | **Total** | **~5 min** | With Quay images |
-
-**With local images (`kind-dev`):**
-- Add ~3-5 min for image builds
-- Total: ~8-10 min
 
 ---
 

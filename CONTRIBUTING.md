@@ -508,9 +508,6 @@ kubectl logs <pod-name> -n ambient-code
 ```bash
 # Check if images are loaded
 docker exec -it ambient-code-control-plane crictl images | grep ambient
-
-# Reload images if needed
-make kind-refresh
 ```
 
 **Service not accessible:**

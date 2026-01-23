@@ -1029,11 +1029,6 @@ cd e2e && npm test
 make kind-up        # Setup
 make test-e2e       # Test
 make kind-down      # Cleanup
-
-# Kind with local images (development)
-make kind-dev       # Build + deploy local
-make test-e2e       # Test your changes
-make kind-down      # Cleanup
 ```
 
 **Key Features**:

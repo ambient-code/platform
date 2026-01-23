@@ -41,22 +41,6 @@ if ! kind get clusters 2>/dev/null | grep -q "^ambient-local$"; then
 fi
 
 echo ""
-echo "Waiting for ingress admission webhook to be ready..."
-# The admission webhook needs time to start even after the controller is ready
-for i in {1..30}; do
-  if kubectl get validatingwebhookconfigurations.admissionregistration.k8s.io ingress-nginx-admission &>/dev/null; then
-    # Give it a few more seconds to be fully ready
-    sleep 3
-    break
-  fi
-  if [ $i -eq 30 ]; then
-    echo "⚠️  Warning: Admission webhook may not be ready, but continuing..."
-    break
-  fi
-  sleep 2
-done
-
-echo ""
 echo "Applying manifests with kustomize..."
 echo "   Using overlay: kind"
 
@@ -76,13 +60,14 @@ if [ -f ".env" ]; then
 fi
 
 # Build manifests and apply with image substitution (if IMAGE_* vars set)
+# Use --validate=false for remote Podman API server compatibility
 kubectl kustomize ../components/manifests/overlays/kind/ | \
   sed "s|quay.io/ambient_code/vteam_backend:latest|${IMAGE_BACKEND:-quay.io/ambient_code/vteam_backend:latest}|g" | \
   sed "s|quay.io/ambient_code/vteam_frontend:latest|${IMAGE_FRONTEND:-quay.io/ambient_code/vteam_frontend:latest}|g" | \
   sed "s|quay.io/ambient_code/vteam_operator:latest|${IMAGE_OPERATOR:-quay.io/ambient_code/vteam_operator:latest}|g" | \
   sed "s|quay.io/ambient_code/vteam_claude_runner:latest|${IMAGE_RUNNER:-quay.io/ambient_code/vteam_claude_runner:latest}|g" | \
   sed "s|quay.io/ambient_code/vteam_state_sync:latest|${IMAGE_STATE_SYNC:-quay.io/ambient_code/vteam_state_sync:latest}|g" | \
-  kubectl apply -f -
+  kubectl apply --validate=false -f -
 
 # Inject ANTHROPIC_API_KEY if set (for agent testing)
 if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
@@ -93,7 +78,7 @@ if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
     -p="[{\"op\": \"replace\", \"path\": \"/stringData/ANTHROPIC_API_KEY\", \"value\": \"${ANTHROPIC_API_KEY}\"}]" 2>/dev/null || \
   kubectl create secret generic ambient-runner-secrets -n ambient-code \
     --from-literal=ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}" \
-    --dry-run=client -o yaml | kubectl apply -f -
+    --dry-run=client -o yaml | kubectl apply --validate=false -f -
   echo "   ✓ ANTHROPIC_API_KEY injected (agent testing enabled)"
 else
   echo ""
@@ -129,13 +114,16 @@ for i in {1..15}; do
   sleep 2
 done
 
-# Detect which port to use (check kind cluster config)
-HTTP_PORT=80
-if kind get clusters 2>/dev/null | grep -q "^ambient-local$"; then
-  # Check if we're using non-standard ports (Podman)
-  if docker ps --filter "name=ambient-local-control-plane" --format "{{.Ports}}" 2>/dev/null | grep -q "8080" || \
-     podman ps --filter "name=ambient-local-control-plane" --format "{{.Ports}}" 2>/dev/null | grep -q "8080"; then
+# Detect which port to use based on container engine
+# Podman uses port 8080 (rootless compatibility), Docker uses port 80
+if [ "${CONTAINER_ENGINE:-}" = "podman" ]; then
+  HTTP_PORT=8080
+else
+  # Auto-detect if not explicitly set
+  if podman ps --filter "name=ambient-local-control-plane" 2>/dev/null | grep -q "ambient-local"; then
     HTTP_PORT=8080
+  else
+    HTTP_PORT=80
   fi
 fi
 
@@ -147,12 +135,6 @@ fi
 
 echo "TEST_TOKEN=$TOKEN" > .env.test
 echo "CYPRESS_BASE_URL=$BASE_URL" >> .env.test
-# Pass through ANTHROPIC_API_KEY availability for tests to know if agent tests can run
-if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
-  echo "AGENT_TESTING_ENABLED=true" >> .env.test
-else
-  echo "AGENT_TESTING_ENABLED=false" >> .env.test
-fi
 echo "   ✓ Token saved to .env.test"
 echo "   ✓ Base URL: $BASE_URL"
 

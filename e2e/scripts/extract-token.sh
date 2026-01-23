@@ -32,12 +32,16 @@ if [ -z "$CONTAINER_ENGINE" ]; then
   fi
 fi
 
-# Detect which port to use
-HTTP_PORT=80
-if kind get clusters 2>/dev/null | grep -q "^ambient-local$"; then
-  if docker ps --filter "name=ambient-local-control-plane" --format "{{.Ports}}" 2>/dev/null | grep -q "8080" || \
-     podman ps --filter "name=ambient-local-control-plane" --format "{{.Ports}}" 2>/dev/null | grep -q "8080"; then
+# Detect which port to use based on container engine
+# Podman uses port 8080 (rootless compatibility), Docker uses port 80
+if [ "$CONTAINER_ENGINE" = "podman" ]; then
+  HTTP_PORT=8080
+else
+  # Auto-detect if not explicitly set
+  if podman ps --filter "name=ambient-local-control-plane" 2>/dev/null | grep -q "ambient-local"; then
     HTTP_PORT=8080
+  else
+    HTTP_PORT=80
   fi
 fi
 
@@ -51,14 +55,9 @@ fi
 echo "TEST_TOKEN=$TOKEN" > .env.test
 echo "CYPRESS_BASE_URL=$BASE_URL" >> .env.test
 
-# Check if ANTHROPIC_API_KEY was provided for agent testing
-# Note: Agent testing also requires operator to properly copy secrets to project namespaces
-# For now, default to false unless explicitly enabled
-if [ "${AGENT_TESTING_ENABLED:-false}" = "true" ]; then
-  echo "AGENT_TESTING_ENABLED=true" >> .env.test
-else
-  echo "AGENT_TESTING_ENABLED=false" >> .env.test
-fi
-
 echo "   ✓ Token saved to .env.test"
 echo "   ✓ Base URL: $BASE_URL"
+echo ""
+echo "💡 To enable agent testing:"
+echo "   Add ANTHROPIC_API_KEY to e2e/.env"
+echo "   Then run: make test-e2e"

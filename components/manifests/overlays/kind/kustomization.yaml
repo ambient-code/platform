@@ -8,8 +8,7 @@ resources:
 - ../../base
 - secrets.yaml
 - test-user.yaml
-- frontend-ingress.yaml
-# backend-ingress removed - all traffic goes through frontend (Next.js proxies to backend)
+# Ingress removed - using NodePort for direct access in kind
 - operator-config.yaml
 - minio-credentials.yaml
 
@@ -35,6 +34,10 @@ patches:
   target:
     kind: Deployment
     name: agentic-operator
+- path: frontend-service-nodeport.yaml
+  target:
+    kind: Service
+    name: frontend-service
 
 # JSON patches to set imagePullPolicy for all deployments
 patchesJson6902:

@@ -525,10 +525,21 @@ clean: ## Clean up Kubernetes resources
 kind-up: ## Start kind cluster with Quay.io images (production-like)
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Starting kind cluster..."
 	@cd e2e && CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/setup-kind.sh
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for ingress admission webhook..."
-	@sleep 5
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for API server to be accessible..."
+	@for i in 1 2 3 4 5 6 7 8 9 10; do \
+		if kubectl cluster-info >/dev/null 2>&1; then \
+			echo "$(COLOR_GREEN)✓$(COLOR_RESET) API server ready"; \
+			break; \
+		fi; \
+		if [ $$i -eq 10 ]; then \
+			echo "$(COLOR_RED)✗$(COLOR_RESET) Timeout waiting for API server"; \
+			echo "   Try: kubectl cluster-info"; \
+			exit 1; \
+		fi; \
+		sleep 3; \
+	done
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Deploying with Quay.io images..."
-	@kubectl apply -k components/manifests/overlays/kind/
+	@kubectl apply --validate=false -k components/manifests/overlays/kind/
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for pods..."
 	@cd e2e && ./scripts/wait-for-ready.sh
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Initializing MinIO..."
@@ -537,32 +548,35 @@ kind-up: ## Start kind cluster with Quay.io images (production-like)
 	@cd e2e && CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/extract-token.sh
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Kind cluster ready!"
 	@echo ""
-	@echo "Access the platform:"
-	@echo "  Frontend: http://localhost:8080 (podman) or http://localhost (docker)"
+	@echo "$(COLOR_BOLD)Access the platform:$(COLOR_RESET)"
+	@echo "  Run in another terminal: $(COLOR_BLUE)make kind-port-forward$(COLOR_RESET)"
+	@echo ""
+	@echo "  Then access:"
+	@echo "  Frontend: http://localhost:8080"
+	@echo "  Backend:  http://localhost:8081"
+	@echo ""
 	@echo "  Get test token: kubectl get secret test-user-token -n ambient-code -o jsonpath='{.data.token}' | base64 -d"
 	@echo ""
 	@echo "Run tests:"
-	@echo "  make test-e2e"
-
-kind-refresh: ## Reload e2e/.env changes to running cluster (update images/secrets)
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Refreshing kind cluster with .env changes..."
-	@if ! kubectl get ns ambient-code >/dev/null 2>&1; then \
-		echo "$(COLOR_RED)✗$(COLOR_RESET) No kind cluster running. Run 'make kind-up' first."; \
-		exit 1; \
-	fi
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Updating secrets and deployments..."
-	@cd e2e && ./scripts/refresh-env.sh
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for pods to restart..."
-	@cd e2e && ./scripts/wait-for-ready.sh
-	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Cluster refreshed!"
-	@echo ""
-	@echo "Test changes:"
 	@echo "  make test-e2e"
 
 kind-down: ## Stop and delete kind cluster
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Cleaning up kind cluster..."
 	@cd e2e && CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/cleanup.sh
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Kind cluster deleted"
+
+kind-port-forward: check-kubectl ## Port-forward kind services (for remote Podman)
+	@echo "$(COLOR_BOLD)🔌 Port forwarding kind services$(COLOR_RESET)"
+	@echo ""
+	@echo "  Frontend: http://localhost:8080"
+	@echo "  Backend:  http://localhost:8081"
+	@echo ""
+	@echo "$(COLOR_YELLOW)Press Ctrl+C to stop$(COLOR_RESET)"
+	@echo ""
+	@trap 'echo ""; echo "$(COLOR_GREEN)✓$(COLOR_RESET) Port forwarding stopped"; exit 0' INT; \
+	(kubectl port-forward -n ambient-code svc/frontend 8080:3000 >/dev/null 2>&1 &); \
+	(kubectl port-forward -n ambient-code svc/backend-api 8081:8080 >/dev/null 2>&1 &); \
+	wait
 
 ##@ E2E Testing (Portable)
 
@@ -581,7 +595,7 @@ test-e2e: ## Run e2e tests against current CYPRESS_BASE_URL
 
 test-e2e-local: ## Run complete e2e test suite with kind (setup, deploy, test, cleanup)
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Running e2e tests with kind (local)..."
-	@$(MAKE) kind-dev CONTAINER_ENGINE=$(CONTAINER_ENGINE)
+	@$(MAKE) kind-up CONTAINER_ENGINE=$(CONTAINER_ENGINE)
 	@cd e2e && trap 'CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/cleanup.sh' EXIT; ./scripts/run-tests.sh
 
 e2e-test: test-e2e-local ## Alias for test-e2e-local (backward compatibility)

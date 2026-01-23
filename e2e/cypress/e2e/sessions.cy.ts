@@ -169,23 +169,15 @@ describe('Ambient Session Management Tests', () => {
    * 4. Verify session auto-generated name
    */
   describe('Complete Session Workflow (Running State)', () => {
-    const agentTestingEnabled = Cypress.env('AGENT_TESTING_ENABLED') === 'true' || 
-                                 Cypress.env('AGENT_TESTING_ENABLED') === true
-
-    before(function() {
-      if (!agentTestingEnabled) {
-        cy.log('⚠️ Skipping running state tests - AGENT_TESTING_ENABLED not set')
-        cy.log('To enable, add ANTHROPIC_API_KEY to e2e/.env and redeploy')
-        this.skip()
-      }
-    })
-
     it('should complete full session lifecycle with agent interaction', function() {
-      if (!agentTestingEnabled) this.skip()
-
       cy.log('📋 Step 0: Configure API key in project via backend API')
       const token = Cypress.env('TEST_TOKEN')
       const apiKey = Cypress.env('ANTHROPIC_API_KEY')
+      
+      // Fail with clear message if API key not provided
+      if (!apiKey) {
+        throw new Error('ANTHROPIC_API_KEY not set in e2e/.env - agent testing cannot proceed')
+      }
       
       cy.request({
         method: 'PUT',

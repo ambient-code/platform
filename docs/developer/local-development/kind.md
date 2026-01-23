@@ -11,6 +11,9 @@ Run the Ambient Code Platform locally using kind (Kubernetes in Podman/Docker) f
 # Start cluster (uses podman by default)
 make kind-up
 
+# In another terminal, port-forward for access
+make kind-port-forward
+
 # Run tests
 make test-e2e
 
@@ -48,13 +51,15 @@ docker ps && kind --version && kubectl version --client
 Creates kind cluster and deploys platform with Quay.io images.
 
 **What it does:**
-1. Creates kind cluster with nginx-ingress
+1. Creates minimal kind cluster (no ingress)
 2. Deploys platform (backend, frontend, operator, minio)
 3. Initializes MinIO storage
 4. Extracts test token to `e2e/.env.test`
 
 **Access:**
-- Frontend: `http://localhost:8080` (Podman) or `http://localhost` (Docker)
+- Run `make kind-port-forward` in another terminal
+- Frontend: `http://localhost:8080`
+- Backend: `http://localhost:8081`
 - Token: `kubectl get secret test-user-token -n ambient-code -o jsonpath='{.data.token}' | base64 -d`
 
 ### `make test-e2e`
@@ -62,17 +67,6 @@ Creates kind cluster and deploys platform with Quay.io images.
 Runs Cypress e2e tests against the cluster.
 
 **Runtime:** ~20 seconds (12 tests)
-
-### `make kind-refresh`
-
-Reloads `e2e/.env` changes without recreating the cluster.
-
-**What it does:**
-- Updates secrets (ANTHROPIC_API_KEY)
-- Updates deployment images (IMAGE_*)
-- Restarts affected pods
-
-**Much faster** than `kind-down && kind-up` (~30 seconds vs ~5 minutes)
 
 ### `make kind-down`
 
@@ -103,8 +97,9 @@ make kind-up
 # Edit e2e/.env to change images or add API key
 vim e2e/.env
 
-# Apply changes (fast - only restarts affected pods)
-make kind-refresh
+# Recreate cluster to pick up changes
+make kind-down
+make kind-up
 
 # Test
 make test-e2e

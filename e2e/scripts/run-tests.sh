@@ -33,17 +33,21 @@ fi
 # Use CYPRESS_BASE_URL from env, .env.test, or default
 CYPRESS_BASE_URL="${CYPRESS_BASE_URL:-http://localhost}"
 
-# Check if agent testing is enabled
-AGENT_TESTING="${AGENT_TESTING_ENABLED:-false}"
+# Load ANTHROPIC_API_KEY from .env or .env.local if available
+if [ -f .env.local ]; then
+  source .env.local
+elif [ -f .env ]; then
+  source .env
+fi
 
 echo ""
 echo "Test token loaded ✓"
 echo "Base URL: $CYPRESS_BASE_URL"
-if [ "$AGENT_TESTING" = "true" ]; then
-  echo "Agent testing: ENABLED (Running Session tests will execute)"
+if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
+  echo "API Key: ✓ Found in .env (agent tests will run)"
 else
-  echo "Agent testing: DISABLED (Running Session tests will be skipped)"
-  echo "   To enable, add ANTHROPIC_API_KEY to e2e/.env and redeploy"
+  echo "API Key: ✗ Not found (agent tests will FAIL)"
+  echo "   Add ANTHROPIC_API_KEY to e2e/.env to run full test suite"
 fi
 echo ""
 
@@ -58,9 +62,10 @@ fi
 echo "Starting Cypress tests..."
 echo ""
 
+# Cypress will load .env/.env.local via cypress.config.ts
+# Just pass the test token and base URL
 CYPRESS_TEST_TOKEN="$TEST_TOKEN" \
   CYPRESS_BASE_URL="$CYPRESS_BASE_URL" \
-  CYPRESS_AGENT_TESTING_ENABLED="$AGENT_TESTING" \
   npm test
 
 exit_code=$?
@@ -74,8 +79,8 @@ else
   echo "Debugging tips:"
   echo "  - Check pod logs: kubectl logs -n ambient-code -l app=frontend"
   echo "  - Check services: kubectl get svc -n ambient-code"
-  echo "  - Check ingress: kubectl get ingress -n ambient-code"
-  echo "  - Test manually: curl http://localhost"
+  echo "  - Test NodePort: curl http://localhost:8080 (podman) or http://localhost (docker)"
+  echo "  - Port-forward: kubectl port-forward -n ambient-code svc/frontend-service 8080:3000"
 fi
 
 exit $exit_code

@@ -95,12 +95,9 @@ After accessing the UI at http://localhost:8080:
 **Made code changes?**
 
 ```bash
-# Rebuild and reload (uses local images)
-make kind-dev
-
-# Or update just one component
-cd components/backend && make build
-make kind-refresh
+# Rebuild and reload
+make kind-down
+make kind-up
 ```
 
 ## Alternative Local Development Options

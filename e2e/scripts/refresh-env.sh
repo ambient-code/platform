@@ -25,7 +25,7 @@ if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
   kubectl create secret generic ambient-runner-secrets \
     -n ambient-code \
     --from-literal=ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}" \
-    --dry-run=client -o yaml | kubectl apply -f -
+    --dry-run=client -o yaml | kubectl apply --validate=false -f -
   echo "   ✅ Secret updated"
 fi
 
