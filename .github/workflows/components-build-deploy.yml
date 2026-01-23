@@ -113,8 +113,6 @@ jobs:
       - name: Set up Docker Buildx
         if: matrix.component.changed == 'true' || github.event.inputs.force_build_all == 'true' || contains(github.event.inputs.components, matrix.component.name) || (github.event_name == 'workflow_dispatch' && github.event.inputs.components == '' && github.event.inputs.force_build_all != 'true')
         uses: docker/setup-buildx-action@v3
-        with:
-          platforms: linux/amd64,linux/arm64
 
       - name: Log in to Quay.io
         if: matrix.component.changed == 'true' || github.event.inputs.force_build_all == 'true' || contains(github.event.inputs.components, matrix.component.name) || (github.event_name == 'workflow_dispatch' && github.event.inputs.components == '' && github.event.inputs.force_build_all != 'true')
@@ -138,7 +136,7 @@ jobs:
         with:
           context: ${{ matrix.component.context }}
           file: ${{ matrix.component.dockerfile }}
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: true
           tags: |
             ${{ matrix.component.image }}:latest
@@ -153,7 +151,7 @@ jobs:
         with:
           context: ${{ matrix.component.context }}
           file: ${{ matrix.component.dockerfile }}
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: false
           tags: ${{ matrix.component.image }}:pr-${{ github.event.pull_request.number }}
           cache-from: type=gha
