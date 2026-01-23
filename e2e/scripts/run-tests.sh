@@ -7,23 +7,26 @@ echo "======================================"
 echo "Running Ambient E2E Tests"
 echo "======================================"
 
-# Check if .env.test exists
-if [ ! -f .env.test ]; then
-  echo "❌ Error: .env.test not found"
-  echo "   Run './scripts/deploy.sh' first to set up the environment"
-  exit 1
-fi
-
-# Load test token and base URL if .env.test exists
+# Load test token and base URL from .env.test if it exists
+# Environment variables take precedence over .env.test
 if [ -f .env.test ]; then
-  source .env.test
+  # Only load if not already set in environment
+  if [ -z "${TEST_TOKEN:-}" ]; then
+    source .env.test
+  else
+    echo "Using TEST_TOKEN from environment (ignoring .env.test)"
+  fi
 fi
 
 # Check for required config
 if [ -z "${TEST_TOKEN:-}" ]; then
   echo "❌ Error: TEST_TOKEN not set"
-  echo "   For kind: Run kind-up or kind-dev first"
-  echo "   For external cluster: Set TEST_TOKEN and CYPRESS_BASE_URL env vars"
+  echo ""
+  echo "Options:"
+  echo "  1. For kind: Run 'make kind-up' first (creates .env.test)"
+  echo "  2. For manual testing: Set TEST_TOKEN environment variable"
+  echo "     Example: TEST_TOKEN=\$(kubectl get secret test-user-token -n ambient-code -o jsonpath='{.data.token}' | base64 -d)"
+  echo ""
   exit 1
 fi
 
