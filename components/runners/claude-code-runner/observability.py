@@ -43,8 +43,8 @@ Usage Format:
 Reference: https://langfuse.com/docs/observability/sdk/python/sdk-v3
 """
 
-import os
 import logging
+import os
 from typing import Any
 from urllib.parse import urlparse
 
@@ -86,11 +86,27 @@ def _privacy_masking_function(data: Any, **kwargs) -> Any:
         masked = {}
         for key, value in data.items():
             # Preserve usage and metadata fields - these don't contain sensitive data
-            if key in ("usage", "usage_details", "metadata", "model", "turn",
-                      "input_tokens", "output_tokens", "cache_read_input_tokens",
-                      "cache_creation_input_tokens", "total_tokens", "cost_usd",
-                      "duration_ms", "duration_api_ms", "num_turns", "session_id",
-                      "tool_id", "tool_name", "is_error", "level"):
+            if key in (
+                "usage",
+                "usage_details",
+                "metadata",
+                "model",
+                "turn",
+                "input_tokens",
+                "output_tokens",
+                "cache_read_input_tokens",
+                "cache_creation_input_tokens",
+                "total_tokens",
+                "cost_usd",
+                "duration_ms",
+                "duration_api_ms",
+                "num_turns",
+                "session_id",
+                "tool_id",
+                "tool_name",
+                "is_error",
+                "level",
+            ):
                 masked[key] = value
             # Redact content fields that may contain user data
             elif key in ("content", "text", "input", "output", "prompt", "completion"):
@@ -112,8 +128,7 @@ def _privacy_masking_function(data: Any, **kwargs) -> Any:
 
 
 class ObservabilityManager:
-    """Manages Langfuse observability for Claude sessions.
-    """
+    """Manages Langfuse observability for Claude sessions."""
 
     def __init__(self, session_id: str, user_id: str, user_name: str):
         """Initialize observability manager.
@@ -129,7 +144,9 @@ class ObservabilityManager:
         self.langfuse_client = None
         self._propagate_ctx = None
         self._tool_spans: dict[str, Any] = {}  # Stores span objects directly
-        self._current_turn_generation = None  # Track active turn for tool span parenting
+        self._current_turn_generation = (
+            None  # Track active turn for tool span parenting
+        )
         self._current_turn_ctx = None  # Track turn context manager for proper cleanup
         self._pending_initial_prompt = None  # Store initial prompt for turn 1
 
@@ -170,13 +187,19 @@ class ObservabilityManager:
             return False
 
         if not host:
-            logging.warning("LANGFUSE_HOST is missing. Add to secret (e.g., http://langfuse:3000).")
+            logging.warning(
+                "LANGFUSE_HOST is missing. Add to secret (e.g., http://langfuse:3000)."
+            )
             return False
 
         # Validate host format
         try:
             parsed = urlparse(host)
-            if not parsed.scheme or not parsed.netloc or parsed.scheme not in ("http", "https"):
+            if (
+                not parsed.scheme
+                or not parsed.netloc
+                or parsed.scheme not in ("http", "https")
+            ):
                 logging.warning(f"LANGFUSE_HOST invalid format: {host}")
                 return False
         except Exception as e:
@@ -187,29 +210,32 @@ class ObservabilityManager:
             # Determine if message masking should be enabled
             # Default: MASK messages (privacy-first approach)
             # Set LANGFUSE_MASK_MESSAGES=false to explicitly disable masking (dev/testing only)
-            mask_messages_env = os.getenv("LANGFUSE_MASK_MESSAGES", "true").strip().lower()
+            mask_messages_env = (
+                os.getenv("LANGFUSE_MASK_MESSAGES", "true").strip().lower()
+            )
             enable_masking = mask_messages_env not in ("false", "0", "no")
 
             if enable_masking:
-                logging.info("Langfuse: Privacy masking ENABLED - user messages and responses will be redacted")
+                logging.info(
+                    "Langfuse: Privacy masking ENABLED - user messages and responses will be redacted"
+                )
                 mask_fn = _privacy_masking_function
             else:
-                logging.warning("Langfuse: Privacy masking DISABLED - full message content will be logged (use only for dev/testing)")
+                logging.warning(
+                    "Langfuse: Privacy masking DISABLED - full message content will be logged (use only for dev/testing)"
+                )
                 mask_fn = None
 
             # Initialize client with optional masking
             self.langfuse_client = Langfuse(
-                public_key=public_key,
-                secret_key=secret_key,
-                host=host,
-                mask=mask_fn
+                public_key=public_key, secret_key=secret_key, host=host, mask=mask_fn
             )
 
             # Build metadata with model information
             metadata = {
                 "namespace": namespace,
                 "user_name": self.user_name,
-                "initial_prompt": prompt[:200] if len(prompt) > 200 else prompt
+                "initial_prompt": prompt[:200] if len(prompt) > 200 else prompt,
             }
 
             # Build tags list
@@ -225,9 +251,13 @@ class ObservabilityManager:
                     metadata["model"] = sanitized_model
                     # Add model as a tag for easy filtering in Langfuse UI
                     tags.append(f"model:{sanitized_model}")
-                    logging.info(f"Langfuse: Model '{sanitized_model}' added to session metadata and tags")
+                    logging.info(
+                        f"Langfuse: Model '{sanitized_model}' added to session metadata and tags"
+                    )
                 else:
-                    logging.warning(f"Langfuse: Model name '{model}' failed sanitization - omitting from metadata")
+                    logging.warning(
+                        f"Langfuse: Model name '{model}' failed sanitization - omitting from metadata"
+                    )
 
             # Enter propagate_attributes context - all traces share session_id/user_id/tags/metadata
             # Each turn will be a separate trace, automatically grouped by session_id
@@ -237,7 +267,7 @@ class ObservabilityManager:
                     user_id=self.user_id,
                     session_id=self.session_id,
                     tags=tags,
-                    metadata=metadata
+                    metadata=metadata,
                 )
                 self._propagate_ctx.__enter__()
             except Exception:
@@ -250,7 +280,9 @@ class ObservabilityManager:
                     self._propagate_ctx = None
                 raise
 
-            logging.info(f"Langfuse: Session tracking enabled (session_id={self.session_id}, user_id={self.user_id}, model={model})")
+            logging.info(
+                f"Langfuse: Session tracking enabled (session_id={self.session_id}, user_id={self.user_id}, model={model})"
+            )
             return True
 
         except Exception as e:
@@ -293,7 +325,9 @@ class ObservabilityManager:
         # Guard: Prevent creating duplicate traces for the same turn
         # SDK sends multiple AssistantMessages during streaming - only create trace once
         if self._current_turn_generation:
-            logging.debug("Langfuse: Trace already active for current turn, skipping duplicate start_turn")
+            logging.debug(
+                "Langfuse: Trace already active for current turn, skipping duplicate start_turn"
+            )
             return
 
         try:
@@ -306,7 +340,9 @@ class ObservabilityManager:
             # Use actual user input if provided, otherwise use generic placeholder
             if user_input:
                 input_content = [{"role": "user", "content": user_input}]
-                logging.info(f"Langfuse: Starting turn trace with model={model} and actual user input")
+                logging.info(
+                    f"Langfuse: Starting turn trace with model={model} and actual user input"
+                )
             else:
                 input_content = [{"role": "user", "content": "User input"}]
                 logging.info(f"Langfuse: Starting turn trace with model={model}")
@@ -323,7 +359,9 @@ class ObservabilityManager:
                 metadata={},  # Turn number will be added in end_turn()
             )
             self._current_turn_generation = self._current_turn_ctx.__enter__()
-            logging.info(f"Langfuse: Created new trace (model={model}, trace_id={self.get_current_trace_id()})")
+            logging.info(
+                f"Langfuse: Created new trace (model={model}, trace_id={self.get_current_trace_id()})"
+            )
 
         except Exception as e:
             logging.error(f"Langfuse: Failed to start turn: {e}", exc_info=True)
@@ -336,14 +374,16 @@ class ObservabilityManager:
         """
         if not self._current_turn_generation:
             return None
-        
+
         # The generation object has a trace_id attribute
         try:
-            return getattr(self._current_turn_generation, 'trace_id', None)
+            return getattr(self._current_turn_generation, "trace_id", None)
         except Exception:
             return None
 
-    def end_turn(self, turn_count: int, message: Any, usage: dict | None = None) -> None:
+    def end_turn(
+        self, turn_count: int, message: Any, usage: dict | None = None
+    ) -> None:
         """Complete turn tracking with output and usage data (called when ResultMessage arrives).
 
         Updates the turn generation with the assistant's output, usage metrics, and SDK's
@@ -357,9 +397,11 @@ class ObservabilityManager:
         # Return silently if Langfuse not initialized
         if not self.langfuse_client:
             return
-            
+
         if not self._current_turn_generation:
-            logging.debug(f"Langfuse: end_turn called but no active turn for turn {turn_count} (may not be initialized)")
+            logging.debug(
+                f"Langfuse: end_turn called but no active turn for turn {turn_count} (may not be initialized)"
+            )
             return
 
         try:
@@ -372,7 +414,9 @@ class ObservabilityManager:
                 if isinstance(blk, TextBlock):
                     text_content.append(getattr(blk, "text", ""))
 
-            output_text = "\n".join(text_content) if text_content else "(no text output)"
+            output_text = (
+                "\n".join(text_content) if text_content else "(no text output)"
+            )
 
             # Calculate usage_details if we have usage data
             usage_details_dict = None
@@ -402,7 +446,7 @@ class ObservabilityManager:
             # SDK v3 requires 'usage_details' parameter for usage tracking
             update_params = {
                 "output": output_text,
-                "metadata": {"turn": turn_count}  # Add SDK's authoritative turn number
+                "metadata": {"turn": turn_count},  # Add SDK's authoritative turn number
             }
             if usage_details_dict:
                 update_params["usage_details"] = usage_details_dict
@@ -423,14 +467,20 @@ class ObservabilityManager:
                     self.langfuse_client.flush()
                     logging.info(f"Langfuse: Flushed turn {turn_count} data")
                 except Exception as e:
-                    logging.warning(f"Langfuse: Flush failed after turn {turn_count}: {e}")
+                    logging.warning(
+                        f"Langfuse: Flush failed after turn {turn_count}: {e}"
+                    )
 
             if usage_details_dict:
-                input_count = usage_details_dict.get('input', 0)
-                output_count = usage_details_dict.get('output', 0)
-                cache_read_count = usage_details_dict.get('cache_read_input_tokens', 0)
-                cache_creation_count = usage_details_dict.get('cache_creation_input_tokens', 0)
-                total_tokens = input_count + output_count + cache_read_count + cache_creation_count
+                input_count = usage_details_dict.get("input", 0)
+                output_count = usage_details_dict.get("output", 0)
+                cache_read_count = usage_details_dict.get("cache_read_input_tokens", 0)
+                cache_creation_count = usage_details_dict.get(
+                    "cache_creation_input_tokens", 0
+                )
+                total_tokens = (
+                    input_count + output_count + cache_read_count + cache_creation_count
+                )
 
                 log_msg = (
                     f"Langfuse: Completed turn {turn_count} - "
@@ -450,7 +500,9 @@ class ObservabilityManager:
                 try:
                     self._current_turn_ctx.__exit__(None, None, None)
                 except Exception as cleanup_error:
-                    logging.warning(f"Langfuse: Cleanup during error failed: {cleanup_error}")
+                    logging.warning(
+                        f"Langfuse: Cleanup during error failed: {cleanup_error}"
+                    )
             self._current_turn_generation = None
             self._current_turn_ctx = None
 
@@ -479,21 +531,27 @@ class ObservabilityManager:
                     as_type="span",
                     name=f"tool_{tool_name}",
                     input=tool_input,
-                    metadata={"tool_id": tool_id, "tool_name": tool_name}
+                    metadata={"tool_id": tool_id, "tool_name": tool_name},
                 )
                 self._tool_spans[tool_id] = span
-                logging.debug(f"Langfuse: Started tool span for {tool_name} (id={tool_id}) under turn")
+                logging.debug(
+                    f"Langfuse: Started tool span for {tool_name} (id={tool_id}) under turn"
+                )
             else:
                 # Fallback: create orphaned span if no active turn (shouldn't happen)
-                logging.warning(f"No active turn for tool {tool_name}, creating orphaned span")
+                logging.warning(
+                    f"No active turn for tool {tool_name}, creating orphaned span"
+                )
                 span = self.langfuse_client.start_observation(
                     as_type="span",
                     name=f"tool_{tool_name}",
                     input=tool_input,
-                    metadata={"tool_id": tool_id, "tool_name": tool_name}
+                    metadata={"tool_id": tool_id, "tool_name": tool_name},
                 )
                 self._tool_spans[tool_id] = span
-                logging.debug(f"Langfuse: Started orphaned tool span for {tool_name} (id={tool_id})")
+                logging.debug(
+                    f"Langfuse: Started orphaned tool span for {tool_name} (id={tool_id})"
+                )
         except Exception as e:
             logging.debug(f"Langfuse: Failed to track tool use: {e}")
 
@@ -522,7 +580,7 @@ class ObservabilityManager:
             tool_span.update(
                 output={"result": result_text},
                 level="ERROR" if is_error else "DEFAULT",
-                metadata={"is_error": is_error or False}
+                metadata={"is_error": is_error or False},
             )
 
             # End the span to close it properly
@@ -612,9 +670,13 @@ class ObservabilityManager:
                 try:
                     tool_span.update(level="ERROR")
                     tool_span.end()
-                    logging.debug(f"Langfuse: Closed tool span {tool_id} during error cleanup")
+                    logging.debug(
+                        f"Langfuse: Closed tool span {tool_id} during error cleanup"
+                    )
                 except Exception as e:
-                    logging.warning(f"Failed to close tool span {tool_id} during error: {e}")
+                    logging.warning(
+                        f"Failed to close tool span {tool_id} during error: {e}"
+                    )
             self._tool_spans.clear()
 
             # Close propagate context

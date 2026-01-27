@@ -1,15 +1,16 @@
 """Unit tests for autoPush functionality in adapter.py."""
 
-import pytest
 import json
 import os
 import sys
-from unittest.mock import MagicMock, patch, Mock
+from unittest.mock import MagicMock, Mock, patch
+
+import pytest
 
 # Mock ag_ui module before importing adapter
-sys.modules['ag_ui'] = Mock()
-sys.modules['ag_ui.core'] = Mock()
-sys.modules['context'] = Mock()
+sys.modules["ag_ui"] = Mock()
+sys.modules["ag_ui.core"] = Mock()
+sys.modules["context"] = Mock()
 
 
 class TestGetReposConfig:
@@ -19,17 +20,20 @@ class TestGetReposConfig:
         """Set up test fixtures."""
         # Import here after mocking dependencies
         from adapter import ClaudeCodeAdapter
+
         self.adapter = ClaudeCodeAdapter()
 
     def test_parse_simple_repo_with_autopush_true(self):
         """Test parsing repo with autoPush=true."""
-        repos_json = json.dumps([
-            {
-                "url": "https://github.com/owner/repo.git",
-                "branch": "main",
-                "autoPush": True
-            }
-        ])
+        repos_json = json.dumps(
+            [
+                {
+                    "url": "https://github.com/owner/repo.git",
+                    "branch": "main",
+                    "autoPush": True,
+                }
+            ]
+        )
 
         with patch.dict(os.environ, {"REPOS_JSON": repos_json}):
             result = self.adapter._get_repos_config()
@@ -42,13 +46,15 @@ class TestGetReposConfig:
 
     def test_parse_simple_repo_with_autopush_false(self):
         """Test parsing repo with autoPush=false."""
-        repos_json = json.dumps([
-            {
-                "url": "https://github.com/owner/repo.git",
-                "branch": "develop",
-                "autoPush": False
-            }
-        ])
+        repos_json = json.dumps(
+            [
+                {
+                    "url": "https://github.com/owner/repo.git",
+                    "branch": "develop",
+                    "autoPush": False,
+                }
+            ]
+        )
 
         with patch.dict(os.environ, {"REPOS_JSON": repos_json}):
             result = self.adapter._get_repos_config()
@@ -58,12 +64,9 @@ class TestGetReposConfig:
 
     def test_parse_repo_without_autopush(self):
         """Test parsing repo without autoPush field defaults to False."""
-        repos_json = json.dumps([
-            {
-                "url": "https://github.com/owner/repo.git",
-                "branch": "main"
-            }
-        ])
+        repos_json = json.dumps(
+            [{"url": "https://github.com/owner/repo.git", "branch": "main"}]
+        )
 
         with patch.dict(os.environ, {"REPOS_JSON": repos_json}):
             result = self.adapter._get_repos_config()
@@ -73,23 +76,25 @@ class TestGetReposConfig:
 
     def test_parse_multiple_repos_mixed_autopush(self):
         """Test parsing multiple repos with mixed autoPush settings."""
-        repos_json = json.dumps([
-            {
-                "url": "https://github.com/owner/repo1.git",
-                "branch": "main",
-                "autoPush": True
-            },
-            {
-                "url": "https://github.com/owner/repo2.git",
-                "branch": "develop",
-                "autoPush": False
-            },
-            {
-                "url": "https://github.com/owner/repo3.git",
-                "branch": "feature"
-                # No autoPush field
-            }
-        ])
+        repos_json = json.dumps(
+            [
+                {
+                    "url": "https://github.com/owner/repo1.git",
+                    "branch": "main",
+                    "autoPush": True,
+                },
+                {
+                    "url": "https://github.com/owner/repo2.git",
+                    "branch": "develop",
+                    "autoPush": False,
+                },
+                {
+                    "url": "https://github.com/owner/repo3.git",
+                    "branch": "feature",
+                    # No autoPush field
+                },
+            ]
+        )
 
         with patch.dict(os.environ, {"REPOS_JSON": repos_json}):
             result = self.adapter._get_repos_config()
@@ -101,14 +106,16 @@ class TestGetReposConfig:
 
     def test_parse_repo_with_explicit_name(self):
         """Test parsing repo with explicit name field."""
-        repos_json = json.dumps([
-            {
-                "name": "my-custom-repo",
-                "url": "https://github.com/owner/repo.git",
-                "branch": "main",
-                "autoPush": True
-            }
-        ])
+        repos_json = json.dumps(
+            [
+                {
+                    "name": "my-custom-repo",
+                    "url": "https://github.com/owner/repo.git",
+                    "branch": "main",
+                    "autoPush": True,
+                }
+            ]
+        )
 
         with patch.dict(os.environ, {"REPOS_JSON": repos_json}):
             result = self.adapter._get_repos_config()
@@ -149,12 +156,7 @@ class TestGetReposConfig:
 
     def test_parse_repo_without_url(self):
         """Test that repos without URL are skipped."""
-        repos_json = json.dumps([
-            {
-                "branch": "main",
-                "autoPush": True
-            }
-        ])
+        repos_json = json.dumps([{"branch": "main", "autoPush": True}])
 
         with patch.dict(os.environ, {"REPOS_JSON": repos_json}):
             result = self.adapter._get_repos_config()
@@ -180,12 +182,14 @@ class TestGetReposConfig:
 
     def test_autopush_with_invalid_string_type(self):
         """Test that string autoPush values default to False."""
-        repos_json = json.dumps([
-            {
-                "url": "https://github.com/owner/repo.git",
-                "autoPush": "true"  # String instead of boolean
-            }
-        ])
+        repos_json = json.dumps(
+            [
+                {
+                    "url": "https://github.com/owner/repo.git",
+                    "autoPush": "true",  # String instead of boolean
+                }
+            ]
+        )
 
         with patch.dict(os.environ, {"REPOS_JSON": repos_json}):
             result = self.adapter._get_repos_config()
@@ -196,12 +200,14 @@ class TestGetReposConfig:
 
     def test_autopush_with_invalid_number_type(self):
         """Test that numeric autoPush values default to False."""
-        repos_json = json.dumps([
-            {
-                "url": "https://github.com/owner/repo.git",
-                "autoPush": 1  # Number instead of boolean
-            }
-        ])
+        repos_json = json.dumps(
+            [
+                {
+                    "url": "https://github.com/owner/repo.git",
+                    "autoPush": 1,  # Number instead of boolean
+                }
+            ]
+        )
 
         with patch.dict(os.environ, {"REPOS_JSON": repos_json}):
             result = self.adapter._get_repos_config()
@@ -212,12 +218,14 @@ class TestGetReposConfig:
 
     def test_autopush_with_null_value(self):
         """Test that null autoPush values default to False."""
-        repos_json = json.dumps([
-            {
-                "url": "https://github.com/owner/repo.git",
-                "autoPush": None  # null in JSON
-            }
-        ])
+        repos_json = json.dumps(
+            [
+                {
+                    "url": "https://github.com/owner/repo.git",
+                    "autoPush": None,  # null in JSON
+                }
+            ]
+        )
 
         with patch.dict(os.environ, {"REPOS_JSON": repos_json}):
             result = self.adapter._get_repos_config()
@@ -249,7 +257,7 @@ class TestBuildWorkspaceContextPrompt:
                 "name": "my-repo",
                 "url": "https://github.com/owner/my-repo.git",
                 "branch": "main",
-                "autoPush": True
+                "autoPush": True,
             }
         ]
 
@@ -257,7 +265,7 @@ class TestBuildWorkspaceContextPrompt:
             repos_cfg=repos_cfg,
             workflow_name=None,
             artifacts_path="artifacts",
-            ambient_config={}
+            ambient_config={},
         )
 
         # Verify git instructions are present
@@ -275,7 +283,7 @@ class TestBuildWorkspaceContextPrompt:
                 "name": "my-repo",
                 "url": "https://github.com/owner/my-repo.git",
                 "branch": "main",
-                "autoPush": False
+                "autoPush": False,
             }
         ]
 
@@ -283,7 +291,7 @@ class TestBuildWorkspaceContextPrompt:
             repos_cfg=repos_cfg,
             workflow_name=None,
             artifacts_path="artifacts",
-            ambient_config={}
+            ambient_config={},
         )
 
         # Verify git instructions are NOT present
@@ -299,27 +307,27 @@ class TestBuildWorkspaceContextPrompt:
                 "name": "repo1",
                 "url": "https://github.com/owner/repo1.git",
                 "branch": "main",
-                "autoPush": True
+                "autoPush": True,
             },
             {
                 "name": "repo2",
                 "url": "https://github.com/owner/repo2.git",
                 "branch": "develop",
-                "autoPush": True
+                "autoPush": True,
             },
             {
                 "name": "repo3",
                 "url": "https://github.com/owner/repo3.git",
                 "branch": "feature",
-                "autoPush": False
-            }
+                "autoPush": False,
+            },
         ]
 
         prompt = self.adapter._build_workspace_context_prompt(
             repos_cfg=repos_cfg,
             workflow_name=None,
             artifacts_path="artifacts",
-            ambient_config={}
+            ambient_config={},
         )
 
         # Verify both autoPush repos are listed
@@ -336,7 +344,7 @@ class TestBuildWorkspaceContextPrompt:
             repos_cfg=[],
             workflow_name=None,
             artifacts_path="artifacts",
-            ambient_config={}
+            ambient_config={},
         )
 
         # Should not include git instructions
@@ -352,7 +360,7 @@ class TestBuildWorkspaceContextPrompt:
                 "name": "my-repo",
                 "url": "https://github.com/owner/my-repo.git",
                 "branch": "main",
-                "autoPush": True
+                "autoPush": True,
             }
         ]
 
@@ -360,7 +368,7 @@ class TestBuildWorkspaceContextPrompt:
             repos_cfg=repos_cfg,
             workflow_name="test-workflow",
             artifacts_path="artifacts",
-            ambient_config={}
+            ambient_config={},
         )
 
         # Should include both workflow info and git instructions
