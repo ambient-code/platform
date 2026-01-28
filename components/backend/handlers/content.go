@@ -48,6 +48,26 @@ func getGitHubTokenFromContext(c *gin.Context) string {
 	return os.Getenv("GITHUB_TOKEN")
 }
 
+// getGitLabTokenFromContext extracts GitLab token from request header or environment
+func getGitLabTokenFromContext(c *gin.Context) string {
+	// Prefer header (passed by backend)
+	if token := strings.TrimSpace(c.GetHeader("X-GitLab-Token")); token != "" {
+		return token
+	}
+	// Fall back to env var (injected via EnvFrom)
+	return os.Getenv("GITLAB_TOKEN")
+}
+
+// getGitTokenForURL returns the appropriate token based on the repository URL
+func getGitTokenForURL(c *gin.Context, repoURL string) string {
+	lowerURL := strings.ToLower(repoURL)
+	if strings.Contains(lowerURL, "gitlab") {
+		return getGitLabTokenFromContext(c)
+	}
+	// Default to GitHub token for github.com or unknown providers
+	return getGitHubTokenFromContext(c)
+}
+
 // ContentGitPush handles POST /content/github/push in CONTENT_SERVICE_MODE
 func ContentGitPush(c *gin.Context) {
 	var body struct {
@@ -83,12 +103,12 @@ func ContentGitPush(c *gin.Context) {
 
 	log.Printf("contentGitPush: using repoDir=%q (stateBaseDir=%q)", repoDir, StateBaseDir)
 
-	// Optional GitHub token provided by backend via internal header
-	gitHubToken := strings.TrimSpace(c.GetHeader("X-GitHub-Token"))
-	log.Printf("contentGitPush: tokenHeaderPresent=%t url.host.redacted=%t branch=%q", gitHubToken != "", strings.HasPrefix(body.OutputRepoURL, "https://"), body.Branch)
+	// Get appropriate token based on repository URL
+	gitToken := getGitTokenForURL(c, body.OutputRepoURL)
+	log.Printf("contentGitPush: tokenHeaderPresent=%t url.host.redacted=%t branch=%q", gitToken != "", strings.HasPrefix(body.OutputRepoURL, "https://"), body.Branch)
 
 	// Call refactored git push function
-	out, err := GitPushRepo(c.Request.Context(), repoDir, body.CommitMessage, body.OutputRepoURL, body.Branch, gitHubToken)
+	out, err := GitPushRepo(c.Request.Context(), repoDir, body.CommitMessage, body.OutputRepoURL, body.Branch, gitToken)
 	if err != nil {
 		if out == "" {
 			// No changes to commit
@@ -280,13 +300,13 @@ func ContentGitConfigureRemote(c *gin.Context) {
 		log.Printf("Initialized git repository at %s", abs)
 	}
 
-	// Get GitHub token and inject into URL for authentication
+	// Get appropriate token and inject into URL for authentication
 	remoteURL := body.RemoteURL
-	gitHubToken := strings.TrimSpace(c.GetHeader("X-GitHub-Token"))
-	if gitHubToken != "" {
-		if authenticatedURL, err := git.InjectGitHubToken(remoteURL, gitHubToken); err == nil {
+	token := getGitTokenForURL(c, body.RemoteURL)
+	if token != "" {
+		if authenticatedURL, err := git.InjectGitToken(remoteURL, token); err == nil {
 			remoteURL = authenticatedURL
-			log.Printf("Injected GitHub token into remote URL")
+			log.Printf("Injected git token into remote URL")
 		}
 	}
 
@@ -348,9 +368,15 @@ func ContentGitSync(c *gin.Context) {
 		return
 	}
 
+	// Get remote URL to determine which token to use
+	remoteCmd := exec.CommandContext(c.Request.Context(), "git", "remote", "get-url", "origin")
+	remoteCmd.Dir = abs
+	remoteOut, _ := remoteCmd.Output()
+	remoteURL := strings.TrimSpace(string(remoteOut))
+
 	// Perform git sync operations with authentication
-	githubToken := getGitHubTokenFromContext(c)
-	if err := GitSyncRepo(c.Request.Context(), abs, body.Message, body.Branch, githubToken); err != nil {
+	gitToken := getGitTokenForURL(c, remoteURL)
+	if err := GitSyncRepo(c.Request.Context(), abs, body.Message, body.Branch, gitToken); err != nil {
 		// Log actual error for debugging, but return generic message to avoid leaking internal details
 		log.Printf("Internal server error: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
@@ -757,8 +783,14 @@ func ContentGitMergeStatus(c *gin.Context) {
 		return
 	}
 
-	githubToken := getGitHubTokenFromContext(c)
-	status, err := GitCheckMergeStatus(c.Request.Context(), abs, branch, githubToken)
+	// Get remote URL to determine which token to use
+	remoteCmd := exec.CommandContext(c.Request.Context(), "git", "remote", "get-url", "origin")
+	remoteCmd.Dir = abs
+	remoteOut, _ := remoteCmd.Output()
+	remoteURL := strings.TrimSpace(string(remoteOut))
+
+	gitToken := getGitTokenForURL(c, remoteURL)
+	status, err := GitCheckMergeStatus(c.Request.Context(), abs, branch, gitToken)
 	if err != nil {
 		log.Printf("ContentGitMergeStatus: check failed: %v", err)
 		// Log actual error for debugging, but return generic message to avoid leaking internal details
@@ -795,8 +827,14 @@ func ContentGitPull(c *gin.Context) {
 		body.Branch = "main"
 	}
 
-	githubToken := getGitHubTokenFromContext(c)
-	if err := GitPullRepo(c.Request.Context(), abs, body.Branch, githubToken); err != nil {
+	// Get remote URL to determine which token to use
+	remoteCmd := exec.CommandContext(c.Request.Context(), "git", "remote", "get-url", "origin")
+	remoteCmd.Dir = abs
+	remoteOut, _ := remoteCmd.Output()
+	remoteURL := strings.TrimSpace(string(remoteOut))
+
+	gitToken := getGitTokenForURL(c, remoteURL)
+	if err := GitPullRepo(c.Request.Context(), abs, body.Branch, gitToken); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -835,8 +873,14 @@ func ContentGitPushToBranch(c *gin.Context) {
 		body.Message = "Session artifacts update"
 	}
 
-	githubToken := getGitHubTokenFromContext(c)
-	if err := GitPushToRepo(c.Request.Context(), abs, body.Branch, body.Message, githubToken); err != nil {
+	// Get remote URL to determine which token to use
+	remoteCmd := exec.CommandContext(c.Request.Context(), "git", "remote", "get-url", "origin")
+	remoteCmd.Dir = abs
+	remoteOut, _ := remoteCmd.Output()
+	remoteURL := strings.TrimSpace(string(remoteOut))
+
+	gitToken := getGitTokenForURL(c, remoteURL)
+	if err := GitPushToRepo(c.Request.Context(), abs, body.Branch, body.Message, gitToken); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}

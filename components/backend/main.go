@@ -127,6 +127,7 @@ func main() {
 	handlers.GetAgenticSessionV1Alpha1Resource = k8s.GetAgenticSessionV1Alpha1Resource
 	handlers.DynamicClient = server.DynamicClient
 	handlers.GetGitHubToken = handlers.WrapGitHubTokenForRepo(git.GetGitHubToken)
+	handlers.GetGitLabToken = git.GetGitLabToken
 	handlers.DeriveRepoFolderFromURL = git.DeriveRepoFolderFromURL
 	// LEGACY: SendMessageToSession removed - AG-UI server uses HTTP/SSE instead of WebSocket
 

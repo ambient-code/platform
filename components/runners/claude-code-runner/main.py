@@ -841,7 +841,11 @@ async def get_default_branch(repo_path: str) -> str:
 
 
 async def clone_repo_at_runtime(
-    git_url: str, branch: str, name: str
+    git_url: str,
+    branch: str,
+    name: str,
+    github_token_override: str | None = None,
+    gitlab_token_override: str | None = None,
 ) -> tuple[bool, str, bool]:
     """
     Clone a repository at runtime or add a new branch to existing repo.
@@ -857,6 +861,8 @@ async def clone_repo_at_runtime(
         git_url: Git repository URL
         branch: Branch to checkout (or empty/None to auto-generate)
         name: Name for the cloned directory (derived from URL if empty)
+        github_token_override: Optional GitHub token from request header (takes precedence over env var)
+        gitlab_token_override: Optional GitLab token from request header (takes precedence over env var)
 
     Returns:
         (success, repo_dir_path, was_newly_cloned) tuple
@@ -890,18 +896,18 @@ async def clone_repo_at_runtime(
     repos_dir.mkdir(parents=True, exist_ok=True)
     repo_final = repos_dir / name
 
-    # Build clone URL with auth token
-    github_token = os.getenv("GITHUB_TOKEN", "").strip()
-    gitlab_token = os.getenv("GITLAB_TOKEN", "").strip()
+    # Build clone URL with auth token (header tokens take precedence over env vars)
+    github_token = github_token_override or os.getenv("GITHUB_TOKEN", "").strip()
+    gitlab_token = gitlab_token_override or os.getenv("GITLAB_TOKEN", "").strip()
     clone_url = git_url
     if github_token and "github" in git_url.lower():
         clone_url = git_url.replace(
             "https://", f"https://x-access-token:{github_token}@"
         )
-        logger.info("Using GITHUB_TOKEN for authentication")
+        logger.info("Using GitHub token for authentication")
     elif gitlab_token and "gitlab" in git_url.lower():
         clone_url = git_url.replace("https://", f"https://oauth2:{gitlab_token}@")
-        logger.info("Using GITLAB_TOKEN for authentication")
+        logger.info("Using GitLab token for authentication")
 
     # Case 1: Repo already exists - add new branch
     if repo_final.exists():
@@ -1144,6 +1150,7 @@ async def add_repo(request: Request):
     Add repository - clones repo and triggers Claude SDK client restart.
 
     Accepts: {"url": "...", "branch": "...", "name": "..."}
+    Headers: X-GitHub-Token, X-GitLab-Token (optional, override env vars)
     """
     global _adapter_initialized
 
@@ -1154,6 +1161,10 @@ async def add_repo(request: Request):
     url = body.get("url", "")
     branch = body.get("branch", "main")
     name = body.get("name", "")
+
+    # Read tokens from headers (passed by backend for authenticated clones)
+    github_token = request.headers.get("X-GitHub-Token", "").strip() or None
+    gitlab_token = request.headers.get("X-GitLab-Token", "").strip() or None
 
     logger.info(f"Add repo request: url={url}, branch={branch}, name={name}")
 
@@ -1166,7 +1177,7 @@ async def add_repo(request: Request):
 
     # Clone the repository at runtime
     success, repo_path, was_newly_cloned = await clone_repo_at_runtime(
-        url, branch, name
+        url, branch, name, github_token, gitlab_token
     )
     if not success:
         raise HTTPException(
