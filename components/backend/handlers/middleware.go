@@ -48,6 +48,27 @@ func isValidKubernetesName(name string) bool {
 	return kubernetesNameRegex.MatchString(name)
 }
 
+// isValidRBACSubject validates RBAC subject identifiers (user/group names in RoleBindings)
+// RBAC subjects can contain colons (e.g., system:authenticated, system:serviceaccount:ns:name)
+// Unlike Kubernetes resource names, RBAC subjects follow a different format (RFC 1123 subdomain)
+// Returns false if:
+//   - name is empty (prevents empty string injection)
+//   - name exceeds 253 characters (max length for DNS subdomain)
+//   - name contains control characters (prevents injection attacks)
+func isValidRBACSubject(name string) bool {
+	// Max length for RBAC subjects is 253 chars (same as DNS subdomain)
+	if len(name) == 0 || len(name) > 253 {
+		return false
+	}
+	// Reject control characters and newlines for security
+	for _, r := range name {
+		if r < 32 || r == 127 {
+			return false
+		}
+	}
+	return true
+}
+
 // ContentListItem represents a content list item for file browsing
 type ContentListItem struct {
 	Name       string `json:"name"`

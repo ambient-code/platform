@@ -157,9 +157,9 @@ func AddProjectPermission(c *gin.Context) {
 		return
 	}
 
-	// Validate subject name is a valid Kubernetes resource name
-	if !isValidKubernetesName(req.SubjectName) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid userName format. Must be a valid Kubernetes resource name."})
+	// Validate subject name is a valid RBAC subject identifier
+	if !isValidRBACSubject(req.SubjectName) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid subject name format"})
 		return
 	}
 
