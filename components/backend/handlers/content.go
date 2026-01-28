@@ -16,6 +16,7 @@ import (
 
 	"ambient-code-backend/git"
 	"ambient-code-backend/pathutil"
+	"ambient-code-backend/types"
 
 	"github.com/gin-gonic/gin"
 )
@@ -306,6 +307,7 @@ func ContentGitConfigureRemote(c *gin.Context) {
 	if token != "" {
 		if authenticatedURL, err := git.InjectGitToken(remoteURL, token); err == nil {
 			remoteURL = authenticatedURL
+			log.Printf("ContentConfigureRemote: configured authentication for %s", types.DetectProvider(body.RemoteURL))
 		}
 	}
 

@@ -1168,9 +1168,9 @@ async def add_repo(request: Request):
 
     # Log authentication source for debugging (without revealing token values)
     if github_token:
-        logger.info("Using authentication from request header")
+        logger.info("Using GitHub authentication from request header")
     elif gitlab_token:
-        logger.info("Using authentication from request header")
+        logger.info("Using GitLab authentication from request header")
 
     logger.info(f"Add repo request: url={url}, branch={branch}, name={name}")
 

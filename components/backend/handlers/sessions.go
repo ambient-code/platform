@@ -1359,6 +1359,8 @@ func AddRepo(c *gin.Context) {
 						log.Printf("AddRepo: configured authentication for project=%s session=%s", project, sessionName)
 					}
 				}
+			default:
+				log.Printf("AddRepo: unknown provider for URL %s, proceeding without authentication", req.URL)
 			}
 		}
 
@@ -3370,6 +3372,8 @@ func ConfigureGitRemote(c *gin.Context) {
 				req.Header.Set("X-GitLab-Token", token)
 			}
 		}
+	default:
+		log.Printf("ConfigureGitRemote: unknown provider for URL %s, proceeding without authentication", body.RemoteURL)
 	}
 
 	resp, err := http.DefaultClient.Do(req)
