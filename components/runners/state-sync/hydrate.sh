@@ -68,8 +68,9 @@ mkdir -p /workspace/repos || error_exit "Failed to create repos directory"
 # If the SCC assigns an fsGroup, the directory should already be writable.
 chmod -R 777 "${CLAUDE_DATA_PATH}" 2>/dev/null || echo "Warning: failed to chmod ${CLAUDE_DATA_PATH} (continuing)"
 
-# Other directories - standard permissions
-chmod 755 /workspace/artifacts /workspace/file-uploads /workspace/repos 2>/dev/null || true
+# Other directories - artifacts/file-uploads are read-only, repos needs write access for runtime additions
+chmod 755 /workspace/artifacts /workspace/file-uploads 2>/dev/null || true
+chmod 777 /workspace/repos 2>/dev/null || true
 
 # Check if S3 is configured
 if [ -z "${S3_ENDPOINT}" ] || [ -z "${S3_BUCKET}" ] || [ -z "${AWS_ACCESS_KEY_ID}" ] || [ -z "${AWS_SECRET_ACCESS_KEY}" ]; then
@@ -131,7 +132,9 @@ fi
 echo "Setting permissions on subdirectories..."
 # .claude needs to be writable by user 1001 (runner container) - use 777
 chmod -R 777 "${CLAUDE_DATA_PATH}" 2>/dev/null || true
-chmod -R 755 /workspace/artifacts /workspace/file-uploads /workspace/repos 2>/dev/null || true
+# repos also needs write access for runtime repo additions (clone_repo_at_runtime)
+chmod -R 755 /workspace/artifacts /workspace/file-uploads 2>/dev/null || true
+chmod -R 777 /workspace/repos 2>/dev/null || true
 
 # ========================================
 # Clone repositories and workflows
