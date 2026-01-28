@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -61,12 +62,23 @@ func getGitLabTokenFromContext(c *gin.Context) string {
 
 // getGitTokenForURL returns the appropriate token based on the repository URL
 func getGitTokenForURL(c *gin.Context, repoURL string) string {
-	lowerURL := strings.ToLower(repoURL)
-	if strings.Contains(lowerURL, "gitlab") {
+	provider := types.DetectProvider(repoURL)
+	if provider == types.ProviderGitLab {
 		return getGitLabTokenFromContext(c)
 	}
 	// Default to GitHub token for github.com or unknown providers
 	return getGitHubTokenFromContext(c)
+}
+
+// getRemoteURL retrieves the origin remote URL for a git repository
+func getRemoteURL(ctx context.Context, repoDir string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", "remote", "get-url", "origin")
+	cmd.Dir = repoDir
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("no remote configured: %w", err)
+	}
+	return strings.TrimSpace(string(out)), nil
 }
 
 // ContentGitPush handles POST /content/github/push in CONTENT_SERVICE_MODE
@@ -370,15 +382,12 @@ func ContentGitSync(c *gin.Context) {
 	}
 
 	// Get remote URL to determine which token to use
-	remoteCmd := exec.CommandContext(c.Request.Context(), "git", "remote", "get-url", "origin")
-	remoteCmd.Dir = abs
-	remoteOut, err := remoteCmd.Output()
+	remoteURL, err := getRemoteURL(c.Request.Context(), abs)
 	if err != nil {
 		log.Printf("ContentGitSync: failed to get remote URL for %s: %v", abs, err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "no remote configured"})
 		return
 	}
-	remoteURL := strings.TrimSpace(string(remoteOut))
 
 	// Perform git sync operations with authentication
 	gitToken := getGitTokenForURL(c, remoteURL)
@@ -790,15 +799,12 @@ func ContentGitMergeStatus(c *gin.Context) {
 	}
 
 	// Get remote URL to determine which token to use
-	remoteCmd := exec.CommandContext(c.Request.Context(), "git", "remote", "get-url", "origin")
-	remoteCmd.Dir = abs
-	remoteOut, err := remoteCmd.Output()
+	remoteURL, err := getRemoteURL(c.Request.Context(), abs)
 	if err != nil {
 		log.Printf("ContentGitMergeStatus: failed to get remote URL for %s: %v", abs, err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "no remote configured"})
 		return
 	}
-	remoteURL := strings.TrimSpace(string(remoteOut))
 
 	gitToken := getGitTokenForURL(c, remoteURL)
 	status, err := GitCheckMergeStatus(c.Request.Context(), abs, branch, gitToken)
@@ -837,15 +843,12 @@ func ContentGitPull(c *gin.Context) {
 	}
 
 	// Get remote URL to determine which token to use
-	remoteCmd := exec.CommandContext(c.Request.Context(), "git", "remote", "get-url", "origin")
-	remoteCmd.Dir = abs
-	remoteOut, err := remoteCmd.Output()
+	remoteURL, err := getRemoteURL(c.Request.Context(), abs)
 	if err != nil {
 		log.Printf("ContentGitPull: failed to get remote URL for %s: %v", abs, err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "no remote configured"})
 		return
 	}
-	remoteURL := strings.TrimSpace(string(remoteOut))
 
 	gitToken := getGitTokenForURL(c, remoteURL)
 	if err := GitPullRepo(c.Request.Context(), abs, body.Branch, gitToken); err != nil {
@@ -888,15 +891,12 @@ func ContentGitPushToBranch(c *gin.Context) {
 	}
 
 	// Get remote URL to determine which token to use
-	remoteCmd := exec.CommandContext(c.Request.Context(), "git", "remote", "get-url", "origin")
-	remoteCmd.Dir = abs
-	remoteOut, err := remoteCmd.Output()
+	remoteURL, err := getRemoteURL(c.Request.Context(), abs)
 	if err != nil {
 		log.Printf("ContentGitPushToBranch: failed to get remote URL for %s: %v", abs, err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "no remote configured"})
 		return
 	}
-	remoteURL := strings.TrimSpace(string(remoteOut))
 
 	gitToken := getGitTokenForURL(c, remoteURL)
 	if err := GitPushToRepo(c.Request.Context(), abs, body.Branch, body.Message, gitToken); err != nil {

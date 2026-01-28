@@ -2958,6 +2958,8 @@ func PushSessionRepo(c *gin.Context) {
 			if GetGitLabToken != nil {
 				if tokenStr, err := GetGitLabToken(c.Request.Context(), k8sClt, project, userID); err == nil && strings.TrimSpace(tokenStr) != "" {
 					req.Header.Set("X-GitLab-Token", tokenStr)
+				} else if err != nil {
+					log.Printf("pushSessionRepo: failed to resolve GitLab authentication: %v", err)
 				}
 			}
 		} else {
