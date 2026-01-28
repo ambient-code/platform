@@ -505,7 +505,10 @@ class ClaudeCodeAdapter:
                 artifacts_path="artifacts",
                 ambient_config=ambient_config,
             )
-            system_prompt_config = {"type": "text", "text": workspace_prompt}
+            system_prompt_config = [
+                "claude_code",
+                {"type": "text", "text": workspace_prompt}
+            ]
 
             # Configure SDK options
             options = ClaudeAgentOptions(
