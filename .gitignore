@@ -148,3 +148,9 @@ reports/
 build.log
 *.log
 !components/**/*.log
+
+# Credentials (never commit)
+e2e/scripts/langfuse-credentials.env
+
+# Build artifacts
+*.tar.gz
