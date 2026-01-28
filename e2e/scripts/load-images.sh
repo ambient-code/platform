@@ -33,6 +33,13 @@ if ! kind get clusters 2>/dev/null | grep -q "^ambient-local$"; then
   exit 1
 fi
 
+# Detect expected architecture based on host
+case "$(uname -m)" in
+  arm64|aarch64) EXPECTED_ARCH="arm64" ;;
+  x86_64|amd64)  EXPECTED_ARCH="amd64" ;;
+  *) EXPECTED_ARCH="amd64" ;;
+esac
+
 # Images to load
 IMAGES=(
   "vteam_backend:latest"
@@ -47,7 +54,19 @@ echo "Loading ${#IMAGES[@]} images into kind cluster..."
 
 for IMAGE in "${IMAGES[@]}"; do
   echo "   Loading $IMAGE..."
-  
+
+  # Verify image exists
+  if ! $CONTAINER_ENGINE image inspect "$IMAGE" >/dev/null 2>&1; then
+    echo "      ❌ Image not found. Run 'make build-all' first"
+    exit 1
+  fi
+
+  # Warn if architecture mismatch (don't block)
+  IMAGE_ARCH=$($CONTAINER_ENGINE image inspect "$IMAGE" --format '{{.Architecture}}' 2>/dev/null)
+  if [ -n "$IMAGE_ARCH" ] && [ "$IMAGE_ARCH" != "$EXPECTED_ARCH" ]; then
+    echo "      ⚠️  Image is $IMAGE_ARCH, host is $EXPECTED_ARCH (may be slow)"
+  fi
+
   # Save as OCI archive
   $CONTAINER_ENGINE save --format oci-archive -o "/tmp/${IMAGE//://}.oci.tar" "$IMAGE"
   

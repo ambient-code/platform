@@ -1,4 +1,4 @@
-.PHONY: help setup build-all build-frontend build-backend build-operator build-runner build-state-sync deploy clean
+.PHONY: help setup build-all build-frontend build-backend build-operator build-runner build-state-sync deploy clean check-architecture
 .PHONY: local-up local-down local-clean local-status local-rebuild local-reload-backend local-reload-frontend local-reload-operator local-sync-version
 .PHONY: local-dev-token
 .PHONY: local-logs local-logs-backend local-logs-frontend local-logs-operator local-shell local-shell-frontend
@@ -14,7 +14,28 @@
 
 # Configuration
 CONTAINER_ENGINE ?= podman
-PLATFORM ?= linux/amd64
+
+# Auto-detect host architecture for native builds
+# Override with PLATFORM=linux/amd64 or PLATFORM=linux/arm64 if needed
+HOST_OS := $(shell uname -s)
+HOST_ARCH := $(shell uname -m)
+
+# Map uname output to Docker platform names
+ifeq ($(HOST_ARCH),arm64)
+    DETECTED_PLATFORM := linux/arm64
+else ifeq ($(HOST_ARCH),aarch64)
+    DETECTED_PLATFORM := linux/arm64
+else ifeq ($(HOST_ARCH),x86_64)
+    DETECTED_PLATFORM := linux/amd64
+else ifeq ($(HOST_ARCH),amd64)
+    DETECTED_PLATFORM := linux/amd64
+else
+    DETECTED_PLATFORM := linux/amd64
+    $(warning Unknown architecture $(HOST_ARCH), defaulting to linux/amd64)
+endif
+
+# Allow manual override via PLATFORM=...
+PLATFORM ?= $(DETECTED_PLATFORM)
 BUILD_FLAGS ?=
 NAMESPACE ?= ambient-code
 REGISTRY ?= quay.io/your-org
@@ -76,7 +97,7 @@ help: ## Display this help message
 	@echo '$(COLOR_BOLD)Configuration Variables:$(COLOR_RESET)'
 	@echo '  CONTAINER_ENGINE=$(CONTAINER_ENGINE)  (docker or podman)'
 	@echo '  NAMESPACE=$(NAMESPACE)'
-	@echo '  PLATFORM=$(PLATFORM)'
+	@echo '  PLATFORM=$(PLATFORM) (detected: $(DETECTED_PLATFORM) from $(HOST_OS)/$(HOST_ARCH))'
 	@echo ''
 	@echo '$(COLOR_BOLD)Examples:$(COLOR_RESET)'
 	@echo '  make local-up CONTAINER_ENGINE=docker'
@@ -626,15 +647,32 @@ check-kubectl: ## Check if kubectl is installed
 	@command -v kubectl >/dev/null 2>&1 || \
 		(echo "$(COLOR_RED)✗$(COLOR_RESET) kubectl not found. Install: https://kubernetes.io/docs/tasks/tools/" && exit 1)
 
+check-architecture: ## Validate build architecture matches host
+	@echo "$(COLOR_BOLD)Architecture Check$(COLOR_RESET)"
+	@echo "  Host: $(HOST_OS) / $(HOST_ARCH)"
+	@echo "  Detected Platform: $(DETECTED_PLATFORM)"
+	@echo "  Active Platform: $(PLATFORM)"
+	@if [ "$(PLATFORM)" != "$(DETECTED_PLATFORM)" ]; then \
+		echo ""; \
+		echo "$(COLOR_YELLOW)⚠  Cross-compilation active$(COLOR_RESET)"; \
+		echo "   Building $(PLATFORM) images on $(DETECTED_PLATFORM) host"; \
+		echo "   This will be slower (QEMU emulation)"; \
+		echo ""; \
+		echo "   To use native builds:"; \
+		echo "     make build-all PLATFORM=$(DETECTED_PLATFORM)"; \
+	else \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Using native architecture"; \
+	fi
+
 _build-and-load: ## Internal: Build and load images
-	@echo "  Building backend..."
-	@$(CONTAINER_ENGINE) build -t $(BACKEND_IMAGE) components/backend $(QUIET_REDIRECT)
-	@echo "  Building frontend..."
-	@$(CONTAINER_ENGINE) build -t $(FRONTEND_IMAGE) components/frontend $(QUIET_REDIRECT)
-	@echo "  Building operator..."
-	@$(CONTAINER_ENGINE) build -t $(OPERATOR_IMAGE) components/operator $(QUIET_REDIRECT)
-	@echo "  Building runner..."
-	@$(CONTAINER_ENGINE) build -t $(RUNNER_IMAGE) -f components/runners/claude-code-runner/Dockerfile components/runners $(QUIET_REDIRECT)
+	@echo "  Building backend ($(PLATFORM))..."
+	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) -t $(BACKEND_IMAGE) components/backend $(QUIET_REDIRECT)
+	@echo "  Building frontend ($(PLATFORM))..."
+	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) -t $(FRONTEND_IMAGE) components/frontend $(QUIET_REDIRECT)
+	@echo "  Building operator ($(PLATFORM))..."
+	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) -t $(OPERATOR_IMAGE) components/operator $(QUIET_REDIRECT)
+	@echo "  Building runner ($(PLATFORM))..."
+	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) -t $(RUNNER_IMAGE) -f components/runners/claude-code-runner/Dockerfile components/runners $(QUIET_REDIRECT)
 	@echo "  Tagging images with localhost prefix..."
 	@$(CONTAINER_ENGINE) tag $(BACKEND_IMAGE) localhost/$(BACKEND_IMAGE) 2>/dev/null || true
 	@$(CONTAINER_ENGINE) tag $(FRONTEND_IMAGE) localhost/$(FRONTEND_IMAGE) 2>/dev/null || true

@@ -44,6 +44,25 @@ podman ps && kind --version && kubectl version --client
 docker ps && kind --version && kubectl version --client
 ```
 
+## Architecture Support
+
+The platform auto-detects your host architecture and builds native images:
+
+- **Apple Silicon (M1/M2/M3):** `linux/arm64`
+- **Intel/AMD:** `linux/amd64`
+
+**Verify native builds:**
+```bash
+make check-architecture  # Should show "✓ Using native architecture"
+```
+
+**Manual override (if needed):**
+```bash
+make build-all PLATFORM=linux/arm64  # Force specific architecture
+```
+
+⚠️ **Warning:** Cross-compiling (building non-native architecture) is 4-6x slower and may crash.
+
 ## Commands
 
 ### `make kind-up`
@@ -205,6 +224,19 @@ make kind-up CONTAINER_ENGINE=docker
 lsof -i:8080  # Find what's using the port
 # Kill it or edit e2e/scripts/setup-kind.sh to use different ports
 ```
+
+### Build crashes with segmentation fault
+
+**Symptom:** `qemu: uncaught target signal 11 (Segmentation fault)` during Next.js build
+
+**Fix:**
+```bash
+# Auto-detect and use native architecture
+make local-clean
+make local-up
+```
+
+**Diagnosis:** Run `make check-architecture` to verify native builds are enabled.
 
 ### MinIO errors
 
