@@ -36,10 +36,11 @@ export type MessagesTabProps = {
   userHasInteracted?: boolean;  // Track if user has sent any messages
   queuedMessages?: QueuedMessageItem[];  // Messages queued while session wasn't running
   hasRealMessages?: boolean;  // Track if there are real user/agent messages
+  onPasteImage?: (file: File) => Promise<void>;  // Handler for pasted images
 };
 
 
-const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chatInput, setChatInput, onSendChat, onInterrupt, onEndSession, onGoToResults, onContinue, workflowMetadata, onCommandClick, isRunActive = false, showWelcomeExperience, welcomeExperienceComponent, activeWorkflow, userHasInteracted = false, queuedMessages = [], hasRealMessages = false }) => {
+const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chatInput, setChatInput, onSendChat, onInterrupt, onEndSession, onGoToResults, onContinue, workflowMetadata, onCommandClick, isRunActive = false, showWelcomeExperience, welcomeExperienceComponent, activeWorkflow, userHasInteracted = false, queuedMessages = [], hasRealMessages = false, onPasteImage }) => {
   const [interrupting, setInterrupting] = useState(false);
   const [ending, setEnding] = useState(false);
   const [sendingChat, setSendingChat] = useState(false);
@@ -242,14 +243,14 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
   const handleChatInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newValue = e.target.value;
     const cursorPos = e.target.selectionStart;
-    
+
     setChatInput(newValue);
-    
+
     // Check if we should show autocomplete
     if (cursorPos > 0) {
       const charBeforeCursor = newValue[cursorPos - 1];
       const textBeforeCursor = newValue.substring(0, cursorPos);
-      
+
       // Check for @ or / trigger
       if (charBeforeCursor === '@' || charBeforeCursor === '/') {
         // Make sure it's at the start or after whitespace
@@ -262,11 +263,11 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
           return;
         }
       }
-      
+
       // Update filter if autocomplete is open
       if (autocompleteOpen) {
         const filterText = textBeforeCursor.substring(autocompleteTriggerPos + 1);
-        
+
         // Close if we've moved past the trigger or hit whitespace
         if (cursorPos <= autocompleteTriggerPos || /\s/.test(filterText)) {
           setAutocompleteOpen(false);
@@ -283,6 +284,37 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
         setAutocompleteOpen(false);
         setAutocompleteType(null);
         setAutocompleteFilter('');
+      }
+    }
+  };
+
+  // Handle paste events to detect and upload images
+  const handlePaste = async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    if (!onPasteImage) return;
+
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (const item of Array.from(items)) {
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+
+        const file = item.getAsFile();
+        if (!file) continue;
+
+        // Generate filename for clipboard image
+        const timestamp = Date.now();
+        const extension = item.type.split('/')[1] || 'png';
+        const filename = `clipboard-${timestamp}.${extension}`;
+
+        // Create File object with proper name
+        const namedFile = new File([file], filename, { type: item.type });
+
+        try {
+          await onPasteImage(namedFile);
+        } catch (error) {
+          console.error('Image paste upload failed:', error);
+        }
       }
     }
   };
@@ -409,6 +441,7 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
                   placeholder={isRunActive ? "Agent is processing... (click Stop to interrupt)" : "Type a message to the agent... (Press Enter to send, Shift+Enter for new line)"}
                   value={chatInput}
                   onChange={handleChatInputChange}
+                  onPaste={handlePaste}
                   onKeyDown={(e) => {
                     // Handle autocomplete navigation
                     if (autocompleteOpen && filteredAutocompleteItems.length > 0) {
