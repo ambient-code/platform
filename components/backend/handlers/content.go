@@ -38,6 +38,8 @@ var (
 	GitCreateBranch       func(ctx context.Context, repoDir, branchName string) error
 	GitListRemoteBranches func(ctx context.Context, repoDir string) ([]string, error)
 	GitSyncRepo           func(ctx context.Context, repoDir, commitMessage, branch, githubToken string) error
+	// GetRemoteURL retrieves the origin remote URL - mockable for testing
+	GetRemoteURL func(ctx context.Context, repoDir string) (string, error)
 )
 
 // getGitHubTokenFromContext extracts GitHub token from request header or environment
@@ -70,8 +72,8 @@ func getGitTokenForURL(c *gin.Context, repoURL string) string {
 	return getGitHubTokenFromContext(c)
 }
 
-// getRemoteURL retrieves the origin remote URL for a git repository
-func getRemoteURL(ctx context.Context, repoDir string) (string, error) {
+// defaultGetRemoteURL is the default implementation of GetRemoteURL
+func defaultGetRemoteURL(ctx context.Context, repoDir string) (string, error) {
 	cmd := exec.CommandContext(ctx, "git", "remote", "get-url", "origin")
 	cmd.Dir = repoDir
 	out, err := cmd.Output()
@@ -79,6 +81,13 @@ func getRemoteURL(ctx context.Context, repoDir string) (string, error) {
 		return "", fmt.Errorf("no remote configured: %w", err)
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+
+func init() {
+	// Set default implementation if not already set (allows test mocking)
+	if GetRemoteURL == nil {
+		GetRemoteURL = defaultGetRemoteURL
+	}
 }
 
 // ContentGitPush handles POST /content/github/push in CONTENT_SERVICE_MODE
@@ -382,7 +391,7 @@ func ContentGitSync(c *gin.Context) {
 	}
 
 	// Get remote URL to determine which token to use
-	remoteURL, err := getRemoteURL(c.Request.Context(), abs)
+	remoteURL, err := GetRemoteURL(c.Request.Context(), abs)
 	if err != nil {
 		log.Printf("ContentGitSync: failed to get remote URL for %s: %v", abs, err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "no remote configured"})
@@ -798,15 +807,12 @@ func ContentGitMergeStatus(c *gin.Context) {
 		return
 	}
 
-	// Get remote URL to determine which token to use
-	remoteURL, err := getRemoteURL(c.Request.Context(), abs)
-	if err != nil {
-		log.Printf("ContentGitMergeStatus: failed to get remote URL for %s: %v", abs, err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "no remote configured"})
-		return
+	// Get remote URL to determine which token to use (optional - proceed without token if no remote)
+	var gitToken string
+	if remoteURL, err := GetRemoteURL(c.Request.Context(), abs); err == nil {
+		gitToken = getGitTokenForURL(c, remoteURL)
 	}
 
-	gitToken := getGitTokenForURL(c, remoteURL)
 	status, err := GitCheckMergeStatus(c.Request.Context(), abs, branch, gitToken)
 	if err != nil {
 		log.Printf("ContentGitMergeStatus: check failed: %v", err)
@@ -843,7 +849,7 @@ func ContentGitPull(c *gin.Context) {
 	}
 
 	// Get remote URL to determine which token to use
-	remoteURL, err := getRemoteURL(c.Request.Context(), abs)
+	remoteURL, err := GetRemoteURL(c.Request.Context(), abs)
 	if err != nil {
 		log.Printf("ContentGitPull: failed to get remote URL for %s: %v", abs, err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "no remote configured"})
@@ -891,7 +897,7 @@ func ContentGitPushToBranch(c *gin.Context) {
 	}
 
 	// Get remote URL to determine which token to use
-	remoteURL, err := getRemoteURL(c.Request.Context(), abs)
+	remoteURL, err := GetRemoteURL(c.Request.Context(), abs)
 	if err != nil {
 		log.Printf("ContentGitPushToBranch: failed to get remote URL for %s: %v", abs, err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "no remote configured"})
