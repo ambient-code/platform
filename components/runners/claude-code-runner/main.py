@@ -899,6 +899,7 @@ async def clone_repo_at_runtime(
     # Build clone URL with auth token (header tokens take precedence over env vars)
     github_token = github_token_override or os.getenv("GITHUB_TOKEN", "").strip()
     gitlab_token = gitlab_token_override or os.getenv("GITLAB_TOKEN", "").strip()
+    # SECURITY: clone_url contains embedded token - never log it
     clone_url = git_url
     if github_token and "github" in git_url.lower():
         clone_url = git_url.replace(

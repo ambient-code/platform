@@ -323,6 +323,7 @@ func ContentGitConfigureRemote(c *gin.Context) {
 	}
 
 	// Get appropriate token and inject into URL for authentication
+	// SECURITY: remoteURL may contain embedded token after injection - never log it
 	remoteURL := body.RemoteURL
 	token := getGitTokenForURL(c, body.RemoteURL)
 	if token != "" {
