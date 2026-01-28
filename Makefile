@@ -3,7 +3,7 @@
 .PHONY: local-dev-token
 .PHONY: local-logs local-logs-backend local-logs-frontend local-logs-operator local-shell local-shell-frontend
 .PHONY: local-test local-test-dev local-test-quick test-all local-url local-troubleshoot local-port-forward local-stop-port-forward
-.PHONY: push-all registry-login setup-hooks remove-hooks check-minikube check-kubectl
+.PHONY: push-all registry-login setup-hooks remove-hooks check-minikube check-kind check-kubectl
 .PHONY: e2e-test e2e-setup e2e-clean deploy-langfuse-openshift
 .PHONY: setup-minio minio-console minio-logs minio-status
 .PHONY: validate-makefile lint-makefile check-shell makefile-health
@@ -294,7 +294,7 @@ local-sync-version: ## Sync version from git to local deployment manifests
 	@VERSION=$$(git describe --tags --always 2>/dev/null || echo "dev") && \
 	echo "  Using version: $$VERSION" && \
 	sed -i.bak "s|value: \"v.*\"|value: \"$$VERSION\"|" \
-	  components/manifests/minikube/frontend-deployment.yaml && \
+	components/manifests/minikube/frontend-deployment.yaml && \
 	rm -f components/manifests/minikube/frontend-deployment.yaml.bak && \
 	echo "  $(COLOR_GREEN)✓$(COLOR_RESET) Version synced to $$VERSION"
 
@@ -441,8 +441,8 @@ local-test-quick: check-kubectl check-minikube ## Quick smoke test of local envi
 	@kubectl get namespace $(NAMESPACE) >/dev/null 2>&1 && echo "$(COLOR_GREEN)✓$(COLOR_RESET) Namespace exists" || (echo "$(COLOR_RED)✗$(COLOR_RESET) Namespace missing" && exit 1)
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for pods to be ready..."
 	@kubectl wait --for=condition=ready pod -l app=backend-api -n $(NAMESPACE) --timeout=60s >/dev/null 2>&1 && \
-	 kubectl wait --for=condition=ready pod -l app=frontend -n $(NAMESPACE) --timeout=60s >/dev/null 2>&1 && \
-	 echo "$(COLOR_GREEN)✓$(COLOR_RESET) Pods ready" || (echo "$(COLOR_RED)✗$(COLOR_RESET) Pods not ready" && exit 1)
+	kubectl wait --for=condition=ready pod -l app=frontend -n $(NAMESPACE) --timeout=60s >/dev/null 2>&1 && \
+	echo "$(COLOR_GREEN)✓$(COLOR_RESET) Pods ready" || (echo "$(COLOR_RED)✗$(COLOR_RESET) Pods not ready" && exit 1)
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Testing backend health..."
 	@for i in 1 2 3 4 5; do \
 		curl -sf http://$$(minikube ip):30080/health >/dev/null 2>&1 && { echo "$(COLOR_GREEN)✓$(COLOR_RESET) Backend healthy"; break; } || { \
@@ -545,7 +545,7 @@ clean: ## Clean up Kubernetes resources
 
 ##@ Kind Local Development
 
-kind-up: ## Start kind cluster with Quay.io images (production-like)
+kind-up: check-kind check-kubectl ## Start kind cluster with Quay.io images (production-like)
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Starting kind cluster..."
 	@cd e2e && CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/setup-kind.sh
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for API server to be accessible..."
@@ -642,6 +642,10 @@ deploy-langfuse-openshift: ## Deploy Langfuse to OpenShift/ROSA cluster
 check-minikube: ## Check if minikube is installed
 	@command -v minikube >/dev/null 2>&1 || \
 		(echo "$(COLOR_RED)✗$(COLOR_RESET) minikube not found. Install: https://minikube.sigs.k8s.io/docs/start/" && exit 1)
+
+check-kind: ## Check if kind is installed
+	@command -v kind >/dev/null 2>&1 || \
+		(echo "$(COLOR_RED)✗$(COLOR_RESET) kind not found. Install: https://kind.sigs.k8s.io/docs/user/quick-start/" && exit 1)
 
 check-kubectl: ## Check if kubectl is installed
 	@command -v kubectl >/dev/null 2>&1 || \
