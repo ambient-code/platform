@@ -83,6 +83,16 @@ const defaultComponents: Components = {
   li: ({ children }) => (
     <li className="leading-relaxed">{children}</li>
   ),
+  a: ({ href, children }) => (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-primary hover:underline cursor-pointer"
+    >
+      {children}
+    </a>
+  ),
 };
 
 const LOADING_MESSAGES = [
