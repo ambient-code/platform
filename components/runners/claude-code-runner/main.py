@@ -1079,9 +1079,6 @@ async def trigger_workflow_greeting(git_url: str, branch: str, path: str):
 
     import aiohttp
 
-    # Wait a moment for workflow to be cloned/initialized
-    await asyncio.sleep(3)
-
     logger.info("Triggering workflow greeting...")
 
     try:
@@ -1102,7 +1099,7 @@ async def trigger_workflow_greeting(git_url: str, branch: str, path: str):
         if path:
             workflow_name = path.split("/")[-1]
 
-        greeting = f"Greet the user and explain that the {workflow_name} workflow is now active. Briefly describe what this workflow helps with based on the systemPrompt in ambient.json. Keep it concise and friendly."
+        greeting = f"Greet the user and explain that the {workflow_name} workflow is now active. Briefly describe what this workflow helps with. Keep it concise and friendly."
 
         payload = {
             "threadId": session_id,
