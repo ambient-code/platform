@@ -70,6 +70,11 @@ chmod -R 777 "${CLAUDE_DATA_PATH}" 2>/dev/null || echo "Warning: failed to chmod
 
 # Other directories - artifacts/file-uploads are read-only, repos needs write access for runtime additions
 chmod 755 /workspace/artifacts /workspace/file-uploads 2>/dev/null || true
+# SECURITY: 777 required for /workspace/repos because:
+# - Init container runs as root but runner container runs as user 1001
+# - Group-based permissions (775) don't work as containers may not share groups
+# - EmptyDir doesn't support fsGroup propagation in all environments
+# - Directory contains cloned git repos (no secrets), so world-writable is acceptable
 chmod 777 /workspace/repos 2>/dev/null || true
 
 # Check if S3 is configured
@@ -133,6 +138,7 @@ echo "Setting permissions on subdirectories..."
 # .claude needs to be writable by user 1001 (runner container) - use 777
 chmod -R 777 "${CLAUDE_DATA_PATH}" 2>/dev/null || true
 # repos also needs write access for runtime repo additions (clone_repo_at_runtime)
+# See security rationale above for why 777 is used
 chmod -R 755 /workspace/artifacts /workspace/file-uploads 2>/dev/null || true
 chmod -R 777 /workspace/repos 2>/dev/null || true
 

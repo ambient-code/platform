@@ -1262,8 +1262,8 @@ func SelectWorkflow(c *gin.Context) {
 func AddRepo(c *gin.Context) {
 	project := c.GetString("project")
 	sessionName := c.Param("sessionName")
-	_, k8sDyn := GetK8sClientsForRequest(c)
-	if k8sDyn == nil {
+	k8sClt, k8sDyn := GetK8sClientsForRequest(c)
+	if k8sClt == nil || k8sDyn == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 		c.Abort()
 		return
@@ -1360,7 +1360,7 @@ func AddRepo(c *gin.Context) {
 					}
 				}
 			default:
-				log.Printf("AddRepo: unknown provider for URL %s, proceeding without authentication", req.URL)
+				log.Printf("AddRepo: unknown provider detected, proceeding without authentication")
 			}
 		}
 
@@ -2935,7 +2935,8 @@ func PushSessionRepo(c *gin.Context) {
 		return
 	}
 
-	// Attach short-lived GitHub and GitLab tokens for one-shot authenticated push
+	// Attach GitHub and GitLab tokens for authenticated push
+	// Note: GitHub uses installation tokens (short-lived), GitLab uses user OAuth tokens
 	// Load session to get authoritative userId
 	gvr = GetAgenticSessionV1Alpha1Resource()
 	obj, err = k8sDyn.Resource(gvr).Namespace(project).Get(c.Request.Context(), session, v1.GetOptions{})
@@ -3375,7 +3376,7 @@ func ConfigureGitRemote(c *gin.Context) {
 			}
 		}
 	default:
-		log.Printf("ConfigureGitRemote: unknown provider for URL %s, proceeding without authentication", body.RemoteURL)
+		log.Printf("ConfigureGitRemote: unknown provider detected, proceeding without authentication")
 	}
 
 	resp, err := http.DefaultClient.Do(req)

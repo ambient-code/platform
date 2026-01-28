@@ -49,7 +49,7 @@ func getGitHubTokenFromContext(c *gin.Context) string {
 		return token
 	}
 	// Fall back to env var (injected via EnvFrom)
-	return os.Getenv("GITHUB_TOKEN")
+	return strings.TrimSpace(os.Getenv("GITHUB_TOKEN"))
 }
 
 // getGitLabTokenFromContext extracts GitLab token from request header or environment
@@ -329,7 +329,7 @@ func ContentGitConfigureRemote(c *gin.Context) {
 	if token != "" {
 		if authenticatedURL, err := git.InjectGitToken(remoteURL, token); err == nil {
 			remoteURL = authenticatedURL
-			log.Printf("ContentConfigureRemote: configured authentication for %s", types.DetectProvider(body.RemoteURL))
+			log.Printf("ContentConfigureRemote: configured authentication for provider=%s tokenLen=%d", types.DetectProvider(body.RemoteURL), len(token))
 		}
 	}
 
@@ -808,7 +808,9 @@ func ContentGitMergeStatus(c *gin.Context) {
 		return
 	}
 
-	// Get remote URL to determine which token to use (optional - proceed without token if no remote)
+	// Get remote URL to determine which token to use
+	// Proceed without token if no remote configured - merge status check is read-only and may
+	// be called before remote is configured (e.g., for local-only repositories)
 	var gitToken string
 	if remoteURL, err := GetRemoteURL(c.Request.Context(), abs); err == nil {
 		gitToken = getGitTokenForURL(c, remoteURL)
