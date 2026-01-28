@@ -55,7 +55,7 @@ func getGitLabTokenFromContext(c *gin.Context) string {
 		return token
 	}
 	// Fall back to env var (injected via EnvFrom)
-	return os.Getenv("GITLAB_TOKEN")
+	return strings.TrimSpace(os.Getenv("GITLAB_TOKEN"))
 }
 
 // getGitTokenForURL returns the appropriate token based on the repository URL
@@ -306,7 +306,6 @@ func ContentGitConfigureRemote(c *gin.Context) {
 	if token != "" {
 		if authenticatedURL, err := git.InjectGitToken(remoteURL, token); err == nil {
 			remoteURL = authenticatedURL
-			log.Printf("Injected git token into remote URL")
 		}
 	}
 
@@ -371,7 +370,12 @@ func ContentGitSync(c *gin.Context) {
 	// Get remote URL to determine which token to use
 	remoteCmd := exec.CommandContext(c.Request.Context(), "git", "remote", "get-url", "origin")
 	remoteCmd.Dir = abs
-	remoteOut, _ := remoteCmd.Output()
+	remoteOut, err := remoteCmd.Output()
+	if err != nil {
+		log.Printf("ContentGitSync: failed to get remote URL for %s: %v", abs, err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "no remote configured"})
+		return
+	}
 	remoteURL := strings.TrimSpace(string(remoteOut))
 
 	// Perform git sync operations with authentication
@@ -786,15 +790,18 @@ func ContentGitMergeStatus(c *gin.Context) {
 	// Get remote URL to determine which token to use
 	remoteCmd := exec.CommandContext(c.Request.Context(), "git", "remote", "get-url", "origin")
 	remoteCmd.Dir = abs
-	remoteOut, _ := remoteCmd.Output()
+	remoteOut, err := remoteCmd.Output()
+	if err != nil {
+		log.Printf("ContentGitMergeStatus: failed to get remote URL for %s: %v", abs, err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "no remote configured"})
+		return
+	}
 	remoteURL := strings.TrimSpace(string(remoteOut))
 
 	gitToken := getGitTokenForURL(c, remoteURL)
 	status, err := GitCheckMergeStatus(c.Request.Context(), abs, branch, gitToken)
 	if err != nil {
 		log.Printf("ContentGitMergeStatus: check failed: %v", err)
-		// Log actual error for debugging, but return generic message to avoid leaking internal details
-		log.Printf("Internal server error: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
@@ -830,7 +837,12 @@ func ContentGitPull(c *gin.Context) {
 	// Get remote URL to determine which token to use
 	remoteCmd := exec.CommandContext(c.Request.Context(), "git", "remote", "get-url", "origin")
 	remoteCmd.Dir = abs
-	remoteOut, _ := remoteCmd.Output()
+	remoteOut, err := remoteCmd.Output()
+	if err != nil {
+		log.Printf("ContentGitPull: failed to get remote URL for %s: %v", abs, err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "no remote configured"})
+		return
+	}
 	remoteURL := strings.TrimSpace(string(remoteOut))
 
 	gitToken := getGitTokenForURL(c, remoteURL)
@@ -876,7 +888,12 @@ func ContentGitPushToBranch(c *gin.Context) {
 	// Get remote URL to determine which token to use
 	remoteCmd := exec.CommandContext(c.Request.Context(), "git", "remote", "get-url", "origin")
 	remoteCmd.Dir = abs
-	remoteOut, _ := remoteCmd.Output()
+	remoteOut, err := remoteCmd.Output()
+	if err != nil {
+		log.Printf("ContentGitPushToBranch: failed to get remote URL for %s: %v", abs, err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "no remote configured"})
+		return
+	}
 	remoteURL := strings.TrimSpace(string(remoteOut))
 
 	gitToken := getGitTokenForURL(c, remoteURL)

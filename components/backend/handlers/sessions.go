@@ -1349,14 +1349,14 @@ func AddRepo(c *gin.Context) {
 				if GetGitHubToken != nil {
 					if token, err := GetGitHubToken(c.Request.Context(), k8sClt, k8sDyn, project, userID); err == nil && token != "" {
 						httpReq.Header.Set("X-GitHub-Token", token)
-						log.Printf("AddRepo: attached GitHub token for project=%s session=%s", project, sessionName)
+						log.Printf("AddRepo: configured authentication for project=%s session=%s", project, sessionName)
 					}
 				}
 			case types.ProviderGitLab:
 				if GetGitLabToken != nil {
 					if token, err := GetGitLabToken(c.Request.Context(), k8sClt, project, userID); err == nil && token != "" {
 						httpReq.Header.Set("X-GitLab-Token", token)
-						log.Printf("AddRepo: attached GitLab token for project=%s session=%s", project, sessionName)
+						log.Printf("AddRepo: configured authentication for project=%s session=%s", project, sessionName)
 					}
 				}
 			}
@@ -2950,18 +2950,16 @@ func PushSessionRepo(c *gin.Context) {
 		if userID != "" {
 			if tokenStr, err := GetGitHubToken(c.Request.Context(), k8sClt, k8sDyn, project, userID); err == nil && strings.TrimSpace(tokenStr) != "" {
 				req.Header.Set("X-GitHub-Token", tokenStr)
-				log.Printf("pushSessionRepo: attached short-lived GitHub token for project=%s session=%s", project, session)
 			} else if err != nil {
-				log.Printf("pushSessionRepo: failed to resolve GitHub token: %v", err)
+				log.Printf("pushSessionRepo: failed to resolve authentication: %v", err)
 			}
 			if GetGitLabToken != nil {
 				if tokenStr, err := GetGitLabToken(c.Request.Context(), k8sClt, project, userID); err == nil && strings.TrimSpace(tokenStr) != "" {
 					req.Header.Set("X-GitLab-Token", tokenStr)
-					log.Printf("pushSessionRepo: attached short-lived GitLab token for project=%s session=%s", project, session)
 				}
 			}
 		} else {
-			log.Printf("pushSessionRepo: session %s/%s missing userContext.userId; proceeding without token", project, session)
+			log.Printf("pushSessionRepo: session %s/%s missing userContext.userId; proceeding without authentication", project, session)
 		}
 	} else {
 		log.Printf("pushSessionRepo: failed to read session for token attach: %v", err)
@@ -3253,12 +3251,10 @@ func GetGitStatus(c *gin.Context) {
 				if userID, ok := uc["userId"].(string); ok && strings.TrimSpace(userID) != "" {
 					if tokenStr, err := GetGitHubToken(c.Request.Context(), k8sClt, k8sDyn, project, userID); err == nil && strings.TrimSpace(tokenStr) != "" {
 						req.Header.Set("X-GitHub-Token", tokenStr)
-						log.Printf("GetGitStatus: attached GitHub token for project=%s session=%s", project, session)
 					}
 					if GetGitLabToken != nil {
 						if tokenStr, err := GetGitLabToken(c.Request.Context(), k8sClt, project, userID); err == nil && strings.TrimSpace(tokenStr) != "" {
 							req.Header.Set("X-GitLab-Token", tokenStr)
-							log.Printf("GetGitStatus: attached GitLab token for project=%s session=%s", project, session)
 						}
 					}
 				}
@@ -3363,17 +3359,15 @@ func ConfigureGitRemote(c *gin.Context) {
 	provider := types.DetectProvider(body.RemoteURL)
 	switch provider {
 	case types.ProviderGitHub:
-		if GetGitHubToken != nil {
+		if GetGitHubToken != nil && userID != "" {
 			if token, err := GetGitHubToken(c.Request.Context(), k8sClt, k8sDyn, project, userID); err == nil && token != "" {
 				req.Header.Set("X-GitHub-Token", token)
-				log.Printf("ConfigureGitRemote: forwarding GitHub token for remote configuration")
 			}
 		}
 	case types.ProviderGitLab:
 		if GetGitLabToken != nil && userID != "" {
 			if token, err := GetGitLabToken(c.Request.Context(), k8sClt, project, userID); err == nil && token != "" {
 				req.Header.Set("X-GitLab-Token", token)
-				log.Printf("ConfigureGitRemote: forwarding GitLab token for remote configuration")
 			}
 		}
 	}
@@ -3492,12 +3486,10 @@ func SynchronizeGit(c *gin.Context) {
 				if userID, ok := uc["userId"].(string); ok && strings.TrimSpace(userID) != "" {
 					if tokenStr, err := GetGitHubToken(c.Request.Context(), k8sClt, k8sDyn, project, userID); err == nil && strings.TrimSpace(tokenStr) != "" {
 						req.Header.Set("X-GitHub-Token", tokenStr)
-						log.Printf("SynchronizeGit: attached GitHub token for project=%s session=%s", project, session)
 					}
 					if GetGitLabToken != nil {
 						if tokenStr, err := GetGitLabToken(c.Request.Context(), k8sClt, project, userID); err == nil && strings.TrimSpace(tokenStr) != "" {
 							req.Header.Set("X-GitLab-Token", tokenStr)
-							log.Printf("SynchronizeGit: attached GitLab token for project=%s session=%s", project, session)
 						}
 					}
 				}
@@ -3563,12 +3555,10 @@ func GetGitMergeStatus(c *gin.Context) {
 				if userID, ok := uc["userId"].(string); ok && strings.TrimSpace(userID) != "" {
 					if tokenStr, err := GetGitHubToken(c.Request.Context(), k8sClt, k8sDyn, project, userID); err == nil && strings.TrimSpace(tokenStr) != "" {
 						req.Header.Set("X-GitHub-Token", tokenStr)
-						log.Printf("GetGitMergeStatus: attached GitHub token for project=%s session=%s", project, session)
 					}
 					if GetGitLabToken != nil {
 						if tokenStr, err := GetGitLabToken(c.Request.Context(), k8sClt, project, userID); err == nil && strings.TrimSpace(tokenStr) != "" {
 							req.Header.Set("X-GitLab-Token", tokenStr)
-							log.Printf("GetGitMergeStatus: attached GitLab token for project=%s session=%s", project, session)
 						}
 					}
 				}
@@ -3649,7 +3639,7 @@ func GitPullSession(c *gin.Context) {
 		req.Header.Set("Authorization", v)
 	}
 
-	// Attach short-lived GitHub and GitLab tokens for authenticated pull
+	// Attach GitHub and GitLab tokens for authenticated pull
 	gvr := GetAgenticSessionV1Alpha1Resource()
 	if obj, err := k8sDyn.Resource(gvr).Namespace(project).Get(c.Request.Context(), session, v1.GetOptions{}); err == nil {
 		if spec, _, _ := unstructured.NestedMap(obj.Object, "spec"); spec != nil {
@@ -3657,12 +3647,10 @@ func GitPullSession(c *gin.Context) {
 				if userID, ok := uc["userId"].(string); ok && strings.TrimSpace(userID) != "" {
 					if tokenStr, err := GetGitHubToken(c.Request.Context(), k8sClt, k8sDyn, project, userID); err == nil && strings.TrimSpace(tokenStr) != "" {
 						req.Header.Set("X-GitHub-Token", tokenStr)
-						log.Printf("GitPullSession: attached GitHub token for project=%s session=%s", project, session)
 					}
 					if GetGitLabToken != nil {
 						if tokenStr, err := GetGitLabToken(c.Request.Context(), k8sClt, project, userID); err == nil && strings.TrimSpace(tokenStr) != "" {
 							req.Header.Set("X-GitLab-Token", tokenStr)
-							log.Printf("GitPullSession: attached GitLab token for project=%s session=%s", project, session)
 						}
 					}
 				}
@@ -3748,7 +3736,7 @@ func GitPushSession(c *gin.Context) {
 		req.Header.Set("Authorization", v)
 	}
 
-	// Attach short-lived GitHub and GitLab tokens for authenticated push
+	// Attach GitHub and GitLab tokens for authenticated push
 	gvr := GetAgenticSessionV1Alpha1Resource()
 	if obj, err := k8sDyn.Resource(gvr).Namespace(project).Get(c.Request.Context(), session, v1.GetOptions{}); err == nil {
 		if spec, _, _ := unstructured.NestedMap(obj.Object, "spec"); spec != nil {
@@ -3756,12 +3744,10 @@ func GitPushSession(c *gin.Context) {
 				if userID, ok := uc["userId"].(string); ok && strings.TrimSpace(userID) != "" {
 					if tokenStr, err := GetGitHubToken(c.Request.Context(), k8sClt, k8sDyn, project, userID); err == nil && strings.TrimSpace(tokenStr) != "" {
 						req.Header.Set("X-GitHub-Token", tokenStr)
-						log.Printf("GitPushSession: attached GitHub token for project=%s session=%s", project, session)
 					}
 					if GetGitLabToken != nil {
 						if tokenStr, err := GetGitLabToken(c.Request.Context(), k8sClt, project, userID); err == nil && strings.TrimSpace(tokenStr) != "" {
 							req.Header.Set("X-GitLab-Token", tokenStr)
-							log.Printf("GitPushSession: attached GitLab token for project=%s session=%s", project, session)
 						}
 					}
 				}
