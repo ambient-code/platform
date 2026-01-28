@@ -1790,8 +1790,8 @@ export default function ProjectSessionDetailPage({
                           </div>
 
                           {/* File Browser */}
-                          <div className="border rounded-lg overflow-hidden">
-                            <div className="px-2 py-1.5 border-b flex items-center justify-between bg-muted/30">
+                          <div className="overflow-hidden">
+                            <div className="px-2 py-1.5 border-y flex items-center justify-between bg-muted/30">
                               <div className="flex items-center gap-1 text-xs text-muted-foreground min-w-0 flex-1">
                                 {(fileOps.currentSubPath ||
                                   fileOps.viewingFile) && (
