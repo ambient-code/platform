@@ -25,10 +25,10 @@ rules:
 - apiGroups: ["batch"]
   resources: ["jobs"]
   verbs: ["get", "list", "watch", "create", "delete"]
-# Pods (for getting logs from failed jobs and cleanup on stop)
+# Pods (create runner pods directly, get logs, and cleanup on stop)
 - apiGroups: [""]
   resources: ["pods"]
-  verbs: ["get", "list", "watch", "delete", "deletecollection"]
+  verbs: ["get", "list", "watch", "create", "delete", "deletecollection"]
 - apiGroups: [""]
   resources: ["pods/log"]
   verbs: ["get"]

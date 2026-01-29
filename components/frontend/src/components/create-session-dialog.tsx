@@ -18,7 +18,6 @@ import {
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -31,8 +30,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import type { CreateAgenticSessionRequest } from "@/types/agentic-session";
 import { useCreateSession } from "@/services/queries/use-sessions";
 import { errorToast } from "@/hooks/use-toast";
@@ -83,7 +80,6 @@ export function CreateSessionDialog({
 
     const request: CreateAgenticSessionRequest = {
       interactive: true,
-      initialPrompt: "Greet the user and briefly explain the workspace capabilities: they can select workflows, add code repositories for context, use slash commands, and you'll help with software engineering tasks. Keep it friendly and concise.",
       llmSettings: {
         model: values.model,
         temperature: values.temperature,
@@ -157,89 +153,7 @@ export function CreateSessionDialog({
                 )}
               />
 
-              {/* Advanced Settings Accordion */}
-              <Accordion type="single" collapsible className="w-full">
-                <AccordionItem value="advanced-settings" className="border rounded-md">
-                  <AccordionTrigger className="px-4 py-3 hover:no-underline">
-                    <span className="text-sm font-medium">Change Default Model Settings</span>
-                  </AccordionTrigger>
-                  <AccordionContent className="px-4 pb-4">
-                    <div className="space-y-6 pt-4">
-                      {/* Temperature and Timeout */}
-                      <div className="grid grid-cols-2 gap-4">
-                        <FormField
-                          control={form.control}
-                          name="temperature"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Temperature</FormLabel>
-                              <FormControl>
-                                <Input
-                                  type="number"
-                                  step="0.1"
-                                  min="0"
-                                  max="2"
-                                  {...field}
-                                  onChange={(e) => field.onChange(parseFloat(e.target.value))}
-                                />
-                              </FormControl>
-                              <FormDescription>Controls randomness (0.0 - 2.0)</FormDescription>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-
-                        <FormField
-                          control={form.control}
-                          name="timeout"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Timeout (seconds)</FormLabel>
-                              <FormControl>
-                                <Input
-                                  type="number"
-                                  step="60"
-                                  min="60"
-                                  max="1800"
-                                  {...field}
-                                  onChange={(e) => field.onChange(parseInt(e.target.value))}
-                                />
-                              </FormControl>
-                              <FormDescription>Session timeout (60-1800 seconds)</FormDescription>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
-
-                      {/* Max Output Tokens */}
-                      <FormField
-                        control={form.control}
-                        name="maxTokens"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Max Output Tokens</FormLabel>
-                            <FormControl>
-                              <Input
-                                type="number"
-                                step="100"
-                                min="100"
-                                max="8000"
-                                {...field}
-                                onChange={(e) => field.onChange(parseInt(e.target.value))}
-                              />
-                            </FormControl>
-                            <FormDescription>Maximum response length (100-8000)</FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
-              </Accordion>
-
+           
               <DialogFooter>
                 <Button
                   type="button"

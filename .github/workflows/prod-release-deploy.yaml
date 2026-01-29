@@ -12,6 +12,16 @@ on:
           - major
           - minor
           - patch
+      force_build_all:
+        description: 'Force rebuild all components'
+        required: false
+        type: boolean
+        default: true
+      components:
+        description: 'Components to build (comma-separated: frontend,backend,operator,claude-runner,state-sync) - leave empty for all'
+        required: false
+        type: string
+        default: ''
 jobs:
    release:
     runs-on: ubuntu-latest
@@ -21,7 +31,7 @@ jobs:
       new_tag: ${{ steps.next_version.outputs.new_tag }}
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0  # Fetch all history for changelog generation
 
@@ -158,9 +168,13 @@ jobs:
             context: ./components/runners
             image: quay.io/ambient_code/vteam_claude_runner
             dockerfile: ./components/runners/claude-code-runner/Dockerfile
+          - name: state-sync
+            context: ./components/runners/state-sync
+            image: quay.io/ambient_code/vteam_state_sync
+            dockerfile: ./components/runners/state-sync/Dockerfile
     steps:
       - name: Checkout code from the tag generated above
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
             ref: ${{ needs.release.outputs.new_tag }}
             fetch-depth: 0
@@ -186,6 +200,7 @@ jobs:
           password: ${{ secrets.REDHAT_PASSWORD }}
 
       - name: Build and push ${{ matrix.component.name }} image
+        if: github.event.inputs.force_build_all == 'true' || contains(github.event.inputs.components, matrix.component.name) || (github.event.inputs.components == '' && github.event.inputs.force_build_all != 'false')
         uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.component.context }}
@@ -203,7 +218,7 @@ jobs:
     needs: [release, build-and-push]
     steps:
       - name: Checkout code from release tag
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           ref: ${{ needs.release.outputs.new_tag }}
 
@@ -221,6 +236,10 @@ jobs:
         run: |
           oc login ${{ secrets.PROD_OPENSHIFT_SERVER }} --token=${{ secrets.PROD_OPENSHIFT_TOKEN }} --insecure-skip-tls-verify
 
+      - name: Deploy observability stack
+        run: |
+          oc apply -k components/manifests/observability/
+
       - name: Update kustomization with release image tags
         working-directory: components/manifests/overlays/production
         run: |
@@ -229,6 +248,7 @@ jobs:
           kustomize edit set image quay.io/ambient_code/vteam_backend:latest=quay.io/ambient_code/vteam_backend:${RELEASE_TAG}
           kustomize edit set image quay.io/ambient_code/vteam_operator:latest=quay.io/ambient_code/vteam_operator:${RELEASE_TAG}
           kustomize edit set image quay.io/ambient_code/vteam_claude_runner:latest=quay.io/ambient_code/vteam_claude_runner:${RELEASE_TAG}
+          kustomize edit set image quay.io/ambient_code/vteam_state_sync:latest=quay.io/ambient_code/vteam_state_sync:${RELEASE_TAG}
 
       - name: Validate kustomization
         working-directory: components/manifests/overlays/production
@@ -256,4 +276,5 @@ jobs:
         run: |
           oc set env deployment/agentic-operator -n ambient-code -c agentic-operator \
             AMBIENT_CODE_RUNNER_IMAGE="quay.io/ambient_code/vteam_claude_runner:${{ needs.release.outputs.new_tag }}" \
-            CONTENT_SERVICE_IMAGE="quay.io/ambient_code/vteam_backend:${{ needs.release.outputs.new_tag }}"
+            CONTENT_SERVICE_IMAGE="quay.io/ambient_code/vteam_backend:${{ needs.release.outputs.new_tag }}" \
+            STATE_SYNC_IMAGE="quay.io/ambient_code/vteam_state_sync:${{ needs.release.outputs.new_tag }}"

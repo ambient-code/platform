@@ -1,0 +1,125 @@
+---
+title: Ambient Code Platform - Deployment & Technology Stack
+---
+
+%%{init: {'theme':'base', 'themeVariables': { 'primaryColor': '#f3f4f6', 'primaryTextColor': '#111827', 'primaryBorderColor': '#d1d5db', 'lineColor': '#9ca3af'}}}%%
+
+graph TD
+    subgraph "🚀 Deployment Options"
+        subgraph "Local Development"
+            MK[Minikube]
+            CRC[OpenShift Local/CRC]
+            DevCmd[make dev-start]
+            HotReload[DEV_MODE=true<br/>make dev-sync]
+        end
+        
+        subgraph "Production"
+            OCP[OpenShift Cluster]
+            K8sCluster[Kubernetes Cluster]
+            Registry[Container Registry]
+            ProdCmd[make deploy<br/>NAMESPACE=prod]
+        end
+    end
+    
+    subgraph "🏗️ Technology Stack"
+        subgraph "Frontend Stack"
+            Next[NextJS 14+]
+            Shadcn[Shadcn/UI]
+            TS1[TypeScript]
+            React[React 18+]
+            TW[Tailwind CSS]
+        end
+        
+        subgraph "Backend Stack"
+            Go1[Go 1.21+]
+            Gin[Gin Framework]
+            K8sClient[Kubernetes Client-Go]
+            OIDC[OpenID Connect]
+        end
+        
+        subgraph "Operator Stack"
+            Go2[Go 1.21+]
+            OperatorSDK[Operator SDK]
+            Controller[Controller Runtime]
+        end
+        
+        subgraph "AI Runner Stack"
+            Python[Python 3.11+]
+            Claude[Claude Code CLI]
+            MCP[Model Context Protocol]
+            Playwright[Playwright MCP Server]
+        end
+    end
+    
+    subgraph "📦 Infrastructure"
+        subgraph "Kubernetes Resources"
+            CRD[Custom Resource Definitions]
+            Jobs[Kubernetes Jobs]
+            Pods[Execution Pods]
+            Services[K8s Services]
+            Routes[OpenShift Routes/<br/>Ingress]
+        end
+        
+        subgraph "Storage & State"
+            CR2[AgenticSession CRs]
+            ConfigMaps[ConfigMaps]
+            Secrets[Secrets]
+            PVC[Persistent Volumes]
+        end
+        
+        subgraph "Security"
+            OAuth[OpenShift OAuth]
+            RBAC[RBAC Policies]
+            SA[Service Accounts]
+            NetPol[Network Policies]
+        end
+    end
+    
+    subgraph "📋 Prerequisites"
+        Docker[Docker/Podman]
+        Kubectl[kubectl CLI]
+        Make[GNU Make]
+        RedHatSecret["Red Hat Pull Secret<br/>for OpenShift"]
+    end
+    
+    %% Relationships
+    DevCmd --> MK
+    DevCmd --> CRC
+    HotReload --> CRC
+    ProdCmd --> OCP
+    ProdCmd --> K8sCluster
+    
+    Registry --> OCP
+    Registry --> K8sCluster
+    
+    Next --> React
+    React --> TS1
+    Shadcn --> TW
+    
+    Go1 --> Gin
+    Go1 --> K8sClient
+    OIDC --> OAuth
+    
+    Go2 --> OperatorSDK
+    OperatorSDK --> Controller
+    
+    Python --> Claude
+    Claude --> MCP
+    MCP --> Playwright
+    
+    CRD --> CR2
+    Jobs --> Pods
+    Services --> Routes
+    
+    %% Styling
+    classDef dev fill:#e0f2fe,stroke:#0284c7,stroke-width:2px,color:#0c4a6e
+    classDef prod fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d
+    classDef tech fill:#fef3c7,stroke:#f59e0b,stroke-width:2px,color:#78350f
+    classDef infra fill:#e9d5ff,stroke:#a855f7,stroke-width:2px,color:#581c87
+    classDef prereq fill:#fee2e2,stroke:#ef4444,stroke-width:2px,color:#7f1d1d
+    
+    class MK,CRC,DevCmd,HotReload dev
+    class OCP,K8sCluster,Registry,ProdCmd prod
+    class Next,Shadcn,TS1,React,TW,Go1,Gin,K8sClient,OIDC,Go2,OperatorSDK,Controller,Python,Claude,MCP,Playwright tech
+    class CRD,Jobs,Pods,Services,Routes,CR2,ConfigMaps,Secrets,PVC,OAuth,RBAC,SA,NetPol infra
+    class Docker,Kubectl,Make,RedHatSecret prereq

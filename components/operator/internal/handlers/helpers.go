@@ -19,22 +19,17 @@ import (
 const (
 	// Progress tracking conditions - these track the session's lifecycle stages
 	conditionReady                     = "Ready"
-	conditionPVCReady                  = "PVCReady"
 	conditionSecretsReady              = "SecretsReady"
-	conditionJobCreated                = "JobCreated"
+	conditionPodCreated                = "PodCreated"
 	conditionPodScheduled              = "PodScheduled"
 	conditionRunnerStarted             = "RunnerStarted"
 	conditionReposReconciled           = "ReposReconciled"
 	conditionWorkflowReconciled        = "WorkflowReconciled"
-	conditionTempContentPodReady       = "TempContentPodReady"
 	conditionReconciled                = "Reconciled"
 	runnerTokenSecretAnnotation        = "ambient-code.io/runner-token-secret"
 	runnerServiceAccountAnnotation     = "ambient-code.io/runner-sa"
 	runnerTokenRefreshedAtAnnotation   = "ambient-code.io/token-refreshed-at"
-	tempContentRequestedAnnotation     = "ambient-code.io/temp-content-requested"
-	tempContentLastAccessedAnnotation  = "ambient-code.io/temp-content-last-accessed"
 	runnerTokenRefreshTTL              = 45 * time.Minute
-	tempContentInactivityTTL           = 10 * time.Minute
 	defaultRunnerTokenSecretPrefix     = "ambient-runner-token-"
 	defaultSessionServiceAccountPrefix = "ambient-session-"
 )

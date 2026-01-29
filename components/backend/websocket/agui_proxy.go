@@ -406,6 +406,88 @@ func HandleAGUIInterrupt(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Interrupt signal sent"})
 }
 
+// HandleMCPStatus proxies MCP status requests to runner
+// GET /api/projects/:projectName/agentic-sessions/:sessionName/mcp/status
+func HandleMCPStatus(c *gin.Context) {
+	projectName := c.Param("projectName")
+	sessionName := c.Param("sessionName")
+
+	// SECURITY: Authenticate user and get user-scoped K8s client
+	reqK8s, _ := handlers.GetK8sClientsForRequest(c)
+	if reqK8s == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
+
+	// SECURITY: Verify user has permission to read this session
+	ctx := context.Background()
+	ssar := &authv1.SelfSubjectAccessReview{
+		Spec: authv1.SelfSubjectAccessReviewSpec{
+			ResourceAttributes: &authv1.ResourceAttributes{
+				Group:     "vteam.ambient-code",
+				Resource:  "agenticsessions",
+				Verb:      "get",
+				Namespace: projectName,
+				Name:      sessionName,
+			},
+		},
+	}
+	res, err := reqK8s.AuthorizationV1().SelfSubjectAccessReviews().Create(ctx, ssar, metav1.CreateOptions{})
+	if err != nil || !res.Status.Allowed {
+		log.Printf("MCP Status: User not authorized to read session %s/%s", projectName, sessionName)
+		c.JSON(http.StatusForbidden, gin.H{"error": "Unauthorized"})
+		c.Abort()
+		return
+	}
+
+	// Get runner endpoint
+	runnerURL, err := getRunnerEndpoint(projectName, sessionName)
+	if err != nil {
+		log.Printf("MCP Status: Failed to get runner endpoint: %v", err)
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Runner not available"})
+		return
+	}
+
+	mcpStatusURL := strings.TrimSuffix(runnerURL, "/") + "/mcp/status"
+	log.Printf("MCP Status: Forwarding to runner: %s", mcpStatusURL)
+
+	// GET from runner's MCP status endpoint
+	req, err := http.NewRequest("GET", mcpStatusURL, nil)
+	if err != nil {
+		log.Printf("MCP Status: Failed to create request: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("MCP Status: Request failed: %v", err)
+		// Runner might not be running yet - return empty list
+		c.JSON(http.StatusOK, gin.H{"servers": []interface{}{}, "totalCount": 0})
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		log.Printf("MCP Status: Runner returned %d: %s", resp.StatusCode, string(body))
+		c.JSON(http.StatusOK, gin.H{"servers": []interface{}{}, "totalCount": 0})
+		return
+	}
+
+	// Forward runner response to client
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		log.Printf("MCP Status: Failed to decode response: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse runner response"})
+		return
+	}
+
+	c.JSON(http.StatusOK, result)
+}
+
 // getRunnerEndpoint returns the AG-UI server endpoint for a session
 // The operator creates a Service named "session-{sessionName}" in the project namespace
 func getRunnerEndpoint(projectName, sessionName string) (string, error) {
@@ -502,4 +584,142 @@ func truncateForLog(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen] + "..."
+}
+
+// HandleAGUIFeedback forwards AG-UI META events (user feedback) to the runner
+// POST /api/projects/:projectName/agentic-sessions/:sessionName/agui/feedback
+// Frontend constructs the full META event, backend validates and forwards
+// See: https://docs.ag-ui.com/drafts/meta-events#user-feedback
+func HandleAGUIFeedback(c *gin.Context) {
+	// SECURITY: Sanitize URL path params to prevent log injection
+	projectName := handlers.SanitizeForLog(c.Param("projectName"))
+	sessionName := handlers.SanitizeForLog(c.Param("sessionName"))
+
+	// SECURITY: Authenticate user and get user-scoped K8s client
+	reqK8s, _ := handlers.GetK8sClientsForRequest(c)
+	if reqK8s == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
+
+	// SECURITY: Verify user has permission to update this session
+	ctx := context.Background()
+	ssar := &authv1.SelfSubjectAccessReview{
+		Spec: authv1.SelfSubjectAccessReviewSpec{
+			ResourceAttributes: &authv1.ResourceAttributes{
+				Group:     "vteam.ambient-code",
+				Resource:  "agenticsessions",
+				Verb:      "update",
+				Namespace: projectName,
+				Name:      sessionName,
+			},
+		},
+	}
+	res, err := reqK8s.AuthorizationV1().SelfSubjectAccessReviews().Create(ctx, ssar, metav1.CreateOptions{})
+	if err != nil || !res.Status.Allowed {
+		log.Printf("AGUI Feedback: User not authorized to update session %s/%s", projectName, sessionName)
+		c.JSON(http.StatusForbidden, gin.H{"error": "Unauthorized"})
+		c.Abort()
+		return
+	}
+
+	// Parse AG-UI META event from frontend
+	// Frontend constructs the full event, we just validate and forward
+	var metaEvent map[string]interface{}
+	if err := c.ShouldBindJSON(&metaEvent); err != nil {
+		log.Printf("AGUI Feedback: Failed to parse META event: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid META event: %v", err)})
+		return
+	}
+
+	// Validate it's a META event
+	eventType, ok := metaEvent["type"].(string)
+	if !ok || eventType != types.EventTypeMeta {
+		log.Printf("AGUI Feedback: Invalid event type: %v", eventType)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Expected META event type"})
+		return
+	}
+
+	// Extract metaType for logging
+	metaType, _ := metaEvent["metaType"].(string)
+	username := handlers.SanitizeForLog(c.GetHeader("X-Forwarded-User"))
+	log.Printf("AGUI Feedback: Received %s feedback from %s for session %s/%s",
+		handlers.SanitizeForLog(metaType), username, projectName, sessionName)
+
+	// Get runner endpoint
+	runnerURL, err := getRunnerEndpoint(projectName, sessionName)
+	if err != nil {
+		log.Printf("AGUI Feedback: Failed to get runner endpoint: %v", err)
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Runner not available"})
+		return
+	}
+
+	// Serialize event for POST to runner (forward as-is)
+	bodyBytes, err := json.Marshal(metaEvent)
+	if err != nil {
+		log.Printf("AGUI Feedback: Failed to serialize META event: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to serialize event"})
+		return
+	}
+
+	// POST to runner's feedback endpoint
+	feedbackURL := strings.TrimSuffix(runnerURL, "/") + "/feedback"
+	log.Printf("AGUI Feedback: Forwarding META event to runner: %s", feedbackURL)
+
+	req, err := http.NewRequest("POST", feedbackURL, bytes.NewReader(bodyBytes))
+	if err != nil {
+		log.Printf("AGUI Feedback: Failed to create request: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		// Runner might not be running - log but don't fail (feedback is best-effort)
+		log.Printf("AGUI Feedback: Request failed (runner may not be running): %v", err)
+		c.JSON(http.StatusAccepted, gin.H{
+			"message": "Feedback queued (runner not available)",
+			"status":  "pending",
+		})
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
+		body, _ := io.ReadAll(resp.Body)
+		log.Printf("AGUI Feedback: Runner returned %d: %s", resp.StatusCode, string(body))
+		c.JSON(resp.StatusCode, gin.H{"error": string(body)})
+		return
+	}
+
+	log.Printf("AGUI Feedback: Successfully forwarded %s feedback to runner", handlers.SanitizeForLog(metaType))
+
+	// Broadcast the META event on the event stream so UI can see feedback submissions
+	// This allows the frontend to display "Feedback submitted" or track which traces have feedback
+	broadcastToThread(sessionName, metaEvent)
+
+	// CRITICAL: Persist the META event so it survives reconnects and session restarts
+	// Without this, feedback events are lost when clients disconnect
+	// Extract runId from event payload if present (feedback is associated with a specific run/message)
+	runID := ""
+	if payload, ok := metaEvent["payload"].(map[string]interface{}); ok {
+		if rid, ok := payload["runId"].(string); ok {
+			runID = rid
+		}
+	}
+	// Fallback: try top-level runId
+	if runID == "" {
+		if rid, ok := metaEvent["runId"].(string); ok {
+			runID = rid
+		}
+	}
+	go persistAGUIEventMap(sessionName, runID, metaEvent)
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Feedback submitted successfully",
+		"status":  "sent",
+	})
 }

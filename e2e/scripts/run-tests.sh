@@ -4,30 +4,51 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 echo "======================================"
-echo "Running vTeam E2E Tests"
+echo "Running Ambient E2E Tests"
 echo "======================================"
 
-# Check if .env.test exists
-if [ ! -f .env.test ]; then
-  echo "❌ Error: .env.test not found"
-  echo "   Run './scripts/deploy.sh' first to set up the environment"
-  exit 1
+# Load test token and base URL from .env.test if it exists
+# Environment variables take precedence over .env.test
+if [ -f .env.test ]; then
+  # Only load if not already set in environment
+  if [ -z "${TEST_TOKEN:-}" ]; then
+    source .env.test
+  else
+    echo "Using TEST_TOKEN from environment (ignoring .env.test)"
+  fi
 fi
 
-# Load test token and base URL
-source .env.test
-
+# Check for required config
 if [ -z "${TEST_TOKEN:-}" ]; then
-  echo "❌ Error: TEST_TOKEN not set in .env.test"
+  echo "❌ Error: TEST_TOKEN not set"
+  echo ""
+  echo "Options:"
+  echo "  1. For kind: Run 'make kind-up' first (creates .env.test)"
+  echo "  2. For manual testing: Set TEST_TOKEN environment variable"
+  echo "     Example: TEST_TOKEN=\$(kubectl get secret test-user-token -n ambient-code -o jsonpath='{.data.token}' | base64 -d)"
+  echo ""
   exit 1
 fi
 
-# Use CYPRESS_BASE_URL from .env.test, or default
-CYPRESS_BASE_URL="${CYPRESS_BASE_URL:-http://vteam.local}"
+# Use CYPRESS_BASE_URL from env, .env.test, or default
+CYPRESS_BASE_URL="${CYPRESS_BASE_URL:-http://localhost}"
+
+# Load ANTHROPIC_API_KEY from .env or .env.local if available
+if [ -f .env.local ]; then
+  source .env.local
+elif [ -f .env ]; then
+  source .env
+fi
 
 echo ""
 echo "Test token loaded ✓"
 echo "Base URL: $CYPRESS_BASE_URL"
+if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
+  echo "API Key: ✓ Found in .env (agent tests will run)"
+else
+  echo "API Key: ✗ Not found (agent tests will FAIL)"
+  echo "   Add ANTHROPIC_API_KEY to e2e/.env to run full test suite"
+fi
 echo ""
 
 # Check if npm packages are installed
@@ -41,7 +62,12 @@ fi
 echo "Starting Cypress tests..."
 echo ""
 
-CYPRESS_TEST_TOKEN="$TEST_TOKEN" CYPRESS_BASE_URL="$CYPRESS_BASE_URL" npm test
+# Cypress will load .env/.env.local via cypress.config.ts
+# Pass test token, base URL, and API key (if available)
+CYPRESS_TEST_TOKEN="$TEST_TOKEN" \
+  CYPRESS_BASE_URL="$CYPRESS_BASE_URL" \
+  ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}" \
+  npm test
 
 exit_code=$?
 
@@ -54,8 +80,8 @@ else
   echo "Debugging tips:"
   echo "  - Check pod logs: kubectl logs -n ambient-code -l app=frontend"
   echo "  - Check services: kubectl get svc -n ambient-code"
-  echo "  - Check ingress: kubectl get ingress -n ambient-code"
-  echo "  - Test manually: curl http://vteam.local"
+  echo "  - Test NodePort: curl http://localhost:8080 (podman) or http://localhost (docker)"
+  echo "  - Port-forward: kubectl port-forward -n ambient-code svc/frontend-service 8080:3000"
 fi
 
 exit $exit_code

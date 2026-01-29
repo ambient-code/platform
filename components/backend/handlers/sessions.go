@@ -2,6 +2,7 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -25,13 +26,10 @@ import (
 	"github.com/gin-gonic/gin"
 	authnv1 "k8s.io/api/authentication/v1"
 	authzv1 "k8s.io/api/authorization/v1"
-	corev1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	ktypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 )
@@ -44,8 +42,6 @@ var (
 	DeriveRepoFolderFromURL           func(string) string
 	// LEGACY: SendMessageToSession removed - AG-UI server uses HTTP/SSE instead of WebSocket
 )
-
-const runnerTokenRefreshedAtAnnotation = "ambient-code.io/token-refreshed-at"
 
 // ootbWorkflowsCache provides in-memory caching for OOTB workflows to avoid GitHub API rate limits.
 // The cache stores workflows by repo URL key and expires after ootbCacheTTL.
@@ -182,6 +178,11 @@ func parseSpec(spec map[string]interface{}) types.AgenticSessionSpec {
 			}
 			if branch, ok := m["branch"].(string); ok && strings.TrimSpace(branch) != "" {
 				r.Branch = types.StringPtr(branch)
+			}
+			// Parse autoPush as optional boolean. Preserve nil to allow CRD default.
+			// nil = use default (false), false = explicit no-push, true = explicit push
+			if autoPush, ok := m["autoPush"].(bool); ok {
+				r.AutoPush = types.BoolPtr(autoPush)
 			}
 			if strings.TrimSpace(r.URL) != "" {
 				repos = append(repos, r)
@@ -408,6 +409,8 @@ func ListSessions(c *gin.Context) {
 			session.Status = parseStatus(status)
 		}
 
+		session.AutoBranch = ComputeAutoBranch(item.GetName())
+
 		sessions = append(sessions, session)
 	}
 
@@ -552,9 +555,10 @@ func CreateSession(c *gin.Context) {
 		timeout = *req.Timeout
 	}
 
-	// Generate unique name
+	// Generate unique name (timestamp-based)
+	// Note: Runner will create branch as "ambient/{session-name}"
 	timestamp := time.Now().Unix()
-	name := fmt.Sprintf("agentic-session-%d", timestamp)
+	name := fmt.Sprintf("session-%d", timestamp)
 
 	// Create the custom resource
 	// Metadata
@@ -630,11 +634,6 @@ func CreateSession(c *gin.Context) {
 		session["spec"].(map[string]interface{})["interactive"] = *req.Interactive
 	}
 
-	// AutoPushOnComplete flag
-	if req.AutoPushOnComplete != nil {
-		session["spec"].(map[string]interface{})["autoPushOnComplete"] = *req.AutoPushOnComplete
-	}
-
 	// Set multi-repo configuration on spec (simplified format)
 	{
 		spec := session["spec"].(map[string]interface{})
@@ -642,8 +641,14 @@ func CreateSession(c *gin.Context) {
 			arr := make([]map[string]interface{}, 0, len(req.Repos))
 			for _, r := range req.Repos {
 				m := map[string]interface{}{"url": r.URL}
-				if r.Branch != nil {
+				// Fill in branch if not provided (auto-generate from session name)
+				if r.Branch != nil && strings.TrimSpace(*r.Branch) != "" {
 					m["branch"] = *r.Branch
+				} else {
+					m["branch"] = ComputeAutoBranch(name)
+				}
+				if r.AutoPush != nil {
+					m["autoPush"] = *r.AutoPush
 				}
 				arr = append(arr, m)
 			}
@@ -719,184 +724,15 @@ func CreateSession(c *gin.Context) {
 		}
 	}()
 
-	// Provision runner token using backend SA (requires elevated permissions for SA/Role/Secret creation)
-	if DynamicClient == nil || K8sClient == nil {
-		log.Printf("Warning: backend SA clients not available, skipping runner token provisioning for session %s/%s", project, name)
-	} else if err := provisionRunnerTokenForSession(c, K8sClient, DynamicClient, project, name); err != nil {
-		// Nonfatal: log and continue. Operator may retry later if implemented.
-		log.Printf("Warning: failed to provision runner token for session %s/%s: %v", project, name, err)
-	}
+	// Runner token provisioning is handled by the operator when creating the pod.
+	// This ensures consistent behavior whether sessions are created via API or kubectl.
 
 	c.JSON(http.StatusCreated, gin.H{
-		"message": "Agentic session created successfully",
-		"name":    name,
-		"uid":     created.GetUID(),
+		"message":    "Agentic session created successfully",
+		"name":       name,
+		"uid":        created.GetUID(),
+		"autoBranch": ComputeAutoBranch(name),
 	})
-}
-
-// provisionRunnerTokenForSession creates a per-session ServiceAccount, grants minimal RBAC,
-// mints a short-lived token, stores it in a Secret, and annotates the AgenticSession with the Secret name.
-func provisionRunnerTokenForSession(c *gin.Context, reqK8s kubernetes.Interface, reqDyn dynamic.Interface, project string, sessionName string) error {
-	// Load owning AgenticSession to parent all resources
-	gvr := GetAgenticSessionV1Alpha1Resource()
-	obj, err := reqDyn.Resource(gvr).Namespace(project).Get(c.Request.Context(), sessionName, v1.GetOptions{})
-	if err != nil {
-		return fmt.Errorf("get AgenticSession: %w", err)
-	}
-	ownerRef := v1.OwnerReference{
-		APIVersion: obj.GetAPIVersion(),
-		Kind:       obj.GetKind(),
-		Name:       obj.GetName(),
-		UID:        obj.GetUID(),
-		Controller: types.BoolPtr(true),
-	}
-
-	// Create ServiceAccount
-	saName := fmt.Sprintf("ambient-session-%s", sessionName)
-	sa := &corev1.ServiceAccount{
-		ObjectMeta: v1.ObjectMeta{
-			Name:            saName,
-			Namespace:       project,
-			Labels:          map[string]string{"app": "ambient-runner"},
-			OwnerReferences: []v1.OwnerReference{ownerRef},
-		},
-	}
-	if _, err := reqK8s.CoreV1().ServiceAccounts(project).Create(c.Request.Context(), sa, v1.CreateOptions{}); err != nil {
-		if !errors.IsAlreadyExists(err) {
-			return fmt.Errorf("create SA: %w", err)
-		}
-	}
-
-	// Create Role with least-privilege for updating AgenticSession status and annotations
-	roleName := fmt.Sprintf("ambient-session-%s-role", sessionName)
-	role := &rbacv1.Role{
-		ObjectMeta: v1.ObjectMeta{
-			Name:            roleName,
-			Namespace:       project,
-			OwnerReferences: []v1.OwnerReference{ownerRef},
-		},
-		Rules: []rbacv1.PolicyRule{
-			{
-				APIGroups: []string{"vteam.ambient-code"},
-				Resources: []string{"agenticsessions"},
-				Verbs:     []string{"get", "list", "watch", "update", "patch"}, // Added update, patch for annotations
-			},
-			{
-				APIGroups: []string{"authorization.k8s.io"},
-				Resources: []string{"selfsubjectaccessreviews"},
-				Verbs:     []string{"create"},
-			},
-		},
-	}
-	// Try to create or update the Role to ensure it has latest permissions
-	if _, err := reqK8s.RbacV1().Roles(project).Create(c.Request.Context(), role, v1.CreateOptions{}); err != nil {
-		if errors.IsAlreadyExists(err) {
-			// Role exists - update it to ensure it has the latest permissions (including update/patch)
-			log.Printf("Role %s already exists, updating with latest permissions", roleName)
-			if _, err := reqK8s.RbacV1().Roles(project).Update(c.Request.Context(), role, v1.UpdateOptions{}); err != nil {
-				return fmt.Errorf("update Role: %w", err)
-			}
-			log.Printf("Successfully updated Role %s with annotation update permissions", roleName)
-		} else {
-			return fmt.Errorf("create Role: %w", err)
-		}
-	}
-
-	// Bind Role to the ServiceAccount
-	rbName := fmt.Sprintf("ambient-session-%s-rb", sessionName)
-	rb := &rbacv1.RoleBinding{
-		ObjectMeta: v1.ObjectMeta{
-			Name:            rbName,
-			Namespace:       project,
-			OwnerReferences: []v1.OwnerReference{ownerRef},
-		},
-		RoleRef:  rbacv1.RoleRef{APIGroup: "rbac.authorization.k8s.io", Kind: "Role", Name: roleName},
-		Subjects: []rbacv1.Subject{{Kind: "ServiceAccount", Name: saName, Namespace: project}},
-	}
-	if _, err := reqK8s.RbacV1().RoleBindings(project).Create(context.TODO(), rb, v1.CreateOptions{}); err != nil {
-		if !errors.IsAlreadyExists(err) {
-			return fmt.Errorf("create RoleBinding: %w", err)
-		}
-	}
-
-	// Mint short-lived K8s ServiceAccount token for CR status updates
-	tr := &authnv1.TokenRequest{Spec: authnv1.TokenRequestSpec{}}
-	tok, err := reqK8s.CoreV1().ServiceAccounts(project).CreateToken(c.Request.Context(), saName, tr, v1.CreateOptions{})
-	if err != nil {
-		return fmt.Errorf("mint token: %w", err)
-	}
-	k8sToken := tok.Status.Token
-	if strings.TrimSpace(k8sToken) == "" {
-		return fmt.Errorf("received empty token for SA %s", saName)
-	}
-
-	// Only store the K8s token; GitHub tokens are minted on-demand by the runner
-	secretData := map[string]string{
-		"k8s-token": k8sToken,
-	}
-
-	// Store token in a Secret (update if exists to refresh token)
-	secretName := fmt.Sprintf("ambient-runner-token-%s", sessionName)
-	refreshedAt := time.Now().UTC().Format(time.RFC3339)
-	sec := &corev1.Secret{
-		ObjectMeta: v1.ObjectMeta{
-			Name:            secretName,
-			Namespace:       project,
-			Labels:          map[string]string{"app": "ambient-runner-token"},
-			OwnerReferences: []v1.OwnerReference{ownerRef},
-			Annotations: map[string]string{
-				runnerTokenRefreshedAtAnnotation: refreshedAt,
-			},
-		},
-		Type:       corev1.SecretTypeOpaque,
-		StringData: secretData,
-	}
-
-	// Try to create the secret
-	if _, err := reqK8s.CoreV1().Secrets(project).Create(c.Request.Context(), sec, v1.CreateOptions{}); err != nil {
-		if errors.IsAlreadyExists(err) {
-			// Secret exists - update it with fresh token
-			log.Printf("Updating existing secret %s with fresh token", secretName)
-			existing, getErr := reqK8s.CoreV1().Secrets(project).Get(c.Request.Context(), secretName, v1.GetOptions{})
-			if getErr != nil {
-				return fmt.Errorf("get Secret for update: %w", getErr)
-			}
-			secretCopy := existing.DeepCopy()
-			if secretCopy.Data == nil {
-				secretCopy.Data = map[string][]byte{}
-			}
-			secretCopy.Data["k8s-token"] = []byte(k8sToken)
-			if secretCopy.Annotations == nil {
-				secretCopy.Annotations = map[string]string{}
-			}
-			secretCopy.Annotations[runnerTokenRefreshedAtAnnotation] = refreshedAt
-			if _, err := reqK8s.CoreV1().Secrets(project).Update(c.Request.Context(), secretCopy, v1.UpdateOptions{}); err != nil {
-				return fmt.Errorf("update Secret: %w", err)
-			}
-			log.Printf("Successfully updated secret %s with fresh token", secretName)
-		} else {
-			return fmt.Errorf("create Secret: %w", err)
-		}
-	}
-
-	// Annotate the AgenticSession with the Secret and SA names (conflict-safe patch)
-	patch := map[string]interface{}{
-		"metadata": map[string]interface{}{
-			"annotations": map[string]string{
-				"ambient-code.io/runner-token-secret": secretName,
-				"ambient-code.io/runner-sa":           saName,
-			},
-		},
-	}
-	b, err := json.Marshal(patch)
-	if err != nil {
-		return fmt.Errorf("marshal patch: %w", err)
-	}
-	if _, err := reqDyn.Resource(gvr).Namespace(project).Patch(c.Request.Context(), obj.GetName(), ktypes.MergePatchType, b, v1.PatchOptions{}); err != nil {
-		return fmt.Errorf("annotate AgenticSession: %w", err)
-	}
-
-	return nil
 }
 
 func GetSession(c *gin.Context) {
@@ -922,10 +758,18 @@ func GetSession(c *gin.Context) {
 		return
 	}
 
+	// Safely extract metadata using type-safe pattern
+	metadata, ok := item.Object["metadata"].(map[string]interface{})
+	if !ok {
+		log.Printf("GetSession: invalid metadata for session %s", sessionName)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid session metadata"})
+		return
+	}
+
 	session := types.AgenticSession{
 		APIVersion: item.GetAPIVersion(),
 		Kind:       item.GetKind(),
-		Metadata:   item.Object["metadata"].(map[string]interface{}),
+		Metadata:   metadata,
 	}
 
 	if spec, ok := item.Object["spec"].(map[string]interface{}); ok {
@@ -935,6 +779,8 @@ func GetSession(c *gin.Context) {
 	if status, ok := item.Object["status"].(map[string]interface{}); ok {
 		session.Status = parseStatus(status)
 	}
+
+	session.AutoBranch = ComputeAutoBranch(sessionName)
 
 	c.JSON(http.StatusOK, session)
 }
@@ -1358,6 +1204,12 @@ func SelectWorkflow(c *gin.Context) {
 		return
 	}
 
+	// Build workflow config
+	branch := req.Branch
+	if branch == "" {
+		branch = "main"
+	}
+
 	// Update activeWorkflow in spec
 	spec, ok := item.Object["spec"].(map[string]interface{})
 	if !ok {
@@ -1368,11 +1220,7 @@ func SelectWorkflow(c *gin.Context) {
 	// Set activeWorkflow
 	workflowMap := map[string]interface{}{
 		"gitUrl": req.GitURL,
-	}
-	if req.Branch != "" {
-		workflowMap["branch"] = req.Branch
-	} else {
-		workflowMap["branch"] = "main"
+		"branch": branch,
 	}
 	if req.Path != "" {
 		workflowMap["path"] = req.Path
@@ -1387,7 +1235,7 @@ func SelectWorkflow(c *gin.Context) {
 		return
 	}
 
-	log.Printf("Workflow updated for session %s: %s@%s", sessionName, req.GitURL, workflowMap["branch"])
+	log.Printf("Workflow updated for session %s: %s@%s", sessionName, req.GitURL, branch)
 
 	// Respond with updated session summary
 	session := types.AgenticSession{
@@ -1421,8 +1269,9 @@ func AddRepo(c *gin.Context) {
 	}
 
 	var req struct {
-		URL    string `json:"url" binding:"required"`
-		Branch string `json:"branch"`
+		URL      string `json:"url" binding:"required"`
+		Branch   string `json:"branch"`
+		AutoPush *bool  `json:"autoPush,omitempty"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -1451,6 +1300,52 @@ func AddRepo(c *gin.Context) {
 		return
 	}
 
+	// Derive repo name from URL
+	repoName := req.URL
+	if idx := strings.LastIndex(req.URL, "/"); idx != -1 {
+		repoName = req.URL[idx+1:]
+	}
+	repoName = strings.TrimSuffix(repoName, ".git")
+
+	// Call runner to clone the repository (if session is running)
+	status, _ := item.Object["status"].(map[string]interface{})
+	phase, _ := status["phase"].(string)
+	if phase == "Running" {
+		runnerURL := fmt.Sprintf("http://session-%s.%s.svc.cluster.local:8001/repos/add", sessionName, project)
+		runnerReq := map[string]string{
+			"url":    req.URL,
+			"branch": req.Branch,
+			"name":   repoName,
+		}
+		reqBody, _ := json.Marshal(runnerReq)
+
+		log.Printf("Calling runner to clone repo: %s -> %s", req.URL, runnerURL)
+		httpReq, err := http.NewRequestWithContext(c.Request.Context(), "POST", runnerURL, bytes.NewReader(reqBody))
+		if err != nil {
+			log.Printf("Failed to create runner request: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create runner request"})
+			return
+		}
+		httpReq.Header.Set("Content-Type", "application/json")
+
+		client := &http.Client{Timeout: 120 * time.Second} // Allow time for clone
+		resp, err := client.Do(httpReq)
+		if err != nil {
+			log.Printf("Failed to call runner to clone repo: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to clone repository (runner not reachable)"})
+			return
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			log.Printf("Runner failed to clone repo (status %d): %s", resp.StatusCode, string(body))
+			c.JSON(resp.StatusCode, gin.H{"error": fmt.Sprintf("Failed to clone repository: %s", string(body))})
+			return
+		}
+		log.Printf("Runner successfully cloned repo %s for session %s", repoName, sessionName)
+	}
+
 	// Update spec.repos
 	spec, ok := item.Object["spec"].(map[string]interface{})
 	if !ok {
@@ -1465,6 +1360,9 @@ func AddRepo(c *gin.Context) {
 	newRepo := map[string]interface{}{
 		"url":    req.URL,
 		"branch": req.Branch,
+	}
+	if req.AutoPush != nil {
+		newRepo["autoPush"] = *req.AutoPush
 	}
 	repos = append(repos, newRepo)
 	spec["repos"] = repos
@@ -1490,7 +1388,7 @@ func AddRepo(c *gin.Context) {
 	}
 
 	log.Printf("Added repository %s to session %s in project %s", req.URL, sessionName, project)
-	c.JSON(http.StatusOK, gin.H{"message": "Repository added", "session": session})
+	c.JSON(http.StatusOK, gin.H{"message": "Repository added", "name": repoName, "session": session})
 }
 
 // RemoveRepo removes a repository from a running session
@@ -1531,19 +1429,78 @@ func RemoveRepo(c *gin.Context) {
 	repos, _ := spec["repos"].([]interface{})
 
 	filteredRepos := []interface{}{}
-	found := false
+	foundInSpec := false
 	for _, r := range repos {
 		rm, _ := r.(map[string]interface{})
 		url, _ := rm["url"].(string)
 		if DeriveRepoFolderFromURL(url) != repoName {
 			filteredRepos = append(filteredRepos, r)
 		} else {
-			found = true
+			foundInSpec = true
 		}
 	}
 
-	if !found {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Repository not found in session"})
+	// Also check status.reconciledRepos for repos added directly to runner
+	// Note: status map is read-only here, not persisted back to CR
+	status, found, err := unstructured.NestedMap(item.Object, "status")
+	if !found || err != nil {
+		log.Printf("Failed to get status: %v", err)
+		status = make(map[string]interface{}) // Local empty map for safe reads
+	}
+
+	reconciledRepos, found, err := unstructured.NestedSlice(status, "reconciledRepos")
+	if !found || err != nil {
+		log.Printf("Failed to get reconciledRepos: %v", err)
+		reconciledRepos = []interface{}{}
+	}
+
+	foundInReconciled := false
+	for _, r := range reconciledRepos {
+		rm, ok := r.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		name, found, err := unstructured.NestedString(rm, "name")
+		if found && err == nil && name == repoName {
+			foundInReconciled = true
+			break
+		}
+
+		// Also try matching by URL
+		url, found, err := unstructured.NestedString(rm, "url")
+		if found && err == nil && DeriveRepoFolderFromURL(url) == repoName {
+			foundInReconciled = true
+			break
+		}
+	}
+
+	// Always call runner to remove from filesystem (if session is running)
+	// Do this BEFORE checking if repo exists in CR, because it might only be on filesystem
+	phase, _, _ := unstructured.NestedString(status, "phase")
+	runnerRemoved := false
+	if phase == "Running" {
+		runnerURL := fmt.Sprintf("http://session-%s.%s.svc.cluster.local:8001/repos/remove", sessionName, project)
+		runnerReq := map[string]string{"name": repoName}
+		reqBody, _ := json.Marshal(runnerReq)
+		resp, err := http.Post(runnerURL, "application/json", bytes.NewReader(reqBody))
+		if err != nil {
+			log.Printf("Warning: failed to call runner /repos/remove: %v", err)
+		} else {
+			defer resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				runnerRemoved = true
+				log.Printf("Runner successfully removed repo %s from filesystem", repoName)
+			} else {
+				body, _ := io.ReadAll(resp.Body)
+				log.Printf("Runner failed to remove repo %s (status %d): %s", repoName, resp.StatusCode, string(body))
+			}
+		}
+	}
+
+	// Allow delete if repo is in CR OR was successfully removed from runner
+	if !foundInSpec && !foundInReconciled && !runnerRemoved {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Repository not found in session or runner"})
 		return
 	}
 
@@ -1574,6 +1531,13 @@ func RemoveRepo(c *gin.Context) {
 }
 
 // GetWorkflowMetadata retrieves commands and agents metadata from the active workflow
+// getContentServiceName returns the ambient-content service name for a session
+// Temp-content pods are deprecated - sessions must be running to access workspace
+func getContentServiceName(session string) string {
+	return fmt.Sprintf("ambient-content-%s", session)
+}
+
+// GetWorkflowMetadata retrieves the workflow metadata for an agentic session
 // GET /api/projects/:projectName/agentic-sessions/:sessionName/workflow/metadata
 func GetWorkflowMetadata(c *gin.Context) {
 	project := c.GetString("project")
@@ -1588,27 +1552,22 @@ func GetWorkflowMetadata(c *gin.Context) {
 		return
 	}
 
-	// Get authorization token
-	token := c.GetHeader("Authorization")
-	if strings.TrimSpace(token) == "" {
-		token = c.GetHeader("X-Forwarded-Access-Token")
-	}
-
-	// Try temp service first (for completed sessions), then regular service
-	serviceName := fmt.Sprintf("temp-content-%s", sessionName)
-	// Use the dependency-injected client selection function
+	// Validate user authentication and authorization
 	reqK8s, _ := GetK8sClientsForRequest(c)
 	if reqK8s == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 		c.Abort()
 		return
 	}
-	if _, err := reqK8s.CoreV1().Services(project).Get(c.Request.Context(), serviceName, v1.GetOptions{}); err != nil {
-		// Temp service doesn't exist, use regular service
-		serviceName = fmt.Sprintf("ambient-content-%s", sessionName)
-	} else {
-		serviceName = fmt.Sprintf("ambient-content-%s", sessionName)
+
+	// Get authorization token
+	token := c.GetHeader("Authorization")
+	if strings.TrimSpace(token) == "" {
+		token = c.GetHeader("X-Forwarded-Access-Token")
 	}
+
+	// Use ambient-content service (per-session content service)
+	serviceName := fmt.Sprintf("ambient-content-%s", sessionName)
 
 	// Build URL to content service
 	endpoint := fmt.Sprintf("http://%s.%s.svc:8080", serviceName, project)
@@ -1812,7 +1771,14 @@ func ListOOTBWorkflows(c *gin.Context) {
 			return
 		}
 		ootbCache.mu.RUnlock()
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to discover OOTB workflows"})
+		// Include more context in error message for debugging
+		errMsg := "Failed to discover OOTB workflows"
+		if strings.Contains(err.Error(), "403") || strings.Contains(err.Error(), "rate limit") {
+			errMsg = "Failed to discover OOTB workflows: GitHub rate limit exceeded. Try again later or configure a GitHub token in project settings."
+		} else if strings.Contains(err.Error(), "404") {
+			errMsg = "Failed to discover OOTB workflows: Repository or path not found"
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": errMsg})
 		return
 	}
 
@@ -2049,18 +2015,10 @@ func StartSession(c *gin.Context) {
 		return
 	}
 
-	// Check if this is a continuation (session is in a terminal phase)
-	isActualContinuation := false
+	// Log current phase for debugging
 	if currentStatus, ok := item.Object["status"].(map[string]interface{}); ok {
 		if phase, ok := currentStatus["phase"].(string); ok {
-			terminalPhases := []string{"Completed", "Failed", "Stopped", "Error"}
-			for _, terminalPhase := range terminalPhases {
-				if phase == terminalPhase {
-					isActualContinuation = true
-					log.Printf("StartSession: Detected continuation - session is in terminal phase: %s", phase)
-					break
-				}
-			}
+			log.Printf("StartSession: Current phase is %s", phase)
 		}
 	}
 
@@ -2074,10 +2032,16 @@ func StartSession(c *gin.Context) {
 	annotations["ambient-code.io/desired-phase"] = "Running"
 	annotations["ambient-code.io/start-requested-at"] = time.Now().Format(time.RFC3339)
 
-	// For continuations, set parent-session-id so operator reuses PVC
-	if isActualContinuation {
-		annotations["vteam.ambient-code/parent-session-id"] = sessionName
-		log.Printf("StartSession: Continuation detected - set parent-session-id=%s for PVC reuse", sessionName)
+	// Clean up self-referential parent-session-id annotations.
+	// Old code used to set parent-session-id to the session's own name for PVC reuse,
+	// but this caused the runner to skip INITIAL_PROMPT thinking it was a continuation.
+	// With S3 storage, we don't need this anymore. Session state persists via S3 sync.
+	// Keep legitimate parent-session-id annotations (pointing to a DIFFERENT session).
+	if existingParent, ok := annotations["vteam.ambient-code/parent-session-id"]; ok {
+		if existingParent == sessionName {
+			log.Printf("StartSession: Clearing self-referential parent-session-id annotation")
+			delete(annotations, "vteam.ambient-code/parent-session-id")
+		}
 	}
 
 	item.SetAnnotations(annotations)
@@ -2230,111 +2194,6 @@ func StopSession(c *gin.Context) {
 	c.JSON(http.StatusAccepted, session)
 }
 
-// EnableWorkspaceAccess requests a temporary content pod for workspace access on stopped sessions
-// POST /api/projects/:projectName/agentic-sessions/:sessionName/workspace/enable
-func EnableWorkspaceAccess(c *gin.Context) {
-	project := c.GetString("project")
-	sessionName := c.Param("sessionName")
-	gvr := GetAgenticSessionV1Alpha1Resource()
-
-	_, k8sDyn := GetK8sClientsForRequest(c)
-	if k8sDyn == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
-		c.Abort()
-		return
-	}
-
-	item, err := k8sDyn.Resource(gvr).Namespace(project).Get(context.TODO(), sessionName, v1.GetOptions{})
-	if err != nil {
-		if errors.IsNotFound(err) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Session not found"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get session"})
-		return
-	}
-
-	// Only allow for stopped/completed/failed sessions
-	status, _ := item.Object["status"].(map[string]interface{})
-	phase, _ := status["phase"].(string)
-	if phase != "Stopped" && phase != "Completed" && phase != "Failed" {
-		c.JSON(http.StatusConflict, gin.H{"error": "Workspace access only available for stopped sessions"})
-		return
-	}
-
-	// Set annotation to request temp pod
-	annotations := item.GetAnnotations()
-	if annotations == nil {
-		annotations = make(map[string]string)
-	}
-	now := time.Now().UTC().Format(time.RFC3339)
-	annotations["ambient-code.io/temp-content-requested"] = "true"
-	annotations["ambient-code.io/temp-content-last-accessed"] = now
-	item.SetAnnotations(annotations)
-
-	// Update CR
-	updated, err := k8sDyn.Resource(gvr).Namespace(project).Update(context.TODO(), item, v1.UpdateOptions{})
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to enable workspace access"})
-		return
-	}
-
-	session := types.AgenticSession{
-		APIVersion: updated.GetAPIVersion(),
-		Kind:       updated.GetKind(),
-		Metadata:   updated.Object["metadata"].(map[string]interface{}),
-	}
-	if spec, ok := updated.Object["spec"].(map[string]interface{}); ok {
-		session.Spec = parseSpec(spec)
-	}
-	if status, ok := updated.Object["status"].(map[string]interface{}); ok {
-		session.Status = parseStatus(status)
-	}
-
-	log.Printf("EnableWorkspaceAccess: Set temp-content-requested annotation for %s", sessionName)
-	c.JSON(http.StatusAccepted, session)
-}
-
-// TouchWorkspaceAccess updates the last-accessed timestamp to keep temp pod alive
-// POST /api/projects/:projectName/agentic-sessions/:sessionName/workspace/touch
-func TouchWorkspaceAccess(c *gin.Context) {
-	project := c.GetString("project")
-	sessionName := c.Param("sessionName")
-	gvr := GetAgenticSessionV1Alpha1Resource()
-
-	_, k8sDyn := GetK8sClientsForRequest(c)
-	if k8sDyn == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
-		c.Abort()
-		return
-	}
-
-	item, err := k8sDyn.Resource(gvr).Namespace(project).Get(context.TODO(), sessionName, v1.GetOptions{})
-	if err != nil {
-		if errors.IsNotFound(err) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Session not found"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get session"})
-		return
-	}
-
-	annotations := item.GetAnnotations()
-	if annotations == nil {
-		annotations = make(map[string]string)
-	}
-	annotations["ambient-code.io/temp-content-last-accessed"] = time.Now().UTC().Format(time.RFC3339)
-	item.SetAnnotations(annotations)
-
-	if _, err := k8sDyn.Resource(gvr).Namespace(project).Update(context.TODO(), item, v1.UpdateOptions{}); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update timestamp"})
-		return
-	}
-
-	log.Printf("TouchWorkspaceAccess: Updated last-accessed timestamp for %s", sessionName)
-	c.JSON(http.StatusOK, gin.H{"message": "Workspace access timestamp updated"})
-}
-
 // GetSessionK8sResources returns job, pod, and PVC information for a session
 // GET /api/projects/:projectName/agentic-sessions/:sessionName/k8s-resources
 func GetSessionK8sResources(c *gin.Context) {
@@ -2449,64 +2308,12 @@ func GetSessionK8sResources(c *gin.Context) {
 		}
 	}
 
-	// Check for temp-content pod
-	tempPodName := fmt.Sprintf("temp-content-%s", sessionName)
-	tempPod, err := k8sClt.CoreV1().Pods(project).Get(c.Request.Context(), tempPodName, v1.GetOptions{})
-	if err == nil {
-		tempPodPhase := string(tempPod.Status.Phase)
-		if tempPod.DeletionTimestamp != nil {
-			tempPodPhase = "Terminating"
-		}
-
-		containerInfos := []map[string]interface{}{}
-		for _, cs := range tempPod.Status.ContainerStatuses {
-			state := "Unknown"
-			var exitCode *int32
-			var reason string
-			if cs.State.Running != nil {
-				state = "Running"
-				// If pod is terminating but container still shows running, mark as terminating
-				if tempPod.DeletionTimestamp != nil {
-					state = "Terminating"
-				}
-			} else if cs.State.Terminated != nil {
-				state = "Terminated"
-				exitCode = &cs.State.Terminated.ExitCode
-				reason = cs.State.Terminated.Reason
-			} else if cs.State.Waiting != nil {
-				state = "Waiting"
-				reason = cs.State.Waiting.Reason
-			}
-			containerInfos = append(containerInfos, map[string]interface{}{
-				"name":     cs.Name,
-				"state":    state,
-				"exitCode": exitCode,
-				"reason":   reason,
-			})
-		}
-		podInfos = append(podInfos, map[string]interface{}{
-			"name":       tempPod.Name,
-			"phase":      tempPodPhase,
-			"containers": containerInfos,
-			"isTempPod":  true,
-		})
-	}
-
 	result["pods"] = podInfos
 
-	// Get PVC info - always use session's own PVC name
-	// Note: If session was created with parent_session_id (via API), the operator handles PVC reuse
-	pvcName := fmt.Sprintf("ambient-workspace-%s", sessionName)
-	pvc, err := k8sClt.CoreV1().PersistentVolumeClaims(project).Get(c.Request.Context(), pvcName, v1.GetOptions{})
-	result["pvcName"] = pvcName
-	if err == nil {
-		result["pvcExists"] = true
-		if storage, ok := pvc.Status.Capacity[corev1.ResourceStorage]; ok {
-			result["pvcSize"] = storage.String()
-		}
-	} else {
-		result["pvcExists"] = false
-	}
+	// PVCs deprecated - sessions now use EmptyDir with S3 state persistence
+	result["pvcExists"] = false
+	result["pvcName"] = "N/A (using EmptyDir + S3)"
+	result["storageMode"] = "EmptyDir + S3"
 
 	c.JSON(http.StatusOK, result)
 }
@@ -2528,11 +2335,20 @@ func ListSessionWorkspace(c *gin.Context) {
 		return
 	}
 
+	// Validate user authentication and authorization
+	reqK8s, _ := GetK8sClientsForRequest(c)
+	if reqK8s == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
+
 	rel := strings.TrimSpace(c.Query("path"))
-	// Build absolute workspace path using plain session (no url.PathEscape to match FS paths)
-	absPath := "/sessions/" + session + "/workspace"
+	// Path is relative to content service's StateBaseDir (which is /workspace)
+	// Content service handles the base path, so we just pass the relative path
+	absPath := ""
 	if rel != "" {
-		absPath += "/" + rel
+		absPath = rel
 	}
 
 	// Call per-job service or temp service for completed sessions
@@ -2541,19 +2357,8 @@ func ListSessionWorkspace(c *gin.Context) {
 		token = c.GetHeader("X-Forwarded-Access-Token")
 	}
 
-	// Try temp service first (for completed sessions), then regular service
-	serviceName := fmt.Sprintf("temp-content-%s", session)
-	// AuthN: require user token before probing K8s Services
-	k8sClt, _ := GetK8sClientsForRequest(c)
-	if k8sClt == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
-		c.Abort()
-		return
-	}
-	if _, err := k8sClt.CoreV1().Services(project).Get(c.Request.Context(), serviceName, v1.GetOptions{}); err != nil {
-		// Temp service doesn't exist, use regular service
-		serviceName = fmt.Sprintf("ambient-content-%s", session)
-	}
+	// Use ambient-content service (per-session content service)
+	serviceName := fmt.Sprintf("ambient-content-%s", session)
 
 	endpoint := fmt.Sprintf("http://%s.%s.svc:8080", serviceName, project)
 	u := fmt.Sprintf("%s/content/list?path=%s", endpoint, url.QueryEscape(absPath))
@@ -2614,24 +2419,24 @@ func GetSessionWorkspaceFile(c *gin.Context) {
 		return
 	}
 
+	// Validate user authentication and authorization
+	reqK8s, _ := GetK8sClientsForRequest(c)
+	if reqK8s == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
+
 	sub := strings.TrimPrefix(c.Param("path"), "/")
-	absPath := "/sessions/" + session + "/workspace/" + sub
+	// Path is relative to content service's StateBaseDir (which is /workspace)
+	absPath := sub
 	token := c.GetHeader("Authorization")
 	if strings.TrimSpace(token) == "" {
 		token = c.GetHeader("X-Forwarded-Access-Token")
 	}
 
-	// Try temp service first (for completed sessions), then regular service
-	serviceName := fmt.Sprintf("temp-content-%s", session)
-	k8sClt, _ := GetK8sClientsForRequest(c)
-	if k8sClt == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
-		c.Abort()
-		return
-	}
-	if _, err := k8sClt.CoreV1().Services(project).Get(c.Request.Context(), serviceName, v1.GetOptions{}); err != nil {
-		serviceName = fmt.Sprintf("ambient-content-%s", session)
-	}
+	// Use ambient-content service (per-session content service)
+	serviceName := fmt.Sprintf("ambient-content-%s", session)
 
 	endpoint := fmt.Sprintf("http://%s.%s.svc:8080", serviceName, project)
 	u := fmt.Sprintf("%s/content/file?path=%s", endpoint, url.QueryEscape(absPath))
@@ -2692,22 +2497,22 @@ func PutSessionWorkspaceFile(c *gin.Context) {
 	// Validate and sanitize path to prevent directory traversal
 	// Use robust path validation that works across platforms
 	sub := strings.TrimPrefix(c.Param("path"), "/")
-	workspaceBase := "/sessions/" + session + "/workspace"
+	workspaceBase := "/workspace"
 
-	// Construct absolute path using filepath.Join for proper path handling
-	absPath := filepath.Join(workspaceBase, sub)
+	// Construct absolute path using filepath.Join for path validation
+	validationPath := filepath.Join(workspaceBase, sub)
 
 	// Use robust path validation from pathutil package
 	// This is more secure than manual string checks and works across platforms
-	if !pathutil.IsPathWithinBase(absPath, workspaceBase) {
-		log.Printf("PutSessionWorkspaceFile: path traversal attempt detected - path=%q escapes workspace=%q", absPath, workspaceBase)
+	if !pathutil.IsPathWithinBase(validationPath, workspaceBase) {
+		log.Printf("PutSessionWorkspaceFile: path traversal attempt detected - path=%q escapes workspace=%q", validationPath, workspaceBase)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid path: must be within workspace directory"})
 		return
 	}
 
+	// Use relative path for content service (it has its own StateBaseDir=/workspace)
 	// Convert to forward slashes for content service (expects POSIX paths)
-	// filepath.Join may use backslashes on Windows, but content service always uses forward slashes
-	absPath = filepath.ToSlash(absPath)
+	absPath := filepath.ToSlash(sub)
 
 	token := c.GetHeader("Authorization")
 	if strings.TrimSpace(token) == "" {
@@ -2740,7 +2545,7 @@ func PutSessionWorkspaceFile(c *gin.Context) {
 	// Verify session exists using reqDyn AFTER RBAC check
 	// This prevents enumeration attacks - unauthorized users get same "Forbidden" response
 	gvr := GetAgenticSessionV1Alpha1Resource()
-	item, err := reqDyn.Resource(gvr).Namespace(project).Get(c.Request.Context(), session, v1.GetOptions{})
+	_, err = reqDyn.Resource(gvr).Namespace(project).Get(c.Request.Context(), session, v1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Session not found"})
@@ -2750,60 +2555,15 @@ func PutSessionWorkspaceFile(c *gin.Context) {
 		return
 	}
 
-	// Try temp service first (for completed sessions), then regular service
-	serviceName := fmt.Sprintf("temp-content-%s", session)
-	serviceFound := false
-
+	// Check if ambient-content service exists (session must be running)
+	serviceName := fmt.Sprintf("ambient-content-%s", session)
 	if _, err := reqK8s.CoreV1().Services(project).Get(c.Request.Context(), serviceName, v1.GetOptions{}); err != nil {
-		// Temp service doesn't exist, try regular service
-		serviceName = fmt.Sprintf("ambient-content-%s", session)
-		if _, err := reqK8s.CoreV1().Services(project).Get(c.Request.Context(), serviceName, v1.GetOptions{}); err != nil {
-			// Neither service exists - need to spawn temp content pod
-			log.Printf("PutSessionWorkspaceFile: No content service found for session %s, requesting temp pod", session)
-			serviceFound = false
-		} else {
-			serviceFound = true
-		}
-	} else {
-		serviceFound = true
-	}
-
-	// If no service exists, request temp content pod and return accepted status
-	// We already have the session item from the existence check above
-	if !serviceFound {
-
-		// Check if temp content was already requested (avoid duplicate pod creation)
-		annotations := item.GetAnnotations()
-		if annotations != nil && annotations["ambient-code.io/temp-content-requested"] == "true" {
-			log.Printf("PutSessionWorkspaceFile: Temp content already requested for session %s", session)
-			c.JSON(http.StatusAccepted, gin.H{"message": "Content service starting, please retry upload in a few seconds"})
-			return
-		}
-
-		// Request temp content pod via annotation
-		if annotations == nil {
-			annotations = make(map[string]string)
-		}
-		now := time.Now().UTC().Format(time.RFC3339)
-		annotations["ambient-code.io/temp-content-requested"] = "true"
-		annotations["ambient-code.io/temp-content-last-accessed"] = now
-		item.SetAnnotations(annotations)
-
-		// Use optimistic locking - if resource was modified between Get and Update, K8s returns conflict
-		if _, err := reqDyn.Resource(gvr).Namespace(project).Update(c.Request.Context(), item, v1.UpdateOptions{}); err != nil {
-			if errors.IsConflict(err) {
-				// Another request updated the resource - likely also requested temp pod
-				log.Printf("PutSessionWorkspaceFile: Conflict updating session %s (concurrent request), treating as already requested", session)
-				c.JSON(http.StatusAccepted, gin.H{"message": "Content service starting, please retry upload in a few seconds"})
-				return
-			}
-			log.Printf("PutSessionWorkspaceFile: Failed to request temp pod: %v", err)
-			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Content service not available, please try again in a few seconds"})
-			return
-		}
-
-		log.Printf("PutSessionWorkspaceFile: Requested temp content pod for session %s", session)
-		c.JSON(http.StatusAccepted, gin.H{"message": "Content service starting, please retry upload in a few seconds"})
+		// Service doesn't exist - session is not running
+		log.Printf("PutSessionWorkspaceFile: Content service not found for session %s (session not running)", session)
+		c.JSON(http.StatusConflict, gin.H{
+			"error": "Session is not running. Start the session to upload files.",
+			"hint":  "File uploads require an active session. Start the session and try again.",
+		})
 		return
 	}
 
@@ -2910,22 +2670,22 @@ func DeleteSessionWorkspaceFile(c *gin.Context) {
 	// Validate and sanitize path to prevent directory traversal
 	// Use robust path validation that works across platforms
 	sub := strings.TrimPrefix(c.Param("path"), "/")
-	workspaceBase := "/sessions/" + session + "/workspace"
+	workspaceBase := "/workspace"
 
-	// Construct absolute path using filepath.Join for proper path handling
-	absPath := filepath.Join(workspaceBase, sub)
+	// Construct absolute path using filepath.Join for path validation
+	validationPath := filepath.Join(workspaceBase, sub)
 
 	// Use robust path validation from pathutil package
 	// This is more secure than manual string checks and works across platforms
-	if !pathutil.IsPathWithinBase(absPath, workspaceBase) {
-		log.Printf("DeleteSessionWorkspaceFile: path traversal attempt detected - path=%q escapes workspace=%q", absPath, workspaceBase)
+	if !pathutil.IsPathWithinBase(validationPath, workspaceBase) {
+		log.Printf("DeleteSessionWorkspaceFile: path traversal attempt detected - path=%q escapes workspace=%q", validationPath, workspaceBase)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid path: must be within workspace directory"})
 		return
 	}
 
+	// Use relative path for content service (it has its own StateBaseDir=/workspace)
 	// Convert to forward slashes for content service (expects POSIX paths)
-	// filepath.Join may use backslashes on Windows, but content service always uses forward slashes
-	absPath = filepath.ToSlash(absPath)
+	absPath := filepath.ToSlash(sub)
 
 	token := c.GetHeader("Authorization")
 	if strings.TrimSpace(token) == "" {
@@ -2968,26 +2728,11 @@ func DeleteSessionWorkspaceFile(c *gin.Context) {
 		return
 	}
 
-	// Try temp service first, then regular service
-	serviceName := fmt.Sprintf("temp-content-%s", session)
-	serviceFound := false
-
+	// Check if content service exists (session must be running)
+	serviceName := getContentServiceName(session)
 	if _, err := reqK8s.CoreV1().Services(project).Get(c.Request.Context(), serviceName, v1.GetOptions{}); err != nil {
-		// Temp service doesn't exist, try regular service
-		serviceName = fmt.Sprintf("ambient-content-%s", session)
-		if _, err := reqK8s.CoreV1().Services(project).Get(c.Request.Context(), serviceName, v1.GetOptions{}); err != nil {
-			log.Printf("DeleteSessionWorkspaceFile: No content service found for session %s", session)
-			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Content service not available"})
-			return
-		} else {
-			serviceFound = true
-		}
-	} else {
-		serviceFound = true
-	}
-
-	if !serviceFound {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Content service not available"})
+		log.Printf("DeleteSessionWorkspaceFile: Content service not found for session %s (session not running)", session)
+		c.JSON(http.StatusConflict, gin.H{"error": "Session is not running. Start the session to access files."})
 		return
 	}
 
@@ -3060,15 +2805,12 @@ func PushSessionRepo(c *gin.Context) {
 	log.Printf("pushSessionRepo: request project=%s session=%s repoIndex=%d commitLen=%d", project, session, body.RepoIndex, len(strings.TrimSpace(body.CommitMessage)))
 
 	// Try temp service first (for completed sessions), then regular service
-	serviceName := fmt.Sprintf("temp-content-%s", session)
+	serviceName := getContentServiceName(session)
 	k8sClt, k8sDyn := GetK8sClientsForRequest(c)
 	if k8sClt == nil || k8sDyn == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 		c.Abort()
 		return
-	}
-	if _, err := k8sClt.CoreV1().Services(project).Get(c.Request.Context(), serviceName, v1.GetOptions{}); err != nil {
-		serviceName = fmt.Sprintf("ambient-content-%s", session)
 	}
 	endpoint := fmt.Sprintf("http://%s.%s.svc:8080", serviceName, project)
 	log.Printf("pushSessionRepo: using service %s", serviceName)
@@ -3092,11 +2834,12 @@ func PushSessionRepo(c *gin.Context) {
 	}
 	rm, _ := repos[body.RepoIndex].(map[string]interface{})
 	// Derive repoPath from input URL folder name
+	// Paths are relative to content service's StateBaseDir (which is /workspace)
 	if in, ok := rm["input"].(map[string]interface{}); ok {
 		if urlv, ok2 := in["url"].(string); ok2 && strings.TrimSpace(urlv) != "" {
 			folder := DeriveRepoFolderFromURL(strings.TrimSpace(urlv))
 			if folder != "" {
-				resolvedRepoPath = fmt.Sprintf("/sessions/%s/workspace/%s", session, folder)
+				resolvedRepoPath = folder
 			}
 		}
 	}
@@ -3113,9 +2856,9 @@ func PushSessionRepo(c *gin.Context) {
 	// If input URL missing or unparsable, fall back to numeric index path (last resort)
 	if strings.TrimSpace(resolvedRepoPath) == "" {
 		if body.RepoIndex >= 0 {
-			resolvedRepoPath = fmt.Sprintf("/sessions/%s/workspace/%d", session, body.RepoIndex)
+			resolvedRepoPath = fmt.Sprintf("%d", body.RepoIndex)
 		} else {
-			resolvedRepoPath = fmt.Sprintf("/sessions/%s/workspace", session)
+			resolvedRepoPath = ""
 		}
 	}
 	if strings.TrimSpace(resolvedOutputURL) == "" {
@@ -3229,24 +2972,21 @@ func AbandonSessionRepo(c *gin.Context) {
 	}
 
 	// Try temp service first (for completed sessions), then regular service
-	serviceName := fmt.Sprintf("temp-content-%s", session)
+	serviceName := getContentServiceName(session)
 	k8sClt, _ := GetK8sClientsForRequest(c)
 	if k8sClt == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 		c.Abort()
 		return
 	}
-	if _, err := k8sClt.CoreV1().Services(project).Get(c.Request.Context(), serviceName, v1.GetOptions{}); err != nil {
-		serviceName = fmt.Sprintf("ambient-content-%s", session)
-	}
 	endpoint := fmt.Sprintf("http://%s.%s.svc:8080", serviceName, project)
 	log.Printf("AbandonSessionRepo: using service %s", serviceName)
 	repoPath := strings.TrimSpace(body.RepoPath)
 	if repoPath == "" {
 		if body.RepoIndex >= 0 {
-			repoPath = fmt.Sprintf("/sessions/%s/workspace/%d", session, body.RepoIndex)
+			repoPath = fmt.Sprintf("%d", body.RepoIndex)
 		} else {
-			repoPath = fmt.Sprintf("/sessions/%s/workspace", session)
+			repoPath = ""
 		}
 	}
 	payload := map[string]interface{}{
@@ -3302,8 +3042,9 @@ func DiffSessionRepo(c *gin.Context) {
 	session := c.Param("sessionName")
 	repoIndexStr := strings.TrimSpace(c.Query("repoIndex"))
 	repoPath := strings.TrimSpace(c.Query("repoPath"))
+	// Paths are relative to content service's StateBaseDir (which is /workspace)
 	if repoPath == "" && repoIndexStr != "" {
-		repoPath = fmt.Sprintf("/sessions/%s/workspace/%s", session, repoIndexStr)
+		repoPath = repoIndexStr
 	}
 	if repoPath == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "missing repoPath/repoIndex"})
@@ -3311,15 +3052,12 @@ func DiffSessionRepo(c *gin.Context) {
 	}
 
 	// Try temp service first (for completed sessions), then regular service
-	serviceName := fmt.Sprintf("temp-content-%s", session)
+	serviceName := getContentServiceName(session)
 	k8sClt, _ := GetK8sClientsForRequest(c)
 	if k8sClt == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 		c.Abort()
 		return
-	}
-	if _, err := k8sClt.CoreV1().Services(project).Get(c.Request.Context(), serviceName, v1.GetOptions{}); err != nil {
-		serviceName = fmt.Sprintf("ambient-content-%s", session)
 	}
 	endpoint := fmt.Sprintf("http://%s.%s.svc:8080", serviceName, project)
 	log.Printf("DiffSessionRepo: using service %s", serviceName)
@@ -3360,6 +3098,77 @@ func DiffSessionRepo(c *gin.Context) {
 	c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), bodyBytes)
 }
 
+// GetReposStatus returns current status of all repositories (branches, current branch, etc.)
+// GET /api/projects/:projectName/agentic-sessions/:sessionName/repos/status
+func GetReposStatus(c *gin.Context) {
+	project := c.Param("projectName")
+	session := c.Param("sessionName")
+
+	k8sClt, dynClt := GetK8sClientsForRequest(c)
+	if k8sClt == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
+
+	// Verify user has access to the session using user-scoped K8s client
+	// This ensures RBAC is enforced before we call the runner
+	gvr := GetAgenticSessionV1Alpha1Resource()
+	_, err := dynClt.Resource(gvr).Namespace(project).Get(context.TODO(), session, v1.GetOptions{})
+	if errors.IsNotFound(err) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Session not found"})
+		return
+	}
+	if err != nil {
+		log.Printf("GetReposStatus: failed to verify session access: %v", err)
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	}
+
+	// Call runner's /repos/status endpoint directly
+	// Authentication flow:
+	// 1. Backend validated user has access to session (above)
+	// 2. Backend calls runner as trusted internal service (no auth header forwarding)
+	// 3. Runner trusts backend's validation
+	// Port 8001 matches AG-UI Service defined in operator (sessions.go:1384)
+	// If changing this port, also update: operator containerPort, Service port, and AGUI_PORT env
+	runnerURL := fmt.Sprintf("http://session-%s.%s.svc.cluster.local:8001/repos/status", session, project)
+
+	req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, runnerURL, nil)
+	if err != nil {
+		log.Printf("GetReposStatus: failed to create HTTP request: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create request"})
+		return
+	}
+	// NOTE: Do NOT forward Authorization header to runner (matches pattern of AddWorkflow, AddRepository, RemoveRepo)
+	// Runner is treated as a trusted backend service; RBAC enforcement happens in backend
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("GetReposStatus: runner not reachable: %v", err)
+		// Return empty repos list instead of error for better UX
+		c.JSON(http.StatusOK, gin.H{"repos": []interface{}{}})
+		return
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("GetReposStatus: failed to read response body: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read response from runner"})
+		return
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("GetReposStatus: runner returned status %d", resp.StatusCode)
+		c.JSON(http.StatusOK, gin.H{"repos": []interface{}{}})
+		return
+	}
+
+	c.Data(http.StatusOK, "application/json", bodyBytes)
+}
+
 // GetGitStatus returns git status for a directory in the workspace
 // GET /api/projects/:projectName/agentic-sessions/:sessionName/git/status?path=artifacts
 func GetGitStatus(c *gin.Context) {
@@ -3372,19 +3181,16 @@ func GetGitStatus(c *gin.Context) {
 		return
 	}
 
-	// Build absolute path
-	absPath := fmt.Sprintf("/sessions/%s/workspace/%s", session, relativePath)
+	// Path is relative to content service's StateBaseDir (which is /workspace)
+	absPath := relativePath
 
 	// Get content service endpoint
-	serviceName := fmt.Sprintf("temp-content-%s", session)
-	k8sClt, _ := GetK8sClientsForRequest(c)
+	serviceName := getContentServiceName(session)
+	k8sClt, k8sDyn := GetK8sClientsForRequest(c)
 	if k8sClt == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 		c.Abort()
 		return
-	}
-	if _, err := k8sClt.CoreV1().Services(project).Get(c.Request.Context(), serviceName, v1.GetOptions{}); err != nil {
-		serviceName = fmt.Sprintf("ambient-content-%s", session)
 	}
 
 	endpoint := fmt.Sprintf("http://%s.%s.svc:8080/content/git-status?path=%s", serviceName, project, url.QueryEscape(absPath))
@@ -3397,6 +3203,21 @@ func GetGitStatus(c *gin.Context) {
 	}
 	if v := c.GetHeader("Authorization"); v != "" {
 		req.Header.Set("Authorization", v)
+	}
+
+	// Attach short-lived GitHub token for authenticated git status
+	gvr := GetAgenticSessionV1Alpha1Resource()
+	if obj, err := k8sDyn.Resource(gvr).Namespace(project).Get(c.Request.Context(), session, v1.GetOptions{}); err == nil {
+		if spec, _, _ := unstructured.NestedMap(obj.Object, "spec"); spec != nil {
+			if uc, ok := spec["userContext"].(map[string]interface{}); ok {
+				if userID, ok := uc["userId"].(string); ok && strings.TrimSpace(userID) != "" {
+					if tokenStr, err := GetGitHubToken(c.Request.Context(), k8sClt, k8sDyn, project, userID); err == nil && strings.TrimSpace(tokenStr) != "" {
+						req.Header.Set("X-GitHub-Token", tokenStr)
+						log.Printf("GetGitStatus: attached GitHub token for project=%s session=%s", project, session)
+					}
+				}
+			}
+		}
 	}
 
 	resp, err := http.DefaultClient.Do(req)
@@ -3443,19 +3264,16 @@ func ConfigureGitRemote(c *gin.Context) {
 		body.Branch = "main"
 	}
 
-	// Build absolute path
-	absPath := fmt.Sprintf("/sessions/%s/workspace/%s", sessionName, body.Path)
+	// Path is relative to content service's StateBaseDir (which is /workspace)
+	absPath := body.Path
 
 	// Get content service endpoint
-	serviceName := fmt.Sprintf("temp-content-%s", sessionName)
+	serviceName := getContentServiceName(sessionName)
 	k8sClt, _ := GetK8sClientsForRequest(c)
 	if k8sClt == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 		c.Abort()
 		return
-	}
-	if _, err := k8sClt.CoreV1().Services(project).Get(c.Request.Context(), serviceName, v1.GetOptions{}); err != nil {
-		serviceName = fmt.Sprintf("ambient-content-%s", sessionName)
 	}
 
 	endpoint := fmt.Sprintf("http://%s.%s.svc:8080/content/git-configure-remote", serviceName, project)
@@ -3560,19 +3378,16 @@ func SynchronizeGit(c *gin.Context) {
 		body.Message = fmt.Sprintf("Session %s - %s", session, time.Now().Format(time.RFC3339))
 	}
 
-	// Build absolute path
-	absPath := fmt.Sprintf("/sessions/%s/workspace/%s", session, body.Path)
+	// Path is relative to content service's StateBaseDir (which is /workspace)
+	absPath := body.Path
 
 	// Get content service endpoint
-	serviceName := fmt.Sprintf("temp-content-%s", session)
-	k8sClt, _ := GetK8sClientsForRequest(c)
+	serviceName := getContentServiceName(session)
+	k8sClt, k8sDyn := GetK8sClientsForRequest(c)
 	if k8sClt == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 		c.Abort()
 		return
-	}
-	if _, err := k8sClt.CoreV1().Services(project).Get(c.Request.Context(), serviceName, v1.GetOptions{}); err != nil {
-		serviceName = fmt.Sprintf("ambient-content-%s", session)
 	}
 
 	endpoint := fmt.Sprintf("http://%s.%s.svc:8080/content/git-sync", serviceName, project)
@@ -3597,6 +3412,21 @@ func SynchronizeGit(c *gin.Context) {
 	req.Header.Set("Content-Type", "application/json")
 	if v := c.GetHeader("Authorization"); v != "" {
 		req.Header.Set("Authorization", v)
+	}
+
+	// Attach short-lived GitHub token for authenticated sync
+	gvr := GetAgenticSessionV1Alpha1Resource()
+	if obj, err := k8sDyn.Resource(gvr).Namespace(project).Get(c.Request.Context(), session, v1.GetOptions{}); err == nil {
+		if spec, _, _ := unstructured.NestedMap(obj.Object, "spec"); spec != nil {
+			if uc, ok := spec["userContext"].(map[string]interface{}); ok {
+				if userID, ok := uc["userId"].(string); ok && strings.TrimSpace(userID) != "" {
+					if tokenStr, err := GetGitHubToken(c.Request.Context(), k8sClt, k8sDyn, project, userID); err == nil && strings.TrimSpace(tokenStr) != "" {
+						req.Header.Set("X-GitHub-Token", tokenStr)
+						log.Printf("SynchronizeGit: attached GitHub token for project=%s session=%s", project, session)
+					}
+				}
+			}
+		}
 	}
 
 	resp, err := http.DefaultClient.Do(req)
@@ -3630,17 +3460,15 @@ func GetGitMergeStatus(c *gin.Context) {
 		branch = "main"
 	}
 
-	absPath := fmt.Sprintf("/sessions/%s/workspace/%s", session, relativePath)
+	// Path is relative to content service's StateBaseDir (which is /workspace)
+	absPath := relativePath
 
-	serviceName := fmt.Sprintf("temp-content-%s", session)
-	k8sClt, _ := GetK8sClientsForRequest(c)
+	serviceName := getContentServiceName(session)
+	k8sClt, k8sDyn := GetK8sClientsForRequest(c)
 	if k8sClt == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 		c.Abort()
 		return
-	}
-	if _, err := k8sClt.CoreV1().Services(project).Get(c.Request.Context(), serviceName, v1.GetOptions{}); err != nil {
-		serviceName = fmt.Sprintf("ambient-content-%s", session)
 	}
 
 	endpoint := fmt.Sprintf("http://%s.%s.svc:8080/content/git-merge-status?path=%s&branch=%s",
@@ -3649,6 +3477,21 @@ func GetGitMergeStatus(c *gin.Context) {
 	req, _ := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, endpoint, nil)
 	if v := c.GetHeader("Authorization"); v != "" {
 		req.Header.Set("Authorization", v)
+	}
+
+	// Attach short-lived GitHub token for authenticated fetch
+	gvr := GetAgenticSessionV1Alpha1Resource()
+	if obj, err := k8sDyn.Resource(gvr).Namespace(project).Get(c.Request.Context(), session, v1.GetOptions{}); err == nil {
+		if spec, _, _ := unstructured.NestedMap(obj.Object, "spec"); spec != nil {
+			if uc, ok := spec["userContext"].(map[string]interface{}); ok {
+				if userID, ok := uc["userId"].(string); ok && strings.TrimSpace(userID) != "" {
+					if tokenStr, err := GetGitHubToken(c.Request.Context(), k8sClt, k8sDyn, project, userID); err == nil && strings.TrimSpace(tokenStr) != "" {
+						req.Header.Set("X-GitHub-Token", tokenStr)
+						log.Printf("GetGitMergeStatus: attached GitHub token for project=%s session=%s", project, session)
+					}
+				}
+			}
+		}
 	}
 
 	resp, err := http.DefaultClient.Do(req)
@@ -3690,17 +3533,15 @@ func GitPullSession(c *gin.Context) {
 		body.Branch = "main"
 	}
 
-	absPath := fmt.Sprintf("/sessions/%s/workspace/%s", session, body.Path)
+	// Path is relative to content service's StateBaseDir (which is /workspace)
+	absPath := body.Path
 
-	serviceName := fmt.Sprintf("temp-content-%s", session)
-	k8sClt, _ := GetK8sClientsForRequest(c)
+	serviceName := getContentServiceName(session)
+	k8sClt, k8sDyn := GetK8sClientsForRequest(c)
 	if k8sClt == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 		c.Abort()
 		return
-	}
-	if _, err := k8sClt.CoreV1().Services(project).Get(c.Request.Context(), serviceName, v1.GetOptions{}); err != nil {
-		serviceName = fmt.Sprintf("ambient-content-%s", session)
 	}
 
 	endpoint := fmt.Sprintf("http://%s.%s.svc:8080/content/git-pull", serviceName, project)
@@ -3724,6 +3565,21 @@ func GitPullSession(c *gin.Context) {
 	req.Header.Set("Content-Type", "application/json")
 	if v := c.GetHeader("Authorization"); v != "" {
 		req.Header.Set("Authorization", v)
+	}
+
+	// Attach short-lived GitHub token for authenticated pull
+	gvr := GetAgenticSessionV1Alpha1Resource()
+	if obj, err := k8sDyn.Resource(gvr).Namespace(project).Get(c.Request.Context(), session, v1.GetOptions{}); err == nil {
+		if spec, _, _ := unstructured.NestedMap(obj.Object, "spec"); spec != nil {
+			if uc, ok := spec["userContext"].(map[string]interface{}); ok {
+				if userID, ok := uc["userId"].(string); ok && strings.TrimSpace(userID) != "" {
+					if tokenStr, err := GetGitHubToken(c.Request.Context(), k8sClt, k8sDyn, project, userID); err == nil && strings.TrimSpace(tokenStr) != "" {
+						req.Header.Set("X-GitHub-Token", tokenStr)
+						log.Printf("GitPullSession: attached GitHub token for project=%s session=%s", project, session)
+					}
+				}
+			}
+		}
 	}
 
 	resp, err := http.DefaultClient.Do(req)
@@ -3769,17 +3625,15 @@ func GitPushSession(c *gin.Context) {
 		body.Message = fmt.Sprintf("Session %s artifacts", session)
 	}
 
-	absPath := fmt.Sprintf("/sessions/%s/workspace/%s", session, body.Path)
+	// Path is relative to content service's StateBaseDir (which is /workspace)
+	absPath := body.Path
 
-	serviceName := fmt.Sprintf("temp-content-%s", session)
-	k8sClt, _ := GetK8sClientsForRequest(c)
+	serviceName := getContentServiceName(session)
+	k8sClt, k8sDyn := GetK8sClientsForRequest(c)
 	if k8sClt == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 		c.Abort()
 		return
-	}
-	if _, err := k8sClt.CoreV1().Services(project).Get(c.Request.Context(), serviceName, v1.GetOptions{}); err != nil {
-		serviceName = fmt.Sprintf("ambient-content-%s", session)
 	}
 
 	endpoint := fmt.Sprintf("http://%s.%s.svc:8080/content/git-push", serviceName, project)
@@ -3804,6 +3658,21 @@ func GitPushSession(c *gin.Context) {
 	req.Header.Set("Content-Type", "application/json")
 	if v := c.GetHeader("Authorization"); v != "" {
 		req.Header.Set("Authorization", v)
+	}
+
+	// Attach short-lived GitHub token for authenticated push
+	gvr := GetAgenticSessionV1Alpha1Resource()
+	if obj, err := k8sDyn.Resource(gvr).Namespace(project).Get(c.Request.Context(), session, v1.GetOptions{}); err == nil {
+		if spec, _, _ := unstructured.NestedMap(obj.Object, "spec"); spec != nil {
+			if uc, ok := spec["userContext"].(map[string]interface{}); ok {
+				if userID, ok := uc["userId"].(string); ok && strings.TrimSpace(userID) != "" {
+					if tokenStr, err := GetGitHubToken(c.Request.Context(), k8sClt, k8sDyn, project, userID); err == nil && strings.TrimSpace(tokenStr) != "" {
+						req.Header.Set("X-GitHub-Token", tokenStr)
+						log.Printf("GitPushSession: attached GitHub token for project=%s session=%s", project, session)
+					}
+				}
+			}
+		}
 	}
 
 	resp, err := http.DefaultClient.Do(req)
@@ -3842,17 +3711,15 @@ func GitCreateBranchSession(c *gin.Context) {
 		body.Path = "artifacts"
 	}
 
-	absPath := fmt.Sprintf("/sessions/%s/workspace/%s", session, body.Path)
+	// Path is relative to content service's StateBaseDir (which is /workspace)
+	absPath := body.Path
 
-	serviceName := fmt.Sprintf("temp-content-%s", session)
+	serviceName := getContentServiceName(session)
 	k8sClt, _ := GetK8sClientsForRequest(c)
 	if k8sClt == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 		c.Abort()
 		return
-	}
-	if _, err := k8sClt.CoreV1().Services(project).Get(c.Request.Context(), serviceName, v1.GetOptions{}); err != nil {
-		serviceName = fmt.Sprintf("ambient-content-%s", session)
 	}
 
 	endpoint := fmt.Sprintf("http://%s.%s.svc:8080/content/git-create-branch", serviceName, project)
@@ -3905,17 +3772,15 @@ func GitListBranchesSession(c *gin.Context) {
 		relativePath = "artifacts"
 	}
 
-	absPath := fmt.Sprintf("/sessions/%s/workspace/%s", session, relativePath)
+	// Path is relative to content service's StateBaseDir (which is /workspace)
+	absPath := relativePath
 
-	serviceName := fmt.Sprintf("temp-content-%s", session)
+	serviceName := getContentServiceName(session)
 	k8sClt, _ := GetK8sClientsForRequest(c)
 	if k8sClt == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 		c.Abort()
 		return
-	}
-	if _, err := k8sClt.CoreV1().Services(project).Get(c.Request.Context(), serviceName, v1.GetOptions{}); err != nil {
-		serviceName = fmt.Sprintf("ambient-content-%s", session)
 	}
 
 	endpoint := fmt.Sprintf("http://%s.%s.svc:8080/content/git-list-branches?path=%s",

@@ -37,7 +37,7 @@ def test_dict_usage_preservation():
         "cache_read_input_tokens": 200,
         "cache_creation_input_tokens": 100,
         "total_tokens": 1800,
-        "cost_usd": 0.05
+        "cost_usd": 0.05,
     }
 
     masked = _privacy_masking_function(usage_data)
@@ -57,7 +57,7 @@ def test_dict_content_masking():
         "role": "user",
         "content": "Please help me analyze this confidential document with sensitive customer data",
         "model": "claude-3-5-sonnet",
-        "turn": 1
+        "turn": 1,
     }
 
     masked = _privacy_masking_function(message_data)
@@ -77,19 +77,16 @@ def test_nested_structure():
         "input": [
             {
                 "role": "user",
-                "content": "Here is my confidential business plan with trade secrets and financial projections"
+                "content": "Here is my confidential business plan with trade secrets and financial projections",
             }
         ],
         "output": "Based on your business plan, I recommend the following strategies for growth and expansion",
-        "usage": {
-            "input_tokens": 500,
-            "output_tokens": 250
-        },
+        "usage": {"input_tokens": 500, "output_tokens": 250},
         "metadata": {
             "model": "claude-sonnet-4-5@20250929",
             "turn": 2,
-            "session_id": "session-123"
-        }
+            "session_id": "session-123",
+        },
     }
 
     masked = _privacy_masking_function(trace_data)
@@ -116,7 +113,7 @@ def test_list_masking():
     messages = [
         "Short metadata value",
         "This is a very long user message that contains sensitive personal information about the user",
-        {"content": "Another sensitive message in a nested dictionary structure"}
+        {"content": "Another sensitive message in a nested dictionary structure"},
     ]
 
     masked = _privacy_masking_function(messages)
@@ -136,16 +133,12 @@ def test_tool_tracking_data():
     tool_data = {
         "tool_name": "Read",
         "tool_id": "toolu_abc123",
-        "input": {
-            "file_path": "/workspace/src/main.py"
-        },
+        "input": {"file_path": "/workspace/src/main.py"},
         "output": {
             "result": "File contents here with potentially sensitive code and comments about implementation details"
         },
         "is_error": False,
-        "metadata": {
-            "turn": 3
-        }
+        "metadata": {"turn": 3},
     }
 
     masked = _privacy_masking_function(tool_data)
@@ -186,7 +179,7 @@ def test_real_world_trace():
         "input": [
             {
                 "role": "user",
-                "content": "Can you help me refactor this legacy codebase? It has several security vulnerabilities."
+                "content": "Can you help me refactor this legacy codebase? It has several security vulnerabilities.",
             }
         ],
         "output": "I'll help you refactor the codebase. First, let me analyze the current structure and identify the security issues.",
@@ -195,13 +188,13 @@ def test_real_world_trace():
             "input": 150,
             "output": 75,
             "cache_read_input_tokens": 50,
-            "cache_creation_input_tokens": 25
+            "cache_creation_input_tokens": 25,
         },
         "metadata": {
             "turn": 1,
             "session_id": "test-session-123",
-            "namespace": "prod-namespace"
-        }
+            "namespace": "prod-namespace",
+        },
     }
 
     masked = _privacy_masking_function(trace)
@@ -265,4 +258,6 @@ if __name__ == "__main__":
         sys.exit(1)
     else:
         print("\n✅ All privacy masking tests passed!")
-        print("User messages and responses will be redacted while preserving usage metrics.")
+        print(
+            "User messages and responses will be redacted while preserving usage metrics."
+        )

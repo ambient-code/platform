@@ -33,6 +33,10 @@ spec:
                       type: string
                       description: "Branch to checkout"
                       default: "main"
+                    autoPush:
+                      type: boolean
+                      default: false
+                      description: "When true, automatically commit and push changes to this repository after session completion"
               interactive:
                 type: boolean
                 description: "When true, run session in interactive chat mode using inbox/outbox files"
@@ -75,10 +79,6 @@ spec:
                 type: integer
                 default: 300
                 description: "Timeout in seconds for the agentic session"
-              autoPushOnComplete:
-                type: boolean
-                default: false
-                description: "When true, the runner will commit and push changes automatically after it finishes"
               activeWorkflow:
                 type: object
                 description: "Active workflow configuration for dynamic workflow switching"
@@ -129,6 +129,18 @@ spec:
                       type: string
                     branch:
                       type: string
+                      description: "DEPRECATED: Use currentActiveBranch instead"
+                    branches:
+                      type: array
+                      description: "All local branches available in this repository"
+                      items:
+                        type: string
+                    currentActiveBranch:
+                      type: string
+                      description: "Currently checked out branch (polled from filesystem)"
+                    defaultBranch:
+                      type: string
+                      description: "Default branch of the remote repository (e.g., main, master)"
                     name:
                       type: string
                     status:

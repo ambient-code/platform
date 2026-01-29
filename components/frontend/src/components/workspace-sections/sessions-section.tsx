@@ -122,13 +122,18 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
     setSearchInput(e.target.value);
   };
 
+  const handleRefresh = () => {
+    setOffset(0);
+    refetch();
+  };
+
   const handleEditName = (sessionName: string, currentDisplayName: string) => {
     setEditingSession({ name: sessionName, displayName: currentDisplayName });
   };
 
   const handleSaveEditName = (newName: string) => {
     if (!editingSession) return;
-    
+
     updateDisplayNameMutation.mutate(
       {
         projectName,
@@ -159,7 +164,7 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
             </CardDescription>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => refetch()} disabled={isFetching}>
+            <Button variant="outline" onClick={handleRefresh} disabled={isFetching}>
               <RefreshCw className={`w-4 h-4 mr-2 ${isFetching ? 'animate-spin' : ''}`} />
               Refresh
             </Button>

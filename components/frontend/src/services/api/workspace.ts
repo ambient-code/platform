@@ -151,36 +151,7 @@ export async function getGitMergeStatus(
   return response;
 }
 
-/**
- * Pull changes from remote
- */
-export async function gitPull(
-  projectName: string,
-  sessionName: string,
-  path: string = 'artifacts',
-  branch: string = 'main'
-): Promise<void> {
-  await apiClient.post<void, { path: string; branch: string }>(
-    `/projects/${projectName}/agentic-sessions/${sessionName}/git/pull`,
-    { path, branch }
-  );
-}
-
-/**
- * Push changes to remote
- */
-export async function gitPush(
-  projectName: string,
-  sessionName: string,
-  path: string = 'artifacts',
-  branch: string = 'main',
-  message?: string
-): Promise<void> {
-  await apiClient.post<void, { path: string; branch: string; message?: string }>(
-    `/projects/${projectName}/agentic-sessions/${sessionName}/git/push`,
-    { path, branch, message }
-  );
-}
+// Removed: gitPull, gitPush - agent handles all git operations
 
 /**
  * Create a new git branch
@@ -218,11 +189,6 @@ export async function gitListBranches(
 export type GitStatus = {
   branch?: string;
   remoteUrl?: string;
-  ahead?: number;
-  behind?: number;
-  staged?: number;
-  unstaged?: number;
-  untracked?: number;
   hasRemote?: boolean;
   initialized?: boolean;
   hasChanges?: boolean;
@@ -264,19 +230,5 @@ export async function configureGitRemote(
   );
 }
 
-/**
- * Synchronize git (commit, pull, push)
- */
-export async function synchronizeGit(
-  projectName: string,
-  sessionName: string,
-  path: string,
-  message?: string,
-  branch?: string
-): Promise<void> {
-  await apiClient.post<void, { path: string; message?: string; branch?: string }>(
-    `/projects/${projectName}/agentic-sessions/${sessionName}/git/synchronize`,
-    { path, message, branch }
-  );
-}
+// Removed: synchronizeGit - agent handles all git operations
 

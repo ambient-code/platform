@@ -1,13 +1,27 @@
 import { BACKEND_URL } from "@/lib/config";
+import { NextRequest } from "next/server";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    // No auth required for public OOTB workflows endpoint
-    const response = await fetch(`${BACKEND_URL}/workflows/ootb`, {
+    // Forward query parameters to backend (e.g., project param for GitHub token lookup)
+    const searchParams = request.nextUrl.searchParams;
+    const queryString = searchParams.toString();
+    const url = queryString
+      ? `${BACKEND_URL}/workflows/ootb?${queryString}`
+      : `${BACKEND_URL}/workflows/ootb`;
+
+    // Forward authorization header if present (enables GitHub token lookup for better rate limits)
+    const headers: HeadersInit = {
+      "Content-Type": "application/json",
+    };
+    const authHeader = request.headers.get("Authorization");
+    if (authHeader) {
+      headers["Authorization"] = authHeader;
+    }
+
+    const response = await fetch(url, {
       method: 'GET',
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers,
     });
 
     // Forward the response from backend

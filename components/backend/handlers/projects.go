@@ -984,3 +984,31 @@ func getUserSubjectNamespace(subject string) string {
 	}
 	return ""
 }
+
+// GetProjectIntegrationStatus returns the status of configured integrations
+// GET /api/projects/:projectName/integration-status
+func GetProjectIntegrationStatus(c *gin.Context) {
+	project := c.GetString("project")
+
+	// User authorization verified by ValidateProjectContext middleware
+	// K8sClientProjects is the backend SA client - users lack permission to read Secrets directly
+
+	ctx := c.Request.Context()
+
+	// Check if GITHUB_TOKEN exists in project's integration secret
+	githubConfigured := false
+	const secretName = "ambient-non-vertex-integrations"
+
+	if K8sClientProjects != nil {
+		secret, err := K8sClientProjects.CoreV1().Secrets(project).Get(ctx, secretName, v1.GetOptions{})
+		if err == nil && secret.Data != nil {
+			if token, ok := secret.Data["GITHUB_TOKEN"]; ok && len(token) > 0 {
+				githubConfigured = true
+			}
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"github": githubConfigured,
+	})
+}

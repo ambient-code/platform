@@ -259,3 +259,15 @@
 .dark .scrollbar-thin::-webkit-scrollbar-thumb:hover {
   background: hsl(var(--foreground));
 }
+
+/* Hide scrollbar while maintaining scroll functionality */
+.scrollbar-hide {
+  /* Firefox */
+  scrollbar-width: none;
+  /* WebKit browsers (Chrome, Safari, Edge) */
+  -ms-overflow-style: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}

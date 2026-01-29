@@ -678,8 +678,8 @@ kubectl get agenticsession <name> -n <project> -o jsonpath='{.status.results}'
 ## Getting Help
 
 - **Documentation**: User guides at `/docs/user-guide/`
-- **GitHub Issues**: [Report bugs/features](https://github.com/your-org/platform/issues)
-- **GitHub Discussions**: [Ask questions](https://github.com/your-org/platform/discussions)
+- **GitHub Issues**: [Report bugs/features](https://github.com/ambient-code/platform/issues)
+- **GitHub Discussions**: [Ask questions](https://github.com/ambient-code/platform/discussions)
 
 **Quick kubectl reference:**
 

@@ -5,10 +5,10 @@ Provides exception sanitization and timeout wrappers
 to prevent API key leaks and hanging operations.
 """
 
-import re
 import asyncio
 import logging
-from typing import Callable, Any, TypeVar, ParamSpec
+import re
+from typing import Any, Callable, ParamSpec, TypeVar
 
 P = ParamSpec("P")
 T = TypeVar("T")
@@ -199,7 +199,7 @@ def sanitize_model_name(model: str, max_length: int = 100) -> str | None:
         return None
 
     # Remove any characters that aren't alphanumeric or allowed separators
-    sanitized = re.sub(r'[^a-zA-Z0-9@.:/_-]', '', model[:max_length])
+    sanitized = re.sub(r"[^a-zA-Z0-9@.:/_-]", "", model[:max_length])
 
     # Return None if empty after sanitization
     return sanitized if sanitized else None

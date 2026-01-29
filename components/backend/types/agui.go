@@ -39,6 +39,10 @@ const (
 
 	// Raw event for pass-through
 	EventTypeRaw = "RAW"
+
+	// META event for user feedback (thumbs up/down)
+	// See: https://docs.ag-ui.com/drafts/meta-events
+	EventTypeMeta = "META"
 )
 
 // AG-UI Message Roles
@@ -251,6 +255,36 @@ type ActivityPatch struct {
 type RawEvent struct {
 	BaseEvent
 	Data interface{} `json:"data"`
+}
+
+// MetaEvent represents AG-UI META events for user feedback
+// See: https://docs.ag-ui.com/drafts/meta-events#user-feedback
+type MetaEvent struct {
+	BaseEvent
+	MetaType string                 `json:"metaType"` // "thumbs_up" or "thumbs_down"
+	Payload  map[string]interface{} `json:"payload"`
+}
+
+// FeedbackPayload contains the payload for feedback META events
+type FeedbackPayload struct {
+	MessageID string `json:"messageId,omitempty"` // ID of the message being rated
+	UserID    string `json:"userId"`              // User providing feedback
+	Reason    string `json:"reason,omitempty"`    // Reason for negative feedback
+	Comment   string `json:"comment,omitempty"`   // Additional user comment
+	// Extended fields for Langfuse context
+	ProjectName       string                   `json:"projectName,omitempty"`
+	SessionName       string                   `json:"sessionName,omitempty"`
+	Workflow          string                   `json:"workflow,omitempty"`
+	Context           string                   `json:"context,omitempty"`
+	IncludeTranscript bool                     `json:"includeTranscript,omitempty"`
+	Transcript        []FeedbackTranscriptItem `json:"transcript,omitempty"`
+}
+
+// FeedbackTranscriptItem represents a message in the feedback transcript
+type FeedbackTranscriptItem struct {
+	Role      string `json:"role"`
+	Content   string `json:"content"`
+	Timestamp string `json:"timestamp,omitempty"`
 }
 
 // NewBaseEvent creates a new BaseEvent with current timestamp

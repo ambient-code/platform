@@ -30,7 +30,7 @@
 ### Test File Locations
 
 **E2E Tests** (`e2e/`):
-- `cypress/e2e/vteam.cy.ts` - Main test suite (5 test cases)
+- `cypress/e2e/acp.cy.ts` - Main test suite (5 test cases)
 - `cypress/support/commands.ts` - Custom Cypress commands
 - `cypress.config.ts` - Cypress configuration
 
@@ -75,9 +75,9 @@
 **Workflow Steps**:
 1. **Change Detection** - Identifies modified components (frontend, backend, operator, runner)
 2. **Conditional Builds** - Builds only changed components, pulls `latest` for unchanged ones
-3. **Kind Cluster Setup** - Creates `vteam-e2e` cluster (vanilla Kubernetes)
+3. **Kind Cluster Setup** - Creates `acp-e2e` cluster (vanilla Kubernetes)
 4. **Image Loading** - Loads all 4 component images into Kind cluster
-5. **Deployment** - Deploys complete vTeam stack via kustomize
+5. **Deployment** - Deploys complete ACP stack via kustomize
 6. **Cypress Tests** - Runs 5 test cases covering:
    - UI authentication and loading
    - Workspace creation dialog
@@ -87,7 +87,7 @@
 7. **Failure Handling** - Uploads screenshots, videos, and component logs on failure
 8. **Cleanup** - Destroys cluster and artifacts
 
-**Test Coverage** (from `e2e/cypress/e2e/vteam.cy.ts`):
+**Test Coverage** (from `e2e/cypress/e2e/acp.cy.ts`):
 - ✅ Token authentication flow
 - ✅ Frontend UI rendering and navigation
 - ✅ Workspace creation (end-to-end user journey)
@@ -183,7 +183,7 @@ make e2e-test CONTAINER_ENGINE=podman
 # Manual E2E workflow (step-by-step)
 cd e2e
 ./scripts/setup-kind.sh           # Create Kind cluster
-./scripts/deploy.sh                # Deploy vTeam stack
+./scripts/deploy.sh                # Deploy ACP stack
 ./scripts/run-tests.sh             # Run Cypress tests
 ./scripts/cleanup.sh               # Clean up cluster
 ```
@@ -203,7 +203,7 @@ make test-unit
 make test-contract
 
 # Integration tests (requires running K8s cluster)
-TEST_NAMESPACE=test-vteam make test-integration-local
+TEST_NAMESPACE=test-acp make test-integration-local
 
 # Integration tests with cleanup
 CLEANUP_RESOURCES=true make test-integration-local
@@ -445,7 +445,7 @@ ok  	components/backend/handlers	0.456s
 
 **Infrastructure**:
 - **Kind (Kubernetes in Docker)**: Vanilla K8s cluster (not OpenShift)
-- **Cluster Name**: `vteam-e2e`
+- **Cluster Name**: `acp-e2e`
 - **Namespace**: `ambient-code`
 - **Ingress**: Nginx ingress controller with path-based routing
 
@@ -457,11 +457,11 @@ ok  	components/backend/handlers	0.456s
 **Change Detection Optimization**:
 ```bash
 # If component changed: build from PR code
-docker build -t quay.io/ambient_code/vteam_frontend:e2e-test ...
+docker build -t quay.io/ambient_code/acp_frontend:e2e-test ...
 
 # If component unchanged: pull latest
-docker pull quay.io/ambient_code/vteam_frontend:latest
-docker tag quay.io/ambient_code/vteam_frontend:latest ...
+docker pull quay.io/ambient_code/acp_frontend:latest
+docker tag quay.io/ambient_code/acp_frontend:latest ...
 ```
 
 **Deployment Pattern**:
@@ -711,7 +711,7 @@ pytest                        # Run tests
 - [`.github/workflows/test-local-dev.yml`](https://github.com/ambient-code/platform/blob/main/.github/workflows/test-local-dev.yml) - Local dev tests
 
 ### Test Files
-- [`e2e/cypress/e2e/vteam.cy.ts`](https://github.com/ambient-code/platform/blob/main/e2e/cypress/e2e/vteam.cy.ts) - E2E test suite
+- [`e2e/cypress/e2e/acp.cy.ts`](https://github.com/ambient-code/platform/blob/main/e2e/cypress/e2e/acp.cy.ts) - E2E test suite
 - [`components/backend/tests/`](https://github.com/ambient-code/platform/tree/main/components/backend/tests) - Backend tests
 - [`components/operator/internal/handlers/sessions_test.go`](https://github.com/ambient-code/platform/blob/main/components/operator/internal/handlers/sessions_test.go) - Operator tests
 - [`components/runners/claude-code-runner/tests/`](https://github.com/ambient-code/platform/tree/main/components/runners/claude-code-runner/tests) - Runner tests

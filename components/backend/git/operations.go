@@ -109,8 +109,10 @@ func GetGitHubToken(ctx context.Context, k8sClient *kubernetes.Clientset, dynCli
 		return "", fmt.Errorf("no GitHub credentials available. Either connect GitHub App or configure GITHUB_TOKEN in integration secrets")
 	}
 
-	log.Printf("Using GITHUB_TOKEN from integration secret %s/%s", project, secretName)
-	return string(token), nil
+	// Trim whitespace and newlines from token (common issue when copying from web UI)
+	cleanToken := strings.TrimSpace(string(token))
+	log.Printf("Using GITHUB_TOKEN from integration secret %s/%s (length=%d)", project, secretName, len(cleanToken))
+	return cleanToken, nil
 }
 
 // GetGitLabToken retrieves a GitLab Personal Access Token for a user
@@ -1635,7 +1637,7 @@ type MergeStatus struct {
 }
 
 // CheckMergeStatus checks if local and remote can merge cleanly
-func CheckMergeStatus(ctx context.Context, repoDir, branch string) (*MergeStatus, error) {
+func CheckMergeStatus(ctx context.Context, repoDir, branch, githubToken string) (*MergeStatus, error) {
 	if branch == "" {
 		branch = "main"
 	}
@@ -1655,8 +1657,17 @@ func CheckMergeStatus(ctx context.Context, repoDir, branch string) (*MergeStatus
 		return stdout.String(), nil
 	}
 
-	// Fetch remote branch
-	_, err := run("git", "fetch", "origin", branch)
+	// Fetch remote branch with authentication if token provided
+	var err error
+	if githubToken != "" {
+		// Trim token to remove any whitespace/newlines
+		cleanToken := strings.TrimSpace(githubToken)
+		// Configure git to use token for this fetch operation
+		cfg := fmt.Sprintf("url.https://x-access-token:%s@github.com/.insteadOf=https://github.com/", cleanToken)
+		_, err = run("git", "-c", cfg, "fetch", "origin", branch)
+	} else {
+		_, err = run("git", "fetch", "origin", branch)
+	}
 	if err != nil {
 		// Remote branch doesn't exist yet
 		status.RemoteBranchExists = false
@@ -1691,17 +1702,41 @@ func CheckMergeStatus(ctx context.Context, repoDir, branch string) (*MergeStatus
 	mergeTreeOut, err := run("git", "merge-tree", strings.TrimSpace(mergeBase), "HEAD", "origin/"+branch)
 	if err == nil && strings.TrimSpace(mergeTreeOut) != "" {
 		// Check for conflict markers in output
-		if strings.Contains(mergeTreeOut, "<<<<<<<") {
+		if strings.Contains(mergeTreeOut, "<<<<<<<") || strings.Contains(mergeTreeOut, "CONFLICT") {
 			status.CanMergeClean = false
+
 			// Parse conflicting files from merge-tree output
+			// Look for diff headers (--- a/ and +++ b/) or CONFLICT markers
+			seenFiles := make(map[string]bool)
 			for _, line := range strings.Split(mergeTreeOut, "\n") {
-				if strings.HasPrefix(line, "--- a/") || strings.HasPrefix(line, "+++ b/") {
-					file := strings.TrimPrefix(strings.TrimPrefix(line, "--- a/"), "+++ b/")
-					if file != "" && !contains(status.ConflictingFiles, file) {
+				// Method 1: Parse from diff headers
+				if strings.HasPrefix(line, "--- a/") {
+					file := strings.TrimPrefix(line, "--- a/")
+					if file != "" && !seenFiles[file] {
 						status.ConflictingFiles = append(status.ConflictingFiles, file)
+						seenFiles[file] = true
+					}
+				} else if strings.HasPrefix(line, "+++ b/") {
+					file := strings.TrimPrefix(line, "+++ b/")
+					if file != "" && !seenFiles[file] {
+						status.ConflictingFiles = append(status.ConflictingFiles, file)
+						seenFiles[file] = true
+					}
+				}
+				// Method 2: Parse from CONFLICT markers (e.g., "CONFLICT (content): Merge conflict in filename")
+				if strings.HasPrefix(line, "CONFLICT") && strings.Contains(line, " in ") {
+					parts := strings.Split(line, " in ")
+					if len(parts) >= 2 {
+						file := strings.TrimSpace(parts[len(parts)-1])
+						if file != "" && !seenFiles[file] {
+							status.ConflictingFiles = append(status.ConflictingFiles, file)
+							seenFiles[file] = true
+						}
 					}
 				}
 			}
+
+			log.Printf("CheckMergeStatus: detected conflicts in %d files: %v", len(status.ConflictingFiles), status.ConflictingFiles)
 		} else {
 			status.CanMergeClean = true
 		}
@@ -1712,13 +1747,77 @@ func CheckMergeStatus(ctx context.Context, repoDir, branch string) (*MergeStatus
 	return status, nil
 }
 
+// configureGitIdentity configures git user.name and user.email
+// Tries to fetch from GitHub API if token provided, falls back to env vars or defaults
+func configureGitIdentity(ctx context.Context, repoDir, githubToken string) {
+	gitUserName := os.Getenv("GIT_USER_NAME")
+	gitUserEmail := os.Getenv("GIT_USER_EMAIL")
+
+	// Try to fetch from GitHub API if token provided
+	if githubToken != "" && (gitUserName == "" || gitUserEmail == "") {
+		req, _ := http.NewRequest("GET", "https://api.github.com/user", nil)
+		req.Header.Set("Authorization", "token "+githubToken)
+		req.Header.Set("Accept", "application/vnd.github+json")
+
+		if resp, err := http.DefaultClient.Do(req); err == nil {
+			defer resp.Body.Close()
+			if resp.StatusCode == 200 {
+				if body, err := io.ReadAll(resp.Body); err == nil {
+					var ghUser struct {
+						Login string `json:"login"`
+						Name  string `json:"name"`
+						Email string `json:"email"`
+					}
+					if err := json.Unmarshal(body, &ghUser); err == nil {
+						if gitUserName == "" && ghUser.Name != "" {
+							gitUserName = ghUser.Name
+						} else if gitUserName == "" && ghUser.Login != "" {
+							gitUserName = ghUser.Login
+						}
+						if gitUserEmail == "" && ghUser.Email != "" {
+							gitUserEmail = ghUser.Email
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Fall back to defaults
+	if gitUserName == "" {
+		gitUserName = "Ambient Code Bot"
+	}
+	if gitUserEmail == "" {
+		gitUserEmail = "bot@ambient-code.local"
+	}
+
+	// Configure git
+	cmd := exec.CommandContext(ctx, "git", "config", "user.name", gitUserName)
+	cmd.Dir = repoDir
+	cmd.Run()
+
+	cmd = exec.CommandContext(ctx, "git", "config", "user.email", gitUserEmail)
+	cmd.Dir = repoDir
+	cmd.Run()
+
+	log.Printf("Configured git identity name=%q email=%q", gitUserName, gitUserEmail)
+}
+
 // PullRepo pulls changes from remote branch
-func PullRepo(ctx context.Context, repoDir, branch string) error {
+func PullRepo(ctx context.Context, repoDir, branch, githubToken string) error {
 	if branch == "" {
 		branch = "main"
 	}
 
-	cmd := exec.CommandContext(ctx, "git", "pull", "--allow-unrelated-histories", "origin", branch)
+	var cmd *exec.Cmd
+	if githubToken != "" {
+		// Trim token to remove any whitespace/newlines
+		cleanToken := strings.TrimSpace(githubToken)
+		cfg := fmt.Sprintf("url.https://x-access-token:%s@github.com/.insteadOf=https://github.com/", cleanToken)
+		cmd = exec.CommandContext(ctx, "git", "-c", cfg, "pull", "--allow-unrelated-histories", "origin", branch)
+	} else {
+		cmd = exec.CommandContext(ctx, "git", "pull", "--allow-unrelated-histories", "origin", branch)
+	}
 	cmd.Dir = repoDir
 
 	if out, err := cmd.CombinedOutput(); err != nil {
@@ -1734,7 +1833,7 @@ func PullRepo(ctx context.Context, repoDir, branch string) error {
 }
 
 // PushToRepo pushes local commits to specified branch
-func PushToRepo(ctx context.Context, repoDir, branch, commitMessage string) error {
+func PushToRepo(ctx context.Context, repoDir, branch, commitMessage, githubToken string) error {
 	if branch == "" {
 		branch = "main"
 	}
@@ -1748,6 +1847,9 @@ func PushToRepo(ctx context.Context, repoDir, branch, commitMessage string) erro
 		err := cmd.Run()
 		return stdout.String(), err
 	}
+
+	// Configure git identity (fetches from GitHub API if token provided)
+	configureGitIdentity(ctx, repoDir, githubToken)
 
 	// Ensure we're on the correct branch (create if needed)
 	// This handles fresh git init repos that don't have a branch yet
@@ -1767,9 +1869,20 @@ func PushToRepo(ctx context.Context, repoDir, branch, commitMessage string) erro
 		}
 	}
 
-	// Push to branch
-	if out, err := run("git", "push", "-u", "origin", branch); err != nil {
-		return fmt.Errorf("failed to push: %w (output: %s)", err, out)
+	// Push to branch with authentication
+	var pushOut string
+	var pushErr error
+	if githubToken != "" {
+		// Trim token to remove any whitespace/newlines
+		cleanToken := strings.TrimSpace(githubToken)
+		// GitHub recommends x-access-token for all token types
+		cfg := fmt.Sprintf("url.https://x-access-token:%s@github.com/.insteadOf=https://github.com/", cleanToken)
+		pushOut, pushErr = run("git", "-c", cfg, "push", "-u", "origin", branch)
+	} else {
+		pushOut, pushErr = run("git", "push", "-u", "origin", branch)
+	}
+	if pushErr != nil {
+		return fmt.Errorf("failed to push: %w (output: %s)", pushErr, pushOut)
 	}
 
 	log.Printf("Successfully pushed to origin/%s", branch)
@@ -1832,64 +1945,76 @@ func ListRemoteBranches(ctx context.Context, repoDir string) ([]string, error) {
 }
 
 // SyncRepo commits, pulls, and pushes changes
-func SyncRepo(ctx context.Context, repoDir, commitMessage, branch string) error {
+func SyncRepo(ctx context.Context, repoDir, commitMessage, branch, githubToken string) error {
 	if branch == "" {
 		branch = "main"
 	}
 
+	run := func(args ...string) (string, error) {
+		cmd := exec.CommandContext(ctx, args[0], args[1:]...)
+		cmd.Dir = repoDir
+		var stdout bytes.Buffer
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stdout
+		err := cmd.Run()
+		return stdout.String(), err
+	}
+
+	// Configure git identity (fetches from GitHub API if token provided)
+	configureGitIdentity(ctx, repoDir, githubToken)
+
 	// Stage all changes
-	cmd := exec.CommandContext(ctx, "git", "add", ".")
-	cmd.Dir = repoDir
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to stage changes: %w (output: %s)", err, string(out))
+	if out, err := run("git", "add", "."); err != nil {
+		return fmt.Errorf("failed to stage changes: %w (output: %s)", err, out)
 	}
 
 	// Commit changes (only if there are changes)
-	cmd = exec.CommandContext(ctx, "git", "commit", "-m", commitMessage)
-	cmd.Dir = repoDir
-	if out, err := cmd.CombinedOutput(); err != nil {
+	if out, err := run("git", "commit", "-m", commitMessage); err != nil {
 		// Check if error is "nothing to commit"
-		outStr := string(out)
-		if !strings.Contains(outStr, "nothing to commit") && !strings.Contains(outStr, "no changes added") {
-			return fmt.Errorf("failed to commit: %w (output: %s)", err, outStr)
+		if !strings.Contains(out, "nothing to commit") && !strings.Contains(out, "no changes added") {
+			return fmt.Errorf("failed to commit: %w (output: %s)", err, out)
 		}
 		// Nothing to commit is not an error
 		log.Printf("SyncRepo: nothing to commit in %s", repoDir)
 	}
 
-	// Pull with rebase to sync with remote
-	cmd = exec.CommandContext(ctx, "git", "pull", "--rebase", "origin", branch)
-	cmd.Dir = repoDir
-	if out, err := cmd.CombinedOutput(); err != nil {
-		outStr := string(out)
+	// Pull with rebase to sync with remote (with authentication)
+	var pullOut string
+	var pullErr error
+	if githubToken != "" {
+		// Trim token to remove any whitespace/newlines
+		cleanToken := strings.TrimSpace(githubToken)
+		cfg := fmt.Sprintf("url.https://x-access-token:%s@github.com/.insteadOf=https://github.com/", cleanToken)
+		pullOut, pullErr = run("git", "-c", cfg, "pull", "--rebase", "origin", branch)
+	} else {
+		pullOut, pullErr = run("git", "pull", "--rebase", "origin", branch)
+	}
+	if pullErr != nil {
 		// Check if it's just "no tracking information" (first push)
-		if !strings.Contains(outStr, "no tracking information") && !strings.Contains(outStr, "couldn't find remote ref") {
-			return fmt.Errorf("failed to pull: %w (output: %s)", err, outStr)
+		if !strings.Contains(pullOut, "no tracking information") && !strings.Contains(pullOut, "couldn't find remote ref") {
+			return fmt.Errorf("failed to pull: %w (output: %s)", pullErr, pullOut)
 		}
-		log.Printf("SyncRepo: pull skipped (no remote tracking): %s", outStr)
+		log.Printf("SyncRepo: pull skipped (no remote tracking): %s", pullOut)
 	}
 
-	// Push to remote
-	cmd = exec.CommandContext(ctx, "git", "push", "-u", "origin", branch)
-	cmd.Dir = repoDir
-	if out, err := cmd.CombinedOutput(); err != nil {
-		outStr := string(out)
-		if strings.Contains(outStr, "Permission denied") || strings.Contains(outStr, "403") {
+	// Push to remote (with authentication)
+	var pushOut string
+	var pushErr error
+	if githubToken != "" {
+		// Trim token to remove any whitespace/newlines
+		cleanToken := strings.TrimSpace(githubToken)
+		cfg := fmt.Sprintf("url.https://x-access-token:%s@github.com/.insteadOf=https://github.com/", cleanToken)
+		pushOut, pushErr = run("git", "-c", cfg, "push", "-u", "origin", branch)
+	} else {
+		pushOut, pushErr = run("git", "push", "-u", "origin", branch)
+	}
+	if pushErr != nil {
+		if strings.Contains(pushOut, "Permission denied") || strings.Contains(pushOut, "403") {
 			return fmt.Errorf("permission denied: no push access to remote")
 		}
-		return fmt.Errorf("failed to push: %w (output: %s)", err, outStr)
+		return fmt.Errorf("failed to push: %w (output: %s)", pushErr, pushOut)
 	}
 
 	log.Printf("Successfully synchronized %s to %s", repoDir, branch)
 	return nil
-}
-
-// Helper function to check if string slice contains a value
-func contains(slice []string, str string) bool {
-	for _, s := range slice {
-		if s == str {
-			return true
-		}
-	}
-	return false
 }

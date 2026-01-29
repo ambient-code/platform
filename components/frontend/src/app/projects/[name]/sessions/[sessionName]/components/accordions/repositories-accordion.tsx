@@ -1,14 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { GitBranch, X, Link, Loader2, CloudUpload } from "lucide-react";
+import { GitBranch, X, Link, Loader2, CloudUpload, ChevronDown, ChevronRight } from "lucide-react";
 import { AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 type Repository = {
   url: string;
-  branch?: string;
+  name?: string;
+  branch?: string; // DEPRECATED: Use currentActiveBranch instead
+  branches?: string[]; // All local branches available
+  currentActiveBranch?: string; // Currently checked out branch
+  defaultBranch?: string; // Default branch of remote
 };
 
 type UploadedFile = {
@@ -34,6 +38,7 @@ export function RepositoriesAccordion({
 }: RepositoriesAccordionProps) {
   const [removingRepo, setRemovingRepo] = useState<string | null>(null);
   const [removingFile, setRemovingFile] = useState<string | null>(null);
+  const [expandedRepos, setExpandedRepos] = useState<Set<string>>(new Set());
 
   const totalContextItems = repositories.length + uploadedFiles.length;
 
@@ -95,29 +100,87 @@ export function RepositoriesAccordion({
             <div className="space-y-2">
               {/* Repositories */}
               {repositories.map((repo, idx) => {
-                const repoName = repo.url.split('/').pop()?.replace('.git', '') || `repo-${idx}`;
+                const repoName = repo.name || repo.url.split('/').pop()?.replace('.git', '') || `repo-${idx}`;
                 const isRemoving = removingRepo === repoName;
+                const isExpanded = expandedRepos.has(repoName);
+                const currentBranch = repo.currentActiveBranch || repo.branch;
+                const hasBranches = repo.branches && repo.branches.length > 0;
+
+                const toggleExpanded = () => {
+                  setExpandedRepos(prev => {
+                    const next = new Set(prev);
+                    if (next.has(repoName)) {
+                      next.delete(repoName);
+                    } else {
+                      next.add(repoName);
+                    }
+                    return next;
+                  });
+                };
 
                 return (
-                  <div key={`repo-${idx}`} className="flex items-center gap-2 p-2 border rounded bg-muted/30 hover:bg-muted/50 transition-colors">
-                    <GitBranch className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium truncate">{repoName}</div>
-                      <div className="text-xs text-muted-foreground truncate">{repo.url}</div>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 w-7 p-0 flex-shrink-0"
-                      onClick={() => handleRemoveRepo(repoName)}
-                      disabled={isRemoving}
-                    >
-                      {isRemoving ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : (
-                        <X className="h-3 w-3" />
+                  <div key={`repo-${idx}`} className="border rounded bg-muted/30">
+                    <div className="flex items-center gap-2 p-2 hover:bg-muted/50 transition-colors">
+                      {hasBranches && (
+                        <button
+                          onClick={toggleExpanded}
+                          className="h-4 w-4 text-muted-foreground flex-shrink-0 hover:text-foreground"
+                        >
+                          {isExpanded ? (
+                            <ChevronDown className="h-4 w-4" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4" />
+                          )}
+                        </button>
                       )}
-                    </Button>
+                      {!hasBranches && <div className="h-4 w-4 flex-shrink-0" />}
+                      <GitBranch className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                      <div className="flex-1 overflow-visible">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <div className="text-sm font-medium truncate">{repoName}</div>
+                          {currentBranch && (
+                            <Badge variant="outline" className="text-xs px-1.5 py-0.5 max-w-full !whitespace-normal !overflow-visible break-words bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
+                              {currentBranch}
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="text-xs text-muted-foreground truncate">{repo.url}</div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0 flex-shrink-0"
+                        onClick={() => handleRemoveRepo(repoName)}
+                        disabled={isRemoving}
+                      >
+                        {isRemoving ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                          <X className="h-3 w-3" />
+                        )}
+                      </Button>
+                    </div>
+
+                    {/* Expandable branches list */}
+                    {isExpanded && hasBranches && (
+                      <div className="px-2 pb-2 pl-10 space-y-1">
+                        <div className="text-xs text-muted-foreground mb-1">Available branches:</div>
+                        {repo.branches!.map((branch, branchIdx) => (
+                          <div
+                            key={branchIdx}
+                            className="text-xs py-1 px-2 rounded bg-muted/50 flex items-center gap-2"
+                          >
+                            <GitBranch className="h-3 w-3 text-muted-foreground" />
+                            <span className="font-mono">{branch}</span>
+                            {branch === currentBranch && (
+                              <Badge variant="secondary" className="text-xs px-1 py-0 h-4 ml-auto">
+                                active
+                              </Badge>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
               })}

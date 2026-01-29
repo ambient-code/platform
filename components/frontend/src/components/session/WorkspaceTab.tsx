@@ -72,7 +72,8 @@ const WorkspaceTab: React.FC<WorkspaceTabProps> = ({ session, wsLoading, wsUnava
     <div className="grid grid-cols-1 gap-0">
       <div className="border rounded-md overflow-hidden">
         <div className="p-3 border-b flex items-center justify-between">
-          <div className="flex-1">
+          <div className="flex-1 space-y-1">
+            <p className="text-xs text-muted-foreground">Session working directory - files created and modified by the AI agent</p>
             {k8sResources?.pvcName ? (
               <div className="flex items-center gap-2">
                 <Badge variant="outline" className="text-xs">
@@ -108,7 +109,7 @@ const WorkspaceTab: React.FC<WorkspaceTabProps> = ({ session, wsLoading, wsUnava
             <EmptyState
               icon={FolderOpen}
               title="No files yet"
-              description="The workspace is empty. Files will appear here as the session progresses."
+              description="This session's working directory is empty. Files will appear here as the AI agent clones repositories and creates or modifies files."
             />
           ) : (
             <FileTree nodes={wsTree} selectedPath={wsSelectedPath} onSelect={onSelect} onToggle={onToggle} />

@@ -93,6 +93,12 @@ async function request<T>(
     'Content-Type': 'application/json',
   };
 
+  // For e2e testing: use NEXT_PUBLIC_E2E_TOKEN if available (injected via k8s env vars)
+  // This allows both automated tests and manual browsing to work without localStorage hacks
+  if (typeof window !== 'undefined' && process.env.NEXT_PUBLIC_E2E_TOKEN) {
+    defaultHeaders['Authorization'] = `Bearer ${process.env.NEXT_PUBLIC_E2E_TOKEN}`;
+  }
+
   // Merge headers
   const headers = {
     ...defaultHeaders,

@@ -6,15 +6,17 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 
 type AddContextModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onAddRepository: (url: string, branch: string) => Promise<void>;
+  onAddRepository: (url: string, branch: string, autoPush?: boolean) => Promise<void>;
   onUploadFile?: () => void;
   isLoading?: boolean;
+  autoBranch?: string;   // Auto-generated branch from backend (single source of truth)
 };
 
 export function AddContextModal({
@@ -23,23 +25,29 @@ export function AddContextModal({
   onAddRepository,
   onUploadFile,
   isLoading = false,
+  autoBranch,
 }: AddContextModalProps) {
   const [contextUrl, setContextUrl] = useState("");
-  const [contextBranch, setContextBranch] = useState("main");
+  const [contextBranch, setContextBranch] = useState("");  // Empty = use auto-generated branch
+  const [autoPush, setAutoPush] = useState(false);
 
   const handleSubmit = async () => {
     if (!contextUrl.trim()) return;
-    
-    await onAddRepository(contextUrl.trim(), contextBranch.trim() || 'main');
-    
+
+    // Use autoBranch from backend (single source of truth), or empty to let runner auto-generate
+    const defaultBranch = autoBranch || '';
+    await onAddRepository(contextUrl.trim(), contextBranch.trim() || defaultBranch, autoPush);
+
     // Reset form
     setContextUrl("");
-    setContextBranch("main");
+    setContextBranch("");
+    setAutoPush(false);
   };
 
   const handleCancel = () => {
     setContextUrl("");
-    setContextBranch("main");
+    setContextBranch("");
+    setAutoPush(false);
     onOpenChange(false);
   };
 
@@ -78,13 +86,35 @@ export function AddContextModal({
             <Label htmlFor="context-branch">Branch (optional)</Label>
             <Input
               id="context-branch"
-              placeholder="main"
+              // Use autoBranch from backend (single source of truth)
+              placeholder={autoBranch}
               value={contextBranch}
               onChange={(e) => setContextBranch(e.target.value)}
             />
             <p className="text-xs text-muted-foreground">
-              Leave empty to use the default branch
+              If left empty, a unique feature branch will be created for this session
             </p>
+          </div>
+
+          <div className="flex items-start space-x-2">
+            <Checkbox
+              id="auto-push"
+              checked={autoPush}
+              onCheckedChange={(checked) => setAutoPush(checked === true)}
+            />
+            <div className="space-y-1">
+              <Label
+                htmlFor="auto-push"
+                className="text-sm font-normal cursor-pointer"
+              >
+                Enable auto-push
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Instructs Claude to commit and push changes made to this
+                repository during the session. Requires git credentials to be
+                configured.
+              </p>
+            </div>
           </div>
 
           {onUploadFile && (

@@ -1,14 +1,6 @@
 # Use Red Hat UBI Node.js 20 minimal image for dependencies
 FROM registry.access.redhat.com/ubi9/nodejs-20-minimal AS deps
 
-# Build arguments for metadata
-ARG GIT_COMMIT=unknown
-ARG GIT_BRANCH=unknown
-ARG GIT_REPO=unknown
-ARG GIT_VERSION=unknown
-ARG BUILD_DATE=unknown
-ARG BUILD_USER=unknown
-
 WORKDIR /app
 
 USER 0
@@ -19,14 +11,6 @@ RUN npm ci
 
 # Rebuild the source code only when needed
 FROM registry.access.redhat.com/ubi9/nodejs-20-minimal AS builder
-
-# Build arguments (need to redeclare for each stage)
-ARG GIT_COMMIT=unknown
-ARG GIT_BRANCH=unknown
-ARG GIT_REPO=unknown
-ARG GIT_VERSION=unknown
-ARG BUILD_DATE=unknown
-ARG BUILD_USER=unknown
 
 USER 0
 
@@ -41,47 +25,16 @@ COPY . .
 # Uncomment the following line in case you want to disable telemetry during the build.
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# Make build metadata available to Next.js at build time
-ENV NEXT_PUBLIC_GIT_COMMIT=${GIT_COMMIT}
-ENV NEXT_PUBLIC_GIT_BRANCH=${GIT_BRANCH}
-ENV NEXT_PUBLIC_GIT_REPO=${GIT_REPO}
-ENV NEXT_PUBLIC_GIT_VERSION=${GIT_VERSION}
-ENV NEXT_PUBLIC_BUILD_DATE=${BUILD_DATE}
-ENV NEXT_PUBLIC_BUILD_USER=${BUILD_USER}
-
 RUN npm run build
 
 # Production image, copy all the files and run next
 FROM registry.access.redhat.com/ubi9/nodejs-20-minimal AS runner
-
-# Build arguments (need to redeclare for final stage)
-ARG GIT_COMMIT=unknown
-ARG GIT_BRANCH=unknown
-ARG GIT_REPO=unknown
-ARG GIT_VERSION=unknown
-ARG BUILD_DATE=unknown
-ARG BUILD_USER=unknown
-
-# Add labels to force cache invalidation and provide metadata
-LABEL git.commit="${GIT_COMMIT}"
-LABEL git.branch="${GIT_BRANCH}"
-LABEL git.version="${GIT_VERSION}"
-LABEL build.date="${BUILD_DATE}"
-LABEL build.user="${BUILD_USER}"
 
 WORKDIR /app
 
 ENV NODE_ENV=production
 # Uncomment the following line in case you want to disable telemetry during runtime.
 ENV NEXT_TELEMETRY_DISABLED=1
-
-# Build metadata as environment variables (NEXT_PUBLIC_ prefix makes them available to client)
-ENV NEXT_PUBLIC_GIT_COMMIT=${GIT_COMMIT}
-ENV NEXT_PUBLIC_GIT_BRANCH=${GIT_BRANCH}
-ENV NEXT_PUBLIC_GIT_REPO=${GIT_REPO}
-ENV NEXT_PUBLIC_GIT_VERSION=${GIT_VERSION}
-ENV NEXT_PUBLIC_BUILD_DATE=${BUILD_DATE}
-ENV NEXT_PUBLIC_BUILD_USER=${BUILD_USER}
 
 # Copy public assets
 COPY --from=builder /app/public ./public

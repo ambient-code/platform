@@ -38,11 +38,19 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
   const [gitlabToken, setGitlabToken] = useState<string>("");
   const [gitlabInstanceUrl, setGitlabInstanceUrl] = useState<string>("");
   const [showGitlabToken, setShowGitlabToken] = useState<boolean>(false);
+  const [storageMode, setStorageMode] = useState<"shared" | "custom">("shared");
+  const [s3Endpoint, setS3Endpoint] = useState<string>("");
+  const [s3Bucket, setS3Bucket] = useState<string>("");
+  const [s3Region, setS3Region] = useState<string>("us-east-1");
+  const [s3AccessKey, setS3AccessKey] = useState<string>("");
+  const [s3SecretKey, setS3SecretKey] = useState<string>("");
+  const [showS3SecretKey, setShowS3SecretKey] = useState<boolean>(false);
   const [anthropicExpanded, setAnthropicExpanded] = useState<boolean>(false);
   const [githubExpanded, setGithubExpanded] = useState<boolean>(false);
   const [jiraExpanded, setJiraExpanded] = useState<boolean>(false);
   const [gitlabExpanded, setGitlabExpanded] = useState<boolean>(false);
-  const FIXED_KEYS = useMemo(() => ["ANTHROPIC_API_KEY","GIT_USER_NAME","GIT_USER_EMAIL","GITHUB_TOKEN","JIRA_URL","JIRA_PROJECT","JIRA_EMAIL","JIRA_API_TOKEN","GITLAB_TOKEN","GITLAB_INSTANCE_URL"] as const, []);
+  const [s3Expanded, setS3Expanded] = useState<boolean>(false);
+  const FIXED_KEYS = useMemo(() => ["ANTHROPIC_API_KEY","GIT_USER_NAME","GIT_USER_EMAIL","GITHUB_TOKEN","JIRA_URL","JIRA_PROJECT","JIRA_EMAIL","JIRA_API_TOKEN","GITLAB_TOKEN","GITLAB_INSTANCE_URL","STORAGE_MODE","S3_ENDPOINT","S3_BUCKET","S3_REGION","S3_ACCESS_KEY","S3_SECRET_KEY"] as const, []);
 
   // React Query hooks
   const { data: project, isLoading: projectLoading } = useProject(projectName);
@@ -75,6 +83,14 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
       setJiraToken(byKey["JIRA_API_TOKEN"] || "");
       setGitlabToken(byKey["GITLAB_TOKEN"] || "");
       setGitlabInstanceUrl(byKey["GITLAB_INSTANCE_URL"] || "");
+      // Determine storage mode: "custom" if S3_ENDPOINT is set, otherwise "shared" (default)
+      const hasCustomS3 = byKey["STORAGE_MODE"] === "custom" || (byKey["S3_ENDPOINT"] && byKey["S3_ENDPOINT"] !== "");
+      setStorageMode(hasCustomS3 ? "custom" : "shared");
+      setS3Endpoint(byKey["S3_ENDPOINT"] || "");
+      setS3Bucket(byKey["S3_BUCKET"] || "");
+      setS3Region(byKey["S3_REGION"] || "us-east-1");
+      setS3AccessKey(byKey["S3_ACCESS_KEY"] || "");
+      setS3SecretKey(byKey["S3_SECRET_KEY"] || "");
       setSecrets(allSecrets.filter(s => !FIXED_KEYS.includes(s.key as typeof FIXED_KEYS[number])));
     }
   }, [runnerSecrets, integrationSecrets, FIXED_KEYS]);
@@ -147,6 +163,18 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
     if (jiraToken) integrationData["JIRA_API_TOKEN"] = jiraToken;
     if (gitlabToken) integrationData["GITLAB_TOKEN"] = gitlabToken;
     if (gitlabInstanceUrl) integrationData["GITLAB_INSTANCE_URL"] = gitlabInstanceUrl;
+    
+    // S3 Storage configuration
+    integrationData["STORAGE_MODE"] = storageMode;
+    if (storageMode === "custom") {
+      // Only save custom S3 settings when custom mode is selected
+      if (s3Endpoint) integrationData["S3_ENDPOINT"] = s3Endpoint;
+      if (s3Bucket) integrationData["S3_BUCKET"] = s3Bucket;
+      if (s3Region) integrationData["S3_REGION"] = s3Region;
+      if (s3AccessKey) integrationData["S3_ACCESS_KEY"] = s3AccessKey;
+      if (s3SecretKey) integrationData["S3_SECRET_KEY"] = s3SecretKey;
+    }
+    // If shared mode: backend will use operator defaults + minio-credentials secret
     for (const { key, value } of secrets) {
       if (!key) continue;
       if (FIXED_KEYS.includes(key as typeof FIXED_KEYS[number])) continue;
@@ -464,6 +492,137 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
                     onChange={(e) => setGitlabInstanceUrl(e.target.value)}
                   />
                 </div>
+              </div>
+            )}
+          </div>
+
+          {/* S3 Storage Configuration Section */}
+          <div className="space-y-3 pt-4 border-t">
+            <div
+              className="flex items-center justify-between cursor-pointer hover:opacity-80"
+              onClick={() => setS3Expanded((v) => !v)}
+            >
+              <div>
+                <Label className="text-base font-semibold cursor-pointer">S3 Storage Configuration</Label>
+                <div className="text-xs text-muted-foreground mt-1">Configure S3-compatible storage for session artifacts and state</div>
+              </div>
+              {s3Expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+            </div>
+            {s3Expanded && (
+              <div className="space-y-4 pl-1">
+                <Alert>
+                  <Info className="h-4 w-4" />
+                  <AlertTitle>Session State Storage</AlertTitle>
+                  <AlertDescription>
+                    Session artifacts, uploads, and Claude history are persisted to S3-compatible storage. By default, the cluster provides shared MinIO storage.
+                  </AlertDescription>
+                </Alert>
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium">Storage Configuration</Label>
+                  <div className="space-y-2">
+                    <div className="flex items-center space-x-2">
+                      <input
+                        id="storage-shared"
+                        type="radio"
+                        name="storageMode"
+                        value="shared"
+                        checked={storageMode === "shared"}
+                        onChange={() => setStorageMode("shared")}
+                        className="h-4 w-4"
+                      />
+                      <Label htmlFor="storage-shared" className="cursor-pointer font-normal">
+                        Use shared cluster storage (default)
+                      </Label>
+                    </div>
+                    <div className="text-xs text-muted-foreground ml-6">
+                      Automatically uses in-cluster MinIO. No configuration needed.
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center space-x-2">
+                      <input
+                        id="storage-custom"
+                        type="radio"
+                        name="storageMode"
+                        value="custom"
+                        checked={storageMode === "custom"}
+                        onChange={() => setStorageMode("custom")}
+                        className="h-4 w-4"
+                      />
+                      <Label htmlFor="storage-custom" className="cursor-pointer font-normal">
+                        Use custom S3-compatible storage
+                      </Label>
+                    </div>
+                    <div className="text-xs text-muted-foreground ml-6">
+                      Configure AWS S3, external MinIO, or other S3-compatible endpoint.
+                    </div>
+                  </div>
+                </div>
+                {storageMode === "custom" && (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="s3Endpoint">S3_ENDPOINT</Label>
+                      <div className="text-xs text-muted-foreground mb-1">S3-compatible endpoint (e.g., https://s3.amazonaws.com, http://minio.local:9000)</div>
+                      <Input
+                        id="s3Endpoint"
+                        type="text"
+                        placeholder="https://s3.amazonaws.com"
+                        value={s3Endpoint}
+                        onChange={(e) => setS3Endpoint(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="s3Bucket">S3_BUCKET</Label>
+                      <div className="text-xs text-muted-foreground mb-1">Bucket name for session storage</div>
+                      <Input
+                        id="s3Bucket"
+                        type="text"
+                        placeholder="ambient-sessions"
+                        value={s3Bucket}
+                        onChange={(e) => setS3Bucket(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="s3Region">S3_REGION</Label>
+                      <div className="text-xs text-muted-foreground mb-1">AWS region (optional, default: us-east-1)</div>
+                      <Input
+                        id="s3Region"
+                        type="text"
+                        placeholder="us-east-1"
+                        value={s3Region}
+                        onChange={(e) => setS3Region(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="s3AccessKey">S3_ACCESS_KEY</Label>
+                      <div className="text-xs text-muted-foreground mb-1">S3 access key ID</div>
+                      <Input
+                        id="s3AccessKey"
+                        type="text"
+                        placeholder="AKIAIOSFODNN7EXAMPLE"
+                        value={s3AccessKey}
+                        onChange={(e) => setS3AccessKey(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="s3SecretKey">S3_SECRET_KEY</Label>
+                      <div className="text-xs text-muted-foreground mb-1">S3 secret access key</div>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          id="s3SecretKey"
+                          type={showS3SecretKey ? "text" : "password"}
+                          placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+                          value={s3SecretKey}
+                          onChange={(e) => setS3SecretKey(e.target.value)}
+                          className="flex-1"
+                        />
+                        <Button type="button" variant="ghost" size="sm" onClick={() => setShowS3SecretKey((v) => !v)} aria-label={showS3SecretKey ? "Hide secret" : "Show secret"}>
+                          {showS3SecretKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </Button>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>

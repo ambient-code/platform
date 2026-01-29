@@ -7,6 +7,9 @@ type AgenticSession struct {
 	Metadata   map[string]interface{} `json:"metadata"`
 	Spec       AgenticSessionSpec     `json:"spec"`
 	Status     *AgenticSessionStatus  `json:"status,omitempty"`
+	// Computed field: auto-generated branch name if user doesn't provide one
+	// IMPORTANT: Keep in sync with runner (main.py) and frontend (add-context-modal.tsx)
+	AutoBranch string `json:"autoBranch,omitempty"`
 }
 
 type AgenticSessionSpec struct {
@@ -28,8 +31,9 @@ type AgenticSessionSpec struct {
 
 // SimpleRepo represents a simplified repository configuration
 type SimpleRepo struct {
-	URL    string  `json:"url"`
-	Branch *string `json:"branch,omitempty"`
+	URL      string  `json:"url"`
+	Branch   *string `json:"branch,omitempty"`
+	AutoPush *bool   `json:"autoPush,omitempty"`
 }
 
 type AgenticSessionStatus struct {
@@ -53,7 +57,6 @@ type CreateAgenticSessionRequest struct {
 	ParentSessionID string       `json:"parent_session_id,omitempty"`
 	// Multi-repo support
 	Repos                []SimpleRepo      `json:"repos,omitempty"`
-	AutoPushOnComplete   *bool             `json:"autoPushOnComplete,omitempty"`
 	UserContext          *UserContext      `json:"userContext,omitempty"`
 	EnvironmentVariables map[string]string `json:"environmentVariables,omitempty"`
 	Labels               map[string]string `json:"labels,omitempty"`

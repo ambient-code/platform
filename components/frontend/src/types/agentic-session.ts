@@ -16,6 +16,7 @@ export type GitRepository = {
 export type SessionRepo = {
     url: string;
     branch?: string;
+    autoPush?: boolean;
 };
 
 export type AgenticSessionSpec = {
@@ -37,8 +38,11 @@ export type AgenticSessionSpec = {
 
 export type ReconciledRepo = {
 	url: string;
-	branch: string;
+	branch: string; // DEPRECATED: Use currentActiveBranch instead
 	name?: string;
+	branches?: string[]; // All local branches available
+	currentActiveBranch?: string; // Currently checked out branch
+	defaultBranch?: string; // Default branch of remote
 	status?: "Cloning" | "Ready" | "Failed";
 	clonedAt?: string;
 };
@@ -115,11 +119,13 @@ export type AgentWaitingMessage = {
 
 export type UserMessage = {
 	type: "user_message";
+	id?: string;  // Message ID for feedback association
 	content: ContentBlock | string;
 	timestamp: string;
 }
 export type AgentMessage = {
 	type: "agent_message";
+	id?: string;  // Message ID for feedback association
 	content: ContentBlock;
 	model: string;
 	timestamp: string;
@@ -184,7 +190,6 @@ export type CreateAgenticSessionRequest = {
 	interactive?: boolean;
 	// Multi-repo support
 	repos?: SessionRepo[];
-	autoPushOnComplete?: boolean;
 	labels?: Record<string, string>;
 	annotations?: Record<string, string>;
 };

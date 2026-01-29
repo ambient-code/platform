@@ -17,6 +17,21 @@ import type {
   PaginationParams,
 } from '@/types/api';
 
+export type McpServer = {
+  name: string;
+  displayName: string;
+  status: 'configured' | 'connected' | 'disconnected' | 'error';
+  authenticated?: boolean;
+  authMessage?: string;
+  source?: string;
+  command?: string;
+};
+
+export type McpStatusResponse = {
+  servers: McpServer[];
+  totalCount: number;
+};
+
 /**
  * List sessions for a project with pagination support
  */
@@ -193,4 +208,41 @@ export async function getSessionExport(
   sessionName: string
 ): Promise<SessionExportResponse> {
   return apiClient.get(`/projects/${projectName}/agentic-sessions/${sessionName}/export`);
+}
+
+/**
+ * Get MCP server status for a session
+ */
+export async function getMcpStatus(
+  projectName: string,
+  sessionName: string
+): Promise<McpStatusResponse> {
+  return apiClient.get<McpStatusResponse>(
+    `/projects/${projectName}/agentic-sessions/${sessionName}/mcp/status`
+  );
+}
+
+export type RepoStatus = {
+  url: string;
+  name: string;
+  branches: string[];
+  currentActiveBranch: string;
+  defaultBranch: string;
+};
+
+export type ReposStatusResponse = {
+  repos: RepoStatus[];
+};
+
+/**
+ * Get current status of all repositories (branches, current branch, etc.)
+ * Fetches directly from runner for real-time updates
+ */
+export async function getReposStatus(
+  projectName: string,
+  sessionName: string
+): Promise<ReposStatusResponse> {
+  return apiClient.get<ReposStatusResponse>(
+    `/projects/${projectName}/agentic-sessions/${sessionName}/repos/status`
+  );
 }

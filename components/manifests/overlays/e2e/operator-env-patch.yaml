@@ -1,0 +1,23 @@
+# Patch to use production images with higher CPU limits for kind cluster
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agentic-operator
+spec:
+  template:
+    spec:
+      containers:
+      - name: agentic-operator
+        env:
+        # Use LOCAL images with kind-specific fixes:
+        # - state-sync: chmod 777 for .claude (vs 755 in production)
+        # - operator: increased CPU 200m→1000m, memory 256Mi→1Gi
+        # - operator: fsGroup:0 for volume permissions
+        # - runner: minimal MCP config (webfetch only, faster startup)
+        - name: AMBIENT_CODE_RUNNER_IMAGE
+          value: "vteam_claude_runner:latest"
+        - name: STATE_SYNC_IMAGE
+          value: "vteam_state_sync:latest"
+        - name: IMAGE_PULL_POLICY
+          value: "IfNotPresent"
+

@@ -23,6 +23,8 @@ import (
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
 )
 
 var _ = Describe("Sessions Handler", Label(test_constants.LabelUnit, test_constants.LabelHandlers, test_constants.LabelSessions), func() {
@@ -518,6 +520,262 @@ var _ = Describe("Sessions Handler", Label(test_constants.LabelUnit, test_consta
 
 				// Assert
 				httpUtils.AssertHTTPStatus(http.StatusNotFound)
+			})
+		})
+	})
+
+	// AutoPush functionality tests
+	Context("AutoPush Field Parsing", func() {
+		var (
+			testClientFactory         *test_utils.TestClientFactory
+			fakeClients               *test_utils.FakeClientSet
+			originalK8sClient         kubernetes.Interface
+			originalK8sClientMw       kubernetes.Interface
+			originalK8sClientProjects kubernetes.Interface
+			originalDynamicClient     dynamic.Interface
+		)
+
+		BeforeEach(func() {
+			logger.Log("Setting up AutoPush test")
+
+			// Save original state
+			originalK8sClient = K8sClient
+			originalK8sClientMw = K8sClientMw
+			originalK8sClientProjects = K8sClientProjects
+			originalDynamicClient = DynamicClient
+
+			// Create fake clients
+			testClientFactory = test_utils.NewTestClientFactory()
+			fakeClients = testClientFactory.GetFakeClients()
+
+			DynamicClient = fakeClients.GetDynamicClient()
+			K8sClientProjects = fakeClients.GetK8sClient()
+			K8sClient = fakeClients.GetK8sClient()
+			K8sClientMw = fakeClients.GetK8sClient()
+		})
+
+		AfterEach(func() {
+			// Restore original state
+			K8sClient = originalK8sClient
+			K8sClientMw = originalK8sClientMw
+			K8sClientProjects = originalK8sClientProjects
+			DynamicClient = originalDynamicClient
+		})
+
+		Describe("parseSpec", func() {
+			It("Should parse autoPush=true from repo", func() {
+				spec := map[string]interface{}{
+					"repos": []interface{}{
+						map[string]interface{}{
+							"url":      "https://github.com/owner/repo.git",
+							"branch":   "main",
+							"autoPush": true,
+						},
+					},
+				}
+
+				parsed := parseSpec(spec)
+				Expect(parsed.Repos).To(HaveLen(1))
+				Expect(parsed.Repos[0].URL).To(Equal("https://github.com/owner/repo.git"))
+				Expect(parsed.Repos[0].Branch).NotTo(BeNil())
+				Expect(*parsed.Repos[0].Branch).To(Equal("main"))
+				Expect(parsed.Repos[0].AutoPush).NotTo(BeNil())
+				Expect(*parsed.Repos[0].AutoPush).To(BeTrue())
+			})
+
+			It("Should parse autoPush=false from repo", func() {
+				spec := map[string]interface{}{
+					"repos": []interface{}{
+						map[string]interface{}{
+							"url":      "https://github.com/owner/repo.git",
+							"branch":   "develop",
+							"autoPush": false,
+						},
+					},
+				}
+
+				parsed := parseSpec(spec)
+				Expect(parsed.Repos).To(HaveLen(1))
+				Expect(parsed.Repos[0].AutoPush).NotTo(BeNil())
+				Expect(*parsed.Repos[0].AutoPush).To(BeFalse())
+			})
+
+			It("Should handle missing autoPush field", func() {
+				spec := map[string]interface{}{
+					"repos": []interface{}{
+						map[string]interface{}{
+							"url":    "https://github.com/owner/repo.git",
+							"branch": "main",
+						},
+					},
+				}
+
+				parsed := parseSpec(spec)
+				Expect(parsed.Repos).To(HaveLen(1))
+				Expect(parsed.Repos[0].AutoPush).To(BeNil())
+			})
+
+			It("Should handle multiple repos with mixed autoPush settings", func() {
+				spec := map[string]interface{}{
+					"repos": []interface{}{
+						map[string]interface{}{
+							"url":      "https://github.com/owner/repo1.git",
+							"autoPush": true,
+						},
+						map[string]interface{}{
+							"url":      "https://github.com/owner/repo2.git",
+							"autoPush": false,
+						},
+						map[string]interface{}{
+							"url": "https://github.com/owner/repo3.git",
+							// No autoPush field
+						},
+					},
+				}
+
+				parsed := parseSpec(spec)
+				Expect(parsed.Repos).To(HaveLen(3))
+
+				// First repo: autoPush=true
+				Expect(parsed.Repos[0].AutoPush).NotTo(BeNil())
+				Expect(*parsed.Repos[0].AutoPush).To(BeTrue())
+
+				// Second repo: autoPush=false
+				Expect(parsed.Repos[1].AutoPush).NotTo(BeNil())
+				Expect(*parsed.Repos[1].AutoPush).To(BeFalse())
+
+				// Third repo: no autoPush field
+				Expect(parsed.Repos[2].AutoPush).To(BeNil())
+			})
+		})
+
+		Describe("ExtractSessionContext", func() {
+			It("Should extract autoPush from repo spec", func() {
+				spec := map[string]interface{}{
+					"repos": []interface{}{
+						map[string]interface{}{
+							"url":      "https://github.com/owner/repo.git",
+							"branch":   "main",
+							"autoPush": true,
+						},
+					},
+				}
+
+				ctx := ExtractSessionContext(spec)
+				Expect(ctx.Repos).To(HaveLen(1))
+				Expect(ctx.Repos[0]["url"]).To(Equal("https://github.com/owner/repo.git"))
+				Expect(ctx.Repos[0]["autoPush"]).To(BeTrue())
+			})
+
+			It("Should handle repos without autoPush field", func() {
+				spec := map[string]interface{}{
+					"repos": []interface{}{
+						map[string]interface{}{
+							"url":    "https://github.com/owner/repo.git",
+							"branch": "main",
+						},
+					},
+				}
+
+				ctx := ExtractSessionContext(spec)
+				Expect(ctx.Repos).To(HaveLen(1))
+				Expect(ctx.Repos[0]["autoPush"]).To(BeNil())
+			})
+		})
+
+		Describe("BoolPtr helper", func() {
+			It("Should create pointer to true", func() {
+				ptr := types.BoolPtr(true)
+				Expect(ptr).NotTo(BeNil())
+				Expect(*ptr).To(BeTrue())
+			})
+
+			It("Should create pointer to false", func() {
+				ptr := types.BoolPtr(false)
+				Expect(ptr).NotTo(BeNil())
+				Expect(*ptr).To(BeFalse())
+			})
+		})
+
+		Describe("Error handling", func() {
+			It("Should handle invalid autoPush type gracefully", func() {
+				spec := map[string]interface{}{
+					"repos": []interface{}{
+						map[string]interface{}{
+							"url":      "https://github.com/owner/repo.git",
+							"autoPush": "invalid-string", // Should be bool
+						},
+					},
+				}
+
+				parsed := parseSpec(spec)
+				Expect(parsed.Repos).To(HaveLen(1))
+				// Should skip invalid type and leave AutoPush as nil
+				Expect(parsed.Repos[0].AutoPush).To(BeNil())
+			})
+
+			It("Should handle autoPush in malformed repo gracefully", func() {
+				spec := map[string]interface{}{
+					"repos": []interface{}{
+						"invalid-string-instead-of-map",
+					},
+				}
+
+				parsed := parseSpec(spec)
+				Expect(parsed.Repos).To(BeEmpty())
+			})
+		})
+
+		Describe("Edge Cases in AddRepo Handler", func() {
+			It("Should handle autoPush as null value", func() {
+				spec := map[string]interface{}{
+					"repos": []interface{}{
+						map[string]interface{}{
+							"url":      "https://github.com/owner/repo.git",
+							"branch":   "main",
+							"autoPush": nil,
+						},
+					},
+				}
+
+				parsed := parseSpec(spec)
+				Expect(parsed.Repos).To(HaveLen(1))
+				// nil autoPush should be treated as not provided
+				Expect(parsed.Repos[0].AutoPush).To(BeNil())
+			})
+
+			It("Should skip autoPush with invalid type (string)", func() {
+				spec := map[string]interface{}{
+					"repos": []interface{}{
+						map[string]interface{}{
+							"url":      "https://github.com/owner/repo.git",
+							"branch":   "main",
+							"autoPush": "true", // String instead of bool
+						},
+					},
+				}
+
+				parsed := parseSpec(spec)
+				Expect(parsed.Repos).To(HaveLen(1))
+				// Invalid type should be skipped, leaving AutoPush as nil
+				Expect(parsed.Repos[0].AutoPush).To(BeNil())
+			})
+
+			It("Should skip autoPush with invalid type (number)", func() {
+				spec := map[string]interface{}{
+					"repos": []interface{}{
+						map[string]interface{}{
+							"url":      "https://github.com/owner/repo.git",
+							"branch":   "main",
+							"autoPush": 1, // Number instead of bool
+						},
+					},
+				}
+
+				parsed := parseSpec(spec)
+				Expect(parsed.Repos).To(HaveLen(1))
+				// Invalid type should be skipped, leaving AutoPush as nil
+				Expect(parsed.Repos[0].AutoPush).To(BeNil())
 			})
 		})
 	})

@@ -4,40 +4,18 @@ import { useCallback, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Download, Loader2 } from 'lucide-react';
 import type { AgenticSession } from '@/types/agentic-session';
 import { getPhaseColor } from '@/utils/session-helpers';
 import { successToast } from '@/hooks/use-toast';
 import { useSessionExport } from '@/services/queries/use-sessions';
 
-function formatDuration(ms: number): string {
-  const seconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const hours = Math.floor(minutes / 60);
-  
-  if (hours > 0) {
-    const remainingMinutes = minutes % 60;
-    const remainingSeconds = seconds % 60;
-    return `${hours}h ${remainingMinutes}m ${remainingSeconds}s`;
-  } else if (minutes > 0) {
-    const remainingSeconds = seconds % 60;
-    return `${minutes}m ${remainingSeconds}s`;
-  } else {
-    return `${seconds}s`;
-  }
-}
-
 type SessionDetailsModalProps = {
   session: AgenticSession;
   projectName: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  durationMs?: number;
-  k8sResources?: {
-    pvcName?: string;
-    pvcSize?: string;
-  };
-  messageCount: number;
 };
 
 export function SessionDetailsModal({
@@ -45,9 +23,6 @@ export function SessionDetailsModal({
   projectName,
   open,
   onOpenChange,
-  durationMs,
-  k8sResources,
-  messageCount,
 }: SessionDetailsModalProps) {
   const [exportingAgui, setExportingAgui] = useState(false);
   const [exportingLegacy, setExportingLegacy] = useState(false);
@@ -113,44 +88,6 @@ export function SessionDetailsModal({
               <span className="text-foreground">{session.spec.llmSettings.model}</span>
             </div>
             
-            <div className="flex items-start gap-3">
-              <span className="font-semibold text-foreground/80 min-w-[100px]">Temperature:</span>
-              <span className="text-foreground">{session.spec.llmSettings.temperature}</span>
-            </div>
-            
-            <div className="flex items-start gap-3">
-              <span className="font-semibold text-foreground/80 min-w-[100px]">Mode:</span>
-              <span className="text-foreground">{session.spec?.interactive ? "Interactive" : "Headless"}</span>
-            </div>
-            
-            {/* startTime removed from simplified status */}
-            
-            <div className="flex items-start gap-3">
-              <span className="font-semibold text-foreground/80 min-w-[100px]">Duration:</span>
-              <span className="text-foreground">{typeof durationMs === "number" ? formatDuration(durationMs) : "-"}</span>
-            </div>
-            
-            {k8sResources?.pvcName && (
-              <div className="flex items-start gap-3">
-                <span className="font-semibold text-foreground/80 min-w-[100px]">PVC:</span>
-                <span className="text-foreground font-mono break-all">{k8sResources.pvcName}</span>
-              </div>
-            )}
-            
-            {k8sResources?.pvcSize && (
-              <div className="flex items-start gap-3">
-                <span className="font-semibold text-foreground/80 min-w-[100px]">PVC Size:</span>
-                <span className="text-foreground">{k8sResources.pvcSize}</span>
-              </div>
-            )}
-            
-            {/* jobName removed from simplified status */}
-            
-            <div className="flex items-start gap-3">
-              <span className="font-semibold text-foreground/80 min-w-[100px]">Messages:</span>
-              <span className="text-foreground">{messageCount}</span>
-            </div>
-            
             {/* Export buttons */}
             <div className="pt-2 space-y-2">
               {loadingExport ? (
@@ -210,25 +147,42 @@ export function SessionDetailsModal({
           {session.status?.conditions && session.status.conditions.length > 0 && (
             <div className="pt-4">
               <div className="text-xs uppercase tracking-wide text-gray-500 mb-2">Reconciliation Conditions</div>
-              <div className="space-y-2">
+              <Accordion type="multiple" className="w-full">
                 {session.status.conditions.map((condition, index) => (
-                  <div key={`${condition.type}-${index}`} className="rounded border px-3 py-2 text-sm">
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold">{condition.type}</span>
-                      <span className={`text-xs ${condition.status === "True" ? "text-green-600" : condition.status === "False" ? "text-red-600" : "text-yellow-600"}`}>
-                        {condition.status}
-                      </span>
-                    </div>
-                    <div className="text-xs text-gray-500">{condition.reason || "No reason provided"}</div>
-                    {condition.message && (
-                      <div className="text-sm text-gray-700 mt-1">{condition.message}</div>
-                    )}
-                    {condition.lastTransitionTime && (
-                      <div className="text-xs text-gray-400 mt-1">Updated {new Date(condition.lastTransitionTime).toLocaleString()}</div>
-                    )}
-                  </div>
+                  <AccordionItem key={`${condition.type}-${index}`} value={`condition-${index}`}>
+                    <AccordionTrigger className="py-3 px-3 hover:no-underline hover:bg-muted/50 rounded-t">
+                      <div className="flex items-center justify-between flex-1 mr-2">
+                        <span className="font-medium text-sm">{condition.type}</span>
+                        <Badge 
+                          variant={condition.status === "True" ? "default" : condition.status === "False" ? "destructive" : "secondary"}
+                          className="ml-2"
+                        >
+                          {condition.status}
+                        </Badge>
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent className="px-3 pb-3">
+                      <div className="space-y-2 text-sm">
+                        <div>
+                          <span className="font-semibold text-foreground/70">Reason:</span>
+                          <span className="ml-2 text-foreground/90">{condition.reason || "No reason provided"}</span>
+                        </div>
+                        {condition.message && (
+                          <div>
+                            <span className="font-semibold text-foreground/70">Message:</span>
+                            <p className="mt-1 text-foreground/90">{condition.message}</p>
+                          </div>
+                        )}
+                        {condition.lastTransitionTime && (
+                          <div className="text-xs text-muted-foreground pt-2">
+                            Updated {new Date(condition.lastTransitionTime).toLocaleString()}
+                          </div>
+                        )}
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
                 ))}
-              </div>
+              </Accordion>
             </div>
           )}
         </div>

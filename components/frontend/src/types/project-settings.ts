@@ -4,11 +4,19 @@ export type LLMSettings = {
   maxTokens: number;
 };
 
+export type S3StorageConfig = {
+  enabled: boolean;
+  endpoint: string;
+  bucket: string;
+  region?: string;
+};
+
 export type ProjectDefaultSettings = {
   llmSettings: LLMSettings;
   defaultTimeout: number;
   allowedWebsiteDomains?: string[];
   maxConcurrentSessions: number;
+  s3Storage?: S3StorageConfig;
 };
 
 export type ProjectResourceLimits = {

@@ -250,67 +250,7 @@ export function useGitMergeStatus(
   });
 }
 
-/**
- * Hook to pull git changes
- */
-export function useGitPull() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: ({
-      projectName,
-      sessionName,
-      path = 'artifacts',
-      branch = 'main',
-    }: {
-      projectName: string;
-      sessionName: string;
-      path?: string;
-      branch?: string;
-    }) => workspaceApi.gitPull(projectName, sessionName, path, branch),
-    onSuccess: (_data, { projectName, sessionName }) => {
-      // Invalidate workspace and merge status
-      queryClient.invalidateQueries({
-        queryKey: workspaceKeys.lists(),
-      });
-      queryClient.invalidateQueries({
-        queryKey: [...workspaceKeys.all, 'git-merge-status', projectName, sessionName],
-      });
-    },
-  });
-}
-
-/**
- * Hook to push git changes
- */
-export function useGitPush() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: ({
-      projectName,
-      sessionName,
-      path = 'artifacts',
-      branch = 'main',
-      message,
-    }: {
-      projectName: string;
-      sessionName: string;
-      path?: string;
-      branch?: string;
-      message?: string;
-    }) => workspaceApi.gitPush(projectName, sessionName, path, branch, message),
-    onSuccess: (_data, { projectName, sessionName }) => {
-      // Invalidate workspace and merge status
-      queryClient.invalidateQueries({
-        queryKey: workspaceKeys.lists(),
-      });
-      queryClient.invalidateQueries({
-        queryKey: [...workspaceKeys.all, 'git-merge-status', projectName, sessionName],
-      });
-    },
-  });
-}
+// Removed: useGitPull, useGitPush - agent handles all git operations
 
 /**
  * Hook to create git branch
@@ -409,40 +349,5 @@ export function useConfigureGitRemote() {
   });
 }
 
-/**
- * Hook to synchronize git (commit, pull, push)
- */
-export function useSynchronizeGit() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: ({
-      projectName,
-      sessionName,
-      path,
-      message,
-      branch,
-    }: {
-      projectName: string;
-      sessionName: string;
-      path: string;
-      message?: string;
-      branch?: string;
-    }) => workspaceApi.synchronizeGit(projectName, sessionName, path, message, branch),
-    onSuccess: (_data, { projectName, sessionName, path }) => {
-      // Invalidate git status
-      queryClient.invalidateQueries({
-        queryKey: [...workspaceKeys.all, 'git-status', projectName, sessionName, path],
-      });
-      // Invalidate workspace to show updated files
-      queryClient.invalidateQueries({
-        queryKey: workspaceKeys.lists(),
-      });
-      // Invalidate merge status
-      queryClient.invalidateQueries({
-        queryKey: [...workspaceKeys.all, 'git-merge-status', projectName, sessionName],
-      });
-    },
-  });
-}
+// Removed: useSynchronizeGit - agent handles all git operations
 

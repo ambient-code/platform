@@ -40,6 +40,9 @@ export const AGUIEventType = {
 
   // Raw event
   RAW: 'RAW',
+  
+  // Meta events (user feedback, annotations, etc.)
+  META: 'META',
 } as const
 
 export type AGUIEventTypeValue = (typeof AGUIEventType)[keyof typeof AGUIEventType]
@@ -241,6 +244,15 @@ export type AGUIRawEvent = AGUIBaseEvent & {
   data: unknown
 }
 
+// Meta event (user feedback, annotations, etc.)
+export type AGUIMetaEvent = {
+  type: typeof AGUIEventType.META
+  metaType: string  // e.g., 'thumbs_up', 'thumbs_down'
+  payload: Record<string, unknown>
+  threadId: string
+  ts?: number  // Unix timestamp in milliseconds
+}
+
 // Union of all event types
 export type AGUIEvent =
   | AGUIRunStartedEvent
@@ -260,6 +272,7 @@ export type AGUIEvent =
   | AGUIActivitySnapshotEvent
   | AGUIActivityDeltaEvent
   | AGUIRawEvent
+  | AGUIMetaEvent
 
 // Run metadata type
 export type AGUIRunMetadata = {
@@ -297,6 +310,9 @@ export type PendingToolCall = {
   parentToolUseId?: string
 }
 
+// Feedback type for messages
+export type MessageFeedback = 'thumbs_up' | 'thumbs_down'
+
 // Client state for AG-UI streaming
 export type AGUIClientState = {
   threadId: string | null
@@ -322,6 +338,8 @@ export type AGUIClientState = {
   // Track child tools that finished before their parent
   pendingChildren: Map<string, AGUIMessage[]>
   error: string | null
+  // Track feedback for messages (messageId -> feedback type)
+  messageFeedback: Map<string, MessageFeedback>
 }
 
 // Type guard functions

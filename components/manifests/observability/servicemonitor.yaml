@@ -1,0 +1,22 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: ambient-otel-collector
+  namespace: ambient-code
+  labels:
+    app: otel-collector
+    # Required for OpenShift User Workload Monitoring to discover this ServiceMonitor
+    openshift.io/cluster-monitoring: "true"
+spec:
+  selector:
+    matchLabels:
+      app: otel-collector
+  endpoints:
+  - port: prometheus
+    interval: 30s
+    path: /metrics
+    scheme: http
+  namespaceSelector:
+    matchNames:
+    - ambient-code
+

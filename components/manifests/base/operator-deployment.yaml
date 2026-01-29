@@ -19,7 +19,21 @@ spec:
       - name: agentic-operator
         image: quay.io/ambient_code/vteam_operator:latest
         imagePullPolicy: Always
+        args:
+        # Controller-runtime configuration
+        - --max-concurrent-reconciles=10  # Process up to 10 sessions in parallel
+        - --health-probe-bind-address=:8081
+        - --leader-elect=false  # Enable for HA deployments with replicas > 1
+        # Uncomment for debugging with legacy watch-based implementation:
+        # - --legacy-watch
+        ports:
+        - containerPort: 8081
+          name: health
+          protocol: TCP
         env:
+        # Controller concurrency (can be overridden via args)
+        - name: MAX_CONCURRENT_RECONCILES
+          value: "10"
         - name: NAMESPACE
           valueFrom:
             fieldRef:
@@ -35,7 +49,7 @@ spec:
         - name: CONTENT_SERVICE_IMAGE
           value: "quay.io/ambient_code/vteam_backend:latest"
         - name: IMAGE_PULL_POLICY
-          value: "Always"
+          value: "IfNotPresent"
         # Vertex AI configuration from ConfigMap
         - name: CLAUDE_CODE_USE_VERTEX
           valueFrom:
@@ -96,6 +110,20 @@ spec:
               name: google-workflow-app-secret
               key: GOOGLE_OAUTH_CLIENT_SECRET
               optional: true
+        # S3 state sync configuration (defaults - can be overridden per-project in settings)
+        - name: STATE_SYNC_IMAGE
+          value: "quay.io/ambient_code/vteam_state_sync:latest"
+        - name: S3_ENDPOINT
+          value: "http://minio.ambient-code.svc:9000"  # In-cluster MinIO (change for external S3)
+        - name: S3_BUCKET
+          value: "ambient-sessions"  # Create this bucket in MinIO console
+        # OpenTelemetry configuration
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: "otel-collector.ambient-code.svc:4317"  # Deploy OTel collector separately
+        - name: DEPLOYMENT_ENV
+          value: "production"
+        - name: VERSION
+          value: "latest"  # Override with actual version in production
         resources:
           requests:
             cpu: 50m
@@ -104,11 +132,15 @@ spec:
             cpu: 200m
             memory: 256Mi
         livenessProbe:
-          exec:
-            command:
-            - /bin/sh
-            - -c
-            - "ps aux | grep '[o]perator' || exit 1"
-          initialDelaySeconds: 30
+          httpGet:
+            path: /healthz
+            port: health
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: health
+          initialDelaySeconds: 5
           periodSeconds: 10
       restartPolicy: Always

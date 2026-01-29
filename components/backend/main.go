@@ -67,6 +67,7 @@ func main() {
 		handlers.GitCheckMergeStatus = git.CheckMergeStatus
 		handlers.GitPullRepo = git.PullRepo
 		handlers.GitPushToRepo = git.PushToRepo
+		handlers.GitSyncRepo = git.SyncRepo
 		handlers.GitCreateBranch = git.CreateBranch
 		handlers.GitListRemoteBranches = git.ListRemoteBranches
 
@@ -108,6 +109,7 @@ func main() {
 	handlers.GitCheckMergeStatus = git.CheckMergeStatus
 	handlers.GitPullRepo = git.PullRepo
 	handlers.GitPushToRepo = git.PushToRepo
+	handlers.GitSyncRepo = git.SyncRepo
 	handlers.GitCreateBranch = git.CreateBranch
 	handlers.GitListRemoteBranches = git.ListRemoteBranches
 
