@@ -3,8 +3,8 @@ Runner context providing session information and utilities.
 """
 
 import os
-from typing import Dict, Any, Optional
 from dataclasses import dataclass, field
+from typing import Any, Dict, Optional
 
 
 @dataclass
@@ -36,4 +36,3 @@ class RunnerContext:
     def get_metadata(self, key: str, default: Any = None) -> Any:
         """Get metadata value."""
         return self.metadata.get(key, default)
-

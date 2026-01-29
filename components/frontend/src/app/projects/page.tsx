@@ -143,7 +143,7 @@ export default function ProjectsPage() {
         <div className="container mx-auto px-6 py-4">
           <PageHeader
             title="Workspaces"
-            description="Select or create a workspace to get started"
+            description="Workspaces are isolated environments for organizing AI-powered agentic sessions. Create a workspace to get started."
           />
         </div>
       </div>
@@ -164,8 +164,7 @@ export default function ProjectsPage() {
               <div>
                 <CardTitle>Workspaces</CardTitle>
                 <CardDescription>
-                  Configure and manage workspace settings, resource limits, and access
-                  controls
+                  Each workspace provides an isolated environment for your team to run agentic sessions, manage API keys, and control access permissions
                 </CardDescription>
               </div>
               <div className="flex gap-2">

@@ -1,7 +1,9 @@
 """Unit tests for duplicate turn prevention in observability module."""
 
+from unittest.mock import MagicMock, Mock, patch
+
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+
 from observability import ObservabilityManager
 
 
@@ -102,7 +104,9 @@ class TestDuplicateTurnPrevention:
         mock_message.content = []
 
         # End turn with SDK's turn number
-        manager.end_turn(5, mock_message, usage={"input_tokens": 100, "output_tokens": 50})
+        manager.end_turn(
+            5, mock_message, usage={"input_tokens": 100, "output_tokens": 50}
+        )
 
         # Check that update was called with turn number in metadata
         mock_generation.update.assert_called_once()
@@ -142,7 +146,9 @@ class TestDuplicateTurnPrevention:
         mock_message = MagicMock()
         mock_message.content = []
 
-        manager.end_turn(2, mock_message, usage={"input_tokens": 100, "output_tokens": 50})
+        manager.end_turn(
+            2, mock_message, usage={"input_tokens": 100, "output_tokens": 50}
+        )
 
         # Check turn number was added to metadata
         call_kwargs = mock_generation.update.call_args[1]

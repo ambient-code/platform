@@ -7,6 +7,7 @@ import { ToolMessage } from "@/components/ui/tool-message";
 import { ThinkingMessage } from "@/components/ui/thinking-message";
 import { SystemMessage } from "@/components/ui/system-message";
 import { Button } from "@/components/ui/button";
+import { FeedbackButtons } from "@/components/feedback";
 
 export type StreamMessageProps = {
   message: (MessageObject | ToolUseMessages | HierarchicalToolMessage) & { streaming?: boolean };
@@ -92,7 +93,17 @@ export const StreamMessage: React.FC<StreamMessageProps> = ({ message, onGoToRes
         case "thinking_block":
           return <ThinkingMessage block={m.content} />
         case "text_block":
-          return <Message role={displayRole} content={m.content.text} name={displayName} borderless={plainCard} timestamp={m.timestamp} streaming={isStreaming}/>
+          return (
+            <Message 
+              role={displayRole} 
+              content={m.content.text} 
+              name={displayName} 
+              borderless={plainCard} 
+              timestamp={m.timestamp} 
+              streaming={isStreaming}
+              feedbackButtons={feedbackElement}
+            />
+          );
         case "tool_use_block":
           return <ToolMessage toolUseBlock={m.content} borderless={plainCard}/>
         case "tool_result_block":
