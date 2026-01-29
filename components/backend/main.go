@@ -10,6 +10,7 @@ import (
 	"ambient-code-backend/handlers"
 	"ambient-code-backend/k8s"
 	"ambient-code-backend/server"
+	"ambient-code-backend/webhook"
 	"ambient-code-backend/websocket"
 
 	"github.com/joho/godotenv"
@@ -141,6 +142,25 @@ func main() {
 
 	// Initialize websocket package
 	websocket.StateBaseDir = server.StateBaseDir
+
+	// Initialize webhook handler (FR-001, FR-008)
+	webhookConfig, err := webhook.LoadConfig(context.Background(), server.K8sClient)
+	if err != nil {
+		log.Printf("Warning: Failed to load webhook config: %v", err)
+		log.Println("Webhook endpoint will not be available")
+		WebhookHandler = nil
+	} else {
+		log.Println("Initializing GitHub webhook handler...")
+		WebhookHandler = webhook.NewWebhookHandler(
+			webhookConfig,
+			server.K8sClient,
+			server.DynamicClient,
+			server.Namespace,
+			k8s.GetAgenticSessionV1Alpha1Resource(),
+			github.Manager,
+		)
+		log.Println("GitHub webhook handler initialized successfully")
+	}
 
 	// Normal server mode
 	if err := server.Run(registerRoutes); err != nil {

@@ -1,0 +1,45 @@
+# Git
+.git/
+.gitignore
+
+# Documentation
+README.md
+*.md
+
+# Development files
+.env.example
+.env
+*.log
+
+# Test files
+*_test.go
+tests/
+coverage.*
+
+# Build artifacts
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+*.prof
+*.cpu
+*.mem
+
+# Development tools
+tmp/
+gin-bin
+debug.log
+private-key.pem
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
