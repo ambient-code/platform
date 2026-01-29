@@ -98,17 +98,71 @@ export function useUpdateProject() {
 
 /**
  * Hook to delete a project
+ *
+ * Implements optimistic updates to prevent race conditions when deleting
+ * multiple projects in quick succession.
  */
 export function useDeleteProject() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (name: string) => projectsApi.deleteProject(name),
+    onMutate: async (name) => {
+      // Cancel any outgoing refetches (so they don't overwrite our optimistic update)
+      await queryClient.cancelQueries({ queryKey: projectKeys.lists() });
+
+      // Snapshot all list queries for rollback on error
+      const previousQueries = new Map<string, unknown>();
+      const queries = queryClient.getQueriesData({ queryKey: projectKeys.lists() });
+      queries.forEach(([queryKey, data]) => {
+        previousQueries.set(JSON.stringify(queryKey), data);
+      });
+
+      // Optimistically remove the project from all list queries
+      queryClient.setQueriesData(
+        { queryKey: projectKeys.lists() },
+        (old: unknown) => {
+          // Handle paginated response
+          if (old && typeof old === 'object' && 'items' in old) {
+            const paginatedData = old as { items: Project[]; totalCount?: number };
+            return {
+              ...paginatedData,
+              items: paginatedData.items.filter((p) => p.name !== name),
+              totalCount: paginatedData.totalCount ? paginatedData.totalCount - 1 : undefined,
+            };
+          }
+          // Handle legacy array response
+          if (Array.isArray(old)) {
+            return old.filter((p: Project) => p.name !== name);
+          }
+          return old;
+        }
+      );
+
+      // Return context with the snapshots
+      return { previousQueries };
+    },
+    onError: (err, name, context) => {
+      // Check if this is a "not found" error (which is fine during deletion)
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      const isNotFoundError =
+        errorMessage.toLowerCase().includes('not found') ||
+        errorMessage.includes('404');
+
+      // Only rollback if it's NOT a "not found" error
+      if (!isNotFoundError && context?.previousQueries) {
+        // Restore all previous query states
+        context.previousQueries.forEach((data, keyString) => {
+          const queryKey = JSON.parse(keyString);
+          queryClient.setQueryData(queryKey, data);
+        });
+      }
+      // Silently ignore "not found" errors during deletion - the project is already gone
+    },
     onSuccess: (_data, name) => {
-      // Remove from cache
+      // Remove the detailed project query from cache
       queryClient.removeQueries({ queryKey: projectKeys.detail(name) });
-      // Invalidate lists
-      queryClient.invalidateQueries({ queryKey: projectKeys.lists() });
+      // No need to invalidate lists - already optimistically updated
     },
   });
 }
