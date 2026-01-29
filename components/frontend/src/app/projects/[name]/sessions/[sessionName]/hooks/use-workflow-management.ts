@@ -32,7 +32,7 @@ export function useWorkflowManagement({
   }, []);
 
   // Activate the pending workflow (or a workflow passed directly)
-  const activateWorkflow = useCallback(async (workflowToActivate?: WorkflowConfig, currentPhase?: string) => {
+  const activateWorkflow = useCallback(async (workflowToActivate?: WorkflowConfig, currentPhase?: string, retryCount = 0) => {
     const workflow = workflowToActivate || pendingWorkflow;
     if (!workflow) return false;
     
@@ -52,7 +52,10 @@ export function useWorkflowManagement({
       return true; // Don't return false - we've queued it successfully
     }
     
-    setWorkflowActivating(true);
+    // Only set loading state on first attempt (not retries)
+    if (retryCount === 0) {
+      setWorkflowActivating(true);
+    }
     
     try {
       // Update CR with workflow configuration
@@ -68,6 +71,16 @@ export function useWorkflowManagement({
       
       if (!response.ok) {
         const errorData = await response.json();
+        
+        // If runner not ready and we haven't retried too many times, retry with backoff
+        if (errorData.retryable && retryCount < 5) {
+          const delay = Math.min(1000 * Math.pow(1.5, retryCount), 5000); // Exponential backoff, max 5s
+          console.log(`Runner not ready, retrying in ${delay}ms (attempt ${retryCount + 1}/5)...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          // Retry without resetting loading state
+          return activateWorkflow(workflow, phase, retryCount + 1);
+        }
+        
         throw new Error(errorData.error || "Failed to update workflow");
       }
       
@@ -80,6 +93,7 @@ export function useWorkflowManagement({
       
       onWorkflowActivated?.();
       
+      setWorkflowActivating(false);
       return true;
     } catch (error) {
       console.error("Failed to activate workflow:", error);
@@ -87,8 +101,6 @@ export function useWorkflowManagement({
       sessionQueue.clearWorkflow();
       setWorkflowActivating(false);
       return false;
-    } finally {
-      setWorkflowActivating(false);
     }
   }, [pendingWorkflow, projectName, sessionName, sessionPhase, sessionQueue, onWorkflowActivated]);
 

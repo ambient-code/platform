@@ -1,0 +1,69 @@
+---
+title: Ambient Code Platform - Component Structure & Development Flow
+---
+
+%%{init: {'theme':'base', 'themeVariables': { 'primaryColor': '#e5e7eb', 'primaryTextColor': '#1f2937', 'primaryBorderColor': '#9ca3af', 'lineColor': '#6b7280', 'secondaryColor': '#f3f4f6', 'tertiaryColor': '#f9fafb'}}}%%
+
+graph LR
+    subgraph "📁 components/"
+        Frontend[frontend/<br/>NextJS + Shadcn UI<br/>🎨 Web Interface]
+        Backend[backend/<br/>Go API Service<br/>⚡ CRD Management]
+        Operator[operator/<br/>Kubernetes Operator<br/>⚙️ Go]
+        Runners[runners/<br/>AI Runner Services]
+        Manifests[manifests/<br/>K8s Deployments<br/>📋 YAML Files]
+        
+        subgraph "runners/"
+            ClaudeRunner[claude-code-runner/<br/>Python Service<br/>🤖 MCP Integration]
+        end
+    end
+    
+    subgraph "Development Commands"
+        DevStart[make dev-start<br/>🚀 Complete Stack]
+        DevSync[make dev-sync<br/>♻️ Hot Reloading]
+        Deploy[make deploy<br/>📦 Production]
+        BuildPush[make build-all push-all<br/>🏗️ Container Images]
+    end
+    
+    subgraph "Environments"
+        Local[Local Development<br/>Minikube + OpenShift]
+        Prod[Production<br/>OpenShift/K8s Cluster]
+    end
+    
+    subgraph "Access Points"
+        FrontendURL[Frontend URL<br/>https://vteam-frontend-vteam-dev.apps-crc.testing]
+        BackendAPI[Backend API<br/>Authenticated]
+        Console[OpenShift Console<br/>Admin Access]
+    end
+    
+    %% Development flow
+    DevStart --> Local
+    Local --> FrontendURL
+    Local --> BackendAPI
+    Local --> Console
+    DevSync -.->|File Sync| Local
+    
+    %% Production flow
+    BuildPush --> Prod
+    Deploy --> Prod
+    
+    %% Component relationships
+    Frontend <-->|API Calls| Backend
+    Backend <-->|Manages| Operator
+    Operator -->|Schedules| ClaudeRunner
+    Manifests -->|Defines| Frontend
+    Manifests -->|Defines| Backend
+    Manifests -->|Defines| Operator
+    Manifests -->|Defines| ClaudeRunner
+    
+    %% Styling
+    classDef component fill:#ddd6fe,stroke:#9333ea,stroke-width:2px,color:#1f2937
+    classDef command fill:#fed7aa,stroke:#ea580c,stroke-width:2px,color:#1f2937
+    classDef env fill:#bbf7d0,stroke:#16a34a,stroke-width:2px,color:#1f2937
+    classDef access fill:#bfdbfe,stroke:#2563eb,stroke-width:2px,color:#1f2937
+    classDef runner fill:#fef3c7,stroke:#f59e0b,stroke-width:2px,color:#1f2937
+    
+    class Frontend,Backend,Operator,Manifests component
+    class ClaudeRunner runner
+    class DevStart,DevSync,Deploy,BuildPush command
+    class Local,Prod env
+    class FrontendURL,BackendAPI,Console access

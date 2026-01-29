@@ -21,6 +21,8 @@ export type MessageProps = {
   actions?: React.ReactNode;
   timestamp?: string;
   streaming?: boolean;
+  /** Feedback buttons to show below the message (for bot messages) */
+  feedbackButtons?: React.ReactNode;
 };
 
 const defaultComponents: Components = {
@@ -172,7 +174,7 @@ export const LoadingDots = () => {
 
 export const Message = React.forwardRef<HTMLDivElement, MessageProps>(
   (
-    { role, content, isLoading, className, components, borderless, actions, timestamp, streaming, ...props },
+    { role, content, isLoading, className, components, borderless, actions, timestamp, streaming, feedbackButtons, ...props },
     ref
   ) => {
     const isBot = role === "bot";
@@ -216,7 +218,7 @@ export const Message = React.forwardRef<HTMLDivElement, MessageProps>(
               !borderless && (isBot ? "bg-card" : "bg-border/30")
             )}>
               {/* Content */}
-              <div className={cn("text-sm text-foreground", !isBot && "py-2 px-4")}>
+              <div className={cn("text-sm text-foreground font-mono", !isBot && "py-2 px-4")}>
                 {isLoading ? (
                   <div>
                     <div className="text-sm text-muted-foreground mb-2">{content}</div>
@@ -236,6 +238,13 @@ export const Message = React.forwardRef<HTMLDivElement, MessageProps>(
                   </div>
                 )}
               </div>
+
+              {/* Feedback buttons for bot messages */}
+              {isBot && feedbackButtons && !isLoading && !streaming && (
+                <div className="mt-2 flex items-center">
+                  {feedbackButtons}
+                </div>
+              )}
 
               {actions ? (
                 <div className={cn(borderless ? "mt-1" : "mt-3 pt-2 border-t")}>{actions}</div>

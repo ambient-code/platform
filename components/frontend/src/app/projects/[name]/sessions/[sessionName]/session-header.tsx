@@ -19,12 +19,6 @@ type SessionHeaderProps = {
   onStop: () => void;
   onContinue: () => void;
   onDelete: () => void;
-  durationMs?: number;
-  k8sResources?: {
-    pvcName?: string;
-    pvcSize?: string;
-  };
-  messageCount: number;
   renderMode?: 'full' | 'actions-only' | 'kebab-only';
 };
 
@@ -36,9 +30,6 @@ export function SessionHeader({
   onStop,
   onContinue,
   onDelete,
-  durationMs,
-  k8sResources,
-  messageCount,
   renderMode = 'full',
 }: SessionHeaderProps) {
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
@@ -146,9 +137,6 @@ export function SessionHeader({
           projectName={projectName}
           open={detailsModalOpen}
           onOpenChange={setDetailsModalOpen}
-          durationMs={durationMs}
-          k8sResources={k8sResources}
-          messageCount={messageCount}
         />
         
         <EditSessionNameDialog
@@ -287,9 +275,6 @@ export function SessionHeader({
         projectName={projectName}
         open={detailsModalOpen}
         onOpenChange={setDetailsModalOpen}
-        durationMs={durationMs}
-        k8sResources={k8sResources}
-        messageCount={messageCount}
       />
       
       <EditSessionNameDialog

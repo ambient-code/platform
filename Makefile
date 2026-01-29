@@ -1,10 +1,11 @@
-.PHONY: help setup build-all build-frontend build-backend build-operator build-runner deploy clean
+.PHONY: help setup build-all build-frontend build-backend build-operator build-runner build-state-sync deploy clean check-architecture
 .PHONY: local-up local-down local-clean local-status local-rebuild local-reload-backend local-reload-frontend local-reload-operator local-sync-version
 .PHONY: local-dev-token
 .PHONY: local-logs local-logs-backend local-logs-frontend local-logs-operator local-shell local-shell-frontend
 .PHONY: local-test local-test-dev local-test-quick test-all local-url local-troubleshoot local-port-forward local-stop-port-forward
-.PHONY: push-all registry-login setup-hooks remove-hooks check-minikube check-kubectl
+.PHONY: push-all registry-login setup-hooks remove-hooks check-minikube check-kind check-kubectl
 .PHONY: e2e-test e2e-setup e2e-clean deploy-langfuse-openshift
+.PHONY: setup-minio minio-console minio-logs minio-status
 .PHONY: validate-makefile lint-makefile check-shell makefile-health
 .PHONY: _create-operator-config _auto-port-forward _show-access-info _build-and-load
 
@@ -13,8 +14,29 @@
 
 # Configuration
 CONTAINER_ENGINE ?= podman
-PLATFORM ?= linux/amd64
-BUILD_FLAGS ?= 
+
+# Auto-detect host architecture for native builds
+# Override with PLATFORM=linux/amd64 or PLATFORM=linux/arm64 if needed
+HOST_OS := $(shell uname -s)
+HOST_ARCH := $(shell uname -m)
+
+# Map uname output to Docker platform names
+ifeq ($(HOST_ARCH),arm64)
+    DETECTED_PLATFORM := linux/arm64
+else ifeq ($(HOST_ARCH),aarch64)
+    DETECTED_PLATFORM := linux/arm64
+else ifeq ($(HOST_ARCH),x86_64)
+    DETECTED_PLATFORM := linux/amd64
+else ifeq ($(HOST_ARCH),amd64)
+    DETECTED_PLATFORM := linux/amd64
+else
+    DETECTED_PLATFORM := linux/amd64
+    $(warning Unknown architecture $(HOST_ARCH), defaulting to linux/amd64)
+endif
+
+# Allow manual override via PLATFORM=...
+PLATFORM ?= $(DETECTED_PLATFORM)
+BUILD_FLAGS ?=
 NAMESPACE ?= ambient-code
 REGISTRY ?= quay.io/your-org
 CI_MODE ?= false
@@ -36,24 +58,17 @@ FRONTEND_IMAGE ?= vteam_frontend:latest
 BACKEND_IMAGE ?= vteam_backend:latest
 OPERATOR_IMAGE ?= vteam_operator:latest
 RUNNER_IMAGE ?= vteam_claude_runner:latest
+STATE_SYNC_IMAGE ?= vteam_state_sync:latest
 
-# Build metadata (captured at build time)
-GIT_COMMIT := $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
-GIT_COMMIT_SHORT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-GIT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
-GIT_REPO := $(shell git remote get-url origin 2>/dev/null || echo "local")
-GIT_DIRTY := $(shell git diff --quiet 2>/dev/null || echo "-dirty")
-GIT_VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
-BUILD_DATE := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
-BUILD_USER := $(shell whoami)@$(shell hostname)
 
-# Colors for output
-COLOR_RESET := \033[0m
-COLOR_BOLD := \033[1m
-COLOR_GREEN := \033[32m
-COLOR_YELLOW := \033[33m
-COLOR_BLUE := \033[34m
-COLOR_RED := \033[31m
+# Colors for output (using tput for better compatibility, with fallback to printf-compatible codes)
+# Use shell assignment to evaluate tput at runtime if available
+COLOR_RESET := $(shell tput sgr0 2>/dev/null || printf '\033[0m')
+COLOR_BOLD := $(shell tput bold 2>/dev/null || printf '\033[1m')
+COLOR_GREEN := $(shell tput setaf 2 2>/dev/null || printf '\033[32m')
+COLOR_YELLOW := $(shell tput setaf 3 2>/dev/null || printf '\033[33m')
+COLOR_BLUE := $(shell tput setaf 4 2>/dev/null || printf '\033[34m')
+COLOR_RED := $(shell tput setaf 1 2>/dev/null || printf '\033[31m')
 
 # Platform flag
 ifneq ($(PLATFORM),)
@@ -82,7 +97,7 @@ help: ## Display this help message
 	@echo '$(COLOR_BOLD)Configuration Variables:$(COLOR_RESET)'
 	@echo '  CONTAINER_ENGINE=$(CONTAINER_ENGINE)  (docker or podman)'
 	@echo '  NAMESPACE=$(NAMESPACE)'
-	@echo '  PLATFORM=$(PLATFORM)'
+	@echo '  PLATFORM=$(PLATFORM) (detected: $(DETECTED_PLATFORM) from $(HOST_OS)/$(HOST_ARCH))'
 	@echo ''
 	@echo '$(COLOR_BOLD)Examples:$(COLOR_RESET)'
 	@echo '  make local-up CONTAINER_ENGINE=docker'
@@ -91,59 +106,37 @@ help: ## Display this help message
 
 ##@ Building
 
-build-all: build-frontend build-backend build-operator build-runner ## Build all container images
+build-all: build-frontend build-backend build-operator build-runner build-state-sync ## Build all container images
 
 build-frontend: ## Build frontend image
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building frontend with $(CONTAINER_ENGINE)..."
-	@echo "  Git: $(GIT_BRANCH)@$(GIT_COMMIT_SHORT)$(GIT_DIRTY)"
 	@cd components/frontend && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
-		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
-		--build-arg GIT_BRANCH=$(GIT_BRANCH) \
-		--build-arg GIT_REPO=$(GIT_REPO) \
-		--build-arg GIT_VERSION=$(GIT_VERSION)$(GIT_DIRTY) \
-		--build-arg BUILD_DATE=$(BUILD_DATE) \
-		--build-arg BUILD_USER=$(BUILD_USER) \
 		-t $(FRONTEND_IMAGE) .
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Frontend built: $(FRONTEND_IMAGE)"
 
 build-backend: ## Build backend image
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building backend with $(CONTAINER_ENGINE)..."
-	@echo "  Git: $(GIT_BRANCH)@$(GIT_COMMIT_SHORT)$(GIT_DIRTY)"
 	@cd components/backend && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
-		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
-		--build-arg GIT_BRANCH=$(GIT_BRANCH) \
-		--build-arg GIT_REPO=$(GIT_REPO) \
-		--build-arg GIT_VERSION=$(GIT_VERSION)$(GIT_DIRTY) \
-		--build-arg BUILD_DATE=$(BUILD_DATE) \
-		--build-arg BUILD_USER=$(BUILD_USER) \
 		-t $(BACKEND_IMAGE) .
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Backend built: $(BACKEND_IMAGE)"
 
 build-operator: ## Build operator image
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building operator with $(CONTAINER_ENGINE)..."
-	@echo "  Git: $(GIT_BRANCH)@$(GIT_COMMIT_SHORT)$(GIT_DIRTY)"
 	@cd components/operator && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
-		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
-		--build-arg GIT_BRANCH=$(GIT_BRANCH) \
-		--build-arg GIT_REPO=$(GIT_REPO) \
-		--build-arg GIT_VERSION=$(GIT_VERSION)$(GIT_DIRTY) \
-		--build-arg BUILD_DATE=$(BUILD_DATE) \
-		--build-arg BUILD_USER=$(BUILD_USER) \
 		-t $(OPERATOR_IMAGE) .
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Operator built: $(OPERATOR_IMAGE)"
 
 build-runner: ## Build Claude Code runner image
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building runner with $(CONTAINER_ENGINE)..."
-	@echo "  Git: $(GIT_BRANCH)@$(GIT_COMMIT_SHORT)$(GIT_DIRTY)"
 	@cd components/runners && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
-		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
-		--build-arg GIT_BRANCH=$(GIT_BRANCH) \
-		--build-arg GIT_REPO=$(GIT_REPO) \
-		--build-arg GIT_VERSION=$(GIT_VERSION)$(GIT_DIRTY) \
-		--build-arg BUILD_DATE=$(BUILD_DATE) \
-		--build-arg BUILD_USER=$(BUILD_USER) \
 		-t $(RUNNER_IMAGE) -f claude-code-runner/Dockerfile .
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Runner built: $(RUNNER_IMAGE)"
+
+build-state-sync: ## Build state-sync image for S3 persistence
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building state-sync with $(CONTAINER_ENGINE)..."
+	@cd components/runners/state-sync && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
+		-t vteam_state_sync:latest .
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) State-sync built: vteam_state_sync:latest"
 
 ##@ Git Hooks
 
@@ -164,12 +157,58 @@ registry-login: ## Login to container registry
 
 push-all: registry-login ## Push all images to registry
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Pushing images to $(REGISTRY)..."
-	@for image in $(FRONTEND_IMAGE) $(BACKEND_IMAGE) $(OPERATOR_IMAGE) $(RUNNER_IMAGE); do \
+	@for image in $(FRONTEND_IMAGE) $(BACKEND_IMAGE) $(OPERATOR_IMAGE) $(RUNNER_IMAGE) $(STATE_SYNC_IMAGE); do \
 		echo "  Tagging and pushing $$image..."; \
 		$(CONTAINER_ENGINE) tag $$image $(REGISTRY)/$$image && \
 		$(CONTAINER_ENGINE) push $(REGISTRY)/$$image; \
 	done
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) All images pushed"
+
+##@ MinIO S3 Storage
+
+setup-minio: ## Set up MinIO and create initial bucket
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Setting up MinIO for S3 state storage..."
+	@./scripts/setup-minio.sh
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) MinIO setup complete"
+
+minio-console: ## Open MinIO console (port-forward to localhost:9001)
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Opening MinIO console at http://localhost:9001"
+	@echo "  Login: admin / changeme123 (or your configured credentials)"
+	@kubectl port-forward svc/minio 9001:9001 -n $(NAMESPACE)
+
+minio-logs: ## View MinIO logs
+	@kubectl logs -f deployment/minio -n $(NAMESPACE)
+
+minio-status: ## Check MinIO status
+	@echo "$(COLOR_BOLD)MinIO Status$(COLOR_RESET)"
+	@kubectl get deployment,pod,svc,pvc -l app=minio -n $(NAMESPACE)
+
+##@ Observability
+
+deploy-observability: ## Deploy observability (OTel + OpenShift Prometheus)
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Deploying observability stack..."
+	@kubectl apply -k components/manifests/observability/
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Observability deployed (OTel + ServiceMonitor)"
+	@echo "  View metrics: OpenShift Console → Observe → Metrics"
+	@echo "  Optional Grafana: make add-grafana"
+
+add-grafana: ## Add Grafana on top of observability stack
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Adding Grafana..."
+	@kubectl apply -k components/manifests/observability/overlays/with-grafana/
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Grafana deployed"
+	@echo "  Create route: oc create route edge grafana --service=grafana -n $(NAMESPACE)"
+
+clean-observability: ## Remove observability components
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Removing observability..."
+	@kubectl delete -k components/manifests/observability/overlays/with-grafana/ 2>/dev/null || true
+	@kubectl delete -k components/manifests/observability/ 2>/dev/null || true
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Observability removed"
+
+grafana-dashboard: ## Open Grafana (create route first)
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Opening Grafana..."
+	@oc create route edge grafana --service=grafana -n $(NAMESPACE) 2>/dev/null || echo "Route already exists"
+	@echo "  URL: https://$$(oc get route grafana -n $(NAMESPACE) -o jsonpath='{.spec.host}')"
+	@echo "  Login: admin/admin"
 
 ##@ Local Development (Minikube)
 
@@ -249,24 +288,13 @@ local-status: check-kubectl ## Show status of local deployment
 	@kubectl get svc -n $(NAMESPACE) 2>/dev/null | grep -E "NAME|NodePort" || echo "No services found"
 	@echo ""
 	@$(MAKE) --no-print-directory _show-access-info
-	@echo ""
-	@echo "$(COLOR_BOLD)Version Status:$(COLOR_RESET)"
-	@GIT_VERSION=$$(git describe --tags --always 2>/dev/null || echo "unknown") && \
-	MANIFEST_VERSION=$$(grep -A1 "name: VTEAM_VERSION" components/manifests/minikube/frontend-deployment.yaml | tail -1 | sed 's/.*value: "\(.*\)"/\1/' | tr -d ' ') && \
-	RUNNING_VERSION=$$(kubectl get deployment frontend -n $(NAMESPACE) -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="VTEAM_VERSION")].value}' 2>/dev/null || echo "not-deployed") && \
-	echo "  Git:      $$GIT_VERSION" && \
-	echo "  Manifest: $$MANIFEST_VERSION" && \
-	echo "  Running:  $$RUNNING_VERSION" && \
-	if [ "$$GIT_VERSION" != "$$MANIFEST_VERSION" ]; then \
-	  echo "  $(COLOR_YELLOW)⚠$(COLOR_RESET)  Manifest version differs from git (run 'make local-sync-version')"; \
-	fi
 
 local-sync-version: ## Sync version from git to local deployment manifests
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Syncing version from git..."
 	@VERSION=$$(git describe --tags --always 2>/dev/null || echo "dev") && \
 	echo "  Using version: $$VERSION" && \
 	sed -i.bak "s|value: \"v.*\"|value: \"$$VERSION\"|" \
-	  components/manifests/minikube/frontend-deployment.yaml && \
+	components/manifests/minikube/frontend-deployment.yaml && \
 	rm -f components/manifests/minikube/frontend-deployment.yaml.bak && \
 	echo "  $(COLOR_GREEN)✓$(COLOR_RESET) Version synced to $$VERSION"
 
@@ -278,15 +306,7 @@ local-rebuild: ## Rebuild and reload all components
 
 local-reload-backend: ## Rebuild and reload backend only
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rebuilding backend..."
-	@echo "  Git: $(GIT_BRANCH)@$(GIT_COMMIT_SHORT)$(GIT_DIRTY)"
-	@cd components/backend && $(CONTAINER_ENGINE) build -t $(BACKEND_IMAGE) \
-		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
-		--build-arg GIT_BRANCH=$(GIT_BRANCH) \
-		--build-arg GIT_REPO=$(GIT_REPO) \
-		--build-arg GIT_VERSION=$(GIT_VERSION)$(GIT_DIRTY) \
-		--build-arg BUILD_DATE=$(BUILD_DATE) \
-		--build-arg BUILD_USER=$(BUILD_USER) \
-		. >/dev/null 2>&1
+	@cd components/backend && $(CONTAINER_ENGINE) build -t $(BACKEND_IMAGE) . >/dev/null 2>&1
 	@$(CONTAINER_ENGINE) tag $(BACKEND_IMAGE) localhost/$(BACKEND_IMAGE) 2>/dev/null || true
 	@$(CONTAINER_ENGINE) save -o /tmp/backend-reload.tar localhost/$(BACKEND_IMAGE)
 	@minikube image load /tmp/backend-reload.tar >/dev/null 2>&1
@@ -309,15 +329,7 @@ local-reload-backend: ## Rebuild and reload backend only
 
 local-reload-frontend: ## Rebuild and reload frontend only
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rebuilding frontend..."
-	@echo "  Git: $(GIT_BRANCH)@$(GIT_COMMIT_SHORT)$(GIT_DIRTY)"
-	@cd components/frontend && $(CONTAINER_ENGINE) build -t $(FRONTEND_IMAGE) \
-		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
-		--build-arg GIT_BRANCH=$(GIT_BRANCH) \
-		--build-arg GIT_REPO=$(GIT_REPO) \
-		--build-arg GIT_VERSION=$(GIT_VERSION)$(GIT_DIRTY) \
-		--build-arg BUILD_DATE=$(BUILD_DATE) \
-		--build-arg BUILD_USER=$(BUILD_USER) \
-		. >/dev/null 2>&1
+	@cd components/frontend && $(CONTAINER_ENGINE) build -t $(FRONTEND_IMAGE) . >/dev/null 2>&1
 	@$(CONTAINER_ENGINE) tag $(FRONTEND_IMAGE) localhost/$(FRONTEND_IMAGE) 2>/dev/null || true
 	@$(CONTAINER_ENGINE) save -o /tmp/frontend-reload.tar localhost/$(FRONTEND_IMAGE)
 	@minikube image load /tmp/frontend-reload.tar >/dev/null 2>&1
@@ -341,15 +353,7 @@ local-reload-frontend: ## Rebuild and reload frontend only
 
 local-reload-operator: ## Rebuild and reload operator only
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rebuilding operator..."
-	@echo "  Git: $(GIT_BRANCH)@$(GIT_COMMIT_SHORT)$(GIT_DIRTY)"
-	@cd components/operator && $(CONTAINER_ENGINE) build -t $(OPERATOR_IMAGE) \
-		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
-		--build-arg GIT_BRANCH=$(GIT_BRANCH) \
-		--build-arg GIT_REPO=$(GIT_REPO) \
-		--build-arg GIT_VERSION=$(GIT_VERSION)$(GIT_DIRTY) \
-		--build-arg BUILD_DATE=$(BUILD_DATE) \
-		--build-arg BUILD_USER=$(BUILD_USER) \
-		. >/dev/null 2>&1
+	@cd components/operator && $(CONTAINER_ENGINE) build -t $(OPERATOR_IMAGE) . >/dev/null 2>&1
 	@$(CONTAINER_ENGINE) tag $(OPERATOR_IMAGE) localhost/$(OPERATOR_IMAGE) 2>/dev/null || true
 	@$(CONTAINER_ENGINE) save -o /tmp/operator-reload.tar localhost/$(OPERATOR_IMAGE)
 	@minikube image load /tmp/operator-reload.tar >/dev/null 2>&1
@@ -437,8 +441,8 @@ local-test-quick: check-kubectl check-minikube ## Quick smoke test of local envi
 	@kubectl get namespace $(NAMESPACE) >/dev/null 2>&1 && echo "$(COLOR_GREEN)✓$(COLOR_RESET) Namespace exists" || (echo "$(COLOR_RED)✗$(COLOR_RESET) Namespace missing" && exit 1)
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for pods to be ready..."
 	@kubectl wait --for=condition=ready pod -l app=backend-api -n $(NAMESPACE) --timeout=60s >/dev/null 2>&1 && \
-	 kubectl wait --for=condition=ready pod -l app=frontend -n $(NAMESPACE) --timeout=60s >/dev/null 2>&1 && \
-	 echo "$(COLOR_GREEN)✓$(COLOR_RESET) Pods ready" || (echo "$(COLOR_RED)✗$(COLOR_RESET) Pods not ready" && exit 1)
+	kubectl wait --for=condition=ready pod -l app=frontend -n $(NAMESPACE) --timeout=60s >/dev/null 2>&1 && \
+	echo "$(COLOR_GREEN)✓$(COLOR_RESET) Pods ready" || (echo "$(COLOR_RED)✗$(COLOR_RESET) Pods not ready" && exit 1)
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Testing backend health..."
 	@for i in 1 2 3 4 5; do \
 		curl -sf http://$$(minikube ip):30080/health >/dev/null 2>&1 && { echo "$(COLOR_GREEN)✓$(COLOR_RESET) Backend healthy"; break; } || { \
@@ -539,22 +543,95 @@ clean: ## Clean up Kubernetes resources
 	@cd components/manifests && ./deploy.sh clean
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Cleanup complete"
 
-##@ E2E Testing (kind-based)
+##@ Kind Local Development
 
-e2e-test: ## Run complete e2e test suite (setup, deploy, test, cleanup)
+kind-up: check-kind check-kubectl ## Start kind cluster with Quay.io images (production-like)
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Starting kind cluster..."
+	@cd e2e && CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/setup-kind.sh
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for API server to be accessible..."
+	@for i in 1 2 3 4 5 6 7 8 9 10; do \
+		if kubectl cluster-info >/dev/null 2>&1; then \
+			echo "$(COLOR_GREEN)✓$(COLOR_RESET) API server ready"; \
+			break; \
+		fi; \
+		if [ $$i -eq 10 ]; then \
+			echo "$(COLOR_RED)✗$(COLOR_RESET) Timeout waiting for API server"; \
+			echo "   Try: kubectl cluster-info"; \
+			exit 1; \
+		fi; \
+		sleep 3; \
+	done
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Deploying with Quay.io images..."
+	@kubectl apply --validate=false -k components/manifests/overlays/kind/
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for pods..."
+	@cd e2e && ./scripts/wait-for-ready.sh
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Initializing MinIO..."
+	@cd e2e && ./scripts/init-minio.sh
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Extracting test token..."
+	@cd e2e && CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/extract-token.sh
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Kind cluster ready!"
+	@echo ""
+	@echo "$(COLOR_BOLD)Access the platform:$(COLOR_RESET)"
+	@echo "  Run in another terminal: $(COLOR_BLUE)make kind-port-forward$(COLOR_RESET)"
+	@echo ""
+	@echo "  Then access:"
+	@echo "  Frontend: http://localhost:8080"
+	@echo "  Backend:  http://localhost:8081"
+	@echo ""
+	@echo "  Get test token: kubectl get secret test-user-token -n ambient-code -o jsonpath='{.data.token}' | base64 -d"
+	@echo ""
+	@echo "Run tests:"
+	@echo "  make test-e2e"
+
+kind-down: ## Stop and delete kind cluster
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Cleaning up kind cluster..."
+	@cd e2e && CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/cleanup.sh
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Kind cluster deleted"
+
+kind-port-forward: check-kubectl ## Port-forward kind services (for remote Podman)
+	@echo "$(COLOR_BOLD)🔌 Port forwarding kind services$(COLOR_RESET)"
+	@echo ""
+	@echo "  Frontend: http://localhost:8080"
+	@echo "  Backend:  http://localhost:8081"
+	@echo ""
+	@echo "$(COLOR_YELLOW)Press Ctrl+C to stop$(COLOR_RESET)"
+	@echo ""
+	@trap 'echo ""; echo "$(COLOR_GREEN)✓$(COLOR_RESET) Port forwarding stopped"; exit 0' INT; \
+	(kubectl port-forward -n ambient-code svc/frontend 8080:3000 >/dev/null 2>&1 &); \
+	(kubectl port-forward -n ambient-code svc/backend-api 8081:8080 >/dev/null 2>&1 &); \
+	wait
+
+##@ E2E Testing (Portable)
+
+test-e2e: ## Run e2e tests against current CYPRESS_BASE_URL
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Running e2e tests..."
-	@cd e2e && CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/cleanup.sh 2>/dev/null || true
-	cd e2e && CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/setup-kind.sh
-	cd e2e && CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/deploy.sh
+	@if [ ! -f e2e/.env.test ] && [ -z "$(CYPRESS_BASE_URL)" ] && [ -z "$(TEST_TOKEN)" ]; then \
+		echo "$(COLOR_RED)✗$(COLOR_RESET) No .env.test found and environment variables not set"; \
+		echo "   Option 1: Run 'make kind-up' first (creates .env.test)"; \
+		echo "   Option 2: Set environment variables:"; \
+		echo "     TEST_TOKEN=\$$(kubectl get secret test-user-token -n ambient-code -o jsonpath='{.data.token}' | base64 -d) \\"; \
+		echo "     CYPRESS_BASE_URL=http://localhost:3000 \\"; \
+		echo "     make test-e2e"; \
+		exit 1; \
+	fi
+	cd e2e && CYPRESS_BASE_URL="$(CYPRESS_BASE_URL)" TEST_TOKEN="$(TEST_TOKEN)" ./scripts/run-tests.sh
+
+test-e2e-local: ## Run complete e2e test suite with kind (setup, deploy, test, cleanup)
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Running e2e tests with kind (local)..."
+	@$(MAKE) kind-up CONTAINER_ENGINE=$(CONTAINER_ENGINE)
 	@cd e2e && trap 'CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/cleanup.sh' EXIT; ./scripts/run-tests.sh
 
-e2e-setup: ## Install e2e test dependencies
+e2e-test: test-e2e-local ## Alias for test-e2e-local (backward compatibility)
+
+test-e2e-setup: ## Install e2e test dependencies
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Installing e2e test dependencies..."
 	cd e2e && npm install
 
-e2e-clean: ## Clean up e2e test environment
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Cleaning up e2e environment..."
-	cd e2e && CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/cleanup.sh
+e2e-setup: test-e2e-setup ## Alias for test-e2e-setup (backward compatibility)
+
+kind-clean: kind-down ## Alias for kind-down
+
+e2e-clean: kind-down ## Alias for kind-down (backward compatibility)
 
 deploy-langfuse-openshift: ## Deploy Langfuse to OpenShift/ROSA cluster
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Deploying Langfuse to OpenShift cluster..."
@@ -566,19 +643,40 @@ check-minikube: ## Check if minikube is installed
 	@command -v minikube >/dev/null 2>&1 || \
 		(echo "$(COLOR_RED)✗$(COLOR_RESET) minikube not found. Install: https://minikube.sigs.k8s.io/docs/start/" && exit 1)
 
+check-kind: ## Check if kind is installed
+	@command -v kind >/dev/null 2>&1 || \
+		(echo "$(COLOR_RED)✗$(COLOR_RESET) kind not found. Install: https://kind.sigs.k8s.io/docs/user/quick-start/" && exit 1)
+
 check-kubectl: ## Check if kubectl is installed
 	@command -v kubectl >/dev/null 2>&1 || \
 		(echo "$(COLOR_RED)✗$(COLOR_RESET) kubectl not found. Install: https://kubernetes.io/docs/tasks/tools/" && exit 1)
 
+check-architecture: ## Validate build architecture matches host
+	@echo "$(COLOR_BOLD)Architecture Check$(COLOR_RESET)"
+	@echo "  Host: $(HOST_OS) / $(HOST_ARCH)"
+	@echo "  Detected Platform: $(DETECTED_PLATFORM)"
+	@echo "  Active Platform: $(PLATFORM)"
+	@if [ "$(PLATFORM)" != "$(DETECTED_PLATFORM)" ]; then \
+		echo ""; \
+		echo "$(COLOR_YELLOW)⚠  Cross-compilation active$(COLOR_RESET)"; \
+		echo "   Building $(PLATFORM) images on $(DETECTED_PLATFORM) host"; \
+		echo "   This will be slower (QEMU emulation)"; \
+		echo ""; \
+		echo "   To use native builds:"; \
+		echo "     make build-all PLATFORM=$(DETECTED_PLATFORM)"; \
+	else \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Using native architecture"; \
+	fi
+
 _build-and-load: ## Internal: Build and load images
-	@echo "  Building backend..."
-	@$(CONTAINER_ENGINE) build -t $(BACKEND_IMAGE) components/backend $(QUIET_REDIRECT)
-	@echo "  Building frontend..."
-	@$(CONTAINER_ENGINE) build -t $(FRONTEND_IMAGE) components/frontend $(QUIET_REDIRECT)
-	@echo "  Building operator..."
-	@$(CONTAINER_ENGINE) build -t $(OPERATOR_IMAGE) components/operator $(QUIET_REDIRECT)
-	@echo "  Building runner..."
-	@$(CONTAINER_ENGINE) build -t $(RUNNER_IMAGE) -f components/runners/claude-code-runner/Dockerfile components/runners $(QUIET_REDIRECT)
+	@echo "  Building backend ($(PLATFORM))..."
+	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) -t $(BACKEND_IMAGE) components/backend $(QUIET_REDIRECT)
+	@echo "  Building frontend ($(PLATFORM))..."
+	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) -t $(FRONTEND_IMAGE) components/frontend $(QUIET_REDIRECT)
+	@echo "  Building operator ($(PLATFORM))..."
+	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) -t $(OPERATOR_IMAGE) components/operator $(QUIET_REDIRECT)
+	@echo "  Building runner ($(PLATFORM))..."
+	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) -t $(RUNNER_IMAGE) -f components/runners/claude-code-runner/Dockerfile components/runners $(QUIET_REDIRECT)
 	@echo "  Tagging images with localhost prefix..."
 	@$(CONTAINER_ENGINE) tag $(BACKEND_IMAGE) localhost/$(BACKEND_IMAGE) 2>/dev/null || true
 	@$(CONTAINER_ENGINE) tag $(FRONTEND_IMAGE) localhost/$(FRONTEND_IMAGE) 2>/dev/null || true

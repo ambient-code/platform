@@ -13,6 +13,7 @@ resources:
 - frontend-deployment.yaml
 - operator-deployment.yaml
 - workspace-pvc.yaml
+- minio-deployment.yaml
 
 # Default images (can be overridden by overlays)
 images:
@@ -23,5 +24,7 @@ images:
 - name: quay.io/ambient_code/vteam_operator
   newTag: latest
 - name: quay.io/ambient_code/vteam_claude_runner
+  newTag: latest
+- name: quay.io/ambient_code/vteam_state_sync
   newTag: latest
 

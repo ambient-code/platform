@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"ambient-code-operator/internal/config"
-	"ambient-code-operator/internal/services"
 
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -39,10 +38,8 @@ func WatchNamespaces() {
 					log.Printf("Error creating default ProjectSettings for namespace %s: %v", namespace.Name, err)
 				}
 
-				// Ensure shared workspace PVC exists
-				if err := services.EnsureProjectWorkspacePVC(namespace.Name); err != nil {
-					log.Printf("Failed to ensure workspace PVC in %s: %v", namespace.Name, err)
-				}
+				// PVC creation removed - sessions now use EmptyDir with S3 state persistence
+				log.Printf("Namespace %s ready (using EmptyDir + S3 for session storage)", namespace.Name)
 			case watch.Error:
 				obj := event.Object.(*unstructured.Unstructured)
 				log.Printf("Watch error for namespaces: %v", obj)

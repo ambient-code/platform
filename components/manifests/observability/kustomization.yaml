@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: ambient-code
+
+# Minimal observability for OpenShift
+# Uses OpenShift's built-in User Workload Monitoring instead of dedicated Prometheus
+#
+# Deploy: kubectl apply -k components/manifests/observability/
+# Add Grafana: kubectl apply -k components/manifests/observability/overlays/with-grafana/
+
+resources:
+  - otel-collector.yaml
+  - servicemonitor.yaml
+

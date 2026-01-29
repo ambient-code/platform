@@ -5,15 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
-
-type MergeStatus = {
-  canMergeClean: boolean;
-  conflictingFiles: string[];
-  remoteCommitsAhead?: number;
-  localCommitsAhead?: number;
-};
 
 type ManageRemoteDialogProps = {
   open: boolean;
@@ -21,9 +13,7 @@ type ManageRemoteDialogProps = {
   onSave: (url: string, branch: string) => Promise<void>;
   directoryName: string;
   currentUrl?: string;
-  currentBranch?: string;
-  remoteBranches?: string[];
-  mergeStatus?: MergeStatus | null;
+  currentBranch?: string; // Not used - always defaults to main
   isLoading?: boolean;
 };
 
@@ -33,31 +23,23 @@ export function ManageRemoteDialog({
   onSave,
   directoryName,
   currentUrl = "",
-  currentBranch = "main",
-  remoteBranches = [],
-  mergeStatus,
   isLoading = false,
 }: ManageRemoteDialogProps) {
   const [remoteUrl, setRemoteUrl] = useState(currentUrl);
-  const [remoteBranch, setRemoteBranch] = useState(currentBranch);
-  const [showCreateBranch, setShowCreateBranch] = useState(false);
-  const [newBranchName, setNewBranchName] = useState("");
 
   // Update local state when props change
   useEffect(() => {
     setRemoteUrl(currentUrl);
-    setRemoteBranch(currentBranch);
-  }, [currentUrl, currentBranch, open]);
+  }, [currentUrl, open]);
 
   const handleSave = async () => {
     if (!remoteUrl.trim()) return;
     
-    await onSave(remoteUrl.trim(), remoteBranch.trim() || "main");
-    setShowCreateBranch(false);
+    // Always use main branch
+    await onSave(remoteUrl.trim(), "main");
   };
 
   const handleCancel = () => {
-    setShowCreateBranch(false);
     onOpenChange(false);
   };
 
@@ -65,9 +47,9 @@ export function ManageRemoteDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Manage Remote for {directoryName}</DialogTitle>
+          <DialogTitle>Configure Remote for {directoryName}</DialogTitle>
           <DialogDescription>
-            Configure repository URL and select branch for git operations
+            Provide the GitHub repository URL. Branch will default to <code className="bg-muted px-1 rounded">main</code>.
           </DialogDescription>
         </DialogHeader>
         
@@ -79,91 +61,16 @@ export function ManageRemoteDialog({
               placeholder="https://github.com/org/my-repo.git"
               value={remoteUrl}
               onChange={(e) => setRemoteUrl(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && remoteUrl.trim()) {
+                  handleSave();
+                }
+              }}
             />
+            <p className="text-xs text-muted-foreground">
+              Use a repository you have write access to
+            </p>
           </div>
-
-          {!showCreateBranch ? (
-            <div className="space-y-2">
-              <Label htmlFor="remote-branch">Branch</Label>
-              <div className="flex gap-2">
-                <Select 
-                  value={remoteBranch} 
-                  onValueChange={(branch) => setRemoteBranch(branch)}
-                >
-                  <SelectTrigger className="flex-1">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {!remoteBranches.includes(remoteBranch) && remoteBranch && (
-                      <SelectItem value={remoteBranch}>{remoteBranch} (current)</SelectItem>
-                    )}
-                    {remoteBranches.map(b => (
-                      <SelectItem key={b} value={b}>{b}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button 
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    setShowCreateBranch(true);
-                    setNewBranchName("");
-                  }}
-                >
-                  New
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <Label>Create New Branch</Label>
-              <Input
-                placeholder="branch-name"
-                value={newBranchName}
-                onChange={e => setNewBranchName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && newBranchName.trim()) {
-                    setRemoteBranch(newBranchName.trim());
-                    setShowCreateBranch(false);
-                  }
-                }}
-                autoFocus
-              />
-              <div className="flex gap-2">
-                <Button 
-                  size="sm"
-                  className="flex-1"
-                  onClick={() => {
-                    setRemoteBranch(newBranchName.trim());
-                    setShowCreateBranch(false);
-                  }}
-                  disabled={!newBranchName.trim()}
-                >
-                  Set Branch
-                </Button>
-                <Button 
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    setShowCreateBranch(false);
-                    setNewBranchName("");
-                  }}
-                >
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          )}
-          
-          {mergeStatus && !showCreateBranch && (
-            <div className="text-xs text-muted-foreground border-t pt-2">
-              {mergeStatus.canMergeClean ? (
-                <span className="text-green-600">✓ Can merge cleanly</span>
-              ) : (
-                <span className="text-amber-600">⚠️ {mergeStatus.conflictingFiles.length} conflicts</span>
-              )}
-            </div>
-          )}
         </div>
 
         <DialogFooter>
@@ -181,10 +88,10 @@ export function ManageRemoteDialog({
             {isLoading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Saving...
+                Configuring...
               </>
             ) : (
-              "Save Remote"
+              "Configure Remote"
             )}
           </Button>
         </DialogFooter>

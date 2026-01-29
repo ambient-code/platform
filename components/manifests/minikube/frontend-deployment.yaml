@@ -22,7 +22,7 @@ spec:
         fsGroup: 1000
       containers:
       - name: frontend
-        image: localhost/vteam-frontend:latest
+        image: localhost/vteam_frontend:latest
         imagePullPolicy: Never
         securityContext:
           allowPrivilegeEscalation: false
@@ -41,7 +41,7 @@ spec:
         - name: GITHUB_APP_SLUG
           value: "ambient-code"
         - name: VTEAM_VERSION
-          value: "v0.0.12-22-g5553056"
+          value: "v0.0.19-8-g6d9251e"
         - name: DISABLE_AUTH
           value: "true"
         - name: MOCK_USER
