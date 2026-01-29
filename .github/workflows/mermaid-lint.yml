@@ -37,10 +37,30 @@ jobs:
       - name: Validate Mermaid syntax
         if: steps.find-mermaid.outputs.files != ''
         run: |
+          set -e  # Exit on first error
+          set -o pipefail
+
+          echo "🔍 Validating Mermaid diagram syntax..."
+          echo ""
+
+          FAILED=0
           for file in ${{ steps.find-mermaid.outputs.files }}; do
-            echo "Validating: $file"
-            mmdc -i "$file" -o /tmp/output.png
+            echo "▶ Checking: $file"
+            if mmdc -i "$file" -o /tmp/output.png 2>&1; then
+              echo "✓ Valid syntax: $file"
+            else
+              echo "✗ SYNTAX ERROR: $file"
+              FAILED=1
+            fi
+            echo ""
           done
+
+          if [ $FAILED -eq 1 ]; then
+            echo "❌ Mermaid validation FAILED - fix syntax errors above"
+            exit 1
+          fi
+
+          echo "✅ All Mermaid diagrams validated successfully"
 
   markdown-links:
     runs-on: ubuntu-latest
@@ -50,5 +70,54 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Validate references
-        run: echo "Diagram validation complete"
+      - name: Check for broken diagram references
+        run: |
+          set -e
+
+          echo "🔍 Checking for broken diagram references..."
+          echo ""
+
+          # Find all .mmd files
+          mmd_files=$(find docs -name "*.mmd" -type f)
+
+          # Find all markdown files that might reference diagrams
+          md_files=$(find docs -name "*.md" -type f)
+
+          BROKEN=0
+          for mmd in $mmd_files; do
+            basename=$(basename "$mmd")
+            filename="${basename%.mmd}"
+
+            # Check if this diagram is referenced in any markdown file
+            if ! grep -r "$basename\|$filename" $md_files > /dev/null 2>&1; then
+              echo "⚠️  WARNING: Unreferenced diagram: $mmd"
+            fi
+          done
+
+          # Check for broken references (references to diagrams that don't exist)
+          for md in $md_files; do
+            # Look for mermaid file references in markdown
+            refs=$(grep -oE '\{\{ [^}]*.mmd [^}]*\}\}|\[.*\]\(.*\.mmd\)' "$md" 2>/dev/null || true)
+
+            if [ -n "$refs" ]; then
+              while IFS= read -r ref; do
+                # Extract the .mmd filename from the reference
+                mmd_ref=$(echo "$ref" | grep -oE '[^/]+\.mmd' || true)
+
+                if [ -n "$mmd_ref" ]; then
+                  if ! find docs -name "$mmd_ref" -type f | grep -q .; then
+                    echo "✗ BROKEN REFERENCE in $md: $mmd_ref (file not found)"
+                    BROKEN=1
+                  fi
+                fi
+              done <<< "$refs"
+            fi
+          done
+
+          if [ $BROKEN -eq 1 ]; then
+            echo ""
+            echo "❌ Found broken diagram references - fix them before merging"
+            exit 1
+          fi
+
+          echo "✅ All diagram references validated successfully"
