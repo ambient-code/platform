@@ -219,9 +219,11 @@ export default function ProjectSessionDetailPage({
   const aguiState = aguiStream.state;
   const aguiSendMessage = aguiStream.sendMessage;
   const aguiInterrupt = aguiStream.interrupt;
-  const isRunActive = aguiStream.isRunActive;
+  // Fix #404: Force isRunActive to false when session is in terminal state (Failed, Completed, Stopped)
+  const rawIsRunActive = aguiStream.isRunActive;
+  const isRunActive = rawIsRunActive && !["Failed", "Completed", "Stopped"].includes(phase);
   const aguiConnectRef = useRef(aguiStream.connect);
-  
+
   // Keep connect ref up to date
   useEffect(() => {
     aguiConnectRef.current = aguiStream.connect;
