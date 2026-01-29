@@ -2567,8 +2567,4 @@ export default function ProjectSessionDetailPage({
       />
     </>
   );
-}  ChevronLeft,
-  ChevronRight,
-  AlertTriangle,
-  X,
-  MoreVertical,
+}
