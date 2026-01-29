@@ -544,7 +544,6 @@ func ContentWorkflowMetadata(c *gin.Context) {
 					displayName = commandName
 				}
 
-
 				// Parse order field from frontmatter, default to MaxInt32 for unordered commands
 				order := int(^uint(0) >> 1) // MaxInt
 				if orderStr := metadata["order"]; orderStr != "" {
