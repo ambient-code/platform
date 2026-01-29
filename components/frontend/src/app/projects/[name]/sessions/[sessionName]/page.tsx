@@ -1578,7 +1578,7 @@ export default function ProjectSessionDetailPage({
                   </Button>
                 </div>
                 <div className={cn(
-                  "flex-grow pb-6",
+                  "flex-grow pb-6 overflow-y-auto scrollbar-hide",
                   ["Stopped", "Completed", "Failed"].includes(phase) && "blur-[2px]"
                 )}>
                   <Accordion

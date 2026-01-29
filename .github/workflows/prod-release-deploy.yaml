@@ -31,7 +31,7 @@ jobs:
       new_tag: ${{ steps.next_version.outputs.new_tag }}
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0  # Fetch all history for changelog generation
 
@@ -174,7 +174,7 @@ jobs:
             dockerfile: ./components/runners/state-sync/Dockerfile
     steps:
       - name: Checkout code from the tag generated above
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
             ref: ${{ needs.release.outputs.new_tag }}
             fetch-depth: 0
@@ -218,7 +218,7 @@ jobs:
     needs: [release, build-and-push]
     steps:
       - name: Checkout code from release tag
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           ref: ${{ needs.release.outputs.new_tag }}
 

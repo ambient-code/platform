@@ -218,7 +218,7 @@ export const Message = React.forwardRef<HTMLDivElement, MessageProps>(
               !borderless && (isBot ? "bg-card" : "bg-border/30")
             )}>
               {/* Content */}
-              <div className={cn("text-sm text-foreground", !isBot && "py-2 px-4")}>
+              <div className={cn("text-sm text-foreground font-mono", !isBot && "py-2 px-4")}>
                 {isLoading ? (
                   <div>
                     <div className="text-sm text-muted-foreground mb-2">{content}</div>

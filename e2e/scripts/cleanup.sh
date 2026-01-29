@@ -2,7 +2,7 @@
 set -euo pipefail
 
 echo "======================================"
-echo "Cleaning up vTeam E2E environment"
+echo "Cleaning up Ambient Kind Cluster"
 echo "======================================"
 
 # Detect container runtime (same logic as setup-kind.sh)
@@ -23,24 +23,11 @@ fi
 
 echo ""
 echo "Deleting kind cluster..."
-if kind get clusters 2>/dev/null | grep -q "^vteam-e2e$"; then
-  kind delete cluster --name vteam-e2e
+if kind get clusters 2>/dev/null | grep -q "^ambient-local$"; then
+  kind delete cluster --name ambient-local
   echo "   ✓ Cluster deleted"
 else
-  echo "   ℹ️  Cluster 'vteam-e2e' not found (already deleted?)"
-fi
-
-echo ""
-echo "Removing /etc/hosts entry..."
-if grep -q "vteam.local" /etc/hosts 2>/dev/null; then
-  # Create backup
-  sudo cp /etc/hosts /etc/hosts.bak.$(date +%Y%m%d_%H%M%S)
-  # Remove the entry
-  sudo sed -i.bak '/vteam.local/d' /etc/hosts
-  echo "   ✓ Removed vteam.local from /etc/hosts"
-  echo "   ℹ️  Backup created"
-else
-  echo "   ℹ️  vteam.local not found in /etc/hosts"
+  echo "   ℹ️  Cluster 'ambient-local' not found (already deleted?)"
 fi
 
 echo ""

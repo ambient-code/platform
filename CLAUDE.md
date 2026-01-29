@@ -111,7 +111,18 @@ instead of service accounts for API operations."
 
 ### Quick Start - Local Development
 
-**Single command setup with OpenShift Local (CRC):**
+**Recommended: Kind (Kubernetes in Docker):**
+
+```bash
+# Prerequisites: Docker installed
+# Fast startup, matches CI environment
+make kind-up
+
+# Access at http://localhost:8080
+# Full guide: docs/developer/local-development/kind.md
+```
+
+**Alternative: OpenShift Local (CRC) - for OpenShift-specific features:**
 
 ```bash
 # Prerequisites: brew install crc
@@ -967,72 +978,70 @@ Study these files to understand established patterns:
 
 ## Testing Strategy
 
-### E2E Tests (Cypress + Kind)
+### E2E Tests (Cypress - Portable)
 
-**Purpose**: Automated end-to-end testing of the complete vTeam stack in a Kubernetes environment.
+**Purpose**: Automated end-to-end testing of the Ambient Code Platform against any deployed instance.
 
 **Location**: `e2e/`
 
 **Quick Start**:
 
 ```bash
-make e2e-test CONTAINER_ENGINE=podman  # Or docker
+# Test against local kind cluster
+make test-e2e-local
+
+# Test against external cluster
+export CYPRESS_BASE_URL=https://your-frontend.com
+export TEST_TOKEN=$(oc whoami -t)
+cd e2e && npm test
 ```
+
+**Test Suites**:
+
+- **vteam.cy.ts** (5 tests): Platform smoke tests — auth, workspace CRUD, API connectivity
+- **sessions.cy.ts** (7 tests): Session management — creation, UI, workflows, agent interaction
+
+**Total Runtime**: ~15 seconds (12 tests consolidated from original 29)
 
 **What Gets Tested**:
 
-- ✅ Full vTeam deployment in kind (Kubernetes in Docker)
-- ✅ Frontend UI rendering and navigation
-- ✅ Backend API connectivity
-- ✅ Project creation workflow (main user journey)
-- ✅ Authentication with ServiceAccount tokens
-- ✅ Ingress routing
-- ✅ All pods deploy and become ready
+- ✅ Workspace creation and navigation
+- ✅ Session creation and UI components
+- ✅ Workflow selection and cards
+- ✅ Chat interface availability
+- ✅ Breadcrumb navigation
+- ✅ Backend API endpoints
+- ✅ Real agent interaction (with ANTHROPIC_API_KEY)
 
 **What Doesn't Get Tested**:
 
-- ❌ OAuth proxy flow (uses direct token auth for simplicity)
-- ❌ Session pod execution (requires Anthropic API key)
-- ❌ Multi-user scenarios
+- ❌ OAuth proxy flow (uses direct token auth)
+- ❌ OpenShift Routes (uses Ingress for kind)
+- ❌ Long-running agent workflows (timeout constraints)
+- ❌ Multi-user concurrent sessions
 
-**Test Suite** (`e2e/cypress/e2e/vteam.cy.ts`):
+**CI Integration**: Tests run automatically on all PRs via GitHub Actions (`.github/workflows/e2e.yml`) using kind + Quay.io images.
 
-1. UI loads with token authentication
-2. Navigate to new project page
-3. Create a new project
-4. List created projects
-5. Backend API cluster-info endpoint
-
-**CI Integration**: Tests run automatically on all PRs via GitHub Actions (`.github/workflows/e2e.yml`)
-
-**Key Implementation Details**:
-
-- **Architecture**: Frontend without oauth-proxy, direct token injection via environment variables
-- **Authentication**: Test user ServiceAccount with cluster-admin permissions
-- **Token Handling**: Frontend deployment includes `OC_TOKEN`, `OC_USER`, `OC_EMAIL` env vars
-- **Podman Support**: Auto-detects runtime, uses ports 8080/8443 for rootless Podman
-- **Ingress**: Standard nginx-ingress with path-based routing
-
-**Adding New Tests**:
-
-```typescript
-it('should test new feature', () => {
-  cy.visit('/some-page')
-  cy.contains('Expected Content').should('be.visible')
-  cy.get('#button').click()
-  // Auth header automatically injected via beforeEach interceptor
-})
-```
-
-**Debugging Tests**:
+**Local Development**:
 
 ```bash
-cd e2e
-source .env.test
-CYPRESS_TEST_TOKEN="$TEST_TOKEN" CYPRESS_BASE_URL="http://vteam.local:8080" npm run test:headed
+# Kind with production images (Quay.io)
+make kind-up        # Setup
+make test-e2e       # Test
+make kind-down      # Cleanup
 ```
 
-**Documentation**: See `e2e/README.md` and `docs/testing/e2e-guide.md` for comprehensive testing guide.
+**Key Features**:
+
+- **Portable**: Tests run against any cluster (kind, CRC, dev, prod)
+- **Fast**: 15-second runtime, one workspace reused across tests
+- **Consolidated**: User journey tests, not isolated element checks
+- **Real Agent Testing**: Verifies actual Claude responses (not hardcoded messages)
+
+**Documentation**: 
+- [E2E Testing README](e2e/README.md) - Running tests
+- [Kind Local Dev Guide](docs/developer/local-development/kind.md) - Using kind for development
+- [E2E Testing Guide](docs/testing/e2e-guide.md) - Writing tests
 
 ### Backend Tests (Go)
 
@@ -1087,7 +1096,7 @@ Special lab track for leadership training located in `docs/labs/director-trainin
 
 - **API keys**: Store in Kubernetes Secrets, managed via ProjectSettings CR
 - **RBAC**: Namespace-scoped isolation prevents cross-project access
-- **OAuth integration**: OpenShift OAuth for cluster-based authentication (see `docs/OPENSHIFT_OAUTH.md`)
+- **OAuth integration**: OpenShift OAuth for cluster-based authentication (see `docs/deployment/OPENSHIFT_OAUTH.md`)
 - **Network policies**: Component isolation and secure communication
 
 ### Monitoring
