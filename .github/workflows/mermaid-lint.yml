@@ -37,7 +37,7 @@ jobs:
             libdrm2 \
             libxkbcommon0 \
             libgbm1 \
-            libasound2
+            libasound2t64
 
       - name: Find Mermaid files
         id: find-mermaid
