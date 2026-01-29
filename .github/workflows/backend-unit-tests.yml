@@ -39,7 +39,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Create reports directory
         shell: bash
@@ -89,7 +89,7 @@ jobs:
 
       - name: Upload HTML Report
         id: upload
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         if: (!cancelled())
         with:
           name: ${{ steps.name_gen.outputs.REPORT_NAME }}

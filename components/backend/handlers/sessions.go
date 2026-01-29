@@ -409,6 +409,8 @@ func ListSessions(c *gin.Context) {
 			session.Status = parseStatus(status)
 		}
 
+		session.AutoBranch = ComputeAutoBranch(item.GetName())
+
 		sessions = append(sessions, session)
 	}
 
@@ -553,9 +555,10 @@ func CreateSession(c *gin.Context) {
 		timeout = *req.Timeout
 	}
 
-	// Generate unique name
+	// Generate unique name (timestamp-based)
+	// Note: Runner will create branch as "ambient/{session-name}"
 	timestamp := time.Now().Unix()
-	name := fmt.Sprintf("agentic-session-%d", timestamp)
+	name := fmt.Sprintf("session-%d", timestamp)
 
 	// Create the custom resource
 	// Metadata
@@ -638,8 +641,11 @@ func CreateSession(c *gin.Context) {
 			arr := make([]map[string]interface{}, 0, len(req.Repos))
 			for _, r := range req.Repos {
 				m := map[string]interface{}{"url": r.URL}
-				if r.Branch != nil {
+				// Fill in branch if not provided (auto-generate from session name)
+				if r.Branch != nil && strings.TrimSpace(*r.Branch) != "" {
 					m["branch"] = *r.Branch
+				} else {
+					m["branch"] = ComputeAutoBranch(name)
 				}
 				if r.AutoPush != nil {
 					m["autoPush"] = *r.AutoPush
@@ -722,9 +728,10 @@ func CreateSession(c *gin.Context) {
 	// This ensures consistent behavior whether sessions are created via API or kubectl.
 
 	c.JSON(http.StatusCreated, gin.H{
-		"message": "Agentic session created successfully",
-		"name":    name,
-		"uid":     created.GetUID(),
+		"message":    "Agentic session created successfully",
+		"name":       name,
+		"uid":        created.GetUID(),
+		"autoBranch": ComputeAutoBranch(name),
 	})
 }
 
@@ -772,6 +779,8 @@ func GetSession(c *gin.Context) {
 	if status, ok := item.Object["status"].(map[string]interface{}); ok {
 		session.Status = parseStatus(status)
 	}
+
+	session.AutoBranch = ComputeAutoBranch(sessionName)
 
 	c.JSON(http.StatusOK, session)
 }
@@ -1201,45 +1210,6 @@ func SelectWorkflow(c *gin.Context) {
 		branch = "main"
 	}
 
-	// Call runner to clone and activate the workflow (if session is running)
-	status, _ := item.Object["status"].(map[string]interface{})
-	phase, _ := status["phase"].(string)
-	if phase == "Running" {
-		runnerURL := fmt.Sprintf("http://session-%s.%s.svc.cluster.local:8001/workflow", sessionName, project)
-		runnerReq := map[string]string{
-			"gitUrl": req.GitURL,
-			"branch": branch,
-			"path":   req.Path,
-		}
-		reqBody, _ := json.Marshal(runnerReq)
-
-		log.Printf("Calling runner to activate workflow: %s@%s (path: %s) -> %s", req.GitURL, branch, req.Path, runnerURL)
-		httpReq, err := http.NewRequestWithContext(c.Request.Context(), "POST", runnerURL, bytes.NewReader(reqBody))
-		if err != nil {
-			log.Printf("Failed to create runner request: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create runner request"})
-			return
-		}
-		httpReq.Header.Set("Content-Type", "application/json")
-
-		client := &http.Client{Timeout: 120 * time.Second} // Allow time for clone
-		resp, err := client.Do(httpReq)
-		if err != nil {
-			log.Printf("Failed to call runner to activate workflow: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to activate workflow (runner not reachable)"})
-			return
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(resp.Body)
-			log.Printf("Runner failed to activate workflow (status %d): %s", resp.StatusCode, string(body))
-			c.JSON(resp.StatusCode, gin.H{"error": fmt.Sprintf("Failed to activate workflow: %s", string(body))})
-			return
-		}
-		log.Printf("Runner successfully activated workflow %s@%s for session %s", req.GitURL, branch, sessionName)
-	}
-
 	// Update activeWorkflow in spec
 	spec, ok := item.Object["spec"].(map[string]interface{})
 	if !ok {
@@ -1459,19 +1429,78 @@ func RemoveRepo(c *gin.Context) {
 	repos, _ := spec["repos"].([]interface{})
 
 	filteredRepos := []interface{}{}
-	found := false
+	foundInSpec := false
 	for _, r := range repos {
 		rm, _ := r.(map[string]interface{})
 		url, _ := rm["url"].(string)
 		if DeriveRepoFolderFromURL(url) != repoName {
 			filteredRepos = append(filteredRepos, r)
 		} else {
-			found = true
+			foundInSpec = true
 		}
 	}
 
-	if !found {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Repository not found in session"})
+	// Also check status.reconciledRepos for repos added directly to runner
+	// Note: status map is read-only here, not persisted back to CR
+	status, found, err := unstructured.NestedMap(item.Object, "status")
+	if !found || err != nil {
+		log.Printf("Failed to get status: %v", err)
+		status = make(map[string]interface{}) // Local empty map for safe reads
+	}
+
+	reconciledRepos, found, err := unstructured.NestedSlice(status, "reconciledRepos")
+	if !found || err != nil {
+		log.Printf("Failed to get reconciledRepos: %v", err)
+		reconciledRepos = []interface{}{}
+	}
+
+	foundInReconciled := false
+	for _, r := range reconciledRepos {
+		rm, ok := r.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		name, found, err := unstructured.NestedString(rm, "name")
+		if found && err == nil && name == repoName {
+			foundInReconciled = true
+			break
+		}
+
+		// Also try matching by URL
+		url, found, err := unstructured.NestedString(rm, "url")
+		if found && err == nil && DeriveRepoFolderFromURL(url) == repoName {
+			foundInReconciled = true
+			break
+		}
+	}
+
+	// Always call runner to remove from filesystem (if session is running)
+	// Do this BEFORE checking if repo exists in CR, because it might only be on filesystem
+	phase, _, _ := unstructured.NestedString(status, "phase")
+	runnerRemoved := false
+	if phase == "Running" {
+		runnerURL := fmt.Sprintf("http://session-%s.%s.svc.cluster.local:8001/repos/remove", sessionName, project)
+		runnerReq := map[string]string{"name": repoName}
+		reqBody, _ := json.Marshal(runnerReq)
+		resp, err := http.Post(runnerURL, "application/json", bytes.NewReader(reqBody))
+		if err != nil {
+			log.Printf("Warning: failed to call runner /repos/remove: %v", err)
+		} else {
+			defer resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				runnerRemoved = true
+				log.Printf("Runner successfully removed repo %s from filesystem", repoName)
+			} else {
+				body, _ := io.ReadAll(resp.Body)
+				log.Printf("Runner failed to remove repo %s (status %d): %s", repoName, resp.StatusCode, string(body))
+			}
+		}
+	}
+
+	// Allow delete if repo is in CR OR was successfully removed from runner
+	if !foundInSpec && !foundInReconciled && !runnerRemoved {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Repository not found in session or runner"})
 		return
 	}
 
@@ -3067,6 +3096,77 @@ func DiffSessionRepo(c *gin.Context) {
 		return
 	}
 	c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), bodyBytes)
+}
+
+// GetReposStatus returns current status of all repositories (branches, current branch, etc.)
+// GET /api/projects/:projectName/agentic-sessions/:sessionName/repos/status
+func GetReposStatus(c *gin.Context) {
+	project := c.Param("projectName")
+	session := c.Param("sessionName")
+
+	k8sClt, dynClt := GetK8sClientsForRequest(c)
+	if k8sClt == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
+
+	// Verify user has access to the session using user-scoped K8s client
+	// This ensures RBAC is enforced before we call the runner
+	gvr := GetAgenticSessionV1Alpha1Resource()
+	_, err := dynClt.Resource(gvr).Namespace(project).Get(context.TODO(), session, v1.GetOptions{})
+	if errors.IsNotFound(err) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Session not found"})
+		return
+	}
+	if err != nil {
+		log.Printf("GetReposStatus: failed to verify session access: %v", err)
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	}
+
+	// Call runner's /repos/status endpoint directly
+	// Authentication flow:
+	// 1. Backend validated user has access to session (above)
+	// 2. Backend calls runner as trusted internal service (no auth header forwarding)
+	// 3. Runner trusts backend's validation
+	// Port 8001 matches AG-UI Service defined in operator (sessions.go:1384)
+	// If changing this port, also update: operator containerPort, Service port, and AGUI_PORT env
+	runnerURL := fmt.Sprintf("http://session-%s.%s.svc.cluster.local:8001/repos/status", session, project)
+
+	req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, runnerURL, nil)
+	if err != nil {
+		log.Printf("GetReposStatus: failed to create HTTP request: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create request"})
+		return
+	}
+	// NOTE: Do NOT forward Authorization header to runner (matches pattern of AddWorkflow, AddRepository, RemoveRepo)
+	// Runner is treated as a trusted backend service; RBAC enforcement happens in backend
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("GetReposStatus: runner not reachable: %v", err)
+		// Return empty repos list instead of error for better UX
+		c.JSON(http.StatusOK, gin.H{"repos": []interface{}{}})
+		return
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("GetReposStatus: failed to read response body: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read response from runner"})
+		return
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("GetReposStatus: runner returned status %d", resp.StatusCode)
+		c.JSON(http.StatusOK, gin.H{"repos": []interface{}{}})
+		return
+	}
+
+	c.Data(http.StatusOK, "application/json", bodyBytes)
 }
 
 // GetGitStatus returns git status for a directory in the workspace

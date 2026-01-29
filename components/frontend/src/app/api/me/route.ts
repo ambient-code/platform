@@ -13,12 +13,16 @@ export async function GET(request: Request) {
       return Response.json({ authenticated: false }, { status: 200 });
     }
 
+    // Clean the displayName by removing cluster suffix (e.g., "@cluster.local", "@apps-crc.testing")
+    const rawDisplayName = username || email || userId;
+    const displayName = rawDisplayName?.split('@')[0] || rawDisplayName;
+
     return Response.json({
       authenticated: true,
       userId,
       email,
       username,
-      displayName: username || email || userId,
+      displayName,
     });
   } catch (error) {
     console.error('Error reading user headers:', error);

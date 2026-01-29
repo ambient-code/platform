@@ -16,6 +16,7 @@ type AddContextModalProps = {
   onAddRepository: (url: string, branch: string, autoPush?: boolean) => Promise<void>;
   onUploadFile?: () => void;
   isLoading?: boolean;
+  autoBranch?: string;   // Auto-generated branch from backend (single source of truth)
 };
 
 export function AddContextModal({
@@ -24,25 +25,28 @@ export function AddContextModal({
   onAddRepository,
   onUploadFile,
   isLoading = false,
+  autoBranch,
 }: AddContextModalProps) {
   const [contextUrl, setContextUrl] = useState("");
-  const [contextBranch, setContextBranch] = useState("main");
+  const [contextBranch, setContextBranch] = useState("");  // Empty = use auto-generated branch
   const [autoPush, setAutoPush] = useState(false);
 
   const handleSubmit = async () => {
     if (!contextUrl.trim()) return;
 
-    await onAddRepository(contextUrl.trim(), contextBranch.trim() || 'main', autoPush);
+    // Use autoBranch from backend (single source of truth), or empty to let runner auto-generate
+    const defaultBranch = autoBranch || '';
+    await onAddRepository(contextUrl.trim(), contextBranch.trim() || defaultBranch, autoPush);
 
     // Reset form
     setContextUrl("");
-    setContextBranch("main");
+    setContextBranch("");
     setAutoPush(false);
   };
 
   const handleCancel = () => {
     setContextUrl("");
-    setContextBranch("main");
+    setContextBranch("");
     setAutoPush(false);
     onOpenChange(false);
   };
@@ -82,12 +86,13 @@ export function AddContextModal({
             <Label htmlFor="context-branch">Branch (optional)</Label>
             <Input
               id="context-branch"
-              placeholder="main"
+              // Use autoBranch from backend (single source of truth)
+              placeholder={autoBranch}
               value={contextBranch}
               onChange={(e) => setContextBranch(e.target.value)}
             />
             <p className="text-xs text-muted-foreground">
-              Leave empty to use the default branch
+              If left empty, a unique feature branch will be created for this session
             </p>
           </div>
 

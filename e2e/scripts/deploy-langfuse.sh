@@ -162,7 +162,6 @@ VALUES_FILE="$SCRIPT_DIR/langfuse-values-clickhouse-minimal-logging.yaml"
 
 helm upgrade --install langfuse langfuse/langfuse \
   --namespace langfuse \
-  --version ">= 3.63.0" \
   --values "$VALUES_FILE" \
   --set langfuse.nextauth.secret.value="$NEXTAUTH_SECRET" \
   --set langfuse.salt.value="$SALT" \
@@ -176,16 +175,16 @@ helm upgrade --install langfuse langfuse/langfuse \
   --set resources.requests.memory=1Gi \
   --set clickhouse.replicaCount=1 \
   --set clickhouse.podAntiAffinityPreset=none \
-  --set clickhouse.resources.requests.memory=1Gi \
-  --set clickhouse.resources.limits.memory=2Gi \
+  --set clickhouse.resources.requests.memory=4Gi \
+  --set clickhouse.resources.limits.memory=8Gi \
   --set clickhouse.resources.requests.cpu=500m \
   --set clickhouse.resources.limits.cpu=1 \
   --set postgresql.primary.podAntiAffinityPreset=none \
   --set redis.master.podAntiAffinityPreset=none \
   --set zookeeper.replicas=1 \
   --set zookeeper.podAntiAffinityPreset=none \
-  --set zookeeper.resources.requests.memory=256Mi \
-  --set zookeeper.resources.limits.memory=512Mi \
+  --set zookeeper.resources.requests.memory=1Gi \
+  --set zookeeper.resources.limits.memory=2Gi \
   --set zookeeper.resources.requests.cpu=250m \
   --set zookeeper.resources.limits.cpu=500m \
   --set minio.enabled=true \

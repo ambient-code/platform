@@ -1,14 +1,16 @@
 """Unit tests for security_utils module."""
 
-import pytest
 import asyncio
 import logging
+
+import pytest
+
 from security_utils import (
     sanitize_exception_message,
     sanitize_model_name,
-    with_timeout,
-    with_sync_timeout,
     validate_and_sanitize_for_logging,
+    with_sync_timeout,
+    with_timeout,
 )
 
 
@@ -336,10 +338,22 @@ class TestSanitizeModelName:
 
     def test_valid_claude_model_names(self):
         """Test that valid Claude model names pass through."""
-        assert sanitize_model_name("claude-3-5-sonnet-20241022") == "claude-3-5-sonnet-20241022"
-        assert sanitize_model_name("claude-sonnet-4-5@20250929") == "claude-sonnet-4-5@20250929"
-        assert sanitize_model_name("claude-opus-4-1@20250805") == "claude-opus-4-1@20250805"
-        assert sanitize_model_name("claude-haiku-4-5@20251001") == "claude-haiku-4-5@20251001"
+        assert (
+            sanitize_model_name("claude-3-5-sonnet-20241022")
+            == "claude-3-5-sonnet-20241022"
+        )
+        assert (
+            sanitize_model_name("claude-sonnet-4-5@20250929")
+            == "claude-sonnet-4-5@20250929"
+        )
+        assert (
+            sanitize_model_name("claude-opus-4-1@20250805")
+            == "claude-opus-4-1@20250805"
+        )
+        assert (
+            sanitize_model_name("claude-haiku-4-5@20251001")
+            == "claude-haiku-4-5@20251001"
+        )
 
     def test_valid_other_model_names(self):
         """Test that other valid model names pass through."""
@@ -349,8 +363,13 @@ class TestSanitizeModelName:
 
     def test_removes_invalid_characters(self):
         """Test that invalid characters are removed."""
-        assert sanitize_model_name("claude-3<script>alert('xss')</script>") == "claude-3scriptalertxss/script"
-        assert sanitize_model_name("model;DROP TABLE users;--") == "modelDROPTABLEusers--"
+        assert (
+            sanitize_model_name("claude-3<script>alert('xss')</script>")
+            == "claude-3scriptalertxss/script"
+        )
+        assert (
+            sanitize_model_name("model;DROP TABLE users;--") == "modelDROPTABLEusers--"
+        )
         assert sanitize_model_name("model\n\r\t\x00") == "model"
         assert sanitize_model_name("model with spaces") == "modelwithspaces"
 
@@ -393,4 +412,7 @@ class TestSanitizeModelName:
         # Path traversal attempt
         assert sanitize_model_name("../../etc/passwd") == "../../etc/passwd"
         # JavaScript injection
-        assert sanitize_model_name("<script>alert('xss')</script>") == "scriptalertxss/script"
+        assert (
+            sanitize_model_name("<script>alert('xss')</script>")
+            == "scriptalertxss/script"
+        )

@@ -725,6 +725,461 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 	}
 
 	// Create the Pod directly (no Job wrapper for faster startup)
+	podSpec := corev1.PodSpec{
+		RestartPolicy:                 corev1.RestartPolicyNever,
+		TerminationGracePeriodSeconds: int64Ptr(30), // Allow time for state-sync final sync
+		// Explicitly set service account for pod creation permissions
+		AutomountServiceAccountToken: boolPtr(false),
+		Volumes: []corev1.Volume{
+			{
+				Name: "workspace",
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{
+						SizeLimit: resource.NewQuantity(10*1024*1024*1024, resource.BinarySI), // 10Gi
+					},
+				},
+			},
+		},
+
+		// InitContainer to hydrate session state from S3
+		InitContainers: []corev1.Container{
+			{
+				Name:            "init-hydrate",
+				Image:           appConfig.StateSyncImage,
+				ImagePullPolicy: appConfig.ImagePullPolicy,
+				Command:         []string{"/usr/local/bin/hydrate.sh"},
+				SecurityContext: &corev1.SecurityContext{
+					AllowPrivilegeEscalation: boolPtr(false),
+					ReadOnlyRootFilesystem:   boolPtr(false),
+					Capabilities: &corev1.Capabilities{
+						Drop: []corev1.Capability{"ALL"},
+					},
+				},
+				Env: func() []corev1.EnvVar {
+					base := []corev1.EnvVar{
+						{Name: "SESSION_NAME", Value: name},
+						{Name: "NAMESPACE", Value: sessionNamespace},
+						{Name: "S3_ENDPOINT", Value: s3Endpoint},
+						{Name: "S3_BUCKET", Value: s3Bucket},
+						{Name: "AWS_ACCESS_KEY_ID", Value: s3AccessKey},
+						{Name: "AWS_SECRET_ACCESS_KEY", Value: s3SecretKey},
+						{Name: "GIT_USER_NAME", Value: os.Getenv("GIT_USER_NAME")},
+						{Name: "GIT_USER_EMAIL", Value: os.Getenv("GIT_USER_EMAIL")},
+					}
+
+					// Add repos JSON if present
+					if repos, ok := spec["repos"].([]interface{}); ok && len(repos) > 0 {
+						b, _ := json.Marshal(repos)
+						base = append(base, corev1.EnvVar{Name: "REPOS_JSON", Value: string(b)})
+					}
+
+					// Add workflow info if present
+					if workflow, ok := spec["activeWorkflow"].(map[string]interface{}); ok {
+						if gitURL, ok := workflow["gitUrl"].(string); ok && strings.TrimSpace(gitURL) != "" {
+							base = append(base, corev1.EnvVar{Name: "ACTIVE_WORKFLOW_GIT_URL", Value: gitURL})
+						}
+						if branch, ok := workflow["branch"].(string); ok && strings.TrimSpace(branch) != "" {
+							base = append(base, corev1.EnvVar{Name: "ACTIVE_WORKFLOW_BRANCH", Value: branch})
+						}
+						if path, ok := workflow["path"].(string); ok && strings.TrimSpace(path) != "" {
+							base = append(base, corev1.EnvVar{Name: "ACTIVE_WORKFLOW_PATH", Value: path})
+						}
+					}
+
+					// Add GitHub token for private repos
+					secretName := ""
+					if meta, ok := currentObj.Object["metadata"].(map[string]interface{}); ok {
+						if anns, ok := meta["annotations"].(map[string]interface{}); ok {
+							if v, ok := anns["ambient-code.io/runner-token-secret"].(string); ok && strings.TrimSpace(v) != "" {
+								secretName = strings.TrimSpace(v)
+							}
+						}
+					}
+					if secretName == "" {
+						secretName = fmt.Sprintf("ambient-runner-token-%s", name)
+					}
+					base = append(base, corev1.EnvVar{
+						Name: "BOT_TOKEN",
+						ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
+							Key:                  "k8s-token",
+						}},
+					})
+
+					return base
+				}(),
+				VolumeMounts: []corev1.VolumeMount{
+					{Name: "workspace", MountPath: "/workspace"},
+					// SubPath mount for .claude so init container writes to same location as runner
+					{Name: "workspace", MountPath: "/app/.claude", SubPath: ".claude"},
+				},
+			},
+		},
+
+		// Flip roles so the content writer is the main container that keeps the pod alive
+		Containers: []corev1.Container{
+			{
+				Name:            "ambient-content",
+				Image:           appConfig.ContentServiceImage,
+				ImagePullPolicy: appConfig.ImagePullPolicy,
+				Env: []corev1.EnvVar{
+					{Name: "CONTENT_SERVICE_MODE", Value: "true"},
+					{Name: "STATE_BASE_DIR", Value: "/workspace"},
+				},
+				// Import integration secrets as environment variables (GITHUB_TOKEN, GITLAB_TOKEN, etc.)
+				EnvFrom: func() []corev1.EnvFromSource {
+					if integrationSecretsExist {
+						return []corev1.EnvFromSource{{
+							SecretRef: &corev1.SecretEnvSource{
+								LocalObjectReference: corev1.LocalObjectReference{Name: integrationSecretsName},
+							},
+						}}
+					}
+					return nil
+				}(),
+				Ports: []corev1.ContainerPort{{ContainerPort: 8080, Name: "http"}},
+				ReadinessProbe: &corev1.Probe{
+					ProbeHandler: corev1.ProbeHandler{
+						HTTPGet: &corev1.HTTPGetAction{
+							Path: "/health",
+							Port: intstr.FromString("http"),
+						},
+					},
+					InitialDelaySeconds: 5,
+					PeriodSeconds:       5,
+				},
+				VolumeMounts: []corev1.VolumeMount{{Name: "workspace", MountPath: "/workspace"}},
+			},
+			{
+				Name:            "ambient-code-runner",
+				Image:           appConfig.AmbientCodeRunnerImage,
+				ImagePullPolicy: appConfig.ImagePullPolicy,
+				// 🔒 Container-level security (SCC-compatible, no privileged capabilities)
+				SecurityContext: &corev1.SecurityContext{
+					AllowPrivilegeEscalation: boolPtr(false),
+					ReadOnlyRootFilesystem:   boolPtr(false), // Playwright needs to write temp files
+					Capabilities: &corev1.Capabilities{
+						Drop: []corev1.Capability{"ALL"}, // Drop all capabilities for security
+					},
+				},
+
+				// Expose AG-UI server port for backend proxy
+				Ports: []corev1.ContainerPort{{
+					Name:          "agui",
+					ContainerPort: 8001,
+					Protocol:      corev1.ProtocolTCP,
+				}},
+
+				VolumeMounts: []corev1.VolumeMount{
+					{Name: "workspace", MountPath: "/workspace", ReadOnly: false},
+					// Mount .claude directory for session state persistence (synced to S3)
+					// This enables SDK's built-in resume functionality
+					{Name: "workspace", MountPath: "/app/.claude", SubPath: ".claude", ReadOnly: false},
+				},
+
+				Env: func() []corev1.EnvVar {
+					base := []corev1.EnvVar{
+						{Name: "DEBUG", Value: "true"},
+						{Name: "INTERACTIVE", Value: fmt.Sprintf("%t", interactive)},
+						{Name: "AGENTIC_SESSION_NAME", Value: name},
+						{Name: "AGENTIC_SESSION_NAMESPACE", Value: sessionNamespace},
+						// Provide session id and workspace path for the runner wrapper
+						{Name: "SESSION_ID", Value: name},
+						{Name: "WORKSPACE_PATH", Value: "/workspace"},
+						{Name: "ARTIFACTS_DIR", Value: "artifacts"},
+						// AG-UI server port (must match containerPort and Service)
+						{Name: "AGUI_PORT", Value: "8001"},
+						// Google MCP credentials directory for workspace-mcp server (writable workspace location)
+						{Name: "GOOGLE_MCP_CREDENTIALS_DIR", Value: "/workspace/.google_workspace_mcp/credentials"},
+						// Google OAuth client credentials for workspace-mcp
+						{Name: "GOOGLE_OAUTH_CLIENT_ID", Value: os.Getenv("GOOGLE_OAUTH_CLIENT_ID")},
+						{Name: "GOOGLE_OAUTH_CLIENT_SECRET", Value: os.Getenv("GOOGLE_OAUTH_CLIENT_SECRET")},
+					}
+
+					// For e2e: use minimal MCP config (webfetch only, no credentials needed)
+					if mcpConfigFile := os.Getenv("MCP_CONFIG_FILE"); strings.TrimSpace(mcpConfigFile) != "" {
+						base = append(base, corev1.EnvVar{Name: "MCP_CONFIG_FILE", Value: mcpConfigFile})
+					}
+
+					// Add user context for observability and auditing (Langfuse userId, logs, etc.)
+					if userID != "" {
+						base = append(base, corev1.EnvVar{Name: "USER_ID", Value: userID})
+					}
+					if userName != "" {
+						base = append(base, corev1.EnvVar{Name: "USER_NAME", Value: userName})
+					}
+
+					// Core session env vars
+					base = append(base,
+						corev1.EnvVar{Name: "INITIAL_PROMPT", Value: prompt},
+						corev1.EnvVar{Name: "LLM_MODEL", Value: model},
+						corev1.EnvVar{Name: "LLM_TEMPERATURE", Value: fmt.Sprintf("%.2f", temperature)},
+						corev1.EnvVar{Name: "LLM_MAX_TOKENS", Value: fmt.Sprintf("%d", maxTokens)},
+						corev1.EnvVar{Name: "USE_AGUI", Value: "true"},
+						corev1.EnvVar{Name: "TIMEOUT", Value: fmt.Sprintf("%d", timeout)},
+						corev1.EnvVar{Name: "BACKEND_API_URL", Value: fmt.Sprintf("http://backend-service.%s.svc.cluster.local:8080/api", appConfig.BackendNamespace)},
+						// LEGACY: WEBSOCKET_URL removed - runner now uses AG-UI server pattern (FastAPI)
+						// Backend proxies to runner's HTTP endpoint instead of WebSocket
+					)
+
+					// Platform-wide Langfuse observability configuration
+					// Uses secretKeyRef to prevent credential exposure in pod specs
+					// Secret is copied to session namespace from operator namespace
+					// All keys are optional to prevent pod startup failures if keys are missing
+					if ambientLangfuseSecretCopied {
+						base = append(base,
+							corev1.EnvVar{
+								Name: "LANGFUSE_ENABLED",
+								ValueFrom: &corev1.EnvVarSource{
+									SecretKeyRef: &corev1.SecretKeySelector{
+										LocalObjectReference: corev1.LocalObjectReference{Name: "ambient-admin-langfuse-secret"},
+										Key:                  "LANGFUSE_ENABLED",
+										Optional:             boolPtr(true),
+									},
+								},
+							},
+							corev1.EnvVar{
+								Name: "LANGFUSE_HOST",
+								ValueFrom: &corev1.EnvVarSource{
+									SecretKeyRef: &corev1.SecretKeySelector{
+										LocalObjectReference: corev1.LocalObjectReference{Name: "ambient-admin-langfuse-secret"},
+										Key:                  "LANGFUSE_HOST",
+										Optional:             boolPtr(true),
+									},
+								},
+							},
+							corev1.EnvVar{
+								Name: "LANGFUSE_PUBLIC_KEY",
+								ValueFrom: &corev1.EnvVarSource{
+									SecretKeyRef: &corev1.SecretKeySelector{
+										LocalObjectReference: corev1.LocalObjectReference{Name: "ambient-admin-langfuse-secret"},
+										Key:                  "LANGFUSE_PUBLIC_KEY",
+										Optional:             boolPtr(true),
+									},
+								},
+							},
+							corev1.EnvVar{
+								Name: "LANGFUSE_SECRET_KEY",
+								ValueFrom: &corev1.EnvVarSource{
+									SecretKeyRef: &corev1.SecretKeySelector{
+										LocalObjectReference: corev1.LocalObjectReference{Name: "ambient-admin-langfuse-secret"},
+										Key:                  "LANGFUSE_SECRET_KEY",
+										Optional:             boolPtr(true),
+									},
+								},
+							},
+						)
+						log.Printf("Langfuse env vars configured via secretKeyRef for session %s", name)
+					}
+
+					// Add Vertex AI configuration only if enabled
+					if vertexEnabled {
+						base = append(base,
+							corev1.EnvVar{Name: "CLAUDE_CODE_USE_VERTEX", Value: "1"},
+							corev1.EnvVar{Name: "CLOUD_ML_REGION", Value: os.Getenv("CLOUD_ML_REGION")},
+							corev1.EnvVar{Name: "ANTHROPIC_VERTEX_PROJECT_ID", Value: os.Getenv("ANTHROPIC_VERTEX_PROJECT_ID")},
+							corev1.EnvVar{Name: "GOOGLE_APPLICATION_CREDENTIALS", Value: os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")},
+						)
+					} else {
+						// Explicitly set to 0 when Vertex is disabled
+						base = append(base, corev1.EnvVar{Name: "CLAUDE_CODE_USE_VERTEX", Value: "0"})
+					}
+
+					// Add PARENT_SESSION_ID if this is a continuation
+					if parentSessionID != "" {
+						base = append(base, corev1.EnvVar{Name: "PARENT_SESSION_ID", Value: parentSessionID})
+						log.Printf("Session %s: passing PARENT_SESSION_ID=%s to runner", name, parentSessionID)
+					}
+
+					// Add IS_RESUME if this session has been started before
+					// Check status.startTime - if present, this is a resume (pod recreate/restart)
+					// This tells the runner to skip INITIAL_PROMPT and use continue_conversation
+					if status, found, _ := unstructured.NestedMap(currentObj.Object, "status"); found {
+						if startTime, ok := status["startTime"].(string); ok && startTime != "" {
+							base = append(base, corev1.EnvVar{Name: "IS_RESUME", Value: "true"})
+							log.Printf("Session %s: marking as resume (IS_RESUME=true, startTime=%s)", name, startTime)
+						}
+					}
+
+					// If backend annotated the session with a runner token secret, inject only BOT_TOKEN
+					// Secret contains: 'k8s-token' (for CR updates)
+					// Prefer annotated secret name; fallback to deterministic name
+					secretName := ""
+					if meta, ok := currentObj.Object["metadata"].(map[string]interface{}); ok {
+						if anns, ok := meta["annotations"].(map[string]interface{}); ok {
+							if v, ok := anns["ambient-code.io/runner-token-secret"].(string); ok && strings.TrimSpace(v) != "" {
+								secretName = strings.TrimSpace(v)
+							}
+						}
+					}
+					if secretName == "" {
+						secretName = fmt.Sprintf("ambient-runner-token-%s", name)
+					}
+					base = append(base, corev1.EnvVar{
+						Name: "BOT_TOKEN",
+						ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
+							Key:                  "k8s-token",
+						}},
+					})
+					// Add CR-provided envs last (override base when same key)
+					if spec, ok := currentObj.Object["spec"].(map[string]interface{}); ok {
+						// Inject REPOS_JSON and MAIN_REPO_NAME from spec.repos and spec.mainRepoName if present
+						if repos, ok := spec["repos"].([]interface{}); ok && len(repos) > 0 {
+							// Use a minimal JSON serialization via fmt (we'll rely on client to pass REPOS_JSON too)
+							// This ensures runner gets repos even if env vars weren't passed from frontend
+							b, _ := json.Marshal(repos)
+							base = append(base, corev1.EnvVar{Name: "REPOS_JSON", Value: string(b)})
+						}
+						if mrn, ok := spec["mainRepoName"].(string); ok && strings.TrimSpace(mrn) != "" {
+							base = append(base, corev1.EnvVar{Name: "MAIN_REPO_NAME", Value: mrn})
+						}
+						// Inject MAIN_REPO_INDEX if provided
+						if mriRaw, ok := spec["mainRepoIndex"]; ok {
+							switch v := mriRaw.(type) {
+							case int64:
+								base = append(base, corev1.EnvVar{Name: "MAIN_REPO_INDEX", Value: fmt.Sprintf("%d", v)})
+							case int32:
+								base = append(base, corev1.EnvVar{Name: "MAIN_REPO_INDEX", Value: fmt.Sprintf("%d", v)})
+							case int:
+								base = append(base, corev1.EnvVar{Name: "MAIN_REPO_INDEX", Value: fmt.Sprintf("%d", v)})
+							case float64:
+								base = append(base, corev1.EnvVar{Name: "MAIN_REPO_INDEX", Value: fmt.Sprintf("%d", int64(v))})
+							case string:
+								if strings.TrimSpace(v) != "" {
+									base = append(base, corev1.EnvVar{Name: "MAIN_REPO_INDEX", Value: v})
+								}
+							}
+						}
+						// Inject activeWorkflow environment variables if present
+						if workflow, ok := spec["activeWorkflow"].(map[string]interface{}); ok {
+							if gitURL, ok := workflow["gitUrl"].(string); ok && strings.TrimSpace(gitURL) != "" {
+								base = append(base, corev1.EnvVar{Name: "ACTIVE_WORKFLOW_GIT_URL", Value: gitURL})
+							}
+							if branch, ok := workflow["branch"].(string); ok && strings.TrimSpace(branch) != "" {
+								base = append(base, corev1.EnvVar{Name: "ACTIVE_WORKFLOW_BRANCH", Value: branch})
+							}
+							if path, ok := workflow["path"].(string); ok && strings.TrimSpace(path) != "" {
+								base = append(base, corev1.EnvVar{Name: "ACTIVE_WORKFLOW_PATH", Value: path})
+							}
+						}
+						if envMap, ok := spec["environmentVariables"].(map[string]interface{}); ok {
+							for k, v := range envMap {
+								if vs, ok := v.(string); ok {
+									// replace if exists
+									replaced := false
+									for i := range base {
+										if base[i].Name == k {
+											base[i].Value = vs
+											replaced = true
+											break
+										}
+									}
+									if !replaced {
+										base = append(base, corev1.EnvVar{Name: k, Value: vs})
+									}
+								}
+							}
+						}
+					}
+
+					return base
+				}(),
+
+				// Import secrets as environment variables
+				// - integrationSecretsName: Only if exists (GIT_TOKEN, JIRA_*, custom keys)
+				// - runnerSecretsName: Only when Vertex disabled (ANTHROPIC_API_KEY)
+				// - ambient-langfuse-keys: Platform-wide Langfuse observability (LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, LANGFUSE_HOST, LANGFUSE_ENABLED)
+				EnvFrom: func() []corev1.EnvFromSource {
+					sources := []corev1.EnvFromSource{}
+
+					// Only inject integration secrets if they exist (optional)
+					if integrationSecretsExist {
+						sources = append(sources, corev1.EnvFromSource{
+							SecretRef: &corev1.SecretEnvSource{
+								LocalObjectReference: corev1.LocalObjectReference{Name: integrationSecretsName},
+							},
+						})
+						log.Printf("Injecting integration secrets from '%s' for session %s", integrationSecretsName, name)
+					} else {
+						log.Printf("Skipping integration secrets '%s' for session %s (not found or not configured)", integrationSecretsName, name)
+					}
+
+					// Only inject runner secrets (ANTHROPIC_API_KEY) when Vertex is disabled
+					if !vertexEnabled && runnerSecretsName != "" {
+						sources = append(sources, corev1.EnvFromSource{
+							SecretRef: &corev1.SecretEnvSource{
+								LocalObjectReference: corev1.LocalObjectReference{Name: runnerSecretsName},
+							},
+						})
+						log.Printf("Injecting runner secrets from '%s' for session %s (Vertex disabled)", runnerSecretsName, name)
+					} else if vertexEnabled && runnerSecretsName != "" {
+						log.Printf("Skipping runner secrets '%s' for session %s (Vertex enabled)", runnerSecretsName, name)
+					}
+
+					return sources
+				}(),
+
+				Resources: corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("500m"),
+						corev1.ResourceMemory: resource.MustParse("512Mi"),
+					},
+					Limits: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("2000m"), // 2 cores for MCP + Claude SDK
+						corev1.ResourceMemory: resource.MustParse("4Gi"),   // Increased for Playwright/Chromium + dev server
+					},
+				},
+			},
+			// S3 state-sync sidecar - syncs .claude/, artifacts/, uploads/ to S3
+			{
+				Name:            "state-sync",
+				Image:           appConfig.StateSyncImage,
+				ImagePullPolicy: appConfig.ImagePullPolicy,
+				Command:         []string{"/usr/local/bin/sync.sh"},
+				SecurityContext: &corev1.SecurityContext{
+					AllowPrivilegeEscalation: boolPtr(false),
+					ReadOnlyRootFilesystem:   boolPtr(false),
+					Capabilities: &corev1.Capabilities{
+						Drop: []corev1.Capability{"ALL"},
+					},
+				},
+				Env: []corev1.EnvVar{
+					{Name: "SESSION_NAME", Value: name},
+					{Name: "NAMESPACE", Value: sessionNamespace},
+					{Name: "S3_ENDPOINT", Value: s3Endpoint},
+					{Name: "S3_BUCKET", Value: s3Bucket},
+					{Name: "SYNC_INTERVAL", Value: "60"},
+					{Name: "MAX_SYNC_SIZE", Value: "1073741824"}, // 1GB
+					{Name: "AWS_ACCESS_KEY_ID", Value: s3AccessKey},
+					{Name: "AWS_SECRET_ACCESS_KEY", Value: s3SecretKey},
+				},
+				VolumeMounts: []corev1.VolumeMount{
+					{Name: "workspace", MountPath: "/workspace", ReadOnly: false},
+					// SubPath mount for .claude so sync sidecar reads from same location as runner
+					{Name: "workspace", MountPath: "/app/.claude", SubPath: ".claude", ReadOnly: false},
+				},
+				Resources: corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("100m"),
+						corev1.ResourceMemory: resource.MustParse("128Mi"),
+					},
+					Limits: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("1000m"), // Increased from 200m for MCP startup
+						corev1.ResourceMemory: resource.MustParse("1Gi"),   // Increased from 256Mi
+					},
+				},
+			},
+		},
+	}
+
+	if appConfig.PodFSGroup != nil {
+		podSpec.SecurityContext = &corev1.PodSecurityContext{
+			FSGroup:             appConfig.PodFSGroup,
+			FSGroupChangePolicy: func() *corev1.PodFSGroupChangePolicy { p := corev1.FSGroupChangeOnRootMismatch; return &p }(),
+		}
+	}
+
 	pod := &corev1.Pod{
 		ObjectMeta: v1.ObjectMeta{
 			Name:      podName,
@@ -747,437 +1202,7 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 				},
 			},
 		},
-		Spec: corev1.PodSpec{
-			RestartPolicy:                 corev1.RestartPolicyNever,
-			TerminationGracePeriodSeconds: int64Ptr(30), // Allow time for state-sync final sync
-			// Explicitly set service account for pod creation permissions
-			AutomountServiceAccountToken: boolPtr(false),
-			Volumes: []corev1.Volume{
-				{
-					Name: "workspace",
-					VolumeSource: corev1.VolumeSource{
-						EmptyDir: &corev1.EmptyDirVolumeSource{
-							SizeLimit: resource.NewQuantity(10*1024*1024*1024, resource.BinarySI), // 10Gi
-						},
-					},
-				},
-			},
-
-			// InitContainer to hydrate session state from S3
-			InitContainers: []corev1.Container{
-				{
-					Name:            "init-hydrate",
-					Image:           appConfig.StateSyncImage,
-					ImagePullPolicy: appConfig.ImagePullPolicy,
-					Command:         []string{"/usr/local/bin/hydrate.sh"},
-					SecurityContext: &corev1.SecurityContext{
-						AllowPrivilegeEscalation: boolPtr(false),
-						ReadOnlyRootFilesystem:   boolPtr(false),
-						Capabilities: &corev1.Capabilities{
-							Drop: []corev1.Capability{"ALL"},
-						},
-					},
-					Env: func() []corev1.EnvVar {
-						base := []corev1.EnvVar{
-							{Name: "SESSION_NAME", Value: name},
-							{Name: "NAMESPACE", Value: sessionNamespace},
-							{Name: "S3_ENDPOINT", Value: s3Endpoint},
-							{Name: "S3_BUCKET", Value: s3Bucket},
-							{Name: "AWS_ACCESS_KEY_ID", Value: s3AccessKey},
-							{Name: "AWS_SECRET_ACCESS_KEY", Value: s3SecretKey},
-							{Name: "GIT_USER_NAME", Value: os.Getenv("GIT_USER_NAME")},
-							{Name: "GIT_USER_EMAIL", Value: os.Getenv("GIT_USER_EMAIL")},
-						}
-
-						// Add repos JSON if present
-						if repos, ok := spec["repos"].([]interface{}); ok && len(repos) > 0 {
-							b, _ := json.Marshal(repos)
-							base = append(base, corev1.EnvVar{Name: "REPOS_JSON", Value: string(b)})
-						}
-
-						// Add workflow info if present
-						if workflow, ok := spec["activeWorkflow"].(map[string]interface{}); ok {
-							if gitURL, ok := workflow["gitUrl"].(string); ok && strings.TrimSpace(gitURL) != "" {
-								base = append(base, corev1.EnvVar{Name: "ACTIVE_WORKFLOW_GIT_URL", Value: gitURL})
-							}
-							if branch, ok := workflow["branch"].(string); ok && strings.TrimSpace(branch) != "" {
-								base = append(base, corev1.EnvVar{Name: "ACTIVE_WORKFLOW_BRANCH", Value: branch})
-							}
-							if path, ok := workflow["path"].(string); ok && strings.TrimSpace(path) != "" {
-								base = append(base, corev1.EnvVar{Name: "ACTIVE_WORKFLOW_PATH", Value: path})
-							}
-						}
-
-						// Add GitHub token for private repos
-						secretName := ""
-						if meta, ok := currentObj.Object["metadata"].(map[string]interface{}); ok {
-							if anns, ok := meta["annotations"].(map[string]interface{}); ok {
-								if v, ok := anns["ambient-code.io/runner-token-secret"].(string); ok && strings.TrimSpace(v) != "" {
-									secretName = strings.TrimSpace(v)
-								}
-							}
-						}
-						if secretName == "" {
-							secretName = fmt.Sprintf("ambient-runner-token-%s", name)
-						}
-						base = append(base, corev1.EnvVar{
-							Name: "BOT_TOKEN",
-							ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{
-								LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
-								Key:                  "k8s-token",
-							}},
-						})
-
-						return base
-					}(),
-					VolumeMounts: []corev1.VolumeMount{
-						{Name: "workspace", MountPath: "/workspace"},
-						// SubPath mount for .claude so init container writes to same location as runner
-						{Name: "workspace", MountPath: "/app/.claude", SubPath: ".claude"},
-					},
-				},
-			},
-
-			// Flip roles so the content writer is the main container that keeps the pod alive
-			Containers: []corev1.Container{
-				{
-					Name:            "ambient-content",
-					Image:           appConfig.ContentServiceImage,
-					ImagePullPolicy: appConfig.ImagePullPolicy,
-					Env: []corev1.EnvVar{
-						{Name: "CONTENT_SERVICE_MODE", Value: "true"},
-						{Name: "STATE_BASE_DIR", Value: "/workspace"},
-					},
-					// Import integration secrets as environment variables (GITHUB_TOKEN, GITLAB_TOKEN, etc.)
-					EnvFrom: func() []corev1.EnvFromSource {
-						if integrationSecretsExist {
-							return []corev1.EnvFromSource{{
-								SecretRef: &corev1.SecretEnvSource{
-									LocalObjectReference: corev1.LocalObjectReference{Name: integrationSecretsName},
-								},
-							}}
-						}
-						return nil
-					}(),
-					Ports: []corev1.ContainerPort{{ContainerPort: 8080, Name: "http"}},
-					ReadinessProbe: &corev1.Probe{
-						ProbeHandler: corev1.ProbeHandler{
-							HTTPGet: &corev1.HTTPGetAction{
-								Path: "/health",
-								Port: intstr.FromString("http"),
-							},
-						},
-						InitialDelaySeconds: 5,
-						PeriodSeconds:       5,
-					},
-					VolumeMounts: []corev1.VolumeMount{{Name: "workspace", MountPath: "/workspace"}},
-				},
-				{
-					Name:            "ambient-code-runner",
-					Image:           appConfig.AmbientCodeRunnerImage,
-					ImagePullPolicy: appConfig.ImagePullPolicy,
-					// 🔒 Container-level security (SCC-compatible, no privileged capabilities)
-					SecurityContext: &corev1.SecurityContext{
-						AllowPrivilegeEscalation: boolPtr(false),
-						ReadOnlyRootFilesystem:   boolPtr(false), // Playwright needs to write temp files
-						Capabilities: &corev1.Capabilities{
-							Drop: []corev1.Capability{"ALL"}, // Drop all capabilities for security
-						},
-					},
-
-					// Expose AG-UI server port for backend proxy
-					Ports: []corev1.ContainerPort{{
-						Name:          "agui",
-						ContainerPort: 8001,
-						Protocol:      corev1.ProtocolTCP,
-					}},
-
-					VolumeMounts: []corev1.VolumeMount{
-						{Name: "workspace", MountPath: "/workspace", ReadOnly: false},
-						// Mount .claude directory for session state persistence (synced to S3)
-						// This enables SDK's built-in resume functionality
-						{Name: "workspace", MountPath: "/app/.claude", SubPath: ".claude", ReadOnly: false},
-					},
-
-					Env: func() []corev1.EnvVar {
-						base := []corev1.EnvVar{
-							{Name: "DEBUG", Value: "true"},
-							{Name: "INTERACTIVE", Value: fmt.Sprintf("%t", interactive)},
-							{Name: "AGENTIC_SESSION_NAME", Value: name},
-							{Name: "AGENTIC_SESSION_NAMESPACE", Value: sessionNamespace},
-							// Provide session id and workspace path for the runner wrapper
-							{Name: "SESSION_ID", Value: name},
-							{Name: "WORKSPACE_PATH", Value: "/workspace"},
-							{Name: "ARTIFACTS_DIR", Value: "artifacts"},
-							// Google MCP credentials directory for workspace-mcp server (writable workspace location)
-							{Name: "GOOGLE_MCP_CREDENTIALS_DIR", Value: "/workspace/.google_workspace_mcp/credentials"},
-							// Google OAuth client credentials for workspace-mcp
-							{Name: "GOOGLE_OAUTH_CLIENT_ID", Value: os.Getenv("GOOGLE_OAUTH_CLIENT_ID")},
-							{Name: "GOOGLE_OAUTH_CLIENT_SECRET", Value: os.Getenv("GOOGLE_OAUTH_CLIENT_SECRET")},
-						}
-
-						// Add user context for observability and auditing (Langfuse userId, logs, etc.)
-						if userID != "" {
-							base = append(base, corev1.EnvVar{Name: "USER_ID", Value: userID})
-						}
-						if userName != "" {
-							base = append(base, corev1.EnvVar{Name: "USER_NAME", Value: userName})
-						}
-
-						// Core session env vars
-						base = append(base,
-							corev1.EnvVar{Name: "INITIAL_PROMPT", Value: prompt},
-							corev1.EnvVar{Name: "LLM_MODEL", Value: model},
-							corev1.EnvVar{Name: "LLM_TEMPERATURE", Value: fmt.Sprintf("%.2f", temperature)},
-							corev1.EnvVar{Name: "LLM_MAX_TOKENS", Value: fmt.Sprintf("%d", maxTokens)},
-							corev1.EnvVar{Name: "USE_AGUI", Value: "true"},
-							corev1.EnvVar{Name: "TIMEOUT", Value: fmt.Sprintf("%d", timeout)},
-							corev1.EnvVar{Name: "BACKEND_API_URL", Value: fmt.Sprintf("http://backend-service.%s.svc.cluster.local:8080/api", appConfig.BackendNamespace)},
-							// LEGACY: WEBSOCKET_URL removed - runner now uses AG-UI server pattern (FastAPI)
-							// Backend proxies to runner's HTTP endpoint instead of WebSocket
-						)
-
-						// Platform-wide Langfuse observability configuration
-						// Uses secretKeyRef to prevent credential exposure in pod specs
-						// Secret is copied to session namespace from operator namespace
-						// All keys are optional to prevent pod startup failures if keys are missing
-						if ambientLangfuseSecretCopied {
-							base = append(base,
-								corev1.EnvVar{
-									Name: "LANGFUSE_ENABLED",
-									ValueFrom: &corev1.EnvVarSource{
-										SecretKeyRef: &corev1.SecretKeySelector{
-											LocalObjectReference: corev1.LocalObjectReference{Name: "ambient-admin-langfuse-secret"},
-											Key:                  "LANGFUSE_ENABLED",
-											Optional:             boolPtr(true),
-										},
-									},
-								},
-								corev1.EnvVar{
-									Name: "LANGFUSE_HOST",
-									ValueFrom: &corev1.EnvVarSource{
-										SecretKeyRef: &corev1.SecretKeySelector{
-											LocalObjectReference: corev1.LocalObjectReference{Name: "ambient-admin-langfuse-secret"},
-											Key:                  "LANGFUSE_HOST",
-											Optional:             boolPtr(true),
-										},
-									},
-								},
-								corev1.EnvVar{
-									Name: "LANGFUSE_PUBLIC_KEY",
-									ValueFrom: &corev1.EnvVarSource{
-										SecretKeyRef: &corev1.SecretKeySelector{
-											LocalObjectReference: corev1.LocalObjectReference{Name: "ambient-admin-langfuse-secret"},
-											Key:                  "LANGFUSE_PUBLIC_KEY",
-											Optional:             boolPtr(true),
-										},
-									},
-								},
-								corev1.EnvVar{
-									Name: "LANGFUSE_SECRET_KEY",
-									ValueFrom: &corev1.EnvVarSource{
-										SecretKeyRef: &corev1.SecretKeySelector{
-											LocalObjectReference: corev1.LocalObjectReference{Name: "ambient-admin-langfuse-secret"},
-											Key:                  "LANGFUSE_SECRET_KEY",
-											Optional:             boolPtr(true),
-										},
-									},
-								},
-							)
-							log.Printf("Langfuse env vars configured via secretKeyRef for session %s", name)
-						}
-
-						// Add Vertex AI configuration only if enabled
-						if vertexEnabled {
-							base = append(base,
-								corev1.EnvVar{Name: "CLAUDE_CODE_USE_VERTEX", Value: "1"},
-								corev1.EnvVar{Name: "CLOUD_ML_REGION", Value: os.Getenv("CLOUD_ML_REGION")},
-								corev1.EnvVar{Name: "ANTHROPIC_VERTEX_PROJECT_ID", Value: os.Getenv("ANTHROPIC_VERTEX_PROJECT_ID")},
-								corev1.EnvVar{Name: "GOOGLE_APPLICATION_CREDENTIALS", Value: os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")},
-							)
-						} else {
-							// Explicitly set to 0 when Vertex is disabled
-							base = append(base, corev1.EnvVar{Name: "CLAUDE_CODE_USE_VERTEX", Value: "0"})
-						}
-
-						// Add PARENT_SESSION_ID if this is a continuation
-						if parentSessionID != "" {
-							base = append(base, corev1.EnvVar{Name: "PARENT_SESSION_ID", Value: parentSessionID})
-							log.Printf("Session %s: passing PARENT_SESSION_ID=%s to runner", name, parentSessionID)
-						}
-
-						// Add IS_RESUME if this session has been started before
-						// Check status.startTime - if present, this is a resume (pod recreate/restart)
-						// This tells the runner to skip INITIAL_PROMPT and use continue_conversation
-						if status, found, _ := unstructured.NestedMap(currentObj.Object, "status"); found {
-							if startTime, ok := status["startTime"].(string); ok && startTime != "" {
-								base = append(base, corev1.EnvVar{Name: "IS_RESUME", Value: "true"})
-								log.Printf("Session %s: marking as resume (IS_RESUME=true, startTime=%s)", name, startTime)
-							}
-						}
-
-						// If backend annotated the session with a runner token secret, inject only BOT_TOKEN
-						// Secret contains: 'k8s-token' (for CR updates)
-						// Prefer annotated secret name; fallback to deterministic name
-						secretName := ""
-						if meta, ok := currentObj.Object["metadata"].(map[string]interface{}); ok {
-							if anns, ok := meta["annotations"].(map[string]interface{}); ok {
-								if v, ok := anns["ambient-code.io/runner-token-secret"].(string); ok && strings.TrimSpace(v) != "" {
-									secretName = strings.TrimSpace(v)
-								}
-							}
-						}
-						if secretName == "" {
-							secretName = fmt.Sprintf("ambient-runner-token-%s", name)
-						}
-						base = append(base, corev1.EnvVar{
-							Name: "BOT_TOKEN",
-							ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{
-								LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
-								Key:                  "k8s-token",
-							}},
-						})
-						// Add CR-provided envs last (override base when same key)
-						if spec, ok := currentObj.Object["spec"].(map[string]interface{}); ok {
-							// Inject REPOS_JSON and MAIN_REPO_NAME from spec.repos and spec.mainRepoName if present
-							if repos, ok := spec["repos"].([]interface{}); ok && len(repos) > 0 {
-								// Use a minimal JSON serialization via fmt (we'll rely on client to pass REPOS_JSON too)
-								// This ensures runner gets repos even if env vars weren't passed from frontend
-								b, _ := json.Marshal(repos)
-								base = append(base, corev1.EnvVar{Name: "REPOS_JSON", Value: string(b)})
-							}
-							if mrn, ok := spec["mainRepoName"].(string); ok && strings.TrimSpace(mrn) != "" {
-								base = append(base, corev1.EnvVar{Name: "MAIN_REPO_NAME", Value: mrn})
-							}
-							// Inject MAIN_REPO_INDEX if provided
-							if mriRaw, ok := spec["mainRepoIndex"]; ok {
-								switch v := mriRaw.(type) {
-								case int64:
-									base = append(base, corev1.EnvVar{Name: "MAIN_REPO_INDEX", Value: fmt.Sprintf("%d", v)})
-								case int32:
-									base = append(base, corev1.EnvVar{Name: "MAIN_REPO_INDEX", Value: fmt.Sprintf("%d", v)})
-								case int:
-									base = append(base, corev1.EnvVar{Name: "MAIN_REPO_INDEX", Value: fmt.Sprintf("%d", v)})
-								case float64:
-									base = append(base, corev1.EnvVar{Name: "MAIN_REPO_INDEX", Value: fmt.Sprintf("%d", int64(v))})
-								case string:
-									if strings.TrimSpace(v) != "" {
-										base = append(base, corev1.EnvVar{Name: "MAIN_REPO_INDEX", Value: v})
-									}
-								}
-							}
-							// Inject activeWorkflow environment variables if present
-							if workflow, ok := spec["activeWorkflow"].(map[string]interface{}); ok {
-								if gitURL, ok := workflow["gitUrl"].(string); ok && strings.TrimSpace(gitURL) != "" {
-									base = append(base, corev1.EnvVar{Name: "ACTIVE_WORKFLOW_GIT_URL", Value: gitURL})
-								}
-								if branch, ok := workflow["branch"].(string); ok && strings.TrimSpace(branch) != "" {
-									base = append(base, corev1.EnvVar{Name: "ACTIVE_WORKFLOW_BRANCH", Value: branch})
-								}
-								if path, ok := workflow["path"].(string); ok && strings.TrimSpace(path) != "" {
-									base = append(base, corev1.EnvVar{Name: "ACTIVE_WORKFLOW_PATH", Value: path})
-								}
-							}
-							if envMap, ok := spec["environmentVariables"].(map[string]interface{}); ok {
-								for k, v := range envMap {
-									if vs, ok := v.(string); ok {
-										// replace if exists
-										replaced := false
-										for i := range base {
-											if base[i].Name == k {
-												base[i].Value = vs
-												replaced = true
-												break
-											}
-										}
-										if !replaced {
-											base = append(base, corev1.EnvVar{Name: k, Value: vs})
-										}
-									}
-								}
-							}
-						}
-
-						return base
-					}(),
-
-					// Import secrets as environment variables
-					// - integrationSecretsName: Only if exists (GIT_TOKEN, JIRA_*, custom keys)
-					// - runnerSecretsName: Only when Vertex disabled (ANTHROPIC_API_KEY)
-					// - ambient-langfuse-keys: Platform-wide Langfuse observability (LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, LANGFUSE_HOST, LANGFUSE_ENABLED)
-					EnvFrom: func() []corev1.EnvFromSource {
-						sources := []corev1.EnvFromSource{}
-
-						// Only inject integration secrets if they exist (optional)
-						if integrationSecretsExist {
-							sources = append(sources, corev1.EnvFromSource{
-								SecretRef: &corev1.SecretEnvSource{
-									LocalObjectReference: corev1.LocalObjectReference{Name: integrationSecretsName},
-								},
-							})
-							log.Printf("Injecting integration secrets from '%s' for session %s", integrationSecretsName, name)
-						} else {
-							log.Printf("Skipping integration secrets '%s' for session %s (not found or not configured)", integrationSecretsName, name)
-						}
-
-						// Only inject runner secrets (ANTHROPIC_API_KEY) when Vertex is disabled
-						if !vertexEnabled && runnerSecretsName != "" {
-							sources = append(sources, corev1.EnvFromSource{
-								SecretRef: &corev1.SecretEnvSource{
-									LocalObjectReference: corev1.LocalObjectReference{Name: runnerSecretsName},
-								},
-							})
-							log.Printf("Injecting runner secrets from '%s' for session %s (Vertex disabled)", runnerSecretsName, name)
-						} else if vertexEnabled && runnerSecretsName != "" {
-							log.Printf("Skipping runner secrets '%s' for session %s (Vertex enabled)", runnerSecretsName, name)
-						}
-
-						return sources
-					}(),
-
-					Resources: corev1.ResourceRequirements{},
-				},
-				// S3 state-sync sidecar - syncs .claude/, artifacts/, uploads/ to S3
-				{
-					Name:            "state-sync",
-					Image:           appConfig.StateSyncImage,
-					ImagePullPolicy: appConfig.ImagePullPolicy,
-					Command:         []string{"/usr/local/bin/sync.sh"},
-					SecurityContext: &corev1.SecurityContext{
-						AllowPrivilegeEscalation: boolPtr(false),
-						ReadOnlyRootFilesystem:   boolPtr(false),
-						Capabilities: &corev1.Capabilities{
-							Drop: []corev1.Capability{"ALL"},
-						},
-					},
-					Env: []corev1.EnvVar{
-						{Name: "SESSION_NAME", Value: name},
-						{Name: "NAMESPACE", Value: sessionNamespace},
-						{Name: "S3_ENDPOINT", Value: s3Endpoint},
-						{Name: "S3_BUCKET", Value: s3Bucket},
-						{Name: "SYNC_INTERVAL", Value: "60"},
-						{Name: "MAX_SYNC_SIZE", Value: "1073741824"}, // 1GB
-						{Name: "AWS_ACCESS_KEY_ID", Value: s3AccessKey},
-						{Name: "AWS_SECRET_ACCESS_KEY", Value: s3SecretKey},
-					},
-					VolumeMounts: []corev1.VolumeMount{
-						{Name: "workspace", MountPath: "/workspace", ReadOnly: false},
-						// SubPath mount for .claude so sync sidecar reads from same location as runner
-						{Name: "workspace", MountPath: "/app/.claude", SubPath: ".claude", ReadOnly: false},
-					},
-					Resources: corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{
-							corev1.ResourceCPU:    resource.MustParse("50m"),
-							corev1.ResourceMemory: resource.MustParse("64Mi"),
-						},
-						Limits: corev1.ResourceList{
-							corev1.ResourceCPU:    resource.MustParse("200m"),
-							corev1.ResourceMemory: resource.MustParse("256Mi"),
-						},
-					},
-				},
-			},
-		},
+		Spec: podSpec,
 	}
 
 	// Note: No volume mounts needed for runner/integration secrets
@@ -1423,8 +1448,10 @@ func reconcileSpecReposWithPatch(sessionNamespace, sessionName string, spec map[
 		return nil
 	}
 
-	// Parse spec repos
-	specRepos := make([]map[string]string, 0, len(repoSlice))
+	// Parse spec repos and deduplicate by URL (keep last occurrence)
+	// When the same repo URL appears multiple times with different branches,
+	// we only keep one entry (the last one) since we only have one physical clone
+	specReposMap := make(map[string]map[string]string)
 	for _, entry := range repoSlice {
 		if repoMap, ok := entry.(map[string]interface{}); ok {
 			url, _ := repoMap["url"].(string)
@@ -1435,11 +1462,18 @@ func reconcileSpecReposWithPatch(sessionNamespace, sessionName string, spec map[
 			if b, ok := repoMap["branch"].(string); ok && strings.TrimSpace(b) != "" {
 				branch = b
 			}
-			specRepos = append(specRepos, map[string]string{
+			// Use URL as key to deduplicate - last branch wins
+			specReposMap[url] = map[string]string{
 				"url":    url,
 				"branch": branch,
-			})
+			}
 		}
+	}
+
+	// Convert map back to slice
+	specRepos := make([]map[string]string, 0, len(specReposMap))
+	for _, repo := range specReposMap {
+		specRepos = append(specRepos, repo)
 	}
 
 	// Get current reconciled repos from status
@@ -1459,16 +1493,22 @@ func reconcileSpecReposWithPatch(sessionNamespace, sessionName string, spec map[
 		}
 	}
 
-	// Detect drift: repos added or removed
+	// Detect drift: repos added, removed, or branch changed
 	toAdd := []map[string]string{}
 	toRemove := []map[string]string{}
+	branchChanged := []map[string]string{}
 
 	// Find repos in spec but not in reconciled (need to add)
+	// Also detect branch changes for existing repos
 	for _, specRepo := range specRepos {
 		found := false
 		for _, reconciledRepo := range reconciledRepos {
 			if specRepo["url"] == reconciledRepo["url"] {
 				found = true
+				// Check if branch changed
+				if specRepo["branch"] != reconciledRepo["branch"] {
+					branchChanged = append(branchChanged, specRepo)
+				}
 				break
 			}
 		}
@@ -1491,7 +1531,7 @@ func reconcileSpecReposWithPatch(sessionNamespace, sessionName string, spec map[
 		}
 	}
 
-	if len(toAdd) == 0 && len(toRemove) == 0 {
+	if len(toAdd) == 0 && len(toRemove) == 0 && len(branchChanged) == 0 {
 		return nil
 	}
 
@@ -1499,7 +1539,7 @@ func reconcileSpecReposWithPatch(sessionNamespace, sessionName string, spec map[
 	// Runner will restart Claude SDK client with new repo configuration
 	runnerBaseURL := fmt.Sprintf("http://session-%s.%s.svc.cluster.local:8001", sessionName, sessionNamespace)
 
-	// Add repos
+	// Add new repos
 	for _, repo := range toAdd {
 		repoName := deriveRepoNameFromURL(repo["url"])
 
@@ -1527,6 +1567,38 @@ func reconcileSpecReposWithPatch(sessionNamespace, sessionName string, spec map[
 
 		if resp.StatusCode != http.StatusOK {
 			log.Printf("[Reconcile] Runner returned %d for repo add", resp.StatusCode)
+		}
+	}
+
+	// Handle branch changes for existing repos (checkout different branch)
+	for _, repo := range branchChanged {
+		repoName := deriveRepoNameFromURL(repo["url"])
+		log.Printf("[Reconcile] Branch changed for repo '%s' to '%s', checking out new branch", repoName, repo["branch"])
+
+		payload := map[string]interface{}{
+			"url":    repo["url"],
+			"branch": repo["branch"],
+			"name":   repoName,
+		}
+		payloadBytes, _ := json.Marshal(payload)
+
+		req, err := http.NewRequest("POST", runnerBaseURL+"/repos/add", bytes.NewReader(payloadBytes))
+		if err != nil {
+			log.Printf("[Reconcile] Failed to create branch change request: %v", err)
+			continue
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		client := &http.Client{Timeout: 10 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			log.Printf("[Reconcile] Failed to change branch via runner: %v", err)
+			continue
+		}
+		resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			log.Printf("[Reconcile] Runner returned %d for branch change", resp.StatusCode)
 		}
 	}
 
@@ -1559,22 +1631,25 @@ func reconcileSpecReposWithPatch(sessionNamespace, sessionName string, spec map[
 		}
 	}
 
-	// Update status to reflect the reconciled state (via statusPatch)
+	// Build simple reconciled status (frontend now polls runner directly for real-time branch info)
 	reconciled := make([]interface{}, 0, len(specRepos))
 	for _, repo := range specRepos {
-		reconciled = append(reconciled, map[string]interface{}{
+		repoName := deriveRepoNameFromURL(repo["url"])
+		reconciledEntry := map[string]interface{}{
 			"url":      repo["url"],
-			"branch":   repo["branch"],
-			"status":   "Ready",
+			"name":     repoName,
+			"branch":   repo["branch"], // Intended branch from spec (deprecated)
 			"clonedAt": time.Now().UTC().Format(time.RFC3339),
-		})
+			"status":   "Ready", // Simplified - frontend polls runner for detailed status
+		}
+		reconciled = append(reconciled, reconciledEntry)
 	}
 	statusPatch.SetField("reconciledRepos", reconciled)
 	statusPatch.AddCondition(conditionUpdate{
 		Type:    conditionReposReconciled,
 		Status:  "True",
 		Reason:  "Reconciled",
-		Message: fmt.Sprintf("Reconciled %d repos (added: %d, removed: %d)", len(specRepos), len(toAdd), len(toRemove)),
+		Message: fmt.Sprintf("Reconciled %d repos (added: %d, removed: %d, branch changed: %d)", len(specRepos), len(toAdd), len(toRemove), len(branchChanged)),
 	})
 
 	return nil
@@ -1610,9 +1685,10 @@ func reconcileActiveWorkflowWithPatch(sessionNamespace, sessionName string, spec
 	reconciledWorkflowRaw, _, _ := unstructured.NestedMap(status, "reconciledWorkflow")
 	reconciledGitURL, _ := reconciledWorkflowRaw["gitUrl"].(string)
 	reconciledBranch, _ := reconciledWorkflowRaw["branch"].(string)
+	reconciledPath, _ := reconciledWorkflowRaw["path"].(string)
 
 	// Detect drift: workflow changed
-	if reconciledGitURL == gitURL && reconciledBranch == branch {
+	if reconciledGitURL == gitURL && reconciledBranch == branch && reconciledPath == path {
 		return nil
 	}
 
@@ -2250,6 +2326,9 @@ func deriveRepoNameFromURL(repoURL string) string {
 
 	return "repo"
 }
+
+// pollRunnerReposStatus removed - frontend now polls runner directly via backend API
+// for real-time branch information. Operator no longer needs to maintain this in CR status.
 
 // regenerateRunnerToken provisions a fresh ServiceAccount, Role, RoleBinding, and token Secret for a session.
 // This is called when restarting sessions to ensure fresh tokens.

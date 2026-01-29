@@ -167,7 +167,7 @@ export function CreateWorkspaceDialog({
         <DialogHeader className="space-y-3">
           <DialogTitle>Create New Workspace</DialogTitle>
           <DialogDescription>
-            Set up a new workspace for your team
+            A workspace is an isolated environment where your team can create and manage AI-powered agentic sessions. Each workspace has its own settings, permissions, and resources.
           </DialogDescription>
         </DialogHeader>
 

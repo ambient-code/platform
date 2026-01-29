@@ -7,6 +7,9 @@ type AgenticSession struct {
 	Metadata   map[string]interface{} `json:"metadata"`
 	Spec       AgenticSessionSpec     `json:"spec"`
 	Status     *AgenticSessionStatus  `json:"status,omitempty"`
+	// Computed field: auto-generated branch name if user doesn't provide one
+	// IMPORTANT: Keep in sync with runner (main.py) and frontend (add-context-modal.tsx)
+	AutoBranch string `json:"autoBranch,omitempty"`
 }
 
 type AgenticSessionSpec struct {

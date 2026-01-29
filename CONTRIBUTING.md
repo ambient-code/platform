@@ -344,252 +344,170 @@ Your PR should include:
 
 ## Local Development Setup
 
-The recommended way to develop and test Ambient Code Platform locally is using **Minikube**. This provides a lightweight Kubernetes environment on your local machine with no authentication requirements, making development fast and easy.
+The recommended way to develop and test Ambient Code Platform locally is using **Kind (Kubernetes in Docker)**. This provides a lightweight Kubernetes environment that matches our CI/CD setup.
 
-### Installing Minikube and Prerequisites
+> **Migrating from Minikube?** Kind is faster, lighter, and matches CI. See [Local Development Guide](docs/developer/local-development/) for comparison.
+
+### Installing Kind and Prerequisites
 
 #### macOS
 
 ```bash
 # Install using Homebrew
-brew install minikube kubectl
+brew install kind kubectl docker
 ```
 
-#### Linux (Debian/Ubuntu)
+#### Linux
 
 ```bash
-# Install Podman
-sudo apt-get update
-sudo apt-get install podman
-
 # Install kubectl
 curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
 sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
 
-# Install Minikube
-curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
-sudo install minikube-linux-amd64 /usr/local/bin/minikube
-```
+# Install Kind
+curl -Lo ./kind https://kind.sigs.k8s.io/dl/latest/kind-linux-amd64
+chmod +x ./kind
+sudo mv ./kind /usr/local/bin/kind
 
-#### Linux (Fedora/RHEL)
-
-```bash
-# Install Podman
-sudo dnf install podman
-
-# Install kubectl
-curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
-
-# Install Minikube
-curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
-sudo install minikube-linux-amd64 /usr/local/bin/minikube
+# Install Docker
+# Follow: https://docs.docker.com/engine/install/
 ```
 
 ### Quick Start
 
-Once Minikube and prerequisites are installed, you can start the complete development environment with a single command:
+Once Kind and prerequisites are installed, you can start the complete development environment with a single command:
 
 #### First-Time Setup
 
-```shell
-make local-up
+```bash
+make kind-up
 ```
 
 This command will:
-- Start Minikube with appropriate resources
-- Enable required addons (ingress, storage)
-- Build container images
+- Create Kind cluster (~30 seconds)
 - Deploy all components (backend, frontend, operator)
-- Set up networking
+- Set up ingress and port forwarding
+- Load container images
 
-The setup takes 2-3 minutes on first run.
+The setup takes ~2 minutes on first run.
 
 #### Access the Application
 
-Get the access URL:
-
-```shell
-make local-url
+```bash
+# Access at http://localhost:8080
 ```
 
-This will display the frontend and backend URLs, typically:
-- Frontend: `http://192.168.64.4:30030`
-- Backend: `http://192.168.64.4:30080`
-
-Or manually construct the URL:
-
-```shell
-# Get Minikube IP
-minikube ip
-
-# Access at http://<minikube-ip>:30030
-```
-
-**Authentication:**
-
-Authentication is **completely disabled** for local development:
-- ✅ No login required
-- ✅ Automatic login as "developer"
-- ✅ Full access to all features
-- ✅ Backend uses service account for Kubernetes API
+Simple! Kind automatically sets up port forwarding to localhost.
 
 #### Stopping and Restarting
 
-Stop the application (keeps Minikube running):
+Stop and delete the Kind cluster:
 
-```shell
-make local-stop
+```bash
+make kind-down
 ```
 
-Restart the application:
+Restart:
 
-```shell
-make local-up
+```bash
+make kind-up
 ```
 
-Delete the entire Minikube cluster:
+#### Alternative: Minikube (Older Approach)
 
-```shell
-make local-delete
-```
+If Kind doesn't work for you, see [QUICK_START.md](QUICK_START.md) for Minikube instructions.
 
 ### Additional Development Commands
 
 **Check status:**
 ```bash
-make local-status       # View pod status and deployment info
+kubectl get pods -n ambient-code
+kubectl get svc -n ambient-code
 ```
 
 **View logs:**
 ```bash
-make local-logs         # Backend logs
-make local-logs-frontend # Frontend logs (if available)
-make local-logs-operator # Operator logs (if available)
+kubectl logs -n ambient-code deployment/backend-api -f
+kubectl logs -n ambient-code deployment/frontend -f
+kubectl logs -n ambient-code deployment/agentic-operator -f
 ```
 
 **Cleanup:**
 ```bash
-make local-stop         # Stop deployment, keep Minikube running
-make local-delete       # Delete entire Minikube cluster
+make kind-down         # Delete Kind cluster
 ```
 
-**Access Kubernetes:**
+**Run tests:**
 ```bash
-kubectl get pods -n ambient-code       # View pods
-kubectl logs <pod-name> -n ambient-code # View specific pod logs
-kubectl describe pod <pod-name> -n ambient-code # Debug pod issues
+make test-e2e          # Run E2E tests
 ```
 
 ## Troubleshooting
 
-### Minikube Installation and Setup Issues
+### Kind Cluster Issues
 
-#### Insufficient Resources
+#### Cluster Won't Start
 
-If Minikube or the platform won't start, you may need to allocate more resources:
+```bash
+# Check Docker is running
+docker ps
 
-```shell
-# Stop Minikube
-minikube stop
-
-# Delete the existing cluster
-minikube delete
-
-# Start with more resources
-minikube start --memory=8192 --cpus=4 --disk-size=50g
-
-# Then deploy the application
-make local-up
+# Delete and recreate cluster
+make kind-down
+make kind-up
 ```
 
-#### Minikube Won't Start
+#### Pods Not Starting
 
-If Minikube fails to start, try these steps:
+```bash
+# Check pod status
+kubectl get pods -n ambient-code
 
-```shell
-# Check status
-minikube status
+# View pod details
+kubectl describe pod <pod-name> -n ambient-code
 
-# View logs
-minikube logs
-
-# Try with a specific driver
-minikube start --driver=podman
-# or
-minikube start --driver=docker
+# Check logs
+kubectl logs <pod-name> -n ambient-code
 ```
 
-#### Complete Minikube Reset
+#### Port Forwarding Issues
 
-If Minikube is completely broken, you can fully reset it:
+```bash
+# Check if port 8080 is in use
+lsof -i :8080
 
-```shell
-# Stop and delete cluster
-minikube stop
-minikube delete
+# Restart port forwarding
+make kind-down
+make kind-up
+```
 
-# Clear cache (optional)
-rm -rf ~/.minikube/cache
+#### Complete Reset
 
-# Start fresh
-minikube start --memory=4096 --cpus=2
-make local-up
+If Kind cluster is broken:
+
+```bash
+# Delete cluster
+kind delete cluster --name ambient-code
+
+# Recreate
+make kind-up
 ```
 
 ### Application Issues
-
-#### Viewing Logs via CLI
-
-The fastest way to view logs:
-
-```bash
-make local-logs         # Backend logs
-kubectl logs -n ambient-code -l app=backend --tail=100 -f
-kubectl logs -n ambient-code -l app=frontend --tail=100 -f
-kubectl logs -n ambient-code -l app=operator --tail=100 -f
-```
-
-#### Viewing Logs via Kubernetes Dashboard
-
-For detailed debugging through the Kubernetes dashboard:
-
-```bash
-# Open Kubernetes dashboard
-minikube dashboard
-```
-
-This will open a web interface where you can:
-1. Navigate to **Workloads > Pods**
-2. Select the `ambient-code` namespace
-3. Click on a pod to view details and logs
-
-#### Common Issues
 
 **Pods not starting:**
 
 ```bash
 kubectl get pods -n ambient-code
 kubectl describe pod <pod-name> -n ambient-code
+kubectl logs <pod-name> -n ambient-code
 ```
 
-**Image pull errors:**
+**Image issues:**
 
 ```bash
-kubectl get events -n ambient-code --sort-by='.lastTimestamp'
-```
-
-**Check if images are loaded:**
-
-```bash
-minikube ssh docker images | grep ambient-code
-```
-
-**PVC issues:**
-
-```bash
-kubectl get pvc -n ambient-code
-kubectl describe pvc <pvc-name> -n ambient-code
+# Check if images are loaded
+docker exec -it ambient-code-control-plane crictl images | grep ambient
 ```
 
 **Service not accessible:**
@@ -598,22 +516,22 @@ kubectl describe pvc <pvc-name> -n ambient-code
 # Check services
 kubectl get services -n ambient-code
 
-# Check NodePort assignments
-kubectl get service backend -n ambient-code -o jsonpath='{.spec.ports[0].nodePort}'
-kubectl get service frontend -n ambient-code -o jsonpath='{.spec.ports[0].nodePort}'
+# Check ingress
+kubectl get ingress -n ambient-code
 
-# Get Minikube IP
-minikube ip
+# Test directly
+kubectl port-forward -n ambient-code svc/frontend-service 3000:3000
 ```
 
 **Networking issues:**
 
 ```bash
-# Verify ingress addon is enabled
-minikube addons list | grep ingress
+# Check ingress controller
+kubectl get pods -n ingress-nginx
 
-# Enable if disabled
-minikube addons enable ingress
+# Restart port forwarding
+make kind-down
+make kind-up
 ```
 
 ## Getting Help

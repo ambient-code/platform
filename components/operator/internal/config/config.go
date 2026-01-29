@@ -4,6 +4,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/dynamic"
@@ -28,6 +29,7 @@ type Config struct {
 	ImagePullPolicy        corev1.PullPolicy
 	S3Endpoint             string
 	S3Bucket               string
+	PodFSGroup             *int64
 }
 
 // InitK8sClients initializes the Kubernetes clients
@@ -118,6 +120,14 @@ func LoadConfig() *Config {
 		s3Bucket = "ambient-sessions"
 	}
 
+	// Optional pod fsGroup (useful for permissive clusters like kind)
+	var podFSGroup *int64
+	if fsGroupStr := os.Getenv("POD_FSGROUP"); fsGroupStr != "" {
+		if fsGroupValue, err := strconv.ParseInt(fsGroupStr, 10, 64); err == nil {
+			podFSGroup = &fsGroupValue
+		}
+	}
+
 	return &Config{
 		Namespace:              namespace,
 		BackendNamespace:       backendNamespace,
@@ -127,5 +137,6 @@ func LoadConfig() *Config {
 		ImagePullPolicy:        imagePullPolicy,
 		S3Endpoint:             s3Endpoint,
 		S3Bucket:               s3Bucket,
+		PodFSGroup:             podFSGroup,
 	}
 }

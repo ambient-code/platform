@@ -2,7 +2,6 @@
 
 > Kubernetes-native AI automation platform for intelligent agentic sessions with multi-agent collaboration
 
-**Note:** This project was formerly known as "vTeam". While the project has been rebranded to **Ambient Code Platform**, the name "vTeam" still appears in various technical artifacts for backward compatibility (see [Legacy vTeam References](#legacy-vteam-references) below).
 
 ## Overview
 
@@ -15,20 +14,19 @@ The **Ambient Code Platform** is an AI automation platform that combines Claude 
 - **Git Provider Support**: Native integration with GitHub and GitLab (SaaS and self-hosted)
 - **Kubernetes Native**: Built with Custom Resources, Operators, and proper RBAC for enterprise deployment
 - **Real-time Monitoring**: Live status updates and job execution tracking
-- **🤖 Amber Background Agent**: Automated issue-to-PR workflows via GitHub Actions ([quickstart](docs/amber-quickstart.md))
 
-### Amber: Self-Service Automation
+## 🚀 Quick Start
 
-**Amber** is a background agent that handles GitHub issues automatically:
+**Get running locally in under 2 minutes with Kind:**
 
-- 🤖 **Auto-Fix**: Create issue with `amber:auto-fix` label → Amber creates PR with linting/formatting fixes
-- 🔧 **Refactoring**: Label issue `amber:refactor` → Amber breaks large files, extracts patterns
-- 🧪 **Test Coverage**: Use `amber:test-coverage` → Amber adds missing tests
+```bash
+make kind-up
+# Access at http://localhost:8080
+```
 
-**Quick Links**:
-- [5-Minute Quickstart](docs/amber-quickstart.md)
-- [Complete Guide](docs/amber-automation.md)
-- [Create Auto-Fix Issue](../../issues/new?template=amber-auto-fix.yml)
+**Full guide:** [Kind Local Development](docs/developer/local-development/kind.md)
+
+**Alternative approaches:** [Minikube](docs/developer/local-development/minikube.md) (older) • [CRC](docs/developer/local-development/crc.md) (OpenShift-specific)
 
 ## Architecture
 
@@ -37,42 +35,94 @@ The platform consists of containerized microservices orchestrated via Kubernetes
 | Component | Technology | Description |
 |-----------|------------|-------------|
 | **Frontend** | NextJS + Shadcn | User interface for managing agentic sessions |
-| **Backend API** | Go + Gin | REST API for managing Kubernetes Custom Resources (multi-tenant: projects, sessions, access control) |
+| **Backend API** | Go + Gin | REST API for managing Kubernetes Custom Resources |
 | **Agentic Operator** | Go | Kubernetes operator that watches CRs and creates Jobs |
-| **Claude Code Runner** | Python + Claude Code CLI | Pod that executes AI with multi-agent collaboration capabilities |
+| **Claude Code Runner** | Python + Claude Code CLI | Pod that executes AI with multi-agent collaboration |
 
-### Agentic Session Flow
+**Learn more:** [Architecture Documentation](docs/architecture/)
 
-1. **Create Session**: User creates agentic session via web UI with task description
-2. **API Processing**: Backend creates `AgenticSession` Custom Resource in Kubernetes
-3. **Job Scheduling**: Operator detects CR and creates Kubernetes Job with runner pod
-4. **AI Execution**: Pod runs Claude Code CLI with multi-agent collaboration for intelligent analysis
-5. **Result Storage**: Analysis results stored back in Custom Resource status
-6. **UI Updates**: Frontend displays real-time progress and completed results
+## 📚 Documentation
 
-## 🚀 Quick Start
+### For Users
+- 📘 [User Guide](docs/user-guide/) - Using the platform
+- 🚀 [Deployment Guide](docs/deployment/) - Production deployment
 
-**Get started in under 5 minutes!**
+### For Developers
+- 🔧 [Contributing Guide](CONTRIBUTING.md) - How to contribute
+- 💻 [Developer Guide](docs/developer/) - Development setup and standards
+- 🏗️ [Architecture](docs/architecture/) - Technical design and ADRs
+- 🧪 [Testing](docs/testing/) - Test suite documentation
 
-See **[QUICK_START.md](QUICK_START.md)** for the fastest way to run vTeam locally.
+### Local Development
+- ⚡ **[Kind Development](docs/developer/local-development/kind.md)** - **Recommended** (fastest, used in CI/CD)
+- 🔄 **[Local Development Options](docs/developer/local-development/)** - Kind vs Minikube vs CRC
+- 📦 **[Minikube Setup](docs/developer/local-development/minikube.md)** - Older approach (still supported)
+- 🔴 **[CRC Setup](docs/developer/local-development/crc.md)** - For OpenShift-specific features
+
+### Integrations
+- 🔌 [GitHub Integration](docs/integrations/GITHUB_APP_SETUP.md)
+- 🦊 [GitLab Integration](docs/integrations/gitlab-integration.md)
+- 📁 [Google Workspace](docs/integrations/google-workspace.md)
+
+## 🤖 Amber Automation Tool
+
+**Amber**
+
+- 🤖 **Auto-Fix**: Automated linting/formatting fixes
+- 🔧 **Refactoring**: Automated code refactoring tasks
+- 🧪 **Test Coverage**: Automated test generation
+
+**Quick Links:**
+- [5-Minute Quickstart](docs/amber-quickstart.md)
+- [Complete Guide](docs/amber-automation.md)
+- [Setup Instructions](AMBER_SETUP.md)
+
+**Note:** Amber is a development tool for this repository and does NOT need to be deployed with the platform.
+
+## 🧩 Components
+
+Each component has its own detailed README:
+
+- [Frontend](components/frontend/) - Next.js web application
+- [Backend](components/backend/) - Go REST API
+- [Operator](components/operator/) - Kubernetes controller
+- [Runners](components/runners/) - AI execution pods
+- [Manifests](components/manifests/) - Kubernetes deployment resources
+
+## 🤝 Contributing
+
+We welcome contributions! Please see:
+
+- [CONTRIBUTING.md](CONTRIBUTING.md) - Contribution guidelines
+- [CLAUDE.md](CLAUDE.md) - Development standards for AI assistants
+- [Code of Conduct](CONTRIBUTING.md#code-of-conduct)
+
+### Quick Development Workflow
 
 ```bash
-# Install prerequisites (one-time)
-brew install minikube kubectl  # macOS
-# or follow QUICK_START.md for Linux
+# Fork and clone
+git clone https://github.com/YOUR_USERNAME/vTeam.git
+cd vTeam
 
-# Start
+# Create feature branch
+git checkout -b feature/amazing-feature
+
+# Make changes and test
 make local-up
+make test
 
-# Check status
-make local-status
+# Submit PR
+git push origin feature/amazing-feature
 ```
 
-That's it! Access the app at `http://$(minikube ip):30030` (get IP with `make local-url`).
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
 
-## Git Provider Support
+**Quick Links:**
+[Quick Start](QUICK_START.md) • [User Guide](docs/user-guide/) • [Architecture](docs/architecture/) • [Contributing](CONTRIBUTING.md) • [API Docs](docs/api/)
 
 ### Supported Providers
 
@@ -633,3 +683,5 @@ These technical references remain unchanged to maintain compatibility with exist
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+**Note:** This project was formerly known as "vTeam". Technical artifacts (image names, namespaces, API groups) still use "vteam" for backward compatibility.
