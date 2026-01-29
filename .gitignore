@@ -105,6 +105,9 @@ dmypy.json
 
 .claude/settings.local.json
 
+# Design documentation
+.design/
+
 # macOS system files
 .DS_Store
 .DS_Store?
