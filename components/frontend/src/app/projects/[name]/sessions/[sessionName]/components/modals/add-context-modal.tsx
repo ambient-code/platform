@@ -34,9 +34,12 @@ export function AddContextModal({
   const handleSubmit = async () => {
     if (!contextUrl.trim()) return;
 
+    // Trim URL and remove trailing slash
+    const sanitizedUrl = contextUrl.trim().replace(/\/+$/, '');
+
     // Use autoBranch from backend (single source of truth), or empty to let runner auto-generate
     const defaultBranch = autoBranch || '';
-    await onAddRepository(contextUrl.trim(), contextBranch.trim() || defaultBranch, autoPush);
+    await onAddRepository(sanitizedUrl, contextBranch.trim() || defaultBranch, autoPush);
 
     // Reset form
     setContextUrl("");
