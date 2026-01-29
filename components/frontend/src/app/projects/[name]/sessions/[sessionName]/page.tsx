@@ -13,10 +13,16 @@ import {
   Download,
   SlidersHorizontal,
   ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
   AlertTriangle,
   X,
   MoreVertical,
+  RefreshCw,
+  Edit,
+  CloudDownload,
 } from "lucide-react";
+import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 
@@ -46,8 +52,15 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { SessionHeader } from "./session-header";
 import { getPhaseColor } from "@/utils/session-helpers";
@@ -147,6 +160,18 @@ export default function ProjectSessionDetailPage({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userHasInteracted, setUserHasInteracted] = useState(false);
 
+  // Left panel visibility and size state
+  const [leftPanelVisible, setLeftPanelVisible] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    const saved = localStorage.getItem('session-left-panel-visible');
+    return saved === null ? true : saved === 'true';
+  });
+  const [leftPanelSize, setLeftPanelSize] = useState(() => {
+    if (typeof window === 'undefined') return 30;
+    const saved = localStorage.getItem('session-left-panel-size');
+    return saved ? parseFloat(saved) : 30;
+  });
+
   // Directory browser state (unified for artifacts, repos, and workflow)
   const [selectedDirectory, setSelectedDirectory] = useState<DirectoryOption>({
     type: "artifacts",
@@ -171,6 +196,16 @@ export default function ProjectSessionDetailPage({
       } catch {}
     });
   }, [params]);
+
+  // Persist left panel visibility
+  useEffect(() => {
+    localStorage.setItem('session-left-panel-visible', String(leftPanelVisible));
+  }, [leftPanelVisible]);
+
+  // Persist left panel size
+  useEffect(() => {
+    localStorage.setItem('session-left-panel-size', String(leftPanelSize));
+  }, [leftPanelSize]);
 
   // Session queue hook (localStorage-backed)
   const sessionQueue = useSessionQueue(projectName, sessionName);
@@ -1452,122 +1487,650 @@ export default function ProjectSessionDetailPage({
         {/* Main content area */}
         <div className="flex-grow overflow-hidden bg-card">
           <div className="h-full">
-            <div className="h-full flex gap-6">
+            <div className="h-full flex gap-0 relative">
               {/* Mobile sidebar overlay */}
               {mobileMenuOpen && (
-                <div 
+                <div
                   className="fixed inset-0 bg-background/80 backdrop-blur-sm z-40 md:hidden"
                   onClick={() => setMobileMenuOpen(false)}
                 />
               )}
 
-              {/* Left Column - Accordions - always show with state-based styling */}
-              {session && (
-                <div className={cn(
-                  "flex-[0_0_400px] min-w-[350px] max-w-[500px] flex flex-col sticky top-0 self-start h-[calc(100vh-8rem)] pt-6 pl-6 pr-6 bg-card relative",
-                  "md:flex md:pr-0",
-                  mobileMenuOpen ? "fixed left-0 top-16 z-50 shadow-lg" : "hidden",
-                  // Disable interactions when not running
-                  phase !== "Running" && "pointer-events-none"
-                )}>
-                  {/* Backdrop blur layer for entire sidebar */}
-                  {phase !== "Running" && (
-                    <div className={cn(
-                      "absolute inset-0 z-[5] backdrop-blur-[1px]",
-                      ["Creating", "Pending", "Stopping"].includes(phase) && "bg-background/40",
-                      ["Stopped", "Completed", "Failed"].includes(phase) && "bg-background/50 backdrop-blur-[2px]"
-                    )} />
-                  )}
+              {/* Floating show button when panel is hidden (desktop only) */}
+              {!leftPanelVisible && !mobileMenuOpen && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setLeftPanelVisible(true)}
+                  className="hidden md:flex absolute left-4 top-4 z-50 h-8 w-8 p-0 shadow-md"
+                  title="Show left panel"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              )}
 
-                  {/* State overlay for non-running sessions */}
-                  {phase !== "Running" && (
-                    <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-auto">
-                      <div className="text-center">
-                        {/* Starting states */}
-                        {["Creating", "Pending"].includes(phase) && (
-                          <>
-                            <Loader2 className="h-10 w-10 mx-auto mb-3 animate-spin text-blue-600" />
-                            <h3 className="font-semibold text-lg mb-1">Starting Session</h3>
-                            <p className="text-sm text-muted-foreground">
-                              Setting up your workspace...
-                            </p>
-                          </>
-                        )}
-                        
-                        {/* Stopping state */}
-                        {phase === "Stopping" && (
-                          <>
-                            <Loader2 className="h-10 w-10 mx-auto mb-3 animate-spin text-orange-600" />
-                            <h3 className="font-semibold text-lg mb-1">Stopping Session</h3>
-                            <p className="text-sm text-muted-foreground">
-                              Saving workspace state...
-                            </p>
-                          </>
-                        )}
-                        
-                        {/* Hibernated states */}
-                        {["Stopped", "Completed", "Failed"].includes(phase) && (
-                          <div className="max-w-sm">
-                            <h3 className="font-semibold text-lg mb-4">Session Hibernated</h3>
-                            
-                            {/* Session details */}
-                            <div className="space-y-3 mb-6 text-left">
-                              {workflowManagement.activeWorkflow && (
-                                <div>
-                                  <p className="text-xs font-medium text-muted-foreground mb-1.5">Workflow</p>
-                                  <Badge variant="secondary" className="text-xs">
-                                    {workflowManagement.activeWorkflow}
-                                  </Badge>
-                                </div>
+              {/* Desktop resizable panels */}
+              <PanelGroup direction="horizontal" className="hidden md:flex h-full">
+                {leftPanelVisible && (
+                  <>
+                    <Panel
+                      defaultSize={leftPanelSize}
+                      minSize={20}
+                      maxSize={50}
+                      onResize={(size) => setLeftPanelSize(size)}
+                      className="relative"
+                    >
+                      {/* Left Column - Accordions */}
+                      <div className="flex flex-col h-full overflow-y-auto pt-6 pl-6 pr-3 bg-card">
+                        <div className="flex-grow pb-6">
+                  <Accordion
+                    type="multiple"
+                    value={openAccordionItems}
+                    onValueChange={setOpenAccordionItems}
+                    className="w-full space-y-3"
+                  >
+                    <WorkflowsAccordion
+                      sessionPhase={session?.status?.phase}
+                      activeWorkflow={workflowManagement.activeWorkflow}
+                      selectedWorkflow={workflowManagement.selectedWorkflow}
+                      workflowActivating={workflowManagement.workflowActivating}
+                      ootbWorkflows={ootbWorkflows}
+                      isExpanded={openAccordionItems.includes("workflows")}
+                      onWorkflowChange={handleWorkflowChange}
+                      onResume={handleContinue}
+                    />
+
+                    <RepositoriesAccordion
+                      repositories={session?.spec?.repos || []}
+                      uploadedFiles={fileUploadsList.map((f) => ({
+                        name: f.name,
+                        path: f.path,
+                        size: f.size,
+                      }))}
+                      onAddRepository={() => setContextModalOpen(true)}
+                      onRemoveRepository={(repoName) =>
+                        removeRepoMutation.mutate(repoName)
+                      }
+                      onRemoveFile={(fileName) =>
+                        removeFileMutation.mutate(fileName)
+                      }
+                    />
+
+                    <ArtifactsAccordion
+                      files={artifactsFiles}
+                      currentSubPath={artifactsOps.currentSubPath}
+                      viewingFile={artifactsOps.viewingFile}
+                      isLoadingFile={artifactsOps.loadingFile}
+                      onFileOrFolderSelect={
+                        artifactsOps.handleFileOrFolderSelect
+                      }
+                      onRefresh={refetchArtifactsFiles}
+                      onDownloadFile={artifactsOps.handleDownloadFile}
+                      onNavigateBack={artifactsOps.navigateBack}
+                    />
+
+                    <McpIntegrationsAccordion
+                      projectName={projectName}
+                      sessionName={sessionName}
+                    />
+
+                    {/* File Explorer */}
+                    <AccordionItem
+                      value="file-explorer"
+                      className="border rounded-lg px-3 bg-card"
+                    >
+                      <AccordionTrigger className="text-base font-semibold hover:no-underline py-3">
+                        <div className="flex items-center gap-2 w-full">
+                          <Folder className="h-4 w-4" />
+                          <span>File Explorer</span>
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] px-2 py-0.5"
+                          >
+                            EXPERIMENTAL
+                          </Badge>
+                          {gitOps.gitStatus?.hasChanges && (
+                            <div className="flex gap-1 ml-auto mr-2">
+                              {(gitOps.gitStatus?.totalAdded ?? 0) > 0 && (
+                                <Badge
+                                  variant="outline"
+                                  className="bg-green-50 text-green-700 border-green-200 dark:bg-green-950/50 dark:text-green-300 dark:border-green-800"
+                                >
+                                  +{gitOps.gitStatus.totalAdded}
+                                </Badge>
                               )}
-                              
-                              {session?.spec?.repos && session.spec.repos.length > 0 && (
-                                <div>
-                                  <p className="text-xs font-medium text-muted-foreground mb-1.5">
-                                    Repositories ({session.spec.repos.length})
-                                  </p>
-                                  <div className="text-sm text-foreground/80 space-y-1">
-                                    {session.spec.repos.slice(0, 3).map((repo, idx) => (
-                                      <div key={idx} className="truncate">
-                                        • {repo.url?.split('/').pop()?.replace('.git', '')}
-                                      </div>
-                                    ))}
-                                    {session.spec.repos.length > 3 && (
-                                      <div className="text-xs text-muted-foreground mt-1">
-                                        +{session.spec.repos.length - 3} more
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
+                              {(gitOps.gitStatus?.totalRemoved ?? 0) > 0 && (
+                                <Badge
+                                  variant="outline"
+                                  className="bg-red-50 text-red-700 border-red-200 dark:bg-red-950/50 dark:text-red-300 dark:border-red-800"
+                                >
+                                  -{gitOps.gitStatus.totalRemoved}
+                                </Badge>
                               )}
-                              
-                              {(!workflowManagement.activeWorkflow && (!session?.spec?.repos || session.spec.repos.length === 0)) && (
-                                <div className="text-center py-2">
-                                  <p className="text-xs text-muted-foreground">
-                                    No workflow or repositories configured
-                                  </p>
+                            </div>
+                          )}
+                        </div>
+                      </AccordionTrigger>
+                      <AccordionContent className="pt-2 pb-3">
+                        <div className="space-y-3">
+                          <p className="text-sm text-muted-foreground">
+                            Browse, view, and manage files in your workspace
+                            directories. Track changes and sync with Git for
+                            version control.
+                          </p>
+
+                          {/* Directory Selector */}
+                          <div className="flex items-center justify-between gap-2">
+                            <Label className="text-xs text-muted-foreground">
+                              Directory:
+                            </Label>
+                            <Select
+                              value={`${selectedDirectory.type}:${selectedDirectory.path}`}
+                              onValueChange={(value) => {
+                                const [type, ...pathParts] = value.split(":");
+                                const path = pathParts.join(":");
+                                const option = directoryOptions.find(
+                                  (opt) =>
+                                    opt.type === type && opt.path === path,
+                                );
+                                if (option) setSelectedDirectory(option);
+                              }}
+                            >
+                              <SelectTrigger className="w-[250px] h-8">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {directoryOptions.map((opt) => (
+                                  <SelectItem
+                                    key={`${opt.type}:${opt.path}`}
+                                    value={`${opt.type}:${opt.path}`}
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      {opt.type === "artifacts" && (
+                                        <Folder className="h-3 w-3" />
+                                      )}
+                                      {opt.type === "file-uploads" && (
+                                        <CloudUpload className="h-3 w-3" />
+                                      )}
+                                      {opt.type === "repo" && (
+                                        <GitBranch className="h-3 w-3" />
+                                      )}
+                                      {opt.type === "workflow" && (
+                                        <Sparkles className="h-3 w-3" />
+                                      )}
+                                      <span className="text-xs">
+                                        {opt.name}
+                                      </span>
+                                    </div>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          {/* File Browser */}
+                          <div className="border rounded-lg overflow-hidden">
+                            <div className="px-2 py-1.5 border-b flex items-center justify-between bg-muted/30">
+                              <div className="flex items-center gap-1 text-xs text-muted-foreground min-w-0 flex-1">
+                                {(fileOps.currentSubPath ||
+                                  fileOps.viewingFile) && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={fileOps.navigateBack}
+                                    className="h-6 px-1.5 mr-1"
+                                  >
+                                    ← Back
+                                  </Button>
+                                )}
+
+                                <Folder className="inline h-3 w-3 mr-1 flex-shrink-0" />
+                                <code className="bg-muted px-1 py-0.5 rounded text-xs truncate">
+                                  {selectedDirectory.path}
+                                  {fileOps.currentSubPath &&
+                                    `/${fileOps.currentSubPath}`}
+                                  {fileOps.viewingFile &&
+                                    `/${fileOps.viewingFile.path}`}
+                                </code>
+                              </div>
+
+                              {fileOps.viewingFile ? (
+                                <div className="flex items-center gap-1">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={fileOps.handleDownloadFile}
+                                    className="h-6 px-2 flex-shrink-0"
+                                    title="Download file"
+                                  >
+                                    <Download className="h-3 w-3" />
+                                  </Button>
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-6 px-2 flex-shrink-0"
+                                      >
+                                        <MoreVertical className="h-3 w-3" />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                      <DropdownMenuItem
+                                        disabled
+                                        className="text-xs text-muted-foreground"
+                                      >
+                                        Sync to Jira - Coming soon
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem
+                                        disabled
+                                        className="text-xs text-muted-foreground"
+                                      >
+                                        Sync to GDrive - Coming soon
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-1">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setUploadModalOpen(true)}
+                                    className="h-6 px-2 flex-shrink-0"
+                                    title="Upload files"
+                                  >
+                                    <CloudUpload className="h-3 w-3" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => refetchDirectoryFiles()}
+                                    className="h-6 px-2 flex-shrink-0"
+                                    title="Refresh"
+                                  >
+                                    <FolderSync className="h-3 w-3" />
+                                  </Button>
                                 </div>
                               )}
                             </div>
-                            
-                            <Button onClick={handleContinue} size="lg" className="w-full" disabled={continueMutation.isPending}>
-                              {continueMutation.isPending ? (
-                                <>
-                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                  Resuming...
-                                </>
-                              ) : (
-                                'Resume Session'
-                              )}
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
 
+                            <div className="p-2 max-h-64 overflow-y-auto">
+                              {fileOps.loadingFile ? (
+                                <div className="flex items-center justify-center py-8">
+                                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                                </div>
+                              ) : fileOps.viewingFile ? (
+                                <div className="text-xs">
+                                  <pre className="bg-muted/50 p-2 rounded overflow-x-auto">
+                                    <code>{fileOps.viewingFile.content}</code>
+                                  </pre>
+                                </div>
+                              ) : directoryFiles.length === 0 ? (
+                                <div className="text-center py-4 text-sm text-muted-foreground">
+                                  <FolderTree className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                                  <p>No files yet</p>
+                                  <p className="text-xs mt-1">
+                                    Files will appear here
+                                  </p>
+                                </div>
+                              ) : (
+                                <FileTree
+                                  nodes={directoryFiles.map(
+                                    (item): FileTreeNode => ({
+                                      name: item.name,
+                                      path: item.path,
+                                      type: item.isDir ? "folder" : "file",
+                                      sizeKb: item.size
+                                        ? item.size / 1024
+                                        : undefined,
+                                    }),
+                                  )}
+                                  onSelect={fileOps.handleFileOrFolderSelect}
+                                />
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Remote Configuration */}
+                          {!currentRemote ? (
+                            <div className="border border-blue-200 bg-blue-50 rounded-md px-3 py-2 flex items-center justify-between dark:border-blue-800 dark:bg-blue-950/50">
+                              <span className="text-sm text-blue-800 dark:text-blue-300">
+                                Set up Git remote for version control
+                              </span>
+                              <Button
+                                onClick={() => setRemoteDialogOpen(true)}
+                                size="sm"
+                                variant="outline"
+                              >
+                                <GitBranch className="mr-2 h-3 w-3" />
+                                Configure
+                              </Button>
+                            </div>
+                          ) : (
+                            <div className="border rounded-md px-2 py-1.5">
+                              <div className="flex items-center gap-2 text-xs">
+                                <div className="flex items-center gap-1.5 text-muted-foreground">
+                                  <Cloud className="h-3 w-3" />
+                                  <span className="truncate max-w-[200px]">
+                                    {currentRemote?.url
+                                      ?.split("/")
+                                      .slice(-2)
+                                      .join("/")
+                                      .replace(".git", "") || ""}
+                                    /{currentRemote?.branch || "main"}
+                                  </span>
+                                </div>
+
+                                <div className="flex-1" />
+
+                                {mergeStatus && !mergeStatus.canMergeClean ? (
+                                  <div className="flex items-center gap-1 text-red-600 dark:text-red-400">
+                                    <X className="h-3 w-3" />
+                                    <span className="font-medium">
+                                      conflict
+                                    </span>
+                                  </div>
+                                ) : gitOps.gitStatus?.hasChanges ||
+                                  mergeStatus?.remoteCommitsAhead ? (
+                                  <div className="flex items-center gap-1.5 text-muted-foreground text-xs">
+                                    {mergeStatus?.remoteCommitsAhead ? (
+                                      <span>
+                                        ↓{mergeStatus.remoteCommitsAhead}
+                                      </span>
+                                    ) : null}
+                                    {gitOps.gitStatus?.hasChanges ? (
+                                      <span className="font-normal">
+                                        {gitOps.gitStatus?.uncommittedFiles ??
+                                          0}{" "}
+                                        uncommitted
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                ) : null}
+
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={() =>
+                                          gitOps.handleGitSynchronize(
+                                            refetchMergeStatus,
+                                          )
+                                        }
+                                        disabled={
+                                          !mergeStatus?.canMergeClean ||
+                                          gitOps.synchronizing ||
+                                          gitOps.gitStatus?.hasChanges
+                                        }
+                                        className="h-6 w-6 p-0"
+                                      >
+                                        {gitOps.synchronizing ? (
+                                          <Loader2 className="h-3 w-3 animate-spin" />
+                                        ) : (
+                                          <RefreshCw className="h-3 w-3" />
+                                        )}
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>
+                                        {gitOps.gitStatus?.hasChanges
+                                          ? "Commit changes first"
+                                          : `Sync with origin/${currentRemote?.branch || "main"}`}
+                                      </p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-6 w-6 p-0"
+                                    >
+                                      <MoreVertical className="h-3 w-3" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem
+                                      onClick={() => setRemoteDialogOpen(true)}
+                                    >
+                                      <Edit className="mr-2 h-3 w-3" />
+                                      Manage Remote
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem
+                                      onClick={() => setCommitModalOpen(true)}
+                                      disabled={!gitOps.gitStatus?.hasChanges}
+                                    >
+                                      <Edit className="mr-2 h-3 w-3" />
+                                      Commit Changes
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      onClick={() =>
+                                        gitOps.handleGitPull(refetchMergeStatus)
+                                      }
+                                      disabled={
+                                        !mergeStatus?.canMergeClean ||
+                                        gitOps.isPulling
+                                      }
+                                    >
+                                      <CloudDownload className="mr-2 h-3 w-3" />
+                                      Pull
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      onClick={() =>
+                                        gitOps.handleGitPush(refetchMergeStatus)
+                                      }
+                                      disabled={
+                                        !mergeStatus?.canMergeClean ||
+                                        gitOps.isPushing ||
+                                        gitOps.gitStatus?.hasChanges
+                                      }
+                                    >
+                                      <CloudUpload className="mr-2 h-3 w-3" />
+                                      Push
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        const newRemotes = {
+                                          ...directoryRemotes,
+                                        };
+                                        delete newRemotes[
+                                          selectedDirectory.path
+                                        ];
+                                        setDirectoryRemotes(newRemotes);
+                                        successToast("Git remote disconnected");
+                                      }}
+                                    >
+                                      <X className="mr-2 h-3 w-3 text-red-600 dark:text-red-400" />
+                                      Disconnect
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  </Accordion>
+                </div>
+
+                {/* Hide panel button at bottom */}
+                <div className="flex-shrink-0 pb-4 pl-6 pr-3 pt-2 border-t bg-card">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setLeftPanelVisible(false)}
+                    className="w-full flex items-center justify-center gap-2 text-muted-foreground hover:text-foreground"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    <span className="text-xs">Hide panel</span>
+                  </Button>
+                </div>
+              </div>
+                    </Panel>
+                    <PanelResizeHandle className="w-1 bg-border hover:bg-primary transition-colors cursor-col-resize" />
+                  </>
+                )}
+
+                {/* Right Column - Messages */}
+                <Panel defaultSize={leftPanelVisible ? 70 : 100} minSize={50}>
+                  <div className="flex-1 min-w-0 flex flex-col h-full">
+                <Card className="relative flex-1 flex flex-col overflow-hidden py-0 border-0 rounded-none md:border-l">
+                  <CardContent className="px-3 pt-0 pb-0 flex-1 flex flex-col overflow-hidden">
+                    {/* Repository change overlay */}
+                    {repoChanging && (
+                      <div className="absolute inset-0 bg-background/90 backdrop-blur-sm z-10 flex items-center justify-center rounded-lg">
+                        <Alert className="max-w-md mx-4">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <AlertTitle>Updating Repositories...</AlertTitle>
+                          <AlertDescription>
+                            <div className="space-y-2">
+                              <p>
+                                Please wait while repositories are being
+                                updated. This may take 10-20 seconds...
+                              </p>
+                            </div>
+                          </AlertDescription>
+                        </Alert>
+                      </div>
+                    )}
+
+                    <div className="flex flex-col flex-1 overflow-hidden">
+                      <FeedbackProvider
+                        projectName={projectName}
+                        sessionName={sessionName}
+                        username={currentUser?.username || currentUser?.displayName || "anonymous"}
+                        initialPrompt={session?.spec?.initialPrompt}
+                        activeWorkflow={workflowManagement.activeWorkflow || undefined}
+                        messages={streamMessages}
+                        traceId={langfuseTraceId || undefined}
+                        messageFeedback={aguiState.messageFeedback}
+                      >
+                        <MessagesTab
+                          session={session}
+                          streamMessages={streamMessages}
+                          chatInput={chatInput}
+                          setChatInput={setChatInput}
+                          onSendChat={() => Promise.resolve(sendChat())}
+                          onInterrupt={aguiInterrupt}
+                          onEndSession={() => Promise.resolve(handleEndSession())}
+                          onGoToResults={() => {}}
+                          onContinue={handleContinue}
+                          workflowMetadata={workflowMetadata}
+                          onCommandClick={handleCommandClick}
+                          isRunActive={isRunActive}
+                          showWelcomeExperience={true}
+                          activeWorkflow={workflowManagement.activeWorkflow}
+                          userHasInteracted={userHasInteracted}
+                          queuedMessages={sessionQueue.messages}
+                          hasRealMessages={hasRealMessages}
+                          welcomeExperienceComponent={
+                            <WelcomeExperience
+                              ootbWorkflows={ootbWorkflows}
+                              onWorkflowSelect={handleWelcomeWorkflowSelect}
+                              onUserInteraction={() => setUserHasInteracted(true)}
+                              userHasInteracted={userHasInteracted}
+                              sessionPhase={session?.status?.phase}
+                              hasRealMessages={hasRealMessages}
+                              onLoadWorkflow={() => setCustomWorkflowDialogOpen(true)}
+                              selectedWorkflow={workflowManagement.selectedWorkflow}
+                            />
+                          }
+                        />
+                      </FeedbackProvider>
+                    </div>
+                  </CardContent>
+                </Card>
+                  </div>
+                </Panel>
+              </PanelGroup>
+
+              {/* Mobile view (unchanged) */}
+              <div className={cn(
+                "md:hidden flex flex-col h-full w-full",
+                mobileMenuOpen ? "hidden" : "flex"
+              )}>
+                <Card className="relative flex-1 flex flex-col overflow-hidden py-0 border-0 rounded-none">
+                  <CardContent className="px-3 pt-0 pb-0 flex-1 flex flex-col overflow-hidden">
+                    {repoChanging && (
+                      <div className="absolute inset-0 bg-background/90 backdrop-blur-sm z-10 flex items-center justify-center rounded-lg">
+                        <Alert className="max-w-md mx-4">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <AlertTitle>Updating Repositories...</AlertTitle>
+                          <AlertDescription>
+                            <div className="space-y-2">
+                              <p>
+                                Please wait while repositories are being
+                                updated. This may take 10-20 seconds...
+                              </p>
+                            </div>
+                          </AlertDescription>
+                        </Alert>
+                      </div>
+                    )}
+
+                    <div className="flex flex-col flex-1 overflow-hidden">
+                      <FeedbackProvider
+                        projectName={projectName}
+                        sessionName={sessionName}
+                        username={currentUser?.username || currentUser?.displayName || "anonymous"}
+                        initialPrompt={session?.spec?.initialPrompt}
+                        activeWorkflow={workflowManagement.activeWorkflow || undefined}
+                        messages={streamMessages}
+                        traceId={langfuseTraceId || undefined}
+                        messageFeedback={aguiState.messageFeedback}
+                      >
+                        <MessagesTab
+                          session={session}
+                          streamMessages={streamMessages}
+                          chatInput={chatInput}
+                          setChatInput={setChatInput}
+                          onSendChat={() => Promise.resolve(sendChat())}
+                          onInterrupt={aguiInterrupt}
+                          onEndSession={() => Promise.resolve(handleEndSession())}
+                          onGoToResults={() => {}}
+                          onContinue={handleContinue}
+                          workflowMetadata={workflowMetadata}
+                          onCommandClick={handleCommandClick}
+                          isRunActive={isRunActive}
+                          showWelcomeExperience={true}
+                          activeWorkflow={workflowManagement.activeWorkflow}
+                          userHasInteracted={userHasInteracted}
+                          queuedMessages={sessionQueue.messages}
+                          hasRealMessages={hasRealMessages}
+                          welcomeExperienceComponent={
+                            <WelcomeExperience
+                              ootbWorkflows={ootbWorkflows}
+                              onWorkflowSelect={handleWelcomeWorkflowSelect}
+                              onUserInteraction={() => setUserHasInteracted(true)}
+                              userHasInteracted={userHasInteracted}
+                              sessionPhase={session?.status?.phase}
+                              hasRealMessages={hasRealMessages}
+                              onLoadWorkflow={() => setCustomWorkflowDialogOpen(true)}
+                              selectedWorkflow={workflowManagement.selectedWorkflow}
+                            />
+                          }
+                        />
+                      </FeedbackProvider>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Mobile left panel sidebar */}
+              <div className={cn(
+                "md:hidden flex flex-col sticky top-0 self-start h-[calc(100vh-8rem)] overflow-y-auto pt-6 pl-6 pr-6 bg-card",
+                mobileMenuOpen ? "fixed left-0 top-16 z-50 shadow-lg w-full" : "hidden"
+              )}>
                 {/* Mobile close button */}
-                <div className="md:hidden flex justify-end mb-4">
+                <div className="flex justify-end mb-4">
                   <Button
                     variant="ghost"
                     size="sm"
@@ -1968,77 +2531,6 @@ export default function ProjectSessionDetailPage({
                     </AccordionItem>
                   </Accordion>
                 </div>
-              </div>
-              )}
-
-              {/* Right Column - Messages */}
-              <div className="flex-1 min-w-0 flex flex-col">
-                <Card className="relative flex-1 flex flex-col overflow-hidden py-0 border-0 rounded-none md:border-l">
-                  <CardContent className="px-3 pt-0 pb-0 flex-1 flex flex-col overflow-hidden">
-                    {/* Repository change overlay */}
-                    {repoChanging && (
-                      <div className="absolute inset-0 bg-background/90 backdrop-blur-sm z-10 flex items-center justify-center rounded-lg">
-                        <Alert className="max-w-md mx-4">
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          <AlertTitle>Updating Repositories...</AlertTitle>
-                          <AlertDescription>
-                            <div className="space-y-2">
-                              <p>
-                                Please wait while repositories are being
-                                updated. This may take 10-20 seconds...
-                              </p>
-                            </div>
-                          </AlertDescription>
-                        </Alert>
-                      </div>
-                    )}
-
-                    <div className="flex flex-col flex-1 overflow-hidden">
-                      <FeedbackProvider
-                        projectName={projectName}
-                        sessionName={sessionName}
-                        username={currentUser?.username || currentUser?.displayName || "anonymous"}
-                        initialPrompt={session?.spec?.initialPrompt}
-                        activeWorkflow={workflowManagement.activeWorkflow || undefined}
-                        messages={streamMessages}
-                        traceId={langfuseTraceId || undefined}
-                        messageFeedback={aguiState.messageFeedback}
-                      >
-                        <MessagesTab
-                          session={session}
-                          streamMessages={streamMessages}
-                          chatInput={chatInput}
-                          setChatInput={setChatInput}
-                          onSendChat={() => Promise.resolve(sendChat())}
-                          onInterrupt={aguiInterrupt}
-                          onEndSession={() => Promise.resolve(handleEndSession())}
-                          onGoToResults={() => {}}
-                          onContinue={handleContinue}
-                          workflowMetadata={workflowMetadata}
-                          onCommandClick={handleCommandClick}
-                          isRunActive={isRunActive}
-                          showWelcomeExperience={!["Completed", "Failed", "Stopped", "Stopping"].includes(session?.status?.phase || "")}
-                          activeWorkflow={workflowManagement.activeWorkflow}
-                          userHasInteracted={userHasInteracted}
-                          queuedMessages={sessionQueue.messages}
-                          hasRealMessages={hasRealMessages}
-                          welcomeExperienceComponent={
-                            <WelcomeExperience
-                              ootbWorkflows={ootbWorkflows}
-                              onWorkflowSelect={handleWelcomeWorkflowSelect}
-                              onUserInteraction={() => setUserHasInteracted(true)}
-                              userHasInteracted={userHasInteracted}
-                              sessionPhase={session?.status?.phase}
-                              hasRealMessages={hasRealMessages}
-                              onLoadWorkflow={() => setCustomWorkflowDialogOpen(true)}
-                              selectedWorkflow={workflowManagement.selectedWorkflow}
-                            />
-                          }
-                        />
-                      </FeedbackProvider>
-                    </div>
-                  </CardContent>
-                </Card>
               </div>
             </div>
           </div>
