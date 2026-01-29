@@ -28,6 +28,17 @@ jobs:
       - name: Install mermaid-cli
         run: npm install -g @mermaid-js/mermaid-cli
 
+      - name: Install Chromium dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libnss3 \
+            libatk-bridge2.0-0 \
+            libdrm2 \
+            libxkbcommon0 \
+            libgbm1 \
+            libasound2
+
       - name: Find Mermaid files
         id: find-mermaid
         run: |
@@ -46,7 +57,7 @@ jobs:
           FAILED=0
           for file in ${{ steps.find-mermaid.outputs.files }}; do
             echo "▶ Checking: $file"
-            if mmdc -i "$file" -o /tmp/output.png 2>&1; then
+            if mmdc -i "$file" -o /tmp/output.png --puppeteerConfigFile <(echo '{"args":["--no-sandbox","--disable-setuid-sandbox"]}') 2>&1; then
               echo "✓ Valid syntax: $file"
             else
               echo "✗ SYNTAX ERROR: $file"
