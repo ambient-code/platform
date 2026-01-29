@@ -162,7 +162,6 @@ VALUES_FILE="$SCRIPT_DIR/langfuse-values-clickhouse-minimal-logging.yaml"
 
 helm upgrade --install langfuse langfuse/langfuse \
   --namespace langfuse \
-  --version ">= 3.63.0" \
   --values "$VALUES_FILE" \
   --set langfuse.nextauth.secret.value="$NEXTAUTH_SECRET" \
   --set langfuse.salt.value="$SALT" \
@@ -176,16 +175,16 @@ helm upgrade --install langfuse langfuse/langfuse \
   --set resources.requests.memory=1Gi \
   --set clickhouse.replicaCount=1 \
   --set clickhouse.podAntiAffinityPreset=none \
-  --set clickhouse.resources.requests.memory=1Gi \
-  --set clickhouse.resources.limits.memory=2Gi \
+  --set clickhouse.resources.requests.memory=4Gi \
+  --set clickhouse.resources.limits.memory=8Gi \
   --set clickhouse.resources.requests.cpu=500m \
   --set clickhouse.resources.limits.cpu=1 \
   --set postgresql.primary.podAntiAffinityPreset=none \
   --set redis.master.podAntiAffinityPreset=none \
   --set zookeeper.replicas=1 \
   --set zookeeper.podAntiAffinityPreset=none \
-  --set zookeeper.resources.requests.memory=256Mi \
-  --set zookeeper.resources.limits.memory=512Mi \
+  --set zookeeper.resources.requests.memory=1Gi \
+  --set zookeeper.resources.limits.memory=2Gi \
   --set zookeeper.resources.requests.cpu=250m \
   --set zookeeper.resources.limits.cpu=500m \
   --set minio.enabled=true \
@@ -340,6 +339,21 @@ rm -f /tmp/langfuse-s3-patch.json
 
 echo "   ✓ S3 credentials configured"
 
+# Configure ClickHouse TTL to prevent disk space issues
+echo ""
+echo "Configuring ClickHouse TTL for system log tables..."
+echo "   (Prevents system logs from consuming excessive disk space)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/configure-clickhouse-ttl.sh" ]; then
+  "$SCRIPT_DIR/configure-clickhouse-ttl.sh" --namespace langfuse --password "$CLICKHOUSE_PASSWORD" --retention-days 7 || {
+    echo "   ⚠️  Warning: Failed to configure ClickHouse TTL"
+    echo "   You can manually run: $SCRIPT_DIR/configure-clickhouse-ttl.sh"
+  }
+else
+  echo "   ⚠️  Warning: configure-clickhouse-ttl.sh not found"
+  echo "   You can manually configure TTL later if needed"
+fi
+
 # Create Ingress or Route based on platform
 echo ""
 if [ "$PLATFORM" = "openshift" ]; then
@@ -483,6 +497,16 @@ echo "   5. Configure your application to use:"
 echo "      LANGFUSE_PUBLIC_KEY=<your-public-key>"
 echo "      LANGFUSE_SECRET_KEY=<your-secret-key>"
 echo "      LANGFUSE_HOST=$LANGFUSE_URL"
+echo ""
+echo "Privacy & Security:"
+echo "   By default, user messages and responses are MASKED in Langfuse traces"
+echo "   for privacy protection. Only usage metrics (tokens, costs) are logged."
+echo ""
+echo "   To disable masking (dev/testing only):"
+echo "      LANGFUSE_MASK_MESSAGES=false"
+echo ""
+echo "   Note: Masking is controlled by the Claude Code runner, not Langfuse itself."
+echo "   See components/runners/claude-code-runner/observability.py for implementation."
 echo ""
 echo "Cleanup (WARNING: This deletes all Langfuse data):"
 echo "   $CLI delete namespace langfuse"

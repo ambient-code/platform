@@ -1,5 +1,8 @@
 // Core types for RFE Workflows and GitHub integration
 
+// AG-UI Protocol types
+export * from './agui'
+
 export interface Project {
   name: string;
   displayName: string;

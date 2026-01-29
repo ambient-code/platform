@@ -75,6 +75,31 @@ spec:
               name: github-app-secret
               key: GITHUB_STATE_SECRET
               optional: true
+        # Google OAuth configuration for workspace-mcp
+        - name: GOOGLE_OAUTH_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: google-workflow-app-secret
+              key: GOOGLE_OAUTH_CLIENT_ID
+              optional: true
+        - name: GOOGLE_OAUTH_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: google-workflow-app-secret
+              key: GOOGLE_OAUTH_CLIENT_SECRET
+              optional: true
+        - name: OAUTH_STATE_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: google-workflow-app-secret
+              key: OAUTH_STATE_SECRET
+              optional: true
+        - name: BACKEND_URL
+          valueFrom:
+            secretKeyRef:
+              name: google-workflow-app-secret
+              key: BACKEND_URL
+              optional: true
         # OOTB Workflows Configuration
         - name: OOTB_WORKFLOWS_REPO
           value: "https://github.com/ambient-code/ootb-ambient-workflows.git"
@@ -82,14 +107,30 @@ spec:
           value: "main"
         - name: OOTB_WORKFLOWS_PATH
           value: "workflows"
-        # Backend needs CLAUDE_CODE_USE_VERTEX to expose vertexEnabled flag via /api/cluster-info
-        # This allows the frontend to show warnings when ANTHROPIC_API_KEY is configured with Vertex enabled
-        # Shares the same config value as the operator for consistency
+        # Vertex AI configuration from operator-config ConfigMap
+        # Backend needs these for:
+        # 1. CLAUDE_CODE_USE_VERTEX: Expose vertexEnabled flag via /api/cluster-info
+        # 2. Other Vertex vars: Display name auto-generation uses Claude Haiku via Vertex
         - name: CLAUDE_CODE_USE_VERTEX
           valueFrom:
             configMapKeyRef:
               name: operator-config
               key: CLAUDE_CODE_USE_VERTEX
+        - name: CLOUD_ML_REGION
+          valueFrom:
+            configMapKeyRef:
+              name: operator-config
+              key: CLOUD_ML_REGION
+        - name: ANTHROPIC_VERTEX_PROJECT_ID
+          valueFrom:
+            configMapKeyRef:
+              name: operator-config
+              key: ANTHROPIC_VERTEX_PROJECT_ID
+        - name: GOOGLE_APPLICATION_CREDENTIALS
+          valueFrom:
+            configMapKeyRef:
+              name: operator-config
+              key: GOOGLE_APPLICATION_CREDENTIALS
         resources:
           requests:
             cpu: 100m
@@ -112,10 +153,21 @@ spec:
         volumeMounts:
         - name: backend-state
           mountPath: /workspace
+        # Vertex AI credentials (optional - only needed when CLAUDE_CODE_USE_VERTEX=1)
+        - name: vertex-credentials
+          mountPath: /app/vertex
+          readOnly: true
       volumes:
       - name: backend-state
         persistentVolumeClaim:
           claimName: backend-state-pvc
+      # ambient-vertex secret contains GCP service account key for Vertex AI
+      # This secret must exist in the same namespace as the backend (ambient-code)
+      # Created manually: kubectl create secret generic ambient-vertex --from-file=ambient-code-key.json=<path-to-key> -n ambient-code
+      - name: vertex-credentials
+        secret:
+          secretName: ambient-vertex
+          optional: true  # Don't fail if Vertex not configured
       
 ---
 apiVersion: v1

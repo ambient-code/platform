@@ -25,6 +25,7 @@ spec:
               key: token
         - name: NODE_TLS_REJECT_UNAUTHORIZED
           value: "0"
+        # Note: Langfuse feedback now handled by runner, not frontend
         resources:
           limits:
             memory: "1Gi"

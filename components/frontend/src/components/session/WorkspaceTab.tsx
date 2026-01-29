@@ -2,7 +2,7 @@
 
 import React from "react";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, FolderOpen, HardDrive } from "lucide-react";
+import { RefreshCw, FolderOpen, HardDrive, Upload } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { FileTree, type FileTreeNode } from "@/components/file-tree";
 import type { AgenticSession } from "@/types/agentic-session";
@@ -17,6 +17,7 @@ export type WorkspaceTabProps = {
   onRefresh: (background?: boolean) => void;
   onSelect: (node: FileTreeNode) => void;
   onToggle: (node: FileTreeNode) => void;
+  onUpload?: () => void;
   k8sResources?: {
     pvcName?: string;
     pvcExists?: boolean;
@@ -26,7 +27,7 @@ export type WorkspaceTabProps = {
   onRetrySpawn?: () => void;
 };
 
-const WorkspaceTab: React.FC<WorkspaceTabProps> = ({ session, wsLoading, wsUnavailable, wsTree, wsSelectedPath, onRefresh, onSelect, onToggle, k8sResources, contentPodError, onRetrySpawn }) => {
+const WorkspaceTab: React.FC<WorkspaceTabProps> = ({ session, wsLoading, wsUnavailable, wsTree, wsSelectedPath, onRefresh, onSelect, onToggle, onUpload, k8sResources, contentPodError, onRetrySpawn }) => {
   if (wsLoading) {
     return (
       <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">
@@ -71,7 +72,8 @@ const WorkspaceTab: React.FC<WorkspaceTabProps> = ({ session, wsLoading, wsUnava
     <div className="grid grid-cols-1 gap-0">
       <div className="border rounded-md overflow-hidden">
         <div className="p-3 border-b flex items-center justify-between">
-          <div className="flex-1">
+          <div className="flex-1 space-y-1">
+            <p className="text-xs text-muted-foreground">Session working directory - files created and modified by the AI agent</p>
             {k8sResources?.pvcName ? (
               <div className="flex items-center gap-2">
                 <Badge variant="outline" className="text-xs">
@@ -90,16 +92,24 @@ const WorkspaceTab: React.FC<WorkspaceTabProps> = ({ session, wsLoading, wsUnava
               <p className="text-xs text-muted-foreground">{wsTree.length} items</p>
             )}
           </div>
-          <Button size="sm" variant="outline" onClick={() => onRefresh(false)} disabled={wsLoading} className="h-8">
-            <RefreshCw className="h-4 w-4" />
-          </Button>
+          <div className="flex gap-2">
+            {onUpload && (
+              <Button size="sm" variant="outline" onClick={onUpload} disabled={wsLoading} className="h-8">
+                <Upload className="h-4 w-4 mr-1" />
+                Upload
+              </Button>
+            )}
+            <Button size="sm" variant="outline" onClick={() => onRefresh(false)} disabled={wsLoading} className="h-8">
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
         <div className="p-2">
           {wsTree.length === 0 ? (
             <EmptyState
               icon={FolderOpen}
               title="No files yet"
-              description="The workspace is empty. Files will appear here as the session progresses."
+              description="This session's working directory is empty. Files will appear here as the AI agent clones repositories and creates or modifies files."
             />
           ) : (
             <FileTree nodes={wsTree} selectedPath={wsSelectedPath} onSelect={onSelect} onToggle={onToggle} />

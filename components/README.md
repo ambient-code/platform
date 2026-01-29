@@ -4,6 +4,14 @@ This directory contains the core components of the Ambient Code Platform.
 
 See the main [README.md](../README.md) for complete documentation, deployment instructions, and usage examples.
 
+## 📊 Architecture Diagrams
+
+View the platform architecture in detail:
+- [Platform Architecture](../docs/platform-architecture.mmd) - Overall system architecture and data flow
+- [Component Structure](../docs/component-structure.mmd) - Directory structure and development workflow
+- [Agentic Session Flow](../docs/agentic-session-flow.mmd) - Detailed sequence diagram of session execution
+- [Deployment Stack](../docs/deployment-stack.mmd) - Technology stack and deployment options
+
 ## Component Directory Structure
 
 ```
@@ -36,7 +44,7 @@ make dev-start
 ```
 
 **Prerequisites:**
-- OpenShift Local (CRC): `brew install crc`
+- Minikube: `brew install minikube`
 - Red Hat pull secret: Get free from [console.redhat.com](https://console.redhat.com/openshift/create/local)
 
 **What you get:**
@@ -78,4 +86,4 @@ make deploy
 make deploy NAMESPACE=my-namespace
 ```
 
-For detailed deployment instructions, see [../docs/OPENSHIFT_DEPLOY.md](../docs/OPENSHIFT_DEPLOY.md).
+For detailed deployment instructions, see [../docs/deployment/OPENSHIFT_DEPLOY.md](../docs/deployment/OPENSHIFT_DEPLOY.md).

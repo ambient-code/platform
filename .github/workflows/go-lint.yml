@@ -3,9 +3,29 @@ name: Go Lint and Format
 on:
   push:
     branches: [main]
+    paths:
+      - 'components/backend/**/*.go'
+      - 'components/backend/go.mod'
+      - 'components/backend/go.sum'
+      - 'components/operator/**/*.go'
+      - 'components/operator/go.mod'
+      - 'components/operator/go.sum'
+      - '.github/workflows/go-lint.yml'
   pull_request:
     branches: [main]
+    paths:
+      - 'components/backend/**/*.go'
+      - 'components/backend/go.mod'
+      - 'components/backend/go.sum'
+      - 'components/operator/**/*.go'
+      - 'components/operator/go.mod'
+      - 'components/operator/go.sum'
+      - '.github/workflows/go-lint.yml'
   workflow_dispatch:
+
+concurrency:
+  group: go-lint-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   detect-go-changes:
@@ -15,7 +35,7 @@ jobs:
       operator: ${{ steps.filter.outputs.operator }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Check for Go changes
         uses: dorny/paths-filter@v3
@@ -37,7 +57,7 @@ jobs:
     if: needs.detect-go-changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch'
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -69,13 +89,22 @@ jobs:
           working-directory: components/backend
           args: --timeout=5m
 
+      # The backend unit tests require -tags=test (to compile test-only hooks used by handlers tests).
+      # We lint both production build (default) and test build (with tags) to avoid hiding issues.
+      - name: Run golangci-lint (test build tags)
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: latest
+          working-directory: components/backend
+          args: --timeout=5m --build-tags=test
+
   lint-operator:
     runs-on: ubuntu-latest
     needs: detect-go-changes
     if: needs.detect-go-changes.outputs.operator == 'true' || github.event_name == 'workflow_dispatch'
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Set up Go
         uses: actions/setup-go@v6

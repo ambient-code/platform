@@ -194,6 +194,27 @@
   }
 }
 
+/* Animation keyframes for welcome experience */
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in-char {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 /* Thin scrollbar styling - Cross-browser support */
 .scrollbar-thin {
   /* Firefox */
@@ -237,4 +258,16 @@
 
 .dark .scrollbar-thin::-webkit-scrollbar-thumb:hover {
   background: hsl(var(--foreground));
+}
+
+/* Hide scrollbar while maintaining scroll functionality */
+.scrollbar-hide {
+  /* Firefox */
+  scrollbar-width: none;
+  /* WebKit browsers (Chrome, Safari, Edge) */
+  -ms-overflow-style: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
 }

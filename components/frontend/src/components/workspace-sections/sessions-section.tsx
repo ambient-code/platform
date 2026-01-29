@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { formatDistanceToNow } from 'date-fns';
-import { Plus, RefreshCw, MoreVertical, Square, Trash2, ArrowRight, Brain, Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, RefreshCw, MoreVertical, Square, Trash2, ArrowRight, Brain, Search, ChevronLeft, ChevronRight, Pencil } from 'lucide-react';
 import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
@@ -13,8 +13,9 @@ import { Input } from '@/components/ui/input';
 import { EmptyState } from '@/components/empty-state';
 import { SessionPhaseBadge } from '@/components/status-badge';
 import { CreateSessionDialog } from '@/components/create-session-dialog';
+import { EditSessionNameDialog } from '@/components/edit-session-name-dialog';
 
-import { useSessionsPaginated, useStopSession, useDeleteSession, useContinueSession } from '@/services/queries';
+import { useSessionsPaginated, useStopSession, useDeleteSession, useContinueSession, useUpdateSessionDisplayName } from '@/services/queries';
 import { successToast, errorToast } from '@/hooks/use-toast';
 import { useDebounce } from '@/hooks/use-debounce';
 import { DEFAULT_PAGE_SIZE } from '@/types/api';
@@ -57,6 +58,10 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
   const stopSessionMutation = useStopSession();
   const deleteSessionMutation = useDeleteSession();
   const continueSessionMutation = useContinueSession();
+  const updateDisplayNameMutation = useUpdateSessionDisplayName();
+  
+  // State for edit name dialog
+  const [editingSession, setEditingSession] = useState<{ name: string; displayName: string } | null>(null);
 
   const handleStop = async (sessionName: string) => {
     stopSessionMutation.mutate(
@@ -120,6 +125,32 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
   const handleRefresh = () => {
     setOffset(0);
     refetch();
+  };
+
+  const handleEditName = (sessionName: string, currentDisplayName: string) => {
+    setEditingSession({ name: sessionName, displayName: currentDisplayName });
+  };
+
+  const handleSaveEditName = (newName: string) => {
+    if (!editingSession) return;
+
+    updateDisplayNameMutation.mutate(
+      {
+        projectName,
+        sessionName: editingSession.name,
+        displayName: newName,
+      },
+      {
+        onSuccess: () => {
+          successToast('Session name updated successfully');
+          setEditingSession(null);
+          refetch();
+        },
+        onError: (error) => {
+          errorToast(error instanceof Error ? error.message : 'Failed to update session name');
+        },
+      }
+    );
   };
 
   return (
@@ -240,10 +271,12 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
                           ) : (
                             <SessionActions
                               sessionName={sessionName}
+                              displayName={session.spec.displayName || sessionName}
                               phase={phase}
                               onStop={handleStop}
                               onContinue={handleContinue}
                               onDelete={handleDelete}
+                              onEditName={handleEditName}
                             />
                           )}
                         </TableCell>
@@ -288,19 +321,30 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
           </>
         )}
       </CardContent>
+      
+      {/* Edit Session Name Dialog */}
+      <EditSessionNameDialog
+        open={!!editingSession}
+        onOpenChange={(open) => !open && setEditingSession(null)}
+        currentName={editingSession?.displayName || ''}
+        onSave={handleSaveEditName}
+        isLoading={updateDisplayNameMutation.isPending}
+      />
     </Card>
   );
 }
 
 type SessionActionsProps = {
   sessionName: string;
+  displayName: string;
   phase: string;
   onStop: (sessionName: string) => void;
   onContinue: (sessionName: string) => void;
   onDelete: (sessionName: string) => void;
+  onEditName: (sessionName: string, currentDisplayName: string) => void;
 };
 
-function SessionActions({ sessionName, phase, onStop, onContinue, onDelete }: SessionActionsProps) {
+function SessionActions({ sessionName, displayName, phase, onStop, onContinue, onDelete, onEditName }: SessionActionsProps) {
   type RowAction = {
     key: string;
     label: string;
@@ -310,6 +354,14 @@ function SessionActions({ sessionName, phase, onStop, onContinue, onDelete }: Se
   };
 
   const actions: RowAction[] = [];
+
+  // Edit name is always available
+  actions.push({
+    key: 'edit',
+    label: 'Edit name',
+    onClick: () => onEditName(sessionName, displayName),
+    icon: <Pencil className="h-4 w-4" />,
+  });
 
   if (phase === 'Pending' || phase === 'Creating' || phase === 'Running') {
     actions.push({
@@ -341,23 +393,7 @@ function SessionActions({ sessionName, phase, onStop, onContinue, onDelete }: Se
     });
   }
 
-  if (actions.length === 1) {
-    const action = actions[0];
-    return (
-      <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={action.onClick}>
-        {action.icon}
-      </Button>
-    );
-  }
-
-  if (actions.length === 0) {
-    return (
-      <Button variant="ghost" size="sm" className="h-8 w-8 p-0" disabled>
-        <MoreVertical className="h-4 w-4" />
-      </Button>
-    );
-  }
-
+  // Always show dropdown since we now always have at least the edit action
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -376,4 +412,3 @@ function SessionActions({ sessionName, phase, onStop, onContinue, onDelete }: Se
     </DropdownMenu>
   );
 }
-

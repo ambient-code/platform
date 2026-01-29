@@ -2,6 +2,7 @@
 
 import React from 'react'
 import { GitHubConnectionCard } from '@/components/github-connection-card'
+import { GoogleDriveConnectionCard } from '@/components/google-drive-connection-card'
 import { PageHeader } from '@/components/page-header'
 
 type Props = { appSlug?: string }
@@ -24,6 +25,7 @@ export default function IntegrationsClient({ appSlug }: Props) {
         <div className="px-6 pt-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <GitHubConnectionCard appSlug={appSlug} showManageButton={true} />
+            <GoogleDriveConnectionCard showManageButton={true} />
           </div>
         </div>
       </div>

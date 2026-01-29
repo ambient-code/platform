@@ -31,6 +31,7 @@ spec:
           value: "ambient-code"
         - name: VTEAM_VERSION
           value: "v0.0.7"
+        # Note: Langfuse feedback now handled by runner, not frontend
         resources:
           requests:
             cpu: 100m

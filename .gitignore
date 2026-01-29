@@ -105,6 +105,9 @@ dmypy.json
 
 .claude/settings.local.json
 
+# Design documentation
+.design/
+
 # macOS system files
 .DS_Store
 .DS_Store?
@@ -132,3 +135,19 @@ e2e/langfuse/.env.langfuse-keys
 # AI assistant configuration
 .cursor/
 .tessl/
+
+# Test Reporting
+logs/
+reports/
+
+# Security scan artifacts (transient)
+.security-scan/
+.security-scan.zip
+
+# Secrets (should use .example templates)
+**/minio-credentials-secret.yaml
+
+# Build artifacts and logs
+build.log
+*.log
+!components/**/*.log

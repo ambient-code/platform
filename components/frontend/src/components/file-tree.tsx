@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Folder, FolderOpen, FileText } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 
 export type FileTreeNode = {
   name: string;
@@ -11,6 +12,7 @@ export type FileTreeNode = {
   expanded?: boolean;
   sizeKb?: number;
   data?: unknown;
+  branch?: string; // Git branch for repository folders
 };
 
 export type FileTreeProps = {
@@ -85,6 +87,12 @@ function FileTreeItem({ node, selectedPath, onSelect, onToggle, depth = 0 }: Ite
         )}
 
         <span className={`flex-1 ${isSelected ? "font-medium" : ""}`}>{node.name}</span>
+
+        {node.branch && (
+          <Badge variant="outline" className="text-xs px-1.5 py-0 h-5 bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
+            {node.branch}
+          </Badge>
+        )}
 
         {typeof node.sizeKb === "number" && (
           <span className="text-xs text-muted-foreground">{node.sizeKb.toFixed(1)}K</span>

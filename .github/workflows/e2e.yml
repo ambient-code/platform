@@ -1,11 +1,34 @@
 name: E2E Tests
 
+# Requires GitHub Secret: ANTHROPIC_API_KEY
+# Set in repository settings → Secrets and variables → Actions
+# Without this secret, the agent session test will fail
+
 on:
   pull_request:
     branches: [ main, master ]
+    paths:
+      - 'components/**'
+      - '.github/workflows/e2e.yml'
+      - 'e2e/**'
+      - 'scripts/**'
+      - '.specify/**'
+      - 'agents/**'
+
   push:
     branches: [ main, master ]
+    paths:
+      - 'components/**'
+      - '.github/workflows/e2e.yml'
+      - 'e2e/**'
+      - 'scripts/**'
+      - '.specify/**'
+      - 'agents/**'
   workflow_dispatch:  # Allow manual trigger
+
+concurrency:
+  group: e2e-tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   detect-changes:
@@ -17,7 +40,7 @@ jobs:
       claude-runner: ${{ steps.filter.outputs.claude-runner }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Check for component changes
         uses: dorny/paths-filter@v3
@@ -41,7 +64,12 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
+
+    - name: Cleanup Diskspace
+      id: cleanup
+      uses: kubeflow/pipelines/.github/actions/github-disk-cleanup@master
+      if: (!cancelled())
 
     - name: Validate AGENTS.md symlink
       run: |
@@ -145,10 +173,10 @@ jobs:
         echo "======================================"
         echo "Loading images into kind cluster..."
         echo "======================================"
-        kind load docker-image quay.io/ambient_code/vteam_frontend:e2e-test --name vteam-e2e
-        kind load docker-image quay.io/ambient_code/vteam_backend:e2e-test --name vteam-e2e
-        kind load docker-image quay.io/ambient_code/vteam_operator:e2e-test --name vteam-e2e
-        kind load docker-image quay.io/ambient_code/vteam_claude_runner:e2e-test --name vteam-e2e
+        kind load docker-image quay.io/ambient_code/vteam_frontend:e2e-test --name ambient-local
+        kind load docker-image quay.io/ambient_code/vteam_backend:e2e-test --name ambient-local
+        kind load docker-image quay.io/ambient_code/vteam_operator:e2e-test --name ambient-local
+        kind load docker-image quay.io/ambient_code/vteam_claude_runner:e2e-test --name ambient-local
         echo "✅ All images loaded into kind cluster"
 
     - name: Update kustomization to use e2e-test images
@@ -159,6 +187,8 @@ jobs:
 
     - name: Deploy vTeam
       working-directory: e2e
+      env:
+        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       run: ./scripts/deploy.sh
         
     - name: Verify deployment
@@ -168,17 +198,16 @@ jobs:
         echo ""
         echo "Checking services..."
         kubectl get svc -n ambient-code
-        echo ""
-        echo "Checking ingress..."
-        kubectl get ingress -n ambient-code
         
     - name: Run Cypress tests
       working-directory: e2e
+      env:
+        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       run: ./scripts/run-tests.sh
       
     - name: Upload test results
       if: failure()
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v6
       with:
         name: cypress-screenshots
         path: e2e/cypress/screenshots
@@ -187,7 +216,7 @@ jobs:
         
     - name: Upload test videos
       if: failure()
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v6
       with:
         name: cypress-videos
         path: e2e/cypress/videos

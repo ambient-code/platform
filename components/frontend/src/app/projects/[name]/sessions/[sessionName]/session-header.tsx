@@ -2,11 +2,14 @@
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { RefreshCw, Octagon, Trash2, Copy, MoreVertical, Info, Play } from 'lucide-react';
+import { RefreshCw, Octagon, Trash2, Copy, MoreVertical, Info, Play, Pencil } from 'lucide-react';
 import { CloneSessionDialog } from '@/components/clone-session-dialog';
 import { SessionDetailsModal } from '@/components/session-details-modal';
+import { EditSessionNameDialog } from '@/components/edit-session-name-dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import type { AgenticSession } from '@/types/agentic-session';
+import { useUpdateSessionDisplayName } from '@/services/queries';
+import { successToast, errorToast } from '@/hooks/use-toast';
 
 type SessionHeaderProps = {
   session: AgenticSession;
@@ -16,12 +19,6 @@ type SessionHeaderProps = {
   onStop: () => void;
   onContinue: () => void;
   onDelete: () => void;
-  durationMs?: number;
-  k8sResources?: {
-    pvcName?: string;
-    pvcSize?: string;
-  };
-  messageCount: number;
   renderMode?: 'full' | 'actions-only' | 'kebab-only';
 };
 
@@ -33,17 +30,37 @@ export function SessionHeader({
   onStop,
   onContinue,
   onDelete,
-  durationMs,
-  k8sResources,
-  messageCount,
   renderMode = 'full',
 }: SessionHeaderProps) {
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
+  const [editNameDialogOpen, setEditNameDialogOpen] = useState(false);
+  
+  const updateDisplayNameMutation = useUpdateSessionDisplayName();
   
   const phase = session.status?.phase || "Pending";
   const canStop = phase === "Running" || phase === "Creating";
   const canResume = phase === "Stopped";
   const canDelete = phase === "Completed" || phase === "Failed" || phase === "Stopped";
+  
+  const handleEditName = (newName: string) => {
+    updateDisplayNameMutation.mutate(
+      {
+        projectName,
+        sessionName: session.metadata.name,
+        displayName: newName,
+      },
+      {
+        onSuccess: () => {
+          successToast('Session name updated successfully');
+          setEditNameDialogOpen(false);
+          onRefresh();
+        },
+        onError: (error) => {
+          errorToast(error instanceof Error ? error.message : 'Failed to update session name');
+        },
+      }
+    );
+  };
 
   // Kebab menu only (for breadcrumb line)
   if (renderMode === 'kebab-only') {
@@ -64,6 +81,10 @@ export function SessionHeader({
             <DropdownMenuItem onClick={() => setDetailsModalOpen(true)}>
               <Info className="w-4 h-4 mr-2" />
               View details
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setEditNameDialogOpen(true)}>
+              <Pencil className="w-4 h-4 mr-2" />
+              Edit name
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             {canStop && (
@@ -113,11 +134,17 @@ export function SessionHeader({
         
         <SessionDetailsModal
           session={session}
+          projectName={projectName}
           open={detailsModalOpen}
           onOpenChange={setDetailsModalOpen}
-          durationMs={durationMs}
-          k8sResources={k8sResources}
-          messageCount={messageCount}
+        />
+        
+        <EditSessionNameDialog
+          open={editNameDialogOpen}
+          onOpenChange={setEditNameDialogOpen}
+          currentName={session.spec.displayName || session.metadata.name}
+          onSave={handleEditName}
+          isLoading={updateDisplayNameMutation.isPending}
         />
       </>
     );
@@ -210,6 +237,10 @@ export function SessionHeader({
                 <Info className="w-4 h-4 mr-2" />
                 View details
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setEditNameDialogOpen(true)}>
+                <Pencil className="w-4 h-4 mr-2" />
+                Edit name
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <CloneSessionDialog
                 session={session}
@@ -241,11 +272,17 @@ export function SessionHeader({
 
       <SessionDetailsModal
         session={session}
+        projectName={projectName}
         open={detailsModalOpen}
         onOpenChange={setDetailsModalOpen}
-        durationMs={durationMs}
-        k8sResources={k8sResources}
-        messageCount={messageCount}
+      />
+      
+      <EditSessionNameDialog
+        open={editNameDialogOpen}
+        onOpenChange={setEditNameDialogOpen}
+        currentName={session.spec.displayName || session.metadata.name}
+        onSave={handleEditName}
+        isLoading={updateDisplayNameMutation.isPending}
       />
     </div>
   );

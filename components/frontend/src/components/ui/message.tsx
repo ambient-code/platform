@@ -20,6 +20,9 @@ export type MessageProps = {
   borderless?: boolean;
   actions?: React.ReactNode;
   timestamp?: string;
+  streaming?: boolean;
+  /** Feedback buttons to show below the message (for bot messages) */
+  feedbackButtons?: React.ReactNode;
 };
 
 const defaultComponents: Components = {
@@ -51,7 +54,7 @@ const defaultComponents: Components = {
     
     // Full code blocks for longer content
     return (
-      <pre className="bg-muted text-foreground p-3 rounded text-xs overflow-x-auto border my-2">
+      <pre className="bg-muted text-foreground py-3 rounded text-xs overflow-x-auto border my-2">
         <code
           className={className}
           {...(props as React.HTMLAttributes<HTMLElement>)}
@@ -62,7 +65,7 @@ const defaultComponents: Components = {
     );
   },
   p: ({ children }) => (
-    <p className="text-muted-foreground leading-relaxed mb-0 text-sm">{children}</p>
+    <p className="text-muted-foreground leading-relaxed mb-[0.2rem] text-sm">{children}</p>
   ),
   h1: ({ children }) => (
     <h1 className="text-lg font-bold text-foreground mb-2">{children}</h1>
@@ -171,13 +174,14 @@ export const LoadingDots = () => {
 
 export const Message = React.forwardRef<HTMLDivElement, MessageProps>(
   (
-    { role, content, isLoading, className, components, borderless, actions, timestamp, ...props },
+    { role, content, isLoading, className, components, borderless, actions, timestamp, streaming, feedbackButtons, ...props },
     ref
   ) => {
     const isBot = role === "bot";
     const avatarBg = isBot ? "bg-blue-600" : "bg-green-600";
     const avatarText = isBot ? "AI" : "U";
     const formattedTime = formatTimestamp(timestamp);
+    const isActivelyStreaming = streaming && isBot;
 
     const avatar = (
       <div className="flex-shrink-0">
@@ -185,7 +189,7 @@ export const Message = React.forwardRef<HTMLDivElement, MessageProps>(
         className={cn(
           "w-8 h-8 rounded-full flex items-center justify-center",
           avatarBg,
-          isLoading && "animate-pulse"
+          (isLoading || isActivelyStreaming) && "animate-pulse"
         )}
       >
         <span className="text-white text-xs font-semibold">
@@ -210,25 +214,37 @@ export const Message = React.forwardRef<HTMLDivElement, MessageProps>(
               </div>
             )}
             <div className={cn(
-              borderless ? "p-0" : "rounded-lg p-3",
+              borderless ? "p-0" : "rounded-lg",
               !borderless && (isBot ? "bg-card" : "bg-border/30")
             )}>
               {/* Content */}
-              <div className="text-sm text-foreground">
+              <div className={cn("text-sm text-foreground font-mono", !isBot && "py-2 px-4")}>
                 {isLoading ? (
                   <div>
                     <div className="text-sm text-muted-foreground mb-2">{content}</div>
                     <LoadingDots />
                   </div>
                 ) : (
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm]}
-                    components={components || defaultComponents}
-                  >
-                    {content}
-                  </ReactMarkdown>
+                  <div className="inline">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={components || defaultComponents}
+                    >
+                      {content}
+                    </ReactMarkdown>
+                    {isActivelyStreaming && (
+                      <span className="inline-block w-2 h-4 bg-primary/70 animate-pulse ml-0.5 align-middle" />
+                    )}
+                  </div>
                 )}
               </div>
+
+              {/* Feedback buttons for bot messages */}
+              {isBot && feedbackButtons && !isLoading && !streaming && (
+                <div className="mt-2 flex items-center">
+                  {feedbackButtons}
+                </div>
+              )}
 
               {actions ? (
                 <div className={cn(borderless ? "mt-1" : "mt-3 pt-2 border-t")}>{actions}</div>

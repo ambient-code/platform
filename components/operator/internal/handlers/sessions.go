@@ -15,89 +15,35 @@ import (
 	"time"
 
 	"ambient-code-operator/internal/config"
-	"ambient-code-operator/internal/services"
 	"ambient-code-operator/internal/types"
 
 	authnv1 "k8s.io/api/authentication/v1"
-	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	intstr "k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/util/retry"
 )
 
-// Track which jobs are currently being monitored to prevent duplicate goroutines
+// Track which pods are currently being monitored to prevent duplicate goroutines
 var (
-	monitoredJobs   = make(map[string]bool)
-	monitoredJobsMu sync.Mutex
+	monitoredPods   = make(map[string]bool)
+	monitoredPodsMu sync.Mutex
 )
 
-// WatchAgenticSessions watches for AgenticSession custom resources and creates jobs
-func WatchAgenticSessions() {
-	gvr := types.GetAgenticSessionResource()
-
-	for {
-		// Watch AgenticSessions across all namespaces
-		watcher, err := config.DynamicClient.Resource(gvr).Watch(context.TODO(), v1.ListOptions{})
-		if err != nil {
-			log.Printf("Failed to create AgenticSession watcher: %v", err)
-			time.Sleep(5 * time.Second)
-			continue
-		}
-
-		log.Println("Watching for AgenticSession events across all namespaces...")
-
-		for event := range watcher.ResultChan() {
-			switch event.Type {
-			case watch.Added, watch.Modified:
-				obj := event.Object.(*unstructured.Unstructured)
-
-				// Only process resources in managed namespaces
-				ns := obj.GetNamespace()
-				if ns == "" {
-					continue
-				}
-				nsObj, err := config.K8sClient.CoreV1().Namespaces().Get(context.TODO(), ns, v1.GetOptions{})
-				if err != nil {
-					log.Printf("Failed to get namespace %s: %v", ns, err)
-					continue
-				}
-				if nsObj.Labels["ambient-code.io/managed"] != "true" {
-					// Skip unmanaged namespaces
-					continue
-				}
-
-				// Add small delay to avoid race conditions with rapid create/delete cycles
-				time.Sleep(100 * time.Millisecond)
-
-				if err := handleAgenticSessionEvent(obj); err != nil {
-					log.Printf("Error handling AgenticSession event: %v", err)
-				}
-			case watch.Deleted:
-				obj := event.Object.(*unstructured.Unstructured)
-				sessionName := obj.GetName()
-				sessionNamespace := obj.GetNamespace()
-				log.Printf("AgenticSession %s/%s deleted", sessionNamespace, sessionName)
-
-				// Cancel any ongoing job monitoring for this session
-				// (We could implement this with a context cancellation if needed)
-				// OwnerReferences handle cleanup of per-session resources
-			case watch.Error:
-				obj := event.Object.(*unstructured.Unstructured)
-				log.Printf("Watch error for AgenticSession: %v", obj)
-			}
-		}
-
-		log.Println("AgenticSession watch channel closed, restarting...")
-		watcher.Stop()
-		time.Sleep(2 * time.Second)
-	}
-}
-
+// handleAgenticSessionEvent is the legacy reconciliation function containing all session
+// lifecycle logic (~2,300 lines). It's called by ReconcilePendingSession() wrapper.
+//
+// TODO(controller-runtime-migration): This function should be refactored into smaller,
+// phase-specific reconcilers that use controller-runtime patterns. Current architecture:
+// - ✅ Controller-runtime framework adopted (work queue, leader election, metrics)
+// - ⚠️ Business logic still uses legacy patterns (direct API calls, manual status updates)
+// - 🔜 Future: Break into ReconcilePending, ReconcileRunning, ReconcileStopped functions
+//
+// This transitional approach allows framework adoption without rewriting 2,300 lines at once.
 func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 	name := obj.GetName()
 	sessionNamespace := obj.GetNamespace()
@@ -128,6 +74,7 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 	// If status.phase is missing, treat as Pending and initialize it
 	if phase == "" {
 		statusPatch.SetField("phase", "Pending")
+		statusPatch.SetField("startTime", time.Now().UTC().Format(time.RFC3339))
 		if err := statusPatch.ApplyAndReset(); err != nil {
 			log.Printf("Warning: failed to initialize phase: %v", err)
 		}
@@ -150,25 +97,13 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 	if desiredPhase == "Running" && phase != "Running" && phase != "Creating" && phase != "Pending" {
 		log.Printf("[DesiredPhase] Session %s/%s: user requested start/restart (current=%s → desired=Running)", sessionNamespace, name, phase)
 
-		// Delete temp pod if it exists (to free PVC for job)
-		tempPodName := fmt.Sprintf("temp-content-%s", name)
-		if _, err := config.K8sClient.CoreV1().Pods(sessionNamespace).Get(context.TODO(), tempPodName, v1.GetOptions{}); err == nil {
-			log.Printf("[DesiredPhase] Deleting temp pod %s to free PVC for job", tempPodName)
-			if err := config.K8sClient.CoreV1().Pods(sessionNamespace).Delete(context.TODO(), tempPodName, v1.DeleteOptions{}); err != nil && !errors.IsNotFound(err) {
-				log.Printf("[DesiredPhase] Warning: failed to delete temp pod: %v", err)
-			}
-			// Clear temp pod annotations
-			_ = clearAnnotation(sessionNamespace, name, tempContentRequestedAnnotation)
-			_ = clearAnnotation(sessionNamespace, name, tempContentLastAccessedAnnotation)
-		}
-
-		// Delete old job if it exists (from previous run)
-		jobName := fmt.Sprintf("%s-job", name)
-		_, err = config.K8sClient.BatchV1().Jobs(sessionNamespace).Get(context.TODO(), jobName, v1.GetOptions{})
+		// Delete old pod if it exists (from previous run)
+		podName := fmt.Sprintf("%s-runner", name)
+		_, err = config.K8sClient.CoreV1().Pods(sessionNamespace).Get(context.TODO(), podName, v1.GetOptions{})
 		if err == nil {
-			log.Printf("[DesiredPhase] Cleaning up old job %s before restart", jobName)
-			if err := deleteJobAndPerJobService(sessionNamespace, jobName, name); err != nil {
-				log.Printf("[DesiredPhase] Warning: failed to cleanup old job: %v", err)
+			log.Printf("[DesiredPhase] Cleaning up old pod %s before restart", podName)
+			if err := deletePodAndPerPodService(sessionNamespace, podName, name); err != nil {
+				log.Printf("[DesiredPhase] Warning: failed to cleanup old pod: %v", err)
 			}
 		} else if !errors.IsNotFound(err) {
 			log.Printf("[DesiredPhase] Error checking for old job: %v", err)
@@ -217,10 +152,10 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 	if desiredPhase == "Stopped" && (phase == "Running" || phase == "Creating") {
 		log.Printf("[DesiredPhase] Session %s/%s: user requested stop (current=%s → desired=Stopped)", sessionNamespace, name, phase)
 
-		// Delete running job (this triggers pod deletion via OwnerReferences)
-		jobName := fmt.Sprintf("%s-job", name)
-		if err := deleteJobAndPerJobService(sessionNamespace, jobName, name); err != nil {
-			log.Printf("[DesiredPhase] Warning: failed to delete job: %v", err)
+		// Delete running pod
+		podName := fmt.Sprintf("%s-runner", name)
+		if err := deletePodAndPerPodService(sessionNamespace, podName, name); err != nil {
+			log.Printf("[DesiredPhase] Warning: failed to delete pod: %v", err)
 		}
 
 		// Set phase=Stopping explicitly (transitional state)
@@ -244,22 +179,22 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 	// === STOPPING PHASE HANDLER ===
 	// Complete the stop transition: verify cleanup and transition to Stopped
 	if phase == "Stopping" {
-		jobName := fmt.Sprintf("%s-job", name)
-		_, err := config.K8sClient.BatchV1().Jobs(sessionNamespace).Get(context.TODO(), jobName, v1.GetOptions{})
+		podName := fmt.Sprintf("%s-runner", name)
+		_, err := config.K8sClient.CoreV1().Pods(sessionNamespace).Get(context.TODO(), podName, v1.GetOptions{})
 
 		if errors.IsNotFound(err) {
-			// Job is gone - safe to transition to Stopped
-			log.Printf("[Stopping] Session %s/%s: job deleted, transitioning to Stopped", sessionNamespace, name)
+			// Pod is gone - safe to transition to Stopped
+			log.Printf("[Stopping] Session %s/%s: pod deleted, transitioning to Stopped", sessionNamespace, name)
 
 			// Set phase=Stopped explicitly
 			statusPatch.SetField("phase", "Stopped")
 			statusPatch.SetField("completionTime", time.Now().UTC().Format(time.RFC3339))
 			// Update progress-tracking conditions to reflect stopped state
 			statusPatch.AddCondition(conditionUpdate{
-				Type:    conditionJobCreated,
+				Type:    conditionPodCreated,
 				Status:  "False",
 				Reason:  "UserStopped",
-				Message: "Job deleted by user stop request",
+				Message: "Pod deleted by user stop request",
 			})
 			statusPatch.AddCondition(conditionUpdate{
 				Type:    conditionRunnerStarted,
@@ -278,13 +213,13 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 
 			log.Printf("[Stopping] Session %s/%s: transitioned to Stopped", sessionNamespace, name)
 		} else if err != nil {
-			// Error checking job - log and retry next reconciliation
-			log.Printf("[Stopping] Session %s/%s: error checking job status: %v", sessionNamespace, name, err)
+			// Error checking pod - log and retry next reconciliation
+			log.Printf("[Stopping] Session %s/%s: error checking pod status: %v", sessionNamespace, name, err)
 		} else {
-			// Job still exists - try to delete it again
-			log.Printf("[Stopping] Session %s/%s: job still exists, deleting", sessionNamespace, name)
-			if err := deleteJobAndPerJobService(sessionNamespace, jobName, name); err != nil {
-				log.Printf("[Stopping] Warning: failed to delete job: %v", err)
+			// Pod still exists - try to delete it again
+			log.Printf("[Stopping] Session %s/%s: pod still exists, deleting", sessionNamespace, name)
+			if err := deletePodAndPerPodService(sessionNamespace, podName, name); err != nil {
+				log.Printf("[Stopping] Warning: failed to delete pod: %v", err)
 			}
 			// Will retry on next reconciliation
 		}
@@ -292,105 +227,61 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 	}
 
 	// === TEMP CONTENT POD RECONCILIATION ===
-	// Manage temporary content pods for workspace access on stopped sessions
+	// Manage temporary content pods for workspace access when runner is not active
 
-	tempContentRequested := annotations != nil && annotations[tempContentRequestedAnnotation] == "true"
-	tempPodName := fmt.Sprintf("temp-content-%s", name)
+	// Temp-content pods removed - users view artifacts directly from S3 bucket
+	// Session state and artifacts persist in S3, accessible via bucket browser or CLI
 
-	// Only manage temp pods for stopped/completed/failed sessions
+	// Early exit for terminal phases - no reconciliation needed
 	if phase == "Stopped" || phase == "Completed" || phase == "Failed" {
-		if tempContentRequested {
-			// User wants workspace access - ensure temp pod exists
-			if err := reconcileTempContentPodWithPatch(sessionNamespace, name, tempPodName, currentObj, statusPatch); err != nil {
-				log.Printf("[TempPod] Failed to reconcile temp pod: %v", err)
-			}
-		} else {
-			// Temp pod not requested - delete if it exists
-			_, err := config.K8sClient.CoreV1().Pods(sessionNamespace).Get(context.TODO(), tempPodName, v1.GetOptions{})
-			if err == nil {
-				log.Printf("[TempPod] Deleting unrequested temp pod: %s", tempPodName)
-				if err := config.K8sClient.CoreV1().Pods(sessionNamespace).Delete(context.TODO(), tempPodName, v1.DeleteOptions{}); err != nil && !errors.IsNotFound(err) {
-					log.Printf("[TempPod] Failed to delete temp pod: %v", err)
-				} else {
-					statusPatch.AddCondition(conditionUpdate{
-						Type:    conditionTempContentPodReady,
-						Status:  "False",
-						Reason:  "NotRequested",
-						Message: "Temp pod removed (not requested)",
-					})
-				}
-			}
-		}
-		// Apply temp pod status changes and return (no further reconciliation needed for stopped sessions)
-		if statusPatch.HasChanges() {
-			if err := statusPatch.Apply(); err != nil {
-				log.Printf("[TempPod] Warning: failed to apply status patch: %v", err)
-			}
-		}
 		return nil
 	}
 
 	// === CONTINUE WITH PHASE-BASED RECONCILIATION ===
 
-	// Early exit: If desired-phase is "Stopped", do not recreate jobs or reconcile
-	// This prevents race conditions where the operator sees the job deleted before phase is updated
+	// Early exit: If desired-phase is "Stopped", do not recreate pods or reconcile
+	// This prevents race conditions where the operator sees the pod deleted before phase is updated
 	if desiredPhase == "Stopped" {
 		log.Printf("Session %s has desired-phase=Stopped, skipping further reconciliation", name)
 		return nil
 	}
 
-	// Handle Stopped phase - clean up running job if it exists
+	// Handle Stopped phase - clean up running pod if it exists
 	if phase == "Stopped" {
-		log.Printf("Session %s is stopped, checking for running job to clean up", name)
-		jobName := fmt.Sprintf("%s-job", name)
+		log.Printf("Session %s is stopped, checking for running pod to clean up", name)
+		podName := fmt.Sprintf("%s-runner", name)
 
-		job, err := config.K8sClient.BatchV1().Jobs(sessionNamespace).Get(context.TODO(), jobName, v1.GetOptions{})
+		_, err := config.K8sClient.CoreV1().Pods(sessionNamespace).Get(context.TODO(), podName, v1.GetOptions{})
 		if err == nil {
-			// Job exists, check if it's still running or needs cleanup
-			if job.Status.Active > 0 || (job.Status.Succeeded == 0 && job.Status.Failed == 0) {
-				log.Printf("Job %s is still active, cleaning up job and pods", jobName)
+			// Pod exists, delete it
+			log.Printf("Pod %s is still active, cleaning up pod", podName)
 
-				// First, delete the job itself with foreground propagation
-				deletePolicy := v1.DeletePropagationForeground
-				err = config.K8sClient.BatchV1().Jobs(sessionNamespace).Delete(context.TODO(), jobName, v1.DeleteOptions{
-					PropagationPolicy: &deletePolicy,
-				})
-				if err != nil && !errors.IsNotFound(err) {
-					log.Printf("Failed to delete job %s: %v", jobName, err)
-				} else {
-					log.Printf("Successfully deleted job %s for stopped session", jobName)
-				}
-
-				// Then, explicitly delete all pods for this job (by job-name label)
-				podSelector := fmt.Sprintf("job-name=%s", jobName)
-				log.Printf("Deleting pods with job-name selector: %s", podSelector)
-				err = config.K8sClient.CoreV1().Pods(sessionNamespace).DeleteCollection(context.TODO(), v1.DeleteOptions{}, v1.ListOptions{
-					LabelSelector: podSelector,
-				})
-				if err != nil && !errors.IsNotFound(err) {
-					log.Printf("Failed to delete pods for job %s: %v (continuing anyway)", jobName, err)
-				} else {
-					log.Printf("Successfully deleted pods for job %s", jobName)
-				}
-
-				// Also delete any pods labeled with this session (in case owner refs are lost)
-				sessionPodSelector := fmt.Sprintf("agentic-session=%s", name)
-				log.Printf("Deleting pods with agentic-session selector: %s", sessionPodSelector)
-				err = config.K8sClient.CoreV1().Pods(sessionNamespace).DeleteCollection(context.TODO(), v1.DeleteOptions{}, v1.ListOptions{
-					LabelSelector: sessionPodSelector,
-				})
-				if err != nil && !errors.IsNotFound(err) {
-					log.Printf("Failed to delete session-labeled pods: %v (continuing anyway)", err)
-				} else {
-					log.Printf("Successfully deleted session-labeled pods")
-				}
+			// Delete the pod
+			deletePolicy := v1.DeletePropagationForeground
+			err = config.K8sClient.CoreV1().Pods(sessionNamespace).Delete(context.TODO(), podName, v1.DeleteOptions{
+				PropagationPolicy: &deletePolicy,
+			})
+			if err != nil && !errors.IsNotFound(err) {
+				log.Printf("Failed to delete pod %s: %v", podName, err)
 			} else {
-				log.Printf("Job %s already completed (Succeeded: %d, Failed: %d), no cleanup needed", jobName, job.Status.Succeeded, job.Status.Failed)
+				log.Printf("Successfully deleted pod %s for stopped session", podName)
+			}
+
+			// Also delete any other pods labeled with this session (in case owner refs are lost)
+			sessionPodSelector := fmt.Sprintf("agentic-session=%s", name)
+			log.Printf("Deleting pods with agentic-session selector: %s", sessionPodSelector)
+			err = config.K8sClient.CoreV1().Pods(sessionNamespace).DeleteCollection(context.TODO(), v1.DeleteOptions{}, v1.ListOptions{
+				LabelSelector: sessionPodSelector,
+			})
+			if err != nil && !errors.IsNotFound(err) {
+				log.Printf("Failed to delete session-labeled pods: %v (continuing anyway)", err)
+			} else {
+				log.Printf("Successfully deleted session-labeled pods")
 			}
 		} else if !errors.IsNotFound(err) {
-			log.Printf("Error checking job %s: %v", jobName, err)
+			log.Printf("Error checking pod %s: %v", podName, err)
 		} else {
-			log.Printf("Job %s not found, already cleaned up", jobName)
+			log.Printf("Pod %s not found, already cleaned up", podName)
 		}
 
 		// Also cleanup ambient-vertex secret when session is stopped
@@ -414,7 +305,6 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 
 	// Handle Running phase - check for generation changes (spec updates)
 	if phase == "Running" {
-		log.Printf("[Reconcile] Session %s/%s is Running, checking for spec changes", sessionNamespace, name)
 
 		currentGeneration := currentObj.GetGeneration()
 		observedGeneration := int64(0)
@@ -427,9 +317,6 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 		}
 
 		if currentGeneration > observedGeneration {
-			log.Printf("[Reconcile] Session %s/%s: detected spec change (generation %d > observed %d), reconciling repos and workflow",
-				sessionNamespace, name, currentGeneration, observedGeneration)
-
 			spec, _, _ := unstructured.NestedMap(currentObj.Object, "spec")
 			reposErr := reconcileSpecReposWithPatch(sessionNamespace, name, spec, currentObj, statusPatch)
 			if reposErr != nil {
@@ -470,9 +357,6 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 			if err := statusPatch.Apply(); err != nil {
 				log.Printf("[Reconcile] Warning: failed to apply status patch: %v", err)
 			}
-			log.Printf("[Reconcile] Session %s/%s: updated observedGeneration to %d after successful reconciliation", sessionNamespace, name, currentGeneration)
-		} else {
-			log.Printf("[Reconcile] Session %s/%s: no spec changes detected (generation %d == observed %d)", sessionNamespace, name, currentGeneration, observedGeneration)
 		}
 
 		return nil
@@ -485,25 +369,25 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 
 	// If in Creating phase, check if job exists
 	if phase == "Creating" {
-		jobName := fmt.Sprintf("%s-job", name)
-		_, err := config.K8sClient.BatchV1().Jobs(sessionNamespace).Get(context.TODO(), jobName, v1.GetOptions{})
+		podName := fmt.Sprintf("%s-runner", name)
+		_, err := config.K8sClient.CoreV1().Pods(sessionNamespace).Get(context.TODO(), podName, v1.GetOptions{})
 		if err == nil {
-			// Job exists, start monitoring if not already running
-			monitorKey := fmt.Sprintf("%s/%s", sessionNamespace, jobName)
-			monitoredJobsMu.Lock()
-			alreadyMonitoring := monitoredJobs[monitorKey]
+			// Pod exists, start monitoring if not already running
+			monitorKey := fmt.Sprintf("%s/%s", sessionNamespace, podName)
+			monitoredPodsMu.Lock()
+			alreadyMonitoring := monitoredPods[monitorKey]
 			if !alreadyMonitoring {
-				monitoredJobs[monitorKey] = true
-				monitoredJobsMu.Unlock()
-				log.Printf("Resuming monitoring for existing job %s (session in Creating phase)", jobName)
-				go monitorJob(jobName, name, sessionNamespace)
+				monitoredPods[monitorKey] = true
+				monitoredPodsMu.Unlock()
+				log.Printf("Resuming monitoring for existing pod %s (session in Creating phase)", podName)
+				go monitorPod(podName, name, sessionNamespace)
 			} else {
-				monitoredJobsMu.Unlock()
-				log.Printf("Job %s already being monitored, skipping duplicate", jobName)
+				monitoredPodsMu.Unlock()
+				log.Printf("Pod %s already being monitored, skipping duplicate", podName)
 			}
 			return nil
 		} else if errors.IsNotFound(err) {
-			// Job doesn't exist but phase is Creating - check if this is due to a stop request
+			// Pod doesn't exist but phase is Creating - check if this is due to a stop request
 			if desiredPhase == "Stopped" {
 				// Job already gone, can transition directly to Stopped (skip Stopping phase)
 				log.Printf("Session %s in Creating phase but job not found and stop requested, transitioning to Stopped", name)
@@ -514,14 +398,14 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 					Type:    conditionReady,
 					Status:  "False",
 					Reason:  "UserStopped",
-					Message: "User requested stop during job creation",
+					Message: "User requested stop during pod creation",
 				})
 				// Update progress-tracking conditions
 				statusPatch.AddCondition(conditionUpdate{
-					Type:    conditionJobCreated,
+					Type:    conditionPodCreated,
 					Status:  "False",
 					Reason:  "UserStopped",
-					Message: "Job deleted by user stop request",
+					Message: "Pod deleted by user stop request",
 				})
 				statusPatch.AddCondition(conditionUpdate{
 					Type:    conditionRunnerStarted,
@@ -535,11 +419,11 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 				return nil
 			}
 
-			// Job doesn't exist but phase is Creating - this is inconsistent state
+			// Pod doesn't exist but phase is Creating - this is inconsistent state
 			// Could happen if:
-			// 1. Job was manually deleted
-			// 2. Operator crashed between job creation and status update
-			// 3. Session is being stopped and job was deleted (stale event)
+			// 1. Pod was manually deleted
+			// 2. Operator crashed between pod creation and status update
+			// 3. Session is being stopped and pod was deleted (stale event)
 
 			// Before recreating, verify the session hasn't been stopped
 			// Fetch fresh status to check for recent state changes
@@ -556,26 +440,26 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 				freshStatus, _, _ := unstructured.NestedMap(freshObj.Object, "status")
 				freshPhase, _, _ := unstructured.NestedString(freshStatus, "phase")
 				if freshPhase == "Stopped" || freshPhase == "Stopping" || freshPhase == "Failed" || freshPhase == "Completed" {
-					log.Printf("Session %s is now in %s phase (stale Creating event), skipping job recreation", name, freshPhase)
+					log.Printf("Session %s is now in %s phase (stale Creating event), skipping pod recreation", name, freshPhase)
 					return nil
 				}
 			}
 
-			log.Printf("Session %s in Creating phase but job not found, resetting to Pending and recreating", name)
+			log.Printf("Session %s in Creating phase but pod not found, resetting to Pending and recreating", name)
 			statusPatch.SetField("phase", "Pending")
 			statusPatch.AddCondition(conditionUpdate{
-				Type:    conditionJobCreated,
+				Type:    conditionPodCreated,
 				Status:  "False",
-				Reason:  "JobMissing",
-				Message: "Job not found, will recreate",
+				Reason:  "PodMissing",
+				Message: "Pod not found, will recreate",
 			})
 			// Apply immediately and continue to Pending logic
 			_ = statusPatch.ApplyAndReset()
-			// Don't return - fall through to Pending logic to create job
+			// Don't return - fall through to Pending logic to create pod
 			_ = "Pending" // phase reset handled by status update
 		} else {
-			// Error checking job - log and continue
-			log.Printf("Error checking job for Creating session %s: %v, will attempt recovery", name, err)
+			// Error checking pod - log and continue
+			log.Printf("Error checking pod for Creating session %s: %v, will attempt recovery", name, err)
 			// Fall through to Pending logic
 			_ = "Pending" // phase reset handled by status update
 		}
@@ -597,90 +481,8 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 		}
 	}
 
-	// Determine PVC name and owner references
-	var pvcName string
-	var ownerRefs []v1.OwnerReference
-	reusingPVC := false
-
-	if parentSessionID != "" {
-		// Continuation: reuse parent's PVC
-		pvcName = fmt.Sprintf("ambient-workspace-%s", parentSessionID)
-		reusingPVC = true
-		log.Printf("Session continuation: reusing PVC %s from parent session %s", pvcName, parentSessionID)
-		// No owner refs - we don't own the parent's PVC
-	} else {
-		// New session: create fresh PVC with owner refs
-		pvcName = fmt.Sprintf("ambient-workspace-%s", name)
-		ownerRefs = []v1.OwnerReference{
-			{
-				APIVersion: "vteam.ambient-code/v1",
-				Kind:       "AgenticSession",
-				Name:       currentObj.GetName(),
-				UID:        currentObj.GetUID(),
-				Controller: boolPtr(true),
-				// BlockOwnerDeletion intentionally omitted to avoid permission issues
-			},
-		}
-	}
-
-	// Ensure PVC exists (skip for continuation if parent's PVC should exist)
-	if !reusingPVC {
-		if err := services.EnsureSessionWorkspacePVC(sessionNamespace, pvcName, ownerRefs); err != nil {
-			log.Printf("Failed to ensure session PVC %s in %s: %v", pvcName, sessionNamespace, err)
-			statusPatch.AddCondition(conditionUpdate{
-				Type:    conditionPVCReady,
-				Status:  "False",
-				Reason:  "ProvisioningFailed",
-				Message: err.Error(),
-			})
-		} else {
-			statusPatch.AddCondition(conditionUpdate{
-				Type:    conditionPVCReady,
-				Status:  "True",
-				Reason:  "Bound",
-				Message: fmt.Sprintf("PVC %s ready", pvcName),
-			})
-		}
-	} else {
-		// Verify parent's PVC exists
-		if _, err := config.K8sClient.CoreV1().PersistentVolumeClaims(sessionNamespace).Get(context.TODO(), pvcName, v1.GetOptions{}); err != nil {
-			log.Printf("Warning: Parent PVC %s not found for continuation session %s: %v", pvcName, name, err)
-			// Fall back to creating new PVC with current session's owner refs
-			pvcName = fmt.Sprintf("ambient-workspace-%s", name)
-			ownerRefs = []v1.OwnerReference{
-				{
-					APIVersion: "vteam.ambient-code/v1",
-					Kind:       "AgenticSession",
-					Name:       currentObj.GetName(),
-					UID:        currentObj.GetUID(),
-					Controller: boolPtr(true),
-				},
-			}
-			if err := services.EnsureSessionWorkspacePVC(sessionNamespace, pvcName, ownerRefs); err != nil {
-				log.Printf("Failed to create fallback PVC %s: %v", pvcName, err)
-				statusPatch.AddCondition(conditionUpdate{
-					Type:    conditionPVCReady,
-					Status:  "False",
-					Reason:  "ProvisioningFailed",
-					Message: err.Error(),
-				})
-			} else {
-				statusPatch.AddCondition(conditionUpdate{
-					Type:    conditionPVCReady,
-					Status:  "True",
-					Reason:  "Bound",
-					Message: fmt.Sprintf("PVC %s ready", pvcName),
-				})
-			}
-		} else {
-			statusPatch.AddCondition(conditionUpdate{
-				Type:    conditionPVCReady,
-				Status:  "True",
-				Reason:  "Reused",
-				Message: fmt.Sprintf("Reused PVC %s from parent session", pvcName),
-			})
-		}
-	}
+	// EmptyDir replaces PVC - session state persists in S3
+	log.Printf("Session will use EmptyDir with S3 state persistence")
 
 	// Load config for this session
 	appConfig := config.LoadConfig()
@@ -772,23 +574,49 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 		log.Printf("Langfuse disabled, skipping secret copy")
 	}
 
-	// Create a Kubernetes Job for this AgenticSession
-	jobName := fmt.Sprintf("%s-job", name)
+	// Create a Kubernetes Pod for this AgenticSession
+	podName := fmt.Sprintf("%s-runner", name)
 
-	// Check if job already exists in the session's namespace
-	_, err = config.K8sClient.BatchV1().Jobs(sessionNamespace).Get(context.TODO(), jobName, v1.GetOptions{})
+	// Ensure runner token exists before creating pod
+	// This handles cases where sessions are created directly via kubectl (bypassing the backend)
+	// or when the backend failed to provision the token
+	runnerTokenSecretName := fmt.Sprintf("ambient-runner-token-%s", name)
+	if _, err := config.K8sClient.CoreV1().Secrets(sessionNamespace).Get(context.TODO(), runnerTokenSecretName, v1.GetOptions{}); err != nil {
+		if errors.IsNotFound(err) {
+			log.Printf("Runner token secret %s not found, creating it now", runnerTokenSecretName)
+			if err := regenerateRunnerToken(sessionNamespace, name, currentObj); err != nil {
+				errMsg := fmt.Sprintf("Failed to provision runner token: %v", err)
+				log.Print(errMsg)
+				statusPatch.SetField("phase", "Failed")
+				statusPatch.AddCondition(conditionUpdate{
+					Type:    conditionReady,
+					Status:  "False",
+					Reason:  "TokenProvisionFailed",
+					Message: errMsg,
+				})
+				_ = statusPatch.Apply()
+				return fmt.Errorf("failed to provision runner token for session %s: %v", name, err)
+			}
+			log.Printf("Successfully provisioned runner token for session %s", name)
+		} else {
+			log.Printf("Warning: error checking runner token secret: %v", err)
+		}
+	}
+
+	// Check if pod already exists in the session's namespace
+	_, err = config.K8sClient.CoreV1().Pods(sessionNamespace).Get(context.TODO(), podName, v1.GetOptions{})
 	if err == nil {
-		log.Printf("Job %s already exists for AgenticSession %s", jobName, name)
+		log.Printf("Pod %s already exists for AgenticSession %s", podName, name)
 		statusPatch.SetField("phase", "Creating")
 		statusPatch.SetField("observedGeneration", currentObj.GetGeneration())
 		statusPatch.AddCondition(conditionUpdate{
-			Type:    conditionJobCreated,
+			Type:    conditionPodCreated,
 			Status:  "True",
-			Reason:  "JobExists",
-			Message: "Runner job already exists",
+			Reason:  "PodExists",
+			Message: "Runner pod already exists",
 		})
 		_ = statusPatch.Apply()
-		// Clear desired-phase annotation if it exists (job already created)
+		// Clear desired-phase annotation if it exists (pod already created)
 		_ = clearAnnotation(sessionNamespace, name, "ambient-code.io/desired-phase")
 		return nil
 	}
@@ -858,66 +686,6 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 		})
 	}
 
-	// Extract repos configuration (simplified format: url and branch)
-	type RepoConfig struct {
-		URL    string
-		Branch string
-	}
-
-	var repos []RepoConfig
-
-	// Read simplified repos[] array format
-	if reposArr, found, _ := unstructured.NestedSlice(spec, "repos"); found && len(reposArr) > 0 {
-		repos = make([]RepoConfig, 0, len(reposArr))
-		for _, repoItem := range reposArr {
-			if repoMap, ok := repoItem.(map[string]interface{}); ok {
-				repo := RepoConfig{}
-				if url, ok := repoMap["url"].(string); ok {
-					repo.URL = url
-				}
-				if branch, ok := repoMap["branch"].(string); ok {
-					repo.Branch = branch
-				} else {
-					repo.Branch = "main"
-				}
-				if repo.URL != "" {
-					repos = append(repos, repo)
-				}
-			}
-		}
-	} else {
-		// Fallback to old format for backward compatibility (input/output structure)
-		inputRepo, _, _ := unstructured.NestedString(spec, "inputRepo")
-		inputBranch, _, _ := unstructured.NestedString(spec, "inputBranch")
-		if v, found, _ := unstructured.NestedString(spec, "input", "repo"); found && strings.TrimSpace(v) != "" {
-			inputRepo = v
-		}
-		if v, found, _ := unstructured.NestedString(spec, "input", "branch"); found && strings.TrimSpace(v) != "" {
-			inputBranch = v
-		}
-		if inputRepo != "" {
-			if inputBranch == "" {
-				inputBranch = "main"
-			}
-			repos = []RepoConfig{{
-				URL:    inputRepo,
-				Branch: inputBranch,
-			}}
-		}
-	}
-
-	// Get first repo for backward compatibility env vars (first repo is always main repo)
-	var inputRepo, inputBranch, outputRepo, outputBranch string
-	if len(repos) > 0 {
-		inputRepo = repos[0].URL
-		inputBranch = repos[0].Branch
-		outputRepo = repos[0].URL // Output same as input in simplified format
-		outputBranch = repos[0].Branch
-	}
-
-	// Read autoPushOnComplete flag
-	autoPushOnComplete, _, _ := unstructured.NestedBool(spec, "autoPushOnComplete")
-
 	// Extract userContext for observability and auditing
 	userID := ""
 	userName := ""
@@ -931,18 +699,500 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 	}
 	log.Printf("Session %s initiated by user: %s (userId: %s)", name, userName, userID)
 
-	// Create the Job
-	job := &batchv1.Job{
+	// Get S3 configuration for this project (from project secret or operator defaults)
+	s3Endpoint, s3Bucket, s3AccessKey, s3SecretKey, err := getS3ConfigForProject(sessionNamespace, appConfig)
+	if err != nil {
+		log.Printf("Warning: S3 not available for project %s: %v (sessions will use ephemeral storage only)", sessionNamespace, err)
+		statusPatch.AddCondition(conditionUpdate{
+			Type:    "S3Available",
+			Status:  "False",
+			Reason:  "NotConfigured",
+			Message: fmt.Sprintf("S3 storage not configured: %v. Session state will not persist across pod restarts. Configure S3 in project settings.", err),
+		})
+		// Set empty values - init-hydrate and state-sync will skip S3 operations
+		s3Endpoint = ""
+		s3Bucket = ""
+		s3AccessKey = ""
+		s3SecretKey = ""
+	} else {
+		log.Printf("S3 configured for project %s: endpoint=%s, bucket=%s", sessionNamespace, s3Endpoint, s3Bucket)
+		statusPatch.AddCondition(conditionUpdate{
+			Type:    "S3Available",
+			Status:  "True",
+			Reason:  "Configured",
+			Message: fmt.Sprintf("S3 storage configured: %s/%s", s3Endpoint, s3Bucket),
+		})
+	}
+
+	// Create the Pod directly (no Job wrapper for faster startup)
+	podSpec := corev1.PodSpec{
+		RestartPolicy:                 corev1.RestartPolicyNever,
+		TerminationGracePeriodSeconds: int64Ptr(30), // Allow time for state-sync final sync
+		// Explicitly set service account for pod creation permissions
+		AutomountServiceAccountToken: boolPtr(false),
+		Volumes: []corev1.Volume{
+			{
+				Name: "workspace",
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{
+						SizeLimit: resource.NewQuantity(10*1024*1024*1024, resource.BinarySI), // 10Gi
+					},
+				},
+			},
+		},
+
+		// InitContainer to hydrate session state from S3
+		InitContainers: []corev1.Container{
+			{
+				Name:            "init-hydrate",
+				Image:           appConfig.StateSyncImage,
+				ImagePullPolicy: appConfig.ImagePullPolicy,
+				Command:         []string{"/usr/local/bin/hydrate.sh"},
+				SecurityContext: &corev1.SecurityContext{
+					AllowPrivilegeEscalation: boolPtr(false),
+					ReadOnlyRootFilesystem:   boolPtr(false),
+					Capabilities: &corev1.Capabilities{
+						Drop: []corev1.Capability{"ALL"},
+					},
+				},
+				Env: func() []corev1.EnvVar {
+					base := []corev1.EnvVar{
+						{Name: "SESSION_NAME", Value: name},
+						{Name: "NAMESPACE", Value: sessionNamespace},
+						{Name: "S3_ENDPOINT", Value: s3Endpoint},
+						{Name: "S3_BUCKET", Value: s3Bucket},
+						{Name: "AWS_ACCESS_KEY_ID", Value: s3AccessKey},
+						{Name: "AWS_SECRET_ACCESS_KEY", Value: s3SecretKey},
+						{Name: "GIT_USER_NAME", Value: os.Getenv("GIT_USER_NAME")},
+						{Name: "GIT_USER_EMAIL", Value: os.Getenv("GIT_USER_EMAIL")},
+					}
+
+					// Add repos JSON if present
+					if repos, ok := spec["repos"].([]interface{}); ok && len(repos) > 0 {
+						b, _ := json.Marshal(repos)
+						base = append(base, corev1.EnvVar{Name: "REPOS_JSON", Value: string(b)})
+					}
+
+					// Add workflow info if present
+					if workflow, ok := spec["activeWorkflow"].(map[string]interface{}); ok {
+						if gitURL, ok := workflow["gitUrl"].(string); ok && strings.TrimSpace(gitURL) != "" {
+							base = append(base, corev1.EnvVar{Name: "ACTIVE_WORKFLOW_GIT_URL", Value: gitURL})
+						}
+						if branch, ok := workflow["branch"].(string); ok && strings.TrimSpace(branch) != "" {
+							base = append(base, corev1.EnvVar{Name: "ACTIVE_WORKFLOW_BRANCH", Value: branch})
+						}
+						if path, ok := workflow["path"].(string); ok && strings.TrimSpace(path) != "" {
+							base = append(base, corev1.EnvVar{Name: "ACTIVE_WORKFLOW_PATH", Value: path})
+						}
+					}
+
+					// Add GitHub token for private repos
+					secretName := ""
+					if meta, ok := currentObj.Object["metadata"].(map[string]interface{}); ok {
+						if anns, ok := meta["annotations"].(map[string]interface{}); ok {
+							if v, ok := anns["ambient-code.io/runner-token-secret"].(string); ok && strings.TrimSpace(v) != "" {
+								secretName = strings.TrimSpace(v)
+							}
+						}
+					}
+					if secretName == "" {
+						secretName = fmt.Sprintf("ambient-runner-token-%s", name)
+					}
+					base = append(base, corev1.EnvVar{
+						Name: "BOT_TOKEN",
+						ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
+							Key:                  "k8s-token",
+						}},
+					})
+
+					return base
+				}(),
+				VolumeMounts: []corev1.VolumeMount{
+					{Name: "workspace", MountPath: "/workspace"},
+					// SubPath mount for .claude so init container writes to same location as runner
+					{Name: "workspace", MountPath: "/app/.claude", SubPath: ".claude"},
+				},
+			},
+		},
+
+		// Flip roles so the content writer is the main container that keeps the pod alive
+		Containers: []corev1.Container{
+			{
+				Name:            "ambient-content",
+				Image:           appConfig.ContentServiceImage,
+				ImagePullPolicy: appConfig.ImagePullPolicy,
+				Env: []corev1.EnvVar{
+					{Name: "CONTENT_SERVICE_MODE", Value: "true"},
+					{Name: "STATE_BASE_DIR", Value: "/workspace"},
+				},
+				// Import integration secrets as environment variables (GITHUB_TOKEN, GITLAB_TOKEN, etc.)
+				EnvFrom: func() []corev1.EnvFromSource {
+					if integrationSecretsExist {
+						return []corev1.EnvFromSource{{
+							SecretRef: &corev1.SecretEnvSource{
+								LocalObjectReference: corev1.LocalObjectReference{Name: integrationSecretsName},
+							},
+						}}
+					}
+					return nil
+				}(),
+				Ports: []corev1.ContainerPort{{ContainerPort: 8080, Name: "http"}},
+				ReadinessProbe: &corev1.Probe{
+					ProbeHandler: corev1.ProbeHandler{
+						HTTPGet: &corev1.HTTPGetAction{
+							Path: "/health",
+							Port: intstr.FromString("http"),
+						},
+					},
+					InitialDelaySeconds: 5,
+					PeriodSeconds:       5,
+				},
+				VolumeMounts: []corev1.VolumeMount{{Name: "workspace", MountPath: "/workspace"}},
+			},
+			{
+				Name:            "ambient-code-runner",
+				Image:           appConfig.AmbientCodeRunnerImage,
+				ImagePullPolicy: appConfig.ImagePullPolicy,
+				// 🔒 Container-level security (SCC-compatible, no privileged capabilities)
+				SecurityContext: &corev1.SecurityContext{
+					AllowPrivilegeEscalation: boolPtr(false),
+					ReadOnlyRootFilesystem:   boolPtr(false), // Playwright needs to write temp files
+					Capabilities: &corev1.Capabilities{
+						Drop: []corev1.Capability{"ALL"}, // Drop all capabilities for security
+					},
+				},
+
+				// Expose AG-UI server port for backend proxy
+				Ports: []corev1.ContainerPort{{
+					Name:          "agui",
+					ContainerPort: 8001,
+					Protocol:      corev1.ProtocolTCP,
+				}},
+
+				VolumeMounts: []corev1.VolumeMount{
+					{Name: "workspace", MountPath: "/workspace", ReadOnly: false},
+					// Mount .claude directory for session state persistence (synced to S3)
+					// This enables SDK's built-in resume functionality
+					{Name: "workspace", MountPath: "/app/.claude", SubPath: ".claude", ReadOnly: false},
+				},
+
+				Env: func() []corev1.EnvVar {
+					base := []corev1.EnvVar{
+						{Name: "DEBUG", Value: "true"},
+						{Name: "INTERACTIVE", Value: fmt.Sprintf("%t", interactive)},
+						{Name: "AGENTIC_SESSION_NAME", Value: name},
+						{Name: "AGENTIC_SESSION_NAMESPACE", Value: sessionNamespace},
+						// Provide session id and workspace path for the runner wrapper
+						{Name: "SESSION_ID", Value: name},
+						{Name: "WORKSPACE_PATH", Value: "/workspace"},
+						{Name: "ARTIFACTS_DIR", Value: "artifacts"},
+						// AG-UI server port (must match containerPort and Service)
+						{Name: "AGUI_PORT", Value: "8001"},
+						// Google MCP credentials directory for workspace-mcp server (writable workspace location)
+						{Name: "GOOGLE_MCP_CREDENTIALS_DIR", Value: "/workspace/.google_workspace_mcp/credentials"},
+						// Google OAuth client credentials for workspace-mcp
+						{Name: "GOOGLE_OAUTH_CLIENT_ID", Value: os.Getenv("GOOGLE_OAUTH_CLIENT_ID")},
+						{Name: "GOOGLE_OAUTH_CLIENT_SECRET", Value: os.Getenv("GOOGLE_OAUTH_CLIENT_SECRET")},
+					}
+
+					// For e2e: use minimal MCP config (webfetch only, no credentials needed)
+					if mcpConfigFile := os.Getenv("MCP_CONFIG_FILE"); strings.TrimSpace(mcpConfigFile) != "" {
+						base = append(base, corev1.EnvVar{Name: "MCP_CONFIG_FILE", Value: mcpConfigFile})
+					}
+
+					// Add user context for observability and auditing (Langfuse userId, logs, etc.)
+					if userID != "" {
+						base = append(base, corev1.EnvVar{Name: "USER_ID", Value: userID})
+					}
+					if userName != "" {
+						base = append(base, corev1.EnvVar{Name: "USER_NAME", Value: userName})
+					}
+
+					// Core session env vars
+					base = append(base,
+						corev1.EnvVar{Name: "INITIAL_PROMPT", Value: prompt},
+						corev1.EnvVar{Name: "LLM_MODEL", Value: model},
+						corev1.EnvVar{Name: "LLM_TEMPERATURE", Value: fmt.Sprintf("%.2f", temperature)},
+						corev1.EnvVar{Name: "LLM_MAX_TOKENS", Value: fmt.Sprintf("%d", maxTokens)},
+						corev1.EnvVar{Name: "USE_AGUI", Value: "true"},
+						corev1.EnvVar{Name: "TIMEOUT", Value: fmt.Sprintf("%d", timeout)},
+						corev1.EnvVar{Name: "BACKEND_API_URL", Value: fmt.Sprintf("http://backend-service.%s.svc.cluster.local:8080/api", appConfig.BackendNamespace)},
+						// LEGACY: WEBSOCKET_URL removed - runner now uses AG-UI server pattern (FastAPI)
+						// Backend proxies to runner's HTTP endpoint instead of WebSocket
+					)
+
+					// Platform-wide Langfuse observability configuration
+					// Uses secretKeyRef to prevent credential exposure in pod specs
+					// Secret is copied to session namespace from operator namespace
+					// All keys are optional to prevent pod startup failures if keys are missing
+					if ambientLangfuseSecretCopied {
+						base = append(base,
+							corev1.EnvVar{
+								Name: "LANGFUSE_ENABLED",
+								ValueFrom: &corev1.EnvVarSource{
+									SecretKeyRef: &corev1.SecretKeySelector{
+										LocalObjectReference: corev1.LocalObjectReference{Name: "ambient-admin-langfuse-secret"},
+										Key:                  "LANGFUSE_ENABLED",
+										Optional:             boolPtr(true),
+									},
+								},
+							},
+							corev1.EnvVar{
+								Name: "LANGFUSE_HOST",
+								ValueFrom: &corev1.EnvVarSource{
+									SecretKeyRef: &corev1.SecretKeySelector{
+										LocalObjectReference: corev1.LocalObjectReference{Name: "ambient-admin-langfuse-secret"},
+										Key:                  "LANGFUSE_HOST",
+										Optional:             boolPtr(true),
+									},
+								},
+							},
+							corev1.EnvVar{
+								Name: "LANGFUSE_PUBLIC_KEY",
+								ValueFrom: &corev1.EnvVarSource{
+									SecretKeyRef: &corev1.SecretKeySelector{
+										LocalObjectReference: corev1.LocalObjectReference{Name: "ambient-admin-langfuse-secret"},
+										Key:                  "LANGFUSE_PUBLIC_KEY",
+										Optional:             boolPtr(true),
+									},
+								},
+							},
+							corev1.EnvVar{
+								Name: "LANGFUSE_SECRET_KEY",
+								ValueFrom: &corev1.EnvVarSource{
+									SecretKeyRef: &corev1.SecretKeySelector{
+										LocalObjectReference: corev1.LocalObjectReference{Name: "ambient-admin-langfuse-secret"},
+										Key:                  "LANGFUSE_SECRET_KEY",
+										Optional:             boolPtr(true),
+									},
+								},
+							},
+						)
+						log.Printf("Langfuse env vars configured via secretKeyRef for session %s", name)
+					}
+
+					// Add Vertex AI configuration only if enabled
+					if vertexEnabled {
+						base = append(base,
+							corev1.EnvVar{Name: "CLAUDE_CODE_USE_VERTEX", Value: "1"},
+							corev1.EnvVar{Name: "CLOUD_ML_REGION", Value: os.Getenv("CLOUD_ML_REGION")},
+							corev1.EnvVar{Name: "ANTHROPIC_VERTEX_PROJECT_ID", Value: os.Getenv("ANTHROPIC_VERTEX_PROJECT_ID")},
+							corev1.EnvVar{Name: "GOOGLE_APPLICATION_CREDENTIALS", Value: os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")},
+						)
+					} else {
+						// Explicitly set to 0 when Vertex is disabled
+						base = append(base, corev1.EnvVar{Name: "CLAUDE_CODE_USE_VERTEX", Value: "0"})
+					}
+
+					// Add PARENT_SESSION_ID if this is a continuation
+					if parentSessionID != "" {
+						base = append(base, corev1.EnvVar{Name: "PARENT_SESSION_ID", Value: parentSessionID})
+						log.Printf("Session %s: passing PARENT_SESSION_ID=%s to runner", name, parentSessionID)
+					}
+
+					// Add IS_RESUME if this session has been started before
+					// Check status.startTime - if present, this is a resume (pod recreate/restart)
+					// This tells the runner to skip INITIAL_PROMPT and use continue_conversation
+					if status, found, _ := unstructured.NestedMap(currentObj.Object, "status"); found {
+						if startTime, ok := status["startTime"].(string); ok && startTime != "" {
+							base = append(base, corev1.EnvVar{Name: "IS_RESUME", Value: "true"})
+							log.Printf("Session %s: marking as resume (IS_RESUME=true, startTime=%s)", name, startTime)
+						}
+					}
+
+					// If backend annotated the session with a runner token secret, inject only BOT_TOKEN
+					// Secret contains: 'k8s-token' (for CR updates)
+					// Prefer annotated secret name; fallback to deterministic name
+					secretName := ""
+					if meta, ok := currentObj.Object["metadata"].(map[string]interface{}); ok {
+						if anns, ok := meta["annotations"].(map[string]interface{}); ok {
+							if v, ok := anns["ambient-code.io/runner-token-secret"].(string); ok && strings.TrimSpace(v) != "" {
+								secretName = strings.TrimSpace(v)
+							}
+						}
+					}
+					if secretName == "" {
+						secretName = fmt.Sprintf("ambient-runner-token-%s", name)
+					}
+					base = append(base, corev1.EnvVar{
+						Name: "BOT_TOKEN",
+						ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
+							Key:                  "k8s-token",
+						}},
+					})
+					// Add CR-provided envs last (override base when same key)
+					if spec, ok := currentObj.Object["spec"].(map[string]interface{}); ok {
+						// Inject REPOS_JSON and MAIN_REPO_NAME from spec.repos and spec.mainRepoName if present
+						if repos, ok := spec["repos"].([]interface{}); ok && len(repos) > 0 {
+							// Use a minimal JSON serialization via fmt (we'll rely on client to pass REPOS_JSON too)
+							// This ensures runner gets repos even if env vars weren't passed from frontend
+							b, _ := json.Marshal(repos)
+							base = append(base, corev1.EnvVar{Name: "REPOS_JSON", Value: string(b)})
+						}
+						if mrn, ok := spec["mainRepoName"].(string); ok && strings.TrimSpace(mrn) != "" {
+							base = append(base, corev1.EnvVar{Name: "MAIN_REPO_NAME", Value: mrn})
+						}
+						// Inject MAIN_REPO_INDEX if provided
+						if mriRaw, ok := spec["mainRepoIndex"]; ok {
+							switch v := mriRaw.(type) {
+							case int64:
+								base = append(base, corev1.EnvVar{Name: "MAIN_REPO_INDEX", Value: fmt.Sprintf("%d", v)})
+							case int32:
+								base = append(base, corev1.EnvVar{Name: "MAIN_REPO_INDEX", Value: fmt.Sprintf("%d", v)})
+							case int:
+								base = append(base, corev1.EnvVar{Name: "MAIN_REPO_INDEX", Value: fmt.Sprintf("%d", v)})
+							case float64:
+								base = append(base, corev1.EnvVar{Name: "MAIN_REPO_INDEX", Value: fmt.Sprintf("%d", int64(v))})
+							case string:
+								if strings.TrimSpace(v) != "" {
+									base = append(base, corev1.EnvVar{Name: "MAIN_REPO_INDEX", Value: v})
+								}
+							}
+						}
+						// Inject activeWorkflow environment variables if present
+						if workflow, ok := spec["activeWorkflow"].(map[string]interface{}); ok {
+							if gitURL, ok := workflow["gitUrl"].(string); ok && strings.TrimSpace(gitURL) != "" {
+								base = append(base, corev1.EnvVar{Name: "ACTIVE_WORKFLOW_GIT_URL", Value: gitURL})
+							}
+							if branch, ok := workflow["branch"].(string); ok && strings.TrimSpace(branch) != "" {
+								base = append(base, corev1.EnvVar{Name: "ACTIVE_WORKFLOW_BRANCH", Value: branch})
+							}
+							if path, ok := workflow["path"].(string); ok && strings.TrimSpace(path) != "" {
+								base = append(base, corev1.EnvVar{Name: "ACTIVE_WORKFLOW_PATH", Value: path})
+							}
+						}
+						if envMap, ok := spec["environmentVariables"].(map[string]interface{}); ok {
+							for k, v := range envMap {
+								if vs, ok := v.(string); ok {
+									// replace if exists
+									replaced := false
+									for i := range base {
+										if base[i].Name == k {
+											base[i].Value = vs
+											replaced = true
+											break
+										}
+									}
+									if !replaced {
+										base = append(base, corev1.EnvVar{Name: k, Value: vs})
+									}
+								}
+							}
+						}
+					}
+
+					return base
+				}(),
+
+				// Import secrets as environment variables
+				// - integrationSecretsName: Only if exists (GIT_TOKEN, JIRA_*, custom keys)
+				// - runnerSecretsName: Only when Vertex disabled (ANTHROPIC_API_KEY)
+				// - ambient-langfuse-keys: Platform-wide Langfuse observability (LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, LANGFUSE_HOST, LANGFUSE_ENABLED)
+				EnvFrom: func() []corev1.EnvFromSource {
+					sources := []corev1.EnvFromSource{}
+
+					// Only inject integration secrets if they exist (optional)
+					if integrationSecretsExist {
+						sources = append(sources, corev1.EnvFromSource{
+							SecretRef: &corev1.SecretEnvSource{
+								LocalObjectReference: corev1.LocalObjectReference{Name: integrationSecretsName},
+							},
+						})
+						log.Printf("Injecting integration secrets from '%s' for session %s", integrationSecretsName, name)
+					} else {
+						log.Printf("Skipping integration secrets '%s' for session %s (not found or not configured)", integrationSecretsName, name)
+					}
+
+					// Only inject runner secrets (ANTHROPIC_API_KEY) when Vertex is disabled
+					if !vertexEnabled && runnerSecretsName != "" {
+						sources = append(sources, corev1.EnvFromSource{
+							SecretRef: &corev1.SecretEnvSource{
+								LocalObjectReference: corev1.LocalObjectReference{Name: runnerSecretsName},
+							},
+						})
+						log.Printf("Injecting runner secrets from '%s' for session %s (Vertex disabled)", runnerSecretsName, name)
+					} else if vertexEnabled && runnerSecretsName != "" {
+						log.Printf("Skipping runner secrets '%s' for session %s (Vertex enabled)", runnerSecretsName, name)
+					}
+
+					return sources
+				}(),
+
+				Resources: corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("500m"),
+						corev1.ResourceMemory: resource.MustParse("512Mi"),
+					},
+					Limits: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("2000m"), // 2 cores for MCP + Claude SDK
+						corev1.ResourceMemory: resource.MustParse("4Gi"),   // Increased for Playwright/Chromium + dev server
+					},
+				},
+			},
+			// S3 state-sync sidecar - syncs .claude/, artifacts/, uploads/ to S3
+			{
+				Name:            "state-sync",
+				Image:           appConfig.StateSyncImage,
+				ImagePullPolicy: appConfig.ImagePullPolicy,
+				Command:         []string{"/usr/local/bin/sync.sh"},
+				SecurityContext: &corev1.SecurityContext{
+					AllowPrivilegeEscalation: boolPtr(false),
+					ReadOnlyRootFilesystem:   boolPtr(false),
+					Capabilities: &corev1.Capabilities{
+						Drop: []corev1.Capability{"ALL"},
+					},
+				},
+				Env: []corev1.EnvVar{
+					{Name: "SESSION_NAME", Value: name},
+					{Name: "NAMESPACE", Value: sessionNamespace},
+					{Name: "S3_ENDPOINT", Value: s3Endpoint},
+					{Name: "S3_BUCKET", Value: s3Bucket},
+					{Name: "SYNC_INTERVAL", Value: "60"},
+					{Name: "MAX_SYNC_SIZE", Value: "1073741824"}, // 1GB
+					{Name: "AWS_ACCESS_KEY_ID", Value: s3AccessKey},
+					{Name: "AWS_SECRET_ACCESS_KEY", Value: s3SecretKey},
+				},
+				VolumeMounts: []corev1.VolumeMount{
+					{Name: "workspace", MountPath: "/workspace", ReadOnly: false},
+					// SubPath mount for .claude so sync sidecar reads from same location as runner
+					{Name: "workspace", MountPath: "/app/.claude", SubPath: ".claude", ReadOnly: false},
+				},
+				Resources: corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("100m"),
+						corev1.ResourceMemory: resource.MustParse("128Mi"),
+					},
+					Limits: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("1000m"), // Increased from 200m for MCP startup
+						corev1.ResourceMemory: resource.MustParse("1Gi"),   // Increased from 256Mi
+					},
+				},
+			},
+		},
+	}
+
+	if appConfig.PodFSGroup != nil {
+		podSpec.SecurityContext = &corev1.PodSecurityContext{
+			FSGroup:             appConfig.PodFSGroup,
+			FSGroupChangePolicy: func() *corev1.PodFSGroupChangePolicy { p := corev1.FSGroupChangeOnRootMismatch; return &p }(),
+		}
+	}
+
+	pod := &corev1.Pod{
 		ObjectMeta: v1.ObjectMeta{
-			Name:      jobName,
+			Name:      podName,
 			Namespace: sessionNamespace,
 			Labels: map[string]string{
 				"agentic-session": name,
 				"app":             "ambient-code-runner",
 			},
+			// If you run a service mesh that injects sidecars and causes egress issues:
+			// Annotations: map[string]string{"sidecar.istio.io/inject": "false"},
 			OwnerReferences: []v1.OwnerReference{
 				{
-					APIVersion: "vteam.ambient-code/v1",
+					APIVersion: "vteam.ambient-code/v1alpha1",
 					Kind:       "AgenticSession",
 					Name:       currentObj.GetName(),
 					UID:        currentObj.GetUID(),
@@ -952,332 +1202,7 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 				},
 			},
 		},
-		Spec: batchv1.JobSpec{
-			BackoffLimit:          int32Ptr(3),
-			ActiveDeadlineSeconds: int64Ptr(14400), // 4 hour timeout for safety
-			// Auto-cleanup finished Jobs if TTL controller is enabled in the cluster
-			TTLSecondsAfterFinished: int32Ptr(600),
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: v1.ObjectMeta{
-					Labels: map[string]string{
-						"agentic-session": name,
-						"app":             "ambient-code-runner",
-					},
-					// If you run a service mesh that injects sidecars and causes egress issues for Jobs:
-					// Annotations: map[string]string{"sidecar.istio.io/inject": "false"},
-				},
-				Spec: corev1.PodSpec{
-					RestartPolicy: corev1.RestartPolicyNever,
-					// Explicitly set service account for pod creation permissions
-					AutomountServiceAccountToken: boolPtr(false),
-					Volumes: []corev1.Volume{
-						{
-							Name: "workspace",
-							VolumeSource: corev1.VolumeSource{
-								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-									ClaimName: pvcName,
-								},
-							},
-						},
-					},
-
-					// InitContainer to ensure workspace directory structure exists
-					InitContainers: []corev1.Container{
-						{
-							Name:  "init-workspace",
-							Image: "registry.access.redhat.com/ubi8/ubi-minimal:latest",
-							Command: []string{
-								"sh", "-c",
-								fmt.Sprintf("mkdir -p /workspace/sessions/%s/workspace && chmod 777 /workspace/sessions/%s/workspace && echo 'Workspace initialized'", name, name),
-							},
-							VolumeMounts: []corev1.VolumeMount{
-								{Name: "workspace", MountPath: "/workspace"},
-							},
-						},
-					},
-
-					// Flip roles so the content writer is the main container that keeps the pod alive
-					Containers: []corev1.Container{
-						{
-							Name:            "ambient-content",
-							Image:           appConfig.ContentServiceImage,
-							ImagePullPolicy: appConfig.ImagePullPolicy,
-							Env: []corev1.EnvVar{
-								{Name: "CONTENT_SERVICE_MODE", Value: "true"},
-								{Name: "STATE_BASE_DIR", Value: "/workspace"},
-							},
-							Ports: []corev1.ContainerPort{{ContainerPort: 8080, Name: "http"}},
-							ReadinessProbe: &corev1.Probe{
-								ProbeHandler: corev1.ProbeHandler{
-									HTTPGet: &corev1.HTTPGetAction{
-										Path: "/health",
-										Port: intstr.FromString("http"),
-									},
-								},
-								InitialDelaySeconds: 5,
-								PeriodSeconds:       5,
-							},
-							VolumeMounts: []corev1.VolumeMount{{Name: "workspace", MountPath: "/workspace"}},
-						},
-						{
-							Name:            "ambient-code-runner",
-							Image:           appConfig.AmbientCodeRunnerImage,
-							ImagePullPolicy: appConfig.ImagePullPolicy,
-							// 🔒 Container-level security (SCC-compatible, no privileged capabilities)
-							SecurityContext: &corev1.SecurityContext{
-								AllowPrivilegeEscalation: boolPtr(false),
-								ReadOnlyRootFilesystem:   boolPtr(false), // Playwright needs to write temp files
-								Capabilities: &corev1.Capabilities{
-									Drop: []corev1.Capability{"ALL"}, // Drop all capabilities for security
-								},
-							},
-
-							VolumeMounts: []corev1.VolumeMount{
-								{Name: "workspace", MountPath: "/workspace", ReadOnly: false},
-								// Mount .claude directory for session state persistence
-								// This enables SDK's built-in resume functionality
-								{Name: "workspace", MountPath: "/app/.claude", SubPath: fmt.Sprintf("sessions/%s/.claude", name), ReadOnly: false},
-							},
-
-							Env: func() []corev1.EnvVar {
-								base := []corev1.EnvVar{
-									{Name: "DEBUG", Value: "true"},
-									{Name: "INTERACTIVE", Value: fmt.Sprintf("%t", interactive)},
-									{Name: "AGENTIC_SESSION_NAME", Value: name},
-									{Name: "AGENTIC_SESSION_NAMESPACE", Value: sessionNamespace},
-									// Provide session id and workspace path for the runner wrapper
-									{Name: "SESSION_ID", Value: name},
-									{Name: "WORKSPACE_PATH", Value: fmt.Sprintf("/workspace/sessions/%s/workspace", name)},
-									{Name: "ARTIFACTS_DIR", Value: "_artifacts"},
-								}
-
-								// Add user context for observability and auditing (Langfuse userId, logs, etc.)
-								if userID != "" {
-									base = append(base, corev1.EnvVar{Name: "USER_ID", Value: userID})
-								}
-								if userName != "" {
-									base = append(base, corev1.EnvVar{Name: "USER_NAME", Value: userName})
-								}
-
-								// Add per-repo environment variables (simplified format)
-								for i, repo := range repos {
-									base = append(base,
-										corev1.EnvVar{Name: fmt.Sprintf("REPO_%d_URL", i), Value: repo.URL},
-										corev1.EnvVar{Name: fmt.Sprintf("REPO_%d_BRANCH", i), Value: repo.Branch},
-									)
-								}
-
-								// Backward compatibility: set INPUT_REPO_URL/OUTPUT_REPO_URL from main repo
-								base = append(base,
-									corev1.EnvVar{Name: "INPUT_REPO_URL", Value: inputRepo},
-									corev1.EnvVar{Name: "INPUT_BRANCH", Value: inputBranch},
-									corev1.EnvVar{Name: "OUTPUT_REPO_URL", Value: outputRepo},
-									corev1.EnvVar{Name: "OUTPUT_BRANCH", Value: outputBranch},
-									corev1.EnvVar{Name: "INITIAL_PROMPT", Value: prompt},
-									corev1.EnvVar{Name: "LLM_MODEL", Value: model},
-									corev1.EnvVar{Name: "LLM_TEMPERATURE", Value: fmt.Sprintf("%.2f", temperature)},
-									corev1.EnvVar{Name: "LLM_MAX_TOKENS", Value: fmt.Sprintf("%d", maxTokens)},
-									corev1.EnvVar{Name: "TIMEOUT", Value: fmt.Sprintf("%d", timeout)},
-									corev1.EnvVar{Name: "AUTO_PUSH_ON_COMPLETE", Value: fmt.Sprintf("%t", autoPushOnComplete)},
-									corev1.EnvVar{Name: "BACKEND_API_URL", Value: fmt.Sprintf("http://backend-service.%s.svc.cluster.local:8080/api", appConfig.BackendNamespace)},
-									// WebSocket URL used by runner-shell to connect back to backend
-									corev1.EnvVar{Name: "WEBSOCKET_URL", Value: fmt.Sprintf("ws://backend-service.%s.svc.cluster.local:8080/api/projects/%s/sessions/%s/ws", appConfig.BackendNamespace, sessionNamespace, name)},
-									// S3 disabled; backend persists messages
-								)
-
-								// Platform-wide Langfuse observability configuration
-								// Uses secretKeyRef to prevent credential exposure in pod specs
-								// Secret is copied to session namespace from operator namespace
-								// All keys are optional to prevent pod startup failures if keys are missing
-								if ambientLangfuseSecretCopied {
-									base = append(base,
-										corev1.EnvVar{
-											Name: "LANGFUSE_ENABLED",
-											ValueFrom: &corev1.EnvVarSource{
-												SecretKeyRef: &corev1.SecretKeySelector{
-													LocalObjectReference: corev1.LocalObjectReference{Name: "ambient-admin-langfuse-secret"},
-													Key:                  "LANGFUSE_ENABLED",
-													Optional:             boolPtr(true),
-												},
-											},
-										},
-										corev1.EnvVar{
-											Name: "LANGFUSE_HOST",
-											ValueFrom: &corev1.EnvVarSource{
-												SecretKeyRef: &corev1.SecretKeySelector{
-													LocalObjectReference: corev1.LocalObjectReference{Name: "ambient-admin-langfuse-secret"},
-													Key:                  "LANGFUSE_HOST",
-													Optional:             boolPtr(true),
-												},
-											},
-										},
-										corev1.EnvVar{
-											Name: "LANGFUSE_PUBLIC_KEY",
-											ValueFrom: &corev1.EnvVarSource{
-												SecretKeyRef: &corev1.SecretKeySelector{
-													LocalObjectReference: corev1.LocalObjectReference{Name: "ambient-admin-langfuse-secret"},
-													Key:                  "LANGFUSE_PUBLIC_KEY",
-													Optional:             boolPtr(true),
-												},
-											},
-										},
-										corev1.EnvVar{
-											Name: "LANGFUSE_SECRET_KEY",
-											ValueFrom: &corev1.EnvVarSource{
-												SecretKeyRef: &corev1.SecretKeySelector{
-													LocalObjectReference: corev1.LocalObjectReference{Name: "ambient-admin-langfuse-secret"},
-													Key:                  "LANGFUSE_SECRET_KEY",
-													Optional:             boolPtr(true),
-												},
-											},
-										},
-									)
-									log.Printf("Langfuse env vars configured via secretKeyRef for session %s", name)
-								}
-
-								// Add Vertex AI configuration only if enabled
-								if vertexEnabled {
-									base = append(base,
-										corev1.EnvVar{Name: "CLAUDE_CODE_USE_VERTEX", Value: "1"},
-										corev1.EnvVar{Name: "CLOUD_ML_REGION", Value: os.Getenv("CLOUD_ML_REGION")},
-										corev1.EnvVar{Name: "ANTHROPIC_VERTEX_PROJECT_ID", Value: os.Getenv("ANTHROPIC_VERTEX_PROJECT_ID")},
-										corev1.EnvVar{Name: "GOOGLE_APPLICATION_CREDENTIALS", Value: os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")},
-									)
-								} else {
-									// Explicitly set to 0 when Vertex is disabled
-									base = append(base, corev1.EnvVar{Name: "CLAUDE_CODE_USE_VERTEX", Value: "0"})
-								}
-
-								// Add PARENT_SESSION_ID if this is a continuation
-								if parentSessionID != "" {
-									base = append(base, corev1.EnvVar{Name: "PARENT_SESSION_ID", Value: parentSessionID})
-									log.Printf("Session %s: passing PARENT_SESSION_ID=%s to runner", name, parentSessionID)
-								}
-								// If backend annotated the session with a runner token secret, inject only BOT_TOKEN
-								// Secret contains: 'k8s-token' (for CR updates)
-								// Prefer annotated secret name; fallback to deterministic name
-								secretName := ""
-								if meta, ok := currentObj.Object["metadata"].(map[string]interface{}); ok {
-									if anns, ok := meta["annotations"].(map[string]interface{}); ok {
-										if v, ok := anns["ambient-code.io/runner-token-secret"].(string); ok && strings.TrimSpace(v) != "" {
-											secretName = strings.TrimSpace(v)
-										}
-									}
-								}
-								if secretName == "" {
-									secretName = fmt.Sprintf("ambient-runner-token-%s", name)
-								}
-								base = append(base, corev1.EnvVar{
-									Name: "BOT_TOKEN",
-									ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{
-										LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
-										Key:                  "k8s-token",
-									}},
-								})
-								// Add CR-provided envs last (override base when same key)
-								if spec, ok := currentObj.Object["spec"].(map[string]interface{}); ok {
-									// Inject REPOS_JSON and MAIN_REPO_NAME from spec.repos and spec.mainRepoName if present
-									if repos, ok := spec["repos"].([]interface{}); ok && len(repos) > 0 {
-										// Use a minimal JSON serialization via fmt (we'll rely on client to pass REPOS_JSON too)
-										// This ensures runner gets repos even if env vars weren't passed from frontend
-										b, _ := json.Marshal(repos)
-										base = append(base, corev1.EnvVar{Name: "REPOS_JSON", Value: string(b)})
-									}
-									if mrn, ok := spec["mainRepoName"].(string); ok && strings.TrimSpace(mrn) != "" {
-										base = append(base, corev1.EnvVar{Name: "MAIN_REPO_NAME", Value: mrn})
-									}
-									// Inject MAIN_REPO_INDEX if provided
-									if mriRaw, ok := spec["mainRepoIndex"]; ok {
-										switch v := mriRaw.(type) {
-										case int64:
-											base = append(base, corev1.EnvVar{Name: "MAIN_REPO_INDEX", Value: fmt.Sprintf("%d", v)})
-										case int32:
-											base = append(base, corev1.EnvVar{Name: "MAIN_REPO_INDEX", Value: fmt.Sprintf("%d", v)})
-										case int:
-											base = append(base, corev1.EnvVar{Name: "MAIN_REPO_INDEX", Value: fmt.Sprintf("%d", v)})
-										case float64:
-											base = append(base, corev1.EnvVar{Name: "MAIN_REPO_INDEX", Value: fmt.Sprintf("%d", int64(v))})
-										case string:
-											if strings.TrimSpace(v) != "" {
-												base = append(base, corev1.EnvVar{Name: "MAIN_REPO_INDEX", Value: v})
-											}
-										}
-									}
-									// Inject activeWorkflow environment variables if present
-									if workflow, ok := spec["activeWorkflow"].(map[string]interface{}); ok {
-										if gitURL, ok := workflow["gitUrl"].(string); ok && strings.TrimSpace(gitURL) != "" {
-											base = append(base, corev1.EnvVar{Name: "ACTIVE_WORKFLOW_GIT_URL", Value: gitURL})
-										}
-										if branch, ok := workflow["branch"].(string); ok && strings.TrimSpace(branch) != "" {
-											base = append(base, corev1.EnvVar{Name: "ACTIVE_WORKFLOW_BRANCH", Value: branch})
-										}
-										if path, ok := workflow["path"].(string); ok && strings.TrimSpace(path) != "" {
-											base = append(base, corev1.EnvVar{Name: "ACTIVE_WORKFLOW_PATH", Value: path})
-										}
-									}
-									if envMap, ok := spec["environmentVariables"].(map[string]interface{}); ok {
-										for k, v := range envMap {
-											if vs, ok := v.(string); ok {
-												// replace if exists
-												replaced := false
-												for i := range base {
-													if base[i].Name == k {
-														base[i].Value = vs
-														replaced = true
-														break
-													}
-												}
-												if !replaced {
-													base = append(base, corev1.EnvVar{Name: k, Value: vs})
-												}
-											}
-										}
-									}
-								}
-
-								return base
-							}(),
-
-							// Import secrets as environment variables
-							// - integrationSecretsName: Only if exists (GIT_TOKEN, JIRA_*, custom keys)
-							// - runnerSecretsName: Only when Vertex disabled (ANTHROPIC_API_KEY)
-							// - ambient-langfuse-keys: Platform-wide Langfuse observability (LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, LANGFUSE_HOST, LANGFUSE_ENABLED)
-							EnvFrom: func() []corev1.EnvFromSource {
-								sources := []corev1.EnvFromSource{}
-
-								// Only inject integration secrets if they exist (optional)
-								if integrationSecretsExist {
-									sources = append(sources, corev1.EnvFromSource{
-										SecretRef: &corev1.SecretEnvSource{
-											LocalObjectReference: corev1.LocalObjectReference{Name: integrationSecretsName},
-										},
-									})
-									log.Printf("Injecting integration secrets from '%s' for session %s", integrationSecretsName, name)
-								} else {
-									log.Printf("Skipping integration secrets '%s' for session %s (not found or not configured)", integrationSecretsName, name)
-								}
-
-								// Only inject runner secrets (ANTHROPIC_API_KEY) when Vertex is disabled
-								if !vertexEnabled && runnerSecretsName != "" {
-									sources = append(sources, corev1.EnvFromSource{
-										SecretRef: &corev1.SecretEnvSource{
-											LocalObjectReference: corev1.LocalObjectReference{Name: runnerSecretsName},
-										},
-									})
-									log.Printf("Injecting runner secrets from '%s' for session %s (Vertex disabled)", runnerSecretsName, name)
-								} else if vertexEnabled && runnerSecretsName != "" {
-									log.Printf("Skipping runner secrets '%s' for session %s (Vertex enabled)", runnerSecretsName, name)
-								}
-
-								return sources
-							}(),
-
-							Resources: corev1.ResourceRequirements{},
-						},
-					},
-				},
-			},
-		},
+		Spec: podSpec,
 	}
 
 	// Note: No volume mounts needed for runner/integration secrets
@@ -1285,14 +1210,14 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 
 	// If ambient-vertex secret was successfully copied, mount it as a volume
 	if ambientVertexSecretCopied {
-		job.Spec.Template.Spec.Volumes = append(job.Spec.Template.Spec.Volumes, corev1.Volume{
+		pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
 			Name:         "vertex",
 			VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: types.AmbientVertexSecretName}},
 		})
 		// Mount to the ambient-code-runner container by name
-		for i := range job.Spec.Template.Spec.Containers {
-			if job.Spec.Template.Spec.Containers[i].Name == "ambient-code-runner" {
-				job.Spec.Template.Spec.Containers[i].VolumeMounts = append(job.Spec.Template.Spec.Containers[i].VolumeMounts, corev1.VolumeMount{
+		for i := range pod.Spec.Containers {
+			if pod.Spec.Containers[i].Name == "ambient-code-runner" {
+				pod.Spec.Containers[i].VolumeMounts = append(pod.Spec.Containers[i].VolumeMounts, corev1.VolumeMount{
 					Name:      "vertex",
 					MountPath: "/app/vertex",
 					ReadOnly:  true,
@@ -1303,21 +1228,103 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 		}
 	}
 
+	// Sync cluster-level Google OAuth credentials to session-specific Secret
+	// This allows the runner to access the user's Google credentials
+	// We copy the credentials from the cluster-level ConfigMap (backend namespace) to a Secret in this namespace
+	googleOAuthSecretName := fmt.Sprintf("%s-google-oauth", name)
+
+	// Try to get user's Google credentials from cluster-level ConfigMap
+	if userID != "" {
+		ownerRef := v1.OwnerReference{
+			APIVersion: currentObj.GetAPIVersion(),
+			Kind:       currentObj.GetKind(),
+			Name:       currentObj.GetName(),
+			UID:        currentObj.GetUID(),
+			Controller: boolPtr(true),
+		}
+
+		err := syncGoogleCredentialsToSecret(context.TODO(), sessionNamespace, googleOAuthSecretName, userID, ownerRef, appConfig.BackendNamespace)
+		if err != nil {
+			log.Printf("Warning: failed to sync Google credentials for user %s to session %s: %v", userID, name, err)
+			// Non-fatal - user may not have connected Google yet, create placeholder
+		}
+	} else {
+		log.Printf("Warning: userID not available for session %s, creating placeholder Google OAuth secret", name)
+	}
+
+	// Ensure secret exists (create placeholder if sync didn't create it)
+	if _, err := config.K8sClient.CoreV1().Secrets(sessionNamespace).Get(context.TODO(), googleOAuthSecretName, v1.GetOptions{}); errors.IsNotFound(err) {
+		placeholderSecret := &corev1.Secret{
+			ObjectMeta: v1.ObjectMeta{
+				Name:      googleOAuthSecretName,
+				Namespace: sessionNamespace,
+				Labels: map[string]string{
+					"app":                      "ambient-code",
+					"ambient-code.io/session":  name,
+					"ambient-code.io/provider": "google",
+					"ambient-code.io/oauth":    "placeholder",
+				},
+				OwnerReferences: []v1.OwnerReference{
+					{
+						APIVersion: currentObj.GetAPIVersion(),
+						Kind:       currentObj.GetKind(),
+						Name:       currentObj.GetName(),
+						UID:        currentObj.GetUID(),
+						Controller: boolPtr(true),
+					},
+				},
+			},
+			Type: corev1.SecretTypeOpaque,
+			Data: map[string][]byte{
+				"credentials.json": []byte(""), // Empty placeholder
+			},
+		}
+		if _, createErr := config.K8sClient.CoreV1().Secrets(sessionNamespace).Create(context.TODO(), placeholderSecret, v1.CreateOptions{}); createErr != nil {
+			log.Printf("Warning: Failed to create placeholder Google OAuth secret %s: %v", googleOAuthSecretName, createErr)
+		} else {
+			log.Printf("Created placeholder Google OAuth secret %s (no cluster credentials for user)", googleOAuthSecretName)
+		}
+	}
+
+	// Always mount Google OAuth secret (with Optional: true so pod starts even if empty)
+	// K8s will sync updates when backend populates credentials after OAuth completion (~60s)
+	pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
+		Name: "google-oauth",
+		VolumeSource: corev1.VolumeSource{
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: googleOAuthSecretName,
+				Optional:   boolPtr(true), // Don't fail if secret is empty or missing
+			},
+		},
+	})
+	// Mount to the ambient-code-runner container
+	for i := range pod.Spec.Containers {
+		if pod.Spec.Containers[i].Name == "ambient-code-runner" {
+			pod.Spec.Containers[i].VolumeMounts = append(pod.Spec.Containers[i].VolumeMounts, corev1.VolumeMount{
+				Name:      "google-oauth",
+				MountPath: "/app/.google_workspace_mcp/credentials",
+				ReadOnly:  true,
+			})
+			log.Printf("Mounted Google OAuth secret to /app/.google_workspace_mcp/credentials in runner container for session %s", name)
+			break
+		}
+	}
+
 	// Do not mount runner Secret volume; runner fetches tokens on demand
 
-	// Create the job
-	createdJob, err := config.K8sClient.BatchV1().Jobs(sessionNamespace).Create(context.TODO(), job, v1.CreateOptions{})
+	// Create the pod
+	createdPod, err := config.K8sClient.CoreV1().Pods(sessionNamespace).Create(context.TODO(), pod, v1.CreateOptions{})
 	if err != nil {
-		// If job already exists, this is likely a race condition from duplicate watch events - not an error
+		// If pod already exists, this is likely a race condition from duplicate watch events - not an error
 		if errors.IsAlreadyExists(err) {
-			log.Printf("Job %s already exists (race condition), continuing", jobName)
-			// Clear desired-phase annotation since job exists
+			log.Printf("Pod %s already exists (race condition), continuing", podName)
+			// Clear desired-phase annotation since pod exists
 			_ = clearAnnotation(sessionNamespace, name, "ambient-code.io/desired-phase")
 			return nil
 		}
-		log.Printf("Failed to create job %s: %v", jobName, err)
+		log.Printf("Failed to create pod %s: %v", podName, err)
 		statusPatch.AddCondition(conditionUpdate{
-			Type:    conditionJobCreated,
+			Type:    conditionPodCreated,
 			Status:  "False",
 			Reason:  "CreateFailed",
 			Message: err.Error(),
@@ -1325,67 +1332,102 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 		statusPatch.AddCondition(conditionUpdate{
 			Type:    conditionReady,
 			Status:  "False",
-			Reason:  "JobCreationFailed",
-			Message: "Runner job creation failed",
+			Reason:  "PodCreationFailed",
+			Message: "Runner pod creation failed",
 		})
 		_ = statusPatch.Apply()
-		return fmt.Errorf("failed to create job: %v", err)
+		return fmt.Errorf("failed to create pod: %v", err)
 	}
 
-	log.Printf("Created job %s for AgenticSession %s", jobName, name)
+	log.Printf("Created pod %s for AgenticSession %s", podName, name)
 	statusPatch.SetField("phase", "Creating")
 	statusPatch.SetField("observedGeneration", currentObj.GetGeneration())
 	statusPatch.AddCondition(conditionUpdate{
-		Type:    conditionJobCreated,
+		Type:    conditionPodCreated,
 		Status:  "True",
-		Reason:  "JobCreated",
-		Message: "Runner job created",
+		Reason:  "PodCreated",
+		Message: "Runner pod created",
 	})
 	// Apply all accumulated status changes in a single API call
 	if err := statusPatch.Apply(); err != nil {
 		log.Printf("Warning: failed to apply status patch: %v", err)
 	}
 
-	// Clear desired-phase annotation now that job is created
+	// Clear desired-phase annotation now that pod is created
 	// (This was deferred from the restart handler to avoid race conditions with stale events)
 	_ = clearAnnotation(sessionNamespace, name, "ambient-code.io/desired-phase")
-	log.Printf("[DesiredPhase] Cleared desired-phase annotation after successful job creation")
+	log.Printf("[DesiredPhase] Cleared desired-phase annotation after successful pod creation")
 
-	// Create a per-job Service pointing to the content container
+	// Create a per-pod Service pointing to the content container
 	svc := &corev1.Service{
 		ObjectMeta: v1.ObjectMeta{
 			Name:      fmt.Sprintf("ambient-content-%s", name),
 			Namespace: sessionNamespace,
 			Labels:    map[string]string{"app": "ambient-code-runner", "agentic-session": name},
 			OwnerReferences: []v1.OwnerReference{{
-				APIVersion: "batch/v1",
-				Kind:       "Job",
-				Name:       jobName,
-				UID:        createdJob.UID,
+				APIVersion: "v1",
+				Kind:       "Pod",
+				Name:       podName,
+				UID:        createdPod.UID,
 				Controller: boolPtr(true),
 			}},
 		},
 		Spec: corev1.ServiceSpec{
-			Selector: map[string]string{"job-name": jobName},
+			Selector: map[string]string{"agentic-session": name, "app": "ambient-code-runner"},
 			Ports:    []corev1.ServicePort{{Port: 8080, TargetPort: intstr.FromString("http"), Protocol: corev1.ProtocolTCP, Name: "http"}},
 			Type:     corev1.ServiceTypeClusterIP,
 		},
 	}
 	if _, serr := config.K8sClient.CoreV1().Services(sessionNamespace).Create(context.TODO(), svc, v1.CreateOptions{}); serr != nil && !errors.IsAlreadyExists(serr) {
-		log.Printf("Failed to create per-job content service for %s: %v", name, serr)
+		log.Printf("Failed to create per-pod content service for %s: %v", name, serr)
 	}
 
-	// Start monitoring the job (only if not already being monitored)
-	monitorKey := fmt.Sprintf("%s/%s", sessionNamespace, jobName)
-	monitoredJobsMu.Lock()
-	alreadyMonitoring := monitoredJobs[monitorKey]
-	if !alreadyMonitoring {
-		monitoredJobs[monitorKey] = true
-		monitoredJobsMu.Unlock()
-		go monitorJob(jobName, name, sessionNamespace)
+	// Create AG-UI Service pointing to the runner's FastAPI server
+	// Backend proxies AG-UI requests to this service endpoint
+	aguiSvc := &corev1.Service{
+		ObjectMeta: v1.ObjectMeta{
+			Name:      fmt.Sprintf("session-%s", name),
+			Namespace: sessionNamespace,
+			Labels: map[string]string{
+				"app":             "ambient-code",
+				"agentic-session": name,
+			},
+			OwnerReferences: []v1.OwnerReference{{
+				APIVersion: "v1",
+				Kind:       "Pod",
+				Name:       podName,
+				UID:        createdPod.UID,
+				Controller: boolPtr(true),
+			}},
+		},
+		Spec: corev1.ServiceSpec{
+			Type:     corev1.ServiceTypeClusterIP,
+			Selector: map[string]string{"agentic-session": name, "app": "ambient-code-runner"},
+			Ports: []corev1.ServicePort{{
+				Name:       "agui",
+				Protocol:   corev1.ProtocolTCP,
+				Port:       8001,
+				TargetPort: intstr.FromInt(8001),
+			}},
+		},
+	}
+	if _, serr := config.K8sClient.CoreV1().Services(sessionNamespace).Create(context.TODO(), aguiSvc, v1.CreateOptions{}); serr != nil && !errors.IsAlreadyExists(serr) {
+		log.Printf("Failed to create AG-UI service for %s: %v", name, serr)
 	} else {
-		monitoredJobsMu.Unlock()
-		log.Printf("Job %s already being monitored, skipping duplicate goroutine", jobName)
+		log.Printf("Created AG-UI service session-%s for AgenticSession %s", name, name)
+	}
+
+	// Start monitoring the pod (only if not already being monitored)
+	monitorKey := fmt.Sprintf("%s/%s", sessionNamespace, podName)
+	monitoredPodsMu.Lock()
+	alreadyMonitoring := monitoredPods[monitorKey]
+	if !alreadyMonitoring {
+		monitoredPods[monitorKey] = true
+		monitoredPodsMu.Unlock()
+		go monitorPod(podName, name, sessionNamespace)
+	} else {
+		monitoredPodsMu.Unlock()
+		log.Printf("Pod %s already being monitored, skipping duplicate goroutine", podName)
 	}
 
 	return nil
@@ -1396,7 +1438,6 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 func reconcileSpecReposWithPatch(sessionNamespace, sessionName string, spec map[string]interface{}, session *unstructured.Unstructured, statusPatch *StatusPatch) error {
 	repoSlice, found, _ := unstructured.NestedSlice(spec, "repos")
 	if !found {
-		log.Printf("[Reconcile] Session %s/%s: no repos defined in spec", sessionNamespace, sessionName)
 		statusPatch.DeleteField("reconciledRepos")
 		statusPatch.AddCondition(conditionUpdate{
 			Type:    conditionReposReconciled,
@@ -1407,8 +1448,10 @@ func reconcileSpecReposWithPatch(sessionNamespace, sessionName string, spec map[
 		return nil
 	}
 
-	// Parse spec repos
-	specRepos := make([]map[string]string, 0, len(repoSlice))
+	// Parse spec repos and deduplicate by URL (keep last occurrence)
+	// When the same repo URL appears multiple times with different branches,
+	// we only keep one entry (the last one) since we only have one physical clone
+	specReposMap := make(map[string]map[string]string)
 	for _, entry := range repoSlice {
 		if repoMap, ok := entry.(map[string]interface{}); ok {
 			url, _ := repoMap["url"].(string)
@@ -1419,11 +1462,18 @@ func reconcileSpecReposWithPatch(sessionNamespace, sessionName string, spec map[
 			if b, ok := repoMap["branch"].(string); ok && strings.TrimSpace(b) != "" {
 				branch = b
 			}
-			specRepos = append(specRepos, map[string]string{
+			// Use URL as key to deduplicate - last branch wins
+			specReposMap[url] = map[string]string{
 				"url":    url,
 				"branch": branch,
-			})
+			}
 		}
+	}
+
+	// Convert map back to slice
+	specRepos := make([]map[string]string, 0, len(specReposMap))
+	for _, repo := range specReposMap {
+		specRepos = append(specRepos, repo)
 	}
 
 	// Get current reconciled repos from status
@@ -1443,16 +1493,22 @@ func reconcileSpecReposWithPatch(sessionNamespace, sessionName string, spec map[
 		}
 	}
 
-	// Detect drift: repos added or removed
+	// Detect drift: repos added, removed, or branch changed
 	toAdd := []map[string]string{}
 	toRemove := []map[string]string{}
+	branchChanged := []map[string]string{}
 
 	// Find repos in spec but not in reconciled (need to add)
+	// Also detect branch changes for existing repos
 	for _, specRepo := range specRepos {
 		found := false
 		for _, reconciledRepo := range reconciledRepos {
 			if specRepo["url"] == reconciledRepo["url"] {
 				found = true
+				// Check if branch changed
+				if specRepo["branch"] != reconciledRepo["branch"] {
+					branchChanged = append(branchChanged, specRepo)
+				}
 				break
 			}
 		}
@@ -1475,75 +1531,127 @@ func reconcileSpecReposWithPatch(sessionNamespace, sessionName string, spec map[
 		}
 	}
 
-	if len(toAdd) == 0 && len(toRemove) == 0 {
-		log.Printf("[Reconcile] Session %s/%s: repos already reconciled (%d repos)", sessionNamespace, sessionName, len(specRepos))
+	if len(toAdd) == 0 && len(toRemove) == 0 && len(branchChanged) == 0 {
 		return nil
 	}
 
-	log.Printf("[Reconcile] Session %s/%s: detected repo drift - adding %d, removing %d", sessionNamespace, sessionName, len(toAdd), len(toRemove))
+	// AG-UI pattern: Call runner's REST endpoints to update configuration
+	// Runner will restart Claude SDK client with new repo configuration
+	runnerBaseURL := fmt.Sprintf("http://session-%s.%s.svc.cluster.local:8001", sessionName, sessionNamespace)
 
-	// Send WebSocket messages via backend to trigger runner actions
-	backendURL := getBackendAPIURL(sessionNamespace)
-
-	// Add repos
+	// Add new repos
 	for _, repo := range toAdd {
 		repoName := deriveRepoNameFromURL(repo["url"])
-		log.Printf("[Reconcile] Session %s/%s: sending repo_added message for %s (%s@%s)", sessionNamespace, sessionName, repoName, repo["url"], repo["branch"])
-		if err := sendWebSocketMessageViaBackend(sessionNamespace, sessionName, backendURL, map[string]interface{}{
-			"type":   "repo_added",
+
+		payload := map[string]interface{}{
 			"url":    repo["url"],
 			"branch": repo["branch"],
 			"name":   repoName,
-		}); err != nil {
-			log.Printf("[Reconcile] Failed to send repo_added message: %v", err)
-			statusPatch.AddCondition(conditionUpdate{
-				Type:    conditionReposReconciled,
-				Status:  "False",
-				Reason:  "MessageFailed",
-				Message: fmt.Sprintf("Failed to notify runner: %v", err),
-			})
-			return fmt.Errorf("failed to send repo_added message: %w", err)
+		}
+		payloadBytes, _ := json.Marshal(payload)
+
+		req, err := http.NewRequest("POST", runnerBaseURL+"/repos/add", bytes.NewReader(payloadBytes))
+		if err != nil {
+			log.Printf("[Reconcile] Failed to create repo add request: %v", err)
+			continue
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		client := &http.Client{Timeout: 10 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			log.Printf("[Reconcile] Failed to add repo via runner: %v", err)
+			continue
+		}
+		resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			log.Printf("[Reconcile] Runner returned %d for repo add", resp.StatusCode)
+		}
+	}
+
+	// Handle branch changes for existing repos (checkout different branch)
+	for _, repo := range branchChanged {
+		repoName := deriveRepoNameFromURL(repo["url"])
+		log.Printf("[Reconcile] Branch changed for repo '%s' to '%s', checking out new branch", repoName, repo["branch"])
+
+		payload := map[string]interface{}{
+			"url":    repo["url"],
+			"branch": repo["branch"],
+			"name":   repoName,
+		}
+		payloadBytes, _ := json.Marshal(payload)
+
+		req, err := http.NewRequest("POST", runnerBaseURL+"/repos/add", bytes.NewReader(payloadBytes))
+		if err != nil {
+			log.Printf("[Reconcile] Failed to create branch change request: %v", err)
+			continue
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		client := &http.Client{Timeout: 10 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			log.Printf("[Reconcile] Failed to change branch via runner: %v", err)
+			continue
+		}
+		resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			log.Printf("[Reconcile] Runner returned %d for branch change", resp.StatusCode)
 		}
 	}
 
 	// Remove repos
 	for _, repo := range toRemove {
 		repoName := deriveRepoNameFromURL(repo["url"])
-		log.Printf("[Reconcile] Session %s/%s: sending repo_removed message for %s", sessionNamespace, sessionName, repoName)
-		if err := sendWebSocketMessageViaBackend(sessionNamespace, sessionName, backendURL, map[string]interface{}{
-			"type": "repo_removed",
+
+		payload := map[string]interface{}{
 			"name": repoName,
-		}); err != nil {
-			log.Printf("[Reconcile] Failed to send repo_removed message: %v", err)
-			statusPatch.AddCondition(conditionUpdate{
-				Type:    conditionReposReconciled,
-				Status:  "False",
-				Reason:  "MessageFailed",
-				Message: fmt.Sprintf("Failed to notify runner: %v", err),
-			})
-			return fmt.Errorf("failed to send repo_removed message: %w", err)
+		}
+		payloadBytes, _ := json.Marshal(payload)
+
+		req, err := http.NewRequest("POST", runnerBaseURL+"/repos/remove", bytes.NewReader(payloadBytes))
+		if err != nil {
+			log.Printf("[Reconcile] Failed to create repo remove request: %v", err)
+			continue
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		client := &http.Client{Timeout: 10 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			log.Printf("[Reconcile] Failed to remove repo via runner: %v", err)
+			continue
+		}
+		resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			log.Printf("[Reconcile] Runner returned %d for repo remove", resp.StatusCode)
 		}
 	}
 
-	// Update status to reflect the reconciled state (via statusPatch)
+	// Build simple reconciled status (frontend now polls runner directly for real-time branch info)
 	reconciled := make([]interface{}, 0, len(specRepos))
 	for _, repo := range specRepos {
-		reconciled = append(reconciled, map[string]interface{}{
+		repoName := deriveRepoNameFromURL(repo["url"])
+		reconciledEntry := map[string]interface{}{
 			"url":      repo["url"],
-			"branch":   repo["branch"],
-			"status":   "Ready",
+			"name":     repoName,
+			"branch":   repo["branch"], // Intended branch from spec (deprecated)
 			"clonedAt": time.Now().UTC().Format(time.RFC3339),
-		})
+			"status":   "Ready", // Simplified - frontend polls runner for detailed status
+		}
+		reconciled = append(reconciled, reconciledEntry)
 	}
 	statusPatch.SetField("reconciledRepos", reconciled)
 	statusPatch.AddCondition(conditionUpdate{
 		Type:    conditionReposReconciled,
 		Status:  "True",
 		Reason:  "Reconciled",
-		Message: fmt.Sprintf("Reconciled %d repos (added: %d, removed: %d)", len(specRepos), len(toAdd), len(toRemove)),
+		Message: fmt.Sprintf("Reconciled %d repos (added: %d, removed: %d, branch changed: %d)", len(specRepos), len(toAdd), len(toRemove), len(branchChanged)),
 	})
 
-	log.Printf("[Reconcile] Session %s/%s: successfully reconciled repos", sessionNamespace, sessionName)
 	return nil
 }
 
@@ -1551,7 +1659,6 @@ func reconcileSpecReposWithPatch(sessionNamespace, sessionName string, spec map[
 func reconcileActiveWorkflowWithPatch(sessionNamespace, sessionName string, spec map[string]interface{}, session *unstructured.Unstructured, statusPatch *StatusPatch) error {
 	workflow, found, _ := unstructured.NestedMap(spec, "activeWorkflow")
 	if !found || len(workflow) == 0 {
-		log.Printf("[Reconcile] Session %s/%s: no workflow defined in spec", sessionNamespace, sessionName)
 		statusPatch.DeleteField("reconciledWorkflow")
 		statusPatch.AddCondition(conditionUpdate{
 			Type:    conditionWorkflowReconciled,
@@ -1570,7 +1677,6 @@ func reconcileActiveWorkflowWithPatch(sessionNamespace, sessionName string, spec
 	path, _ := workflow["path"].(string)
 
 	if strings.TrimSpace(gitURL) == "" {
-		log.Printf("[Reconcile] Session %s/%s: workflow gitUrl is empty", sessionNamespace, sessionName)
 		return nil
 	}
 
@@ -1579,34 +1685,55 @@ func reconcileActiveWorkflowWithPatch(sessionNamespace, sessionName string, spec
 	reconciledWorkflowRaw, _, _ := unstructured.NestedMap(status, "reconciledWorkflow")
 	reconciledGitURL, _ := reconciledWorkflowRaw["gitUrl"].(string)
 	reconciledBranch, _ := reconciledWorkflowRaw["branch"].(string)
+	reconciledPath, _ := reconciledWorkflowRaw["path"].(string)
 
 	// Detect drift: workflow changed
-	if reconciledGitURL == gitURL && reconciledBranch == branch {
-		log.Printf("[Reconcile] Session %s/%s: workflow already reconciled (%s@%s)", sessionNamespace, sessionName, gitURL, branch)
+	if reconciledGitURL == gitURL && reconciledBranch == branch && reconciledPath == path {
 		return nil
 	}
 
-	log.Printf("[Reconcile] Session %s/%s: detected workflow drift - switching from %s@%s to %s@%s",
-		sessionNamespace, sessionName, reconciledGitURL, reconciledBranch, gitURL, branch)
+	// AG-UI pattern: Call runner's /workflow endpoint to update configuration
+	// Runner will restart Claude SDK client with new workflow
+	runnerURL := fmt.Sprintf("http://session-%s.%s.svc.cluster.local:8001/workflow", sessionName, sessionNamespace)
 
-	// Send WebSocket message via backend to trigger runner workflow switch
-	backendURL := getBackendAPIURL(sessionNamespace)
-	log.Printf("[Reconcile] Session %s/%s: sending workflow_change message for %s@%s (path: %s)", sessionNamespace, sessionName, gitURL, branch, path)
-
-	if err := sendWebSocketMessageViaBackend(sessionNamespace, sessionName, backendURL, map[string]interface{}{
-		"type":   "workflow_change",
+	payload := map[string]interface{}{
 		"gitUrl": gitURL,
 		"branch": branch,
 		"path":   path,
-	}); err != nil {
-		log.Printf("[Reconcile] Failed to send workflow_change message: %v", err)
+	}
+	payloadBytes, _ := json.Marshal(payload)
+
+	req, err := http.NewRequest("POST", runnerURL, bytes.NewReader(payloadBytes))
+	if err != nil {
+		log.Printf("[Reconcile] Failed to create workflow request: %v", err)
+		return fmt.Errorf("failed to create workflow request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("[Reconcile] Failed to send workflow change to runner: %v", err)
 		statusPatch.AddCondition(conditionUpdate{
 			Type:    conditionWorkflowReconciled,
 			Status:  "False",
-			Reason:  "MessageFailed",
+			Reason:  "UpdateFailed",
 			Message: fmt.Sprintf("Failed to notify runner: %v", err),
 		})
-		return fmt.Errorf("failed to send workflow_selected message: %w", err)
+		return fmt.Errorf("failed to update runner workflow: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		log.Printf("[Reconcile] Runner returned non-200 for workflow change: %d - %s", resp.StatusCode, string(body))
+		statusPatch.AddCondition(conditionUpdate{
+			Type:    conditionWorkflowReconciled,
+			Status:  "False",
+			Reason:  "UpdateFailed",
+			Message: fmt.Sprintf("Runner returned %d", resp.StatusCode),
+		})
+		return fmt.Errorf("runner workflow update failed: %d", resp.StatusCode)
 	}
 
 	// Update status to reflect the reconciled state (via statusPatch)
@@ -1624,22 +1751,21 @@ func reconcileActiveWorkflowWithPatch(sessionNamespace, sessionName string, spec
 		Message: fmt.Sprintf("Switched to workflow %s@%s", gitURL, branch),
 	})
 
-	log.Printf("[Reconcile] Session %s/%s: successfully reconciled workflow", sessionNamespace, sessionName)
 	return nil
 }
 
-func monitorJob(jobName, sessionName, sessionNamespace string) {
-	monitorKey := fmt.Sprintf("%s/%s", sessionNamespace, jobName)
+func monitorPod(podName, sessionName, sessionNamespace string) {
+	monitorKey := fmt.Sprintf("%s/%s", sessionNamespace, podName)
 
 	// Remove from monitoring map when this goroutine exits
 	defer func() {
-		monitoredJobsMu.Lock()
-		delete(monitoredJobs, monitorKey)
-		monitoredJobsMu.Unlock()
-		log.Printf("Stopped monitoring job %s (goroutine exiting)", jobName)
+		monitoredPodsMu.Lock()
+		delete(monitoredPods, monitorKey)
+		monitoredPodsMu.Unlock()
+		log.Printf("Stopped monitoring pod %s (goroutine exiting)", podName)
 	}()
 
-	log.Printf("Starting job monitoring for %s (session: %s/%s)", jobName, sessionNamespace, sessionName)
+	log.Printf("Starting pod monitoring for %s (session: %s/%s)", podName, sessionNamespace, sessionName)
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 
@@ -1662,7 +1788,7 @@ func monitorJob(jobName, sessionName, sessionNamespace string) {
 		sessionStatus, _, _ := unstructured.NestedMap(sessionObj.Object, "status")
 		if sessionStatus != nil {
 			if currentPhase, ok := sessionStatus["phase"].(string); ok && currentPhase == "Stopped" {
-				log.Printf("AgenticSession %s was stopped; stopping job monitoring", sessionName)
+				log.Printf("AgenticSession %s was stopped; stopping pod monitoring", sessionName)
 				return
 			}
 		}
@@ -1671,61 +1797,15 @@ func monitorJob(jobName, sessionName, sessionNamespace string) {
 			log.Printf("Failed to refresh runner token for %s/%s: %v", sessionNamespace, sessionName, err)
 		}
 
-		job, err := config.K8sClient.BatchV1().Jobs(sessionNamespace).Get(context.TODO(), jobName, v1.GetOptions{})
+		pod, err := config.K8sClient.CoreV1().Pods(sessionNamespace).Get(context.TODO(), podName, v1.GetOptions{})
 		if err != nil {
 			if errors.IsNotFound(err) {
-				log.Printf("Job %s deleted; stopping monitor", jobName)
+				log.Printf("Pod %s deleted; stopping monitor", podName)
 				return
 			}
-			log.Printf("Error fetching job %s: %v", jobName, err)
+			log.Printf("Error fetching pod %s: %v", podName, err)
 			continue
 		}
-
-		pods, err := config.K8sClient.CoreV1().Pods(sessionNamespace).List(context.TODO(), v1.ListOptions{LabelSelector: fmt.Sprintf("job-name=%s", jobName)})
-		if err != nil {
-			log.Printf("Failed to list pods for job %s: %v", jobName, err)
-			continue
-		}
-
-		if job.Status.Succeeded > 0 {
-			statusPatch.SetField("phase", "Completed")
-			statusPatch.SetField("completionTime", time.Now().UTC().Format(time.RFC3339))
-			statusPatch.AddCondition(conditionUpdate{Type: conditionReady, Status: "False", Reason: "Completed", Message: "Session finished"})
-			_ = statusPatch.Apply()
-			_ = ensureSessionIsInteractive(sessionNamespace, sessionName)
-			_ = deleteJobAndPerJobService(sessionNamespace, jobName, sessionName)
-			return
-		}
-
-		if job.Spec.BackoffLimit != nil && job.Status.Failed >= *job.Spec.BackoffLimit {
-			statusPatch.SetField("phase", "Failed")
-			statusPatch.SetField("completionTime", time.Now().UTC().Format(time.RFC3339))
-			statusPatch.AddCondition(conditionUpdate{Type: conditionReady, Status: "False", Reason: "BackoffLimitExceeded", Message: "Runner failed repeatedly"})
-			_ = statusPatch.Apply()
-			_ = ensureSessionIsInteractive(sessionNamespace, sessionName)
-			_ = deleteJobAndPerJobService(sessionNamespace, jobName, sessionName)
-			return
-		}
-
-		if len(pods.Items) == 0 {
-			if job.Status.Active == 0 && job.Status.Succeeded == 0 && job.Status.Failed == 0 {
-				statusPatch.SetField("phase", "Failed")
-				statusPatch.SetField("completionTime", time.Now().UTC().Format(time.RFC3339))
-				statusPatch.AddCondition(conditionUpdate{
-					Type:    conditionReady,
-					Status:  "False",
-					Reason:  "PodMissing",
-					Message: "Runner pod missing",
-				})
-				_ = statusPatch.Apply()
-				_ = ensureSessionIsInteractive(sessionNamespace, sessionName)
-				_ = deleteJobAndPerJobService(sessionNamespace, jobName, sessionName)
-				return
-			}
-			continue
-		}
-
-		pod := pods.Items[0]
 		// Note: We don't store pod name in status (pods are ephemeral, can be recreated)
 		// Use k8s-resources endpoint or kubectl for live pod info
 
@@ -1733,17 +1813,81 @@ func monitorJob(jobName, sessionName, sessionNamespace string) {
 			statusPatch.AddCondition(conditionUpdate{Type: conditionPodScheduled, Status: "True", Reason: "Scheduled", Message: fmt.Sprintf("Scheduled on %s", pod.Spec.NodeName)})
 		}
 
-		if pod.Status.Phase == corev1.PodFailed {
-			statusPatch.SetField("phase", "Failed")
+		if pod.Status.Phase == corev1.PodSucceeded {
+			statusPatch.SetField("phase", "Completed")
 			statusPatch.SetField("completionTime", time.Now().UTC().Format(time.RFC3339))
-			statusPatch.AddCondition(conditionUpdate{Type: conditionReady, Status: "False", Reason: "PodFailed", Message: pod.Status.Message})
+			statusPatch.AddCondition(conditionUpdate{Type: conditionReady, Status: "False", Reason: "Completed", Message: "Session finished"})
 			_ = statusPatch.Apply()
 			_ = ensureSessionIsInteractive(sessionNamespace, sessionName)
-			_ = deleteJobAndPerJobService(sessionNamespace, jobName, sessionName)
+			_ = deletePodAndPerPodService(sessionNamespace, podName, sessionName)
 			return
 		}
 
-		runner := getContainerStatusByName(&pod, "ambient-code-runner")
+		if pod.Status.Phase == corev1.PodFailed {
+			// Collect detailed error message from pod and containers
+			errorMsg := pod.Status.Message
+			if errorMsg == "" {
+				errorMsg = pod.Status.Reason
+			}
+
+			// Check init containers for errors
+			for _, initStatus := range pod.Status.InitContainerStatuses {
+				if initStatus.State.Terminated != nil && initStatus.State.Terminated.ExitCode != 0 {
+					msg := fmt.Sprintf("Init container %s failed (exit %d): %s",
+						initStatus.Name,
+						initStatus.State.Terminated.ExitCode,
+						initStatus.State.Terminated.Message)
+					if initStatus.State.Terminated.Reason != "" {
+						msg = fmt.Sprintf("%s - %s", msg, initStatus.State.Terminated.Reason)
+					}
+					errorMsg = msg
+					break
+				}
+				if initStatus.State.Waiting != nil && initStatus.State.Waiting.Reason != "" {
+					errorMsg = fmt.Sprintf("Init container %s: %s - %s",
+						initStatus.Name,
+						initStatus.State.Waiting.Reason,
+						initStatus.State.Waiting.Message)
+					break
+				}
+			}
+
+			// Check main containers for errors if init passed
+			if errorMsg == "" || errorMsg == "PodFailed" {
+				for _, containerStatus := range pod.Status.ContainerStatuses {
+					if containerStatus.State.Terminated != nil && containerStatus.State.Terminated.ExitCode != 0 {
+						errorMsg = fmt.Sprintf("Container %s failed (exit %d): %s - %s",
+							containerStatus.Name,
+							containerStatus.State.Terminated.ExitCode,
+							containerStatus.State.Terminated.Reason,
+							containerStatus.State.Terminated.Message)
+						break
+					}
+					if containerStatus.State.Waiting != nil {
+						errorMsg = fmt.Sprintf("Container %s: %s - %s",
+							containerStatus.Name,
+							containerStatus.State.Waiting.Reason,
+							containerStatus.State.Waiting.Message)
+						break
+					}
+				}
+			}
+
+			if errorMsg == "" {
+				errorMsg = "Pod failed with unknown error"
+			}
+
+			log.Printf("Pod %s failed: %s", podName, errorMsg)
+			statusPatch.SetField("phase", "Failed")
+			statusPatch.SetField("completionTime", time.Now().UTC().Format(time.RFC3339))
+			statusPatch.AddCondition(conditionUpdate{Type: conditionReady, Status: "False", Reason: "PodFailed", Message: errorMsg})
+			_ = statusPatch.Apply()
+			_ = ensureSessionIsInteractive(sessionNamespace, sessionName)
+			_ = deletePodAndPerPodService(sessionNamespace, podName, sessionName)
+			return
+		}
+
+		runner := getContainerStatusByName(pod, "ambient-code-runner")
 		if runner == nil {
 			// Apply any accumulated changes (e.g., PodScheduled) before continuing
 			_ = statusPatch.Apply()
@@ -1768,7 +1912,7 @@ func monitorJob(jobName, sessionName, sessionNamespace string) {
 				statusPatch.AddCondition(conditionUpdate{Type: conditionReady, Status: "False", Reason: waiting.Reason, Message: msg})
 				_ = statusPatch.Apply()
 				_ = ensureSessionIsInteractive(sessionNamespace, sessionName)
-				_ = deleteJobAndPerJobService(sessionNamespace, jobName, sessionName)
+				_ = deletePodAndPerPodService(sessionNamespace, podName, sessionName)
 				return
 			}
 		}
@@ -1802,7 +1946,7 @@ func monitorJob(jobName, sessionName, sessionNamespace string) {
 
 			_ = statusPatch.Apply()
 			_ = ensureSessionIsInteractive(sessionNamespace, sessionName)
-			_ = deleteJobAndPerJobService(sessionNamespace, jobName, sessionName)
+			_ = deletePodAndPerPodService(sessionNamespace, podName, sessionName)
 			return
 		}
 
@@ -1821,31 +1965,101 @@ func getContainerStatusByName(pod *corev1.Pod, name string) *corev1.ContainerSta
 	return nil
 }
 
+// getS3ConfigForProject reads S3 configuration from project's integration secret
+// Falls back to operator defaults if not configured
+func getS3ConfigForProject(namespace string, appConfig *config.Config) (endpoint, bucket, accessKey, secretKey string, err error) {
+	// Try to read from project's ambient-non-vertex-integrations secret
+	secret, err := config.K8sClient.CoreV1().Secrets(namespace).Get(context.TODO(), "ambient-non-vertex-integrations", v1.GetOptions{})
+	if err != nil && !errors.IsNotFound(err) {
+		return "", "", "", "", fmt.Errorf("failed to read project secret: %w", err)
+	}
+
+	// Read from project secret if available
+	storageMode := "shared" // Default to shared cluster storage
+	if secret != nil && secret.Data != nil {
+		// Check storage mode (shared vs custom)
+		if mode := string(secret.Data["STORAGE_MODE"]); mode != "" {
+			storageMode = mode
+		}
+
+		// Only read custom S3 settings if in custom mode
+		if storageMode == "custom" {
+			if val := string(secret.Data["S3_ENDPOINT"]); val != "" {
+				endpoint = val
+			}
+			if val := string(secret.Data["S3_BUCKET"]); val != "" {
+				bucket = val
+			}
+			if val := string(secret.Data["S3_ACCESS_KEY"]); val != "" {
+				accessKey = val
+			}
+			if val := string(secret.Data["S3_SECRET_KEY"]); val != "" {
+				secretKey = val
+			}
+			log.Printf("Using custom S3 configuration for project %s", namespace)
+		} else {
+			log.Printf("Using shared cluster storage (MinIO) for project %s", namespace)
+		}
+	}
+
+	// Use operator defaults (for shared mode or as fallback)
+	if endpoint == "" {
+		endpoint = appConfig.S3Endpoint
+	}
+	if bucket == "" {
+		bucket = appConfig.S3Bucket
+	}
+
+	// If credentials still empty AND using default endpoint/bucket, use shared MinIO credentials
+	// This implements "shared cluster storage" mode where users don't need to configure anything
+	usingDefaults := endpoint == appConfig.S3Endpoint && bucket == appConfig.S3Bucket
+	if (accessKey == "" || secretKey == "") && usingDefaults {
+		// Look for minio-credentials secret in operator namespace
+		minioSecret, err := config.K8sClient.CoreV1().Secrets(appConfig.BackendNamespace).Get(context.TODO(), "minio-credentials", v1.GetOptions{})
+		if err == nil && minioSecret.Data != nil {
+			if accessKey == "" {
+				accessKey = string(minioSecret.Data["access-key"])
+			}
+			if secretKey == "" {
+				secretKey = string(minioSecret.Data["secret-key"])
+			}
+			log.Printf("Using shared MinIO credentials for project %s (shared cluster storage mode)", namespace)
+		} else {
+			log.Printf("Warning: minio-credentials secret not found in namespace %s", appConfig.BackendNamespace)
+		}
+	}
+
+	// Validate we have required config
+	if endpoint == "" || bucket == "" {
+		return "", "", "", "", fmt.Errorf("incomplete S3 configuration - endpoint and bucket required")
+	}
+	if accessKey == "" || secretKey == "" {
+		return "", "", "", "", fmt.Errorf("incomplete S3 configuration - access key and secret key required")
+	}
+
+	log.Printf("S3 config for project %s: endpoint=%s, bucket=%s", namespace, endpoint, bucket)
+	return endpoint, bucket, accessKey, secretKey, nil
+}
+
 // deleteJobAndPerJobService deletes the Job and its associated per-job Service
-func deleteJobAndPerJobService(namespace, jobName, sessionName string) error {
-	// Delete Service first (it has ownerRef to Job, but delete explicitly just in case)
+func deletePodAndPerPodService(namespace, podName, sessionName string) error {
+	// Delete Service first (it has ownerRef to Pod, but delete explicitly just in case)
 	svcName := fmt.Sprintf("ambient-content-%s", sessionName)
 	if err := config.K8sClient.CoreV1().Services(namespace).Delete(context.TODO(), svcName, v1.DeleteOptions{}); err != nil && !errors.IsNotFound(err) {
-		log.Printf("Failed to delete per-job service %s/%s: %v", namespace, svcName, err)
+		log.Printf("Failed to delete per-pod service %s/%s: %v", namespace, svcName, err)
 	}
 
-	// Delete the Job with background propagation
+	// Delete AG-UI service
+	aguiSvcName := fmt.Sprintf("session-%s", sessionName)
+	if err := config.K8sClient.CoreV1().Services(namespace).Delete(context.TODO(), aguiSvcName, v1.DeleteOptions{}); err != nil && !errors.IsNotFound(err) {
+		log.Printf("Failed to delete AG-UI service %s/%s: %v", namespace, aguiSvcName, err)
+	}
+
+	// Delete the Pod with background propagation
 	policy := v1.DeletePropagationBackground
-	if err := config.K8sClient.BatchV1().Jobs(namespace).Delete(context.TODO(), jobName, v1.DeleteOptions{PropagationPolicy: &policy}); err != nil && !errors.IsNotFound(err) {
-		log.Printf("Failed to delete job %s/%s: %v", namespace, jobName, err)
+	if err := config.K8sClient.CoreV1().Pods(namespace).Delete(context.TODO(), podName, v1.DeleteOptions{PropagationPolicy: &policy}); err != nil && !errors.IsNotFound(err) {
+		log.Printf("Failed to delete pod %s/%s: %v", namespace, podName, err)
 		return err
-	}
-
-	// Proactively delete Pods for this Job
-	if pods, err := config.K8sClient.CoreV1().Pods(namespace).List(context.TODO(), v1.ListOptions{LabelSelector: fmt.Sprintf("job-name=%s", jobName)}); err == nil {
-		for i := range pods.Items {
-			p := pods.Items[i]
-			if err := config.K8sClient.CoreV1().Pods(namespace).Delete(context.TODO(), p.Name, v1.DeleteOptions{}); err != nil && !errors.IsNotFound(err) {
-				log.Printf("Failed to delete pod %s/%s for job %s: %v", namespace, p.Name, jobName, err)
-			}
-		}
-	} else if !errors.IsNotFound(err) {
-		log.Printf("Failed to list pods for job %s/%s: %v", namespace, jobName, err)
 	}
 
 	// Delete the ambient-vertex secret if it was copied by the operator
@@ -1868,90 +2082,6 @@ func deleteJobAndPerJobService(namespace, jobName, sessionName string) error {
 	// when the session CR is deleted. This allows sessions to be restarted.
 
 	return nil
-}
-
-// CleanupExpiredTempContentPods removes temporary content pods that have exceeded their TTL
-func CleanupExpiredTempContentPods() {
-	log.Println("Starting temp content pod cleanup goroutine")
-	for {
-		time.Sleep(1 * time.Minute)
-
-		// List all temp content pods across all namespaces
-		pods, err := config.K8sClient.CoreV1().Pods("").List(context.TODO(), v1.ListOptions{
-			LabelSelector: "app=temp-content-service",
-		})
-		if err != nil {
-			log.Printf("[TempPodCleanup] Failed to list temp content pods: %v", err)
-			continue
-		}
-
-		gvr := types.GetAgenticSessionResource()
-		for _, pod := range pods.Items {
-			sessionName := pod.Labels["agentic-session"]
-			if sessionName == "" {
-				log.Printf("[TempPodCleanup] Temp pod %s has no agentic-session label, skipping", pod.Name)
-				continue
-			}
-
-			// Check if session still exists
-			session, err := config.DynamicClient.Resource(gvr).Namespace(pod.Namespace).Get(context.TODO(), sessionName, v1.GetOptions{})
-			if err != nil {
-				if errors.IsNotFound(err) {
-					// Session deleted, delete temp pod
-					log.Printf("[TempPodCleanup] Session %s/%s gone, deleting orphaned temp pod %s", pod.Namespace, sessionName, pod.Name)
-					if err := config.K8sClient.CoreV1().Pods(pod.Namespace).Delete(context.TODO(), pod.Name, v1.DeleteOptions{}); err != nil && !errors.IsNotFound(err) {
-						log.Printf("[TempPodCleanup] Failed to delete orphaned temp pod: %v", err)
-					}
-				}
-				continue
-			}
-
-			// Get last-accessed timestamp from session annotation
-			annotations := session.GetAnnotations()
-			lastAccessedStr := annotations[tempContentLastAccessedAnnotation]
-			if lastAccessedStr == "" {
-				// Fall back to pod created-at if no last-accessed
-				lastAccessedStr = pod.Annotations["ambient-code.io/created-at"]
-			}
-
-			if lastAccessedStr == "" {
-				log.Printf("[TempPodCleanup] No timestamp for temp pod %s, skipping", pod.Name)
-				continue
-			}
-
-			lastAccessed, err := time.Parse(time.RFC3339, lastAccessedStr)
-			if err != nil {
-				log.Printf("[TempPodCleanup] Failed to parse timestamp for pod %s: %v", pod.Name, err)
-				continue
-			}
-
-			// Delete if inactive for > 10 minutes
-			if time.Since(lastAccessed) > tempContentInactivityTTL {
-				log.Printf("[TempPodCleanup] Deleting inactive temp pod %s/%s (last accessed: %v ago)",
-					pod.Namespace, pod.Name, time.Since(lastAccessed))
-
-				if err := config.K8sClient.CoreV1().Pods(pod.Namespace).Delete(context.TODO(), pod.Name, v1.DeleteOptions{}); err != nil && !errors.IsNotFound(err) {
-					log.Printf("[TempPodCleanup] Failed to delete temp pod: %v", err)
-					continue
-				}
-
-				// Update condition
-				_ = mutateAgenticSessionStatus(pod.Namespace, sessionName, func(status map[string]interface{}) {
-					setCondition(status, conditionUpdate{
-						Type:    conditionTempContentPodReady,
-						Status:  "False",
-						Reason:  "Expired",
-						Message: fmt.Sprintf("Temp pod deleted due to inactivity (%v)", time.Since(lastAccessed)),
-					})
-				})
-
-				// Clear temp-content-requested annotation
-				delete(annotations, tempContentRequestedAnnotation)
-				delete(annotations, tempContentLastAccessedAnnotation)
-				_ = updateAnnotations(pod.Namespace, sessionName, annotations)
-			}
-		}
-	}
 }
 
 // copySecretToNamespace copies a secret to a target namespace with owner references
@@ -2068,6 +2198,7 @@ func copySecretToNamespace(ctx context.Context, sourceSecret *corev1.Secret, tar
 }
 
 // deleteAmbientVertexSecret deletes the ambient-vertex secret from a namespace if it was copied
+// and no other active sessions in the namespace still need it.
 func deleteAmbientVertexSecret(ctx context.Context, namespace string) error {
 	secret, err := config.K8sClient.CoreV1().Secrets(namespace).Get(ctx, types.AmbientVertexSecretName, v1.GetOptions{})
 	if err != nil {
@@ -2084,7 +2215,36 @@ func deleteAmbientVertexSecret(ctx context.Context, namespace string) error {
 		return nil
 	}
 
-	log.Printf("Deleting copied %s secret from namespace %s", types.AmbientVertexSecretName, namespace)
+	// Check if there are other active sessions in this namespace that might need this secret
+	// Don't delete the shared secret if other sessions are Running, Creating, or Pending
+	gvr := types.GetAgenticSessionResource()
+	sessions, err := config.DynamicClient.Resource(gvr).Namespace(namespace).List(ctx, v1.ListOptions{})
+	if err != nil {
+		log.Printf("Warning: failed to list sessions in namespace %s, skipping secret deletion: %v", namespace, err)
+		return nil // Don't delete if we can't verify no other sessions need it
+	}
+
+	activeCount := 0
+	for _, session := range sessions.Items {
+		status, _, _ := unstructured.NestedMap(session.Object, "status")
+		phase := ""
+		if status != nil {
+			if p, ok := status["phase"].(string); ok {
+				phase = p
+			}
+		}
+		// Count sessions that are active and might need the vertex secret
+		if phase == "Running" || phase == "Creating" || phase == "Pending" {
+			activeCount++
+		}
+	}
+
+	if activeCount > 0 {
+		log.Printf("Skipping %s secret deletion in namespace %s: %d active session(s) may still need it", types.AmbientVertexSecretName, namespace, activeCount)
+		return nil
+	}
+
+	log.Printf("Deleting copied %s secret from namespace %s (no active sessions)", types.AmbientVertexSecretName, namespace)
 	err = config.K8sClient.CoreV1().Secrets(namespace).Delete(ctx, types.AmbientVertexSecretName, v1.DeleteOptions{})
 	if err != nil && !errors.IsNotFound(err) {
 		return fmt.Errorf("failed to delete %s secret: %w", types.AmbientVertexSecretName, err)
@@ -2094,6 +2254,7 @@ func deleteAmbientVertexSecret(ctx context.Context, namespace string) error {
 }
 
 // deleteAmbientLangfuseSecret deletes the ambient-admin-langfuse-secret from a namespace if it was copied
+// and no other active sessions in the namespace still need it.
 func deleteAmbientLangfuseSecret(ctx context.Context, namespace string) error {
 	const langfuseSecretName = "ambient-admin-langfuse-secret"
 	secret, err := config.K8sClient.CoreV1().Secrets(namespace).Get(ctx, langfuseSecretName, v1.GetOptions{})
@@ -2111,7 +2272,36 @@ func deleteAmbientLangfuseSecret(ctx context.Context, namespace string) error {
 		return nil
 	}
 
-	log.Printf("Deleting copied %s secret from namespace %s", langfuseSecretName, namespace)
+	// Check if there are other active sessions in this namespace that might need this secret
+	// Don't delete the shared secret if other sessions are Running, Creating, or Pending
+	gvr := types.GetAgenticSessionResource()
+	sessions, err := config.DynamicClient.Resource(gvr).Namespace(namespace).List(ctx, v1.ListOptions{})
+	if err != nil {
+		log.Printf("Warning: failed to list sessions in namespace %s, skipping secret deletion: %v", namespace, err)
+		return nil // Don't delete if we can't verify no other sessions need it
+	}
+
+	activeCount := 0
+	for _, session := range sessions.Items {
+		status, _, _ := unstructured.NestedMap(session.Object, "status")
+		phase := ""
+		if status != nil {
+			if p, ok := status["phase"].(string); ok {
+				phase = p
+			}
+		}
+		// Count sessions that are active and might need the langfuse secret
+		if phase == "Running" || phase == "Creating" || phase == "Pending" {
+			activeCount++
+		}
+	}
+
+	if activeCount > 0 {
+		log.Printf("Skipping %s secret deletion in namespace %s: %d active session(s) may still need it", langfuseSecretName, namespace, activeCount)
+		return nil
+	}
+
+	log.Printf("Deleting copied %s secret from namespace %s (no active sessions)", langfuseSecretName, namespace)
 	err = config.K8sClient.CoreV1().Secrets(namespace).Delete(ctx, langfuseSecretName, v1.DeleteOptions{})
 	if err != nil && !errors.IsNotFound(err) {
 		return fmt.Errorf("failed to delete %s secret: %w", langfuseSecretName, err)
@@ -2120,188 +2310,8 @@ func deleteAmbientLangfuseSecret(ctx context.Context, namespace string) error {
 	return nil
 }
 
-// reconcileTempContentPodWithPatch is a version of reconcileTempContentPod that uses StatusPatch for batched updates.
-func reconcileTempContentPodWithPatch(sessionNamespace, sessionName, tempPodName string, session *unstructured.Unstructured, statusPatch *StatusPatch) error {
-	// Check if pod already exists
-	tempPod, err := config.K8sClient.CoreV1().Pods(sessionNamespace).Get(context.TODO(), tempPodName, v1.GetOptions{})
-
-	if errors.IsNotFound(err) {
-		// Create temp pod
-		log.Printf("[TempPod] Creating temp content pod for workspace access: %s/%s", sessionNamespace, tempPodName)
-
-		pvcName := fmt.Sprintf("ambient-workspace-%s", sessionName)
-		appConfig := config.LoadConfig()
-
-		pod := &corev1.Pod{
-			ObjectMeta: v1.ObjectMeta{
-				Name:      tempPodName,
-				Namespace: sessionNamespace,
-				Labels: map[string]string{
-					"app":             "temp-content-service",
-					"agentic-session": sessionName,
-				},
-				Annotations: map[string]string{
-					"ambient-code.io/created-at": time.Now().UTC().Format(time.RFC3339),
-				},
-				OwnerReferences: []v1.OwnerReference{{
-					APIVersion: session.GetAPIVersion(),
-					Kind:       session.GetKind(),
-					Name:       session.GetName(),
-					UID:        session.GetUID(),
-					Controller: boolPtr(true),
-				}},
-			},
-			Spec: corev1.PodSpec{
-				RestartPolicy: corev1.RestartPolicyNever,
-				Containers: []corev1.Container{{
-					Name:            "content",
-					Image:           appConfig.ContentServiceImage,
-					ImagePullPolicy: appConfig.ImagePullPolicy,
-					Env: []corev1.EnvVar{
-						{Name: "CONTENT_SERVICE_MODE", Value: "true"},
-						{Name: "STATE_BASE_DIR", Value: "/workspace"},
-					},
-					Ports: []corev1.ContainerPort{{ContainerPort: 8080, Name: "http"}},
-					VolumeMounts: []corev1.VolumeMount{{
-						Name:      "workspace",
-						MountPath: "/workspace",
-					}},
-					ReadinessProbe: &corev1.Probe{
-						ProbeHandler: corev1.ProbeHandler{
-							HTTPGet: &corev1.HTTPGetAction{
-								Path: "/health",
-								Port: intstr.FromString("http"),
-							},
-						},
-						InitialDelaySeconds: 3,
-						PeriodSeconds:       3,
-					},
-				}},
-				Volumes: []corev1.Volume{{
-					Name: "workspace",
-					VolumeSource: corev1.VolumeSource{
-						PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-							ClaimName: pvcName,
-						},
-					},
-				}},
-			},
-		}
-
-		if _, err := config.K8sClient.CoreV1().Pods(sessionNamespace).Create(context.TODO(), pod, v1.CreateOptions{}); err != nil {
-			log.Printf("[TempPod] Failed to create temp pod: %v", err)
-			statusPatch.AddCondition(conditionUpdate{
-				Type:    conditionTempContentPodReady,
-				Status:  "False",
-				Reason:  "CreationFailed",
-				Message: fmt.Sprintf("Failed to create temp pod: %v", err),
-			})
-			return fmt.Errorf("failed to create temp pod: %w", err)
-		}
-
-		log.Printf("[TempPod] Created temp pod %s", tempPodName)
-		statusPatch.AddCondition(conditionUpdate{
-			Type:    conditionTempContentPodReady,
-			Status:  "Unknown",
-			Reason:  "Provisioning",
-			Message: "Temp content pod starting",
-		})
-		return nil
-	}
-
-	if err != nil {
-		return fmt.Errorf("failed to check temp pod: %w", err)
-	}
-
-	// Temp pod exists, check readiness
-	if tempPod.Status.Phase == corev1.PodRunning {
-		ready := false
-		for _, cond := range tempPod.Status.Conditions {
-			if cond.Type == corev1.PodReady && cond.Status == corev1.ConditionTrue {
-				ready = true
-				break
-			}
-		}
-
-		if ready {
-			statusPatch.AddCondition(conditionUpdate{
-				Type:    conditionTempContentPodReady,
-				Status:  "True",
-				Reason:  "Ready",
-				Message: "Temp content pod is ready for workspace access",
-			})
-		} else {
-			statusPatch.AddCondition(conditionUpdate{
-				Type:    conditionTempContentPodReady,
-				Status:  "Unknown",
-				Reason:  "NotReady",
-				Message: "Temp content pod not ready yet",
-			})
-		}
-	} else if tempPod.Status.Phase == corev1.PodFailed {
-		statusPatch.AddCondition(conditionUpdate{
-			Type:    conditionTempContentPodReady,
-			Status:  "False",
-			Reason:  "PodFailed",
-			Message: fmt.Sprintf("Temp content pod failed: %s", tempPod.Status.Message),
-		})
-	}
-
-	return nil
-}
-
-// getBackendAPIURL returns the backend API URL for the given namespace
-func getBackendAPIURL(namespace string) string {
-	appConfig := config.LoadConfig()
-	return fmt.Sprintf("http://backend-service.%s.svc.cluster.local:8080/api", appConfig.BackendNamespace)
-}
-
-// sendWebSocketMessageViaBackend sends a WebSocket message to the runner via the backend's message endpoint
-func sendWebSocketMessageViaBackend(namespace, sessionName, backendURL string, message map[string]interface{}) error {
-	// The backend exposes POST /api/projects/:project/sessions/:sessionName/messages
-	// Format: { "type": "repo_added", "payload": {...}, ...other fields }
-	// Backend will extract "type" and wrap remaining fields under "payload" if needed
-	url := fmt.Sprintf("%s/projects/%s/sessions/%s/messages", backendURL, namespace, sessionName)
-
-	payload, err := json.Marshal(message)
-	if err != nil {
-		return fmt.Errorf("failed to marshal message: %w", err)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	// Use operator's service account token for authentication
-	// The backend accepts internal calls from the operator namespace
-	// Get the operator's SA token from the mounted service account
-	tokenBytes, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/token")
-	if err == nil && len(tokenBytes) > 0 {
-		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", string(tokenBytes)))
-	} else {
-		log.Printf("[WebSocket] Warning: could not read operator SA token, request may fail: %v", err)
-	}
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to send request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("backend returned status %d: %s", resp.StatusCode, string(body))
-	}
-
-	log.Printf("[WebSocket] Successfully sent message type=%s to session %s/%s via backend", message["type"], namespace, sessionName)
-	return nil
-}
+// LEGACY: getBackendAPIURL removed - AG-UI migration
+// Workflow and repo changes now call runner's REST endpoints directly
 
 // deriveRepoNameFromURL extracts the repository name from a git URL
 func deriveRepoNameFromURL(repoURL string) string {
@@ -2316,6 +2326,9 @@ func deriveRepoNameFromURL(repoURL string) string {
 
 	return "repo"
 }
+
+// pollRunnerReposStatus removed - frontend now polls runner directly via backend API
+// for real-time branch information. Operator no longer needs to maintain this in CR status.
 
 // regenerateRunnerToken provisions a fresh ServiceAccount, Role, RoleBinding, and token Secret for a session.
 // This is called when restarting sessions to ensure fresh tokens.
@@ -2472,9 +2485,99 @@ func regenerateRunnerToken(sessionNamespace, sessionName string, session *unstru
 	return nil
 }
 
+// syncGoogleCredentialsToSecret syncs cluster-level Google OAuth credentials to session-specific Secret
+// Reads from Secret "google-oauth-credentials" in backend namespace (keyed by userID)
+// Writes to Secret "{sessionName}-google-oauth" in session namespace for runner to mount
+func syncGoogleCredentialsToSecret(ctx context.Context, sessionNamespace, secretName, userID string, ownerRef v1.OwnerReference, backendNamespace string) error {
+	// Read cluster-level credentials from backend namespace Secret
+	const srcSecretName = "google-oauth-credentials"
+	srcSecret, err := config.K8sClient.CoreV1().Secrets(backendNamespace).Get(ctx, srcSecretName, v1.GetOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			log.Printf("Google OAuth Secret not found - user hasn't connected Google yet")
+			return nil // Not an error - user just hasn't authenticated
+		}
+		return fmt.Errorf("failed to get Google OAuth Secret: %w", err)
+	}
+
+	if srcSecret.Data == nil || len(srcSecret.Data[userID]) == 0 {
+		log.Printf("No Google OAuth credentials for user %s in Secret", userID)
+		return nil // User hasn't connected
+	}
+
+	// Parse credentials JSON
+	var creds struct {
+		AccessToken  string   `json:"accessToken"`
+		RefreshToken string   `json:"refreshToken"`
+		Scopes       []string `json:"scopes"`
+		ExpiresAt    string   `json:"expiresAt"`
+	}
+	if err := json.Unmarshal(srcSecret.Data[userID], &creds); err != nil {
+		return fmt.Errorf("failed to parse credentials: %w", err)
+	}
+
+	// Parse expiry time
+	expiresAt, err := time.Parse(time.RFC3339, creds.ExpiresAt)
+	if err != nil {
+		log.Printf("Warning: failed to parse expiry time: %v", err)
+		expiresAt = time.Now().Add(1 * time.Hour) // Default to 1 hour
+	}
+
+	// Create workspace-mcp compatible credentials JSON
+	credentialsJSON := map[string]interface{}{
+		"token":         creds.AccessToken,
+		"refresh_token": "",
+		"token_uri":     "",
+		"client_id":     "",
+		"client_secret": "",
+		"scopes":        creds.Scopes,
+		"expiry":        expiresAt.Format("2006-01-02T15:04:05"), // Timezone-naive for Python
+	}
+
+	credBytes, err := json.MarshalIndent(credentialsJSON, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal credentials: %w", err)
+	}
+
+	// Create or update Secret in session namespace
+	secret := &corev1.Secret{
+		ObjectMeta: v1.ObjectMeta{
+			Name:      secretName,
+			Namespace: sessionNamespace,
+			Labels: map[string]string{
+				"app":                        "ambient-code",
+				"ambient-code.io/session":    ownerRef.Name,
+				"ambient-code.io/provider":   "google",
+				"ambient-code.io/oauth":      "true",
+				"ambient-code.io/oauth-user": userID,
+			},
+			OwnerReferences: []v1.OwnerReference{ownerRef},
+		},
+		Type: corev1.SecretTypeOpaque,
+		Data: map[string][]byte{
+			"credentials.json": credBytes,
+		},
+	}
+
+	if _, err := config.K8sClient.CoreV1().Secrets(sessionNamespace).Create(ctx, secret, v1.CreateOptions{}); err != nil {
+		if errors.IsAlreadyExists(err) {
+			// Update existing secret
+			if _, err := config.K8sClient.CoreV1().Secrets(sessionNamespace).Update(ctx, secret, v1.UpdateOptions{}); err != nil {
+				return fmt.Errorf("failed to update Secret: %w", err)
+			}
+			log.Printf("✓ Updated Google OAuth Secret %s with cluster-level credentials for user %s", secretName, userID)
+		} else {
+			return fmt.Errorf("failed to create Secret: %w", err)
+		}
+	} else {
+		log.Printf("✓ Created Google OAuth Secret %s with cluster-level credentials for user %s", secretName, userID)
+	}
+
+	return nil
+}
+
 // Helper functions
 var (
 	boolPtr  = func(b bool) *bool { return &b }
-	int32Ptr = func(i int32) *int32 { return &i }
 	int64Ptr = func(i int64) *int64 { return &i }
 )

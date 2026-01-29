@@ -1,10 +1,12 @@
 """Unit tests for observability module."""
 
-import pytest
-import os
 import logging
+import os
 from unittest.mock import Mock, patch
-from observability import ObservabilityManager
+
+import pytest
+
+from observability import ObservabilityManager, _privacy_masking_function
 
 
 @pytest.fixture
@@ -53,8 +55,11 @@ class TestLangfuseInitialization:
     async def test_init_langfuse_unavailable(self, manager):
         """Test initialization when Langfuse SDK is not available."""
         # Mock the import to raise ImportError
-        with patch.dict('sys.modules', {'langfuse': None}):
-            with patch('builtins.__import__', side_effect=ImportError("No module named 'langfuse'")):
+        with patch.dict("sys.modules", {"langfuse": None}):
+            with patch(
+                "builtins.__import__",
+                side_effect=ImportError("No module named 'langfuse'"),
+            ):
                 result = await manager.initialize("test prompt", "test-namespace")
 
         assert result is False
@@ -125,7 +130,9 @@ class TestLangfuseInitialization:
     @pytest.mark.asyncio
     @patch("langfuse.propagate_attributes")
     @patch("langfuse.Langfuse")
-    async def test_init_successful(self, mock_langfuse_class, mock_propagate, manager, caplog):
+    async def test_init_successful(
+        self, mock_langfuse_class, mock_propagate, manager, caplog
+    ):
         """Test successful Langfuse initialization with SDK v3 propagate_attributes pattern."""
         mock_client = Mock()
         mock_langfuse_class.return_value = mock_client
@@ -151,10 +158,12 @@ class TestLangfuseInitialization:
         assert manager.langfuse_client is not None
         assert manager._propagate_ctx is not None
 
+        # Verify Langfuse client was initialized with privacy masking enabled (default)
         mock_langfuse_class.assert_called_once_with(
             public_key="pk-lf-public",
             secret_key="sk-lf-secret",
             host="http://localhost:3000",
+            mask=_privacy_masking_function,
         )
 
         # Verify propagate_attributes was called
@@ -169,7 +178,9 @@ class TestLangfuseInitialization:
     @pytest.mark.asyncio
     @patch("langfuse.propagate_attributes")
     @patch("langfuse.Langfuse")
-    async def test_init_with_user_tracking(self, mock_langfuse_class, mock_propagate, caplog):
+    async def test_init_with_user_tracking(
+        self, mock_langfuse_class, mock_propagate, caplog
+    ):
         """Test Langfuse initialization with user tracking."""
         mock_client = Mock()
         mock_langfuse_class.return_value = mock_client
@@ -296,11 +307,15 @@ class TestStartTurn:
 
         # Second call to start_turn (same turn, streaming update) - should be ignored
         manager.start_turn("claude-3-5-sonnet", "User input")
-        assert mock_client.start_as_current_observation.call_count == 1  # Still 1, not 2
+        assert (
+            mock_client.start_as_current_observation.call_count == 1
+        )  # Still 1, not 2
 
         # Third call to start_turn (still same turn) - should be ignored
         manager.start_turn("claude-3-5-sonnet", "User input")
-        assert mock_client.start_as_current_observation.call_count == 1  # Still 1, not 3
+        assert (
+            mock_client.start_as_current_observation.call_count == 1
+        )  # Still 1, not 3
 
 
 class TestEndTurn:

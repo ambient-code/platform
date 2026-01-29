@@ -14,7 +14,7 @@ RUN go mod download
 # Copy the source code
 COPY . .
 
-# Build the application (with flags to avoid segfault)
+# Build the application
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o main .
 
 # Final stage

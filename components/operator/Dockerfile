@@ -1,6 +1,14 @@
 # Build stage
 FROM registry.access.redhat.com/ubi9/go-toolset:1.24 AS builder
 
+# Build arguments for metadata
+ARG GIT_COMMIT=unknown
+ARG GIT_BRANCH=unknown
+ARG GIT_REPO=unknown
+ARG GIT_VERSION=unknown
+ARG BUILD_DATE=unknown
+ARG BUILD_USER=unknown
+
 USER 0
 WORKDIR /app
 
@@ -13,7 +21,7 @@ RUN go mod download
 # Copy the source code
 COPY . .
 
-# Build the application (with flags to avoid segfault)
+# Build the application
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o operator .
 
 # Final stage
@@ -31,5 +39,7 @@ RUN chmod +x ./operator && chmod 775 /app
 
 USER 1001
 
-# Command to run the executable
-CMD ["./operator"]
+# Use ENTRYPOINT so that args from K8s are appended, not replaced
+ENTRYPOINT ["./operator"]
+# Default args (can be overridden by K8s deployment)
+CMD []

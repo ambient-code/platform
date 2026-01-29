@@ -14,6 +14,10 @@ import type {
   PaginationParams,
 } from '@/types/api';
 
+export type IntegrationStatus = {
+  github: boolean;
+};
+
 /**
  * List projects with pagination support
  */
@@ -114,5 +118,16 @@ export async function removeProjectPermission(
 ): Promise<void> {
   await apiClient.delete(
     `/projects/${projectName}/permissions/${subjectType}/${subjectName}`
+  );
+}
+
+/**
+ * Get project integration status (GitHub, etc.)
+ */
+export async function getProjectIntegrationStatus(
+  projectName: string
+): Promise<IntegrationStatus> {
+  return apiClient.get<IntegrationStatus>(
+    `/projects/${projectName}/integration-status`
   );
 }

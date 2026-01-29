@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-import { ToolResultBlock, ToolUseBlock } from "@/types/agentic-session";
+import { ToolResultBlock, ToolUseBlock, ToolUseMessages } from "@/types/agentic-session";
 import {
   ChevronDown,
   ChevronRight,
@@ -20,6 +20,7 @@ import { formatTimestamp } from "@/lib/format-timestamp";
 export type ToolMessageProps = {
   toolUseBlock?: ToolUseBlock;
   resultBlock?: ToolResultBlock;
+  childToolCalls?: ToolUseMessages[];
   className?: string;
   borderless?: boolean;
   timestamp?: string;
@@ -145,9 +146,130 @@ const getColorClassesForName = (name: string) => {
   return colorChoices[idx];
 };
 
+// Helper to convert Python literal to JSON-parseable string
+const pythonLiteralToJson = (pythonStr: string): string => {
+  // This handles Python dict/list notation like [{'type': 'text', 'text': '...'}]
+  // Use a state machine to properly handle quotes and escape sequences
+  
+  let result = '';
+  let inString = false;
+  let stringChar = '';
+  let escaped = false;
+  
+  for (let i = 0; i < pythonStr.length; i++) {
+    const char = pythonStr[i];
+    
+    if (escaped) {
+      // Handle escape sequences
+      if (inString) {
+        // Inside string - convert Python escapes to JSON escapes
+        if (char === "'") {
+          // Python: \' → JSON: ' (no escape needed in double-quoted JSON string)
+          result += "'";
+        } else if (char === '"') {
+          // Python: \" → JSON: \" (keep escape)
+          result += '\\"';
+        } else {
+          // All other escapes (\n, \t, \\, etc.) are valid in both
+          result += '\\' + char;
+        }
+      } else {
+        // Outside string - just copy
+        result += '\\' + char;
+      }
+      escaped = false;
+      continue;
+    }
+    
+    if (char === '\\') {
+      escaped = true;
+      continue;
+    }
+    
+    // Handle quotes
+    if (char === "'" || char === '"') {
+      if (!inString) {
+        // Starting a string
+        inString = true;
+        stringChar = char;
+        result += '"'; // Always use double quotes in JSON
+      } else if (char === stringChar) {
+        // Ending a string
+        inString = false;
+        stringChar = '';
+        result += '"';
+      } else {
+        // Different quote inside string
+        if (char === '"') {
+          // Double quote inside single-quoted Python string
+          result += '\\"'; // Must escape in JSON
+        } else {
+          // Single quote inside double-quoted string
+          result += "'"; // No escape needed
+        }
+      }
+      continue;
+    }
+    
+    // If we're in a string, just copy characters
+    if (inString) {
+      result += char;
+      continue;
+    }
+    
+    // Handle Python keywords outside strings
+    if (!inString) {
+      if (pythonStr.substr(i, 4) === 'True') {
+        result += 'true';
+        i += 3;
+        continue;
+      }
+      if (pythonStr.substr(i, 5) === 'False') {
+        result += 'false';
+        i += 4;
+        continue;
+      }
+      if (pythonStr.substr(i, 4) === 'None') {
+        result += 'null';
+        i += 3;
+        continue;
+      }
+    }
+    
+    result += char;
+  }
+  
+  return result;
+};
+
 const extractTextFromResultContent = (content: unknown): string => {
   try {
-    if (typeof content === "string") return content;
+    // If string, try to parse as JSON/Python first (handles stringified arrays/objects)
+    if (typeof content === "string") {
+      // Try parsing if it looks like JSON/Python
+      if (content.trim().startsWith("[") || content.trim().startsWith("{")) {
+        try {
+          // FIRST: Try parsing as valid JSON (backend now sends proper JSON)
+          const parsed = JSON.parse(content);
+          return extractTextFromResultContent(parsed);
+        } catch {
+          // FALLBACK: Try converting Python notation to JSON (for old sessions)
+          try {
+            const jsonStr = pythonLiteralToJson(content);
+            const parsed = JSON.parse(jsonStr);
+            return extractTextFromResultContent(parsed);
+          } catch {
+            // LAST RESORT: Can't parse, just return the raw string
+            // This handles cases where the content is malformed or uses unknown syntax
+            console.warn('Failed to parse result content, showing raw text');
+            return content;
+          }
+        }
+      }
+      return content;
+    }
+    
+    // Handle arrays of text blocks
     if (Array.isArray(content)) {
       const texts = content
         .map((item) => {
@@ -159,8 +281,9 @@ const extractTextFromResultContent = (content: unknown): string => {
         .filter(Boolean);
       if (texts.length) return texts.join("\n\n");
     }
+    
+    // Handle nested content arrays
     if (content && typeof content === "object") {
-      // Some schemas nest under content: []
       const maybe = (content as Record<string, unknown>).content;
       if (Array.isArray(maybe)) {
         const texts = maybe
@@ -174,24 +297,208 @@ const extractTextFromResultContent = (content: unknown): string => {
         if (texts.length) return texts.join("\n\n");
       }
     }
+    
     return JSON.stringify(content ?? "");
   } catch {
     return String(content ?? "");
   }
 };
 
+// Generate smart summary for tool calls based on tool name and input
+const generateToolSummary = (toolName: string, input?: Record<string, unknown>): string => {
+  if (!input || Object.keys(input).length === 0) return formatToolName(toolName);
+  
+  // WebSearch - show query
+  if (toolName.toLowerCase().includes("websearch") || toolName.toLowerCase().includes("web_search")) {
+    const query = input.query as string | undefined;
+    if (query) return `Searching the web for "${query}"`;
+  }
+  
+  // FileRead - show file path
+  if (toolName.toLowerCase().includes("read") && (input.file || input.path || input.target_file)) {
+    const file = (input.file || input.path || input.target_file) as string;
+    return `Reading ${file}`;
+  }
+  
+  // FileWrite - show file path
+  if (toolName.toLowerCase().includes("write") && (input.file || input.path || input.target_file)) {
+    const file = (input.file || input.path || input.target_file) as string;
+    return `Writing to ${file}`;
+  }
+  
+  // Grep - show pattern and path
+  if (toolName.toLowerCase().includes("grep") || toolName.toLowerCase().includes("search")) {
+    const pattern = input.pattern as string | undefined;
+    const path = input.path as string | undefined;
+    if (pattern && path) return `Searching for "${pattern}" in ${path}`;
+    if (pattern) return `Searching for "${pattern}"`;
+  }
+  
+  // Command execution
+  if (toolName.toLowerCase().includes("command") || toolName.toLowerCase().includes("terminal")) {
+    const command = input.command as string | undefined;
+    if (command) {
+      const truncated = command.length > 50 ? command.substring(0, 50) + "..." : command;
+      return `Running: ${truncated}`;
+    }
+  }
+  
+  // Fallback: show first string value from input (often contains the main parameter)
+  const firstStringValue = Object.values(input).find(v => typeof v === 'string' && v.length > 0) as string | undefined;
+  if (firstStringValue) {
+    const truncated = firstStringValue.length > 60 ? firstStringValue.substring(0, 60) + "..." : firstStringValue;
+    return truncated;
+  }
+  
+  // Last resort: show formatted tool name
+  return formatToolName(toolName);
+};
+
+// Child Tool Call component for hierarchical rendering (collapsed by default)
+type ChildToolCallProps = {
+  toolUseBlock?: ToolUseBlock;
+  resultBlock?: ToolResultBlock;
+};
+
+const ChildToolCall: React.FC<ChildToolCallProps> = ({ toolUseBlock, resultBlock }) => {
+  const [expanded, setExpanded] = useState(false);
+  
+  // Check if result has actual content (same logic as parent tool)
+  const hasActualResult = Boolean(
+    resultBlock && 
+    resultBlock.content !== undefined && 
+    resultBlock.content !== null &&
+    (() => {
+      const content = resultBlock.content;
+      // Empty string
+      if (content === "") return false;
+      // Empty array
+      if (Array.isArray(content) && content.length === 0) return false;
+      // Empty object
+      if (typeof content === 'object' && !Array.isArray(content) && Object.keys(content).length === 0) return false;
+      // String that only contains whitespace or quotes
+      if (typeof content === 'string' && content.trim() === '') return false;
+      if (typeof content === 'string' && (content === '""' || content === "''")) return false;
+      // Has actual content
+      return true;
+    })()
+  );
+  
+  const isError = resultBlock?.is_error === true;
+  const isSuccess = hasActualResult && !isError;
+  const isPending = !hasActualResult && !isError;
+  
+  const toolName = toolUseBlock?.name || "unknown_tool";
+  
+  // Parse input - it might be a string that needs JSON parsing or already an object
+  let toolInput: Record<string, unknown> | undefined;
+  if (toolUseBlock?.input) {
+    if (typeof toolUseBlock.input === 'string') {
+      try {
+        toolInput = JSON.parse(toolUseBlock.input) as Record<string, unknown>;
+      } catch {
+        // If parsing fails, treat the string as a single value
+        toolInput = { value: toolUseBlock.input };
+      }
+    } else {
+      toolInput = toolUseBlock.input as Record<string, unknown>;
+    }
+  }
+  
+  // Generate smart collapsed summary - ALWAYS show the query/input, not the result
+  // Result should only be visible when expanded
+  const collapsedSummary = generateToolSummary(toolName, toolInput);
+  
+  return (
+    <div className="py-1">
+      <div 
+        className="flex items-center gap-2 cursor-pointer hover:bg-muted/30 rounded px-2 py-1"
+        onClick={() => setExpanded(!expanded)}
+      >
+        {isError && <X className="w-3 h-3 text-red-500 flex-shrink-0" />}
+        {isSuccess && <Check className="w-3 h-3 text-green-500 flex-shrink-0" />}
+        {isPending && <Loader2 className="w-3 h-3 animate-spin text-blue-500 flex-shrink-0" />}
+        
+        <Badge variant="secondary" className="text-[10px] px-1.5 py-0.5 flex-shrink-0">
+          {formatToolName(toolName)}
+        </Badge>
+        
+        {/* Collapsed summary */}
+        {!expanded && (
+          <span className="text-[11px] text-muted-foreground truncate flex-1">
+            {collapsedSummary}
+          </span>
+        )}
+        
+        <ChevronRight className={cn(
+          "w-3 h-3 text-muted-foreground transition-transform flex-shrink-0",
+          expanded && "rotate-90"
+        )} />
+      </div>
+      
+      {expanded && (
+        <div className="mt-1 ml-5 text-xs space-y-2 bg-muted/20 rounded p-2 border border-border">
+          {toolInput && Object.keys(toolInput).length > 0 && (
+            <div>
+              <div className="font-medium text-foreground/70 mb-1">Input</div>
+              <pre className="text-[10px] overflow-x-auto text-muted-foreground">
+                {JSON.stringify(toolInput, null, 2)}
+              </pre>
+            </div>
+          )}
+          {resultBlock?.content && (
+            <div>
+              <div className="font-medium text-foreground/70 mb-1">
+                Result {isError && <span className="text-red-600">(Error)</span>}
+              </div>
+              {/* Render result as markdown for better formatting */}
+              <ExpandableMarkdown 
+                className="prose-sm" 
+                content={extractTextFromResultContent(resultBlock.content as unknown)}
+                maxLength={500}
+              />
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const ToolMessage = React.forwardRef<HTMLDivElement, ToolMessageProps>(
-  ({ toolUseBlock, resultBlock, className, borderless, timestamp, ...props }, ref) => {
+  ({ toolUseBlock, resultBlock, childToolCalls, className, borderless, timestamp, ...props }, ref) => {
     const [isExpanded, setIsExpanded] = useState(false);
 
     const toolResultBlock = resultBlock;
-    const isToolCall = Boolean(toolUseBlock && !toolResultBlock);
-    const isToolResult = Boolean(toolResultBlock);
+    
+    // Check if result has actual content (not just empty object/array/string)
+    const hasActualResult = Boolean(
+      toolResultBlock && 
+      toolResultBlock.content !== undefined && 
+      toolResultBlock.content !== null &&
+      (() => {
+        const content = toolResultBlock.content;
+        // Empty string
+        if (content === "") return false;
+        // Empty array
+        if (Array.isArray(content) && content.length === 0) return false;
+        // Empty object
+        if (typeof content === 'object' && !Array.isArray(content) && Object.keys(content).length === 0) return false;
+        // String that only contains whitespace or quotes
+        if (typeof content === 'string' && content.trim() === '') return false;
+        if (typeof content === 'string' && (content === '""' || content === "''")) return false;
+        // Has actual content
+        return true;
+      })()
+    );
+    
+    const isToolCall = Boolean(toolUseBlock && !hasActualResult);
+    const isToolResult = hasActualResult;
 
     // For tool calls/results, show collapsible interface
     const toolName = formatToolName(toolUseBlock?.name);
-    const isLoading = isToolCall; // Tool call without result is loading
     const isError = toolResultBlock?.is_error === true;
+    const isLoading = isToolCall && !isError; // Tool call without result is loading, unless there's an error
     const isSuccess = isToolResult && !isError;
 
     // Subagent detection and data
@@ -249,7 +556,7 @@ export const ToolMessage = React.forwardRef<HTMLDivElement, ToolMessageProps>(
                 )}
                 onClick={() => setIsExpanded(!isExpanded)}
               >
-                <div className={cn("flex items-center", isCompact ? "space-x-1.5" : "space-x-2")}>
+                <div className={cn("flex items-center flex-1 min-w-0", isCompact ? "space-x-1.5" : "space-x-2")}>
                   {/* Status Icon */}
                   {!isCompact && (
                     <div className="flex-shrink-0">
@@ -265,24 +572,40 @@ export const ToolMessage = React.forwardRef<HTMLDivElement, ToolMessageProps>(
                       {isLoading && (
                         <Loader2 className="w-3 h-3 text-blue-500 animate-spin" />
                       )}
+                      {isSuccess && <Check className="w-3 h-3 text-green-500" />}
                       {isError && <X className="w-3 h-3 text-red-500" />}
                     </div>
                   )}
 
-                  {/* Tool Name */}
-                  <div className="flex-1 flex items-center min-h-0">
+                  {/* Tool Name Badge */}
+                  <div className="flex-shrink-0">
                     <Badge
                       className={cn(
                         "text-xs text-white",
-                        isLoading && "bg-blue-500 animate-pulse",
+                        isLoading && "bg-blue-500",
                         isError && "bg-red-600",
                         isSuccess && "bg-green-600",
                         isSubagent && subagentClasses?.badgeBg,
                         isCompact && "!py-0 px-1.5 leading-tight"
                       )}
                     >
-                      {isSubagent ? displayName : (isLoading ? "Calling" : "Called") + " " + displayName}
+                      {displayName}
                     </Badge>
+                  </div>
+
+                  {/* Title/Description - Always visible (collapsed or expanded) */}
+                  <div className="flex-1 min-w-0 text-sm text-muted-foreground truncate">
+                    {isSubagent ? (
+                      // Agent: Show description (title)
+                      <span className="truncate">
+                        {subagentDescription || subagentPrompt || "Working..."}
+                      </span>
+                    ) : (
+                      // Regular tool: Show query/input summary
+                      <span className="truncate">
+                        {generateToolSummary(toolUseBlock?.name || "", inputData)}
+                      </span>
+                    )}
                   </div>
 
                   {/* Expand/Collapse Icon */}
@@ -296,33 +619,69 @@ export const ToolMessage = React.forwardRef<HTMLDivElement, ToolMessageProps>(
                 </div>
               </div>
 
-              {/* Subagent primary content (description + prompt) */}
-              {isSubagent ? (
+              {/* Subagent primary content - REORDERED: Input → Activity → Result */}
+              {isSubagent && isExpanded ? (
                 <div className="px-3 pb-3 space-y-3">
-                  <div>
-                    {subagentDescription && subagentDescription.trim() ? (
-                      <div className="text-foreground">
-                        <ExpandableMarkdown className="prose-sm" content={subagentDescription} />
+                  {/* 1. INPUT - Show when expanded */}
+                  {subagentPrompt && (
+                    <div className="space-y-2">
+                      <h4 className="text-xs font-medium text-foreground/60 uppercase tracking-wide">
+                        Prompt
+                      </h4>
+                      <div className="rounded p-2 overflow-x-auto bg-muted/20 border border-border text-xs text-muted-foreground">
+                        <ExpandableMarkdown className="prose-sm" content={subagentPrompt} maxLength={500} />
                       </div>
-                    ) : isLoading ? (
-                      <div className="text-muted-foreground text-sm italic">
-                        Working on your request...
+                    </div>
+                  )}
+                  
+                  {/* 2. ACTIVITY - Agent child tool calls */}
+                  {childToolCalls && childToolCalls.length > 0 && (
+                    <div className="space-y-2">
+                      <h4 className="text-xs font-medium text-foreground/60 uppercase tracking-wide">
+                        Activity
+                      </h4>
+                      <div className="space-y-1 pl-2 border-l-2 border-purple-200 dark:border-purple-800">
+                        {childToolCalls.map((child, idx) => (
+                          <ChildToolCall
+                            key={`child-${child.toolUseBlock?.id || idx}`}
+                            toolUseBlock={child.toolUseBlock}
+                            resultBlock={child.resultBlock}
+                          />
+                        ))}
                       </div>
-                    ) : null}
-                    
-                    {isLoading && subagentDescription && subagentDescription.trim() && (
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground mt-2">
-                        <Loader2 className="w-3 h-3 animate-bounce" />
-                        <span>Waiting for result…</span>
-                      </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
+                  
+                  {/* Loading indicator when waiting for result */}
+                  {isLoading && (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      <span>
+                        {childToolCalls && childToolCalls.length > 0 
+                          ? "Processing..." 
+                          : "Waiting for result…"}
+                      </span>
+                    </div>
+                  )}
 
-                  {isExpanded && subagentPrompt && (
+                  {/* 3. RESULT - Only show if there's actual content */}
+                  {hasActualResult && (
                     <div>
-                      <h4 className="text-xs font-medium text-foreground/80 mb-1">Prompt</h4>
-                      <div className="rounded p-2 overflow-x-auto">
-                        <ExpandableMarkdown className="prose-sm" content={subagentPrompt} />
+                      <h4 className="text-xs font-medium text-foreground/60 uppercase tracking-wide">
+                        Result {isError && <span className="text-red-600">(Error)</span>}
+                      </h4>
+                      <div className={cn(
+                        "rounded p-2 mt-1 overflow-x-auto border text-xs",
+                        isError 
+                          ? "bg-red-50 dark:bg-red-950/50 border-red-200 dark:border-red-800"
+                          : "bg-muted/30 border-border"
+                      )}>
+                        {/* CRITICAL: Render result as markdown for better formatting */}
+                        <ExpandableMarkdown 
+                          className="prose-sm" 
+                          content={extractTextFromResultContent(toolResultBlock?.content as unknown)}
+                          maxLength={1000}
+                        />
                       </div>
                     </div>
                   )}
@@ -368,38 +727,6 @@ export const ToolMessage = React.forwardRef<HTMLDivElement, ToolMessageProps>(
                 )
               )}
             </div>
-
-            {/* Subagent Result Card (separate) */}
-            {isSubagent && isToolResult && (
-              <div
-                className={cn(
-                  "mt-2 rounded-lg border shadow-sm",
-                  subagentClasses?.cardBg,
-                  subagentClasses?.border
-                )}
-              >
-                <div className="flex items-center justify-between p-3">
-                  <div className="flex items-center space-x-2">
-                    <div className="flex-shrink-0">
-                      {isSuccess && <Check className="w-4 h-4 text-green-500" />}
-                      {isError && <X className="w-4 h-4 text-red-500" />}
-                    </div>
-                    <div className="flex-1">
-                      <Badge
-                        className={cn("text-xs text-white", subagentClasses?.badgeBg)}
-                      >
-                        {displayName}
-                      </Badge>
-                    </div>
-                  </div>
-                </div>
-                <div className="px-3 pb-3">
-                  <div className={cn("rounded p-2 overflow-x-auto text-foreground")}>
-                    <ExpandableMarkdown className="prose-sm" content={extractTextFromResultContent(toolResultBlock?.content as unknown)} />
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </div>
