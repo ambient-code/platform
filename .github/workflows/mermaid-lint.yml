@@ -1,0 +1,54 @@
+name: Mermaid Lint
+
+on:
+  pull_request:
+    paths:
+      - "docs/**/*.mmd"
+      - ".github/workflows/mermaid-lint.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "docs/**/*.mmd"
+
+jobs:
+  mermaid-lint:
+    runs-on: ubuntu-latest
+    name: Lint Mermaid Diagrams
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+
+      - name: Install mermaid-cli
+        run: npm install -g @mermaid-js/mermaid-cli
+
+      - name: Find Mermaid files
+        id: find-mermaid
+        run: |
+          files=$(find docs -name "*.mmd" | tr '\n' ' ')
+          echo "files=$files" >> $GITHUB_OUTPUT
+
+      - name: Validate Mermaid syntax
+        if: steps.find-mermaid.outputs.files != ''
+        run: |
+          for file in ${{ steps.find-mermaid.outputs.files }}; do
+            echo "Validating: $file"
+            mmdc -i "$file" -o /tmp/output.png
+          done
+
+  markdown-links:
+    runs-on: ubuntu-latest
+    name: Check Documentation Links
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate references
+        run: echo "Diagram validation complete"

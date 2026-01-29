@@ -49,6 +49,12 @@ nav:
   - Developer Guide:
     - Observability & Instrumentation: observability-langfuse.md
     - Model Pricing: model-pricing.md
+  - Architecture:
+    - Overview: architecture/README.md
+    - Diagrams:
+      - Index: architecture/diagrams/index.md
+      - System Overview: architecture/diagrams/system-overview.md
+      - Session Lifecycle: architecture/diagrams/session-lifecycle.md
   - Labs:
     - Overview: labs/index.md
     - Lab 1 - Your First Agentic Session: labs/basic/lab-1-first-rfe.md
