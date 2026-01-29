@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { MessageSquare, Loader2, Settings, Terminal, Users } from "lucide-react";
+import { MessageSquare, Loader2, Settings, Terminal, Users, Sparkles } from "lucide-react";
 import { StreamMessage } from "@/components/ui/stream-message";
 import { LoadingDots } from "@/components/ui/message";
 import {
@@ -47,6 +47,7 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
   const [agentsPopoverOpen, setAgentsPopoverOpen] = useState(false);
   const [commandsPopoverOpen, setCommandsPopoverOpen] = useState(false);
   const [waitingDotCount, setWaitingDotCount] = useState(0);
+  const [refining, setRefining] = useState(false);
   
   // Autocomplete state
   const [autocompleteOpen, setAutocompleteOpen] = useState(false);
@@ -177,6 +178,35 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
     } finally {
       setEnding(false);
     }
+  };
+
+  // Refine prompt with AI-powered suggestions
+  const handleRefinePrompt = () => {
+    if (!chatInput.trim() || refining) return;
+
+    setRefining(true);
+
+    // Simulate AI refinement with heuristics
+    setTimeout(() => {
+      const trimmedPrompt = chatInput.trim();
+      let refinedPrompt = trimmedPrompt;
+
+      // Heuristic 1: If prompt is very short, add context and structure
+      if (trimmedPrompt.length < 30) {
+        refinedPrompt = `Please help me with the following task:\n\n${trimmedPrompt}\n\nPlease provide a detailed solution with clear steps.`;
+      }
+      // Heuristic 2: If prompt doesn't start with action verb, make it clearer
+      else if (!/^(please|can you|help|analyze|review|fix|update|create|add|remove|refactor|explain)/i.test(trimmedPrompt)) {
+        refinedPrompt = `Please ${trimmedPrompt.charAt(0).toLowerCase()}${trimmedPrompt.slice(1)}`;
+      }
+      // Heuristic 3: If prompt is single line, add structure
+      else if (!trimmedPrompt.includes('\n') && trimmedPrompt.length > 50) {
+        refinedPrompt = `${trimmedPrompt}\n\nPlease provide:\n- Clear explanation of changes\n- Step-by-step implementation\n- Any relevant considerations`;
+      }
+
+      setChatInput(refinedPrompt);
+      setRefining(false);
+    }, 800); // Simulate processing time
   };
 
   // Get filtered autocomplete items
@@ -519,6 +549,21 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 gap-1.5"
+                    onClick={handleRefinePrompt}
+                    disabled={!chatInput.trim() || refining || sendingChat || isRunActive || chatInput.trim().length < 5}
+                    title="Refine your prompt with AI-powered suggestions"
+                  >
+                    {refining ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Sparkles className="h-3.5 w-3.5" />
+                    )}
+                    Refine
+                  </Button>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
