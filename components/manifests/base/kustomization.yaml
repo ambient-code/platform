@@ -12,6 +12,7 @@ resources:
 - backend-deployment.yaml
 - frontend-deployment.yaml
 - operator-deployment.yaml
+- public-api-deployment.yaml
 - workspace-pvc.yaml
 - minio-deployment.yaml
 
@@ -26,5 +27,7 @@ images:
 - name: quay.io/ambient_code/vteam_claude_runner
   newTag: latest
 - name: quay.io/ambient_code/vteam_state_sync
+  newTag: latest
+- name: quay.io/ambient_code/vteam_public_api
   newTag: latest
 

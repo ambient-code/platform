@@ -1,4 +1,4 @@
-.PHONY: help setup build-all build-frontend build-backend build-operator build-runner build-state-sync deploy clean check-architecture
+.PHONY: help setup build-all build-frontend build-backend build-operator build-runner build-state-sync build-public-api deploy clean check-architecture
 .PHONY: local-up local-down local-clean local-status local-rebuild local-reload-backend local-reload-frontend local-reload-operator local-sync-version
 .PHONY: local-dev-token
 .PHONY: local-logs local-logs-backend local-logs-frontend local-logs-operator local-shell local-shell-frontend
@@ -59,6 +59,7 @@ BACKEND_IMAGE ?= vteam_backend:latest
 OPERATOR_IMAGE ?= vteam_operator:latest
 RUNNER_IMAGE ?= vteam_claude_runner:latest
 STATE_SYNC_IMAGE ?= vteam_state_sync:latest
+PUBLIC_API_IMAGE ?= vteam_public_api:latest
 
 
 # Colors for output (using tput for better compatibility, with fallback to printf-compatible codes)
@@ -106,7 +107,7 @@ help: ## Display this help message
 
 ##@ Building
 
-build-all: build-frontend build-backend build-operator build-runner build-state-sync ## Build all container images
+build-all: build-frontend build-backend build-operator build-runner build-state-sync build-public-api ## Build all container images
 
 build-frontend: ## Build frontend image
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building frontend with $(CONTAINER_ENGINE)..."
@@ -137,6 +138,12 @@ build-state-sync: ## Build state-sync image for S3 persistence
 	@cd components/runners/state-sync && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
 		-t vteam_state_sync:latest .
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) State-sync built: vteam_state_sync:latest"
+
+build-public-api: ## Build public API gateway image
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building public-api with $(CONTAINER_ENGINE)..."
+	@cd components/public-api && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
+		-t $(PUBLIC_API_IMAGE) .
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Public API built: $(PUBLIC_API_IMAGE)"
 
 ##@ Git Hooks
 
