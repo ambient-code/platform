@@ -64,8 +64,9 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
   const phase = session?.status?.phase || "";
   const isInteractive = session?.spec?.interactive;
   
-  // Show chat interface when session is interactive AND (in Running state OR showing welcome experience)
-  const showChatInterface = isInteractive && (phase === "Running" || showWelcomeExperience);
+  // Show chat interface only when session is interactive AND Running
+  // Welcome experience can be shown during Pending/Creating, but chat input only when Running
+  const showChatInterface = isInteractive && phase === "Running";
   
   // Determine if session is in a terminal state
   const isTerminalState = ["Completed", "Failed", "Stopped"].includes(phase);
@@ -524,9 +525,6 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
                         );
                       } else {
                         const cmd = item as { id: string; name: string; slashCommand: string; description?: string };
-                        const commandTitle = cmd.name.includes('.') 
-                          ? cmd.name.split('.').pop() 
-                          : cmd.name;
                         
                         return (
                           <div
@@ -540,8 +538,8 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
                             onMouseEnter={() => setAutocompleteSelectedIndex(index)}
                           >
                             <div className="font-medium text-sm">{cmd.slashCommand}</div>
-                            <div className="text-xs text-muted-foreground truncate capitalize">
-                              {commandTitle}
+                            <div className="text-xs text-muted-foreground truncate">
+                              {cmd.name}
                             </div>
                           </div>
                         );
@@ -668,18 +666,14 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
                             className="max-h-[400px] overflow-y-scroll space-y-2 pr-2 scrollbar-thin"
                           >
                             {workflowMetadata.commands.map((cmd) => {
-                              const commandTitle = cmd.name.includes('.') 
-                                ? cmd.name.split('.').pop() 
-                                : cmd.name;
-                              
                               return (
                                 <div
                                   key={cmd.id}
                                   className="p-3 rounded-md border bg-muted/30"
                                 >
                                   <div className="flex items-center justify-between mb-1">
-                                    <h3 className="text-sm font-bold capitalize">
-                                      {commandTitle}
+                                    <h3 className="text-sm font-bold">
+                                      {cmd.name}
                                     </h3>
                                     <Button
                                       variant="outline"
@@ -692,7 +686,7 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
                                         }
                                       }}
                                     >
-                                      Run {cmd.slashCommand.replace(/^\/speckit\./, '/')}
+                                      Run {cmd.slashCommand}
                                     </Button>
                                   </div>
                                   {cmd.description && (
@@ -746,26 +740,28 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
         </div>
       )}
 
-      {isInteractive && !showChatInterface && streamMessages.length > 0 && (
+      {isInteractive && !showChatInterface && (streamMessages.length > 0 || isCreating || isTerminalState) && (
         <div className="sticky bottom-0 border-t bg-muted/50">
           <div className="p-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
-                      <Settings className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start">
-                    <DropdownMenuCheckboxItem
-                      checked={showSystemMessages}
-                      onCheckedChange={setShowSystemMessages}
-                    >
-                      Show system messages
-                    </DropdownMenuCheckboxItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                {streamMessages.length > 0 && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+                        <Settings className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start">
+                      <DropdownMenuCheckboxItem
+                        checked={showSystemMessages}
+                        onCheckedChange={setShowSystemMessages}
+                      >
+                        Show system messages
+                      </DropdownMenuCheckboxItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
                 <p className="text-sm text-muted-foreground">
                   {isCreating && "Chat will be available once the session is running..."}
                   {isTerminalState && (

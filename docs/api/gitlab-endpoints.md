@@ -1,6 +1,6 @@
 # GitLab Integration API Endpoints
 
-This document describes the GitLab integration API endpoints available in vTeam.
+This document describes the GitLab integration API endpoints available in ACP.
 
 ## Base URL
 
@@ -15,7 +15,7 @@ For production deployments, replace with your actual backend URL.
 All endpoints require authentication via Bearer token in the Authorization header:
 
 ```http
-Authorization: Bearer <your-vteam-auth-token>
+Authorization: Bearer <your-acp-auth-token>
 ```
 
 ---
@@ -24,14 +24,14 @@ Authorization: Bearer <your-vteam-auth-token>
 
 ### 1. Connect GitLab Account
 
-Connect a GitLab account to vTeam by providing a Personal Access Token.
+Connect a GitLab account to ACP by providing a Personal Access Token.
 
 **Endpoint**: `POST /auth/gitlab/connect`
 
 **Request Headers**:
 ```http
 Content-Type: application/json
-Authorization: Bearer <vteam-auth-token>
+Authorization: Bearer <acp-auth-token>
 ```
 
 **Request Body**:
@@ -53,7 +53,7 @@ Authorization: Bearer <vteam-auth-token>
 ```bash
 curl -X POST http://vteam-backend:8080/api/auth/gitlab/connect \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <vteam-token>" \
+  -H "Authorization: Bearer <acp-token>" \
   -d '{
     "personalAccessToken": "glpat-xyz123abc456",
     "instanceUrl": "https://gitlab.com"
@@ -114,13 +114,13 @@ Check if user has a GitLab account connected and retrieve connection details.
 
 **Request Headers**:
 ```http
-Authorization: Bearer <vteam-auth-token>
+Authorization: Bearer <acp-auth-token>
 ```
 
 **Example Request**:
 ```bash
 curl -X GET http://vteam-backend:8080/api/auth/gitlab/status \
-  -H "Authorization: Bearer <vteam-token>"
+  -H "Authorization: Bearer <acp-token>"
 ```
 
 **Success Response (Connected)** (`200 OK`):
@@ -162,19 +162,19 @@ curl -X GET http://vteam-backend:8080/api/auth/gitlab/status \
 
 ### 3. Disconnect GitLab Account
 
-Disconnect GitLab account from vTeam and remove stored credentials.
+Disconnect GitLab account from ACP and remove stored credentials.
 
 **Endpoint**: `POST /auth/gitlab/disconnect`
 
 **Request Headers**:
 ```http
-Authorization: Bearer <vteam-auth-token>
+Authorization: Bearer <acp-auth-token>
 ```
 
 **Example Request**:
 ```bash
 curl -X POST http://vteam-backend:8080/api/auth/gitlab/disconnect \
-  -H "Authorization: Bearer <vteam-token>"
+  -H "Authorization: Bearer <acp-token>"
 ```
 
 **Success Response** (`200 OK`):
@@ -254,7 +254,7 @@ interface ConnectGitLabResponse {
 ```
 
 **Fields**:
-- `userId`: vTeam user ID
+- `userId`: ACP user ID
 - `gitlabUserId`: GitLab user ID (from GitLab API)
 - `username`: GitLab username
 - `instanceUrl`: GitLab instance URL (GitLab.com or self-hosted)
@@ -331,7 +331,7 @@ All error responses follow this format:
 | Status Code | Meaning | Common Causes |
 |-------------|---------|---------------|
 | 400 | Bad Request | Invalid request body, missing required fields |
-| 401 | Unauthorized | vTeam authentication token missing or invalid |
+| 401 | Unauthorized | ACP authentication token missing or invalid |
 | 500 | Internal Server Error | GitLab token validation failed, database error, network error |
 
 ### GitLab-Specific Errors
@@ -372,7 +372,7 @@ When GitLab token validation fails, error messages include specific remediation:
 
 ```bash
 curl -X GET http://vteam-backend:8080/api/auth/gitlab/status \
-  -H "Authorization: Bearer $VTEAM_TOKEN"
+  -H "Authorization: Bearer $ACP_TOKEN"
 ```
 
 Response:
@@ -385,7 +385,7 @@ Response:
 ```bash
 curl -X POST http://vteam-backend:8080/api/auth/gitlab/connect \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $VTEAM_TOKEN" \
+  -H "Authorization: Bearer $ACP_TOKEN" \
   -d '{
     "personalAccessToken": "'"$GITLAB_TOKEN"'",
     "instanceUrl": "https://gitlab.com"
@@ -408,7 +408,7 @@ Response:
 
 ```bash
 curl -X GET http://vteam-backend:8080/api/auth/gitlab/status \
-  -H "Authorization: Bearer $VTEAM_TOKEN"
+  -H "Authorization: Bearer $ACP_TOKEN"
 ```
 
 Response:
@@ -425,7 +425,7 @@ Response:
 
 ```bash
 curl -X POST http://vteam-backend:8080/api/auth/gitlab/disconnect \
-  -H "Authorization: Bearer $VTEAM_TOKEN"
+  -H "Authorization: Bearer $ACP_TOKEN"
 ```
 
 Response:
@@ -444,7 +444,7 @@ Response:
 # Connect to self-hosted instance
 curl -X POST http://vteam-backend:8080/api/auth/gitlab/connect \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $VTEAM_TOKEN" \
+  -H "Authorization: Bearer $ACP_TOKEN" \
   -d '{
     "personalAccessToken": "glpat-selfhosted-token",
     "instanceUrl": "https://gitlab.company.com"
@@ -489,7 +489,7 @@ Required GitLab token scopes:
 2. **Rotate Tokens**: Encourage users to rotate GitLab tokens every 90 days
 3. **Minimum Scopes**: Only request required scopes
 4. **Token Expiration**: Set expiration dates on GitLab tokens
-5. **Secure vTeam Tokens**: Protect vTeam authentication tokens
+5. **Secure ACP Tokens**: Protect ACP authentication tokens
 
 ---
 
@@ -504,9 +504,9 @@ Required GitLab token scopes:
 
 Limits configured by GitLab administrator (may differ from GitLab.com).
 
-### vTeam Behavior
+### ACP Behavior
 
-- No rate limit enforcement on vTeam side
+- No rate limit enforcement on ACP side
 - GitLab API errors (429 Too Many Requests) passed through to user
 - Error messages include wait time recommendation
 
@@ -550,11 +550,11 @@ See examples throughout this document.
 
 ### "User not authenticated"
 
-**Cause**: vTeam authentication token missing or invalid
+**Cause**: ACP authentication token missing or invalid
 
 **Solution**:
 - Include `Authorization: Bearer <token>` header
-- Verify vTeam token is valid
+- Verify ACP token is valid
 - Check token hasn't expired
 
 ### "GitLab token validation failed: 401"

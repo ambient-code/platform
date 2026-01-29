@@ -22,6 +22,7 @@ export const projectKeys = {
   details: () => [...projectKeys.all, 'detail'] as const,
   detail: (name: string) => [...projectKeys.details(), name] as const,
   permissions: (name: string) => [...projectKeys.detail(name), 'permissions'] as const,
+  integrationStatus: (name: string) => [...projectKeys.detail(name), 'integration-status'] as const,
 };
 
 /**
@@ -169,5 +170,17 @@ export function useRemoveProjectPermission() {
         queryKey: projectKeys.permissions(projectName),
       });
     },
+  });
+}
+
+/**
+ * Hook to fetch project integration status (GitHub, etc.)
+ */
+export function useProjectIntegrationStatus(projectName: string) {
+  return useQuery({
+    queryKey: projectKeys.integrationStatus(projectName),
+    queryFn: () => projectsApi.getProjectIntegrationStatus(projectName),
+    enabled: !!projectName,
+    staleTime: 60000, // Cache for 1 minute
   });
 }

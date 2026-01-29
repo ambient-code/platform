@@ -1,4 +1,6 @@
-# Patch to add OAuth proxy sidecar to frontend deployment
+# Patch for production frontend deployment
+# - Adds OAuth proxy sidecar for authentication
+# - Overrides resource limits to prevent OOMKills (sawtooth memory pattern)
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -7,6 +9,15 @@ spec:
   template:
     spec:
       containers:
+      # Frontend container - increased limits to prevent OOMKills
+      - name: frontend
+        resources:
+          requests:
+            memory: 512Mi
+            cpu: 200m
+          limits:
+            memory: 2Gi
+            cpu: 1000m
       # OAuth proxy sidecar
       - name: oauth-proxy
         image: quay.io/openshift/origin-oauth-proxy:4.14
@@ -46,6 +57,13 @@ spec:
           periodSeconds: 5
           successThreshold: 1
           failureThreshold: 3
+        resources:
+          requests:
+            memory: 256Mi
+            cpu: 50m
+          limits:
+            memory: 512Mi
+            cpu: 200m
         volumeMounts:
         - mountPath: /etc/oauth/config
           name: oauth-config

@@ -37,9 +37,9 @@ See the [Getting Started Guide](user-guide/getting-started.md) for detailed setu
 ### Production Deployment
 
 For production OpenShift clusters:
-- [OpenShift Deployment Guide](OPENSHIFT_DEPLOY.md)
-- [OAuth Configuration](OPENSHIFT_OAUTH.md)
-- [GitHub App Setup](GITHUB_APP_SETUP.md)
+- [OpenShift Deployment Guide](deployment/OPENSHIFT_DEPLOY.md)
+- [OAuth Configuration](deployment/OPENSHIFT_OAUTH.md)
+- [GitHub App Setup](integrations/GITHUB_APP_SETUP.md)
 
 ## Key Features
 
@@ -76,12 +76,12 @@ Hands-on exercises to master the platform:
 Technical reference documentation:
 - [Glossary](reference/glossary.md) - Key terms and concepts
 
-### [🚀 Deployment Guides](OPENSHIFT_DEPLOY.md)
+### [🚀 Deployment Guides](deployment/)
 Production deployment resources:
-- [OpenShift Deployment](OPENSHIFT_DEPLOY.md)
-- [OAuth Setup](OPENSHIFT_OAUTH.md)
-- [GitHub App Configuration](GITHUB_APP_SETUP.md)
-- [Claude Code Runner](CLAUDE_CODE_RUNNER.md)
+- [OpenShift Deployment](deployment/OPENSHIFT_DEPLOY.md)
+- [OAuth Setup](deployment/OPENSHIFT_OAUTH.md)
+- [GitHub App Configuration](integrations/GITHUB_APP_SETUP.md)
+- [Claude Code Runner](developer/CLAUDE_CODE_RUNNER.md)
 
 ## Getting Help
 

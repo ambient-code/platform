@@ -45,8 +45,8 @@ env:
 Auto-detects container runtime:
 
 ```bash
-Docker:  ports 80/443  → http://vteam.local
-Podman:  ports 8080/8443 → http://vteam.local:8080
+Docker:  ports 80/443  → http://acp.local
+Podman:  ports 8080/8443 → http://acp.local:8080
 ```
 
 ### 4. Manifest Management
@@ -88,7 +88,7 @@ it('should create a new project', () => {
 
 ### 6. Adding Tests for New Features
 
-- Add test to `e2e/cypress/e2e/vteam.cy.ts`
+- Add test to `e2e/cypress/e2e/acp.cy.ts`
 - Ensure auth header is automatically added (no manual setup needed)
 - Use `cy.visit()`, `cy.contains()`, `cy.get()` for UI interactions
 - Use `cy.request()` for direct API testing
@@ -188,7 +188,7 @@ Before committing e2e test changes:
 make e2e-test CONTAINER_ENGINE=podman
 
 # Verify video
-open e2e/cypress/videos/vteam.cy.ts.mp4
+open e2e/cypress/videos/acp.cy.ts.mp4
 
 # Check for console errors
 # Review screenshots if any tests failed
@@ -213,7 +213,7 @@ kubectl describe ingress frontend-ingress -n ambient-code
 ### Test Manually
 
 ```bash
-curl http://vteam.local:8080/api/cluster-info
+curl http://acp.local:8080/api/cluster-info
 ```
 
 ### Run with UI for Debugging

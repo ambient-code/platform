@@ -20,13 +20,18 @@ Cypress.Commands.add('setAuthToken', (token: string) => {
   }).as('authInterceptor')
 })
 
-// Add global beforeEach to re-apply auth token
+// Add global beforeEach to set up auth
+// Note: In e2e environment, NEXT_PUBLIC_E2E_TOKEN is baked into the frontend build
+// This intercept is kept as backup for direct backend API calls (if any)
 beforeEach(() => {
   const token = Cypress.env('TEST_TOKEN')
   if (token) {
-    // Intercept all requests in this test
+    // Intercept all requests and add auth header (backup)
     cy.intercept('**', (req) => {
-      req.headers['Authorization'] = `Bearer ${token}`
+      // Only add header if not already present (frontend adds it automatically in e2e)
+      if (!req.headers['Authorization']) {
+        req.headers['Authorization'] = `Bearer ${token}`
+      }
     })
   }
 })

@@ -7,6 +7,7 @@ import { ToolMessage } from "@/components/ui/tool-message";
 import { ThinkingMessage } from "@/components/ui/thinking-message";
 import { SystemMessage } from "@/components/ui/system-message";
 import { Button } from "@/components/ui/button";
+import { FeedbackButtons } from "@/components/feedback";
 
 export type StreamMessageProps = {
   message: (MessageObject | ToolUseMessages | HierarchicalToolMessage) & { streaming?: boolean };
@@ -63,14 +64,53 @@ export const StreamMessage: React.FC<StreamMessageProps> = ({ message, onGoToRes
     case "user_message":
     case "agent_message": {
       const isStreaming = 'streaming' in message && message.streaming;
+      const isAgent = m.type === "agent_message";
+      
+      // Get content text for feedback context
+      const getContentText = () => {
+        if (typeof m.content === "string") return m.content;
+        if ("text" in m.content) return m.content.text;
+        if ("thinking" in m.content) return m.content.thinking;
+        return "";
+      };
+      
+      // Feedback buttons for agent text messages (not tool use/result, not streaming)
+      const feedbackElement = isAgent && !isStreaming ? (
+        <FeedbackButtons 
+          messageId={m.id}  // Pass message ID for feedback association
+          messageContent={getContentText()} 
+          messageTimestamp={m.timestamp}
+        />
+      ) : undefined;
+      
       if (typeof m.content === "string") {
-        return <Message role={m.type === "agent_message" ? "bot" : "user"} content={m.content} name="Claude AI" borderless={plainCard} timestamp={m.timestamp} streaming={isStreaming}/>;
+        return (
+          <Message 
+            role={isAgent ? "bot" : "user"} 
+            content={m.content} 
+            name="Claude AI" 
+            borderless={plainCard} 
+            timestamp={m.timestamp} 
+            streaming={isStreaming}
+            feedbackButtons={feedbackElement}
+          />
+        );
       }
       switch (m.content.type) {
         case "thinking_block":
           return <ThinkingMessage block={m.content} />
         case "text_block":
-          return <Message role={m.type === "agent_message" ? "bot" : "user"} content={m.content.text} name="Claude AI" borderless={plainCard} timestamp={m.timestamp} streaming={isStreaming}/>
+          return (
+            <Message 
+              role={isAgent ? "bot" : "user"} 
+              content={m.content.text} 
+              name="Claude AI" 
+              borderless={plainCard} 
+              timestamp={m.timestamp} 
+              streaming={isStreaming}
+              feedbackButtons={feedbackElement}
+            />
+          );
         case "tool_use_block":
           return <ToolMessage toolUseBlock={m.content} borderless={plainCard}/>
         case "tool_result_block":

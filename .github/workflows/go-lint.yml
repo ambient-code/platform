@@ -35,7 +35,7 @@ jobs:
       operator: ${{ steps.filter.outputs.operator }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Check for Go changes
         uses: dorny/paths-filter@v3
@@ -57,7 +57,7 @@ jobs:
     if: needs.detect-go-changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch'
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -104,7 +104,7 @@ jobs:
     if: needs.detect-go-changes.outputs.operator == 'true' || github.event_name == 'workflow_dispatch'
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Set up Go
         uses: actions/setup-go@v6
