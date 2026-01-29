@@ -124,7 +124,7 @@ export function RepositoriesAccordion({
                       {hasBranches && (
                         <button
                           onClick={toggleExpanded}
-                          className="h-4 w-4 text-muted-foreground flex-shrink-0 hover:text-foreground"
+                          className="h-4 w-4 text-muted-foreground flex-shrink-0 hover:text-foreground cursor-pointer"
                         >
                           {isExpanded ? (
                             <ChevronDown className="h-4 w-4" />
@@ -135,7 +135,7 @@ export function RepositoriesAccordion({
                       )}
                       {!hasBranches && <div className="h-4 w-4 flex-shrink-0" />}
                       <GitBranch className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                      <div className="flex-1 overflow-visible">
+                      <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <div className="text-sm font-medium truncate">{repoName}</div>
                           {currentBranch && (
