@@ -63,9 +63,10 @@ echo "Starting Cypress tests..."
 echo ""
 
 # Cypress will load .env/.env.local via cypress.config.ts
-# Just pass the test token and base URL
+# Pass test token, base URL, and API key (if available)
 CYPRESS_TEST_TOKEN="$TEST_TOKEN" \
   CYPRESS_BASE_URL="$CYPRESS_BASE_URL" \
+  ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}" \
   npm test
 
 exit_code=$?
