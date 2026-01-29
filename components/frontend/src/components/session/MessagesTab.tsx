@@ -351,8 +351,8 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
           </div>
         )}
 
-        {/* Show loading indicator when agent is actively processing */}
-        {shouldShowMessages && isRunActive && filteredMessages.length > 0 && (
+        {/* Show loading indicator when agent is actively processing (Fix #403) */}
+        {shouldShowMessages && isRunActive && (
           <div className="pl-12 pr-4 py-2">
             <LoadingDots />
           </div>
