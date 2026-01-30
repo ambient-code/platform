@@ -4,7 +4,8 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { Loader2 } from "lucide-react";
+import Link from "next/link";
+import { AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -30,8 +31,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import type { CreateAgenticSessionRequest } from "@/types/agentic-session";
 import { useCreateSession } from "@/services/queries/use-sessions";
+import { useProjectIntegrationStatus } from "@/services/queries/use-projects";
+import { useIntegrationSecrets } from "@/services/queries/use-secrets";
 import { errorToast } from "@/hooks/use-toast";
 
 const models = [
@@ -64,6 +68,16 @@ export function CreateSessionDialog({
   const [open, setOpen] = useState(false);
   const router = useRouter();
   const createSessionMutation = useCreateSession();
+
+  const { data: integrationStatus } = useProjectIntegrationStatus(projectName);
+  const { data: integrationSecrets } = useIntegrationSecrets(projectName);
+
+  const githubConfigured = integrationStatus?.github ?? false;
+  const byKey = integrationSecrets
+    ? Object.fromEntries(integrationSecrets.map((s) => [s.key, s.value]))
+    : {};
+  const atlassianConfigured =
+    !!(byKey.JIRA_URL?.trim() && byKey.JIRA_PROJECT?.trim() && byKey.JIRA_EMAIL?.trim() && byKey.JIRA_API_TOKEN?.trim());
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -152,6 +166,97 @@ export function CreateSessionDialog({
                   </FormItem>
                 )}
               />
+
+              {/* Integration status (same visual style as integrations accordion), alphabetical: Atlassian, GitHub, Google Workspace */}
+              <div className="w-full space-y-2">
+                <FormLabel>Integrations</FormLabel>
+                {/* Atlassian card */}
+                {atlassianConfigured ? (
+                  <div className="flex items-start justify-between gap-3 p-3 border rounded-lg bg-background/50">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <div className="flex-shrink-0">
+                          <CheckCircle2 className="h-4 w-4 text-green-600" />
+                        </div>
+                        <h4 className="font-medium text-sm">Atlassian</h4>
+                        <Badge variant="secondary" className="text-xs font-normal">
+                          read only
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        MCP access to Jira and Atlassian issues and projects.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-start gap-3 p-3 border rounded-lg bg-background/50">
+                    <div className="flex-shrink-0">
+                      <AlertTriangle className="h-4 w-4 text-amber-500" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-medium text-sm">Atlassian</h4>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Configure{" "}
+                        <Link
+                          href={`/projects/${encodeURIComponent(projectName)}?section=settings`}
+                          className="text-primary hover:underline"
+                        >
+                          workspace settings
+                        </Link>{" "}
+                        to access Atlassian MCP in this session.
+                      </p>
+                    </div>
+                  </div>
+                )}
+                {/* GitHub card */}
+                {githubConfigured ? (
+                  <div className="flex items-start justify-between gap-3 p-3 border rounded-lg bg-background/50">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <div className="flex-shrink-0">
+                          <CheckCircle2 className="h-4 w-4 text-green-600" />
+                        </div>
+                        <h4 className="font-medium text-sm">GitHub</h4>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        MCP access to GitHub repositories.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-start gap-3 p-3 border rounded-lg bg-background/50">
+                    <div className="flex-shrink-0">
+                      <AlertTriangle className="h-4 w-4 text-amber-500" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-medium text-sm">GitHub</h4>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Configure{" "}
+                        <Link href="/integrations" className="text-primary hover:underline">
+                          Integrations
+                        </Link>{" "}
+                        to access GitHub MCP in this session.
+                      </p>
+                    </div>
+                  </div>
+                )}
+                {/* Google Workspace card */}
+                <div className="flex items-start gap-3 p-3 border rounded-lg bg-background/50">
+                  <div className="flex-shrink-0">
+                    <AlertTriangle className="h-4 w-4 text-amber-500" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-medium text-sm">Google Workspace</h4>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Configure{" "}
+                      <Link href="/integrations" className="text-primary hover:underline">
+                        Integrations
+                      </Link>{" "}
+                      to access Google Workspace MCP in this session.
+                    </p>
+                  </div>
+                </div>
+              </div>
 
               <DialogFooter>
                 <Button
