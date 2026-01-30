@@ -309,7 +309,7 @@ export function McpIntegrationsAccordion({
     | { type: 'github'; displayName: string }
     | { type: 'server'; displayName: string; server: McpServer }
   const globalItems: GlobalItem[] = [
-    { type: 'github', displayName: 'GitHub' },
+    { type: 'github' as const, displayName: 'GitHub' },
     ...globalServers.map((server) => ({ type: 'server' as const, displayName: getDisplayName(server), server })),
     ...otherServers.map((server) => ({ type: 'server' as const, displayName: getDisplayName(server), server })),
   ].sort((a, b) => a.displayName.localeCompare(b.displayName))
