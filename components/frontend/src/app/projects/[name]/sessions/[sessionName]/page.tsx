@@ -1290,19 +1290,47 @@ export default function ProjectSessionDetailPage({
   // LEGACY: Old handleInterrupt removed - now using aguiInterrupt from useAGUIStream
   // which calls the proper AG-UI interrupt endpoint that signals Claude SDK
 
-  const handleEndSession = () => {
-    // Use stop API to end the session
-    stopMutation.mutate(
-      { projectName, sessionName, data: { reason: "end_session" } },
-      {
-        onSuccess: () => successToast("Session ended successfully"),
-        onError: (err) =>
-          errorToast(
-            err instanceof Error ? err.message : "Failed to end session",
-          ),
-      },
-    );
-  };
+                      <FeedbackProvider
+                        projectName={projectName}
+                        sessionName={sessionName}
+                        username={currentUser?.username || currentUser?.displayName || "anonymous"}
+                        initialPrompt={session?.spec?.initialPrompt}
+                        activeWorkflow={workflowManagement.activeWorkflow || undefined}
+                        messages={streamMessages}
+                        traceId={langfuseTraceId || undefined}
+                        messageFeedback={aguiState.messageFeedback}
+                      >
+                        <MessagesTab
+                          session={session}
+                          streamMessages={streamMessages}
+                          chatInput={chatInput}
+                          setChatInput={setChatInput}
+                          onSendChat={() => Promise.resolve(sendChat())}
+                          onInterrupt={aguiInterrupt}
+                          onGoToResults={() => {}}
+                          onContinue={handleContinue}
+                          workflowMetadata={workflowMetadata}
+                          onCommandClick={handleCommandClick}
+                          isRunActive={isRunActive}
+                          showWelcomeExperience={!["Completed", "Failed", "Stopped", "Stopping"].includes(session?.status?.phase || "")}
+                          activeWorkflow={workflowManagement.activeWorkflow}
+                          userHasInteracted={userHasInteracted}
+                          queuedMessages={sessionQueue.messages}
+                          hasRealMessages={hasRealMessages}
+                          welcomeExperienceComponent={
+                            <WelcomeExperience
+                              ootbWorkflows={ootbWorkflows}
+                              onWorkflowSelect={handleWelcomeWorkflowSelect}
+                              onUserInteraction={() => setUserHasInteracted(true)}
+                              userHasInteracted={userHasInteracted}
+                              sessionPhase={session?.status?.phase}
+                              hasRealMessages={hasRealMessages}
+                              onLoadWorkflow={() => setCustomWorkflowDialogOpen(true)}
+                              selectedWorkflow={workflowManagement.selectedWorkflow}
+                            />
+                          }
+                        />
+                      </FeedbackProvider>
 
   // Loading state
   if (isLoading || !projectName || !sessionName) {
@@ -1994,6 +2022,38 @@ export default function ProjectSessionDetailPage({
                     )}
 
                     <div className="flex flex-col flex-1 overflow-hidden">
+<<<<<<< HEAD
+                      <MessagesTab
+                        session={session}
+                        streamMessages={streamMessages}
+                        chatInput={chatInput}
+                        setChatInput={setChatInput}
+                        onSendChat={() => Promise.resolve(sendChat())}
+                        onInterrupt={aguiInterrupt}
+                        onGoToResults={() => {}}
+                        onContinue={handleContinue}
+                        workflowMetadata={workflowMetadata}
+                        onCommandClick={handleCommandClick}
+                        isRunActive={isRunActive}
+                        showWelcomeExperience={true}
+                        activeWorkflow={workflowManagement.activeWorkflow}
+                        userHasInteracted={userHasInteracted}
+                        queuedMessages={sessionQueue.messages}
+                        hasRealMessages={hasRealMessages}
+                        welcomeExperienceComponent={
+                          <WelcomeExperience
+                            ootbWorkflows={ootbWorkflows}
+                            onWorkflowSelect={handleWelcomeWorkflowSelect}
+                            onUserInteraction={() => setUserHasInteracted(true)}
+                            userHasInteracted={userHasInteracted}
+                            sessionPhase={session?.status?.phase}
+                            hasRealMessages={hasRealMessages}
+                            onLoadWorkflow={() => setCustomWorkflowDialogOpen(true)}
+                            selectedWorkflow={workflowManagement.selectedWorkflow}
+                          />
+                        }
+                      />
+=======
                       <FeedbackProvider
                         projectName={projectName}
                         sessionName={sessionName}
@@ -2036,6 +2096,7 @@ export default function ProjectSessionDetailPage({
                           }
                         />
                       </FeedbackProvider>
+>>>>>>> origin/main
                     </div>
                   </CardContent>
                 </Card>
@@ -2107,4 +2168,19 @@ export default function ProjectSessionDetailPage({
       />
     </>
   );
-}
+}  // Duration calculation removed - startTime/completionTime no longer in status
+  const durationMs = undefined;
+
+  const handleEndSession = () => {
+    // Use stop API to end the session
+    stopMutation.mutate(
+      { projectName, sessionName, data: { reason: "end_session" } },
+      {
+        onSuccess: () => successToast("Session ended successfully"),
+        onError: (err) =>
+          errorToast(
+            err instanceof Error ? err.message : "Failed to end session",
+          ),
+      },
+    );
+  };
