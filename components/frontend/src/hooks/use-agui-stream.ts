@@ -142,6 +142,7 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
               id: newState.currentMessage.id || crypto.randomUUID(),
               role: newState.currentMessage.role || AGUIRole.ASSISTANT,
               content: newState.currentMessage.content,
+              timestamp: event.timestamp,
             }
             newState.messages = [...newState.messages, msg]
             onMessage?.(msg)
@@ -214,6 +215,7 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
                 id: messageId,
                 role: newState.currentMessage.role || AGUIRole.ASSISTANT,
                 content: newState.currentMessage.content,
+                timestamp: event.timestamp,
               }
               newState.messages = [...newState.messages, msg]
               onMessage?.(msg)
@@ -415,6 +417,7 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
               toolCallId: toolCallId,
               name: toolCallName,
               toolCalls: [completedToolCall],
+              timestamp: event.timestamp,
             }
             messages.push(toolMessage)
           }
@@ -546,6 +549,7 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
                 thinking: actualRawData.thinking as string,
                 signature: actualRawData.signature as string,
               },
+              timestamp: event.timestamp,
             }
             newState.messages = [...newState.messages, msg]
             onMessage?.(msg)
@@ -562,6 +566,7 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
                 id: messageId,
                 role: AGUIRole.USER,
                 content: actualRawData.content as string,
+                timestamp: event.timestamp,
               }
               newState.messages = [...newState.messages, msg]
               onMessage?.(msg)
@@ -575,6 +580,7 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
               id: (actualRawData.id as string) || crypto.randomUUID(),
               role: actualRawData.role as AGUIMessage['role'],
               content: actualRawData.content as string,
+              timestamp: event.timestamp,
             }
             newState.messages = [...newState.messages, msg]
             onMessage?.(msg)
