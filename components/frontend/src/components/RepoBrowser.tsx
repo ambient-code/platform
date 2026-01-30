@@ -172,7 +172,15 @@ export default function RepoBrowser({
               {loading && nodes.length === 0 ? (
                 <div className="text-sm text-muted-foreground p-2">Loading…</div>
               ) : (
-                <FileTree nodes={nodes} selectedPath={selectedPath} onSelect={onSelect} onToggle={onToggle} />
+                <FileTree
+                  nodes={nodes}
+                  selectedPath={selectedPath}
+                  onSelect={onSelect}
+                  onToggle={onToggle}
+                  repoUrl={repoUrl}
+                  currentBranch={currentRef}
+                  gitlabInstance={process.env.NEXT_PUBLIC_GITLAB_DEFAULT_INSTANCE}
+                />
               )}
             </div>
           </div>
