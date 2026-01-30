@@ -6,7 +6,7 @@
 .PHONY: push-all registry-login setup-hooks remove-hooks check-minikube check-kind check-kubectl
 .PHONY: e2e-test e2e-setup e2e-clean deploy-langfuse-openshift
 .PHONY: setup-minio minio-console minio-logs minio-status
-.PHONY: validate-makefile lint-makefile check-shell makefile-health
+.PHONY: self-validate validate-makefile lint-makefile check-shell makefile-health
 .PHONY: _create-operator-config _auto-port-forward _show-access-info _build-and-load
 
 # Default target
@@ -368,6 +368,113 @@ local-reload-operator: ## Rebuild and reload operator only
 test-all: local-test-quick local-test-dev ## Run all tests (quick + comprehensive)
 
 ##@ Quality Assurance
+
+self-validate: ## Run complete Makefile validation (same checks as CI)
+	@echo "$(COLOR_BOLD)🔍 Running Makefile Self-Validation$(COLOR_RESET)"
+	@echo ""
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 1/8: Validating Makefile syntax..."
+	@$(MAKE) --no-print-directory lint-makefile
+	@echo ""
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 2/8: Checking shell scripts..."
+	@$(MAKE) --no-print-directory check-shell
+	@echo ""
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 3/8: Verifying required targets exist..."
+	@required_targets=( \
+		"help" \
+		"local-up" \
+		"local-down" \
+		"local-status" \
+		"local-test-quick" \
+		"self-validate" \
+		"validate-makefile" \
+		"lint-makefile" \
+		"check-shell" \
+		"makefile-health" \
+		"build-all" \
+		"deploy" \
+		"clean" \
+	); \
+	missing_targets=(); \
+	for target in "$${required_targets[@]}"; do \
+		if ! grep -q "^$$target:" Makefile; then \
+			missing_targets+=("$$target"); \
+		fi; \
+	done; \
+	if [ $${#missing_targets[@]} -gt 0 ]; then \
+		echo "$(COLOR_RED)✗$(COLOR_RESET) Missing required targets:"; \
+		printf '  - %s\n' "$${missing_targets[@]}"; \
+		exit 1; \
+	else \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) All required targets present"; \
+	fi
+	@echo ""
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 4/8: Verifying .PHONY declarations..."
+	@targets=$$(grep -E '^[a-zA-Z][a-zA-Z0-9_-]+:' Makefile | grep -v '^_' | cut -d: -f1 | sort -u); \
+	phony_targets=$$(grep '^\.PHONY:' Makefile | sed 's/^\.PHONY: //' | tr ' ' '\n' | sort -u); \
+	target_count=$$(echo "$$targets" | wc -l); \
+	phony_count=$$(echo "$$phony_targets" | wc -l); \
+	echo "$(COLOR_GREEN)✓$(COLOR_RESET) Found $$target_count targets, $$phony_count in .PHONY"; \
+	not_phony=(); \
+	while IFS= read -r target; do \
+		if ! echo "$$phony_targets" | grep -q "^$${target}$$"; then \
+			if [[ ! "$$target" =~ ^% ]] && [[ ! "$$target" =~ ^\. ]]; then \
+				not_phony+=("$$target"); \
+			fi; \
+		fi; \
+	done <<< "$$targets"; \
+	if [ $${#not_phony[@]} -gt 0 ]; then \
+		echo "$(COLOR_YELLOW)⚠$(COLOR_RESET)  Targets not declared in .PHONY (may be intentional):"; \
+		printf '  - %s\n' "$${not_phony[@]}" | head -10; \
+	fi
+	@echo ""
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 5/8: Checking for hardcoded values..."
+	@if grep -n "ambient-code" Makefile | grep -v "NAMESPACE ?=" | grep -v "^[0-9]*:#" | grep -v "@echo" | grep -q .; then \
+		echo "$(COLOR_YELLOW)⚠$(COLOR_RESET)  Found hardcoded 'ambient-code' references:"; \
+		grep -n "ambient-code" Makefile | grep -v "NAMESPACE ?=" | grep -v "^[0-9]*:#" | grep -v "@echo" | head -5; \
+		echo "   To fix: Replace 'ambient-code' with '\$$(NAMESPACE)'"; \
+	fi; \
+	if grep -nE "docker|podman" Makefile | grep -v "CONTAINER_ENGINE" | grep -v "^[0-9]*:#" | grep -v "@echo" | grep -q .; then \
+		echo "$(COLOR_YELLOW)⚠$(COLOR_RESET)  Found hardcoded docker/podman references:"; \
+		grep -nE "docker|podman" Makefile | grep -v "CONTAINER_ENGINE" | grep -v "^[0-9]*:#" | grep -v "@echo" | head -5; \
+		echo "   To fix: Replace with '\$$(CONTAINER_ENGINE)'"; \
+	fi; \
+	echo "$(COLOR_GREEN)✓$(COLOR_RESET) Hardcoded value check complete"
+	@echo ""
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 6/8: Testing help target output..."
+	@make help > /tmp/help-output.txt 2>&1; \
+	if ! grep -q "Quick Start:" /tmp/help-output.txt; then \
+		echo "$(COLOR_RED)✗$(COLOR_RESET) Help output missing 'Quick Start' section"; \
+		exit 1; \
+	fi; \
+	if ! grep -q "Quality Assurance:" /tmp/help-output.txt; then \
+		echo "$(COLOR_RED)✗$(COLOR_RESET) Help output missing 'Quality Assurance' section"; \
+		exit 1; \
+	fi; \
+	if ! grep -q "Available Targets:" /tmp/help-output.txt; then \
+		echo "$(COLOR_RED)✗$(COLOR_RESET) Help output missing 'Available Targets' section"; \
+		exit 1; \
+	fi; \
+	rm -f /tmp/help-output.txt; \
+	echo "$(COLOR_GREEN)✓$(COLOR_RESET) Help target produces expected output"
+	@echo ""
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 7/8: Verifying target documentation..."
+	@total_targets=$$(grep -E '^[a-zA-Z][a-zA-Z0-9_-]+:' Makefile | grep -v '^_' | wc -l); \
+	documented_targets=$$(grep -E '^[a-zA-Z][a-zA-Z0-9_-]+:.*##' Makefile | wc -l); \
+	if [ "$$total_targets" -gt 0 ]; then \
+		percentage=$$((documented_targets * 100 / total_targets)); \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Documentation coverage: $${percentage}% ($$documented_targets/$$total_targets targets)"; \
+		if [ "$$percentage" -lt 50 ]; then \
+			echo "$(COLOR_YELLOW)⚠$(COLOR_RESET)  Coverage below 50%, consider adding '## comments' to more targets"; \
+		fi; \
+	fi
+	@echo ""
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 8/8: Running comprehensive validation..."
+	@$(MAKE) --no-print-directory validate-makefile
+	@echo ""
+	@echo "$(COLOR_GREEN)✅ All validation checks passed!$(COLOR_RESET)"
+	@echo ""
+	@echo "Your Makefile meets quality standards and is ready to commit."
+
 
 validate-makefile: lint-makefile check-shell ## Validate Makefile quality and syntax
 	@echo "$(COLOR_GREEN)✓ Makefile validation passed$(COLOR_RESET)"
