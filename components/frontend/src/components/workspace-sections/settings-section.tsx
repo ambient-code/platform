@@ -367,7 +367,7 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
             >
               <div className="flex items-center gap-2">
                 {githubExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                <span className="font-semibold">GitHub Integration</span>
+                <span className="font-semibold">GitHub</span>
                 {(gitUserName || gitUserEmail || gitToken) && <span className="text-xs text-muted-foreground">(configured)</span>}
               </div>
             </button>
@@ -405,7 +405,7 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
             )}
           </div>
 
-          {/* Jira Integration Section */}
+          {/* Atlassian Integration Section */}
           <div className="border rounded-lg">
             <button
               type="button"
@@ -414,7 +414,7 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
             >
               <div className="flex items-center gap-2">
                 {jiraExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                <span className="font-semibold">Jira Integration</span>
+                <span className="font-semibold">Atlassian</span>
                 {(jiraUrl || jiraProject || jiraEmail || jiraToken) && <span className="text-xs text-muted-foreground">(configured)</span>}
               </div>
             </button>
@@ -457,7 +457,7 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
             >
               <div className="flex items-center gap-2">
                 {gitlabExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                <span className="font-semibold">GitLab Integration</span>
+                <span className="font-semibold">GitLab</span>
                 {(gitlabToken || gitlabInstanceUrl) && <span className="text-xs text-muted-foreground">(configured)</span>}
               </div>
             </button>
