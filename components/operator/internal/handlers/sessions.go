@@ -889,8 +889,7 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 						Exec: &corev1.ExecAction{
 							Command: []string{"/bin/sh", "-c",
 								"mkdir -p /workspace/.google_workspace_mcp/credentials && " +
-									"cp -f /app/.google_workspace_mcp/credentials/* /workspace/.google_workspace_mcp/credentials/ 2>/dev/null || true && " +
-									"chmod 777 /workspace/.google_workspace_mcp/credentials 2>/dev/null || true"},
+									"cp -f /app/.google_workspace_mcp/credentials/* /workspace/.google_workspace_mcp/credentials/ 2>/dev/null || true"},
 						},
 					},
 				},
