@@ -19,6 +19,7 @@ type WebhookHandler struct {
 	deduplicationCache    *DeduplicationCache
 	installationVerifier  *InstallationVerifier
 	keywordDetector       *KeywordDetector
+	namespaceResolver     *NamespaceResolver
 	sessionCreator        *SessionCreator
 	githubCommenter       *GitHubCommenter
 	logger                *WebhookLogger
@@ -40,7 +41,8 @@ func NewWebhookHandler(
 		deduplicationCache:    NewDeduplicationCache(24 * time.Hour),
 		installationVerifier:  NewInstallationVerifier(k8sClient, namespace),
 		keywordDetector:       NewKeywordDetector(),
-		sessionCreator:        NewSessionCreator(dynamicClient, namespace, gvr, logger),
+		namespaceResolver:     NewNamespaceResolver(dynamicClient),
+		sessionCreator:        NewSessionCreator(k8sClient, dynamicClient, gvr, logger),
 		githubCommenter:       NewGitHubCommenter(tokenManager, logger),
 		logger:                logger,
 	}
@@ -189,8 +191,36 @@ func (wh *WebhookHandler) handleIssueComment(ctx context.Context, c *gin.Context
 
 	wh.logger.LogAuthorizationChecked(deliveryID, sessionCtx.Repository, true, installationID)
 
-	// Create agentic session (FR-014)
-	sessionID, err := wh.sessionCreator.CreateSession(ctx, sessionCtx, deliveryID)
+	// Resolve authorized namespace from ProjectSettings (B1 fix)
+	authorizedNamespace, err := wh.namespaceResolver.GetAuthorizedNamespace(ctx, installationID, sessionCtx.Repository)
+	if err != nil {
+		RecordWebhookRejected("namespace_not_authorized")
+		wh.logger.LogError(deliveryID, "handler", fmt.Sprintf("Namespace authorization failed: %v", err), err)
+
+		// Post error comment explaining the issue
+		if sessionCtx.PRNumber != nil {
+			errorMsg := fmt.Sprintf("❌ **Authorization Failed**\n\nRepository `%s` is not configured in any project's ProjectSettings.\n\n"+
+				"To enable webhook integration:\n"+
+				"1. Add your GitHub App installation to a ProjectSettings CRD\n"+
+				"2. Include this repository in the `spec.githubInstallation.repositories` list\n\n"+
+				"**Installation ID:** %d\n"+
+				"**Delivery ID:** %s",
+				sessionCtx.Repository, installationID, deliveryID)
+			_ = wh.githubCommenter.PostErrorComment(ctx, installationID, sessionCtx.Repository, *sessionCtx.PRNumber, "namespace_not_authorized", errorMsg, deliveryID)
+		}
+
+		RespondUnauthorized(c, "Repository not authorized in any project namespace", deliveryID)
+		return
+	}
+
+	wh.logger.LogDebug(deliveryID, "Namespace authorized", map[string]interface{}{
+		"repository":  sessionCtx.Repository,
+		"namespace":   authorizedNamespace,
+		"installationID": installationID,
+	})
+
+	// Create agentic session in authorized namespace (FR-014, B1 fix)
+	sessionID, err := wh.sessionCreator.CreateSession(ctx, authorizedNamespace, sessionCtx, deliveryID)
 	if err != nil {
 		RecordWebhookFailed(sessionCtx.EventType, "session_creation_failed")
 

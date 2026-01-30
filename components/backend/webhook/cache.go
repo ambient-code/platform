@@ -1,6 +1,7 @@
 package webhook
 
 import (
+	"context"
 	"sync"
 	"time"
 )
@@ -14,20 +15,30 @@ type DeduplicationCache struct {
 	mu      sync.RWMutex
 	entries map[string]time.Time // deliveryID -> expirationTime
 	ttl     time.Duration
+	ctx     context.Context
+	cancel  context.CancelFunc
 }
 
 // NewDeduplicationCache creates a new deduplication cache with the specified TTL
 // For GitHub webhooks, the recommended TTL is 24 hours to handle potential retry windows
 func NewDeduplicationCache(ttl time.Duration) *DeduplicationCache {
+	ctx, cancel := context.WithCancel(context.Background())
 	cache := &DeduplicationCache{
 		entries: make(map[string]time.Time),
 		ttl:     ttl,
+		ctx:     ctx,
+		cancel:  cancel,
 	}
 
-	// Start background cleanup goroutine
+	// Start background cleanup goroutine (C3 fix: with context cancellation)
 	go cache.cleanupExpired()
 
 	return cache
+}
+
+// Shutdown stops the background cleanup goroutine (C3 fix)
+func (c *DeduplicationCache) Shutdown() {
+	c.cancel()
 }
 
 // IsDuplicate checks if a delivery ID has been seen before
@@ -74,15 +85,21 @@ func (c *DeduplicationCache) cleanupExpired() {
 	ticker := time.NewTicker(10 * time.Minute) // Cleanup every 10 minutes
 	defer ticker.Stop()
 
-	for range ticker.C {
-		c.mu.Lock()
-		now := time.Now()
-		for deliveryID, expirationTime := range c.entries {
-			if now.After(expirationTime) {
-				delete(c.entries, deliveryID)
+	for {
+		select {
+		case <-c.ctx.Done():
+			// Context cancelled - stop cleanup goroutine (C3 fix)
+			return
+		case <-ticker.C:
+			c.mu.Lock()
+			now := time.Now()
+			for deliveryID, expirationTime := range c.entries {
+				if now.After(expirationTime) {
+					delete(c.entries, deliveryID)
+				}
 			}
+			c.mu.Unlock()
 		}
-		c.mu.Unlock()
 	}
 }
 

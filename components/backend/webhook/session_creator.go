@@ -9,6 +9,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
 )
 
 const (
@@ -18,17 +19,17 @@ const (
 
 // SessionCreator creates agentic sessions from webhook events (FR-014)
 type SessionCreator struct {
+	k8sClient     kubernetes.Interface
 	dynamicClient dynamic.Interface
-	namespace     string
 	gvr           schema.GroupVersionResource
 	logger        *WebhookLogger
 }
 
 // NewSessionCreator creates a new session creator
-func NewSessionCreator(dynamicClient dynamic.Interface, namespace string, gvr schema.GroupVersionResource, logger *WebhookLogger) *SessionCreator {
+func NewSessionCreator(k8sClient kubernetes.Interface, dynamicClient dynamic.Interface, gvr schema.GroupVersionResource, logger *WebhookLogger) *SessionCreator {
 	return &SessionCreator{
+		k8sClient:     k8sClient,
 		dynamicClient: dynamicClient,
-		namespace:     namespace,
 		gvr:           gvr,
 		logger:        logger,
 	}
@@ -36,8 +37,9 @@ func NewSessionCreator(dynamicClient dynamic.Interface, namespace string, gvr sc
 
 // CreateSession creates an agentic session from webhook context (FR-014)
 // It uses deterministic session naming (FR-024) and creates the session synchronously
+// The namespace parameter specifies where to create the session (must be authorized via ProjectSettings)
 // Returns the session ID if successful, error otherwise
-func (sc *SessionCreator) CreateSession(ctx context.Context, sessionCtx *SessionContext, deliveryID string) (string, error) {
+func (sc *SessionCreator) CreateSession(ctx context.Context, namespace string, sessionCtx *SessionContext, deliveryID string) (string, error) {
 	// Generate deterministic session name (FR-024)
 	sessionName := GenerateSessionName(sessionCtx.Repository, sessionCtx.PRNumber, sessionCtx.IssueNumber, deliveryID)
 
@@ -51,7 +53,7 @@ func (sc *SessionCreator) CreateSession(ctx context.Context, sessionCtx *Session
 			"kind":       "AgenticSession",
 			"metadata": map[string]interface{}{
 				"name":      sessionName,
-				"namespace": sc.namespace,
+				"namespace": namespace,
 				"labels": map[string]interface{}{
 					"source":               "webhook",
 					"github.com/repo":      sessionCtx.Repository,
@@ -66,7 +68,7 @@ func (sc *SessionCreator) CreateSession(ctx context.Context, sessionCtx *Session
 			},
 			"spec": map[string]interface{}{
 				"displayName":   fmt.Sprintf("Webhook: %s", sessionCtx.TriggerReason),
-				"project":       sc.namespace,
+				"project":       namespace,
 				"initialPrompt": initialPrompt,
 				"llmSettings": map[string]interface{}{
 					"model":       "sonnet",
@@ -88,16 +90,36 @@ func (sc *SessionCreator) CreateSession(ctx context.Context, sessionCtx *Session
 
 	// Add PR number label if applicable
 	if sessionCtx.PRNumber != nil {
-		metadata := session.Object["metadata"].(map[string]interface{})
-		labels := metadata["labels"].(map[string]interface{})
-		labels["github.com/pr-number"] = fmt.Sprintf("%d", *sessionCtx.PRNumber)
+		if err := unstructured.SetNestedField(session.Object, fmt.Sprintf("%d", *sessionCtx.PRNumber), "metadata", "labels", "github.com/pr-number"); err != nil {
+			return "", fmt.Errorf("failed to set PR number label: %w", err)
+		}
 	}
 
 	// Add issue number label if applicable
 	if sessionCtx.IssueNumber != nil {
-		metadata := session.Object["metadata"].(map[string]interface{})
-		labels := metadata["labels"].(map[string]interface{})
-		labels["github.com/issue-number"] = fmt.Sprintf("%d", *sessionCtx.IssueNumber)
+		if err := unstructured.SetNestedField(session.Object, fmt.Sprintf("%d", *sessionCtx.IssueNumber), "metadata", "labels", "github.com/issue-number"); err != nil {
+			return "", fmt.Errorf("failed to set issue number label: %w", err)
+		}
+	}
+
+	// Add OwnerReferences to namespace for proper cleanup (C2 fix)
+	ns, err := sc.k8sClient.CoreV1().Namespaces().Get(ctx, namespace, metav1.GetOptions{})
+	if err != nil {
+		sc.logger.LogError(deliveryID, "session_creator", "Failed to get namespace for OwnerReferences", err)
+		// Continue without OwnerReferences - not critical for session creation
+	} else {
+		ownerRefs := []interface{}{
+			map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Namespace",
+				"name":       namespace,
+				"uid":        string(ns.UID),
+			},
+		}
+		if err := unstructured.SetNestedSlice(session.Object, ownerRefs, "metadata", "ownerReferences"); err != nil {
+			sc.logger.LogError(deliveryID, "session_creator", "Failed to set OwnerReferences", err)
+			// Continue without OwnerReferences - not critical for session creation
+		}
 	}
 
 	// Create context with timeout for synchronous creation (FR-014)
@@ -107,10 +129,10 @@ func (sc *SessionCreator) CreateSession(ctx context.Context, sessionCtx *Session
 	// Attempt synchronous creation
 	sc.logger.LogDebug(deliveryID, "Creating agentic session", map[string]interface{}{
 		"session_name": sessionName,
-		"namespace":    sc.namespace,
+		"namespace":    namespace,
 	})
 
-	created, err := sc.dynamicClient.Resource(sc.gvr).Namespace(sc.namespace).Create(createCtx, session, metav1.CreateOptions{})
+	created, err := sc.dynamicClient.Resource(sc.gvr).Namespace(namespace).Create(createCtx, session, metav1.CreateOptions{})
 	if err != nil {
 		sc.logger.LogSessionCreationFailed(deliveryID, sessionCtx.EventType, "kubernetes_api_error", err.Error())
 		return "", fmt.Errorf("failed to create agentic session: %w", err)

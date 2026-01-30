@@ -42,6 +42,20 @@ spec:
               runnerSecretsName:
                 type: string
                 description: "Name of the Kubernetes Secret in this namespace that stores runner configuration key/value pairs"
+              githubInstallation:
+                type: object
+                description: "GitHub App installation configuration for webhook authorization"
+                properties:
+                  installationID:
+                    type: integer
+                    format: int64
+                    description: "GitHub App installation ID for this project"
+                  repositories:
+                    type: array
+                    description: "Authorized GitHub repositories (format: owner/repo)"
+                    items:
+                      type: string
+                      pattern: '^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$'
               repositories:
                 type: array
                 description: "Git repositories configured for this project"

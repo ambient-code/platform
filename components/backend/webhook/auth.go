@@ -32,8 +32,10 @@ type InstallationVerifier struct {
 	k8sClient kubernetes.Interface
 	namespace string
 
-	mu    sync.RWMutex
-	cache map[string]*installationCacheEntry // repository -> cache entry
+	mu     sync.RWMutex
+	cache  map[string]*installationCacheEntry // repository -> cache entry
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 type installationCacheEntry struct {
@@ -43,16 +45,24 @@ type installationCacheEntry struct {
 
 // NewInstallationVerifier creates a new installation verifier with caching
 func NewInstallationVerifier(k8sClient kubernetes.Interface, namespace string) *InstallationVerifier {
+	ctx, cancel := context.WithCancel(context.Background())
 	verifier := &InstallationVerifier{
 		k8sClient: k8sClient,
 		namespace: namespace,
 		cache:     make(map[string]*installationCacheEntry),
+		ctx:       ctx,
+		cancel:    cancel,
 	}
 
-	// Start background cache cleanup
+	// Start background cache cleanup (C3 fix: with context cancellation)
 	go verifier.cleanupExpiredCache()
 
 	return verifier
+}
+
+// Shutdown stops the background cleanup goroutine (C3 fix)
+func (v *InstallationVerifier) Shutdown() {
+	v.cancel()
 }
 
 // VerifyInstallation checks if the GitHub App is installed for the repository
@@ -142,15 +152,21 @@ func (v *InstallationVerifier) cleanupExpiredCache() {
 	ticker := time.NewTicker(15 * time.Minute)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		v.mu.Lock()
-		now := time.Now()
-		for repo, entry := range v.cache {
-			if now.After(entry.expiresAt) {
-				delete(v.cache, repo)
+	for {
+		select {
+		case <-v.ctx.Done():
+			// Context cancelled - stop cleanup goroutine (C3 fix)
+			return
+		case <-ticker.C:
+			v.mu.Lock()
+			now := time.Now()
+			for repo, entry := range v.cache {
+				if now.After(entry.expiresAt) {
+					delete(v.cache, repo)
+				}
 			}
+			v.mu.Unlock()
 		}
-		v.mu.Unlock()
 	}
 }
 
