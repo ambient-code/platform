@@ -249,7 +249,7 @@ export function McpIntegrationsAccordion({
     if (server.authenticated === true) {
       const badge = (
         <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
-          <AlertTriangle className="h-3 w-3 mr-1" />
+          <CheckCircle2 className="h-3 w-3 mr-1" />
           Authenticated
         </Badge>
       )
