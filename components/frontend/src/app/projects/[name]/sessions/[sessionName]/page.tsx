@@ -1630,13 +1630,6 @@ export default function ProjectSessionDetailPage({
                     <McpIntegrationsAccordion
                       projectName={projectName}
                       sessionName={sessionName}
-                      s3Enabled={
-                        session?.status?.conditions?.some(
-                          (c) => c.type === 'S3Available' && c.status === 'True'
-                        ) ?? false
-                      }
-                      onStop={handleStop}
-                      canStop={phase === 'Running' || phase === 'Creating'}
                     />
 
                     {/* File Explorer */}

@@ -153,7 +153,6 @@ export function CreateSessionDialog({
                 )}
               />
 
-           
               <DialogFooter>
                 <Button
                   type="button"
@@ -177,4 +176,3 @@ export function CreateSessionDialog({
     </>
   );
 }
-

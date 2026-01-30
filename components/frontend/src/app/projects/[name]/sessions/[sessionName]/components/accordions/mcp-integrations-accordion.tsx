@@ -1,8 +1,11 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { Plug, CheckCircle2, XCircle, AlertCircle, AlertTriangle } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { GitHubConnectModal } from '../modals/github-connect-modal'
 import {
   AccordionItem,
   AccordionTrigger,
@@ -15,6 +18,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { Skeleton } from '@/components/ui/skeleton'
 import { useMcpStatus } from '@/services/queries/use-mcp'
 import { useProjectIntegrationStatus } from '@/services/queries/use-projects'
 import type { McpServer } from '@/services/api/sessions'
@@ -22,27 +26,36 @@ import type { McpServer } from '@/services/api/sessions'
 type McpIntegrationsAccordionProps = {
   projectName: string
   sessionName: string
-  /** When true (S3 enabled), show stop-then-resume message for unconfigured Atlassian/Google */
-  s3Enabled?: boolean
-  /** Called when user clicks "stop" in the description (stops the session like kebab menu) */
-  onStop?: () => void
-  /** When true, session can be stopped (Running or Creating); "stop" link is clickable */
-  canStop?: boolean
 }
 
 export function McpIntegrationsAccordion({
   projectName,
   sessionName,
-  s3Enabled = false,
-  onStop,
-  canStop = false,
 }: McpIntegrationsAccordionProps) {
+  const [githubConnectModalOpen, setGitHubConnectModalOpen] = useState(false)
+  const [placeholderTimedOut, setPlaceholderTimedOut] = useState(false)
+
   // Fetch real MCP status from runner
-  const { data: mcpStatus } = useMcpStatus(projectName, sessionName)
+  const { data: mcpStatus, isPending: mcpPending } = useMcpStatus(projectName, sessionName)
   const mcpServers = mcpStatus?.servers || []
 
-  const { data: integrationStatus } = useProjectIntegrationStatus(projectName)
+  const { data: integrationStatus, isPending: integrationStatusPending } =
+    useProjectIntegrationStatus(projectName)
   const githubConfigured = integrationStatus?.github ?? false
+
+  // Show skeleton cards until we have MCP servers or 2 min elapsed (backend returns empty when runner not ready)
+  const showPlaceholders =
+    mcpPending || (mcpServers.length === 0 && !placeholderTimedOut)
+
+  useEffect(() => {
+    if (mcpServers.length > 0) {
+      setPlaceholderTimedOut(false)
+      return
+    }
+    if (!mcpStatus) return
+    const t = setTimeout(() => setPlaceholderTimedOut(true), 2 * 60 * 1000)
+    return () => clearTimeout(t)
+  }, [mcpStatus, mcpServers.length])
 
   // This workspace: configured per workspace (e.g. Atlassian via Workspace Settings)
   const workspaceServerNames = new Set(['mcp-atlassian'])
@@ -53,7 +66,25 @@ export function McpIntegrationsAccordion({
     (s) => !workspaceServerNames.has(s.name) && !globalServerNames.has(s.name)
   )
 
-  const renderGitHubCard = () => (
+  const renderCardSkeleton = () => (
+    <div
+      className="flex items-start justify-between gap-3 p-3 border rounded-lg bg-background/50"
+      aria-hidden
+    >
+      <div className="flex-1 min-w-0 space-y-2">
+        <div className="flex items-center gap-2">
+          <Skeleton className="h-4 w-4 rounded-full flex-shrink-0" />
+          <Skeleton className="h-4 w-20" />
+        </div>
+        <Skeleton className="h-3 w-full max-w-[240px]" />
+      </div>
+    </div>
+  )
+
+  const renderGitHubCard = () =>
+    integrationStatusPending ? (
+      renderCardSkeleton()
+    ) : (
     <div
       key="github"
       className="flex items-start justify-between gap-3 p-3 border rounded-lg bg-background/50"
@@ -86,13 +117,18 @@ export function McpIntegrationsAccordion({
       </div>
       <div className="flex-shrink-0">
         {!githubConfigured && (
-          <Link href="/integrations" className="text-xs text-primary hover:underline">
-            Integrations
-          </Link>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-xs"
+            onClick={() => setGitHubConnectModalOpen(true)}
+          >
+            Connect
+          </Button>
         )}
       </div>
     </div>
-  )
+    )
 
   const renderServerCard = (server: McpServer) => (
     <div
@@ -143,35 +179,9 @@ export function McpIntegrationsAccordion({
     if (server.name === 'webfetch') return 'Fetches web content for the session.'
     if (server.name === 'mcp-atlassian') {
       if (server.authenticated === false) {
-        if (s3Enabled && onStop) {
-          return (
-            <>
-              Configure the connection in{' '}
-              <Link
-                href={`/projects/${encodeURIComponent(projectName)}?section=settings`}
-                className="text-primary hover:underline"
-              >
-                workspace settings
-              </Link>
-              , then{' '}
-              {canStop ? (
-                <button
-                  type="button"
-                  onClick={onStop}
-                  className="text-primary hover:underline font-medium bg-transparent border-0 p-0 cursor-pointer text-inherit"
-                >
-                  stop
-                </button>
-              ) : (
-                'stop'
-              )}{' '}
-              this session and resume it.
-            </>
-          )
-        }
         return (
           <>
-            This session was started without Atlassian MCP. Configure the connection in{' '}
+            Session started without Atlassian MCP. Configure{' '}
             <Link
               href={`/projects/${encodeURIComponent(projectName)}?section=settings`}
               className="text-primary hover:underline"
@@ -186,32 +196,9 @@ export function McpIntegrationsAccordion({
     }
     if (server.name === 'google-workspace') {
       if (server.authenticated === false) {
-        if (s3Enabled && onStop) {
-          return (
-            <>
-              Configure the connection in{' '}
-              <Link href="/integrations" className="text-primary hover:underline">
-                Integrations
-              </Link>
-              , then{' '}
-              {canStop ? (
-                <button
-                  type="button"
-                  onClick={onStop}
-                  className="text-primary hover:underline font-medium bg-transparent border-0 p-0 cursor-pointer text-inherit"
-                >
-                  stop
-                </button>
-              ) : (
-                'stop'
-              )}{' '}
-              this session and resume it.
-            </>
-          )
-        }
         return (
           <>
-            This session was started without Google Workspace MCP. Configure the connection in{' '}
+            Session started without Google Workspace MCP. Configure{' '}
             <Link href="/integrations" className="text-primary hover:underline">
               Integrations
             </Link>{' '}
@@ -328,6 +315,7 @@ export function McpIntegrationsAccordion({
   ].sort((a, b) => a.displayName.localeCompare(b.displayName))
 
   return (
+    <>
     <AccordionItem value="mcp-integrations" className="border rounded-lg px-3 bg-card">
       <AccordionTrigger className="text-base font-semibold hover:no-underline py-3">
         <div className="flex items-center gap-2">
@@ -337,26 +325,39 @@ export function McpIntegrationsAccordion({
       </AccordionTrigger>
       <AccordionContent className="px-1 pb-3">
         <div className="space-y-4">
-          {workspaceServers.length > 0 && (
+          {showPlaceholders ? (
             <div className="space-y-2">
               <h5 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                 This workspace
               </h5>
-              <div className="space-y-2">
-                {sortedWorkspaceServers.map(renderServerCard)}
-              </div>
+              <div className="space-y-2">{renderCardSkeleton()}</div>
             </div>
+          ) : (
+            workspaceServers.length > 0 && (
+              <div className="space-y-2">
+                <h5 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  This workspace
+                </h5>
+                <div className="space-y-2">
+                  {sortedWorkspaceServers.map(renderServerCard)}
+                </div>
+              </div>
+            )
           )}
           <div className="space-y-2">
             <h5 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
               Global
             </h5>
             <div className="space-y-2">
-              {globalItems.map((item) =>
-                item.type === 'github' ? (
-                  <div key="github">{renderGitHubCard()}</div>
-                ) : (
-                  renderServerCard(item.server)
+              {showPlaceholders ? (
+                <div key="global-skeleton">{renderCardSkeleton()}</div>
+              ) : (
+                globalItems.map((item) =>
+                  item.type === 'github' ? (
+                    <div key="github">{renderGitHubCard()}</div>
+                  ) : (
+                    renderServerCard(item.server)
+                  )
                 )
               )}
             </div>
@@ -364,5 +365,12 @@ export function McpIntegrationsAccordion({
         </div>
       </AccordionContent>
     </AccordionItem>
+
+    <GitHubConnectModal
+      projectName={projectName}
+      open={githubConnectModalOpen}
+      onOpenChange={setGitHubConnectModalOpen}
+    />
+    </>
   )
 }
