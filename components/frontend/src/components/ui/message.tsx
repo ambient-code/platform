@@ -7,7 +7,7 @@ import remarkGfm from "remark-gfm";
 import type { Components } from "react-markdown";
 import { formatTimestamp } from "@/lib/format-timestamp";
 
-export type MessageRole = "bot" | "user";
+export type MessageRole = "bot" | "user" | "system";
 
 export type MessageProps = {
   role: MessageRole;
@@ -188,8 +188,9 @@ export const Message = React.forwardRef<HTMLDivElement, MessageProps>(
     ref
   ) => {
     const isBot = role === "bot";
-    const avatarBg = isBot ? "bg-blue-600" : "bg-green-600";
-    const avatarText = isBot ? "AI" : "U";
+    const isSystem = role === "system";
+    const avatarBg = isBot ? "bg-blue-600" : isSystem ? "bg-gray-500" : "bg-green-600";
+    const avatarText = isBot ? "AI" : isSystem ? "SYS" : "U";
     const formattedTime = formatTimestamp(timestamp);
     const isActivelyStreaming = streaming && isBot;
 
@@ -210,25 +211,25 @@ export const Message = React.forwardRef<HTMLDivElement, MessageProps>(
     )
 
     return (
-      <div ref={ref} className={cn("mb-4", isBot && "mt-2", className)} {...props}>
-        <div className={cn("flex space-x-3", isBot ? "items-start" : "items-center justify-end")}>
+      <div ref={ref} className={cn("mb-4", (isBot || isSystem) && "mt-2", className)} {...props}>
+        <div className={cn("flex space-x-3", (isBot || isSystem) ? "items-start" : "items-center justify-end")}>
           {/* Avatar */}
-         {isBot ? avatar : null}
+         {(isBot || isSystem) ? avatar : null}
 
           {/* Message Content */}
-          <div className={cn("flex-1 min-w-0", !isBot && "max-w-[70%]")}>
+          <div className={cn("flex-1 min-w-0", (!isBot && !isSystem) && "max-w-[70%]")}>
             {/* Timestamp */}
             {formattedTime && (
-              <div className={cn("text-[10px] text-muted-foreground/60 mb-1", !isBot && "text-right")}>
+              <div className={cn("text-[10px] text-muted-foreground/60 mb-1", (!isBot && !isSystem) && "text-right")}>
                 {formattedTime}
               </div>
             )}
             <div className={cn(
               borderless ? "p-0" : "rounded-lg",
-              !borderless && (isBot ? "bg-card" : "bg-border/30")
+              !borderless && ((isBot || isSystem) ? isSystem ? "bg-muted/50" : "bg-card" : "bg-border/30")
             )}>
               {/* Content */}
-              <div className={cn("text-sm text-foreground font-mono", !isBot && "py-2 px-4")}>
+              <div className={cn("text-sm font-mono", isSystem ? "text-muted-foreground" : "text-foreground", (!isBot && !isSystem) && "py-2 px-4")}>
                 {isLoading ? (
                   <div>
                     <div className="text-sm text-muted-foreground mb-2">{content}</div>
@@ -262,7 +263,7 @@ export const Message = React.forwardRef<HTMLDivElement, MessageProps>(
             </div>
           </div>
 
-          {isBot ? null : avatar}
+          {(isBot || isSystem) ? null : avatar}
         </div>
       </div>
     );

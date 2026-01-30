@@ -64,37 +64,30 @@ export const StreamMessage: React.FC<StreamMessageProps> = ({ message, onGoToRes
     case "user_message":
     case "agent_message": {
       const isStreaming = 'streaming' in message && message.streaming;
-      const isAgent = m.type === "agent_message";
-      
-      // Get content text for feedback context
-      const getContentText = () => {
-        if (typeof m.content === "string") return m.content;
-        if ("text" in m.content) return m.content.text;
-        if ("thinking" in m.content) return m.content.thinking;
-        return "";
-      };
-      
-      // Feedback buttons for agent text messages (not tool use/result, not streaming)
-      const feedbackElement = isAgent && !isStreaming ? (
-        <FeedbackButtons 
-          messageId={m.id}  // Pass message ID for feedback association
-          messageContent={getContentText()} 
-          messageTimestamp={m.timestamp}
-        />
-      ) : undefined;
-      
+
+      // Check for AG-UI role field
+      const role = 'role' in m ? m.role : undefined;
+
+      // Determine display role based on AG-UI role
+      let displayRole: "user" | "bot" | "system" = "user";
+      let displayName = "You";
+
+      if (role === "assistant" || (m.type === "agent_message" && !role)) {
+        displayRole = "bot";
+        displayName = "Claude AI";
+      } else if (role === "developer") {
+        displayRole = "system";
+        displayName = "Platform";
+      } else if (role === "system") {
+        displayRole = "system";
+        displayName = "System";
+      } else if (role === "user" || m.type === "user_message") {
+        displayRole = "user";
+        displayName = "You";
+      }
+
       if (typeof m.content === "string") {
-        return (
-          <Message 
-            role={isAgent ? "bot" : "user"} 
-            content={m.content} 
-            name="Claude AI" 
-            borderless={plainCard} 
-            timestamp={m.timestamp} 
-            streaming={isStreaming}
-            feedbackButtons={feedbackElement}
-          />
-        );
+        return <Message role={displayRole} content={m.content} name={displayName} borderless={plainCard} timestamp={m.timestamp} streaming={isStreaming}/>;
       }
       switch (m.content.type) {
         case "thinking_block":
@@ -102,9 +95,9 @@ export const StreamMessage: React.FC<StreamMessageProps> = ({ message, onGoToRes
         case "text_block":
           return (
             <Message 
-              role={isAgent ? "bot" : "user"} 
+              role={displayRole} 
               content={m.content.text} 
-              name="Claude AI" 
+              name={displayName} 
               borderless={plainCard} 
               timestamp={m.timestamp} 
               streaming={isStreaming}
