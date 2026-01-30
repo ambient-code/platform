@@ -505,8 +505,10 @@ class ClaudeCodeAdapter:
                 artifacts_path="artifacts",
                 ambient_config=ambient_config,
             )
-            # Use "claude_code" preset - custom workspace prompt will be added via context
-            system_prompt_config = "claude_code"
+            system_prompt_config = [
+                "claude_code",
+                {"type": "text", "text": workspace_prompt}
+            ]
 
             # Configure SDK options
             options = ClaudeAgentOptions(
