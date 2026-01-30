@@ -99,6 +99,8 @@ func (v *InstallationVerifier) VerifyInstallation(ctx context.Context, repositor
 
 // fetchInstallationFromConfigMap retrieves installation ID from the ConfigMap
 // This follows the existing pattern from handlers/github_auth.go
+// NOTE: This is kept for backward compatibility but namespace authorization
+// via ProjectSettings (namespace_resolver.go) is the primary authorization mechanism
 func (v *InstallationVerifier) fetchInstallationFromConfigMap(ctx context.Context, repository string) (int64, error) {
 	cm, err := v.k8sClient.CoreV1().ConfigMaps(v.namespace).Get(ctx, InstallationsConfigMapName, metav1.GetOptions{})
 	if err != nil {
@@ -118,10 +120,13 @@ func (v *InstallationVerifier) fetchInstallationFromConfigMap(ctx context.Contex
 			continue // Skip invalid entries
 		}
 
-		// TODO: This is a simplified check - in production, we should verify the repository
-		// belongs to this installation by calling the GitHub API
-		// For Phase 1A, we'll assume any installation ID is valid
-		// Phase 1B should enhance this with ProjectSettings mapping
+		// NOTE: Repository ownership verification is now handled by ProjectSettings
+		// in the namespace_resolver.go. This ConfigMap check is kept for backward
+		// compatibility but the primary authorization is ProjectSettings-based.
+		// The combination of:
+		// 1. This installation verification (proves app is installed)
+		// 2. Namespace resolution (proves repository is authorized in a project)
+		// provides dual authorization (B1 fix)
 		if installation.InstallationID > 0 {
 			return installation.InstallationID, nil
 		}
