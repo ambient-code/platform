@@ -1627,9 +1627,16 @@ export default function ProjectSessionDetailPage({
                       onNavigateBack={artifactsOps.navigateBack}
                     />
 
-                    <McpIntegrationsAccordion 
+                    <McpIntegrationsAccordion
                       projectName={projectName}
                       sessionName={sessionName}
+                      s3Enabled={
+                        session?.status?.conditions?.some(
+                          (c) => c.type === 'S3Available' && c.status === 'True'
+                        ) ?? false
+                      }
+                      onStop={handleStop}
+                      canStop={phase === 'Running' || phase === 'Creating'}
                     />
 
                     {/* File Explorer */}
