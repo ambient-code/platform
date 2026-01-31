@@ -461,6 +461,23 @@ Langfuse supports OpenTelemetry as of 2025:
    - FORBIDDEN: `BlockOwnerDeletion` (causes permission issues in multi-tenant environments)
    - Pattern: (operator/internal/handlers/sessions.go:125-134, handlers/sessions.go:470-476)
 
+### Exception: Public API Gateway Service
+
+The `components/public-api/` service is a **stateless HTTP gateway** that does NOT follow the standard backend patterns above. This is intentional:
+
+- **No K8s Clients**: The public-api does NOT use `GetK8sClientsForRequest()` or access Kubernetes directly
+- **No RBAC Permissions**: The ServiceAccount has NO RoleBindings - it cannot access any K8s resources
+- **Token Forwarding Only**: All requests are proxied to the backend with the user's token in the `Authorization` header
+- **Backend Validates**: All K8s operations and RBAC enforcement happen in the backend service
+
+**Why different?** The public-api is a thin shim layer that:
+1. Extracts and validates tokens
+2. Extracts project context (from header or ServiceAccount token)
+3. Validates input parameters (prevents injection attacks)
+4. Forwards requests with proper authorization headers
+
+This separation of concerns improves security by minimizing the attack surface of the externally-exposed service.
+
 ### Package Organization
 
 **Backend Structure** (`components/backend/`):

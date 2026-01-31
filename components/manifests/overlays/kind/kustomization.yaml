@@ -38,6 +38,10 @@ patches:
   target:
     kind: Service
     name: frontend-service
+- path: public-api-service-nodeport.yaml
+  target:
+    kind: Service
+    name: public-api-service
 
 # JSON patches to set imagePullPolicy for all deployments
 patchesJson6902:
@@ -59,6 +63,12 @@ patchesJson6902:
     kind: Deployment
     name: agentic-operator
   path: image-pull-policy-patch.yaml
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: public-api
+  path: image-pull-policy-patch.yaml
 
 # Kind overlay: Use Quay.io production images by default
 # For local development with local images, use overlays/kind-local/ instead
@@ -68,5 +78,7 @@ images:
 - name: quay.io/ambient_code/vteam_frontend
   newTag: latest
 - name: quay.io/ambient_code/vteam_operator
+  newTag: latest
+- name: quay.io/ambient_code/vteam_public_api
   newTag: latest
 
