@@ -4,8 +4,6 @@ import { useState, useEffect } from 'react'
 import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { Plug, CheckCircle2, XCircle, AlertCircle, AlertTriangle } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { GitHubConnectModal } from '../modals/github-connect-modal'
 import {
   AccordionItem,
   AccordionTrigger,
@@ -32,7 +30,6 @@ export function McpIntegrationsAccordion({
   projectName,
   sessionName,
 }: McpIntegrationsAccordionProps) {
-  const [githubConnectModalOpen, setGitHubConnectModalOpen] = useState(false)
   const [placeholderTimedOut, setPlaceholderTimedOut] = useState(false)
 
   // Fetch real MCP status from runner
@@ -112,20 +109,18 @@ export function McpIntegrationsAccordion({
           <h4 className="font-medium text-sm">GitHub</h4>
         </div>
         <p className="text-xs text-muted-foreground mt-0.5">
-          MCP access to GitHub repositories.
+          {githubConfigured ? (
+            'MCP access to GitHub repositories.'
+          ) : (
+            <>
+              Session started without GitHub MCP. Configure{' '}
+              <Link href="/integrations" className="text-primary hover:underline">
+                Integrations
+              </Link>{' '}
+              and start a new session.
+            </>
+          )}
         </p>
-      </div>
-      <div className="flex-shrink-0">
-        {!githubConfigured && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-xs"
-            onClick={() => setGitHubConnectModalOpen(true)}
-          >
-            Connect
-          </Button>
-        )}
       </div>
     </div>
     )
@@ -365,12 +360,6 @@ export function McpIntegrationsAccordion({
         </div>
       </AccordionContent>
     </AccordionItem>
-
-    <GitHubConnectModal
-      projectName={projectName}
-      open={githubConnectModalOpen}
-      onOpenChange={setGitHubConnectModalOpen}
-    />
     </>
   )
 }
