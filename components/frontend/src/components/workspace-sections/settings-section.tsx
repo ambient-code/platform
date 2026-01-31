@@ -405,7 +405,7 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
             )}
           </div>
 
-          {/* Atlassian Integration Section */}
+          {/* Jira Integration Section */}
           <div className="border rounded-lg">
             <button
               type="button"
@@ -414,7 +414,7 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
             >
               <div className="flex items-center gap-2">
                 {jiraExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                <span className="font-semibold">Atlassian</span>
+                <span className="font-semibold">Jira</span>
                 {(jiraUrl || jiraProject || jiraEmail || jiraToken) && <span className="text-xs text-muted-foreground">(configured)</span>}
               </div>
             </button>

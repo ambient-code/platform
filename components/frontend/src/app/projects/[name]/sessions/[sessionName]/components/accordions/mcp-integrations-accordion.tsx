@@ -57,7 +57,7 @@ export function McpIntegrationsAccordion({
     return () => clearTimeout(t)
   }, [mcpStatus, mcpServers.length])
 
-  // This workspace: configured per workspace (e.g. Atlassian via Workspace Settings)
+  // This workspace: configured per workspace (e.g. Jira via Workspace Settings)
   const workspaceServerNames = new Set(['mcp-atlassian'])
   const globalServerNames = new Set(['webfetch', 'google-workspace'])
   const workspaceServers = mcpServers.filter((s) => workspaceServerNames.has(s.name))
@@ -173,7 +173,7 @@ export function McpIntegrationsAccordion({
   )
 
   const getDisplayName = (server: McpServer) =>
-    server.name === 'mcp-atlassian' ? 'Atlassian' : server.displayName
+    server.name === 'mcp-atlassian' ? 'Jira' : server.displayName
 
   const getDescription = (server: McpServer): ReactNode => {
     if (server.name === 'webfetch') return 'Fetches web content for the session.'
@@ -181,7 +181,7 @@ export function McpIntegrationsAccordion({
       if (server.authenticated === false) {
         return (
           <>
-            Session started without Atlassian MCP. Configure{' '}
+            Session started without Jira MCP. Configure{' '}
             <Link
               href={`/projects/${encodeURIComponent(projectName)}?section=settings`}
               className="text-primary hover:underline"
@@ -192,7 +192,7 @@ export function McpIntegrationsAccordion({
           </>
         )
       }
-      return 'MCP access to Jira and Atlassian issues and projects.'
+      return 'MCP access to Jira issues and projects.'
     }
     if (server.name === 'google-workspace') {
       if (server.authenticated === false) {
@@ -238,11 +238,11 @@ export function McpIntegrationsAccordion({
     // Webfetch: no badge
     if (server.name === 'webfetch') return null
 
-    // Atlassian not authenticated: no link (description explains to configure and start new session)
+    // Jira not authenticated: no link (description explains to configure and start new session)
 
     // Google Workspace not authenticated: no link (description explains to configure and start new session)
 
-    // Atlassian connected: no badge
+    // Jira connected: no badge
     if (server.name === 'mcp-atlassian' && server.authenticated === true) return null
 
     // Authenticated: show badge (with optional tooltip)
@@ -268,7 +268,7 @@ export function McpIntegrationsAccordion({
       return badge
     }
 
-    // Other servers with auth status but not authenticated: no badge (only Atlassian/Google get links above)
+    // Other servers with auth status but not authenticated: no badge (only Jira/Google get links above)
     if (server.authenticated === false) return null
 
     // Fall back to status-based badges (for servers without auth info; webfetch already returns null)

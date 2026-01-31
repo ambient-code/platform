@@ -167,10 +167,10 @@ export function CreateSessionDialog({
                 )}
               />
 
-              {/* Integration status (same visual style as integrations accordion), alphabetical: Atlassian, GitHub, Google Workspace */}
+              {/* Integration status (same visual style as integrations accordion), alphabetical: Jira, GitHub, Google Workspace */}
               <div className="w-full space-y-2">
                 <FormLabel>Integrations</FormLabel>
-                {/* Atlassian card */}
+                {/* Jira card */}
                 {atlassianConfigured ? (
                   <div className="flex items-start justify-between gap-3 p-3 border rounded-lg bg-background/50">
                     <div className="flex-1 min-w-0">
@@ -178,13 +178,13 @@ export function CreateSessionDialog({
                         <div className="flex-shrink-0">
                           <CheckCircle2 className="h-4 w-4 text-green-600" />
                         </div>
-                        <h4 className="font-medium text-sm">Atlassian</h4>
+                        <h4 className="font-medium text-sm">Jira</h4>
                         <Badge variant="secondary" className="text-xs font-normal">
                           read only
                         </Badge>
                       </div>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        MCP access to Jira and Atlassian issues and projects.
+                        MCP access to Jira issues and projects.
                       </p>
                     </div>
                   </div>
@@ -194,7 +194,7 @@ export function CreateSessionDialog({
                       <AlertTriangle className="h-4 w-4 text-amber-500" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h4 className="font-medium text-sm">Atlassian</h4>
+                      <h4 className="font-medium text-sm">Jira</h4>
                       <p className="text-xs text-muted-foreground mt-0.5">
                         Configure{" "}
                         <Link
@@ -203,7 +203,7 @@ export function CreateSessionDialog({
                         >
                           workspace settings
                         </Link>{" "}
-                        to access Atlassian MCP in this session.
+                        to access Jira MCP in this session.
                       </p>
                     </div>
                   </div>
