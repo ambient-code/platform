@@ -24,6 +24,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -46,6 +47,7 @@ const models = [
 ];
 
 const formSchema = z.object({
+  displayName: z.string().max(50).optional(),
   model: z.string().min(1, "Please select a model"),
   temperature: z.number().min(0).max(2),
   maxTokens: z.number().min(100).max(8000),
@@ -82,6 +84,7 @@ export function CreateSessionDialog({
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
+      displayName: "",
       model: "claude-sonnet-4-5",
       temperature: 0.7,
       maxTokens: 4000,
@@ -101,6 +104,10 @@ export function CreateSessionDialog({
       },
       timeout: values.timeout,
     };
+    const trimmedName = values.displayName?.trim();
+    if (trimmedName) {
+      request.displayName = trimmedName;
+    }
 
     createSessionMutation.mutate(
       { projectName, data: request },
@@ -141,6 +148,29 @@ export function CreateSessionDialog({
 
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              {/* Session name (optional; same as Edit name in kebab menu) */}
+              <FormField
+                control={form.control}
+                name="displayName"
+                render={({ field }) => (
+                  <FormItem className="w-full">
+                    <FormLabel>Session name</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        placeholder="Enter a display name..."
+                        maxLength={50}
+                        disabled={createSessionMutation.isPending}
+                      />
+                    </FormControl>
+                    <p className="text-xs text-muted-foreground">
+                      {(field.value ?? "").length}/50 characters. Optional; you can rename later from the session menu.
+                    </p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
               {/* Model Selection */}
               <FormField
                 control={form.control}
