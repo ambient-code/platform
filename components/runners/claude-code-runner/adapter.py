@@ -324,6 +324,9 @@ class ClaudeCodeAdapter:
             f"_run_claude_agent_sdk called with prompt length={len(prompt)}, will create fresh client"
         )
         try:
+            # Refresh Google credentials before each run (picks up newly authenticated creds)
+            await self.refresh_google_credentials()
+
             # Check for authentication method
             logger.info("Checking authentication configuration...")
             api_key = self.context.get_env("ANTHROPIC_API_KEY", "")
@@ -451,6 +454,52 @@ class ClaudeCodeAdapter:
             # Load MCP server configuration (webfetch is included in static .mcp.json)
             mcp_servers = self._load_mcp_config(cwd_path) or {}
 
+            # Pre-flight check: Validate MCP server authentication status
+            # Import here to avoid circular dependency
+            from main import _check_mcp_authentication
+
+            mcp_auth_warnings = []
+            if mcp_servers:
+                for server_name in mcp_servers.keys():
+                    is_auth, msg = _check_mcp_authentication(server_name)
+
+                    if is_auth is False:
+                        # Authentication definitely failed
+                        mcp_auth_warnings.append(f"⚠️  {server_name}: {msg}")
+                    elif is_auth is None:
+                        # Authentication needs refresh or uncertain
+                        mcp_auth_warnings.append(f"ℹ️  {server_name}: {msg}")
+
+            if mcp_auth_warnings:
+                warning_msg = "**MCP Server Authentication Issues:**\n\n" + "\n".join(mcp_auth_warnings)
+                warning_msg += "\n\nThese servers may not work correctly until re-authenticated."
+                logger.warning(warning_msg)
+
+                # Yield a user-visible message about auth issues
+                # Generate IDs for this warning message
+                warning_message_id = str(uuid.uuid4())
+
+                yield TextMessageStartEvent(
+                    type=EventType.TEXT_MESSAGE_START,
+                    thread_id=thread_id,
+                    run_id=run_id,
+                    message_id=warning_message_id,
+                    role="assistant"
+                )
+                yield TextMessageContentEvent(
+                    type=EventType.TEXT_MESSAGE_CONTENT,
+                    thread_id=thread_id,
+                    run_id=run_id,
+                    message_id=warning_message_id,
+                    delta=warning_msg
+                )
+                yield TextMessageEndEvent(
+                    type=EventType.TEXT_MESSAGE_END,
+                    thread_id=thread_id,
+                    run_id=run_id,
+                    message_id=warning_message_id
+                )
+
             # Create custom session control tools
             # Capture self reference for the restart tool closure
             adapter_ref = self
@@ -505,10 +554,16 @@ class ClaudeCodeAdapter:
                 artifacts_path="artifacts",
                 ambient_config=ambient_config,
             )
-            system_prompt_config = [
-                "claude_code",
-                {"type": "text", "text": workspace_prompt}
-            ]
+            # SystemPromptPreset format: uses claude_code preset with appended workspace context
+            system_prompt_config = {
+                "type": "preset",
+                "preset": "claude_code",
+                "append": workspace_prompt,
+            }
+
+            # Capture stderr from the SDK to diagnose MCP server failures
+            def sdk_stderr_handler(line: str):
+                logger.warning(f"[SDK stderr] {line.rstrip()}")
 
             # Configure SDK options
             options = ClaudeAgentOptions(
@@ -519,6 +574,7 @@ class ClaudeCodeAdapter:
                 setting_sources=["project"],
                 system_prompt=system_prompt_config,
                 include_partial_messages=True,
+                stderr=sdk_stderr_handler,
             )
 
             if self._skip_resume_on_restart:
@@ -1454,6 +1510,24 @@ class ClaudeCodeAdapter:
             return []
         return []
 
+    def _expand_env_vars(self, value: Any) -> Any:
+        """Recursively expand ${VAR} and ${VAR:-default} patterns in config values."""
+        if isinstance(value, str):
+            # Pattern: ${VAR} or ${VAR:-default}
+            pattern = r'\$\{([^}:]+)(?::-([^}]*))?\}'
+
+            def replace_var(match):
+                var_name = match.group(1)
+                default_val = match.group(2) if match.group(2) is not None else ""
+                return os.environ.get(var_name, default_val)
+
+            return re.sub(pattern, replace_var, value)
+        elif isinstance(value, dict):
+            return {k: self._expand_env_vars(v) for k, v in value.items()}
+        elif isinstance(value, list):
+            return [self._expand_env_vars(item) for item in value]
+        return value
+
     def _load_mcp_config(self, cwd_path: str) -> Optional[dict]:
         """Load MCP server configuration from the ambient runner's .mcp.json file."""
         try:
@@ -1467,7 +1541,11 @@ class ClaudeCodeAdapter:
                 logger.info(f"Loading MCP config from: {runner_mcp_file}")
                 with open(runner_mcp_file, "r") as f:
                     config = _json.load(f)
-                    return config.get("mcpServers", {})
+                    mcp_servers = config.get("mcpServers", {})
+                    # Expand environment variables in the config
+                    expanded = self._expand_env_vars(mcp_servers)
+                    logger.info(f"Expanded MCP config env vars for {len(expanded)} servers")
+                    return expanded
             else:
                 logger.info(f"No MCP config file found at: {runner_mcp_file}")
                 return None
@@ -1584,7 +1662,11 @@ class ClaudeCodeAdapter:
         This method checks if credentials.json exists and has content.
         Call refresh_google_credentials() periodically to pick up new credentials after OAuth.
         """
-        await self._try_copy_google_credentials()
+        success = await self._try_copy_google_credentials()
+
+        if success:
+            # Extract and set USER_GOOGLE_EMAIL from credentials
+            await self._set_google_user_email()
 
     async def _try_copy_google_credentials(self) -> bool:
         """Attempt to copy Google credentials from mounted secret.
@@ -1642,6 +1724,8 @@ class ClaudeCodeAdapter:
         changes (typically within ~60 seconds), so this will pick up new credentials
         without requiring a pod restart.
 
+        Also updates USER_GOOGLE_EMAIL environment variable if credentials changed.
+
         Returns:
             True if new credentials were found and copied, False otherwise.
         """
@@ -1661,7 +1745,12 @@ class ClaudeCodeAdapter:
                         logging.info(
                             "Detected updated Google OAuth credentials, refreshing..."
                         )
-                        return await self._try_copy_google_credentials()
+                        success = await self._try_copy_google_credentials()
+                        if success:
+                            # Update USER_GOOGLE_EMAIL when credentials refresh
+                            await self._set_google_user_email()
+                            logging.info("Google credentials refreshed successfully")
+                        return success
                 except OSError:
                     pass
             return False
@@ -1671,5 +1760,19 @@ class ClaudeCodeAdapter:
             logging.info(
                 "✓ Google OAuth credentials now available (user completed authentication)"
             )
+            # Set USER_GOOGLE_EMAIL for new credentials
+            await self._set_google_user_email()
             return True
         return False
+
+    async def _set_google_user_email(self):
+        """Ensure USER_GOOGLE_EMAIL is set for the MCP server.
+
+        The operator now sets USER_GOOGLE_EMAIL directly from cluster credentials.
+        This function only logs the current value for debugging.
+        """
+        current_email = os.environ.get("USER_GOOGLE_EMAIL", "")
+        if current_email and current_email != "user@example.com":
+            logging.info(f"USER_GOOGLE_EMAIL already set by operator: {current_email}")
+        else:
+            logging.warning("USER_GOOGLE_EMAIL not set or is placeholder - Google MCP may not work")

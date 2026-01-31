@@ -699,6 +699,12 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 	}
 	log.Printf("Session %s initiated by user: %s (userId: %s)", name, userName, userID)
 
+	// Get user's Google email from cluster-level credentials for MCP server
+	userGoogleEmail := getGoogleUserEmail(userID, appConfig.BackendNamespace)
+	if userGoogleEmail != "" {
+		log.Printf("User %s has Google OAuth email: %s", userID, userGoogleEmail)
+	}
+
 	// Get S3 configuration for this project (from project secret or operator defaults)
 	s3Endpoint, s3Bucket, s3AccessKey, s3SecretKey, err := getS3ConfigForProject(sessionNamespace, appConfig)
 	if err != nil {
@@ -877,6 +883,17 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 					{Name: "workspace", MountPath: "/app/.claude", SubPath: ".claude", ReadOnly: false},
 				},
 
+				// Lifecycle hook to copy Google credentials from read-only secret mount to writable workspace
+				Lifecycle: &corev1.Lifecycle{
+					PostStart: &corev1.LifecycleHandler{
+						Exec: &corev1.ExecAction{
+							Command: []string{"/bin/sh", "-c",
+								"mkdir -p /workspace/.google_workspace_mcp/credentials && " +
+									"cp -f /app/.google_workspace_mcp/credentials/* /workspace/.google_workspace_mcp/credentials/ 2>/dev/null || true"},
+						},
+					},
+				},
+
 				Env: func() []corev1.EnvVar {
 					base := []corev1.EnvVar{
 						{Name: "DEBUG", Value: "true"},
@@ -889,11 +906,14 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 						{Name: "ARTIFACTS_DIR", Value: "artifacts"},
 						// AG-UI server port (must match containerPort and Service)
 						{Name: "AGUI_PORT", Value: "8001"},
-						// Google MCP credentials directory for workspace-mcp server (writable workspace location)
+						// Google MCP credentials directory - uses writable workspace location
+						// Credentials are copied from read-only secret mount by postStart lifecycle hook
 						{Name: "GOOGLE_MCP_CREDENTIALS_DIR", Value: "/workspace/.google_workspace_mcp/credentials"},
 						// Google OAuth client credentials for workspace-mcp
 						{Name: "GOOGLE_OAUTH_CLIENT_ID", Value: os.Getenv("GOOGLE_OAUTH_CLIENT_ID")},
 						{Name: "GOOGLE_OAUTH_CLIENT_SECRET", Value: os.Getenv("GOOGLE_OAUTH_CLIENT_SECRET")},
+						// User's Google email from cluster-level OAuth credentials
+						{Name: "USER_GOOGLE_EMAIL", Value: userGoogleEmail},
 					}
 
 					// For e2e: use minimal MCP config (webfetch only, no credentials needed)
@@ -2485,12 +2505,53 @@ func regenerateRunnerToken(sessionNamespace, sessionName string, session *unstru
 	return nil
 }
 
+// sanitizeSecretKey converts a userID to a valid Kubernetes secret key
+// IMPORTANT: This must match the sanitization in components/backend/handlers/oauth.go
+// Kubernetes secret keys must match: [-._a-zA-Z0-9]+
+// Replaces invalid characters (: / etc.) with hyphens
+func sanitizeSecretKey(userID string) string {
+	sanitized := strings.ReplaceAll(userID, ":", "-")
+	sanitized = strings.ReplaceAll(sanitized, "/", "-")
+	return sanitized
+}
+
+// getGoogleUserEmail retrieves the user's Google email from cluster-level credentials
+// Returns empty string if not found or not authenticated
+func getGoogleUserEmail(userID string, backendNamespace string) string {
+	if userID == "" {
+		return ""
+	}
+
+	const srcSecretName = "google-oauth-credentials"
+	secretKey := sanitizeSecretKey(userID)
+
+	srcSecret, err := config.K8sClient.CoreV1().Secrets(backendNamespace).Get(context.TODO(), srcSecretName, v1.GetOptions{})
+	if err != nil {
+		return ""
+	}
+
+	if srcSecret.Data == nil || len(srcSecret.Data[secretKey]) == 0 {
+		return ""
+	}
+
+	var creds struct {
+		Email string `json:"email"`
+	}
+	if err := json.Unmarshal(srcSecret.Data[secretKey], &creds); err != nil {
+		return ""
+	}
+
+	return creds.Email
+}
+
 // syncGoogleCredentialsToSecret syncs cluster-level Google OAuth credentials to session-specific Secret
-// Reads from Secret "google-oauth-credentials" in backend namespace (keyed by userID)
+// Reads from Secret "google-oauth-credentials" in backend namespace (keyed by sanitized userID)
 // Writes to Secret "{sessionName}-google-oauth" in session namespace for runner to mount
 func syncGoogleCredentialsToSecret(ctx context.Context, sessionNamespace, secretName, userID string, ownerRef v1.OwnerReference, backendNamespace string) error {
 	// Read cluster-level credentials from backend namespace Secret
 	const srcSecretName = "google-oauth-credentials"
+	secretKey := sanitizeSecretKey(userID) // Backend sanitizes userID before storing
+
 	srcSecret, err := config.K8sClient.CoreV1().Secrets(backendNamespace).Get(ctx, srcSecretName, v1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -2500,20 +2561,25 @@ func syncGoogleCredentialsToSecret(ctx context.Context, sessionNamespace, secret
 		return fmt.Errorf("failed to get Google OAuth Secret: %w", err)
 	}
 
-	if srcSecret.Data == nil || len(srcSecret.Data[userID]) == 0 {
-		log.Printf("No Google OAuth credentials for user %s in Secret", userID)
+	if srcSecret.Data == nil || len(srcSecret.Data[secretKey]) == 0 {
+		log.Printf("No Google OAuth credentials for user %s (key: %s) in Secret", userID, secretKey)
 		return nil // User hasn't connected
 	}
 
 	// Parse credentials JSON
 	var creds struct {
+		Email        string   `json:"email"`
 		AccessToken  string   `json:"accessToken"`
 		RefreshToken string   `json:"refreshToken"`
 		Scopes       []string `json:"scopes"`
 		ExpiresAt    string   `json:"expiresAt"`
 	}
-	if err := json.Unmarshal(srcSecret.Data[userID], &creds); err != nil {
+	if err := json.Unmarshal(srcSecret.Data[secretKey], &creds); err != nil {
 		return fmt.Errorf("failed to parse credentials: %w", err)
+	}
+
+	if creds.Email == "" {
+		return fmt.Errorf("credentials missing email field for user %s", userID)
 	}
 
 	// Parse expiry time
@@ -2524,20 +2590,26 @@ func syncGoogleCredentialsToSecret(ctx context.Context, sessionNamespace, secret
 	}
 
 	// Create workspace-mcp compatible credentials JSON
+	// Format: flat structure with token, refresh_token, token_uri, client_id, client_secret, scopes, expiry
+	// File is named {email}.json per workspace-mcp expectations
 	credentialsJSON := map[string]interface{}{
 		"token":         creds.AccessToken,
-		"refresh_token": "",
-		"token_uri":     "",
-		"client_id":     "",
-		"client_secret": "",
+		"refresh_token": creds.RefreshToken,
+		"token_uri":     "https://oauth2.googleapis.com/token",
+		"client_id":     os.Getenv("GOOGLE_OAUTH_CLIENT_ID"),
+		"client_secret": os.Getenv("GOOGLE_OAUTH_CLIENT_SECRET"),
 		"scopes":        creds.Scopes,
-		"expiry":        expiresAt.Format("2006-01-02T15:04:05"), // Timezone-naive for Python
+		"expiry":        expiresAt.Format("2006-01-02T15:04:05"), // Timezone-naive for Google auth library
 	}
 
 	credBytes, err := json.MarshalIndent(credentialsJSON, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal credentials: %w", err)
 	}
+
+	// Use credentials.json as filename (K8s secret keys can't contain @ from email)
+	// workspace-mcp will load this file and use USER_GOOGLE_EMAIL env var to identify user
+	credentialsFilename := "credentials.json"
 
 	// Create or update Secret in session namespace
 	secret := &corev1.Secret{
@@ -2549,13 +2621,13 @@ func syncGoogleCredentialsToSecret(ctx context.Context, sessionNamespace, secret
 				"ambient-code.io/session":    ownerRef.Name,
 				"ambient-code.io/provider":   "google",
 				"ambient-code.io/oauth":      "true",
-				"ambient-code.io/oauth-user": userID,
+				"ambient-code.io/oauth-user": secretKey, // Use sanitized key for label (K8s labels don't allow colons)
 			},
 			OwnerReferences: []v1.OwnerReference{ownerRef},
 		},
 		Type: corev1.SecretTypeOpaque,
 		Data: map[string][]byte{
-			"credentials.json": credBytes,
+			credentialsFilename: credBytes,
 		},
 	}
 

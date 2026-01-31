@@ -21,13 +21,14 @@ The Claude Code Runner uses a hybrid system prompt approach that combines:
 
 ### Implementation
 
-In `adapter.py` (lines 508-511), the system prompt is configured as an array:
+In `adapter.py` (lines 557-561), the system prompt uses `SystemPromptPreset` format:
 
 ```python
-system_prompt_config = [
-    "claude_code",
-    {"type": "text", "text": workspace_prompt}
-]
+system_prompt_config = {
+    "type": "preset",
+    "preset": "claude_code",
+    "append": workspace_prompt,
+}
 ```
 
 This configuration ensures that:
@@ -114,6 +115,11 @@ The workspace context prompt is built by `_build_workspace_context_prompt()` (li
 
 - `MCP_CONFIG_FILE` - Path to MCP servers config (default: `/app/claude-runner/.mcp.json`)
 
+### Google Workspace Integration
+
+- `USER_GOOGLE_EMAIL` - User's Google email for authentication (set by operator)
+- `GOOGLE_MCP_CREDENTIALS_DIR` - Path to Google OAuth credentials directory (default: `/workspace/.google_workspace_mcp/credentials`)
+
 ## MCP Servers
 
 The runner supports MCP (Model Context Protocol) servers for extending Claude's capabilities:
@@ -124,6 +130,34 @@ The runner supports MCP (Model Context Protocol) servers for extending Claude's 
 - **session** - Session control tools (restart_session)
 
 MCP servers are configured in `.mcp.json` and loaded at runtime.
+
+### Google Workspace MCP Server
+
+The google-workspace MCP server (workspace-mcp) requires OAuth credentials for Google Drive access:
+
+**Credentials Flow:**
+1. User authenticates via OAuth in the frontend (`/integrations` page)
+2. Backend stores credentials in a cluster-level K8s secret
+3. Operator creates a session-specific secret with the user's credentials
+4. Secret is mounted read-only at `/app/.google_workspace_mcp/credentials/`
+5. A postStart lifecycle hook copies credentials to writable `/workspace/.google_workspace_mcp/credentials/`
+6. The MCP server uses the writable path for token refresh
+
+**Credentials Format** (flat JSON structure):
+```json
+{
+  "token": "<access_token>",
+  "refresh_token": "<refresh_token>",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "client_id": "<oauth_client_id>",
+  "client_secret": "<oauth_client_secret>",
+  "scopes": ["https://www.googleapis.com/auth/drive.readonly"],
+  "expiry": "2026-01-30T12:00:00"
+}
+```
+
+**Why writable credentials directory?**
+The workspace-mcp server refreshes OAuth tokens automatically when they expire. This requires writing updated tokens to the credentials file. K8s secrets are mounted read-only, so the postStart hook copies credentials to a writable location.
 
 ## Development
 
@@ -188,17 +222,31 @@ The runner operates within a workspace at `/workspace/` with the following struc
 
 ```
 /workspace/
-├── .claude/              # Claude SDK state (conversation history)
 ├── repos/                # Cloned repositories
 │   └── {repo-name}/     # Individual repository
 ├── workflows/            # Workflow repositories
 │   └── {workflow-name}/ # Individual workflow
 ├── artifacts/            # Output files created by Claude
 ├── file-uploads/         # User-uploaded files
-└── .google_workspace_mcp/ # Google OAuth credentials
+└── .google_workspace_mcp/ # Google OAuth credentials (writable copy)
     └── credentials/
         └── credentials.json
+
+/app/
+└── .claude/              # Claude SDK state (conversation history)
 ```
+
+### Directory Permissions
+
+The runner container runs as uid=1001 (non-root). The init container (`hydrate.sh`) sets up directory permissions:
+
+- `/workspace/artifacts`, `/workspace/file-uploads`, `/workspace/repos` - **777 permissions**
+  - Required because MCP servers spawn as subprocesses and need write access to their working directory
+  - `chown 1001:0` is attempted first but may fail on SELinux-restricted hosts
+- `/app/.claude` - **777 permissions**
+  - Claude SDK requires write access for conversation state
+- `/workspace/.google_workspace_mcp/credentials/` - **777 permissions**
+  - Created by postStart hook for writable OAuth token storage
 
 ## Security
 
@@ -208,21 +256,17 @@ The runner implements several security measures:
 - **Timeout Protection**: Operations have configurable timeouts
 - **User Context Validation**: User IDs and names are sanitized
 - **Read-only Workflow Directories**: Workflows are read-only, outputs go to artifacts
+- **OAuth Credentials Isolation**: Google credentials are stored in session-specific secrets, copied to writable storage only within the container
 
 See `security_utils.py` for implementation details.
 
 ## Recent Changes
 
-### System Prompt Configuration (2026-01-28)
+### System Prompt Configuration (2026-01-29)
 
-Changed the system prompt configuration to use a hybrid approach:
+Changed the system prompt configuration to use the `SystemPromptPreset` format:
 
-**Before:**
-```python
-system_prompt_config = {"type": "text", "text": workspace_prompt}
-```
-
-**After:**
+**Before (incorrect - caused SDK initialization error):**
 ```python
 system_prompt_config = [
     "claude_code",
@@ -230,16 +274,25 @@ system_prompt_config = [
 ]
 ```
 
+**After (correct SystemPromptPreset format):**
+```python
+system_prompt_config = {
+    "type": "preset",
+    "preset": "claude_code",
+    "append": workspace_prompt,
+}
+```
+
 **Rationale:**
-- Leverages the built-in Claude Code system prompt for standard capabilities
-- Appends workspace-specific context for session-aware operation
-- Maintains separation between standard instructions and custom context
-- Ensures Claude has both general coding capabilities and workspace knowledge
+- `ClaudeAgentOptions.system_prompt` expects `str | SystemPromptPreset | None`
+- The list format was invalid and caused `'list' object has no attribute 'get'` error
+- `SystemPromptPreset` uses `type="preset"`, `preset="claude_code"`, and optional `append`
+- This leverages the built-in Claude Code system prompt with appended workspace context
 
 **Impact:**
+- Fixes SDK initialization failure
 - Claude receives comprehensive instructions from both sources
-- No breaking changes to existing functionality
-- Better alignment with Claude Agent SDK best practices
+- Better alignment with Claude Agent SDK type definitions
 
 **Files Changed:**
-- `components/runners/claude-code-runner/adapter.py` (lines 508-511)
+- `components/runners/claude-code-runner/adapter.py` (lines 557-561)

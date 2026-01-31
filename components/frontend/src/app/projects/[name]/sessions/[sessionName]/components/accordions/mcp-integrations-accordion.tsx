@@ -32,13 +32,17 @@ export function McpIntegrationsAccordion({
   const getStatusIcon = (server: McpServer) => {
     // If we have auth info, use that for the icon
     if (server.authenticated !== undefined) {
-      if (server.authenticated) {
+      if (server.authenticated === true) {
         return <CheckCircle2 className="h-4 w-4 text-green-600" />
+      } else if (server.authenticated === null) {
+        // Null = needs refresh/uncertain state
+        return <AlertCircle className="h-4 w-4 text-amber-500" />
       } else {
+        // False = not authenticated
         return <KeyRound className="h-4 w-4 text-amber-500" />
       }
     }
-    
+
     // Fall back to status-based icons
     switch (server.status) {
       case 'configured':
@@ -55,11 +59,19 @@ export function McpIntegrationsAccordion({
   const getAuthBadge = (server: McpServer) => {
     // If auth info is available, show auth status
     if (server.authenticated !== undefined) {
-      if (server.authenticated) {
+      if (server.authenticated === true) {
         return (
           <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
             <KeyRoundIcon className="h-3 w-3 mr-1" />
             Authenticated
+          </Badge>
+        )
+      } else if (server.authenticated === null) {
+        // Null = needs refresh/uncertain state
+        return (
+          <Badge variant="outline" className="text-xs bg-amber-50 text-amber-700 border-amber-200">
+            <AlertCircle className="h-3 w-3 mr-1" />
+            Needs Refresh
           </Badge>
         )
       } else {

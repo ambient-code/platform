@@ -8,6 +8,8 @@ import json
 import logging
 import os
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 import uvicorn
@@ -466,32 +468,159 @@ async def handle_feedback(event: FeedbackEvent):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-def _check_mcp_authentication(server_name: str) -> tuple[bool | None, str | None]:
+def _read_google_credentials(workspace_path: Path, secret_path: Path) -> Dict[str, Any] | None:
     """
-    Check if credentials are available for known MCP servers.
+    Read Google credentials from workspace or secret mount location.
+
+    Args:
+        workspace_path: Path to writable workspace credentials
+        secret_path: Path to read-only secret mount credentials
+
+    Returns:
+        Credentials dict if found and parseable, None otherwise
+    """
+    import json as _json
+
+    cred_path = workspace_path if workspace_path.exists() else secret_path
+
+    if not cred_path.exists():
+        return None
+
+    try:
+        # Check file has content
+        if cred_path.stat().st_size == 0:
+            return None
+
+        # Load and validate credentials structure
+        with open(cred_path, 'r') as f:
+            return _json.load(f)
+
+    except (_json.JSONDecodeError, OSError) as e:
+        logger.warning(f"Failed to read Google credentials: {e}")
+        return None
+
+
+def _parse_token_expiry(expiry_str: str) -> datetime | None:
+    """
+    Parse token expiry timestamp string to datetime.
+
+    Args:
+        expiry_str: ISO 8601 timestamp string (may include Z suffix or be timezone-naive)
+
+    Returns:
+        Parsed timezone-aware datetime object or None if parsing fails
+    """
+    try:
+        # Handle Z suffix
+        expiry_str = expiry_str.replace('Z', '+00:00')
+        dt = datetime.fromisoformat(expiry_str)
+        # If timezone-naive, assume UTC
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except (ValueError, TypeError) as e:
+        logger.warning(f"Could not parse token expiry '{expiry_str}': {e}")
+        return None
+
+
+def _validate_google_token(user_creds: Dict[str, Any], user_email: str) -> tuple[bool | None, str]:
+    """
+    Validate Google OAuth token structure and expiry.
+
+    Args:
+        user_creds: Credential dict for a specific user
+        user_email: Email address of the user
 
     Returns:
         Tuple of (is_authenticated, auth_message)
-        Returns (None, None) for servers we don't know how to check
+        - True: Valid and unexpired token
+        - False: Invalid or expired without refresh token
+        - None: Needs refresh or uncertain state
+    """
+    from datetime import datetime, timezone
+
+    # Check for required fields and that they're non-empty
+    if not user_creds.get("access_token") or not user_creds.get("refresh_token"):
+        return False, "Google OAuth credentials incomplete - missing or empty tokens"
+
+    # Check token expiry if available
+    if "token_expiry" in user_creds and user_creds["token_expiry"]:
+        expiry_str = user_creds["token_expiry"]
+        expiry = _parse_token_expiry(expiry_str)
+
+        if expiry is None:
+            # Can't parse expiry - treat as uncertain rather than valid
+            return None, f"Google OAuth authenticated as {user_email} (token expiry format invalid)"
+
+        now = datetime.now(timezone.utc)
+
+        # If expired and no refresh token, authentication failed
+        if expiry <= now and not user_creds.get("refresh_token"):
+            return False, "Google OAuth token expired - re-authenticate"
+
+        # If expired but have refresh token, mark as needs refresh
+        if expiry <= now:
+            return None, f"Google OAuth authenticated as {user_email} (token refresh needed)"
+
+    # Valid credentials found
+    return True, f"Google OAuth authenticated as {user_email}"
+
+
+def _check_mcp_authentication(server_name: str) -> tuple[bool | None, str | None]:
+    """
+    Check if credentials are available AND VALID for known MCP servers.
+
+    Args:
+        server_name: Name of the MCP server to check (e.g., 'google-workspace', 'jira')
+
+    Returns:
+        Tuple of (is_authenticated, auth_message) where:
+        - (True, message): Valid authentication with user email in message
+        - (False, error): No authentication or invalid (error describes reason)
+        - (None, message): Authentication uncertain/needs refresh
+        - (None, None): Server type not recognized for auth checking
     """
     from pathlib import Path
 
     # Google Workspace MCP - we know how to check this
     if server_name == "google-workspace":
-        # Check mounted secret location first, then workspace copy
+        # Check workspace location first (writable copy), then mounted secret
+        workspace_path = Path("/workspace/.google_workspace_mcp/credentials/credentials.json")
         secret_path = Path("/app/.google_workspace_mcp/credentials/credentials.json")
-        workspace_path = Path(
-            "/workspace/.google_workspace_mcp/credentials/credentials.json"
-        )
 
-        for cred_path in [workspace_path, secret_path]:
-            if cred_path.exists():
-                try:
-                    if cred_path.stat().st_size > 0:
-                        return True, "Google OAuth credentials available"
-                except OSError:
-                    pass
-        return False, "Google OAuth not configured - authenticate via Integrations page"
+        creds = _read_google_credentials(workspace_path, secret_path)
+
+        if creds is None:
+            return False, "Google OAuth not configured - authenticate via Integrations page"
+
+        try:
+            # workspace-mcp credentials format (flat structure):
+            # {
+            #   "token": "access_token_value",
+            #   "refresh_token": "...",
+            #   "token_uri": "https://oauth2.googleapis.com/token",
+            #   "client_id": "...",
+            #   "client_secret": "...",
+            #   "scopes": [...],
+            #   "expiry": "2026-01-23T12:00:00"
+            # }
+
+            # Get user email from environment (set by operator)
+            user_email = os.environ.get("USER_GOOGLE_EMAIL", "")
+            if not user_email or user_email == "user@example.com":
+                return False, "Google OAuth not configured - USER_GOOGLE_EMAIL not set"
+
+            # Map new flat format to expected field names
+            user_creds = {
+                "access_token": creds.get("token", ""),
+                "refresh_token": creds.get("refresh_token", ""),
+                "token_expiry": creds.get("expiry", ""),
+            }
+
+            return _validate_google_token(user_creds, user_email)
+
+        except KeyError as e:
+            return False, f"Google OAuth credentials corrupted: {str(e)}"
 
     # Jira/Atlassian MCP - we know how to check this
     if server_name in ("mcp-atlassian", "jira"):

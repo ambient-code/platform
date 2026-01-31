@@ -64,11 +64,14 @@ mkdir -p /workspace/artifacts || error_exit "Failed to create artifacts director
 mkdir -p /workspace/file-uploads || error_exit "Failed to create file-uploads directory"
 mkdir -p /workspace/repos || error_exit "Failed to create repos directory"
 
+# Set ownership to runner user (works on standard K8s, may fail on SELinux/SCC)
+chown -R 1001:0 "${CLAUDE_DATA_PATH}" /workspace/artifacts /workspace/file-uploads /workspace/repos 2>/dev/null || true
+
 # Set permissions for .claude (best-effort; may be restricted by SCC)
 # If the SCC assigns an fsGroup, the directory should already be writable.
 chmod -R 777 "${CLAUDE_DATA_PATH}" 2>/dev/null || echo "Warning: failed to chmod ${CLAUDE_DATA_PATH} (continuing)"
 
-# Other directories - artifacts/file-uploads are read-only, repos needs write access for runtime additions
+# Other directories - standard permissions since chown sets ownership to runner user
 chmod 755 /workspace/artifacts /workspace/file-uploads 2>/dev/null || true
 # SECURITY: 777 required for /workspace/repos because:
 # - Init container runs as root but runner container runs as user 1001
@@ -133,9 +136,11 @@ else
     echo "No existing state found, starting fresh session"
 fi
 
-# Set permissions on subdirectories after S3 download (EmptyDir root may not be chmodable)
-echo "Setting permissions on subdirectories..."
-# .claude needs to be writable by user 1001 (runner container) - use 777
+# Set ownership and permissions on subdirectories after S3 download
+echo "Setting ownership and permissions on subdirectories..."
+# Try chown first (works on standard K8s), fall back to 777 if blocked by SELinux/SCC
+chown -R 1001:0 "${CLAUDE_DATA_PATH}" /workspace/artifacts /workspace/file-uploads /workspace/repos 2>/dev/null || true
+# .claude needs 777 for SDK internals
 chmod -R 777 "${CLAUDE_DATA_PATH}" 2>/dev/null || true
 # repos also needs write access for runtime repo additions (clone_repo_at_runtime)
 # See security rationale above for why 777 is used
