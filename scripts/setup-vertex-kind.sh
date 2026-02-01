@@ -146,7 +146,7 @@ kubectl patch configmap operator-config -n "$NAMESPACE" --type merge -p "{
     \"CLAUDE_CODE_USE_VERTEX\": \"1\",
     \"ANTHROPIC_VERTEX_PROJECT_ID\": \"$ANTHROPIC_VERTEX_PROJECT_ID\",
     \"CLOUD_ML_REGION\": \"$CLOUD_ML_REGION\",
-    \"GOOGLE_APPLICATION_CREDENTIALS\": \"/etc/vertex/ambient-code-key.json\"
+    \"GOOGLE_APPLICATION_CREDENTIALS\": \"/app/vertex/ambient-code-key.json\"
   }
 }"
 echo "  Done"
@@ -167,11 +167,20 @@ echo "  - Namespace: $NAMESPACE"
 echo "  - Project:   $ANTHROPIC_VERTEX_PROJECT_ID"
 echo "  - Region:    $CLOUD_ML_REGION"
 echo ""
-echo "Next steps:"
-echo "  1. Verify the operator started correctly:"
-echo "     kubectl logs -l app=agentic-operator -n $NAMESPACE | grep -i vertex"
+
+# Verify Vertex mode is active in operator logs
+echo "Verifying Vertex AI configuration..."
+sleep 3
+if kubectl logs -l app=agentic-operator -n "$NAMESPACE" --tail=100 2>/dev/null | grep -qi "vertex ai mode enabled"; then
+    echo "  ✓ Vertex AI mode is active"
+else
+    echo "  ⚠ Could not verify Vertex mode in logs yet"
+    echo "    Check manually: kubectl logs -l app=agentic-operator -n $NAMESPACE | grep -i vertex"
+fi
 echo ""
-echo "  2. Create a session via the UI at http://localhost:8080"
+
+echo "Next steps:"
+echo "  1. Create a session via the UI at http://localhost:8080"
 echo ""
 echo "To switch back to Anthropic API, update the ConfigMap:"
 echo "  kubectl patch configmap operator-config -n $NAMESPACE --type merge \\"
