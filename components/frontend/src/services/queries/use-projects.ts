@@ -182,5 +182,6 @@ export function useProjectIntegrationStatus(projectName: string) {
     queryFn: () => projectsApi.getProjectIntegrationStatus(projectName),
     enabled: !!projectName,
     staleTime: 60000, // Cache for 1 minute
+    refetchOnMount: 'always', // Ensure fresh status when viewing session/accordion
   });
 }

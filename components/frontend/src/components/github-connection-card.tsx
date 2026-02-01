@@ -6,7 +6,7 @@ import { Card } from '@/components/ui/card'
 import { useGitHubStatus, useDisconnectGitHub } from '@/services/queries'
 import { successToast, errorToast } from '@/hooks/use-toast'
 
-type Props = { 
+type Props = {
   appSlug?: string
   showManageButton?: boolean
 }
