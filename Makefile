@@ -597,8 +597,8 @@ kind-port-forward: check-kubectl ## Port-forward kind services (for remote Podma
 	@echo "$(COLOR_YELLOW)Press Ctrl+C to stop$(COLOR_RESET)"
 	@echo ""
 	@trap 'echo ""; echo "$(COLOR_GREEN)✓$(COLOR_RESET) Port forwarding stopped"; exit 0' INT; \
-	(kubectl port-forward -n ambient-code svc/frontend 8080:3000 >/dev/null 2>&1 &); \
-	(kubectl port-forward -n ambient-code svc/backend-api 8081:8080 >/dev/null 2>&1 &); \
+	(kubectl port-forward -n ambient-code svc/frontend-service 8080:3000 >/dev/null 2>&1 &); \
+	(kubectl port-forward -n ambient-code svc/backend-service 8081:8080 >/dev/null 2>&1 &); \
 	wait
 
 ##@ E2E Testing (Portable)
