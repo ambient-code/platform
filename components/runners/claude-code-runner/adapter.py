@@ -480,29 +480,17 @@ class ClaudeCodeAdapter:
                 warning_msg += "\n\nThese servers may not work correctly until re-authenticated."
                 logger.warning(warning_msg)
 
-                # Yield a user-visible message about auth issues
-                # Generate IDs for this warning message
-                warning_message_id = str(uuid.uuid4())
-
-                yield TextMessageStartEvent(
-                    type=EventType.TEXT_MESSAGE_START,
+                # Send as RAW event (not chat message) so UI can display as banner/notification
+                # Don't send as TextMessage - that shows up in chat history
+                yield RawEvent(
+                    type=EventType.RAW,
                     thread_id=thread_id,
                     run_id=run_id,
-                    message_id=warning_message_id,
-                    role="assistant"
-                )
-                yield TextMessageContentEvent(
-                    type=EventType.TEXT_MESSAGE_CONTENT,
-                    thread_id=thread_id,
-                    run_id=run_id,
-                    message_id=warning_message_id,
-                    delta=warning_msg
-                )
-                yield TextMessageEndEvent(
-                    type=EventType.TEXT_MESSAGE_END,
-                    thread_id=thread_id,
-                    run_id=run_id,
-                    message_id=warning_message_id
+                    event={
+                        "type": "mcp_authentication_warning",
+                        "message": warning_msg,
+                        "servers": [s.split(": ")[1] if ": " in s else s for s in mcp_auth_warnings]
+                    }
                 )
 
             # Create custom session control tools
