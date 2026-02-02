@@ -1406,6 +1406,12 @@ class ClaudeCodeAdapter:
                 _json.dump(creds_data, f, indent=2)
             creds_file.chmod(0o644)
             logger.info("✓ Updated Google credentials file for workspace-mcp")
+            
+            # Set USER_GOOGLE_EMAIL for MCP server (from backend API response)
+            user_email = google_creds.get("email", "")
+            if user_email and user_email != "user@example.com":
+                os.environ["USER_GOOGLE_EMAIL"] = user_email
+                logger.info(f"✓ Set USER_GOOGLE_EMAIL to {user_email} for workspace-mcp")
         
         # Fetch Jira credentials
         jira_creds = await self._fetch_jira_credentials()

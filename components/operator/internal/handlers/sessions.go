@@ -699,11 +699,8 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 	}
 	log.Printf("Session %s initiated by user: %s (userId: %s)", name, userName, userID)
 
-	// Get user's Google email from cluster-level credentials for MCP server
-	userGoogleEmail := getGoogleUserEmail(userID, appConfig.BackendNamespace)
-	if userGoogleEmail != "" {
-		log.Printf("User %s has Google OAuth email: %s", userID, userGoogleEmail)
-	}
+	// NOTE: Google email no longer fetched by operator - runner fetches credentials at runtime
+	// Runner will set USER_GOOGLE_EMAIL from backend API response in _populate_runtime_credentials()
 
 	// Get S3 configuration for this project (from project secret or operator defaults)
 	s3Endpoint, s3Bucket, s3AccessKey, s3SecretKey, err := getS3ConfigForProject(sessionNamespace, appConfig)
@@ -907,13 +904,12 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 						// AG-UI server port (must match containerPort and Service)
 						{Name: "AGUI_PORT", Value: "8001"},
 						// Google MCP credentials directory - uses writable workspace location
-						// Credentials are copied from read-only secret mount by postStart lifecycle hook
-						{Name: "GOOGLE_MCP_CREDENTIALS_DIR", Value: "/workspace/.google_workspace_mcp/credentials"},
-						// Google OAuth client credentials for workspace-mcp
-						{Name: "GOOGLE_OAUTH_CLIENT_ID", Value: os.Getenv("GOOGLE_OAUTH_CLIENT_ID")},
-						{Name: "GOOGLE_OAUTH_CLIENT_SECRET", Value: os.Getenv("GOOGLE_OAUTH_CLIENT_SECRET")},
-						// User's Google email from cluster-level OAuth credentials
-						{Name: "USER_GOOGLE_EMAIL", Value: userGoogleEmail},
+					// Credentials fetched at runtime by runner from backend API
+					{Name: "GOOGLE_MCP_CREDENTIALS_DIR", Value: "/workspace/.google_workspace_mcp/credentials"},
+					// Google OAuth client credentials for workspace-mcp
+					{Name: "GOOGLE_OAUTH_CLIENT_ID", Value: os.Getenv("GOOGLE_OAUTH_CLIENT_ID")},
+					{Name: "GOOGLE_OAUTH_CLIENT_SECRET", Value: os.Getenv("GOOGLE_OAUTH_CLIENT_SECRET")},
+					// NOTE: USER_GOOGLE_EMAIL set by runner at runtime from fetched credentials
 					}
 
 					// For e2e: use minimal MCP config (webfetch only, no credentials needed)
