@@ -82,7 +82,11 @@ func validateGitLabInput(instanceURL, token string) error {
 			return fmt.Errorf("instance URL must have a valid hostname")
 		}
 
-		// Prevent common injection attempts
+		// Prevent common injection attempts - check both userinfo and hostname
+		// url.Parse treats "user@host" as userinfo, so check both
+		if parsedURL.User != nil && parsedURL.User.String() != "" {
+			return fmt.Errorf("instance URL cannot contain user info (@ syntax)")
+		}
 		if strings.Contains(parsedURL.Host, "@") {
 			return fmt.Errorf("instance URL hostname cannot contain '@'")
 		}
