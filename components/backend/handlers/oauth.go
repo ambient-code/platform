@@ -809,14 +809,15 @@ type GoogleOAuthCredentials struct {
 }
 
 // isValidUserID validates userID for use as a Kubernetes Secret data key
-// Keys must be valid DNS subdomain names (RFC 1123) and reasonable length
+// Keys must match regex: [-._a-zA-Z0-9]+
+// Note: userID is sanitized in forwardedIdentityMiddleware to ensure validity
 func isValidUserID(userID string) bool {
 	if userID == "" || len(userID) > 253 {
 		return false
 	}
-	// Reject path traversal and invalid characters for Secret data keys
+	// Check against K8s Secret key regex: [-._a-zA-Z0-9]+
 	for _, ch := range userID {
-		if ch == '/' || ch == '\\' || ch == '\x00' {
+		if !((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '-' || ch == '_' || ch == '.') {
 			return false
 		}
 	}

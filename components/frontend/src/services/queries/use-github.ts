@@ -140,3 +140,44 @@ export function useCreatePullRequest() {
     }) => githubApi.createPullRequest(data, projectName),
   });
 }
+
+/**
+ * Hook to get GitHub PAT status
+ */
+export function useGitHubPATStatus() {
+  return useQuery({
+    queryKey: [...githubKeys.all, 'pat', 'status'],
+    queryFn: githubApi.getGitHubPATStatus,
+    staleTime: 60 * 1000, // 1 minute
+  });
+}
+
+/**
+ * Hook to save GitHub PAT
+ */
+export function useSaveGitHubPAT() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (token: string) => githubApi.saveGitHubPAT(token),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [...githubKeys.all, 'pat', 'status'] });
+      queryClient.invalidateQueries({ queryKey: githubKeys.status() });
+    },
+  });
+}
+
+/**
+ * Hook to delete GitHub PAT
+ */
+export function useDeleteGitHubPAT() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: githubApi.deleteGitHubPAT,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [...githubKeys.all, 'pat', 'status'] });
+      queryClient.invalidateQueries({ queryKey: githubKeys.status() });
+    },
+  });
+}

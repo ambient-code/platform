@@ -1248,87 +1248,15 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 		}
 	}
 
-	// Sync cluster-level Google OAuth credentials to session-specific Secret
-	// This allows the runner to access the user's Google credentials
-	// We copy the credentials from the cluster-level ConfigMap (backend namespace) to a Secret in this namespace
-	googleOAuthSecretName := fmt.Sprintf("%s-google-oauth", name)
+	// NOTE: Google credentials are now fetched at runtime via backend API
+	// No longer mounting credentials.json as volume
+	// This ensures tokens are always fresh and automatically refreshed
+	log.Printf("Session %s will fetch Google credentials at runtime from backend API", name)
 
-	// Try to get user's Google credentials from cluster-level ConfigMap
-	if userID != "" {
-		ownerRef := v1.OwnerReference{
-			APIVersion: currentObj.GetAPIVersion(),
-			Kind:       currentObj.GetKind(),
-			Name:       currentObj.GetName(),
-			UID:        currentObj.GetUID(),
-			Controller: boolPtr(true),
-		}
-
-		err := syncGoogleCredentialsToSecret(context.TODO(), sessionNamespace, googleOAuthSecretName, userID, ownerRef, appConfig.BackendNamespace)
-		if err != nil {
-			log.Printf("Warning: failed to sync Google credentials for user %s to session %s: %v", userID, name, err)
-			// Non-fatal - user may not have connected Google yet, create placeholder
-		}
-	} else {
-		log.Printf("Warning: userID not available for session %s, creating placeholder Google OAuth secret", name)
-	}
-
-	// Ensure secret exists (create placeholder if sync didn't create it)
-	if _, err := config.K8sClient.CoreV1().Secrets(sessionNamespace).Get(context.TODO(), googleOAuthSecretName, v1.GetOptions{}); errors.IsNotFound(err) {
-		placeholderSecret := &corev1.Secret{
-			ObjectMeta: v1.ObjectMeta{
-				Name:      googleOAuthSecretName,
-				Namespace: sessionNamespace,
-				Labels: map[string]string{
-					"app":                      "ambient-code",
-					"ambient-code.io/session":  name,
-					"ambient-code.io/provider": "google",
-					"ambient-code.io/oauth":    "placeholder",
-				},
-				OwnerReferences: []v1.OwnerReference{
-					{
-						APIVersion: currentObj.GetAPIVersion(),
-						Kind:       currentObj.GetKind(),
-						Name:       currentObj.GetName(),
-						UID:        currentObj.GetUID(),
-						Controller: boolPtr(true),
-					},
-				},
-			},
-			Type: corev1.SecretTypeOpaque,
-			Data: map[string][]byte{
-				"credentials.json": []byte(""), // Empty placeholder
-			},
-		}
-		if _, createErr := config.K8sClient.CoreV1().Secrets(sessionNamespace).Create(context.TODO(), placeholderSecret, v1.CreateOptions{}); createErr != nil {
-			log.Printf("Warning: Failed to create placeholder Google OAuth secret %s: %v", googleOAuthSecretName, createErr)
-		} else {
-			log.Printf("Created placeholder Google OAuth secret %s (no cluster credentials for user)", googleOAuthSecretName)
-		}
-	}
-
-	// Always mount Google OAuth secret (with Optional: true so pod starts even if empty)
-	// K8s will sync updates when backend populates credentials after OAuth completion (~60s)
-	pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
-		Name: "google-oauth",
-		VolumeSource: corev1.VolumeSource{
-			Secret: &corev1.SecretVolumeSource{
-				SecretName: googleOAuthSecretName,
-				Optional:   boolPtr(true), // Don't fail if secret is empty or missing
-			},
-		},
-	})
-	// Mount to the ambient-code-runner container
-	for i := range pod.Spec.Containers {
-		if pod.Spec.Containers[i].Name == "ambient-code-runner" {
-			pod.Spec.Containers[i].VolumeMounts = append(pod.Spec.Containers[i].VolumeMounts, corev1.VolumeMount{
-				Name:      "google-oauth",
-				MountPath: "/app/.google_workspace_mcp/credentials",
-				ReadOnly:  true,
-			})
-			log.Printf("Mounted Google OAuth secret to /app/.google_workspace_mcp/credentials in runner container for session %s", name)
-			break
-		}
-	}
+	// NOTE: Credentials are now fetched at runtime via backend API endpoints
+	// No longer injecting Jira, GitLab, or GitHub credentials as env vars
+	// This ensures fresh tokens for long-running sessions and automatic refresh
+	log.Printf("Session %s will fetch credentials at runtime from backend API", name)
 
 	// Do not mount runner Secret volume; runner fetches tokens on demand
 
@@ -2505,148 +2433,8 @@ func regenerateRunnerToken(sessionNamespace, sessionName string, session *unstru
 	return nil
 }
 
-// sanitizeSecretKey converts a userID to a valid Kubernetes secret key
-// IMPORTANT: This must match the sanitization in components/backend/handlers/oauth.go
-// Kubernetes secret keys must match: [-._a-zA-Z0-9]+
-// Replaces invalid characters (: / etc.) with hyphens
-func sanitizeSecretKey(userID string) string {
-	sanitized := strings.ReplaceAll(userID, ":", "-")
-	sanitized = strings.ReplaceAll(sanitized, "/", "-")
-	return sanitized
-}
-
-// getGoogleUserEmail retrieves the user's Google email from cluster-level credentials
-// Returns empty string if not found or not authenticated
-func getGoogleUserEmail(userID string, backendNamespace string) string {
-	if userID == "" {
-		return ""
-	}
-
-	const srcSecretName = "google-oauth-credentials"
-	secretKey := sanitizeSecretKey(userID)
-
-	srcSecret, err := config.K8sClient.CoreV1().Secrets(backendNamespace).Get(context.TODO(), srcSecretName, v1.GetOptions{})
-	if err != nil {
-		return ""
-	}
-
-	if srcSecret.Data == nil || len(srcSecret.Data[secretKey]) == 0 {
-		return ""
-	}
-
-	var creds struct {
-		Email string `json:"email"`
-	}
-	if err := json.Unmarshal(srcSecret.Data[secretKey], &creds); err != nil {
-		return ""
-	}
-
-	return creds.Email
-}
-
-// syncGoogleCredentialsToSecret syncs cluster-level Google OAuth credentials to session-specific Secret
-// Reads from Secret "google-oauth-credentials" in backend namespace (keyed by sanitized userID)
-// Writes to Secret "{sessionName}-google-oauth" in session namespace for runner to mount
-func syncGoogleCredentialsToSecret(ctx context.Context, sessionNamespace, secretName, userID string, ownerRef v1.OwnerReference, backendNamespace string) error {
-	// Read cluster-level credentials from backend namespace Secret
-	const srcSecretName = "google-oauth-credentials"
-	secretKey := sanitizeSecretKey(userID) // Backend sanitizes userID before storing
-
-	srcSecret, err := config.K8sClient.CoreV1().Secrets(backendNamespace).Get(ctx, srcSecretName, v1.GetOptions{})
-	if err != nil {
-		if errors.IsNotFound(err) {
-			log.Printf("Google OAuth Secret not found - user hasn't connected Google yet")
-			return nil // Not an error - user just hasn't authenticated
-		}
-		return fmt.Errorf("failed to get Google OAuth Secret: %w", err)
-	}
-
-	if srcSecret.Data == nil || len(srcSecret.Data[secretKey]) == 0 {
-		log.Printf("No Google OAuth credentials for user %s (key: %s) in Secret", userID, secretKey)
-		return nil // User hasn't connected
-	}
-
-	// Parse credentials JSON
-	var creds struct {
-		Email        string   `json:"email"`
-		AccessToken  string   `json:"accessToken"`
-		RefreshToken string   `json:"refreshToken"`
-		Scopes       []string `json:"scopes"`
-		ExpiresAt    string   `json:"expiresAt"`
-	}
-	if err := json.Unmarshal(srcSecret.Data[secretKey], &creds); err != nil {
-		return fmt.Errorf("failed to parse credentials: %w", err)
-	}
-
-	if creds.Email == "" {
-		return fmt.Errorf("credentials missing email field for user %s", userID)
-	}
-
-	// Parse expiry time
-	expiresAt, err := time.Parse(time.RFC3339, creds.ExpiresAt)
-	if err != nil {
-		log.Printf("Warning: failed to parse expiry time: %v", err)
-		expiresAt = time.Now().Add(1 * time.Hour) // Default to 1 hour
-	}
-
-	// Create workspace-mcp compatible credentials JSON
-	// Format: flat structure with token, refresh_token, token_uri, client_id, client_secret, scopes, expiry
-	// File is named {email}.json per workspace-mcp expectations
-	credentialsJSON := map[string]interface{}{
-		"token":         creds.AccessToken,
-		"refresh_token": creds.RefreshToken,
-		"token_uri":     "https://oauth2.googleapis.com/token",
-		"client_id":     os.Getenv("GOOGLE_OAUTH_CLIENT_ID"),
-		"client_secret": os.Getenv("GOOGLE_OAUTH_CLIENT_SECRET"),
-		"scopes":        creds.Scopes,
-		"expiry":        expiresAt.Format("2006-01-02T15:04:05"), // Timezone-naive for Google auth library
-	}
-
-	credBytes, err := json.MarshalIndent(credentialsJSON, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal credentials: %w", err)
-	}
-
-	// Use credentials.json as filename (K8s secret keys can't contain @ from email)
-	// workspace-mcp will load this file and use USER_GOOGLE_EMAIL env var to identify user
-	credentialsFilename := "credentials.json"
-
-	// Create or update Secret in session namespace
-	secret := &corev1.Secret{
-		ObjectMeta: v1.ObjectMeta{
-			Name:      secretName,
-			Namespace: sessionNamespace,
-			Labels: map[string]string{
-				"app":                        "ambient-code",
-				"ambient-code.io/session":    ownerRef.Name,
-				"ambient-code.io/provider":   "google",
-				"ambient-code.io/oauth":      "true",
-				"ambient-code.io/oauth-user": secretKey, // Use sanitized key for label (K8s labels don't allow colons)
-			},
-			OwnerReferences: []v1.OwnerReference{ownerRef},
-		},
-		Type: corev1.SecretTypeOpaque,
-		Data: map[string][]byte{
-			credentialsFilename: credBytes,
-		},
-	}
-
-	if _, err := config.K8sClient.CoreV1().Secrets(sessionNamespace).Create(ctx, secret, v1.CreateOptions{}); err != nil {
-		if errors.IsAlreadyExists(err) {
-			// Update existing secret
-			if _, err := config.K8sClient.CoreV1().Secrets(sessionNamespace).Update(ctx, secret, v1.UpdateOptions{}); err != nil {
-				return fmt.Errorf("failed to update Secret: %w", err)
-			}
-			log.Printf("✓ Updated Google OAuth Secret %s with cluster-level credentials for user %s", secretName, userID)
-		} else {
-			return fmt.Errorf("failed to create Secret: %w", err)
-		}
-	} else {
-		log.Printf("✓ Created Google OAuth Secret %s with cluster-level credentials for user %s", secretName, userID)
-	}
-
-	return nil
-}
+// NOTE: Sync functions below are now unused - credentials are fetched at runtime via backend API
+// This supersedes PR #562's volume mounting approach with just-in-time credential fetching
 
 // Helper functions
 var (

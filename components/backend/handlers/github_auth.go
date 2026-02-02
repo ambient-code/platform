@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -70,6 +71,18 @@ type GitHubAppInstallation struct {
 	InstallationID int64     `json:"installationId"`
 	Host           string    `json:"host"`
 	UpdatedAt      time.Time `json:"updatedAt"`
+}
+
+// GitHubPATCredentials represents a GitHub Personal Access Token for a user
+type GitHubPATCredentials struct {
+	UserID    string    `json:"userId"`
+	Token     string    `json:"token"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+// GetToken implements the interface for git package
+func (g *GitHubPATCredentials) GetToken() string {
+	return g.Token
 }
 
 // GetInstallationID implements the interface for git package
@@ -430,25 +443,48 @@ func LinkGitHubInstallationGlobal(c *gin.Context) {
 }
 
 // GetGitHubStatusGlobal handles GET /auth/github/status
+// Returns both GitHub App and PAT status
 func GetGitHubStatusGlobal(c *gin.Context) {
 	userID, _ := c.Get("userID")
 	if userID == nil || strings.TrimSpace(userID.(string)) == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing user identity"})
 		return
 	}
-	inst, err := GetGitHubInstallation(c.Request.Context(), userID.(string))
-	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"installed": false})
-		return
+
+	userIDStr := userID.(string)
+	response := gin.H{
+		"installed": false,
+		"pat":       gin.H{"configured": false},
 	}
-	c.JSON(http.StatusOK, gin.H{
-		"installed":      true,
-		"installationId": inst.InstallationID,
-		"host":           inst.Host,
-		"githubUserId":   inst.GitHubUserID,
-		"userId":         inst.UserID,
-		"updatedAt":      inst.UpdatedAt.Format(time.RFC3339),
-	})
+
+	// Check GitHub App installation
+	inst, err := GetGitHubInstallation(c.Request.Context(), userIDStr)
+	if err == nil && inst != nil {
+		response["installed"] = true
+		response["installationId"] = inst.InstallationID
+		response["host"] = inst.Host
+		response["githubUserId"] = inst.GitHubUserID
+		response["userId"] = inst.UserID
+		response["updatedAt"] = inst.UpdatedAt.Format(time.RFC3339)
+	}
+
+	// Check GitHub PAT
+	patCreds, err := GetGitHubPATCredentials(c.Request.Context(), userIDStr)
+	if err == nil && patCreds != nil {
+		response["pat"] = gin.H{
+			"configured": true,
+			"updatedAt":  patCreds.UpdatedAt.Format(time.RFC3339),
+		}
+	}
+
+	// Determine active method
+	if patCreds != nil {
+		response["active"] = "pat"
+	} else if inst != nil {
+		response["active"] = "app"
+	}
+
+	c.JSON(http.StatusOK, response)
 }
 
 // DisconnectGitHubGlobal handles POST /auth/github/disconnect
@@ -463,4 +499,244 @@ func DisconnectGitHubGlobal(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "GitHub account disconnected"})
+}
+
+// ============================================================================
+// GitHub Personal Access Token (PAT) Management
+// ============================================================================
+
+// SaveGitHubPAT handles POST /api/auth/github/pat
+// Saves user's GitHub Personal Access Token at cluster level
+func SaveGitHubPAT(c *gin.Context) {
+	// Verify user has valid K8s token
+	reqK8s, _ := GetK8sClientsForRequest(c)
+	if reqK8s == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		return
+	}
+
+	userID := c.GetString("userID")
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User authentication required"})
+		return
+	}
+	if !isValidUserID(userID) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user identifier"})
+		return
+	}
+
+	var req struct {
+		Token string `json:"token" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Validate token format (GitHub PATs start with ghp_, gho_, ghu_, ghs_, or github_pat_)
+	if !strings.HasPrefix(req.Token, "ghp_") && !strings.HasPrefix(req.Token, "gho_") &&
+		!strings.HasPrefix(req.Token, "ghu_") && !strings.HasPrefix(req.Token, "ghs_") &&
+		!strings.HasPrefix(req.Token, "github_pat_") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid GitHub token format"})
+		return
+	}
+
+	// Store credentials
+	creds := &GitHubPATCredentials{
+		UserID:    userID,
+		Token:     req.Token,
+		UpdatedAt: time.Now(),
+	}
+
+	if err := storeGitHubPATCredentials(c.Request.Context(), creds); err != nil {
+		log.Printf("Failed to store GitHub PAT for user %s: %v", userID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save GitHub PAT"})
+		return
+	}
+
+	log.Printf("✓ Stored GitHub PAT for user %s", userID)
+	c.JSON(http.StatusOK, gin.H{"message": "GitHub PAT saved successfully"})
+}
+
+// GetGitHubPATStatus handles GET /api/auth/github/pat/status
+// Returns whether user has a PAT configured
+func GetGitHubPATStatus(c *gin.Context) {
+	// Verify user has valid K8s token
+	reqK8s, _ := GetK8sClientsForRequest(c)
+	if reqK8s == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		return
+	}
+
+	userID := c.GetString("userID")
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User authentication required"})
+		return
+	}
+
+	creds, err := GetGitHubPATCredentials(c.Request.Context(), userID)
+	if err != nil {
+		log.Printf("Failed to get GitHub PAT for user %s: %v", userID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check GitHub PAT status"})
+		return
+	}
+
+	if creds == nil {
+		c.JSON(http.StatusOK, gin.H{"configured": false})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"configured": true,
+		"updatedAt":  creds.UpdatedAt.Format(time.RFC3339),
+	})
+}
+
+// DeleteGitHubPAT handles DELETE /api/auth/github/pat
+// Removes user's GitHub PAT
+func DeleteGitHubPAT(c *gin.Context) {
+	// Verify user has valid K8s token
+	reqK8s, _ := GetK8sClientsForRequest(c)
+	if reqK8s == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		return
+	}
+
+	userID := c.GetString("userID")
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User authentication required"})
+		return
+	}
+
+	if err := DeleteGitHubPATCredentials(c.Request.Context(), userID); err != nil {
+		log.Printf("Failed to delete GitHub PAT for user %s: %v", userID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to remove GitHub PAT"})
+		return
+	}
+
+	log.Printf("✓ Deleted GitHub PAT for user %s", userID)
+	c.JSON(http.StatusOK, gin.H{"message": "GitHub PAT removed successfully"})
+}
+
+// storeGitHubPATCredentials stores GitHub PAT in cluster-level Secret
+func storeGitHubPATCredentials(ctx context.Context, creds *GitHubPATCredentials) error {
+	if creds == nil || creds.UserID == "" {
+		return fmt.Errorf("invalid credentials payload")
+	}
+
+	const secretName = "github-pat-credentials"
+
+	for i := 0; i < 3; i++ { // retry on conflict
+		secret, err := K8sClient.CoreV1().Secrets(Namespace).Get(ctx, secretName, v1.GetOptions{})
+		if err != nil {
+			if errors.IsNotFound(err) {
+				// Create Secret
+				secret = &corev1.Secret{
+					ObjectMeta: v1.ObjectMeta{
+						Name:      secretName,
+						Namespace: Namespace,
+						Labels: map[string]string{
+							"app":                      "ambient-code",
+							"ambient-code.io/provider": "github",
+							"ambient-code.io/type":     "pat",
+						},
+					},
+					Type: corev1.SecretTypeOpaque,
+					Data: map[string][]byte{},
+				}
+				if _, cerr := K8sClient.CoreV1().Secrets(Namespace).Create(ctx, secret, v1.CreateOptions{}); cerr != nil && !errors.IsAlreadyExists(cerr) {
+					return fmt.Errorf("failed to create Secret: %w", cerr)
+				}
+				// Fetch again to get resourceVersion
+				secret, err = K8sClient.CoreV1().Secrets(Namespace).Get(ctx, secretName, v1.GetOptions{})
+				if err != nil {
+					return fmt.Errorf("failed to fetch Secret after create: %w", err)
+				}
+			} else {
+				return fmt.Errorf("failed to get Secret: %w", err)
+			}
+		}
+
+		if secret.Data == nil {
+			secret.Data = map[string][]byte{}
+		}
+
+		b, err := json.Marshal(creds)
+		if err != nil {
+			return fmt.Errorf("failed to marshal credentials: %w", err)
+		}
+		secret.Data[creds.UserID] = b
+
+		if _, uerr := K8sClient.CoreV1().Secrets(Namespace).Update(ctx, secret, v1.UpdateOptions{}); uerr != nil {
+			if errors.IsConflict(uerr) {
+				continue // retry
+			}
+			return fmt.Errorf("failed to update Secret: %w", uerr)
+		}
+		return nil
+	}
+	return fmt.Errorf("failed to update Secret after retries")
+}
+
+// GetGitHubPATCredentials retrieves cluster-level GitHub PAT for a user
+func GetGitHubPATCredentials(ctx context.Context, userID string) (*GitHubPATCredentials, error) {
+	if userID == "" {
+		return nil, fmt.Errorf("userID is required")
+	}
+
+	const secretName = "github-pat-credentials"
+
+	secret, err := K8sClient.CoreV1().Secrets(Namespace).Get(ctx, secretName, v1.GetOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil, nil // User hasn't configured PAT
+		}
+		return nil, err
+	}
+
+	if secret.Data == nil || len(secret.Data[userID]) == 0 {
+		return nil, nil // User hasn't configured PAT
+	}
+
+	var creds GitHubPATCredentials
+	if err := json.Unmarshal(secret.Data[userID], &creds); err != nil {
+		return nil, fmt.Errorf("failed to parse credentials: %w", err)
+	}
+
+	return &creds, nil
+}
+
+// DeleteGitHubPATCredentials removes GitHub PAT for a user
+func DeleteGitHubPATCredentials(ctx context.Context, userID string) error {
+	if userID == "" {
+		return fmt.Errorf("userID is required")
+	}
+
+	const secretName = "github-pat-credentials"
+
+	for i := 0; i < 3; i++ { // retry on conflict
+		secret, err := K8sClient.CoreV1().Secrets(Namespace).Get(ctx, secretName, v1.GetOptions{})
+		if err != nil {
+			if errors.IsNotFound(err) {
+				return nil // Secret doesn't exist, nothing to delete
+			}
+			return fmt.Errorf("failed to get Secret: %w", err)
+		}
+
+		if secret.Data == nil || len(secret.Data[userID]) == 0 {
+			return nil // User's credentials don't exist
+		}
+
+		delete(secret.Data, userID)
+
+		if _, uerr := K8sClient.CoreV1().Secrets(Namespace).Update(ctx, secret, v1.UpdateOptions{}); uerr != nil {
+			if errors.IsConflict(uerr) {
+				continue // retry
+			}
+			return fmt.Errorf("failed to update Secret: %w", uerr)
+		}
+		return nil
+	}
+	return fmt.Errorf("failed to update Secret after retries")
 }
