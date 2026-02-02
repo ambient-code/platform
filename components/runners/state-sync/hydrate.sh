@@ -160,11 +160,10 @@ set +e
 # Set HOME for git config (alpine doesn't set it by default)
 export HOME=/tmp
 
-# Git identity
-GIT_USER_NAME="${GIT_USER_NAME:-Ambient Code Bot}"
-GIT_USER_EMAIL="${GIT_USER_EMAIL:-bot@ambient-code.local}"
-git config --global user.name "$GIT_USER_NAME" || echo "Warning: failed to set git user.name"
-git config --global user.email "$GIT_USER_EMAIL" || echo "Warning: failed to set git user.email"
+# Git identity - now auto-derived from GitHub/GitLab credentials via API
+# Set defaults here, backend git operations will override with user's actual identity
+git config --global user.name "Ambient Code Bot" || echo "Warning: failed to set git user.name"
+git config --global user.email "bot@ambient-code.local" || echo "Warning: failed to set git user.email"
 
 # Mark workspace as safe (in case runner needs it)
 git config --global --add safe.directory /workspace 2>/dev/null || true

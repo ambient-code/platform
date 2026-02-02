@@ -764,11 +764,10 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 						{Name: "NAMESPACE", Value: sessionNamespace},
 						{Name: "S3_ENDPOINT", Value: s3Endpoint},
 						{Name: "S3_BUCKET", Value: s3Bucket},
-						{Name: "AWS_ACCESS_KEY_ID", Value: s3AccessKey},
-						{Name: "AWS_SECRET_ACCESS_KEY", Value: s3SecretKey},
-						{Name: "GIT_USER_NAME", Value: os.Getenv("GIT_USER_NAME")},
-						{Name: "GIT_USER_EMAIL", Value: os.Getenv("GIT_USER_EMAIL")},
-					}
+					{Name: "AWS_ACCESS_KEY_ID", Value: s3AccessKey},
+					{Name: "AWS_SECRET_ACCESS_KEY", Value: s3SecretKey},
+					// NOTE: GIT_USER_NAME and GIT_USER_EMAIL removed - auto-derived from GitHub/GitLab token via API
+				}
 
 					// Add repos JSON if present
 					if repos, ok := spec["repos"].([]interface{}); ok && len(repos) > 0 {

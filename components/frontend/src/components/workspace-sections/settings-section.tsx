@@ -27,8 +27,6 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
   const [showValues, setShowValues] = useState<Record<number, boolean>>({});
   const [anthropicApiKey, setAnthropicApiKey] = useState<string>("");
   const [showAnthropicKey, setShowAnthropicKey] = useState<boolean>(false);
-  const [gitUserName, setGitUserName] = useState<string>("");
-  const [gitUserEmail, setGitUserEmail] = useState<string>("");
   const [storageMode, setStorageMode] = useState<"shared" | "custom">("shared");
   const [s3Endpoint, setS3Endpoint] = useState<string>("");
   const [s3Bucket, setS3Bucket] = useState<string>("");
@@ -38,7 +36,7 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
   const [showS3SecretKey, setShowS3SecretKey] = useState<boolean>(false);
   const [anthropicExpanded, setAnthropicExpanded] = useState<boolean>(false);
   const [s3Expanded, setS3Expanded] = useState<boolean>(false);
-  const FIXED_KEYS = useMemo(() => ["ANTHROPIC_API_KEY","GIT_USER_NAME","GIT_USER_EMAIL","STORAGE_MODE","S3_ENDPOINT","S3_BUCKET","S3_REGION","S3_ACCESS_KEY","S3_SECRET_KEY"] as const, []);
+  const FIXED_KEYS = useMemo(() => ["ANTHROPIC_API_KEY","STORAGE_MODE","S3_ENDPOINT","S3_BUCKET","S3_REGION","S3_ACCESS_KEY","S3_SECRET_KEY"] as const, []);
 
   // React Query hooks
   const { data: project, isLoading: projectLoading } = useProject(projectName);
@@ -62,8 +60,6 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
     if (allSecrets.length > 0) {
       const byKey: Record<string, string> = Object.fromEntries(allSecrets.map(s => [s.key, s.value]));
       setAnthropicApiKey(byKey["ANTHROPIC_API_KEY"] || "");
-      setGitUserName(byKey["GIT_USER_NAME"] || "");
-      setGitUserEmail(byKey["GIT_USER_EMAIL"] || "");
       // Determine storage mode: "custom" if S3_ENDPOINT is set, otherwise "shared" (default)
       const hasCustomS3 = byKey["STORAGE_MODE"] === "custom" || (byKey["S3_ENDPOINT"] && byKey["S3_ENDPOINT"] !== "");
       setStorageMode(hasCustomS3 ? "custom" : "shared");
@@ -134,9 +130,7 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
 
     const integrationData: Record<string, string> = {};
 
-    // GIT_USER_* for commit identity (still project-scoped)
-    if (gitUserName) integrationData["GIT_USER_NAME"] = gitUserName;
-    if (gitUserEmail) integrationData["GIT_USER_EMAIL"] = gitUserEmail;
+    // NOTE: GIT_USER_* removed - git identity now auto-derived from GitHub/GitLab credentials
     
     // S3 Storage configuration
     integrationData["STORAGE_MODE"] = storageMode;
@@ -330,24 +324,6 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
                 </div>
               </div>
             )}
-          </div>
-
-          {/* Git User Identity Section - Still project-scoped for commit identity */}
-          <div className="border rounded-lg p-4 bg-muted/30">
-            <h3 className="text-sm font-semibold mb-3">Git Commit Identity</h3>
-            <p className="text-xs text-muted-foreground mb-3">
-              Configure the name and email used for git commits in this workspace
-            </p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label htmlFor="gitUserName">GIT_USER_NAME</Label>
-                <Input id="gitUserName" placeholder="Your Name" value={gitUserName} onChange={(e) => setGitUserName(e.target.value)} />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="gitUserEmail">GIT_USER_EMAIL</Label>
-                <Input id="gitUserEmail" placeholder="you@example.com" value={gitUserEmail} onChange={(e) => setGitUserEmail(e.target.value)} />
-              </div>
-            </div>
           </div>
 
           {/* Migration Notice */}
