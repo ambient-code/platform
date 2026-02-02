@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 
@@ -66,47 +67,78 @@ func ValidateGitLabToken(ctx context.Context, token, instanceURL string) (bool, 
 }
 
 // ValidateJiraToken checks if Jira credentials are valid
-// Uses /rest/auth/1/session endpoint per Jira Server REST API docs:
-// https://docs.atlassian.com/software/jira/docs/api/REST/9.12.0/#auth/1/session-currentUser
+// Uses /rest/api/*/myself endpoint which accepts Basic Auth (API tokens)
+// Note: /rest/auth/1/session is for cookie-based sessions, not API tokens!
 func ValidateJiraToken(ctx context.Context, url, email, apiToken string) (bool, error) {
 	if url == "" || email == "" || apiToken == "" {
+		log.Printf("DEBUG Jira: Missing credentials: url=%v, email=%v, token=%v", url != "", email != "", apiToken != "")
 		return false, fmt.Errorf("missing required credentials")
 	}
 
 	client := &http.Client{Timeout: 15 * time.Second}
 
-	// Use auth session endpoint - works for both Cloud and Server
-	// Per docs: Returns 200 if authenticated, 401 if not
-	authURL := fmt.Sprintf("%s/rest/auth/1/session", url)
-
-	req, err := http.NewRequestWithContext(ctx, "GET", authURL, nil)
-	if err != nil {
-		return false, fmt.Errorf("failed to create request")
+	// Try API v3 first (Jira Cloud), fallback to v2 (Jira Server/DC)
+	// /myself endpoint works with Basic Auth (API tokens)
+	apiURLs := []string{
+		fmt.Sprintf("%s/rest/api/3/myself", url),
+		fmt.Sprintf("%s/rest/api/2/myself", url),
 	}
 
-	// Jira uses Basic Auth with email:token
-	req.SetBasicAuth(email, apiToken)
-	req.Header.Set("Accept", "application/json")
+	log.Printf("DEBUG Jira: Validating credentials for %s (email=%s, tokenLen=%d)", url, email, len(apiToken))
 
-	resp, err := client.Do(req)
-	if err != nil {
-		// Network error - assume valid to avoid false negatives
-		return true, nil
-	}
-	defer resp.Body.Close()
+	var lastStatus int
+	var got401 bool
 
-	// 200 = valid and authenticated
-	// 401 = invalid credentials
-	// Other codes = assume valid (might be server config issue)
-	if resp.StatusCode == http.StatusOK {
-		return true, nil
+	for i, apiURL := range apiURLs {
+		log.Printf("DEBUG Jira: Trying API v%d: %s", 3-i, apiURL)
+		
+		req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
+		if err != nil {
+			log.Printf("DEBUG Jira: Failed to create request: %v", err)
+			continue
+		}
+
+		// Jira uses Basic Auth with email:token
+		req.SetBasicAuth(email, apiToken)
+		req.Header.Set("Accept", "application/json")
+
+		resp, err := client.Do(req)
+		if err != nil {
+			log.Printf("DEBUG Jira: Network error: %v", err)
+			continue
+		}
+		defer resp.Body.Close()
+
+		lastStatus = resp.StatusCode
+		log.Printf("DEBUG Jira: Got response status=%d from API v%d", resp.StatusCode, 3-i)
+
+		// 200 = valid, 401 = invalid, 404 = wrong API version (try next)
+		if resp.StatusCode == http.StatusOK {
+			log.Printf("DEBUG Jira: ✓ Credentials VALID (200 OK)")
+			return true, nil
+		}
+		if resp.StatusCode == http.StatusUnauthorized {
+			got401 = true
+			log.Printf("DEBUG Jira: Got 401 on API v%d, will try next version", 3-i)
+			continue
+		}
+		if resp.StatusCode == http.StatusNotFound {
+			log.Printf("DEBUG Jira: Got 404 (API version not available), trying next")
+			continue
+		}
+		
+		// Other status (403, 500, etc)
+		log.Printf("DEBUG Jira: Unexpected status %d", resp.StatusCode)
 	}
-	if resp.StatusCode == http.StatusUnauthorized {
+
+	// If got 401 on any attempt, credentials are definitely invalid
+	if got401 {
+		log.Printf("DEBUG Jira: ✗ Credentials INVALID (got 401 on at least one API version)")
 		return false, nil
 	}
 
-	// For other status codes (403, 404, 500, etc), assume valid
-	// to avoid false negatives from server configuration issues
+	// Couldn't validate - assume valid to avoid false negatives
+	log.Printf("DEBUG Jira: Couldn't validate (last status=%d), assuming valid", lastStatus)
 	return true, nil
 }
 
