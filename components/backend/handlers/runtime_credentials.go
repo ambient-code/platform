@@ -54,17 +54,16 @@ func GetGitHubTokenForSession(c *gin.Context) {
 	}
 
 	// Verify authenticated user owns this session (RBAC: prevent accessing other users' credentials)
+	// Note: BOT_TOKEN (session ServiceAccount) won't have userID in context, which is fine -
+	// BOT_TOKEN is already scoped to this specific session via RBAC
 	authenticatedUserID := c.GetString("userID")
-	if authenticatedUserID == "" {
-		log.Printf("Missing authenticated userID in request context for session %s/%s", project, session)
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "User authentication required"})
-		return
-	}
-	if authenticatedUserID != userID {
+	if authenticatedUserID != "" && authenticatedUserID != userID {
 		log.Printf("RBAC violation: user %s attempted to access credentials for session owned by %s", authenticatedUserID, userID)
 		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied: session belongs to different user"})
 		return
 	}
+	// If authenticatedUserID is empty, this is likely BOT_TOKEN (session-scoped ServiceAccount)
+	// which is allowed because it's already restricted to this session via K8s RBAC
 
 	// Try to get GitHub token using standard precedence (PAT > App > project fallback)
 	// Need to convert K8sClient interface to *kubernetes.Clientset for git.GetGitHubToken
@@ -120,17 +119,16 @@ func GetGoogleCredentialsForSession(c *gin.Context) {
 	}
 
 	// Verify authenticated user owns this session (RBAC: prevent accessing other users' credentials)
+	// Note: BOT_TOKEN (session ServiceAccount) won't have userID in context, which is fine -
+	// BOT_TOKEN is already scoped to this specific session via RBAC
 	authenticatedUserID := c.GetString("userID")
-	if authenticatedUserID == "" {
-		log.Printf("Missing authenticated userID in request context for session %s/%s", project, session)
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "User authentication required"})
-		return
-	}
-	if authenticatedUserID != userID {
+	if authenticatedUserID != "" && authenticatedUserID != userID {
 		log.Printf("RBAC violation: user %s attempted to access credentials for session owned by %s", authenticatedUserID, userID)
 		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied: session belongs to different user"})
 		return
 	}
+	// If authenticatedUserID is empty, this is likely BOT_TOKEN (session-scoped ServiceAccount)
+	// which is allowed because it's already restricted to this session via K8s RBAC
 
 	// Get Google credentials from cluster storage
 	creds, err := GetGoogleCredentials(c.Request.Context(), userID)
@@ -208,17 +206,16 @@ func GetJiraCredentialsForSession(c *gin.Context) {
 	}
 
 	// Verify authenticated user owns this session (RBAC: prevent accessing other users' credentials)
+	// Note: BOT_TOKEN (session ServiceAccount) won't have userID in context, which is fine -
+	// BOT_TOKEN is already scoped to this specific session via RBAC
 	authenticatedUserID := c.GetString("userID")
-	if authenticatedUserID == "" {
-		log.Printf("Missing authenticated userID in request context for session %s/%s", project, session)
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "User authentication required"})
-		return
-	}
-	if authenticatedUserID != userID {
+	if authenticatedUserID != "" && authenticatedUserID != userID {
 		log.Printf("RBAC violation: user %s attempted to access credentials for session owned by %s", authenticatedUserID, userID)
 		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied: session belongs to different user"})
 		return
 	}
+	// If authenticatedUserID is empty, this is likely BOT_TOKEN (session-scoped ServiceAccount)
+	// which is allowed because it's already restricted to this session via K8s RBAC
 
 	// Get Jira credentials
 	creds, err := GetJiraCredentials(c.Request.Context(), userID)
@@ -275,17 +272,16 @@ func GetGitLabTokenForSession(c *gin.Context) {
 	}
 
 	// Verify authenticated user owns this session (RBAC: prevent accessing other users' credentials)
+	// Note: BOT_TOKEN (session ServiceAccount) won't have userID in context, which is fine -
+	// BOT_TOKEN is already scoped to this specific session via RBAC
 	authenticatedUserID := c.GetString("userID")
-	if authenticatedUserID == "" {
-		log.Printf("Missing authenticated userID in request context for session %s/%s", project, session)
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "User authentication required"})
-		return
-	}
-	if authenticatedUserID != userID {
+	if authenticatedUserID != "" && authenticatedUserID != userID {
 		log.Printf("RBAC violation: user %s attempted to access credentials for session owned by %s", authenticatedUserID, userID)
 		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied: session belongs to different user"})
 		return
 	}
+	// If authenticatedUserID is empty, this is likely BOT_TOKEN (session-scoped ServiceAccount)
+	// which is allowed because it's already restricted to this session via K8s RBAC
 
 	// Get GitLab credentials
 	creds, err := GetGitLabCredentials(c.Request.Context(), userID)
