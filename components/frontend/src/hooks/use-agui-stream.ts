@@ -170,6 +170,7 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
             id: event.messageId || null,
             role: event.role,
             content: '',
+            timestamp: event.timestamp,  // Capture timestamp from event
           }
           return newState
         }
@@ -237,6 +238,7 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
             name: event.toolCallName || 'unknown_tool',
             args: '',
             parentToolUseId: parentToolId,
+            timestamp: event.timestamp,  // Capture timestamp from event
           });
           newState.pendingToolCalls = updatedPending;
           
