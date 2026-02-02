@@ -65,7 +65,7 @@ func getGitHubStatusForUser(ctx context.Context, userID string) gin.H {
 	if err == nil && patCreds != nil {
 		// Validate PAT token
 		valid, _ := ValidateGitHubToken(ctx, patCreds.Token)
-		
+
 		status["pat"] = gin.H{
 			"configured": true,
 			"updatedAt":  patCreds.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),

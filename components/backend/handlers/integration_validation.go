@@ -45,7 +45,7 @@ func ValidateGitLabToken(ctx context.Context, token, instanceURL string) (bool, 
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	apiURL := fmt.Sprintf("%s/api/v4/user", instanceURL)
-	
+
 	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
 	if err != nil {
 		return false, fmt.Errorf("failed to create request: %w", err)
@@ -71,7 +71,7 @@ func ValidateJiraToken(ctx context.Context, url, email, apiToken string) (bool, 
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	apiURL := fmt.Sprintf("%s/rest/api/3/myself", url)
-	
+
 	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
 	if err != nil {
 		return false, fmt.Errorf("failed to create request: %w", err)
@@ -98,7 +98,7 @@ func ValidateGoogleToken(ctx context.Context, accessToken string) (bool, error) 
 	}
 
 	client := &http.Client{Timeout: 10 * time.Second}
-	
+
 	req, err := http.NewRequestWithContext(ctx, "GET", "https://www.googleapis.com/oauth2/v1/userinfo", nil)
 	if err != nil {
 		return false, fmt.Errorf("failed to create request: %w", err)

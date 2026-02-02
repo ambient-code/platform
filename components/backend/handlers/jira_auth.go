@@ -17,9 +17,9 @@ import (
 // JiraCredentials represents cluster-level Jira credentials for a user
 type JiraCredentials struct {
 	UserID    string    `json:"userId"`
-	URL       string    `json:"url"`       // e.g., "https://company.atlassian.net"
-	Email     string    `json:"email"`     // Jira account email
-	APIToken  string    `json:"apiToken"`  // Jira API token
+	URL       string    `json:"url"`      // e.g., "https://company.atlassian.net"
+	Email     string    `json:"email"`    // Jira account email
+	APIToken  string    `json:"apiToken"` // Jira API token
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 

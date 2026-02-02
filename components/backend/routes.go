@@ -120,7 +120,7 @@ func registerRoutes(r *gin.Engine) {
 		api.GET("/auth/github/status", handlers.GetGitHubStatusGlobal)
 		api.POST("/auth/github/disconnect", handlers.DisconnectGitHubGlobal)
 		api.GET("/auth/github/user/callback", handlers.HandleGitHubUserOAuthCallback)
-		
+
 		// GitHub PAT (alternative to GitHub App)
 		api.POST("/auth/github/pat", handlers.SaveGitHubPAT)
 		api.GET("/auth/github/pat/status", handlers.GetGitHubPATStatus)

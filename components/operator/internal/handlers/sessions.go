@@ -905,12 +905,12 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 						// AG-UI server port (must match containerPort and Service)
 						{Name: "AGUI_PORT", Value: "8001"},
 						// Google MCP credentials directory - uses writable workspace location
-					// Credentials fetched at runtime by runner from backend API
-					{Name: "GOOGLE_MCP_CREDENTIALS_DIR", Value: "/workspace/.google_workspace_mcp/credentials"},
-					// Google OAuth client credentials for workspace-mcp
-					{Name: "GOOGLE_OAUTH_CLIENT_ID", Value: os.Getenv("GOOGLE_OAUTH_CLIENT_ID")},
-					{Name: "GOOGLE_OAUTH_CLIENT_SECRET", Value: os.Getenv("GOOGLE_OAUTH_CLIENT_SECRET")},
-					// NOTE: USER_GOOGLE_EMAIL set by runner at runtime from fetched credentials
+						// Credentials fetched at runtime by runner from backend API
+						{Name: "GOOGLE_MCP_CREDENTIALS_DIR", Value: "/workspace/.google_workspace_mcp/credentials"},
+						// Google OAuth client credentials for workspace-mcp
+						{Name: "GOOGLE_OAUTH_CLIENT_ID", Value: os.Getenv("GOOGLE_OAUTH_CLIENT_ID")},
+						{Name: "GOOGLE_OAUTH_CLIENT_SECRET", Value: os.Getenv("GOOGLE_OAUTH_CLIENT_SECRET")},
+						// NOTE: USER_GOOGLE_EMAIL set by runner at runtime from fetched credentials
 					}
 
 					// For e2e: use minimal MCP config (webfetch only, no credentials needed)

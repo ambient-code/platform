@@ -67,7 +67,7 @@ func GetGitHubTokenForSession(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal error"})
 		return
 	}
-	
+
 	token, err := git.GetGitHubToken(c.Request.Context(), k8sClientset, DynamicClient, project, userID)
 	if err != nil {
 		log.Printf("Failed to get GitHub token for user %s: %v", userID, err)
