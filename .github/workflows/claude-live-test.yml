@@ -150,7 +150,8 @@ jobs:
                 "@playwright/mcp",
                 "--base-url", "http://localhost",
                 "--output-dir", "/tmp/test_output",
-                "--caps", "testing,pdf"
+                "--caps", "testing,pdf,tracing",
+                "--headless"
               ]
             }
           }
