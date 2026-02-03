@@ -1,13 +1,30 @@
 name: Claude Live Testing
 
 # AI-powered exploratory testing with Playwright MCP
-# Trigger: Add 'claude-test' label to PR
-# Claude will test the feature with browser automation and provide reports
+# 
+# Trigger 1: Add 'claude-test' label to PR → deploys to kind cluster
+# Trigger 2: Manual workflow_dispatch → tests existing cluster
 
 on:
   pull_request_target:
     types: [labeled]
     branches: [ main, master ]
+  
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: 'Frontend URL (e.g., https://ambient-code.apps.cluster.com)'
+        required: true
+        type: string
+      test_token:
+        description: 'Auth token (run: oc whoami -t)'
+        required: true
+        type: string
+      test_prompt:
+        description: 'What to test (optional)'
+        required: false
+        type: string
+        default: 'Perform comprehensive exploratory testing of the application'
 
 permissions:
   contents: write
@@ -15,33 +32,52 @@ permissions:
   issues: write
 
 concurrency:
-  group: claude-test-${{ github.event.pull_request.number }}
+  group: claude-test-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 
 jobs:
-  # Security check - only proceed if claude-test label was added
-  check-label:
+  # Determine mode and configuration
+  setup:
     runs-on: ubuntu-latest
     outputs:
-      should-run: ${{ steps.check.outputs.should-run }}
+      mode: ${{ steps.detect.outputs.mode }}
+      should-run: ${{ steps.detect.outputs.should-run }}
+      base-url: ${{ steps.detect.outputs.base-url }}
+      test-token: ${{ steps.detect.outputs.test-token }}
+      test-prompt: ${{ steps.detect.outputs.test-prompt }}
     steps:
-      - name: Check if claude-test label was added
-        id: check
+      - name: Detect trigger mode
+        id: detect
         run: |
-          if [ "${{ github.event.label.name }}" = "claude-test" ]; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "mode=manual" >> $GITHUB_OUTPUT
             echo "should-run=true" >> $GITHUB_OUTPUT
-            echo "✅ claude-test label added - proceeding with live testing"
+            echo "base-url=${{ inputs.base_url }}" >> $GITHUB_OUTPUT
+            echo "test-token=${{ inputs.test_token }}" >> $GITHUB_OUTPUT
+            echo "test-prompt=${{ inputs.test_prompt }}" >> $GITHUB_OUTPUT
+            echo "✅ Manual trigger - testing existing cluster at ${{ inputs.base_url }}"
+          elif [ "${{ github.event.label.name }}" = "claude-test" ]; then
+            echo "mode=pr" >> $GITHUB_OUTPUT
+            echo "should-run=true" >> $GITHUB_OUTPUT
+            echo "base-url=http://localhost" >> $GITHUB_OUTPUT
+            echo "test-token=FROM_KIND" >> $GITHUB_OUTPUT
+            echo "test-prompt=Test the PR changes" >> $GITHUB_OUTPUT
+            echo "✅ PR label trigger - will deploy to kind"
           else
+            echo "mode=skip" >> $GITHUB_OUTPUT
             echo "should-run=false" >> $GITHUB_OUTPUT
-            echo "⏭️  Label '${{ github.event.label.name }}' is not claude-test - skipping"
+            echo "⏭️  Wrong label - skipping"
           fi
 
-  claude-live-test:
-    name: Claude Live Testing
+  # Deploy to kind (only for PR trigger)
+  deploy-to-kind:
+    name: Deploy PR to Kind
     runs-on: ubuntu-latest
-    needs: check-label
-    if: needs.check-label.outputs.should-run == 'true'
-    timeout-minutes: 30
+    needs: setup
+    if: needs.setup.outputs.mode == 'pr'
+    timeout-minutes: 20
+    outputs:
+      test-token: ${{ steps.token.outputs.token }}
 
     steps:
     - name: Checkout PR code
@@ -53,11 +89,6 @@ jobs:
       uses: kubeflow/pipelines/.github/actions/github-disk-cleanup@master
       if: (!cancelled())
 
-    - name: Set up Node.js
-      uses: actions/setup-node@v6
-      with:
-        node-version: '20'
-        
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
       with:
@@ -71,7 +102,6 @@ jobs:
         echo "SHA: ${{ github.event.pull_request.head.sha }}"
         echo "======================================"
 
-        # Build all images from PR code
         docker build -t quay.io/ambient_code/vteam_frontend:claude-test \
           -f components/frontend/Dockerfile components/frontend
         
@@ -126,29 +156,68 @@ jobs:
         echo "Checking services..."
         kubectl get svc -n ambient-code
 
-    - name: Get test token
+    - name: Get test token from kind
       id: token
       run: |
         TOKEN=$(kubectl get secret test-user-token -n ambient-code -o jsonpath='{.data.token}' | base64 -d)
         echo "token=$TOKEN" >> $GITHUB_OUTPUT
-        echo "✅ Token retrieved (length: ${#TOKEN})"
+        echo "✅ Token retrieved from kind cluster"
+
+  # Run Claude testing (works for both PR and manual modes)
+  claude-test:
+    name: Claude Live Testing
+    runs-on: ubuntu-latest
+    needs: [setup, deploy-to-kind]
+    if: |
+      needs.setup.outputs.should-run == 'true' &&
+      (needs.setup.outputs.mode == 'manual' || needs.deploy-to-kind.result == 'success')
+    timeout-minutes: 25
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v6
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v6
+      with:
+        node-version: '20'
 
     - name: Install Playwright
       run: |
         npm install -g @playwright/mcp
         npx playwright install chromium
+        echo "✅ Playwright installed"
+
+    - name: Determine test configuration
+      id: config
+      run: |
+        if [ "${{ needs.setup.outputs.mode }}" = "manual" ]; then
+          BASE_URL="${{ needs.setup.outputs.base-url }}"
+          TOKEN="${{ needs.setup.outputs.test-token }}"
+          echo "Testing existing cluster at: $BASE_URL"
+        else
+          BASE_URL="http://localhost"
+          TOKEN="${{ needs.deploy-to-kind.outputs.test-token }}"
+          echo "Testing PR deployment in kind"
+        fi
+        
+        echo "base-url=$BASE_URL" >> $GITHUB_OUTPUT
+        echo "test-token=$TOKEN" >> $GITHUB_OUTPUT
+        echo "✅ Configuration set"
 
     - name: Create MCP configuration for Playwright
+      env:
+        BASE_URL: ${{ steps.config.outputs.base-url }}
       run: |
         mkdir -p /tmp/mcp
-        cat > /tmp/mcp/playwright-config.json << 'EOF'
+        cat > /tmp/mcp/playwright-config.json << EOF
         {
           "mcpServers": {
             "playwright": {
               "command": "npx",
               "args": [
                 "@playwright/mcp",
-                "--base-url", "http://localhost",
+                "--base-url", "${BASE_URL}",
                 "--output-dir", "/tmp/test_output",
                 "--caps", "testing,pdf,tracing,vision",
                 "--headless"
@@ -157,75 +226,94 @@ jobs:
           }
         }
         EOF
-        echo "✅ MCP config created"
+        echo "✅ MCP config created for ${BASE_URL}"
         cat /tmp/mcp/playwright-config.json
 
     - name: Create test prompt for Claude
       env:
+        BASE_URL: ${{ steps.config.outputs.base-url }}
+        TEST_TOKEN: ${{ steps.config.outputs.test-token }}
+        TEST_PROMPT: ${{ needs.setup.outputs.test-prompt }}
         PR_NUMBER: ${{ github.event.pull_request.number }}
         PR_TITLE: ${{ github.event.pull_request.title }}
       run: |
         mkdir -p /tmp/test_output
-        cat > /tmp/test-prompt.md << 'EOF'
-        # AI-Powered Live Testing Task
+        
+        # Different prompts for PR vs manual testing
+        if [ "${{ needs.setup.outputs.mode }}" = "manual" ]; then
+          cat > /tmp/test-prompt.md << EOF
+        # Manual Live Testing Task
 
-        You are performing exploratory testing on a deployed web application for this PR.
+        You are testing a deployed Ambient Code Platform instance.
 
         ## Application Access
 
-        - **Frontend URL:** http://localhost
-        - **Auth Token:** ${{ steps.token.outputs.token }}
-        - **Test workspace:** e2e-claude-test-${{ github.run_id }}
+        - **Frontend URL:** ${BASE_URL}
+        - **Auth Token:** ${TEST_TOKEN}
 
-        ## Your Testing Mission
+        ## Testing Objective
+
+        ${TEST_PROMPT}
+
+        ## Your Mission
+
+        1. **Navigate to the application** - Use browser_navigate
+        2. **Explore the UI** - Use browser_snapshot to understand structure
+        3. **Test functionality** - Create workspaces, sessions, test features
+        4. **Document findings** - Create test report at /tmp/test_output/test_report.md
+
+        ## Tips
+
+        - Use browser tools to navigate, interact, and test
+        - Use \`browser_snapshot()\` to understand page structure
+        - Take screenshots at key test points
+        - Be thorough but efficient (~20 minute budget)
+
+        Begin testing now!
+        EOF
+        else
+          cat > /tmp/test-prompt.md << EOF
+        # PR Live Testing Task
+
+        You are testing changes from PR #${PR_NUMBER}: "${PR_TITLE}"
+
+        ## Application Access
+
+        - **Frontend URL:** ${BASE_URL}
+        - **Auth Token:** ${TEST_TOKEN}
+        - **Test workspace:** claude-test-${GITHUB_RUN_ID}
+
+        ## Your Mission
 
         1. **Navigate to the application**
-           ```
-           Use browser_navigate to go to http://localhost
-           Use browser_snapshot to see the page structure
-           ```
-
-        2. **Create a test workspace**
-           - Look for "New Workspace" or similar button
-           - Name it: e2e-claude-test-${{ github.run_id }}
-
-        3. **Test the PR changes**
-           Based on PR #${{ github.event.pull_request.number }}: "${{ github.event.pull_request.title }}"
-           
-           - Navigate to areas affected by the PR
-           - Test the main functionality
-           - Try edge cases (empty inputs, errors, etc.)
-           - Test navigation and UI interactions
-
-        4. **Exploratory testing**
-           - Click around related features
-           - Look for UI bugs (misalignment, broken links)
-           - Test error handling
-           - Verify responsive behavior
-
-        5. **Generate test report**
-           Create a file `/tmp/test_output/test_report.md` with:
+        2. **Create test workspace:** claude-test-${GITHUB_RUN_ID}
+        3. **Test the PR changes** - Focus on areas affected by this PR
+        4. **Exploratory testing** - Try edge cases, test error handling
+        5. **Generate test report** at /tmp/test_output/test_report.md with:
            - Executive summary
            - Test scenarios executed
-           - Screenshots taken (use browser_take_screenshot)
+           - Screenshots taken
            - Issues found (if any)
            - Overall assessment (✅ Pass / ⚠️ Issues / ❌ Fail)
 
         ## Tips
 
         - Use browser tools to navigate, interact, and test
-        - Use `browser_snapshot()` to understand page structure
+        - Use \`browser_snapshot()\` to understand page structure
         - Take screenshots at key test points
         - Be thorough but efficient (~20 minute budget)
 
         Begin testing now!
         EOF
+        fi
+        
         echo "✅ Test prompt created"
 
     - name: Run Claude with Playwright MCP
       uses: anthropics/claude-code-action@v1
       env:
-        TEST_TOKEN: ${{ steps.token.outputs.token }}
+        TEST_TOKEN: ${{ steps.config.outputs.test-token }}
+        BASE_URL: ${{ steps.config.outputs.base-url }}
       with:
         anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
         github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -240,7 +328,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v6
       with:
-        name: claude-test-report-pr-${{ github.event.pull_request.number }}
+        name: claude-test-report-${{ github.run_id }}
         path: |
           /tmp/test_output/test_report.md
           /tmp/test_output/*.png
@@ -252,13 +340,13 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v6
       with:
-        name: playwright-traces-pr-${{ github.event.pull_request.number }}
+        name: playwright-traces-${{ github.run_id }}
         path: /tmp/test_output/traces
         if-no-files-found: ignore
         retention-days: 30
         
-    - name: Debug logs on failure
-      if: failure()
+    - name: Debug logs on failure (kind only)
+      if: failure() && needs.setup.outputs.mode == 'pr'
       run: |
         echo "=== Frontend logs ==="
         kubectl logs -n ambient-code -l app=frontend --tail=100 || true
@@ -269,8 +357,8 @@ jobs:
         echo "=== Operator logs ==="
         kubectl logs -n ambient-code -l app=agentic-operator --tail=100 || true
         
-    - name: Cleanup
-      if: always()
+    - name: Cleanup kind cluster
+      if: always() && needs.setup.outputs.mode == 'pr'
       working-directory: e2e
       run: |
         CLEANUP_ARTIFACTS=true ./scripts/cleanup.sh || true
