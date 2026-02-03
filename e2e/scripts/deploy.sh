@@ -135,8 +135,17 @@ fi
 
 echo "TEST_TOKEN=$TOKEN" > .env.test
 echo "CYPRESS_BASE_URL=$BASE_URL" >> .env.test
-echo "   ✓ Token saved to .env.test"
-echo "   ✓ Base URL: $BASE_URL"
+# Save ANTHROPIC_API_KEY to .env.test if set (for agent testing in Cypress)
+if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
+  echo "ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY" >> .env.test
+  echo "   ✓ Token saved to .env.test"
+  echo "   ✓ Base URL: $BASE_URL"
+  echo "   ✓ API Key saved (agent testing enabled)"
+else
+  echo "   ✓ Token saved to .env.test"
+  echo "   ✓ Base URL: $BASE_URL"
+  echo "   ⚠️  No API Key (agent testing will be skipped)"
+fi
 
 echo ""
 echo "✅ Deployment complete!"
