@@ -170,19 +170,14 @@ describe('Ambient Session Management Tests', () => {
    */
   describe('Complete Session Workflow (Running State)', () => {
     it('should complete full session lifecycle with agent interaction', function() {
-      cy.log('📋 Step 0: Check for API key availability')
+      cy.log('📋 Step 0: Configure API key in project via backend API')
       const token = Cypress.env('TEST_TOKEN')
       const apiKey = Cypress.env('ANTHROPIC_API_KEY')
       
-      // Skip test if API key not provided (e.g., PRs from forks don't have access to secrets)
+      // Fail with clear message if API key not provided
       if (!apiKey) {
-        cy.log('⚠️ ANTHROPIC_API_KEY not available - skipping agent interaction test')
-        cy.log('   This is expected for PRs from forks (GitHub security restriction)')
-        cy.log('   For local testing: Add ANTHROPIC_API_KEY to e2e/.env')
-        this.skip()
+        throw new Error('ANTHROPIC_API_KEY not set. This workflow only runs with secrets.')
       }
-      
-      cy.log('✅ API key available - proceeding with agent interaction test')
       
       cy.request({
         method: 'PUT',
