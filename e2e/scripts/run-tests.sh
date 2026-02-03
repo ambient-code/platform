@@ -66,7 +66,7 @@ echo ""
 # Pass test token, base URL, and API key (if available)
 CYPRESS_TEST_TOKEN="$TEST_TOKEN" \
   CYPRESS_BASE_URL="$CYPRESS_BASE_URL" \
-  ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}" \
+  CYPRESS_ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}" \
   npm test
 
 exit_code=$?

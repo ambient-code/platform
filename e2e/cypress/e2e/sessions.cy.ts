@@ -176,7 +176,7 @@ describe('Ambient Session Management Tests', () => {
       
       // Fail with clear message if API key not provided
       if (!apiKey) {
-        throw new Error('ANTHROPIC_API_KEY not set in e2e/.env - agent testing cannot proceed')
+        throw new Error('ANTHROPIC_API_KEY not set - agent testing cannot proceed. Set it in e2e/.env for local testing or as a GitHub secret for CI.')
       }
       
       cy.request({

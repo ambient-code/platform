@@ -27,7 +27,8 @@ export default defineConfig({
     viewportHeight: 720,
     setupNodeEvents(on, config) {
       // Pass environment variables to Cypress tests
-      config.env.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || ''
+      // CYPRESS_* env vars are automatically exposed, but we explicitly set it here too
+      config.env.ANTHROPIC_API_KEY = process.env.CYPRESS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || ''
       
       return config
     },
