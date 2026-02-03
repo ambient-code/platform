@@ -170,14 +170,19 @@ describe('Ambient Session Management Tests', () => {
    */
   describe('Complete Session Workflow (Running State)', () => {
     it('should complete full session lifecycle with agent interaction', function() {
-      cy.log('📋 Step 0: Configure API key in project via backend API')
+      cy.log('📋 Step 0: Check for API key availability')
       const token = Cypress.env('TEST_TOKEN')
       const apiKey = Cypress.env('ANTHROPIC_API_KEY')
       
-      // Fail with clear message if API key not provided
+      // Skip test if API key not provided (e.g., PRs from forks don't have access to secrets)
       if (!apiKey) {
-        throw new Error('ANTHROPIC_API_KEY not set - agent testing cannot proceed. Set it in e2e/.env for local testing or as a GitHub secret for CI.')
+        cy.log('⚠️ ANTHROPIC_API_KEY not available - skipping agent interaction test')
+        cy.log('   This is expected for PRs from forks (GitHub security restriction)')
+        cy.log('   For local testing: Add ANTHROPIC_API_KEY to e2e/.env')
+        this.skip()
       }
+      
+      cy.log('✅ API key available - proceeding with agent interaction test')
       
       cy.request({
         method: 'PUT',
@@ -193,7 +198,7 @@ describe('Ambient Session Management Tests', () => {
         cy.log('✅ API key configured in project namespace')
       })
 
-      cy.log('📋 Step 1: Create new session')
+      cy.log('📋 Step 2: Create new session')
       cy.visit(`/projects/${workspaceName}`)
       cy.contains('button', 'New Session').click()
       cy.contains('button', 'Create').click()
@@ -203,16 +208,16 @@ describe('Ambient Session Management Tests', () => {
         cy.log(`✅ Session created: ${runningSessionId}`)
       })
 
-      cy.log('📋 Step 2: Wait for session to reach Running (may take 2 min)')
+      cy.log('📋 Step 3: Wait for session to reach Running (may take 2 min)')
       cy.get('textarea[placeholder*="message"]', { timeout: 180000 }).should('be.visible')
       cy.log('✅ Session Running!')
 
-      cy.log('📋 Step 3: Send initial hello message')
+      cy.log('📋 Step 4: Send initial hello message')
       cy.get('textarea[placeholder*="message"]').clear().type('Hello!')
       cy.contains('button', 'Send').click()
       cy.log('✅ Hello message sent!')
 
-      cy.log('📋 Step 4: Verify Claude starts responding')
+      cy.log('📋 Step 5: Verify Claude starts responding')
       // Wait for Send button to disappear (agent is processing)
       cy.contains('button', 'Send', { timeout: 10000 }).should('not.exist')
       cy.log('   Send button gone - agent is processing')
@@ -223,13 +228,13 @@ describe('Ambient Session Management Tests', () => {
       cy.log('✅ Confirmed real Claude processing - full stack working!')
       cy.log('⚠️ Not waiting for completion (can take 5+ minutes for full response)')
 
-      cy.log('📋 Step 5: Select workflow')
+      cy.log('📋 Step 6: Select workflow')
       cy.contains('Workflows').click()
       cy.get('[role="combobox"]').first().should('be.visible').click()
       cy.contains(/Fix a bug/i, { timeout: 5000 }).should('be.visible').click({ force: true })
       cy.log('✅ Workflow selected!')
 
-      cy.log('📋 Step 6: Wait for agent to acknowledge workflow selection')
+      cy.log('📋 Step 7: Wait for agent to acknowledge workflow selection')
       // Agent should respond to workflow change (not just show the dropdown value)
       cy.get('body', { timeout: 60000 }).should(($body) => {
         const text = $body.text()
@@ -243,7 +248,7 @@ describe('Ambient Session Management Tests', () => {
       })
       cy.log('✅ Workflow acknowledged!')
 
-      cy.log('📋 Step 7: Verify session has auto-generated name')
+      cy.log('📋 Step 8: Verify session has auto-generated name')
       cy.visit(`/projects/${workspaceName}`)
       cy.contains('Sessions', { timeout: 10000 }).should('be.visible')
       cy.get('body').should(($body) => {
