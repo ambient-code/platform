@@ -7,13 +7,6 @@ echo "======================================"
 echo "Deploying Ambient to kind cluster"
 echo "======================================"
 
-# Debug: Check if ANTHROPIC_API_KEY is set (show length, not value)
-if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
-  echo "🔍 Debug: ANTHROPIC_API_KEY is set (length: ${#ANTHROPIC_API_KEY})"
-else
-  echo "🔍 Debug: ANTHROPIC_API_KEY is NOT set in environment"
-fi
-
 # Load .env file if it exists (for ANTHROPIC_API_KEY)
 if [ -f ".env" ]; then
   echo "Loading configuration from .env..."
