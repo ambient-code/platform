@@ -211,39 +211,12 @@ jobs:
            - Issues found (if any)
            - Overall assessment (✅ Pass / ⚠️ Issues / ❌ Fail)
 
-        ## Available Playwright MCP Tools
-
-        **Core Navigation:**
-        - `browser_navigate(url)` - Navigate to URL
-        - `browser_snapshot()` - Get page accessibility tree (better than screenshot!)
-        
-        **Element Interactions:**
-        - `browser_click(element, ref)` - Click elements via accessibility tree
-        - `browser_type(ref, text)` - Type into inputs
-        - `browser_fill(ref, value)` - Fill form fields
-        - `browser_select(ref, values)` - Select dropdown options
-        
-        **Visual Tools:**
-        - `browser_take_screenshot(filename)` - Capture screenshots
-        - `browser_pdf_save(filename)` - Save page as PDF
-        
-        **Coordinate-Based (Vision):**
-        - `browser_mouse_click_xy(x, y)` - Click at coordinates
-        - `browser_mouse_drag_xy(startX, startY, endX, endY)` - Drag and drop
-        - `browser_mouse_wheel(deltaX, deltaY)` - Scroll
-        
-        **Test Assertions:**
-        - `browser_verify_text_visible(text)` - Assert text is visible
-        - `browser_verify_element_visible(role, accessibleName)` - Assert element exists
-        - `browser_verify_value(element, ref, value)` - Assert input values
-
         ## Tips
 
-        - Always use `browser_snapshot()` first to understand page structure
-        - Use exact `ref` values from snapshots for interactions
-        - Take screenshots at key moments (before/after actions)
-        - Be thorough but efficient (you have ~20 minutes)
-        - Document everything in the test report
+        - Use browser tools to navigate, interact, and test
+        - Use `browser_snapshot()` to understand page structure
+        - Take screenshots at key test points
+        - Be thorough but efficient (~20 minute budget)
 
         Begin testing now!
         EOF
