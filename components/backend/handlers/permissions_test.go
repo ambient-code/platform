@@ -738,10 +738,10 @@ var _ = Describe("Permissions Handler", Ordered, Label(test_constants.LabelUnit,
 	Context("Input Validation", func() {
 		It("Should reject userNames with invalid characters", func() {
 			invalidUserNames := []string{
-				"user\nname",            // newline not allowed (control character)
-				"user\tname",            // tab not allowed (control character)
-				"user\x00name",          // null byte not allowed (control character)
-				"user\x1fname",          // control character not allowed
+				"user\nname",             // newline not allowed (control character)
+				"user\tname",             // tab not allowed (control character)
+				"user\x00name",           // null byte not allowed (control character)
+				"user\x1fname",           // control character not allowed
 				strings.Repeat("a", 254), // too long (>253 chars)
 			}
 
