@@ -103,6 +103,7 @@ var _ = Describe("GitLab Auth Handler", Label(test_constants.LabelUnit, test_con
 					"token-with-dashes-456",            // with dashes
 					"UPPERCASE_TOKEN_789012",           // uppercase, 20 chars
 					"MixedCase-Token_1234567",          // mixed case, 20 chars
+					"glpat-abc123xyz.01.def456ghi",     // with periods (GitLab token format)
 				}
 
 				for _, token := range validTokens {
@@ -195,7 +196,6 @@ var _ = Describe("GitLab Auth Handler", Label(test_constants.LabelUnit, test_con
 					"token;with;semicolons",
 					"token:with:colons",
 					"token,with,commas",
-					"token.with.dots",
 					"token?with?questions",
 					"token!with!exclamations",
 				}

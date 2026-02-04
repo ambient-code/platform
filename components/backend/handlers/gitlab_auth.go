@@ -102,12 +102,12 @@ func validateGitLabInput(instanceURL, token string) error {
 	}
 
 	// Validate token contains only valid characters (alphanumeric and some special chars)
-	// GitLab tokens use: a-z, A-Z, 0-9, -, _
+	// GitLab tokens use: a-z, A-Z, 0-9, -, _, .
 	for _, char := range token {
 		if (char < 'a' || char > 'z') &&
 			(char < 'A' || char > 'Z') &&
 			(char < '0' || char > '9') &&
-			char != '-' && char != '_' {
+			char != '-' && char != '_' && char != '.' {
 			return fmt.Errorf("token contains invalid characters")
 		}
 	}
