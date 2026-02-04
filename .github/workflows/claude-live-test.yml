@@ -161,12 +161,14 @@ jobs:
         cat /tmp/mcp/playwright-config.json
 
     - name: Create test prompt for Claude
+      id: prompt
       env:
         PR_NUMBER: ${{ github.event.pull_request.number }}
         PR_TITLE: ${{ github.event.pull_request.title }}
+        TEST_TOKEN: ${{ steps.token.outputs.token }}
       run: |
         mkdir -p /tmp/test_output
-        cat > /tmp/test-prompt.md << 'EOF'
+        cat > /tmp/test-prompt.txt << EOF
         # AI-Powered Live Testing Task
 
         You are performing exploratory testing on a deployed web application for this PR.
@@ -174,8 +176,8 @@ jobs:
         ## Application Access
 
         - **Frontend URL:** http://localhost
-        - **Auth Token:** ${{ steps.token.outputs.token }}
-        - **Test workspace:** e2e-claude-test-${{ github.run_id }}
+        - **Auth Token:** ${TEST_TOKEN}
+        - **Test workspace:** e2e-claude-test-${PR_NUMBER}
 
         ## Your Testing Mission
 
@@ -187,10 +189,10 @@ jobs:
 
         2. **Create a test workspace**
            - Look for "New Workspace" or similar button
-           - Name it: e2e-claude-test-${{ github.run_id }}
+           - Name it: e2e-claude-test-${PR_NUMBER}
 
         3. **Test the PR changes**
-           Based on PR #${{ github.event.pull_request.number }}: "${{ github.event.pull_request.title }}"
+           Based on PR #${PR_NUMBER}: "${PR_TITLE}"
            
            - Navigate to areas affected by the PR
            - Test the main functionality
@@ -220,6 +222,12 @@ jobs:
 
         Begin testing now!
         EOF
+        
+        # Read the prompt content and save to output
+        echo "prompt<<PROMPT_EOF" >> $GITHUB_OUTPUT
+        cat /tmp/test-prompt.txt >> $GITHUB_OUTPUT
+        echo "PROMPT_EOF" >> $GITHUB_OUTPUT
+        
         echo "✅ Test prompt created"
 
     - name: Run Claude with Playwright MCP
@@ -229,8 +237,7 @@ jobs:
       with:
         anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
         github_token: ${{ secrets.GITHUB_TOKEN }}
-        prompt: |
-          $(cat /tmp/test-prompt.md)
+        prompt: ${{ steps.prompt.outputs.prompt }}
         claude_args: |
           --mcp-config /tmp/mcp/playwright-config.json
           --max-turns 30
