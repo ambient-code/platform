@@ -83,7 +83,7 @@ export function McpIntegrationsAccordion({
         displayName: 'Google Workspace',
         status: 'disconnected',
         authenticated: false,
-        authMessage: null,
+        authMessage: undefined,
       } as McpServer)
     }
 
@@ -95,7 +95,7 @@ export function McpIntegrationsAccordion({
         displayName: 'Jira',
         status: 'disconnected',
         authenticated: false,
-        authMessage: null,
+        authMessage: undefined,
       } as McpServer)
     }
   }
