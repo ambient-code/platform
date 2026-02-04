@@ -37,6 +37,7 @@ import type { CreateAgenticSessionRequest } from "@/types/agentic-session";
 import { useCreateSession } from "@/services/queries/use-sessions";
 import { useProjectIntegrationStatus } from "@/services/queries/use-projects";
 import { useIntegrationSecrets } from "@/services/queries/use-secrets";
+import { useIntegrationsStatus } from "@/services/queries/use-integrations";
 import { errorToast } from "@/hooks/use-toast";
 
 const models = [
@@ -73,8 +74,10 @@ export function CreateSessionDialog({
 
   const { data: integrationStatus } = useProjectIntegrationStatus(projectName);
   const { data: integrationSecrets } = useIntegrationSecrets(projectName);
+  const { data: integrationsStatus } = useIntegrationsStatus();
 
   const githubConfigured = integrationStatus?.github ?? false;
+  const gitlabConfigured = integrationsStatus?.gitlab?.connected ?? false;
   const byKey = integrationSecrets
     ? Object.fromEntries(integrationSecrets.map((s) => [s.key, s.value]))
     : {};
@@ -228,10 +231,10 @@ export function CreateSessionDialog({
                       <p className="text-xs text-muted-foreground mt-0.5">
                         Configure{" "}
                         <Link
-                          href={`/projects/${encodeURIComponent(projectName)}?section=settings`}
+                          href="/integrations"
                           className="text-primary hover:underline"
                         >
-                          workspace settings
+                          Integrations
                         </Link>{" "}
                         to access Jira MCP in this session.
                       </p>
@@ -266,6 +269,38 @@ export function CreateSessionDialog({
                           Integrations
                         </Link>{" "}
                         to access GitHub MCP in this session.
+                      </p>
+                    </div>
+                  </div>
+                )}
+                {/* GitLab card */}
+                {gitlabConfigured ? (
+                  <div className="flex items-start justify-between gap-3 p-3 border rounded-lg bg-background/50">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <div className="flex-shrink-0">
+                          <CheckCircle2 className="h-4 w-4 text-green-600" />
+                        </div>
+                        <h4 className="font-medium text-sm">GitLab</h4>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        MCP access to GitLab repositories.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-start gap-3 p-3 border rounded-lg bg-background/50">
+                    <div className="flex-shrink-0">
+                      <AlertTriangle className="h-4 w-4 text-amber-500" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-medium text-sm">GitLab</h4>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Configure{" "}
+                        <Link href="/integrations" className="text-primary hover:underline">
+                          Integrations
+                        </Link>{" "}
+                        to access GitLab MCP in this session.
                       </p>
                     </div>
                   </div>

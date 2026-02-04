@@ -19,6 +19,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { useMcpStatus } from '@/services/queries/use-mcp'
 import { useProjectIntegrationStatus } from '@/services/queries/use-projects'
+import { useIntegrationsStatus } from '@/services/queries/use-integrations'
 import type { McpServer } from '@/services/api/sessions'
 
 type McpIntegrationsAccordionProps = {
@@ -40,6 +41,9 @@ export function McpIntegrationsAccordion({
     useProjectIntegrationStatus(projectName)
   const githubConfigured = integrationStatus?.github ?? false
 
+  const { data: integrationsStatus } = useIntegrationsStatus()
+  const gitlabConfigured = integrationsStatus?.gitlab?.connected ?? false
+
   // Show skeleton cards until we have MCP servers or 2 min elapsed (backend returns empty when runner not ready)
   const showPlaceholders =
     mcpPending || (mcpServers.length === 0 && !placeholderTimedOut)
@@ -50,18 +54,51 @@ export function McpIntegrationsAccordion({
       return
     }
     if (!mcpStatus) return
-    const t = setTimeout(() => setPlaceholderTimedOut(true), 2 * 60 * 1000)
+    const t = setTimeout(() => setPlaceholderTimedOut(true), 15 * 1000) // 15 seconds
     return () => clearTimeout(t)
   }, [mcpStatus, mcpServers.length])
 
-  // This workspace: configured per workspace (e.g. Jira via Workspace Settings)
-  const workspaceServerNames = new Set(['mcp-atlassian'])
-  const globalServerNames = new Set(['webfetch', 'google-workspace'])
-  const workspaceServers = mcpServers.filter((s) => workspaceServerNames.has(s.name))
-  const globalServers = mcpServers.filter((s) => globalServerNames.has(s.name))
-  const otherServers = mcpServers.filter(
-    (s) => !workspaceServerNames.has(s.name) && !globalServerNames.has(s.name)
-  )
+  // Collect all MCP servers
+  const allServers = [...mcpServers]
+
+  // Ensure core integrations always appear (even if not in API response)
+  if (!showPlaceholders) {
+    // Webfetch - always available
+    const hasWebfetch = allServers.some((s) => s.name === 'webfetch')
+    if (!hasWebfetch) {
+      allServers.push({
+        name: 'webfetch',
+        displayName: 'Webfetch',
+        status: 'disconnected',
+        authenticated: undefined,
+        authMessage: 'Fetches web content for the session.',
+      } as McpServer)
+    }
+
+    // Google Workspace - show as not configured if missing
+    const hasGoogleWorkspace = allServers.some((s) => s.name === 'google-workspace')
+    if (!hasGoogleWorkspace) {
+      allServers.push({
+        name: 'google-workspace',
+        displayName: 'Google Workspace',
+        status: 'disconnected',
+        authenticated: false,
+        authMessage: null,
+      } as McpServer)
+    }
+
+    // Jira - workspace-level integration
+    const hasJira = allServers.some((s) => s.name === 'mcp-atlassian')
+    if (!hasJira) {
+      allServers.push({
+        name: 'mcp-atlassian',
+        displayName: 'Jira',
+        status: 'disconnected',
+        authenticated: false,
+        authMessage: null,
+      } as McpServer)
+    }
+  }
 
   const renderCardSkeleton = () => (
     <div
@@ -125,6 +162,53 @@ export function McpIntegrationsAccordion({
     </div>
     )
 
+  const renderGitLabCard = () =>
+    integrationStatusPending ? (
+      renderCardSkeleton()
+    ) : (
+    <div
+      key="gitlab"
+      className="flex items-start justify-between gap-3 p-3 border rounded-lg bg-background/50"
+    >
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <div className="flex-shrink-0">
+            {gitlabConfigured ? (
+              <CheckCircle2 className="h-4 w-4 text-green-600" />
+            ) : (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-flex">
+                      <AlertTriangle className="h-4 w-4 text-amber-500" />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>not configured</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+          </div>
+          <h4 className="font-medium text-sm">GitLab</h4>
+        </div>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          {gitlabConfigured ? (
+            'MCP access to GitLab repositories.'
+          ) : (
+            <>
+              Session started without GitLab MCP. Configure{' '}
+              <Link href="/integrations" className="text-primary hover:underline">
+                Integrations
+              </Link>{' '}
+              and start a new session.
+            </>
+          )}
+        </p>
+      </div>
+    </div>
+    )
+
   const renderServerCard = (server: McpServer) => (
     <div
       key={server.name}
@@ -177,11 +261,8 @@ export function McpIntegrationsAccordion({
         return (
           <>
             Session started without Jira MCP. Configure{' '}
-            <Link
-              href={`/projects/${encodeURIComponent(projectName)}?section=settings`}
-              className="text-primary hover:underline"
-            >
-              workspace settings
+            <Link href="/integrations" className="text-primary hover:underline">
+              Integrations
             </Link>{' '}
             and start a new session.
           </>
@@ -215,8 +296,8 @@ export function McpIntegrationsAccordion({
         // Null = needs refresh/uncertain state
         return <AlertCircle className="h-4 w-4 text-amber-500" />
       } else {
-        // False = not authenticated
-        return <KeyRound className="h-4 w-4 text-amber-500" />
+        // False = not authenticated/not configured
+        return <AlertTriangle className="h-4 w-4 text-amber-500" />
       }
     }
 
@@ -300,17 +381,15 @@ export function McpIntegrationsAccordion({
     }
   }
 
-  const sortedWorkspaceServers = [...workspaceServers].sort((a, b) =>
-    getDisplayName(a).localeCompare(getDisplayName(b))
-  )
-
-  type GlobalItem =
+  // Combine all integrations (GitHub + GitLab + all MCP servers)
+  type IntegrationItem =
     | { type: 'github'; displayName: string }
+    | { type: 'gitlab'; displayName: string }
     | { type: 'server'; displayName: string; server: McpServer }
-  const globalItems: GlobalItem[] = [
+  const allIntegrations: IntegrationItem[] = [
     { type: 'github' as const, displayName: 'GitHub' },
-    ...globalServers.map((server) => ({ type: 'server' as const, displayName: getDisplayName(server), server })),
-    ...otherServers.map((server) => ({ type: 'server' as const, displayName: getDisplayName(server), server })),
+    { type: 'gitlab' as const, displayName: 'GitLab' },
+    ...allServers.map((server) => ({ type: 'server' as const, displayName: getDisplayName(server), server })),
   ].sort((a, b) => a.displayName.localeCompare(b.displayName))
 
   return (
@@ -323,44 +402,23 @@ export function McpIntegrationsAccordion({
         </div>
       </AccordionTrigger>
       <AccordionContent className="px-1 pb-3">
-        <div className="space-y-4">
+        <div className="space-y-2">
           {showPlaceholders ? (
-            <div className="space-y-2">
-              <h5 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                This workspace
-              </h5>
-              <div className="space-y-2">{renderCardSkeleton()}</div>
-            </div>
+            <>
+              {renderCardSkeleton()}
+              {renderCardSkeleton()}
+            </>
           ) : (
-            workspaceServers.length > 0 && (
-              <div className="space-y-2">
-                <h5 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                  This workspace
-                </h5>
-                <div className="space-y-2">
-                  {sortedWorkspaceServers.map(renderServerCard)}
-                </div>
-              </div>
-            )
+            allIntegrations.map((item) => {
+              if (item.type === 'github') {
+                return <div key="github">{renderGitHubCard()}</div>
+              } else if (item.type === 'gitlab') {
+                return <div key="gitlab">{renderGitLabCard()}</div>
+              } else {
+                return renderServerCard(item.server)
+              }
+            })
           )}
-          <div className="space-y-2">
-            <h5 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-              Global
-            </h5>
-            <div className="space-y-2">
-              {showPlaceholders ? (
-                <div key="global-skeleton">{renderCardSkeleton()}</div>
-              ) : (
-                globalItems.map((item) =>
-                  item.type === 'github' ? (
-                    <div key="github">{renderGitHubCard()}</div>
-                  ) : (
-                    renderServerCard(item.server)
-                  )
-                )
-              )}
-            </div>
-          </div>
         </div>
       </AccordionContent>
     </AccordionItem>
