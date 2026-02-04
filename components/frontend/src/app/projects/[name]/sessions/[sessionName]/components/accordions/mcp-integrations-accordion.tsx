@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import type { ReactNode } from 'react'
 import Link from 'next/link'
-import { Plug, CheckCircle2, XCircle, AlertCircle, KeyRound } from 'lucide-react'
+import { Plug, CheckCircle2, XCircle, AlertCircle, AlertTriangle, KeyRound } from 'lucide-react'
 import {
   AccordionItem,
   AccordionTrigger,
