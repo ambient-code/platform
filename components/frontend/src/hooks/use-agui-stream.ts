@@ -606,7 +606,7 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
         return newState
       })
     },
-    [onEvent, onMessage, onError],
+    [onEvent, onMessage, onError, onTraceId],
   )
 
   // Connect to the AG-UI event stream
