@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import type { ReactNode } from 'react'
 import Link from 'next/link'
-import { Plug, CheckCircle2, XCircle, AlertCircle, AlertTriangle } from 'lucide-react'
+import { Plug, CheckCircle2, XCircle, AlertCircle, KeyRound } from 'lucide-react'
 import {
   AccordionItem,
   AccordionTrigger,
@@ -209,13 +209,17 @@ export function McpIntegrationsAccordion({
   const getStatusIcon = (server: McpServer) => {
     // If we have auth info, use that for the icon
     if (server.authenticated !== undefined) {
-      if (server.authenticated) {
+      if (server.authenticated === true) {
         return <CheckCircle2 className="h-4 w-4 text-green-600" />
+      } else if (server.authenticated === null) {
+        // Null = needs refresh/uncertain state
+        return <AlertCircle className="h-4 w-4 text-amber-500" />
       } else {
-        return <AlertTriangle className="h-4 w-4 text-amber-500" />
+        // False = not authenticated
+        return <KeyRound className="h-4 w-4 text-amber-500" />
       }
     }
-    
+
     // Fall back to status-based icons
     switch (server.status) {
       case 'configured':

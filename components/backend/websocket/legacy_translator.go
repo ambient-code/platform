@@ -86,7 +86,7 @@ func MigrateLegacySessionToAGUI(sessionID string) error {
 		"type":      types.EventTypeMessagesSnapshot,
 		"threadId":  sessionID,
 		"runId":     "legacy-migration",
-		"timestamp": time.Now().UTC().Format(time.RFC3339Nano),
+		"timestamp": time.Now().UTC().Format(types.AGUITimestampFormat),
 		"messages":  messages,
 	}
 

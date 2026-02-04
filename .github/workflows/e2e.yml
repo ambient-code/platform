@@ -1,46 +1,50 @@
 name: E2E Tests
 
-# Requires GitHub Secret: ANTHROPIC_API_KEY
-# Set in repository settings → Secrets and variables → Actions
-# Without this secret, the agent session test will fail
+# ONLY runs when maintainer adds "safe-to-test" label to a PR
+# Has access to secrets (including ANTHROPIC_API_KEY)
+# Maintainers: Review PR code before adding label!
 
 on:
-  pull_request:
+  pull_request_target:
+    types: [labeled]
     branches: [ main, master ]
-    paths:
-      - 'components/**'
-      - '.github/workflows/e2e.yml'
-      - 'e2e/**'
-      - 'scripts/**'
-      - '.specify/**'
-      - 'agents/**'
-
-  push:
-    branches: [ main, master ]
-    paths:
-      - 'components/**'
-      - '.github/workflows/e2e.yml'
-      - 'e2e/**'
-      - 'scripts/**'
-      - '.specify/**'
-      - 'agents/**'
-  workflow_dispatch:  # Allow manual trigger
 
 concurrency:
-  group: e2e-tests-${{ github.event.pull_request.number || github.ref }}
+  group: e2e-tests-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
+  # Security check - only proceed if safe-to-test label was added
+  check-label:
+    runs-on: ubuntu-latest
+    outputs:
+      should-run: ${{ steps.check.outputs.should-run }}
+    steps:
+      - name: Check if safe-to-test label was added
+        id: check
+        run: |
+          if [ "${{ github.event.label.name }}" = "safe-to-test" ]; then
+            echo "should-run=true" >> $GITHUB_OUTPUT
+            echo "✅ safe-to-test label added - proceeding with tests"
+          else
+            echo "should-run=false" >> $GITHUB_OUTPUT
+            echo "⏭️  Label '${{ github.event.label.name }}' is not safe-to-test - skipping"
+          fi
+
   detect-changes:
     runs-on: ubuntu-latest
+    needs: check-label
+    if: needs.check-label.outputs.should-run == 'true'
     outputs:
       frontend: ${{ steps.filter.outputs.frontend }}
       backend: ${{ steps.filter.outputs.backend }}
       operator: ${{ steps.filter.outputs.operator }}
       claude-runner: ${{ steps.filter.outputs.claude-runner }}
     steps:
-      - name: Checkout code
+      - name: Checkout PR code
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Check for component changes
         uses: dorny/paths-filter@v3
@@ -59,15 +63,17 @@ jobs:
   e2e:
     name: End-to-End Tests
     runs-on: ubuntu-latest
-    needs: detect-changes
-    timeout-minutes: 20  # Increased to account for builds
+    needs: [check-label, detect-changes]
+    if: needs.check-label.outputs.should-run == 'true'
+    timeout-minutes: 25
 
     steps:
-    - name: Checkout code
+    - name: Checkout PR code
       uses: actions/checkout@v6
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
 
     - name: Cleanup Diskspace
-      id: cleanup
       uses: kubeflow/pipelines/.github/actions/github-disk-cleanup@master
       if: (!cancelled())
 
@@ -100,6 +106,8 @@ jobs:
       run: |
         echo "======================================"
         echo "Building images from PR code..."
+        echo "PR #${{ github.event.pull_request.number }}"
+        echo "SHA: ${{ github.event.pull_request.head.sha }}"
         echo "======================================"
 
         # Build frontend image (if changed or use latest)
@@ -156,7 +164,6 @@ jobs:
 
     - name: Install kind
       run: |
-        # Install kind
         curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64
         chmod +x ./kind
         sudo mv ./kind /usr/local/bin/kind
@@ -181,11 +188,10 @@ jobs:
 
     - name: Update kustomization to use e2e-test images
       run: |
-        # Update image tags to use locally built images
         sed -i 's/newTag: latest/newTag: e2e-test/g' components/manifests/overlays/e2e/kustomization.yaml
         echo "Updated kustomization.yaml to use e2e-test tag"
 
-    - name: Deploy vTeam
+    - name: Deploy vTeam (with ANTHROPIC_API_KEY)
       working-directory: e2e
       env:
         ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -199,7 +205,7 @@ jobs:
         echo "Checking services..."
         kubectl get svc -n ambient-code
         
-    - name: Run Cypress tests
+    - name: Run Cypress tests (with ANTHROPIC_API_KEY)
       working-directory: e2e
       env:
         ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -209,7 +215,7 @@ jobs:
       if: failure()
       uses: actions/upload-artifact@v6
       with:
-        name: cypress-screenshots
+        name: cypress-screenshots-pr-${{ github.event.pull_request.number }}
         path: e2e/cypress/screenshots
         if-no-files-found: ignore
         retention-days: 7
@@ -218,7 +224,7 @@ jobs:
       if: failure()
       uses: actions/upload-artifact@v6
       with:
-        name: cypress-videos
+        name: cypress-videos-pr-${{ github.event.pull_request.number }}
         path: e2e/cypress/videos
         if-no-files-found: ignore
         retention-days: 7
@@ -239,6 +245,4 @@ jobs:
       if: always()
       working-directory: e2e
       run: |
-        # Clean up cluster and artifacts in CI
         CLEANUP_ARTIFACTS=true ./scripts/cleanup.sh || true
-

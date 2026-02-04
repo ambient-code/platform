@@ -308,6 +308,7 @@ export type PendingToolCall = {
   name: string
   args: string
   parentToolUseId?: string
+  timestamp?: string  // Timestamp from TOOL_CALL_START event
 }
 
 // Feedback type for messages
@@ -325,6 +326,7 @@ export type AGUIClientState = {
     id: string | null
     role: AGUIRoleValue | null
     content: string
+    timestamp?: string  // Timestamp from TEXT_MESSAGE_START event
   } | null
   // DEPRECATED: Use pendingToolCalls instead for parallel tool call support
   currentToolCall: {

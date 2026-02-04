@@ -96,6 +96,12 @@ func main() {
 	git.GetGitHubInstallation = func(ctx context.Context, userID string) (interface{}, error) {
 		return github.GetInstallation(ctx, userID)
 	}
+	git.GetGitHubPATCredentials = func(ctx context.Context, userID string) (interface{}, error) {
+		return handlers.GetGitHubPATCredentials(ctx, userID)
+	}
+	git.GetGitLabCredentials = func(ctx context.Context, userID string) (interface{}, error) {
+		return handlers.GetGitLabCredentials(ctx, userID)
+	}
 	git.GitHubTokenManager = github.Manager
 	git.GetBackendNamespace = func() string {
 		return server.Namespace

@@ -21,7 +21,7 @@ export type McpServer = {
   name: string;
   displayName: string;
   status: 'configured' | 'connected' | 'disconnected' | 'error';
-  authenticated?: boolean;
+  authenticated?: boolean | null; // true = valid, false = invalid, null = needs refresh/uncertain, undefined = not checked
   authMessage?: string;
   source?: string;
   command?: string;

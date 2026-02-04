@@ -118,11 +118,14 @@ func (c *MessageCompactor) handleTextMessageStart(event map[string]interface{}) 
 	if role == "" {
 		role = types.RoleAssistant
 	}
+	// Preserve timestamp from the event
+	timestamp, _ := event["timestamp"].(string)
 
 	c.currentMessage = &types.Message{
-		ID:      messageID,
-		Role:    role,
-		Content: "",
+		ID:        messageID,
+		Role:      role,
+		Content:   "",
+		Timestamp: timestamp,
 	}
 }
 
@@ -228,17 +231,25 @@ func (c *MessageCompactor) handleToolCallEnd(event map[string]interface{}) {
 		tc.Status = "error"
 	}
 
+	// Preserve timestamp from the event
+	timestamp, _ := event["timestamp"].(string)
+
 	// Add to message
 	// Check if we need to create a new message or add to current
 	if c.currentMessage != nil && c.currentMessage.Role == types.RoleAssistant {
 		// Add to current message
 		c.currentMessage.ToolCalls = append(c.currentMessage.ToolCalls, tc)
+		// Update timestamp if not already set
+		if c.currentMessage.Timestamp == "" && timestamp != "" {
+			c.currentMessage.Timestamp = timestamp
+		}
 	} else {
 		// Create new message for this tool call
 		c.messages = append(c.messages, types.Message{
 			ID:        uuid.New().String(),
 			Role:      types.RoleAssistant,
 			ToolCalls: []types.ToolCall{tc},
+			Timestamp: timestamp,
 		})
 	}
 

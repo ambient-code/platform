@@ -86,15 +86,17 @@ class ClaudeCodeAdapter:
         self.context = context
         logger.info(f"Initialized Claude Code adapter for session {context.session_id}")
 
-        # Copy Google OAuth credentials from mounted Secret to writable workspace location
-        await self._setup_google_credentials()
-
+        # NOTE: Credentials are now fetched at runtime from backend API
+        # No longer copying from mounted volumes or reading from env vars
+        # This ensures tokens are always fresh for long-running sessions
+        logger.info("Credentials will be fetched on-demand from backend API")
+        
         # Workspace is already prepared by init container (hydrate.sh)
         # - Repos cloned to /workspace/repos/
         # - Workflows cloned to /workspace/workflows/
         # - State hydrated from S3 to .claude/, artifacts/, file-uploads/
         logger.info("Workspace prepared by init container, validating...")
-
+            
         # Validate prerequisite files exist for phase-based commands
         try:
             await self._validate_prerequisites()
@@ -128,9 +130,8 @@ class ClaudeCodeAdapter:
         self._current_thread_id = thread_id
         self._current_run_id = run_id
 
-        # Check for newly available Google OAuth credentials (user may have authenticated mid-session)
-        # This picks up credentials after K8s syncs the mounted secret (~60s after OAuth completes)
-        await self.refresh_google_credentials()
+        # NOTE: Credentials are now fetched on-demand at runtime, no need to pre-fetch
+        # Each tool call will get fresh credentials from the backend API
 
         try:
             # Emit RUN_STARTED
@@ -324,6 +325,9 @@ class ClaudeCodeAdapter:
             f"_run_claude_agent_sdk called with prompt length={len(prompt)}, will create fresh client"
         )
         try:
+            # NOTE: Credentials are now fetched at runtime via _populate_runtime_credentials()
+            # No need for manual refresh - backend API always returns fresh tokens
+
             # Check for authentication method
             logger.info("Checking authentication configuration...")
             api_key = self.context.get_env("ANTHROPIC_API_KEY", "")
@@ -448,8 +452,46 @@ class ClaudeCodeAdapter:
             logger.info(f"Claude SDK CWD: {cwd_path}")
             logger.info(f"Claude SDK additional directories: {add_dirs}")
 
+            # Fetch fresh credentials from backend and populate environment
+            # This ensures MCP servers get fresh tokens for long-running sessions
+            await self._populate_runtime_credentials()
+
             # Load MCP server configuration (webfetch is included in static .mcp.json)
             mcp_servers = self._load_mcp_config(cwd_path) or {}
+
+            # Pre-flight check: Validate MCP server authentication status
+            # Import here to avoid circular dependency
+            from main import _check_mcp_authentication
+
+            mcp_auth_warnings = []
+            if mcp_servers:
+                for server_name in mcp_servers.keys():
+                    is_auth, msg = _check_mcp_authentication(server_name)
+
+                    if is_auth is False:
+                        # Authentication definitely failed
+                        mcp_auth_warnings.append(f"⚠️  {server_name}: {msg}")
+                    elif is_auth is None:
+                        # Authentication needs refresh or uncertain
+                        mcp_auth_warnings.append(f"ℹ️  {server_name}: {msg}")
+
+            if mcp_auth_warnings:
+                warning_msg = "**MCP Server Authentication Issues:**\n\n" + "\n".join(mcp_auth_warnings)
+                warning_msg += "\n\nThese servers may not work correctly until re-authenticated."
+                logger.warning(warning_msg)
+
+                # Send as RAW event (not chat message) so UI can display as banner/notification
+                # Don't send as TextMessage - that shows up in chat history
+                yield RawEvent(
+                    type=EventType.RAW,
+                    thread_id=thread_id,
+                    run_id=run_id,
+                    event={
+                        "type": "mcp_authentication_warning",
+                        "message": warning_msg,
+                        "servers": [s.split(": ")[1] if ": " in s else s for s in mcp_auth_warnings]
+                    }
+                )
 
             # Create custom session control tools
             # Capture self reference for the restart tool closure
@@ -505,10 +547,16 @@ class ClaudeCodeAdapter:
                 artifacts_path="artifacts",
                 ambient_config=ambient_config,
             )
-            system_prompt_config = [
-                "claude_code",
-                {"type": "text", "text": workspace_prompt}
-            ]
+            # SystemPromptPreset format: uses claude_code preset with appended workspace context
+            system_prompt_config = {
+                "type": "preset",
+                "preset": "claude_code",
+                "append": workspace_prompt,
+            }
+
+            # Capture stderr from the SDK to diagnose MCP server failures
+            def sdk_stderr_handler(line: str):
+                logger.warning(f"[SDK stderr] {line.rstrip()}")
 
             # Configure SDK options
             options = ClaudeAgentOptions(
@@ -519,6 +567,7 @@ class ClaudeCodeAdapter:
                 setting_sources=["project"],
                 system_prompt=system_prompt_config,
                 include_partial_messages=True,
+                stderr=sdk_stderr_handler,
             )
 
             if self._skip_resume_on_restart:
@@ -1291,17 +1340,18 @@ class ClaudeCodeAdapter:
             hostname = parsed.hostname or ""
 
             if "gitlab" in hostname.lower():
-                token = os.getenv("GITLAB_TOKEN", "").strip()
+                token = await self._fetch_gitlab_token()
                 if token:
-                    logger.info(f"Using GITLAB_TOKEN for {hostname}")
+                    logger.info(f"Using fresh GitLab token for {hostname}")
                     return token
                 else:
-                    logger.warning(f"No GITLAB_TOKEN found for GitLab URL: {url}")
+                    logger.warning(f"No GitLab credentials configured for {url}")
                     return ""
 
-            token = os.getenv("GITHUB_TOKEN") or await self._fetch_github_token()
+            # Always fetch fresh GitHub token (PAT or App)
+            token = await self._fetch_github_token()
             if token:
-                logger.info(f"Using GitHub token for {hostname}")
+                logger.info(f"Using fresh GitHub token for {hostname}")
             return token
 
         except Exception as e:
@@ -1310,16 +1360,153 @@ class ClaudeCodeAdapter:
             )
             return os.getenv("GITHUB_TOKEN") or await self._fetch_github_token()
 
-    async def _fetch_github_token(self) -> str:
-        """Fetch GitHub token from backend API or environment."""
-        cached = os.getenv("GITHUB_TOKEN", "").strip()
-        if cached:
-            logger.info("Using GITHUB_TOKEN from environment")
-            return cached
+    async def _populate_runtime_credentials(self) -> None:
+        """Fetch all credentials from backend and populate environment variables.
+        
+        This is called before each SDK run to ensure MCP servers have fresh tokens.
+        """
+        logger.info("Fetching fresh credentials from backend API...")
+        
+        # Fetch Google credentials
+        google_creds = await self._fetch_google_credentials()
+        if google_creds.get("accessToken"):
+            # Write credentials to file for workspace-mcp
+            creds_dir = Path("/workspace/.google_workspace_mcp/credentials")
+            creds_dir.mkdir(parents=True, exist_ok=True)
+            creds_file = creds_dir / "credentials.json"
+            
+            # Get OAuth client config from env
+            client_id = os.getenv("GOOGLE_OAUTH_CLIENT_ID", "")
+            client_secret = os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", "")
+            
+            # Create credentials.json for workspace-mcp
+            creds_data = {
+                "token": google_creds.get("accessToken"),
+                "refresh_token": "",  # Backend handles refresh
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "scopes": google_creds.get("scopes", []),
+                "expiry": google_creds.get("expiresAt", ""),
+            }
+            
+            with open(creds_file, "w") as f:
+                _json.dump(creds_data, f, indent=2)
+            creds_file.chmod(0o644)
+            logger.info("✓ Updated Google credentials file for workspace-mcp")
+            
+            # Set USER_GOOGLE_EMAIL for MCP server (from backend API response)
+            user_email = google_creds.get("email", "")
+            if user_email and user_email != "user@example.com":
+                os.environ["USER_GOOGLE_EMAIL"] = user_email
+                logger.info(f"✓ Set USER_GOOGLE_EMAIL to {user_email} for workspace-mcp")
+        
+        # Fetch Jira credentials
+        jira_creds = await self._fetch_jira_credentials()
+        if jira_creds.get("apiToken"):
+            os.environ["JIRA_URL"] = jira_creds.get("url", "")
+            os.environ["JIRA_API_TOKEN"] = jira_creds.get("apiToken", "")
+            os.environ["JIRA_EMAIL"] = jira_creds.get("email", "")
+            logger.info("✓ Updated Jira credentials in environment")
+        
+        # Fetch GitLab token
+        gitlab_token = await self._fetch_gitlab_token()
+        if gitlab_token:
+            os.environ["GITLAB_TOKEN"] = gitlab_token
+            logger.info("✓ Updated GitLab token in environment")
+        
+        # Fetch GitHub token (PAT or App)
+        github_token = await self._fetch_github_token()
+        if github_token:
+            os.environ["GITHUB_TOKEN"] = github_token
+            logger.info("✓ Updated GitHub token in environment")
+        
+        logger.info("Runtime credentials populated successfully")
 
+    async def _fetch_credential(self, credential_type: str) -> dict:
+        """Fetch credentials from backend API at runtime.
+        
+        Args:
+            credential_type: One of 'github', 'google', 'jira', 'gitlab'
+            
+        Returns:
+            Dictionary with credential data or empty dict if unavailable
+        """
+        base = os.getenv("BACKEND_API_URL", "").rstrip("/")
+        project = os.getenv("PROJECT_NAME") or os.getenv("AGENTIC_SESSION_NAMESPACE", "")
+        project = project.strip()
+        session_id = self.context.session_id
+
+        if not base or not project or not session_id:
+            logger.warning(f"Cannot fetch {credential_type} credentials: missing environment variables (base={base}, project={project}, session={session_id})")
+            return {}
+
+        url = f"{base}/projects/{project}/agentic-sessions/{session_id}/credentials/{credential_type}"
+        logger.info(f"Fetching fresh {credential_type} credentials from: {url}")
+
+        req = _urllib_request.Request(url, method="GET")
+        bot = (os.getenv("BOT_TOKEN") or "").strip()
+        if bot:
+            req.add_header("Authorization", f"Bearer {bot}")
+
+        loop = asyncio.get_event_loop()
+
+        def _do_req():
+            try:
+                with _urllib_request.urlopen(req, timeout=10) as resp:
+                    return resp.read().decode("utf-8", errors="replace")
+            except Exception as e:
+                logger.warning(f"{credential_type} credential fetch failed: {e}")
+                return ""
+
+        resp_text = await loop.run_in_executor(None, _do_req)
+        if not resp_text:
+            return {}
+
+        try:
+            data = _json.loads(resp_text)
+            logger.info(f"Successfully fetched {credential_type} credentials from backend")
+            return data
+        except Exception as e:
+            logger.error(f"Failed to parse {credential_type} credential response: {e}")
+            return {}
+
+    async def _fetch_github_token(self) -> str:
+        """Fetch GitHub token from backend API (always fresh - PAT or minted App token)."""
+        data = await self._fetch_credential("github")
+        token = data.get("token", "")
+        if token:
+            logger.info("Using fresh GitHub token from backend")
+        return token
+
+    async def _fetch_google_credentials(self) -> dict:
+        """Fetch Google OAuth credentials from backend API."""
+        data = await self._fetch_credential("google")
+        if data.get("accessToken"):
+            logger.info(f"Using fresh Google credentials from backend (email: {data.get('email', 'unknown')})")
+        return data
+
+    async def _fetch_jira_credentials(self) -> dict:
+        """Fetch Jira credentials from backend API."""
+        data = await self._fetch_credential("jira")
+        if data.get("apiToken"):
+            logger.info(f"Using Jira credentials from backend (url: {data.get('url', 'unknown')})")
+        return data
+
+    async def _fetch_gitlab_token(self) -> str:
+        """Fetch GitLab token from backend API."""
+        data = await self._fetch_credential("gitlab")
+        token = data.get("token", "")
+        if token:
+            logger.info(f"Using fresh GitLab token from backend (instance: {data.get('instanceUrl', 'unknown')})")
+        return token
+
+    async def _fetch_github_token_legacy(self) -> str:
+        """Legacy method - kept for backward compatibility."""
         # Build mint URL from environment
         base = os.getenv("BACKEND_API_URL", "").rstrip("/")
-        project = os.getenv("PROJECT_NAME", "").strip()
+        project = os.getenv("PROJECT_NAME") or os.getenv("AGENTIC_SESSION_NAMESPACE", "")
+        project = project.strip()
         session_id = self.context.session_id
 
         if not base or not project or not session_id:
@@ -1327,7 +1514,7 @@ class ClaudeCodeAdapter:
             return ""
 
         url = f"{base}/projects/{project}/agentic-sessions/{session_id}/github/token"
-        logger.info(f"Fetching GitHub token from: {url}")
+        logger.info(f"Fetching GitHub token from legacy endpoint: {url}")
 
         req = _urllib_request.Request(
             url, data=b"{}", headers={"Content-Type": "application/json"}, method="POST"
@@ -1454,6 +1641,24 @@ class ClaudeCodeAdapter:
             return []
         return []
 
+    def _expand_env_vars(self, value: Any) -> Any:
+        """Recursively expand ${VAR} and ${VAR:-default} patterns in config values."""
+        if isinstance(value, str):
+            # Pattern: ${VAR} or ${VAR:-default}
+            pattern = r'\$\{([^}:]+)(?::-([^}]*))?\}'
+
+            def replace_var(match):
+                var_name = match.group(1)
+                default_val = match.group(2) if match.group(2) is not None else ""
+                return os.environ.get(var_name, default_val)
+
+            return re.sub(pattern, replace_var, value)
+        elif isinstance(value, dict):
+            return {k: self._expand_env_vars(v) for k, v in value.items()}
+        elif isinstance(value, list):
+            return [self._expand_env_vars(item) for item in value]
+        return value
+
     def _load_mcp_config(self, cwd_path: str) -> Optional[dict]:
         """Load MCP server configuration from the ambient runner's .mcp.json file."""
         try:
@@ -1467,7 +1672,11 @@ class ClaudeCodeAdapter:
                 logger.info(f"Loading MCP config from: {runner_mcp_file}")
                 with open(runner_mcp_file, "r") as f:
                     config = _json.load(f)
-                    return config.get("mcpServers", {})
+                    mcp_servers = config.get("mcpServers", {})
+                    # Expand environment variables in the config
+                    expanded = self._expand_env_vars(mcp_servers)
+                    logger.info(f"Expanded MCP config env vars for {len(expanded)} servers")
+                    return expanded
             else:
                 logger.info(f"No MCP config file found at: {runner_mcp_file}")
                 return None
@@ -1577,99 +1786,6 @@ class ClaudeCodeAdapter:
 
         return prompt
 
-    async def _setup_google_credentials(self):
-        """Copy Google OAuth credentials from mounted Secret to writable workspace location.
-
-        The secret is always mounted (as placeholder if user hasn't authenticated).
-        This method checks if credentials.json exists and has content.
-        Call refresh_google_credentials() periodically to pick up new credentials after OAuth.
-        """
-        await self._try_copy_google_credentials()
-
-    async def _try_copy_google_credentials(self) -> bool:
-        """Attempt to copy Google credentials from mounted secret.
-
-        Returns:
-            True if credentials were successfully copied, False otherwise.
-        """
-        secret_path = Path("/app/.google_workspace_mcp/credentials/credentials.json")
-
-        # Check if secret file exists
-        if not secret_path.exists():
-            logging.debug(
-                "Google OAuth credentials not found at %s (placeholder secret or not mounted)",
-                secret_path,
-            )
-            return False
-
-        # Check if file has content (not empty placeholder)
-        try:
-            if secret_path.stat().st_size == 0:
-                logging.debug(
-                    "Google OAuth credentials file is empty (user hasn't authenticated yet)"
-                )
-                return False
-        except OSError as e:
-            logging.debug("Could not stat Google OAuth credentials file: %s", e)
-            return False
-
-        # Create writable credentials directory in workspace
-        workspace_creds_dir = Path("/workspace/.google_workspace_mcp/credentials")
-        workspace_creds_dir.mkdir(parents=True, exist_ok=True)
-
-        # Copy credentials from read-only Secret mount to writable workspace
-        dest_path = workspace_creds_dir / "credentials.json"
-        try:
-            shutil.copy2(secret_path, dest_path)
-            # Make it writable so workspace-mcp can update tokens
-            dest_path.chmod(0o644)
-            logging.info(
-                "✓ Copied Google OAuth credentials from Secret to writable workspace at %s",
-                dest_path,
-            )
-            return True
-        except Exception as e:
-            logging.error("Failed to copy Google OAuth credentials: %s", e)
-            return False
-
-    async def refresh_google_credentials(self) -> bool:
-        """Check for and copy new Google OAuth credentials.
-
-        Call this method periodically (e.g., before processing a message) to detect
-        when a user completes the OAuth flow and credentials become available.
-
-        Kubernetes automatically updates the mounted secret volume when the secret
-        changes (typically within ~60 seconds), so this will pick up new credentials
-        without requiring a pod restart.
-
-        Returns:
-            True if new credentials were found and copied, False otherwise.
-        """
-        dest_path = Path(
-            "/workspace/.google_workspace_mcp/credentials/credentials.json"
-        )
-
-        # If we already have credentials in workspace, check if source is newer
-        if dest_path.exists():
-            secret_path = Path(
-                "/app/.google_workspace_mcp/credentials/credentials.json"
-            )
-            if secret_path.exists():
-                try:
-                    # Compare modification times - secret mount updates when K8s syncs
-                    if secret_path.stat().st_mtime > dest_path.stat().st_mtime:
-                        logging.info(
-                            "Detected updated Google OAuth credentials, refreshing..."
-                        )
-                        return await self._try_copy_google_credentials()
-                except OSError:
-                    pass
-            return False
-
-        # No credentials yet, try to copy
-        if await self._try_copy_google_credentials():
-            logging.info(
-                "✓ Google OAuth credentials now available (user completed authentication)"
-            )
-            return True
-        return False
+    # NOTE: Google credential copy functions removed - credentials now fetched at runtime via backend API
+    # This supersedes PR #562's volume mounting approach with just-in-time credential fetching
+    # See _populate_runtime_credentials() for new approach

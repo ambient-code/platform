@@ -86,6 +86,12 @@ func registerRoutes(r *gin.Engine) {
 			// MCP status endpoint
 			projectGroup.GET("/agentic-sessions/:sessionName/mcp/status", websocket.HandleMCPStatus)
 
+			// Runtime credential fetch endpoints (for long-running sessions)
+			projectGroup.GET("/agentic-sessions/:sessionName/credentials/github", handlers.GetGitHubTokenForSession)
+			projectGroup.GET("/agentic-sessions/:sessionName/credentials/google", handlers.GetGoogleCredentialsForSession)
+			projectGroup.GET("/agentic-sessions/:sessionName/credentials/jira", handlers.GetJiraCredentialsForSession)
+			projectGroup.GET("/agentic-sessions/:sessionName/credentials/gitlab", handlers.GetGitLabTokenForSession)
+
 			// Session export
 			projectGroup.GET("/agentic-sessions/:sessionName/export", websocket.HandleExportSession)
 
@@ -103,7 +109,8 @@ func registerRoutes(r *gin.Engine) {
 			projectGroup.GET("/integration-secrets", handlers.ListIntegrationSecrets)
 			projectGroup.PUT("/integration-secrets", handlers.UpdateIntegrationSecrets)
 
-			// GitLab authentication endpoints (project-scoped)
+			// GitLab authentication endpoints (DEPRECATED - moved to cluster-scoped)
+			// Kept for backward compatibility, will be removed in future version
 			projectGroup.POST("/auth/gitlab/connect", handlers.ConnectGitLabGlobal)
 			projectGroup.GET("/auth/gitlab/status", handlers.GetGitLabStatusGlobal)
 			projectGroup.POST("/auth/gitlab/disconnect", handlers.DisconnectGitLabGlobal)
@@ -114,10 +121,30 @@ func registerRoutes(r *gin.Engine) {
 		api.POST("/auth/github/disconnect", handlers.DisconnectGitHubGlobal)
 		api.GET("/auth/github/user/callback", handlers.HandleGitHubUserOAuthCallback)
 
+		// GitHub PAT (alternative to GitHub App)
+		api.POST("/auth/github/pat", handlers.SaveGitHubPAT)
+		api.GET("/auth/github/pat/status", handlers.GetGitHubPATStatus)
+		api.DELETE("/auth/github/pat", handlers.DeleteGitHubPAT)
+
 		// Cluster-level Google OAuth (similar to GitHub App pattern)
 		api.POST("/auth/google/connect", handlers.GetGoogleOAuthURLGlobal)
 		api.GET("/auth/google/status", handlers.GetGoogleOAuthStatusGlobal)
 		api.POST("/auth/google/disconnect", handlers.DisconnectGoogleOAuthGlobal)
+
+		// Unified integrations status endpoint
+		api.GET("/auth/integrations/status", handlers.GetIntegrationsStatus)
+
+		// Cluster-level Jira (user-scoped)
+		api.POST("/auth/jira/connect", handlers.ConnectJira)
+		api.GET("/auth/jira/status", handlers.GetJiraStatus)
+		api.DELETE("/auth/jira/disconnect", handlers.DisconnectJira)
+		api.POST("/auth/jira/test", handlers.TestJiraConnection)
+
+		// Cluster-level GitLab (user-scoped)
+		api.POST("/auth/gitlab/connect", handlers.ConnectGitLabGlobal)
+		api.GET("/auth/gitlab/status", handlers.GetGitLabStatusGlobal)
+		api.DELETE("/auth/gitlab/disconnect", handlers.DisconnectGitLabGlobal)
+		api.POST("/auth/gitlab/test", handlers.TestGitLabConnection)
 
 		// Cluster info endpoint (public, no auth required)
 		api.GET("/cluster-info", handlers.GetClusterInfo)

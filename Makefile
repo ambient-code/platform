@@ -60,6 +60,14 @@ OPERATOR_IMAGE ?= vteam_operator:latest
 RUNNER_IMAGE ?= vteam_claude_runner:latest
 STATE_SYNC_IMAGE ?= vteam_state_sync:latest
 
+# Vertex AI Configuration (for LOCAL_VERTEX=true)
+# These inherit from environment if set, or can be overridden on command line
+LOCAL_VERTEX ?= false
+ANTHROPIC_VERTEX_PROJECT_ID ?= $(shell echo $$ANTHROPIC_VERTEX_PROJECT_ID)
+CLOUD_ML_REGION ?= $(shell echo $$CLOUD_ML_REGION)
+# Default to ADC location if not set (created by: gcloud auth application-default login)
+GOOGLE_APPLICATION_CREDENTIALS ?= $(or $(shell echo $$GOOGLE_APPLICATION_CREDENTIALS),$(HOME)/.config/gcloud/application_default_credentials.json)
+
 
 # Colors for output (using tput for better compatibility, with fallback to printf-compatible codes)
 # Use shell assignment to evaluate tput at runtime if available
@@ -570,6 +578,14 @@ kind-up: check-kind check-kubectl ## Start kind cluster with Quay.io images (pro
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Extracting test token..."
 	@cd e2e && CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/extract-token.sh
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Kind cluster ready!"
+	@# Vertex AI setup if requested
+	@if [ "$(LOCAL_VERTEX)" = "true" ]; then \
+		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Configuring Vertex AI..."; \
+		ANTHROPIC_VERTEX_PROJECT_ID="$(ANTHROPIC_VERTEX_PROJECT_ID)" \
+		CLOUD_ML_REGION="$(CLOUD_ML_REGION)" \
+		GOOGLE_APPLICATION_CREDENTIALS="$(GOOGLE_APPLICATION_CREDENTIALS)" \
+		./scripts/setup-vertex-kind.sh; \
+	fi
 	@echo ""
 	@echo "$(COLOR_BOLD)Access the platform:$(COLOR_RESET)"
 	@echo "  Run in another terminal: $(COLOR_BLUE)make kind-port-forward$(COLOR_RESET)"

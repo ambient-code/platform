@@ -152,7 +152,7 @@ jobs:
           context: ${{ matrix.component.context }}
           file: ${{ matrix.component.dockerfile }}
           platforms: linux/amd64,linux/arm64
-          push: false
+          push: true
           tags: ${{ matrix.component.image }}:pr-${{ github.event.pull_request.number }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

@@ -809,14 +809,20 @@ type GoogleOAuthCredentials struct {
 }
 
 // isValidUserID validates userID for use as a Kubernetes Secret data key
-// Keys must be valid DNS subdomain names (RFC 1123) and reasonable length
+// Keys must match regex: [-._a-zA-Z0-9]+
+// Note: userID is sanitized in forwardedIdentityMiddleware to ensure validity
 func isValidUserID(userID string) bool {
 	if userID == "" || len(userID) > 253 {
 		return false
 	}
-	// Reject path traversal and invalid characters for Secret data keys
+	// Check against K8s Secret key regex: [-._a-zA-Z0-9]+
+	// Check for invalid characters
 	for _, ch := range userID {
-		if ch == '/' || ch == '\\' || ch == '\x00' {
+		isValid := (ch >= 'a' && ch <= 'z') ||
+			(ch >= 'A' && ch <= 'Z') ||
+			(ch >= '0' && ch <= '9') ||
+			ch == '-' || ch == '_' || ch == '.'
+		if !isValid {
 			return false
 		}
 	}
@@ -961,6 +967,17 @@ func HandleGoogleOAuthCallback(ctx context.Context, code string, stateData map[s
 	return nil
 }
 
+// sanitizeSecretKey converts a userID to a valid Kubernetes secret key
+// IMPORTANT: This must match the sanitization in components/operator/internal/handlers/sessions.go
+// Kubernetes secret keys must match: [-._a-zA-Z0-9]+
+// Replaces invalid characters (: / etc.) with hyphens
+func sanitizeSecretKey(userID string) string {
+	// Replace colons and slashes with hyphens
+	sanitized := strings.ReplaceAll(userID, ":", "-")
+	sanitized = strings.ReplaceAll(sanitized, "/", "-")
+	return sanitized
+}
+
 // storeGoogleCredentials stores Google OAuth credentials in cluster-level Secret
 func storeGoogleCredentials(ctx context.Context, creds *GoogleOAuthCredentials) error {
 	if creds == nil || creds.UserID == "" {
@@ -968,6 +985,7 @@ func storeGoogleCredentials(ctx context.Context, creds *GoogleOAuthCredentials) 
 	}
 
 	const secretName = "google-oauth-credentials"
+	secretKey := sanitizeSecretKey(creds.UserID)
 
 	for i := 0; i < 3; i++ { // retry on conflict
 		secret, err := K8sClient.CoreV1().Secrets(Namespace).Get(ctx, secretName, v1.GetOptions{})
@@ -1008,7 +1026,7 @@ func storeGoogleCredentials(ctx context.Context, creds *GoogleOAuthCredentials) 
 		if err != nil {
 			return fmt.Errorf("failed to marshal credentials: %w", err)
 		}
-		secret.Data[creds.UserID] = b
+		secret.Data[secretKey] = b
 
 		if _, uerr := K8sClient.CoreV1().Secrets(Namespace).Update(ctx, secret, v1.UpdateOptions{}); uerr != nil {
 			if errors.IsConflict(uerr) {
@@ -1024,6 +1042,8 @@ func storeGoogleCredentials(ctx context.Context, creds *GoogleOAuthCredentials) 
 // GetGoogleCredentials retrieves cluster-level Google OAuth credentials for a user
 func GetGoogleCredentials(ctx context.Context, userID string) (*GoogleOAuthCredentials, error) {
 	const secretName = "google-oauth-credentials"
+	secretKey := sanitizeSecretKey(userID)
+
 	secret, err := K8sClient.CoreV1().Secrets(Namespace).Get(ctx, secretName, v1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -1032,12 +1052,12 @@ func GetGoogleCredentials(ctx context.Context, userID string) (*GoogleOAuthCrede
 		return nil, fmt.Errorf("failed to get Secret: %w", err)
 	}
 
-	if secret.Data == nil || len(secret.Data[userID]) == 0 {
+	if secret.Data == nil || len(secret.Data[secretKey]) == 0 {
 		return nil, nil // User hasn't connected yet
 	}
 
 	var creds GoogleOAuthCredentials
-	if err := json.Unmarshal(secret.Data[userID], &creds); err != nil {
+	if err := json.Unmarshal(secret.Data[secretKey], &creds); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal credentials: %w", err)
 	}
 
@@ -1110,6 +1130,7 @@ func DisconnectGoogleOAuthGlobal(c *gin.Context) {
 	}
 
 	const secretName = "google-oauth-credentials"
+	secretKey := sanitizeSecretKey(userID)
 	ctx := c.Request.Context()
 
 	for i := 0; i < 3; i++ { // retry on conflict
@@ -1124,13 +1145,13 @@ func DisconnectGoogleOAuthGlobal(c *gin.Context) {
 			return
 		}
 
-		if secret.Data == nil || len(secret.Data[userID]) == 0 {
+		if secret.Data == nil || len(secret.Data[secretKey]) == 0 {
 			// Already disconnected
 			c.JSON(http.StatusOK, gin.H{"message": "Google Drive disconnected"})
 			return
 		}
 
-		delete(secret.Data, userID)
+		delete(secret.Data, secretKey)
 
 		if _, uerr := K8sClient.CoreV1().Secrets(Namespace).Update(ctx, secret, v1.UpdateOptions{}); uerr != nil {
 			if errors.IsConflict(uerr) {

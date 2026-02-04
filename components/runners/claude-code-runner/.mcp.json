@@ -15,7 +15,6 @@
       }
     },
     "google-workspace": {
-      "type": "stdio",
       "command": "uvx",
       "args": [
         "workspace-mcp@1.6.1",
