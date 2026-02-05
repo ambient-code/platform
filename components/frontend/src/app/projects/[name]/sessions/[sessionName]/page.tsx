@@ -2031,6 +2031,12 @@ export default function ProjectSessionDetailPage({
                           userHasInteracted={userHasInteracted}
                           queuedMessages={sessionQueue.messages}
                           hasRealMessages={hasRealMessages}
+                          onPasteImage={async (file: File) => {
+                            await uploadFileMutation.mutateAsync({
+                              type: 'local',
+                              file: file
+                            });
+                          }}
                           welcomeExperienceComponent={
                             <WelcomeExperience
                               ootbWorkflows={ootbWorkflows}
