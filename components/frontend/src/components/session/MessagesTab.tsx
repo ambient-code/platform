@@ -74,13 +74,17 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
   // Filter out system messages unless showSystemMessages is true
   const filteredMessages = streamMessages.filter((msg) => {
     if (showSystemMessages) return true;
-    
-    // Hide system_message type by default
-    // Check if msg has a type property and if it's a system_message
+
+    // Hide system_message type by default (legacy)
     if ('type' in msg && msg.type === "system_message") {
       return false;
     }
-    
+
+    // Hide messages with system or developer role (AG-UI protocol)
+    if ('role' in msg && (msg.role === "system" || msg.role === "developer")) {
+      return false;
+    }
+
     return true;
   });
 
