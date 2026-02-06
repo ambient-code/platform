@@ -781,8 +781,8 @@ var _ = Describe("Permissions Handler", Ordered, Label(test_constants.LabelUnit,
 				"system:unauthenticated", // RBAC group for anonymous access
 				"system:serviceaccount:test-project:default", // service account reference
 				"user@domain.com",        // email addresses are valid RBAC subjects
-				"user.name",              // dots are valid in RBAC subjects
-				"User-Name",              // uppercase is valid in RBAC subjects
+				"john.doe",               // dots are valid in RBAC subjects
+				"AdminUser",              // uppercase is valid in RBAC subjects
 				strings.Repeat("a", 253), // exactly 253 chars (max allowed for RBAC subjects)
 			}
 
