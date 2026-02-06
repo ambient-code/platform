@@ -225,7 +225,7 @@ export default function ProjectSessionDetailPage({
 
   // Track the current Langfuse trace ID for feedback association
   const [langfuseTraceId, setLangfuseTraceId] = useState<string | null>(null);
-
+  
   // AG-UI streaming hook - replaces useSessionMessages and useSendChatMessage
   // Note: autoConnect is intentionally false to avoid SSR hydration mismatch
   // Connection is triggered manually in useEffect after client hydration
@@ -693,12 +693,12 @@ export default function ProjectSessionDetailPage({
       seenRepos.add(repoName);
 
       // Repos are cloned to /workspace/repos/{name}
-        options.push({
-          type: "repo",
-          name: repoName,
+      options.push({
+        type: "repo",
+        name: repoName,
         path: `repos/${repoName}`,
-        });
       });
+    });
 
     if (workflowManagement.activeWorkflow && session?.spec?.activeWorkflow) {
       const workflowName =
@@ -1319,20 +1319,6 @@ export default function ProjectSessionDetailPage({
   // LEGACY: Old handleInterrupt removed - now using aguiInterrupt from useAGUIStream
   // which calls the proper AG-UI interrupt endpoint that signals Claude SDK
 
-  const handleEndSession = () => {
-    // Use stop API to end the session
-    stopMutation.mutate(
-      { projectName, sessionName, data: { reason: "end_session" } },
-      {
-        onSuccess: () => successToast("Session ended successfully"),
-        onError: (err) =>
-          errorToast(
-            err instanceof Error ? err.message : "Failed to end session",
-          ),
-      },
-    );
-  };
-
   // Loading state
   if (isLoading || !projectName || !sessionName) {
     return (
@@ -1466,16 +1452,16 @@ export default function ProjectSessionDetailPage({
 
         {/* Mobile: Options menu button (below header border) - always show */}
         {session && (
-        <div className="md:hidden px-6 py-1 bg-card border-b">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="h-8 w-8 p-0"
-          >
-            <SlidersHorizontal className="h-4 w-4" />
-          </Button>
-        </div>
+          <div className="md:hidden px-6 py-1 bg-card border-b">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="h-8 w-8 p-0"
+            >
+              <SlidersHorizontal className="h-4 w-4" />
+            </Button>
+          </div>
         )}
 
         {/* Main content area */}
@@ -1483,7 +1469,7 @@ export default function ProjectSessionDetailPage({
           <div className="h-full relative">
               {/* Mobile sidebar overlay */}
               {mobileMenuOpen && (
-                <div
+                <div 
                   className="fixed inset-0 bg-background/80 backdrop-blur-sm z-40 md:hidden"
                   onClick={() => setMobileMenuOpen(false)}
                 />
@@ -1491,11 +1477,11 @@ export default function ProjectSessionDetailPage({
 
             {/* Mobile Left Column (overlay) */}
             {session && mobileMenuOpen && (
-              <div className={cn(
+                <div className={cn(
                 "fixed left-0 top-16 z-50 shadow-lg flex flex-col md:hidden",
                 "w-[400px] h-[calc(100vh-4rem)] pt-6 pl-6 pr-6 bg-card relative",
-                phase !== "Running" && "pointer-events-none"
-              )}>
+                  phase !== "Running" && "pointer-events-none"
+                )}>
                   {/* Backdrop blur layer for entire sidebar */}
                   {phase !== "Running" && (
                     <div className={cn(
@@ -1725,7 +1711,7 @@ export default function ProjectSessionDetailPage({
                             >
                               <SelectTrigger className="w-[300px] h-auto min-h-[2.5rem] py-2.5 overflow-visible">
                                 <div className="flex items-center gap-2 flex-wrap w-full pr-6 overflow-visible">
-                                <SelectValue />
+                                  <SelectValue />
                                 </div>
                               </SelectTrigger>
                               <SelectContent>
@@ -1755,34 +1741,34 @@ export default function ProjectSessionDetailPage({
                                   }
 
                                   return (
-                                  <SelectItem
-                                    key={`${opt.type}:${opt.path}`}
-                                    value={`${opt.type}:${opt.path}`}
+                                    <SelectItem
+                                      key={`${opt.type}:${opt.path}`}
+                                      value={`${opt.type}:${opt.path}`}
                                       className="py-2"
-                                  >
+                                    >
                                       <div className="flex items-center gap-2 flex-wrap w-full">
-                                      {opt.type === "artifacts" && (
-                                        <Folder className="h-3 w-3" />
-                                      )}
-                                      {opt.type === "file-uploads" && (
-                                        <CloudUpload className="h-3 w-3" />
-                                      )}
-                                      {opt.type === "repo" && (
-                                        <GitBranch className="h-3 w-3" />
-                                      )}
-                                      {opt.type === "workflow" && (
-                                        <Sparkles className="h-3 w-3" />
-                                      )}
-                                      <span className="text-xs">
-                                        {opt.name}
-                                      </span>
+                                        {opt.type === "artifacts" && (
+                                          <Folder className="h-3 w-3" />
+                                        )}
+                                        {opt.type === "file-uploads" && (
+                                          <CloudUpload className="h-3 w-3" />
+                                        )}
+                                        {opt.type === "repo" && (
+                                          <GitBranch className="h-3 w-3" />
+                                        )}
+                                        {opt.type === "workflow" && (
+                                          <Sparkles className="h-3 w-3" />
+                                        )}
+                                        <span className="text-xs">
+                                          {opt.name}
+                                        </span>
                                         {branchName && (
                                           <Badge variant="outline" className="text-xs px-1.5 py-0.5 max-w-full !whitespace-normal !overflow-visible break-words bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
                                             {branchName}
                                           </Badge>
                                         )}
-                                    </div>
-                                  </SelectItem>
+                                      </div>
+                                    </SelectItem>
                                   );
                                 })}
                               </SelectContent>
@@ -1900,12 +1886,12 @@ export default function ProjectSessionDetailPage({
                                   nodes={directoryFiles.map(
                                     (item): FileTreeNode => {
                                       const node: FileTreeNode = {
-                                      name: item.name,
-                                      path: item.path,
-                                      type: item.isDir ? "folder" : "file",
-                                      sizeKb: item.size
-                                        ? item.size / 1024
-                                        : undefined,
+                                        name: item.name,
+                                        path: item.path,
+                                        type: item.isDir ? "folder" : "file",
+                                        sizeKb: item.size
+                                          ? item.size / 1024
+                                          : undefined,
                                       };
 
                                       // Don't add branch badges to individual files/folders
@@ -1956,18 +1942,18 @@ export default function ProjectSessionDetailPage({
                                     <span className="text-muted-foreground/50">(local only)</span>
                                   </div>
                                 </div>
-                              <Button
-                                onClick={() => setRemoteDialogOpen(true)}
-                                size="sm"
-                                variant="outline"
+                                <Button
+                                  onClick={() => setRemoteDialogOpen(true)}
+                                  size="sm"
+                                  variant="outline"
                                   className="w-full"
                                   disabled={!githubConfigured}
-                              >
+                                >
                                   <Cloud className="mr-2 h-3 w-3" />
                                   Configure Remote
-                              </Button>
-                            </div>
-                          ) : (
+                                </Button>
+                              </div>
+                            ) : (
                               /* State 3: Has Git + Remote */
                               <div className="border rounded-md px-2 py-1.5 space-y-1">
                                 {/* Remote Repository */}
@@ -1987,9 +1973,9 @@ export default function ProjectSessionDetailPage({
                                   <GitBranch className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
                                   <span className="text-muted-foreground">
                                     {currentBranch}
-                                    </span>
-                                  </div>
-                                  </div>
+                                  </span>
+                                </div>
+                              </div>
                             )}
                           </div>
                         </div>
@@ -1998,7 +1984,7 @@ export default function ProjectSessionDetailPage({
                   </Accordion>
                 </div>
               </div>
-            )}
+              )}
 
             {/* Floating show button when left panel is hidden (desktop only) */}
             {!leftPanelVisible && !mobileMenuOpen && (
@@ -2226,53 +2212,53 @@ export default function ProjectSessionDetailPage({
                       </div>
                     )}
                     <div className="flex flex-col flex-1 overflow-hidden">
-                    <FeedbackProvider
-                      projectName={projectName}
-                      sessionName={sessionName}
-                      username={currentUser?.username || currentUser?.displayName || "anonymous"}
-                      initialPrompt={session?.spec?.initialPrompt}
-                      activeWorkflow={workflowManagement.activeWorkflow || undefined}
-                      messages={streamMessages}
-                      traceId={langfuseTraceId || undefined}
-                      messageFeedback={aguiState.messageFeedback}
-                    >
-                      <MessagesTab
-                        session={session}
-                        streamMessages={streamMessages}
-                        chatInput={chatInput}
-                        setChatInput={setChatInput}
-                        onSendChat={() => Promise.resolve(sendChat())}
-                        onInterrupt={aguiInterrupt}
-                        onGoToResults={() => {}}
-                        onContinue={handleContinue}
-                        workflowMetadata={workflowMetadata}
-                        onCommandClick={handleCommandClick}
-                        isRunActive={isRunActive}
-                        showWelcomeExperience={!["Completed", "Failed", "Stopped", "Stopping"].includes(session?.status?.phase || "")}
-                        activeWorkflow={workflowManagement.activeWorkflow}
-                        userHasInteracted={userHasInteracted}
-                        queuedMessages={sessionQueue.messages}
-                        hasRealMessages={hasRealMessages}
-                        welcomeExperienceComponent={
-                          <WelcomeExperience
-                            ootbWorkflows={ootbWorkflows}
-                            onWorkflowSelect={handleWelcomeWorkflowSelect}
-                            onUserInteraction={() => setUserHasInteracted(true)}
-                            userHasInteracted={userHasInteracted}
-                            sessionPhase={session?.status?.phase}
-                            hasRealMessages={hasRealMessages}
-                            onLoadWorkflow={() => setCustomWorkflowDialogOpen(true)}
-                            selectedWorkflow={workflowManagement.selectedWorkflow}
-                          />
-                        }
-                      />
-                    </FeedbackProvider>
+                      <FeedbackProvider
+                        projectName={projectName}
+                        sessionName={sessionName}
+                        username={currentUser?.username || currentUser?.displayName || "anonymous"}
+                        initialPrompt={session?.spec?.initialPrompt}
+                        activeWorkflow={workflowManagement.activeWorkflow || undefined}
+                        messages={streamMessages}
+                        traceId={langfuseTraceId || undefined}
+                        messageFeedback={aguiState.messageFeedback}
+                      >
+                        <MessagesTab
+                          session={session}
+                          streamMessages={streamMessages}
+                          chatInput={chatInput}
+                          setChatInput={setChatInput}
+                          onSendChat={() => Promise.resolve(sendChat())}
+                          onInterrupt={aguiInterrupt}
+                          onGoToResults={() => {}}
+                          onContinue={handleContinue}
+                          workflowMetadata={workflowMetadata}
+                          onCommandClick={handleCommandClick}
+                          isRunActive={isRunActive}
+                          showWelcomeExperience={!["Completed", "Failed", "Stopped", "Stopping"].includes(session?.status?.phase || "")}
+                          activeWorkflow={workflowManagement.activeWorkflow}
+                          userHasInteracted={userHasInteracted}
+                          queuedMessages={sessionQueue.messages}
+                          hasRealMessages={hasRealMessages}
+                          welcomeExperienceComponent={
+                            <WelcomeExperience
+                              ootbWorkflows={ootbWorkflows}
+                              onWorkflowSelect={handleWelcomeWorkflowSelect}
+                              onUserInteraction={() => setUserHasInteracted(true)}
+                              userHasInteracted={userHasInteracted}
+                              sessionPhase={session?.status?.phase}
+                              hasRealMessages={hasRealMessages}
+                              onLoadWorkflow={() => setCustomWorkflowDialogOpen(true)}
+                              selectedWorkflow={workflowManagement.selectedWorkflow}
+                            />
+                          }
+                        />
+                      </FeedbackProvider>
                     </div>
                   </CardContent>
                 </Card>
-              </div>
-                </div>
-                            </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Modals */}
