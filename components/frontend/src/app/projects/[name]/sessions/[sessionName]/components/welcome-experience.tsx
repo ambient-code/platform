@@ -27,7 +27,7 @@ type WelcomeExperienceProps = {
 };
 
 const WELCOME_MESSAGE = `Welcome to Ambient AI! Please select a workflow or type a message to get started.`;
-const SETUP_MESSAGE = `Great! Give me a moment to get set up.`;
+const SETUP_MESSAGE = `Great! Give me a moment to get set up`;
 
 export function WelcomeExperience({
   ootbWorkflows,
