@@ -1639,6 +1639,7 @@ export default function ProjectSessionDetailPage({
                     <McpServersAccordion
                       projectName={projectName}
                       sessionName={sessionName}
+                      sessionPhase={phase}
                     />
 
                     <IntegrationsAccordion />

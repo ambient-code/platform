@@ -30,29 +30,33 @@ import type { McpServer, McpTool } from '@/services/api/sessions'
 type McpServersAccordionProps = {
   projectName: string
   sessionName: string
+  sessionPhase?: string
 }
 
 export function McpServersAccordion({
   projectName,
   sessionName,
+  sessionPhase,
 }: McpServersAccordionProps) {
   const [placeholderTimedOut, setPlaceholderTimedOut] = useState(false)
 
-  const { data: mcpStatus, isPending: mcpPending } = useMcpStatus(projectName, sessionName)
+  // Only fetch MCP status once the session is actually running (runner pod ready)
+  const isRunning = sessionPhase === 'Running'
+  const { data: mcpStatus, isPending: mcpPending } = useMcpStatus(projectName, sessionName, isRunning)
   const mcpServers = mcpStatus?.servers || []
 
   const showPlaceholders =
-    mcpPending || (mcpServers.length === 0 && !placeholderTimedOut)
+    !isRunning || mcpPending || (mcpServers.length === 0 && !placeholderTimedOut)
 
   useEffect(() => {
     if (mcpServers.length > 0) {
       setPlaceholderTimedOut(false)
       return
     }
-    if (!mcpStatus) return
+    if (!isRunning || !mcpStatus) return
     const t = setTimeout(() => setPlaceholderTimedOut(true), 15 * 1000)
     return () => clearTimeout(t)
-  }, [mcpStatus, mcpServers.length])
+  }, [mcpStatus, mcpServers.length, isRunning])
 
   const getStatusIcon = (server: McpServer) => {
     switch (server.status) {
@@ -132,8 +136,8 @@ export function McpServersAccordion({
       ([, v]) => typeof v === 'boolean'
     )
     return (
-      <div key={tool.name} className="flex items-center justify-between gap-2 py-1.5 px-1">
-        <span className="text-xs font-mono truncate">{tool.name}</span>
+      <div key={tool.name} className="flex items-center justify-between gap-3 px-3 py-2">
+        <code className="text-xs truncate">{tool.name}</code>
         {annotations.length > 0 && (
           <div className="flex items-center gap-1 flex-shrink-0">
             {annotations.map(([k, v]) => renderAnnotationBadge(k, v as boolean))}
@@ -158,6 +162,8 @@ export function McpServersAccordion({
               {getStatusIcon(server)}
             </div>
             <h4 className="font-medium text-sm">{server.displayName}</h4>
+          </div>
+          <div className="flex items-center gap-2 mt-1 ml-6">
             {server.version && (
               <span className="text-[10px] text-muted-foreground">v{server.version}</span>
             )}
@@ -176,12 +182,12 @@ export function McpServersAccordion({
                   align="start"
                   className="w-80 p-0"
                 >
-                  <div className="px-3 py-2 border-b">
+                  <div className="px-3 py-2.5 border-b bg-muted/30">
                     <p className="text-xs font-medium">
                       {server.displayName} — {toolCount} {toolCount === 1 ? 'tool' : 'tools'}
                     </p>
                   </div>
-                  <div className="max-h-64 overflow-y-auto divide-y">
+                  <div className="max-h-72 overflow-y-auto">
                     {tools.map((tool) => renderToolRow(tool))}
                   </div>
                 </PopoverContent>
