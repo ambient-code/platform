@@ -1,0 +1,272 @@
+name: Claude Live Testing
+
+# AI-powered exploratory testing with Playwright MCP
+# Trigger: Add 'claude-test' label to PR
+# Claude will test the feature with browser automation and provide reports
+
+on:
+  pull_request_target:
+    types: [labeled]
+    branches: [ main, master ]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: claude-test-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  # Security check - only proceed if claude-test label was added
+  check-label:
+    runs-on: ubuntu-latest
+    outputs:
+      should-run: ${{ steps.check.outputs.should-run }}
+    steps:
+      - name: Check if claude-test label was added
+        id: check
+        run: |
+          if [ "${{ github.event.label.name }}" = "claude-test" ]; then
+            echo "should-run=true" >> $GITHUB_OUTPUT
+            echo "✅ claude-test label added - proceeding with live testing"
+          else
+            echo "should-run=false" >> $GITHUB_OUTPUT
+            echo "⏭️  Label '${{ github.event.label.name }}' is not claude-test - skipping"
+          fi
+
+  claude-live-test:
+    name: Claude Live Testing
+    runs-on: ubuntu-latest
+    needs: check-label
+    if: needs.check-label.outputs.should-run == 'true'
+    timeout-minutes: 30
+
+    steps:
+    - name: Checkout PR code
+      uses: actions/checkout@v6
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
+
+    - name: Cleanup Diskspace
+      uses: kubeflow/pipelines/.github/actions/github-disk-cleanup@master
+      if: (!cancelled())
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v6
+      with:
+        node-version: '20'
+        
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      with:
+        driver-opts: network=host
+
+    - name: Build component images from PR code
+      run: |
+        echo "======================================"
+        echo "Building images from PR code..."
+        echo "PR #${{ github.event.pull_request.number }}"
+        echo "SHA: ${{ github.event.pull_request.head.sha }}"
+        echo "======================================"
+
+        # Build all images from PR code
+        docker build -t quay.io/ambient_code/vteam_frontend:claude-test \
+          -f components/frontend/Dockerfile components/frontend
+        
+        docker build -t quay.io/ambient_code/vteam_backend:claude-test \
+          -f components/backend/Dockerfile components/backend
+        
+        docker build -t quay.io/ambient_code/vteam_operator:claude-test \
+          -f components/operator/Dockerfile components/operator
+        
+        docker build -t quay.io/ambient_code/vteam_claude_runner:claude-test \
+          -f components/runners/claude-code-runner/Dockerfile components/runners
+
+        echo "✅ All images built"
+
+    - name: Install kind
+      run: |
+        curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64
+        chmod +x ./kind
+        sudo mv ./kind /usr/local/bin/kind
+        kind version
+
+    - name: Setup kind cluster
+      working-directory: e2e
+      run: |
+        chmod +x scripts/*.sh
+        ./scripts/setup-kind.sh
+
+    - name: Load images into kind cluster
+      run: |
+        echo "Loading images into kind cluster..."
+        kind load docker-image quay.io/ambient_code/vteam_frontend:claude-test --name ambient-local
+        kind load docker-image quay.io/ambient_code/vteam_backend:claude-test --name ambient-local
+        kind load docker-image quay.io/ambient_code/vteam_operator:claude-test --name ambient-local
+        kind load docker-image quay.io/ambient_code/vteam_claude_runner:claude-test --name ambient-local
+        echo "✅ All images loaded"
+
+    - name: Update kustomization to use claude-test images
+      run: |
+        sed -i 's/newTag: latest/newTag: claude-test/g' components/manifests/overlays/e2e/kustomization.yaml
+
+    - name: Deploy vTeam
+      working-directory: e2e
+      env:
+        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      run: ./scripts/deploy.sh
+        
+    - name: Verify deployment
+      run: |
+        echo "Checking pods..."
+        kubectl get pods -n ambient-code
+        echo ""
+        echo "Checking services..."
+        kubectl get svc -n ambient-code
+
+    - name: Get test token
+      id: token
+      run: |
+        TOKEN=$(kubectl get secret test-user-token -n ambient-code -o jsonpath='{.data.token}' | base64 -d)
+        echo "token=$TOKEN" >> $GITHUB_OUTPUT
+        echo "✅ Token retrieved (length: ${#TOKEN})"
+
+    - name: Install Playwright
+      run: |
+        npm install -g @playwright/mcp
+        npx playwright install chromium
+
+    - name: Create MCP configuration for Playwright
+      run: |
+        mkdir -p /tmp/mcp /tmp/test_output
+        
+        # Create MCP config with video and trace recording
+        cat > /tmp/mcp/playwright-config.json << 'EOF'
+        {
+          "mcpServers": {
+            "playwright": {
+              "command": "npx",
+              "args": [
+                "@playwright/mcp",
+                "--headless",
+                "--caps", "testing,pdf,vision",
+                "--save-trace",
+                "--save-video=1280x720",
+                "--output-dir", "/tmp/test_output"
+              ]
+            }
+          }
+        }
+        EOF
+        
+        echo "✅ MCP config created"
+        cat /tmp/mcp/playwright-config.json
+
+    - name: Create test prompt for Claude
+      id: prompt
+      env:
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        PR_TITLE: ${{ github.event.pull_request.title }}
+        PR_BODY: ${{ github.event.pull_request.body }}
+        PR_ADDITIONS: ${{ github.event.pull_request.additions }}
+        PR_DELETIONS: ${{ github.event.pull_request.deletions }}
+        PR_CHANGED_FILES: ${{ github.event.pull_request.changed_files }}
+        PR_DIFF_URL: ${{ github.event.pull_request.diff_url }}
+      run: |
+        # Create prompt with full PR context
+        cat > /tmp/test-prompt.txt << 'PROMPT_EOF'
+        You are performing exploratory testing using Playwright MCP browser tools.
+
+        ## PR Information
+        **PR #${{ github.event.pull_request.number }}**: ${{ github.event.pull_request.title }}
+
+        **Description:**
+        ${{ github.event.pull_request.body }}
+
+        **Changes:**
+        - Files changed: ${{ github.event.pull_request.changed_files }}
+        - Lines added: +${{ github.event.pull_request.additions }}
+        - Lines deleted: -${{ github.event.pull_request.deletions }}
+        - Diff: ${{ github.event.pull_request.diff_url }}
+
+        ## Test Environment
+        - App URL: http://localhost
+        - Test workspace: e2e-claude-test-${{ github.event.pull_request.number }}
+
+        ## Your Mission
+        1. Gain na understanding of the PR changes and how you will manually test them using the browser tools. ONLY test the specific features/fixes mentioned in the PR.
+        1. Navigate to http://localhost
+        2. Create test workspace: e2e-claude-test-${{ github.event.pull_request.number }}
+        6. Take screenshots at key moments
+        7. Write findings to /tmp/test_output/test_report.md
+
+        Video/trace recording is automatic. Focus on thorough testing of the PR changes.
+        PROMPT_EOF
+        
+        # Save to output
+        {
+          echo 'prompt<<GITHUB_OUTPUT_EOF'
+          cat /tmp/test-prompt.txt
+          echo 'GITHUB_OUTPUT_EOF'
+        } >> $GITHUB_OUTPUT
+        
+        echo "✅ Test prompt created"
+
+    - name: Run Claude with Playwright MCP
+      uses: anthropics/claude-code-action@v1
+      env:
+        TEST_TOKEN: ${{ steps.token.outputs.token }}
+        DEBUG: "*"
+      with:
+        anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        prompt: ${{ steps.prompt.outputs.prompt }}
+        show_full_output: true
+        claude_args: |
+          --mcp-config /tmp/mcp/playwright-config.json
+          --max-turns 50
+          --model claude-haiku-4-5-20251001
+          --allowedTools "mcp__playwright__*,Read,Write,List,WebFetch"
+          --disallowedTools "Bash"
+          --debug
+
+    - name: Upload test report and screenshots
+      if: always()
+      uses: actions/upload-artifact@v6
+      with:
+        name: claude-test-report-pr-${{ github.event.pull_request.number }}
+        path: |
+          /tmp/test_output/test_report.md
+          /tmp/test_output/*.png
+          /tmp/test_output/*.pdf
+        if-no-files-found: ignore
+        retention-days: 30
+
+    - name: Upload Playwright traces (includes video)
+      if: always()
+      uses: actions/upload-artifact@v6
+      with:
+        name: playwright-traces-pr-${{ github.event.pull_request.number }}
+        path: /tmp/test_output/traces
+        if-no-files-found: ignore
+        retention-days: 30
+        
+    - name: Debug logs on failure
+      if: failure()
+      run: |
+        echo "=== Frontend logs ==="
+        kubectl logs -n ambient-code -l app=frontend --tail=100 || true
+        echo ""
+        echo "=== Backend logs ==="
+        kubectl logs -n ambient-code -l app=backend-api --tail=100 || true
+        echo ""
+        echo "=== Operator logs ==="
+        kubectl logs -n ambient-code -l app=agentic-operator --tail=100 || true
+        
+    - name: Cleanup
+      if: always()
+      working-directory: e2e
+      run: |
+        CLEANUP_ARTIFACTS=true ./scripts/cleanup.sh || true

@@ -139,6 +139,41 @@ ANTHROPIC_API_KEY=sk-ant-api03-...
 
 ## Configuration
 
+### Vertex AI (Optional)
+
+Use Google Cloud Vertex AI instead of direct Anthropic API:
+
+```bash
+# If you already have these in .zshrc (e.g., for Claude Code CLI):
+# - ANTHROPIC_VERTEX_PROJECT_ID
+# - CLOUD_ML_REGION
+
+# Just add LOCAL_VERTEX=true
+make kind-up LOCAL_VERTEX=true
+```
+
+**Default credentials:** `~/.config/gcloud/application_default_credentials.json`
+(Created by `gcloud auth application-default login`)
+
+**Override credentials path:**
+```bash
+make kind-up LOCAL_VERTEX=true GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
+```
+
+**Override all values:**
+```bash
+make kind-up LOCAL_VERTEX=true \
+    ANTHROPIC_VERTEX_PROJECT_ID=my-project \
+    CLOUD_ML_REGION=us-east5 \
+    GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json
+```
+
+**Reconfigure existing cluster:**
+```bash
+# If cluster is already running, run the setup script directly
+./scripts/setup-vertex-kind.sh
+```
+
 ### Environment Variables (`e2e/.env`)
 
 Create `e2e/.env` to customize the deployment:

@@ -111,3 +111,24 @@ export async function createPullRequest(
     : '/github/pr';
   return apiClient.post<CreatePRResponse, CreatePRRequest>(path, data);
 }
+
+/**
+ * Save GitHub Personal Access Token
+ */
+export async function saveGitHubPAT(token: string): Promise<void> {
+  await apiClient.post<void, { token: string }>('/auth/github/pat', { token });
+}
+
+/**
+ * Get GitHub PAT status
+ */
+export async function getGitHubPATStatus(): Promise<{ configured: boolean; updatedAt?: string }> {
+  return apiClient.get<{ configured: boolean; updatedAt?: string }>('/auth/github/pat/status');
+}
+
+/**
+ * Delete GitHub Personal Access Token
+ */
+export async function deleteGitHubPAT(): Promise<void> {
+  await apiClient.delete<void>('/auth/github/pat');
+}

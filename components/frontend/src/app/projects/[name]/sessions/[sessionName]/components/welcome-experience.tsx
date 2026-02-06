@@ -207,8 +207,6 @@ export function WelcomeExperience({
 
               {/* Message Content */}
               <div className="flex-1 min-w-0">
-                {/* Timestamp */}
-                <div className="text-[10px] text-muted-foreground/60 mb-1">just now</div>
                 <div className="rounded-lg bg-card">
                   {/* Content */}
                   <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap mb-[0.2rem]">
@@ -400,13 +398,11 @@ export function WelcomeExperience({
                   </div>
                 </div>
 
-                {/* Message Content */}
-                <div className="flex-1 min-w-0">
-                  {/* Timestamp */}
-                  <div className="text-[10px] text-muted-foreground/60 mb-1">just now</div>
-                  <div className="rounded-lg bg-card">
-                    {/* Content */}
-                    <p className="text-sm text-muted-foreground leading-relaxed mb-[0.2rem]">
+              {/* Message Content */}
+              <div className="flex-1 min-w-0">
+                <div className="rounded-lg bg-card">
+                  {/* Content */}
+                  <p className="text-sm text-muted-foreground leading-relaxed mb-[0.2rem]">
                       {!isSetupTypingComplete ? (
                         <>
                           {setupDisplayedText.slice(0, -3)}

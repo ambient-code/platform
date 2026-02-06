@@ -274,12 +274,16 @@ func handleStreamedEvent(sessionID, runID, threadID, jsonData string, runState *
 
 	eventType, _ := event["type"].(string)
 
-	// Ensure threadId and runId are set
+	// Ensure threadId, runId, and timestamp are set
 	if _, ok := event["threadId"]; !ok {
 		event["threadId"] = threadID
 	}
 	if _, ok := event["runId"]; !ok {
 		event["runId"] = runID
+	}
+	// Add timestamp if not present - critical for message timestamp tracking
+	if _, ok := event["timestamp"]; !ok {
+		event["timestamp"] = time.Now().UTC().Format(types.AGUITimestampFormat)
 	}
 
 	// Check for terminal events

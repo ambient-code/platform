@@ -30,11 +30,23 @@ func Run(registerRoutes RouterFunc) error {
 		if strings.Contains(param.Request.URL.RawQuery, "token=") {
 			path = strings.Split(path, "?")[0] + "?token=[REDACTED]"
 		}
-		return fmt.Sprintf("[GIN] %s | %3d | %s | %s\n",
+
+		// Redact Authorization header from logs
+		authHeader := "[none]"
+		if auth := param.Request.Header.Get("Authorization"); auth != "" {
+			if strings.HasPrefix(auth, "Bearer ") {
+				authHeader = "Bearer [REDACTED]"
+			} else {
+				authHeader = "[REDACTED]"
+			}
+		}
+
+		return fmt.Sprintf("[GIN] %s | %3d | %s | %s | Auth: %s\n",
 			param.Method,
 			param.StatusCode,
 			param.ClientIP,
 			path,
+			authHeader,
 		)
 	}))
 
@@ -67,11 +79,67 @@ func Run(registerRoutes RouterFunc) error {
 	return nil
 }
 
+// sanitizeUserID converts userID to a valid Kubernetes Secret data key
+// K8s Secret keys must match regex: [-._a-zA-Z0-9]+
+// Follows cert-manager's sanitization pattern for consistent, secure key generation
+//
+// Handles common username formats:
+// - OpenShift: kube:admin, system:serviceaccount:ns:sa → kube-admin, system-serviceaccount-ns-sa
+// - Email: user@company.com → user-company.com
+// - LDAP: CN=User,OU=dept,DC=com → CN-User-OU-dept-DC-com
+// - SSO: domain\username → domain-username
+// - Spaces: "First Last" → "First-Last"
+//
+// Security: Only replaces characters, never interprets them (no injection risk)
+func sanitizeUserID(userID string) string {
+	if userID == "" {
+		return ""
+	}
+
+	// Limit length to K8s maximum (253 chars for Secret keys)
+	if len(userID) > 253 {
+		// Take first 253 chars after sanitization to preserve readability
+		userID = userID[:253]
+	}
+
+	// Replace all invalid characters with hyphen
+	// Valid: a-z, A-Z, 0-9, hyphen, underscore, period
+	// This approach is secure because we're doing character replacement,
+	// not parsing or interpreting the input (no injection vectors)
+	sanitized := strings.Map(func(r rune) rune {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' || r == '.' {
+			return r
+		}
+		// Replace all invalid chars with hyphen (like cert-manager)
+		// Common replacements:
+		// : (kube:admin) → -
+		// @ (email) → -
+		// / \ (paths, Windows) → -
+		// , (LDAP DN) → -
+		// space → -
+		return '-'
+	}, userID)
+
+	// Ensure doesn't start/end with hyphen (K8s label-like constraint for consistency)
+	sanitized = strings.Trim(sanitized, "-")
+
+	// Collapse multiple consecutive hyphens to single hyphen for readability
+	for strings.Contains(sanitized, "--") {
+		sanitized = strings.ReplaceAll(sanitized, "--", "-")
+	}
+
+	return sanitized
+}
+
 // forwardedIdentityMiddleware populates Gin context from common OAuth proxy headers
 func forwardedIdentityMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if v := c.GetHeader("X-Forwarded-User"); v != "" {
-			c.Set("userID", v)
+			// Sanitize userID to make it valid for K8s Secret keys
+			// Example: "kube:admin" becomes "kube-admin"
+			c.Set("userID", sanitizeUserID(v))
+			// Keep original for display purposes
+			c.Set("userIDOriginal", v)
 		}
 		// Prefer preferred username; fallback to user id
 		name := c.GetHeader("X-Forwarded-Preferred-Username")

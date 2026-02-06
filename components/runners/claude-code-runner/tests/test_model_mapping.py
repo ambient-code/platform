@@ -10,12 +10,12 @@ from pathlib import Path
 
 import pytest
 
-# Add parent directory to path for importing wrapper module
-wrapper_dir = Path(__file__).parent.parent
-if str(wrapper_dir) not in sys.path:
-    sys.path.insert(0, str(wrapper_dir))
+# Add parent directory to path for importing adapter module
+adapter_dir = Path(__file__).parent.parent
+if str(adapter_dir) not in sys.path:
+    sys.path.insert(0, str(adapter_dir))
 
-from wrapper import ClaudeCodeAdapter  # type: ignore[import]
+from adapter import ClaudeCodeAdapter  # type: ignore[import]
 
 
 class TestMapToVertexModel:
@@ -93,6 +93,7 @@ class TestMapToVertexModel:
         # These are the exact model values from the frontend dropdown
         frontend_models = [
             "claude-sonnet-4-5",
+            "claude-opus-4-6",
             "claude-opus-4-5",
             "claude-opus-4-1",
             "claude-haiku-4-5",
@@ -100,6 +101,7 @@ class TestMapToVertexModel:
 
         expected_mappings = {
             "claude-sonnet-4-5": "claude-sonnet-4-5@20250929",
+            "claude-opus-4-6": "claude-opus-4-6",
             "claude-opus-4-5": "claude-opus-4-5@20251101",
             "claude-opus-4-1": "claude-opus-4-1@20250805",
             "claude-haiku-4-5": "claude-haiku-4-5@20251001",
@@ -112,19 +114,20 @@ class TestMapToVertexModel:
             ), f"Model {model} should map to {expected_mappings[model]}, got {result}"
 
     def test_mapping_includes_version_date(self):
-        """Test that all mapped models include version dates"""
+        """Test that mapped models include version dates (except Opus 4.6)"""
         adapter = ClaudeCodeAdapter()
 
-        models = [
+        # Opus 4.6 is the exception - uses simplified naming without @date
+        models_with_dates = [
             "claude-opus-4-5",
             "claude-opus-4-1",
             "claude-sonnet-4-5",
             "claude-haiku-4-5",
         ]
 
-        for model in models:
+        for model in models_with_dates:
             result = adapter._map_to_vertex_model(model)
-            # All Vertex AI models should have @YYYYMMDD format
+            # All Vertex AI models (except Opus 4.6) should have @YYYYMMDD format
             assert "@" in result, f"Mapped model {result} should include @ version date"
             assert (
                 len(result.split("@")) == 2
@@ -136,6 +139,13 @@ class TestMapToVertexModel:
             assert (
                 version_date.isdigit()
             ), f"Version date {version_date} should be all digits"
+
+    def test_opus_4_6_no_date_suffix(self):
+        """Test that Opus 4.6 uses simplified naming (no @date suffix)"""
+        adapter = ClaudeCodeAdapter()
+        result = adapter._map_to_vertex_model("claude-opus-4-6")
+        assert result == "claude-opus-4-6"
+        assert "@" not in result, "Opus 4.6 should NOT have @date suffix"
 
     def test_none_input_handling(self):
         """Test that None input raises TypeError (invalid type per signature)"""
@@ -171,8 +181,9 @@ class TestModelMappingIntegration:
         """Test that mapped model IDs match the expected Vertex AI format"""
         adapter = ClaudeCodeAdapter()
 
-        # Expected Vertex AI model ID format: model-name@YYYYMMDD
+        # Expected Vertex AI model ID format: model-name@YYYYMMDD (except Opus 4.6)
         models_to_test = [
+            ("claude-opus-4-6", "claude-opus-4-6"),
             ("claude-opus-4-5", "claude-opus-4-5@20251101"),
             ("claude-opus-4-1", "claude-opus-4-1@20250805"),
             ("claude-sonnet-4-5", "claude-sonnet-4-5@20250929"),
@@ -192,6 +203,7 @@ class TestModelMappingIntegration:
         # Simulate user selecting from UI dropdown
         ui_selections = [
             "claude-sonnet-4-5",  # User selects Sonnet 4.5
+            "claude-opus-4-6",  # User selects Opus 4.6 (newest)
             "claude-opus-4-5",  # User selects Opus 4.5
             "claude-opus-4-1",  # User selects Opus 4.1
             "claude-haiku-4-5",  # User selects Haiku 4.5
@@ -202,11 +214,19 @@ class TestModelMappingIntegration:
 
             # Verify it maps to a valid Vertex AI model ID
             assert vertex_model.startswith("claude-")
-            assert "@" in vertex_model
+
+            # Opus 4.6 is the exception - no @date suffix
+            if selection == "claude-opus-4-6":
+                assert "@" not in vertex_model
+            else:
+                assert "@" in vertex_model
 
             # Verify the base model name is preserved
-            base_name = vertex_model.split("@")[0]
-            assert selection in vertex_model or base_name in selection
+            if "@" in vertex_model:
+                base_name = vertex_model.split("@")[0]
+                assert selection in vertex_model or base_name in selection
+            else:
+                assert selection == vertex_model
 
     def test_end_to_end_vertex_mapping_flow(self):
         """Test complete flow: UI selection → model mapping → Vertex AI call"""
@@ -215,24 +235,34 @@ class TestModelMappingIntegration:
         # Simulate complete flow for each model
         test_scenarios = [
             {
+                "ui_selection": "claude-opus-4-6",
+                "expected_vertex_id": "claude-opus-4-6",
+                "description": "Newest Opus model (simplified naming)",
+                "has_date_suffix": False,
+            },
+            {
                 "ui_selection": "claude-opus-4-5",
                 "expected_vertex_id": "claude-opus-4-5@20251101",
                 "description": "Latest Opus model",
+                "has_date_suffix": True,
             },
             {
                 "ui_selection": "claude-opus-4-1",
                 "expected_vertex_id": "claude-opus-4-1@20250805",
                 "description": "Previous Opus model",
+                "has_date_suffix": True,
             },
             {
                 "ui_selection": "claude-sonnet-4-5",
                 "expected_vertex_id": "claude-sonnet-4-5@20250929",
                 "description": "Balanced model",
+                "has_date_suffix": True,
             },
             {
                 "ui_selection": "claude-haiku-4-5",
                 "expected_vertex_id": "claude-haiku-4-5@20251001",
                 "description": "Fastest model",
+                "has_date_suffix": True,
             },
         ]
 
@@ -249,21 +279,27 @@ class TestModelMappingIntegration:
             ), f"{scenario['description']}: Expected {scenario['expected_vertex_id']}, got {vertex_model_id}"
 
             # Step 4: Verify Vertex AI model ID format is valid
-            assert "@" in vertex_model_id
-            parts = vertex_model_id.split("@")
-            assert len(parts) == 2
-            model_name, version_date = parts
-            assert model_name.startswith("claude-")
-            assert len(version_date) == 8  # YYYYMMDD format
-            assert version_date.isdigit()
+            if scenario["has_date_suffix"]:
+                assert "@" in vertex_model_id
+                parts = vertex_model_id.split("@")
+                assert len(parts) == 2
+                model_name, version_date = parts
+                assert model_name.startswith("claude-")
+                assert len(version_date) == 8  # YYYYMMDD format
+                assert version_date.isdigit()
+            else:
+                # Opus 4.6 uses simplified naming - no @date suffix
+                assert "@" not in vertex_model_id
+                assert vertex_model_id.startswith("claude-")
 
     def test_model_ordering_consistency(self):
         """Test that model ordering is consistent between frontend and backend"""
         adapter = ClaudeCodeAdapter()
 
-        # Expected ordering: Sonnet → Opus 4.5 → Opus 4.1 → Haiku (matches frontend dropdown)
+        # Expected ordering: Sonnet → Opus 4.6 → Opus 4.5 → Opus 4.1 → Haiku (matches frontend dropdown)
         expected_order = [
             "claude-sonnet-4-5",
+            "claude-opus-4-6",
             "claude-opus-4-5",
             "claude-opus-4-1",
             "claude-haiku-4-5",
@@ -272,10 +308,19 @@ class TestModelMappingIntegration:
         # Verify all models map successfully in order
         for model in expected_order:
             vertex_id = adapter._map_to_vertex_model(model)
-            assert "@" in vertex_id, f"Model {model} should map to valid Vertex AI ID"
+            # Opus 4.6 is the exception - no @date suffix
+            if model == "claude-opus-4-6":
+                assert (
+                    "@" not in vertex_id
+                ), f"Model {model} should use simplified naming"
+            else:
+                assert (
+                    "@" in vertex_id
+                ), f"Model {model} should map to valid Vertex AI ID"
 
         # Verify ordering matches frontend dropdown
         assert expected_order[0] == "claude-sonnet-4-5"  # Balanced (default)
-        assert expected_order[1] == "claude-opus-4-5"  # Latest Opus
-        assert expected_order[2] == "claude-opus-4-1"  # Previous Opus
-        assert expected_order[3] == "claude-haiku-4-5"  # Fastest
+        assert expected_order[1] == "claude-opus-4-6"  # Newest Opus
+        assert expected_order[2] == "claude-opus-4-5"  # Latest Opus
+        assert expected_order[3] == "claude-opus-4-1"  # Previous Opus
+        assert expected_order[4] == "claude-haiku-4-5"  # Fastest
