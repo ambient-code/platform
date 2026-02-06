@@ -16,7 +16,14 @@ import {
   AlertTriangle,
   X,
   MoreVertical,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
+import {
+  ResizablePanelGroup,
+  ResizablePanel,
+  ResizableHandle,
+} from "@/components/ui/resizable";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 
@@ -147,6 +154,14 @@ export default function ProjectSessionDetailPage({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userHasInteracted, setUserHasInteracted] = useState(false);
 
+  // Left panel visibility and size state (persisted to localStorage)
+  const [leftPanelVisible, setLeftPanelVisible] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    const saved = localStorage.getItem('session-left-panel-visible');
+    return saved === null ? true : saved === 'true';
+  });
+  
+
   // Directory browser state (unified for artifacts, repos, and workflow)
   const [selectedDirectory, setSelectedDirectory] = useState<DirectoryOption>({
     type: "artifacts",
@@ -171,6 +186,11 @@ export default function ProjectSessionDetailPage({
       } catch {}
     });
   }, [params]);
+
+  // Persist left panel visibility
+  useEffect(() => {
+    localStorage.setItem('session-left-panel-visible', String(leftPanelVisible));
+  }, [leftPanelVisible]);
 
   // Session queue hook (localStorage-backed)
   const sessionQueue = useSessionQueue(projectName, sessionName);
@@ -205,7 +225,7 @@ export default function ProjectSessionDetailPage({
 
   // Track the current Langfuse trace ID for feedback association
   const [langfuseTraceId, setLangfuseTraceId] = useState<string | null>(null);
-  
+
   // AG-UI streaming hook - replaces useSessionMessages and useSendChatMessage
   // Note: autoConnect is intentionally false to avoid SSR hydration mismatch
   // Connection is triggered manually in useEffect after client hydration
@@ -673,12 +693,12 @@ export default function ProjectSessionDetailPage({
       seenRepos.add(repoName);
 
       // Repos are cloned to /workspace/repos/{name}
-      options.push({
-        type: "repo",
-        name: repoName,
+        options.push({
+          type: "repo",
+          name: repoName,
         path: `repos/${repoName}`,
+        });
       });
-    });
 
     if (workflowManagement.activeWorkflow && session?.spec?.activeWorkflow) {
       const workflowName =
@@ -1446,39 +1466,36 @@ export default function ProjectSessionDetailPage({
 
         {/* Mobile: Options menu button (below header border) - always show */}
         {session && (
-          <div className="md:hidden px-6 py-1 bg-card border-b">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="h-8 w-8 p-0"
-            >
-              <SlidersHorizontal className="h-4 w-4" />
-            </Button>
-          </div>
+        <div className="md:hidden px-6 py-1 bg-card border-b">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="h-8 w-8 p-0"
+          >
+            <SlidersHorizontal className="h-4 w-4" />
+          </Button>
+        </div>
         )}
 
         {/* Main content area */}
         <div className="flex-grow overflow-hidden bg-card">
-          <div className="h-full">
-            <div className="h-full flex gap-6">
+          <div className="h-full relative">
               {/* Mobile sidebar overlay */}
               {mobileMenuOpen && (
-                <div 
+                <div
                   className="fixed inset-0 bg-background/80 backdrop-blur-sm z-40 md:hidden"
                   onClick={() => setMobileMenuOpen(false)}
                 />
               )}
 
-              {/* Left Column - Accordions - always show with state-based styling */}
-              {session && (
-                <div className={cn(
-                  "flex-[0_0_400px] min-w-[350px] max-w-[500px] flex flex-col sticky top-0 self-start h-[calc(100vh-8rem)] pt-6 pl-6 pr-6 bg-card relative",
-                  "md:flex md:pr-0",
-                  mobileMenuOpen ? "fixed left-0 top-16 z-50 shadow-lg" : "hidden",
-                  // Disable interactions when not running
-                  phase !== "Running" && "pointer-events-none"
-                )}>
+            {/* Mobile Left Column (overlay) */}
+            {session && mobileMenuOpen && (
+              <div className={cn(
+                "fixed left-0 top-16 z-50 shadow-lg flex flex-col md:hidden",
+                "w-[400px] h-[calc(100vh-4rem)] pt-6 pl-6 pr-6 bg-card relative",
+                phase !== "Running" && "pointer-events-none"
+              )}>
                   {/* Backdrop blur layer for entire sidebar */}
                   {phase !== "Running" && (
                     <div className={cn(
@@ -1708,7 +1725,7 @@ export default function ProjectSessionDetailPage({
                             >
                               <SelectTrigger className="w-[300px] h-auto min-h-[2.5rem] py-2.5 overflow-visible">
                                 <div className="flex items-center gap-2 flex-wrap w-full pr-6 overflow-visible">
-                                  <SelectValue />
+                                <SelectValue />
                                 </div>
                               </SelectTrigger>
                               <SelectContent>
@@ -1738,34 +1755,34 @@ export default function ProjectSessionDetailPage({
                                   }
 
                                   return (
-                                    <SelectItem
-                                      key={`${opt.type}:${opt.path}`}
-                                      value={`${opt.type}:${opt.path}`}
+                                  <SelectItem
+                                    key={`${opt.type}:${opt.path}`}
+                                    value={`${opt.type}:${opt.path}`}
                                       className="py-2"
-                                    >
+                                  >
                                       <div className="flex items-center gap-2 flex-wrap w-full">
-                                        {opt.type === "artifacts" && (
-                                          <Folder className="h-3 w-3" />
-                                        )}
-                                        {opt.type === "file-uploads" && (
-                                          <CloudUpload className="h-3 w-3" />
-                                        )}
-                                        {opt.type === "repo" && (
-                                          <GitBranch className="h-3 w-3" />
-                                        )}
-                                        {opt.type === "workflow" && (
-                                          <Sparkles className="h-3 w-3" />
-                                        )}
-                                        <span className="text-xs">
-                                          {opt.name}
-                                        </span>
+                                      {opt.type === "artifacts" && (
+                                        <Folder className="h-3 w-3" />
+                                      )}
+                                      {opt.type === "file-uploads" && (
+                                        <CloudUpload className="h-3 w-3" />
+                                      )}
+                                      {opt.type === "repo" && (
+                                        <GitBranch className="h-3 w-3" />
+                                      )}
+                                      {opt.type === "workflow" && (
+                                        <Sparkles className="h-3 w-3" />
+                                      )}
+                                      <span className="text-xs">
+                                        {opt.name}
+                                      </span>
                                         {branchName && (
                                           <Badge variant="outline" className="text-xs px-1.5 py-0.5 max-w-full !whitespace-normal !overflow-visible break-words bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
                                             {branchName}
                                           </Badge>
                                         )}
-                                      </div>
-                                    </SelectItem>
+                                    </div>
+                                  </SelectItem>
                                   );
                                 })}
                               </SelectContent>
@@ -1883,12 +1900,12 @@ export default function ProjectSessionDetailPage({
                                   nodes={directoryFiles.map(
                                     (item): FileTreeNode => {
                                       const node: FileTreeNode = {
-                                        name: item.name,
-                                        path: item.path,
-                                        type: item.isDir ? "folder" : "file",
-                                        sizeKb: item.size
-                                          ? item.size / 1024
-                                          : undefined,
+                                      name: item.name,
+                                      path: item.path,
+                                      type: item.isDir ? "folder" : "file",
+                                      sizeKb: item.size
+                                        ? item.size / 1024
+                                        : undefined,
                                       };
 
                                       // Don't add branch badges to individual files/folders
@@ -1939,18 +1956,18 @@ export default function ProjectSessionDetailPage({
                                     <span className="text-muted-foreground/50">(local only)</span>
                                   </div>
                                 </div>
-                                <Button
-                                  onClick={() => setRemoteDialogOpen(true)}
-                                  size="sm"
-                                  variant="outline"
+                              <Button
+                                onClick={() => setRemoteDialogOpen(true)}
+                                size="sm"
+                                variant="outline"
                                   className="w-full"
                                   disabled={!githubConfigured}
-                                >
+                              >
                                   <Cloud className="mr-2 h-3 w-3" />
                                   Configure Remote
-                                </Button>
-                              </div>
-                            ) : (
+                              </Button>
+                            </div>
+                          ) : (
                               /* State 3: Has Git + Remote */
                               <div className="border rounded-md px-2 py-1.5 space-y-1">
                                 {/* Remote Repository */}
@@ -1970,9 +1987,9 @@ export default function ProjectSessionDetailPage({
                                   <GitBranch className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
                                   <span className="text-muted-foreground">
                                     {currentBranch}
-                                  </span>
-                                </div>
-                              </div>
+                                    </span>
+                                  </div>
+                                  </div>
                             )}
                           </div>
                         </div>
@@ -1981,10 +1998,147 @@ export default function ProjectSessionDetailPage({
                   </Accordion>
                 </div>
               </div>
-              )}
+            )}
 
-              {/* Right Column - Messages */}
-              <div className="flex-1 min-w-0 flex flex-col">
+            {/* Floating show button when left panel is hidden (desktop only) */}
+            {!leftPanelVisible && !mobileMenuOpen && (
+                                      <Button
+                variant="outline"
+                                        size="sm"
+                className="hidden md:flex fixed left-2 top-1/2 -translate-y-1/2 z-30 h-8 w-8 p-0 rounded-full shadow-md"
+                onClick={() => setLeftPanelVisible(true)}
+                title="Show left panel"
+              >
+                <ChevronRight className="h-4 w-4" />
+                                      </Button>
+            )}
+
+            {/* Desktop resizable panels */}
+            <ResizablePanelGroup direction="horizontal" autoSaveId="session-layout" className="hidden md:flex h-full">
+              {leftPanelVisible && session && (
+                <>
+                  <ResizablePanel
+                    id="left-panel"
+                    order={1}
+                    defaultSize={30}
+                    minSize={20}
+                    maxSize={50}
+                  >
+                    <div className={cn(
+                      "flex flex-col h-[calc(100vh-8rem)] pt-6 pl-6 bg-card relative",
+                      phase !== "Running" && "pointer-events-none"
+                    )}>
+                      {/* Backdrop blur layer for entire sidebar */}
+                      {phase !== "Running" && (
+                        <div className={cn(
+                          "absolute inset-0 z-[5] backdrop-blur-[1px]",
+                          ["Creating", "Pending", "Stopping"].includes(phase) && "bg-background/40",
+                          ["Stopped", "Completed", "Failed"].includes(phase) && "bg-background/50 backdrop-blur-[2px]"
+                        )} />
+                      )}
+
+                      {/* State overlay for non-running sessions */}
+                      {phase !== "Running" && (
+                        <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-auto">
+                          <div className="text-center">
+                            {["Creating", "Pending"].includes(phase) && (
+                              <>
+                                <Loader2 className="h-10 w-10 mx-auto mb-3 animate-spin text-blue-600" />
+                                <h3 className="font-semibold text-lg mb-1">Starting Session</h3>
+                                <p className="text-sm text-muted-foreground">Setting up your workspace...</p>
+                              </>
+                            )}
+                            {phase === "Stopping" && (
+                              <>
+                                <Loader2 className="h-10 w-10 mx-auto mb-3 animate-spin text-orange-600" />
+                                <h3 className="font-semibold text-lg mb-1">Stopping Session</h3>
+                                <p className="text-sm text-muted-foreground">Saving workspace state...</p>
+                              </>
+                            )}
+                            {["Stopped", "Completed", "Failed"].includes(phase) && (
+                              <div className="max-w-sm">
+                                <h3 className="font-semibold text-lg mb-4">Session Hibernated</h3>
+                                <Button onClick={handleContinue} size="lg" className="w-full" disabled={continueMutation.isPending}>
+                                  {continueMutation.isPending ? (
+                                    <>
+                                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                      Resuming...
+                                    </>
+                                  ) : (
+                                    'Resume Session'
+                                  )}
+                                    </Button>
+                            </div>
+                          )}
+                        </div>
+                        </div>
+                      )}
+
+                      <div className={cn(
+                        "flex-grow pb-6 overflow-y-auto scrollbar-hide",
+                        ["Stopped", "Completed", "Failed"].includes(phase) && "blur-[2px]"
+                      )}>
+                        <Accordion
+                          type="multiple"
+                          value={openAccordionItems}
+                          onValueChange={phase === "Running" ? setOpenAccordionItems : undefined}
+                          className="w-full space-y-3"
+                        >
+                          <WorkflowsAccordion
+                            sessionPhase={session?.status?.phase}
+                            activeWorkflow={workflowManagement.activeWorkflow}
+                            selectedWorkflow={workflowManagement.selectedWorkflow}
+                            workflowActivating={workflowManagement.workflowActivating}
+                            ootbWorkflows={ootbWorkflows}
+                            isExpanded={openAccordionItems.includes("workflows")}
+                            onWorkflowChange={handleWorkflowChange}
+                            onResume={handleContinue}
+                          />
+                          <RepositoriesAccordion
+                            repositories={reposStatus?.repos || session?.status?.reconciledRepos || session?.spec?.repos || []}
+                            uploadedFiles={fileUploadsList.map((f) => ({ name: f.name, path: f.path, size: f.size }))}
+                            onAddRepository={() => setContextModalOpen(true)}
+                            onRemoveRepository={(repoName) => removeRepoMutation.mutate(repoName)}
+                            onRemoveFile={(fileName) => removeFileMutation.mutate(fileName)}
+                          />
+                          <ArtifactsAccordion
+                            files={artifactsFiles}
+                            currentSubPath={artifactsOps.currentSubPath}
+                            viewingFile={artifactsOps.viewingFile}
+                            isLoadingFile={artifactsOps.loadingFile}
+                            onFileOrFolderSelect={artifactsOps.handleFileOrFolderSelect}
+                            onRefresh={refetchArtifactsFiles}
+                            onDownloadFile={artifactsOps.handleDownloadFile}
+                            onNavigateBack={artifactsOps.navigateBack}
+                          />
+                          <McpServersAccordion
+                            projectName={projectName}
+                            sessionName={sessionName}
+                            sessionPhase={phase}
+                          />
+                          <IntegrationsAccordion />
+                  </Accordion>
+                </div>
+
+                      {/* Hide panel button */}
+                      <div className="pt-2 pb-3 flex justify-center border-t">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setLeftPanelVisible(false)}
+                          className="text-muted-foreground hover:text-foreground"
+                  >
+                          <ChevronLeft className="h-4 w-4 mr-1" />
+                    <span className="text-xs">Hide panel</span>
+                  </Button>
+                </div>
+              </div>
+                  </ResizablePanel>
+                  <ResizableHandle className="w-1 hover:bg-primary/50 transition-colors" />
+                  </>
+                )}
+              <ResizablePanel id="right-panel" order={2} defaultSize={leftPanelVisible ? 70 : 100} minSize={50}>
+                  <div className="flex-1 min-w-0 flex flex-col h-full">
                 <Card className="relative flex-1 flex flex-col overflow-hidden py-0 border-0 rounded-none md:border-l">
                   <CardContent className="px-3 pt-0 pb-0 flex-1 flex flex-col overflow-hidden">
                     {/* Repository change overlay */}
@@ -2016,45 +2170,111 @@ export default function ProjectSessionDetailPage({
                         traceId={langfuseTraceId || undefined}
                         messageFeedback={aguiState.messageFeedback}
                       >
-                        <MessagesTab
-                          session={session}
-                          streamMessages={streamMessages}
-                          chatInput={chatInput}
-                          setChatInput={setChatInput}
-                          onSendChat={() => Promise.resolve(sendChat())}
-                          onInterrupt={aguiInterrupt}
-                          onEndSession={() => Promise.resolve(handleEndSession())}
-                          onGoToResults={() => {}}
-                          onContinue={handleContinue}
-                          workflowMetadata={workflowMetadata}
-                          onCommandClick={handleCommandClick}
-                          isRunActive={isRunActive}
+                      <MessagesTab
+                        session={session}
+                        streamMessages={streamMessages}
+                        chatInput={chatInput}
+                        setChatInput={setChatInput}
+                        onSendChat={() => Promise.resolve(sendChat())}
+                        onInterrupt={aguiInterrupt}
+                        onEndSession={() => Promise.resolve(handleEndSession())}
+                        onGoToResults={() => {}}
+                        onContinue={handleContinue}
+                        workflowMetadata={workflowMetadata}
+                        onCommandClick={handleCommandClick}
+                        isRunActive={isRunActive}
                           showWelcomeExperience={!["Completed", "Failed", "Stopped", "Stopping"].includes(session?.status?.phase || "")}
-                          activeWorkflow={workflowManagement.activeWorkflow}
-                          userHasInteracted={userHasInteracted}
-                          queuedMessages={sessionQueue.messages}
-                          hasRealMessages={hasRealMessages}
-                          welcomeExperienceComponent={
-                            <WelcomeExperience
-                              ootbWorkflows={ootbWorkflows}
-                              onWorkflowSelect={handleWelcomeWorkflowSelect}
-                              onUserInteraction={() => setUserHasInteracted(true)}
-                              userHasInteracted={userHasInteracted}
-                              sessionPhase={session?.status?.phase}
-                              hasRealMessages={hasRealMessages}
-                              onLoadWorkflow={() => setCustomWorkflowDialogOpen(true)}
-                              selectedWorkflow={workflowManagement.selectedWorkflow}
-                            />
-                          }
-                        />
+                        activeWorkflow={workflowManagement.activeWorkflow}
+                        userHasInteracted={userHasInteracted}
+                        queuedMessages={sessionQueue.messages}
+                        hasRealMessages={hasRealMessages}
+                        welcomeExperienceComponent={
+                          <WelcomeExperience
+                            ootbWorkflows={ootbWorkflows}
+                            onWorkflowSelect={handleWelcomeWorkflowSelect}
+                            onUserInteraction={() => setUserHasInteracted(true)}
+                            userHasInteracted={userHasInteracted}
+                            sessionPhase={session?.status?.phase}
+                            hasRealMessages={hasRealMessages}
+                            onLoadWorkflow={() => setCustomWorkflowDialogOpen(true)}
+                            selectedWorkflow={workflowManagement.selectedWorkflow}
+                          />
+                        }
+                      />
                       </FeedbackProvider>
                     </div>
                   </CardContent>
                 </Card>
+                  </div>
+              </ResizablePanel>
+            </ResizablePanelGroup>
+
+            {/* Mobile right column */}
+            <div className="md:hidden h-full flex flex-col">
+                <Card className="relative flex-1 flex flex-col overflow-hidden py-0 border-0 rounded-none">
+                  <CardContent className="px-3 pt-0 pb-0 flex-1 flex flex-col overflow-hidden">
+                    {repoChanging && (
+                      <div className="absolute inset-0 bg-background/90 backdrop-blur-sm z-10 flex items-center justify-center rounded-lg">
+                        <Alert className="max-w-md mx-4">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <AlertTitle>Updating Repositories...</AlertTitle>
+                          <AlertDescription>
+                            <div className="space-y-2">
+                            <p>Please wait while repositories are being updated. This may take 10-20 seconds...</p>
+                            </div>
+                          </AlertDescription>
+                        </Alert>
+                      </div>
+                    )}
+                    <div className="flex flex-col flex-1 overflow-hidden">
+                    <FeedbackProvider
+                      projectName={projectName}
+                      sessionName={sessionName}
+                      username={currentUser?.username || currentUser?.displayName || "anonymous"}
+                      initialPrompt={session?.spec?.initialPrompt}
+                      activeWorkflow={workflowManagement.activeWorkflow || undefined}
+                      messages={streamMessages}
+                      traceId={langfuseTraceId || undefined}
+                      messageFeedback={aguiState.messageFeedback}
+                    >
+                      <MessagesTab
+                        session={session}
+                        streamMessages={streamMessages}
+                        chatInput={chatInput}
+                        setChatInput={setChatInput}
+                        onSendChat={() => Promise.resolve(sendChat())}
+                        onInterrupt={aguiInterrupt}
+                        onEndSession={() => Promise.resolve(handleEndSession())}
+                        onGoToResults={() => {}}
+                        onContinue={handleContinue}
+                        workflowMetadata={workflowMetadata}
+                        onCommandClick={handleCommandClick}
+                        isRunActive={isRunActive}
+                        showWelcomeExperience={!["Completed", "Failed", "Stopped", "Stopping"].includes(session?.status?.phase || "")}
+                        activeWorkflow={workflowManagement.activeWorkflow}
+                        userHasInteracted={userHasInteracted}
+                        queuedMessages={sessionQueue.messages}
+                        hasRealMessages={hasRealMessages}
+                        welcomeExperienceComponent={
+                          <WelcomeExperience
+                            ootbWorkflows={ootbWorkflows}
+                            onWorkflowSelect={handleWelcomeWorkflowSelect}
+                            onUserInteraction={() => setUserHasInteracted(true)}
+                            userHasInteracted={userHasInteracted}
+                            sessionPhase={session?.status?.phase}
+                            hasRealMessages={hasRealMessages}
+                            onLoadWorkflow={() => setCustomWorkflowDialogOpen(true)}
+                            selectedWorkflow={workflowManagement.selectedWorkflow}
+                          />
+                        }
+                      />
+                    </FeedbackProvider>
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
-            </div>
-          </div>
-        </div>
+                </div>
+                            </div>
       </div>
 
       {/* Modals */}
