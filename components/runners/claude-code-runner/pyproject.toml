@@ -43,7 +43,8 @@ dev-dependencies = [
 ]
 
 [tool.setuptools]
-py-modules = ["main", "adapter", "context", "observability", "security_utils"]
+py-modules = ["main", "adapter", "auth", "config", "context", "observability", "prompts", "security_utils", "utils", "workspace"]
+packages = ["tools"]
 
 [build-system]
 requires = ["setuptools>=61.0"]

@@ -1,17 +1,24 @@
 """
-Test cases for wrapper._setup_vertex_credentials()
+Test cases for auth.setup_vertex_credentials()
 
 This module tests all error cases and validation logic for Vertex AI credential setup.
 """
 
 import asyncio
 import os
+import sys
 import tempfile
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from claude_code_runner.wrapper import ClaudeCodeWrapper
+
+# Add parent directory to path
+runner_dir = Path(__file__).parent.parent
+if str(runner_dir) not in sys.path:
+    sys.path.insert(0, str(runner_dir))
+
+from auth import setup_vertex_credentials  # type: ignore[import]
 
 
 class TestSetupVertexCredentials:
@@ -48,10 +55,8 @@ class TestSetupVertexCredentials:
             "CLOUD_ML_REGION": "us-central1",
         }.get(key)
 
-        wrapper = ClaudeCodeWrapper(mock_context)
-
         # Execute
-        result = await wrapper._setup_vertex_credentials()
+        result = await setup_vertex_credentials(mock_context)
 
         # Verify
         assert result is not None
@@ -71,11 +76,11 @@ class TestSetupVertexCredentials:
             "CLOUD_ML_REGION": "us-central1",
         }.get(key)
 
-        wrapper = ClaudeCodeWrapper(mock_context)
+
 
         # Execute and verify
         with pytest.raises(RuntimeError) as exc_info:
-            await wrapper._setup_vertex_credentials()
+            await setup_vertex_credentials(mock_context)
 
         assert "GOOGLE_APPLICATION_CREDENTIALS" in str(exc_info.value)
         assert "not set" in str(exc_info.value)
@@ -90,11 +95,11 @@ class TestSetupVertexCredentials:
             "CLOUD_ML_REGION": "us-central1",
         }.get(key)
 
-        wrapper = ClaudeCodeWrapper(mock_context)
+
 
         # Execute and verify
         with pytest.raises(RuntimeError) as exc_info:
-            await wrapper._setup_vertex_credentials()
+            await setup_vertex_credentials(mock_context)
 
         assert "GOOGLE_APPLICATION_CREDENTIALS" in str(exc_info.value)
 
@@ -109,11 +114,11 @@ class TestSetupVertexCredentials:
             "CLOUD_ML_REGION": "us-central1",
         }.get(key)
 
-        wrapper = ClaudeCodeWrapper(mock_context)
+
 
         # Execute and verify
         with pytest.raises(RuntimeError) as exc_info:
-            await wrapper._setup_vertex_credentials()
+            await setup_vertex_credentials(mock_context)
 
         assert "ANTHROPIC_VERTEX_PROJECT_ID" in str(exc_info.value)
         assert "not set" in str(exc_info.value)
@@ -130,11 +135,11 @@ class TestSetupVertexCredentials:
             "CLOUD_ML_REGION": "us-central1",
         }.get(key)
 
-        wrapper = ClaudeCodeWrapper(mock_context)
+
 
         # Execute and verify
         with pytest.raises(RuntimeError) as exc_info:
-            await wrapper._setup_vertex_credentials()
+            await setup_vertex_credentials(mock_context)
 
         assert "ANTHROPIC_VERTEX_PROJECT_ID" in str(exc_info.value)
 
@@ -149,11 +154,11 @@ class TestSetupVertexCredentials:
             "ANTHROPIC_VERTEX_PROJECT_ID": "test-project-123",
         }.get(key)
 
-        wrapper = ClaudeCodeWrapper(mock_context)
+
 
         # Execute and verify
         with pytest.raises(RuntimeError) as exc_info:
-            await wrapper._setup_vertex_credentials()
+            await setup_vertex_credentials(mock_context)
 
         assert "CLOUD_ML_REGION" in str(exc_info.value)
         assert "not set" in str(exc_info.value)
@@ -170,11 +175,11 @@ class TestSetupVertexCredentials:
             "CLOUD_ML_REGION": "",
         }.get(key)
 
-        wrapper = ClaudeCodeWrapper(mock_context)
+
 
         # Execute and verify
         with pytest.raises(RuntimeError) as exc_info:
-            await wrapper._setup_vertex_credentials()
+            await setup_vertex_credentials(mock_context)
 
         assert "CLOUD_ML_REGION" in str(exc_info.value)
 
@@ -189,11 +194,11 @@ class TestSetupVertexCredentials:
             "CLOUD_ML_REGION": "us-central1",
         }.get(key)
 
-        wrapper = ClaudeCodeWrapper(mock_context)
+
 
         # Execute and verify
         with pytest.raises(RuntimeError) as exc_info:
-            await wrapper._setup_vertex_credentials()
+            await setup_vertex_credentials(mock_context)
 
         assert "Service account file" in str(exc_info.value)
         assert "does not exist" in str(exc_info.value)
@@ -205,11 +210,11 @@ class TestSetupVertexCredentials:
         # Setup - all vars missing
         mock_context.get_env.side_effect = lambda key: None
 
-        wrapper = ClaudeCodeWrapper(mock_context)
+
 
         # Execute and verify - should fail on first check
         with pytest.raises(RuntimeError) as exc_info:
-            await wrapper._setup_vertex_credentials()
+            await setup_vertex_credentials(mock_context)
 
         assert "GOOGLE_APPLICATION_CREDENTIALS" in str(exc_info.value)
 
@@ -222,11 +227,11 @@ class TestSetupVertexCredentials:
             "CLOUD_ML_REGION": "us-central1",
         }.get(key)
 
-        wrapper = ClaudeCodeWrapper(mock_context)
+
 
         # Should fail on GOOGLE_APPLICATION_CREDENTIALS first
         with pytest.raises(RuntimeError) as exc_info:
-            await wrapper._setup_vertex_credentials()
+            await setup_vertex_credentials(mock_context)
 
         assert "GOOGLE_APPLICATION_CREDENTIALS" in str(exc_info.value)
 
@@ -241,11 +246,11 @@ class TestSetupVertexCredentials:
             "CLOUD_ML_REGION": "us-central1",
         }.get(key)
 
-        wrapper = ClaudeCodeWrapper(mock_context)
+
 
         # Should fail on ANTHROPIC_VERTEX_PROJECT_ID second
         with pytest.raises(RuntimeError) as exc_info:
-            await wrapper._setup_vertex_credentials()
+            await setup_vertex_credentials(mock_context)
 
         assert "ANTHROPIC_VERTEX_PROJECT_ID" in str(exc_info.value)
 
@@ -260,11 +265,11 @@ class TestSetupVertexCredentials:
             "ANTHROPIC_VERTEX_PROJECT_ID": "test-project-123",
         }.get(key)
 
-        wrapper = ClaudeCodeWrapper(mock_context)
+
 
         # Should fail on CLOUD_ML_REGION third
         with pytest.raises(RuntimeError) as exc_info:
-            await wrapper._setup_vertex_credentials()
+            await setup_vertex_credentials(mock_context)
 
         assert "CLOUD_ML_REGION" in str(exc_info.value)
 
@@ -279,11 +284,11 @@ class TestSetupVertexCredentials:
             "CLOUD_ML_REGION": "us-central1",
         }.get(key)
 
-        wrapper = ClaudeCodeWrapper(mock_context)
+
 
         # Should fail on file existence check last
         with pytest.raises(RuntimeError) as exc_info:
-            await wrapper._setup_vertex_credentials()
+            await setup_vertex_credentials(mock_context)
 
         assert "Service account file" in str(exc_info.value)
         assert "does not exist" in str(exc_info.value)
@@ -300,10 +305,10 @@ class TestSetupVertexCredentials:
             "CLOUD_ML_REGION": "us-central1",
         }.get(key)
 
-        wrapper = ClaudeCodeWrapper(mock_context)
+
 
         # Execute
-        await wrapper._setup_vertex_credentials()
+        await setup_vertex_credentials(mock_context)
 
         # Verify logging was called with details
         assert mock_context.send_log.called
@@ -330,11 +335,11 @@ class TestSetupVertexCredentials:
             "CLOUD_ML_REGION": "  us-central1  ",
         }.get(key)
 
-        wrapper = ClaudeCodeWrapper(mock_context)
+
 
         # Execute - depending on implementation, this might succeed or fail
         # If the code doesn't strip whitespace, the values should work
-        result = await wrapper._setup_vertex_credentials()
+        result = await setup_vertex_credentials(mock_context)
 
         # Verify that whitespace is preserved (not stripped)
         assert result["project_id"] == "  test-project-123  "
@@ -350,11 +355,11 @@ class TestSetupVertexCredentials:
             key
         )  # Returns None for other keys
 
-        wrapper = ClaudeCodeWrapper(mock_context)
+
 
         # Should fail when checking for None values
         with pytest.raises(RuntimeError) as exc_info:
-            await wrapper._setup_vertex_credentials()
+            await setup_vertex_credentials(mock_context)
 
         assert "not set" in str(exc_info.value)
 
@@ -371,12 +376,12 @@ class TestSetupVertexCredentials:
             "CLOUD_ML_REGION": "us-central1",
         }.get(key)
 
-        wrapper = ClaudeCodeWrapper(mock_context)
+
 
         # Execute and verify
         # Path.exists() returns True for directories, so this might not fail
         # depending on implementation
-        result = await wrapper._setup_vertex_credentials()
+        result = await setup_vertex_credentials(mock_context)
 
         # If implementation only checks exists(), this will pass
         # If it checks is_file(), this should fail
@@ -399,10 +404,10 @@ class TestSetupVertexCredentials:
                 "CLOUD_ML_REGION": "us-central1",
             }.get(key)
 
-            wrapper = ClaudeCodeWrapper(mock_context)
+    
 
             # Execute - should work if file exists in current directory
-            result = await wrapper._setup_vertex_credentials()
+            result = await setup_vertex_credentials(mock_context)
 
             assert result is not None
             assert result["credentials_path"] == relative_path
@@ -424,10 +429,8 @@ class TestSetupVertexCredentials:
             "CLOUD_ML_REGION": "us-central1",
         }.get(key)
 
-        wrapper = ClaudeCodeWrapper(mock_context)
-
         # Execute
-        result = await wrapper._setup_vertex_credentials()
+        result = await setup_vertex_credentials(mock_context)
 
         # Should accept special characters
         assert result["project_id"] == special_project_id
@@ -452,10 +455,10 @@ class TestSetupVertexCredentials:
                 "CLOUD_ML_REGION": region,
             }.get(key)
 
-            wrapper = ClaudeCodeWrapper(mock_context)
+    
 
             # Execute
-            result = await wrapper._setup_vertex_credentials()
+            result = await setup_vertex_credentials(mock_context)
 
             # Should accept all valid region codes
             assert result["region"] == region
@@ -470,10 +473,8 @@ class TestSetupVertexCredentials:
             "CLOUD_ML_REGION": "us-central1",
         }.get(key)
 
-        wrapper = ClaudeCodeWrapper(mock_context)
-
         # Execute
-        result = await wrapper._setup_vertex_credentials()
+        result = await setup_vertex_credentials(mock_context)
 
         # Verify structure
         assert isinstance(result, dict)
@@ -506,10 +507,8 @@ class TestSetupVertexCredentialsIntegration:
             )
             context.send_log = AsyncMock()
 
-            wrapper = ClaudeCodeWrapper(context)
-
             # Execute
-            result = await wrapper._setup_vertex_credentials()
+            result = await setup_vertex_credentials(context)
 
             # Verify
             assert Path(temp_path).exists()
@@ -544,9 +543,8 @@ class TestSetupVertexCredentialsIntegration:
             contexts.append(context)
 
         # Execute concurrently
-        wrappers = [ClaudeCodeWrapper(ctx) for ctx in contexts]
         results = await asyncio.gather(
-            *[wrapper._setup_vertex_credentials() for wrapper in wrappers]
+            *[setup_vertex_credentials(ctx) for ctx in contexts]
         )
 
         # Verify all succeeded

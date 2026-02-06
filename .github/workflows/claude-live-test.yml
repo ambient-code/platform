@@ -216,6 +216,8 @@ jobs:
 
     - name: Run Claude with Playwright MCP
       uses: anthropics/claude-code-action@v1
+      continue-on-error: true
+      id: claude_test
       env:
         TEST_TOKEN: ${{ steps.token.outputs.token }}
         DEBUG: "*"

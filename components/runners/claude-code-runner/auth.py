@@ -1,0 +1,351 @@
+"""
+Authentication and credential management for the Claude Code runner.
+
+Handles Anthropic API keys, Vertex AI setup, and runtime credential
+fetching from the backend API (GitHub, Google, Jira, GitLab).
+"""
+
+import asyncio
+import json as _json
+import logging
+import os
+import re
+from pathlib import Path
+from urllib import request as _urllib_request
+from urllib.parse import urlparse
+
+from context import RunnerContext
+
+logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# User context sanitization
+# ---------------------------------------------------------------------------
+
+def sanitize_user_context(user_id: str, user_name: str) -> tuple[str, str]:
+    """Validate and sanitize user context fields to prevent injection attacks."""
+    if user_id:
+        user_id = str(user_id).strip()
+        if len(user_id) > 255:
+            user_id = user_id[:255]
+        user_id = re.sub(r"[^a-zA-Z0-9@._-]", "", user_id)
+
+    if user_name:
+        user_name = str(user_name).strip()
+        if len(user_name) > 255:
+            user_name = user_name[:255]
+        user_name = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", user_name)
+
+    return user_id, user_name
+
+
+# ---------------------------------------------------------------------------
+# Model helpers
+# ---------------------------------------------------------------------------
+
+# Anthropic API → Vertex AI model name mapping
+VERTEX_MODEL_MAP: dict[str, str] = {
+    "claude-opus-4-5": "claude-opus-4-5@20251101",
+    "claude-opus-4-1": "claude-opus-4-1@20250805",
+    "claude-sonnet-4-5": "claude-sonnet-4-5@20250929",
+    "claude-haiku-4-5": "claude-haiku-4-5@20251001",
+}
+
+
+def map_to_vertex_model(model: str) -> str:
+    """Map Anthropic API model names to Vertex AI model names."""
+    return VERTEX_MODEL_MAP.get(model, model)
+
+
+async def setup_vertex_credentials(context: RunnerContext) -> dict:
+    """Set up Google Cloud Vertex AI credentials from service account.
+
+    Returns:
+        Dict with credentials_path, project_id, region.
+
+    Raises:
+        RuntimeError: If required environment variables are missing.
+    """
+    service_account_path = context.get_env(
+        "GOOGLE_APPLICATION_CREDENTIALS", ""
+    ).strip()
+    project_id = context.get_env("ANTHROPIC_VERTEX_PROJECT_ID", "").strip()
+    region = context.get_env("CLOUD_ML_REGION", "").strip()
+
+    if not service_account_path:
+        raise RuntimeError(
+            "GOOGLE_APPLICATION_CREDENTIALS must be set when CLAUDE_CODE_USE_VERTEX=1"
+        )
+    if not project_id:
+        raise RuntimeError(
+            "ANTHROPIC_VERTEX_PROJECT_ID must be set when CLAUDE_CODE_USE_VERTEX=1"
+        )
+    if not region:
+        raise RuntimeError(
+            "CLOUD_ML_REGION must be set when CLAUDE_CODE_USE_VERTEX=1"
+        )
+
+    if not Path(service_account_path).exists():
+        raise RuntimeError(
+            f"Service account key file not found at {service_account_path}"
+        )
+
+    logger.info(f"Vertex AI configured: project={project_id}, region={region}")
+    return {
+        "credentials_path": service_account_path,
+        "project_id": project_id,
+        "region": region,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Backend credential fetching
+# ---------------------------------------------------------------------------
+
+async def _fetch_credential(context: RunnerContext, credential_type: str) -> dict:
+    """Fetch credentials from backend API at runtime.
+
+    Args:
+        context: Runner context with session_id.
+        credential_type: One of 'github', 'google', 'jira', 'gitlab'.
+
+    Returns:
+        Dictionary with credential data or empty dict if unavailable.
+    """
+    base = os.getenv("BACKEND_API_URL", "").rstrip("/")
+    project = os.getenv("PROJECT_NAME") or os.getenv(
+        "AGENTIC_SESSION_NAMESPACE", ""
+    )
+    project = project.strip()
+    session_id = context.session_id
+
+    if not base or not project or not session_id:
+        logger.warning(
+            f"Cannot fetch {credential_type} credentials: missing environment "
+            f"variables (base={base}, project={project}, session={session_id})"
+        )
+        return {}
+
+    url = (
+        f"{base}/projects/{project}/agentic-sessions/"
+        f"{session_id}/credentials/{credential_type}"
+    )
+    logger.info(f"Fetching fresh {credential_type} credentials from: {url}")
+
+    req = _urllib_request.Request(url, method="GET")
+    bot = (os.getenv("BOT_TOKEN") or "").strip()
+    if bot:
+        req.add_header("Authorization", f"Bearer {bot}")
+
+    loop = asyncio.get_event_loop()
+
+    def _do_req():
+        try:
+            with _urllib_request.urlopen(req, timeout=10) as resp:
+                return resp.read().decode("utf-8", errors="replace")
+        except Exception as e:
+            logger.warning(f"{credential_type} credential fetch failed: {e}")
+            return ""
+
+    resp_text = await loop.run_in_executor(None, _do_req)
+    if not resp_text:
+        return {}
+
+    try:
+        data = _json.loads(resp_text)
+        logger.info(
+            f"Successfully fetched {credential_type} credentials from backend"
+        )
+        return data
+    except Exception as e:
+        logger.error(
+            f"Failed to parse {credential_type} credential response: {e}"
+        )
+        return {}
+
+
+async def fetch_github_token(context: RunnerContext) -> str:
+    """Fetch GitHub token from backend API (always fresh — PAT or minted App token)."""
+    data = await _fetch_credential(context, "github")
+    token = data.get("token", "")
+    if token:
+        logger.info("Using fresh GitHub token from backend")
+    return token
+
+
+async def fetch_google_credentials(context: RunnerContext) -> dict:
+    """Fetch Google OAuth credentials from backend API."""
+    data = await _fetch_credential(context, "google")
+    if data.get("accessToken"):
+        logger.info(
+            f"Using fresh Google credentials from backend "
+            f"(email: {data.get('email', 'unknown')})"
+        )
+    return data
+
+
+async def fetch_jira_credentials(context: RunnerContext) -> dict:
+    """Fetch Jira credentials from backend API."""
+    data = await _fetch_credential(context, "jira")
+    if data.get("apiToken"):
+        logger.info(
+            f"Using Jira credentials from backend "
+            f"(url: {data.get('url', 'unknown')})"
+        )
+    return data
+
+
+async def fetch_gitlab_token(context: RunnerContext) -> str:
+    """Fetch GitLab token from backend API."""
+    data = await _fetch_credential(context, "gitlab")
+    token = data.get("token", "")
+    if token:
+        logger.info(
+            f"Using fresh GitLab token from backend "
+            f"(instance: {data.get('instanceUrl', 'unknown')})"
+        )
+    return token
+
+
+async def fetch_token_for_url(context: RunnerContext, url: str) -> str:
+    """Fetch appropriate token based on repository URL host."""
+    try:
+        parsed = urlparse(url)
+        hostname = parsed.hostname or ""
+
+        if "gitlab" in hostname.lower():
+            token = await fetch_gitlab_token(context)
+            if token:
+                logger.info(f"Using fresh GitLab token for {hostname}")
+                return token
+            else:
+                logger.warning(f"No GitLab credentials configured for {url}")
+                return ""
+
+        token = await fetch_github_token(context)
+        if token:
+            logger.info(f"Using fresh GitHub token for {hostname}")
+        return token
+
+    except Exception as e:
+        logger.warning(
+            f"Failed to parse URL {url}: {e}, falling back to GitHub token"
+        )
+        return os.getenv("GITHUB_TOKEN") or await fetch_github_token(context)
+
+
+async def populate_runtime_credentials(context: RunnerContext) -> None:
+    """Fetch all credentials from backend and populate environment variables.
+
+    Called before each SDK run to ensure MCP servers have fresh tokens.
+    """
+    logger.info("Fetching fresh credentials from backend API...")
+
+    # Google credentials
+    google_creds = await fetch_google_credentials(context)
+    if google_creds.get("accessToken"):
+        creds_dir = Path("/workspace/.google_workspace_mcp/credentials")
+        creds_dir.mkdir(parents=True, exist_ok=True)
+        creds_file = creds_dir / "credentials.json"
+
+        client_id = os.getenv("GOOGLE_OAUTH_CLIENT_ID", "")
+        client_secret = os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", "")
+
+        creds_data = {
+            "token": google_creds.get("accessToken"),
+            "refresh_token": "",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "scopes": google_creds.get("scopes", []),
+            "expiry": google_creds.get("expiresAt", ""),
+        }
+
+        with open(creds_file, "w") as f:
+            _json.dump(creds_data, f, indent=2)
+        creds_file.chmod(0o644)
+        logger.info("✓ Updated Google credentials file for workspace-mcp")
+
+        user_email = google_creds.get("email", "")
+        if user_email and user_email != "user@example.com":
+            os.environ["USER_GOOGLE_EMAIL"] = user_email
+            logger.info(
+                f"✓ Set USER_GOOGLE_EMAIL to {user_email} for workspace-mcp"
+            )
+
+    # Jira credentials
+    jira_creds = await fetch_jira_credentials(context)
+    if jira_creds.get("apiToken"):
+        os.environ["JIRA_URL"] = jira_creds.get("url", "")
+        os.environ["JIRA_API_TOKEN"] = jira_creds.get("apiToken", "")
+        os.environ["JIRA_EMAIL"] = jira_creds.get("email", "")
+        logger.info("✓ Updated Jira credentials in environment")
+
+    # GitLab token
+    gitlab_token = await fetch_gitlab_token(context)
+    if gitlab_token:
+        os.environ["GITLAB_TOKEN"] = gitlab_token
+        logger.info("✓ Updated GitLab token in environment")
+
+    # GitHub token
+    github_token = await fetch_github_token(context)
+    if github_token:
+        os.environ["GITHUB_TOKEN"] = github_token
+        logger.info("✓ Updated GitHub token in environment")
+
+    logger.info("Runtime credentials populated successfully")
+
+
+async def fetch_github_token_legacy(context: RunnerContext) -> str:
+    """Legacy method — kept for backward compatibility."""
+    base = os.getenv("BACKEND_API_URL", "").rstrip("/")
+    project = os.getenv("PROJECT_NAME") or os.getenv(
+        "AGENTIC_SESSION_NAMESPACE", ""
+    )
+    project = project.strip()
+    session_id = context.session_id
+
+    if not base or not project or not session_id:
+        logger.warning("Cannot fetch GitHub token: missing environment variables")
+        return ""
+
+    url = (
+        f"{base}/projects/{project}/agentic-sessions/"
+        f"{session_id}/github/token"
+    )
+    logger.info(f"Fetching GitHub token from legacy endpoint: {url}")
+
+    req = _urllib_request.Request(
+        url,
+        data=b"{}",
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    bot = (os.getenv("BOT_TOKEN") or "").strip()
+    if bot:
+        req.add_header("Authorization", f"Bearer {bot}")
+
+    loop = asyncio.get_event_loop()
+
+    def _do_req():
+        try:
+            with _urllib_request.urlopen(req, timeout=10) as resp:
+                return resp.read().decode("utf-8", errors="replace")
+        except Exception as e:
+            logger.warning(f"GitHub token fetch failed: {e}")
+            return ""
+
+    resp_text = await loop.run_in_executor(None, _do_req)
+    if not resp_text:
+        return ""
+
+    try:
+        data = _json.loads(resp_text)
+        token = str(data.get("token") or "")
+        if token:
+            logger.info("Successfully fetched GitHub token from backend")
+        return token
+    except Exception as e:
+        logger.error(f"Failed to parse token response: {e}")
+        return ""

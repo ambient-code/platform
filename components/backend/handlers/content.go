@@ -663,15 +663,20 @@ func ContentWorkflowMetadata(c *gin.Context) {
 		log.Printf("ContentWorkflowMetadata: agents directory not found or unreadable: %v", err)
 	}
 
+	configResponse := gin.H{
+		"name":         ambientConfig.Name,
+		"description":  ambientConfig.Description,
+		"systemPrompt": ambientConfig.SystemPrompt,
+		"artifactsDir": ambientConfig.ArtifactsDir,
+	}
+	if ambientConfig.Rubric != nil {
+		configResponse["rubric"] = ambientConfig.Rubric
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"commands": commands,
 		"agents":   agents,
-		"config": gin.H{
-			"name":         ambientConfig.Name,
-			"description":  ambientConfig.Description,
-			"systemPrompt": ambientConfig.SystemPrompt,
-			"artifactsDir": ambientConfig.ArtifactsDir,
-		},
+		"config":   configResponse,
 	})
 }
 
@@ -713,12 +718,21 @@ func parseFrontmatter(filePath string) map[string]string {
 	return result
 }
 
+// RubricConfig represents the rubric evaluation configuration in ambient.json.
+// Schema is a JSON Schema object that defines the tool's input_schema for
+// additional metadata fields beyond final_score and reasoning.
+type RubricConfig struct {
+	ActivationPrompt string                 `json:"activationPrompt,omitempty"`
+	Schema           map[string]interface{} `json:"schema,omitempty"`
+}
+
 // AmbientConfig represents the ambient.json configuration
 type AmbientConfig struct {
-	Name         string `json:"name"`
-	Description  string `json:"description"`
-	SystemPrompt string `json:"systemPrompt"`
-	ArtifactsDir string `json:"artifactsDir"`
+	Name         string        `json:"name"`
+	Description  string        `json:"description"`
+	SystemPrompt string        `json:"systemPrompt"`
+	ArtifactsDir string        `json:"artifactsDir"`
+	Rubric       *RubricConfig `json:"rubric,omitempty"`
 }
 
 // parseAmbientConfig reads and parses ambient.json from workflow directory

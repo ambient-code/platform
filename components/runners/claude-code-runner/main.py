@@ -696,8 +696,9 @@ async def get_mcp_status():
             if os.path.exists(workflow_path):
                 cwd_path = workflow_path
 
-        # Use adapter's method to load MCP config (same as it does during runs)
-        mcp_config = adapter._load_mcp_config(cwd_path)
+        # Load MCP config using the config module (same as adapter does during runs)
+        import config as runner_config
+        mcp_config = runner_config.load_mcp_config(adapter.context, cwd_path)
         logger.info(f"MCP config: {mcp_config}")
 
         if mcp_config:
