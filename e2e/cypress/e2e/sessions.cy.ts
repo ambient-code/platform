@@ -204,12 +204,19 @@ describe('Ambient Session Management Tests', () => {
       })
 
       cy.log('📋 Step 3: Wait for session to reach Running (may take 2 min)')
-      cy.get('textarea[placeholder*="message"]', { timeout: 180000 }).should('be.visible')
+      // Wait for session to be in Running state AND textarea to be visible
+      cy.get('textarea[placeholder*="message"]', { timeout: 180000 })
+        .should('exist')
+        .and('be.visible')
+        .and('not.be.disabled')
       cy.log('✅ Session Running!')
 
       cy.log('📋 Step 4: Send initial hello message')
-      cy.get('textarea[placeholder*="message"]').clear().type('Hello!')
-      cy.contains('button', 'Send').click()
+      cy.get('textarea[placeholder*="message"]')
+        .should('be.visible')
+        .clear()
+        .type('Hello!', { force: true })
+      cy.contains('button', 'Send').should('be.visible').click()
       cy.log('✅ Hello message sent!')
 
       cy.log('📋 Step 5: Verify Claude starts responding')
