@@ -63,8 +63,8 @@ kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 nodes:
 - role: control-plane
-  # Use more stable Kubernetes version for Podman compatibility
-  image: kindest/node:v1.28.0@sha256:b7a4cad12c197af3ba43202d3efe03246b3f0793f162afb40a33c923952d5b31
+  # Kind v0.31.0 default node image
+  image: kindest/node:v1.35.0@sha256:452d707d4862f52530247495d180205e029056831160e22870e37e3f6c1ac31f
   extraPortMappings:
   - containerPort: 30080
     hostPort: ${HTTP_PORT}
@@ -77,7 +77,7 @@ EOF
 echo ""
 echo "✅ Kind cluster ready!"
 echo "   Cluster: ambient-local"
-echo "   Kubernetes: v1.28.0"
+echo "   Kubernetes: v1.35.0"
 echo "   NodePort: 30080 → host port ${HTTP_PORT}"
 echo ""
 echo "📝 Next steps:"
