@@ -1,0 +1,5 @@
+# Patch to set imagePullPolicy: IfNotPresent for kind-local cluster
+# Uses locally built and loaded images, not pulled from a registry
+- op: replace
+  path: /spec/template/spec/containers/0/imagePullPolicy
+  value: IfNotPresent
