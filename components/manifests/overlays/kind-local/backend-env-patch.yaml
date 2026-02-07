@@ -1,0 +1,15 @@
+# Patch backend to use IfNotPresent for dynamically created resources
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-api
+spec:
+  template:
+    spec:
+      containers:
+      - name: backend-api
+        env:
+        - name: IMAGE_PULL_POLICY
+          value: "IfNotPresent"
+        - name: CONTENT_SERVICE_IMAGE
+          value: "docker.io/library/vteam_backend:latest"
