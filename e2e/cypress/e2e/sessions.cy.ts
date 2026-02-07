@@ -96,7 +96,7 @@ describe('Ambient Session Management Tests', () => {
     cy.contains('Workflows', { timeout: 10000 }).should('be.visible')
     cy.contains('Context').should('be.visible')
     cy.contains('Artifacts').should('be.visible')
-    cy.contains('MCP Server Status').should('be.visible')
+    cy.contains('MCP Servers').should('be.visible')
     cy.contains('File Explorer').should('be.visible')
     
     // Breadcrumbs
