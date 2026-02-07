@@ -29,7 +29,8 @@ permissions:
   contents: write
   issues: write
   pull-requests: write
-  id-token: write  # Required for OIDC token (Bedrock/Vertex/Foundry/OAuth)
+  id-token: write    # Required for OIDC token (Bedrock/Vertex/Foundry/OAuth)
+  workflows: write   # Required to create/update GitHub Actions workflow files
 
 jobs:
   amber-handler:
