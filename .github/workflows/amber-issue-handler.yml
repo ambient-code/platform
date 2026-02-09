@@ -14,7 +14,7 @@
 #
 # SECURITY:
 # - Validates branch names against injection attacks
-# - Uses strict regex matching for PR lookup
+# - Uses gh CLI search for PR lookup (no regex on untrusted input)
 # - Handles race conditions when PRs are closed during execution
 
 name: Amber Issue-to-PR Handler
@@ -76,36 +76,22 @@ jobs:
 
       - name: Extract issue details
         id: issue-details
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const issue = context.payload.issue;
+        env:
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ISSUE_JSON=$(gh issue view "$ISSUE_NUMBER" --json number,title,body)
+          echo "issue_number=$ISSUE_NUMBER" >> $GITHUB_OUTPUT
+          echo "issue_title=$(echo "$ISSUE_JSON" | jq -r '.title')" >> $GITHUB_OUTPUT
 
-            // Parse issue body for Amber-compatible context
-            const body = issue.body || '';
+          BODY=$(echo "$ISSUE_JSON" | jq -r '.body // ""')
+          echo "issue_body<<EOF" >> $GITHUB_OUTPUT
+          echo "$BODY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
-            // Extract file paths mentioned in issue
-            const filePattern = /(?:File|Path):\s*`?([^\s`]+)`?/gi;
-            const files = [...body.matchAll(filePattern)].map(m => m[1]);
-
-            // Extract specific instructions
-            const instructionPattern = /(?:Instructions?|Task):\s*\n([\s\S]*?)(?:\n#{2,}|\n---|\n\*\*|$)/i;
-            const instructionMatch = body.match(instructionPattern);
-            const instructions = instructionMatch ? instructionMatch[1].trim() : '';
-
-            // Set outputs
-            core.setOutput('issue_number', issue.number);
-            core.setOutput('issue_title', issue.title);
-            core.setOutput('issue_body', body);
-            core.setOutput('files', JSON.stringify(files));
-            core.setOutput('instructions', instructions || issue.title);
-
-            console.log('Parsed issue:', {
-              number: issue.number,
-              title: issue.title,
-              files: files,
-              instructions: instructions || issue.title
-            });
+          # Use issue title as instructions (Claude receives the full body via the prompt template)
+          TITLE=$(echo "$ISSUE_JSON" | jq -r '.title')
+          echo "instructions=$TITLE" >> $GITHUB_OUTPUT
 
       - name: Create Amber agent prompt
         id: create-prompt
@@ -113,7 +99,6 @@ jobs:
           ISSUE_NUMBER: ${{ steps.issue-details.outputs.issue_number }}
           ISSUE_TITLE: ${{ steps.issue-details.outputs.issue_title }}
           ISSUE_INSTRUCTIONS: ${{ steps.issue-details.outputs.instructions }}
-          ISSUE_FILES: ${{ steps.issue-details.outputs.files }}
           ACTION_TYPE: ${{ steps.action-type.outputs.type }}
           ACTION_SEVERITY: ${{ steps.action-type.outputs.severity }}
         run: |
@@ -128,9 +113,6 @@ jobs:
 
           **Instructions:**
           ${ISSUE_INSTRUCTIONS}
-
-          **Files to modify (if specified):**
-          ${ISSUE_FILES}
 
           ## Your Mission
 
@@ -211,13 +193,11 @@ jobs:
             exit 1
           fi
 
-          # Check if there's already an open PR for this issue using stricter matching
-          # Search for PRs that reference this issue and filter by body containing exact "Closes #N" pattern
-          EXISTING_PR=$(gh pr list --state open --json number,headRefName,body --jq \
-            ".[] | select(.body | test(\"Closes #${ISSUE_NUMBER}($|[^0-9])\")) | {number, headRefName}" \
-            2>/dev/null | head -1 || echo "")
+          # Use gh search to find open PRs that close this issue
+          EXISTING_PR=$(gh pr list --state open --search "Closes #${ISSUE_NUMBER}" \
+            --json number,headRefName --jq '.[0] // empty' 2>/dev/null || echo "")
 
-          if [ -n "$EXISTING_PR" ] && [ "$EXISTING_PR" != "null" ] && [ "$EXISTING_PR" != "{}" ]; then
+          if [ -n "$EXISTING_PR" ]; then
             PR_NUMBER=$(echo "$EXISTING_PR" | jq -r '.number')
             EXISTING_BRANCH=$(echo "$EXISTING_PR" | jq -r '.headRefName')
 
@@ -362,36 +342,25 @@ jobs:
         env:
           ISSUE_NUMBER: ${{ steps.issue-details.outputs.issue_number }}
           ACTION_TYPE: ${{ steps.action-type.outputs.type }}
-          RUN_ID: ${{ github.run_id }}
-          GITHUB_SERVER_URL: ${{ github.server_url }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const issueNumber = parseInt(process.env.ISSUE_NUMBER);
-            const actionType = process.env.ACTION_TYPE;
-            const runId = process.env.RUN_ID;
-            const serverUrl = process.env.GITHUB_SERVER_URL;
-            const repository = process.env.GITHUB_REPOSITORY;
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment "$ISSUE_NUMBER" --body "$(cat <<EOF
+          ✅ Amber reviewed this issue but found no changes were needed.
 
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: issueNumber,
-              body: `✅ Amber reviewed this issue but found no changes were needed.
+          **Action Type:** ${ACTION_TYPE}
 
-            **Action Type:** ${actionType}
+          **Possible reasons:**
+          - Files are already properly formatted
+          - No linting issues found
+          - The requested changes may have already been applied
 
-            **Possible reasons:**
-            - Files are already properly formatted
-            - No linting issues found
-            - The requested changes may have already been applied
+          If you believe changes are still needed, please provide more specific instructions or file paths in the issue description.
 
-            If you believe changes are still needed, please provide more specific instructions or file paths in the issue description.
-
-            ---
-            🔍 [View AI decision process](${serverUrl}/${repository}/actions/runs/${runId}) (logs available for 90 days)`
-            });
+          ---
+          🔍 [View AI decision process](${RUN_URL}) (logs available for 90 days)
+          EOF
+          )"
 
       - name: Push branch to remote
         if: steps.check-changes.outputs.has_changes == 'true'
@@ -405,38 +374,34 @@ jobs:
         if: steps.check-changes.outputs.has_changes == 'true'
         env:
           ISSUE_NUMBER: ${{ steps.issue-details.outputs.issue_number }}
-          RUN_ID: ${{ github.run_id }}
-          GITHUB_SERVER_URL: ${{ github.server_url }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
           EXISTING_PR: ${{ steps.check-existing-pr.outputs.existing_pr }}
           EXISTING_PR_NUMBER: ${{ steps.check-existing-pr.outputs.pr_number }}
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const { execFile } = require('child_process');
-            const { promisify } = require('util');
-            const execFileAsync = promisify(execFile);
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          DIFF_STAT=$(git diff HEAD~1 --stat)
 
-            const issueNumber = parseInt(process.env.ISSUE_NUMBER);
-            const runId = process.env.RUN_ID;
-            const serverUrl = process.env.GITHUB_SERVER_URL;
-            const repository = process.env.GITHUB_REPOSITORY;
-            const existingPr = process.env.EXISTING_PR === 'true';
-            const existingPrNumber = process.env.EXISTING_PR_NUMBER;
+          if [ "$EXISTING_PR" == "true" ]; then
+            NEXT="Changes pushed to existing PR #${EXISTING_PR_NUMBER}"
+          else
+            NEXT="A PR will be created shortly for formal review"
+          fi
 
-            // Safely get git diff (no shell injection risk with execFile)
-            const { stdout: diff } = await execFileAsync('git', ['diff', 'HEAD~1', '--stat']);
+          gh issue comment "$ISSUE_NUMBER" --body "$(cat <<EOF
+          ## Amber Change Summary
 
-            const nextSteps = existingPr
-              ? `- Review that changes match the issue description\n- Verify no scope creep or unintended modifications\n- Changes pushed to existing PR #${existingPrNumber}`
-              : `- Review that changes match the issue description\n- Verify no scope creep or unintended modifications\n- A PR will be created shortly for formal review`;
+          The following files were modified:
 
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: issueNumber,
-              body: `## Amber Change Summary\n\nThe following files were modified:\n\n\`\`\`\n${diff}\n\`\`\`\n\n**Next Steps:**\n${nextSteps}\n\n---\n🔍 [View AI decision process](${serverUrl}/${repository}/actions/runs/${runId}) (logs available for 90 days)`
-            });
+          \`\`\`
+          ${DIFF_STAT}
+          \`\`\`
+
+          **Next Steps:** ${NEXT}
+
+          ---
+          🔍 [View AI decision process](${RUN_URL}) (logs available for 90 days)
+          EOF
+          )"
 
       - name: Create or Update Pull Request
         if: steps.check-changes.outputs.has_changes == 'true'
@@ -446,210 +411,86 @@ jobs:
           ISSUE_NUMBER: ${{ steps.issue-details.outputs.issue_number }}
           ISSUE_TITLE: ${{ steps.issue-details.outputs.issue_title }}
           ACTION_TYPE: ${{ steps.action-type.outputs.type }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          RUN_ID: ${{ github.run_id }}
-          GITHUB_SERVER_URL: ${{ github.server_url }}
           EXISTING_PR: ${{ steps.check-existing-pr.outputs.existing_pr }}
           EXISTING_PR_NUMBER: ${{ steps.check-existing-pr.outputs.pr_number }}
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const branchName = process.env.BRANCH_NAME;
-            const commitSha = process.env.COMMIT_SHA;
-            const issueNumber = parseInt(process.env.ISSUE_NUMBER);
-            const issueTitle = process.env.ISSUE_TITLE;
-            const actionType = process.env.ACTION_TYPE;
-            const repository = process.env.GITHUB_REPOSITORY;
-            const runId = process.env.RUN_ID;
-            const serverUrl = process.env.GITHUB_SERVER_URL;
-            const existingPr = process.env.EXISTING_PR === 'true';
-            const existingPrNumber = process.env.EXISTING_PR_NUMBER ? parseInt(process.env.EXISTING_PR_NUMBER) : null;
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          SHORT_SHA="${COMMIT_SHA:0:7}"
 
-            // Helper function for retrying API calls with exponential backoff
-            // Retries on: 5xx errors, network errors (no status), JSON parse errors
-            async function retryWithBackoff(fn, maxRetries = 3, initialDelay = 1000) {
-              for (let i = 0; i < maxRetries; i++) {
-                try {
-                  return await fn();
-                } catch (error) {
-                  const isLastAttempt = i === maxRetries - 1;
-                  // Retry on: network errors (undefined status), 5xx errors, or specific error patterns
-                  const isRetriable = !error.status || error.status >= 500;
+          if [ "$EXISTING_PR" == "true" ] && [ -n "$EXISTING_PR_NUMBER" ]; then
+            # Update existing PR
+            gh pr comment "$EXISTING_PR_NUMBER" --body "$(cat <<EOF
+          🤖 **Amber pushed additional changes**
 
-                  if (isLastAttempt || !isRetriable) {
-                    throw error;
-                  }
+          - **Commit:** ${SHORT_SHA}
+          - **Action Type:** ${ACTION_TYPE}
 
-                  const delay = initialDelay * Math.pow(2, i);
-                  const errorMsg = error.message || 'Unknown error';
-                  const errorStatus = error.status || 'network error';
-                  console.log(`Attempt ${i + 1} failed (${errorStatus}: ${errorMsg}), retrying in ${delay}ms...`);
-                  await new Promise(resolve => setTimeout(resolve, delay));
-                }
-              }
-              // Defensive: Should never reach here due to throw in loop, but explicit for clarity
-              throw new Error('retryWithBackoff: max retries exceeded');
-            }
+          New changes have been pushed to this PR. Please review the updated code.
 
-            // Helper function to safely add a comment with fallback logging
-            async function safeComment(issueNum, body, description) {
-              try {
-                await retryWithBackoff(async () => {
-                  return await github.rest.issues.createComment({
-                    owner: context.repo.owner,
-                    repo: context.repo.repo,
-                    issue_number: issueNum,
-                    body: body
-                  });
-                });
-                console.log(`Successfully added comment: ${description}`);
-              } catch (commentError) {
-                // Log but don't fail the workflow for comment failures
-                console.log(`Warning: Failed to add comment (${description}): ${commentError.message}`);
-                console.log(`Comment body was: ${body.substring(0, 200)}...`);
-              }
-            }
+          ---
+          🔍 [View AI decision process](${RUN_URL}) (logs available for 90 days)
+          EOF
+            )"
 
-            try {
-              // If PR already exists, just add a comment about the new push
-              if (existingPr && existingPrNumber) {
-                console.log(`PR #${existingPrNumber} already exists, adding update comment`);
+            gh issue comment "$ISSUE_NUMBER" --body \
+              "🤖 Amber pushed additional changes to PR #${EXISTING_PR_NUMBER}. [View run](${RUN_URL})"
+          else
+            # Create new PR
+            PR_URL=$(gh pr create \
+              --title "[Amber] Fix: ${ISSUE_TITLE}" \
+              --head "$BRANCH_NAME" \
+              --base main \
+              --body "$(cat <<EOF
+          ## Automated Fix by Amber Agent
 
-                // Add comment to PR about the new commit (with fallback)
-                await safeComment(
-                  existingPrNumber,
-                  `🤖 **Amber pushed additional changes**
+          This PR addresses issue #${ISSUE_NUMBER}.
 
-            - **Commit:** ${commitSha.substring(0, 7)}
-            - **Action Type:** ${actionType}
+          ### Changes Summary
+          - **Action Type:** ${ACTION_TYPE}
+          - **Commit:** ${SHORT_SHA}
 
-            New changes have been pushed to this PR. Please review the updated code.
+          ### Pre-merge Checklist
+          - [ ] All linters pass
+          - [ ] All tests pass
+          - [ ] Changes follow project conventions (CLAUDE.md)
+          - [ ] No scope creep beyond issue description
 
-            ---
-            🔍 [View AI decision process](${serverUrl}/${repository}/actions/runs/${runId}) (logs available for 90 days)`,
-                  `PR #${existingPrNumber} update notification`
-                );
+          ---
+          🤖 Generated with Amber Background Agent
 
-                // Also notify on the issue (with fallback)
-                await safeComment(
-                  issueNumber,
-                  `🤖 Amber pushed additional changes to the existing PR #${existingPrNumber}.\n\n---\n🔍 [View AI decision process](${serverUrl}/${repository}/actions/runs/${runId}) (logs available for 90 days)`,
-                  `Issue #${issueNumber} update notification`
-                );
+          Closes #${ISSUE_NUMBER}
+          EOF
+            )")
 
-                console.log(`Updated existing PR #${existingPrNumber}`);
-                return;
-              }
+            # Extract PR number and add labels (best-effort)
+            PR_NUMBER=$(echo "$PR_URL" | grep -oE '[0-9]+$')
+            gh pr edit "$PR_NUMBER" --add-label "amber-generated,auto-fix,${ACTION_TYPE}" 2>/dev/null || true
 
-              // Create new PR
-              const pr = await github.rest.pulls.create({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                title: `[Amber] Fix: ${issueTitle}`,
-                head: branchName,
-                base: 'main',
-                body: `## Automated Fix by Amber Agent
-
-            This PR addresses issue #${issueNumber} using the Amber background agent.
-
-            ### Changes Summary
-            - **Action Type:** ${actionType}
-            - **Commit:** ${commitSha.substring(0, 7)}
-            - **Triggered by:** Issue label/command
-
-            ### Pre-merge Checklist
-            - [ ] All linters pass
-            - [ ] All tests pass
-            - [ ] Changes follow project conventions (CLAUDE.md)
-            - [ ] No scope creep beyond issue description
-
-            ### Reviewer Notes
-            This PR was automatically generated. Please review:
-            1. Code quality and adherence to standards
-            2. Test coverage for changes
-            3. No unintended side effects
-
-            ---
-            🤖 Generated with [Amber Background Agent](https://github.com/${repository}/blob/main/docs/amber-automation.md)
-
-            Closes #${issueNumber}`
-              });
-
-              // Add labels with retry logic for transient API failures (non-critical)
-              try {
-                await retryWithBackoff(async () => {
-                  return await github.rest.issues.addLabels({
-                    owner: context.repo.owner,
-                    repo: context.repo.repo,
-                    issue_number: pr.data.number,
-                    labels: ['amber-generated', 'auto-fix', actionType]
-                  });
-                });
-              } catch (labelError) {
-                console.log(`Warning: Failed to add labels to PR #${pr.data.number}: ${labelError.message}`);
-              }
-
-              // Link PR back to issue (with fallback)
-              await safeComment(
-                issueNumber,
-                `🤖 Amber has created a pull request to address this issue: #${pr.data.number}\n\nThe changes are ready for review. All automated checks will run on the PR.\n\n---\n🔍 [View AI decision process](${serverUrl}/${repository}/actions/runs/${runId}) (logs available for 90 days)`,
-                `Issue #${issueNumber} PR link notification`
-              );
-
-              console.log('Created PR:', pr.data.html_url);
-            } catch (error) {
-              console.error('Failed to create/update PR:', error);
-              core.setFailed(`PR creation/update failed: ${error.message}`);
-
-              // Notify on issue about failure (with fallback - best effort)
-              await safeComment(
-                issueNumber,
-                `⚠️ Amber completed changes but failed to create a pull request.\n\n**Error:** ${error.message}\n\nChanges committed to \`${branchName}\`. A maintainer can manually create the PR.`,
-                `Issue #${issueNumber} PR failure notification`
-              );
-            }
+            gh issue comment "$ISSUE_NUMBER" --body \
+              "🤖 Amber created PR #${PR_NUMBER} to address this issue. [View run](${RUN_URL})"
+          fi
 
       - name: Report failure
         if: failure()
         env:
           ISSUE_NUMBER: ${{ steps.issue-details.outputs.issue_number }}
           ACTION_TYPE: ${{ steps.action-type.outputs.type }}
-          RUN_ID: ${{ github.run_id }}
-          GITHUB_SERVER_URL: ${{ github.server_url }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const issueNumber = parseInt(process.env.ISSUE_NUMBER);
-            const actionType = process.env.ACTION_TYPE || 'unknown';
-            const runId = process.env.RUN_ID;
-            const serverUrl = process.env.GITHUB_SERVER_URL;
-            const repository = process.env.GITHUB_REPOSITORY;
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Validate issue number before attempting comment
+          if ! [[ "$ISSUE_NUMBER" =~ ^[0-9]+$ ]]; then
+            echo "Error: Invalid issue number, cannot post failure comment"
+            exit 0
+          fi
 
-            // Validate issue number before attempting comment
-            if (!issueNumber || isNaN(issueNumber)) {
-              console.log('Error: Invalid issue number, cannot post failure comment');
-              return;
-            }
+          gh issue comment "$ISSUE_NUMBER" --body "$(cat <<EOF
+          ⚠️ Amber encountered an error while processing this issue.
 
-            try {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: issueNumber,
-                body: `⚠️ Amber encountered an error while processing this issue.
+          **Action Type:** ${ACTION_TYPE:-unknown}
+          **Workflow Run:** ${RUN_URL}
 
-            **Action Type:** ${actionType}
-            **Workflow Run:** ${serverUrl}/${repository}/actions/runs/${runId}
-
-            Please review the workflow logs for details. You may need to:
-            1. Check if the issue description provides sufficient context
-            2. Verify the specified files exist
-            3. Ensure the changes are feasible for automation
-
-            Manual intervention may be required for complex changes.`
-              });
-              console.log(`Posted failure comment to issue #${issueNumber}`);
-            } catch (commentError) {
-              console.log(`Warning: Failed to post failure comment to issue #${issueNumber}: ${commentError.message}`);
-            }
+          Please review the workflow logs for details. Manual intervention may be required.
+          EOF
+          )" || echo "Warning: Failed to post failure comment"
