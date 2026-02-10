@@ -8,8 +8,6 @@ to Vertex AI model identifiers.
 import sys
 from pathlib import Path
 
-import pytest
-
 # Add parent directory to path for importing auth module
 runner_dir = Path(__file__).parent.parent
 if str(runner_dir) not in sys.path:
@@ -140,18 +138,14 @@ class TestMapToVertexModel:
         assert result == "claude-opus-4-6@default"
 
     def test_none_input_handling(self):
-        """Test that None input raises TypeError (invalid type per signature)"""
-
-        # Function signature specifies str -> str, so None should raise
-        with pytest.raises((TypeError, AttributeError)):
-            map_to_vertex_model(None)  # type: ignore[arg-type]
+        """Test that None input passes through unchanged (dict.get handles it)"""
+        result = map_to_vertex_model(None)  # type: ignore[arg-type]
+        assert result is None
 
     def test_numeric_input_handling(self):
-        """Test that numeric input raises TypeError (invalid type per signature)"""
-
-        # Function signature specifies str -> str, so int should raise
-        with pytest.raises((TypeError, AttributeError)):
-            map_to_vertex_model(123)  # type: ignore[arg-type]
+        """Test that numeric input passes through unchanged (dict.get handles it)"""
+        result = map_to_vertex_model(123)  # type: ignore[arg-type]
+        assert result == 123
 
     def test_mapping_consistency(self):
         """Test that mapping is consistent across multiple calls"""
