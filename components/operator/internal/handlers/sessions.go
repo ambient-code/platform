@@ -1001,6 +1001,11 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 						base = append(base, corev1.EnvVar{Name: "CLAUDE_CODE_USE_VERTEX", Value: "0"})
 					}
 
+					// Pass dynamic model configuration to runner
+					if modelsJSON := os.Getenv("MODELS_JSON"); modelsJSON != "" {
+						base = append(base, corev1.EnvVar{Name: "MODELS_JSON", Value: modelsJSON})
+					}
+
 					// Add PARENT_SESSION_ID if this is a continuation
 					if parentSessionID != "" {
 						base = append(base, corev1.EnvVar{Name: "PARENT_SESSION_ID", Value: parentSessionID})

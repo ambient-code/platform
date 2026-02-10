@@ -71,6 +71,12 @@ spec:
             configMapKeyRef:
               name: operator-config
               key: GOOGLE_APPLICATION_CREDENTIALS
+        - name: MODELS_JSON
+          valueFrom:
+            configMapKeyRef:
+              name: operator-config
+              key: MODELS_JSON
+              optional: true
         # Platform-wide Langfuse observability configuration
         # All LANGFUSE_* config stored in ambient-admin-langfuse-secret (platform-admin managed)
         - name: LANGFUSE_ENABLED

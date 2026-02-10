@@ -131,6 +131,12 @@ spec:
             configMapKeyRef:
               name: operator-config
               key: GOOGLE_APPLICATION_CREDENTIALS
+        - name: MODELS_JSON
+          valueFrom:
+            configMapKeyRef:
+              name: operator-config
+              key: MODELS_JSON
+              optional: true
         resources:
           requests:
             cpu: 100m
