@@ -1,6 +1,6 @@
 # MVP Implementation Checklist
 
-**Scope**: 8-10 weeks to MVP (owner/admin permissions + delete safety + Kueue quota integration)
+**Scope**: 8-10 weeks to MVP (owner/admin permissions + delete safety + namespace quota integration)
 
 **Team**: Backend (4 days) + Operator (3 days) + Frontend (2 days) + Testing (2 days) + Ops (2 days) = 13 person-days
 
@@ -13,7 +13,7 @@
 - [ ] Add owner field (immutable string)
 - [ ] Add adminUsers field (array of strings)
 - [ ] Add quota fields (nested object)
-- [ ] Add kueueWorkloadProfile field (string reference)
+ - [ ] Add quotaProfile field (string reference)
 - [ ] Add displayName, description fields
 - [ ] Add status fields: createdAt, createdBy, lastModifiedAt, lastModifiedBy
 - [ ] Add status.adminRoleBindingsCreated array
@@ -33,7 +33,7 @@
 
 ### Operator Updates (handlers/projectsettings.go)
 - [ ] Reconcile adminUsers: create RoleBindings for each admin
-- [ ] Reconcile kueueWorkloadProfile: create/update LocalQueue
+- [ ] Reconcile quotaProfile: create/update ResourceQuota + LimitRange
 - [ ] Update status.adminRoleBindingsCreated (list of created RB names)
 - [ ] Update status.phase (Ready | Error | Updating)
 - [ ] Handle deleted admins (remove RoleBindings)
@@ -73,33 +73,22 @@
 
 ---
 
-## Week 3-4: Kueue Integration Foundation
+## Week 3-4: Namespace quota integration foundation
 
 ### Cluster Preparation
-- [ ] Install Kueue operator on cluster
-  - [ ] `kubectl apply -f kueue/install.yaml`
-  - [ ] Wait for kueue-controller-manager pod ready
-- [ ] Create ResourceFlavor manifests
-  - [ ] default-flavor (CPU + Memory)
-  - [ ] gpu-flavor (for future GPU workloads)
-- [ ] Create ClusterQueue manifests
-  - [ ] development-queue (20% cluster capacity, 50 max concurrent)
-  - [ ] production-queue (70% cluster capacity, 200 max concurrent)
-  - [ ] unlimited-queue (platform team only)
-- [ ] Create admission check (PVC quota validation)
+- [ ] Prepare ResourceQuota and LimitRange examples for each tier
+  - [ ] `components/manifests/quota/namespace-resourcequota.yaml`
+  - [ ] `components/manifests/quota/namespace-limitrange.yaml`
+  - [ ] Validate examples on test cluster
 
-### Operator Kueue Integration
-- [ ] Add Workload CR creation in session handler
+### Operator Namespace Quota Integration
+- [ ] Operator creates/updates ResourceQuota & LimitRange per workspace based on `spec.quotaProfile`
   - [ ] Get workspace quota from ProjectSettings
-  - [ ] Create Workload with pod template (CPU/Memory requests)
-  - [ ] Set labels: workspace, session-id
-  - [ ] Set OwnerReference to AgenticSession
-- [ ] Add Workload monitoring
-  - [ ] Watch Workload status.conditions
-  - [ ] Admitted → Proceed to create Job
-  - [ ] Evicted → Update session status, retry
-  - [ ] Inadmissible → Return error, suggest queue position
-- [ ] **Test**: Create session → Workload created → tracks admission
+  - [ ] Create/Update ResourceQuota with appropriate requests/limits
+  - [ ] Set OwnerReference to ProjectSettings for traceability
+- [ ] Add monitoring for namespace quota status
+  - [ ] If quota prevents object creation, emit quota events and surface to UI
+  - [ ] **Test**: Create session → resource creation blocked/allowed per quota
 
 ### Backend Awareness
 - [ ] When session creation blocked by quota, return 429 with queue info

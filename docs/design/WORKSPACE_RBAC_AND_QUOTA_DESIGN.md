@@ -12,7 +12,7 @@ This document establishes the complete permissions and quota hierarchy for the A
 
 1. **Permissions Model**: Root User → Owner → Admin → User → Viewer (5-tier hierarchy)
 2. **ProjectSettings Enhancement**: Owner/admin tracking with audit trail
-3. **Kueue Integration**: First-class quota and policy enforcement
+3. **Namespace quota integration**: First-class quota and policy enforcement using Kubernetes ResourceQuota & LimitRange
 4. **Langfuse Tracing**: Critical operations emitted for observability
 5. **Delete Safety**: Confirmation pattern with workspace name verification
 
@@ -243,8 +243,9 @@ spec:
     gitUrl: "https://github.com/acme/defaults"
     branch: "main"
   
-  # ============ KUEUE REFERENCE (NEW - Phase 1) ============
-  kueueWorkloadProfile: "development"   # Links to Kueue ClusterQueue
+  # ============ NAMESPACE QUOTA REFERENCE (NEW - Phase 1) ============
+  # quotaProfile maps to a predefined ResourceQuota + LimitRange profile
+  quotaProfile: "development"   # Maps to a ResourceQuota/LimitRange example
   
   # ============ SETTINGS (FUTURE) ============
   # runnerSecretsName: "runner-config"   # Already used, not shown in this PR
@@ -273,10 +274,10 @@ status:
       lastUpdateTime: "2025-02-10T15:00:00Z"
       reason: "AllAdminsActive"
       message: "All 2 admin RoleBindings created and active"
-    - type: "KueueQuotaActive"
+    - type: "NamespaceQuotaActive"
       status: "True"
-      reason: "WorkloadProfileExists"
-      message: "Linked to Kueue profile 'development'"
+      reason: "QuotaProfileExists"
+      message: "Linked to quota profile 'development' (ResourceQuota/LimitRange)"
 ```
 
 ### CRD Schema Changes
@@ -331,9 +332,9 @@ spec:
           type: string
           pattern: '^[0-9]+(Mi|Gi)$'  # e.g., "8Gi"
     
-    kueueWorkloadProfile:
+    quotaProfile:
       type: string
-      description: "References Kueue ClusterQueue name"
+      description: "References a predefined quota profile (maps to ResourceQuota + LimitRange)"
 
 status:
   properties:
@@ -355,57 +356,38 @@ status:
 
 ---
 
-## Part 4: Kueue Integration (First-Class Component)
+## Part 4: Namespace quota integration (ResourceQuota + LimitRange)
 
-### Why Kueue?
+### Why namespace quotas?
 
 **Current State:**
-- Namespaces limit resource _allocation_ but not _fairness, prioritization, or policy enforcement_
-- Max concurrent sessions stuck at backend business logic (~3-5 per project)
-- No platform-wide queue or priority system
-- No cost tracking per workspace
+- Kubernetes namespaces already provide strong primitives for resource limits (`ResourceQuota`, `LimitRange`) and for scoping resources by namespace.
+- For MVP we prefer to use native Kubernetes primitives which are widely available and simpler to operate and maintain.
 
-**Kueue Solves:**
-- ✅ Enforces queue discipline (FIFO, priority, fair-share)
-- ✅ Multi-tenant quota management across all projects
-- ✅ Workload preemption (lower-priority work paused for higher-priority)
-- ✅ Elastic quota (burst capacity when available)
-- ✅ Integration with pod resource requests (enforced with LimitRanges)
+**This change means:**
+- We will enforce per-workspace quotas using `ResourceQuota` and `LimitRange` on the namespace.
+- The operator will reconcile `ProjectSettings.spec.quota` into namespace `ResourceQuota`/`LimitRange` objects.
+- Multi-tenant fairness is handled by conservative default quotas per workspace (and reviewed by platform operators) rather than an external queueing system in Phase 1.
 
 ### Architecture
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│ Kueue Cluster-Level Configuration                           │
+│ Namespace Quota Configuration                                 │
 ├──────────────────────────────────────────────────────────────┤
 │                                                               │
-│  ResourceFlavor (compute resource profiles)                 │
-│    ├─ "gpu-a100": 10 GPUs available                         │
-│    ├─ "cpu-large": 64 CPU cores available                   │
-│    └─ "standard": 128 GB RAM available                      │
+│  ResourceQuota (namespace-level total limits)                │
+│    ├─ hard:
+│    │   ├─ limits.cpu: "100"
+│    │   ├─ limits.memory: "256Gi"
+│    │   └─ persistentvolumeclaims: "100"
 │                                                               │
-│  ClusterQueue (platform-level quota buckets)                │
-│    ├─ "dev-queue": 20% of cluster capacity                  │
-│    │   ├─ maxRunningWorkloads: 50                           │
-│    │   ├─ strategy: ApplyFifoOrder                          │
-│    │   └─ borrowingLimit: 50% (borrow from prod on weekend) │
-│    │                                                         │
-│    └─ "prod-queue": 70% of cluster capacity                 │
-│        ├─ maxRunningWorkloads: 200                          │
-│        └─ borrowLimit: 0% (reserved)                        │
+│  LimitRange (per-pod min/max/defaults)                      │
+│    ├─ default.requests.cpu: "200m"
+│    ├─ default.requests.memory: "256Mi"
+│    └─ default.limits.cpu: "4"
 │                                                               │
-│  LocalQueue (workspace-level queues)                        │
-│    ├─ "my-workspace/dev": clusterQueue=dev-queue           │
-│    │   ├─ maxRunningWorkloads: 5                           │
-│    │   ├─ cacheSize: 10 GB                                  │
-│    │   └─ priority: 1                                       │
-│    │                                                         │
-│    └─ "engineering-team/prod": clusterQueue=prod-queue     │
-│        ├─ maxRunningWorkloads: 20                          │
-│        └─ priority: 100 (high)                              │
-│                                                               │
-│  AdmissionCheckController (policy enforcement)              │
-│    └─ "pvc-quota": Checks PVC size limits                   │
+│  ProjectSettings.spec.quota → reconciled into above objects  │
 │                                                               │
 └──────────────────────────────────────────────────────────────┘
                             ↓↓↓
@@ -413,17 +395,19 @@ status:
        ┌────────────────────────────────────────┐
        │ 1. Backend validates: user has create  │
        │    permission (RBAC)                   │
-       │ 2. Backend creates Workload (Kueue CR) │
-       │ 3. Workload waits in LocalQueue        │
-       │ 4. Kueue schedules when quota available│
-       │ 5. Job created by operator             │
-       │ 6. Session runs with enforced limits   │
+       │ 2. Backend creates AgenticSession CR   │
+       │ 3. Operator creates Job/Pod in ns      │
+       │ 4. K8s admission uses LimitRange/Quota │
+       │    to enforce per-pod and namespace    │
+       │    limits                              │
+       │ 5. If limits exceeded, pod admission   │
+       │    is rejected and backend returns 429│
        └────────────────────────────────────────┘
 ```
 
-### UserFacing: Quota Tiers (SaaS Mental Model)
+### User-facing: Quota Tiers (SaaS Mental Model)
 
-Create preset quota profiles that teams can choose:
+Create preset quota profiles that teams can choose; the operator maps the chosen profile to `ResourceQuota` and `LimitRange` values:
 
 ```yaml
 # Tier: Development (default for new workspaces)
@@ -432,7 +416,6 @@ spec:
   maxConcurrentSessions: 3
   maxSessionDurationMinutes: 120        # 2 hours
   maxStorageGB: 20
-  maxMonthlyTokens: 100000              # ~$3
   cpuLimit: "2"
   memoryLimit: "4Gi"
 
@@ -442,7 +425,6 @@ spec:
   maxConcurrentSessions: 10
   maxSessionDurationMinutes: 480        # 8 hours
   maxStorageGB: 500
-  maxMonthlyTokens: 5000000             # ~$150
   cpuLimit: "8"
   memoryLimit: "32Gi"
 
@@ -453,7 +435,6 @@ spec:
   maxConcurrentSessions: 999
   maxSessionDurationMinutes: 43200      # 30 days
   maxStorageGB: 10000
-  maxMonthlyTokens: 999999999
   cpuLimit: "64"
   memoryLimit: "256Gi"
 ```
@@ -464,21 +445,26 @@ spec:
 
 ```go
 func reconcileProjectSettings(obj *unstructured.Unstructured) error {
-  // 1. Ensure LocalQueue exists (maps to kueueWorkloadProfile)
-  kueueProfile := getWorkloadProfile(obj)  // e.g., "development"
-  ensureLocalQueue(namespace, kueueProfile)
+  // 1. Compute desired ResourceQuota & LimitRange from spec.quota
+  quota := getQuotaSpec(obj)
 
-  // 2. Ensure admin RoleBindings exist
+  // 2. Ensure ResourceQuota exists and matches desired limits
+  ensureResourceQuota(namespace, quota)
+
+  // 3. Ensure LimitRange exists with per-pod defaults/limits
+  ensureLimitRange(namespace, quota)
+
+  // 4. Ensure admin RoleBindings exist
   adminUsers := getAdminUsers(obj)
   for _, admin := range adminUsers {
     ensureAdminRoleBinding(namespace, admin)
   }
 
-  // 3. Update status with reconciliation results
+  // 5. Update status with reconciliation results
   updateStatus(namespace, map[string]interface{}{
     "phase": "Ready",
     "adminRoleBindingsCreated": []string{...},
-    "kueueWorkloadProfile": kueueProfile,
+    "namespaceQuotaProfile": quota.ProfileName,
   })
 
   return nil
@@ -489,39 +475,18 @@ func reconcileProjectSettings(obj *unstructured.Unstructured) error {
 
 ```go
 func handleAgenticSessionCreated(session *unstructured.Unstructured) error {
-  // 1. Get workspace quota
+  // 1. Get namespace ResourceQuota and LimitRange settings
   quota := getWorkspaceQuota(session.Namespace)
 
-  // 2. Create Kueue Workload CR
-  workload := &Workload{
-    ObjectMeta: metav1.ObjectMeta{
-      Name: session.Name,
-      Namespace: session.Namespace,
-    },
-    Spec: WorkloadSpec{
-      QueueName: "local-queue",  // From LocalQueue
-      PodTemplate: {
-        Spec: corev1.PodSpec{
-          Containers: []corev1.Container{{
-            Resources: corev1.ResourceRequirements{
-              Requests: corev1.ResourceList{
-                "cpu": resource.MustParse(quota.cpuLimit),
-                "memory": resource.MustParse(quota.memoryLimit),
-              },
-            },
-          }},
-        },
-      },
-    },
+  // 2. Create Job/Pod with resource requests informed by quota
+  podReqs := corev1.ResourceList{
+    "cpu": resource.MustParse(quota.cpuLimit),
+    "memory": resource.MustParse(quota.memoryLimit),
   }
-  createWorkload(session.Namespace, workload)
 
-  // 3. Wait for admission (Kueue will accept or queue)
-  // → Kueue automatically enforces quota
-  // → Operator monitors workload.status.conditions
-
-  // 4. Once admitted, create Job as normal
-  createJob(...)
+  // 3. Create Job; if namespace ResourceQuota prevents admission,
+  //    pod admission will fail and backend should report quota exceeded
+  createJobWithRequests(session, podReqs)
 
   return nil
 }
@@ -531,50 +496,11 @@ func handleAgenticSessionCreated(session *unstructured.Unstructured) error {
 
 | Component | What It Enforces | Mechanism |
 |-----------|-----------------|-----------|
-| **Kueue** | Concurrent sessions, queue order, fair-share | Workload scheduling |
-| **Kubernetes Namespace** | Total CPU/Memory allocation | ResourceQuota |
-| **Kubernetes LimitRange** | Per-pod min/max CPU/Memory | Pod admission |
-| **Operator** | Session timeout, storage limits | Cascading deletion |
+| **Kubernetes ResourceQuota** | Namespace totals (cpu, memory, PVC count/size) | K8s admission control |
+| **Kubernetes LimitRange** | Per-pod min/max/default CPU/Memory | Pod admission defaults/limits |
+| **Operator** | Reconcile ProjectSettings → ResourceQuota/LimitRange | Create/update namespace objects |
 | **Backend** | Role-based creation (who can create) | RBAC + permission checks |
 | **Langfuse** | Token budget per workspace | Trace emission + analytics |
-
-### LocalQueue Example
-
-```yaml
-apiVersion: kueue.x-k8s.io/v1alpha1
-kind: LocalQueue
-metadata:
-  name: local-queue
-  namespace: my-workspace
-spec:
-  clusterQueue: development  # Links to ClusterQueue
-  nameForReservation: "my-workspace-dev"
-
----
-# For each Kueue profile tier, create a ClusterQueue:
-apiVersion: kueue.x-k8s.io/v1alpha1
-kind: ClusterQueue
-metadata:
-  name: development
-spec:
-  resourceGroups:
-    - coveredResources: ["cpu", "memory"]
-      flavors:
-        - name: default-flavor
-          resources:
-            - name: cpu
-              nominalQuota: 16
-            - name: memory
-              nominalQuota: 64Gi
-  maxRunningWorkloads: 50
-  namespaceSelector:
-    matchLabels:
-      kueue-tier: development
-  borrowingLimit:
-    resources:
-      - name: cpu
-        value: 8               # Can borrow up to 8 CPUs when available
-```
 
 ---
 
@@ -603,7 +529,7 @@ QUOTA EVENTS:
   ✓ quota_limit_exceeded(workspace, resource_type, requested, limit)
   ✓ quota_tier_changed(workspace, from_tier, to_tier, by_who)
 
-KUEUE EVENTS:
+QUOTA EVENTS:
   ✓ workload_queued(workspace, session_id, position_in_queue, wait_estimate)
   ✓ workload_admitted(workspace, session_id, available_resources)
   ✓ workload_preempted(workspace, session_id, reason, higher_priority_id)
@@ -884,8 +810,8 @@ export const DeleteProjectDialog = ({ projectName, onConfirm }) => {
 ### Phase 1: Core Permissions + Delete + Quota (8-10 weeks)
 
 **Week 1-2: Foundation**
-- [ ] Update ProjectSettings CRD (owner, adminUsers, quota, kueueWorkloadProfile)
-- [ ] Update operator reconciliation (create admin RoleBindings, manage Kueue LocalQueues)
+- [ ] Update ProjectSettings CRD (owner, adminUsers, quota, quotaProfile)
+- [ ] Update operator reconciliation (create admin RoleBindings, create/maintain ResourceQuota & LimitRange)
 - [ ] Update backend handlers (validate owner, add admin, remove admin)
 - [ ] Add Langfuse trace emission (project lifecycle + session lifecycle)
 
@@ -894,11 +820,10 @@ export const DeleteProjectDialog = ({ projectName, onConfirm }) => {
 - [ ] Add delete confirmation dialog to frontend
 - [ ] E2E test delete flow with confirmation
 
-**Week 3-4: Kueue Integration**
-- [ ] Install Kueue on cluster (manifests in components/manifests/kueue/)
-- [ ] Create ResourceFlavors and ClusterQueues for each tier
-- [ ] Operator creates LocalQueue per workspace
-- [ ] AgenticSession handler creates Workload CR
+**Week 3-4: Namespace quota integration**
+- [ ] Prepare ResourceQuota and LimitRange examples for each quota tier
+- [ ] Operator creates/updates ResourceQuota & LimitRange per workspace based on `spec.quotaProfile`
+- [ ] AgenticSession handler relies on Kubernetes admission for quota enforcement; backend emits quota traces
 
 **Week 4-5: Quota Enforcement**
 - [ ] Operator monitors Workload admission
@@ -918,14 +843,14 @@ export const DeleteProjectDialog = ({ projectName, onConfirm }) => {
 
 **Week 7-8: Testing & Polish**
 - [ ] Unit tests (handlers, operators, permissions)
-- [ ] Integration tests (RBAC + Kueue interaction)
+- [ ] Integration tests (RBAC + NamespaceQuota interaction)
 - [ ] E2E tests (create → add admin → delete flow)
 - [ ] Performance testing (parallel quota checks)
 
 **Week 8-10: Documentation & Deployment**
 - [ ] Update ADRs and context files
 - [ ] Change `components/manifests/base/rbac/README.md`
-- [ ] Write deployment guide for Kueue
+- [ ] Write deployment guide for Namespace ResourceQuota / LimitRange (examples, runbook)
 - [ ] Write admin/owner runbook
 
 ### Phase 2: Project Transfer + Root User (4-6 weeks)
@@ -1004,7 +929,7 @@ func GetSystemInfo(c *gin.Context) {
     "rootUsers": []string{
       os.Getenv("PLATFORM_ROOT_USER"),
     },
-    "kueuqEnabled": isKueueEnabled(),
+    "namespaceQuotaEnabled": isNamespaceQuotaEnabled(),
     "langfuseEnabled": isLangfuseEnabled(),
   })
 }
@@ -1058,7 +983,7 @@ spec:
   maxMonthlyTokens: 100000
   cpuLimit: "2"
   memoryLimit: "4Gi"
-  kueueClusterQueue: "development"
+  quotaProfileCluster: "development"
 
 ---
 # Production Tier
@@ -1075,7 +1000,7 @@ spec:
   maxMonthlyTokens: 5000000
   cpuLimit: "8"
   memoryLimit: "32Gi"
-  kueueClusterQueue: "production"
+  quotaProfileCluster: "production"
 
 ---
 # Unlimited Tier (Platform team only)
@@ -1092,7 +1017,7 @@ spec:
   maxMonthlyTokens: 999999999
   cpuLimit: "64"
   memoryLimit: "256Gi"
-  kueueClusterQueue: "unlimited"
+  quotaProfileCluster: "unlimited"
 ```
 
 ### CreateProject with Tier Selection
@@ -1137,7 +1062,7 @@ func CreateProject(c *gin.Context) {
       AdminUsers: []string{c.GetString("user_id")},  // Owner is auto-admin
       DisplayName: req.DisplayName,
       Quota: quotaTier.Spec,
-      KueueWorkloadProfile: req.QuotaTier,
+      QuotaProfile: req.QuotaTier,
     },
   }
   DynamicClient.Resource(projectSettingsGVR).Namespace(req.Name).Create(...)
@@ -1270,9 +1195,9 @@ NEW CRDS:
   ✓ components/manifests/base/quotas/quota-tiers.yaml
 
 NEW MANIFESTS:
-  ✓ components/manifests/kueue/clusterqueue.yaml
-  ✓ components/manifests/kueue/localqueue.yaml (per-project)
-  ✓ components/manifests/kueue/resourceflavor.yaml
+  ✓ components/manifests/quota/namespace-resourcequota.yaml
+  ✓ components/manifests/quota/namespace-limitrange.yaml (per-project)
+  ✓ components/manifests/quota/README.md (examples)
 
 MODIFIED FILES:
   ✓ components/manifests/base/crds/projectsettings-crd.yaml (enhance schema)
@@ -1280,7 +1205,7 @@ MODIFIED FILES:
   ✓ components/backend/handlers/projects.go (DeleteProject endpoint)
   ✓ components/backend/handlers/project_settings.go (new endpoints for admins)
   ✓ components/backend/handlers/permissions.go (verify owner for delete)
-  ✓ components/operator/internal/handlers/projectsettings.go (reconcile admins + kueue)
+  ✓ components/operator/internal/handlers/projectsettings.go (reconcile admins + namespace quota)
   ✓ components/backend/observability.py (emit traces)
   ✓ components/frontend/src/pages/projects/[name]/settings.tsx (admin/delete UI)
 

@@ -40,7 +40,7 @@
 **Start here**: [`ARCHITECTURE_SUMMARY.md`](ARCHITECTURE_SUMMARY.md)
 - What "Owner" and "Admin" mean
 - How delete confirmation protects users
-- Why Kueue matters (quota enforcement)
+- Why namespace quotas matter (quota enforcement using ResourceQuota + LimitRange)
 - Phase 1 vs. Phase 2 vs. Phase 3
 
 **Then read**: [`ROLES_VS_OWNER_HIERARCHY.md`](ROLES_VS_OWNER_HIERARCHY.md) → FAQ section
@@ -50,7 +50,7 @@
 
 ### 🔧 If You're **DevOps** or **Infra**
 
-**Start here**: [`WORKSPACE_RBAC_AND_QUOTA_DESIGN.md`](WORKSPACE_RBAC_AND_QUOTA_DESIGN.md) → Part 4 (Kueue Integration)
+**Start here**: [`WORKSPACE_RBAC_AND_QUOTA_DESIGN.md`](WORKSPACE_RBAC_AND_QUOTA_DESIGN.md) → Part 4 (Namespace quota integration)
 - ResourceFlavors setup
 - ClusterQueue configuration
 - LocalQueue per workspace
@@ -59,7 +59,7 @@
 **Then read**: (After MVP deployment) `RUNBOOK_QUOTA_ENFORCEMENT.md` (Phase 1 creation)
 - How to adjust limits
 - Emergency override procedures
-- Monitoring Kueue health
+- Monitoring namespace quota enforcement health
 
 ---
 
@@ -72,7 +72,7 @@
 - Part 1: Explanation of existing 3-tier RBAC
 - Part 2: New 5-tier permissions hierarchy (detailed)
 - Part 3: ProjectSettings CR enhancements (with schema)
-- Part 4: Kueue integration (architecture + examples)
+ - Part 4: Namespace quota integration (architecture + examples)
 - Part 5: Langfuse tracing (critical operations + masking)
 - Part 6: Delete project safety pattern
 - Part 7: Implementation phases (Phase 1, 2, 3)
@@ -90,7 +90,7 @@
 **Contains**:
 - Week 1-2: Foundation & CRD updates
 - Week 2-3: Delete endpoint & frontend
-- Week 3-4: Kueue foundation
+- Week 3-4: Namespace quota foundation
 - Week 4-5: Admin management
 - Week 5-6: Quota enforcement
 - Week 6-7: Migration & audit trail
@@ -161,9 +161,9 @@
 ### Phase 1 (MVP) - 8-10 weeks
 
 **CRDs**:
-- ✅ ProjectSettings (enhanced with owner, adminUsers, quota, kueueWorkloadProfile)
+- ✅ ProjectSettings (enhanced with owner, adminUsers, quota, quotaProfile)
 - ✅ QuotaTier (define tiers: development, production, unlimited)
-- ✅ Kueue ResourceFlavor, ClusterQueue, LocalQueue (quota enforcement)
+- ✅ Namespace ResourceQuota + LimitRange examples (quota enforcement)
 
 **Backend Handlers** (~200 lines new code):
 - ✅ DELETE /api/projects/:projectName (delete with name confirmation)
@@ -174,7 +174,7 @@
 **Operator Reconciliation** (~100 lines):
 - ✅ Watch ProjectSettings.spec.adminUsers changes
 - ✅ Create/delete RoleBindings for each admin
-- ✅ Create LocalQueue for each workspace (linked to quota tier)
+- ✅ Create/Update ResourceQuota & LimitRange for each workspace (linked to quota tier)
 - ✅ Update status fields (createdAt, createdBy, adminRoleBindingsCreated)
 
 **Frontend** (~200 lines):
@@ -212,9 +212,9 @@
 2. Read `ROLES_VS_OWNER_HIERARCHY.md` (governance vs. technical)
 3. See "Why Two Levels?" section for reasoning
 
-### Scenario 4: "I need to set up Kueue"
-1. Jump to Part 4 (Kueue Integration) in `WORKSPACE_RBAC_AND_QUOTA_DESIGN.md`
-2. Copy ClusterQueue + ResourceFlavor manifests
+### Scenario 4: "I need to set up namespace quotas"
+1. Jump to Part 4 (Namespace quota integration) in `WORKSPACE_RBAC_AND_QUOTA_DESIGN.md`
+2. Copy `components/manifests/quota/` examples (ResourceQuota + LimitRange)
 3. Reference `MVP_IMPLEMENTATION_CHECKLIST.md` Week 3-4 for deployment steps
 
 ### Scenario 5: "I need to write tests"

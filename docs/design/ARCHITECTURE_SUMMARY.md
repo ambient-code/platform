@@ -16,8 +16,8 @@ The complete technical specification:
 
 - **Part 1**: Explanation of existing 3-tier RBAC model (view/edit/admin roles)
 - **Part 2**: New 5-tier permissions hierarchy (Root → Owner → Admin → User → Viewer)
-- **Part 3**: ProjectSettings CR enhancements (owner, adminUsers, quota, kueueWorkloadProfile)
-- **Part 4**: Kueue integration as first-class quota enforcement
+- **Part 3**: ProjectSettings CR enhancements (owner, adminUsers, quota, quotaProfile)
+- **Part 4**: Namespace quota integration (ResourceQuota + LimitRange)
 - **Part 5**: Langfuse tracing strategy (privacy-first masking, critical operations)
 - **Part 6**: Delete project with confirmation pattern
 - **Part 7**: Implementation phases (Phase 1 core + Phase 2 transfer)
@@ -31,7 +31,7 @@ Week-by-week breakdown:
 
 - **Week 1-2**: CRD updates, ProjectSettings enhancements, backend types
 - **Week 2-3**: Delete endpoint, frontend confirmation dialog
-- **Week 3-4**: Kueue foundation (install, ResourceFlavors, ClusterQueues)
+- **Week 3-4**: Namespace quota foundation (prepare ResourceQuota + LimitRange examples)
 - **Week 4-5**: Admin management endpoints (add/remove)
 - **Week 5-6**: Quota enforcement (checks, monitoring, display)
 - **Week 6-7**: Migration for existing projects, audit trail
@@ -76,10 +76,10 @@ Clarification document:
    - Prevents accidental loss
    - Langfuse traces the event
 
-5. **Kueue as First-Class Component**
-   - Not an opt-in add-on
-   - Part of MVP, enforces quota from day 1
-   - Integrated with ProjectSettings (kueueWorkloadProfile)
+5. **Namespace Quota as First-Class Component**
+  - Not an opt-in add-on
+  - Part of MVP, enforces quota via namespace ResourceQuota + LimitRange from day 1
+  - Integrated with ProjectSettings (quotaProfile)
 
 6. **Langfuse from Day 1**
    - Critical operations emit traces (project lifecycle, admin changes, quota events)
@@ -134,7 +134,7 @@ Improvements:
   ✅ Clear owner (governance authority)
   ✅ Admin(s) under owner control
   ✅ Admins can't remove each other
-  ✅ Quota enforced by Kueue (first-class)
+  ✅ Quota enforced via namespace ResourceQuota + LimitRange (first-class)
   ✅ Delete requires confirmation + name verification
   ✅ Langfuse traces project_deleted event
   ✅ Audit trail (createdBy, lastModifiedBy, timestamps)
@@ -153,11 +153,11 @@ Improvements:
 │  ├─ owner: "alice@company.com"                                 │
 │  ├─ adminUsers: ["bob@company.com", "charlie@company.com"]     │
 │  ├─ quota: { maxConcurrentSessions: 5, maxStorage: 100GB, ... }│
-│  ├─ kueueWorkloadProfile: "production"                         │
+│  ├─ quotaProfile: "production"                         │
 │  └─ status:                                                     │
 │      ├─ createdAt, createdBy, lastModifiedAt, lastModifiedBy   │
 │      ├─ adminRoleBindingsCreated: [...]                        │
-│      └─ conditions: AdminsConfigured, KueueQuotaActive         │
+│      └─ conditions: AdminsConfigured, NamespaceQuotaActive      │
 │                                                                  │
 │  RoleBindings (Kubernetes RBAC - Auto-Created)                │
 │  ├─ alice → ambient-project-admin                             │
@@ -167,12 +167,12 @@ Improvements:
 │  └─ stakeholder → ambient-project-view                        │
 │                                                                  │
 │  AgenticSessions (User Work + Quota Enforcement)               │
-│  └─ → Creates Workload (Kueue CR)                              │
-│      → Workload queued/admitted by Kueue                       │
-│      → When admitted: create Job                               │
+│  └─ → Backend creates AgenticSession; operator ensures namespace ResourceQuota/LimitRange exists
+│      → Kubernetes admission enforces namespace totals; if quota prevents creation, backend returns 429
+│      → When allowed: create Job/Pod for session                 │
 │                                                                  │
-│  LocalQueue (Kueue - Quota/Policy Enforcement)                │
-│  └─ Links to ClusterQueue (development/production/unlimited)  │
+│  Namespace ResourceQuota (Quota/Policy Enforcement)           │
+│  └─ Profiles: development/production/unlimited                 │
 │                                                                  │
 │  Jobs, PVCs, Secrets, Services (Execution Resources)           │
 │  └─ Owner can delete all (cascades on namespace delete)        │
@@ -193,10 +193,10 @@ Backend creates AgenticSession CR
   ↓
 Operator watches: AgenticSession created
   ├─ Gets quota from ProjectSettings.spec.quota
-  ├─ Creates Workload (Kueue CR)
+  ├─ Operator ensures ResourceQuota/LimitRange exists for workspace
   └─ Emits trace: "session_created"
   ↓
-Kueue scheduler:
+Namespace quota enforcement:
   ├─ Checks: Is workspace under concurrent session limit?
   ├─ Yes → Admits Workload
   ├─ No → Queues Workload (wait, backpressure)
@@ -221,7 +221,7 @@ Session Complete → Workload Released → Slot available for next
 components/manifests/base/quotas/
   └─ quota-tiers.yaml          # Development, Production, Unlimited
 
-components/manifests/kueue/
+components/manifests/quota/
   ├─ resourceflavor.yaml       # CPU, Memory, GPU flavors
   ├─ clusterqueue.yaml         # dev-queue, prod-queue, unlimited-queue
   └─ localqueue.yaml           # Auto-created per workspace
@@ -230,7 +230,7 @@ components/manifests/kueue/
 ### Updated CRDs
 ```
 components/manifests/base/crds/
-  └─ projectsettings-crd.yaml  # Add owner, adminUsers, quota, kueueWorkloadProfile fields
+  └─ projectsettings-crd.yaml  # Add owner, adminUsers, quota, quotaProfile fields
 ```
 
 ### Backend Modifications
@@ -424,7 +424,7 @@ A: RoleBinding recreated by operator reconciliation (idempotent). Phase 2 transf
 A: No, owner is immutable (locked). Phase 2 adds transfer request + approval flow.
 
 **Q: How do I organize by quota if dev/prod can be in same workspace?**  
-A: ProjectSettings.kueueWorkloadProfile selects tier (development, production, unlimited).
+A: ProjectSettings.quotaProfile selects tier (development, production, unlimited).
 
 ---
 

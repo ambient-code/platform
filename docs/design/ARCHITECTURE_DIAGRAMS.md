@@ -216,7 +216,7 @@ graph TD
     Meta["displayName: 'My Workspace'<br/>description: 'Frontend + Backend'"]
     Quota["quota:<br/>maxConcurrentSessions: 5<br/>maxSessionDurationMinutes: 480<br/>maxStorageGB: 100<br/>cpuLimit: '4'<br/>memoryLimit: '8Gi'"]
     Config["defaultConfigRepo:<br/>gitUrl: https://...<br/>branch: main"]
-    Kueue["kueueWorkloadProfile:<br/>development"]
+    QuotaProfile["namespaceQuotaProfile:<br/>development"]
     
     Status["status:"]
     Created["createdAt: 2025-01-15T...<br/>createdBy: alice"]
@@ -233,7 +233,7 @@ graph TD
     Spec --> Meta
     Spec --> Quota
     Spec --> Config
-    Spec --> Kueue
+    Spec --> QuotaProfile
     
     Status --> Created
     Status --> Modified
@@ -248,36 +248,37 @@ graph TD
 
 ---
 
-## 8. Kueue Integration Architecture
+## 8. Namespace Quota Integration Architecture
 
 ```mermaid
 graph TB
-    subgraph "Kueue Cluster-Level"
-        RF["ResourceFlavor<br/>- gpu-a100: 10 GPUs<br/>- cpu-large: 64 CPUs"]
-        CQ["ClusterQueue<br/>- dev-queue: 20% capacity<br/>- prod-queue: 70% capacity"]
+    subgraph "Kubernetes Cluster"
+        RQ["ResourceQuota<br/>(namespace totals)"]
+        LR["LimitRange<br/>(per-pod defaults/limits)"]
     end
     
     subgraph "Per-Workspace"
-        PS["ProjectSettings<br/>kueueWorkloadProfile:<br/>development"]
-        LQ["LocalQueue<br/>my-workspace/dev<br/>maxRunningWorkloads: 5<br/>clusterQueue: dev-queue"]
+        PS["ProjectSettings<br/>namespaceQuotaProfile:<br/>development"]
+        NS["Namespace<br/>my-workspace"]
     end
     
     subgraph "Session Execution"
         Job["Job spec.podTemplate<br/>requests:<br/>  cpu: 2<br/>  memory: 4Gi"]
-        WL["Workload CR<br/>(created by operator)"]
+        Pod["Pod Admission<br/>(LimitRange/ResourceQuota)"]
     end
     
-    RF --> CQ
-    CQ --> LQ
-    PS --> LQ
-    LQ --> WL
-    Job --> WL
+    PS --> NS
+    NS --> RQ
+    NS --> LR
+    Job --> Pod
+    Pod --> RQ
+    Pod --> LR
     
-    style RF fill:#ff9999,color:#fff
-    style CQ fill:#ffcc99,color:#000
-    style LQ fill:#99ccff,color:#fff
+    style RQ fill:#ff9999,color:#fff
+    style LR fill:#ffcc99,color:#000
+    style NS fill:#99ccff,color:#fff
     style PS fill:#ffd93d,color:#000
-    style WL fill:#99ff99,color:#000
+    style Pod fill:#99ff99,color:#000
     style Job fill:#cc99ff,color:#fff
 ```
 
@@ -322,9 +323,7 @@ graph TB
     PS2["ProjectSettings B<br/>maxConcurrentSessions: 3"]
     PS3["ProjectSettings C<br/>maxConcurrentSessions: 10"]
     
-    Kueue["Kueue<br/>Fair-share allocation"]
-    
-    Enforce["Operator enforces:<br/>- Session count per workspace<br/>- Duration per session<br/>- Token usage per month"]
+    Enforce["Operator enforces:<br/>- Session count per workspace<br/>- Duration per session<br/>- Token usage per month<br/>- ResourceQuota & LimitRange reconciliation"]
     
     Result["End Result:<br/>No workspace starves others<br/>Platform resources shared fairly"]
     
@@ -332,14 +331,13 @@ graph TB
     User2 --> PS2
     User3 --> PS3
     
-    PS1 --> Kueue
-    PS2 --> Kueue
-    PS3 --> Kueue
+    PS1 --> Enforce
+    PS2 --> Enforce
+    PS3 --> Enforce
     
-    Kueue --> Enforce
+    Enforce --> Result
     Enforce --> Result
     
-    style Kueue fill:#ff9999,color:#fff,stroke:#c00,stroke-width:2px
     style Enforce fill:#99ccff,color:#fff
     style Result fill:#6bcf7f,color:#fff,stroke:#090,stroke-width:2px
 ```
@@ -355,7 +353,7 @@ gantt
     
     section Phase 1
     Owner field & audit trail :p1a, 2026-02-10, 30d
-    Kueue quota integration :p1b, 2026-02-15, 40d
+    Namespace quota integration :p1b, 2026-02-15, 40d
     Delete workspace safety :p1c, 2026-02-10, 35d
     Admin management UI :p1d, 2026-02-20, 45d
     
@@ -441,7 +439,7 @@ sequenceDiagram
 1. **5-Tier Hierarchy**: Root → Owner → Admin → User → Viewer provides clear governance
 2. **Immutable Owner**: Created by user; can be transferred via Root approval
 3. **Audit Trail**: Every change tracked in ProjectSettings.status
-4. **Kueue Integration**: Platform-wide fair quota management
+4. **Namespace Quota Integration**: Platform-wide quota management using ResourceQuota + LimitRange
 5. **Delete Safety**: Confirmation by name reduces accidental deletions
 6. **Configuration Repo**: Workspace defaults for session configuration
 7. **RBAC Separation**: Kubernetes ClusterRoles unchanged; governance added in CR

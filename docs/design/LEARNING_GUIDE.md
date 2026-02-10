@@ -6,7 +6,7 @@ This system adds **governance and quota management** to the Ambient Code Platfor
 
 1. **Clear ownership** - Know who created each workspace
 2. **Role-based access** - 5 tiers of permissions (Root → Owner → Admin → User → Viewer)
-3. **Fair quota enforcement** - Platform-wide resource sharing via Kueue
+3. **Fair quota enforcement** - Platform-wide resource sharing via namespace ResourceQuota + LimitRange
 4. **Safe deletions** - Prevent accidental workspace deletions
 5. **Audit trail** - Track all permission changes
 
@@ -39,8 +39,8 @@ This system adds **governance and quota management** to the Ambient Code Platfor
    Example: "Charlie is a USER - can run sessions but can't invite others"
 
 👁️ VIEWER
-   Purpose: Stakeholders who need visibility
-   Permissions: Read-only, see progress and results
+Q: How do namespace quotas prevent starvation?
+A: Per-namespace `ResourceQuota` and `LimitRange` enforce totals and defaults; combined with backend observability they prevent long-running hogging of cluster capacity.
    Example: "Manager watches session progress but can't change anything"
 ```
 
@@ -126,24 +126,22 @@ Bob can now create sessions (K8s RBAC + frontend enforces)
 ProjectSettings.status.adminRoleBindingsCreated updated
 ```
 
-#### 4. Kueue Integration
+#### 4. Namespace quota integration
 
-**What is Kueue?** Kubernetes queue management that prevents resource starvation
+**What is Namespace Quota?** Kubernetes `ResourceQuota` and `LimitRange` enforce per-namespace resource limits (CPU, memory, storage, object counts).
 
 **How it works:**
 ```
-ResourceFlavors (cluster-level resources)
-    ↓
-ClusterQueues (pool usage: 20% dev, 70% prod)
-    ↓
-LocalQueues (workspace-level: "my-workspace/dev")
-    ↓
-Sessions submit as Workloads
-    ↓
-Kueue schedules in FIFO order, respecting quotas
+ResourceQuota/LimitRange profiles (cluster-level examples)
+  ↓
+Operator applies ResourceQuota + LimitRange to each workspace namespace based on `spec.quotaProfile`
+  ↓
+Sessions create Pods/Jobs; Kubernetes admission enforces namespace totals
+  ↓
+When quota prevents creation, backend emits quota events and UI surfaces limits/position
 ```
 
-**Result:** No single workspace can starve others; fair-share allocation
+**Result:** No single workspace can starve others; fair-share allocation via namespace quotas and backend observability
 
 #### 5. Delete Safety
 
@@ -175,36 +173,42 @@ Delete namespace (cascades: Sessions, Jobs, PVCs)
 
 #### Prerequisites
 
-1. **Kueue must be installed**
-   ```bash
-   helm install kueue kueue/kueue
-   ```
+1. **Prepare namespace quota examples**
+  ```bash
+  # Examples live in components/manifests/quota/
+  ls components/manifests/quota
+  ```
 
-2. **Configure ResourceFlavors** (cluster resources available)
+2. **Configure quota profiles** (namespace `ResourceQuota` + `LimitRange` examples)
    ```yaml
-   apiVersion: kueue.x-k8s.io/v1beta1
-   kind: ResourceFlavor
+   apiVersion: v1
+   kind: ResourceQuota
    metadata:
-     name: cpu-large
+     name: rq-development
+     namespace: my-workspace
    spec:
-     nodeLabels:
-       kubernetes.io/instance-type: "large"
-   ```
-
-3. **Configure ClusterQueues** (quota buckets)
-   ```yaml
-   apiVersion: kueue.x-k8s.io/v1beta1
-   kind: ClusterQueue
+     hard:
+       requests.cpu: "20"
+       requests.memory: "64Gi"
+       limits.cpu: "40"
+       limits.memory: "128Gi"
+       persistentvolumeclaims: "10"
+       pods: "50"
+   ---
+   apiVersion: v1
+   kind: LimitRange
    metadata:
-     name: dev-queue
+     name: lr-defaults
+     namespace: my-workspace
    spec:
-     maxRunningWorkloads: 50
-     borrowingLimit: "50%"  # Can borrow from prod on weekend
-     flavors:
-       - name: cpu-large
-         quota:
-           - min: "4"
-               max: "16"
+     limits:
+       - type: Container
+         default:
+           cpu: "500m"
+           memory: "1Gi"
+         defaultRequest:
+           cpu: "250m"
+           memory: "512Mi"
    ```
 
 #### Operator Responsibilities
@@ -219,8 +223,8 @@ When ProjectSettings.spec.adminUsers changes:
 
 When ProjectSettings.spec.quota changes:
 
-1. **Validate** (quotas are reasonable, Kueue supports them)
-2. **Reconcile LocalQueue** (update maxRunningWorkloads, etc.)
+1. **Validate** (quotas are reasonable for ResourceQuota/LimitRange)
+2. **Reconcile ResourceQuota & LimitRange** (create/update per-namespace)
 3. **Emit Langfuse trace** (quota_changed)
 
 #### Monitoring
@@ -232,8 +236,8 @@ kubectl get projectsettings -A
 # Check admin RoleBindings created
 kubectl describe ps projectsettings -n my-workspace
 
-# Check Kueue workloads
-kubectl get workloads -A
+# Check namespace quotas
+kubectl get resourcequota,limitrange -n my-workspace
 
 # Check Langfuse traces
 # (Use Langfuse dashboard)
@@ -370,7 +374,7 @@ kubectl get workloads -A
 - ✅ Owner field in ProjectSettings (immutable)
 - ✅ Admin management (add/remove admins)
 - ✅ Audit trail (createdBy, lastModifiedBy, timestamps)
-- ✅ Kueue integration (quota enforcement)
+- ✅ Namespace quota integration (quota enforcement)
 - ✅ Delete workspace safety confirmation
 - ✅ Langfuse tracing for critical operations
 - ✅ Full e2e tests and UI
@@ -440,7 +444,7 @@ Scenario: Create workspace, invite team, create session
 | **Ownership** | Immutable after creation |
 | **Admins** | Multiple allowed, managed by Owner |
 | **Quota** | Per-workspace max concurrent sessions, duration, storage |
-| **Kueue** | Fair-share queue management across all workspaces |
+| **Namespace quotas** | Fair-share resource limits enforced per-namespace (ResourceQuota + LimitRange) |
 | **Audit** | CreatedAt, CreatedBy, LastModifiedAt, LastModifiedBy |
 | **Safety** | Delete requires name confirmation |
 | **Phases** | Phase 1 complete system, Phase 2+ transfers + cost tracking |

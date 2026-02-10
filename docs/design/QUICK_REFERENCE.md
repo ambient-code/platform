@@ -43,7 +43,7 @@
 
 ### Operator
 - [ ] Reconcile adminUsers → RoleBindings
-- [ ] Create LocalQueue (Kueue)
+- [ ] Create namespace ResourceQuota / LimitRange from `ProjectSettings.spec.quota`
 - [ ] Update audit trail (status fields)
 
 ### Frontend
@@ -53,7 +53,7 @@
 
 ### Infrastructure
 - [ ] ProjectSettings CRD enhancement
-- [ ] Kueue installation manifests
+- [ ] Namespace ResourceQuota / LimitRange examples
 - [ ] QuotaTier definitions
 - [ ] Migration script
 
@@ -102,14 +102,14 @@ Layer 2: TECHNICAL (Kubernetes RBAC)
    ├─ Delete verb on rolebindings?
    └─ List verb on secrets?
 
-Layer 3: QUOTA (Kueue)
-  "Is this work allowed to RUN?"
-   ├─ Under concurrent session limit?
-   ├─ Under storage limit?
-   └─ Under token budget?
+Layer 3: QUOTA (Kubernetes namespace ResourceQuota + LimitRange)
+   "Is this work allowed to RUN?"
+    ├─ Within namespace CPU/Memory totals?
+    ├─ Within storage/PVC limits?
+    └─ Within token budget enforced by backend/observability?
 ```
 
-**They work together**: Governance → RBAC → Kueue → Execution
+**They work together**: Governance → RBAC → NamespaceQuota → Execution
 
 ---
 
@@ -146,7 +146,7 @@ Layer 3: QUOTA (Kueue)
 → Start with type definitions in `backend/types/common.go`
 
 ### Week 3: I'm Stuck
-→ Reference [`WORKSPACE_RBAC_AND_QUOTA_DESIGN.md`](docs/design/WORKSPACE_RBAC_AND_QUOTA_DESIGN.md) Part 4 (Kueue)  
+→ Reference [`WORKSPACE_RBAC_AND_QUOTA_DESIGN.md`](docs/design/WORKSPACE_RBAC_AND_QUOTA_DESIGN.md) Part 4 (Namespace quota integration)  
 → Check [`ROLES_VS_OWNER_HIERARCHY.md`](docs/design/ROLES_VS_OWNER_HIERARCHY.md) for permission logic
 
 ### Week 5+: I Need Tests
@@ -156,7 +156,7 @@ Layer 3: QUOTA (Kueue)
 ### Deployment Time
 → Follow [`ARCHITECTURE_SUMMARY.md`](docs/design/ARCHITECTURE_SUMMARY.md) "Success Criteria"  
 → Run migration script on existing projects  
-→ Verify Kueue workload admission
+→ Verify namespace `ResourceQuota` and `LimitRange` are applied
 
 ---
 
@@ -182,7 +182,7 @@ TOTAL                  13 days  13x
 1. ✅ **5-tier hierarchy** (Root, Owner, Admin, User, Viewer)
 2. ✅ **Owner = immutable** (until Phase 2 transfer)
 3. ✅ **Multiple admins** (owner manages them)
-4. ✅ **Kueue = first-class** (not optional)
+4. ✅ **Namespace ResourceQuota = first-class** (not optional)
 5. ✅ **Delete with name confirmation** (safety feature)
 6. ✅ **Langfuse from day 1** (critical ops traced)
 7. ✅ **Both user + group access** (coexist cleanly)

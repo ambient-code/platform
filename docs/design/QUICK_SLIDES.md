@@ -19,7 +19,7 @@
 ```
 ✅ Clear owner - Workspace creator = owner
 ✅ Hierarchy - Owner > Admin > User > Viewer
-✅ Fair quota - Kueue ensures no starvation
+✅ Fair quota - Namespace ResourceQuota + LimitRange ensure fair sharing
 ✅ Safe delete - Requires name confirmation
 ✅ Full audit - Track createdBy, lastModifiedBy, timestamps
 ```
@@ -187,16 +187,16 @@ Emit audit trace: workspace_deleted
 
 ---
 
-## Slide 8: Quota Management - Kueue
+## Slide 8: Quota Management - Namespace ResourceQuota
 
 ```
-WITHOUT KUEUE (Old Way)
+WITHOUT Namespace Quotas (Old Way)
   Problem:
   - Alice's workspace hogs all resources
   - Bob's sessions get stuck waiting
   - No fair sharing
 
-WITH KUEUE (New Way)
+WITH Namespace Quotas (New Way)
   Workspace A quota: 5 concurrent sessions
        ↓
   Workspace B quota: 3 concurrent sessions
@@ -205,16 +205,16 @@ WITH KUEUE (New Way)
        ↓
   CLUSTER TOTAL: 50 concurrent (if enough hardware)
        ↓
-  KUEUE MAGIC: Fair-share FIFO scheduling
+  Namespace quotas + backend enforcement: fair sharing and admission control
        ↓
   Result: No workspace starves others ✅
 ```
 
 **How it works:**
-1. Each workspace has a LocalQueue with maxRunningWorkloads limit
-2. Sessions become Workloads in that queue
-3. Kueue schedules FIFO, respects limits
-4. If workspace hits limit, new sessions wait their turn
+1. Each workspace gets a ResourceQuota + LimitRange based on `quotaProfile`
+2. Kubernetes enforces namespace-level resource totals (CPU, memory, storage, count)
+3. If quota prevents creation, backend emits quota events and UI shows limits/position
+4. Operator can adjust namespace quotas via profiles for different tiers
 
 ---
 
@@ -285,7 +285,7 @@ RESULT:
 PHASE 1 (MVP) - Weeks 1-10
 ├─ Week 1-2: Owner field + Audit trail
 ├─ Week 2-3: Admin management backend
-├─ Week 3-4: Kueue integration
+├─ Week 3-4: Namespace quota integration
 ├─ Week 4-5: Delete safety UI
 ├─ Week 5-7: Full CRUD + testing
 ├─ Week 7-9: E2E testing + bug fixes
@@ -308,7 +308,7 @@ ESTIMATED: 8-10 weeks elapsed time
 ✅ **5-tier hierarchy** provides clear governance  
 ✅ **Immutable owner** prevents transfers without authority  
 ✅ **Multiple admins** share workspace management  
-✅ **Kueue integration** ensures fair resource sharing  
+✅ **Namespace quota integration** ensures fair resource sharing  
 ✅ **Quota per workspace** prevents starvation  
 ✅ **Delete safety** requires name confirmation  
 ✅ **Full audit trail** tracks all changes  
@@ -330,7 +330,7 @@ ESTIMATED: 8-10 weeks elapsed time
 **Q: What happens if workspace deletes?**
 → All sessions, jobs, PVCs cascade-deleted. Audit trail stays.
 
-**Q: Can Kueue reject my session?**
+**Q: Can namespace quotas reject my session?**
 → Yes, if workspace hits maxConcurrentSessions limit. Must wait queue.
 
 **Q: Does Root need one in each workspace?**
@@ -381,7 +381,7 @@ ESTIMATED: 8-10 weeks elapsed time
 
 ### Platform Operator (90 min)
 1. LEARNING_GUIDE.md "For Platform Operators" - 20 min
-2. WORKSPACE_RBAC_AND_QUOTA_DESIGN.md Part 4 (Kueue) - 30 min
+2. WORKSPACE_RBAC_AND_QUOTA_DESIGN.md Part 4 (Namespace quota integration) - 30 min
 3. MVP_IMPLEMENTATION_CHECKLIST.md - 30 min
 4. Deployment questions - 10 min
 
