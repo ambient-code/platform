@@ -29,11 +29,6 @@ class TestMapToVertexModel:
         result = map_to_vertex_model("claude-opus-4-5")
         assert result == "claude-opus-4-5@20251101"
 
-    def test_map_opus_4_1(self):
-        """Test mapping for Claude Opus 4.1"""
-        result = map_to_vertex_model("claude-opus-4-1")
-        assert result == "claude-opus-4-1@20250805"
-
     def test_map_sonnet_4_5(self):
         """Test mapping for Claude Sonnet 4.5"""
         result = map_to_vertex_model("claude-sonnet-4-5")
@@ -59,15 +54,15 @@ class TestMapToVertexModel:
         """Test that model mapping is case-sensitive"""
 
         # Uppercase should not match
-        result = map_to_vertex_model("CLAUDE-OPUS-4-1")
-        assert result == "CLAUDE-OPUS-4-1"  # Should return unchanged
+        result = map_to_vertex_model("CLAUDE-OPUS-4-5")
+        assert result == "CLAUDE-OPUS-4-5"  # Should return unchanged
 
     def test_whitespace_in_model_name(self):
         """Test handling of whitespace in model names"""
 
         # Model name with whitespace should not match
-        result = map_to_vertex_model(" claude-opus-4-1 ")
-        assert result == " claude-opus-4-1 "  # Should return unchanged
+        result = map_to_vertex_model(" claude-opus-4-5 ")
+        assert result == " claude-opus-4-5 "  # Should return unchanged
 
     def test_partial_model_name_no_match(self):
         """Test that partial model names don't match"""
@@ -76,7 +71,7 @@ class TestMapToVertexModel:
 
     def test_vertex_model_id_passthrough(self):
         """Test that Vertex AI model IDs are returned unchanged"""
-        vertex_id = "claude-opus-4-1@20250805"
+        vertex_id = "claude-opus-4-5@20251101"
         result = map_to_vertex_model(vertex_id)
         # If already a Vertex ID, should return unchanged
         assert result == vertex_id
@@ -89,7 +84,6 @@ class TestMapToVertexModel:
             "claude-sonnet-4-5",
             "claude-opus-4-6",
             "claude-opus-4-5",
-            "claude-opus-4-1",
             "claude-haiku-4-5",
         ]
 
@@ -97,7 +91,6 @@ class TestMapToVertexModel:
             "claude-sonnet-4-5": "claude-sonnet-4-5@20250929",
             "claude-opus-4-6": "claude-opus-4-6@default",
             "claude-opus-4-5": "claude-opus-4-5@20251101",
-            "claude-opus-4-1": "claude-opus-4-1@20250805",
             "claude-haiku-4-5": "claude-haiku-4-5@20251001",
         }
 
@@ -112,7 +105,6 @@ class TestMapToVertexModel:
 
         models_with_date = [
             "claude-opus-4-5",
-            "claude-opus-4-1",
             "claude-sonnet-4-5",
             "claude-haiku-4-5",
         ]
@@ -170,7 +162,6 @@ class TestModelMappingIntegration:
         models_to_test = [
             ("claude-opus-4-6", "claude-opus-4-6@default"),
             ("claude-opus-4-5", "claude-opus-4-5@20251101"),
-            ("claude-opus-4-1", "claude-opus-4-1@20250805"),
             ("claude-sonnet-4-5", "claude-sonnet-4-5@20250929"),
             ("claude-haiku-4-5", "claude-haiku-4-5@20251001"),
         ]
@@ -189,7 +180,6 @@ class TestModelMappingIntegration:
             "claude-sonnet-4-5",  # User selects Sonnet 4.5
             "claude-opus-4-6",  # User selects Opus 4.6
             "claude-opus-4-5",  # User selects Opus 4.5
-            "claude-opus-4-1",  # User selects Opus 4.1
             "claude-haiku-4-5",  # User selects Haiku 4.5
         ]
 
@@ -218,11 +208,6 @@ class TestModelMappingIntegration:
                 "ui_selection": "claude-opus-4-5",
                 "expected_vertex_id": "claude-opus-4-5@20251101",
                 "description": "Previous Opus model",
-            },
-            {
-                "ui_selection": "claude-opus-4-1",
-                "expected_vertex_id": "claude-opus-4-1@20250805",
-                "description": "Older Opus model",
             },
             {
                 "ui_selection": "claude-sonnet-4-5",
@@ -262,12 +247,11 @@ class TestModelMappingIntegration:
     def test_model_ordering_consistency(self):
         """Test that model ordering is consistent between frontend and backend"""
 
-        # Expected ordering: Sonnet → Opus 4.6 → Opus 4.5 → Opus 4.1 → Haiku (matches frontend dropdown)
+        # Expected ordering: Sonnet → Opus 4.6 → Opus 4.5 → Haiku (matches frontend dropdown)
         expected_order = [
             "claude-sonnet-4-5",
             "claude-opus-4-6",
             "claude-opus-4-5",
-            "claude-opus-4-1",
             "claude-haiku-4-5",
         ]
 
@@ -280,5 +264,4 @@ class TestModelMappingIntegration:
         assert expected_order[0] == "claude-sonnet-4-5"  # Balanced (default)
         assert expected_order[1] == "claude-opus-4-6"  # Latest Opus
         assert expected_order[2] == "claude-opus-4-5"  # Previous Opus
-        assert expected_order[3] == "claude-opus-4-1"  # Older Opus
-        assert expected_order[4] == "claude-haiku-4-5"  # Fastest
+        assert expected_order[3] == "claude-haiku-4-5"  # Fastest
