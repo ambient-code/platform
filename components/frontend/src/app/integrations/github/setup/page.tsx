@@ -13,26 +13,31 @@ export default function GitHubSetupPage() {
   useEffect(() => {
     const url = new URL(window.location.href)
     const installationId = url.searchParams.get('installation_id')
+    const code = url.searchParams.get('code')
 
     if (!installationId) {
       setMessage('No installation was detected.')
       return
     }
 
-    connectMutation.mutate(
-      { installationId: Number(installationId) },
-      {
-        onSuccess: () => {
-          setMessage('GitHub connected. Redirecting...')
-          setTimeout(() => {
-            window.location.replace('/integrations')
-          }, 800)
-        },
-        onError: (err) => {
-          setError(err instanceof Error ? err.message : 'Failed to complete setup')
-        },
-      }
-    )
+    const request: { installationId: number; code?: string } = {
+      installationId: Number(installationId),
+    }
+    if (code) {
+      request.code = code
+    }
+
+    connectMutation.mutate(request, {
+      onSuccess: () => {
+        setMessage('GitHub connected. Redirecting...')
+        setTimeout(() => {
+          window.location.replace('/integrations')
+        }, 800)
+      },
+      onError: (err) => {
+        setError(err instanceof Error ? err.message : 'Failed to complete setup')
+      },
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
