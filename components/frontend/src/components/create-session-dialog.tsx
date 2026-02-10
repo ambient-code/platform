@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import Link from "next/link";
-import { AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, GitBranch, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -35,6 +35,7 @@ import {
 import type { CreateAgenticSessionRequest } from "@/types/agentic-session";
 import { useCreateSession } from "@/services/queries/use-sessions";
 import { useIntegrationsStatus } from "@/services/queries/use-integrations";
+import { useProjectSettings } from "@/services/queries/use-project-settings";
 import { errorToast } from "@/hooks/use-toast";
 
 const models = [
@@ -51,6 +52,8 @@ const formSchema = z.object({
   temperature: z.number().min(0).max(2),
   maxTokens: z.number().min(100).max(8000),
   timeout: z.number().min(60).max(1800),
+  configRepoUrl: z.string().url("Must be a valid URL").optional().or(z.literal("")),
+  configRepoBranch: z.string().max(100).optional(),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -71,6 +74,7 @@ export function CreateSessionDialog({
   const createSessionMutation = useCreateSession();
 
   const { data: integrationsStatus } = useIntegrationsStatus();
+  const { data: projectSettings } = useProjectSettings(projectName);
 
   const githubConfigured = integrationsStatus?.github?.active != null;
   const gitlabConfigured = integrationsStatus?.gitlab?.connected ?? false;
@@ -85,8 +89,23 @@ export function CreateSessionDialog({
       temperature: 0.7,
       maxTokens: 4000,
       timeout: 300,
+      configRepoUrl: "",
+      configRepoBranch: "",
     },
   });
+
+  // Pre-fill config repo from workspace default settings
+  useEffect(() => {
+    if (projectSettings?.defaultConfigRepo?.gitUrl) {
+      const current = form.getValues();
+      if (!current.configRepoUrl) {
+        form.setValue("configRepoUrl", projectSettings.defaultConfigRepo.gitUrl);
+      }
+      if (!current.configRepoBranch && projectSettings.defaultConfigRepo.branch) {
+        form.setValue("configRepoBranch", projectSettings.defaultConfigRepo.branch);
+      }
+    }
+  }, [projectSettings, form]);
 
   const onSubmit = async (values: FormValues) => {
     if (!projectName) return;
@@ -103,6 +122,15 @@ export function CreateSessionDialog({
     const trimmedName = values.displayName?.trim();
     if (trimmedName) {
       request.displayName = trimmedName;
+    }
+
+    const trimmedConfigUrl = values.configRepoUrl?.trim();
+    if (trimmedConfigUrl) {
+      request.configRepo = { gitUrl: trimmedConfigUrl };
+      const trimmedBranch = values.configRepoBranch?.trim();
+      if (trimmedBranch) {
+        request.configRepo.branch = trimmedBranch;
+      }
     }
 
     createSessionMutation.mutate(
@@ -192,6 +220,53 @@ export function CreateSessionDialog({
                   </FormItem>
                 )}
               />
+
+              {/* Config Repo (optional) */}
+              <div className="w-full space-y-3">
+                <FormLabel>Config Repo</FormLabel>
+                <p className="text-xs text-muted-foreground -mt-2">
+                  A Git repository with session configuration (CLAUDE.md, .claude/ rules, skills, agents, .mcp.json).
+                  Contents are overlaid into the workspace at startup.
+                </p>
+                <div className="flex items-start gap-3">
+                  <FormField
+                    control={form.control}
+                    name="configRepoUrl"
+                    render={({ field }) => (
+                      <FormItem className="flex-1">
+                        <FormControl>
+                          <div className="relative">
+                            <GitBranch className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <Input
+                              {...field}
+                              placeholder="https://github.com/org/session-config"
+                              className="pl-9"
+                              disabled={createSessionMutation.isPending}
+                            />
+                          </div>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="configRepoBranch"
+                    render={({ field }) => (
+                      <FormItem className="w-[160px]">
+                        <FormControl>
+                          <Input
+                            {...field}
+                            placeholder="main"
+                            disabled={createSessionMutation.isPending}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </div>
 
               {/* Integration auth status */}
               <div className="w-full space-y-2">

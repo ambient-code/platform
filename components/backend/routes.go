@@ -109,6 +109,9 @@ func registerRoutes(r *gin.Engine) {
 			projectGroup.GET("/integration-secrets", handlers.ListIntegrationSecrets)
 			projectGroup.PUT("/integration-secrets", handlers.UpdateIntegrationSecrets)
 
+			projectGroup.GET("/project-settings", handlers.GetProjectSettings)
+			projectGroup.PUT("/project-settings", handlers.UpdateProjectSettings)
+
 			// GitLab authentication endpoints (DEPRECATED - moved to cluster-scoped)
 			// Kept for backward compatibility, will be removed in future version
 			projectGroup.POST("/auth/gitlab/connect", handlers.ConnectGitLabGlobal)
