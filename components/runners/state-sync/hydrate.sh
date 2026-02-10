@@ -204,6 +204,51 @@ else
     echo "No repositories configured in spec"
 fi
 
+# Clone session-config repository and overlay into workspace
+# Config files (CLAUDE.md, .claude/, .mcp.json) are copied first; workspace repo files override later.
+if [ -n "$CONFIG_REPO_GIT_URL" ] && [ "$CONFIG_REPO_GIT_URL" != "null" ]; then
+    CONFIG_BRANCH="${CONFIG_REPO_BRANCH:-main}"
+
+    echo "Cloning session-config repository..."
+    echo "  URL: $CONFIG_REPO_GIT_URL"
+    echo "  Branch: $CONFIG_BRANCH"
+
+    CONFIG_TEMP="/tmp/config-repo-clone-$$"
+    CONFIG_CLONE_OK=false
+
+    for attempt in 1 2; do
+        if git clone --branch "$CONFIG_BRANCH" --single-branch --depth 1 "$CONFIG_REPO_GIT_URL" "$CONFIG_TEMP" 2>&1; then
+            CONFIG_CLONE_OK=true
+            break
+        fi
+        rm -rf "$CONFIG_TEMP" 2>/dev/null || true
+        if [ "$attempt" -eq 1 ]; then
+            echo "  Retry in 5s..."
+            sleep 5
+        fi
+    done
+
+    if [ "$CONFIG_CLONE_OK" = true ]; then
+        echo "  Clone successful, overlaying into workspace..."
+
+        # Remove .git directory — we only want the config files
+        rm -rf "$CONFIG_TEMP/.git"
+
+        # Overlay: copy config files into /workspace root
+        # cp -rn (no-clobber, GNU coreutils) ensures workspace repo files take precedence
+        cp -rn "$CONFIG_TEMP"/. /workspace/ 2>/dev/null || true
+
+        rm -rf "$CONFIG_TEMP"
+        echo "  ✓ Session config applied to workspace"
+    else
+        echo "  ✗ Failed to clone session-config repository after 2 attempts"
+        echo "Failed to clone session-config repository: $CONFIG_REPO_GIT_URL (branch: $CONFIG_BRANCH)" > /workspace/.config-repo-error
+        # Non-fatal: session continues without config overlay
+    fi
+else
+    echo "No session-config repository configured"
+fi
+
 # Clone workflow repository
 if [ -n "$ACTIVE_WORKFLOW_GIT_URL" ] && [ "$ACTIVE_WORKFLOW_GIT_URL" != "null" ]; then
     WORKFLOW_BRANCH="${ACTIVE_WORKFLOW_BRANCH:-main}"

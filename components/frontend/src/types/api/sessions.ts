@@ -55,6 +55,10 @@ export type AgenticSessionSpec = {
     branch: string;
     path?: string;
   };
+  configRepo?: {
+    gitUrl: string;
+    branch?: string;
+  };
 };
 
 export type ReconciledRepo = {
@@ -124,6 +128,7 @@ export type CreateAgenticSessionRequest = {
   environmentVariables?: Record<string, string>;
   interactive?: boolean;
   repos?: SessionRepo[];
+  configRepo?: { gitUrl: string; branch?: string };
   userContext?: UserContext;
   labels?: Record<string, string>;
   annotations?: Record<string, string>;

@@ -788,6 +788,16 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 						}
 					}
 
+					// Add config repo info if present (cloned at init, overlaid into workspace)
+					if configRepo, ok := spec["configRepo"].(map[string]interface{}); ok {
+						if gitURL, ok := configRepo["gitUrl"].(string); ok && strings.TrimSpace(gitURL) != "" {
+							base = append(base, corev1.EnvVar{Name: "CONFIG_REPO_GIT_URL", Value: gitURL})
+						}
+						if branch, ok := configRepo["branch"].(string); ok && strings.TrimSpace(branch) != "" {
+							base = append(base, corev1.EnvVar{Name: "CONFIG_REPO_BRANCH", Value: branch})
+						}
+					}
+
 					// Add GitHub token for private repos
 					secretName := ""
 					if meta, ok := currentObj.Object["metadata"].(map[string]interface{}); ok {
@@ -1077,6 +1087,15 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 							}
 							if path, ok := workflow["path"].(string); ok && strings.TrimSpace(path) != "" {
 								base = append(base, corev1.EnvVar{Name: "ACTIVE_WORKFLOW_PATH", Value: path})
+							}
+						}
+						// Inject configRepo environment variables if present (cloned at init, overlaid into workspace)
+						if configRepo, ok := spec["configRepo"].(map[string]interface{}); ok {
+							if gitURL, ok := configRepo["gitUrl"].(string); ok && strings.TrimSpace(gitURL) != "" {
+								base = append(base, corev1.EnvVar{Name: "CONFIG_REPO_GIT_URL", Value: gitURL})
+							}
+							if branch, ok := configRepo["branch"].(string); ok && strings.TrimSpace(branch) != "" {
+								base = append(base, corev1.EnvVar{Name: "CONFIG_REPO_BRANCH", Value: branch})
 							}
 						}
 						if envMap, ok := spec["environmentVariables"].(map[string]interface{}); ok {
