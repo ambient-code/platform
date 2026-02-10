@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -44,6 +45,7 @@ func GetIntegrationsStatus(c *gin.Context) {
 // Helper functions to get individual integration statuses
 
 func getGitHubStatusForUser(ctx context.Context, userID string) gin.H {
+	log.Printf("getGitHubStatusForUser: querying status for user=%s", userID)
 	status := gin.H{
 		"installed": false,
 		"pat":       gin.H{"configured": false},
@@ -52,11 +54,14 @@ func getGitHubStatusForUser(ctx context.Context, userID string) gin.H {
 	// Check GitHub App
 	inst, err := GetGitHubInstallation(ctx, userID)
 	if err == nil && inst != nil {
+		log.Printf("getGitHubStatusForUser: found installation for user=%s installationId=%d githubUser=%s", userID, inst.InstallationID, inst.GitHubUserID)
 		status["installed"] = true
 		status["installationId"] = inst.InstallationID
 		status["host"] = inst.Host
 		status["githubUserId"] = inst.GitHubUserID
 		status["updatedAt"] = inst.UpdatedAt.Format("2006-01-02T15:04:05Z07:00")
+	} else {
+		log.Printf("getGitHubStatusForUser: no installation found for user=%s", userID)
 	}
 
 	// Check GitHub PAT

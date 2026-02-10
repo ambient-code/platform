@@ -76,8 +76,9 @@ export function useConnectGitHub() {
   return useMutation({
     mutationFn: (data: GitHubConnectRequest) => githubApi.connectGitHub(data),
     onSuccess: () => {
-      // Invalidate status to show connected state
+      // Invalidate both GitHub-specific and unified integrations status
       queryClient.invalidateQueries({ queryKey: githubKeys.status() });
+      queryClient.invalidateQueries({ queryKey: ['integrations', 'status'] });
     },
   });
 }
@@ -91,8 +92,9 @@ export function useDisconnectGitHub() {
   return useMutation({
     mutationFn: githubApi.disconnectGitHub,
     onSuccess: () => {
-      // Invalidate status to show disconnected state
+      // Invalidate both GitHub-specific and unified integrations status
       queryClient.invalidateQueries({ queryKey: githubKeys.status() });
+      queryClient.invalidateQueries({ queryKey: ['integrations', 'status'] });
       // Clear forks cache
       queryClient.invalidateQueries({ queryKey: githubKeys.forks() });
     },
@@ -163,6 +165,7 @@ export function useSaveGitHubPAT() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [...githubKeys.all, 'pat', 'status'] });
       queryClient.invalidateQueries({ queryKey: githubKeys.status() });
+      queryClient.invalidateQueries({ queryKey: ['integrations', 'status'] });
     },
   });
 }
@@ -178,6 +181,7 @@ export function useDeleteGitHubPAT() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [...githubKeys.all, 'pat', 'status'] });
       queryClient.invalidateQueries({ queryKey: githubKeys.status() });
+      queryClient.invalidateQueries({ queryKey: ['integrations', 'status'] });
     },
   });
 }

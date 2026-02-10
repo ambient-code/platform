@@ -85,14 +85,12 @@ export type CreatePRResponse = {
 
 export type GitHubConnectRequest = {
   installationId: number;
-  // Legacy OAuth fields (deprecated)
   code?: string;
-  state?: string;
 };
 
 export type GitHubConnectResponse = {
   message: string;
-  username: string;
+  installationId: number;
 };
 
 export type GitHubDisconnectResponse = {

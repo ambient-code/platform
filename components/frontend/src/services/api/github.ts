@@ -34,7 +34,7 @@ export async function connectGitHub(data: GitHubConnectRequest): Promise<string>
     '/auth/github/install',
     data
   );
-  return response.username;
+  return response.message;
 }
 
 /**

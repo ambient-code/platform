@@ -358,15 +358,18 @@ func GetGitHubInstallation(ctx context.Context, userID string) (*GitHubAppInstal
 	cm, err := K8sClient.CoreV1().ConfigMaps(Namespace).Get(ctx, cmName, v1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
+			log.Printf("GetGitHubInstallation: ConfigMap %s not found for user=%s", cmName, userID)
 			return nil, fmt.Errorf("installation not found")
 		}
 		return nil, fmt.Errorf("failed to read ConfigMap: %w", err)
 	}
 	if cm.Data == nil {
+		log.Printf("GetGitHubInstallation: no data in ConfigMap for user=%s", userID)
 		return nil, fmt.Errorf("installation not found")
 	}
 	raw, ok := cm.Data[userID]
 	if !ok || raw == "" {
+		log.Printf("GetGitHubInstallation: no entry for user=%s in ConfigMap", userID)
 		return nil, fmt.Errorf("installation not found")
 	}
 	var inst GitHubAppInstallation
@@ -395,27 +398,55 @@ func deleteGitHubInstallation(ctx context.Context, userID string) error {
 
 // LinkGitHubInstallationGlobal handles POST /auth/github/install
 // Links the current SSO user to a GitHub App installation ID.
+// Accepts optional OAuth `code` for verified ownership via code exchange.
 func LinkGitHubInstallationGlobal(c *gin.Context) {
 	userID, _ := c.Get("userID")
 	if userID == nil || strings.TrimSpace(userID.(string)) == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing user identity"})
 		return
 	}
+	userIDStr := userID.(string)
 	var req struct {
-		InstallationID int64 `json:"installationId" binding:"required"`
+		InstallationID int64  `json:"installationId" binding:"required"`
+		Code           string `json:"code"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	log.Printf("LinkGitHubInstallationGlobal: user=%s installationId=%d codePresent=%v", userIDStr, req.InstallationID, req.Code != "")
 	installation := GitHubAppInstallation{
-		UserID:         userID.(string),
+		UserID:         userIDStr,
 		InstallationID: req.InstallationID,
 		Host:           "github.com",
 		UpdatedAt:      time.Now(),
 	}
-	// Best-effort: enrich with GitHub account login for the installation
-	if GithubTokenManager != nil {
+
+	// If OAuth code is provided and OAuth env vars are configured, do verified ownership
+	clientID := os.Getenv("GITHUB_CLIENT_ID")
+	clientSecret := os.Getenv("GITHUB_CLIENT_SECRET")
+	if req.Code != "" && clientID != "" && clientSecret != "" {
+		token, err := exchangeOAuthCodeForUserToken(clientID, clientSecret, req.Code)
+		if err != nil {
+			log.Printf("LinkGitHubInstallationGlobal: OAuth code exchange failed for user=%s: %v", userIDStr, err)
+			// Fall through to best-effort enrichment below
+		} else {
+			owns, login, err := userOwnsInstallation(token, req.InstallationID)
+			if err != nil {
+				log.Printf("LinkGitHubInstallationGlobal: ownership verification failed for user=%s: %v", userIDStr, err)
+			} else if !owns {
+				log.Printf("LinkGitHubInstallationGlobal: user=%s does not own installation %d", userIDStr, req.InstallationID)
+				c.JSON(http.StatusForbidden, gin.H{"error": "installation not owned by user"})
+				return
+			} else {
+				log.Printf("LinkGitHubInstallationGlobal: verified ownership via OAuth for user=%s login=%s", userIDStr, login)
+				installation.GitHubUserID = login
+			}
+		}
+	}
+
+	// Best-effort: enrich with GitHub account login via App JWT if not already set
+	if installation.GitHubUserID == "" && GithubTokenManager != nil {
 		if jwt, err := GithubTokenManager.GenerateJWT(); err == nil {
 			api := githubAPIBaseURL(installation.Host)
 			url := fmt.Sprintf("%s/app/installations/%d", api, req.InstallationID)

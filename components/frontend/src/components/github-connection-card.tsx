@@ -41,9 +41,10 @@ export function GitHubConnectionCard({ appSlug, showManageButton = true, status,
 
   const handleConnect = () => {
     if (!appSlug) return
-    const setupUrl = new URL('/integrations/github/setup', window.location.origin)
-    const redirectUri = encodeURIComponent(setupUrl.toString())
-    const url = `https://github.com/apps/${appSlug}/installations/new?redirect_uri=${redirectUri}`
+    // Let GitHub use the Callback URL configured in the App settings
+    // rather than overriding with redirect_uri (which GitHub ignores
+    // unless it matches a configured callback URL)
+    const url = `https://github.com/apps/${appSlug}/installations/new`
     window.location.href = url
   }
 
