@@ -45,12 +45,29 @@ def sanitize_user_context(user_id: str, user_name: str) -> tuple[str, str]:
 # ---------------------------------------------------------------------------
 
 # Anthropic API → Vertex AI model name mapping
-VERTEX_MODEL_MAP: dict[str, str] = {
+# Built from MODELS_JSON env var (set via operator-config ConfigMap) if available,
+# otherwise falls back to hardcoded defaults.
+_HARDCODED_VERTEX_MAP: dict[str, str] = {
     "claude-opus-4-5": "claude-opus-4-5@20251101",
     "claude-opus-4-1": "claude-opus-4-1@20250805",
     "claude-sonnet-4-5": "claude-sonnet-4-5@20250929",
     "claude-haiku-4-5": "claude-haiku-4-5@20251001",
 }
+
+
+def _build_vertex_model_map() -> dict[str, str]:
+    raw = os.environ.get("MODELS_JSON", "")
+    if not raw:
+        return dict(_HARDCODED_VERTEX_MAP)
+    try:
+        models = _json.loads(raw)
+        return {m["name"]: m["vertexId"] for m in models if m.get("vertexId")}
+    except Exception:
+        logger.warning("Failed to parse MODELS_JSON, using hardcoded map")
+        return dict(_HARDCODED_VERTEX_MAP)
+
+
+VERTEX_MODEL_MAP: dict[str, str] = _build_vertex_model_map()
 
 
 def map_to_vertex_model(model: str) -> str:

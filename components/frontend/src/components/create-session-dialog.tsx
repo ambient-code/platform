@@ -35,9 +35,10 @@ import {
 import type { CreateAgenticSessionRequest } from "@/types/agentic-session";
 import { useCreateSession } from "@/services/queries/use-sessions";
 import { useIntegrationsStatus } from "@/services/queries/use-integrations";
+import { useClusterInfo } from "@/hooks/use-cluster-info";
 import { errorToast } from "@/hooks/use-toast";
 
-const models = [
+const fallbackModels = [
   { value: "claude-sonnet-4-5", label: "Claude Sonnet 4.5" },
   { value: "claude-opus-4-6", label: "Claude Opus 4.6" },
   { value: "claude-opus-4-5", label: "Claude Opus 4.5" },
@@ -69,6 +70,13 @@ export function CreateSessionDialog({
   const [open, setOpen] = useState(false);
   const router = useRouter();
   const createSessionMutation = useCreateSession();
+  const { models: clusterModels } = useClusterInfo();
+
+  const models = clusterModels.length > 0
+    ? clusterModels.map((m) => ({ value: m.name, label: m.displayName }))
+    : fallbackModels;
+
+  const defaultModel = clusterModels.find((m) => m.default)?.name ?? "claude-sonnet-4-5";
 
   const { data: integrationsStatus } = useIntegrationsStatus();
 
@@ -81,7 +89,7 @@ export function CreateSessionDialog({
     resolver: zodResolver(formSchema),
     defaultValues: {
       displayName: "",
-      model: "claude-sonnet-4-5",
+      model: defaultModel,
       temperature: 0.7,
       maxTokens: 4000,
       timeout: 300,

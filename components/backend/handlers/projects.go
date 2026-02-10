@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -137,9 +138,20 @@ func GetClusterInfo(c *gin.Context) {
 	isOpenShift := isOpenShiftCluster()
 	vertexEnabled := os.Getenv("CLAUDE_CODE_USE_VERTEX") == "1"
 
+	var models []map[string]interface{}
+	if raw := os.Getenv("MODELS_JSON"); raw != "" {
+		if err := json.Unmarshal([]byte(raw), &models); err != nil {
+			log.Printf("Warning: failed to parse MODELS_JSON: %v", err)
+		}
+	}
+	if models == nil {
+		models = []map[string]interface{}{}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"isOpenShift":   isOpenShift,
 		"vertexEnabled": vertexEnabled,
+		"models":        models,
 	})
 }
 

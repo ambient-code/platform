@@ -5,9 +5,17 @@
 
 import { apiClient } from './client';
 
+export type ModelInfo = {
+  name: string;
+  displayName: string;
+  vertexId?: string;
+  default?: boolean;
+};
+
 export type ClusterInfo = {
   isOpenShift: boolean;
   vertexEnabled: boolean;
+  models: ModelInfo[];
 };
 
 /**
