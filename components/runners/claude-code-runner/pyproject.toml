@@ -1,35 +1,37 @@
 [project]
 name = "claude-code-runner"
-version = "0.2.0"
-description = "AG-UI Server for Claude Code SDK"
+version = "0.3.0"
+description = "AG-UI Server built on the Ambient Runner SDK with Claude Agent SDK bridge"
 readme = "CLAUDE.md"
 requires-python = ">=3.11"
 authors = [
   { name = "vTeam" }
 ]
 dependencies = [
-  # AG-UI Server
+  # Ambient Runner SDK core
   "fastapi>=0.100.0",
   "uvicorn[standard]>=0.23.0",
-  
-  # AG-UI Protocol SDK (official)
   "ag-ui-protocol>=0.1.0",
-  
-  # Claude SDK
-  "anthropic[vertex]>=0.68.0",
-  "claude-agent-sdk>=0.1.23",
-  
-  # Observability
-  "langfuse>=3.0.0",
-  
-  # Utilities
   "pydantic>=2.0.0",
   "aiohttp>=3.8.0",
   "requests>=2.31.0",
   "pyjwt>=2.8.0",
-  
-  # MCP integrations
+]
+
+[project.optional-dependencies]
+claude = [
+  "anthropic[vertex]>=0.68.0",
+  "claude-agent-sdk>=0.1.23",
+]
+observability = [
+  "langfuse>=3.0.0",
+]
+mcp-atlassian = [
   "mcp-atlassian>=0.11.9",
+]
+# Install everything for the default Claude runner
+all = [
+  "claude-code-runner[claude,observability,mcp-atlassian]",
 ]
 
 [tool.uv]
@@ -43,8 +45,8 @@ dev-dependencies = [
 ]
 
 [tool.setuptools]
-py-modules = ["main", "adapter", "auth", "config", "context", "observability", "prompts", "security_utils", "utils", "workspace"]
-packages = ["tools"]
+py-modules = ["main"]
+packages = ["ag_ui_claude_sdk", "ambient_runner", "ambient_runner.endpoints", "ambient_runner.middleware", "ambient_runner.platform", "ambient_runner.bridges", "ambient_runner.bridges.claude", "ambient_runner.bridges.langgraph"]
 
 [build-system]
 requires = ["setuptools>=61.0"]

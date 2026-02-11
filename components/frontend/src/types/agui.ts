@@ -41,6 +41,9 @@ export const AGUIEventType = {
   // Raw event
   RAW: 'RAW',
   
+  // Custom events (platform extensions)
+  CUSTOM: 'CUSTOM',
+
   // Meta events (user feedback, annotations, etc.)
   META: 'META',
 } as const
@@ -244,6 +247,13 @@ export type AGUIRawEvent = AGUIBaseEvent & {
   data: unknown
 }
 
+// Custom event (platform extensions)
+export type AGUICustomEvent = AGUIBaseEvent & {
+  type: typeof AGUIEventType.CUSTOM
+  name: string
+  value: unknown
+}
+
 // Meta event (user feedback, annotations, etc.)
 export type AGUIMetaEvent = {
   type: typeof AGUIEventType.META
@@ -272,6 +282,7 @@ export type AGUIEvent =
   | AGUIActivitySnapshotEvent
   | AGUIActivityDeltaEvent
   | AGUIRawEvent
+  | AGUICustomEvent
   | AGUIMetaEvent
 
 // Run metadata type

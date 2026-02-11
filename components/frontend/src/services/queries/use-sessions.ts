@@ -239,14 +239,19 @@ export function useDeleteSession() {
 // useSendChatMessage and useSendControlMessage removed - replaced by AG-UI protocol
 
 /**
- * Hook to fetch K8s resources (job, pods, PVC) for a session
+ * Hook to fetch Kubernetes events for the session's runner pod.
+ * Pass a custom refetchInterval (ms) to poll faster during startup phases.
  */
-export function useSessionK8sResources(projectName: string, sessionName: string) {
+export function useSessionPodEvents(
+  projectName: string,
+  sessionName: string,
+  refetchInterval: number = 3000,
+) {
   return useQuery({
-    queryKey: [...sessionKeys.detail(projectName, sessionName), 'k8s-resources'] as const,
-    queryFn: () => sessionsApi.getSessionK8sResources(projectName, sessionName),
+    queryKey: [...sessionKeys.detail(projectName, sessionName), 'pod-events'] as const,
+    queryFn: () => sessionsApi.getSessionPodEvents(projectName, sessionName),
     enabled: !!projectName && !!sessionName,
-    refetchInterval: 5000, // Poll every 5 seconds
+    refetchInterval,
   });
 }
 

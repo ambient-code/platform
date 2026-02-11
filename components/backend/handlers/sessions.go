@@ -1566,11 +1566,10 @@ func RemoveRepo(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Repository removed", "session": session})
 }
 
-// GetWorkflowMetadata retrieves commands and agents metadata from the active workflow
-// getContentServiceName returns the ambient-content service name for a session
-// Temp-content pods are deprecated - sessions must be running to access workspace
-func getContentServiceName(session string) string {
-	return fmt.Sprintf("ambient-content-%s", session)
+// getRunnerServiceName returns the K8s Service name for a session's runner.
+// The runner serves both AG-UI and content endpoints on port 8001.
+func getRunnerServiceName(session string) string {
+	return fmt.Sprintf("session-%s", session)
 }
 
 // GetWorkflowMetadata retrieves the workflow metadata for an agentic session
@@ -1602,11 +1601,11 @@ func GetWorkflowMetadata(c *gin.Context) {
 		token = c.GetHeader("X-Forwarded-Access-Token")
 	}
 
-	// Use ambient-content service (per-session content service)
-	serviceName := fmt.Sprintf("ambient-content-%s", sessionName)
+	// Use runner service for content endpoints
+	serviceName := getRunnerServiceName(sessionName)
 
-	// Build URL to content service
-	endpoint := fmt.Sprintf("http://%s.%s.svc:8080", serviceName, project)
+	// Build URL to runner's content endpoint
+	endpoint := fmt.Sprintf("http://%s.%s.svc.cluster.local:8001", serviceName, project)
 	u := fmt.Sprintf("%s/content/workflow-metadata?session=%s", endpoint, sessionName)
 
 	log.Printf("GetWorkflowMetadata: project=%s session=%s endpoint=%s", project, sessionName, endpoint)
@@ -1619,7 +1618,7 @@ func GetWorkflowMetadata(c *gin.Context) {
 	client := &http.Client{Timeout: 4 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Printf("GetWorkflowMetadata: content service request failed: %v", err)
+		log.Printf("GetWorkflowMetadata: runner content request failed: %v", err)
 		// Return empty metadata on error
 		c.JSON(http.StatusOK, gin.H{"commands": []interface{}{}, "agents": []interface{}{}})
 		return
@@ -1633,9 +1632,9 @@ func GetWorkflowMetadata(c *gin.Context) {
 		return
 	}
 
-	// Log if content service returned an error
+	// Log if runner returned an error
 	if resp.StatusCode >= 400 {
-		log.Printf("GetWorkflowMetadata: content service returned error status %d: %s", resp.StatusCode, string(b))
+		log.Printf("GetWorkflowMetadata: runner returned error status %d: %s", resp.StatusCode, string(b))
 	}
 
 	c.Data(resp.StatusCode, "application/json", b)
@@ -2232,131 +2231,63 @@ func StopSession(c *gin.Context) {
 
 // GetSessionK8sResources returns job, pod, and PVC information for a session
 // GET /api/projects/:projectName/agentic-sessions/:sessionName/k8s-resources
-func GetSessionK8sResources(c *gin.Context) {
-	// Get project from context (set by middleware) or param
+// GetSessionPodEvents returns Kubernetes events for the session's runner pod.
+// The pod name follows the convention {sessionName}-runner (set by the operator).
+func GetSessionPodEvents(c *gin.Context) {
 	project := c.GetString("project")
 	if project == "" {
 		project = c.Param("projectName")
 	}
 	sessionName := c.Param("sessionName")
+	podName := fmt.Sprintf("%s-runner", sessionName)
 
-	k8sClt, k8sDyn := GetK8sClientsForRequest(c)
-	if k8sDyn == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
-		c.Abort()
-		return
-	}
+	k8sClt, _ := GetK8sClientsForRequest(c)
 	if k8sClt == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 		c.Abort()
 		return
 	}
 
-	// Get session to find job name
-	gvr := GetAgenticSessionV1Alpha1Resource()
-	session, err := k8sDyn.Resource(gvr).Namespace(project).Get(c.Request.Context(), sessionName, v1.GetOptions{})
+	events, err := k8sClt.CoreV1().Events(project).List(c.Request.Context(), v1.ListOptions{
+		FieldSelector: fmt.Sprintf("involvedObject.name=%s", podName),
+	})
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+		log.Printf("GetSessionPodEvents: failed to list events for pod %s: %v", podName, err)
+		c.JSON(http.StatusOK, gin.H{"events": []interface{}{}})
 		return
 	}
 
-	status, _ := session.Object["status"].(map[string]interface{})
-	jobName, _ := status["jobName"].(string)
-	if jobName == "" {
-		jobName = fmt.Sprintf("%s-job", sessionName)
-	}
-
-	result := map[string]interface{}{}
-
-	// Get Job status
-	job, err := k8sClt.BatchV1().Jobs(project).Get(c.Request.Context(), jobName, v1.GetOptions{})
-	jobExists := err == nil
-
-	if jobExists {
-		result["jobName"] = jobName
-		jobStatus := "Unknown"
-		if job.Status.Active > 0 {
-			jobStatus = "Active"
-		} else if job.Status.Succeeded > 0 {
-			jobStatus = "Succeeded"
-		} else if job.Status.Failed > 0 {
-			jobStatus = "Failed"
+	eventInfos := make([]map[string]interface{}, 0, len(events.Items))
+	for _, event := range events.Items {
+		ts := event.LastTimestamp.Time
+		if ts.IsZero() {
+			ts = event.EventTime.Time
 		}
-		result["jobStatus"] = jobStatus
-		result["jobConditions"] = job.Status.Conditions
-	} else if errors.IsNotFound(err) {
-		// Job not found - don't return job info at all
-		log.Printf("GetSessionK8sResources: Job %s not found, omitting from response", jobName)
-		// Don't include jobName or jobStatus in result
-	} else {
-		// Other error - still show job name but with error status
-		result["jobName"] = jobName
-		result["jobStatus"] = "Error"
-		log.Printf("GetSessionK8sResources: Error getting job %s: %v", jobName, err)
-	}
-
-	// Get Pods for this job (only if job exists)
-	podInfos := []map[string]interface{}{}
-	if jobExists {
-		pods, err := k8sClt.CoreV1().Pods(project).List(c.Request.Context(), v1.ListOptions{
-			LabelSelector: fmt.Sprintf("job-name=%s", jobName),
+		if ts.IsZero() {
+			ts = event.CreationTimestamp.Time
+		}
+		eventInfos = append(eventInfos, map[string]interface{}{
+			"type":      event.Type,
+			"reason":    event.Reason,
+			"message":   event.Message,
+			"timestamp": ts.Format(time.RFC3339),
+			"count":     event.Count,
 		})
-		if err == nil {
-			for _, pod := range pods.Items {
-				// Check if pod is terminating (has DeletionTimestamp)
-				podPhase := string(pod.Status.Phase)
-				if pod.DeletionTimestamp != nil {
-					podPhase = "Terminating"
-				}
-
-				containerInfos := []map[string]interface{}{}
-				for _, cs := range pod.Status.ContainerStatuses {
-					state := "Unknown"
-					var exitCode *int32
-					var reason string
-					if cs.State.Running != nil {
-						state = "Running"
-						// If pod is terminating but container still shows running, mark it as terminating
-						if pod.DeletionTimestamp != nil {
-							state = "Terminating"
-						}
-					} else if cs.State.Terminated != nil {
-						state = "Terminated"
-						exitCode = &cs.State.Terminated.ExitCode
-						reason = cs.State.Terminated.Reason
-					} else if cs.State.Waiting != nil {
-						state = "Waiting"
-						reason = cs.State.Waiting.Reason
-					}
-					containerInfos = append(containerInfos, map[string]interface{}{
-						"name":     cs.Name,
-						"state":    state,
-						"exitCode": exitCode,
-						"reason":   reason,
-					})
-				}
-				podInfos = append(podInfos, map[string]interface{}{
-					"name":       pod.Name,
-					"phase":      podPhase,
-					"containers": containerInfos,
-				})
-			}
-		}
 	}
 
-	result["pods"] = podInfos
+	// Sort by timestamp
+	sort.Slice(eventInfos, func(i, j int) bool {
+		ti, _ := eventInfos[i]["timestamp"].(string)
+		tj, _ := eventInfos[j]["timestamp"].(string)
+		return ti < tj
+	})
 
-	// PVCs deprecated - sessions now use EmptyDir with S3 state persistence
-	result["pvcExists"] = false
-	result["pvcName"] = "N/A (using EmptyDir + S3)"
-	result["storageMode"] = "EmptyDir + S3"
-
-	c.JSON(http.StatusOK, result)
+	c.JSON(http.StatusOK, gin.H{"events": eventInfos})
 }
 
 // setRepoStatus removed - status.repos no longer in CRD (status simplified to phase, message, is_error)
 
-// ListSessionWorkspace proxies to per-job content service for directory listing.
+// ListSessionWorkspace proxies to the runner for directory listing.
 func ListSessionWorkspace(c *gin.Context) {
 	// Get project from context (set by middleware) or param
 	project := c.GetString("project")
@@ -2380,8 +2311,7 @@ func ListSessionWorkspace(c *gin.Context) {
 	}
 
 	rel := strings.TrimSpace(c.Query("path"))
-	// Path is relative to content service's StateBaseDir (which is /workspace)
-	// Content service handles the base path, so we just pass the relative path
+	// Path is relative to runner's WORKSPACE_PATH (which is /workspace)
 	absPath := ""
 	if rel != "" {
 		absPath = rel
@@ -2393,10 +2323,10 @@ func ListSessionWorkspace(c *gin.Context) {
 		token = c.GetHeader("X-Forwarded-Access-Token")
 	}
 
-	// Use ambient-content service (per-session content service)
-	serviceName := fmt.Sprintf("ambient-content-%s", session)
+	// Use runner service for content endpoints
+	serviceName := getRunnerServiceName(session)
 
-	endpoint := fmt.Sprintf("http://%s.%s.svc:8080", serviceName, project)
+	endpoint := fmt.Sprintf("http://%s.%s.svc.cluster.local:8001", serviceName, project)
 	u := fmt.Sprintf("%s/content/list?path=%s", endpoint, url.QueryEscape(absPath))
 	log.Printf("ListSessionWorkspace: project=%s session=%s endpoint=%s", project, session, endpoint)
 	req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, u, nil)
@@ -2411,7 +2341,7 @@ func ListSessionWorkspace(c *gin.Context) {
 	client := &http.Client{Timeout: 4 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Printf("ListSessionWorkspace: content service request failed: %v", err)
+		log.Printf("ListSessionWorkspace: runner content request failed: %v", err)
 		// Soften error to 200 with empty list so UI doesn't spam
 		c.JSON(http.StatusOK, gin.H{"items": []any{}})
 		return
@@ -2424,12 +2354,12 @@ func ListSessionWorkspace(c *gin.Context) {
 		return
 	}
 
-	// Log if content service returned an error (other than 404 which is handled below)
+	// Log if runner returned an error (other than 404 which is handled below)
 	if resp.StatusCode >= 400 && resp.StatusCode != http.StatusNotFound {
-		log.Printf("ListSessionWorkspace: content service returned error status %d: %s", resp.StatusCode, string(b))
+		log.Printf("ListSessionWorkspace: runner returned error status %d: %s", resp.StatusCode, string(b))
 	}
 
-	// If content service returns 404, check if it's because workspace doesn't exist yet
+	// If runner returns 404, check if it's because workspace doesn't exist yet
 	if resp.StatusCode == http.StatusNotFound {
 		log.Printf("ListSessionWorkspace: workspace not found (may not be created yet by runner)")
 		// Return empty list instead of error for better UX during session startup
@@ -2440,7 +2370,7 @@ func ListSessionWorkspace(c *gin.Context) {
 	c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), b)
 }
 
-// GetSessionWorkspaceFile reads a file via content service.
+// GetSessionWorkspaceFile reads a file via the runner's content endpoint.
 func GetSessionWorkspaceFile(c *gin.Context) {
 	// Get project from context (set by middleware) or param
 	project := c.GetString("project")
@@ -2464,17 +2394,17 @@ func GetSessionWorkspaceFile(c *gin.Context) {
 	}
 
 	sub := strings.TrimPrefix(c.Param("path"), "/")
-	// Path is relative to content service's StateBaseDir (which is /workspace)
+	// Path is relative to runner's WORKSPACE_PATH (/workspace)
 	absPath := sub
 	token := c.GetHeader("Authorization")
 	if strings.TrimSpace(token) == "" {
 		token = c.GetHeader("X-Forwarded-Access-Token")
 	}
 
-	// Use ambient-content service (per-session content service)
-	serviceName := fmt.Sprintf("ambient-content-%s", session)
+	// Use runner service for content endpoints
+	serviceName := getRunnerServiceName(session)
 
-	endpoint := fmt.Sprintf("http://%s.%s.svc:8080", serviceName, project)
+	endpoint := fmt.Sprintf("http://%s.%s.svc.cluster.local:8001", serviceName, project)
 	u := fmt.Sprintf("%s/content/file?path=%s", endpoint, url.QueryEscape(absPath))
 	req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, u, nil)
 	if err != nil {
@@ -2495,19 +2425,19 @@ func GetSessionWorkspaceFile(c *gin.Context) {
 	b, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Printf("GetSessionWorkspaceFile: failed to read response body: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read file from content service"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read file from runner"})
 		return
 	}
 
-	// Log if content service returned an error
+	// Log if runner returned an error
 	if resp.StatusCode >= 400 {
-		log.Printf("GetSessionWorkspaceFile: content service returned error status %d for path %s", resp.StatusCode, sub)
+		log.Printf("GetSessionWorkspaceFile: runner returned error status %d for path %s", resp.StatusCode, sub)
 	}
 
 	c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), b)
 }
 
-// PutSessionWorkspaceFile writes a file via content service.
+// PutSessionWorkspaceFile writes a file via the runner's content endpoint.
 func PutSessionWorkspaceFile(c *gin.Context) {
 	// Get project from context (set by middleware) or param
 	project := c.GetString("project")
@@ -2546,8 +2476,8 @@ func PutSessionWorkspaceFile(c *gin.Context) {
 		return
 	}
 
-	// Use relative path for content service (it has its own StateBaseDir=/workspace)
-	// Convert to forward slashes for content service (expects POSIX paths)
+	// Use relative path for runner (WORKSPACE_PATH=/workspace)
+	// Convert to forward slashes for runner (expects POSIX paths)
 	absPath := filepath.ToSlash(sub)
 
 	token := c.GetHeader("Authorization")
@@ -2591,11 +2521,11 @@ func PutSessionWorkspaceFile(c *gin.Context) {
 		return
 	}
 
-	// Check if ambient-content service exists (session must be running)
-	serviceName := fmt.Sprintf("ambient-content-%s", session)
+	// Check if runner service exists (session must be running)
+	serviceName := getRunnerServiceName(session)
 	if _, err := reqK8s.CoreV1().Services(project).Get(c.Request.Context(), serviceName, v1.GetOptions{}); err != nil {
 		// Service doesn't exist - session is not running
-		log.Printf("PutSessionWorkspaceFile: Content service not found for session %s (session not running)", session)
+		log.Printf("PutSessionWorkspaceFile: Runner service not found for session %s (session not running)", session)
 		c.JSON(http.StatusConflict, gin.H{
 			"error": "Session is not running. Start the session to upload files.",
 			"hint":  "File uploads require an active session. Start the session and try again.",
@@ -2603,7 +2533,7 @@ func PutSessionWorkspaceFile(c *gin.Context) {
 		return
 	}
 
-	endpoint := fmt.Sprintf("http://%s.%s.svc:8080", serviceName, project)
+	endpoint := fmt.Sprintf("http://%s.%s.svc.cluster.local:8001", serviceName, project)
 	log.Printf("PutSessionWorkspaceFile: using service %s for session %s", serviceName, session)
 	payload, err := io.ReadAll(c.Request.Body)
 	if err != nil {
@@ -2668,19 +2598,19 @@ func PutSessionWorkspaceFile(c *gin.Context) {
 	rb, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Printf("PutSessionWorkspaceFile: failed to read response body: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read response from content service"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read response from runner"})
 		return
 	}
 
-	// Log if content service returned an error
+	// Log if runner returned an error
 	if resp.StatusCode >= 400 {
-		log.Printf("PutSessionWorkspaceFile: content service returned error status %d for path %s: %s", resp.StatusCode, sub, string(rb))
+		log.Printf("PutSessionWorkspaceFile: runner returned error status %d for path %s: %s", resp.StatusCode, sub, string(rb))
 	}
 
 	c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), rb)
 }
 
-// DeleteSessionWorkspaceFile deletes a file via content service.
+// DeleteSessionWorkspaceFile deletes a file via the runner's content endpoint.
 func DeleteSessionWorkspaceFile(c *gin.Context) {
 	// Get project from context (set by middleware) or param
 	project := c.GetString("project")
@@ -2719,8 +2649,8 @@ func DeleteSessionWorkspaceFile(c *gin.Context) {
 		return
 	}
 
-	// Use relative path for content service (it has its own StateBaseDir=/workspace)
-	// Convert to forward slashes for content service (expects POSIX paths)
+	// Use relative path for runner (WORKSPACE_PATH=/workspace)
+	// Convert to forward slashes for runner (expects POSIX paths)
 	absPath := filepath.ToSlash(sub)
 
 	token := c.GetHeader("Authorization")
@@ -2764,15 +2694,15 @@ func DeleteSessionWorkspaceFile(c *gin.Context) {
 		return
 	}
 
-	// Check if content service exists (session must be running)
-	serviceName := getContentServiceName(session)
+	// Check if runner service exists (session must be running)
+	serviceName := getRunnerServiceName(session)
 	if _, err := reqK8s.CoreV1().Services(project).Get(c.Request.Context(), serviceName, v1.GetOptions{}); err != nil {
-		log.Printf("DeleteSessionWorkspaceFile: Content service not found for session %s (session not running)", session)
+		log.Printf("DeleteSessionWorkspaceFile: Runner service not found for session %s (session not running)", session)
 		c.JSON(http.StatusConflict, gin.H{"error": "Session is not running. Start the session to access files."})
 		return
 	}
 
-	endpoint := fmt.Sprintf("http://%s.%s.svc:8080", serviceName, project)
+	endpoint := fmt.Sprintf("http://%s.%s.svc.cluster.local:8001", serviceName, project)
 	log.Printf("DeleteSessionWorkspaceFile: using service %s for session %s, path=%s", serviceName, session, absPath)
 
 	// Use DELETE request with path in body
@@ -2813,7 +2743,7 @@ func DeleteSessionWorkspaceFile(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete file"})
 			return
 		}
-		// Try to parse error from content service, otherwise use generic message
+		// Try to parse error from runner, otherwise use generic message
 		var errResp map[string]interface{}
 		if err := json.Unmarshal(rb, &errResp); err == nil {
 			c.JSON(resp.StatusCode, errResp)
@@ -2823,7 +2753,7 @@ func DeleteSessionWorkspaceFile(c *gin.Context) {
 	}
 }
 
-// PushSessionRepo proxies a push request for a given session repo to the per-job content service.
+// PushSessionRepo proxies a push request for a given session repo to the runner.
 // POST /api/projects/:projectName/agentic-sessions/:sessionName/github/push
 // Body: { repoIndex: number, commitMessage?: string, branch?: string }
 func PushSessionRepo(c *gin.Context) {
@@ -2841,14 +2771,14 @@ func PushSessionRepo(c *gin.Context) {
 	log.Printf("pushSessionRepo: request project=%s session=%s repoIndex=%d commitLen=%d", project, session, body.RepoIndex, len(strings.TrimSpace(body.CommitMessage)))
 
 	// Try temp service first (for completed sessions), then regular service
-	serviceName := getContentServiceName(session)
+	serviceName := getRunnerServiceName(session)
 	k8sClt, k8sDyn := GetK8sClientsForRequest(c)
 	if k8sClt == nil || k8sDyn == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 		c.Abort()
 		return
 	}
-	endpoint := fmt.Sprintf("http://%s.%s.svc:8080", serviceName, project)
+	endpoint := fmt.Sprintf("http://%s.%s.svc.cluster.local:8001", serviceName, project)
 	log.Printf("pushSessionRepo: using service %s", serviceName)
 
 	// Simplified: 1) get session; 2) compute repoPath from INPUT repo folder; 3) get output url/branch; 4) proxy
@@ -2870,7 +2800,7 @@ func PushSessionRepo(c *gin.Context) {
 	}
 	rm, _ := repos[body.RepoIndex].(map[string]interface{})
 	// Derive repoPath from input URL folder name
-	// Paths are relative to content service's StateBaseDir (which is /workspace)
+	// Paths are relative to runner's WORKSPACE_PATH (/workspace)
 	if in, ok := rm["input"].(map[string]interface{}); ok {
 		if urlv, ok2 := in["url"].(string); ok2 && strings.TrimSpace(urlv) != "" {
 			folder := DeriveRepoFolderFromURL(strings.TrimSpace(urlv))
@@ -2982,7 +2912,7 @@ func PushSessionRepo(c *gin.Context) {
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Printf("pushSessionRepo: failed to read response body: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read response from content service"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read response from runner"})
 		return
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
@@ -3015,14 +2945,14 @@ func AbandonSessionRepo(c *gin.Context) {
 	}
 
 	// Try temp service first (for completed sessions), then regular service
-	serviceName := getContentServiceName(session)
+	serviceName := getRunnerServiceName(session)
 	k8sClt, _ := GetK8sClientsForRequest(c)
 	if k8sClt == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 		c.Abort()
 		return
 	}
-	endpoint := fmt.Sprintf("http://%s.%s.svc:8080", serviceName, project)
+	endpoint := fmt.Sprintf("http://%s.%s.svc.cluster.local:8001", serviceName, project)
 	log.Printf("AbandonSessionRepo: using service %s", serviceName)
 	repoPath := strings.TrimSpace(body.RepoPath)
 	if repoPath == "" {
@@ -3066,7 +2996,7 @@ func AbandonSessionRepo(c *gin.Context) {
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Printf("abandonSessionRepo: failed to read response body: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read response from content service"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read response from runner"})
 		return
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
@@ -3085,7 +3015,7 @@ func DiffSessionRepo(c *gin.Context) {
 	session := c.Param("sessionName")
 	repoIndexStr := strings.TrimSpace(c.Query("repoIndex"))
 	repoPath := strings.TrimSpace(c.Query("repoPath"))
-	// Paths are relative to content service's StateBaseDir (which is /workspace)
+	// Paths are relative to runner's WORKSPACE_PATH (/workspace)
 	if repoPath == "" && repoIndexStr != "" {
 		repoPath = repoIndexStr
 	}
@@ -3095,14 +3025,14 @@ func DiffSessionRepo(c *gin.Context) {
 	}
 
 	// Try temp service first (for completed sessions), then regular service
-	serviceName := getContentServiceName(session)
+	serviceName := getRunnerServiceName(session)
 	k8sClt, _ := GetK8sClientsForRequest(c)
 	if k8sClt == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 		c.Abort()
 		return
 	}
-	endpoint := fmt.Sprintf("http://%s.%s.svc:8080", serviceName, project)
+	endpoint := fmt.Sprintf("http://%s.%s.svc.cluster.local:8001", serviceName, project)
 	log.Printf("DiffSessionRepo: using service %s", serviceName)
 	url := fmt.Sprintf("%s/content/github/diff?repoPath=%s", endpoint, url.QueryEscape(repoPath))
 	req, _ := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, url, nil)
@@ -3224,11 +3154,11 @@ func GetGitStatus(c *gin.Context) {
 		return
 	}
 
-	// Path is relative to content service's StateBaseDir (which is /workspace)
+	// Path is relative to runner's WORKSPACE_PATH (/workspace)
 	absPath := relativePath
 
-	// Get content service endpoint
-	serviceName := getContentServiceName(session)
+	// Get runner endpoint
+	serviceName := getRunnerServiceName(session)
 	k8sClt, k8sDyn := GetK8sClientsForRequest(c)
 	if k8sClt == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
@@ -3236,7 +3166,7 @@ func GetGitStatus(c *gin.Context) {
 		return
 	}
 
-	endpoint := fmt.Sprintf("http://%s.%s.svc:8080/content/git-status?path=%s", serviceName, project, url.QueryEscape(absPath))
+	endpoint := fmt.Sprintf("http://%s.%s.svc.cluster.local:8001/content/git-status?path=%s", serviceName, project, url.QueryEscape(absPath))
 
 	req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, endpoint, nil)
 	if err != nil {
@@ -3269,7 +3199,7 @@ func GetGitStatus(c *gin.Context) {
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "content service unavailable"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "runner unavailable"})
 		return
 	}
 	defer resp.Body.Close()
@@ -3277,7 +3207,7 @@ func GetGitStatus(c *gin.Context) {
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Printf("GetGitStatus: failed to read response body: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read response from content service"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read response from runner"})
 		return
 	}
 	c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), bodyBytes)
@@ -3311,11 +3241,11 @@ func ConfigureGitRemote(c *gin.Context) {
 		body.Branch = "main"
 	}
 
-	// Path is relative to content service's StateBaseDir (which is /workspace)
+	// Path is relative to runner's WORKSPACE_PATH (/workspace)
 	absPath := body.Path
 
-	// Get content service endpoint
-	serviceName := getContentServiceName(sessionName)
+	// Get runner endpoint
+	serviceName := getRunnerServiceName(sessionName)
 	k8sClt, _ := GetK8sClientsForRequest(c)
 	if k8sClt == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
@@ -3323,7 +3253,7 @@ func ConfigureGitRemote(c *gin.Context) {
 		return
 	}
 
-	endpoint := fmt.Sprintf("http://%s.%s.svc:8080/content/git-configure-remote", serviceName, project)
+	endpoint := fmt.Sprintf("http://%s.%s.svc.cluster.local:8001/content/git-configure-remote", serviceName, project)
 
 	reqBody, err := json.Marshal(map[string]interface{}{
 		"path":      absPath,
@@ -3381,7 +3311,7 @@ func ConfigureGitRemote(c *gin.Context) {
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "content service unavailable"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "runner unavailable"})
 		return
 	}
 	defer resp.Body.Close()
@@ -3420,7 +3350,7 @@ func ConfigureGitRemote(c *gin.Context) {
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Printf("ConfigureGitRemote: failed to read response body: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read response from content service"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read response from runner"})
 		return
 	}
 	c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), bodyBytes)
@@ -3449,11 +3379,11 @@ func SynchronizeGit(c *gin.Context) {
 		body.Message = fmt.Sprintf("Session %s - %s", session, time.Now().Format(time.RFC3339))
 	}
 
-	// Path is relative to content service's StateBaseDir (which is /workspace)
+	// Path is relative to runner's WORKSPACE_PATH (/workspace)
 	absPath := body.Path
 
-	// Get content service endpoint
-	serviceName := getContentServiceName(session)
+	// Get runner endpoint
+	serviceName := getRunnerServiceName(session)
 	k8sClt, k8sDyn := GetK8sClientsForRequest(c)
 	if k8sClt == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
@@ -3461,7 +3391,7 @@ func SynchronizeGit(c *gin.Context) {
 		return
 	}
 
-	endpoint := fmt.Sprintf("http://%s.%s.svc:8080/content/git-sync", serviceName, project)
+	endpoint := fmt.Sprintf("http://%s.%s.svc.cluster.local:8001/content/git-sync", serviceName, project)
 
 	reqBody, err := json.Marshal(map[string]interface{}{
 		"path":    absPath,
@@ -3506,7 +3436,7 @@ func SynchronizeGit(c *gin.Context) {
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "content service unavailable"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "runner unavailable"})
 		return
 	}
 	defer resp.Body.Close()
@@ -3514,7 +3444,7 @@ func SynchronizeGit(c *gin.Context) {
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Printf("SynchronizeGit: failed to read response body: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read response from content service"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read response from runner"})
 		return
 	}
 	c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), bodyBytes)
@@ -3535,10 +3465,10 @@ func GetGitMergeStatus(c *gin.Context) {
 		branch = "main"
 	}
 
-	// Path is relative to content service's StateBaseDir (which is /workspace)
+	// Path is relative to runner's WORKSPACE_PATH (/workspace)
 	absPath := relativePath
 
-	serviceName := getContentServiceName(session)
+	serviceName := getRunnerServiceName(session)
 	k8sClt, k8sDyn := GetK8sClientsForRequest(c)
 	if k8sClt == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
@@ -3546,7 +3476,7 @@ func GetGitMergeStatus(c *gin.Context) {
 		return
 	}
 
-	endpoint := fmt.Sprintf("http://%s.%s.svc:8080/content/git-merge-status?path=%s&branch=%s",
+	endpoint := fmt.Sprintf("http://%s.%s.svc.cluster.local:8001/content/git-merge-status?path=%s&branch=%s",
 		serviceName, project, url.QueryEscape(absPath), url.QueryEscape(branch))
 
 	req, _ := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, endpoint, nil)
@@ -3575,7 +3505,7 @@ func GetGitMergeStatus(c *gin.Context) {
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "content service unavailable"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "runner unavailable"})
 		return
 	}
 	defer resp.Body.Close()
@@ -3583,7 +3513,7 @@ func GetGitMergeStatus(c *gin.Context) {
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Printf("GetGitMergeStatus: failed to read response body: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read response from content service"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read response from runner"})
 		return
 	}
 	c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), bodyBytes)
@@ -3612,10 +3542,10 @@ func GitPullSession(c *gin.Context) {
 		body.Branch = "main"
 	}
 
-	// Path is relative to content service's StateBaseDir (which is /workspace)
+	// Path is relative to runner's WORKSPACE_PATH (/workspace)
 	absPath := body.Path
 
-	serviceName := getContentServiceName(session)
+	serviceName := getRunnerServiceName(session)
 	k8sClt, k8sDyn := GetK8sClientsForRequest(c)
 	if k8sClt == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
@@ -3623,7 +3553,7 @@ func GitPullSession(c *gin.Context) {
 		return
 	}
 
-	endpoint := fmt.Sprintf("http://%s.%s.svc:8080/content/git-pull", serviceName, project)
+	endpoint := fmt.Sprintf("http://%s.%s.svc.cluster.local:8001/content/git-pull", serviceName, project)
 
 	reqBody, err := json.Marshal(map[string]interface{}{
 		"path":   absPath,
@@ -3667,7 +3597,7 @@ func GitPullSession(c *gin.Context) {
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "content service unavailable"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "runner unavailable"})
 		return
 	}
 	defer resp.Body.Close()
@@ -3675,7 +3605,7 @@ func GitPullSession(c *gin.Context) {
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Printf("GitPullSession: failed to read response body: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read response from content service"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read response from runner"})
 		return
 	}
 	c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), bodyBytes)
@@ -3708,10 +3638,10 @@ func GitPushSession(c *gin.Context) {
 		body.Message = fmt.Sprintf("Session %s artifacts", session)
 	}
 
-	// Path is relative to content service's StateBaseDir (which is /workspace)
+	// Path is relative to runner's WORKSPACE_PATH (/workspace)
 	absPath := body.Path
 
-	serviceName := getContentServiceName(session)
+	serviceName := getRunnerServiceName(session)
 	k8sClt, k8sDyn := GetK8sClientsForRequest(c)
 	if k8sClt == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
@@ -3719,7 +3649,7 @@ func GitPushSession(c *gin.Context) {
 		return
 	}
 
-	endpoint := fmt.Sprintf("http://%s.%s.svc:8080/content/git-push", serviceName, project)
+	endpoint := fmt.Sprintf("http://%s.%s.svc.cluster.local:8001/content/git-push", serviceName, project)
 
 	reqBody, err := json.Marshal(map[string]interface{}{
 		"path":    absPath,
@@ -3764,7 +3694,7 @@ func GitPushSession(c *gin.Context) {
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "content service unavailable"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "runner unavailable"})
 		return
 	}
 	defer resp.Body.Close()
@@ -3772,7 +3702,7 @@ func GitPushSession(c *gin.Context) {
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Printf("GitPushSession: failed to read response body: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read response from content service"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read response from runner"})
 		return
 	}
 	c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), bodyBytes)
@@ -3798,10 +3728,10 @@ func GitCreateBranchSession(c *gin.Context) {
 		body.Path = "artifacts"
 	}
 
-	// Path is relative to content service's StateBaseDir (which is /workspace)
+	// Path is relative to runner's WORKSPACE_PATH (/workspace)
 	absPath := body.Path
 
-	serviceName := getContentServiceName(session)
+	serviceName := getRunnerServiceName(session)
 	k8sClt, _ := GetK8sClientsForRequest(c)
 	if k8sClt == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
@@ -3809,7 +3739,7 @@ func GitCreateBranchSession(c *gin.Context) {
 		return
 	}
 
-	endpoint := fmt.Sprintf("http://%s.%s.svc:8080/content/git-create-branch", serviceName, project)
+	endpoint := fmt.Sprintf("http://%s.%s.svc.cluster.local:8001/content/git-create-branch", serviceName, project)
 
 	reqBody, err := json.Marshal(map[string]interface{}{
 		"path":       absPath,
@@ -3834,7 +3764,7 @@ func GitCreateBranchSession(c *gin.Context) {
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "content service unavailable"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "runner unavailable"})
 		return
 	}
 	defer resp.Body.Close()
@@ -3842,7 +3772,7 @@ func GitCreateBranchSession(c *gin.Context) {
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Printf("GitCreateBranchSession: failed to read response body: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read response from content service"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read response from runner"})
 		return
 	}
 	c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), bodyBytes)
@@ -3859,10 +3789,10 @@ func GitListBranchesSession(c *gin.Context) {
 		relativePath = "artifacts"
 	}
 
-	// Path is relative to content service's StateBaseDir (which is /workspace)
+	// Path is relative to runner's WORKSPACE_PATH (/workspace)
 	absPath := relativePath
 
-	serviceName := getContentServiceName(session)
+	serviceName := getRunnerServiceName(session)
 	k8sClt, _ := GetK8sClientsForRequest(c)
 	if k8sClt == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
@@ -3870,7 +3800,7 @@ func GitListBranchesSession(c *gin.Context) {
 		return
 	}
 
-	endpoint := fmt.Sprintf("http://%s.%s.svc:8080/content/git-list-branches?path=%s",
+	endpoint := fmt.Sprintf("http://%s.%s.svc.cluster.local:8001/content/git-list-branches?path=%s",
 		serviceName, project, url.QueryEscape(absPath))
 
 	req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, endpoint, nil)
@@ -3885,7 +3815,7 @@ func GitListBranchesSession(c *gin.Context) {
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "content service unavailable"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "runner unavailable"})
 		return
 	}
 	defer resp.Body.Close()
@@ -3893,7 +3823,7 @@ func GitListBranchesSession(c *gin.Context) {
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Printf("GitListBranchesSession: failed to read response body: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read response from content service"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read response from runner"})
 		return
 	}
 	c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), bodyBytes)

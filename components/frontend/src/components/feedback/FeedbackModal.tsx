@@ -13,7 +13,6 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { ThumbsUp, ThumbsDown, Loader2, Info } from "lucide-react";
-import { useFeedbackContextOptional } from "@/contexts/FeedbackContext";
 
 export type FeedbackType = "positive" | "negative";
 
@@ -21,83 +20,72 @@ type FeedbackModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   feedbackType: FeedbackType;
-  messageId?: string;  // Message ID for feedback association (matches messages in MESSAGES_SNAPSHOT)
+  projectName: string;
+  sessionName: string;
+  messageId?: string;
   messageContent?: string;
-  messageTimestamp?: string;
+  /** AG-UI runId from the assistant message — used by backend to resolve the Langfuse traceId. */
+  runId?: string;
   onSubmitSuccess?: () => void;
 };
 
+/**
+ * Self-contained feedback modal that sends a META event to the
+ * platform's AG-UI feedback endpoint.  The backend forwards to
+ * the runner (Langfuse) and persists a RAW event so the thumbs
+ * highlight survives reconnects.  No dependency on FeedbackContext.
+ *
+ * Used by CopilotChatPanel when CopilotKit's built-in thumbs up/down
+ * buttons are clicked.
+ */
 export function FeedbackModal({
   open,
   onOpenChange,
   feedbackType,
+  projectName,
+  sessionName,
   messageId,
   messageContent,
+  runId,
   onSubmitSuccess,
 }: FeedbackModalProps) {
   const [comment, setComment] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const feedbackContext = useFeedbackContextOptional();
-
   const handleSubmit = async () => {
-    if (!feedbackContext) {
-      setError("Session context not available");
-      return;
-    }
-
     setIsSubmitting(true);
     setError(null);
 
     try {
-      // Build context string from what the user was working on
-      const contextParts: string[] = [];
-      
-      if (feedbackContext.initialPrompt) {
-        contextParts.push(`Initial prompt: ${feedbackContext.initialPrompt}`);
-      }
-      
-      if (messageContent) {
-        contextParts.push(messageContent);
-      }
-
-      // Build AG-UI META event following the spec
-      // See: https://docs.ag-ui.com/drafts/meta-events#user-feedback
       const payload: Record<string, unknown> = {
-        userId: feedbackContext.username,
-        projectName: feedbackContext.projectName,
-        sessionName: feedbackContext.sessionName,
+        projectName,
+        sessionName,
       };
-      
-      // Include messageId so frontend can match feedback to specific messages
+
       if (messageId) {
         payload.messageId = messageId;
       }
-      if (feedbackContext.traceId) {
-        payload.traceId = feedbackContext.traceId;
+      if (runId) {
+        payload.runId = runId;
       }
       if (comment) {
         payload.comment = comment;
       }
-      if (feedbackContext.activeWorkflow) {
-        payload.workflow = feedbackContext.activeWorkflow;
+      if (messageContent) {
+        payload.context = messageContent;
       }
-      if (contextParts.length > 0) {
-        payload.context = contextParts.join("; ");
-      }
-      
+
       const metaEvent = {
         type: "META",
         metaType: feedbackType === "positive" ? "thumbs_up" : "thumbs_down",
         payload,
-        threadId: feedbackContext.sessionName,
+        threadId: sessionName,
         ts: Date.now(),
       };
-      
-      // Send to backend (which forwards to runner and broadcasts on event stream)
-      const feedbackUrl = `/api/projects/${encodeURIComponent(feedbackContext.projectName)}/agentic-sessions/${encodeURIComponent(feedbackContext.sessionName)}/agui/feedback`;
-      
+
+      const feedbackUrl = `/api/projects/${encodeURIComponent(projectName)}/agentic-sessions/${encodeURIComponent(sessionName)}/agui/feedback`;
+
       const response = await fetch(feedbackUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -109,7 +97,7 @@ export function FeedbackModal({
         throw new Error(data.error || "Failed to submit feedback");
       }
 
-      // Success - close modal and reset
+      // Success
       setComment("");
       onOpenChange(false);
       onSubmitSuccess?.();
@@ -148,7 +136,6 @@ export function FeedbackModal({
         </DialogHeader>
 
         <div className="space-y-4 py-4">
-          {/* Comment textarea */}
           <div className="space-y-2">
             <Label htmlFor="feedback-comment">
               Additional comments (optional)
@@ -167,7 +154,6 @@ export function FeedbackModal({
             />
           </div>
 
-          {/* Privacy disclaimer */}
           <div className="rounded-md border border-border/50 bg-muted/30 px-3 py-2.5 text-xs text-muted-foreground">
             <div className="flex items-center gap-1.5 mb-1">
               <Info className="h-3.5 w-3.5 flex-shrink-0" />
@@ -178,7 +164,6 @@ export function FeedbackModal({
             </p>
           </div>
 
-          {/* Error message */}
           {error && (
             <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
               {error}

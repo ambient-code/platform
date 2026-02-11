@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from observability import ObservabilityManager
+from ambient_runner.observability import ObservabilityManager
 
 
 class TestDuplicateTurnPrevention:

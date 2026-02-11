@@ -1,26 +1,3 @@
-import type { SessionMessage } from "@/types";
-import type { ToolUseBlock, ToolResultBlock } from "@/types/agentic-session";
-
-export type RawWireMessage = SessionMessage & { payload?: unknown; timestamp?: string };
-
-export type InnerEnvelope = {
-  type?: string;
-  timestamp?: string;
-  payload?: Record<string, unknown> | string;
-  partial?: { id: string; index: number; total: number; data: string };
-  seq?: number;
-};
-
-export type ToolUseBlockWithTimestamp = {
-  block: ToolUseBlock;
-  timestamp: string;
-};
-
-export type ToolResultBlockWithTimestamp = {
-  block: ToolResultBlock;
-  timestamp: string;
-};
-
 export type GitStatus = {
   initialized: boolean;
   hasChanges: boolean;

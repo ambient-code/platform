@@ -818,40 +818,8 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 			},
 		},
 
-		// Flip roles so the content writer is the main container that keeps the pod alive
+		// Runner is the main container — serves AG-UI and content endpoints on port 8001
 		Containers: []corev1.Container{
-			{
-				Name:            "ambient-content",
-				Image:           appConfig.ContentServiceImage,
-				ImagePullPolicy: appConfig.ImagePullPolicy,
-				Env: []corev1.EnvVar{
-					{Name: "CONTENT_SERVICE_MODE", Value: "true"},
-					{Name: "STATE_BASE_DIR", Value: "/workspace"},
-				},
-				// Import integration secrets as environment variables (GITHUB_TOKEN, GITLAB_TOKEN, etc.)
-				EnvFrom: func() []corev1.EnvFromSource {
-					if integrationSecretsExist {
-						return []corev1.EnvFromSource{{
-							SecretRef: &corev1.SecretEnvSource{
-								LocalObjectReference: corev1.LocalObjectReference{Name: integrationSecretsName},
-							},
-						}}
-					}
-					return nil
-				}(),
-				Ports: []corev1.ContainerPort{{ContainerPort: 8080, Name: "http"}},
-				ReadinessProbe: &corev1.Probe{
-					ProbeHandler: corev1.ProbeHandler{
-						HTTPGet: &corev1.HTTPGetAction{
-							Path: "/health",
-							Port: intstr.FromString("http"),
-						},
-					},
-					InitialDelaySeconds: 5,
-					PeriodSeconds:       5,
-				},
-				VolumeMounts: []corev1.VolumeMount{{Name: "workspace", MountPath: "/workspace"}},
-			},
 			{
 				Name:            "ambient-code-runner",
 				Image:           appConfig.AmbientCodeRunnerImage,
@@ -1302,32 +1270,8 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 	_ = clearAnnotation(sessionNamespace, name, "ambient-code.io/desired-phase")
 	log.Printf("[DesiredPhase] Cleared desired-phase annotation after successful pod creation")
 
-	// Create a per-pod Service pointing to the content container
-	svc := &corev1.Service{
-		ObjectMeta: v1.ObjectMeta{
-			Name:      fmt.Sprintf("ambient-content-%s", name),
-			Namespace: sessionNamespace,
-			Labels:    map[string]string{"app": "ambient-code-runner", "agentic-session": name},
-			OwnerReferences: []v1.OwnerReference{{
-				APIVersion: "v1",
-				Kind:       "Pod",
-				Name:       podName,
-				UID:        createdPod.UID,
-				Controller: boolPtr(true),
-			}},
-		},
-		Spec: corev1.ServiceSpec{
-			Selector: map[string]string{"agentic-session": name, "app": "ambient-code-runner"},
-			Ports:    []corev1.ServicePort{{Port: 8080, TargetPort: intstr.FromString("http"), Protocol: corev1.ProtocolTCP, Name: "http"}},
-			Type:     corev1.ServiceTypeClusterIP,
-		},
-	}
-	if _, serr := config.K8sClient.CoreV1().Services(sessionNamespace).Create(context.TODO(), svc, v1.CreateOptions{}); serr != nil && !errors.IsAlreadyExists(serr) {
-		log.Printf("Failed to create per-pod content service for %s: %v", name, serr)
-	}
-
-	// Create AG-UI Service pointing to the runner's FastAPI server
-	// Backend proxies AG-UI requests to this service endpoint
+	// Create session Service pointing to the runner's FastAPI server
+	// Backend proxies both AG-UI and content requests to this service endpoint
 	aguiSvc := &corev1.Service{
 		ObjectMeta: v1.ObjectMeta{
 			Name:      fmt.Sprintf("session-%s", name),
@@ -1728,11 +1672,24 @@ func monitorPod(podName, sessionName, sessionNamespace string) {
 			continue
 		}
 
-		// Check if session was stopped - exit monitor loop immediately
+		// Check if session was stopped or is stopping - exit monitor loop immediately
+		// This prevents the monitor from overwriting phase=Stopping with phase=Failed
+		// when the pod exits with non-zero (e.g. state-sync exit 137 during termination)
 		sessionStatus, _, _ := unstructured.NestedMap(sessionObj.Object, "status")
 		if sessionStatus != nil {
-			if currentPhase, ok := sessionStatus["phase"].(string); ok && currentPhase == "Stopped" {
-				log.Printf("AgenticSession %s was stopped; stopping pod monitoring", sessionName)
+			if currentPhase, ok := sessionStatus["phase"].(string); ok {
+				if currentPhase == "Stopped" || currentPhase == "Stopping" {
+					log.Printf("AgenticSession %s phase is %s; stopping pod monitoring", sessionName, currentPhase)
+					return
+				}
+			}
+		}
+		// Also check desired-phase annotation as a belt-and-braces guard
+		// (the annotation is set before phase transitions, so catches early race)
+		sessionAnnotations := sessionObj.GetAnnotations()
+		if sessionAnnotations != nil {
+			if dp := strings.TrimSpace(sessionAnnotations["ambient-code.io/desired-phase"]); dp == "Stopped" {
+				log.Printf("AgenticSession %s has desired-phase=Stopped; stopping pod monitoring", sessionName)
 				return
 			}
 		}
@@ -1987,18 +1944,12 @@ func getS3ConfigForProject(namespace string, appConfig *config.Config) (endpoint
 	return endpoint, bucket, accessKey, secretKey, nil
 }
 
-// deleteJobAndPerJobService deletes the Job and its associated per-job Service
+// deletePodAndPerPodService deletes the Pod and its associated session Service
 func deletePodAndPerPodService(namespace, podName, sessionName string) error {
-	// Delete Service first (it has ownerRef to Pod, but delete explicitly just in case)
-	svcName := fmt.Sprintf("ambient-content-%s", sessionName)
+	// Delete session service (it has ownerRef to Pod, but delete explicitly just in case)
+	svcName := fmt.Sprintf("session-%s", sessionName)
 	if err := config.K8sClient.CoreV1().Services(namespace).Delete(context.TODO(), svcName, v1.DeleteOptions{}); err != nil && !errors.IsNotFound(err) {
-		log.Printf("Failed to delete per-pod service %s/%s: %v", namespace, svcName, err)
-	}
-
-	// Delete AG-UI service
-	aguiSvcName := fmt.Sprintf("session-%s", sessionName)
-	if err := config.K8sClient.CoreV1().Services(namespace).Delete(context.TODO(), aguiSvcName, v1.DeleteOptions{}); err != nil && !errors.IsNotFound(err) {
-		log.Printf("Failed to delete AG-UI service %s/%s: %v", namespace, aguiSvcName, err)
+		log.Printf("Failed to delete session service %s/%s: %v", namespace, svcName, err)
 	}
 
 	// Delete the Pod with background propagation

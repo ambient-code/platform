@@ -14,14 +14,17 @@ import os
 import sys
 from pathlib import Path
 
+import pytest
+
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from observability import ObservabilityManager
+from ambient_runner.observability import ObservabilityManager
 
 logging.basicConfig(level=logging.INFO)
 
 
+@pytest.mark.asyncio
 async def test_model_metadata_tracking():
     """Test that model metadata is properly tracked in Langfuse."""
 
@@ -101,6 +104,7 @@ async def test_model_metadata_tracking():
     print("=" * 60)
 
 
+@pytest.mark.asyncio
 async def test_propagate_attributes_with_model():
     """Test that propagate_attributes includes model in metadata."""
 

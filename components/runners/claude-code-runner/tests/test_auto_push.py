@@ -8,17 +8,8 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-# Add parent directory to path
-runner_dir = Path(__file__).parent.parent
-if str(runner_dir) not in sys.path:
-    sys.path.insert(0, str(runner_dir))
-
-# Mock ag_ui module before importing modules
-sys.modules["ag_ui"] = Mock()
-sys.modules["ag_ui.core"] = Mock()
-
-from config import get_repos_config  # type: ignore[import]
-from prompts import build_workspace_context_prompt  # type: ignore[import]
+from ambient_runner.platform.config import get_repos_config
+from ambient_runner.platform.prompts import build_workspace_context_prompt
 
 
 class TestGetReposConfig:
@@ -261,7 +252,6 @@ class TestBuildWorkspaceContextPrompt:
         # Verify git instructions are present
         assert "Git Push Instructions" in prompt
         assert "repos/my-repo/" in prompt
-        assert "branch: main" in prompt
         assert "git add" in prompt
         assert "git commit" in prompt
         assert "git push origin" in prompt
@@ -324,19 +314,18 @@ class TestBuildWorkspaceContextPrompt:
 
         # Verify both autoPush repos are listed
         assert "repos/repo1/" in prompt
-        assert "branch: main" in prompt
         assert "repos/repo2/" in prompt
-        assert "branch: develop" in prompt
         # repo3 should not be in git instructions since autoPush=false
         # (but it will be in the general repos list)
 
     def test_prompt_without_repos(self):
         """Test prompt generation when no repos are configured."""
-        prompt = self.adapter._build_workspace_context_prompt(
+        prompt = build_workspace_context_prompt(
             repos_cfg=[],
             workflow_name=None,
             artifacts_path="artifacts",
             ambient_config={},
+            workspace_path="/workspace",
         )
 
         # Should not include git instructions

@@ -2,23 +2,28 @@
 // Reference: https://docs.ag-ui.com/concepts/events
 package types
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
-// Timestamp format constants for AG-UI events and metadata.
-// These ensure consistent timestamp formatting across the codebase.
+// Timestamp helpers for AG-UI events and metadata.
+//
+// AG-UI protocol timestamps are epoch milliseconds (int64), not ISO strings.
+// See: BaseEventSchema in @ag-ui/core — timestamp: z.number().optional()
 const (
-	// AGUITimestampFormat is used for event timestamps that require nanosecond precision.
-	// This preserves event ordering when multiple events occur in rapid succession.
-	// Format: "2006-01-02T15:04:05.999999999Z07:00" (RFC3339 with nanoseconds)
-	// Used in: BaseEvent.Timestamp, streamed events
-	AGUITimestampFormat = time.RFC3339Nano
-
 	// AGUIMetadataTimestampFormat is used for run/session metadata timestamps.
 	// This is sufficient for human-readable timestamps where nanosecond precision isn't needed.
 	// Format: "2006-01-02T15:04:05Z07:00" (RFC3339)
 	// Used in: AGUIRunMetadata.StartedAt, AGUIRunMetadata.FinishedAt
 	AGUIMetadataTimestampFormat = time.RFC3339
 )
+
+// AGUITimestampNow returns the current time as epoch milliseconds,
+// which is the format expected by the AG-UI protocol.
+func AGUITimestampNow() int64 {
+	return time.Now().UnixMilli()
+}
 
 // AG-UI Event Types as defined in the protocol specification
 // See: https://docs.ag-ui.com/concepts/events
@@ -44,7 +49,7 @@ const (
 
 	// State management events
 	EventTypeStateSnapshot = "STATE_SNAPSHOT"
-	EventTypStateDelta     = "STATE_DELTA"
+	EventTypeStateDelta    = "STATE_DELTA"
 
 	// Message snapshot for restore/reconnect
 	EventTypeMessagesSnapshot = "MESSAGES_SNAPSHOT"
@@ -55,6 +60,9 @@ const (
 
 	// Raw event for pass-through
 	EventTypeRaw = "RAW"
+
+	// Custom event for platform extensions
+	EventTypeCustom = "CUSTOM"
 
 	// META event for user feedback (thumbs up/down)
 	// See: https://docs.ag-ui.com/drafts/meta-events
@@ -78,22 +86,27 @@ type BaseEvent struct {
 	Type      string `json:"type"`
 	ThreadID  string `json:"threadId"`
 	RunID     string `json:"runId"`
-	Timestamp string `json:"timestamp"` // Format: AGUITimestampFormat (RFC3339Nano)
+	Timestamp int64  `json:"timestamp,omitempty"` // Epoch milliseconds (AG-UI spec)
 	// Optional fields
 	MessageID   string `json:"messageId,omitempty"`
 	ParentRunID string `json:"parentRunId,omitempty"`
 }
 
-// RunAgentInput is the input format for starting an AG-UI run
+// RunAgentInput is the input format for starting an AG-UI run.
+// Messages is json.RawMessage so the Go proxy passes messages through untouched
+// to the Python runner. The AG-UI spec uses OpenAI-style nested tool calls
+// (e.g. {id, type, function: {name, arguments}}) which would be silently lost
+// if parsed into the flat Go Message/ToolCall structs.
 // See: https://docs.ag-ui.com/quickstart/introduction
 type RunAgentInput struct {
-	ThreadID    string                 `json:"threadId,omitempty"`
-	RunID       string                 `json:"runId,omitempty"`
-	ParentRunID string                 `json:"parentRunId,omitempty"`
-	Messages    []Message              `json:"messages,omitempty"`
-	State       map[string]interface{} `json:"state,omitempty"`
-	Tools       []ToolDefinition       `json:"tools,omitempty"`
-	Context     map[string]interface{} `json:"context,omitempty"`
+	ThreadID       string                 `json:"threadId,omitempty"`
+	RunID          string                 `json:"runId,omitempty"`
+	ParentRunID    string                 `json:"parentRunId,omitempty"`
+	Messages       json.RawMessage        `json:"messages,omitempty"`
+	State          map[string]interface{} `json:"state,omitempty"`
+	Tools          []ToolDefinition       `json:"tools,omitempty"`
+	Context        interface{}            `json:"context,omitempty"` // AG-UI sends array or object
+	ForwardedProps map[string]interface{} `json:"forwardedProps,omitempty"`
 }
 
 // RunAgentOutput is the response after starting a run
@@ -303,13 +316,13 @@ type FeedbackTranscriptItem struct {
 	Timestamp string `json:"timestamp,omitempty"`
 }
 
-// NewBaseEvent creates a new BaseEvent with current timestamp
+// NewBaseEvent creates a new BaseEvent with current timestamp (epoch ms).
 func NewBaseEvent(eventType, threadID, runID string) BaseEvent {
 	return BaseEvent{
 		Type:      eventType,
 		ThreadID:  threadID,
 		RunID:     runID,
-		Timestamp: time.Now().UTC().Format(AGUITimestampFormat),
+		Timestamp: AGUITimestampNow(),
 	}
 }
 

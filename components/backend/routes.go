@@ -7,20 +7,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func registerContentRoutes(r *gin.Engine) {
-	r.POST("/content/write", handlers.ContentWrite)
-	r.GET("/content/file", handlers.ContentRead)
-	r.GET("/content/list", handlers.ContentList)
-	r.DELETE("/content/delete", handlers.ContentDelete)
-	r.GET("/content/git-status", handlers.ContentGitStatus)
-	r.POST("/content/git-configure-remote", handlers.ContentGitConfigureRemote)
-	r.GET("/content/workflow-metadata", handlers.ContentWorkflowMetadata)
-	// Removed: All manual git operation endpoints - agent handles all git operations
-	// - /content/github/push, /content/github/abandon, /content/github/diff
-	// - /content/git-pull, /content/git-push, /content/git-sync
-	// - /content/git-create-branch, /content/git-list-branches
-}
-
 func registerRoutes(r *gin.Engine) {
 	// API routes
 	api := r.Group("/api")
@@ -61,7 +47,7 @@ func registerRoutes(r *gin.Engine) {
 			projectGroup.POST("/agentic-sessions/:sessionName/git/configure-remote", handlers.ConfigureGitRemote)
 			// Removed: git/pull, git/push, git/synchronize, git/create-branch, git/list-branches - agent handles all git operations
 			projectGroup.GET("/agentic-sessions/:sessionName/git/list-branches", handlers.GitListBranchesSession)
-			projectGroup.GET("/agentic-sessions/:sessionName/k8s-resources", handlers.GetSessionK8sResources)
+			projectGroup.GET("/agentic-sessions/:sessionName/pod-events", handlers.GetSessionPodEvents)
 			projectGroup.POST("/agentic-sessions/:sessionName/workflow", handlers.SelectWorkflow)
 			projectGroup.GET("/agentic-sessions/:sessionName/workflow/metadata", handlers.GetWorkflowMetadata)
 			projectGroup.POST("/agentic-sessions/:sessionName/repos", handlers.AddRepo)
@@ -79,9 +65,9 @@ func registerRoutes(r *gin.Engine) {
 			projectGroup.POST("/agentic-sessions/:sessionName/agui/run", websocket.HandleAGUIRunProxy)
 			projectGroup.POST("/agentic-sessions/:sessionName/agui/interrupt", websocket.HandleAGUIInterrupt)
 			projectGroup.POST("/agentic-sessions/:sessionName/agui/feedback", websocket.HandleAGUIFeedback)
-			projectGroup.GET("/agentic-sessions/:sessionName/agui/events", websocket.HandleAGUIEvents)
-			projectGroup.GET("/agentic-sessions/:sessionName/agui/history", websocket.HandleAGUIHistory)
-			projectGroup.GET("/agentic-sessions/:sessionName/agui/runs", websocket.HandleAGUIRuns)
+
+			// Runner capabilities endpoint
+			projectGroup.GET("/agentic-sessions/:sessionName/agui/capabilities", websocket.HandleCapabilities)
 
 			// MCP status endpoint
 			projectGroup.GET("/agentic-sessions/:sessionName/mcp/status", websocket.HandleMCPStatus)

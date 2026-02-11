@@ -268,14 +268,8 @@ jobs:
             VTEAM_VERSION="${{ needs.release.outputs.new_tag }}" \
             FEEDBACK_URL="https://forms.gle/7XiWrvo6No922DUz6"
 
-      - name: Update backend environment variables
-        run: |
-          oc set env deployment/backend-api -n ambient-code -c backend-api \
-            CONTENT_SERVICE_IMAGE="quay.io/ambient_code/vteam_backend:${{ needs.release.outputs.new_tag }}"
-
       - name: Update operator environment variables
         run: |
           oc set env deployment/agentic-operator -n ambient-code -c agentic-operator \
             AMBIENT_CODE_RUNNER_IMAGE="quay.io/ambient_code/vteam_claude_runner:${{ needs.release.outputs.new_tag }}" \
-            CONTENT_SERVICE_IMAGE="quay.io/ambient_code/vteam_backend:${{ needs.release.outputs.new_tag }}" \
             STATE_SYNC_IMAGE="quay.io/ambient_code/vteam_state_sync:${{ needs.release.outputs.new_tag }}"

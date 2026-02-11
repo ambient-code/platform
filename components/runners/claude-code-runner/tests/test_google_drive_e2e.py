@@ -48,9 +48,9 @@ async def test_google_drive_authentication_flow():
 
     sys.path.insert(0, str(Path(__file__).parent.parent))
 
-    from adapter import ClaudeCodeAdapter
-    from context import RunnerContext
-    from main import _check_mcp_authentication
+    from ag_ui_claude_sdk import ClaudeAgentAdapter as ClaudeCodeAdapter
+    from ambient_runner.platform.context import RunnerContext
+    from ambient_runner.bridges.claude.mcp import check_mcp_authentication as _check_mcp_authentication
 
     # Setup test credentials
     test_creds_path = Path("/tmp/test_credentials.json")
