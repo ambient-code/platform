@@ -165,13 +165,24 @@ async def _fetch_credential(context: RunnerContext, credential_type: str) -> dic
         return {}
 
 
+async def fetch_github_credentials(context: RunnerContext) -> dict:
+    """Fetch GitHub credentials from backend API (always fresh — PAT or minted App token).
+
+    Returns dict with: token, userName, email, provider
+    """
+    data = await _fetch_credential(context, "github")
+    if data.get("token"):
+        logger.info(
+            f"Using fresh GitHub credentials from backend "
+            f"(user: {data.get('userName', 'unknown')}, email: {data.get('email', 'unknown')})"
+        )
+    return data
+
+
 async def fetch_github_token(context: RunnerContext) -> str:
     """Fetch GitHub token from backend API (always fresh — PAT or minted App token)."""
-    data = await _fetch_credential(context, "github")
-    token = data.get("token", "")
-    if token:
-        logger.info("Using fresh GitHub token from backend")
-    return token
+    data = await fetch_github_credentials(context)
+    return data.get("token", "")
 
 
 async def fetch_google_credentials(context: RunnerContext) -> dict:
@@ -196,16 +207,25 @@ async def fetch_jira_credentials(context: RunnerContext) -> dict:
     return data
 
 
+async def fetch_gitlab_credentials(context: RunnerContext) -> dict:
+    """Fetch GitLab credentials from backend API.
+
+    Returns dict with: token, instanceUrl, userName, email, provider
+    """
+    data = await _fetch_credential(context, "gitlab")
+    if data.get("token"):
+        logger.info(
+            f"Using fresh GitLab credentials from backend "
+            f"(instance: {data.get('instanceUrl', 'unknown')}, "
+            f"user: {data.get('userName', 'unknown')}, email: {data.get('email', 'unknown')})"
+        )
+    return data
+
+
 async def fetch_gitlab_token(context: RunnerContext) -> str:
     """Fetch GitLab token from backend API."""
-    data = await _fetch_credential(context, "gitlab")
-    token = data.get("token", "")
-    if token:
-        logger.info(
-            f"Using fresh GitLab token from backend "
-            f"(instance: {data.get('instanceUrl', 'unknown')})"
-        )
-    return token
+    data = await fetch_gitlab_credentials(context)
+    return data.get("token", "")
 
 
 async def fetch_token_for_url(context: RunnerContext, url: str) -> str:
@@ -239,8 +259,13 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
     """Fetch all credentials from backend and populate environment variables.
 
     Called before each SDK run to ensure MCP servers have fresh tokens.
+    Also configures git identity from GitHub/GitLab credentials.
     """
     logger.info("Fetching fresh credentials from backend API...")
+
+    # Track git identity from provider credentials
+    git_user_name = ""
+    git_user_email = ""
 
     # Google credentials
     google_creds = await fetch_google_credentials(context)
@@ -282,19 +307,66 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
         os.environ["JIRA_EMAIL"] = jira_creds.get("email", "")
         logger.info("✓ Updated Jira credentials in environment")
 
-    # GitLab token
-    gitlab_token = await fetch_gitlab_token(context)
-    if gitlab_token:
-        os.environ["GITLAB_TOKEN"] = gitlab_token
+    # GitLab credentials (with user identity)
+    gitlab_creds = await fetch_gitlab_credentials(context)
+    if gitlab_creds.get("token"):
+        os.environ["GITLAB_TOKEN"] = gitlab_creds["token"]
         logger.info("✓ Updated GitLab token in environment")
+        # Use GitLab identity if available (can be overridden by GitHub below)
+        if gitlab_creds.get("userName"):
+            git_user_name = gitlab_creds["userName"]
+        if gitlab_creds.get("email"):
+            git_user_email = gitlab_creds["email"]
 
-    # GitHub token
-    github_token = await fetch_github_token(context)
-    if github_token:
-        os.environ["GITHUB_TOKEN"] = github_token
+    # GitHub credentials (with user identity - takes precedence)
+    github_creds = await fetch_github_credentials(context)
+    if github_creds.get("token"):
+        os.environ["GITHUB_TOKEN"] = github_creds["token"]
         logger.info("✓ Updated GitHub token in environment")
+        # GitHub identity takes precedence over GitLab
+        if github_creds.get("userName"):
+            git_user_name = github_creds["userName"]
+        if github_creds.get("email"):
+            git_user_email = github_creds["email"]
+
+    # Configure git identity from provider credentials
+    # Fix for: GitHub credentials aren't mounted to session - need git identity
+    await configure_git_identity(git_user_name, git_user_email)
 
     logger.info("Runtime credentials populated successfully")
+
+
+async def configure_git_identity(user_name: str, user_email: str) -> None:
+    """Configure git user.name and user.email from provider credentials.
+
+    Falls back to defaults if not provided. This ensures commits are
+    attributed to the correct user rather than the default bot identity.
+    """
+    import subprocess
+
+    # Use provided values or fall back to defaults
+    final_name = user_name.strip() if user_name else "Ambient Code Bot"
+    final_email = user_email.strip() if user_email else "bot@ambient-code.local"
+
+    # Also set environment variables for git operations in subprocesses
+    os.environ["GIT_USER_NAME"] = final_name
+    os.environ["GIT_USER_EMAIL"] = final_email
+
+    try:
+        # Configure git globally for this session
+        subprocess.run(
+            ["git", "config", "--global", "user.name", final_name],
+            capture_output=True,
+            timeout=5,
+        )
+        subprocess.run(
+            ["git", "config", "--global", "user.email", final_email],
+            capture_output=True,
+            timeout=5,
+        )
+        logger.info(f"✓ Configured git identity: {final_name} <{final_email}>")
+    except Exception as e:
+        logger.warning(f"Failed to configure git identity: {e}")
 
 
 async def fetch_github_token_legacy(context: RunnerContext) -> str:
