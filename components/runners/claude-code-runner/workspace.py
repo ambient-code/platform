@@ -139,6 +139,48 @@ def setup_multi_repo_paths(
     return cwd_path, add_dirs
 
 
+def resolve_sdk_paths(context: RunnerContext) -> tuple[str, list[str]]:
+    """Resolve CWD and additional directories for the Claude SDK.
+
+    Determines the working directory based on active workflow, repos config,
+    or falls back to the artifacts directory.
+
+    Returns:
+        (cwd_path, additional_dirs)
+    """
+    import config as runner_config
+
+    repos_cfg = runner_config.get_repos_config()
+    cwd_path = context.workspace_path
+    add_dirs: list[str] = []
+
+    active_workflow_url = (os.getenv("ACTIVE_WORKFLOW_GIT_URL") or "").strip()
+
+    if active_workflow_url:
+        cwd_path, add_dirs, _ = setup_workflow_paths(
+            context, active_workflow_url, repos_cfg
+        )
+    elif repos_cfg:
+        cwd_path, add_dirs = setup_multi_repo_paths(context, repos_cfg)
+    else:
+        cwd_path = str(Path(context.workspace_path) / "artifacts")
+
+    cwd_path_obj = Path(cwd_path)
+    if not cwd_path_obj.exists():
+        logger.warning(f"Working directory missing, creating: {cwd_path}")
+        try:
+            cwd_path_obj.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            logger.error(f"Failed to create working directory: {e}")
+            cwd_path = context.workspace_path
+
+    logger.info(f"Claude SDK CWD: {cwd_path}")
+    if add_dirs:
+        logger.info(f"Claude SDK additional directories: {add_dirs}")
+
+    return cwd_path, add_dirs
+
+
 async def prepare_workspace(context: RunnerContext) -> None:
     """Validate workspace prepared by init container.
 

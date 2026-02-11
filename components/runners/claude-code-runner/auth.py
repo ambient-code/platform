@@ -297,6 +297,47 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
     logger.info("Runtime credentials populated successfully")
 
 
+async def setup_sdk_authentication(context: RunnerContext) -> tuple[str, bool, str]:
+    """Set up SDK auth env vars for the Claude Agent SDK.
+
+    Configures ANTHROPIC_API_KEY (or Vertex AI placeholders) and returns
+    the resolved model name.
+
+    Returns:
+        (api_key, use_vertex, configured_model)
+    """
+    api_key = context.get_env("ANTHROPIC_API_KEY", "")
+    use_vertex = context.get_env("CLAUDE_CODE_USE_VERTEX", "").strip() == "1"
+
+    if not api_key and not use_vertex:
+        raise RuntimeError(
+            "Either ANTHROPIC_API_KEY or CLAUDE_CODE_USE_VERTEX=1 must be set"
+        )
+
+    model = context.get_env("LLM_MODEL")
+    configured_model = model or "claude-sonnet-4-5@20250929"
+
+    if api_key:
+        os.environ["ANTHROPIC_API_KEY"] = api_key
+        logger.info("Using Anthropic API key authentication")
+
+    if use_vertex:
+        vertex_credentials = await setup_vertex_credentials(context)
+        os.environ["ANTHROPIC_API_KEY"] = "vertex-auth-mode"
+        os.environ["CLAUDE_CODE_USE_VERTEX"] = "1"
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = vertex_credentials.get(
+            "credentials_path", ""
+        )
+        os.environ["ANTHROPIC_VERTEX_PROJECT_ID"] = vertex_credentials.get(
+            "project_id", ""
+        )
+        os.environ["CLOUD_ML_REGION"] = vertex_credentials.get("region", "")
+        if model:
+            configured_model = map_to_vertex_model(model)
+
+    return api_key, use_vertex, configured_model
+
+
 async def fetch_github_token_legacy(context: RunnerContext) -> str:
     """Legacy method — kept for backward compatibility."""
     base = os.getenv("BACKEND_API_URL", "").rstrip("/")

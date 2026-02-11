@@ -44,7 +44,7 @@ const (
 
 	// State management events
 	EventTypeStateSnapshot = "STATE_SNAPSHOT"
-	EventTypStateDelta     = "STATE_DELTA"
+	EventTypeStateDelta    = "STATE_DELTA"
 
 	// Message snapshot for restore/reconnect
 	EventTypeMessagesSnapshot = "MESSAGES_SNAPSHOT"
@@ -55,6 +55,9 @@ const (
 
 	// Raw event for pass-through
 	EventTypeRaw = "RAW"
+
+	// Custom event for platform extensions
+	EventTypeCustom = "CUSTOM"
 
 	// META event for user feedback (thumbs up/down)
 	// See: https://docs.ag-ui.com/drafts/meta-events

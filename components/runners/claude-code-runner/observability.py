@@ -592,6 +592,205 @@ class ObservabilityManager:
         except Exception as e:
             logging.debug(f"Langfuse: Failed to track tool result: {e}")
 
+    # ------------------------------------------------------------------
+    # AG-UI event-driven tracking
+    # ------------------------------------------------------------------
+
+    def init_event_tracking(self, model: str, prompt: str) -> None:
+        """Prepare the manager to track observability from AG-UI events.
+
+        Call this once per run before feeding events via ``track_agui_event``.
+
+        Args:
+            model: Model name for the Langfuse generation.
+            prompt: User prompt (used as input for the first turn trace).
+        """
+        self._evt_model = model
+        self._evt_prompt = prompt
+        self._evt_turn_started = False
+        self._evt_accumulated_text = ""
+        self._evt_tool_args: dict[str, str] = {}
+        self._evt_tool_names: dict[str, str] = {}
+
+    def track_agui_event(self, event: Any) -> None:
+        """Track a single AG-UI event for Langfuse observability.
+
+        Derives turn boundaries, tool calls, and result data entirely from the
+        AG-UI event stream — no raw SDK messages needed.
+
+        Args:
+            event: An AG-UI ``BaseEvent`` (or subclass).
+        """
+        if not self.langfuse_client:
+            return
+
+        from ag_ui.core import EventType
+
+        etype = getattr(event, "type", None)
+
+        # --- Turn start: first assistant text message ----
+        if etype == EventType.TEXT_MESSAGE_START:
+            role = getattr(event, "role", "")
+            if role == "assistant" and not self._evt_turn_started:
+                self.start_turn(self._evt_model, user_input=self._evt_prompt)
+                self._evt_turn_started = True
+
+        # --- Accumulate streamed text ---
+        elif etype == EventType.TEXT_MESSAGE_CONTENT:
+            delta = getattr(event, "delta", "")
+            if delta:
+                self._evt_accumulated_text += delta
+
+        # --- Tool call start ---
+        elif etype == EventType.TOOL_CALL_START:
+            tool_id = getattr(event, "tool_call_id", "")
+            tool_name = getattr(event, "tool_call_name", "")
+            self._evt_tool_names[tool_id] = tool_name
+            self._evt_tool_args[tool_id] = ""
+            # Create Langfuse span immediately (input details arrive later)
+            self.track_tool_use(tool_name, tool_id, {})
+
+        # --- Streaming tool arguments ---
+        elif etype == EventType.TOOL_CALL_ARGS:
+            tool_id = getattr(event, "tool_call_id", "")
+            delta = getattr(event, "delta", "")
+            if tool_id in self._evt_tool_args:
+                self._evt_tool_args[tool_id] += delta
+
+        # --- Tool call end ---
+        elif etype == EventType.TOOL_CALL_END:
+            tool_id = getattr(event, "tool_call_id", "")
+            result = getattr(event, "result", None)
+            error = getattr(event, "error", None)
+            self.track_tool_result(tool_id, result or error, bool(error))
+            self._evt_tool_args.pop(tool_id, None)
+            self._evt_tool_names.pop(tool_id, None)
+
+        # --- Run finished: close the turn with result data ---
+        elif etype == EventType.RUN_FINISHED:
+            self._close_turn_from_agui_result(event)
+
+    def finalize_event_tracking(self) -> None:
+        """Safety-net: close any open turn that was not ended by a RUN_FINISHED."""
+        if not self.langfuse_client:
+            return
+        if self._evt_turn_started:
+            self._close_turn_with_text(
+                turn_count=1,
+                text=self._evt_accumulated_text,
+                usage=None,
+            )
+            self._evt_turn_started = False
+
+    # --- private helpers for event tracking ---
+
+    def _close_turn_from_agui_result(self, event: Any) -> None:
+        """Extract result data from a ``RUN_FINISHED`` event and close the turn."""
+        if not self._evt_turn_started:
+            return
+
+        result = getattr(event, "result", None)
+        usage = None
+        num_turns = 1
+
+        if isinstance(result, dict):
+            usage_raw = result.get("usage")
+            if usage_raw is not None and not isinstance(usage_raw, dict):
+                try:
+                    if hasattr(usage_raw, "__dict__"):
+                        usage_raw = usage_raw.__dict__
+                    elif hasattr(usage_raw, "model_dump"):
+                        usage_raw = usage_raw.model_dump()
+                except Exception:
+                    usage_raw = None
+            usage = usage_raw if isinstance(usage_raw, dict) else None
+            num_turns = result.get("num_turns", 1) or 1
+
+        self._close_turn_with_text(
+            turn_count=num_turns,
+            text=self._evt_accumulated_text,
+            usage=usage,
+        )
+        self._evt_turn_started = False
+
+    def _close_turn_with_text(
+        self, turn_count: int, text: str, usage: dict | None
+    ) -> None:
+        """Close the current Langfuse turn using pre-accumulated text.
+
+        This is the event-driven equivalent of ``end_turn`` — it does the same
+        Langfuse bookkeeping but takes plain text instead of an SDK message.
+        """
+        if not self._current_turn_generation:
+            return
+
+        try:
+            output_text = text or "(no text output)"
+
+            usage_details_dict = None
+            if usage and isinstance(usage, dict):
+                input_tokens = usage.get("input_tokens", 0)
+                output_tokens = usage.get("output_tokens", 0)
+                cache_creation = usage.get("cache_creation_input_tokens", 0)
+                cache_read = usage.get("cache_read_input_tokens", 0)
+
+                usage_details_dict = {
+                    "input": input_tokens,
+                    "output": output_tokens,
+                }
+                if cache_read > 0:
+                    usage_details_dict["cache_read_input_tokens"] = cache_read
+                if cache_creation > 0:
+                    usage_details_dict["cache_creation_input_tokens"] = (
+                        cache_creation
+                    )
+
+            update_params: dict[str, Any] = {
+                "output": output_text,
+                "metadata": {"turn": turn_count},
+            }
+            if usage_details_dict:
+                update_params["usage_details"] = usage_details_dict
+            self._current_turn_generation.update(**update_params)
+
+            if self._current_turn_ctx:
+                self._current_turn_ctx.__exit__(None, None, None)
+
+            self._current_turn_generation = None
+            self._current_turn_ctx = None
+
+            if self.langfuse_client:
+                try:
+                    self.langfuse_client.flush()
+                    logging.info(f"Langfuse: Flushed turn {turn_count} data")
+                except Exception as e:
+                    logging.warning(
+                        f"Langfuse: Flush failed after turn {turn_count}: {e}"
+                    )
+
+            if usage_details_dict:
+                total = sum(usage_details_dict.values())
+                logging.info(
+                    f"Langfuse: Completed turn {turn_count} "
+                    f"({usage_details_dict.get('input', 0)} input, "
+                    f"{usage_details_dict.get('output', 0)} output, "
+                    f"total: {total})"
+                )
+            else:
+                logging.info(
+                    f"Langfuse: Completed turn {turn_count} (no usage data)"
+                )
+
+        except Exception as e:
+            logging.error(f"Langfuse: Failed to close turn: {e}", exc_info=True)
+            if self._current_turn_ctx:
+                try:
+                    self._current_turn_ctx.__exit__(None, None, None)
+                except Exception:
+                    pass
+            self._current_turn_generation = None
+            self._current_turn_ctx = None
+
     async def finalize(self) -> None:
         """Finalize and flush observability data."""
         if not self.langfuse_client:

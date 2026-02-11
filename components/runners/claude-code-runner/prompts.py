@@ -58,6 +58,42 @@ RUBRIC_EVALUATION_PROCESS = (
     "Provide honest, calibrated scores with clear reasoning.\n\n"
 )
 
+def build_sdk_system_prompt(workspace_path: str, cwd_path: str) -> dict:
+    """Build the full system prompt config dict for the Claude SDK.
+
+    Loads ambient config, resolves the workflow name, builds the workspace
+    context prompt, and wraps it in the Claude Code preset format.
+
+    Returns:
+        Dict with ``type``, ``preset``, and ``append`` keys.
+    """
+    import config as runner_config
+
+    repos_cfg = runner_config.get_repos_config()
+    active_workflow_url = (os.getenv("ACTIVE_WORKFLOW_GIT_URL") or "").strip()
+    ambient_config = (
+        runner_config.load_ambient_config(cwd_path) if active_workflow_url else {}
+    )
+
+    derived_name = None
+    if active_workflow_url:
+        derived_name = active_workflow_url.split("/")[-1].removesuffix(".git")
+
+    workspace_prompt = build_workspace_context_prompt(
+        repos_cfg=repos_cfg,
+        workflow_name=derived_name if active_workflow_url else None,
+        artifacts_path="artifacts",
+        ambient_config=ambient_config,
+        workspace_path=workspace_path,
+    )
+
+    return {
+        "type": "preset",
+        "preset": "claude_code",
+        "append": workspace_prompt,
+    }
+
+
 RESTART_TOOL_DESCRIPTION = (
     "Restart the Claude session to recover from issues, clear state, "
     "or get a fresh connection. Use this if you detect you're in a "
