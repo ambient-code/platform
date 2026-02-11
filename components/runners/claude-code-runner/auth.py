@@ -174,7 +174,7 @@ async def fetch_github_credentials(context: RunnerContext) -> dict:
     if data.get("token"):
         logger.info(
             f"Using fresh GitHub credentials from backend "
-            f"(user: {data.get('userName', 'unknown')}, email: {data.get('email', 'unknown')})"
+            f"(user: {data.get('userName', 'unknown')}, hasEmail: {bool(data.get('email'))})"
         )
     return data
 
@@ -217,7 +217,7 @@ async def fetch_gitlab_credentials(context: RunnerContext) -> dict:
         logger.info(
             f"Using fresh GitLab credentials from backend "
             f"(instance: {data.get('instanceUrl', 'unknown')}, "
-            f"user: {data.get('userName', 'unknown')}, email: {data.get('email', 'unknown')})"
+            f"user: {data.get('userName', 'unknown')}, hasEmail: {bool(data.get('email'))})"
         )
     return data
 
@@ -365,8 +365,10 @@ async def configure_git_identity(user_name: str, user_email: str) -> None:
             timeout=5,
         )
         logger.info(f"✓ Configured git identity: {final_name} <{final_email}>")
-    except Exception as e:
+    except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError) as e:
         logger.warning(f"Failed to configure git identity: {e}")
+    except Exception as e:
+        logger.error(f"Unexpected error configuring git identity: {e}", exc_info=True)
 
 
 async def fetch_github_token_legacy(context: RunnerContext) -> str:

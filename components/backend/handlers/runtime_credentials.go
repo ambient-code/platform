@@ -85,6 +85,9 @@ func GetGitHubTokenForSession(c *gin.Context) {
 	// Fetch user identity from GitHub API for git config
 	// Fix for: GitHub credentials aren't mounted to session - need git identity
 	userName, userEmail := fetchGitHubUserIdentity(c.Request.Context(), token)
+	if userName != "" {
+		log.Printf("Returning GitHub credentials with identity for session %s/%s", project, session)
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"token":    token,
@@ -309,6 +312,9 @@ func GetGitLabTokenForSession(c *gin.Context) {
 	// Fetch user identity from GitLab API for git config
 	// Fix for: need to distinguish between GitHub and GitLab providers
 	userName, userEmail := fetchGitLabUserIdentity(c.Request.Context(), creds.Token, creds.InstanceURL)
+	if userName != "" {
+		log.Printf("Returning GitLab credentials with identity for session %s/%s", project, session)
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"token":       creds.Token,
@@ -448,7 +454,7 @@ func fetchGitHubUserIdentity(ctx context.Context, token string) (userName, email
 	}
 	email = ghUser.Email
 
-	log.Printf("Fetched GitHub user identity: name=%q email=%q", userName, email)
+	log.Printf("Fetched GitHub user identity: name=%q hasEmail=%t", userName, email != "")
 	return userName, email
 }
 
@@ -510,6 +516,6 @@ func fetchGitLabUserIdentity(ctx context.Context, token, instanceURL string) (us
 	}
 	email = glUser.Email
 
-	log.Printf("Fetched GitLab user identity: name=%q email=%q", userName, email)
+	log.Printf("Fetched GitLab user identity: name=%q hasEmail=%t", userName, email != "")
 	return userName, email
 }
