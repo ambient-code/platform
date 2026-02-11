@@ -158,6 +158,17 @@ jobs:
           docker tag quay.io/ambient_code/vteam_claude_runner:latest quay.io/ambient_code/vteam_claude_runner:e2e-test
         fi
 
+        # Build state-sync image (if changed or use latest)
+        if [ "${{ needs.detect-changes.outputs.claude-runner }}" == "true" ]; then
+          echo "Building state-sync (changed)..."
+          docker build -t quay.io/ambient_code/vteam_state_sync:e2e-test \
+            components/runners/state-sync
+        else
+          echo "State-sync unchanged, pulling latest..."
+          docker pull quay.io/ambient_code/vteam_state_sync:latest
+          docker tag quay.io/ambient_code/vteam_state_sync:latest quay.io/ambient_code/vteam_state_sync:e2e-test
+        fi
+
         echo ""
         echo "✅ All images ready"
         docker images | grep e2e-test
@@ -184,6 +195,7 @@ jobs:
         kind load docker-image quay.io/ambient_code/vteam_backend:e2e-test --name ambient-local
         kind load docker-image quay.io/ambient_code/vteam_operator:e2e-test --name ambient-local
         kind load docker-image quay.io/ambient_code/vteam_claude_runner:e2e-test --name ambient-local
+        kind load docker-image quay.io/ambient_code/vteam_state_sync:e2e-test --name ambient-local
         echo "✅ All images loaded into kind cluster"
 
     - name: Update kustomization to use e2e-test images
