@@ -379,20 +379,39 @@ func (c *MessageCompactor) handleMessagesSnapshot(event map[string]interface{}) 
 
 }
 
-// CompactEvents is the main entry point for event compaction
+// CompactEvents is the main entry point for event compaction.
+//
+// Optimisation: if the event stream contains MESSAGES_SNAPSHOT events
+// (sent by the AG-UI adapter), we skip to the LAST snapshot and only
+// compact events that come after it.  This avoids replaying the entire
+// event log on reconnect.
 func CompactEvents(events []map[string]interface{}) []types.Message {
 
-	// Count event types to help debug
-	eventTypeCounts := make(map[string]int)
-	for _, event := range events {
-		eventType, _ := event["type"].(string)
-		eventTypeCounts[eventType]++
+	// Find the index of the last MESSAGES_SNAPSHOT event.
+	// Everything before it is already accounted for in that snapshot.
+	lastSnapshotIdx := -1
+	for i := len(events) - 1; i >= 0; i-- {
+		if et, _ := events[i]["type"].(string); et == types.EventTypeMessagesSnapshot {
+			lastSnapshotIdx = i
+			break
+		}
 	}
 
 	compactor := NewMessageCompactor()
 
-	for _, event := range events {
-		compactor.HandleEvent(event)
+	if lastSnapshotIdx >= 0 {
+		// Fast path: start from the snapshot, then replay only subsequent events
+		compactor.HandleEvent(events[lastSnapshotIdx])
+		for _, event := range events[lastSnapshotIdx+1:] {
+			compactor.HandleEvent(event)
+		}
+		log.Printf("Compaction: fast-path via MESSAGES_SNAPSHOT at index %d (%d events skipped)",
+			lastSnapshotIdx, lastSnapshotIdx)
+	} else {
+		// Fallback: replay all events
+		for _, event := range events {
+			compactor.HandleEvent(event)
+		}
 	}
 
 	messages := compactor.GetMessages()

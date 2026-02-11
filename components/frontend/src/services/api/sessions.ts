@@ -257,3 +257,26 @@ export async function getReposStatus(
     `/projects/${projectName}/agentic-sessions/${sessionName}/repos/status`
   );
 }
+
+// --- Capabilities ---
+
+export type CapabilitiesResponse = {
+  framework: string;
+  agent_features: string[];
+  platform_features: string[];
+  file_system: boolean;
+  mcp: boolean;
+  tracing: string | null;
+  session_persistence: boolean;
+  model: string | null;
+  session_id: string | null;
+};
+
+export async function getCapabilities(
+  projectName: string,
+  sessionName: string
+): Promise<CapabilitiesResponse> {
+  return apiClient.get<CapabilitiesResponse>(
+    `/projects/${projectName}/agentic-sessions/${sessionName}/agui/capabilities`
+  );
+}

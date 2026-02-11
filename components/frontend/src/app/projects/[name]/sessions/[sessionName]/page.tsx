@@ -29,6 +29,7 @@ import { cn } from "@/lib/utils";
 
 // Custom components
 import MessagesTab from "@/components/session/MessagesTab";
+import { CopilotChatPanel } from "@/components/session/CopilotChatPanel";
 import { FileTree, type FileTreeNode } from "@/components/file-tree";
 
 import { Button } from "@/components/ui/button";
@@ -2471,47 +2472,12 @@ export default function ProjectSessionDetailPage({
                     )}
 
                     <div className="flex flex-col flex-1 overflow-hidden">
-                      <FeedbackProvider
+                      {/* CopilotKit-powered chat — replaces custom AG-UI streaming */}
+                      <CopilotChatPanel
                         projectName={projectName}
                         sessionName={sessionName}
-                        username={currentUser?.username || currentUser?.displayName || "anonymous"}
-                        initialPrompt={session?.spec?.initialPrompt}
-                        activeWorkflow={workflowManagement.activeWorkflow || undefined}
-                        messages={streamMessages}
-                        traceId={langfuseTraceId || undefined}
-                        messageFeedback={aguiState.messageFeedback}
-                      >
-                      <MessagesTab
-                        session={session}
-                        streamMessages={streamMessages}
-                        chatInput={chatInput}
-                        setChatInput={setChatInput}
-                        onSendChat={() => Promise.resolve(sendChat())}
-                        onInterrupt={aguiInterrupt}
-                        onGoToResults={() => {}}
-                        onContinue={handleContinue}
-                        workflowMetadata={workflowMetadata}
-                        onCommandClick={handleCommandClick}
-                        isRunActive={isRunActive}
-                        showWelcomeExperience={!["Completed", "Failed", "Stopped", "Stopping"].includes(session?.status?.phase || "")}
-                        activeWorkflow={workflowManagement.activeWorkflow}
-                        userHasInteracted={userHasInteracted}
-                        queuedMessages={sessionQueue.messages}
-                        hasRealMessages={hasRealMessages}
-                        welcomeExperienceComponent={
-                          <WelcomeExperience
-                            ootbWorkflows={ootbWorkflows}
-                            onWorkflowSelect={handleWelcomeWorkflowSelect}
-                            onUserInteraction={() => setUserHasInteracted(true)}
-                            userHasInteracted={userHasInteracted}
-                            sessionPhase={session?.status?.phase}
-                            hasRealMessages={hasRealMessages}
-                            onLoadWorkflow={() => setCustomWorkflowDialogOpen(true)}
-                            selectedWorkflow={workflowManagement.selectedWorkflow}
-                          />
-                        }
+                        className="flex-1"
                       />
-                      </FeedbackProvider>
                     </div>
                   </CardContent>
                 </Card>
@@ -2537,47 +2503,12 @@ export default function ProjectSessionDetailPage({
                       </div>
                     )}
                     <div className="flex flex-col flex-1 overflow-hidden">
-                      <FeedbackProvider
+                      {/* CopilotKit-powered chat — mobile view */}
+                      <CopilotChatPanel
                         projectName={projectName}
                         sessionName={sessionName}
-                        username={currentUser?.username || currentUser?.displayName || "anonymous"}
-                        initialPrompt={session?.spec?.initialPrompt}
-                        activeWorkflow={workflowManagement.activeWorkflow || undefined}
-                        messages={streamMessages}
-                        traceId={langfuseTraceId || undefined}
-                        messageFeedback={aguiState.messageFeedback}
-                      >
-                        <MessagesTab
-                          session={session}
-                          streamMessages={streamMessages}
-                          chatInput={chatInput}
-                          setChatInput={setChatInput}
-                          onSendChat={() => Promise.resolve(sendChat())}
-                          onInterrupt={aguiInterrupt}
-                          onGoToResults={() => {}}
-                          onContinue={handleContinue}
-                          workflowMetadata={workflowMetadata}
-                          onCommandClick={handleCommandClick}
-                          isRunActive={isRunActive}
-                          showWelcomeExperience={!["Completed", "Failed", "Stopped", "Stopping"].includes(session?.status?.phase || "")}
-                          activeWorkflow={workflowManagement.activeWorkflow}
-                          userHasInteracted={userHasInteracted}
-                          queuedMessages={sessionQueue.messages}
-                          hasRealMessages={hasRealMessages}
-                          welcomeExperienceComponent={
-                            <WelcomeExperience
-                              ootbWorkflows={ootbWorkflows}
-                              onWorkflowSelect={handleWelcomeWorkflowSelect}
-                              onUserInteraction={() => setUserHasInteracted(true)}
-                              userHasInteracted={userHasInteracted}
-                              sessionPhase={session?.status?.phase}
-                              hasRealMessages={hasRealMessages}
-                              onLoadWorkflow={() => setCustomWorkflowDialogOpen(true)}
-                              selectedWorkflow={workflowManagement.selectedWorkflow}
-                            />
-                          }
-                        />
-                      </FeedbackProvider>
+                        className="flex-1"
+                      />
                     </div>
                   </CardContent>
                 </Card>

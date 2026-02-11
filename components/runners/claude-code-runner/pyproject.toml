@@ -43,8 +43,8 @@ dev-dependencies = [
 ]
 
 [tool.setuptools]
-py-modules = ["main", "adapter", "auth", "config", "context", "observability", "prompts", "security_utils", "utils", "workspace"]
-packages = ["tools"]
+py-modules = ["main", "adapter", "auth", "config", "context", "mcp", "observability", "prompts", "security_utils", "utils", "workspace"]
+packages = ["tools", "ag_ui_claude_sdk", "endpoints", "middleware", "ambient_runner", "ambient_runner.endpoints", "ambient_runner.middleware", "ambient_runner.platform", "ambient_runner.bridges"]
 
 [build-system]
 requires = ["setuptools>=61.0"]

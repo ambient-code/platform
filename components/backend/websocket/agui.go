@@ -198,6 +198,12 @@ func RouteAGUIEvent(sessionID string, event map[string]interface{}) {
 	// Persist the event (use runID from event, not activeRunState)
 	go persistAGUIEventMap(sessionID, runID, event)
 
+	// If this is a MESSAGES_SNAPSHOT, also persist as the latest snapshot
+	// for fast reconnect (avoids replaying the full event log)
+	if eventType == types.EventTypeMessagesSnapshot {
+		go persistMessagesSnapshot(sessionID, event)
+	}
+
 	// Check for terminal events - mark run as complete
 	if isTerminalEventType(eventType) {
 		activeRunState.Status = getTerminalStatusFromType(eventType)
@@ -205,6 +211,43 @@ func RouteAGUIEvent(sessionID string, event map[string]interface{}) {
 		// Schedule cleanup of run state (no need to compact async - we compact on SSE connect)
 		go scheduleRunCleanup(runID, 5*time.Minute)
 	}
+}
+
+// persistMessagesSnapshot writes the latest MESSAGES_SNAPSHOT to a separate
+// file for fast reconnect.  On reconnect the backend can read this file
+// directly instead of replaying all events through the compactor.
+func persistMessagesSnapshot(sessionID string, event map[string]interface{}) {
+	path := fmt.Sprintf("%s/sessions/%s/messages-snapshot.json", StateBaseDir, sessionID)
+	_ = ensureDir(fmt.Sprintf("%s/sessions/%s", StateBaseDir, sessionID))
+
+	data, err := json.Marshal(event)
+	if err != nil {
+		log.Printf("AGUI: failed to marshal MESSAGES_SNAPSHOT for persistence: %v", err)
+		return
+	}
+
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		log.Printf("AGUI: failed to write MESSAGES_SNAPSHOT: %v", err)
+		return
+	}
+	log.Printf("AGUI: Persisted MESSAGES_SNAPSHOT for session %s (%d bytes)", sessionID, len(data))
+}
+
+// loadPersistedSnapshot reads the latest MESSAGES_SNAPSHOT from disk.
+// Returns nil if no snapshot exists.
+func loadPersistedSnapshot(sessionID string) map[string]interface{} {
+	path := fmt.Sprintf("%s/sessions/%s/messages-snapshot.json", StateBaseDir, sessionID)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil // No snapshot yet
+	}
+
+	var event map[string]interface{}
+	if err := json.Unmarshal(data, &event); err != nil {
+		log.Printf("AGUI: failed to unmarshal persisted MESSAGES_SNAPSHOT: %v", err)
+		return nil
+	}
+	return event
 }
 
 // loadCompactedMessages loads pre-compacted messages from completed runs

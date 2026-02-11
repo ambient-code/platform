@@ -83,6 +83,9 @@ func registerRoutes(r *gin.Engine) {
 			projectGroup.GET("/agentic-sessions/:sessionName/agui/history", websocket.HandleAGUIHistory)
 			projectGroup.GET("/agentic-sessions/:sessionName/agui/runs", websocket.HandleAGUIRuns)
 
+			// Runner capabilities endpoint
+			projectGroup.GET("/agentic-sessions/:sessionName/agui/capabilities", websocket.HandleCapabilities)
+
 			// MCP status endpoint
 			projectGroup.GET("/agentic-sessions/:sessionName/mcp/status", websocket.HandleMCPStatus)
 

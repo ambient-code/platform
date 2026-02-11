@@ -410,6 +410,97 @@ func HandleAGUIInterrupt(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Interrupt signal sent"})
 }
 
+// HandleCapabilities proxies GET /capabilities to the runner.
+// Returns the runner's framework capabilities, platform features, and config.
+// GET /api/projects/:projectName/agentic-sessions/:sessionName/agui/capabilities
+func HandleCapabilities(c *gin.Context) {
+	projectName := c.Param("projectName")
+	sessionName := c.Param("sessionName")
+
+	// SECURITY: Authenticate user
+	reqK8s, _ := handlers.GetK8sClientsForRequest(c)
+	if reqK8s == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
+
+	// SECURITY: Verify read permission
+	ctx := context.Background()
+	ssar := &authv1.SelfSubjectAccessReview{
+		Spec: authv1.SelfSubjectAccessReviewSpec{
+			ResourceAttributes: &authv1.ResourceAttributes{
+				Group:     "vteam.ambient-code",
+				Resource:  "agenticsessions",
+				Verb:      "get",
+				Namespace: projectName,
+				Name:      sessionName,
+			},
+		},
+	}
+	res, err := reqK8s.AuthorizationV1().SelfSubjectAccessReviews().Create(ctx, ssar, metav1.CreateOptions{})
+	if err != nil || !res.Status.Allowed {
+		log.Printf("Capabilities: User not authorized to read session %s/%s", projectName, sessionName)
+		c.JSON(http.StatusForbidden, gin.H{"error": "Unauthorized"})
+		c.Abort()
+		return
+	}
+
+	// Proxy to runner
+	runnerURL, err := getRunnerEndpoint(projectName, sessionName)
+	if err != nil {
+		log.Printf("Capabilities: Failed to get runner endpoint: %v", err)
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Runner not available"})
+		return
+	}
+
+	capURL := strings.TrimSuffix(runnerURL, "/") + "/capabilities"
+	log.Printf("Capabilities: Forwarding to runner: %s", capURL)
+
+	req, err := http.NewRequest("GET", capURL, nil)
+	if err != nil {
+		log.Printf("Capabilities: Failed to create request: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("Capabilities: Request failed: %v", err)
+		// Runner not ready — return minimal default
+		c.JSON(http.StatusOK, gin.H{
+			"framework":       "unknown",
+			"agent_features":  []interface{}{},
+			"platform_features": []interface{}{},
+			"file_system":     false,
+			"mcp":             false,
+		})
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		log.Printf("Capabilities: Runner returned %d: %s", resp.StatusCode, string(body))
+		c.JSON(http.StatusOK, gin.H{
+			"framework":       "unknown",
+			"agent_features":  []interface{}{},
+			"platform_features": []interface{}{},
+		})
+		return
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		log.Printf("Capabilities: Failed to decode response: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse runner response"})
+		return
+	}
+
+	c.JSON(http.StatusOK, result)
+}
+
 // HandleMCPStatus proxies MCP status requests to runner
 // GET /api/projects/:projectName/agentic-sessions/:sessionName/mcp/status
 func HandleMCPStatus(c *gin.Context) {

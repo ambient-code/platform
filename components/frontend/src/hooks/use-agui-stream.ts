@@ -515,6 +515,20 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
           return newState
         }
 
+        // Handle CUSTOM events (platform extensions via AG-UI CustomEvent)
+        if (event.type === AGUIEventType.CUSTOM) {
+          type CustomEventData = { name?: string; value?: Record<string, unknown> }
+          const customEvent = event as unknown as CustomEventData
+          
+          // Langfuse trace ID from tracing middleware
+          if (customEvent.name === 'ambient:langfuse_trace' && customEvent.value?.traceId) {
+            onTraceId?.(customEvent.value.traceId as string)
+            return newState
+          }
+
+          return newState
+        }
+
         // Handle RAW events (may contain message data or thinking blocks)
         if (event.type === AGUIEventType.RAW) {
           // RAW events use "event" field (AG-UI standard), or "data" field (legacy)
@@ -531,7 +545,7 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
             return newState
           }
           
-          // Handle Langfuse trace_id for feedback association
+          // Handle Langfuse trace_id for feedback association (legacy RawEvent fallback)
           if (rawData?.type === 'langfuse_trace' && rawData?.traceId) {
             const traceId = rawData.traceId as string
             onTraceId?.(traceId)
