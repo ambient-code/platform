@@ -7,67 +7,19 @@ import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, Optional
 
 import uvicorn
-from ag_ui.core import RunAgentInput
 from ag_ui.encoder import EventEncoder
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
 
+from ambient_runner.endpoints.run import RunnerInput
 from context import RunnerContext
 from endpoints import state
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-
-# ------------------------------------------------------------------
-# Input model
-# ------------------------------------------------------------------
-
-
-class RunnerInput(BaseModel):
-    """Input model for runner with optional AG-UI fields."""
-    threadId: Optional[str] = None
-    thread_id: Optional[str] = None
-    runId: Optional[str] = None
-    run_id: Optional[str] = None
-    parentRunId: Optional[str] = None
-    parent_run_id: Optional[str] = None
-    messages: List[Dict[str, Any]]
-    state: Optional[Dict[str, Any]] = None
-    tools: Optional[List[Any]] = None
-    context: Optional[Union[List[Any], Dict[str, Any]]] = None
-    forwardedProps: Optional[Dict[str, Any]] = None
-    environment: Optional[Dict[str, str]] = None
-    metadata: Optional[Dict[str, Any]] = None
-
-    def to_run_agent_input(self) -> RunAgentInput:
-        """Convert to official RunAgentInput model."""
-        import uuid
-
-        thread_id = self.threadId or self.thread_id
-        run_id = self.runId or self.run_id
-        parent_run_id = self.parentRunId or self.parent_run_id
-
-        if not run_id:
-            run_id = str(uuid.uuid4())
-            logger.info(f"Generated run_id: {run_id}")
-
-        context_list = self.context if isinstance(self.context, list) else []
-
-        return RunAgentInput(
-            thread_id=thread_id,
-            run_id=run_id,
-            parent_run_id=parent_run_id,
-            messages=self.messages,
-            state=self.state or {},
-            tools=self.tools or [],
-            context=context_list,
-            forwarded_props=self.forwardedProps or {},
-        )
 
 
 # ------------------------------------------------------------------

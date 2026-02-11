@@ -1,6 +1,6 @@
 # ADR-0006: Ambient Runner SDK Architecture
 
-**Status:** Proposed  
+**Status:** Accepted  
 **Date:** 2026-02-10  
 **Authors:** Gavin Krumbacher  
 **Deciders:** Platform Team
@@ -351,43 +351,43 @@ add_ambient_endpoints(app, bridge=MyBridge())
 - [x] Langfuse trace ID emitted once per run
 
 ### Phase 2: Tracing middleware
-- [ ] Move `obs.track_agui_event()` into a proper AG-UI middleware class
-- [ ] Trace ID injected into `RUN_STARTED` metadata (not separate RawEvent)
-- [ ] Developer events for setup lifecycle (role="developer")
+- [x] Move `obs.track_agui_event()` into a proper AG-UI middleware class
+- [x] Trace ID injected via CustomEvent (not separate RawEvent)
+- [x] Developer events for setup lifecycle (role="developer")
 
 ### Phase 3: Capabilities endpoint
-- [ ] `GET /capabilities` returns framework + platform features
-- [ ] Frontend reads capabilities and shows/hides UI features
-- [ ] Conditional endpoint registration based on capabilities
+- [x] `GET /capabilities` returns framework + platform features
+- [x] Frontend reads capabilities and shows/hides UI features
+- [x] Conditional endpoint registration based on capabilities
 
 ### Phase 4: `ambient_runner` package extraction
-- [ ] Extract into standalone package: `ambient_runner`
-- [ ] `add_ambient_endpoints(app, bridge)` as public API
-- [ ] `PlatformBridge` ABC and `PlatformContext`/`FrameworkCapabilities` types
-- [ ] `ClaudeBridge` as first implementation
-- [ ] Current `main.py` becomes a thin consumer
+- [x] Extract into standalone package: `ambient_runner`
+- [x] `add_ambient_endpoints(app, bridge)` as public API
+- [x] `PlatformBridge` ABC and `PlatformContext`/`FrameworkCapabilities` types
+- [x] `ClaudeBridge` as first implementation
+- [x] Current `main.py` becomes a thin consumer
 
 ### Phase 5: Adapter persistence
-- [ ] Adapter created once, reused across runs
-- [ ] Rebuild only on config change (workflow, repo)
-- [ ] Session resume via bridge + `.claude/` S3 sync
+- [x] Adapter created once, reused across runs
+- [x] Rebuild only on config change (workflow, repo)
+- [x] Session resume via bridge + `.claude/` S3 sync
 
 ### Phase 6: Backend consumes MESSAGES_SNAPSHOT
-- [ ] Backend proxy intercepts `MESSAGES_SNAPSHOT` events
-- [ ] Persists to DB directly (no separate compaction)
-- [ ] On session resume, loads from DB into `RunAgentInput.messages`
-- [ ] Remove duplicated compaction logic from backend
+- [x] Backend proxy intercepts `MESSAGES_SNAPSHOT` events
+- [x] Persists to DB directly (no separate compaction)
+- [x] On session resume, loads from DB into `RunAgentInput.messages`
+- [x] Remove duplicated compaction logic from backend
 
 ### Phase 7: CopilotKit frontend adoption
-- [ ] Replace custom `useAGUIStream` hook with CopilotKit's `useCopilotChat`
-- [ ] Use `useCopilotAction` for human-in-the-loop tools
-- [ ] MetaEvents for feedback UI state
+- [x] Replace custom `useAGUIStream` hook with CopilotKit's `useCopilotChat`
+- [x] Use `useCopilotAction` for human-in-the-loop tools
+- [x] MetaEvents for feedback UI state
 
 ### Phase 8: Second framework (LangGraph)
-- [ ] `LangGraphBridge` implementation
-- [ ] Validates the abstraction works across frameworks
-- [ ] Different capabilities (no file_system, no MCP)
-- [ ] Frontend adapts UI based on capabilities
+- [x] `LangGraphBridge` implementation
+- [x] Validates the abstraction works across frameworks
+- [x] Different capabilities (no file_system, no MCP)
+- [x] Frontend adapts UI based on capabilities
 
 ---
 
