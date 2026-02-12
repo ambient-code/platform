@@ -18,6 +18,9 @@ from context import RunnerContext
 
 logger = logging.getLogger(__name__)
 
+# Placeholder email used by the platform when no real email is available.
+_PLACEHOLDER_EMAIL = "user@example.com"
+
 
 # ---------------------------------------------------------------------------
 # User context sanitization
@@ -293,7 +296,7 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
         logger.info("✓ Updated Google credentials file for workspace-mcp")
 
         user_email = google_creds.get("email", "")
-        if user_email and user_email != "user@example.com":
+        if user_email and user_email != _PLACEHOLDER_EMAIL:
             os.environ["USER_GOOGLE_EMAIL"] = user_email
             logger.info(
                 f"✓ Set USER_GOOGLE_EMAIL to {user_email} for workspace-mcp"

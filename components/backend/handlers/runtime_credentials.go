@@ -20,6 +20,9 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
+// identityAPITimeout is the HTTP client timeout for GitHub/GitLab user identity API calls.
+const identityAPITimeout = 10 * time.Second
+
 // GetGitHubTokenForSession handles GET /api/projects/:project/agentic-sessions/:session/credentials/github
 // Returns PAT (priority 1) or freshly minted GitHub App token (priority 2)
 func GetGitHubTokenForSession(c *gin.Context) {
@@ -378,7 +381,7 @@ func exchangeOAuthToken(ctx context.Context, tokenURL string, payload map[string
 		form.Set(k, v)
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{Timeout: identityAPITimeout}
 	resp, err := client.Post(tokenURL, "application/x-www-form-urlencoded", strings.NewReader(form.Encode()))
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
@@ -404,14 +407,18 @@ func fetchGitHubUserIdentity(ctx context.Context, token string) (userName, email
 		return "", ""
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	if ctx.Err() != nil {
+		return "", ""
+	}
+
+	client := &http.Client{Timeout: identityAPITimeout}
 	req, err := http.NewRequestWithContext(ctx, "GET", "https://api.github.com/user", nil)
 	if err != nil {
 		log.Printf("Failed to create GitHub user request: %v", err)
 		return "", ""
 	}
 
-	req.Header.Set("Authorization", "token "+token)
+	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 
@@ -423,10 +430,11 @@ func fetchGitHubUserIdentity(ctx context.Context, token string) (userName, email
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 256))
 		if resp.StatusCode == http.StatusForbidden {
-			log.Printf("GitHub API /user returned 403 (token may lack 'read:user' scope)")
+			log.Printf("GitHub API /user returned 403 (token may lack 'read:user' scope): %s", string(errBody))
 		} else {
-			log.Printf("GitHub API /user returned status %d", resp.StatusCode)
+			log.Printf("GitHub API /user returned status %d: %s", resp.StatusCode, string(errBody))
 		}
 		return "", ""
 	}
@@ -465,13 +473,17 @@ func fetchGitLabUserIdentity(ctx context.Context, token, instanceURL string) (us
 		return "", ""
 	}
 
+	if ctx.Err() != nil {
+		return "", ""
+	}
+
 	// Default to gitlab.com if no instance URL
 	apiURL := "https://gitlab.com/api/v4/user"
 	if instanceURL != "" && instanceURL != "https://gitlab.com" {
 		apiURL = strings.TrimSuffix(instanceURL, "/") + "/api/v4/user"
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{Timeout: identityAPITimeout}
 	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
 	if err != nil {
 		log.Printf("Failed to create GitLab user request: %v", err)
@@ -489,7 +501,8 @@ func fetchGitLabUserIdentity(ctx context.Context, token, instanceURL string) (us
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		log.Printf("GitLab API /user returned status %d", resp.StatusCode)
+		errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 256))
+		log.Printf("GitLab API /user returned status %d: %s", resp.StatusCode, string(errBody))
 		return "", ""
 	}
 

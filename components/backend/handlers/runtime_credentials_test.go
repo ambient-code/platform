@@ -30,7 +30,7 @@ var _ = Describe("Runtime Credentials - Git Identity", func() {
 				// Mock GitHub API response
 				server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					Expect(r.URL.Path).To(Equal("/user"))
-					Expect(r.Header.Get("Authorization")).To(Equal("token test-token"))
+					Expect(r.Header.Get("Authorization")).To(Equal("Bearer test-token"))
 					Expect(r.Header.Get("Accept")).To(Equal("application/vnd.github+json"))
 
 					w.Header().Set("Content-Type", "application/json")
