@@ -7,17 +7,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
-
-// TestRuntimeCredentials runs the Ginkgo test suite
-func TestRuntimeCredentials(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "Runtime Credentials Suite")
-}
 
 var _ = Describe("Runtime Credentials - Git Identity", func() {
 
