@@ -1755,6 +1755,8 @@ func monitorPod(podName, sessionName, sessionNamespace string) {
 
 		if pod.Spec.NodeName != "" {
 			statusPatch.AddCondition(conditionUpdate{Type: conditionPodScheduled, Status: "True", Reason: "Scheduled", Message: fmt.Sprintf("Scheduled on %s", pod.Spec.NodeName)})
+		} else {
+			surfacePodSchedulingFailure(pod, statusPatch)
 		}
 
 		if pod.Status.Phase == corev1.PodSucceeded {

@@ -203,6 +203,8 @@ func UpdateSessionFromPodStatus(ctx context.Context, session *unstructured.Unstr
 			Reason:  "Scheduled",
 			Message: fmt.Sprintf("Scheduled on %s", pod.Spec.NodeName),
 		})
+	} else {
+		surfacePodSchedulingFailure(pod, statusPatch)
 	}
 
 	switch pod.Status.Phase {
@@ -344,6 +346,24 @@ func DeletePodAndServices(ctx context.Context, namespace, podName, sessionName s
 // EnsureFreshRunnerToken refreshes the runner token if needed.
 func EnsureFreshRunnerToken(ctx context.Context, session *unstructured.Unstructured) error {
 	return ensureFreshRunnerToken(ctx, session)
+}
+
+// surfacePodSchedulingFailure checks pod conditions for scheduling failures
+// and adds a PodScheduled=False condition to the status patch if found.
+// This surfaces messages like "0/1 nodes are available: 1 Insufficient memory"
+// so users can see why their session is stuck in Creating.
+func surfacePodSchedulingFailure(pod *corev1.Pod, statusPatch *StatusPatch) {
+	for _, cond := range pod.Status.Conditions {
+		if cond.Type == corev1.PodScheduled && cond.Status == corev1.ConditionFalse {
+			statusPatch.AddCondition(conditionUpdate{
+				Type:    conditionPodScheduled,
+				Status:  "False",
+				Reason:  string(cond.Reason),
+				Message: cond.Message,
+			})
+			return
+		}
+	}
 }
 
 // collectPodErrorMessage extracts detailed error information from a failed pod.
