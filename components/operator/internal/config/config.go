@@ -30,6 +30,19 @@ type Config struct {
 	S3Endpoint             string
 	S3Bucket               string
 	PodFSGroup             *int64
+	// Session container resources (externalized for per-environment tuning)
+	RunnerCPURequest       string
+	RunnerCPULimit         string
+	RunnerMemoryRequest    string
+	RunnerMemoryLimit      string
+	ContentCPURequest      string
+	ContentCPULimit        string
+	ContentMemoryRequest   string
+	ContentMemoryLimit     string
+	StateSyncCPURequest    string
+	StateSyncCPULimit      string
+	StateSyncMemoryRequest string
+	StateSyncMemoryLimit   string
 }
 
 // InitK8sClients initializes the Kubernetes clients
@@ -68,6 +81,15 @@ func InitK8sClients() error {
 	}
 
 	return nil
+}
+
+// envOrDefault returns the value of the named environment variable or the
+// provided fallback when the variable is unset or empty.
+func envOrDefault(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
 }
 
 // LoadConfig loads the operator configuration from environment variables
@@ -138,5 +160,17 @@ func LoadConfig() *Config {
 		S3Endpoint:             s3Endpoint,
 		S3Bucket:               s3Bucket,
 		PodFSGroup:             podFSGroup,
+		RunnerCPURequest:       envOrDefault("RUNNER_CPU_REQUEST", "500m"),
+		RunnerCPULimit:         envOrDefault("RUNNER_CPU_LIMIT", "2000m"),
+		RunnerMemoryRequest:    envOrDefault("RUNNER_MEMORY_REQUEST", "1Gi"),
+		RunnerMemoryLimit:      envOrDefault("RUNNER_MEMORY_LIMIT", "4Gi"),
+		ContentCPURequest:      envOrDefault("CONTENT_CPU_REQUEST", "100m"),
+		ContentCPULimit:        envOrDefault("CONTENT_CPU_LIMIT", "500m"),
+		ContentMemoryRequest:   envOrDefault("CONTENT_MEMORY_REQUEST", "1Gi"),
+		ContentMemoryLimit:     envOrDefault("CONTENT_MEMORY_LIMIT", "2Gi"),
+		StateSyncCPURequest:    envOrDefault("STATE_SYNC_CPU_REQUEST", "100m"),
+		StateSyncCPULimit:      envOrDefault("STATE_SYNC_CPU_LIMIT", "1000m"),
+		StateSyncMemoryRequest: envOrDefault("STATE_SYNC_MEMORY_REQUEST", "1Gi"),
+		StateSyncMemoryLimit:   envOrDefault("STATE_SYNC_MEMORY_LIMIT", "2Gi"),
 	}
 }

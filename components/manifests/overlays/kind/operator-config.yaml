@@ -8,6 +8,10 @@ metadata:
 data:
   # Use local runner image loaded into kind cluster (not quay.io)
   AMBIENT_CODE_RUNNER_IMAGE: "vteam_claude_runner:latest"
+  # Session container resource overrides (smaller for local dev)
+  RUNNER_MEMORY_LIMIT: "1Gi"
+  CONTENT_MEMORY_LIMIT: "256Mi"
+  STATE_SYNC_MEMORY_LIMIT: "256Mi"
   # Vertex AI Configuration - Disabled for e2e testing
   CLAUDE_CODE_USE_VERTEX: "0"
   CLOUD_ML_REGION: ""

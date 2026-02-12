@@ -117,6 +117,31 @@ spec:
           value: "http://minio.ambient-code.svc:9000"  # In-cluster MinIO (change for external S3)
         - name: S3_BUCKET
           value: "ambient-sessions"  # Create this bucket in MinIO console
+        # Session container resources (externalized from sessions.go)
+        - name: RUNNER_CPU_REQUEST
+          value: "500m"
+        - name: RUNNER_CPU_LIMIT
+          value: "2000m"
+        - name: RUNNER_MEMORY_REQUEST
+          value: "1Gi"
+        - name: RUNNER_MEMORY_LIMIT
+          value: "4Gi"
+        - name: CONTENT_CPU_REQUEST
+          value: "100m"
+        - name: CONTENT_CPU_LIMIT
+          value: "500m"
+        - name: CONTENT_MEMORY_REQUEST
+          value: "1Gi"
+        - name: CONTENT_MEMORY_LIMIT
+          value: "2Gi"
+        - name: STATE_SYNC_CPU_REQUEST
+          value: "100m"
+        - name: STATE_SYNC_CPU_LIMIT
+          value: "1000m"
+        - name: STATE_SYNC_MEMORY_REQUEST
+          value: "1Gi"
+        - name: STATE_SYNC_MEMORY_LIMIT
+          value: "2Gi"
         # OpenTelemetry configuration
         - name: OTEL_EXPORTER_OTLP_ENDPOINT
           value: "otel-collector.ambient-code.svc:4317"  # Deploy OTel collector separately

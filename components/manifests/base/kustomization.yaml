@@ -15,6 +15,7 @@ resources:
 - public-api-deployment.yaml
 - workspace-pvc.yaml
 - minio-deployment.yaml
+- session-limitrange.yaml
 
 # Default images (can be overridden by overlays)
 images:
