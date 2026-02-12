@@ -27,6 +27,8 @@ type AgenticSessionSpec struct {
 	Repos []SimpleRepo `json:"repos,omitempty"`
 	// Active workflow for dynamic workflow switching
 	ActiveWorkflow *WorkflowSelection `json:"activeWorkflow,omitempty"`
+	// Session configuration repository (CLAUDE.md, .claude/ settings, rules, skills, agents, .mcp.json)
+	ConfigRepo *ConfigRepoSelection `json:"configRepo,omitempty"`
 }
 
 // SimpleRepo represents a simplified repository configuration
@@ -56,11 +58,13 @@ type CreateAgenticSessionRequest struct {
 	Interactive     *bool        `json:"interactive,omitempty"`
 	ParentSessionID string       `json:"parent_session_id,omitempty"`
 	// Multi-repo support
-	Repos                []SimpleRepo      `json:"repos,omitempty"`
-	UserContext          *UserContext      `json:"userContext,omitempty"`
-	EnvironmentVariables map[string]string `json:"environmentVariables,omitempty"`
-	Labels               map[string]string `json:"labels,omitempty"`
-	Annotations          map[string]string `json:"annotations,omitempty"`
+	Repos []SimpleRepo `json:"repos,omitempty"`
+	// Session configuration repository
+	ConfigRepo           *ConfigRepoSelection `json:"configRepo,omitempty"`
+	UserContext          *UserContext         `json:"userContext,omitempty"`
+	EnvironmentVariables map[string]string    `json:"environmentVariables,omitempty"`
+	Labels               map[string]string    `json:"labels,omitempty"`
+	Annotations          map[string]string    `json:"annotations,omitempty"`
 }
 
 type CloneSessionRequest struct {
@@ -105,6 +109,12 @@ type ReconciledWorkflow struct {
 	Path      string  `json:"path,omitempty"`
 	Status    string  `json:"status,omitempty"`
 	AppliedAt *string `json:"appliedAt,omitempty"`
+}
+
+// ConfigRepoSelection references a session-config repository
+type ConfigRepoSelection struct {
+	GitURL string `json:"gitUrl" binding:"required"`
+	Branch string `json:"branch,omitempty"`
 }
 
 // Condition mirrors metav1.Condition for API transport

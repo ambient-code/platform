@@ -47,3 +47,18 @@ export type ProjectSettingsUpdateRequest = {
   defaultSettings: ProjectDefaultSettings;
   resourceLimits: ProjectResourceLimits;
 };
+
+// Types for the project-settings REST API (backed by ProjectSettings CR)
+
+export type DefaultConfigRepo = {
+  gitUrl: string;
+  branch?: string;
+};
+
+export type ProjectSettingsCR = {
+  defaultConfigRepo?: DefaultConfigRepo;
+};
+
+export type UpdateProjectSettingsRequest = {
+  defaultConfigRepo?: DefaultConfigRepo;
+};

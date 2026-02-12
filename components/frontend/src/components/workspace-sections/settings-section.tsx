@@ -8,12 +8,13 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { Save, Loader2, Info, AlertTriangle } from "lucide-react";
+import { Save, Loader2, Info, AlertTriangle, GitBranch } from "lucide-react";
 import { Plus, Trash2, Eye, EyeOff, ChevronDown, ChevronRight } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { successToast, errorToast } from "@/hooks/use-toast";
 import { useProject, useUpdateProject } from "@/services/queries/use-projects";
 import { useSecretsValues, useUpdateSecrets, useIntegrationSecrets, useUpdateIntegrationSecrets } from "@/services/queries/use-secrets";
+import { useProjectSettings, useUpdateProjectSettings } from "@/services/queries/use-project-settings";
 import { useClusterInfo } from "@/hooks/use-cluster-info";
 import { useMemo } from "react";
 
@@ -34,6 +35,8 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
   const [s3AccessKey, setS3AccessKey] = useState<string>("");
   const [s3SecretKey, setS3SecretKey] = useState<string>("");
   const [showS3SecretKey, setShowS3SecretKey] = useState<boolean>(false);
+  const [configRepoUrl, setConfigRepoUrl] = useState<string>("");
+  const [configRepoBranch, setConfigRepoBranch] = useState<string>("");
   const [anthropicExpanded, setAnthropicExpanded] = useState<boolean>(false);
   const [s3Expanded, setS3Expanded] = useState<boolean>(false);
   const FIXED_KEYS = useMemo(() => ["ANTHROPIC_API_KEY","STORAGE_MODE","S3_ENDPOINT","S3_BUCKET","S3_REGION","S3_ACCESS_KEY","S3_SECRET_KEY"] as const, []);
@@ -42,8 +45,10 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
   const { data: project, isLoading: projectLoading } = useProject(projectName);
   const { data: runnerSecrets } = useSecretsValues(projectName);  // ambient-runner-secrets (ANTHROPIC_API_KEY)
   const { data: integrationSecrets } = useIntegrationSecrets(projectName);  // ambient-non-vertex-integrations (GITHUB_TOKEN, GIT_USER_*, JIRA_*, custom)
+  const { data: projectSettings } = useProjectSettings(projectName);
   const { vertexEnabled } = useClusterInfo();
   const updateProjectMutation = useUpdateProject();
+  const updateProjectSettingsMutation = useUpdateProjectSettings();
   const updateSecretsMutation = useUpdateSecrets();
   const updateIntegrationSecretsMutation = useUpdateIntegrationSecrets();
 
@@ -53,6 +58,14 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
       setFormData({ displayName: project.displayName || "", description: project.description || "" });
     }
   }, [project]);
+
+  // Sync config repo from project settings
+  useEffect(() => {
+    if (projectSettings?.defaultConfigRepo) {
+      setConfigRepoUrl(projectSettings.defaultConfigRepo.gitUrl || "");
+      setConfigRepoBranch(projectSettings.defaultConfigRepo.branch || "");
+    }
+  }, [projectSettings]);
 
   // Sync secrets values to state (merge both secrets)
   useEffect(() => {
@@ -89,6 +102,27 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
         },
         onError: (error) => {
           const message = error instanceof Error ? error.message : "Failed to update project";
+          errorToast(message);
+        },
+      }
+    );
+  };
+
+  const handleSaveConfigRepo = () => {
+    const trimmedUrl = configRepoUrl.trim();
+    updateProjectSettingsMutation.mutate(
+      {
+        projectName,
+        data: {
+          defaultConfigRepo: trimmedUrl
+            ? { gitUrl: trimmedUrl, ...(configRepoBranch.trim() && { branch: configRepoBranch.trim() }) }
+            : { gitUrl: "" },
+        },
+      },
+      {
+        onSuccess: () => successToast("Default config repo updated"),
+        onError: (error) => {
+          const message = error instanceof Error ? error.message : "Failed to update config repo";
           errorToast(message);
         },
       }
@@ -248,6 +282,56 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
           </AlertDescription>
         </Alert>
       )}
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <GitBranch className="h-5 w-5 text-muted-foreground" />
+            <CardTitle>Default Config Repo</CardTitle>
+          </div>
+          <CardDescription>
+            A Git repository containing session configuration (CLAUDE.md, .claude/ rules, .mcp.json) that will be pre-filled for new sessions in this workspace.
+          </CardDescription>
+        </CardHeader>
+        <Separator />
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-3 gap-3">
+            <div className="col-span-2 space-y-2">
+              <Label htmlFor="configRepoUrl">Repository URL</Label>
+              <Input
+                id="configRepoUrl"
+                value={configRepoUrl}
+                onChange={(e) => setConfigRepoUrl(e.target.value)}
+                placeholder="https://github.com/org/session-config.git"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="configRepoBranch">Branch</Label>
+              <Input
+                id="configRepoBranch"
+                value={configRepoBranch}
+                onChange={(e) => setConfigRepoBranch(e.target.value)}
+                placeholder="main"
+              />
+            </div>
+          </div>
+          <div className="pt-2">
+            <Button onClick={handleSaveConfigRepo} disabled={updateProjectSettingsMutation.isPending}>
+              {updateProjectSettingsMutation.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4 mr-2" />
+                  Save Config Repo
+                </>
+              )}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

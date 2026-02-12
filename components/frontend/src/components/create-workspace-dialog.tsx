@@ -15,9 +15,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { CreateProjectRequest } from "@/types/project";
-import { Save, Loader2, Info } from "lucide-react";
+import { Save, Loader2, Info, GitBranch } from "lucide-react";
 import { successToast, errorToast } from "@/hooks/use-toast";
 import { useCreateProject } from "@/services/queries";
+import { useUpdateProjectSettings } from "@/services/queries/use-project-settings";
 import { useClusterInfo } from "@/hooks/use-cluster-info";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
@@ -32,8 +33,11 @@ export function CreateWorkspaceDialog({
 }: CreateWorkspaceDialogProps) {
   const router = useRouter();
   const createProjectMutation = useCreateProject();
+  const updateSettingsMutation = useUpdateProjectSettings();
   const { isOpenShift, isLoading: clusterLoading } = useClusterInfo();
   const [error, setError] = useState<string | null>(null);
+  const [configRepoUrl, setConfigRepoUrl] = useState("");
+  const [configRepoBranch, setConfigRepoBranch] = useState("");
   const [formData, setFormData] = useState<CreateProjectRequest>({
     name: "",
     displayName: "",
@@ -100,6 +104,8 @@ export function CreateWorkspaceDialog({
       displayName: "",
       description: "",
     });
+    setConfigRepoUrl("");
+    setConfigRepoBranch("");
     setNameError(null);
     setError(null);
     setManuallyEditedName(false);
@@ -145,6 +151,18 @@ export function CreateWorkspaceDialog({
 
     createProjectMutation.mutate(payload, {
       onSuccess: (project) => {
+        // Save default config repo if provided
+        if (configRepoUrl.trim()) {
+          updateSettingsMutation.mutate({
+            projectName: project.name,
+            data: {
+              defaultConfigRepo: {
+                gitUrl: configRepoUrl.trim(),
+                ...(configRepoBranch.trim() && { branch: configRepoBranch.trim() }),
+              },
+            },
+          });
+        }
         successToast(
           `Workspace "${formData.displayName || formData.name}" created successfully`
         );
@@ -241,6 +259,38 @@ export function CreateWorkspaceDialog({
                 />
               </div>
             )}
+          </div>
+
+          {/* Default Config Repo */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <GitBranch className="h-4 w-4 text-muted-foreground" />
+              <Label className="text-sm font-medium">Default Config Repo</Label>
+              <span className="text-xs text-muted-foreground">(optional)</span>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              A Git repository containing session configuration (CLAUDE.md, .claude/ rules, .mcp.json) that will be pre-filled for new sessions.
+            </p>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="col-span-2 space-y-2">
+                <Label htmlFor="configRepoUrl" className="text-xs text-muted-foreground">Repository URL</Label>
+                <Input
+                  id="configRepoUrl"
+                  value={configRepoUrl}
+                  onChange={(e) => setConfigRepoUrl(e.target.value)}
+                  placeholder="https://github.com/org/session-config.git"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="configRepoBranch" className="text-xs text-muted-foreground">Branch</Label>
+                <Input
+                  id="configRepoBranch"
+                  value={configRepoBranch}
+                  onChange={(e) => setConfigRepoBranch(e.target.value)}
+                  placeholder="main"
+                />
+              </div>
+            </div>
           </div>
 
           {error && (

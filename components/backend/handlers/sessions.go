@@ -207,6 +207,18 @@ func parseSpec(spec map[string]interface{}) types.AgenticSessionSpec {
 		result.ActiveWorkflow = ws
 	}
 
+	// Parse configRepo
+	if configRepo, ok := spec["configRepo"].(map[string]interface{}); ok {
+		cr := &types.ConfigRepoSelection{}
+		if gitURL, ok := configRepo["gitUrl"].(string); ok {
+			cr.GitURL = gitURL
+		}
+		if branch, ok := configRepo["branch"].(string); ok {
+			cr.Branch = branch
+		}
+		result.ConfigRepo = cr
+	}
+
 	return result
 }
 
@@ -655,6 +667,16 @@ func CreateSession(c *gin.Context) {
 			}
 			spec["repos"] = arr
 		}
+	}
+
+	// Set session-config repo on spec if provided
+	if req.ConfigRepo != nil && strings.TrimSpace(req.ConfigRepo.GitURL) != "" {
+		spec := session["spec"].(map[string]interface{})
+		cr := map[string]interface{}{"gitUrl": req.ConfigRepo.GitURL}
+		if strings.TrimSpace(req.ConfigRepo.Branch) != "" {
+			cr["branch"] = req.ConfigRepo.Branch
+		}
+		spec["configRepo"] = cr
 	}
 
 	// Add userContext derived from authenticated caller; ignore client-supplied userId

@@ -34,6 +34,11 @@ export type AgenticSessionSpec = {
 		branch: string;
 		path?: string;
 	};
+	// Session configuration repository (CLAUDE.md, .claude/ rules, skills, agents, .mcp.json)
+	configRepo?: {
+		gitUrl: string;
+		branch?: string;
+	};
 };
 
 export type ReconciledRepo = {
@@ -190,6 +195,8 @@ export type CreateAgenticSessionRequest = {
 	interactive?: boolean;
 	// Multi-repo support
 	repos?: SessionRepo[];
+	// Session configuration repository
+	configRepo?: { gitUrl: string; branch?: string };
 	labels?: Record<string, string>;
 	annotations?: Record<string, string>;
 };

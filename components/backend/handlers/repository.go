@@ -124,31 +124,3 @@ func ValidateProjectRepository(ctx context.Context, repoURL string, userID strin
 
 	return info, nil
 }
-
-// EnrichProjectSettingsWithProviders adds provider information to repositories in ProjectSettings
-func EnrichProjectSettingsWithProviders(repositories []map[string]interface{}) []map[string]interface{} {
-	enriched := make([]map[string]interface{}, len(repositories))
-
-	for i, repo := range repositories {
-		enrichedRepo := make(map[string]interface{})
-
-		// Copy existing fields
-		for k, v := range repo {
-			enrichedRepo[k] = v
-		}
-
-		// Add provider if not already present
-		if _, hasProvider := repo["provider"]; !hasProvider {
-			if url, hasURL := repo["url"].(string); hasURL {
-				provider := DetectRepositoryProvider(url)
-				if provider != "" {
-					enrichedRepo["provider"] = string(provider)
-				}
-			}
-		}
-
-		enriched[i] = enrichedRepo
-	}
-
-	return enriched
-}
