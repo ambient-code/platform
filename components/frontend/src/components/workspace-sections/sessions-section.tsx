@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { formatDistanceToNow } from 'date-fns';
-import { Plus, RefreshCw, MoreVertical, Square, Trash2, ArrowRight, Brain, Search, ChevronLeft, ChevronRight, Pencil } from 'lucide-react';
+import { Plus, RefreshCw, MoreVertical, Square, Trash2, ArrowRight, Brain, Search, ChevronLeft, ChevronRight, Pencil, X } from 'lucide-react';
 import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -28,26 +29,48 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
   // Pagination and search state
   const [searchInput, setSearchInput] = useState('');
   const [offset, setOffset] = useState(0);
+  const [labelFilters, setLabelFilters] = useState<Record<string, string>>({});
   const limit = DEFAULT_PAGE_SIZE;
 
   // Debounce search to avoid too many API calls
   const debouncedSearch = useDebounce(searchInput, 300);
 
-  // Reset offset when search changes
+  // Build labelSelector string from filters
+  const labelSelector = Object.entries(labelFilters)
+    .map(([k, v]) => `${k}=${v}`)
+    .join(',') || undefined;
+
+  // Reset offset when search or label filters change
   useEffect(() => {
     setOffset(0);
-  }, [debouncedSearch]);
+  }, [debouncedSearch, labelSelector]);
+
+  const addLabelFilter = useCallback((key: string, value: string) => {
+    setLabelFilters((prev) => ({ ...prev, [key]: value }));
+  }, []);
+
+  const removeLabelFilter = useCallback((key: string) => {
+    setLabelFilters((prev) => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  }, []);
 
   // React Query hooks with pagination
   const {
     data: paginatedData,
     isFetching,
     refetch,
-  } = useSessionsPaginated(projectName, {
-    limit,
-    offset,
-    search: debouncedSearch || undefined,
-  });
+  } = useSessionsPaginated(
+    projectName,
+    {
+      limit,
+      offset,
+      search: debouncedSearch || undefined,
+    },
+    labelSelector
+  );
 
   const sessions = paginatedData?.items ?? [];
   const totalCount = paginatedData?.totalCount ?? 0;
@@ -190,19 +213,52 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
             className="pl-9"
           />
         </div>
+        {/* Active label filters */}
+        {Object.keys(labelFilters).length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mt-2">
+            <span className="text-xs text-muted-foreground self-center mr-1">Filtering by:</span>
+            {Object.entries(labelFilters).map(([key, value]) => (
+              <Badge key={key} variant="outline" className="gap-1 pr-1">
+                <span className="font-semibold">{key}</span>
+                <span className="text-muted-foreground">=</span>
+                <span>{value}</span>
+                <button
+                  type="button"
+                  onClick={() => removeLabelFilter(key)}
+                  className="ml-0.5 rounded-sm hover:bg-muted p-0.5"
+                  aria-label={`Remove filter ${key}`}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            ))}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 text-xs px-2"
+              onClick={() => setLabelFilters({})}
+            >
+              Clear all
+            </Button>
+          </div>
+        )}
       </CardHeader>
       <CardContent>
-        {sessions.length === 0 && !debouncedSearch ? (
+        {sessions.length === 0 && !debouncedSearch && Object.keys(labelFilters).length === 0 ? (
           <EmptyState
             icon={Brain}
             title="No sessions found"
             description="Create your first agentic session"
           />
-        ) : sessions.length === 0 && debouncedSearch ? (
+        ) : sessions.length === 0 ? (
           <EmptyState
             icon={Search}
             title="No matching sessions"
-            description={`No sessions found matching "${debouncedSearch}"`}
+            description={
+              debouncedSearch
+                ? `No sessions found matching "${debouncedSearch}"`
+                : "No sessions match the selected label filters"
+            }
           />
         ) : (
           <>
@@ -214,8 +270,8 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
                     <TableHead>Status</TableHead>
                     <TableHead>Mode</TableHead>
                     <TableHead className="hidden md:table-cell">Model</TableHead>
-                    <TableHead className="hidden lg:table-cell">Created</TableHead>
-                    <TableHead className="hidden xl:table-cell">Cost</TableHead>
+                    <TableHead className="hidden lg:table-cell">Labels</TableHead>
+                    <TableHead className="hidden xl:table-cell">Created</TableHead>
                     <TableHead className="w-[50px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -256,12 +312,30 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
                           </span>
                         </TableCell>
                         <TableCell className="hidden lg:table-cell">
-                          {session.metadata?.creationTimestamp &&
-                            formatDistanceToNow(new Date(session.metadata.creationTimestamp), { addSuffix: true })}
+                          {session.metadata?.labels && Object.keys(session.metadata.labels).length > 0 ? (
+                            <div className="flex flex-wrap gap-1 max-w-[200px]">
+                              {Object.entries(session.metadata.labels).map(([key, value]) => (
+                                <Badge
+                                  key={key}
+                                  variant="secondary"
+                                  className="text-[10px] px-1.5 py-0 cursor-pointer hover:bg-accent"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    addLabelFilter(key, value);
+                                  }}
+                                >
+                                  {key}={value}
+                                </Badge>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-sm text-muted-foreground/60">—</span>
+                          )}
                         </TableCell>
                         <TableCell className="hidden xl:table-cell">
-                          {/* total_cost_usd removed from simplified status */}
-                          <span className="text-sm text-muted-foreground/60">—</span>
+                          {session.metadata?.creationTimestamp &&
+                            formatDistanceToNow(new Date(session.metadata.creationTimestamp), { addSuffix: true })}
                         </TableCell>
                         <TableCell>
                           {isActionPending ? (

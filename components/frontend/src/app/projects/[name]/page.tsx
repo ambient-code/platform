@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams, useSearchParams } from 'next/navigation';
-import { Star, Settings, Users, Loader2 } from 'lucide-react';
+import { useParams, useSearchParams, useRouter } from 'next/navigation';
+import { Star, Settings, Users, Loader2, Workflow, Server } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 import { Button } from '@/components/ui/button';
@@ -14,13 +14,15 @@ import { Breadcrumbs } from '@/components/breadcrumbs';
 import { SessionsSection } from '@/components/workspace-sections/sessions-section';
 import { SharingSection } from '@/components/workspace-sections/sharing-section';
 import { SettingsSection } from '@/components/workspace-sections/settings-section';
+import { McpConfigEditor } from '@/components/mcp-config-editor';
 import { useProject } from '@/services/queries/use-projects';
 
-type Section = 'sessions' | 'sharing' | 'settings';
+type Section = 'sessions' | 'sharing' | 'settings' | 'mcp-servers';
 
 export default function ProjectDetailsPage() {
   const params = useParams();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const projectName = params?.name as string;
   
   // Fetch project data for display name and description
@@ -33,7 +35,7 @@ export default function ProjectDetailsPage() {
   // Update active section when query parameter changes
   useEffect(() => {
     const sectionParam = searchParams.get('section') as Section;
-    if (sectionParam && ['sessions', 'sharing', 'settings'].includes(sectionParam)) {
+    if (sectionParam && ['sessions', 'sharing', 'settings', 'mcp-servers'].includes(sectionParam)) {
       setActiveSection(sectionParam);
     }
   }, [searchParams]);
@@ -41,6 +43,7 @@ export default function ProjectDetailsPage() {
   const navItems = [
     { id: 'sessions' as Section, label: 'Sessions', icon: Star },
     { id: 'sharing' as Section, label: 'Sharing', icon: Users },
+    { id: 'mcp-servers' as Section, label: 'MCP Servers', icon: Server },
     { id: 'settings' as Section, label: 'Workspace Settings', icon: Settings },
   ];
 
@@ -112,6 +115,15 @@ export default function ProjectDetailsPage() {
                       </Button>
                     );
                   })}
+                  <hr className="my-1" />
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start"
+                    onClick={() => router.push(`/projects/${projectName}/workflow-designer`)}
+                  >
+                    <Workflow className="w-4 h-4 mr-2" />
+                    Workflow Designer
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -120,6 +132,7 @@ export default function ProjectDetailsPage() {
           {/* Main Content */}
           {activeSection === 'sessions' && <SessionsSection projectName={projectName} />}
           {activeSection === 'sharing' && <SharingSection projectName={projectName} />}
+          {activeSection === 'mcp-servers' && <McpConfigEditor projectName={projectName} />}
           {activeSection === 'settings' && <SettingsSection projectName={projectName} />}
         </div>
       </div>

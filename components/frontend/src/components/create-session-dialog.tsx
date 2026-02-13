@@ -32,6 +32,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { LabelEditor } from "@/components/label-editor";
 import type { CreateAgenticSessionRequest } from "@/types/agentic-session";
 import { useCreateSession } from "@/services/queries/use-sessions";
 import { useIntegrationsStatus } from "@/services/queries/use-integrations";
@@ -67,6 +68,7 @@ export function CreateSessionDialog({
   onSuccess,
 }: CreateSessionDialogProps) {
   const [open, setOpen] = useState(false);
+  const [labels, setLabels] = useState<Record<string, string>>({});
   const router = useRouter();
   const createSessionMutation = useCreateSession();
 
@@ -104,6 +106,9 @@ export function CreateSessionDialog({
     if (trimmedName) {
       request.displayName = trimmedName;
     }
+    if (Object.keys(labels).length > 0) {
+      request.labels = labels;
+    }
 
     createSessionMutation.mutate(
       { projectName, data: request },
@@ -126,6 +131,7 @@ export function CreateSessionDialog({
     setOpen(newOpen);
     if (!newOpen) {
       form.reset();
+      setLabels({});
     }
   };
 
@@ -192,6 +198,17 @@ export function CreateSessionDialog({
                   </FormItem>
                 )}
               />
+
+              {/* Labels */}
+              <div className="w-full space-y-2">
+                <FormLabel>Labels</FormLabel>
+                <LabelEditor
+                  labels={labels}
+                  onChange={setLabels}
+                  disabled={createSessionMutation.isPending}
+                  suggestions={["team", "type", "priority", "feature"]}
+                />
+              </div>
 
               {/* Integration auth status */}
               <div className="w-full space-y-2">

@@ -1224,6 +1224,36 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 	// Note: No volume mounts needed for runner/integration secrets
 	// All keys are injected as environment variables via EnvFrom above
 
+	// Mount MCP config from project ConfigMap if it exists
+	mcpCM, mcpErr := config.K8sClient.CoreV1().ConfigMaps(sessionNamespace).Get(
+		context.TODO(), "ambient-mcp-config", v1.GetOptions{},
+	)
+	if mcpErr == nil && mcpCM != nil {
+		// Add volume for the ConfigMap
+		pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
+			Name: "mcp-config",
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{Name: "ambient-mcp-config"},
+					Optional:             boolPtr(true),
+				},
+			},
+		})
+		// Mount to runner container
+		for i := range pod.Spec.Containers {
+			if pod.Spec.Containers[i].Name == "ambient-code-runner" {
+				pod.Spec.Containers[i].VolumeMounts = append(pod.Spec.Containers[i].VolumeMounts, corev1.VolumeMount{
+					Name:      "mcp-config",
+					MountPath: "/home/user/.mcp.json",
+					SubPath:   "mcp.json",
+					ReadOnly:  true,
+				})
+				log.Printf("Mounted MCP config from ConfigMap for session %s", name)
+				break
+			}
+		}
+	}
+
 	// If ambient-vertex secret was successfully copied, mount it as a volume
 	if ambientVertexSecretCopied {
 		pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
