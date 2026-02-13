@@ -26,6 +26,7 @@ _PLACEHOLDER_EMAIL = "user@example.com"
 # User context sanitization
 # ---------------------------------------------------------------------------
 
+
 def sanitize_user_context(user_id: str, user_name: str) -> tuple[str, str]:
     """Validate and sanitize user context fields to prevent injection attacks."""
     if user_id:
@@ -49,8 +50,8 @@ def sanitize_user_context(user_id: str, user_name: str) -> tuple[str, str]:
 
 # Anthropic API → Vertex AI model name mapping
 VERTEX_MODEL_MAP: dict[str, str] = {
+    "claude-opus-4-6": "claude-opus-4-6@default",
     "claude-opus-4-5": "claude-opus-4-5@20251101",
-    "claude-opus-4-1": "claude-opus-4-1@20250805",
     "claude-sonnet-4-5": "claude-sonnet-4-5@20250929",
     "claude-haiku-4-5": "claude-haiku-4-5@20251001",
 }
@@ -70,9 +71,7 @@ async def setup_vertex_credentials(context: RunnerContext) -> dict:
     Raises:
         RuntimeError: If required environment variables are missing.
     """
-    service_account_path = context.get_env(
-        "GOOGLE_APPLICATION_CREDENTIALS", ""
-    ).strip()
+    service_account_path = context.get_env("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
     project_id = context.get_env("ANTHROPIC_VERTEX_PROJECT_ID", "").strip()
     region = context.get_env("CLOUD_ML_REGION", "").strip()
 
@@ -85,9 +84,7 @@ async def setup_vertex_credentials(context: RunnerContext) -> dict:
             "ANTHROPIC_VERTEX_PROJECT_ID must be set when CLAUDE_CODE_USE_VERTEX=1"
         )
     if not region:
-        raise RuntimeError(
-            "CLOUD_ML_REGION must be set when CLAUDE_CODE_USE_VERTEX=1"
-        )
+        raise RuntimeError("CLOUD_ML_REGION must be set when CLAUDE_CODE_USE_VERTEX=1")
 
     if not Path(service_account_path).exists():
         raise RuntimeError(
@@ -106,6 +103,7 @@ async def setup_vertex_credentials(context: RunnerContext) -> dict:
 # Backend credential fetching
 # ---------------------------------------------------------------------------
 
+
 async def _fetch_credential(context: RunnerContext, credential_type: str) -> dict:
     """Fetch credentials from backend API at runtime.
 
@@ -117,9 +115,7 @@ async def _fetch_credential(context: RunnerContext, credential_type: str) -> dic
         Dictionary with credential data or empty dict if unavailable.
     """
     base = os.getenv("BACKEND_API_URL", "").rstrip("/")
-    project = os.getenv("PROJECT_NAME") or os.getenv(
-        "AGENTIC_SESSION_NAMESPACE", ""
-    )
+    project = os.getenv("PROJECT_NAME") or os.getenv("AGENTIC_SESSION_NAMESPACE", "")
     project = project.strip()
     session_id = context.session_id
 
@@ -157,14 +153,10 @@ async def _fetch_credential(context: RunnerContext, credential_type: str) -> dic
 
     try:
         data = _json.loads(resp_text)
-        logger.info(
-            f"Successfully fetched {credential_type} credentials from backend"
-        )
+        logger.info(f"Successfully fetched {credential_type} credentials from backend")
         return data
     except Exception as e:
-        logger.error(
-            f"Failed to parse {credential_type} credential response: {e}"
-        )
+        logger.error(f"Failed to parse {credential_type} credential response: {e}")
         return {}
 
 
@@ -204,8 +196,7 @@ async def fetch_jira_credentials(context: RunnerContext) -> dict:
     data = await _fetch_credential(context, "jira")
     if data.get("apiToken"):
         logger.info(
-            f"Using Jira credentials from backend "
-            f"(url: {data.get('url', 'unknown')})"
+            f"Using Jira credentials from backend (url: {data.get('url', 'unknown')})"
         )
     return data
 
@@ -252,9 +243,7 @@ async def fetch_token_for_url(context: RunnerContext, url: str) -> str:
         return token
 
     except Exception as e:
-        logger.warning(
-            f"Failed to parse URL {url}: {e}, falling back to GitHub token"
-        )
+        logger.warning(f"Failed to parse URL {url}: {e}, falling back to GitHub token")
         return os.getenv("GITHUB_TOKEN") or await fetch_github_token(context)
 
 
@@ -298,9 +287,7 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
         user_email = google_creds.get("email", "")
         if user_email and user_email != _PLACEHOLDER_EMAIL:
             os.environ["USER_GOOGLE_EMAIL"] = user_email
-            logger.info(
-                f"✓ Set USER_GOOGLE_EMAIL to {user_email} for workspace-mcp"
-            )
+            logger.info(f"✓ Set USER_GOOGLE_EMAIL to {user_email} for workspace-mcp")
 
     # Jira credentials
     jira_creds = await fetch_jira_credentials(context)
@@ -377,9 +364,7 @@ async def configure_git_identity(user_name: str, user_email: str) -> None:
 async def fetch_github_token_legacy(context: RunnerContext) -> str:
     """Legacy method — kept for backward compatibility."""
     base = os.getenv("BACKEND_API_URL", "").rstrip("/")
-    project = os.getenv("PROJECT_NAME") or os.getenv(
-        "AGENTIC_SESSION_NAMESPACE", ""
-    )
+    project = os.getenv("PROJECT_NAME") or os.getenv("AGENTIC_SESSION_NAMESPACE", "")
     project = project.strip()
     session_id = context.session_id
 
@@ -387,10 +372,7 @@ async def fetch_github_token_legacy(context: RunnerContext) -> str:
         logger.warning("Cannot fetch GitHub token: missing environment variables")
         return ""
 
-    url = (
-        f"{base}/projects/{project}/agentic-sessions/"
-        f"{session_id}/github/token"
-    )
+    url = f"{base}/projects/{project}/agentic-sessions/{session_id}/github/token"
     logger.info(f"Fetching GitHub token from legacy endpoint: {url}")
 
     req = _urllib_request.Request(
