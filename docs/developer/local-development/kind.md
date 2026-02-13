@@ -1,8 +1,8 @@
 # Local Development with Kind
 
-Run the Ambient Code Platform locally using kind (Kubernetes in Podman/Docker) for development and testing.
+**Bottom line:** `make kind-up` creates a local cluster with production images from Quay.io. Access at `http://localhost:8080` after running `make kind-port-forward`. Works natively on both Apple Silicon (arm64) and Intel (amd64).
 
-> **Cluster Name**: `ambient-local`  
+> **Cluster Name**: `ambient-local`
 > **Default Engine**: Podman (use `CONTAINER_ENGINE=docker` for more stable networking on macOS)
 
 ## Quick Start
@@ -258,6 +258,22 @@ make kind-up CONTAINER_ENGINE=docker
 ```bash
 lsof -i:8080  # Find what's using the port
 # Kill it or edit e2e/scripts/setup-kind.sh to use different ports
+```
+
+### init-hydrate crashes on Apple Silicon
+
+**Symptom:** `init-hydrate` init container crashes with `lfstack.push invalid packing` or rclone segfaults. The runner pod stays in `Init:CrashLoopBackOff`.
+
+**Cause:** The `STATE_SYNC_IMAGE` is pointing to an amd64-only image that runs under QEMU emulation, hitting a known Go runtime bug.
+
+**Fix:** Ensure the kind overlay uses multi-arch images from `quay.io/ambient_code/`:
+```bash
+# Verify the operator is using the correct registry
+kubectl get deployment agentic-operator -n ambient-code \
+  -o jsonpath='{.spec.template.spec.containers[0].env}' | python3 -m json.tool | grep -A1 STATE_SYNC
+
+# Should show: quay.io/ambient_code/vteam_state_sync:latest
+# If it shows gkrumbach07 or another registry, update the kind overlay and redeploy
 ```
 
 ### Build crashes with segmentation fault

@@ -3,7 +3,7 @@
 .PHONY: local-dev-token
 .PHONY: local-logs local-logs-backend local-logs-frontend local-logs-operator local-shell local-shell-frontend
 .PHONY: local-test local-test-dev local-test-quick test-all local-url local-troubleshoot local-port-forward local-stop-port-forward
-.PHONY: push-all registry-login setup-hooks remove-hooks check-minikube check-kind check-kubectl
+.PHONY: push-all registry-login setup-hooks remove-hooks check-minikube check-kind check-kubectl check-image-arch
 .PHONY: e2e-test e2e-setup e2e-clean deploy-langfuse-openshift
 .PHONY: setup-minio minio-console minio-logs minio-status
 .PHONY: validate-makefile lint-makefile check-shell makefile-health
@@ -560,7 +560,7 @@ clean: ## Clean up Kubernetes resources
 
 ##@ Kind Local Development
 
-kind-up: check-kind check-kubectl ## Start kind cluster with Quay.io images (production-like)
+kind-up: check-kind check-kubectl check-image-arch ## Start kind cluster with Quay.io images (production-like)
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Starting kind cluster..."
 	@cd e2e && CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/setup-kind.sh
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for API server to be accessible..."
@@ -674,6 +674,23 @@ check-kubectl: ## Check if kubectl is installed
 	@command -v kubectl >/dev/null 2>&1 || \
 		(echo "$(COLOR_RED)✗$(COLOR_RESET) kubectl not found. Install: https://kubernetes.io/docs/tasks/tools/" && exit 1)
 
+check-image-arch: ## Verify overlay images are multi-arch compatible with host
+	@if [ "$(HOST_ARCH)" = "arm64" ] || [ "$(HOST_ARCH)" = "aarch64" ]; then \
+		OVERLAY="components/manifests/overlays/kind/operator-env-patch.yaml"; \
+		BAD=$$(grep -E 'value:.*quay\.io/' "$$OVERLAY" 2>/dev/null | grep -v 'quay\.io/ambient_code/' || true); \
+		if [ -n "$$BAD" ]; then \
+			echo "$(COLOR_RED)✗$(COLOR_RESET) arm64 host detected but kind overlay references non-multi-arch images:"; \
+			echo "$$BAD" | sed 's/^/   /'; \
+			echo ""; \
+			echo "  Images must come from quay.io/ambient_code/ (multi-arch)."; \
+			echo "  Fix: $(COLOR_BOLD)$$OVERLAY$(COLOR_RESET)"; \
+			exit 1; \
+		fi; \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Image arch check passed (arm64 host, multi-arch images)"; \
+	else \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Image arch check passed (amd64 host)"; \
+	fi
+
 check-architecture: ## Validate build architecture matches host
 	@echo "$(COLOR_BOLD)Architecture Check$(COLOR_RESET)"
 	@echo "  Host: $(HOST_OS) / $(HOST_ARCH)"
@@ -700,21 +717,26 @@ _build-and-load: ## Internal: Build and load images
 	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) -t $(OPERATOR_IMAGE) components/operator $(QUIET_REDIRECT)
 	@echo "  Building runner ($(PLATFORM))..."
 	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) -t $(RUNNER_IMAGE) -f components/runners/claude-code-runner/Dockerfile components/runners $(QUIET_REDIRECT)
+	@echo "  Building state-sync ($(PLATFORM))..."
+	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) -t $(STATE_SYNC_IMAGE) components/runners/state-sync $(QUIET_REDIRECT)
 	@echo "  Tagging images with localhost prefix..."
 	@$(CONTAINER_ENGINE) tag $(BACKEND_IMAGE) localhost/$(BACKEND_IMAGE) 2>/dev/null || true
 	@$(CONTAINER_ENGINE) tag $(FRONTEND_IMAGE) localhost/$(FRONTEND_IMAGE) 2>/dev/null || true
 	@$(CONTAINER_ENGINE) tag $(OPERATOR_IMAGE) localhost/$(OPERATOR_IMAGE) 2>/dev/null || true
 	@$(CONTAINER_ENGINE) tag $(RUNNER_IMAGE) localhost/$(RUNNER_IMAGE) 2>/dev/null || true
+	@$(CONTAINER_ENGINE) tag $(STATE_SYNC_IMAGE) localhost/$(STATE_SYNC_IMAGE) 2>/dev/null || true
 	@echo "  Loading images into minikube..."
 	@mkdir -p /tmp/minikube-images
 	@$(CONTAINER_ENGINE) save -o /tmp/minikube-images/backend.tar localhost/$(BACKEND_IMAGE)
 	@$(CONTAINER_ENGINE) save -o /tmp/minikube-images/frontend.tar localhost/$(FRONTEND_IMAGE)
 	@$(CONTAINER_ENGINE) save -o /tmp/minikube-images/operator.tar localhost/$(OPERATOR_IMAGE)
 	@$(CONTAINER_ENGINE) save -o /tmp/minikube-images/runner.tar localhost/$(RUNNER_IMAGE)
+	@$(CONTAINER_ENGINE) save -o /tmp/minikube-images/state-sync.tar localhost/$(STATE_SYNC_IMAGE)
 	@minikube image load /tmp/minikube-images/backend.tar $(QUIET_REDIRECT)
 	@minikube image load /tmp/minikube-images/frontend.tar $(QUIET_REDIRECT)
 	@minikube image load /tmp/minikube-images/operator.tar $(QUIET_REDIRECT)
 	@minikube image load /tmp/minikube-images/runner.tar $(QUIET_REDIRECT)
+	@minikube image load /tmp/minikube-images/state-sync.tar $(QUIET_REDIRECT)
 	@rm -rf /tmp/minikube-images
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Images built and loaded"
 
