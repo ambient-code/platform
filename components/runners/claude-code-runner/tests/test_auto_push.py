@@ -1,27 +1,28 @@
-"""Unit tests for autoPush functionality in adapter.py."""
+"""Unit tests for autoPush functionality."""
 
 import json
 import os
 import sys
+from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-# Mock ag_ui module before importing adapter
+# Add parent directory to path
+runner_dir = Path(__file__).parent.parent
+if str(runner_dir) not in sys.path:
+    sys.path.insert(0, str(runner_dir))
+
+# Mock ag_ui module before importing modules
 sys.modules["ag_ui"] = Mock()
 sys.modules["ag_ui.core"] = Mock()
-sys.modules["context"] = Mock()
+
+from config import get_repos_config  # type: ignore[import]
+from prompts import build_workspace_context_prompt  # type: ignore[import]
 
 
 class TestGetReposConfig:
-    """Tests for _get_repos_config method."""
-
-    def setup_method(self):
-        """Set up test fixtures."""
-        # Import here after mocking dependencies
-        from adapter import ClaudeCodeAdapter
-
-        self.adapter = ClaudeCodeAdapter()
+    """Tests for config.get_repos_config function."""
 
     def test_parse_simple_repo_with_autopush_true(self):
         """Test parsing repo with autoPush=true."""
@@ -36,7 +37,7 @@ class TestGetReposConfig:
         )
 
         with patch.dict(os.environ, {"REPOS_JSON": repos_json}):
-            result = self.adapter._get_repos_config()
+            result = get_repos_config()
 
         assert len(result) == 1
         assert result[0]["url"] == "https://github.com/owner/repo.git"
@@ -57,7 +58,7 @@ class TestGetReposConfig:
         )
 
         with patch.dict(os.environ, {"REPOS_JSON": repos_json}):
-            result = self.adapter._get_repos_config()
+            result = get_repos_config()
 
         assert len(result) == 1
         assert result[0]["autoPush"] is False
@@ -69,7 +70,7 @@ class TestGetReposConfig:
         )
 
         with patch.dict(os.environ, {"REPOS_JSON": repos_json}):
-            result = self.adapter._get_repos_config()
+            result = get_repos_config()
 
         assert len(result) == 1
         assert result[0]["autoPush"] is False
@@ -97,7 +98,7 @@ class TestGetReposConfig:
         )
 
         with patch.dict(os.environ, {"REPOS_JSON": repos_json}):
-            result = self.adapter._get_repos_config()
+            result = get_repos_config()
 
         assert len(result) == 3
         assert result[0]["autoPush"] is True
@@ -118,7 +119,7 @@ class TestGetReposConfig:
         )
 
         with patch.dict(os.environ, {"REPOS_JSON": repos_json}):
-            result = self.adapter._get_repos_config()
+            result = get_repos_config()
 
         assert len(result) == 1
         assert result[0]["name"] == "my-custom-repo"
@@ -127,21 +128,21 @@ class TestGetReposConfig:
     def test_parse_empty_repos_json(self):
         """Test parsing empty REPOS_JSON."""
         with patch.dict(os.environ, {"REPOS_JSON": ""}):
-            result = self.adapter._get_repos_config()
+            result = get_repos_config()
 
         assert result == []
 
     def test_parse_missing_repos_json(self):
         """Test parsing when REPOS_JSON not set."""
         with patch.dict(os.environ, {}, clear=True):
-            result = self.adapter._get_repos_config()
+            result = get_repos_config()
 
         assert result == []
 
     def test_parse_invalid_json(self):
         """Test parsing invalid JSON returns empty list."""
         with patch.dict(os.environ, {"REPOS_JSON": "invalid-json{"}):
-            result = self.adapter._get_repos_config()
+            result = get_repos_config()
 
         assert result == []
 
@@ -150,7 +151,7 @@ class TestGetReposConfig:
         repos_json = json.dumps({"url": "https://github.com/owner/repo.git"})
 
         with patch.dict(os.environ, {"REPOS_JSON": repos_json}):
-            result = self.adapter._get_repos_config()
+            result = get_repos_config()
 
         assert result == []
 
@@ -159,7 +160,7 @@ class TestGetReposConfig:
         repos_json = json.dumps([{"branch": "main", "autoPush": True}])
 
         with patch.dict(os.environ, {"REPOS_JSON": repos_json}):
-            result = self.adapter._get_repos_config()
+            result = get_repos_config()
 
         assert result == []
 
@@ -175,7 +176,7 @@ class TestGetReposConfig:
             repos_json = json.dumps([{"url": url, "autoPush": True}])
 
             with patch.dict(os.environ, {"REPOS_JSON": repos_json}):
-                result = self.adapter._get_repos_config()
+                result = get_repos_config()
 
             assert len(result) == 1
             assert result[0]["name"] == expected_name
@@ -192,7 +193,7 @@ class TestGetReposConfig:
         )
 
         with patch.dict(os.environ, {"REPOS_JSON": repos_json}):
-            result = self.adapter._get_repos_config()
+            result = get_repos_config()
 
         assert len(result) == 1
         # Invalid type should default to False
@@ -210,7 +211,7 @@ class TestGetReposConfig:
         )
 
         with patch.dict(os.environ, {"REPOS_JSON": repos_json}):
-            result = self.adapter._get_repos_config()
+            result = get_repos_config()
 
         assert len(result) == 1
         # Invalid type should default to False
@@ -228,7 +229,7 @@ class TestGetReposConfig:
         )
 
         with patch.dict(os.environ, {"REPOS_JSON": repos_json}):
-            result = self.adapter._get_repos_config()
+            result = get_repos_config()
 
         assert len(result) == 1
         # null should default to False
@@ -236,19 +237,7 @@ class TestGetReposConfig:
 
 
 class TestBuildWorkspaceContextPrompt:
-    """Tests for _build_workspace_context_prompt method."""
-
-    def setup_method(self):
-        """Set up test fixtures."""
-        # Import here after mocking dependencies
-        from adapter import ClaudeCodeAdapter
-
-        self.adapter = ClaudeCodeAdapter()
-
-        # Create a mock context
-        mock_context = MagicMock()
-        mock_context.workspace_path = "/workspace"
-        self.adapter.context = mock_context
+    """Tests for prompts.build_workspace_context_prompt function."""
 
     def test_prompt_includes_git_instructions_with_autopush(self):
         """Test that git push instructions are included when autoPush=true."""
@@ -261,11 +250,12 @@ class TestBuildWorkspaceContextPrompt:
             }
         ]
 
-        prompt = self.adapter._build_workspace_context_prompt(
+        prompt = build_workspace_context_prompt(
             repos_cfg=repos_cfg,
             workflow_name=None,
             artifacts_path="artifacts",
             ambient_config={},
+            workspace_path="/workspace",
         )
 
         # Verify git instructions are present
@@ -287,11 +277,12 @@ class TestBuildWorkspaceContextPrompt:
             }
         ]
 
-        prompt = self.adapter._build_workspace_context_prompt(
+        prompt = build_workspace_context_prompt(
             repos_cfg=repos_cfg,
             workflow_name=None,
             artifacts_path="artifacts",
             ambient_config={},
+            workspace_path="/workspace",
         )
 
         # Verify git instructions are NOT present
@@ -323,11 +314,12 @@ class TestBuildWorkspaceContextPrompt:
             },
         ]
 
-        prompt = self.adapter._build_workspace_context_prompt(
+        prompt = build_workspace_context_prompt(
             repos_cfg=repos_cfg,
             workflow_name=None,
             artifacts_path="artifacts",
             ambient_config={},
+            workspace_path="/workspace",
         )
 
         # Verify both autoPush repos are listed
@@ -364,11 +356,12 @@ class TestBuildWorkspaceContextPrompt:
             }
         ]
 
-        prompt = self.adapter._build_workspace_context_prompt(
+        prompt = build_workspace_context_prompt(
             repos_cfg=repos_cfg,
             workflow_name="test-workflow",
             artifacts_path="artifacts",
             ambient_config={},
+            workspace_path="/workspace",
         )
 
         # Should include both workflow info and git instructions

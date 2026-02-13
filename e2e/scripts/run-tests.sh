@@ -33,11 +33,17 @@ fi
 # Use CYPRESS_BASE_URL from env, .env.test, or default
 CYPRESS_BASE_URL="${CYPRESS_BASE_URL:-http://localhost}"
 
-# Load ANTHROPIC_API_KEY from .env or .env.local if available
-if [ -f .env.local ]; then
-  source .env.local
-elif [ -f .env ]; then
-  source .env
+# Load ANTHROPIC_API_KEY from .env.test (CI), .env.local (local override), or .env (local dev)
+# Priority: .env.local > .env.test > .env
+if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
+  if [ -f .env.local ]; then
+    source .env.local
+  elif [ -f .env.test ]; then
+    # Load ANTHROPIC_API_KEY from .env.test if present (set by deploy.sh in CI)
+    source .env.test
+  elif [ -f .env ]; then
+    source .env
+  fi
 fi
 
 echo ""
@@ -66,7 +72,7 @@ echo ""
 # Pass test token, base URL, and API key (if available)
 CYPRESS_TEST_TOKEN="$TEST_TOKEN" \
   CYPRESS_BASE_URL="$CYPRESS_BASE_URL" \
-  ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}" \
+  CYPRESS_ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}" \
   npm test
 
 exit_code=$?

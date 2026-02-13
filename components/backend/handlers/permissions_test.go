@@ -738,17 +738,11 @@ var _ = Describe("Permissions Handler", Ordered, Label(test_constants.LabelUnit,
 	Context("Input Validation", func() {
 		It("Should reject userNames with invalid characters", func() {
 			invalidUserNames := []string{
-				"user@domain.com",       // @ not allowed in k8s resource names
-				"user/name",             // / not allowed
-				"user\\name",            // \ not allowed
-				"user:name",             // : not allowed
-				"user name",             // space not allowed
-				"user.name",             // . not allowed in k8s resource names
-				"User-Name",             // uppercase not allowed
-				"user-name-",            // can't end with dash
-				"-user-name",            // can't start with dash
-				"user..name",            // consecutive dots not allowed
-				strings.Repeat("a", 64), // too long (>63 chars)
+				"user\nname",             // newline not allowed (control character)
+				"user\tname",             // tab not allowed (control character)
+				"user\x00name",           // null byte not allowed (control character)
+				"user\x1fname",           // control character not allowed
+				strings.Repeat("a", 254), // too long (>253 chars)
 			}
 
 			for _, userName := range invalidUserNames {
@@ -770,7 +764,7 @@ var _ = Describe("Permissions Handler", Ordered, Label(test_constants.LabelUnit,
 
 				httpUtils.AssertHTTPStatus(http.StatusBadRequest)
 				httpUtils.AssertJSONContains(map[string]interface{}{
-					"error": "Invalid userName format. Must be a valid Kubernetes resource name.",
+					"error": "Invalid subject name format",
 				})
 
 				logger.Log("Correctly rejected invalid userName: %s", userName)
@@ -782,8 +776,14 @@ var _ = Describe("Permissions Handler", Ordered, Label(test_constants.LabelUnit,
 				"user-name",
 				"user123",
 				"123user",
-				"a",                     // single character
-				strings.Repeat("a", 63), // exactly 63 chars (max allowed)
+				"a",                      // single character
+				"system:authenticated",   // RBAC group for all authenticated users
+				"system:unauthenticated", // RBAC group for anonymous access
+				"system:serviceaccount:test-project:default", // service account reference
+				"user@domain.com",        // email addresses are valid RBAC subjects
+				"john.doe",               // dots are valid in RBAC subjects
+				"AdminUser",              // uppercase is valid in RBAC subjects
+				strings.Repeat("a", 253), // exactly 253 chars (max allowed for RBAC subjects)
 			}
 
 			for _, userName := range validUserNames {

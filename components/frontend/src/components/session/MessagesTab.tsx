@@ -24,7 +24,6 @@ export type MessagesTabProps = {
   setChatInput: (v: string) => void;
   onSendChat: () => Promise<void>;
   onInterrupt: () => Promise<void>;
-  onEndSession: () => Promise<void>;
   onGoToResults?: () => void;
   onContinue: () => void;
   workflowMetadata?: WorkflowMetadata;
@@ -39,9 +38,8 @@ export type MessagesTabProps = {
 };
 
 
-const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chatInput, setChatInput, onSendChat, onInterrupt, onEndSession, onGoToResults, onContinue, workflowMetadata, onCommandClick, isRunActive = false, showWelcomeExperience, welcomeExperienceComponent, activeWorkflow, userHasInteracted = false, queuedMessages = [], hasRealMessages = false }) => {
+const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chatInput, setChatInput, onSendChat, onInterrupt, onGoToResults, onContinue, workflowMetadata, onCommandClick, isRunActive = false, showWelcomeExperience, welcomeExperienceComponent, activeWorkflow, userHasInteracted = false, queuedMessages = [], hasRealMessages = false }) => {
   const [interrupting, setInterrupting] = useState(false);
-  const [ending, setEnding] = useState(false);
   const [sendingChat, setSendingChat] = useState(false);
   const [showSystemMessages, setShowSystemMessages] = useState(false);
   const [agentsPopoverOpen, setAgentsPopoverOpen] = useState(false);
@@ -167,15 +165,6 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
       await onInterrupt();
     } finally {
       setInterrupting(false);
-    }
-  };
-
-  const handleEndSession = async () => {
-    setEnding(true);
-    try {
-      await onEndSession();
-    } finally {
-      setEnding(false);
     }
   };
 
@@ -683,24 +672,15 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
                       Stop
                     </Button>
                   ) : (
-                    <Button 
-                      size="sm" 
-                      onClick={handleSendChat} 
-                      disabled={!chatInput.trim() || sendingChat || ending}
+                    <Button
+                      size="sm"
+                      onClick={handleSendChat}
+                      disabled={!chatInput.trim() || sendingChat}
                     >
                       {sendingChat && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
                       Send
                     </Button>
                   )}
-                  <Button 
-                    variant="secondary" 
-                    size="sm" 
-                    onClick={handleEndSession}
-                    disabled={ending || sendingChat || interrupting}
-                  >
-                    {ending && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
-                    End session
-                  </Button>
                 </div>
               </div>
           </div>

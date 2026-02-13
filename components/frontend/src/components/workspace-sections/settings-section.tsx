@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Label } from "@/components/ui/label";
@@ -26,18 +27,6 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
   const [showValues, setShowValues] = useState<Record<number, boolean>>({});
   const [anthropicApiKey, setAnthropicApiKey] = useState<string>("");
   const [showAnthropicKey, setShowAnthropicKey] = useState<boolean>(false);
-  const [gitUserName, setGitUserName] = useState<string>("");
-  const [gitUserEmail, setGitUserEmail] = useState<string>("");
-  const [gitToken, setGitToken] = useState<string>("");
-  const [showGitToken, setShowGitToken] = useState<boolean>(false);
-  const [jiraUrl, setJiraUrl] = useState<string>("");
-  const [jiraProject, setJiraProject] = useState<string>("");
-  const [jiraEmail, setJiraEmail] = useState<string>("");
-  const [jiraToken, setJiraToken] = useState<string>("");
-  const [showJiraToken, setShowJiraToken] = useState<boolean>(false);
-  const [gitlabToken, setGitlabToken] = useState<string>("");
-  const [gitlabInstanceUrl, setGitlabInstanceUrl] = useState<string>("");
-  const [showGitlabToken, setShowGitlabToken] = useState<boolean>(false);
   const [storageMode, setStorageMode] = useState<"shared" | "custom">("shared");
   const [s3Endpoint, setS3Endpoint] = useState<string>("");
   const [s3Bucket, setS3Bucket] = useState<string>("");
@@ -46,11 +35,8 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
   const [s3SecretKey, setS3SecretKey] = useState<string>("");
   const [showS3SecretKey, setShowS3SecretKey] = useState<boolean>(false);
   const [anthropicExpanded, setAnthropicExpanded] = useState<boolean>(false);
-  const [githubExpanded, setGithubExpanded] = useState<boolean>(false);
-  const [jiraExpanded, setJiraExpanded] = useState<boolean>(false);
-  const [gitlabExpanded, setGitlabExpanded] = useState<boolean>(false);
   const [s3Expanded, setS3Expanded] = useState<boolean>(false);
-  const FIXED_KEYS = useMemo(() => ["ANTHROPIC_API_KEY","GIT_USER_NAME","GIT_USER_EMAIL","GITHUB_TOKEN","JIRA_URL","JIRA_PROJECT","JIRA_EMAIL","JIRA_API_TOKEN","GITLAB_TOKEN","GITLAB_INSTANCE_URL","STORAGE_MODE","S3_ENDPOINT","S3_BUCKET","S3_REGION","S3_ACCESS_KEY","S3_SECRET_KEY"] as const, []);
+  const FIXED_KEYS = useMemo(() => ["ANTHROPIC_API_KEY","STORAGE_MODE","S3_ENDPOINT","S3_BUCKET","S3_REGION","S3_ACCESS_KEY","S3_SECRET_KEY"] as const, []);
 
   // React Query hooks
   const { data: project, isLoading: projectLoading } = useProject(projectName);
@@ -74,15 +60,6 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
     if (allSecrets.length > 0) {
       const byKey: Record<string, string> = Object.fromEntries(allSecrets.map(s => [s.key, s.value]));
       setAnthropicApiKey(byKey["ANTHROPIC_API_KEY"] || "");
-      setGitUserName(byKey["GIT_USER_NAME"] || "");
-      setGitUserEmail(byKey["GIT_USER_EMAIL"] || "");
-      setGitToken(byKey["GITHUB_TOKEN"] || "");
-      setJiraUrl(byKey["JIRA_URL"] || "");
-      setJiraProject(byKey["JIRA_PROJECT"] || "");
-      setJiraEmail(byKey["JIRA_EMAIL"] || "");
-      setJiraToken(byKey["JIRA_API_TOKEN"] || "");
-      setGitlabToken(byKey["GITLAB_TOKEN"] || "");
-      setGitlabInstanceUrl(byKey["GITLAB_INSTANCE_URL"] || "");
       // Determine storage mode: "custom" if S3_ENDPOINT is set, otherwise "shared" (default)
       const hasCustomS3 = byKey["STORAGE_MODE"] === "custom" || (byKey["S3_ENDPOINT"] && byKey["S3_ENDPOINT"] !== "");
       setStorageMode(hasCustomS3 ? "custom" : "shared");
@@ -153,16 +130,7 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
 
     const integrationData: Record<string, string> = {};
 
-    // GITHUB_TOKEN, GIT_USER_*, JIRA_*, custom keys go to ambient-non-vertex-integrations
-    if (gitUserName) integrationData["GIT_USER_NAME"] = gitUserName;
-    if (gitUserEmail) integrationData["GIT_USER_EMAIL"] = gitUserEmail;
-    if (gitToken) integrationData["GITHUB_TOKEN"] = gitToken;
-    if (jiraUrl) integrationData["JIRA_URL"] = jiraUrl;
-    if (jiraProject) integrationData["JIRA_PROJECT"] = jiraProject;
-    if (jiraEmail) integrationData["JIRA_EMAIL"] = jiraEmail;
-    if (jiraToken) integrationData["JIRA_API_TOKEN"] = jiraToken;
-    if (gitlabToken) integrationData["GITLAB_TOKEN"] = gitlabToken;
-    if (gitlabInstanceUrl) integrationData["GITLAB_INSTANCE_URL"] = gitlabInstanceUrl;
+    // NOTE: GIT_USER_* removed - git identity now auto-derived from GitHub/GitLab credentials
     
     // S3 Storage configuration
     integrationData["STORAGE_MODE"] = storageMode;
@@ -358,142 +326,18 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
             )}
           </div>
 
-          {/* GitHub Integration Section */}
-          <div className="border rounded-lg">
-            <button
-              type="button"
-              onClick={() => setGithubExpanded(!githubExpanded)}
-              className="w-full flex items-center justify-between p-3 hover:bg-muted/50 transition-colors rounded-lg"
-            >
-              <div className="flex items-center gap-2">
-                {githubExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                <span className="font-semibold">GitHub Integration</span>
-                {(gitUserName || gitUserEmail || gitToken) && <span className="text-xs text-muted-foreground">(configured)</span>}
-              </div>
-            </button>
-            {githubExpanded && (
-              <div className="px-3 pb-3 space-y-3 border-t pt-3">
-                <div className="text-xs text-muted-foreground">Configure Git credentials for repository operations (clone, commit, push)</div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <Label htmlFor="gitUserName">GIT_USER_NAME</Label>
-                    <Input id="gitUserName" placeholder="Your Name" value={gitUserName} onChange={(e) => setGitUserName(e.target.value)} />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="gitUserEmail">GIT_USER_EMAIL</Label>
-                    <Input id="gitUserEmail" placeholder="you@example.com" value={gitUserEmail} onChange={(e) => setGitUserEmail(e.target.value)} />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="gitToken">GITHUB_TOKEN</Label>
-                  <div className="text-xs text-muted-foreground mb-1">GitHub personal access token or fine-grained token for git operations and API access</div>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      id="gitToken"
-                      type={showGitToken ? "text" : "password"}
-                      placeholder="ghp_... or glpat-..."
-                      value={gitToken}
-                      onChange={(e) => setGitToken(e.target.value)}
-                      className="flex-1"
-                    />
-                    <Button type="button" variant="ghost" size="sm" onClick={() => setShowGitToken((v) => !v)} aria-label={showGitToken ? "Hide token" : "Show token"}>
-                      {showGitToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Jira Integration Section */}
-          <div className="border rounded-lg">
-            <button
-              type="button"
-              onClick={() => setJiraExpanded(!jiraExpanded)}
-              className="w-full flex items-center justify-between p-3 hover:bg-muted/50 transition-colors rounded-lg"
-            >
-              <div className="flex items-center gap-2">
-                {jiraExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                <span className="font-semibold">Jira Integration</span>
-                {(jiraUrl || jiraProject || jiraEmail || jiraToken) && <span className="text-xs text-muted-foreground">(configured)</span>}
-              </div>
-            </button>
-            {jiraExpanded && (
-              <div className="px-3 pb-3 space-y-3 border-t pt-3">
-                <div className="text-xs text-muted-foreground">Configure Jira integration for issue management</div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <Label htmlFor="jiraUrl">JIRA_URL</Label>
-                    <Input id="jiraUrl" placeholder="https://your-domain.atlassian.net" value={jiraUrl} onChange={(e) => setJiraUrl(e.target.value)} />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="jiraProject">JIRA_PROJECT</Label>
-                    <Input id="jiraProject" placeholder="ABC" value={jiraProject} onChange={(e) => setJiraProject(e.target.value)} />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="jiraEmail">JIRA_EMAIL</Label>
-                    <Input id="jiraEmail" placeholder="you@example.com" value={jiraEmail} onChange={(e) => setJiraEmail(e.target.value)} />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="jiraToken">JIRA_API_TOKEN</Label>
-                    <div className="flex items-center gap-2">
-                      <Input id="jiraToken" type={showJiraToken ? "text" : "password"} placeholder="token" value={jiraToken} onChange={(e) => setJiraToken(e.target.value)} />
-                      <Button type="button" variant="ghost" size="sm" onClick={() => setShowJiraToken((v) => !v)} aria-label={showJiraToken ? "Hide token" : "Show token"}>
-                        {showJiraToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* GitLab Integration Section */}
-          <div className="border rounded-lg">
-            <button
-              type="button"
-              onClick={() => setGitlabExpanded(!gitlabExpanded)}
-              className="w-full flex items-center justify-between p-3 hover:bg-muted/50 transition-colors rounded-lg"
-            >
-              <div className="flex items-center gap-2">
-                {gitlabExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                <span className="font-semibold">GitLab Integration</span>
-                {(gitlabToken || gitlabInstanceUrl) && <span className="text-xs text-muted-foreground">(configured)</span>}
-              </div>
-            </button>
-            {gitlabExpanded && (
-              <div className="px-3 pb-3 space-y-3 border-t pt-3">
-                <div className="text-xs text-muted-foreground">Configure GitLab credentials for repository operations (clone, commit, push)</div>
-                <div className="space-y-2">
-                  <Label htmlFor="gitlabToken">GITLAB_TOKEN</Label>
-                  <div className="text-xs text-muted-foreground mb-1">GitLab personal access token (glpat-...) with api, read_api, read_user, write_repository scopes</div>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      id="gitlabToken"
-                      type={showGitlabToken ? "text" : "password"}
-                      placeholder="glpat-..."
-                      value={gitlabToken}
-                      onChange={(e) => setGitlabToken(e.target.value)}
-                      className="flex-1"
-                    />
-                    <Button type="button" variant="ghost" size="sm" onClick={() => setShowGitlabToken((v) => !v)} aria-label={showGitlabToken ? "Hide token" : "Show token"}>
-                      {showGitlabToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </Button>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="gitlabInstanceUrl">GITLAB_INSTANCE_URL</Label>
-                  <div className="text-xs text-muted-foreground mb-1">GitLab instance URL (leave empty for gitlab.com, or use https://gitlab.company.com for self-hosted)</div>
-                  <Input
-                    id="gitlabInstanceUrl"
-                    type="text"
-                    placeholder="https://gitlab.com"
-                    value={gitlabInstanceUrl}
-                    onChange={(e) => setGitlabInstanceUrl(e.target.value)}
-                  />
-                </div>
-              </div>
-            )}
+          {/* Migration Notice */}
+          <div className="border rounded-lg p-4 bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
+            <h3 className="text-sm font-semibold mb-2 text-blue-900 dark:text-blue-100">Integration Credentials Moved</h3>
+            <p className="text-xs text-blue-800 dark:text-blue-200 mb-2">
+              GitHub, GitLab, Jira, and Google Drive credentials are now managed at the user level on the{' '}
+              <Link href="/integrations" className="underline font-medium">Integrations page</Link>.
+              This allows you to use the same credentials across all your workspaces.
+            </p>
+            <p className="text-xs text-blue-700 dark:text-blue-300">
+              Any credentials previously configured here will continue to work as a fallback, but we recommend
+              connecting your integrations on the Integrations page for the best experience.
+            </p>
           </div>
 
           {/* S3 Storage Configuration Section */}

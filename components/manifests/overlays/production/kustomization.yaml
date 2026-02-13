@@ -14,6 +14,7 @@ resources:
 - ../../base
 - route.yaml
 - backend-route.yaml
+- public-api-route.yaml
 - operator-config-openshift.yaml
 
 # Patches for production environment
@@ -59,4 +60,10 @@ images:
   newTag: latest
 - name: quay.io/ambient_code/vteam_state_sync:latest
   newName: quay.io/ambient_code/vteam_state_sync
+  newTag: latest
+- name: quay.io/ambient_code/vteam_public_api
+  newName: quay.io/ambient_code/vteam_public_api
+  newTag: latest
+- name: quay.io/ambient_code/vteam_public_api:latest
+  newName: quay.io/ambient_code/vteam_public_api
   newTag: latest

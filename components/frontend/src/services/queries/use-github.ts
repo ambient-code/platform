@@ -76,8 +76,9 @@ export function useConnectGitHub() {
   return useMutation({
     mutationFn: (data: GitHubConnectRequest) => githubApi.connectGitHub(data),
     onSuccess: () => {
-      // Invalidate status to show connected state
+      // Invalidate both GitHub-specific and unified integrations status
       queryClient.invalidateQueries({ queryKey: githubKeys.status() });
+      queryClient.invalidateQueries({ queryKey: ['integrations', 'status'] });
     },
   });
 }
@@ -91,8 +92,9 @@ export function useDisconnectGitHub() {
   return useMutation({
     mutationFn: githubApi.disconnectGitHub,
     onSuccess: () => {
-      // Invalidate status to show disconnected state
+      // Invalidate both GitHub-specific and unified integrations status
       queryClient.invalidateQueries({ queryKey: githubKeys.status() });
+      queryClient.invalidateQueries({ queryKey: ['integrations', 'status'] });
       // Clear forks cache
       queryClient.invalidateQueries({ queryKey: githubKeys.forks() });
     },
@@ -138,5 +140,48 @@ export function useCreatePullRequest() {
       data: CreatePRRequest;
       projectName?: string;
     }) => githubApi.createPullRequest(data, projectName),
+  });
+}
+
+/**
+ * Hook to get GitHub PAT status
+ */
+export function useGitHubPATStatus() {
+  return useQuery({
+    queryKey: [...githubKeys.all, 'pat', 'status'],
+    queryFn: githubApi.getGitHubPATStatus,
+    staleTime: 60 * 1000, // 1 minute
+  });
+}
+
+/**
+ * Hook to save GitHub PAT
+ */
+export function useSaveGitHubPAT() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (token: string) => githubApi.saveGitHubPAT(token),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [...githubKeys.all, 'pat', 'status'] });
+      queryClient.invalidateQueries({ queryKey: githubKeys.status() });
+      queryClient.invalidateQueries({ queryKey: ['integrations', 'status'] });
+    },
+  });
+}
+
+/**
+ * Hook to delete GitHub PAT
+ */
+export function useDeleteGitHubPAT() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: githubApi.deleteGitHubPAT,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [...githubKeys.all, 'pat', 'status'] });
+      queryClient.invalidateQueries({ queryKey: githubKeys.status() });
+      queryClient.invalidateQueries({ queryKey: ['integrations', 'status'] });
+    },
   });
 }

@@ -32,6 +32,7 @@ var _ = Describe("Content Handler", Label(test_constants.LabelUnit, test_constan
 		originalGitPushToRepo         func(ctx context.Context, repoDir, branch, commitMessage, githubToken string) error
 		originalGitCreateBranch       func(ctx context.Context, repoDir, branchName string) error
 		originalGitListRemoteBranches func(ctx context.Context, repoDir string) ([]string, error)
+		originalGetRemoteURL          func(ctx context.Context, repoDir string) (string, error)
 	)
 
 	BeforeEach(func() {
@@ -58,6 +59,12 @@ var _ = Describe("Content Handler", Label(test_constants.LabelUnit, test_constan
 		originalGitPushToRepo = GitPushToRepo
 		originalGitCreateBranch = GitCreateBranch
 		originalGitListRemoteBranches = GitListRemoteBranches
+		originalGetRemoteURL = GetRemoteURL
+
+		// Default mock for GetRemoteURL - returns GitHub URL
+		GetRemoteURL = func(ctx context.Context, repoDir string) (string, error) {
+			return "https://github.com/test/repo.git", nil
+		}
 	})
 
 	AfterEach(func() {
@@ -71,6 +78,7 @@ var _ = Describe("Content Handler", Label(test_constants.LabelUnit, test_constan
 		GitPushToRepo = originalGitPushToRepo
 		GitCreateBranch = originalGitCreateBranch
 		GitListRemoteBranches = originalGitListRemoteBranches
+		GetRemoteURL = originalGetRemoteURL
 
 		// Clean up temp directory
 		if tempStateDir != "" {

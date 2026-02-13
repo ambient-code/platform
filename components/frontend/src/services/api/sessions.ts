@@ -17,14 +17,25 @@ import type {
   PaginationParams,
 } from '@/types/api';
 
+export type McpToolAnnotations = {
+  readOnly?: boolean;
+  destructive?: boolean;
+  idempotent?: boolean;
+  openWorld?: boolean;
+  [key: string]: boolean | undefined;
+};
+
+export type McpTool = {
+  name: string;
+  annotations: McpToolAnnotations;
+};
+
 export type McpServer = {
   name: string;
   displayName: string;
-  status: 'configured' | 'connected' | 'disconnected' | 'error';
-  authenticated?: boolean;
-  authMessage?: string;
-  source?: string;
-  command?: string;
+  status: string;
+  version?: string;
+  tools?: McpTool[];
 };
 
 export type McpStatusResponse = {

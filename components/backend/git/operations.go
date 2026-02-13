@@ -31,6 +31,8 @@ import (
 var (
 	GetProjectSettingsResource func() schema.GroupVersionResource
 	GetGitHubInstallation      func(context.Context, string) (interface{}, error)
+	GetGitHubPATCredentials    func(context.Context, string) (interface{}, error)
+	GetGitLabCredentials       func(context.Context, string) (interface{}, error)
 	GitHubTokenManager         interface{} // *GitHubTokenManager from main package
 	GetBackendNamespace        func() string
 )
@@ -48,9 +50,29 @@ type DiffSummary struct {
 	FilesRemoved int `json:"files_removed"`
 }
 
-// GetGitHubToken tries to get a GitHub token from GitHub App first, then falls back to project runner secret
+// GetGitHubToken tries to get a GitHub token with the following precedence:
+// 1. User's Personal Access Token (cluster-level, highest priority)
+// 2. GitHub App installation token (cluster-level)
+// 3. Project-level GITHUB_TOKEN (legacy fallback)
 func GetGitHubToken(ctx context.Context, k8sClient *kubernetes.Clientset, dynClient dynamic.Interface, project, userID string) (string, error) {
-	// Try GitHub App first if available
+	// Priority 1: Check for user's GitHub PAT (cluster-level)
+	if GetGitHubPATCredentials != nil {
+		patCreds, err := GetGitHubPATCredentials(ctx, userID)
+		if err == nil && patCreds != nil {
+			type patCredentials interface {
+				GetToken() string
+			}
+			if pat, ok := patCreds.(patCredentials); ok {
+				token := pat.GetToken()
+				if token != "" {
+					log.Printf("Using GitHub PAT for user %s (overrides GitHub App)", userID)
+					return token, nil
+				}
+			}
+		}
+	}
+
+	// Priority 2: Try GitHub App if available
 	if GetGitHubInstallation != nil && GitHubTokenManager != nil {
 		installation, err := GetGitHubInstallation(ctx, userID)
 		if err == nil && installation != nil {
@@ -77,76 +99,95 @@ func GetGitHubToken(ctx context.Context, k8sClient *kubernetes.Clientset, dynCli
 		}
 	}
 
-	// Fall back to project integration secret GITHUB_TOKEN (hardcoded secret name)
+	// Priority 3: Fall back to project integration secret GITHUB_TOKEN (legacy, deprecated)
 	if k8sClient == nil {
 		log.Printf("Cannot read integration secret: k8s client is nil")
-		return "", fmt.Errorf("no GitHub credentials available. Either connect GitHub App or configure GITHUB_TOKEN in integration secrets")
+		return "", fmt.Errorf("no GitHub credentials available. Connect GitHub on the Integrations page")
 	}
 
 	const secretName = "ambient-non-vertex-integrations"
 
-	log.Printf("Attempting to read GITHUB_TOKEN from secret %s/%s", project, secretName)
+	log.Printf("Attempting to read GITHUB_TOKEN from secret %s/%s (legacy fallback)", project, secretName)
 
 	secret, err := k8sClient.CoreV1().Secrets(project).Get(ctx, secretName, v1.GetOptions{})
 	if err != nil {
 		log.Printf("Failed to get integration secret %s/%s: %v", project, secretName, err)
-		return "", fmt.Errorf("no GitHub credentials available. Either connect GitHub App or configure GITHUB_TOKEN in integration secrets")
+		return "", fmt.Errorf("no GitHub credentials available. Connect GitHub on the Integrations page")
 	}
 
 	if secret.Data == nil {
 		log.Printf("Secret %s/%s exists but Data is nil", project, secretName)
-		return "", fmt.Errorf("no GitHub credentials available. Either connect GitHub App or configure GITHUB_TOKEN in integration secrets")
+		return "", fmt.Errorf("no GitHub credentials available. Connect GitHub on the Integrations page")
 	}
 
 	token, ok := secret.Data["GITHUB_TOKEN"]
 	if !ok {
 		log.Printf("Secret %s/%s exists but has no GITHUB_TOKEN key (available keys: %v)", project, secretName, getSecretKeys(secret.Data))
-		return "", fmt.Errorf("no GitHub credentials available. Either connect GitHub App or configure GITHUB_TOKEN in integration secrets")
+		return "", fmt.Errorf("no GitHub credentials available. Connect GitHub on the Integrations page")
 	}
 
 	if len(token) == 0 {
 		log.Printf("Secret %s/%s has GITHUB_TOKEN key but value is empty", project, secretName)
-		return "", fmt.Errorf("no GitHub credentials available. Either connect GitHub App or configure GITHUB_TOKEN in integration secrets")
+		return "", fmt.Errorf("no GitHub credentials available. Connect GitHub on the Integrations page")
 	}
 
 	// Trim whitespace and newlines from token (common issue when copying from web UI)
 	cleanToken := strings.TrimSpace(string(token))
-	log.Printf("Using GITHUB_TOKEN from integration secret %s/%s (length=%d)", project, secretName, len(cleanToken))
+	log.Printf("Using GITHUB_TOKEN from integration secret %s/%s (length=%d, legacy fallback)", project, secretName, len(cleanToken))
 	return cleanToken, nil
 }
 
 // GetGitLabToken retrieves a GitLab Personal Access Token for a user
+// Priority: Cluster-level credentials > Project-level fallback (legacy)
 func GetGitLabToken(ctx context.Context, k8sClient kubernetes.Interface, project, userID string) (string, error) {
-	if k8sClient == nil {
-		log.Printf("Cannot read GitLab token: k8s client is nil")
-		return "", fmt.Errorf("no GitLab credentials available. Please connect your GitLab account")
+	// Priority 1: Check cluster-level GitLab credentials
+	if GetGitLabCredentials != nil {
+		gitlabCreds, err := GetGitLabCredentials(ctx, userID)
+		if err == nil && gitlabCreds != nil {
+			type gitlabCredentials interface {
+				GetToken() string
+			}
+			if creds, ok := gitlabCreds.(gitlabCredentials); ok && creds != nil {
+				token := creds.GetToken()
+				if token != "" {
+					log.Printf("Using cluster-level GitLab token for user %s", userID)
+					return token, nil
+				}
+			}
+		}
 	}
 
-	// GitLab tokens are stored in the project namespace (multi-tenant isolation)
-	// This matches the GitHub PAT pattern using ambient-non-vertex-integrations
+	// Priority 2: Fall back to project-level gitlab-user-tokens (legacy, deprecated)
+	if k8sClient == nil {
+		log.Printf("Cannot read GitLab token: k8s client is nil")
+		return "", fmt.Errorf("no GitLab credentials available. Connect GitLab on the Integrations page")
+	}
+
+	log.Printf("Attempting to read GitLab token from project secret (legacy fallback)")
+
 	secret, err := k8sClient.CoreV1().Secrets(project).Get(ctx, "gitlab-user-tokens", v1.GetOptions{})
 	if err != nil {
 		log.Printf("Failed to get gitlab-user-tokens secret in %s: %v", project, err)
-		return "", fmt.Errorf("no GitLab credentials available. Please connect your GitLab account in this project")
+		return "", fmt.Errorf("no GitLab credentials available. Connect GitLab on the Integrations page")
 	}
 
 	if secret.Data == nil {
 		log.Printf("Secret gitlab-user-tokens exists but Data is nil")
-		return "", fmt.Errorf("no GitLab credentials available. Please connect your GitLab account")
+		return "", fmt.Errorf("no GitLab credentials available. Connect GitLab on the Integrations page")
 	}
 
 	token, ok := secret.Data[userID]
 	if !ok {
 		log.Printf("Secret gitlab-user-tokens has no token for user %s", userID)
-		return "", fmt.Errorf("no GitLab credentials available. Please connect your GitLab account")
+		return "", fmt.Errorf("no GitLab credentials available. Connect GitLab on the Integrations page")
 	}
 
 	if len(token) == 0 {
 		log.Printf("Secret gitlab-user-tokens has token for user %s but value is empty", userID)
-		return "", fmt.Errorf("no GitLab credentials available. Please connect your GitLab account")
+		return "", fmt.Errorf("no GitLab credentials available. Connect GitLab on the Integrations page")
 	}
 
-	log.Printf("Using GitLab token for user %s from gitlab-user-tokens secret", userID)
+	log.Printf("Using GitLab token for user %s from gitlab-user-tokens secret (legacy fallback)", userID)
 	return string(token), nil
 }
 

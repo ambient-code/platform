@@ -9,6 +9,14 @@ export type GitHubStatus = {
   userId?: string;
   host?: string;
   updatedAt?: string;
+  // PAT status
+  pat?: {
+    configured: boolean;
+    updatedAt?: string;
+    valid?: boolean;
+  };
+  // Active method: 'app' | 'pat'
+  active?: string;
   // Legacy OAuth fields (deprecated)
   connected?: boolean;
   username?: string;
@@ -77,14 +85,12 @@ export type CreatePRResponse = {
 
 export type GitHubConnectRequest = {
   installationId: number;
-  // Legacy OAuth fields (deprecated)
   code?: string;
-  state?: string;
 };
 
 export type GitHubConnectResponse = {
   message: string;
-  username: string;
+  installationId: number;
 };
 
 export type GitHubDisconnectResponse = {

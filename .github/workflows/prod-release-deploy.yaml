@@ -265,7 +265,8 @@ jobs:
         run: |
           oc set env deployment/frontend -n ambient-code -c frontend \
             GITHUB_APP_SLUG="ambient-code" \
-            VTEAM_VERSION="${{ needs.release.outputs.new_tag }}"
+            VTEAM_VERSION="${{ needs.release.outputs.new_tag }}" \
+            FEEDBACK_URL="https://forms.gle/7XiWrvo6No922DUz6"
 
       - name: Update backend environment variables
         run: |

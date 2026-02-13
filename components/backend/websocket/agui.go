@@ -123,6 +123,11 @@ func RouteAGUIEvent(sessionID string, event map[string]interface{}) {
 
 	// If no active run found, check if event has a runId we should create
 	if activeRunState == nil {
+		// Ensure timestamp is set before any early returns
+		if event["timestamp"] == nil || event["timestamp"] == "" {
+			event["timestamp"] = time.Now().UTC().Format(types.AGUITimestampFormat)
+		}
+
 		// Don't create lazy runs for terminal events - they should only apply to existing runs
 		if isTerminalEventType(eventType) {
 			go persistAGUIEventMap(sessionID, "", event)
@@ -163,12 +168,16 @@ func RouteAGUIEvent(sessionID string, event map[string]interface{}) {
 		threadID = eventThreadID
 	}
 
-	// Fill in missing IDs only if not present
+	// Fill in missing IDs and timestamp
 	if event["threadId"] == nil || event["threadId"] == "" {
 		event["threadId"] = threadID
 	}
 	if event["runId"] == nil || event["runId"] == "" {
 		event["runId"] = runID
+	}
+	// Add timestamp if not present - critical for message timestamp tracking
+	if event["timestamp"] == nil || event["timestamp"] == "" {
+		event["timestamp"] = time.Now().UTC().Format(types.AGUITimestampFormat)
 	}
 
 	// Broadcast to run-specific SSE subscribers

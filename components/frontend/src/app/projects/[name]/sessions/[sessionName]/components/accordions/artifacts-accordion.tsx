@@ -64,9 +64,9 @@ export function ArtifactsAccordion({
           </p>
           
           {/* File Browser for Artifacts */}
-          <div className="border rounded-lg overflow-hidden">
+          <div className="overflow-hidden">
             {/* Header with breadcrumbs and actions */}
-            <div className="px-2 py-1.5 border-b flex items-center justify-between bg-muted/30">
+            <div className="px-2 py-1.5 border-y flex items-center justify-between bg-muted/30">
               <div className="flex items-center gap-1 text-xs text-muted-foreground min-w-0 flex-1">
                 {/* Back button when in subfolder or viewing file */}
                 {(currentSubPath || viewingFile) && (

@@ -60,21 +60,25 @@ spec:
           httpGet:
             path: /minio/health/live
             port: 9000
-          initialDelaySeconds: 30
-          periodSeconds: 10
+          initialDelaySeconds: 60
+          periodSeconds: 15
+          timeoutSeconds: 5
+          failureThreshold: 5
         readinessProbe:
           httpGet:
             path: /minio/health/ready
             port: 9000
-          initialDelaySeconds: 10
-          periodSeconds: 5
+          initialDelaySeconds: 20
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 5
         resources:
           requests:
-            cpu: 250m
-            memory: 512Mi
+            cpu: 2000m
+            memory: 4Gi
           limits:
-            cpu: 1000m
-            memory: 2Gi
+            cpu: 4000m
+            memory: 8Gi
       volumes:
       - name: data
         persistentVolumeClaim:

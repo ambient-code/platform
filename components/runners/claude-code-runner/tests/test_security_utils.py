@@ -5,13 +5,9 @@ import logging
 
 import pytest
 
-from security_utils import (
-    sanitize_exception_message,
-    sanitize_model_name,
-    validate_and_sanitize_for_logging,
-    with_sync_timeout,
-    with_timeout,
-)
+from security_utils import (sanitize_exception_message, sanitize_model_name,
+                            validate_and_sanitize_for_logging,
+                            with_sync_timeout, with_timeout)
 
 
 class TestSanitizeExceptionMessage:

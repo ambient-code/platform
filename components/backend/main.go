@@ -95,7 +95,25 @@ func main() {
 	// Initialize git package
 	git.GetProjectSettingsResource = k8s.GetProjectSettingsResource
 	git.GetGitHubInstallation = func(ctx context.Context, userID string) (interface{}, error) {
-		return github.GetInstallation(ctx, userID)
+		installation, err := github.GetInstallation(ctx, userID)
+		if installation == nil {
+			return nil, err
+		}
+		return installation, err
+	}
+	git.GetGitHubPATCredentials = func(ctx context.Context, userID string) (interface{}, error) {
+		creds, err := handlers.GetGitHubPATCredentials(ctx, userID)
+		if creds == nil {
+			return nil, err
+		}
+		return creds, err
+	}
+	git.GetGitLabCredentials = func(ctx context.Context, userID string) (interface{}, error) {
+		creds, err := handlers.GetGitLabCredentials(ctx, userID)
+		if creds == nil {
+			return nil, err
+		}
+		return creds, err
 	}
 	git.GitHubTokenManager = github.Manager
 	git.GetBackendNamespace = func() string {
@@ -128,6 +146,7 @@ func main() {
 	handlers.GetAgenticSessionV1Alpha1Resource = k8s.GetAgenticSessionV1Alpha1Resource
 	handlers.DynamicClient = server.DynamicClient
 	handlers.GetGitHubToken = handlers.WrapGitHubTokenForRepo(git.GetGitHubToken)
+	handlers.GetGitLabToken = git.GetGitLabToken
 	handlers.DeriveRepoFolderFromURL = git.DeriveRepoFolderFromURL
 	// LEGACY: SendMessageToSession removed - AG-UI server uses HTTP/SSE instead of WebSocket
 

@@ -1,4 +1,4 @@
-.PHONY: help setup build-all build-frontend build-backend build-operator build-runner build-state-sync deploy clean check-architecture
+.PHONY: help setup build-all build-frontend build-backend build-operator build-runner build-state-sync build-public-api deploy clean check-architecture
 .PHONY: local-up local-down local-clean local-status local-rebuild local-reload-backend local-reload-frontend local-reload-operator local-sync-version
 .PHONY: local-dev-token
 .PHONY: local-logs local-logs-backend local-logs-frontend local-logs-operator local-shell local-shell-frontend
@@ -59,6 +59,15 @@ BACKEND_IMAGE ?= vteam_backend:latest
 OPERATOR_IMAGE ?= vteam_operator:latest
 RUNNER_IMAGE ?= vteam_claude_runner:latest
 STATE_SYNC_IMAGE ?= vteam_state_sync:latest
+PUBLIC_API_IMAGE ?= vteam_public_api:latest
+
+# Vertex AI Configuration (for LOCAL_VERTEX=true)
+# These inherit from environment if set, or can be overridden on command line
+LOCAL_VERTEX ?= false
+ANTHROPIC_VERTEX_PROJECT_ID ?= $(shell echo $$ANTHROPIC_VERTEX_PROJECT_ID)
+CLOUD_ML_REGION ?= $(shell echo $$CLOUD_ML_REGION)
+# Default to ADC location if not set (created by: gcloud auth application-default login)
+GOOGLE_APPLICATION_CREDENTIALS ?= $(or $(shell echo $$GOOGLE_APPLICATION_CREDENTIALS),$(HOME)/.config/gcloud/application_default_credentials.json)
 
 
 # Colors for output (using tput for better compatibility, with fallback to printf-compatible codes)
@@ -106,7 +115,7 @@ help: ## Display this help message
 
 ##@ Building
 
-build-all: build-frontend build-backend build-operator build-runner build-state-sync ## Build all container images
+build-all: build-frontend build-backend build-operator build-runner build-state-sync build-public-api ## Build all container images
 
 build-frontend: ## Build frontend image
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building frontend with $(CONTAINER_ENGINE)..."
@@ -138,6 +147,12 @@ build-state-sync: ## Build state-sync image for S3 persistence
 		-t vteam_state_sync:latest .
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) State-sync built: vteam_state_sync:latest"
 
+build-public-api: ## Build public API gateway image
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building public-api with $(CONTAINER_ENGINE)..."
+	@cd components/public-api && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
+		-t $(PUBLIC_API_IMAGE) .
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Public API built: $(PUBLIC_API_IMAGE)"
+
 ##@ Git Hooks
 
 setup-hooks: ## Install git hooks for branch protection
@@ -157,7 +172,7 @@ registry-login: ## Login to container registry
 
 push-all: registry-login ## Push all images to registry
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Pushing images to $(REGISTRY)..."
-	@for image in $(FRONTEND_IMAGE) $(BACKEND_IMAGE) $(OPERATOR_IMAGE) $(RUNNER_IMAGE) $(STATE_SYNC_IMAGE); do \
+	@for image in $(FRONTEND_IMAGE) $(BACKEND_IMAGE) $(OPERATOR_IMAGE) $(RUNNER_IMAGE) $(STATE_SYNC_IMAGE) $(PUBLIC_API_IMAGE); do \
 		echo "  Tagging and pushing $$image..."; \
 		$(CONTAINER_ENGINE) tag $$image $(REGISTRY)/$$image && \
 		$(CONTAINER_ENGINE) push $(REGISTRY)/$$image; \
@@ -221,7 +236,7 @@ local-up: check-minikube check-kubectl ## Start local development environment (m
 			(minikube status >/dev/null 2>&1 && echo "$(COLOR_GREEN)✓$(COLOR_RESET) Minikube already running") || \
 			(echo "$(COLOR_RED)✗$(COLOR_RESET) Failed to start minikube" && exit 1); \
 	else \
-		minikube start --driver=podman --memory=4096 --cpus=2 --kubernetes-version=v1.28.3 --container-runtime=cri-o $(QUIET_REDIRECT) || \
+		minikube start --driver=podman --memory=4096 --cpus=2 --kubernetes-version=v1.35.0 --container-runtime=cri-o $(QUIET_REDIRECT) || \
 			(minikube status >/dev/null 2>&1 && echo "$(COLOR_GREEN)✓$(COLOR_RESET) Minikube already running") || \
 			(echo "$(COLOR_RED)✗$(COLOR_RESET) Failed to start minikube" && exit 1); \
 	fi
@@ -570,6 +585,14 @@ kind-up: check-kind check-kubectl ## Start kind cluster with Quay.io images (pro
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Extracting test token..."
 	@cd e2e && CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/extract-token.sh
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Kind cluster ready!"
+	@# Vertex AI setup if requested
+	@if [ "$(LOCAL_VERTEX)" = "true" ]; then \
+		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Configuring Vertex AI..."; \
+		ANTHROPIC_VERTEX_PROJECT_ID="$(ANTHROPIC_VERTEX_PROJECT_ID)" \
+		CLOUD_ML_REGION="$(CLOUD_ML_REGION)" \
+		GOOGLE_APPLICATION_CREDENTIALS="$(GOOGLE_APPLICATION_CREDENTIALS)" \
+		./scripts/setup-vertex-kind.sh; \
+	fi
 	@echo ""
 	@echo "$(COLOR_BOLD)Access the platform:$(COLOR_RESET)"
 	@echo "  Run in another terminal: $(COLOR_BLUE)make kind-port-forward$(COLOR_RESET)"
@@ -597,8 +620,8 @@ kind-port-forward: check-kubectl ## Port-forward kind services (for remote Podma
 	@echo "$(COLOR_YELLOW)Press Ctrl+C to stop$(COLOR_RESET)"
 	@echo ""
 	@trap 'echo ""; echo "$(COLOR_GREEN)✓$(COLOR_RESET) Port forwarding stopped"; exit 0' INT; \
-	(kubectl port-forward -n ambient-code svc/frontend 8080:3000 >/dev/null 2>&1 &); \
-	(kubectl port-forward -n ambient-code svc/backend-api 8081:8080 >/dev/null 2>&1 &); \
+	(kubectl port-forward -n ambient-code svc/frontend-service 8080:3000 >/dev/null 2>&1 &); \
+	(kubectl port-forward -n ambient-code svc/backend-service 8081:8080 >/dev/null 2>&1 &); \
 	wait
 
 ##@ E2E Testing (Portable)

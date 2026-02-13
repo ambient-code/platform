@@ -20,11 +20,11 @@ User → Frontend → Backend API → K8s Operator → Runner Jobs → Claude Co
 
 ### Diagrams
 **[Architecture Diagrams](diagrams/)** - Visual system representations
-- [Platform Architecture](../platform-architecture.mmd) - Complete system diagram
-- [Component Structure](../component-structure.mmd) - Component relationships
-- [Deployment Stack](../deployment-stack.mmd) - Deployment topology
-- [Agentic Session Flow](../agentic-session-flow.mmd) - Session lifecycle
-- [UX Feature Workflow](diagrams/ux-feature-workflow.md) - Multi-agent workflow
+- [Platform Architecture](./diagrams/platform-architecture.mmd) - Complete system diagram
+- [Component Structure](./diagrams/component-structure.mmd) - Component relationships
+- [Deployment Stack](./diagrams/deployment-stack.mmd) - Deployment topology
+- [Agentic Session Flow](./diagrams/agentic-session-flow.mmd) - Session lifecycle
+- [UX Feature Workflow](./diagrams/ux-feature-workflow.md) - Multi-agent workflow
 
 ### Key Components
 

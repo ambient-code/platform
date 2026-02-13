@@ -10,6 +10,7 @@ on:
       - 'components/operator/**'
       - 'components/backend/**'
       - 'components/frontend/**'
+      - 'components/public-api/**'
   pull_request_target:
     branches: [main]
     paths:
@@ -19,6 +20,7 @@ on:
       - 'components/operator/**'
       - 'components/backend/**'
       - 'components/frontend/**'
+      - 'components/public-api/**'
   workflow_dispatch:
     inputs:
       force_build_all:
@@ -27,7 +29,7 @@ on:
         type: boolean
         default: false
       components:
-        description: 'Components to build (comma-separated: frontend,backend,operator,claude-runner,state-sync) - leave empty for all'
+        description: 'Components to build (comma-separated: frontend,backend,operator,claude-runner,state-sync,public-api) - leave empty for all'
         required: false
         type: string
         default: ''
@@ -45,6 +47,7 @@ jobs:
       operator: ${{ steps.filter.outputs.operator }}
       claude-runner: ${{ steps.filter.outputs.claude-runner }}
       state-sync: ${{ steps.filter.outputs.state-sync }}
+      public-api: ${{ steps.filter.outputs.public-api }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -66,6 +69,8 @@ jobs:
               - 'components/runners/claude-code-runner/**'
             state-sync:
               - 'components/runners/state-sync/**'
+            public-api:
+              - 'components/public-api/**'
 
   build-and-push:
     runs-on: ubuntu-latest
@@ -103,6 +108,11 @@ jobs:
             image: quay.io/ambient_code/vteam_state_sync
             dockerfile: ./components/runners/state-sync/Dockerfile
             changed: ${{ needs.detect-changes.outputs.state-sync }}
+          - name: public-api
+            context: ./components/public-api
+            image: quay.io/ambient_code/vteam_public_api
+            dockerfile: ./components/public-api/Dockerfile
+            changed: ${{ needs.detect-changes.outputs.public-api }}
     steps:
       - name: Checkout code
         if: matrix.component.changed == 'true' || github.event.inputs.force_build_all == 'true' || contains(github.event.inputs.components, matrix.component.name) || (github.event_name == 'workflow_dispatch' && github.event.inputs.components == '' && github.event.inputs.force_build_all != 'true')
@@ -152,7 +162,7 @@ jobs:
           context: ${{ matrix.component.context }}
           file: ${{ matrix.component.dockerfile }}
           platforms: linux/amd64,linux/arm64
-          push: false
+          push: true
           tags: ${{ matrix.component.image }}:pr-${{ github.event.pull_request.number }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -187,7 +197,7 @@ jobs:
   deploy-to-openshift:
     runs-on: ubuntu-latest
     needs: [detect-changes, build-and-push, update-rbac-and-crd]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && (needs.detect-changes.outputs.frontend == 'true' || needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.operator == 'true' || needs.detect-changes.outputs.claude-runner == 'true' || needs.detect-changes.outputs.state-sync == 'true')
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && (needs.detect-changes.outputs.frontend == 'true' || needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.operator == 'true' || needs.detect-changes.outputs.claude-runner == 'true' || needs.detect-changes.outputs.state-sync == 'true' || needs.detect-changes.outputs.public-api == 'true')
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -240,6 +250,12 @@ jobs:
             echo "state_sync_tag=stage" >> $GITHUB_OUTPUT
           fi
 
+          if [ "${{ needs.detect-changes.outputs.public-api }}" == "true" ]; then
+            echo "public_api_tag=${{ github.sha }}" >> $GITHUB_OUTPUT
+          else
+            echo "public_api_tag=stage" >> $GITHUB_OUTPUT
+          fi
+
       - name: Update kustomization with image tags
         working-directory: components/manifests/overlays/production
         run: |
@@ -248,6 +264,7 @@ jobs:
           kustomize edit set image quay.io/ambient_code/vteam_operator:latest=quay.io/ambient_code/vteam_operator:${{ steps.image-tags.outputs.operator_tag }}
           kustomize edit set image quay.io/ambient_code/vteam_claude_runner:latest=quay.io/ambient_code/vteam_claude_runner:${{ steps.image-tags.outputs.runner_tag }}
           kustomize edit set image quay.io/ambient_code/vteam_state_sync:latest=quay.io/ambient_code/vteam_state_sync:${{ steps.image-tags.outputs.state_sync_tag }}
+          kustomize edit set image quay.io/ambient_code/vteam_public_api:latest=quay.io/ambient_code/vteam_public_api:${{ steps.image-tags.outputs.public_api_tag }}
 
       - name: Validate kustomization
         working-directory: components/manifests/overlays/production
@@ -265,7 +282,8 @@ jobs:
         run: |
           oc set env deployment/frontend -n ambient-code -c frontend \
             GITHUB_APP_SLUG="ambient-code-stage" \
-            VTEAM_VERSION="${{ github.sha }}"
+            VTEAM_VERSION="${{ github.sha }}" \
+            FEEDBACK_URL="https://forms.gle/7XiWrvo6No922DUz6"
 
       - name: Update backend environment variables
         if: needs.detect-changes.outputs.backend == 'true'
@@ -312,6 +330,7 @@ jobs:
           kustomize edit set image quay.io/ambient_code/vteam_operator:latest=quay.io/ambient_code/vteam_operator:stage
           kustomize edit set image quay.io/ambient_code/vteam_claude_runner:latest=quay.io/ambient_code/vteam_claude_runner:stage
           kustomize edit set image quay.io/ambient_code/vteam_state_sync:latest=quay.io/ambient_code/vteam_state_sync:stage
+          kustomize edit set image quay.io/ambient_code/vteam_public_api:latest=quay.io/ambient_code/vteam_public_api:stage
 
       - name: Validate kustomization
         working-directory: components/manifests/overlays/production
@@ -328,7 +347,8 @@ jobs:
         run: |
           oc set env deployment/frontend -n ambient-code -c frontend \
             GITHUB_APP_SLUG="ambient-code-stage" \
-            VTEAM_VERSION="${{ github.sha }}"
+            VTEAM_VERSION="${{ github.sha }}" \
+            FEEDBACK_URL="https://forms.gle/7XiWrvo6No922DUz6"
 
       - name: Update backend environment variables
         run: |

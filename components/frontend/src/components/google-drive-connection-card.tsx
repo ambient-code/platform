@@ -5,16 +5,24 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Loader2 } from 'lucide-react'
 import { successToast, errorToast } from '@/hooks/use-toast'
-import { useGoogleStatus, useDisconnectGoogle } from '@/services/queries/use-google'
+import { useDisconnectGoogle } from '@/services/queries/use-google'
 import * as googleAuthApi from '@/services/api/google-auth'
 
 type Props = {
   showManageButton?: boolean
+  status?: {
+    connected: boolean
+    email?: string
+    expiresAt?: string
+    updatedAt?: string
+  }
+  onRefresh?: () => void
 }
 
-export function GoogleDriveConnectionCard({ showManageButton = true }: Props) {
-  const { data: status, isLoading, error, refetch } = useGoogleStatus()
+export function GoogleDriveConnectionCard({ showManageButton = true, status, onRefresh }: Props) {
   const disconnectMutation = useDisconnectGoogle()
+  const isLoading = !status
+  const error = null
   const [connecting, setConnecting] = useState(false)
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -68,7 +76,7 @@ export function GoogleDriveConnectionCard({ showManageButton = true }: Props) {
           }
           setConnecting(false)
           // Refetch status to check if OAuth succeeded
-          refetch()
+          onRefresh?.()
         }
       }, 500)
     } catch (err) {
@@ -82,7 +90,7 @@ export function GoogleDriveConnectionCard({ showManageButton = true }: Props) {
     disconnectMutation.mutate(undefined, {
       onSuccess: () => {
         successToast('Google Drive disconnected successfully')
-        refetch()
+        onRefresh?.()
       },
       onError: (error) => {
         errorToast(error instanceof Error ? error.message : 'Failed to disconnect Google Drive')
@@ -95,8 +103,8 @@ export function GoogleDriveConnectionCard({ showManageButton = true }: Props) {
   }
 
   return (
-    <Card className="bg-card border border-gray-200 shadow-sm">
-      <div className="p-6">
+    <Card className="bg-card border border-gray-200 shadow-sm flex flex-col h-full">
+      <div className="p-6 flex flex-col flex-1">
         {/* Header section with icon and title */}
         <div className="flex items-start gap-4 mb-6">
           <div className="flex-shrink-0 w-16 h-16 bg-white border border-gray-200 rounded-lg flex items-center justify-center">
@@ -148,7 +156,7 @@ export function GoogleDriveConnectionCard({ showManageButton = true }: Props) {
         </div>
 
         {/* Action buttons */}
-        <div className="flex gap-3">
+        <div className="flex gap-3 mt-auto">
           {status?.connected ? (
             <>
               {showManageButton && (

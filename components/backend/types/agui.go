@@ -4,6 +4,22 @@ package types
 
 import "time"
 
+// Timestamp format constants for AG-UI events and metadata.
+// These ensure consistent timestamp formatting across the codebase.
+const (
+	// AGUITimestampFormat is used for event timestamps that require nanosecond precision.
+	// This preserves event ordering when multiple events occur in rapid succession.
+	// Format: "2006-01-02T15:04:05.999999999Z07:00" (RFC3339 with nanoseconds)
+	// Used in: BaseEvent.Timestamp, streamed events
+	AGUITimestampFormat = time.RFC3339Nano
+
+	// AGUIMetadataTimestampFormat is used for run/session metadata timestamps.
+	// This is sufficient for human-readable timestamps where nanosecond precision isn't needed.
+	// Format: "2006-01-02T15:04:05Z07:00" (RFC3339)
+	// Used in: AGUIRunMetadata.StartedAt, AGUIRunMetadata.FinishedAt
+	AGUIMetadataTimestampFormat = time.RFC3339
+)
+
 // AG-UI Event Types as defined in the protocol specification
 // See: https://docs.ag-ui.com/concepts/events
 const (
@@ -62,7 +78,7 @@ type BaseEvent struct {
 	Type      string `json:"type"`
 	ThreadID  string `json:"threadId"`
 	RunID     string `json:"runId"`
-	Timestamp string `json:"timestamp"`
+	Timestamp string `json:"timestamp"` // Format: AGUITimestampFormat (RFC3339Nano)
 	// Optional fields
 	MessageID   string `json:"messageId,omitempty"`
 	ParentRunID string `json:"parentRunId,omitempty"`
@@ -293,7 +309,7 @@ func NewBaseEvent(eventType, threadID, runID string) BaseEvent {
 		Type:      eventType,
 		ThreadID:  threadID,
 		RunID:     runID,
-		Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
+		Timestamp: time.Now().UTC().Format(AGUITimestampFormat),
 	}
 }
 
