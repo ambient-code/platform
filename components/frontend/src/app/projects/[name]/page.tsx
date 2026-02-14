@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams, useSearchParams, useRouter } from 'next/navigation';
-import { Star, Settings, Users, Loader2, Workflow, Server } from 'lucide-react';
+import { useParams, useSearchParams } from 'next/navigation';
+import { Star, Settings, Users, Loader2, Server } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 import { Button } from '@/components/ui/button';
@@ -22,7 +22,6 @@ type Section = 'sessions' | 'sharing' | 'settings' | 'mcp-servers';
 export default function ProjectDetailsPage() {
   const params = useParams();
   const searchParams = useSearchParams();
-  const router = useRouter();
   const projectName = params?.name as string;
   
   // Fetch project data for display name and description
@@ -115,15 +114,6 @@ export default function ProjectDetailsPage() {
                       </Button>
                     );
                   })}
-                  <hr className="my-1" />
-                  <Button
-                    variant="ghost"
-                    className="w-full justify-start"
-                    onClick={() => router.push(`/projects/${projectName}/workflow-designer`)}
-                  >
-                    <Workflow className="w-4 h-4 mr-2" />
-                    Workflow Designer
-                  </Button>
                 </div>
               </CardContent>
             </Card>
