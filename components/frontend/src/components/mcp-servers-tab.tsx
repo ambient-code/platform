@@ -4,12 +4,58 @@ import { useRef, useState } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Plus, MoreHorizontal, Pencil, Trash2, Server, Zap, Download, Upload } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Plus, MoreHorizontal, Pencil, Trash2, Server, Zap, Download, Upload, ChevronDown } from "lucide-react";
 import { successToast, errorToast } from "@/hooks/use-toast";
 import { useMcpConfig, useUpdateMcpConfig, useTestMcpServer } from "@/services/queries/use-mcp-config";
 import { McpServerDialog } from "@/components/mcp-server-dialog";
 import type { McpServerConfig } from "@/services/api/mcp-config";
+
+// OpenCode local server format: {type: "local", command: ["cmd", ...args], environment?: {...}}
+type OpenCodeServer = {
+  type: string;
+  command: string[];
+  environment?: Record<string, string>;
+  enabled?: boolean;
+};
+
+function toInternal(servers: Record<string, unknown>): Record<string, McpServerConfig> {
+  const result: Record<string, McpServerConfig> = {};
+  for (const [name, raw] of Object.entries(servers)) {
+    const srv = raw as Record<string, unknown>;
+    if (Array.isArray(srv.command)) {
+      // OpenCode format: command is an array
+      const [cmd = "", ...args] = srv.command as string[];
+      result[name] = { command: cmd, args, env: (srv.environment ?? {}) as Record<string, string> };
+    } else {
+      // Claude Code format: command is a string, args is separate
+      result[name] = srv as McpServerConfig;
+    }
+  }
+  return result;
+}
+
+function toOpenCode(servers: Record<string, McpServerConfig>): Record<string, OpenCodeServer> {
+  const result: Record<string, OpenCodeServer> = {};
+  for (const [name, srv] of Object.entries(servers)) {
+    result[name] = {
+      type: "local",
+      command: [srv.command, ...srv.args],
+      ...(Object.keys(srv.env).length > 0 ? { environment: srv.env } : {}),
+    };
+  }
+  return result;
+}
+
+function downloadJson(data: unknown, filename: string) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const blobUrl = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = blobUrl;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(blobUrl);
+}
 
 type McpServersTabProps = {
   projectName: string;
@@ -83,15 +129,14 @@ export function McpServersTab({ projectName }: McpServersTabProps) {
     );
   };
 
-  const handleExport = () => {
-    const blob = new Blob([JSON.stringify({ mcpServers: servers }, null, 2)], { type: "application/json" });
-    const blobUrl = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = blobUrl;
-    a.download = "mcp-servers.json";
-    a.click();
-    URL.revokeObjectURL(blobUrl);
-    successToast(`Exported ${serverEntries.length} server(s)`);
+  const handleExportClaudeCode = () => {
+    downloadJson({ mcpServers: servers }, "mcp-servers.json");
+    successToast(`Exported ${serverEntries.length} server(s) (Claude Code format)`);
+  };
+
+  const handleExportOpenCode = () => {
+    downloadJson({ mcp: toOpenCode(servers) }, "opencode.json");
+    successToast(`Exported ${serverEntries.length} server(s) (OpenCode format)`);
   };
 
   const handleImportClick = () => {
@@ -106,12 +151,13 @@ export function McpServersTab({ projectName }: McpServersTabProps) {
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      // Accept Claude Code format {"mcpServers": {...}} or native {"servers": {...}}
-      const imported: Record<string, McpServerConfig> | undefined = data.mcpServers ?? data.servers;
-      if (!imported || typeof imported !== "object") {
-        errorToast("Invalid MCP config file — must contain 'mcpServers' or 'servers'");
+      // Accept: Claude Code {"mcpServers": {...}}, native {"servers": {...}}, OpenCode {"mcp": {...}}
+      const raw: Record<string, unknown> | undefined = data.mcpServers ?? data.servers ?? data.mcp;
+      if (!raw || typeof raw !== "object") {
+        errorToast("Invalid MCP config file — must contain 'mcpServers', 'servers', or 'mcp'");
         return;
       }
+      const imported = toInternal(raw);
       const merged = { ...servers, ...imported };
       const count = Object.keys(imported).length;
       updateMutation.mutate(
@@ -132,9 +178,23 @@ export function McpServersTab({ projectName }: McpServersTabProps) {
         <Button variant="outline" size="sm" onClick={handleImportClick}>
           <Upload className="w-4 h-4 mr-2" /> Import
         </Button>
-        <Button variant="outline" size="sm" onClick={handleExport} disabled={serverEntries.length === 0}>
-          <Download className="w-4 h-4 mr-2" /> Export
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" disabled={serverEntries.length === 0}>
+              <Download className="w-4 h-4 mr-2" /> Export <ChevronDown className="w-3 h-3 ml-1" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuLabel>Export format</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={handleExportClaudeCode}>
+              Claude Code / Desktop
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleExportOpenCode}>
+              OpenCode
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
         <Button onClick={handleAdd} size="sm" disabled={updateMutation.isPending}>
           <Plus className="w-4 h-4 mr-2" /> Add Server
         </Button>
