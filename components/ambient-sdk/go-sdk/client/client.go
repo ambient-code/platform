@@ -6,7 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
@@ -15,54 +18,66 @@ import (
 // Client is a simple HTTP client for the Ambient Platform API
 type Client struct {
 	baseURL    string
-	token      string
+	token      types.SecureToken
 	project    string
 	httpClient *http.Client
+	logger     *slog.Logger
 }
 
 // NewClient creates a new HTTP client for the Ambient Platform
 // Returns an error if token validation fails
 func NewClient(baseURL, token, project string) (*Client, error) {
-	if err := validateToken(token); err != nil {
-		return nil, fmt.Errorf("invalid token: %w", err)
-	}
-	
-	return &Client{
-		baseURL: baseURL,
-		token:   token,
-		project: project,
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-		},
-	}, nil
+	return NewClientWithTimeout(baseURL, token, project, 30*time.Second)
 }
 
 // NewClientWithTimeout creates a new HTTP client with custom timeout
 // Returns an error if token validation fails
 func NewClientWithTimeout(baseURL, token, project string, timeout time.Duration) (*Client, error) {
-	if err := validateToken(token); err != nil {
+	secureToken := types.SecureToken(token)
+	if err := secureToken.IsValid(); err != nil {
 		return nil, fmt.Errorf("invalid token: %w", err)
 	}
 	
-	return &Client{
+	// Create logger with ReplaceAttr for additional sensitive data protection
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+		ReplaceAttr: sanitizeLogAttrs,
+	}))
+	
+	client := &Client{
 		baseURL: baseURL,
-		token:   token,
+		token:   secureToken,
 		project: project,
 		httpClient: &http.Client{
 			Timeout: timeout,
 		},
-	}, nil
+		logger: logger,
+	}
+	
+	// Log client creation (without any sensitive data)
+	client.logger.Info("Ambient client created",
+		"base_url", baseURL,
+		"project", project,
+		"timeout", timeout)
+	
+	return client, nil
 }
 
 // CreateSession creates a new agentic session
 func (c *Client) CreateSession(ctx context.Context, req *types.CreateSessionRequest) (*types.CreateSessionResponse, error) {
 	// Validate the request first
 	if err := req.Validate(); err != nil {
+		c.logger.Error("Session creation failed validation", "error", err)
 		return nil, fmt.Errorf("invalid request: %w", err)
 	}
 
+	c.logger.Info("Creating session", 
+		"task_length", len(req.Task),
+		"model", req.Model,
+		"repo_count", len(req.Repos))
+
 	jsonBody, err := json.Marshal(req)
 	if err != nil {
+		c.logger.Error("Failed to marshal request", "error", err)
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
@@ -73,32 +88,47 @@ func (c *Client) CreateSession(ctx context.Context, req *types.CreateSessionRequ
 	}
 
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+c.token)
+	httpReq.Header.Set("Authorization", "Bearer "+c.token.String())
 	httpReq.Header.Set("X-Ambient-Project", c.project)
 
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
+		c.logger.Error("HTTP request failed", "error", err, "url", url)
 		return nil, fmt.Errorf("failed to execute request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
+		c.logger.Error("Failed to read response body", "error", err)
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusCreated {
+		c.logger.Error("Session creation failed", 
+			"status_code", resp.StatusCode,
+			"response_body_length", len(body))
+		
 		var errResp types.ErrorResponse
 		if json.Unmarshal(body, &errResp) == nil {
-			return nil, fmt.Errorf("API error (%d): %s - %s", resp.StatusCode, errResp.Error, errResp.Message)
+			// Log full error details for debugging (sanitized by slog)
+			c.logger.Debug("API error details", "error", errResp.Error, "message", errResp.Message)
+			// Return generic error message to avoid exposing sensitive details
+			return nil, fmt.Errorf("API error (%d): %s", resp.StatusCode, errResp.Error)
 		}
-		return nil, fmt.Errorf("API error (%d): %s", resp.StatusCode, string(body))
+		// Don't expose raw response body - return generic error
+		return nil, fmt.Errorf("API error (%d): request failed", resp.StatusCode)
 	}
 
 	var createResp types.CreateSessionResponse
 	if err := json.Unmarshal(body, &createResp); err != nil {
+		c.logger.Error("Failed to unmarshal response", "error", err)
 		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
+
+	c.logger.Info("Session created successfully", 
+		"session_id", createResp.ID,
+		"status_code", resp.StatusCode)
 
 	return &createResp, nil
 }
@@ -112,7 +142,7 @@ func (c *Client) GetSession(ctx context.Context, sessionID string) (*types.Sessi
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	httpReq.Header.Set("Authorization", "Bearer "+c.token)
+	httpReq.Header.Set("Authorization", "Bearer "+c.token.String())
 	httpReq.Header.Set("X-Ambient-Project", c.project)
 
 	resp, err := c.httpClient.Do(httpReq)
@@ -133,9 +163,10 @@ func (c *Client) GetSession(ctx context.Context, sessionID string) (*types.Sessi
 	if resp.StatusCode != http.StatusOK {
 		var errResp types.ErrorResponse
 		if json.Unmarshal(body, &errResp) == nil {
-			return nil, fmt.Errorf("API error (%d): %s - %s", resp.StatusCode, errResp.Error, errResp.Message)
+			// Return generic error without exposing full details
+			return nil, fmt.Errorf("API error (%d): %s", resp.StatusCode, errResp.Error)
 		}
-		return nil, fmt.Errorf("API error (%d): %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("API error (%d): request failed", resp.StatusCode)
 	}
 
 	var session types.SessionResponse
@@ -155,7 +186,7 @@ func (c *Client) ListSessions(ctx context.Context) (*types.SessionListResponse, 
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	httpReq.Header.Set("Authorization", "Bearer "+c.token)
+	httpReq.Header.Set("Authorization", "Bearer "+c.token.String())
 	httpReq.Header.Set("X-Ambient-Project", c.project)
 
 	resp, err := c.httpClient.Do(httpReq)
@@ -172,9 +203,10 @@ func (c *Client) ListSessions(ctx context.Context) (*types.SessionListResponse, 
 	if resp.StatusCode != http.StatusOK {
 		var errResp types.ErrorResponse
 		if json.Unmarshal(body, &errResp) == nil {
-			return nil, fmt.Errorf("API error (%d): %s - %s", resp.StatusCode, errResp.Error, errResp.Message)
+			// Return generic error without exposing full details
+			return nil, fmt.Errorf("API error (%d): %s", resp.StatusCode, errResp.Error)
 		}
-		return nil, fmt.Errorf("API error (%d): %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("API error (%d): request failed", resp.StatusCode)
 	}
 
 	var listResp types.SessionListResponse
@@ -213,20 +245,49 @@ func (c *Client) WaitForCompletion(ctx context.Context, sessionID string, pollIn
 	}
 }
 
-// validateToken performs basic token validation to prevent common issues
-func validateToken(token string) error {
-	if len(token) == 0 {
-		return fmt.Errorf("token cannot be empty")
+// sanitizeLogAttrs implements the ReplaceAttr approach for slog
+// This provides a global safety net for any sensitive data that might be logged
+func sanitizeLogAttrs(_ []string, attr slog.Attr) slog.Attr {
+	key := attr.Key
+	value := attr.Value
+	
+	// Sanitize by exact key name (case-sensitive for precision)
+	switch key {
+	case "token", "Token", "TOKEN":
+		return slog.String(key, "[REDACTED]")
+	case "password", "Password", "PASSWORD":
+		return slog.String(key, "[REDACTED]")
+	case "secret", "Secret", "SECRET":
+		return slog.String(key, "[REDACTED]")
+	case "apikey", "api_key", "ApiKey", "API_KEY":
+		return slog.String(key, "[REDACTED]")
+	case "authorization", "Authorization", "AUTHORIZATION":
+		return slog.String(key, "[REDACTED]")
 	}
 	
-	if len(token) < 10 {
-		return fmt.Errorf("token appears too short to be valid")
+	// Sanitize by key patterns (case-insensitive)
+	keyLower := strings.ToLower(key)
+	if strings.HasSuffix(keyLower, "_token") || strings.HasSuffix(keyLower, "_password") ||
+	   strings.HasSuffix(keyLower, "_secret") || strings.HasSuffix(keyLower, "_key") {
+		return slog.String(key, "[REDACTED]")
 	}
 	
-	// Check for common token format issues
-	if token == "YOUR_TOKEN_HERE" || token == "your-token-here" || token == "token" {
-		return fmt.Errorf("token appears to be a placeholder value")
+	// Sanitize by value content ONLY for obvious token patterns
+	if value.Kind() == slog.KindString {
+		str := value.String()
+		// Only redact clear Bearer token patterns
+		if strings.HasPrefix(str, "Bearer ") || strings.HasPrefix(str, "bearer ") {
+			return slog.String(key, "[REDACTED_BEARER]")
+		}
+		// Only redact SHA256 tokens (common OpenShift token format)
+		if strings.HasPrefix(str, "sha256~") {
+			return slog.String(key, "[REDACTED_SHA256_TOKEN]")
+		}
+		// Only redact JWT patterns (starts with ey and contains dots)
+		if strings.HasPrefix(str, "ey") && strings.Count(str, ".") >= 2 && len(str) > 50 {
+			return slog.String(key, "[REDACTED_JWT]")
+		}
 	}
 	
-	return nil
+	return attr
 }

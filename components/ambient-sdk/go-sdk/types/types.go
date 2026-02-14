@@ -3,6 +3,7 @@ package types
 
 import (
 	"fmt"
+	"log/slog"
 	"net/url"
 	"strings"
 )
@@ -59,6 +60,123 @@ const (
 	StatusCompleted = "completed"
 	StatusFailed    = "failed"
 )
+
+// SecureToken is a type-safe wrapper for authentication tokens that implements
+// slog.LogValuer for automatic sanitization in logs
+type SecureToken string
+
+// LogValue implements slog.LogValuer to safely log tokens
+func (t SecureToken) LogValue() slog.Value {
+	if len(t) == 0 {
+		return slog.StringValue("[EMPTY]")
+	}
+	if len(t) < 8 {
+		return slog.StringValue("[TOO_SHORT]")
+	}
+	// Show only first 6 characters + length for debugging
+	return slog.StringValue(fmt.Sprintf("%s***(%d_chars)", string(t)[:6], len(t)))
+}
+
+// String returns the actual token value - use with care
+func (t SecureToken) String() string {
+	return string(t)
+}
+
+// IsValid performs comprehensive token validation
+func (t SecureToken) IsValid() error {
+	if len(t) == 0 {
+		return fmt.Errorf("token cannot be empty")
+	}
+	
+	tokenStr := string(t)
+	
+	// Check for common placeholder values
+	placeholders := []string{
+		"YOUR_TOKEN_HERE", "your-token-here", "token", "password", 
+		"secret", "example", "test", "demo", "placeholder", "TODO",
+	}
+	for _, placeholder := range placeholders {
+		if strings.EqualFold(tokenStr, placeholder) {
+			return fmt.Errorf("token appears to be a placeholder value")
+		}
+	}
+	
+	// Check minimum length for security
+	if len(tokenStr) < 10 {
+		return fmt.Errorf("token is too short (minimum 10 characters required)")
+	}
+	
+	// Validate known token formats
+	if err := t.validateTokenFormat(tokenStr); err != nil {
+		return fmt.Errorf("invalid token format: %w", err)
+	}
+	
+	return nil
+}
+
+// validateTokenFormat checks for known secure token formats
+func (t SecureToken) validateTokenFormat(token string) error {
+	// OpenShift SHA256 tokens
+	if strings.HasPrefix(token, "sha256~") {
+		if len(token) < 20 {
+			return fmt.Errorf("OpenShift token too short")
+		}
+		return nil
+	}
+	
+	// JWT tokens (3 base64 parts separated by dots)
+	if strings.Count(token, ".") == 2 {
+		parts := strings.Split(token, ".")
+		if len(parts) == 3 {
+			// Basic JWT structure validation
+			for i, part := range parts {
+				if len(part) == 0 {
+					return fmt.Errorf("JWT part %d is empty", i+1)
+				}
+				// JWT parts should be base64-like (alphanumeric + _- characters)
+				for _, char := range part {
+					if !((char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') ||
+						(char >= '0' && char <= '9') || char == '_' || char == '-') {
+						return fmt.Errorf("JWT contains invalid characters")
+					}
+				}
+			}
+			return nil
+		}
+	}
+	
+	// GitHub tokens
+	if strings.HasPrefix(token, "ghp_") || strings.HasPrefix(token, "gho_") || 
+	   strings.HasPrefix(token, "ghu_") || strings.HasPrefix(token, "ghs_") {
+		if len(token) < 40 {
+			return fmt.Errorf("GitHub token too short")
+		}
+		return nil
+	}
+	
+	// Generic validation for other tokens
+	if len(token) < 20 {
+		return fmt.Errorf("token appears too short for secure authentication")
+	}
+	
+	// Must contain alphanumeric characters
+	hasAlpha := false
+	hasNumeric := false
+	for _, char := range token {
+		if char >= 'a' && char <= 'z' || char >= 'A' && char <= 'Z' {
+			hasAlpha = true
+		}
+		if char >= '0' && char <= '9' {
+			hasNumeric = true
+		}
+	}
+	
+	if !hasAlpha || !hasNumeric {
+		return fmt.Errorf("token must contain both alphabetic and numeric characters")
+	}
+	
+	return nil
+}
 
 // Validate validates the CreateSessionRequest for common issues
 func (r *CreateSessionRequest) Validate() error {

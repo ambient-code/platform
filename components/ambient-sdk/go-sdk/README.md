@@ -68,9 +68,57 @@ func main() {
 }
 ```
 
-## Authentication
+## Authentication & Authorization
 
-The SDK uses Bearer token authentication with project routing:
+The SDK uses Bearer token authentication with project-scoped authorization:
+
+### Token Requirements
+
+- **Bearer Token**: Must be a valid authentication token (OpenShift, JWT, or GitHub format)
+- **Project Header**: `X-Ambient-Project` specifies the target Kubernetes namespace
+- **RBAC**: User must have appropriate permissions in the target namespace
+
+### Supported Token Formats
+
+- **OpenShift**: `sha256~...` format tokens from `oc whoami -t`
+- **JWT**: Standard JSON Web Tokens with 3 base64 parts
+- **GitHub**: Tokens starting with `ghp_`, `gho_`, `ghu_`, or `ghs_`
+
+### Required Permissions
+
+Your user account must have these Kubernetes RBAC permissions in the target project/namespace:
+
+```yaml
+# Minimum required permissions
+- apiGroups: ["vteam.ambient-code"]
+  resources: ["agenticsessions"]
+  verbs: ["get", "list", "create"]
+
+- apiGroups: [""]
+  resources: ["namespaces"]
+  verbs: ["get"]
+```
+
+### Common Permission Errors
+
+**403 Forbidden**:
+```bash
+# Check your permissions
+oc auth can-i create agenticsessions.vteam.ambient-code -n your-project
+oc auth can-i list agenticsessions.vteam.ambient-code -n your-project
+```
+
+**401 Unauthorized**:
+```bash
+# Check token validity  
+oc whoami  # Should return your username
+oc whoami -t  # Should return a token starting with sha256~
+```
+
+**400 Bad Request - Project required**:
+- Ensure `AMBIENT_PROJECT` environment variable is set
+- Project must be a valid Kubernetes namespace name
+- User must have access to the specified project
 
 ```bash
 # Set environment variables
