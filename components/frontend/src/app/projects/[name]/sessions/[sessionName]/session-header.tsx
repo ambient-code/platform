@@ -96,7 +96,7 @@ export function SessionHeader({
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent>
         <DropdownMenuItem
-          onClick={() => handleExport('markdown')}
+          onClick={() => void handleExport('markdown')}
           disabled={exportLoading !== null}
         >
           {exportLoading === 'markdown' ? (
@@ -107,7 +107,7 @@ export function SessionHeader({
           As Markdown
         </DropdownMenuItem>
         <DropdownMenuItem
-          onClick={() => handleExport('pdf')}
+          onClick={() => void handleExport('pdf')}
           disabled={exportLoading !== null}
         >
           {exportLoading === 'pdf' ? (

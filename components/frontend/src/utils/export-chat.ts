@@ -18,6 +18,14 @@ type ExportEvent = {
   timestamp?: string;
 };
 
+function isExportEvent(raw: unknown): raw is ExportEvent {
+  return typeof raw === 'object' && raw !== null && 'type' in raw;
+}
+
+const MAX_TOOL_ARGS_LENGTH = 2000;
+const MAX_ERROR_LENGTH = 1000;
+const MAX_RESULT_LENGTH = 2000;
+
 type ConversationBlock =
   | { kind: 'message'; role: string; content: string; timestamp?: string }
   | { kind: 'tool'; name: string; args: string; result?: string; error?: string; timestamp?: string };
@@ -33,7 +41,8 @@ function assembleBlocks(events: unknown[]): ConversationBlock[] {
   const toolCalls = new Map<string, { name: string; args: string; timestamp?: string }>();
 
   for (const raw of events) {
-    const ev = raw as ExportEvent;
+    if (!isExportEvent(raw)) continue;
+    const ev = raw;
 
     switch (ev.type) {
       case AGUIEventType.TEXT_MESSAGE_START:
@@ -171,18 +180,18 @@ export function convertEventsToMarkdown(
       if (block.args.trim()) {
         lines.push('**Arguments:**');
         lines.push('```json');
-        lines.push(truncate(prettyJson(block.args), 2000));
+        lines.push(truncate(prettyJson(block.args), MAX_TOOL_ARGS_LENGTH));
         lines.push('```');
       }
       if (block.error) {
         lines.push('**Error:**');
         lines.push('```');
-        lines.push(truncate(block.error, 1000));
+        lines.push(truncate(block.error, MAX_ERROR_LENGTH));
         lines.push('```');
       } else if (block.result) {
         lines.push('**Result:**');
         lines.push('```');
-        lines.push(truncate(block.result, 2000));
+        lines.push(truncate(block.result, MAX_RESULT_LENGTH));
         lines.push('```');
       }
       lines.push('</details>');
@@ -221,7 +230,9 @@ export function exportAsPdf(markdown: string, sessionName: string): void {
   const html = markdownToHtml(markdown);
 
   const printWindow = window.open('', '_blank');
-  if (!printWindow) return;
+  if (!printWindow) {
+    throw new Error('Failed to open print window. Please allow popups for this site.');
+  }
 
   printWindow.document.write(`<!DOCTYPE html>
 <html>
@@ -262,15 +273,12 @@ ${html}
 
   printWindow.document.close();
 
-  // Guard against double-print: load listener + timeout fallback
-  let printed = false;
-  const doPrint = () => {
-    if (printed) return;
-    printed = true;
+  // Trigger print once: load listener with timeout fallback
+  const timeoutId = setTimeout(() => printWindow.print(), 500);
+  printWindow.addEventListener('load', () => {
+    clearTimeout(timeoutId);
     printWindow.print();
-  };
-  printWindow.addEventListener('load', doPrint);
-  setTimeout(doPrint, 500);
+  });
 }
 
 // --------------- Helpers ---------------
