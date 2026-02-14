@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Plus, MoreHorizontal, Pencil, Trash2, Server } from "lucide-react";
+import { Plus, MoreHorizontal, Pencil, Trash2, Server, Zap, Download, Upload } from "lucide-react";
 import { successToast, errorToast } from "@/hooks/use-toast";
-import { useMcpConfig, useUpdateMcpConfig } from "@/services/queries/use-mcp-config";
+import { useMcpConfig, useUpdateMcpConfig, useTestMcpServer } from "@/services/queries/use-mcp-config";
 import { McpServerDialog } from "@/components/mcp-server-dialog";
 import type { McpServerConfig } from "@/services/api/mcp-config";
 
@@ -18,8 +18,10 @@ type McpServersTabProps = {
 export function McpServersTab({ projectName }: McpServersTabProps) {
   const { data: config } = useMcpConfig(projectName);
   const updateMutation = useUpdateMcpConfig();
+  const testMutation = useTestMcpServer();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingServer, setEditingServer] = useState<{ name: string; config: McpServerConfig } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const servers = config?.servers ?? {};
   const serverEntries = Object.entries(servers);
@@ -61,12 +63,86 @@ export function McpServersTab({ projectName }: McpServersTabProps) {
     );
   };
 
+  const handleTest = (name: string, srv: McpServerConfig) => {
+    testMutation.mutate(
+      { projectName, config: srv },
+      {
+        onSuccess: (result) => {
+          if (result.valid) {
+            const info = result.serverInfo;
+            const detail = info?.name ? `${info.name}${info.version ? ` v${info.version}` : ''}` : 'OK';
+            successToast(`Server "${name}" is working — ${detail}`);
+          } else {
+            errorToast(`Server "${name}" failed: ${result.error || 'Unknown error'}`);
+          }
+        },
+        onError: (error) => {
+          errorToast(`Server "${name}" test error: ${error instanceof Error ? error.message : 'Request failed'}`);
+        },
+      }
+    );
+  };
+
+  const handleExport = () => {
+    const mcpServers: Record<string, McpServerConfig> = {};
+    for (const [name, srv] of serverEntries) {
+      mcpServers[name] = { command: srv.command, args: srv.args, env: srv.env };
+    }
+    const blob = new Blob([JSON.stringify({ mcpServers }, null, 2)], { type: "application/json" });
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = blobUrl;
+    a.download = "mcp-servers.json";
+    a.click();
+    URL.revokeObjectURL(blobUrl);
+    successToast(`Exported ${serverEntries.length} server(s)`);
+  };
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // Reset so the same file can be re-imported
+    e.target.value = "";
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      // Accept Claude Code format {"mcpServers": {...}} or native {"servers": {...}}
+      const imported: Record<string, McpServerConfig> | undefined = data.mcpServers ?? data.servers;
+      if (!imported || typeof imported !== "object") {
+        errorToast("Invalid MCP config file — must contain 'mcpServers' or 'servers'");
+        return;
+      }
+      const merged = { ...servers, ...imported };
+      const count = Object.keys(imported).length;
+      updateMutation.mutate(
+        { projectName, config: { servers: merged } },
+        {
+          onSuccess: () => successToast(`Imported ${count} server(s)`),
+          onError: () => errorToast("Failed to import MCP servers"),
+        }
+      );
+    } catch {
+      errorToast("Could not parse the selected file as JSON");
+    }
+  };
+
   return (
     <>
-      <div className="flex justify-end mb-4">
+      <div className="flex justify-end gap-2 mb-4">
+        <Button variant="outline" size="sm" onClick={handleImportClick}>
+          <Upload className="w-4 h-4 mr-2" /> Import
+        </Button>
+        <Button variant="outline" size="sm" onClick={handleExport} disabled={serverEntries.length === 0}>
+          <Download className="w-4 h-4 mr-2" /> Export
+        </Button>
         <Button onClick={handleAdd} size="sm" disabled={updateMutation.isPending}>
           <Plus className="w-4 h-4 mr-2" /> Add Server
         </Button>
+        <input ref={fileInputRef} type="file" accept=".json" className="hidden" onChange={handleImportFile} />
       </div>
 
       {serverEntries.length === 0 ? (
@@ -113,6 +189,9 @@ export function McpServersTab({ projectName }: McpServersTabProps) {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => handleTest(name, srv)}>
+                        <Zap className="w-4 h-4 mr-2" /> Test
+                      </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => handleEdit(name, srv)}>
                         <Pencil className="w-4 h-4 mr-2" /> Edit
                       </DropdownMenuItem>
@@ -136,6 +215,7 @@ export function McpServersTab({ projectName }: McpServersTabProps) {
         }}
         onSave={handleSave}
         saving={updateMutation.isPending}
+        projectName={projectName}
         initialName={editingServer?.name}
         initialConfig={editingServer?.config}
       />

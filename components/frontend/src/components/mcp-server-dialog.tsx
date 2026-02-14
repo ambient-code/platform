@@ -5,8 +5,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Plus, Trash2, Loader2 } from "lucide-react";
-import type { McpServerConfig } from "@/services/api/mcp-config";
+import { Plus, Trash2, Loader2, Zap, CheckCircle2, XCircle } from "lucide-react";
+import type { McpServerConfig, McpTestResult } from "@/services/api/mcp-config";
+import { useTestMcpServer } from "@/services/queries/use-mcp-config";
 
 type EnvEntry = { key: string; value: string };
 
@@ -15,16 +16,20 @@ type McpServerDialogProps = {
   onOpenChange: (open: boolean) => void;
   onSave: (name: string, config: McpServerConfig) => void;
   saving: boolean;
+  projectName: string;
   initialName?: string;
   initialConfig?: McpServerConfig;
 };
 
-export function McpServerDialog({ open, onOpenChange, onSave, saving, initialName, initialConfig }: McpServerDialogProps) {
+export function McpServerDialog({ open, onOpenChange, onSave, saving, projectName, initialName, initialConfig }: McpServerDialogProps) {
   const [name, setName] = useState("");
   const [command, setCommand] = useState("");
   const [args, setArgs] = useState("");
   const [envEntries, setEnvEntries] = useState<EnvEntry[]>([]);
+  const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'fail'>('idle');
+  const [testResult, setTestResult] = useState<McpTestResult | null>(null);
   const isEditing = !!initialName;
+  const testMutation = useTestMcpServer();
 
   useEffect(() => {
     if (open) {
@@ -35,11 +40,17 @@ export function McpServerDialog({ open, onOpenChange, onSave, saving, initialNam
         ? Object.entries(initialConfig.env).map(([key, value]) => ({ key, value }))
         : [];
       setEnvEntries(entries);
+      setTestStatus('idle');
+      setTestResult(null);
     }
   }, [open, initialName, initialConfig]);
 
-  const handleSubmit = () => {
-    if (!name.trim() || !command.trim()) return;
+  const resetTest = () => {
+    setTestStatus('idle');
+    setTestResult(null);
+  };
+
+  const buildConfig = (): McpServerConfig => {
     const parsedArgs = args
       .split(",")
       .map((a) => a.trim())
@@ -50,7 +61,31 @@ export function McpServerDialog({ open, onOpenChange, onSave, saving, initialNam
         env[entry.key.trim()] = entry.value;
       }
     }
-    onSave(name.trim(), { command: command.trim(), args: parsedArgs, env });
+    return { command: command.trim(), args: parsedArgs, env };
+  };
+
+  const handleSubmit = () => {
+    if (!name.trim() || !command.trim()) return;
+    onSave(name.trim(), buildConfig());
+  };
+
+  const handleTest = () => {
+    if (!command.trim()) return;
+    setTestStatus('testing');
+    setTestResult(null);
+    testMutation.mutate(
+      { projectName, config: buildConfig() },
+      {
+        onSuccess: (result) => {
+          setTestResult(result);
+          setTestStatus(result.valid ? 'success' : 'fail');
+        },
+        onError: (error) => {
+          setTestResult({ valid: false, error: error instanceof Error ? error.message : 'Test request failed' });
+          setTestStatus('fail');
+        },
+      },
+    );
   };
 
   const addEnvEntry = () => setEnvEntries([...envEntries, { key: "", value: "" }]);
@@ -76,11 +111,11 @@ export function McpServerDialog({ open, onOpenChange, onSave, saving, initialNam
           </div>
           <div className="space-y-2">
             <Label htmlFor="server-command">Command</Label>
-            <Input id="server-command" value={command} onChange={(e) => setCommand(e.target.value)} placeholder="e.g. npx" />
+            <Input id="server-command" value={command} onChange={(e) => { setCommand(e.target.value); resetTest(); }} placeholder="e.g. npx" />
           </div>
           <div className="space-y-2">
             <Label htmlFor="server-args">Arguments (comma-separated)</Label>
-            <Input id="server-args" value={args} onChange={(e) => setArgs(e.target.value)} placeholder="e.g. -y, @modelcontextprotocol/server-filesystem, /path" />
+            <Input id="server-args" value={args} onChange={(e) => { setArgs(e.target.value); resetTest(); }} placeholder="e.g. -y, @modelcontextprotocol/server-filesystem, /path" />
           </div>
           <div className="space-y-2">
             <div className="flex items-center justify-between">
@@ -91,18 +126,47 @@ export function McpServerDialog({ open, onOpenChange, onSave, saving, initialNam
             </div>
             {envEntries.map((entry, i) => (
               <div key={i} className="flex gap-2 items-center">
-                <Input value={entry.key} onChange={(e) => updateEnvEntry(i, "key", e.target.value)} placeholder="KEY" className="flex-1" />
-                <Input value={entry.value} onChange={(e) => updateEnvEntry(i, "value", e.target.value)} placeholder="value" className="flex-1" />
+                <Input value={entry.key} onChange={(e) => { updateEnvEntry(i, "key", e.target.value); resetTest(); }} placeholder="KEY" className="flex-1" />
+                <Input value={entry.value} onChange={(e) => { updateEnvEntry(i, "value", e.target.value); resetTest(); }} placeholder="value" className="flex-1" />
                 <Button type="button" variant="ghost" size="icon" onClick={() => removeEnvEntry(i)}>
                   <Trash2 className="w-4 h-4 text-destructive" />
                 </Button>
               </div>
             ))}
           </div>
+
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            onClick={handleTest}
+            disabled={testStatus === 'testing' || !command.trim()}
+          >
+            {testStatus === 'testing' ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Zap className="w-4 h-4 mr-2" />
+            )}
+            {testStatus === 'testing' ? "Testing..." : "Test Connection"}
+          </Button>
+
+          {testStatus === 'success' && testResult && (
+            <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950/30 rounded-md p-2">
+              <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+              <span>Connected{testResult.serverInfo?.name ? ` — ${testResult.serverInfo.name}${testResult.serverInfo.version ? ` v${testResult.serverInfo.version}` : ''}` : ''}</span>
+            </div>
+          )}
+
+          {testStatus === 'fail' && testResult && (
+            <div className="flex items-center gap-2 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 rounded-md p-2">
+              <XCircle className="w-4 h-4 flex-shrink-0" />
+              <span className="break-all">{testResult.error || "Connection failed"}</span>
+            </div>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>Cancel</Button>
-          <Button onClick={handleSubmit} disabled={saving || !name.trim() || !command.trim()}>
+          <Button onClick={handleSubmit} disabled={saving || !name.trim() || !command.trim() || testStatus !== 'success'}>
             {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
             {isEditing ? "Update" : "Add"}
           </Button>

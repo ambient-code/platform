@@ -111,6 +111,7 @@ func registerRoutes(r *gin.Engine) {
 
 			projectGroup.GET("/mcp-config", handlers.GetMcpConfig)
 			projectGroup.PUT("/mcp-config", handlers.UpdateMcpConfig)
+			projectGroup.POST("/mcp-config/test", handlers.TestMcpServer)
 			projectGroup.GET("/http-tools", handlers.GetHttpTools)
 			projectGroup.PUT("/http-tools", handlers.UpdateHttpTools)
 

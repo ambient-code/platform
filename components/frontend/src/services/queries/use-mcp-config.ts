@@ -25,3 +25,15 @@ export function useUpdateMcpConfig() {
     },
   });
 }
+
+export function useTestMcpServer() {
+  return useMutation({
+    mutationFn: ({
+      projectName,
+      config,
+    }: {
+      projectName: string;
+      config: mcpConfigApi.McpServerConfig;
+    }) => mcpConfigApi.testMcpServer(projectName, config),
+  });
+}
