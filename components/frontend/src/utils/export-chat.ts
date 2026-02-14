@@ -135,18 +135,28 @@ function truncate(s: string, max: number): string {
 export function convertEventsToMarkdown(
   exportData: SessionExportResponse,
   session: AgenticSession,
+  options?: { username?: string; projectName?: string },
 ): string {
   const displayName = session.spec.displayName || session.metadata.name;
   const model = session.spec.llmSettings.model;
   const created = formatTimestamp(session.metadata.creationTimestamp);
   const phase = session.status?.phase ?? 'Unknown';
 
+  const sessionUrl =
+    typeof window !== 'undefined' && options?.projectName
+      ? `${window.location.origin}/projects/${options.projectName}/sessions/${session.metadata.name}`
+      : '';
+  const sessionCell = sessionUrl
+    ? `[${session.metadata.name}](${sessionUrl})`
+    : session.metadata.name;
+
   const lines: string[] = [
     `# ${displayName}`,
     '',
     `| Field | Value |`,
     `|-------|-------|`,
-    `| Session | ${session.metadata.name} |`,
+    `| Session | ${sessionCell} |`,
+    ...(options?.username ? [`| User | ${options.username} |`] : []),
     `| Model | ${model} |`,
     `| Status | ${phase} |`,
     `| Created | ${created} |`,
@@ -165,7 +175,8 @@ export function convertEventsToMarkdown(
 
   for (const block of blocks) {
     if (block.kind === 'message') {
-      const roleLabel = block.role === 'user' ? 'User' : block.role === 'assistant' ? 'Assistant' : block.role;
+      const roleLabel =
+        block.role === 'user' ? '\u{1F464} User' : block.role === 'assistant' ? '\u{1F916} Assistant' : block.role;
       const ts = formatTimestamp(block.timestamp);
       lines.push(`## ${roleLabel}`);
       if (ts) lines.push(`*${ts}*`);
@@ -175,7 +186,7 @@ export function convertEventsToMarkdown(
     } else {
       const ts = formatTimestamp(block.timestamp);
       lines.push(`<details>`);
-      lines.push(`<summary>Tool: ${block.name}${ts ? ` (${ts})` : ''}</summary>`);
+      lines.push(`<summary>\u{1F527} Tool: ${block.name}${ts ? ` (${ts})` : ''}</summary>`);
       lines.push('');
       if (block.args.trim()) {
         lines.push('**Arguments:**');
@@ -306,8 +317,14 @@ function markdownToHtml(md: string): string {
     }
 
     // Pass through HTML tags directly (<details>, <summary>, </details>)
+    // Add visual accent border to <details> blocks
     if (/^\s*<\/?(?:details|summary)/.test(line)) {
-      out.push(line);
+      out.push(
+        line.replace(
+          /^(\s*<details)>/,
+          '$1 style="border-left:3px solid #6b7280">',
+        ),
+      );
       i++;
       continue;
     }
@@ -319,11 +336,17 @@ function markdownToHtml(md: string): string {
       continue;
     }
 
-    // Headings
+    // Headings — apply role-specific colors for h2
     const headingMatch = line.match(/^(#{1,6})\s+(.*)$/);
     if (headingMatch) {
       const level = headingMatch[1].length;
-      out.push(`<h${level}>${inlineFormat(headingMatch[2])}</h${level}>`);
+      const text = headingMatch[2];
+      let style = '';
+      if (level === 2) {
+        if (text.includes('\u{1F464}')) style = ' style="color:#1d4ed8"'; // blue for User
+        else if (text.includes('\u{1F916}')) style = ' style="color:#15803d"'; // green for Assistant
+      }
+      out.push(`<h${level}${style}>${inlineFormat(text)}</h${level}>`);
       i++;
       continue;
     }
@@ -363,6 +386,10 @@ function markdownToHtml(md: string): string {
 function inlineFormat(s: string): string {
   // Escape HTML first to prevent XSS from message content
   let result = escapeHtml(s);
+  // Markdown links: [text](url) — render as clickable anchors in PDF (http/https only)
+  result = result.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_match, text: string, url: string) =>
+    /^https?:\/\//i.test(url) ? `<a href="${url}" style="color:#2563eb">${text}</a>` : `${text} (${url})`,
+  );
   result = result.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
   result = result.replace(/(?<!\*)\*([^*]+?)\*(?!\*)/g, '<em>$1</em>');
   result = result.replace(/`([^`]+?)`/g, '<code>$1</code>');

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { RefreshCw, Octagon, Trash2, Copy, MoreVertical, Info, Play, Pencil, Download, FileText, Printer, Loader2 } from 'lucide-react';
+import { RefreshCw, Octagon, Trash2, Copy, MoreVertical, Info, Play, Pencil, Download, FileText, Printer, Loader2, HardDrive } from 'lucide-react';
 import { CloneSessionDialog } from '@/components/clone-session-dialog';
 import { SessionDetailsModal } from '@/components/session-details-modal';
 import { EditSessionNameDialog } from '@/components/edit-session-name-dialog';
@@ -11,9 +11,11 @@ import {
   DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent,
 } from '@/components/ui/dropdown-menu';
 import type { AgenticSession } from '@/types/agentic-session';
-import { useUpdateSessionDisplayName } from '@/services/queries';
+import { useUpdateSessionDisplayName, useCurrentUser } from '@/services/queries';
+import { useMcpStatus } from '@/services/queries/use-mcp';
+import { useGoogleStatus } from '@/services/queries/use-google';
 import { successToast, errorToast } from '@/hooks/use-toast';
-import { getSessionExport } from '@/services/api/sessions';
+import { getSessionExport, saveToGoogleDrive } from '@/services/api/sessions';
 import { convertEventsToMarkdown, downloadAsMarkdown, exportAsPdf } from '@/utils/export-chat';
 
 type SessionHeaderProps = {
@@ -39,14 +41,23 @@ export function SessionHeader({
 }: SessionHeaderProps) {
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
   const [editNameDialogOpen, setEditNameDialogOpen] = useState(false);
-  const [exportLoading, setExportLoading] = useState<'markdown' | 'pdf' | null>(null);
+  const [exportLoading, setExportLoading] = useState<'markdown' | 'pdf' | 'gdrive' | null>(null);
 
   const updateDisplayNameMutation = useUpdateSessionDisplayName();
+  const { data: me } = useCurrentUser();
 
   const phase = session.status?.phase || "Pending";
-  const canStop = phase === "Running" || phase === "Creating";
+  const isRunning = phase === "Running";
+  const canStop = isRunning || phase === "Creating";
   const canResume = phase === "Stopped";
   const canDelete = phase === "Completed" || phase === "Failed" || phase === "Stopped";
+
+  const { data: mcpStatus } = useMcpStatus(projectName, session.metadata.name, isRunning);
+  const { data: googleStatus } = useGoogleStatus();
+  const googleDriveServer = mcpStatus?.servers?.find(
+    (s) => s.name.includes('gdrive') || s.name.includes('google-drive') || s.name.includes('google-workspace')
+  );
+  const hasGdriveMcp = !!googleDriveServer;
 
   const handleEditName = (newName: string) => {
     updateDisplayNameMutation.mutate(
@@ -68,18 +79,42 @@ export function SessionHeader({
     );
   };
 
-  const handleExport = async (format: 'markdown' | 'pdf') => {
+  const handleExport = async (format: 'markdown' | 'pdf' | 'gdrive') => {
+    if (format === 'gdrive') {
+      if (!googleStatus?.connected) {
+        errorToast('Connect Google Drive in Integrations first');
+        return;
+      }
+      if (!isRunning || !hasGdriveMcp) {
+        errorToast('Session must be running with Google Drive MCP configured');
+        return;
+      }
+    }
+
     setExportLoading(format);
     try {
       const exportData = await getSessionExport(projectName, session.metadata.name);
-      const markdown = convertEventsToMarkdown(exportData, session);
+      const markdown = convertEventsToMarkdown(exportData, session, {
+        username: me?.displayName || me?.username || me?.email,
+        projectName,
+      });
       const filename = session.spec.displayName || session.metadata.name;
 
-      if (format === 'markdown') {
-        downloadAsMarkdown(markdown, `${filename}.md`);
-        successToast('Chat exported as Markdown');
-      } else {
-        exportAsPdf(markdown, filename);
+      switch (format) {
+        case 'markdown':
+          downloadAsMarkdown(markdown, `${filename}.md`);
+          successToast('Chat exported as Markdown');
+          break;
+        case 'pdf':
+          exportAsPdf(markdown, filename);
+          break;
+        case 'gdrive':
+          await saveToGoogleDrive(
+            projectName, session.metadata.name, markdown,
+            `${filename}.md`, googleDriveServer?.name ?? 'google-workspace',
+          );
+          successToast('Saved to Google Drive');
+          break;
       }
     } catch (err) {
       errorToast(err instanceof Error ? err.message : 'Failed to export chat');
@@ -116,6 +151,17 @@ export function SessionHeader({
             <Printer className="w-4 h-4 mr-2" />
           )}
           As PDF
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => void handleExport('gdrive')}
+          disabled={exportLoading !== null}
+        >
+          {exportLoading === 'gdrive' ? (
+            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+          ) : (
+            <HardDrive className="w-4 h-4 mr-2" />
+          )}
+          Save to my Google Drive
         </DropdownMenuItem>
       </DropdownMenuSubContent>
     </DropdownMenuSub>
