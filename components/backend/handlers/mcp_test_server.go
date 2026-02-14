@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/rand"
 	"k8s.io/client-go/kubernetes"
@@ -169,9 +171,6 @@ func TestMcpServer(c *gin.Context) {
 		{Name: "MCP_TEST_ARGS", Value: string(argsJSON)},
 		{Name: "MCP_TEST_ENV", Value: string(envJSON)},
 	}
-	for k, v := range req.Env {
-		envVars = append(envVars, corev1.EnvVar{Name: k, Value: v})
-	}
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -190,6 +189,16 @@ func TestMcpServer(c *gin.Context) {
 					Image:   runnerImage,
 					Command: []string{"python3", "-c", mcpTestScript},
 					Env:     envVars,
+					Resources: corev1.ResourceRequirements{
+						Limits: corev1.ResourceList{
+							corev1.ResourceCPU:    resource.MustParse("500m"),
+							corev1.ResourceMemory: resource.MustParse("256Mi"),
+						},
+						Requests: corev1.ResourceList{
+							corev1.ResourceCPU:    resource.MustParse("100m"),
+							corev1.ResourceMemory: resource.MustParse("64Mi"),
+						},
+					},
 				},
 			},
 		},
@@ -251,9 +260,11 @@ func readMcpTestLogs(ctx context.Context, clientset kubernetes.Interface, namesp
 	}
 	defer logStream.Close()
 
-	buf := make([]byte, 8192)
-	n, _ := logStream.Read(buf)
-	logOutput := string(buf[:n])
+	logBytes, err := io.ReadAll(logStream)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read pod log stream: %v", err)
+	}
+	logOutput := string(logBytes)
 
 	var podResult struct {
 		Success    bool                   `json:"success"`

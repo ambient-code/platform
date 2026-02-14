@@ -84,11 +84,7 @@ export function McpServersTab({ projectName }: McpServersTabProps) {
   };
 
   const handleExport = () => {
-    const mcpServers: Record<string, McpServerConfig> = {};
-    for (const [name, srv] of serverEntries) {
-      mcpServers[name] = { command: srv.command, args: srv.args, env: srv.env };
-    }
-    const blob = new Blob([JSON.stringify({ mcpServers }, null, 2)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify({ mcpServers: servers }, null, 2)], { type: "application/json" });
     const blobUrl = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = blobUrl;
