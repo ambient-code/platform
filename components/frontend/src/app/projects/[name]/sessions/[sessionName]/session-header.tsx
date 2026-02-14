@@ -2,14 +2,19 @@
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { RefreshCw, Octagon, Trash2, Copy, MoreVertical, Info, Play, Pencil } from 'lucide-react';
+import { RefreshCw, Octagon, Trash2, Copy, MoreVertical, Info, Play, Pencil, Download, FileText, Printer, Loader2 } from 'lucide-react';
 import { CloneSessionDialog } from '@/components/clone-session-dialog';
 import { SessionDetailsModal } from '@/components/session-details-modal';
 import { EditSessionNameDialog } from '@/components/edit-session-name-dialog';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+  DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent,
+} from '@/components/ui/dropdown-menu';
 import type { AgenticSession } from '@/types/agentic-session';
 import { useUpdateSessionDisplayName } from '@/services/queries';
 import { successToast, errorToast } from '@/hooks/use-toast';
+import { getSessionExport } from '@/services/api/sessions';
+import { convertEventsToMarkdown, downloadAsMarkdown, exportAsPdf } from '@/utils/export-chat';
 
 type SessionHeaderProps = {
   session: AgenticSession;
@@ -34,14 +39,15 @@ export function SessionHeader({
 }: SessionHeaderProps) {
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
   const [editNameDialogOpen, setEditNameDialogOpen] = useState(false);
-  
+  const [exportLoading, setExportLoading] = useState<'markdown' | 'pdf' | null>(null);
+
   const updateDisplayNameMutation = useUpdateSessionDisplayName();
-  
+
   const phase = session.status?.phase || "Pending";
   const canStop = phase === "Running" || phase === "Creating";
   const canResume = phase === "Stopped";
   const canDelete = phase === "Completed" || phase === "Failed" || phase === "Stopped";
-  
+
   const handleEditName = (newName: string) => {
     updateDisplayNameMutation.mutate(
       {
@@ -61,6 +67,59 @@ export function SessionHeader({
       }
     );
   };
+
+  const handleExport = async (format: 'markdown' | 'pdf') => {
+    setExportLoading(format);
+    try {
+      const exportData = await getSessionExport(projectName, session.metadata.name);
+      const markdown = convertEventsToMarkdown(exportData, session);
+      const filename = session.spec.displayName || session.metadata.name;
+
+      if (format === 'markdown') {
+        downloadAsMarkdown(markdown, `${filename}.md`);
+        successToast('Chat exported as Markdown');
+      } else {
+        exportAsPdf(markdown, filename);
+      }
+    } catch (err) {
+      errorToast(err instanceof Error ? err.message : 'Failed to export chat');
+    } finally {
+      setExportLoading(null);
+    }
+  };
+
+  const exportSubMenu = (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger>
+        <Download className="w-4 h-4 mr-2" />
+        Export chat
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent>
+        <DropdownMenuItem
+          onClick={() => handleExport('markdown')}
+          disabled={exportLoading !== null}
+        >
+          {exportLoading === 'markdown' ? (
+            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+          ) : (
+            <FileText className="w-4 h-4 mr-2" />
+          )}
+          As Markdown
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => handleExport('pdf')}
+          disabled={exportLoading !== null}
+        >
+          {exportLoading === 'pdf' ? (
+            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+          ) : (
+            <Printer className="w-4 h-4 mr-2" />
+          )}
+          As PDF
+        </DropdownMenuItem>
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
+  );
 
   // Kebab menu only (for breadcrumb line)
   if (renderMode === 'kebab-only') {
@@ -116,6 +175,7 @@ export function SessionHeader({
               }
               projectName={projectName}
             />
+            {exportSubMenu}
             {canDelete && (
               <>
                 <DropdownMenuSeparator />
@@ -131,14 +191,14 @@ export function SessionHeader({
             )}
           </DropdownMenuContent>
         </DropdownMenu>
-        
+
         <SessionDetailsModal
           session={session}
           projectName={projectName}
           open={detailsModalOpen}
           onOpenChange={setDetailsModalOpen}
         />
-        
+
         <EditSessionNameDialog
           open={editNameDialogOpen}
           onOpenChange={setEditNameDialogOpen}
@@ -224,7 +284,7 @@ export function SessionHeader({
               Resume
             </Button>
           )}
-          
+
           {/* Actions dropdown menu */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -252,6 +312,7 @@ export function SessionHeader({
                 }
                 projectName={projectName}
               />
+              {exportSubMenu}
               {canDelete && (
                 <>
                   <DropdownMenuSeparator />
@@ -276,7 +337,7 @@ export function SessionHeader({
         open={detailsModalOpen}
         onOpenChange={setDetailsModalOpen}
       />
-      
+
       <EditSessionNameDialog
         open={editNameDialogOpen}
         onOpenChange={setEditNameDialogOpen}
