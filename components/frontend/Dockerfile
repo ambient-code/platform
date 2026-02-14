@@ -10,7 +10,9 @@ COPY package.json package-lock.json* ./
 RUN npm ci
 
 # Rebuild the source code only when needed
-FROM registry.access.redhat.com/ubi9/nodejs-20-minimal AS builder
+# Use the full nodejs-20 image (not minimal) for the build stage because
+# Next.js 16 Turbopack requires native SWC binaries that depend on glibc.
+FROM registry.access.redhat.com/ubi9/nodejs-20 AS builder
 
 USER 0
 
