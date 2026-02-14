@@ -4,6 +4,7 @@ HTTP API types for the Ambient Platform Public API.
 
 from typing import List, Optional
 from dataclasses import dataclass
+from urllib.parse import urlparse
 
 # Session status constants
 StatusPending = "pending"
@@ -23,6 +24,25 @@ class RepoHTTP:
         if self.branch:
             result["branch"] = self.branch
         return result
+    
+    def validate(self) -> None:
+        """Validate repository configuration."""
+        if not self.url or not self.url.strip():
+            raise ValueError("Repository URL cannot be empty")
+        
+        # Parse and validate URL
+        try:
+            parsed = urlparse(self.url)
+        except Exception as e:
+            raise ValueError(f"Invalid URL format: {e}")
+        
+        # Check for supported schemes
+        if parsed.scheme not in ("https", "http"):
+            raise ValueError(f"Unsupported URL scheme: {parsed.scheme} (must be http or https)")
+        
+        # Check for common invalid URLs
+        if "example.com" in self.url or "localhost" in self.url:
+            raise ValueError("URL appears to be a placeholder or localhost")
 
 
 @dataclass
@@ -39,6 +59,37 @@ class CreateSessionRequest:
         if self.repos:
             result["repos"] = [repo.to_dict() for repo in self.repos]
         return result
+    
+    def validate(self) -> None:
+        """Validate the session creation request."""
+        if not self.task or not self.task.strip():
+            raise ValueError("Task cannot be empty")
+        
+        if len(self.task) > 10000:
+            raise ValueError("Task exceeds maximum length of 10,000 characters")
+        
+        # Validate model if provided
+        if self.model and not self._is_valid_model(self.model):
+            raise ValueError(f"Invalid model: {self.model}")
+        
+        # Validate repositories
+        if self.repos:
+            for i, repo in enumerate(self.repos):
+                try:
+                    repo.validate()
+                except ValueError as e:
+                    raise ValueError(f"Repository {i}: {e}")
+    
+    def _is_valid_model(self, model: str) -> bool:
+        """Check if the model name is valid."""
+        valid_models = [
+            "claude-3.5-sonnet",
+            "claude-3.5-haiku", 
+            "claude-3-opus",
+            "claude-3-sonnet",
+            "claude-3-haiku",
+        ]
+        return model in valid_models
 
 
 @dataclass

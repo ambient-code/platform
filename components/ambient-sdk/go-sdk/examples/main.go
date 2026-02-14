@@ -7,8 +7,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/ambient/platform-sdk/client"
-	"github.com/ambient/platform-sdk/types"
+	"github.com/ambient-code/platform/components/ambient-sdk/go-sdk/client"
+	"github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
 )
 
 const (
@@ -34,7 +34,10 @@ func main() {
 	}
 
 	// Create HTTP client
-	client := client.NewClientWithTimeout(apiURL, token, project, 60*time.Second)
+	client, err := client.NewClientWithTimeout(apiURL, token, project, 60*time.Second)
+	if err != nil {
+		log.Fatalf("Failed to create client: %v", err)
+	}
 	fmt.Printf("✓ Created client for API: %s\n", apiURL)
 	fmt.Printf("✓ Using project: %s\n", project)
 

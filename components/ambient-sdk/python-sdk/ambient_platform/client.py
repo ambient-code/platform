@@ -3,8 +3,10 @@ HTTP client for the Ambient Platform Public API.
 """
 
 import json
+import os
 import time
 from typing import Optional
+from urllib.parse import urlparse
 import httpx
 
 from .types import (
@@ -42,7 +44,15 @@ class AmbientClient:
             token: Bearer token for authentication
             project: Project name (Kubernetes namespace)
             timeout: HTTP request timeout in seconds
+            
+        Raises:
+            ValueError: If token or other parameters fail validation
         """
+        # Validate inputs
+        self._validate_token(token)
+        self._validate_project(project)
+        self._validate_base_url(base_url)
+        
         self.base_url = base_url.rstrip("/")
         self.token = token
         self.project = project
@@ -100,10 +110,14 @@ class AmbientClient:
             CreateSessionResponse with session ID and message
 
         Raises:
+            ValueError: If request validation fails
             AmbientAPIError: If the API request fails
             AuthenticationError: If authentication fails
             AmbientConnectionError: If connection fails
         """
+        # Validate the request first
+        request.validate()
+        
         url = f"{self.base_url}/v1/sessions"
         
         try:
@@ -241,3 +255,49 @@ class AmbientClient:
             project=project,
             **{k: v for k, v in kwargs.items() if k not in ("base_url", "token", "project")}
         )
+
+    def _validate_token(self, token: str) -> None:
+        """Validate token format and security."""
+        if not token:
+            raise ValueError("Token cannot be empty")
+        
+        if len(token) < 10:
+            raise ValueError("Token appears too short to be valid")
+        
+        # Check for common placeholder values
+        if token.lower() in ("your_token_here", "your-token-here", "token", "bearer"):
+            raise ValueError("Token appears to be a placeholder value")
+        
+        # Check for potential token leakage patterns
+        if "AMBIENT_TOKEN=" in token:
+            raise ValueError("Token contains 'AMBIENT_TOKEN=' prefix - potential format error")
+
+    def _validate_project(self, project: str) -> None:
+        """Validate project name format."""
+        if not project:
+            raise ValueError("Project cannot be empty")
+        
+        if not project.replace("-", "").replace("_", "").isalnum():
+            raise ValueError("Project must contain only alphanumeric characters, hyphens, and underscores")
+        
+        if len(project) > 63:
+            raise ValueError("Project name cannot exceed 63 characters")
+
+    def _validate_base_url(self, base_url: str) -> None:
+        """Validate base URL format."""
+        if not base_url:
+            raise ValueError("Base URL cannot be empty")
+        
+        parsed = urlparse(base_url)
+        if not parsed.scheme or not parsed.netloc:
+            raise ValueError("Base URL must include scheme (http/https) and host")
+        
+        if parsed.scheme not in ("http", "https"):
+            raise ValueError("Base URL scheme must be http or https")
+        
+        # Check for common placeholder values
+        if "localhost" in parsed.netloc and not base_url.startswith("http://localhost"):
+            raise ValueError("Localhost URLs should use http://localhost format")
+        
+        if "example.com" in parsed.netloc:
+            raise ValueError("Base URL appears to contain placeholder domain")

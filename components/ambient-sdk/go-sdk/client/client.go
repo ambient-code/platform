@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/ambient/platform-sdk/types"
+	"github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
 )
 
 // Client is a simple HTTP client for the Ambient Platform API
@@ -21,7 +21,12 @@ type Client struct {
 }
 
 // NewClient creates a new HTTP client for the Ambient Platform
-func NewClient(baseURL, token, project string) *Client {
+// Returns an error if token validation fails
+func NewClient(baseURL, token, project string) (*Client, error) {
+	if err := validateToken(token); err != nil {
+		return nil, fmt.Errorf("invalid token: %w", err)
+	}
+	
 	return &Client{
 		baseURL: baseURL,
 		token:   token,
@@ -29,11 +34,16 @@ func NewClient(baseURL, token, project string) *Client {
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
-	}
+	}, nil
 }
 
 // NewClientWithTimeout creates a new HTTP client with custom timeout
-func NewClientWithTimeout(baseURL, token, project string, timeout time.Duration) *Client {
+// Returns an error if token validation fails
+func NewClientWithTimeout(baseURL, token, project string, timeout time.Duration) (*Client, error) {
+	if err := validateToken(token); err != nil {
+		return nil, fmt.Errorf("invalid token: %w", err)
+	}
+	
 	return &Client{
 		baseURL: baseURL,
 		token:   token,
@@ -41,11 +51,16 @@ func NewClientWithTimeout(baseURL, token, project string, timeout time.Duration)
 		httpClient: &http.Client{
 			Timeout: timeout,
 		},
-	}
+	}, nil
 }
 
 // CreateSession creates a new agentic session
 func (c *Client) CreateSession(ctx context.Context, req *types.CreateSessionRequest) (*types.CreateSessionResponse, error) {
+	// Validate the request first
+	if err := req.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid request: %w", err)
+	}
+
 	jsonBody, err := json.Marshal(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
@@ -196,4 +211,22 @@ func (c *Client) WaitForCompletion(ctx context.Context, sessionID string, pollIn
 			}
 		}
 	}
+}
+
+// validateToken performs basic token validation to prevent common issues
+func validateToken(token string) error {
+	if len(token) == 0 {
+		return fmt.Errorf("token cannot be empty")
+	}
+	
+	if len(token) < 10 {
+		return fmt.Errorf("token appears too short to be valid")
+	}
+	
+	// Check for common token format issues
+	if token == "YOUR_TOKEN_HERE" || token == "your-token-here" || token == "token" {
+		return fmt.Errorf("token appears to be a placeholder value")
+	}
+	
+	return nil
 }
