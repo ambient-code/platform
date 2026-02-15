@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
-import { Star, Settings, Users, Loader2 } from 'lucide-react';
+import { Star, Settings, Users, Loader2, Server } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 import { Button } from '@/components/ui/button';
@@ -14,9 +14,10 @@ import { Breadcrumbs } from '@/components/breadcrumbs';
 import { SessionsSection } from '@/components/workspace-sections/sessions-section';
 import { SharingSection } from '@/components/workspace-sections/sharing-section';
 import { SettingsSection } from '@/components/workspace-sections/settings-section';
+import { McpConfigEditor } from '@/components/mcp-config-editor';
 import { useProject } from '@/services/queries/use-projects';
 
-type Section = 'sessions' | 'sharing' | 'settings';
+type Section = 'sessions' | 'sharing' | 'settings' | 'mcp-servers';
 
 export default function ProjectDetailsPage() {
   const params = useParams();
@@ -33,7 +34,7 @@ export default function ProjectDetailsPage() {
   // Update active section when query parameter changes
   useEffect(() => {
     const sectionParam = searchParams.get('section') as Section;
-    if (sectionParam && ['sessions', 'sharing', 'settings'].includes(sectionParam)) {
+    if (sectionParam && ['sessions', 'sharing', 'settings', 'mcp-servers'].includes(sectionParam)) {
       setActiveSection(sectionParam);
     }
   }, [searchParams]);
@@ -41,6 +42,7 @@ export default function ProjectDetailsPage() {
   const navItems = [
     { id: 'sessions' as Section, label: 'Sessions', icon: Star },
     { id: 'sharing' as Section, label: 'Sharing', icon: Users },
+    { id: 'mcp-servers' as Section, label: 'MCP Servers', icon: Server },
     { id: 'settings' as Section, label: 'Workspace Settings', icon: Settings },
   ];
 
@@ -120,6 +122,7 @@ export default function ProjectDetailsPage() {
           {/* Main Content */}
           {activeSection === 'sessions' && <SessionsSection projectName={projectName} />}
           {activeSection === 'sharing' && <SharingSection projectName={projectName} />}
+          {activeSection === 'mcp-servers' && <McpConfigEditor projectName={projectName} />}
           {activeSection === 'settings' && <SettingsSection projectName={projectName} />}
         </div>
       </div>
