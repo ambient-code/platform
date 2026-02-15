@@ -200,10 +200,13 @@ func HandleAGUIRunProxy(c *gin.Context) {
 
 		trimmed := strings.TrimSpace(line)
 
-		// Persist every event in background (including snapshots)
+		// Persist every event synchronously to guarantee JSONL ordering.
+		// (The old `go persistStreamedEvent(...)` caused a race where
+		// goroutines wrote events out-of-order, e.g. RUN_FINISHED before
+		// MESSAGES_SNAPSHOT.  Persist is fast — JSON marshal + file append.)
 		if strings.HasPrefix(trimmed, "data: ") {
 			jsonData := strings.TrimPrefix(trimmed, "data: ")
-			go persistStreamedEvent(sessionName, runID, threadID, jsonData)
+			persistStreamedEvent(sessionName, runID, threadID, jsonData)
 
 			// Skip forwarding MESSAGES_SNAPSHOT to the client.
 			// CopilotKit already has the full conversation from the

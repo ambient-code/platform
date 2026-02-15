@@ -128,7 +128,8 @@ type pendingTool struct {
 //     concatenated delta.
 //   - Events that arrive *between* START and END of a streaming
 //     sequence are buffered and emitted after END (reordering).
-//   - All other events pass through unchanged.
+//   - All other events pass through unchanged (including
+//     MESSAGES_SNAPSHOT, CUSTOM, STATE_SNAPSHOT, RUN_STARTED, etc.).
 //   - Incomplete sequences (START without END) are flushed at the end.
 func compactStreamingEvents(events []map[string]interface{}) []map[string]interface{} {
 	compacted := make([]map[string]interface{}, 0, len(events)/2)
