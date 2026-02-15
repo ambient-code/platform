@@ -5,7 +5,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Plus, MoreHorizontal, Pencil, Trash2, Globe } from "lucide-react";
+import { Plus, MoreHorizontal, Pencil, Trash2, Globe, AlertCircle } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { successToast, errorToast } from "@/hooks/use-toast";
 import { useHttpTools, useUpdateHttpTools } from "@/services/queries/use-http-tools";
 import { HttpToolDialog } from "@/components/http-tool-dialog";
@@ -16,7 +18,7 @@ type HttpToolsTabProps = {
 };
 
 export function HttpToolsTab({ projectName }: HttpToolsTabProps) {
-  const { data } = useHttpTools(projectName);
+  const { data, isLoading, error } = useHttpTools(projectName);
   const updateMutation = useUpdateHttpTools();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingTool, setEditingTool] = useState<HttpToolConfig | null>(null);
@@ -60,6 +62,27 @@ export function HttpToolsTab({ projectName }: HttpToolsTabProps) {
       }
     );
   };
+
+  if (isLoading) {
+    return (
+      <div className="space-y-3 py-4">
+        <Skeleton className="h-8 w-full" />
+        <Skeleton className="h-8 w-full" />
+        <Skeleton className="h-8 w-3/4" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <Alert variant="destructive">
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription>
+          Failed to load HTTP tools configuration: {error instanceof Error ? error.message : "Unknown error"}
+        </AlertDescription>
+      </Alert>
+    );
+  }
 
   return (
     <>

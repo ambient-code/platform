@@ -1228,6 +1228,9 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 	mcpCM, mcpErr := config.K8sClient.CoreV1().ConfigMaps(sessionNamespace).Get(
 		context.TODO(), "ambient-mcp-config", v1.GetOptions{},
 	)
+	if mcpErr != nil && !errors.IsNotFound(mcpErr) {
+		log.Printf("Warning: failed to fetch MCP ConfigMap for session %s in %s: %v", name, sessionNamespace, mcpErr)
+	}
 	if mcpErr == nil && mcpCM != nil {
 		// Add volume for the ConfigMap
 		pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{

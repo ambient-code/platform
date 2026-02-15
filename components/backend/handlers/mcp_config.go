@@ -45,7 +45,11 @@ func getConfigMapKey(c *gin.Context, key string, emptyValue interface{}) {
 
 	var config map[string]interface{}
 	if err := json.Unmarshal([]byte(raw), &config); err != nil {
-		log.Printf("Failed to parse JSON for key %q from ConfigMap %s/%s: %v", key, projectName, mcpConfigMapName, err)
+		preview := raw
+		if len(preview) > 200 {
+			preview = preview[:200] + "..."
+		}
+		log.Printf("Failed to parse JSON for key %q from ConfigMap %s/%s: %v (raw: %s)", key, projectName, mcpConfigMapName, err, preview)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse config"})
 		return
 	}

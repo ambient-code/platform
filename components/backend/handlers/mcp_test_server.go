@@ -8,6 +8,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -139,12 +141,35 @@ type mcpTestResponse struct {
 	Error      string                 `json:"error,omitempty"`
 }
 
+// allowedMcpCommands is the set of commands permitted in MCP test pods.
+// These correspond to standard MCP server launchers available in the runner image.
+var allowedMcpCommands = map[string]bool{
+	"npx":     true,
+	"node":    true,
+	"python":  true,
+	"python3": true,
+	"uvx":     true,
+	"uv":      true,
+	"docker":  true,
+	"podman":  true,
+}
+
 // TestMcpServer handles POST /api/projects/:projectName/mcp-config/test
 // Spawns a temporary Pod using the runner image to test an MCP server connection.
 func TestMcpServer(c *gin.Context) {
 	var req mcpTestRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if !allowedMcpCommands[req.Command] {
+		names := make([]string, 0, len(allowedMcpCommands))
+		for k := range allowedMcpCommands {
+			names = append(names, k)
+		}
+		sort.Strings(names)
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("command %q is not allowed; permitted commands: %s", req.Command, strings.Join(names, ", "))})
 		return
 	}
 
@@ -189,6 +214,13 @@ func TestMcpServer(c *gin.Context) {
 					Image:   runnerImage,
 					Command: []string{"python3", "-c", mcpTestScript},
 					Env:     envVars,
+					SecurityContext: &corev1.SecurityContext{
+						AllowPrivilegeEscalation: BoolPtr(false),
+						ReadOnlyRootFilesystem:   BoolPtr(false),
+						Capabilities: &corev1.Capabilities{
+							Drop: []corev1.Capability{"ALL"},
+						},
+					},
 					Resources: corev1.ResourceRequirements{
 						Limits: corev1.ResourceList{
 							corev1.ResourceCPU:    resource.MustParse("500m"),

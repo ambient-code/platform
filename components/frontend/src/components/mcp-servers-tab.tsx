@@ -5,7 +5,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Plus, MoreHorizontal, Pencil, Trash2, Server, Zap, Download, Upload, ChevronDown } from "lucide-react";
+import { Plus, MoreHorizontal, Pencil, Trash2, Server, Zap, Download, Upload, ChevronDown, AlertCircle } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { successToast, errorToast } from "@/hooks/use-toast";
 import { useMcpConfig, useUpdateMcpConfig, useTestMcpServer } from "@/services/queries/use-mcp-config";
 import { McpServerDialog } from "@/components/mcp-server-dialog";
@@ -62,7 +64,7 @@ type McpServersTabProps = {
 };
 
 export function McpServersTab({ projectName }: McpServersTabProps) {
-  const { data: config } = useMcpConfig(projectName);
+  const { data: config, isLoading, error } = useMcpConfig(projectName);
   const updateMutation = useUpdateMcpConfig();
   const testMutation = useTestMcpServer();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -171,6 +173,27 @@ export function McpServersTab({ projectName }: McpServersTabProps) {
       errorToast("Could not parse the selected file as JSON");
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="space-y-3 py-4">
+        <Skeleton className="h-8 w-full" />
+        <Skeleton className="h-8 w-full" />
+        <Skeleton className="h-8 w-3/4" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <Alert variant="destructive">
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription>
+          Failed to load MCP server configuration: {error instanceof Error ? error.message : "Unknown error"}
+        </AlertDescription>
+      </Alert>
+    );
+  }
 
   return (
     <>
