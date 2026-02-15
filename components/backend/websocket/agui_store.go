@@ -1,12 +1,15 @@
 // Package websocket provides AG-UI protocol endpoints for event streaming.
 //
-// agui_store.go — Event persistence and snapshot assembly.
+// agui_store.go — Event persistence, compaction, and replay.
 //
-// Write path: append every event to agui-events.jsonl (append-only log).
-// Read path:  load events, find the last MESSAGES_SNAPSHOT (sent by the
-//             runner at the end of each run), merge any newer messages
-//             from subsequent RUN_STARTEDs, and repair orphaned child
-//             tool results.
+// Write path:  append every event to agui-events.jsonl (append-only log).
+// Read path:   load events and compact streaming deltas for efficient replay.
+// Compaction:  mirrors @ag-ui/client compactEvents — concatenates
+//              TEXT_MESSAGE_CONTENT and TOOL_CALL_ARGS deltas, preserves
+//              all other events as-is.
+//
+// On reconnect the proxy replays the compacted events individually
+// (matching InMemoryAgentRunner.connect()), NOT a rebuilt MESSAGES_SNAPSHOT.
 package websocket
 
 import (
@@ -16,6 +19,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
+	"sync"
 	"time"
 )
 
@@ -89,291 +94,307 @@ func loadEvents(sessionID string) []map[string]interface{} {
 }
 
 // ─── Compaction ──────────────────────────────────────────────────────
-
-// compactEvents builds a MESSAGES_SNAPSHOT for reconnect.
 //
-// Simple approach:
-//  1. Use the last MESSAGES_SNAPSHOT from the event log (the runner
-//     sends one at the end of each completed run — it's authoritative).
-//  2. If no snapshot exists, fall back to the last RUN_STARTED's
-//     input.messages (the conversation CopilotKit sent us).
-//  3. Pick up any new messages from RUN_STARTEDs after the snapshot
-//     (handles: user sends a message then refreshes before the runner
-//     finishes — their new message is in the next RUN_STARTED).
-//  4. Repair orphaned child tool results (sub-agent tool calls missing
-//     from the snapshot's toolCalls definitions).
+// Go port of @ag-ui/client compactEvents (compact.ts).
 //
-// Returns nil if no message data exists.
-func compactEvents(events []map[string]interface{}) map[string]interface{} {
-	if len(events) == 0 {
-		return nil
-	}
+// Mirrors the InMemoryAgentRunner pattern:
+//   - During run:    raw events are appended to the JSONL log.
+//   - After run:     compactStreamingEvents shrinks deltas and the log
+//                    is rewritten atomically.
+//   - On connect():  compacted events are replayed individually.
 
-	// 1. Find the last MESSAGES_SNAPSHOT
-	var snapshotMessages []interface{}
-	snapshotIdx := -1
-	for i, evt := range events {
-		if t, _ := evt["type"].(string); t == types.EventTypeMessagesSnapshot {
-			if msgs, ok := evt["messages"].([]interface{}); ok && len(msgs) > 0 {
-				snapshotMessages = msgs
-				snapshotIdx = i
-			}
+// pendingText tracks an in-progress TEXT_MESSAGE sequence.
+type pendingText struct {
+	start       map[string]interface{}
+	deltas      []string // accumulated delta strings
+	end         map[string]interface{}
+	otherEvents []map[string]interface{}
+}
+
+// pendingTool tracks an in-progress TOOL_CALL sequence.
+type pendingTool struct {
+	start       map[string]interface{}
+	deltas      []string // accumulated delta strings
+	end         map[string]interface{}
+	otherEvents []map[string]interface{}
+}
+
+// compactStreamingEvents consolidates streaming deltas, matching
+// @ag-ui/client compactEvents exactly:
+//
+//   - TEXT_MESSAGE_CONTENT events with the same messageId → one event
+//     with concatenated delta.
+//   - TOOL_CALL_ARGS events with the same toolCallId → one event with
+//     concatenated delta.
+//   - Events that arrive *between* START and END of a streaming
+//     sequence are buffered and emitted after END (reordering).
+//   - All other events pass through unchanged.
+//   - Incomplete sequences (START without END) are flushed at the end.
+func compactStreamingEvents(events []map[string]interface{}) []map[string]interface{} {
+	compacted := make([]map[string]interface{}, 0, len(events)/2)
+
+	// Ordered maps (Go maps don't preserve insertion order, so we
+	// also track insertion order via slices).
+	textByID := make(map[string]*pendingText)
+	var textOrder []string
+
+	toolByID := make(map[string]*pendingTool)
+	var toolOrder []string
+
+	getOrCreateText := func(id string) *pendingText {
+		if p, ok := textByID[id]; ok {
+			return p
 		}
+		p := &pendingText{}
+		textByID[id] = p
+		textOrder = append(textOrder, id)
+		return p
 	}
 
-	// 2. No snapshot? Use the last RUN_STARTED.input.messages
-	if snapshotMessages == nil {
-		for i := len(events) - 1; i >= 0; i-- {
-			if t, _ := events[i]["type"].(string); t == types.EventTypeRunStarted {
-				input, _ := events[i]["input"].(map[string]interface{})
-				if input == nil {
-					continue
-				}
-				if msgs, _ := input["messages"].([]interface{}); len(msgs) > 0 {
-					snapshotMessages = msgs
-					snapshotIdx = i
+	getOrCreateTool := func(id string) *pendingTool {
+		if p, ok := toolByID[id]; ok {
+			return p
+		}
+		p := &pendingTool{}
+		toolByID[id] = p
+		toolOrder = append(toolOrder, id)
+		return p
+	}
+
+	flushText := func(msgID string) {
+		p := textByID[msgID]
+		if p == nil {
+			return
+		}
+		if p.start != nil {
+			compacted = append(compacted, p.start)
+		}
+		if len(p.deltas) > 0 {
+			concatenated := ""
+			for _, d := range p.deltas {
+				concatenated += d
+			}
+			compacted = append(compacted, map[string]interface{}{
+				"type":      types.EventTypeTextMessageContent,
+				"messageId": msgID,
+				"delta":     concatenated,
+			})
+		}
+		if p.end != nil {
+			compacted = append(compacted, p.end)
+		}
+		for _, other := range p.otherEvents {
+			compacted = append(compacted, other)
+		}
+		delete(textByID, msgID)
+	}
+
+	flushTool := func(tcID string) {
+		p := toolByID[tcID]
+		if p == nil {
+			return
+		}
+		if p.start != nil {
+			compacted = append(compacted, p.start)
+		}
+		if len(p.deltas) > 0 {
+			concatenated := ""
+			for _, d := range p.deltas {
+				concatenated += d
+			}
+			compacted = append(compacted, map[string]interface{}{
+				"type":       types.EventTypeToolCallArgs,
+				"toolCallId": tcID,
+				"delta":      concatenated,
+			})
+		}
+		if p.end != nil {
+			compacted = append(compacted, p.end)
+		}
+		for _, other := range p.otherEvents {
+			compacted = append(compacted, other)
+		}
+		delete(toolByID, tcID)
+	}
+
+	for _, evt := range events {
+		eventType, _ := evt["type"].(string)
+
+		switch eventType {
+		// ── Text message streaming ──
+		case types.EventTypeTextMessageStart:
+			msgID, _ := evt["messageId"].(string)
+			if msgID == "" {
+				compacted = append(compacted, evt)
+				continue
+			}
+			p := getOrCreateText(msgID)
+			p.start = evt
+
+		case types.EventTypeTextMessageContent:
+			msgID, _ := evt["messageId"].(string)
+			if msgID == "" {
+				compacted = append(compacted, evt)
+				continue
+			}
+			p := getOrCreateText(msgID)
+			delta, _ := evt["delta"].(string)
+			p.deltas = append(p.deltas, delta)
+
+		case types.EventTypeTextMessageEnd:
+			msgID, _ := evt["messageId"].(string)
+			if msgID == "" {
+				compacted = append(compacted, evt)
+				continue
+			}
+			p := getOrCreateText(msgID)
+			p.end = evt
+			flushText(msgID)
+
+		// ── Tool call streaming ──
+		case types.EventTypeToolCallStart:
+			tcID, _ := evt["toolCallId"].(string)
+			if tcID == "" {
+				compacted = append(compacted, evt)
+				continue
+			}
+			p := getOrCreateTool(tcID)
+			p.start = evt
+
+		case types.EventTypeToolCallArgs:
+			tcID, _ := evt["toolCallId"].(string)
+			if tcID == "" {
+				compacted = append(compacted, evt)
+				continue
+			}
+			p := getOrCreateTool(tcID)
+			delta, _ := evt["delta"].(string)
+			p.deltas = append(p.deltas, delta)
+
+		case types.EventTypeToolCallEnd:
+			tcID, _ := evt["toolCallId"].(string)
+			if tcID == "" {
+				compacted = append(compacted, evt)
+				continue
+			}
+			p := getOrCreateTool(tcID)
+			p.end = evt
+			flushTool(tcID)
+
+		// ── Everything else (pass-through or buffer) ──
+		default:
+			// If we're inside an open streaming sequence, buffer the event
+			// so it gets emitted after the sequence closes (reordering).
+			buffered := false
+			for _, id := range textOrder {
+				p := textByID[id]
+				if p != nil && p.start != nil && p.end == nil {
+					p.otherEvents = append(p.otherEvents, evt)
+					buffered = true
 					break
 				}
 			}
-		}
-	}
-
-	if snapshotMessages == nil {
-		return nil
-	}
-
-	// 3. Collect new messages from RUN_STARTEDs after the snapshot
-	//    (dedup by ID against the snapshot)
-	seenIDs := make(map[string]bool, len(snapshotMessages))
-	for _, m := range snapshotMessages {
-		if msg, ok := m.(map[string]interface{}); ok {
-			if id, _ := msg["id"].(string); id != "" {
-				seenIDs[id] = true
+			if !buffered {
+				for _, id := range toolOrder {
+					p := toolByID[id]
+					if p != nil && p.start != nil && p.end == nil {
+						p.otherEvents = append(p.otherEvents, evt)
+						buffered = true
+						break
+					}
+				}
+			}
+			if !buffered {
+				compacted = append(compacted, evt)
 			}
 		}
 	}
 
-	var extraMessages []interface{}
-	for _, evt := range events[snapshotIdx+1:] {
-		if t, _ := evt["type"].(string); t != types.EventTypeRunStarted {
-			continue
+	// Flush any remaining incomplete sequences (mid-run reconnect).
+	for _, id := range textOrder {
+		if textByID[id] != nil {
+			flushText(id)
 		}
-		input, _ := evt["input"].(map[string]interface{})
-		if input == nil {
-			continue
-		}
-		msgs, _ := input["messages"].([]interface{})
-		for _, m := range msgs {
-			msg, ok := m.(map[string]interface{})
-			if !ok {
-				continue
-			}
-			id, _ := msg["id"].(string)
-			if id != "" && !seenIDs[id] {
-				seenIDs[id] = true
-				extraMessages = append(extraMessages, msg)
-			}
+	}
+	for _, id := range toolOrder {
+		if toolByID[id] != nil {
+			flushTool(id)
 		}
 	}
 
-	allMessages := make([]interface{}, 0, len(snapshotMessages)+len(extraMessages))
-	allMessages = append(allMessages, snapshotMessages...)
-	allMessages = append(allMessages, extraMessages...)
-
-	// 4. Repair orphaned child tool results
-	allMessages = repairOrphanedToolResults(allMessages, events)
-
-	if len(allMessages) == 0 {
-		return nil
-	}
-
-	return map[string]interface{}{
-		"type":     types.EventTypeMessagesSnapshot,
-		"messages": allMessages,
-	}
+	return compacted
 }
 
-// repairOrphanedToolResults scans the message list for tool result
-// messages (role:"tool") whose toolCallId doesn't match any tool call
-// defined in an assistant message's toolCalls array.  For each group of
-// orphaned results, it scans the full event log for the corresponding
-// TOOL_CALL_START/END events and creates an assistant message with
-// proper toolCalls definitions, inserted just before the first orphan.
-//
-// This ensures CopilotKit can match every tool result to a tool call
-// definition, even for sub-agent child tool calls that the runner's
-// MESSAGES_SNAPSHOT didn't include.
-func repairOrphanedToolResults(messages []interface{}, events []map[string]interface{}) []interface{} {
-	// Collect all defined tool call IDs from assistant messages
-	definedToolCallIDs := make(map[string]bool)
-	for _, m := range messages {
-		collectToolCallIDs(m, definedToolCallIDs)
-	}
+// ─── Post-run log compaction ─────────────────────────────────────────
 
-	// Find orphaned tool result toolCallIds
-	var orphanedIDs []string
-	for _, m := range messages {
-		msg, ok := m.(map[string]interface{})
-		if !ok {
-			continue
-		}
-		role, _ := msg["role"].(string)
-		if role != "tool" {
-			continue
-		}
-		tcID, _ := msg["toolCallId"].(string)
-		if tcID != "" && !definedToolCallIDs[tcID] {
-			orphanedIDs = append(orphanedIDs, tcID)
-		}
-	}
+// rewriteEventLog atomically replaces the session's JSONL log with the
+// provided events.  Writes to a temp file then renames, so concurrent
+// readers either see the old file or the new one — never a partial write.
+func rewriteEventLog(sessionID string, events []map[string]interface{}) {
+	dir := fmt.Sprintf("%s/sessions/%s", StateBaseDir, sessionID)
+	target := filepath.Join(dir, "agui-events.jsonl")
+	tmp := target + ".tmp"
 
-	if len(orphanedIDs) == 0 {
-		return messages
-	}
-
-	log.Printf("AGUI Store: repairing %d orphaned tool results from event log", len(orphanedIDs))
-
-	// Build tool call definitions from the event log
-	orphanSet := make(map[string]bool, len(orphanedIDs))
-	for _, id := range orphanedIDs {
-		orphanSet[id] = true
-	}
-
-	// Scan events for TOOL_CALL_START/ARGS/END to reconstruct definitions
-	type toolDef struct {
-		id   string
-		name string
-		args string
-	}
-	toolDefs := make(map[string]*toolDef)
-	for _, evt := range events {
-		eventType, _ := evt["type"].(string)
-		switch eventType {
-		case types.EventTypeToolCallStart:
-			tcID, _ := evt["toolCallId"].(string)
-			if !orphanSet[tcID] {
-				continue
-			}
-			tcName, _ := evt["toolCallName"].(string)
-			toolDefs[tcID] = &toolDef{id: tcID, name: tcName}
-		case types.EventTypeToolCallArgs:
-			tcID, _ := evt["toolCallId"].(string)
-			if td, ok := toolDefs[tcID]; ok {
-				delta, _ := evt["delta"].(string)
-				td.args += delta
-			}
-		}
-	}
-
-	// Build toolCalls array for the repair assistant message
-	var repairedToolCalls []map[string]interface{}
-	for _, id := range orphanedIDs {
-		td, ok := toolDefs[id]
-		if !ok {
-			continue
-		}
-		repairedToolCalls = append(repairedToolCalls, map[string]interface{}{
-			"id":   td.id,
-			"type": "function",
-			"function": map[string]interface{}{
-				"name":      td.name,
-				"arguments": td.args,
-			},
-		})
-	}
-
-	if len(repairedToolCalls) == 0 {
-		return messages
-	}
-
-	// Create a synthetic assistant message with the missing tool calls.
-	// Insert it just before the first orphaned tool result so the order
-	// is: assistant(toolCalls) → tool results.
-	repairMsg := map[string]interface{}{
-		"id":        generateEventID(),
-		"role":      "assistant",
-		"toolCalls": repairedToolCalls,
-	}
-
-	// Find insertion point: just before first orphaned result
-	insertIdx := len(messages)
-	for i, m := range messages {
-		msg, ok := m.(map[string]interface{})
-		if !ok {
-			continue
-		}
-		role, _ := msg["role"].(string)
-		tcID, _ := msg["toolCallId"].(string)
-		if role == "tool" && orphanSet[tcID] {
-			insertIdx = i
-			break
-		}
-	}
-
-	// Insert the repair message
-	result := make([]interface{}, 0, len(messages)+1)
-	result = append(result, messages[:insertIdx]...)
-	result = append(result, repairMsg)
-	result = append(result, messages[insertIdx:]...)
-
-	log.Printf("AGUI Store: inserted synthetic assistant message with %d child tool calls", len(repairedToolCalls))
-
-	return result
-}
-
-// collectToolCallIDs extracts all toolCall IDs from an assistant message
-// (any message with a toolCalls array) and adds them to the provided set.
-// Used by compaction to identify which tool-result messages are valid
-// (i.e. have a matching parent assistant tool call) vs. orphaned sub-agent
-// internal results.
-func collectToolCallIDs(m interface{}, ids map[string]bool) {
-	msg, ok := m.(map[string]interface{})
-	if !ok {
+	f, err := os.Create(tmp)
+	if err != nil {
+		log.Printf("AGUI Store: compact rewrite failed (create tmp): %v", err)
 		return
 	}
-	tcs, ok := msg["toolCalls"].([]interface{})
-	if !ok {
-		return
-	}
-	for _, tc := range tcs {
-		tcMap, ok := tc.(map[string]interface{})
-		if !ok {
+
+	for _, evt := range events {
+		data, err := json.Marshal(evt)
+		if err != nil {
 			continue
 		}
-		if id, ok := tcMap["id"].(string); ok && id != "" {
-			ids[id] = true
-		}
+		f.Write(append(data, '\n'))
+	}
+	f.Close()
+
+	if err := os.Rename(tmp, target); err != nil {
+		log.Printf("AGUI Store: compact rewrite failed (rename): %v", err)
+		os.Remove(tmp)
 	}
 }
 
-// collectCustomEvents returns CUSTOM events from the event log for replay.
-// Custom events are not messages and cannot be included in MESSAGES_SNAPSHOT.
-// The proxy replays them as separate SSE events after the snapshot so
-// CopilotKit can re-process frontend actions, state, etc.
-//
-// META events (user feedback — thumbs up/down) are also collected and
-// converted to CUSTOM events with name "ambient:feedback", because META
-// is a draft event type not yet in the AG-UI core Zod schema.
-func collectCustomEvents(events []map[string]interface{}) []map[string]interface{} {
-	var custom []map[string]interface{}
-	for _, evt := range events {
-		t, _ := evt["type"].(string)
-		switch t {
-		case types.EventTypeCustom:
-			custom = append(custom, evt)
-		case types.EventTypeMeta:
-			// Convert META → CUSTOM so it passes Zod validation
-			custom = append(custom, map[string]interface{}{
-				"type": types.EventTypeCustom,
-				"name": "ambient:feedback",
-				"value": map[string]interface{}{
-					"metaType": evt["metaType"],
-					"payload":  evt["payload"],
-				},
-			})
-		}
+// ─── Reconnect cache ─────────────────────────────────────────────────
+
+type reconnectCacheEntry struct {
+	events    []map[string]interface{}
+	timestamp time.Time
+}
+
+var (
+	reconnectCache    sync.Map // sessionName → *reconnectCacheEntry
+	reconnectCacheTTL = 2 * time.Second
+)
+
+// getCachedReconnectEvents returns cached compacted events if the cache
+// entry is younger than reconnectCacheTTL.  Returns nil on miss.
+func getCachedReconnectEvents(sessionName string) []map[string]interface{} {
+	val, ok := reconnectCache.Load(sessionName)
+	if !ok {
+		return nil
 	}
-	return custom
+	entry := val.(*reconnectCacheEntry)
+	if time.Since(entry.timestamp) > reconnectCacheTTL {
+		reconnectCache.Delete(sessionName)
+		return nil
+	}
+	return entry.events
+}
+
+// setCachedReconnectEvents stores compacted events in the cache.
+func setCachedReconnectEvents(sessionName string, events []map[string]interface{}) {
+	reconnectCache.Store(sessionName, &reconnectCacheEntry{
+		events:    events,
+		timestamp: time.Now(),
+	})
+}
+
+// invalidateReconnectCache removes the cache entry for a session.
+// Called when a new run starts (hasMessages = true).
+func invalidateReconnectCache(sessionName string) {
+	reconnectCache.Delete(sessionName)
 }
 
 // ─── Timestamp sanitization ──────────────────────────────────────────

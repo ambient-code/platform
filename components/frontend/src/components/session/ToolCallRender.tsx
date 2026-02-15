@@ -35,7 +35,7 @@ function ToolCallRender({
   result: unknown;
 }) {
   const [expanded, setExpanded] = useState(true);
-  const { agent: { messages } } = useAgent();
+  const { agent: { messages } } = useAgent({ agentId: "session" });
 
   const isComplete = status === "complete";
   const isError = isComplete && result instanceof Error;
@@ -67,10 +67,22 @@ function ToolCallRender({
     }
   });
 
-  // Find our tool call by matching name + args
+  // Find our tool call by matching name + normalised args.
+  // AG-UI messages keep the raw `function.arguments` string (often pretty-
+  // printed with spaces after colons), while `args` here is already parsed.
+  // We normalise both sides so the comparison isn't thrown off by whitespace.
+  const normalise = (raw: string): string => {
+    if (!raw || raw.trim() === "") return "{}";
+    try {
+      return JSON.stringify(JSON.parse(raw));
+    } catch {
+      return raw;
+    }
+  };
+
   const argsStr = JSON.stringify(args);
   const thisTC = toolCallEntries.find(
-    (tc) => tc.name === name && tc.args === argsStr,
+    (tc) => tc.name === name && normalise(tc.args) === argsStr,
   );
 
   // ── Child detection: if we sit between another TC and its result,
@@ -85,7 +97,16 @@ function ToolCallRender({
         tcResult.msgIndex > thisTC.msgIndex
       );
     });
-    if (isChild) return null;
+    // Return a ref-based element that hides the CopilotKit wrapper div.
+    // Returning `null` would still leave the wrapper (with its margins) in the DOM.
+    if (isChild)
+      return (
+        <div
+          ref={(el) => {
+            if (el?.parentElement) el.parentElement.style.display = "none";
+          }}
+        />
+      );
   }
 
   // ── Find children: TCs between our start and our result ───────────
@@ -110,7 +131,7 @@ function ToolCallRender({
       return {
         id: child.id,
         name: child.name,
-        args: JSON.parse(child.args) as Record<string, unknown>,
+        args: (child.args ? JSON.parse(child.args) : {}) as Record<string, unknown>,
         status: childResult ? "complete" : "inProgress",
         result: childResult?.content,
       };
