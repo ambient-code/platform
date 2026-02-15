@@ -7,9 +7,8 @@
 //  1. Passthrough: POST to runner, pipe SSE back to client.
 //  2. Persist: append every event to agui-events.jsonl as it flows through.
 //
-// On reconnect (page refresh, empty messages), compacted events are
-// replayed individually — matching InMemoryAgentRunner.connect().
-// CopilotKit processes them through its normal event pipeline.
+// Reconnection is handled by InMemoryAgentRunner on the frontend.
+// The backend only persists events for cross-restart recovery.
 package websocket
 
 import (
@@ -104,42 +103,17 @@ func HandleAGUIRunProxy(c *gin.Context) {
 	c.Header("X-Accel-Buffering", "no")
 	c.Writer.WriteHeader(http.StatusOK)
 
-	// ── Reconnect (page refresh): replay compacted events ────────
-	// Matches InMemoryAgentRunner.connect(): load all historic events,
-	// compact streaming deltas, and replay each event individually.
-	// CopilotKit processes them through its normal event pipeline,
-	// building messages, tool calls, thinking blocks, etc.
-	//
-	// Events keep their ORIGINAL threadId/runId — CopilotKit handles
-	// multiple sequential runs in one stream.
+	// ── Empty messages = no-op ───────────────────────────────────
+	// InMemoryAgentRunner handles reconnects on the frontend.
+	// The backend should not receive empty-message requests, but if
+	// it does (e.g. cold start fallback), just return an empty stream.
 	if !hasMessages {
-		log.Printf("AGUI Proxy (reconnect): serving history for %s/%s", projectName, sessionName)
-
-		// Check reconnect cache first (prevents CopilotKit hammering)
-		compacted := getCachedReconnectEvents(sessionName)
-		if compacted != nil {
-			log.Printf("AGUI Proxy (reconnect): cache hit — %d compacted events for %s", len(compacted), sessionName)
-		} else {
-			events := loadEvents(sessionName)
-			compacted = compactStreamingEvents(events)
-			setCachedReconnectEvents(sessionName, compacted)
-			log.Printf("AGUI Proxy (reconnect): loaded %d raw → %d compacted events for %s", len(events), len(compacted), sessionName)
-		}
-
-		// Replay each compacted event individually
-		for _, evt := range compacted {
-			writeSSEEvent(c.Writer, evt)
-		}
-
+		log.Printf("AGUI Proxy: empty messages for %s/%s (reconnect handled by frontend)", projectName, sessionName)
 		c.Writer.Flush()
-		log.Printf("AGUI Proxy (reconnect): replayed %d events for %s", len(compacted), sessionName)
 		return
 	}
 
 	// ── New message: forward to runner ────────────────────────────
-	// Invalidate reconnect cache — new events are about to be appended.
-	invalidateReconnectCache(sessionName)
-
 	runnerURL := getRunnerEndpoint(projectName, sessionName)
 	bodyBytes, err := json.Marshal(input)
 	if err != nil {
@@ -168,28 +142,9 @@ func HandleAGUIRunProxy(c *gin.Context) {
 	}
 
 	// ── Pipe SSE from runner to client, persist each event ───────────
-	//
-	// IMPORTANT: We filter out MESSAGES_SNAPSHOT events from the live
-	// stream.  The runner sends a snapshot at the end of each run, but
-	// forwarding it to CopilotKit causes it to REPLACE its streaming
-	// message state (which includes live tool call renders from
-	// useDefaultTool) with the flat snapshot (which only has static
-	// message history).  This nukes all tool-call UI mid-stream.
-	//
-	// The snapshot is still persisted to the JSONL log.  On reconnect
-	// it gets replayed as part of the compacted event history, which
-	// is fine because there are no live renders to clobber at that point.
 	reader := bufio.NewReader(resp.Body)
-	clientGone := c.Request.Context().Done()
 
 	for {
-		select {
-		case <-clientGone:
-			log.Printf("AGUI Proxy: client disconnected for run %s", truncID(runID))
-			return
-		default:
-		}
-
 		line, err := reader.ReadString('\n')
 		if err != nil {
 			if err != io.EOF {
@@ -200,22 +155,10 @@ func HandleAGUIRunProxy(c *gin.Context) {
 
 		trimmed := strings.TrimSpace(line)
 
-		// Persist every event synchronously to guarantee JSONL ordering.
-		// (The old `go persistStreamedEvent(...)` caused a race where
-		// goroutines wrote events out-of-order, e.g. RUN_FINISHED before
-		// MESSAGES_SNAPSHOT.  Persist is fast — JSON marshal + file append.)
+		// Persist every event synchronously to JSONL (backup for recovery).
 		if strings.HasPrefix(trimmed, "data: ") {
 			jsonData := strings.TrimPrefix(trimmed, "data: ")
 			persistStreamedEvent(sessionName, runID, threadID, jsonData)
-
-			// Skip forwarding MESSAGES_SNAPSHOT to the client.
-			// CopilotKit already has the full conversation from the
-			// streaming events; the snapshot would clobber tool-call
-			// renders and cause them to vanish from the UI.
-			if strings.Contains(jsonData, `"type":"MESSAGES_SNAPSHOT"`) {
-				log.Printf("AGUI Proxy: suppressed MESSAGES_SNAPSHOT forward for run %s (persisted only)", truncID(runID))
-				continue
-			}
 		}
 
 		// Forward raw SSE line to client
@@ -224,23 +167,6 @@ func HandleAGUIRunProxy(c *gin.Context) {
 	}
 
 	log.Printf("AGUI Proxy: run %s stream ended", runID[:8])
-
-	// Compact the JSONL log in the background now that the run finished.
-	// This shrinks hundreds/thousands of raw delta events down to a handful
-	// of compacted events, keeping future reconnects fast.
-	// Matches InMemoryAgentRunner: compactEvents(runEvents) → historicRuns.
-	go func() {
-		events := loadEvents(sessionName)
-		if len(events) == 0 {
-			return
-		}
-		compacted := compactStreamingEvents(events)
-		if len(compacted) < len(events) {
-			rewriteEventLog(sessionName, compacted)
-			invalidateReconnectCache(sessionName)
-			log.Printf("AGUI Proxy: compacted event log for %s (%d → %d events)", sessionName, len(events), len(compacted))
-		}
-	}()
 }
 
 // persistStreamedEvent parses a raw JSON event, ensures IDs, and
