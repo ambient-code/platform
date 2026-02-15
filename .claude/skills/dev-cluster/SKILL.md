@@ -72,6 +72,65 @@ The Ambient Code Platform consists of these containerized components:
 
 **Access:** http://localhost:3000 (frontend) / http://localhost:8080 (backend)
 
+## Workflow: Setting Up from a PR
+
+When a user provides a PR URL or number, follow this process:
+
+### Step 1: Fetch PR Details
+```bash
+# Get PR metadata (title, branch, changed files, state)
+gh pr view <PR_NUMBER> --json title,headRefName,files,state,body
+```
+
+### Step 2: Checkout the PR Branch
+```bash
+git fetch origin <branch_name>
+git checkout <branch_name>
+```
+
+### Step 3: Determine Affected Components
+Analyze the changed files from the PR to identify which components need rebuilding (see component mapping below). Then follow the appropriate cluster workflow (Kind or Minikube).
+
+## Detecting the Container Engine
+
+**Before any build step**, detect which container engine is available:
+
+```bash
+# Check which engine is available
+if command -v docker &>/dev/null && docker info &>/dev/null 2>&1; then
+    CONTAINER_ENGINE=docker
+elif command -v podman &>/dev/null && podman info &>/dev/null 2>&1; then
+    CONTAINER_ENGINE=podman
+else
+    echo "ERROR: No container engine available"
+    exit 1
+fi
+```
+
+**Always pass `CONTAINER_ENGINE=` to make commands:**
+```bash
+make build-frontend CONTAINER_ENGINE=docker
+make build-all CONTAINER_ENGINE=docker
+```
+
+## Detecting the Access URL
+
+After deployment, **check the actual port mapping** instead of assuming a fixed port:
+
+```bash
+# For kind with Docker: check the container's published ports
+docker ps --filter "name=ambient-local" --format "{{.Ports}}"
+# Example output: 0.0.0.0:80->30080/tcp  → access at http://localhost
+# Example output: 0.0.0.0:8080->30080/tcp → access at http://localhost:8080
+
+# Quick connectivity test
+curl -s -o /dev/null -w "%{http_code}" http://localhost:80
+```
+
+**Port mapping depends on the container engine:**
+- **Docker**: host port 80 → http://localhost
+- **Podman**: host port 8080 → http://localhost:8080
+
 ## Workflow: Testing Changes in Kind
 
 When a user says something like "test this changeset in kind", follow this process:
@@ -109,30 +168,31 @@ Note: By default, kind uses production Quay.io images. We'll need to:
 ```
 
 ### Step 3: Build Changed Components
-```bash
-# Build specific components (from /workspace/repos/platform)
-cd /workspace/repos/platform
 
+**Important:** Detect the container engine first (see "Detecting the Container Engine" above), then pass it to all build commands.
+
+```bash
+# Build specific components — always pass CONTAINER_ENGINE
 # Build backend (if changed)
-make build-backend
+make build-backend CONTAINER_ENGINE=$CONTAINER_ENGINE
 
 # Build frontend (if changed)
-make build-frontend
+make build-frontend CONTAINER_ENGINE=$CONTAINER_ENGINE
 
 # Build operator (if changed)
-make build-operator
+make build-operator CONTAINER_ENGINE=$CONTAINER_ENGINE
 
 # Build runner (if changed)
-make build-runner
+make build-runner CONTAINER_ENGINE=$CONTAINER_ENGINE
 
 # Build state-sync (if changed)
-make build-state-sync
+make build-state-sync CONTAINER_ENGINE=$CONTAINER_ENGINE
 
 # Build public-api (if changed)
-make build-public-api
+make build-public-api CONTAINER_ENGINE=$CONTAINER_ENGINE
 
 # Or build all at once
-make build-all
+make build-all CONTAINER_ENGINE=$CONTAINER_ENGINE
 ```
 
 ### Step 4: Setup/Update Kind Cluster
@@ -189,11 +249,14 @@ kubectl logs -l app=backend -n ambient-code --tail=50
 ```
 
 ### Step 7: Provide Access Info
+
+**Detect the actual URL** by checking the kind container's port mapping (see "Detecting the Access URL" above), then provide the correct URL to the user.
+
 ```
 ✓ Deployment complete!
 
 Access the platform at:
-- Frontend: http://localhost:8080 (or http://localhost with Docker)
+- Frontend: <detected URL from port mapping>
 - Test credentials: Check .env.test for the token
 
 To view logs:
@@ -403,8 +466,8 @@ kubectl describe pod -l app=backend -n ambient-code | grep Image:
 Key environment variables that affect cluster behavior:
 
 ```bash
-# Container runtime
-CONTAINER_ENGINE=podman  # or docker
+# Container runtime (detect automatically — see "Detecting the Container Engine")
+CONTAINER_ENGINE=docker  # or podman
 
 # Build platform
 PLATFORM=linux/amd64     # or linux/arm64
@@ -416,15 +479,46 @@ NAMESPACE=ambient-code
 REGISTRY=quay.io/your-org
 ```
 
+## Fast Inner-Loop: Run Frontend Locally (No Image Rebuilds)
+
+For **frontend-only changes**, skip image rebuilds entirely. Run NextJS locally with hot-reload against the backend in the kind cluster:
+
+```bash
+# Terminal 1: port-forward backend from kind cluster
+kubectl port-forward svc/backend-service 8080:8080 -n ambient-code
+
+# Terminal 2: run frontend dev server with auth token
+cd components/frontend
+OC_TOKEN=$(kubectl get secret test-user-token -n ambient-code -o jsonpath='{.data.token}' | base64 -d) npm run dev
+
+# Open http://localhost:3000
+```
+
+**Why this works:**
+- The frontend's `BACKEND_URL` defaults to `http://localhost:8080/api`
+- NextJS API routes proxy all requests to the backend at that URL
+- `OC_TOKEN` is injected into `X-Forwarded-Access-Token` headers for authentication
+- Every file save triggers instant hot-reload — no Docker build, no kind load, no rollout restart
+
+**When to use:**
+- Frontend-only changes (components, styles, pages, API routes)
+- Iterating on UI features rapidly
+- Debugging frontend issues
+
+**When NOT to use:**
+- Backend, operator, or runner changes (those still need image rebuild + load)
+- Testing changes to container configuration or deployment manifests
+
 ## Best Practices
 
-1. **Use kind for quick validation**: If you just need to verify changes work, kind is faster
-2. **Use minikube for development**: Better tooling for iterative development with `local-reload-*` commands
-3. **Always check logs**: After deploying, verify pods started successfully
-4. **Clean up when done**: `make kind-down` or `make local-clean` to free resources
-5. **Check what changed first**: Use `git status` and `git diff` to understand scope
-6. **Build only what changed**: Don't rebuild everything if only one component changed
-7. **Verify image pull policy**: Ensure deployments use `imagePullPolicy: Never` for local images
+1. **Use local dev server for frontend**: Fastest feedback loop, no image rebuilds needed
+2. **Use kind for backend/operator validation**: When you need to rebuild non-frontend components
+3. **Use minikube for development**: Better tooling for iterative development with `local-reload-*` commands
+4. **Always check logs**: After deploying, verify pods started successfully
+5. **Clean up when done**: `make kind-down` or `make local-clean` to free resources
+6. **Check what changed first**: Use `git status` and `git diff` to understand scope
+7. **Build only what changed**: Don't rebuild everything if only one component changed
+8. **Verify image pull policy**: Ensure deployments use `imagePullPolicy: Never` for local images
 
 ## Quick Reference
 
@@ -435,12 +529,16 @@ Do you need to test local code changes?
 ├─ No → Use kind (make kind-up)
 │        Fast, uses production images
 │
-└─ Yes → Do you need to iterate frequently?
-         ├─ No → Use kind with manual image loading
-         │        Good for one-off tests
+└─ Yes → Is the change frontend-only?
+         ├─ Yes → Run locally with npm run dev
+         │        Instant hot-reload, no image builds
          │
-         └─ Yes → Use minikube (make local-up)
-                  Best for development with hot-reload
+         └─ No → Do you need to iterate frequently?
+                  ├─ No → Use kind with manual image loading
+                  │        Good for one-off tests
+                  │
+                  └─ Yes → Use minikube (make local-up)
+                           Best for development with hot-reload
 ```
 
 ### Cheat Sheet
@@ -453,7 +551,7 @@ Do you need to test local code changes?
 | Check status | `kubectl get pods -n ambient-code` | `make local-status` |
 | View logs | `kubectl logs -f -l app=backend -n ambient-code` | `make local-logs-backend` |
 | Tear down | `make kind-down` | `make local-clean` |
-| Access URL | http://localhost:8080 | http://localhost:3000 |
+| Access URL | Detect from port mapping (Docker: `:80`, Podman: `:8080`) | http://localhost:3000 |
 
 ## When to Invoke This Skill
 
@@ -482,7 +580,7 @@ Assistant (using dev-cluster skill):
 7. Verifies: `kubectl rollout status deployment/backend -n ambient-code`
 8. Provides access URL and log commands
 
-Result: User can test their backend changes at http://localhost:8080
+Result: User can test their backend changes at the detected URL (http://localhost for Docker, http://localhost:8080 for Podman)
 
 ### Example 2: Incremental Development with Minikube
 
