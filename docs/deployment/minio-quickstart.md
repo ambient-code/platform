@@ -6,7 +6,7 @@ MinIO provides in-cluster S3-compatible storage for Ambient Code session state, 
 
 ## Quick Setup
 
-### 1. Deploy MinIO
+### 1. Prepare MinIO Credentials (Before Deployment)
 
 ```bash
 # Create MinIO credentials secret
@@ -15,25 +15,25 @@ cp minio-credentials-secret.yaml.example minio-credentials-secret.yaml
 
 # Edit credentials (change admin/changeme123 to secure values)
 vi minio-credentials-secret.yaml
-
-# Apply the secret
-kubectl apply -f minio-credentials-secret.yaml -n ambient-code
-
-# MinIO deployment is included in base manifests, so deploy normally
-make deploy NAMESPACE=ambient-code
 ```
 
-### 2. Create Bucket
+**Important:** Create this secret BEFORE running deploy.sh so MinIO has credentials on startup.
+
+### 2. Deploy (Bucket Created Automatically)
 
 ```bash
-# Run automated setup
-make setup-minio NAMESPACE=ambient-code
-
-# Or manually:
-kubectl port-forward svc/minio 9001:9001 -n ambient-code &
-open http://localhost:9001
-# Login with credentials, create bucket "ambient-sessions"
+# MinIO deployment AND bucket setup are both automated
+cd components/manifests
+./deploy.sh
 ```
+
+The deploy.sh script will:
+- Deploy MinIO with your credentials
+- Wait for MinIO to be ready
+- **Automatically create the `ambient-sessions` bucket**
+- Enable versioning and set privacy policy
+
+**No manual bucket creation needed!** 🎉
 
 ### 3. Configure Project
 
@@ -49,6 +49,20 @@ Navigate to project settings in the UI and configure:
 | **S3_SECRET_KEY** | Your MinIO root password |
 
 Click **Save Integration Secrets**.
+
+### 4. Troubleshooting: Manual Bucket Setup (If Needed)
+
+If the automatic setup failed or you need to re-create the bucket:
+
+```bash
+# Run manual setup
+make setup-minio NAMESPACE=ambient-code
+
+# Or directly:
+./scripts/setup-minio.sh
+```
+
+This is safe to run multiple times - it skips bucket creation if it already exists.
 
 ## Accessing MinIO Console
 

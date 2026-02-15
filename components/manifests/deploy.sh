@@ -367,6 +367,28 @@ oc rollout status deployment/backend-api --namespace=${NAMESPACE} --timeout=300s
 oc rollout status deployment/agentic-operator --namespace=${NAMESPACE} --timeout=300s
 oc rollout status deployment/frontend --namespace=${NAMESPACE} --timeout=300s
 
+# Wait for MinIO and setup bucket
+echo -e "${YELLOW}Waiting for MinIO to be ready...${NC}"
+oc rollout status deployment/minio --namespace=${NAMESPACE} --timeout=300s || {
+    echo -e "${YELLOW}⚠️  MinIO deployment not found or failed to start${NC}"
+    echo -e "${YELLOW}Sessions will fail without S3 storage. Deploy MinIO separately if needed.${NC}"
+}
+
+# Setup MinIO bucket automatically
+echo -e "${YELLOW}Setting up MinIO bucket...${NC}"
+if [ -f "../../scripts/setup-minio.sh" ]; then
+    # Run setup script (it handles existing bucket gracefully)
+    NAMESPACE=${NAMESPACE} ../../scripts/setup-minio.sh || {
+        echo -e "${YELLOW}⚠️  MinIO setup encountered an issue (may be already configured)${NC}"
+        echo -e "${YELLOW}If sessions fail with 'init-hydrate' errors, run manually:${NC}"
+        echo -e "   ${BLUE}make setup-minio NAMESPACE=${NAMESPACE}${NC}"
+    }
+else
+    echo -e "${YELLOW}⚠️  MinIO setup script not found at ../../scripts/setup-minio.sh${NC}"
+    echo -e "${YELLOW}Run manually after deployment:${NC}"
+    echo -e "   ${BLUE}make setup-minio NAMESPACE=${NAMESPACE}${NC}"
+fi
+
 # Get service and route information
 echo -e "${BLUE}Getting service and route information...${NC}"
 echo ""
