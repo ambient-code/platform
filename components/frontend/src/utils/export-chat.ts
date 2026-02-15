@@ -166,7 +166,7 @@ export function convertEventsToMarkdown(
     '',
   ];
 
-  const blocks = assembleBlocks(exportData.aguiEvents);
+  const blocks = assembleBlocks(exportData.aguiEvents ?? []);
 
   if (blocks.length === 0) {
     lines.push('*No conversation content found.*');
@@ -223,7 +223,7 @@ export function triggerDownload(content: string, filename: string, mimeType: str
   link.href = url;
   link.download = filename;
   link.click();
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 100);
 }
 
 /**
@@ -284,12 +284,18 @@ ${html}
 
   printWindow.document.close();
 
-  // Trigger print once: load listener with timeout fallback
-  const timeoutId = setTimeout(() => printWindow.print(), 500);
+  // Trigger print exactly once: load listener with timeout fallback and guard flag
+  let printed = false;
+  const doPrint = () => {
+    if (printed) return;
+    printed = true;
+    printWindow.print();
+  };
+  const timeoutId = setTimeout(doPrint, 500);
   printWindow.addEventListener('load', () => {
     clearTimeout(timeoutId);
-    printWindow.print();
-  });
+    doPrint();
+  }, { once: true });
 }
 
 // --------------- Helpers ---------------
@@ -387,9 +393,17 @@ function inlineFormat(s: string): string {
   // Escape HTML first to prevent XSS from message content
   let result = escapeHtml(s);
   // Markdown links: [text](url) — render as clickable anchors in PDF (http/https only)
-  result = result.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_match, text: string, url: string) =>
-    /^https?:\/\//i.test(url) ? `<a href="${url}" style="color:#2563eb">${text}</a>` : `${text} (${url})`,
-  );
+  result = result.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_match, text: string, url: string) => {
+    try {
+      const parsed = new URL(url);
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+        return `<a href="${url}" style="color:#2563eb">${text}</a>`;
+      }
+    } catch {
+      // invalid URL — fall through
+    }
+    return `${text} (${url})`;
+  });
   result = result.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
   result = result.replace(/(?<!\*)\*([^*]+?)\*(?!\*)/g, '<em>$1</em>');
   result = result.replace(/`([^`]+?)`/g, '<code>$1</code>');
