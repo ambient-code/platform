@@ -2,15 +2,10 @@
 package server
 
 import (
-	"context"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
-	"os/signal"
 	"strings"
-	"syscall"
-	"time"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -165,70 +160,4 @@ func forwardedIdentityMiddleware() gin.HandlerFunc {
 		}
 		c.Next()
 	}
-}
-
-// RunContentService starts the server in content service mode with graceful shutdown
-func RunContentService(registerContentRoutes RouterFunc) error {
-	r := gin.New()
-	r.Use(gin.Recovery())
-	r.Use(gin.LoggerWithFormatter(func(param gin.LogFormatterParams) string {
-		path := param.Path
-		if strings.Contains(param.Request.URL.RawQuery, "token=") {
-			path = strings.Split(path, "?")[0] + "?token=[REDACTED]"
-		}
-		return fmt.Sprintf("[GIN] %s | %3d | %s | %s\n",
-			param.Method,
-			param.StatusCode,
-			param.ClientIP,
-			path,
-		)
-	}))
-
-	// Register content service routes
-	registerContentRoutes(r)
-
-	// Health check endpoint
-	r.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"status": "healthy"})
-	})
-
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
-
-	// Create HTTP server for graceful shutdown
-	srv := &http.Server{
-		Addr:    ":" + port,
-		Handler: r,
-	}
-
-	// Channel to receive shutdown signal
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-
-	// Start server in goroutine
-	go func() {
-		log.Printf("Content service starting on port %s", port)
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Content service listen error: %v", err)
-		}
-	}()
-
-	// Wait for shutdown signal
-	sig := <-quit
-	log.Printf("Content service received signal %v, shutting down gracefully...", sig)
-
-	// Create shutdown context with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	// Attempt graceful shutdown
-	if err := srv.Shutdown(ctx); err != nil {
-		log.Printf("Content service forced to shutdown: %v", err)
-		return err
-	}
-
-	log.Println("Content service shutdown complete")
-	return nil
 }

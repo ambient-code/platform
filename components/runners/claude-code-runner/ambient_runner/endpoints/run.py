@@ -1,4 +1,4 @@
-"""POST / — AG-UI run endpoint (SDK-provided, delegates to bridge)."""
+"""POST / — AG-UI run endpoint (delegates to bridge)."""
 
 import logging
 import uuid
@@ -68,11 +68,20 @@ async def run_agent(input_data: RunnerInput, request: Request):
             async for event in bridge.run(run_agent_input):
                 yield encoder.encode(event)
         except Exception as e:
-            logger.error(f"Error in event stream: {e}")
+            logger.error(f"Error in event stream: {e}", exc_info=True)
+
+            # Build descriptive error message, enriched by bridge-specific context
+            error_msg = str(e)
+            extra = bridge.get_error_context()
+            if extra:
+                error_msg = f"{error_msg}\n\n{extra}"
+
             yield encoder.encode(
                 RunErrorEvent(
                     type=EventType.RUN_ERROR,
-                    message=str(e),
+                    thread_id=run_agent_input.thread_id or "",
+                    run_id=run_agent_input.run_id or "unknown",
+                    message=error_msg,
                 )
             )
 

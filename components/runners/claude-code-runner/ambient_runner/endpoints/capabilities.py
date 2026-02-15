@@ -34,6 +34,7 @@ async def get_capabilities(request: Request):
     """Return the capabilities manifest from the bridge."""
     bridge = request.app.state.bridge
     caps = bridge.capabilities()
+    context = bridge.context
 
     platform_features = _detect_platform_features(request.app)
 
@@ -45,4 +46,6 @@ async def get_capabilities(request: Request):
         "mcp": caps.mcp,
         "tracing": caps.tracing,
         "session_persistence": caps.session_persistence,
+        "model": bridge.configured_model or None,
+        "session_id": context.session_id if context else None,
     }

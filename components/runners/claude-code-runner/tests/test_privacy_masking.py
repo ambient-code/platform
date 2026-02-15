@@ -15,7 +15,7 @@ from pathlib import Path
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from observability import _privacy_masking_function
+from ambient_runner.observability import _privacy_masking_function
 
 
 def test_string_masking():

@@ -1,15 +1,11 @@
-"""AG-UI middleware for the Ambient Runner SDK.
+"""
+AG-UI middleware for the Ambient Runner SDK.
 
-Re-exports middleware from the top-level middleware package.
-When the SDK is extracted to a standalone package, these will be self-contained.
+Middleware wraps the adapter's event stream to add platform concerns
+(tracing, developer events) without modifying the adapter itself.
 """
 
-import importlib
-
-_tracing = importlib.import_module("middleware.tracing")
-tracing_middleware = _tracing.tracing_middleware
-
-_dev = importlib.import_module("middleware.developer_events")
-emit_developer_message = _dev.emit_developer_message
+from ambient_runner.middleware.developer_events import emit_developer_message
+from ambient_runner.middleware.tracing import tracing_middleware
 
 __all__ = ["tracing_middleware", "emit_developer_message"]

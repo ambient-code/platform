@@ -18,6 +18,7 @@ import {
   MoreVertical,
   ChevronLeft,
   ChevronRight,
+  AlertCircle,
 } from "lucide-react";
 import {
   ResizablePanelGroup,
@@ -28,7 +29,7 @@ import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 // Custom components
-import { CopilotChatPanel } from "@/components/session/CopilotChatPanel";
+import { CopilotSessionProvider, CopilotChatView } from "@/components/session/CopilotChatPanel";
 import { FileTree, type FileTreeNode } from "@/components/file-tree";
 
 import { Button } from "@/components/ui/button";
@@ -76,7 +77,8 @@ import { useFileOperations } from "./hooks/use-file-operations";
 import { useSessionQueue } from "@/hooks/use-session-queue";
 import type { DirectoryOption, DirectoryRemote } from "./lib/types";
 
-import type { ReconciledRepo, SessionRepo } from "@/types/agentic-session";
+import type { ReconciledRepo, SessionRepo, AgenticSession, AgenticSessionPhase } from "@/types/agentic-session";
+import { SessionStartingEvents } from "@/components/session/SessionStartingEvents";
 
 // React Query hooks
 import {
@@ -85,7 +87,6 @@ import {
   useDeleteSession,
   useContinueSession,
   useReposStatus,
-  useCurrentUser,
 } from "@/services/queries";
 import {
   useWorkspaceList,
@@ -97,7 +98,6 @@ import {
 } from "@/services/queries/use-workflows";
 import { useIntegrationsStatus } from "@/services/queries/use-integrations";
 import { useMutation } from "@tanstack/react-query";
-import { FeedbackProvider } from "@/contexts/FeedbackContext";
 
 // Constants for artifact auto-refresh timing
 // Moved outside component to avoid unnecessary effect re-runs
@@ -114,6 +114,92 @@ const COMPLETION_DELAY_MS = 2000;
 
 // NOTE: isCompletedToolUseMessage type guard removed — was only used by the
 // old streamMessages useMemo. CopilotKit handles tool rendering now.
+
+// ─── Phase-aware overlay for non-running sessions ─────────────────────
+
+type SessionPhaseOverlayProps = {
+  phase: AgenticSessionPhase;
+  session: AgenticSession | undefined;
+  projectName: string;
+  sessionName: string;
+  onResume: () => void;
+  isResuming: boolean;
+};
+
+function SessionPhaseOverlay({
+  phase,
+  session,
+  projectName,
+  sessionName,
+  onResume,
+  isResuming,
+}: SessionPhaseOverlayProps) {
+  // Creating / Pending — show live pod events timeline
+  if (phase === "Creating" || phase === "Pending") {
+    return (
+      <SessionStartingEvents
+        projectName={projectName}
+        sessionName={sessionName}
+      />
+    );
+  }
+
+  // Stopping — simple spinner
+  if (phase === "Stopping") {
+    return (
+      <div className="flex flex-col items-center justify-center h-full">
+        <Loader2 className="h-10 w-10 animate-spin text-orange-500 mb-3" />
+        <h3 className="font-semibold text-lg">Stopping Session</h3>
+        <p className="text-sm text-muted-foreground mt-1">
+          Saving workspace state...
+        </p>
+      </div>
+    );
+  }
+
+  // Failed — show error from conditions
+  if (phase === "Failed") {
+    const conditions = session?.status?.conditions ?? [];
+    const failedCondition = conditions.find(
+      (c) => c.status === "False" && c.message,
+    );
+    const errorMessage =
+      failedCondition?.message ?? "Session failed unexpectedly.";
+    const errorReason = failedCondition?.reason;
+
+    return (
+      <div className="flex flex-col items-center justify-center h-full px-4">
+        <div className="max-w-md w-full text-center">
+          <div className="mb-4 rounded-full bg-red-500/10 p-4 inline-flex">
+            <AlertCircle className="h-8 w-8 text-red-500" />
+          </div>
+          <h3 className="font-semibold text-lg mb-2">Session Failed</h3>
+          {errorReason && (
+            <Badge variant="destructive" className="mb-3 text-xs">
+              {errorReason}
+            </Badge>
+          )}
+          <p className="text-sm text-muted-foreground mb-6 break-words">
+            {errorMessage}
+          </p>
+          <Button onClick={onResume} size="lg" className="w-full" disabled={isResuming}>
+            {isResuming ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Resuming...
+              </>
+            ) : (
+              "Retry Session"
+            )}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // Fallback (shouldn't normally be reached — Stopped/Completed use CopilotChatView)
+  return null;
+}
 
 export default function ProjectSessionDetailPage({
   params,
@@ -187,9 +273,6 @@ export default function ProjectSessionDetailPage({
   const { data: integrationsStatus } = useIntegrationsStatus();
   const githubConfigured = integrationsStatus?.github?.active != null;
   
-  // Get current user for feedback context
-  const { data: currentUser } = useCurrentUser();
-
   // Extract phase for sidebar state management
   const phase = session?.status?.phase || "Pending";
 
@@ -199,10 +282,6 @@ export default function ProjectSessionDetailPage({
     sessionName,
     phase === "Running" // Only poll when session is running
   );
-
-  // Track the current Langfuse trace ID for feedback association
-  // CopilotKit receives this via CustomEvent from the tracing middleware
-  const [langfuseTraceId, setLangfuseTraceId] = useState<string | null>(null);
 
   // Workflow management hook
   const workflowManagement = useWorkflowManagement({
@@ -676,7 +755,7 @@ export default function ProjectSessionDetailPage({
 
     // Poll artifacts every 10 seconds while session is running
     const interval = setInterval(() => {
-      refetchArtifactsFiles();
+        refetchArtifactsFiles();
     }, 10_000);
 
     return () => clearInterval(interval);
@@ -911,7 +990,8 @@ export default function ProjectSessionDetailPage({
           </div>
         )}
 
-        {/* Main content area */}
+        {/* Main content area — single CopilotKit provider for both layouts */}
+        <CopilotSessionProvider projectName={projectName} sessionName={sessionName}>
         <div className="flex-grow overflow-hidden bg-card">
           <div className="h-full relative">
               {/* Mobile sidebar overlay */}
@@ -1918,12 +1998,27 @@ export default function ProjectSessionDetailPage({
                     )}
 
                     <div className="flex flex-col flex-1 overflow-hidden">
-                      {/* CopilotKit-powered chat — replaces custom AG-UI streaming */}
-                      <CopilotChatPanel
-                        projectName={projectName}
-                        sessionName={sessionName}
-                        className="flex-1"
-                      />
+                      {/* Phase-aware chat area */}
+                      {phase === "Running" || ["Stopped", "Completed"].includes(phase) ? (
+                        <CopilotChatView
+                          projectName={projectName}
+                          sessionName={sessionName}
+                          className="flex-1"
+                          isSessionActive={phase === "Running"}
+                          workflowMetadata={workflowMetadata}
+                          onResume={phase !== "Running" ? handleContinue : undefined}
+                          isResuming={continueMutation.isPending}
+                        />
+                      ) : (
+                        <SessionPhaseOverlay
+                          phase={phase}
+                          session={session}
+                          projectName={projectName}
+                          sessionName={sessionName}
+                          onResume={handleContinue}
+                          isResuming={continueMutation.isPending}
+                        />
+                      )}
                     </div>
                   </CardContent>
                 </Card>
@@ -1949,18 +2044,34 @@ export default function ProjectSessionDetailPage({
                       </div>
                     )}
                     <div className="flex flex-col flex-1 overflow-hidden">
-                      {/* CopilotKit-powered chat — mobile view */}
-                      <CopilotChatPanel
-                        projectName={projectName}
-                        sessionName={sessionName}
-                        className="flex-1"
-                      />
+                      {/* Phase-aware chat area — mobile */}
+                      {phase === "Running" || ["Stopped", "Completed"].includes(phase) ? (
+                        <CopilotChatView
+                          projectName={projectName}
+                          sessionName={sessionName}
+                          className="flex-1"
+                          isSessionActive={phase === "Running"}
+                          workflowMetadata={workflowMetadata}
+                          onResume={phase !== "Running" ? handleContinue : undefined}
+                          isResuming={continueMutation.isPending}
+                        />
+                      ) : (
+                        <SessionPhaseOverlay
+                          phase={phase}
+                          session={session}
+                          projectName={projectName}
+                          sessionName={sessionName}
+                          onResume={handleContinue}
+                          isResuming={continueMutation.isPending}
+                        />
+                      )}
                     </div>
                   </CardContent>
                 </Card>
             </div>
           </div>
         </div>
+        </CopilotSessionProvider>
       </div>
 
       {/* Modals */}

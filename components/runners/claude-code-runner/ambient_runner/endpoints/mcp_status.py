@@ -1,11 +1,20 @@
-"""MCP status endpoint (SDK-provided).
+"""GET /mcp/status — MCP server connection diagnostics.
 
-Re-exports the router from the top-level endpoints package.
-When the SDK is extracted to a standalone package, this will be self-contained.
+Delegates to ``bridge.get_mcp_status()`` which creates an ephemeral SDK
+client (framework-specific) to query live MCP server status.
 """
 
-import importlib
-_mod = importlib.import_module("endpoints.mcp_status")
-router = _mod.router
+import logging
 
-__all__ = ["router"]
+from fastapi import APIRouter, Request
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter()
+
+
+@router.get("/mcp/status")
+async def get_mcp_status(request: Request):
+    """Returns MCP server connection status via the bridge."""
+    bridge = request.app.state.bridge
+    return await bridge.get_mcp_status()

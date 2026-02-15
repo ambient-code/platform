@@ -45,12 +45,6 @@ func EnsureProjectWorkspacePVC(namespace string) error {
 	return nil
 }
 
-// EnsureContentService deploys a per-namespace backend instance in CONTENT_SERVICE_MODE
-func EnsureContentService(namespace string) error {
-	// removed: per-namespace content service no longer managed by operator
-	return nil
-}
-
 // EnsureSessionWorkspacePVC is deprecated - sessions now use EmptyDir with S3 state persistence
 // Kept for backward compatibility but returns nil immediately
 func EnsureSessionWorkspacePVC(namespace, pvcName string, ownerRefs []v1.OwnerReference) error {

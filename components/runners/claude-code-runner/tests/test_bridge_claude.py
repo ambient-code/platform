@@ -6,8 +6,9 @@ import pytest
 
 from ag_ui.core import EventType, RunAgentInput
 
-from ambient_runner.bridge import FrameworkCapabilities, PlatformBridge, PlatformContext
+from ambient_runner.bridge import FrameworkCapabilities, PlatformBridge
 from ambient_runner.bridges.claude import ClaudeBridge
+from ambient_runner.platform.context import RunnerContext
 
 
 # ------------------------------------------------------------------
@@ -22,62 +23,42 @@ class TestPlatformBridgeABC:
         with pytest.raises(TypeError):
             PlatformBridge()
 
-    def test_needs_rebuild_default_returns_false(self):
-        """The default implementation of needs_rebuild returns False."""
+    def test_minimal_subclass_works(self):
+        """A subclass implementing the three required methods can be instantiated."""
 
         class MinimalBridge(PlatformBridge):
             def capabilities(self):
                 return FrameworkCapabilities(framework="test")
 
-            def create_adapter(self, ctx):
-                return None
+            async def run(self, input_data):
+                yield  # pragma: no cover
+
+            async def interrupt(self, thread_id=None):
+                pass
+
+        bridge = MinimalBridge()
+        assert bridge.capabilities().framework == "test"
+
+    def test_lifecycle_defaults(self):
+        """Default lifecycle methods are no-ops and safe to call."""
+
+        class MinimalBridge(PlatformBridge):
+            def capabilities(self):
+                return FrameworkCapabilities(framework="test")
 
             async def run(self, input_data):
                 yield  # pragma: no cover
 
-            async def interrupt(self):
+            async def interrupt(self, thread_id=None):
                 pass
 
         bridge = MinimalBridge()
-        ctx = PlatformContext(session_id="s1", workspace_path="/tmp")
-        assert bridge.needs_rebuild(ctx) is False
-
-
-class TestPlatformContext:
-    """Tests for the PlatformContext dataclass."""
-
-    def test_defaults(self):
-        ctx = PlatformContext(session_id="s1", workspace_path="/w")
-        assert ctx.session_id == "s1"
-        assert ctx.workspace_path == "/w"
-        assert ctx.cwd_path == ""
-        assert ctx.add_dirs == []
-        assert ctx.model == ""
-        assert ctx.mcp_servers == {}
-        assert ctx.allowed_tools == []
-        assert ctx.system_prompt == {}
-        assert ctx.first_run is True
-        assert ctx.is_resume is False
-        assert ctx.environment == {}
-        assert ctx.extra == {}
-
-    def test_custom_values(self):
-        ctx = PlatformContext(
-            session_id="s2",
-            workspace_path="/work",
-            cwd_path="/work/src",
-            model="claude-4",
-            mcp_servers={"jira": {"url": "http://jira"}},
-            allowed_tools=["Read", "Write"],
-            first_run=False,
-            is_resume=True,
-            environment={"LLM_MAX_TOKENS": "4096"},
-        )
-        assert ctx.model == "claude-4"
-        assert ctx.mcp_servers == {"jira": {"url": "http://jira"}}
-        assert ctx.allowed_tools == ["Read", "Write"]
-        assert ctx.first_run is False
-        assert ctx.is_resume is True
+        assert bridge.context is None
+        assert bridge.configured_model == ""
+        assert bridge.obs is None
+        assert bridge.get_error_context() == ""
+        bridge.set_context(RunnerContext(session_id="s1", workspace_path="/tmp"))
+        bridge.mark_dirty()
 
 
 class TestFrameworkCapabilities:
@@ -116,155 +97,112 @@ class TestClaudeBridgeCapabilities:
     def test_mcp_support(self):
         assert ClaudeBridge().capabilities().mcp is True
 
-    def test_tracing(self):
-        assert ClaudeBridge().capabilities().tracing == "langfuse"
-
     def test_session_persistence(self):
         assert ClaudeBridge().capabilities().session_persistence is True
 
-
-class TestClaudeBridgeBuildOptions:
-    """Test the private _build_options method with various contexts."""
-
-    def test_basic_options(self):
-        ctx = PlatformContext(
-            session_id="s1",
-            workspace_path="/w",
-            cwd_path="/w/src",
-            model="claude-sonnet",
-            allowed_tools=["Read"],
-            mcp_servers={"jira": {}},
-            system_prompt={"type": "text", "content": "Hello"},
-        )
-        opts = ClaudeBridge._build_options(ctx)
-
-        assert opts["cwd"] == "/w/src"
-        assert opts["model"] == "claude-sonnet"
-        assert opts["allowed_tools"] == ["Read"]
-        assert opts["mcp_servers"] == {"jira": {}}
-        assert opts["system_prompt"] == {"type": "text", "content": "Hello"}
-        assert opts["permission_mode"] == "acceptEdits"
-        assert opts["include_partial_messages"] is True
-
-    def test_add_dirs_included_when_present(self):
-        ctx = PlatformContext(session_id="s1", workspace_path="/w", cwd_path="/w", add_dirs=["/extra"])
-        opts = ClaudeBridge._build_options(ctx)
-        assert opts["add_dirs"] == ["/extra"]
-
-    def test_add_dirs_excluded_when_empty(self):
-        ctx = PlatformContext(session_id="s1", workspace_path="/w", cwd_path="/w")
-        opts = ClaudeBridge._build_options(ctx)
-        assert "add_dirs" not in opts
-
-    def test_max_tokens_from_environment(self):
-        ctx = PlatformContext(
-            session_id="s1", workspace_path="/w", cwd_path="/w",
-            environment={"LLM_MAX_TOKENS": "8192"},
-        )
-        opts = ClaudeBridge._build_options(ctx)
-        assert opts["max_tokens"] == 8192
-
-    def test_max_tokens_fallback_to_MAX_TOKENS(self):
-        ctx = PlatformContext(
-            session_id="s1", workspace_path="/w", cwd_path="/w",
-            environment={"MAX_TOKENS": "4096"},
-        )
-        opts = ClaudeBridge._build_options(ctx)
-        assert opts["max_tokens"] == 4096
-
-    def test_invalid_max_tokens_ignored(self):
-        ctx = PlatformContext(
-            session_id="s1", workspace_path="/w", cwd_path="/w",
-            environment={"LLM_MAX_TOKENS": "not_a_number"},
-        )
-        opts = ClaudeBridge._build_options(ctx)
-        assert "max_tokens" not in opts
-
-    def test_temperature_from_environment(self):
-        ctx = PlatformContext(
-            session_id="s1", workspace_path="/w", cwd_path="/w",
-            environment={"LLM_TEMPERATURE": "0.7"},
-        )
-        opts = ClaudeBridge._build_options(ctx)
-        assert opts["temperature"] == pytest.approx(0.7)
-
-    def test_continue_conversation_on_non_first_run(self):
-        ctx = PlatformContext(session_id="s1", workspace_path="/w", cwd_path="/w", first_run=False)
-        opts = ClaudeBridge._build_options(ctx)
-        assert opts["continue_conversation"] is True
-
-    def test_continue_conversation_on_resume(self):
-        ctx = PlatformContext(session_id="s1", workspace_path="/w", cwd_path="/w", is_resume=True)
-        opts = ClaudeBridge._build_options(ctx)
-        assert opts["continue_conversation"] is True
-
-    def test_no_continue_on_first_run(self):
-        ctx = PlatformContext(session_id="s1", workspace_path="/w", cwd_path="/w", first_run=True, is_resume=False)
-        opts = ClaudeBridge._build_options(ctx)
-        assert "continue_conversation" not in opts
-
-    def test_model_not_set_when_empty(self):
-        ctx = PlatformContext(session_id="s1", workspace_path="/w", cwd_path="/w", model="")
-        opts = ClaudeBridge._build_options(ctx)
-        assert "model" not in opts
-
-
-class TestClaudeBridgeNeedsRebuild:
-    """Test rebuild detection logic."""
-
-    def test_needs_rebuild_when_no_prior_context(self):
+    def test_tracing_none_before_observability_init(self):
+        """Before observability is set up, tracing should be None."""
         bridge = ClaudeBridge()
-        ctx = PlatformContext(session_id="s1", workspace_path="/w")
-        assert bridge.needs_rebuild(ctx) is True
+        assert bridge.capabilities().tracing is None
 
-    def test_no_rebuild_when_same_config(self):
+    def test_tracing_langfuse_after_observability_init(self):
+        """After observability is set up, tracing should be 'langfuse'."""
         bridge = ClaudeBridge()
-        ctx = PlatformContext(session_id="s1", workspace_path="/w", cwd_path="/w/src", model="claude-4")
-        bridge._last_ctx = ctx
-        assert bridge.needs_rebuild(ctx) is False
+        mock_obs = MagicMock()
+        mock_obs.langfuse_client = MagicMock()
+        bridge._obs = mock_obs
+        assert bridge.capabilities().tracing == "langfuse"
 
-    def test_rebuild_when_cwd_changes(self):
-        bridge = ClaudeBridge()
-        bridge._last_ctx = PlatformContext(session_id="s1", workspace_path="/w", cwd_path="/w/old")
-        new_ctx = PlatformContext(session_id="s1", workspace_path="/w", cwd_path="/w/new")
-        assert bridge.needs_rebuild(new_ctx) is True
 
-    def test_rebuild_when_model_changes(self):
-        bridge = ClaudeBridge()
-        bridge._last_ctx = PlatformContext(session_id="s1", workspace_path="/w", model="old-model")
-        new_ctx = PlatformContext(session_id="s1", workspace_path="/w", model="new-model")
-        assert bridge.needs_rebuild(new_ctx) is True
+class TestClaudeBridgeLifecycle:
+    """Test lifecycle methods on ClaudeBridge."""
 
-    def test_rebuild_when_mcp_servers_change(self):
+    def test_set_context(self):
         bridge = ClaudeBridge()
-        bridge._last_ctx = PlatformContext(session_id="s1", workspace_path="/w", mcp_servers={"a": {}})
-        new_ctx = PlatformContext(session_id="s1", workspace_path="/w", mcp_servers={"b": {}})
-        assert bridge.needs_rebuild(new_ctx) is True
+        assert bridge.context is None
+        ctx = RunnerContext(session_id="s1", workspace_path="/w")
+        bridge.set_context(ctx)
+        assert bridge.context is ctx
+        assert bridge.context.session_id == "s1"
+
+    def test_mark_dirty_resets_state(self):
+        bridge = ClaudeBridge()
+        bridge._ready = True
+        bridge._first_run = False
+        bridge._adapter = MagicMock()
+        bridge.mark_dirty()
+        assert bridge._ready is False
+        assert bridge._first_run is True
+        assert bridge._adapter is None
+
+    def test_configured_model_empty_by_default(self):
+        assert ClaudeBridge().configured_model == ""
+
+    def test_obs_none_by_default(self):
+        assert ClaudeBridge().obs is None
+
+    def test_session_manager_none_before_init(self):
+        assert ClaudeBridge().session_manager is None
+
+    def test_get_error_context_empty_by_default(self):
+        assert ClaudeBridge().get_error_context() == ""
+
+    def test_get_error_context_with_stderr(self):
+        bridge = ClaudeBridge()
+        bridge._stderr_lines = ["error: something broke", "at line 42"]
+        ctx = bridge.get_error_context()
+        assert "something broke" in ctx
+        assert "line 42" in ctx
 
 
 @pytest.mark.asyncio
-class TestClaudeBridgeRunAndInterrupt:
-    """Test run/interrupt lifecycle with a mocked adapter."""
+class TestClaudeBridgeRunGuards:
+    """Test run() and interrupt() guard conditions."""
 
-    async def test_run_raises_if_no_adapter(self):
+    async def test_run_raises_without_context(self):
         bridge = ClaudeBridge()
         input_data = RunAgentInput(
             thread_id="t1", run_id="r1", messages=[], state={},
             tools=[], context=[], forwarded_props={},
         )
-        with pytest.raises(RuntimeError, match="adapter not created"):
-            _ = [e async for e in bridge.run(input_data)]
+        with pytest.raises(RuntimeError, match="Context not set"):
+            async for _ in bridge.run(input_data):
+                pass
 
-    async def test_interrupt_raises_if_no_adapter(self):
+    async def test_interrupt_raises_without_session_manager(self):
         bridge = ClaudeBridge()
-        with pytest.raises(RuntimeError, match="no adapter to interrupt"):
+        with pytest.raises(RuntimeError, match="No active session manager"):
             await bridge.interrupt()
 
-    @patch("ambient_runner.bridges.claude.ClaudeAgentAdapter")
-    async def test_create_adapter_stores_instance(self, MockAdapter):
-        MockAdapter.return_value = MagicMock()
+    async def test_interrupt_raises_with_unknown_thread(self):
+        from ambient_runner.bridges.claude.session import SessionManager
+
         bridge = ClaudeBridge()
-        ctx = PlatformContext(session_id="s1", workspace_path="/w", cwd_path="/w")
-        adapter = bridge.create_adapter(ctx)
-        assert bridge._adapter is adapter
-        assert bridge._last_ctx is ctx
+        bridge._session_manager = SessionManager()
+        bridge.set_context(RunnerContext(session_id="s1", workspace_path="/w"))
+        with pytest.raises(RuntimeError, match="No active session"):
+            await bridge.interrupt("nonexistent-thread")
+
+
+@pytest.mark.asyncio
+class TestClaudeBridgeShutdown:
+    """Test shutdown behaviour."""
+
+    async def test_shutdown_with_no_resources(self):
+        """Shutdown should not raise when nothing is initialised."""
+        bridge = ClaudeBridge()
+        await bridge.shutdown()
+
+    async def test_shutdown_calls_session_manager(self):
+        bridge = ClaudeBridge()
+        mock_manager = AsyncMock()
+        bridge._session_manager = mock_manager
+        await bridge.shutdown()
+        mock_manager.shutdown.assert_awaited_once()
+
+    async def test_shutdown_calls_obs_finalize(self):
+        bridge = ClaudeBridge()
+        mock_obs = AsyncMock()
+        bridge._obs = mock_obs
+        await bridge.shutdown()
+        mock_obs.finalize.assert_awaited_once()

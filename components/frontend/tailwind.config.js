@@ -95,6 +95,6 @@ module.exports = {
   },
   plugins: [
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    require("tw-animate-css")
+    require("tailwindcss-animate")
   ],
 }

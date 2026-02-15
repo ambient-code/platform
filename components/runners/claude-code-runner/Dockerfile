@@ -65,7 +65,7 @@ COPY claude-code-runner /app/claude-runner
 
 
 # Install runner as a package (pulls dependencies including AG-UI SDK)
-RUN pip install --no-cache-dir /app/claude-runner
+RUN pip install --no-cache-dir '/app/claude-runner[all]'
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1

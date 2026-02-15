@@ -213,37 +213,30 @@ class ClaudeAgentAdapter:
         # Store the options (ClaudeAgentOptions object OR dict)
         self._options = options
         
-        # Extract api_key for setup
-        if isinstance(options, dict):
-            self.api_key = options.get("api_key") or os.getenv("ANTHROPIC_API_KEY", "")
-        elif options is not None and hasattr(options, "api_key"):
-            self.api_key = getattr(options, "api_key", None) or os.getenv("ANTHROPIC_API_KEY", "")
-        else:
-            self.api_key = os.getenv("ANTHROPIC_API_KEY", "")
-        
-        # Track Claude SDK session IDs per thread (for session resumption)
-        # Maps thread_id -> session_id returned by Claude SDK
-        self._session_ids_by_thread: Dict[str, str] = {}
-        
-        # Active client reference (for interrupt support)
-        self._active_client: Optional[Any] = None
-        
         # Result data from last run (for RunFinished event)
         self._last_result_data: Optional[Dict[str, Any]] = None
 
         # Current state tracking per run (for state management)
         self._current_state: Optional[Any] = None
 
-    async def run(self, input_data: RunAgentInput) -> AsyncIterator[BaseEvent]:
+    async def run(
+        self,
+        input_data: RunAgentInput,
+        *,
+        message_stream: Any,
+    ) -> AsyncIterator[BaseEvent]:
         """
         Process a run and yield AG-UI events.
         
-        This is the main entry point that consumes RunAgentInput and produces
-        a stream of AG-UI protocol events.
+        The adapter is a pure protocol translator — it converts Claude SDK
+        messages into AG-UI events.  The caller owns the ``ClaudeSDKClient``
+        lifecycle and provides the message stream.
         
         Args:
             input_data: RunAgentInput with thread_id, run_id, messages, tools,
                         context, state, forwarded_props, etc.
+            message_stream: Async iterator of Claude SDK ``Message`` objects,
+                e.g. from ``SessionWorker.query()`` or ``client.receive_response()``.
             
         Yields:
             AG-UI events (RunStartedEvent, TextMessageContentEvent, etc.)
@@ -336,7 +329,8 @@ class ClaudeAgentAdapter:
             
             # Run Claude SDK and yield events
             async for event in self._stream_claude_sdk(
-                user_message, thread_id, run_id, input_data, frontend_tool_names
+                user_message, thread_id, run_id, input_data, frontend_tool_names,
+                message_stream,
             ):
                 yield event
             
@@ -493,14 +487,8 @@ class ClaudeAgentAdapter:
                     f"Created ag_ui MCP server with {len(ag_ui_tools)} tools: {tool_names}"
                 )
         
-        # Add session resumption if we have an existing session for this thread
-        # resume option tells the Claude SDK to load and continue the previous conversation
-        # (session_id on client.query() just labels the session directory, doesn't resume)
-        if thread_id:
-            existing_session_id = self._session_ids_by_thread.get(thread_id)
-            if existing_session_id:
-                merged_kwargs["resume"] = existing_session_id
-                logger.debug(f"Added resume={existing_session_id[:8]}... for thread {thread_id[:8]}...")
+        # NOTE: Session resumption (--resume) is the platform's responsibility.
+        # The platform can pass resume=<session_id> via the options dict.
         
         # Create the options object
         logger.debug(f"Creating ClaudeAgentOptions with merged kwargs: {merged_kwargs}")
@@ -513,9 +501,13 @@ class ClaudeAgentAdapter:
         run_id: str,
         input_data: RunAgentInput,
         frontend_tool_names: set[str],
+        message_stream: Any,
     ) -> AsyncIterator[BaseEvent]:
         """
-        Execute the Claude SDK with the given prompt and yield AG-UI events.
+        Process Claude SDK messages and yield AG-UI events.
+        
+        Pure protocol translator — the caller owns the ``ClaudeSDKClient``
+        lifecycle and provides the message stream.
         
         Args:
             prompt: The user prompt to send to Claude
@@ -523,6 +515,7 @@ class ClaudeAgentAdapter:
             run_id: AG-UI run identifier
             input_data: Full RunAgentInput for context
             frontend_tool_names: Set of frontend tool names for halt detection
+            message_stream: Async iterator of SDK Messages from the caller.
         """
         # Per-run state (local to this invocation)
         current_message_id: Optional[str] = None
@@ -573,14 +566,7 @@ class ClaudeAgentAdapter:
                 )
             pending_msg = None
         
-        if not self.api_key:
-            raise RuntimeError("ANTHROPIC_API_KEY must be set")
-        
-        # Set environment variable for SDK
-        os.environ['ANTHROPIC_API_KEY'] = self.api_key
-        
-        # Import Claude SDK (after setting env var)
-        from claude_agent_sdk import ClaudeSDKClient
+        # Import Claude SDK types for isinstance checks
         from claude_agent_sdk import (
             AssistantMessage,
             UserMessage,
@@ -593,44 +579,12 @@ class ClaudeAgentAdapter:
         )
         from claude_agent_sdk.types import StreamEvent
         
-        # Build options dynamically from base options + kwargs + input.tools + session resume
-        options = self._build_options(input_data=input_data, thread_id=thread_id)
+        logger.info(f"[AGUI] processing message stream (thread={thread_id}, prompt_len={len(prompt)})")
         
-        # Create client
-        logger.debug("Creating ClaudeSDKClient...")     
-        client = ClaudeSDKClient(options=options)
+        # Process response stream
+        message_count = 0
         
-        # Store reference for interrupt support
-        self._active_client = client
-        
-        try:
-            # Connect to SDK
-            logger.debug("Connecting to Claude SDK...")
-            await client.connect()
-            logger.debug("Connected successfully!")
-            
-            # Use existing session_id as label if we have one, otherwise thread_id
-            existing_session_id = self._session_ids_by_thread.get(thread_id)
-            session_label = existing_session_id or thread_id
-            
-            if existing_session_id:
-                logger.debug(
-                    f"Resuming session {existing_session_id[:8]}... for thread {thread_id[:8]}..."
-                )
-            else:
-                logger.debug(
-                    f"Starting new session for thread {thread_id[:8]}... "
-                    f"(message_count={len(input_data.messages)})"
-                )
-            
-            await client.query(prompt, session_id=session_label)
-            
-            logger.debug("Query sent, waiting for response stream...")
-            
-            # Process response stream
-            message_count = 0
-            
-            async for message in client.receive_response():
+        async for message in message_stream:
                 message_count += 1
                 
                 # If we've halted due to frontend tool, break out of loop (interrupt already called)
@@ -817,11 +771,8 @@ class ClaudeAgentAdapter:
 
                                 logger.debug(f"Frontend tool halt: {current_tool_display_name}")
 
-                                if self._active_client:
-                                    try:
-                                        await self._active_client.interrupt()
-                                    except Exception as e:
-                                        logger.warning(f"Failed to interrupt stream: {e}")
+                                # NOTE: interrupt is the caller's responsibility
+                                # (e.g. worker.interrupt() from the platform layer)
                                 
                                 halt_event_stream = True
                                 # Continue consuming remaining events for cleanup
@@ -897,11 +848,6 @@ class ClaudeAgentAdapter:
                     subtype = getattr(message, 'subtype', '')
                     data = getattr(message, 'data', {}) or {}
                     
-                    if subtype == 'init' and data:
-                        returned_session_id = data.get('session_id')
-                        if returned_session_id:
-                            self._session_ids_by_thread[thread_id] = returned_session_id
-                  
                     msg_text = (data.get('message') or data.get('text') or '') if data else ''
                     
                     if msg_text:
@@ -943,40 +889,16 @@ class ClaudeAgentAdapter:
                             content=result_text,
                         ))
             
-            # Emit MESSAGES_SNAPSHOT with input messages + new messages from this run
-            if run_messages:
-                all_messages = list(input_data.messages or []) + run_messages
-                logger.debug(
-                    f"MESSAGES_SNAPSHOT: {len(all_messages)} msgs ({message_count} SDK messages processed)"
-                )
-                yield MessagesSnapshotEvent(
-                    type=EventType.MESSAGES_SNAPSHOT,
-                    messages=all_messages,
-                )
+        # Emit MESSAGES_SNAPSHOT with input messages + new messages from this run
+        if run_messages:
+            all_messages = list(input_data.messages or []) + run_messages
+            logger.debug(
+                f"MESSAGES_SNAPSHOT: {len(all_messages)} msgs ({message_count} SDK messages processed)"
+            )
+            yield MessagesSnapshotEvent(
+                type=EventType.MESSAGES_SNAPSHOT,
+                messages=all_messages,
+            )
         
         # Errors propagate to run() which emits RunErrorEvent
-            
-        finally:
-            # Clear active client reference
-            self._active_client = None
-            
-            # Always disconnect client
-            if client is not None:
-                logger.debug("Disconnecting Claude SDK client")
-                await client.disconnect()
-    
-    async def interrupt(self) -> None:
-        """
-        Interrupt the active Claude SDK execution.
-        """
-        if self._active_client is None:
-            logger.warning("Interrupt requested but no active client")
-            return
-        
-        try:
-            logger.debug("Sending interrupt signal to Claude SDK...")
-            await self._active_client.interrupt()
-            logger.debug("Interrupt signal sent successfully")
-        except Exception as e:
-            logger.error(f"Failed to interrupt Claude SDK: {e}")
 
