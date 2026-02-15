@@ -19,7 +19,9 @@ type ExportEvent = {
 };
 
 function isExportEvent(raw: unknown): raw is ExportEvent {
-  return typeof raw === 'object' && raw !== null && 'type' in raw;
+  if (typeof raw !== 'object' || raw === null || !('type' in raw)) return false;
+  const obj = raw as Record<string, unknown>;
+  return typeof obj.type === 'string';
 }
 
 const MAX_TOOL_ARGS_LENGTH = 2000;

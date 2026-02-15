@@ -32,17 +32,22 @@ export async function POST(
 
     if (!response.ok) {
       const errorText = await response.text()
-      return new Response(JSON.stringify({ error: errorText }), {
+      // Preserve structured JSON errors from backend; wrap plain text
+      let errorBody: string
+      try {
+        const parsed = JSON.parse(errorText)
+        errorBody = JSON.stringify(parsed)
+      } catch {
+        errorBody = JSON.stringify({ error: errorText || `HTTP ${response.status}` })
+      }
+      return new Response(errorBody, {
         status: response.status,
         headers: { 'Content-Type': 'application/json' },
       })
     }
 
     const data = await response.json()
-    return new Response(JSON.stringify(data), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    })
+    return Response.json(data)
   } catch (error) {
     console.error('MCP invoke proxy error:', error)
     return new Response(

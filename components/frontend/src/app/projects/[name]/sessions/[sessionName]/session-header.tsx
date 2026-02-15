@@ -11,11 +11,11 @@ import {
   DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent,
 } from '@/components/ui/dropdown-menu';
 import type { AgenticSession } from '@/types/agentic-session';
-import { useUpdateSessionDisplayName, useCurrentUser } from '@/services/queries';
+import { useUpdateSessionDisplayName, useCurrentUser, useSessionExport } from '@/services/queries';
 import { useMcpStatus } from '@/services/queries/use-mcp';
 import { useGoogleStatus } from '@/services/queries/use-google';
 import { successToast, errorToast } from '@/hooks/use-toast';
-import { getSessionExport, saveToGoogleDrive } from '@/services/api/sessions';
+import { saveToGoogleDrive } from '@/services/api/sessions';
 import { convertEventsToMarkdown, downloadAsMarkdown, exportAsPdf } from '@/utils/export-chat';
 
 type SessionHeaderProps = {
@@ -52,6 +52,7 @@ export function SessionHeader({
   const canResume = phase === "Stopped";
   const canDelete = phase === "Completed" || phase === "Failed" || phase === "Stopped";
 
+  const { refetch: fetchExportData } = useSessionExport(projectName, session.metadata.name, false);
   const { data: mcpStatus } = useMcpStatus(projectName, session.metadata.name, isRunning);
   const { data: googleStatus } = useGoogleStatus();
   const googleDriveServer = mcpStatus?.servers?.find(
@@ -93,7 +94,10 @@ export function SessionHeader({
 
     setExportLoading(format);
     try {
-      const exportData = await getSessionExport(projectName, session.metadata.name);
+      const { data: exportData } = await fetchExportData();
+      if (!exportData) {
+        throw new Error('No export data available');
+      }
       const markdown = convertEventsToMarkdown(exportData, session, {
         username: me?.displayName || me?.username || me?.email,
         projectName,
