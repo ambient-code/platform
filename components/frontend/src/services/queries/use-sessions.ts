@@ -222,15 +222,61 @@ export function useDeleteSession() {
       projectName: string;
       sessionName: string;
     }) => sessionsApi.deleteSession(projectName, sessionName),
+    onMutate: async ({ projectName, sessionName }) => {
+      // Cancel any outgoing refetches to avoid race conditions
+      await queryClient.cancelQueries({ queryKey: sessionKeys.lists() });
+
+      // Snapshot previous values for rollback
+      const previousQueries = new Map();
+
+      // Get all list query keys that match this project
+      const allListQueries = queryClient.getQueriesData({ queryKey: sessionKeys.lists() });
+
+      // Save snapshots and optimistically update all matching list queries
+      allListQueries.forEach(([queryKey, data]) => {
+        // Check if this query is for the current project
+        const projectNameInKey = queryKey[2]; // sessionKeys.list format: ['sessions', 'list', projectName, params?]
+        if (projectNameInKey === projectName && data) {
+          previousQueries.set(JSON.stringify(queryKey), data);
+
+          // Update paginated list queries
+          if ('items' in data && Array.isArray(data.items)) {
+            queryClient.setQueryData(queryKey, {
+              ...data,
+              items: data.items.filter((s: AgenticSession) => s.metadata.name !== sessionName),
+              totalCount: data.totalCount ? data.totalCount - 1 : 0,
+            });
+          }
+          // Update non-paginated list queries (legacy)
+          else if (Array.isArray(data)) {
+            queryClient.setQueryData(
+              queryKey,
+              data.filter((s: AgenticSession) => s.metadata.name !== sessionName)
+            );
+          }
+        }
+      });
+
+      return { previousQueries };
+    },
+    onError: (_err, { projectName }, context) => {
+      // Rollback on error - restore all previous query data
+      if (context?.previousQueries) {
+        context.previousQueries.forEach((data, keyStr) => {
+          const queryKey = JSON.parse(keyStr);
+          queryClient.setQueryData(queryKey, data);
+        });
+      }
+    },
     onSuccess: (_data, { projectName, sessionName }) => {
-      // Remove from cache
+      // Remove detail query from cache
       queryClient.removeQueries({
         queryKey: sessionKeys.detail(projectName, sessionName),
       });
-      // Invalidate list
+      // Final invalidation to ensure consistency (non-blocking background refetch)
       queryClient.invalidateQueries({
         queryKey: sessionKeys.list(projectName),
-        refetchType: 'all',
+        refetchType: 'none', // Don't refetch immediately since we already updated optimistically
       });
     },
   });
