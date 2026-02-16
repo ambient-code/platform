@@ -109,8 +109,7 @@ make kind-down
 
 **Quick Start:**
 ```bash
-make dev-start
-# Access at https://vteam-frontend-vteam-dev.apps-crc.testing
+make local-up    # Note: CRC dev-* targets have been replaced with local-* equivalents
 ```
 
 **Full Guide:** [crc.md](crc.md)
@@ -228,7 +227,7 @@ make test-e2e
 ### Need OpenShift-Specific Features?
 Use **CRC** only if you need Routes, BuildConfigs, etc:
 ```bash
-make dev-start  # CRC-based
+make local-up  # Local dev (minikube-based)
 ```
 
 ### Need to Debug with Breakpoints?

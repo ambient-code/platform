@@ -72,13 +72,13 @@ This directory contains automated workflows for the Ambient Code Platform.
 **Purpose**: Validates local development setup works correctly.
 
 **Triggers**:
-- Changes to dev scripts (`Makefile`, `dev-start.sh`, etc.)
+- Changes to dev scripts (`Makefile`, local-dev scripts, etc.)
 - Manual workflow dispatch
 
 **What It Does**:
 1. Simulates local development environment
-2. Tests `make dev-start`, `make dev-stop`
-3. Verifies CRC integration
+2. Tests `make local-up`, `make local-down`
+3. Verifies local cluster integration
 
 ---
 

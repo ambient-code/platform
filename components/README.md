@@ -39,19 +39,20 @@ components/
 
 ### Local Development (Recommended)
 ```bash
-# Single command to start everything
-make dev-start
+# Single command to start everything (minikube)
+make local-up
+
+# Or use Kind (recommended for most development)
+make kind-up
 ```
 
 **Prerequisites:**
-- Minikube: `brew install minikube`
-- Red Hat pull secret: Get free from [console.redhat.com](https://console.redhat.com/openshift/create/local)
+- Minikube (`brew install minikube`) or Kind (`brew install kind`) + Docker
 
 **What you get:**
-- ✅ Complete OpenShift development environment
-- ✅ Frontend: `https://vteam-frontend-vteam-dev.apps-crc.testing`
+- ✅ Complete local development environment
+- ✅ Frontend and backend accessible via localhost
 - ✅ Backend API working with authentication
-- ✅ OpenShift console access
 - ✅ Ready for project creation and agentic sessions
 
 ### Production Deployment
@@ -65,13 +66,12 @@ cd components/manifests
 CONTAINER_REGISTRY=$REGISTRY ./deploy.sh
 ```
 
-### Hot Reloading Development
+### Rebuild Components
 ```bash
-# Terminal 1: Start with development mode
-DEV_MODE=true make dev-start
-
-# Terminal 2: Enable file sync for hot-reloading
-make dev-sync
+make local-rebuild           # Rebuild and reload all components
+make local-reload-backend    # Rebuild and reload backend only
+make local-reload-frontend   # Rebuild and reload frontend only
+make local-reload-operator   # Rebuild and reload operator only
 ```
 
 ## Quick Deploy

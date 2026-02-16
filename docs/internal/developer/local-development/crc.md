@@ -27,7 +27,7 @@ brew install crc
 
 ### 2. Start Development Environment
 ```bash
-make dev-start
+make local-up
 ```
 *First run: ~5-10 minutes. Subsequent runs: ~2-3 minutes.*
 
@@ -38,37 +38,37 @@ make dev-start
 
 ### 4. Verify Everything Works
 ```bash
-make dev-test  # Should show 11/12 tests passing
+make local-test
 ```
 
 ## Hot-Reloading Development
 
 ```bash
-# Terminal 1: Start with development mode
-DEV_MODE=true make dev-start
+# Start local environment
+make local-up
 
-# Terminal 2: Enable file sync  
-make dev-sync
+# Rebuild components after changes
+make local-rebuild
 ```
 
 ## Essential Commands
 
 ```bash
 # Day-to-day workflow
-make dev-start          # Start environment
-make dev-test           # Run tests
-make dev-stop           # Stop (keep CRC running)
-make dev-clean          # Full cleanup
+make local-up              # Start environment
+make local-test            # Run tests
+make local-down            # Stop (keep cluster running)
+make local-clean           # Full cleanup
 
 # Logs
-make dev-logs           # All logs
-make dev-logs-backend   # Backend only
-make dev-logs-frontend  # Frontend only
-make dev-logs-operator  # Operator only
+make local-logs            # All logs
+make local-logs-backend    # Backend only
+make local-logs-frontend   # Frontend only
+make local-logs-operator   # Operator only
 
-# Operator management
-make dev-restart-operator  # Restart operator
-make dev-operator-status   # Check operator status
+# Status and troubleshooting
+make local-status          # Show status of local deployment
+make local-troubleshoot    # Show troubleshooting information
 ```
 
 ## Installation Details
@@ -115,7 +115,7 @@ sudo chmod +x /usr/local/bin/crc
 3. Download pull secret
 4. Save to `~/.crc/pull-secret.json`
 
-The `make dev-start` script will automatically use this pull secret.
+The `make local-up` script will automatically use this pull secret.
 
 ## Features
 
@@ -128,7 +128,7 @@ The `make dev-start` script will automatically use this pull secret.
 
 ### ✅ Development Workflow
 - Hot-reloading with `DEV_MODE=true`
-- File sync with `make dev-sync`
+- Rebuild with `make local-rebuild`
 - Quick operator restarts
 - Component-specific log viewing
 
@@ -165,7 +165,7 @@ crc logs
 
 # Reset if needed
 crc delete
-make dev-start
+make local-up
 ```
 
 ### Pods Not Starting
@@ -216,7 +216,7 @@ crc config set memory 16384  # 16GB
 crc config set disk-size 100  # 100GB
 
 # Then start
-make dev-start
+make local-up
 ```
 
 ### Custom Registry
@@ -224,21 +224,17 @@ make dev-start
 ```bash
 # Use external registry instead of internal
 export CONTAINER_REGISTRY=quay.io/your-username
-make dev-start
+make local-up
 ```
 
 ## Cleanup
 
 ```bash
-# Stop but keep CRC running
-make dev-stop
+# Stop but keep cluster running
+make local-down
 
-# Stop and shutdown CRC
-make dev-stop-cluster
-
-# Full cleanup (deletes CRC cluster)
-make dev-clean
-crc delete
+# Full cleanup (deletes cluster)
+make local-clean
 ```
 
 ## See Also

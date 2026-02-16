@@ -84,7 +84,7 @@ cd e2e
 
 **Deploy**:
 ```bash
-make dev-start
+make local-up
 ```
 
 ## How It Works
