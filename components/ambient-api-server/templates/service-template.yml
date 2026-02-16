@@ -1,0 +1,348 @@
+---
+kind: Template
+apiVersion: v1
+metadata:
+  name: ambient-api-server-service
+  annotations:
+    openshift.io/display-name: Ambient API Server
+    description: REST API server for the Ambient Code Platform
+    tags: golang,ambient,api
+parameters:
+
+- name: ENVIRONMENT
+  displayName: Environment
+  description: Which environment to use for this deployment
+  value: production
+
+- name: IMAGE_REGISTRY
+  displayName: Image Registry
+  required: true
+
+- name: IMAGE_REPOSITORY
+  displayName: Image Repository
+  required: true
+
+- name: IMAGE_TAG
+  displayName: Image tag
+  value: latest
+
+- name: GLOG_V
+  displayName: GLOG V Level
+  description: Log verbosity level
+  value: "10"
+
+- name: MEMORY_REQUEST
+  description: Memory request for the API pods.
+  value: "512Mi"
+
+- name: MEMORY_LIMIT
+  description: Memory limit for the API pods.
+  value: "1Gi"
+
+- name: CPU_REQUEST
+  description: CPU request for the API pods.
+  value: "200m"
+
+- name: CPU_LIMIT
+  description: CPU limit for the API pods.
+  value: "1"
+
+- name: JWKS_URL
+  displayName: JWK Token Certificate URL
+
+- name: REPLICAS
+  description: Number of replicas of the service to run.
+  value: "1"
+
+- name: ENABLE_JWT
+  displayName: Enable JWT
+  description: Enable JWT authentication validation
+  value: "true"
+
+- name: ENABLE_HTTPS
+  displayName: Enable HTTPS
+  description: Enable HTTPS rather than HTTP
+  value: "true"
+
+- name: API_SERVER_BINDADDRESS
+  displayName: API Server Bindaddress
+  description: API server bind address
+  value: :8000
+
+- name: METRICS_SERVER_BINDADDRESS
+  displayName: Metrics Server Bindaddress
+  description: Metrics server bind address
+  value: :4433
+
+- name: HEALTH_CHECK_SERVER_BINDADDRESS
+  displayName: Health check Server Bindaddress
+  description: Health check server bind address
+  value: :4434
+
+- name: API_SERVER_HOSTNAME
+  displayName: API Server Hostname
+  description: Server's public hostname
+  value: ""
+
+- name: CORS_ALLOWED_ORIGINS
+  displayName: CORS Allowed Origins
+  description: Comma-separated list of CORS allowed origins
+  value: ""
+
+- name: CORS_ALLOWED_HEADERS
+  displayName: CORS Allowed Headers
+  description: Comma-separated list of additional CORS allowed headers
+  value: X-Ambient-Project
+
+- name: ENABLE_AUTHZ
+  displayName: Enable Authz
+  description: Enable Authorization on endpoints, should only be disabled for debug
+  value: "true"
+
+- name: DB_MAX_OPEN_CONNS
+  displayName: Maximum Open Database Connections
+  description: Maximum number of open database connections per pod
+  value: "50"
+
+- name: DB_SSLMODE
+  displayName: DB SSLmode
+  description: Database ssl mode (disable | require | verify-ca | verify-full)
+  value: "disable"
+
+- name: ENABLE_DB_DEBUG
+  displayName: Enable DB Debug
+  description: Framework database debug mode
+  value: "false"
+
+- name: ENABLE_METRICS_HTTPS
+  displayName: Enable Metrics HTTPS
+  description: Enable HTTPS for metrics server
+  value: "false"
+
+- name: ENABLE_AUTHZ_MOCK
+  displayName: Enable Authz Mock
+  description: Enable mock authz client
+  value: "false"
+
+- name: HTTP_READ_TIMEOUT
+  displayName: HTTP Read Timeout
+  description: HTTP server read timeout
+  value: 5s
+
+- name: HTTP_WRITE_TIMEOUT
+  displayName: HTTP Write Timeout
+  description: HTTP server write timeout
+  value: 30s
+
+- name: ENABLE_SENTRY
+  displayName: Enable Sentry Error Reporting
+  value: "false"
+
+- name: SENTRY_URL
+  displayName: Sentry base URL
+  description: Base URL (without https://) of sentry server
+  value: ""
+
+- name: SENTRY_PROJECT
+  displayName: Sentry Project ID
+  value: ""
+
+- name: ENABLE_SENTRY_DEBUG
+  displayName: Enable Sentry Debug Logging
+  value: "false"
+
+- name: SENTRY_TIMEOUT
+  displayName: Sentry Timeout
+  description: Timeout for all Sentry operations
+  value: "5s"
+
+objects:
+  - kind: ServiceAccount
+    apiVersion: v1
+    metadata:
+      name: ambient-api-server
+      labels:
+        app: ambient-api-server
+
+  - kind: Deployment
+    apiVersion: apps/v1
+    metadata:
+      name: ambient-api-server
+      labels:
+        app: ambient-api-server
+    spec:
+      selector:
+        matchLabels:
+          app: ambient-api-server
+      replicas: ${{REPLICAS}}
+      strategy:
+        rollingUpdate:
+          maxSurge: 25%
+          maxUnavailable: 25%
+        type: RollingUpdate
+      template:
+        metadata:
+          labels:
+            app: ambient-api-server
+        spec:
+          serviceAccountName: ambient-api-server
+          volumes:
+          - name: tls
+            secret:
+              secretName: ambient-api-server-tls
+          - name: service
+            secret:
+              secretName: ambient-api-server
+          - name: rds
+            secret:
+              secretName: ambient-api-server-rds
+          - name: authentication
+            configMap:
+              name: authentication
+          initContainers:
+          - name: migration
+            image: ${IMAGE_REGISTRY}/${IMAGE_REPOSITORY}:${IMAGE_TAG}
+            imagePullPolicy: IfNotPresent
+            volumeMounts:
+            - name: service
+              mountPath: /secrets/service
+            - name: rds
+              mountPath: /secrets/rds
+            command:
+            - /usr/local/bin/ambient-api-server
+            - migrate
+            - --db-host-file=/secrets/rds/db.host
+            - --db-port-file=/secrets/rds/db.port
+            - --db-user-file=/secrets/rds/db.user
+            - --db-password-file=/secrets/rds/db.password
+            - --db-name-file=/secrets/rds/db.name
+            - --alsologtostderr
+            - -v=${GLOG_V}
+          containers:
+          - name: service
+            image: ${IMAGE_REGISTRY}/${IMAGE_REPOSITORY}:${IMAGE_TAG}
+            imagePullPolicy: IfNotPresent
+            volumeMounts:
+            - name: tls
+              mountPath: /secrets/tls
+            - name: service
+              mountPath: /secrets/service
+            - name: rds
+              mountPath: /secrets/rds
+            - name: authentication
+              mountPath: /configs/authentication
+            env:
+              - name: "AMBIENT_ENV"
+                value: "${ENVIRONMENT}"
+            command:
+            - /usr/local/bin/ambient-api-server
+            - serve
+            - --db-host-file=/secrets/rds/db.host
+            - --db-port-file=/secrets/rds/db.port
+            - --db-user-file=/secrets/rds/db.user
+            - --db-password-file=/secrets/rds/db.password
+            - --db-name-file=/secrets/rds/db.name
+            - --enable-mock=${ENABLE_AUTHZ_MOCK}
+            - --https-cert-file=/secrets/tls/tls.crt
+            - --https-key-file=/secrets/tls/tls.key
+            - --acl-file=/configs/authentication/acl.yml
+            - --jwk-cert-file=/configs/authentication/jwks.json
+            - --jwk-cert-url=${JWKS_URL}
+            - --enable-jwt=${ENABLE_JWT}
+            - --enable-https=${ENABLE_HTTPS}
+            - --api-server-hostname=${API_SERVER_HOSTNAME}
+            - --api-server-bindaddress=${API_SERVER_BINDADDRESS}
+            - --health-check-server-bindaddress=${HEALTH_CHECK_SERVER_BINDADDRESS}
+            - --metrics-server-bindaddress=${METRICS_SERVER_BINDADDRESS}
+            - --enable-health-check-https=${ENABLE_HTTPS}
+            - --db-sslmode=${DB_SSLMODE}
+            - --db-max-open-connections=${DB_MAX_OPEN_CONNS}
+            - --enable-authz=${ENABLE_AUTHZ}
+            - --enable-db-debug=${ENABLE_DB_DEBUG}
+            - --enable-metrics-https=${ENABLE_METRICS_HTTPS}
+            - --enable-sentry=${ENABLE_SENTRY}
+            - --enable-sentry-debug=${ENABLE_SENTRY_DEBUG}
+            - --sentry-url=${SENTRY_URL}
+            - --sentry-project=${SENTRY_PROJECT}
+            - --sentry-timeout=${SENTRY_TIMEOUT}
+            - --sentry-key-file=/secrets/service/sentry.key
+            - --http-read-timeout=${HTTP_READ_TIMEOUT}
+            - --http-write-timeout=${HTTP_WRITE_TIMEOUT}
+            - --cors-allowed-origins=${CORS_ALLOWED_ORIGINS}
+            - --cors-allowed-headers=${CORS_ALLOWED_HEADERS}
+            - --alsologtostderr
+            - -v=${GLOG_V}
+            resources:
+              requests:
+                cpu: ${CPU_REQUEST}
+                memory: ${MEMORY_REQUEST}
+              limits:
+                cpu: ${CPU_LIMIT}
+                memory: ${MEMORY_LIMIT}
+            livenessProbe:
+              httpGet:
+                path: /api/ambient-api-server
+                port: 8000
+                scheme: HTTPS
+              initialDelaySeconds: 15
+              periodSeconds: 5
+            readinessProbe:
+              httpGet:
+                path: /healthcheck
+                port: 4434
+                scheme: HTTPS
+                httpHeaders:
+                - name: User-Agent
+                  value: Probe
+              initialDelaySeconds: 20
+              periodSeconds: 10
+
+  - kind: Service
+    apiVersion: v1
+    metadata:
+      name: ambient-api-server
+      labels:
+        app: ambient-api-server
+        port: api
+      annotations:
+        description: Exposes and load balances the ambient-api-server pods
+        service.beta.openshift.io/serving-cert-secret-name: ambient-api-server-tls
+    spec:
+      selector:
+        app: ambient-api-server
+      ports:
+        - port: 8000
+          targetPort: 8000
+          protocol: TCP
+
+  - kind: Service
+    apiVersion: v1
+    metadata:
+      name: ambient-api-server-metrics
+      labels:
+        app: ambient-api-server
+        port: metrics
+      annotations:
+        description: Exposes the ambient-api-server metrics endpoint
+        service.beta.openshift.io/serving-cert-secret-name: ambient-api-server-metrics-tls
+    spec:
+      selector:
+        app: ambient-api-server
+      ports:
+      - port: 4433
+        targetPort: 4433
+        name: metrics
+
+  - apiVersion: v1
+    kind: Service
+    metadata:
+      name: ambient-api-server-healthcheck
+      labels:
+        app: ambient-api-server
+        port: healthcheck
+    spec:
+      selector:
+        app: ambient-api-server
+      ports:
+      - port: 4434
+        targetPort: 4434

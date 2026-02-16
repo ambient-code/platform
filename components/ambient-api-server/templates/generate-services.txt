@@ -1,0 +1,162 @@
+package {{.KindLowerPlural}}
+
+import (
+	"context"
+
+	"{{.Library}}/pkg/api"
+	"{{.Library}}/pkg/db"
+	"{{.Library}}/pkg/errors"
+	"{{.Library}}/pkg/logger"
+	"{{.Library}}/pkg/services"
+)
+
+const {{.KindLowerPlural}}LockType db.LockType = "{{.KindSnakeCasePlural}}"
+
+var (
+	DisableAdvisoryLock     = false
+	UseBlockingAdvisoryLock = true
+)
+
+type {{.Kind}}Service interface {
+	Get(ctx context.Context, id string) (*{{.Kind}}, *errors.ServiceError)
+	Create(ctx context.Context, {{.KindLowerSingular}} *{{.Kind}}) (*{{.Kind}}, *errors.ServiceError)
+	Replace(ctx context.Context, {{.KindLowerSingular}} *{{.Kind}}) (*{{.Kind}}, *errors.ServiceError)
+	Delete(ctx context.Context, id string) *errors.ServiceError
+	All(ctx context.Context) ({{.Kind}}List, *errors.ServiceError)
+
+	FindByIDs(ctx context.Context, ids []string) ({{.Kind}}List, *errors.ServiceError)
+
+	OnUpsert(ctx context.Context, id string) error
+	OnDelete(ctx context.Context, id string) error
+}
+
+func New{{.Kind}}Service(lockFactory db.LockFactory, {{.KindLowerSingular}}Dao {{.Kind}}Dao, events services.EventService) {{.Kind}}Service {
+	return &sql{{.Kind}}Service{
+		lockFactory: lockFactory,
+		{{.KindLowerSingular}}Dao: {{.KindLowerSingular}}Dao,
+		events:      events,
+	}
+}
+
+var _ {{.Kind}}Service = &sql{{.Kind}}Service{}
+
+type sql{{.Kind}}Service struct {
+	lockFactory db.LockFactory
+	{{.KindLowerSingular}}Dao {{.Kind}}Dao
+	events      services.EventService
+}
+
+func (s *sql{{.Kind}}Service) OnUpsert(ctx context.Context, id string) error {
+	logger := logger.NewLogger(ctx)
+
+	{{.KindLowerSingular}}, err := s.{{.KindLowerSingular}}Dao.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	logger.Infof("Do idempotent somethings with this {{.KindLowerSingular}}: %s", {{.KindLowerSingular}}.ID)
+
+	return nil
+}
+
+func (s *sql{{.Kind}}Service) OnDelete(ctx context.Context, id string) error {
+	logger := logger.NewLogger(ctx)
+	logger.Infof("This {{.KindLowerSingular}} has been deleted: %s", id)
+	return nil
+}
+
+func (s *sql{{.Kind}}Service) Get(ctx context.Context, id string) (*{{.Kind}}, *errors.ServiceError) {
+	{{.KindLowerSingular}}, err := s.{{.KindLowerSingular}}Dao.Get(ctx, id)
+	if err != nil {
+		return nil, services.HandleGetError("{{.Kind}}", "id", id, err)
+	}
+	return {{.KindLowerSingular}}, nil
+}
+
+func (s *sql{{.Kind}}Service) Create(ctx context.Context, {{.KindLowerSingular}} *{{.Kind}}) (*{{.Kind}}, *errors.ServiceError) {
+	{{.KindLowerSingular}}, err := s.{{.KindLowerSingular}}Dao.Create(ctx, {{.KindLowerSingular}})
+	if err != nil {
+		return nil, services.HandleCreateError("{{.Kind}}", err)
+	}
+
+	_, evErr := s.events.Create(ctx, &api.Event{
+		Source:    "{{.KindPlural}}",
+		SourceID:  {{.KindLowerSingular}}.ID,
+		EventType: api.CreateEventType,
+	})
+	if evErr != nil {
+		return nil, services.HandleCreateError("{{.Kind}}", evErr)
+	}
+
+	return {{.KindLowerSingular}}, nil
+}
+
+func (s *sql{{.Kind}}Service) Replace(ctx context.Context, {{.KindLowerSingular}} *{{.Kind}}) (*{{.Kind}}, *errors.ServiceError) {
+	if !DisableAdvisoryLock {
+		if UseBlockingAdvisoryLock {
+			lockOwnerID, err := s.lockFactory.NewAdvisoryLock(ctx, {{.KindLowerSingular}}.ID, {{.KindLowerPlural}}LockType)
+			if err != nil {
+				return nil, errors.DatabaseAdvisoryLock(err)
+			}
+			defer s.lockFactory.Unlock(ctx, lockOwnerID)
+		} else {
+			lockOwnerID, locked, err := s.lockFactory.NewNonBlockingLock(ctx, {{.KindLowerSingular}}.ID, {{.KindLowerPlural}}LockType)
+			if err != nil {
+				return nil, errors.DatabaseAdvisoryLock(err)
+			}
+			if !locked {
+				return nil, services.HandleCreateError("{{.Kind}}", errors.New(errors.ErrorConflict, "row locked"))
+			}
+			defer s.lockFactory.Unlock(ctx, lockOwnerID)
+		}
+	}
+
+	{{.KindLowerSingular}}, err := s.{{.KindLowerSingular}}Dao.Replace(ctx, {{.KindLowerSingular}})
+	if err != nil {
+		return nil, services.HandleUpdateError("{{.Kind}}", err)
+	}
+
+	_, evErr := s.events.Create(ctx, &api.Event{
+		Source:    "{{.KindPlural}}",
+		SourceID:  {{.KindLowerSingular}}.ID,
+		EventType: api.UpdateEventType,
+	})
+	if evErr != nil {
+		return nil, services.HandleUpdateError("{{.Kind}}", evErr)
+	}
+
+	return {{.KindLowerSingular}}, nil
+}
+
+func (s *sql{{.Kind}}Service) Delete(ctx context.Context, id string) *errors.ServiceError {
+	if err := s.{{.KindLowerSingular}}Dao.Delete(ctx, id); err != nil {
+		return services.HandleDeleteError("{{.Kind}}", errors.GeneralError("Unable to delete {{.KindLowerSingular}}: %s", err))
+	}
+
+	_, evErr := s.events.Create(ctx, &api.Event{
+		Source:    "{{.KindPlural}}",
+		SourceID:  id,
+		EventType: api.DeleteEventType,
+	})
+	if evErr != nil {
+		return services.HandleDeleteError("{{.Kind}}", evErr)
+	}
+
+	return nil
+}
+
+func (s *sql{{.Kind}}Service) FindByIDs(ctx context.Context, ids []string) ({{.Kind}}List, *errors.ServiceError) {
+	{{.KindLowerPlural}}, err := s.{{.KindLowerSingular}}Dao.FindByIDs(ctx, ids)
+	if err != nil {
+		return nil, errors.GeneralError("Unable to get all {{.KindLowerPlural}}: %s", err)
+	}
+	return {{.KindLowerPlural}}, nil
+}
+
+func (s *sql{{.Kind}}Service) All(ctx context.Context) ({{.Kind}}List, *errors.ServiceError) {
+	{{.KindLowerPlural}}, err := s.{{.KindLowerSingular}}Dao.All(ctx)
+	if err != nil {
+		return nil, errors.GeneralError("Unable to get all {{.KindLowerPlural}}: %s", err)
+	}
+	return {{.KindLowerPlural}}, nil
+}

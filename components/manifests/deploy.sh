@@ -134,6 +134,9 @@ DEFAULT_FRONTEND_IMAGE="${DEFAULT_FRONTEND_IMAGE:-${CONTAINER_REGISTRY}/vteam_fr
 DEFAULT_OPERATOR_IMAGE="${DEFAULT_OPERATOR_IMAGE:-${CONTAINER_REGISTRY}/vteam_operator:${IMAGE_TAG}}"
 DEFAULT_RUNNER_IMAGE="${DEFAULT_RUNNER_IMAGE:-${CONTAINER_REGISTRY}/vteam_claude_runner:${IMAGE_TAG}}"
 DEFAULT_STATE_SYNC_IMAGE="${DEFAULT_STATE_SYNC_IMAGE:-${CONTAINER_REGISTRY}/vteam_state_sync:${IMAGE_TAG}}"
+# Content service image (defaults to same as backend, but can be overridden)
+CONTENT_SERVICE_IMAGE="${CONTENT_SERVICE_IMAGE:-${DEFAULT_BACKEND_IMAGE}}"
+DEFAULT_API_SERVER_IMAGE="${DEFAULT_API_SERVER_IMAGE:-${CONTAINER_REGISTRY}/vteam_api_server:${IMAGE_TAG}}"
 
 # Handle uninstall/clean command early
 if [ "${1:-}" = "uninstall" ] || [ "${1:-}" = "clean" ]; then
@@ -233,6 +236,8 @@ echo -e "Frontend Image: ${GREEN}${DEFAULT_FRONTEND_IMAGE}${NC}"
 echo -e "Operator Image: ${GREEN}${DEFAULT_OPERATOR_IMAGE}${NC}"
 echo -e "Runner Image: ${GREEN}${DEFAULT_RUNNER_IMAGE}${NC}"
 echo -e "State Sync Image: ${GREEN}${DEFAULT_STATE_SYNC_IMAGE}${NC}"
+echo -e "Content Service Image: ${GREEN}${CONTENT_SERVICE_IMAGE}${NC}"
+echo -e "API Server Image: ${GREEN}${DEFAULT_API_SERVER_IMAGE}${NC}"
 echo ""
 
 # Check prerequisites
@@ -305,6 +310,7 @@ kustomize edit set image quay.io/ambient_code/vteam_frontend:latest=${DEFAULT_FR
 kustomize edit set image quay.io/ambient_code/vteam_operator:latest=${DEFAULT_OPERATOR_IMAGE}
 kustomize edit set image quay.io/ambient_code/vteam_claude_runner:latest=${DEFAULT_RUNNER_IMAGE}
 kustomize edit set image quay.io/ambient_code/vteam_state_sync:latest=${DEFAULT_STATE_SYNC_IMAGE}
+kustomize edit set image quay.io/ambient_code/vteam_api_server:latest=${DEFAULT_API_SERVER_IMAGE}
 
 # Build and apply manifests
 echo -e "${BLUE}Building and applying manifests...${NC}"
@@ -425,6 +431,7 @@ kustomize edit set image quay.io/ambient_code/vteam_frontend:latest=quay.io/ambi
 kustomize edit set image quay.io/ambient_code/vteam_operator:latest=quay.io/ambient_code/vteam_operator:latest
 kustomize edit set image quay.io/ambient_code/vteam_claude_runner:latest=quay.io/ambient_code/vteam_claude_runner:latest
 kustomize edit set image quay.io/ambient_code/vteam_state_sync:latest=quay.io/ambient_code/vteam_state_sync:latest
+kustomize edit set image quay.io/ambient_code/vteam_api_server:latest=quay.io/ambient_code/vteam_api_server:latest
 cd ../..
 
 echo -e "${GREEN}🎯 Ready to create RFE workflows with multi-agent collaboration!${NC}"

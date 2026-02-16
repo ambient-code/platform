@@ -41,6 +41,9 @@ patches:
 
 # Production images
 images:
+- name: quay.io/ambient_code/vteam_api_server:latest
+  newName: quay.io/ambient_code/vteam_api_server
+  newTag: latest
 - name: quay.io/ambient_code/vteam_backend
   newName: quay.io/ambient_code/vteam_backend
   newTag: latest
