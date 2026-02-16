@@ -5,14 +5,15 @@ WORKDIR /app
 
 USER 0
 
-# Install dependencies based on the preferred package manager
+# Copy the local TS SDK package
+COPY .sdk-vendor/ts-sdk ./.sdk-vendor/ts-sdk
+
+# Install dependencies
 COPY package.json package-lock.json* ./
-RUN npm ci
+RUN sed -i 's|file:../ambient-sdk/ts-sdk|file:.sdk-vendor/ts-sdk|' package.json && npm install
 
 # Rebuild the source code only when needed
-# Use the full nodejs-20 image (not minimal) for the build stage because
-# Next.js 16 Turbopack requires native SWC binaries that depend on glibc.
-FROM registry.access.redhat.com/ubi9/nodejs-20 AS builder
+FROM registry.access.redhat.com/ubi9/nodejs-20-minimal AS builder
 
 USER 0
 
@@ -26,6 +27,9 @@ COPY . .
 # Learn more here: https://nextjs.org/telemetry
 # Uncomment the following line in case you want to disable telemetry during the build.
 ENV NEXT_TELEMETRY_DISABLED=1
+
+ARG NEXT_PUBLIC_AMBIENT_API_URL
+ENV NEXT_PUBLIC_AMBIENT_API_URL=${NEXT_PUBLIC_AMBIENT_API_URL}
 
 RUN npm run build
 

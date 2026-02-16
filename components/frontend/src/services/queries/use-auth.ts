@@ -16,11 +16,12 @@ export const authKeys = {
 /**
  * Hook to fetch current user profile
  */
-export function useCurrentUser() {
+export function useCurrentUser(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: authKeys.currentUser(),
     queryFn: authApi.getCurrentUser,
-    staleTime: 5 * 60 * 1000, // 5 minutes - user info doesn't change often
+    staleTime: 5 * 60 * 1000,
+    enabled: options?.enabled,
   });
 }
 

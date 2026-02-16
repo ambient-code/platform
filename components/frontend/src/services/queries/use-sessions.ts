@@ -58,11 +58,11 @@ export function useSessions(projectName: string) {
 /**
  * Hook to fetch a single session
  */
-export function useSession(projectName: string, sessionName: string) {
+export function useSession(projectName: string, sessionName: string, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: sessionKeys.detail(projectName, sessionName),
     queryFn: () => sessionsApi.getSession(projectName, sessionName),
-    enabled: !!projectName && !!sessionName,
+    enabled: (options?.enabled ?? true) && !!projectName && !!sessionName,
     retry: 3, // Retry failed requests (useful during backend rollouts)
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000), // Exponential backoff
     // Poll for status updates based on session phase

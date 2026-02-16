@@ -16,11 +16,12 @@ export const versionKeys = {
 /**
  * Hook to fetch application version
  */
-export function useVersion() {
+export function useVersion(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: versionKeys.current(),
     queryFn: versionApi.getVersion,
-    staleTime: 5 * 60 * 1000, // Cache version for 5 minutes
-    retry: false, // Don't retry on failure
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+    enabled: options?.enabled,
   });
 }

@@ -8,15 +8,14 @@ export const workflowKeys = {
     [...workflowKeys.all, "metadata", projectName, sessionName] as const,
 };
 
-export function useOOTBWorkflows(projectName?: string) {
+export function useOOTBWorkflows(projectName?: string, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: workflowKeys.ootb(projectName),
     queryFn: async () => {
       const workflows = await workflowsApi.listOOTBWorkflows(projectName);
-      // Return all workflows - filtering should be done at the component level if needed
       return workflows;
     },
-    enabled: !!projectName, // Only fetch when projectName is available
+    enabled: (options?.enabled ?? true) && !!projectName,
     staleTime: 5 * 60 * 1000, // 5 minutes - workflows don't change often
   });
 }
@@ -24,12 +23,13 @@ export function useOOTBWorkflows(projectName?: string) {
 export function useWorkflowMetadata(
   projectName: string,
   sessionName: string,
-  enabled: boolean
+  enabled: boolean,
+  options?: { enabled?: boolean },
 ) {
   return useQuery({
     queryKey: workflowKeys.metadata(projectName, sessionName),
     queryFn: () => workflowsApi.getWorkflowMetadata(projectName, sessionName),
-    enabled: enabled && !!projectName && !!sessionName,
+    enabled: (options?.enabled ?? true) && enabled && !!projectName && !!sessionName,
     staleTime: 60 * 1000, // 1 minute
   });
 }
