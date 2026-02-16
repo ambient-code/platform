@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { GitBranch, X, Link, Loader2, CloudUpload, ChevronDown, ChevronRight } from "lucide-react";
 import { AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
@@ -42,6 +42,18 @@ export function RepositoriesAccordion({
 
   const totalContextItems = repositories.length + uploadedFiles.length;
 
+  // Pulse the badge when count increases
+  const prevCount = useRef(totalContextItems);
+  const [badgePulse, setBadgePulse] = useState(false);
+  useEffect(() => {
+    if (totalContextItems > prevCount.current) {
+      setBadgePulse(true);
+      const timer = setTimeout(() => setBadgePulse(false), 1500);
+      return () => clearTimeout(timer);
+    }
+    prevCount.current = totalContextItems;
+  }, [totalContextItems]);
+
   const handleRemoveRepo = async (repoName: string) => {
     if (confirm(`Remove repository ${repoName}?`)) {
       setRemovingRepo(repoName);
@@ -72,7 +84,14 @@ export function RepositoriesAccordion({
           <Link className="h-4 w-4" />
           <span>Context</span>
           {totalContextItems > 0 && (
-            <Badge variant="secondary" className="ml-auto mr-2">
+            <Badge
+              variant="secondary"
+              className={`ml-auto mr-2 transition-all duration-300 ${
+                badgePulse
+                  ? "bg-green-500 text-white shadow-[0_0_8px_rgba(34,197,94,0.6)] scale-110"
+                  : ""
+              }`}
+            >
               {totalContextItems}
             </Badge>
           )}

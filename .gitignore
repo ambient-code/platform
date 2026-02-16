@@ -81,6 +81,7 @@ celerybeat-schedule
 # Environments
 .env
 .env.uat
+.dev-bootstrap.env
 .venv
 env/
 venv/

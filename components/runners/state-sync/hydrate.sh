@@ -72,7 +72,12 @@ chown -R 1001:0 "${CLAUDE_DATA_PATH}" /workspace/artifacts /workspace/file-uploa
 chmod -R 777 "${CLAUDE_DATA_PATH}" 2>/dev/null || echo "Warning: failed to chmod ${CLAUDE_DATA_PATH} (continuing)"
 
 # Other directories - standard permissions since chown sets ownership to runner user
-chmod 755 /workspace/artifacts /workspace/file-uploads 2>/dev/null || true
+chmod 755 /workspace/artifacts 2>/dev/null || true
+# SECURITY: 777 required for /workspace/file-uploads because:
+# - Init container runs as root but content sidecar runs as user 1001
+# - Content sidecar needs write access to store user-uploaded files
+# - Directory contains user-uploaded files (no secrets), so world-writable is acceptable
+chmod 777 /workspace/file-uploads 2>/dev/null || true
 # SECURITY: 777 required for /workspace/repos because:
 # - Init container runs as root but runner container runs as user 1001
 # - Group-based permissions (775) don't work as containers may not share groups
@@ -144,7 +149,8 @@ chown -R 1001:0 "${CLAUDE_DATA_PATH}" /workspace/artifacts /workspace/file-uploa
 chmod -R 777 "${CLAUDE_DATA_PATH}" 2>/dev/null || true
 # repos also needs write access for runtime repo additions (clone_repo_at_runtime)
 # See security rationale above for why 777 is used
-chmod -R 755 /workspace/artifacts /workspace/file-uploads 2>/dev/null || true
+chmod -R 755 /workspace/artifacts 2>/dev/null || true
+chmod -R 777 /workspace/file-uploads 2>/dev/null || true
 chmod -R 777 /workspace/repos 2>/dev/null || true
 
 # ========================================

@@ -3,7 +3,7 @@
 .PHONY: local-dev-token
 .PHONY: local-logs local-logs-backend local-logs-frontend local-logs-operator local-shell local-shell-frontend
 .PHONY: local-test local-test-dev local-test-quick test-all local-url local-troubleshoot local-port-forward local-stop-port-forward
-.PHONY: push-all registry-login setup-hooks remove-hooks check-minikube check-kind check-kubectl
+.PHONY: push-all registry-login setup-hooks remove-hooks check-minikube check-kind check-kubectl dev-bootstrap
 .PHONY: e2e-test e2e-setup e2e-clean deploy-langfuse-openshift
 .PHONY: setup-minio minio-console minio-logs minio-status
 .PHONY: validate-makefile lint-makefile check-shell makefile-health
@@ -593,6 +593,11 @@ kind-up: check-kind check-kubectl ## Start kind cluster with Quay.io images (pro
 		GOOGLE_APPLICATION_CREDENTIALS="$(GOOGLE_APPLICATION_CREDENTIALS)" \
 		./scripts/setup-vertex-kind.sh; \
 	fi
+	@if [ -f .dev-bootstrap.env ]; then \
+		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Bootstrapping developer workspace..."; \
+		./scripts/bootstrap-workspace.sh || \
+		echo "$(COLOR_YELLOW)⚠$(COLOR_RESET)  Bootstrap failed (non-fatal). Run 'make dev-bootstrap' manually."; \
+	fi
 	@echo ""
 	@echo "$(COLOR_BOLD)Access the platform:$(COLOR_RESET)"
 	@echo "  Run in another terminal: $(COLOR_BLUE)make kind-port-forward$(COLOR_RESET)"
@@ -623,6 +628,9 @@ kind-port-forward: check-kubectl ## Port-forward kind services (for remote Podma
 	(kubectl port-forward -n ambient-code svc/frontend-service 8080:3000 >/dev/null 2>&1 &); \
 	(kubectl port-forward -n ambient-code svc/backend-service 8081:8080 >/dev/null 2>&1 &); \
 	wait
+
+dev-bootstrap: check-kubectl ## Bootstrap developer workspace with API key and integrations
+	@./scripts/bootstrap-workspace.sh
 
 ##@ E2E Testing (Portable)
 

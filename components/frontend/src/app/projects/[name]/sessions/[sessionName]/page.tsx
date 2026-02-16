@@ -2498,6 +2498,12 @@ export default function ProjectSessionDetailPage({
                         userHasInteracted={userHasInteracted}
                         queuedMessages={sessionQueue.messages}
                         hasRealMessages={hasRealMessages}
+                        onPasteImage={async (file: File) => {
+                          await uploadFileMutation.mutateAsync({ type: "local", file });
+                        }}
+                        onCancelQueuedMessage={(id) => sessionQueue.cancelMessage(id)}
+                        onUpdateQueuedMessage={(id, content) => sessionQueue.updateMessage(id, content)}
+                        onClearQueue={() => sessionQueue.clearMessages()}
                         welcomeExperienceComponent={
                           <WelcomeExperience
                             ootbWorkflows={ootbWorkflows}
@@ -2564,6 +2570,12 @@ export default function ProjectSessionDetailPage({
                           userHasInteracted={userHasInteracted}
                           queuedMessages={sessionQueue.messages}
                           hasRealMessages={hasRealMessages}
+                          onPasteImage={async (file: File) => {
+                            await uploadFileMutation.mutateAsync({ type: "local", file });
+                          }}
+                          onCancelQueuedMessage={(id) => sessionQueue.cancelMessage(id)}
+                          onUpdateQueuedMessage={(id, content) => sessionQueue.updateMessage(id, content)}
+                          onClearQueue={() => sessionQueue.clearMessages()}
                           welcomeExperienceComponent={
                             <WelcomeExperience
                               ootbWorkflows={ootbWorkflows}
