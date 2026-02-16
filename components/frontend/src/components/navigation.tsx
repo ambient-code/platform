@@ -4,9 +4,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { UserBubble } from "@/components/user-bubble";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { ApiSourceToggle } from "@/components/api-source-toggle";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Plug, LogOut } from "lucide-react";
 import { useVersion } from "@/services/queries/use-version";
+import { useApiSource } from "@/contexts/api-source-context";
 
 type NavigationProps = {
   feedbackUrl?: string;
@@ -16,7 +18,8 @@ export function Navigation({ feedbackUrl }: NavigationProps) {
   // const pathname = usePathname();
   // const segments = pathname?.split("/").filter(Boolean) || [];
   const router = useRouter();
-  const { data: version } = useVersion();
+  const { isApiServer } = useApiSource();
+  const { data: version } = useVersion({ enabled: !isApiServer });
 
   const handleLogout = () => {
     // Redirect to oauth-proxy logout endpoint  
@@ -55,10 +58,13 @@ export function Navigation({ feedbackUrl }: NavigationProps) {
                 Share feedback
               </a>
             )}
+            <ApiSourceToggle />
             <ThemeToggle />
             <DropdownMenu>
-              <DropdownMenuTrigger className="outline-none">
-                <UserBubble />
+              <DropdownMenuTrigger asChild>
+                <button type="button" className="inline-flex items-center justify-center whitespace-nowrap text-sm rounded-md hover:bg-accent hover:text-accent-foreground cursor-pointer outline-none">
+                  <UserBubble />
+                </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onSelect={() => router.push('/integrations')}>

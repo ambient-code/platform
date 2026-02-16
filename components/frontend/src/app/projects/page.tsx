@@ -24,13 +24,17 @@ import {
 } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { useProjectsPaginated, useDeleteProject } from '@/services/queries';
+import { useV1ProjectsAll, useV1DeleteProjectGlobal } from '@/services/queries/v1';
 import { PageHeader } from '@/components/page-header';
 import { EmptyState } from '@/components/empty-state';
 import { ErrorMessage } from '@/components/error-message';
 import { DestructiveConfirmationDialog } from '@/components/confirmation-dialog';
 import { CreateWorkspaceDialog } from '@/components/create-workspace-dialog';
+import { V1CreateWorkspaceDialog } from '@/components/v1-create-workspace-dialog';
 import { successToast, errorToast } from '@/hooks/use-toast';
+import { useApiSource } from '@/contexts/api-source-context';
 import type { Project } from '@/types/api';
+import type { Project as V1Project } from '@ambient-platform/sdk';
 import { DEFAULT_PAGE_SIZE } from '@/types/api';
 import { useDebounce } from '@/hooks/use-debounce';
 
@@ -38,40 +42,69 @@ export default function ProjectsPage() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const { isApiServer } = useApiSource();
 
-  // Pagination and search state
   const [searchInput, setSearchInput] = useState('');
   const [offset, setOffset] = useState(0);
+  const [page, setPage] = useState(1);
   const limit = DEFAULT_PAGE_SIZE;
 
-  // Debounce search to avoid too many API calls
   const debouncedSearch = useDebounce(searchInput, 300);
 
-  // Reset offset when search changes
   useEffect(() => {
     setOffset(0);
+    setPage(1);
   }, [debouncedSearch]);
 
-  // React Query hooks with pagination
-  const {
-    data: paginatedData,
-    isLoading,
-    isFetching,
-    error,
-    refetch,
-  } = useProjectsPaginated({
+  const k8sQuery = useProjectsPaginated({
     limit,
     offset,
     search: debouncedSearch || undefined,
-  });
+  }, { enabled: !isApiServer });
 
-  const projects = paginatedData?.items ?? [];
-  const totalCount = paginatedData?.totalCount ?? 0;
-  const hasMore = paginatedData?.hasMore ?? false;
-  const currentPage = Math.floor(offset / limit) + 1;
+  const v1Query = useV1ProjectsAll({
+    page,
+    size: limit,
+    search: debouncedSearch || undefined,
+  }, { enabled: isApiServer });
+
+  const k8sDeleteMutation = useDeleteProject();
+  const v1DeleteMutation = useV1DeleteProjectGlobal();
+
+  const isLoading = isApiServer ? v1Query.isLoading : k8sQuery.isLoading;
+  const isFetching = isApiServer ? v1Query.isFetching : k8sQuery.isFetching;
+  const error = isApiServer ? v1Query.error : k8sQuery.error;
+  const refetch = isApiServer ? v1Query.refetch : k8sQuery.refetch;
+  const deleteProjectMutation = isApiServer ? v1DeleteMutation : k8sDeleteMutation;
+
+  const normalizedData = (() => {
+    if (isApiServer) {
+      const v1Data = v1Query.data;
+      if (!v1Data) return { items: [] as Project[], totalCount: 0, hasMore: false };
+      const items: Project[] = v1Data.items.map((p: V1Project) => ({
+        name: p.name,
+        displayName: p.display_name,
+        description: p.description,
+        labels: {},
+        annotations: {},
+        creationTimestamp: p.created_at ?? '',
+        status: (p.status as Project['status']) || 'active',
+        isOpenShift: false,
+      }));
+      const total = v1Data.total ?? 0;
+      return { items, totalCount: total, hasMore: page * limit < total };
+    }
+    const k8sData = k8sQuery.data;
+    if (!k8sData) return { items: [] as Project[], totalCount: 0, hasMore: false };
+    return { items: k8sData.items, totalCount: k8sData.totalCount, hasMore: k8sData.hasMore };
+  })();
+
+  const projects = normalizedData.items;
+  const totalCount = normalizedData.totalCount;
+  const hasMore = normalizedData.hasMore;
+  const currentPage = isApiServer ? page : Math.floor(offset / limit) + 1;
   const totalPages = Math.ceil(totalCount / limit);
-
-  const deleteProjectMutation = useDeleteProject();
+  const hasPaginatedData = isApiServer ? !!v1Query.data : !!k8sQuery.data;
 
   const handleRefreshClick = () => {
     refetch();
@@ -79,12 +112,18 @@ export default function ProjectsPage() {
 
   const handleNextPage = () => {
     if (hasMore) {
-      setOffset(offset + limit);
+      if (isApiServer) {
+        setPage(page + 1);
+      } else {
+        setOffset(offset + limit);
+      }
     }
   };
 
   const handlePrevPage = () => {
-    if (offset > 0) {
+    if (isApiServer) {
+      if (page > 1) setPage(page - 1);
+    } else if (offset > 0) {
       setOffset(Math.max(0, offset - limit));
     }
   };
@@ -106,19 +145,23 @@ export default function ProjectsPage() {
   const confirmDelete = async () => {
     if (!projectToDelete) return;
 
-    deleteProjectMutation.mutate(projectToDelete.name, {
+    const idOrName = isApiServer
+      ? (projectToDelete as Project & { id?: string }).id ?? projectToDelete.name
+      : projectToDelete.name;
+
+    deleteProjectMutation.mutate(idOrName, {
       onSuccess: () => {
         successToast(`Project "${projectToDelete.displayName || projectToDelete.name}" deleted successfully`);
         closeDeleteDialog();
       },
-      onError: (error) => {
+      onError: (error: Error) => {
         errorToast(error instanceof Error ? error.message : 'Failed to delete project');
       },
     });
   };
 
   // Initial loading state (no data yet)
-  if (isLoading && !paginatedData) {
+  if (isLoading && !hasPaginatedData) {
     return (
       <div className="min-h-screen bg-background">
         <div className="container mx-auto p-6">
@@ -286,14 +329,14 @@ export default function ProjectsPage() {
                 {totalPages > 1 && (
                   <div className="flex items-center justify-between pt-4 border-t mt-4">
                     <div className="text-sm text-muted-foreground">
-                      Showing {offset + 1}-{Math.min(offset + limit, totalCount)} of {totalCount} workspaces
+                      Showing {(currentPage - 1) * limit + 1}-{Math.min(currentPage * limit, totalCount)} of {totalCount} workspaces
                     </div>
                     <div className="flex items-center gap-2">
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={handlePrevPage}
-                        disabled={offset === 0 || isFetching}
+                        disabled={currentPage <= 1 || isFetching}
                       >
                         <ChevronLeft className="h-4 w-4 mr-1" />
                         Previous
@@ -331,10 +374,17 @@ export default function ProjectsPage() {
         />
 
         {/* Create workspace dialog */}
-        <CreateWorkspaceDialog
-          open={showCreateDialog}
-          onOpenChange={setShowCreateDialog}
-        />
+        {isApiServer ? (
+          <V1CreateWorkspaceDialog
+            open={showCreateDialog}
+            onOpenChange={setShowCreateDialog}
+          />
+        ) : (
+          <CreateWorkspaceDialog
+            open={showCreateDialog}
+            onOpenChange={setShowCreateDialog}
+          />
+        )}
       </div>
     </div>
   );
