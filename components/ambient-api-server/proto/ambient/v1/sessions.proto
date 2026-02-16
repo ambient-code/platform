@@ -1,0 +1,138 @@
+syntax = "proto3";
+
+package ambient.v1;
+
+option go_package = "github.com/ambient/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1;ambient_v1";
+
+import "ambient/v1/common.proto";
+import "google/protobuf/timestamp.proto";
+
+message Session {
+  ObjectReference metadata = 1;
+  string name = 2;
+  optional string repo_url = 3;
+  optional string prompt = 4;
+  optional string created_by_user_id = 5;
+  optional string assigned_user_id = 6;
+  optional string workflow_id = 7;
+  optional string repos = 8;
+  optional bool interactive = 9;
+  optional int32 timeout = 10;
+  optional string llm_model = 11;
+  optional double llm_temperature = 12;
+  optional int32 llm_max_tokens = 13;
+  optional string parent_session_id = 14;
+  optional string bot_account_name = 15;
+  optional string resource_overrides = 16;
+  optional string environment_variables = 17;
+  optional string labels = 18;
+  optional string annotations = 19;
+  optional string project_id = 20;
+  optional string phase = 21;
+  optional google.protobuf.Timestamp start_time = 22;
+  optional google.protobuf.Timestamp completion_time = 23;
+  optional string sdk_session_id = 24;
+  optional int32 sdk_restart_count = 25;
+  optional string conditions = 26;
+  optional string reconciled_repos = 27;
+  optional string reconciled_workflow = 28;
+  optional string kube_cr_name = 29;
+  optional string kube_cr_uid = 30;
+  optional string kube_namespace = 31;
+}
+
+message CreateSessionRequest {
+  string name = 1;
+  optional string repo_url = 2;
+  optional string prompt = 3;
+  optional string created_by_user_id = 4;
+  optional string assigned_user_id = 5;
+  optional string workflow_id = 6;
+  optional string repos = 7;
+  optional bool interactive = 8;
+  optional int32 timeout = 9;
+  optional string llm_model = 10;
+  optional double llm_temperature = 11;
+  optional int32 llm_max_tokens = 12;
+  optional string parent_session_id = 13;
+  optional string bot_account_name = 14;
+  optional string resource_overrides = 15;
+  optional string environment_variables = 16;
+  optional string labels = 17;
+  optional string annotations = 18;
+  optional string project_id = 19;
+}
+
+message GetSessionRequest {
+  string id = 1;
+}
+
+message UpdateSessionRequest {
+  string id = 1;
+  optional string name = 2;
+  optional string repo_url = 3;
+  optional string prompt = 4;
+  optional string assigned_user_id = 5;
+  optional string workflow_id = 6;
+  optional string repos = 7;
+  optional bool interactive = 8;
+  optional int32 timeout = 9;
+  optional string llm_model = 10;
+  optional double llm_temperature = 11;
+  optional int32 llm_max_tokens = 12;
+  optional string parent_session_id = 13;
+  optional string bot_account_name = 14;
+  optional string resource_overrides = 15;
+  optional string environment_variables = 16;
+  optional string labels = 17;
+  optional string annotations = 18;
+  optional string project_id = 19;
+}
+
+message UpdateSessionStatusRequest {
+  string id = 1;
+  optional string phase = 2;
+  optional google.protobuf.Timestamp start_time = 3;
+  optional google.protobuf.Timestamp completion_time = 4;
+  optional string sdk_session_id = 5;
+  optional int32 sdk_restart_count = 6;
+  optional string conditions = 7;
+  optional string reconciled_repos = 8;
+  optional string reconciled_workflow = 9;
+  optional string kube_cr_uid = 10;
+  optional string kube_namespace = 11;
+}
+
+message DeleteSessionRequest {
+  string id = 1;
+}
+
+message ListSessionsRequest {
+  int32 page = 1;
+  int32 size = 2;
+}
+
+message ListSessionsResponse {
+  repeated Session items = 1;
+  ListMeta metadata = 2;
+}
+
+message DeleteSessionResponse {}
+
+message WatchSessionsRequest {}
+
+message SessionWatchEvent {
+  EventType type = 1;
+  Session session = 2;
+  string resource_id = 3;
+}
+
+service SessionService {
+  rpc GetSession(GetSessionRequest) returns (Session);
+  rpc CreateSession(CreateSessionRequest) returns (Session);
+  rpc UpdateSession(UpdateSessionRequest) returns (Session);
+  rpc UpdateSessionStatus(UpdateSessionStatusRequest) returns (Session);
+  rpc DeleteSession(DeleteSessionRequest) returns (DeleteSessionResponse);
+  rpc ListSessions(ListSessionsRequest) returns (ListSessionsResponse);
+  rpc WatchSessions(WatchSessionsRequest) returns (stream SessionWatchEvent);
+}

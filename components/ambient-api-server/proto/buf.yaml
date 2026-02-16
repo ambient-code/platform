@@ -1,0 +1,12 @@
+version: v2
+modules:
+  - path: .
+    name: buf.build/ambient/ambient-api-server
+deps:
+  - buf.build/googleapis/googleapis
+lint:
+  use:
+    - DEFAULT
+breaking:
+  use:
+    - WIRE_JSON

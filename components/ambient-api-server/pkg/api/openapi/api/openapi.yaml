@@ -1,0 +1,1856 @@
+openapi: 3.0.0
+info:
+  contact:
+    email: admin@your.project.com
+  description: Ambient API Server
+  license:
+    name: Apache-2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+  title: Ambient API Server
+  version: 1.0.0
+servers:
+- description: current domain
+  url: http://localhost:8000
+- description: Production
+  url: https://api.your.project.com
+- description: Staging
+  url: https://api.stage.your.project.com
+security:
+- Bearer: []
+paths:
+  /api/ambient-api-server/v1/sessions:
+    get:
+      parameters:
+      - description: Page number of record list when record list exceeds specified
+          page size
+        explode: true
+        in: query
+        name: page
+        required: false
+        schema:
+          default: 1
+          minimum: 1
+          type: integer
+        style: form
+      - description: Maximum number of records to return
+        explode: true
+        in: query
+        name: size
+        required: false
+        schema:
+          default: 100
+          minimum: 0
+          type: integer
+        style: form
+      - description: Specifies the search criteria
+        explode: true
+        in: query
+        name: search
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Specifies the order by criteria
+        explode: true
+        in: query
+        name: orderBy
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Supplies a comma-separated list of fields to be returned
+        explode: true
+        in: query
+        name: fields
+        required: false
+        schema:
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionList"
+          description: A JSON array of session objects
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Returns a list of sessions
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Session"
+        description: Session data
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Validation errors occurred
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Session already exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: An unexpected error occurred creating the session
+      security:
+      - Bearer: []
+      summary: Create a new session
+  /api/ambient-api-server/v1/sessions/{id}:
+    get:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+          description: Session found by id
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No session with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Get an session by id
+    patch:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionPatchRequest"
+        description: Updated session data
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+          description: Session updated successfully
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Validation errors occurred
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No session with specified id exists
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Session already exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error updating session
+      security:
+      - Bearer: []
+      summary: Update an session
+  /api/ambient-api-server/v1/sessions/{id}/status:
+    patch:
+      description: Write-back endpoint for control plane to sync runtime status from
+        Kubernetes CR
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionStatusPatchRequest"
+        description: Session status fields to update
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+          description: Session status updated successfully
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Validation errors occurred
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No session with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error updating session status
+      security:
+      - Bearer: []
+      summary: Update session status fields
+  /api/ambient-api-server/v1/sessions/{id}/start:
+    post:
+      description: "Transitions session phase to Pending. Valid from empty/nil, Stopped,\
+        \ Failed, or Completed phase. Also sets interactive=true."
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+          description: Session started successfully
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No session with specified id exists
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Session is in a phase that cannot be started
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Start a session
+  /api/ambient-api-server/v1/sessions/{id}/stop:
+    post:
+      description: "Transitions session phase to Stopping. Valid from Running, Creating,\
+        \ or Pending phase."
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+          description: Session stop initiated successfully
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No session with specified id exists
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Session is in a phase that cannot be stopped
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Stop a session
+  /api/ambient-api-server/v1/projects:
+    get:
+      parameters:
+      - description: Page number of record list when record list exceeds specified
+          page size
+        explode: true
+        in: query
+        name: page
+        required: false
+        schema:
+          default: 1
+          minimum: 1
+          type: integer
+        style: form
+      - description: Maximum number of records to return
+        explode: true
+        in: query
+        name: size
+        required: false
+        schema:
+          default: 100
+          minimum: 0
+          type: integer
+        style: form
+      - description: Specifies the search criteria
+        explode: true
+        in: query
+        name: search
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Specifies the order by criteria
+        explode: true
+        in: query
+        name: orderBy
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Supplies a comma-separated list of fields to be returned
+        explode: true
+        in: query
+        name: fields
+        required: false
+        schema:
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectList"
+          description: A JSON array of project objects
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Returns a list of projects
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Project"
+        description: Project data
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Validation errors occurred
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Project already exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: An unexpected error occurred creating the project
+      security:
+      - Bearer: []
+      summary: Create a new project
+  /api/ambient-api-server/v1/projects/{id}:
+    delete:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "204":
+          description: Project deleted successfully
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No project with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Delete a project by id
+    get:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+          description: Project found by id
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No project with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Get a project by id
+    patch:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectPatchRequest"
+        description: Updated project data
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+          description: Project updated successfully
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Validation errors occurred
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No project with specified id exists
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Project already exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error updating project
+      security:
+      - Bearer: []
+      summary: Update a project
+  /api/ambient-api-server/v1/project_settings:
+    get:
+      parameters:
+      - description: Page number of record list when record list exceeds specified
+          page size
+        explode: true
+        in: query
+        name: page
+        required: false
+        schema:
+          default: 1
+          minimum: 1
+          type: integer
+        style: form
+      - description: Maximum number of records to return
+        explode: true
+        in: query
+        name: size
+        required: false
+        schema:
+          default: 100
+          minimum: 0
+          type: integer
+        style: form
+      - description: Specifies the search criteria
+        explode: true
+        in: query
+        name: search
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Specifies the order by criteria
+        explode: true
+        in: query
+        name: orderBy
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Supplies a comma-separated list of fields to be returned
+        explode: true
+        in: query
+        name: fields
+        required: false
+        schema:
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectSettingsList"
+          description: A JSON array of project settings objects
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Returns a list of project settings
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectSettings"
+        description: Project settings data
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectSettings"
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Validation errors occurred
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Project settings already exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: An unexpected error occurred creating the project settings
+      security:
+      - Bearer: []
+      summary: Create a new project settings
+  /api/ambient-api-server/v1/project_settings/{id}:
+    delete:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "204":
+          description: Project settings deleted successfully
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No project settings with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Delete a project settings by id
+    get:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectSettings"
+          description: Project settings found by id
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No project settings with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Get a project settings by id
+    patch:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectSettingsPatchRequest"
+        description: Updated project settings data
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectSettings"
+          description: Project settings updated successfully
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Validation errors occurred
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No project settings with specified id exists
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Project settings already exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error updating project settings
+      security:
+      - Bearer: []
+      summary: Update a project settings
+  /api/ambient-api-server/v1/users:
+    get:
+      parameters:
+      - description: Page number of record list when record list exceeds specified
+          page size
+        explode: true
+        in: query
+        name: page
+        required: false
+        schema:
+          default: 1
+          minimum: 1
+          type: integer
+        style: form
+      - description: Maximum number of records to return
+        explode: true
+        in: query
+        name: size
+        required: false
+        schema:
+          default: 100
+          minimum: 0
+          type: integer
+        style: form
+      - description: Specifies the search criteria
+        explode: true
+        in: query
+        name: search
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Specifies the order by criteria
+        explode: true
+        in: query
+        name: orderBy
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Supplies a comma-separated list of fields to be returned
+        explode: true
+        in: query
+        name: fields
+        required: false
+        schema:
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserList"
+          description: A JSON array of user objects
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Returns a list of users
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/User"
+        description: User data
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Validation errors occurred
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: User already exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: An unexpected error occurred creating the user
+      security:
+      - Bearer: []
+      summary: Create a new user
+  /api/ambient-api-server/v1/users/{id}:
+    get:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+          description: User found by id
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No user with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Get an user by id
+    patch:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserPatchRequest"
+        description: Updated user data
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+          description: User updated successfully
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Validation errors occurred
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No user with specified id exists
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: User already exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error updating user
+      security:
+      - Bearer: []
+      summary: Update an user
+components:
+  parameters:
+    id:
+      description: The id of record
+      explode: false
+      in: path
+      name: id
+      required: true
+      schema:
+        type: string
+      style: simple
+    page:
+      description: Page number of record list when record list exceeds specified page
+        size
+      explode: true
+      in: query
+      name: page
+      required: false
+      schema:
+        default: 1
+        minimum: 1
+        type: integer
+      style: form
+    size:
+      description: Maximum number of records to return
+      explode: true
+      in: query
+      name: size
+      required: false
+      schema:
+        default: 100
+        minimum: 0
+        type: integer
+      style: form
+    search:
+      description: Specifies the search criteria
+      explode: true
+      in: query
+      name: search
+      required: false
+      schema:
+        type: string
+      style: form
+    orderBy:
+      description: Specifies the order by criteria
+      explode: true
+      in: query
+      name: orderBy
+      required: false
+      schema:
+        type: string
+      style: form
+    fields:
+      description: Supplies a comma-separated list of fields to be returned
+      explode: true
+      in: query
+      name: fields
+      required: false
+      schema:
+        type: string
+      style: form
+  schemas:
+    ObjectReference:
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+        href:
+          type: string
+        created_at:
+          format: date-time
+          type: string
+        updated_at:
+          format: date-time
+          type: string
+      type: object
+    List:
+      properties:
+        kind:
+          type: string
+        page:
+          type: integer
+        size:
+          type: integer
+        total:
+          type: integer
+      required:
+      - items
+      - kind
+      - page
+      - size
+      - total
+      type: object
+    Error:
+      allOf:
+      - $ref: "#/components/schemas/ObjectReference"
+      - properties:
+          code:
+            type: string
+          reason:
+            type: string
+          operation_id:
+            type: string
+        type: object
+      example:
+        reason: reason
+        code: code
+        updated_at: 2000-01-23T04:56:07.000+00:00
+        kind: kind
+        created_at: 2000-01-23T04:56:07.000+00:00
+        operation_id: operation_id
+        id: id
+        href: href
+    Session:
+      allOf:
+      - $ref: "#/components/schemas/ObjectReference"
+      - properties:
+          name:
+            type: string
+          repo_url:
+            type: string
+          prompt:
+            type: string
+          created_by_user_id:
+            description: Set from authentication token. Cannot be set or modified
+              via API.
+            readOnly: true
+            type: string
+          assigned_user_id:
+            type: string
+          workflow_id:
+            type: string
+          repos:
+            type: string
+          interactive:
+            type: boolean
+          timeout:
+            type: integer
+          llm_model:
+            type: string
+          llm_temperature:
+            format: double
+            type: number
+          llm_max_tokens:
+            type: integer
+          parent_session_id:
+            type: string
+          bot_account_name:
+            type: string
+          resource_overrides:
+            type: string
+          environment_variables:
+            type: string
+          labels:
+            type: string
+          annotations:
+            type: string
+          project_id:
+            type: string
+          phase:
+            readOnly: true
+            type: string
+          start_time:
+            format: date-time
+            readOnly: true
+            type: string
+          completion_time:
+            format: date-time
+            readOnly: true
+            type: string
+          sdk_session_id:
+            readOnly: true
+            type: string
+          sdk_restart_count:
+            readOnly: true
+            type: integer
+          conditions:
+            readOnly: true
+            type: string
+          reconciled_repos:
+            readOnly: true
+            type: string
+          reconciled_workflow:
+            readOnly: true
+            type: string
+          kube_cr_name:
+            readOnly: true
+            type: string
+          kube_cr_uid:
+            readOnly: true
+            type: string
+          kube_namespace:
+            readOnly: true
+            type: string
+        required:
+        - name
+        type: object
+      example:
+        workflow_id: workflow_id
+        completion_time: 2000-01-23T04:56:07.000+00:00
+        interactive: true
+        created_at: 2000-01-23T04:56:07.000+00:00
+        annotations: annotations
+        reconciled_workflow: reconciled_workflow
+        timeout: 5
+        environment_variables: environment_variables
+        kube_cr_uid: kube_cr_uid
+        sdk_restart_count: 7
+        updated_at: 2000-01-23T04:56:07.000+00:00
+        project_id: project_id
+        parent_session_id: parent_session_id
+        id: id
+        href: href
+        phase: phase
+        repo_url: repo_url
+        llm_model: llm_model
+        resource_overrides: resource_overrides
+        kind: kind
+        llm_temperature: 5.637376656633329
+        assigned_user_id: assigned_user_id
+        created_by_user_id: created_by_user_id
+        llm_max_tokens: 2
+        labels: labels
+        reconciled_repos: reconciled_repos
+        start_time: 2000-01-23T04:56:07.000+00:00
+        sdk_session_id: sdk_session_id
+        bot_account_name: bot_account_name
+        repos: repos
+        name: name
+        kube_cr_name: kube_cr_name
+        conditions: conditions
+        kube_namespace: kube_namespace
+        prompt: prompt
+    SessionList:
+      allOf:
+      - $ref: "#/components/schemas/List"
+      - properties:
+          items:
+            items:
+              $ref: "#/components/schemas/Session"
+            type: array
+        type: object
+      example:
+        total: 1
+        size: 6
+        kind: kind
+        page: 0
+        items:
+        - workflow_id: workflow_id
+          completion_time: 2000-01-23T04:56:07.000+00:00
+          interactive: true
+          created_at: 2000-01-23T04:56:07.000+00:00
+          annotations: annotations
+          reconciled_workflow: reconciled_workflow
+          timeout: 5
+          environment_variables: environment_variables
+          kube_cr_uid: kube_cr_uid
+          sdk_restart_count: 7
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          project_id: project_id
+          parent_session_id: parent_session_id
+          id: id
+          href: href
+          phase: phase
+          repo_url: repo_url
+          llm_model: llm_model
+          resource_overrides: resource_overrides
+          kind: kind
+          llm_temperature: 5.637376656633329
+          assigned_user_id: assigned_user_id
+          created_by_user_id: created_by_user_id
+          llm_max_tokens: 2
+          labels: labels
+          reconciled_repos: reconciled_repos
+          start_time: 2000-01-23T04:56:07.000+00:00
+          sdk_session_id: sdk_session_id
+          bot_account_name: bot_account_name
+          repos: repos
+          name: name
+          kube_cr_name: kube_cr_name
+          conditions: conditions
+          kube_namespace: kube_namespace
+          prompt: prompt
+        - workflow_id: workflow_id
+          completion_time: 2000-01-23T04:56:07.000+00:00
+          interactive: true
+          created_at: 2000-01-23T04:56:07.000+00:00
+          annotations: annotations
+          reconciled_workflow: reconciled_workflow
+          timeout: 5
+          environment_variables: environment_variables
+          kube_cr_uid: kube_cr_uid
+          sdk_restart_count: 7
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          project_id: project_id
+          parent_session_id: parent_session_id
+          id: id
+          href: href
+          phase: phase
+          repo_url: repo_url
+          llm_model: llm_model
+          resource_overrides: resource_overrides
+          kind: kind
+          llm_temperature: 5.637376656633329
+          assigned_user_id: assigned_user_id
+          created_by_user_id: created_by_user_id
+          llm_max_tokens: 2
+          labels: labels
+          reconciled_repos: reconciled_repos
+          start_time: 2000-01-23T04:56:07.000+00:00
+          sdk_session_id: sdk_session_id
+          bot_account_name: bot_account_name
+          repos: repos
+          name: name
+          kube_cr_name: kube_cr_name
+          conditions: conditions
+          kube_namespace: kube_namespace
+          prompt: prompt
+    SessionPatchRequest:
+      example:
+        repo_url: repo_url
+        workflow_id: workflow_id
+        llm_model: llm_model
+        resource_overrides: resource_overrides
+        llm_temperature: 6.027456183070403
+        interactive: true
+        annotations: annotations
+        assigned_user_id: assigned_user_id
+        llm_max_tokens: 1
+        timeout: 0
+        labels: labels
+        environment_variables: environment_variables
+        project_id: project_id
+        bot_account_name: bot_account_name
+        repos: repos
+        name: name
+        parent_session_id: parent_session_id
+        prompt: prompt
+      properties:
+        name:
+          type: string
+        repo_url:
+          type: string
+        prompt:
+          type: string
+        assigned_user_id:
+          type: string
+        workflow_id:
+          type: string
+        repos:
+          type: string
+        interactive:
+          type: boolean
+        timeout:
+          type: integer
+        llm_model:
+          type: string
+        llm_temperature:
+          format: double
+          type: number
+        llm_max_tokens:
+          type: integer
+        parent_session_id:
+          type: string
+        bot_account_name:
+          type: string
+        resource_overrides:
+          type: string
+        environment_variables:
+          type: string
+        labels:
+          type: string
+        annotations:
+          type: string
+        project_id:
+          type: string
+      type: object
+    SessionStatusPatchRequest:
+      example:
+        phase: phase
+        start_time: 2000-01-23T04:56:07.000+00:00
+        kube_cr_uid: kube_cr_uid
+        completion_time: 2000-01-23T04:56:07.000+00:00
+        sdk_restart_count: 0
+        sdk_session_id: sdk_session_id
+        conditions: conditions
+        kube_namespace: kube_namespace
+        reconciled_workflow: reconciled_workflow
+        reconciled_repos: reconciled_repos
+      properties:
+        phase:
+          type: string
+        start_time:
+          format: date-time
+          type: string
+        completion_time:
+          format: date-time
+          type: string
+        sdk_session_id:
+          type: string
+        sdk_restart_count:
+          type: integer
+        conditions:
+          type: string
+        reconciled_repos:
+          type: string
+        reconciled_workflow:
+          type: string
+        kube_cr_uid:
+          type: string
+        kube_namespace:
+          type: string
+      type: object
+    Project:
+      allOf:
+      - $ref: "#/components/schemas/ObjectReference"
+      - properties:
+          name:
+            type: string
+          display_name:
+            type: string
+          description:
+            type: string
+          labels:
+            type: string
+          annotations:
+            type: string
+          status:
+            type: string
+          created_at:
+            format: date-time
+            type: string
+          updated_at:
+            format: date-time
+            type: string
+        required:
+        - name
+        type: object
+      example:
+        updated_at: 2000-01-23T04:56:07.000+00:00
+        kind: kind
+        name: name
+        created_at: 2000-01-23T04:56:07.000+00:00
+        description: description
+        annotations: annotations
+        id: id
+        href: href
+        display_name: display_name
+        labels: labels
+        status: status
+    ProjectList:
+      allOf:
+      - $ref: "#/components/schemas/List"
+      - properties:
+          items:
+            items:
+              $ref: "#/components/schemas/Project"
+            type: array
+        type: object
+      example:
+        total: 1
+        size: 6
+        kind: kind
+        page: 0
+        items:
+        - updated_at: 2000-01-23T04:56:07.000+00:00
+          kind: kind
+          name: name
+          created_at: 2000-01-23T04:56:07.000+00:00
+          description: description
+          annotations: annotations
+          id: id
+          href: href
+          display_name: display_name
+          labels: labels
+          status: status
+        - updated_at: 2000-01-23T04:56:07.000+00:00
+          kind: kind
+          name: name
+          created_at: 2000-01-23T04:56:07.000+00:00
+          description: description
+          annotations: annotations
+          id: id
+          href: href
+          display_name: display_name
+          labels: labels
+          status: status
+    ProjectPatchRequest:
+      example:
+        name: name
+        description: description
+        annotations: annotations
+        display_name: display_name
+        labels: labels
+        status: status
+      properties:
+        name:
+          type: string
+        display_name:
+          type: string
+        description:
+          type: string
+        labels:
+          type: string
+        annotations:
+          type: string
+        status:
+          type: string
+      type: object
+    ProjectSettings:
+      allOf:
+      - $ref: "#/components/schemas/ObjectReference"
+      - properties:
+          project_id:
+            type: string
+          group_access:
+            type: string
+          runner_secrets:
+            type: string
+          repositories:
+            type: string
+          created_at:
+            format: date-time
+            type: string
+          updated_at:
+            format: date-time
+            type: string
+        required:
+        - project_id
+        type: object
+      example:
+        updated_at: 2000-01-23T04:56:07.000+00:00
+        runner_secrets: runner_secrets
+        project_id: project_id
+        repositories: repositories
+        kind: kind
+        created_at: 2000-01-23T04:56:07.000+00:00
+        id: id
+        href: href
+        group_access: group_access
+    ProjectSettingsList:
+      allOf:
+      - $ref: "#/components/schemas/List"
+      - properties:
+          items:
+            items:
+              $ref: "#/components/schemas/ProjectSettings"
+            type: array
+        type: object
+      example:
+        total: 1
+        size: 6
+        kind: kind
+        page: 0
+        items:
+        - updated_at: 2000-01-23T04:56:07.000+00:00
+          runner_secrets: runner_secrets
+          project_id: project_id
+          repositories: repositories
+          kind: kind
+          created_at: 2000-01-23T04:56:07.000+00:00
+          id: id
+          href: href
+          group_access: group_access
+        - updated_at: 2000-01-23T04:56:07.000+00:00
+          runner_secrets: runner_secrets
+          project_id: project_id
+          repositories: repositories
+          kind: kind
+          created_at: 2000-01-23T04:56:07.000+00:00
+          id: id
+          href: href
+          group_access: group_access
+    ProjectSettingsPatchRequest:
+      example:
+        runner_secrets: runner_secrets
+        project_id: project_id
+        repositories: repositories
+        group_access: group_access
+      properties:
+        project_id:
+          type: string
+        group_access:
+          type: string
+        runner_secrets:
+          type: string
+        repositories:
+          type: string
+      type: object
+    User:
+      allOf:
+      - $ref: "#/components/schemas/ObjectReference"
+      - properties:
+          username:
+            type: string
+          name:
+            type: string
+          email:
+            type: string
+        required:
+        - name
+        - username
+        type: object
+      example:
+        updated_at: 2000-01-23T04:56:07.000+00:00
+        kind: kind
+        name: name
+        created_at: 2000-01-23T04:56:07.000+00:00
+        id: id
+        href: href
+        email: email
+        username: username
+    UserList:
+      allOf:
+      - $ref: "#/components/schemas/List"
+      - properties:
+          items:
+            items:
+              $ref: "#/components/schemas/User"
+            type: array
+        type: object
+      example:
+        total: 1
+        size: 6
+        kind: kind
+        page: 0
+        items:
+        - updated_at: 2000-01-23T04:56:07.000+00:00
+          kind: kind
+          name: name
+          created_at: 2000-01-23T04:56:07.000+00:00
+          id: id
+          href: href
+          email: email
+          username: username
+        - updated_at: 2000-01-23T04:56:07.000+00:00
+          kind: kind
+          name: name
+          created_at: 2000-01-23T04:56:07.000+00:00
+          id: id
+          href: href
+          email: email
+          username: username
+    UserPatchRequest:
+      example:
+        name: name
+        email: email
+        username: username
+      properties:
+        username:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+      type: object
+  securitySchemes:
+    Bearer:
+      bearerFormat: JWT
+      scheme: bearer
+      type: http

@@ -34,6 +34,9 @@ patches:
 
 # Production images
 images:
+- name: quay.io/ambient_code/vteam_api_server:latest
+  newName: quay.io/ambient_code/vteam_api_server
+  newTag: latest
 - name: quay.io/ambient_code/vteam_backend
   newName: quay.io/ambient_code/vteam_backend
   newTag: latest
@@ -58,12 +61,12 @@ images:
 - name: quay.io/ambient_code/vteam_operator:latest
   newName: quay.io/ambient_code/vteam_operator
   newTag: latest
-- name: quay.io/ambient_code/vteam_state_sync:latest
-  newName: quay.io/ambient_code/vteam_state_sync
-  newTag: latest
 - name: quay.io/ambient_code/vteam_public_api
   newName: quay.io/ambient_code/vteam_public_api
   newTag: latest
 - name: quay.io/ambient_code/vteam_public_api:latest
   newName: quay.io/ambient_code/vteam_public_api
+  newTag: latest
+- name: quay.io/ambient_code/vteam_state_sync:latest
+  newName: quay.io/ambient_code/vteam_state_sync
   newTag: latest

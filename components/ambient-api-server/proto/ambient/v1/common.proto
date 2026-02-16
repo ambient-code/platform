@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package ambient.v1;
+
+option go_package = "github.com/ambient/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1;ambient_v1";
+
+import "google/protobuf/timestamp.proto";
+
+message ObjectReference {
+  string id = 1;
+  google.protobuf.Timestamp created_at = 2;
+  google.protobuf.Timestamp updated_at = 3;
+  string kind = 4;
+  string href = 5;
+}
+
+message ListMeta {
+  int32 page = 1;
+  int32 size = 2;
+  int32 total = 3;
+}
+
+message Error {
+  string id = 1;
+  string kind = 2;
+  string href = 3;
+  int32 code = 4;
+  string reason = 5;
+  string operation_id = 6;
+}
+
+enum EventType {
+  EVENT_TYPE_UNSPECIFIED = 0;
+  EVENT_TYPE_CREATED = 1;
+  EVENT_TYPE_UPDATED = 2;
+  EVENT_TYPE_DELETED = 3;
+}

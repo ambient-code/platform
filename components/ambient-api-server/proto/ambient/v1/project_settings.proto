@@ -1,0 +1,67 @@
+syntax = "proto3";
+
+package ambient.v1;
+
+option go_package = "github.com/ambient/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1;ambient_v1";
+
+import "ambient/v1/common.proto";
+
+message ProjectSettings {
+  ObjectReference metadata = 1;
+  string project_id = 2;
+  optional string group_access = 3;
+  optional string runner_secrets = 4;
+  optional string repositories = 5;
+}
+
+message CreateProjectSettingsRequest {
+  string project_id = 1;
+  optional string group_access = 2;
+  optional string runner_secrets = 3;
+  optional string repositories = 4;
+}
+
+message GetProjectSettingsRequest {
+  string id = 1;
+}
+
+message UpdateProjectSettingsRequest {
+  string id = 1;
+  optional string project_id = 2;
+  optional string group_access = 3;
+  optional string runner_secrets = 4;
+  optional string repositories = 5;
+}
+
+message DeleteProjectSettingsRequest {
+  string id = 1;
+}
+
+message ListProjectSettingsRequest {
+  int32 page = 1;
+  int32 size = 2;
+}
+
+message ListProjectSettingsResponse {
+  repeated ProjectSettings items = 1;
+  ListMeta metadata = 2;
+}
+
+message DeleteProjectSettingsResponse {}
+
+message WatchProjectSettingsRequest {}
+
+message ProjectSettingsWatchEvent {
+  EventType type = 1;
+  ProjectSettings project_settings = 2;
+  string resource_id = 3;
+}
+
+service ProjectSettingsService {
+  rpc GetProjectSettings(GetProjectSettingsRequest) returns (ProjectSettings);
+  rpc CreateProjectSettings(CreateProjectSettingsRequest) returns (ProjectSettings);
+  rpc UpdateProjectSettings(UpdateProjectSettingsRequest) returns (ProjectSettings);
+  rpc DeleteProjectSettings(DeleteProjectSettingsRequest) returns (DeleteProjectSettingsResponse);
+  rpc ListProjectSettings(ListProjectSettingsRequest) returns (ListProjectSettingsResponse);
+  rpc WatchProjectSettings(WatchProjectSettingsRequest) returns (stream ProjectSettingsWatchEvent);
+}
