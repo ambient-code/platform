@@ -112,13 +112,20 @@ export function SessionHeader({
         case 'pdf':
           exportAsPdf(markdown, filename);
           break;
-        case 'gdrive':
-          await saveToGoogleDrive(
+        case 'gdrive': {
+          const result = await saveToGoogleDrive(
             projectName, session.metadata.name, markdown,
             `${filename}.md`, googleDriveServer?.name ?? 'google-workspace',
           );
+          if (result.error) {
+            throw new Error(result.error);
+          }
+          if (!result.content) {
+            throw new Error('Failed to create file in Google Drive');
+          }
           successToast('Saved to Google Drive');
           break;
+        }
       }
     } catch (err) {
       errorToast(err instanceof Error ? err.message : 'Failed to export chat');

@@ -395,7 +395,7 @@ function inlineFormat(s: string): string {
   // Escape HTML first to prevent XSS from message content
   let result = escapeHtml(s);
   // Markdown links: [text](url) — render as clickable anchors in PDF (http/https only)
-  result = result.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_match, text: string, url: string) => {
+  result = result.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_match: string, text: string, url: string) => {
     try {
       const parsed = new URL(url);
       if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
