@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
-import { Star, Settings, Users, Loader2 } from 'lucide-react';
+import { Star, Settings, Users, Loader2, Package, Shield, GitFork, KeyRound } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 import { Button } from '@/components/ui/button';
@@ -14,38 +14,61 @@ import { Breadcrumbs } from '@/components/breadcrumbs';
 import { SessionsSection } from '@/components/workspace-sections/sessions-section';
 import { SharingSection } from '@/components/workspace-sections/sharing-section';
 import { SettingsSection } from '@/components/workspace-sections/settings-section';
+import { V1SessionsSection } from '@/components/workspace-sections/v1-sessions-section';
+import { V1ResourcesSection } from '@/components/workspace-sections/v1-resources-section';
+import { V1PermissionsSection } from '@/components/workspace-sections/v1-permissions-section';
+import { V1RepositoryRefsSection } from '@/components/workspace-sections/v1-repository-refs-section';
+import { V1ProjectKeysSection } from '@/components/workspace-sections/v1-project-keys-section';
 import { useProject } from '@/services/queries/use-projects';
+import { useApiSource } from '@/contexts/api-source-context';
 
-type Section = 'sessions' | 'sharing' | 'settings';
+type Section = 'sessions' | 'sharing' | 'settings' | 'v1-sessions' | 'v1-resources' | 'v1-permissions' | 'v1-repositories' | 'v1-api-keys';
 
 export default function ProjectDetailsPage() {
   const params = useParams();
   const searchParams = useSearchParams();
   const projectName = params?.name as string;
   
-  // Fetch project data for display name and description
-  const { data: project, isLoading: projectLoading } = useProject(projectName);
-  
-  // Initialize active section from query parameter or default to 'sessions'
-  const initialSection = (searchParams.get('section') as Section) || 'sessions';
+  const { source, isApiServer } = useApiSource();
+
+  const { data: project, isLoading: projectLoading } = useProject(projectName, { enabled: !isApiServer });
+
+  const initialSection = (searchParams.get('section') as Section) || (isApiServer ? 'v1-sessions' : 'sessions');
   const [activeSection, setActiveSection] = useState<Section>(initialSection);
 
-  // Update active section when query parameter changes
   useEffect(() => {
     const sectionParam = searchParams.get('section') as Section;
-    if (sectionParam && ['sessions', 'sharing', 'settings'].includes(sectionParam)) {
+    if (sectionParam && ['sessions', 'sharing', 'settings', 'v1-sessions', 'v1-resources', 'v1-permissions', 'v1-repositories', 'v1-api-keys'].includes(sectionParam)) {
       setActiveSection(sectionParam);
     }
   }, [searchParams]);
 
-  const navItems = [
+  useEffect(() => {
+    const k8sSections: Section[] = ['sessions', 'sharing', 'settings'];
+    const apiSections: Section[] = ['v1-sessions', 'v1-resources', 'v1-permissions', 'v1-repositories', 'v1-api-keys'];
+    if (source === 'k8s' && !k8sSections.includes(activeSection)) {
+      setActiveSection('sessions');
+    } else if (source === 'api-server' && !apiSections.includes(activeSection)) {
+      setActiveSection('v1-sessions');
+    }
+  }, [source, activeSection]);
+
+  const k8sNavItems = [
     { id: 'sessions' as Section, label: 'Sessions', icon: Star },
     { id: 'sharing' as Section, label: 'Sharing', icon: Users },
     { id: 'settings' as Section, label: 'Workspace Settings', icon: Settings },
   ];
 
+  const apiServerNavItems = [
+    { id: 'v1-sessions' as Section, label: 'Sessions', icon: Star },
+    { id: 'v1-resources' as Section, label: 'Resources', icon: Package },
+    { id: 'v1-permissions' as Section, label: 'Permissions', icon: Shield },
+    { id: 'v1-repositories' as Section, label: 'Repositories', icon: GitFork },
+    { id: 'v1-api-keys' as Section, label: 'API Keys', icon: KeyRound },
+  ];
+
   // Loading state
-  if (!projectName || projectLoading) {
+  if (!projectName || (!isApiServer && projectLoading)) {
     return (
       <div className="container mx-auto p-6">
         <div className="flex items-center justify-center h-64">
@@ -89,15 +112,14 @@ export default function ProjectDetailsPage() {
 
         {/* Content */}
         <div className="px-6 flex gap-6">
-          {/* Sidebar Navigation */}
-          <aside className="w-56 shrink-0">
+          <aside className="w-56 shrink-0 space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>Workspace</CardTitle>
+                <CardTitle>{source === 'k8s' ? 'Workspace' : 'API Server'}</CardTitle>
               </CardHeader>
               <CardContent className="px-4 pb-4 pt-2">
                 <div className="space-y-1">
-                  {navItems.map((item) => {
+                  {(source === 'k8s' ? k8sNavItems : apiServerNavItems).map((item) => {
                     const isActive = activeSection === item.id;
                     const Icon = item.icon;
                     return (
@@ -117,10 +139,14 @@ export default function ProjectDetailsPage() {
             </Card>
           </aside>
 
-          {/* Main Content */}
           {activeSection === 'sessions' && <SessionsSection projectName={projectName} />}
           {activeSection === 'sharing' && <SharingSection projectName={projectName} />}
           {activeSection === 'settings' && <SettingsSection projectName={projectName} />}
+          {activeSection === 'v1-sessions' && <V1SessionsSection projectName={projectName} />}
+          {activeSection === 'v1-resources' && <V1ResourcesSection projectName={projectName} />}
+          {activeSection === 'v1-permissions' && <V1PermissionsSection projectName={projectName} />}
+          {activeSection === 'v1-repositories' && <V1RepositoryRefsSection projectName={projectName} />}
+          {activeSection === 'v1-api-keys' && <V1ProjectKeysSection projectName={projectName} />}
         </div>
       </div>
     </div>

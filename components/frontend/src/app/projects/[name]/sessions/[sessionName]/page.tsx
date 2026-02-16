@@ -84,13 +84,16 @@ import { useAGUIStream } from "@/hooks/use-agui-stream";
 
 // React Query hooks
 import {
-  useSession,
-  useStopSession,
-  useDeleteSession,
-  useContinueSession,
   useReposStatus,
   useCurrentUser,
 } from "@/services/queries";
+import {
+  useSessionDual,
+  useStopSessionDual,
+  useDeleteSessionDual,
+  useContinueSessionDual,
+} from "@/services/queries/use-session-dual";
+import { useApiSource } from "@/contexts/api-source-context";
 import {
   useWorkspaceList,
 } from "@/services/queries/use-workspace";
@@ -143,6 +146,7 @@ export default function ProjectSessionDetailPage({
   params: Promise<{ name: string; sessionName: string }>;
 }) {
   const router = useRouter();
+  const { isApiServer } = useApiSource();
   const [projectName, setProjectName] = useState<string>("");
   const [sessionName, setSessionName] = useState<string>("");
   const [chatInput, setChatInput] = useState("");
@@ -201,17 +205,17 @@ export default function ProjectSessionDetailPage({
     isLoading,
     error,
     refetch: refetchSession,
-  } = useSession(projectName, sessionName);
-  const stopMutation = useStopSession();
-  const deleteMutation = useDeleteSession();
-  const continueMutation = useContinueSession();
+  } = useSessionDual(projectName, sessionName);
+  const stopMutation = useStopSessionDual();
+  const deleteMutation = useDeleteSessionDual();
+  const continueMutation = useContinueSessionDual();
   
   // Check integration status
-  const { data: integrationsStatus } = useIntegrationsStatus();
+  const { data: integrationsStatus } = useIntegrationsStatus({ enabled: !isApiServer });
   const githubConfigured = integrationsStatus?.github?.active != null;
   
   // Get current user for feedback context
-  const { data: currentUser } = useCurrentUser();
+  const { data: currentUser } = useCurrentUser({ enabled: !isApiServer });
 
   // Extract phase for sidebar state management
   const phase = session?.status?.phase || "Pending";
@@ -220,7 +224,7 @@ export default function ProjectSessionDetailPage({
   const { data: reposStatus } = useReposStatus(
     projectName,
     sessionName,
-    phase === "Running" // Only poll when session is running
+    !isApiServer && phase === "Running"
   );
 
   // Track the current Langfuse trace ID for feedback association
@@ -541,7 +545,7 @@ export default function ProjectSessionDetailPage({
   });
 
   // Fetch OOTB workflows
-  const { data: ootbWorkflows = [] } = useOOTBWorkflows(projectName);
+  const { data: ootbWorkflows = [] } = useOOTBWorkflows(projectName, { enabled: !isApiServer });
 
   // Fetch workflow metadata
   const { data: workflowMetadata } = useWorkflowMetadata(
@@ -549,6 +553,7 @@ export default function ProjectSessionDetailPage({
     sessionName,
     !!workflowManagement.activeWorkflow &&
       !workflowManagement.workflowActivating,
+    { enabled: !isApiServer },
   );
 
   // Git operations for selected directory
@@ -598,7 +603,7 @@ export default function ProjectSessionDetailPage({
       fileOps.currentSubPath
         ? `${selectedDirectory.path}/${fileOps.currentSubPath}`
         : selectedDirectory.path,
-      { enabled: openAccordionItems.includes("file-explorer") },
+      { enabled: !isApiServer && openAccordionItems.includes("file-explorer") },
     );
 
   // Artifacts file operations
@@ -615,6 +620,7 @@ export default function ProjectSessionDetailPage({
       artifactsOps.currentSubPath
         ? `artifacts/${artifactsOps.currentSubPath}`
         : "artifacts",
+      { enabled: !isApiServer },
     );
 
   // Stabilize refetchArtifactsFiles with useCallback to prevent infinite re-renders
@@ -634,7 +640,7 @@ export default function ProjectSessionDetailPage({
       projectName,
       sessionName,
       "file-uploads",
-      { enabled: openAccordionItems.includes("context") },
+      { enabled: !isApiServer && openAccordionItems.includes("context") },
     );
 
   // Track if we've already initialized from session
@@ -2596,7 +2602,7 @@ export default function ProjectSessionDetailPage({
         }}
         onUploadFile={() => setUploadModalOpen(true)}
         isLoading={addRepoMutation.isPending}
-        autoBranch={session?.autoBranch}
+        autoBranch={(session as Record<string, unknown>)?.autoBranch as string | undefined}
       />
 
       <UploadFileModal

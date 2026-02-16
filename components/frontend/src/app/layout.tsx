@@ -6,6 +6,7 @@ import { QueryProvider } from "@/components/providers/query-provider";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import { SyntaxThemeProvider } from "@/components/providers/syntax-theme-provider";
 import { Toaster } from "@/components/ui/toaster";
+import { ApiSourceProvider } from "@/contexts/api-source-context";
 import { env } from "@/lib/env";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -42,9 +43,11 @@ export default function RootLayout({
         >
           <SyntaxThemeProvider />
           <QueryProvider>
-            <Navigation feedbackUrl={feedbackUrl} />
-            <main className="flex-1 bg-background overflow-auto">{children}</main>
-            <Toaster />
+            <ApiSourceProvider>
+              <Navigation feedbackUrl={feedbackUrl} />
+              <main className="flex-1 bg-background overflow-auto">{children}</main>
+              <Toaster />
+            </ApiSourceProvider>
           </QueryProvider>
         </ThemeProvider>
       </body>
