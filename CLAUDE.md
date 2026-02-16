@@ -107,6 +107,55 @@ then review this PR for token handling issues."
 instead of service accounts for API operations."
 ```
 
+## Pre-commit Hooks
+
+The project uses the [pre-commit](https://pre-commit.com/) framework to run linters locally before every commit. Configuration lives in `.pre-commit-config.yaml`.
+
+### Install
+
+```bash
+make setup-hooks
+```
+
+### What Runs
+
+**On every `git commit`:**
+
+| Hook | Scope |
+|------|-------|
+| trailing-whitespace, end-of-file-fixer, check-yaml, check-added-large-files, check-merge-conflict, detect-private-key | All files |
+| ruff-format, ruff (check + fix) | Python (runners, scripts) |
+| gofmt, go vet, golangci-lint | Go (backend, operator, public-api — per-module) |
+| eslint | Frontend TypeScript/JavaScript |
+| branch-protection | Blocks commits to main/master/production |
+
+**On every `git push`:**
+
+| Hook | Scope |
+|------|-------|
+| push-protection | Blocks pushes to main/master/production |
+
+### Run Manually
+
+```bash
+make lint                                    # All hooks, all files
+pre-commit run gofmt-check --all-files       # Single hook
+pre-commit run --files path/to/file.go       # Single file
+```
+
+### Skip Hooks
+
+```bash
+git commit --no-verify    # Skip pre-commit hooks
+git push --no-verify      # Skip pre-push hooks
+```
+
+### Notes
+
+- Go and ESLint wrappers (`scripts/pre-commit/`) skip gracefully if the toolchain is not installed
+- `tsc --noEmit` and `npm run build` are **not** included (slow; CI gates on them)
+- Branch/push protection scripts remain in `scripts/git-hooks/` and are invoked by pre-commit
+
 ## Development Commands
 
 ### Quick Start - Local Development
@@ -891,31 +940,22 @@ Before committing backend or operator code, verify:
 - [ ] **Status Updates**: Used `UpdateStatus` subresource, handled IsNotFound gracefully
 - [ ] **Tests**: Added/updated tests for new functionality
 - [ ] **Logging**: Structured logs with relevant context (namespace, resource name, etc.)
-- [ ] **Code Quality**: Ran all linting checks locally (see below)
+- [ ] **Code Quality**: Pre-commit hooks pass (`make lint` or commit triggers them automatically)
 
-**Run these commands before committing:**
+**Linting runs automatically** via pre-commit hooks on every commit. To run manually:
 
 ```bash
-# Backend
-cd components/backend
-gofmt -l .                    # Check formatting (should output nothing)
-go vet ./...                  # Detect suspicious constructs
-golangci-lint run            # Run comprehensive linting
-
-# Operator
-cd components/operator
-gofmt -l .
-go vet ./...
-golangci-lint run
+make lint                        # All hooks, all files
+pre-commit run golangci-lint --all-files  # Go linting only
 ```
 
 **Auto-format code:**
 
 ```bash
-gofmt -w components/backend components/operator
+gofmt -w components/backend components/operator components/public-api
 ```
 
-**Note**: GitHub Actions will automatically run these checks on your PR. Fix any issues locally before pushing.
+**Note**: GitHub Actions will also run these checks on your PR.
 
 ### Common Mistakes to Avoid
 
@@ -1055,7 +1095,7 @@ make kind-down      # Cleanup
 - **Consolidated**: User journey tests, not isolated element checks
 - **Real Agent Testing**: Verifies actual Claude responses (not hardcoded messages)
 
-**Documentation**: 
+**Documentation**:
 - [E2E Testing README](e2e/README.md) - Running tests
 - [Kind Local Dev Guide](docs/developer/local-development/kind.md) - Using kind for development
 - [E2E Testing Guide](docs/testing/e2e-guide.md) - Writing tests
@@ -1159,6 +1199,7 @@ Before committing frontend code:
 - [ ] All routes have loading.tsx, error.tsx
 - [ ] `npm run build` passes with 0 errors, 0 warnings
 - [ ] All types use `type` instead of `interface`
+- [ ] Pre-commit hooks pass (`make lint` or commit triggers them automatically)
 
 ### Reference Files
 

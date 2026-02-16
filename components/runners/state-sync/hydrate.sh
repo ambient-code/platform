@@ -104,7 +104,7 @@ echo "S3 connection successful"
 echo "Checking for existing session state in S3..."
 if rclone --config /tmp/.config/rclone/rclone.conf lsf "${S3_PATH}/" 2>/dev/null | grep -q .; then
     echo "Found existing session state, downloading from S3..."
-    
+
     # Download .claude data to /app/.claude (SubPath mount matches runner container)
     if rclone --config /tmp/.config/rclone/rclone.conf lsf "${S3_PATH}/.claude/" 2>/dev/null | grep -q .; then
         echo "  Downloading .claude/..."
@@ -116,7 +116,7 @@ if rclone --config /tmp/.config/rclone/rclone.conf lsf "${S3_PATH}/" 2>/dev/null
     else
         echo "  No data for .claude/"
     fi
-    
+
     # Download other sync paths to /workspace
     for path in "${SYNC_PATHS[@]}"; do
         if rclone --config /tmp/.config/rclone/rclone.conf lsf "${S3_PATH}/${path}/" 2>/dev/null | grep -q .; then
@@ -130,7 +130,7 @@ if rclone --config /tmp/.config/rclone/rclone.conf lsf "${S3_PATH}/" 2>/dev/null
             echo "  No data for ${path}/"
         fi
     done
-    
+
     echo "State hydration complete!"
 else
     echo "No existing state found, starting fresh session"
@@ -179,20 +179,24 @@ if [ -n "$REPOS_JSON" ] && [ "$REPOS_JSON" != "null" ] && [ "$REPOS_JSON" != "" 
         while [ $i -lt $REPO_COUNT ]; do
             REPO_URL=$(echo "$REPOS_JSON" | jq -r ".[$i].url // empty" 2>/dev/null || echo "")
             REPO_BRANCH=$(echo "$REPOS_JSON" | jq -r ".[$i].branch // \"main\"" 2>/dev/null || echo "main")
-            
+
             # Derive repo name from URL
             REPO_NAME=$(basename "$REPO_URL" .git 2>/dev/null || echo "")
-            
+
             if [ -n "$REPO_NAME" ] && [ -n "$REPO_URL" ] && [ "$REPO_URL" != "null" ]; then
                 REPO_DIR="/workspace/repos/$REPO_NAME"
                 echo "  Cloning $REPO_NAME (branch: $REPO_BRANCH)..."
-                
+
                 # Mark repo directory as safe
                 git config --global --add safe.directory "$REPO_DIR" 2>/dev/null || true
-                
+
                 # Clone repository (for private repos, runner will handle token injection)
                 if git clone --branch "$REPO_BRANCH" --single-branch "$REPO_URL" "$REPO_DIR" 2>&1; then
                     echo "  ✓ Cloned $REPO_NAME"
+                    # Install pre-commit hooks if the repo has a config
+                    if [ -f "$REPO_DIR/.pre-commit-config.yaml" ] && command -v pre-commit &>/dev/null; then
+                        (cd "$REPO_DIR" && pre-commit install 2>/dev/null) || true
+                    fi
                 else
                     echo "  ⚠ Failed to clone $REPO_NAME (may require authentication)"
                 fi
@@ -208,31 +212,31 @@ fi
 if [ -n "$ACTIVE_WORKFLOW_GIT_URL" ] && [ "$ACTIVE_WORKFLOW_GIT_URL" != "null" ]; then
     WORKFLOW_BRANCH="${ACTIVE_WORKFLOW_BRANCH:-main}"
     WORKFLOW_PATH="${ACTIVE_WORKFLOW_PATH:-}"
-    
+
     echo "Cloning workflow repository..."
     echo "  URL: $ACTIVE_WORKFLOW_GIT_URL"
     echo "  Branch: $WORKFLOW_BRANCH"
     if [ -n "$WORKFLOW_PATH" ]; then
         echo "  Subpath: $WORKFLOW_PATH"
     fi
-    
+
     # Derive workflow name from URL
     WORKFLOW_NAME=$(basename "$ACTIVE_WORKFLOW_GIT_URL" .git)
     WORKFLOW_FINAL="/workspace/workflows/${WORKFLOW_NAME}"
     WORKFLOW_TEMP="/tmp/workflow-clone-$$"
-    
+
     git config --global --add safe.directory "$WORKFLOW_FINAL" 2>/dev/null || true
-    
+
     # Clone to temp location
     if git clone --branch "$WORKFLOW_BRANCH" --single-branch "$ACTIVE_WORKFLOW_GIT_URL" "$WORKFLOW_TEMP" 2>&1; then
         echo "  Clone successful, processing..."
-        
+
         # Extract subpath if specified
         if [ -n "$WORKFLOW_PATH" ]; then
             SUBPATH_FULL="$WORKFLOW_TEMP/$WORKFLOW_PATH"
             echo "  Checking for subpath: $SUBPATH_FULL"
             ls -la "$SUBPATH_FULL" 2>&1 || echo "  Subpath does not exist"
-            
+
             if [ -d "$SUBPATH_FULL" ]; then
                 echo "  Extracting subpath: $WORKFLOW_PATH"
                 mkdir -p "$(dirname "$WORKFLOW_FINAL")"
@@ -262,4 +266,3 @@ echo "========================================="
 echo "Workspace initialized successfully"
 echo "========================================="
 exit 0
-
