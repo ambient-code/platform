@@ -13,10 +13,10 @@
 describe('Chatbox Component Demo', () => {
   const workspaceName = `chatbox-demo-${Date.now()}`
 
-  const LONG = 4000
-  const PAUSE = 3000
-  const SHORT = 2000
-  const TYPE_DELAY = 100
+  const LONG = 3200
+  const PAUSE = 2400
+  const SHORT = 1600
+  const TYPE_DELAY = 80
 
   const chatInput = () => cy.get('textarea[placeholder*="message"]').first()
 
