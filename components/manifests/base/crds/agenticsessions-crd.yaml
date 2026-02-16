@@ -93,6 +93,17 @@ spec:
                   path:
                     type: string
                     description: "Optional path within repo (for repos with multiple workflows)"
+              configRepo:
+                type: object
+                description: "Session configuration repository (CLAUDE.md, .claude/ settings, rules, skills, agents, .mcp.json)"
+                properties:
+                  gitUrl:
+                    type: string
+                    description: "Git repository URL for the session config"
+                  branch:
+                    type: string
+                    description: "Branch to clone"
+                    default: "main"
           status:
             type: object
             properties:

@@ -12,19 +12,20 @@ const (
 	LabelTypes    = "types"
 
 	// Specific component labels for handlers
-	LabelRepo        = "repo"
-	LabelRepoSeed    = "repo_seed"
-	LabelSecrets     = "secrets"
-	LabelRepository  = "repository"
-	LabelMiddleware  = "middleware"
-	LabelPermissions = "permissions"
-	LabelProjects    = "projects"
-	LabelGitHubAuth  = "github-auth"
-	LabelGitLabAuth  = "gitlab-auth"
-	LabelSessions    = "sessions"
-	LabelContent     = "content"
-	LabelDisplayName = "display-name"
-	LabelHealth      = "health"
+	LabelRepo            = "repo"
+	LabelRepoSeed        = "repo_seed"
+	LabelSecrets         = "secrets"
+	LabelRepository      = "repository"
+	LabelMiddleware      = "middleware"
+	LabelPermissions     = "permissions"
+	LabelProjects        = "projects"
+	LabelGitHubAuth      = "github-auth"
+	LabelGitLabAuth      = "gitlab-auth"
+	LabelSessions        = "sessions"
+	LabelProjectSettings = "project-settings"
+	LabelContent         = "content"
+	LabelDisplayName     = "display-name"
+	LabelHealth          = "health"
 
 	// Specific component labels for other areas
 	LabelOperations = "operations" // for git operations
