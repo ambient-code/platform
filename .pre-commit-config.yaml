@@ -1,0 +1,83 @@
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+repos:
+  # ── General file hygiene ──────────────────────────────────────────────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: ['--allow-multiple-documents']
+        exclude: ^mkdocs\.yml$
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: check-merge-conflict
+      - id: detect-private-key
+
+  # ── Python (ruff) ────────────────────────────────────────────────────
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.11.12
+    hooks:
+      - id: ruff-format
+        files: ^(components/runners/|scripts/)
+        types_or: [python]
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+        files: ^(components/runners/|scripts/)
+        types_or: [python]
+
+  # ── Go ───────────────────────────────────────────────────────────────
+  - repo: local
+    hooks:
+      - id: gofmt-check
+        name: gofmt
+        entry: scripts/pre-commit/gofmt-check.sh
+        language: script
+        types: [go]
+        pass_filenames: true
+
+      - id: go-vet
+        name: go vet
+        entry: scripts/pre-commit/go-vet.sh
+        language: script
+        types: [go]
+        pass_filenames: true
+        require_serial: true
+
+      - id: golangci-lint
+        name: golangci-lint
+        entry: scripts/pre-commit/golangci-lint.sh
+        language: script
+        types: [go]
+        pass_filenames: true
+        require_serial: true
+
+  # ── Frontend (ESLint) ────────────────────────────────────────────────
+  - repo: local
+    hooks:
+      - id: eslint
+        name: eslint
+        entry: scripts/pre-commit/eslint.sh
+        language: script
+        files: ^components/frontend/.*\.(ts|tsx|js|jsx)$
+        pass_filenames: true
+
+  # ── Branch protection ────────────────────────────────────────────────
+  - repo: local
+    hooks:
+      - id: branch-protection
+        name: branch protection
+        entry: python3 scripts/git-hooks/pre-commit
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+
+      - id: push-protection
+        name: push protection
+        entry: python3 scripts/git-hooks/pre-push
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-push]

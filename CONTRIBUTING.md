@@ -94,7 +94,7 @@ Before contributing, ensure you have:
 
 ### Install Git Hooks (Recommended)
 
-To prevent accidental commits to protected branches (`main`, `master`, `production`), install our git hooks:
+We use the [pre-commit](https://pre-commit.com/) framework to run linters and branch protection checks automatically on every commit. Install with:
 
 ```bash
 make setup-hooks
@@ -106,12 +106,24 @@ Or run the installation script directly:
 ./scripts/install-git-hooks.sh
 ```
 
-**What the hooks do:**
+**What runs on every commit:**
 
-- **pre-commit** - Blocks commits to `main`/`master`/`production` branches
-- **pre-push** - Blocks pushes to `main`/`master`/`production` branches
+- **File hygiene** - trailing whitespace, EOF fixer, YAML validation, large file check, merge conflict markers, private key detection
+- **Python** - `ruff format` + `ruff check --fix` (runners and scripts)
+- **Go** - `gofmt`, `go vet`, `golangci-lint` (backend, operator, public-api)
+- **Frontend** - ESLint (TypeScript/JavaScript)
+- **Branch protection** - blocks commits to `main`/`master`/`production`
 
-**Hooks are automatically installed** when you run `make dev-start`.
+**What runs on push:**
+
+- **Push protection** - blocks pushes to `main`/`master`/`production`
+
+**Run all hooks manually:**
+
+```bash
+make lint
+# or: pre-commit run --all-files
+```
 
 If you need to override the hooks (e.g., for hotfixes):
 

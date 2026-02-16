@@ -1,280 +1,140 @@
-# Git Hooks for Branch Protection
+# Git Hooks (pre-commit Framework)
 
-This directory contains git hooks that enforce the feature branch workflow to prevent accidental commits and pushes to protected branches.
+This project uses the [pre-commit](https://pre-commit.com/) framework to manage git hooks. All hook configuration lives in `.pre-commit-config.yaml` at the repository root.
 
 ## What's Included
 
-### `pre-commit`
+### Pre-commit Stage (runs on `git commit`)
 
-Runs before every `git commit` and blocks commits to protected branches:
+| Hook | Source | Scope |
+|------|--------|-------|
+| trailing-whitespace | pre-commit-hooks | All files |
+| end-of-file-fixer | pre-commit-hooks | All files |
+| check-yaml | pre-commit-hooks | YAML files |
+| check-added-large-files | pre-commit-hooks | All files (>1MB) |
+| check-merge-conflict | pre-commit-hooks | All files |
+| detect-private-key | pre-commit-hooks | All files |
+| ruff-format | ruff-pre-commit | Python (runners, scripts) |
+| ruff | ruff-pre-commit | Python (runners, scripts) |
+| gofmt | local wrapper | Go files |
+| go vet | local wrapper | Go files (per-module) |
+| golangci-lint | local wrapper | Go files (per-module) |
+| eslint | local wrapper | Frontend TS/JS files |
+| branch-protection | local (this directory) | All commits |
 
-- `main`
-- `master`
-- `production`
+### Pre-push Stage (runs on `git push`)
 
-**Error message example:**
+| Hook | Source | Scope |
+|------|--------|-------|
+| push-protection | local (this directory) | All pushes |
 
-```
-⚠️  Attempting to commit directly to 'main'
-❌ Direct commits to 'main' are not allowed.
+### Local Wrapper Scripts
 
-💡 Create a feature branch instead:
-   git checkout -b feature/your-feature-name
-   git checkout -b fix/bug-description
-   git checkout -b issue-123-description
+Go and ESLint hooks use wrapper scripts in `scripts/pre-commit/` because:
 
-🔧 Or force commit (not recommended):
-   git commit --no-verify -m 'your message'
-```
-
-### `pre-push`
-
-Runs before every `git push` and blocks pushes to protected branches:
-
-- Blocks if you're currently on a protected branch
-- Blocks if you're pushing to a protected remote branch
-
-**Error message example:**
-
-```
-⚠️  Attempting to push directly to 'main'
-❌ Direct pushes to 'main' are not allowed.
-
-💡 Use the pull request workflow instead:
-   1. Create a feature branch: git checkout -b feature/your-feature
-   2. Push your feature branch: git push origin feature/your-feature
-   3. Open a pull request on GitHub
-
-🔧 Or force push (not recommended):
-   git push --no-verify
-```
+- **Go** has 3 separate modules (`backend`, `operator`, `public-api`) — tools must `cd` into each module directory
+- **ESLint** config and `node_modules` live in `components/frontend/`
+- All wrappers skip gracefully if the toolchain is not installed
 
 ## Installation
 
-### Automatic Installation (Recommended)
-
-Hooks are automatically installed when you run:
-
 ```bash
-make dev-start
+make setup-hooks
 ```
 
-### Manual Installation
-
-If you need to install hooks manually:
+Or directly:
 
 ```bash
 ./scripts/install-git-hooks.sh
 ```
 
-Or via Makefile:
-
-```bash
-make setup-hooks
-```
-
-### Verify Installation
-
-Check that symlinks exist in `.git/hooks/`:
-
-```bash
-ls -la .git/hooks/ | grep -E 'pre-commit|pre-push'
-```
-
-You should see symlinks pointing to `../../scripts/git-hooks/pre-commit` and `pre-push`.
+This installs pre-commit (if needed) and registers hooks for both `pre-commit` and `pre-push` stages.
 
 ## Usage
 
-### Normal Workflow (Hooks Active)
+### Automatic (default)
+
+Hooks run automatically on every `git commit` and `git push`. Only files staged for commit are checked.
+
+### Manual
+
+Run all hooks against the entire repo:
 
 ```bash
-# Create a feature branch
-git checkout -b feature/my-feature
-
-# Make changes and commit (hook allows this)
-git add .
-git commit -m "feat: add new feature"
-
-# Push to feature branch (hook allows this)
-git push origin feature/my-feature
-
-# Try to commit to main (hook blocks this)
-git checkout main
-git commit -m "oops"  # ❌ Blocked by pre-commit hook
+make lint
+# or: pre-commit run --all-files
 ```
 
-### Override When Necessary
-
-In rare cases where you need to commit/push to a protected branch (e.g., hotfix, CI automation):
+Run a specific hook:
 
 ```bash
-# Override pre-commit hook
-git commit --no-verify -m "hotfix: critical security patch"
-
-# Override pre-push hook
-git push --no-verify origin main
+pre-commit run gofmt-check --all-files
+pre-commit run eslint --all-files
+pre-commit run golangci-lint --all-files
 ```
 
-**⚠️ Use `--no-verify` sparingly!** It bypasses all safety checks.
+### Skip Hooks
+
+```bash
+git commit --no-verify -m "hotfix: critical fix"
+git push --no-verify
+```
+
+## Branch Protection Scripts
+
+The Python scripts in this directory (`pre-commit` and `pre-push`) implement branch protection logic. They are invoked by the pre-commit framework — not as raw git hooks.
+
+### `pre-commit` (Python)
+
+Blocks commits to protected branches: `main`, `master`, `production`.
+
+### `pre-push` (Python)
+
+Blocks pushes to protected branches by checking both the current branch and push targets.
 
 ## Uninstallation
-
-To remove the git hooks:
 
 ```bash
 make remove-hooks
 ```
-
-Or manually:
-
-```bash
-rm .git/hooks/pre-commit
-rm .git/hooks/pre-push
-```
-
-Backed-up hooks (if any existed before installation) are saved as `.git/hooks/pre-commit.backup`.
-
-## How It Works
-
-### Symlinks
-
-The installation script creates symlinks from `.git/hooks/` to `scripts/git-hooks/`:
-
-```
-.git/hooks/pre-commit  →  ../../scripts/git-hooks/pre-commit
-.git/hooks/pre-push    →  ../../scripts/git-hooks/pre-push
-```
-
-**Benefits:**
-
-- Changes to hook scripts automatically apply (no reinstall needed)
-- Hooks are tracked in git (in `scripts/git-hooks/`)
-- Easy to update and maintain
-
-### Hook Execution Flow
-
-**Pre-commit:**
-
-1. Git runs `.git/hooks/pre-commit` before creating commit
-2. Hook checks current branch with `git rev-parse --abbrev-ref HEAD`
-3. If branch is protected → exit code 1 (block commit)
-4. If branch is allowed → exit code 0 (proceed)
-
-**Pre-push:**
-
-1. Git runs `.git/hooks/pre-push` before pushing
-2. Hook receives push targets via stdin (local ref, remote ref)
-3. Checks both current branch and target branch
-4. If either is protected → exit code 1 (block push)
-5. If both are allowed → exit code 0 (proceed)
 
 ## Customization
 
 ### Add More Protected Branches
 
-Edit the `PROTECTED_BRANCHES` list in both hook files:
+Edit `PROTECTED_BRANCHES` in both `pre-commit` and `pre-push` Python scripts.
 
-```python
-PROTECTED_BRANCHES: List[str] = ["main", "master", "production", "release"]
-```
+### Modify Linter Configuration
 
-### Change Suggested Branch Prefixes
-
-Edit the `SUGGESTED_PREFIXES` list in `pre-commit`:
-
-```python
-SUGGESTED_PREFIXES: List[str] = [
-    "feature/",
-    "fix/",
-    "docs/",
-    "refactor/",
-    "test/",
-    "issue-",
-    "jira-",  # Add your custom prefixes
-]
-```
-
-### Disable Hooks Temporarily
-
-Instead of uninstalling, you can temporarily disable:
-
-```bash
-# Disable pre-commit
-mv .git/hooks/pre-commit .git/hooks/pre-commit.disabled
-
-# Re-enable
-mv .git/hooks/pre-commit.disabled .git/hooks/pre-commit
-```
-
-Or use `--no-verify` for individual operations.
+Edit `.pre-commit-config.yaml` at the repo root.
 
 ## Troubleshooting
 
-### Hook Not Running
-
-**Check if hook is executable:**
+### Hooks Not Running
 
 ```bash
-ls -l .git/hooks/pre-commit
-# Should show: lrwxr-xr-x (symlink with execute permissions)
-```
+# Verify installation
+pre-commit --version
+ls -la .git/hooks/pre-commit
 
-**Verify symlink target:**
-
-```bash
-readlink .git/hooks/pre-commit
-# Should show: ../../scripts/git-hooks/pre-commit
-```
-
-**Reinstall hooks:**
-
-```bash
+# Reinstall
 make remove-hooks
 make setup-hooks
 ```
 
-### Python Not Found
+### Specific Linter Failing
 
-Hooks require Python 3.11+ (project standard). Verify:
-
-```bash
-python3 --version
-```
-
-If Python is not in your PATH, update the shebang in hook files:
-
-```python
-#!/usr/bin/env python3.11  # Specific version
-```
-
-### Hook Fails with Error
-
-Run the hook manually to see detailed errors:
+Run the failing hook in isolation to see detailed output:
 
 ```bash
-python3 scripts/git-hooks/pre-commit
-python3 scripts/git-hooks/pre-push < /dev/null
+pre-commit run <hook-id> --all-files --verbose
 ```
 
-### Backed-Up Hook Lost
+### Old Symlink Hooks
 
-If the installer backed up your previous hook, restore it:
+The installer automatically removes old symlink-based hooks pointing to `scripts/git-hooks/`. If you still have issues, manually remove them:
 
 ```bash
-mv .git/hooks/pre-commit.backup .git/hooks/pre-commit
+rm -f .git/hooks/pre-commit .git/hooks/pre-push
+make setup-hooks
 ```
-
-## Contributing
-
-When modifying hooks:
-
-1. Test thoroughly on both protected and non-protected branches
-2. Ensure error messages are clear and actionable
-3. Follow project Python standards (black, isort, type hints)
-4. Update this README if behavior changes
-
-## References
-
-- [Git Hooks Documentation](https://git-scm.com/docs/githooks)
-- [CONTRIBUTING.md](../../CONTRIBUTING.md) - Project contribution guide
-- [Makefile](../../Makefile) - Development commands
