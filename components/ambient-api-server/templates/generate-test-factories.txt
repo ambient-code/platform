@@ -1,0 +1,114 @@
+package {{.KindLowerPlural}}_test
+
+import (
+	"context"
+	"fmt"
+{{- $hasTime := false}}
+{{- range .Fields}}
+{{- if eq .Type "time"}}
+{{- $hasTime = true}}
+{{- end}}
+{{- end}}
+{{- if $hasTime}}
+	"time"
+{{- end}}
+
+	"{{.Library}}/pkg/environments"
+	"{{.Repo}}/{{.Project}}/plugins/{{.KindLowerPlural}}"
+)
+
+func new{{.Kind}}(id string) (*{{.KindLowerPlural}}.{{.Kind}}, error) {
+	{{.KindLowerSingular}}Service := {{.KindLowerPlural}}.Service(&environments.Environment().Services)
+
+	{{.KindLowerSingular}} := &{{.KindLowerPlural}}.{{.Kind}}{
+{{- range .Fields}}
+{{- if .Nullable}}
+{{- if eq .Type "string"}}
+		{{.Name}}: stringPtr("test-{{.NameSnakeCase}}"),
+{{- else if eq .Type "int"}}
+		{{.Name}}: intPtr(42),
+{{- else if eq .Type "int64"}}
+		{{.Name}}: int64Ptr(42),
+{{- else if eq .Type "bool"}}
+		{{.Name}}: boolPtr(true),
+{{- else if eq .Type "float"}}
+		{{.Name}}: float64Ptr(3.14),
+{{- else if eq .Type "time"}}
+		{{.Name}}: timePtr(time.Now()),
+{{- end}}
+{{- else}}
+{{- if eq .Type "string"}}
+		{{.Name}}: "test-{{.NameSnakeCase}}",
+{{- else if eq .Type "int"}}
+		{{.Name}}: 42,
+{{- else if eq .Type "int64"}}
+		{{.Name}}: 42,
+{{- else if eq .Type "bool"}}
+		{{.Name}}: true,
+{{- else if eq .Type "float"}}
+		{{.Name}}: 3.14,
+{{- else if eq .Type "time"}}
+		{{.Name}}: time.Now(),
+{{- end}}
+{{- end}}
+{{- end}}
+	}
+
+	sub, err := {{.KindLowerSingular}}Service.Create(context.Background(), {{.KindLowerSingular}})
+	if err != nil {
+		return nil, err
+	}
+
+	return sub, nil
+}
+
+func new{{.Kind}}List(namePrefix string, count int) ([]*{{.KindLowerPlural}}.{{.Kind}}, error) {
+	var items []*{{.KindLowerPlural}}.{{.Kind}}
+	for i := 1; i <= count; i++ {
+		name := fmt.Sprintf("%s_%d", namePrefix, i)
+		c, err := new{{.Kind}}(name)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, c)
+	}
+	return items, nil
+}
+
+{{- $hasNullableString := false}}
+{{- $hasNullableInt := false}}
+{{- $hasNullableInt64 := false}}
+{{- $hasNullableBool := false}}
+{{- $hasNullableFloat := false}}
+{{- $hasNullableTime := false}}
+{{- range .Fields}}
+{{- if .Nullable}}
+{{- if eq .Type "string"}}{{- $hasNullableString = true}}{{- end}}
+{{- if eq .Type "int"}}{{- $hasNullableInt = true}}{{- end}}
+{{- if eq .Type "int64"}}{{- $hasNullableInt64 = true}}{{- end}}
+{{- if eq .Type "bool"}}{{- $hasNullableBool = true}}{{- end}}
+{{- if eq .Type "float"}}{{- $hasNullableFloat = true}}{{- end}}
+{{- if eq .Type "time"}}{{- $hasNullableTime = true}}{{- end}}
+{{- end}}
+{{- end}}
+{{- if or $hasNullableString $hasNullableInt $hasNullableInt64 $hasNullableBool $hasNullableFloat $hasNullableTime}}
+
+{{- if $hasNullableString}}
+func stringPtr(s string) *string       { return &s }
+{{- end}}
+{{- if $hasNullableInt}}
+func intPtr(i int) *int                { return &i }
+{{- end}}
+{{- if $hasNullableInt64}}
+func int64Ptr(i int64) *int64          { return &i }
+{{- end}}
+{{- if $hasNullableBool}}
+func boolPtr(b bool) *bool             { return &b }
+{{- end}}
+{{- if $hasNullableFloat}}
+func float64Ptr(f float64) *float64    { return &f }
+{{- end}}
+{{- if $hasNullableTime}}
+func timePtr(t time.Time) *time.Time   { return &t }
+{{- end}}
+{{- end}}

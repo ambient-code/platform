@@ -1,0 +1,35 @@
+package {{.KindLowerPlural}}
+
+import (
+	"{{.Library}}/pkg/api"
+	"gorm.io/gorm"
+)
+
+type {{.Kind}} struct {
+	api.Meta
+{{- range .Fields}}
+	{{.Name}} {{.GoType}} {{.JSONTag}}
+{{- end}}
+}
+
+type {{.Kind}}List []*{{.Kind}}
+type {{.Kind}}Index map[string]*{{.Kind}}
+
+func (l {{.Kind}}List) Index() {{.Kind}}Index {
+	index := {{.Kind}}Index{}
+	for _, o := range l {
+		index[o.ID] = o
+	}
+	return index
+}
+
+func (d *{{.Kind}}) BeforeCreate(tx *gorm.DB) error {
+	d.ID = api.NewID()
+	return nil
+}
+
+type {{.Kind}}PatchRequest struct {
+{{- range .Fields}}
+	{{.Name}} {{.PointerType}} `json:"{{.NameSnakeCase}},omitempty"`
+{{- end}}
+}

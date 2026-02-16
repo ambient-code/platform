@@ -1,0 +1,21 @@
+---
+apiVersion: v1
+kind: Template
+metadata:
+  name: ambient-api-server-route
+
+objects:
+
+- apiVersion: route.openshift.io/v1
+  kind: Route
+  metadata:
+    name: ambient-api-server
+    labels:
+      app: ambient-api-server
+  spec:
+    to:
+      kind: Service
+      name: ambient-api-server
+    tls:
+      termination: reencrypt
+      insecureEdgeTerminationPolicy: Redirect

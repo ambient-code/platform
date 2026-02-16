@@ -1,0 +1,237 @@
+paths:
+  /api/ambient-api-server/v1/project_keys:
+    get:
+      summary: Returns a list of project keys
+      security:
+        - Bearer: []
+      responses:
+        '200':
+          description: A JSON array of project key objects
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectKeyList'
+        '401':
+          description: Auth token is invalid
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '403':
+          description: Unauthorized to perform operation
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '500':
+          description: Unexpected error occurred
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/size'
+        - $ref: '#/components/parameters/search'
+        - $ref: '#/components/parameters/orderBy'
+        - $ref: '#/components/parameters/fields'
+    post:
+      summary: Create a new project key
+      description: Creates a new API key. The plaintext key is returned ONLY in the create response and cannot be retrieved again.
+      security:
+        - Bearer: []
+      requestBody:
+        description: Project key data (only name and optional project_id/expires_at are accepted)
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectKey'
+      responses:
+        '201':
+          description: Created. The plaintext_key field is ONLY present in this response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectKey'
+        '400':
+          description: Validation errors occurred
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '401':
+          description: Auth token is invalid
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '403':
+          description: Unauthorized to perform operation
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '500':
+          description: An unexpected error occurred creating the project key
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+  /api/ambient-api-server/v1/project_keys/{id}:
+    get:
+      summary: Get a project key by id
+      description: Returns project key metadata. The plaintext key is never returned on GET.
+      security:
+        - Bearer: []
+      responses:
+        '200':
+          description: Project key found by id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectKey'
+        '401':
+          description: Auth token is invalid
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '403':
+          description: Unauthorized to perform operation
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '404':
+          description: No project key with specified id exists
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '500':
+          description: Unexpected error occurred
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+    delete:
+      summary: Revoke a project key
+      security:
+        - Bearer: []
+      responses:
+        '204':
+          description: Project key revoked successfully
+        '401':
+          description: Auth token is invalid
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '403':
+          description: Unauthorized to perform operation
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '404':
+          description: No project key with specified id exists
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '500':
+          description: Unexpected error occurred
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+    parameters:
+      - $ref: '#/components/parameters/id'
+components:
+  schemas:
+    ProjectKey:
+      allOf:
+        - $ref: 'openapi.yaml#/components/schemas/ObjectReference'
+        - type: object
+          required:
+            - name
+          properties:
+            name:
+              type: string
+              description: Human-readable name for the key
+            key_prefix:
+              type: string
+              description: First 8 characters of the key for identification
+            plaintext_key:
+              type: string
+              description: The full API key. Only returned once on creation.
+            project_id:
+              type: string
+            expires_at:
+              type: string
+              format: date-time
+            last_used_at:
+              type: string
+              format: date-time
+    ProjectKeyList:
+      allOf:
+        - $ref: 'openapi.yaml#/components/schemas/List'
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/ProjectKey'
+    ProjectKeyPatchRequest:
+      type: object
+      properties:
+        name:
+          type: string
+  parameters:
+      id:
+        name: id
+        in: path
+        description: The id of record
+        required: true
+        schema:
+          type: string
+      page:
+        name: page
+        in: query
+        description: Page number of record list when record list exceeds specified page size
+        schema:
+          type: integer
+          default: 1
+          minimum: 1
+        required: false
+      size:
+        name: size
+        in: query
+        description: Maximum number of records to return
+        schema:
+          type: integer
+          default: 100
+          minimum: 0
+        required: false
+      search:
+        name: search
+        in: query
+        required: false
+        description: Specifies the search criteria
+        schema:
+          type: string
+      orderBy:
+        name: orderBy
+        in: query
+        required: false
+        description: Specifies the order by criteria
+        schema:
+          type: string
+      fields:
+        name: fields
+        in: query
+        required: false
+        description: Supplies a comma-separated list of fields to be returned
+        schema:
+          type: string

@@ -1,0 +1,257 @@
+openapi: 3.0.0
+info:
+  title: Ambient API Server
+  description: Ambient API Server
+  version: "1.0.0"
+  contact:
+    email: admin@your.project.com
+  license:
+    name: Apache-2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+servers:
+  - url: http://localhost:8000
+    description: current domain
+  - url: https://api.your.project.com
+    description: Production
+  - url: https://api.stage.your.project.com
+    description: Staging
+paths:
+  /api/ambient-api-server/v1/agents:
+    $ref: 'openapi.agents.yaml#/paths/~1api~1ambient-api-server~1v1~1agents'
+  /api/ambient-api-server/v1/agents/{id}:
+    $ref: 'openapi.agents.yaml#/paths/~1api~1ambient-api-server~1v1~1agents~1{id}'
+  /api/ambient-api-server/v1/skills:
+    $ref: 'openapi.skills.yaml#/paths/~1api~1ambient-api-server~1v1~1skills'
+  /api/ambient-api-server/v1/skills/{id}:
+    $ref: 'openapi.skills.yaml#/paths/~1api~1ambient-api-server~1v1~1skills~1{id}'
+  /api/ambient-api-server/v1/tasks:
+    $ref: 'openapi.tasks.yaml#/paths/~1api~1ambient-api-server~1v1~1tasks'
+  /api/ambient-api-server/v1/tasks/{id}:
+    $ref: 'openapi.tasks.yaml#/paths/~1api~1ambient-api-server~1v1~1tasks~1{id}'
+  /api/ambient-api-server/v1/workflows:
+    $ref: 'openapi.workflows.yaml#/paths/~1api~1ambient-api-server~1v1~1workflows'
+  /api/ambient-api-server/v1/workflows/{id}:
+    $ref: 'openapi.workflows.yaml#/paths/~1api~1ambient-api-server~1v1~1workflows~1{id}'
+  /api/ambient-api-server/v1/sessions:
+    $ref: 'openapi.sessions.yaml#/paths/~1api~1ambient-api-server~1v1~1sessions'
+  /api/ambient-api-server/v1/sessions/{id}:
+    $ref: 'openapi.sessions.yaml#/paths/~1api~1ambient-api-server~1v1~1sessions~1{id}'
+  /api/ambient-api-server/v1/sessions/{id}/status:
+    $ref: 'openapi.sessions.yaml#/paths/~1api~1ambient-api-server~1v1~1sessions~1{id}~1status'
+  /api/ambient-api-server/v1/sessions/{id}/start:
+    $ref: 'openapi.sessions.yaml#/paths/~1api~1ambient-api-server~1v1~1sessions~1{id}~1start'
+  /api/ambient-api-server/v1/sessions/{id}/stop:
+    $ref: 'openapi.sessions.yaml#/paths/~1api~1ambient-api-server~1v1~1sessions~1{id}~1stop'
+  /api/ambient-api-server/v1/workflow_skills:
+    $ref: 'openapi.workflowSkills.yaml#/paths/~1api~1ambient-api-server~1v1~1workflow_skills'
+  /api/ambient-api-server/v1/workflow_skills/{id}:
+    $ref: 'openapi.workflowSkills.yaml#/paths/~1api~1ambient-api-server~1v1~1workflow_skills~1{id}'
+  /api/ambient-api-server/v1/workflow_tasks:
+    $ref: 'openapi.workflowTasks.yaml#/paths/~1api~1ambient-api-server~1v1~1workflow_tasks'
+  /api/ambient-api-server/v1/workflow_tasks/{id}:
+    $ref: 'openapi.workflowTasks.yaml#/paths/~1api~1ambient-api-server~1v1~1workflow_tasks~1{id}'
+  /api/ambient-api-server/v1/projects:
+    $ref: 'openapi.projects.yaml#/paths/~1api~1ambient-api-server~1v1~1projects'
+  /api/ambient-api-server/v1/projects/{id}:
+    $ref: 'openapi.projects.yaml#/paths/~1api~1ambient-api-server~1v1~1projects~1{id}'
+  /api/ambient-api-server/v1/project_settings:
+    $ref: 'openapi.projectSettings.yaml#/paths/~1api~1ambient-api-server~1v1~1project_settings'
+  /api/ambient-api-server/v1/project_settings/{id}:
+    $ref: 'openapi.projectSettings.yaml#/paths/~1api~1ambient-api-server~1v1~1project_settings~1{id}'
+  /api/ambient-api-server/v1/permissions:
+    $ref: 'openapi.permissions.yaml#/paths/~1api~1ambient-api-server~1v1~1permissions'
+  /api/ambient-api-server/v1/permissions/{id}:
+    $ref: 'openapi.permissions.yaml#/paths/~1api~1ambient-api-server~1v1~1permissions~1{id}'
+  /api/ambient-api-server/v1/repository_refs:
+    $ref: 'openapi.repositoryRefs.yaml#/paths/~1api~1ambient-api-server~1v1~1repository_refs'
+  /api/ambient-api-server/v1/repository_refs/{id}:
+    $ref: 'openapi.repositoryRefs.yaml#/paths/~1api~1ambient-api-server~1v1~1repository_refs~1{id}'
+  /api/ambient-api-server/v1/project_keys:
+    $ref: 'openapi.projectKeys.yaml#/paths/~1api~1ambient-api-server~1v1~1project_keys'
+  /api/ambient-api-server/v1/project_keys/{id}:
+    $ref: 'openapi.projectKeys.yaml#/paths/~1api~1ambient-api-server~1v1~1project_keys~1{id}'
+  # AUTO-ADD NEW PATHS
+  /api/ambient-api-server/v1/users:
+    $ref: 'openapi.users.yaml#/paths/~1api~1ambient-api-server~1v1~1users'
+  /api/ambient-api-server/v1/users/{id}:
+    $ref: 'openapi.users.yaml#/paths/~1api~1ambient-api-server~1v1~1users~1{id}'
+components:
+  securitySchemes:
+    Bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    ObjectReference:
+      type: object
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+        href:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    List:
+      type: object
+      properties:
+        kind:
+          type: string
+        page:
+          type: integer
+        size:
+          type: integer
+        total:
+          type: integer
+      required:
+        - kind
+        - page
+        - size
+        - total
+        - items
+    Error:
+      allOf:
+      - $ref: '#/components/schemas/ObjectReference'
+      - type: object
+        properties:
+          code:
+            type: string
+          reason:
+            type: string
+          operation_id:
+            type: string
+    Agent:
+      $ref: 'openapi.agents.yaml#/components/schemas/Agent'
+    AgentList:
+      $ref: 'openapi.agents.yaml#/components/schemas/AgentList'
+    AgentPatchRequest:
+      $ref: 'openapi.agents.yaml#/components/schemas/AgentPatchRequest'
+    Skill:
+      $ref: 'openapi.skills.yaml#/components/schemas/Skill'
+    SkillList:
+      $ref: 'openapi.skills.yaml#/components/schemas/SkillList'
+    SkillPatchRequest:
+      $ref: 'openapi.skills.yaml#/components/schemas/SkillPatchRequest'
+    Task:
+      $ref: 'openapi.tasks.yaml#/components/schemas/Task'
+    TaskList:
+      $ref: 'openapi.tasks.yaml#/components/schemas/TaskList'
+    TaskPatchRequest:
+      $ref: 'openapi.tasks.yaml#/components/schemas/TaskPatchRequest'
+    Workflow:
+      $ref: 'openapi.workflows.yaml#/components/schemas/Workflow'
+    WorkflowList:
+      $ref: 'openapi.workflows.yaml#/components/schemas/WorkflowList'
+    WorkflowPatchRequest:
+      $ref: 'openapi.workflows.yaml#/components/schemas/WorkflowPatchRequest'
+    Session:
+      $ref: 'openapi.sessions.yaml#/components/schemas/Session'
+    SessionList:
+      $ref: 'openapi.sessions.yaml#/components/schemas/SessionList'
+    SessionPatchRequest:
+      $ref: 'openapi.sessions.yaml#/components/schemas/SessionPatchRequest'
+    SessionStatusPatchRequest:
+      $ref: 'openapi.sessions.yaml#/components/schemas/SessionStatusPatchRequest'
+    WorkflowSkill:
+      $ref: 'openapi.workflowSkills.yaml#/components/schemas/WorkflowSkill'
+    WorkflowSkillList:
+      $ref: 'openapi.workflowSkills.yaml#/components/schemas/WorkflowSkillList'
+    WorkflowSkillPatchRequest:
+      $ref: 'openapi.workflowSkills.yaml#/components/schemas/WorkflowSkillPatchRequest'
+    WorkflowTask:
+      $ref: 'openapi.workflowTasks.yaml#/components/schemas/WorkflowTask'
+    WorkflowTaskList:
+      $ref: 'openapi.workflowTasks.yaml#/components/schemas/WorkflowTaskList'
+    WorkflowTaskPatchRequest:
+      $ref: 'openapi.workflowTasks.yaml#/components/schemas/WorkflowTaskPatchRequest'
+    Project:
+      $ref: 'openapi.projects.yaml#/components/schemas/Project'
+    ProjectList:
+      $ref: 'openapi.projects.yaml#/components/schemas/ProjectList'
+    ProjectPatchRequest:
+      $ref: 'openapi.projects.yaml#/components/schemas/ProjectPatchRequest'
+    ProjectSettings:
+      $ref: 'openapi.projectSettings.yaml#/components/schemas/ProjectSettings'
+    ProjectSettingsList:
+      $ref: 'openapi.projectSettings.yaml#/components/schemas/ProjectSettingsList'
+    ProjectSettingsPatchRequest:
+      $ref: 'openapi.projectSettings.yaml#/components/schemas/ProjectSettingsPatchRequest'
+    Permission:
+      $ref: 'openapi.permissions.yaml#/components/schemas/Permission'
+    PermissionList:
+      $ref: 'openapi.permissions.yaml#/components/schemas/PermissionList'
+    PermissionPatchRequest:
+      $ref: 'openapi.permissions.yaml#/components/schemas/PermissionPatchRequest'
+    RepositoryRef:
+      $ref: 'openapi.repositoryRefs.yaml#/components/schemas/RepositoryRef'
+    RepositoryRefList:
+      $ref: 'openapi.repositoryRefs.yaml#/components/schemas/RepositoryRefList'
+    RepositoryRefPatchRequest:
+      $ref: 'openapi.repositoryRefs.yaml#/components/schemas/RepositoryRefPatchRequest'
+    ProjectKey:
+      $ref: 'openapi.projectKeys.yaml#/components/schemas/ProjectKey'
+    ProjectKeyList:
+      $ref: 'openapi.projectKeys.yaml#/components/schemas/ProjectKeyList'
+    ProjectKeyPatchRequest:
+      $ref: 'openapi.projectKeys.yaml#/components/schemas/ProjectKeyPatchRequest'
+    # AUTO-ADD NEW SCHEMAS
+    User:
+      $ref: 'openapi.users.yaml#/components/schemas/User'
+    UserList:
+      $ref: 'openapi.users.yaml#/components/schemas/UserList'
+    UserPatchRequest:
+      $ref: 'openapi.users.yaml#/components/schemas/UserPatchRequest'
+  parameters:
+    id:
+      name: id
+      in: path
+      description: The id of record
+      required: true
+      schema:
+        type: string
+    page:
+      name: page
+      in: query
+      description: Page number of record list when record list exceeds specified page size
+      schema:
+        type: integer
+        default: 1
+        minimum: 1
+      required: false
+    size:
+      name: size
+      in: query
+      description: Maximum number of records to return
+      schema:
+        type: integer
+        default: 100
+        minimum: 0
+      required: false
+    search:
+      name: search
+      in: query
+      required: false
+      description: Specifies the search criteria
+      schema:
+        type: string
+    orderBy:
+      name: orderBy
+      in: query
+      required: false
+      description: Specifies the order by criteria
+      schema:
+        type: string
+    fields:
+      name: fields
+      in: query
+      required: false
+      description: Supplies a comma-separated list of fields to be returned
+      schema:
+        type: string
+security:
+  - Bearer: []

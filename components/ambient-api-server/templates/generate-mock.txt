@@ -1,0 +1,49 @@
+package {{.KindLowerPlural}}
+
+import (
+	"context"
+
+	"gorm.io/gorm"
+
+	"{{.Library}}/pkg/errors"
+)
+
+var _ {{.Kind}}Dao = &{{.KindLowerSingular}}DaoMock{}
+
+type {{.KindLowerSingular}}DaoMock struct {
+	{{.KindLowerPlural}} {{.Kind}}List
+}
+
+func NewMock{{.Kind}}Dao() *{{.KindLowerSingular}}DaoMock {
+	return &{{.KindLowerSingular}}DaoMock{}
+}
+
+func (d *{{.KindLowerSingular}}DaoMock) Get(ctx context.Context, id string) (*{{.Kind}}, error) {
+	for _, {{.KindLowerSingular}} := range d.{{.KindLowerPlural}} {
+		if {{.KindLowerSingular}}.ID == id {
+			return {{.KindLowerSingular}}, nil
+		}
+	}
+	return nil, gorm.ErrRecordNotFound
+}
+
+func (d *{{.KindLowerSingular}}DaoMock) Create(ctx context.Context, {{.KindLowerSingular}} *{{.Kind}}) (*{{.Kind}}, error) {
+	d.{{.KindLowerPlural}} = append(d.{{.KindLowerPlural}}, {{.KindLowerSingular}})
+	return {{.KindLowerSingular}}, nil
+}
+
+func (d *{{.KindLowerSingular}}DaoMock) Replace(ctx context.Context, {{.KindLowerSingular}} *{{.Kind}}) (*{{.Kind}}, error) {
+	return nil, errors.NotImplemented("{{.Kind}}").AsError()
+}
+
+func (d *{{.KindLowerSingular}}DaoMock) Delete(ctx context.Context, id string) error {
+	return errors.NotImplemented("{{.Kind}}").AsError()
+}
+
+func (d *{{.KindLowerSingular}}DaoMock) FindByIDs(ctx context.Context, ids []string) ({{.Kind}}List, error) {
+	return nil, errors.NotImplemented("{{.Kind}}").AsError()
+}
+
+func (d *{{.KindLowerSingular}}DaoMock) All(ctx context.Context) ({{.Kind}}List, error) {
+	return d.{{.KindLowerPlural}}, nil
+}
