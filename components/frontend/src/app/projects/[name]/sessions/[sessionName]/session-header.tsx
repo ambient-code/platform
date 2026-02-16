@@ -115,7 +115,7 @@ export function SessionHeader({
         case 'gdrive': {
           const result = await saveToGoogleDrive(
             projectName, session.metadata.name, markdown,
-            `${filename}.md`, googleDriveServer?.name ?? 'google-workspace',
+            `${filename}.md`, me?.email ?? '', googleDriveServer?.name ?? 'google-workspace',
           );
           if (result.error) {
             throw new Error(result.error);

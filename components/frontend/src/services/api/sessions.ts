@@ -274,6 +274,7 @@ export async function saveToGoogleDrive(
   sessionName: string,
   content: string,
   filename: string,
+  userEmail: string,
   serverName: string = 'google-workspace',
 ): Promise<GoogleDriveFileResponse> {
   return apiClient.post<GoogleDriveFileResponse>(
@@ -281,7 +282,7 @@ export async function saveToGoogleDrive(
     {
       server: serverName,
       tool: 'create_drive_file',
-      args: { user_google_email: 'jeder@redhat.com', file_name: filename, content, mime_type: 'text/markdown' },
+      args: { user_google_email: userEmail, file_name: filename, content, mime_type: 'text/markdown' },
     },
   );
 }
