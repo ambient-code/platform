@@ -257,3 +257,32 @@ export async function getReposStatus(
     `/projects/${projectName}/agentic-sessions/${sessionName}/repos/status`
   );
 }
+
+/**
+ * Response from Google Drive file creation
+ */
+export type GoogleDriveFileResponse = {
+  content?: string;
+  error?: string;
+};
+
+/**
+ * Save content to Google Drive via the session's MCP server
+ */
+export async function saveToGoogleDrive(
+  projectName: string,
+  sessionName: string,
+  content: string,
+  filename: string,
+  userEmail: string,
+  serverName: string = 'google-workspace',
+): Promise<GoogleDriveFileResponse> {
+  return apiClient.post<GoogleDriveFileResponse>(
+    `/projects/${projectName}/agentic-sessions/${sessionName}/mcp/invoke`,
+    {
+      server: serverName,
+      tool: 'create_drive_file',
+      args: { user_google_email: userEmail, file_name: filename, content, mime_type: 'text/markdown' },
+    },
+  );
+}
