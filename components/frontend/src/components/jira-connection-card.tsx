@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -8,6 +8,10 @@ import { Label } from '@/components/ui/label'
 import { Loader2, Eye, EyeOff } from 'lucide-react'
 import { successToast, errorToast } from '@/hooks/use-toast'
 import { useConnectJira, useDisconnectJira } from '@/services/queries/use-jira'
+import { useCurrentUser } from '@/services/queries/use-auth'
+
+// Default Jira URL for Red Hat (can be changed by user)
+const DEFAULT_JIRA_URL = 'https://issues.redhat.com'
 
 type Props = {
   status?: {
@@ -23,28 +27,41 @@ type Props = {
 export function JiraConnectionCard({ status, onRefresh }: Props) {
   const connectMutation = useConnectJira()
   const disconnectMutation = useDisconnectJira()
+  const { data: currentUser } = useCurrentUser()
   const isLoading = !status
-  
+
   const [showForm, setShowForm] = useState(false)
   const [url, setUrl] = useState('')
-  const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
   const [apiToken, setApiToken] = useState('')
   const [showToken, setShowToken] = useState(false)
 
+  // Pre-populate form fields when form is shown
+  useEffect(() => {
+    if (showForm && !url && !username) {
+      // Pre-populate URL with default
+      setUrl(DEFAULT_JIRA_URL)
+      // Pre-populate username with user's email if available
+      if (currentUser?.email) {
+        setUsername(currentUser.email)
+      }
+    }
+  }, [showForm, url, username, currentUser?.email])
+
   const handleConnect = async () => {
-    if (!url || !email || !apiToken) {
+    if (!url || !username || !apiToken) {
       errorToast('Please fill in all fields')
       return
     }
 
     connectMutation.mutate(
-      { url, email, apiToken },
+      { url, email: username, apiToken },
       {
         onSuccess: () => {
           successToast('Jira connected successfully')
           setShowForm(false)
           setUrl('')
-          setEmail('')
+          setUsername('')
           setApiToken('')
           onRefresh?.()
         },
@@ -70,8 +87,8 @@ export function JiraConnectionCard({ status, onRefresh }: Props) {
   const handleEdit = () => {
     // Pre-fill form with existing values for editing
     if (status?.connected) {
-      setUrl(status.url || '')
-      setEmail(status.email || '')
+      setUrl(status.url || DEFAULT_JIRA_URL)
+      setUsername(status.email || '')
       setShowForm(true)
     }
   }
@@ -127,7 +144,7 @@ export function JiraConnectionCard({ status, onRefresh }: Props) {
               <Input
                 id="jira-url"
                 type="url"
-                placeholder="https://your-company.atlassian.net"
+                placeholder="https://issues.redhat.com"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 disabled={connectMutation.isPending}
@@ -135,16 +152,19 @@ export function JiraConnectionCard({ status, onRefresh }: Props) {
               />
             </div>
             <div>
-              <Label htmlFor="jira-email" className="text-sm">Email</Label>
+              <Label htmlFor="jira-username" className="text-sm">Username</Label>
               <Input
-                id="jira-email"
-                type="email"
-                placeholder="your-email@company.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                id="jira-username"
+                type="text"
+                placeholder="rh-dept-kerberos or your-email@redhat.com"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
                 disabled={connectMutation.isPending}
                 className="mt-1"
               />
+              <p className="text-xs text-muted-foreground mt-1">
+                Your Jira login username (e.g., rh-dept-kerberos)
+              </p>
             </div>
             <div>
               <Label htmlFor="jira-token" className="text-sm">API Token</Label>
@@ -182,7 +202,7 @@ export function JiraConnectionCard({ status, onRefresh }: Props) {
             <div className="flex gap-2 pt-2">
               <Button
                 onClick={handleConnect}
-                disabled={connectMutation.isPending || !url || !email || !apiToken}
+                disabled={connectMutation.isPending || !url || !username || !apiToken}
                 className="flex-1"
               >
                 {connectMutation.isPending ? (

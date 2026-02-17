@@ -11,7 +11,7 @@ export function getApiUrl(): string {
     // Client-side: use relative URLs to hit our Next.js API routes
     return '/api'
   }
-  
+
   // Server-side: directly call backend
   return BACKEND_URL
 }
