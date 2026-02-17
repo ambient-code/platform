@@ -74,6 +74,7 @@ import { useGitOperations } from "./hooks/use-git-operations";
 import { useWorkflowManagement } from "./hooks/use-workflow-management";
 import { useFileOperations } from "./hooks/use-file-operations";
 import { useSessionQueue } from "@/hooks/use-session-queue";
+import { useDraftInput } from "@/hooks/use-draft-input";
 import type { DirectoryOption, DirectoryRemote } from "./lib/types";
 
 import type { MessageObject, ToolUseMessages, HierarchicalToolMessage, ReconciledRepo, SessionRepo } from "@/types/agentic-session";
@@ -145,7 +146,6 @@ export default function ProjectSessionDetailPage({
   const router = useRouter();
   const [projectName, setProjectName] = useState<string>("");
   const [sessionName, setSessionName] = useState<string>("");
-  const [chatInput, setChatInput] = useState("");
   const [backHref, setBackHref] = useState<string | null>(null);
   const [openAccordionItems, setOpenAccordionItems] = useState<string[]>([]);
   const [contextModalOpen, setContextModalOpen] = useState(false);
@@ -194,6 +194,9 @@ export default function ProjectSessionDetailPage({
 
   // Session queue hook (localStorage-backed)
   const sessionQueue = useSessionQueue(projectName, sessionName);
+
+  // Draft input hook (localStorage-backed)
+  const { draft: chatInput, setDraft: setChatInput, clearDraft } = useDraftInput(projectName, sessionName);
 
   // React Query hooks
   const {
@@ -1286,13 +1289,13 @@ export default function ProjectSessionDetailPage({
     if (!chatInput.trim()) return;
 
     const finalMessage = chatInput.trim();
-    setChatInput("");
+    clearDraft();
 
     // Mark user interaction when they send first message
     setUserHasInteracted(true);
 
     const phase = session?.status?.phase;
-    
+
     // If session is not yet running, queue the message for later
     // This includes: undefined (loading), "Pending", "Creating", or any other non-Running state
     if (!phase || phase !== "Running") {
