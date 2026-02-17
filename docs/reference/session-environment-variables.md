@@ -135,7 +135,7 @@ Configuration for the AG-UI protocol server running inside the runner container.
 
 Platform-wide LLM observability configuration. All keys are sourced from the `ambient-admin-langfuse-secret` Secret and are optional — missing keys will not prevent pod startup.
 
-For setup and deployment details, see [Observability & Langfuse](../observability/observability-langfuse.md).
+For setup and deployment details, see [Observability & Langfuse](../observability-langfuse.md).
 
 | Variable | Required | Default | Source | Description |
 |----------|----------|---------|--------|-------------|
