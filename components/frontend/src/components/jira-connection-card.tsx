@@ -36,17 +36,17 @@ export function JiraConnectionCard({ status, onRefresh }: Props) {
   const [apiToken, setApiToken] = useState('')
   const [showToken, setShowToken] = useState(false)
 
-  // Pre-populate form fields when form is shown
+  // Pre-populate form fields when form is first shown
   useEffect(() => {
-    if (showForm && !url && !username) {
-      // Pre-populate URL with default
-      setUrl(DEFAULT_JIRA_URL)
-      // Pre-populate username with user's email if available
-      if (currentUser?.email) {
+    if (showForm) {
+      if (!url) {
+        setUrl(DEFAULT_JIRA_URL)
+      }
+      if (!username && currentUser?.email) {
         setUsername(currentUser.email)
       }
     }
-  }, [showForm, url, username, currentUser?.email])
+  }, [showForm, currentUser?.email])
 
   const handleConnect = async () => {
     if (!url || !username || !apiToken) {
