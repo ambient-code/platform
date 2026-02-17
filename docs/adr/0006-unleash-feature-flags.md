@@ -27,6 +27,7 @@ How should we implement feature flag management for the platform?
 * **Multi-environment:** Different flag states for dev, staging, production
 * **Security:** Admin API credentials must not be exposed to frontend
 * **Ephemeral flags:** Flag definitions change frequently, avoid rigid schemas
+* **Flag visibility governance:** Some flags should only be controllable by platform team, not workspace admins
 
 ## Considered Options
 
@@ -67,6 +68,26 @@ Chosen option: **"ConfigMap overrides per workspace"**, because:
 3. **Simple evaluation:** Check ConfigMap first, fall back to Unleash
 4. **Preserves Unleash capabilities:** A/B testing and gradual rollouts still work via Unleash
 5. **Workspace autonomy:** Admins can override without affecting other workspaces
+
+### Flag Visibility Control
+
+Chosen option: **"Tag-based filtering"**, because:
+
+1. **Platform-controlled:** Platform team decides which flags are workspace-configurable via Unleash tags
+2. **No code changes:** Adding/removing workspace-configurable flags requires only tag changes in Unleash
+3. **Clear governance:** Explicit separation between platform-only and workspace-configurable flags
+4. **Audit trail:** Unleash tracks tag changes with history
+
+**Implementation:**
+- Flags with tag `scope: workspace` appear in the workspace admin UI
+- Flags without this tag are platform-only (controllable only via Unleash UI)
+- Tag type/value configurable via environment variables
+
+**Alternatives considered:**
+- Naming convention (e.g., `workspace.*` prefix) - Less flexible, requires flag renaming
+- Separate Unleash projects - More complex, harder to manage
+- Backend allowlist - Requires code changes for each new flag
+- Flag type filtering - Unleash types have semantic meaning, shouldn't overload
 
 ### Consequences
 
@@ -125,7 +146,8 @@ Chosen option: **"ConfigMap overrides per workspace"**, because:
 │    └─ DELETE: Remove override from ConfigMap (use Unleash default)     │
 │                                                                         │
 │  Flag Listing (/projects/:name/feature-flags)                           │
-│    └─ Returns Unleash flags + workspace override status                 │
+│    └─ Returns Unleash flags filtered by tag (scope: workspace)          │
+│    └─ Includes workspace override status from ConfigMap                 │
 └─────────────────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -192,6 +214,48 @@ Examples:
 * `backend.multi-repo.enabled` - Multi-repo support in backend
 * `runner.langfuse.tracing` - Langfuse tracing in runner
 
+### Flag Visibility (Platform-Only vs Workspace-Configurable)
+
+Not all feature flags should be controllable by workspace admins. The platform uses **tag-based filtering** to control which flags appear in the workspace admin UI:
+
+| Flag Type | Unleash Tag | Visible in Workspace UI | Controllable By |
+|-----------|-------------|------------------------|-----------------|
+| Workspace-configurable | `scope: workspace` | ✅ Yes | Workspace admins + Platform team |
+| Platform-only | (no tag) | ❌ No | Platform team only (via Unleash UI) |
+
+**When to use each:**
+
+| Use Case | Flag Type | Rationale |
+|----------|-----------|-----------|
+| Beta features users can opt into | Workspace-configurable | User choice |
+| Experimental UI changes | Workspace-configurable | Users can revert if issues |
+| Infrastructure/operational flags | Platform-only | Requires platform expertise |
+| Security-related flags | Platform-only | Must be centrally controlled |
+| Gradual rollouts (A/B tests) | Platform-only | Platform controls rollout % |
+| Kill switches | Platform-only | Emergency platform control |
+
+**Adding the tag in Unleash:**
+1. Navigate to the feature flag in Unleash UI
+2. Click "Add tag"
+3. Type: `scope`, Value: `workspace`
+4. Save
+
+**Filtering logic in backend:**
+```go
+// Only include flags with scope:workspace tag
+func isWorkspaceConfigurable(tags []Tag) bool {
+    tagType := getEnvOrDefault("UNLEASH_WORKSPACE_TAG_TYPE", "scope")
+    tagValue := getEnvOrDefault("UNLEASH_WORKSPACE_TAG_VALUE", "workspace")
+
+    for _, tag := range tags {
+        if tag.Type == tagType && tag.Value == tagValue {
+            return true
+        }
+    }
+    return false
+}
+```
+
 ### API Endpoints
 
 | Endpoint | Method | Description |
@@ -233,6 +297,8 @@ Examples:
 | `UNLEASH_ADMIN_TOKEN` | Backend | Admin API token (read-write) |
 | `UNLEASH_PROJECT` | Backend | Unleash project ID (default: "default") |
 | `UNLEASH_ENVIRONMENT` | Backend | Target environment (default: "development") |
+| `UNLEASH_WORKSPACE_TAG_TYPE` | Backend | Tag type for workspace-configurable flags (default: "scope") |
+| `UNLEASH_WORKSPACE_TAG_VALUE` | Backend | Tag value for workspace-configurable flags (default: "workspace") |
 | `NEXT_PUBLIC_UNLEASH_ENV_CONTEXT_FIELD` | Frontend | Environment value sent in SDK context (default: "development"). Note: This does NOT select the Unleash environment—that's determined by the token scope. Used for strategy constraints that check `context.environment`. |
 
 ### Patterns Established
@@ -342,6 +408,8 @@ This pattern prevents ConfigMap update spam when users toggle multiple flags and
 * A/B testing works when no override is set
 * Gradual rollout respects workspace context
 * `useWorkspaceFlag()` hook returns correct values
+* Only flags with `scope: workspace` tag appear in workspace admin UI
+* Platform-only flags (without tag) are hidden from workspace admin UI
 
 **Security Testing:**
 

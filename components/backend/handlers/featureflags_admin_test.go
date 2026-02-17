@@ -1010,4 +1010,69 @@ var _ = Describe("Feature Flags Admin Handler", Label(test_constants.LabelUnit, 
 			}
 		})
 	})
+
+	Context("Tag-Based Filtering", func() {
+		Describe("isWorkspaceConfigurable", func() {
+			It("Should return true for flags with scope:workspace tag", func() {
+				tags := []Tag{
+					{Type: "scope", Value: "workspace"},
+				}
+				Expect(isWorkspaceConfigurable(tags)).To(BeTrue())
+
+				logger.Log("Correctly identified workspace-configurable flag")
+			})
+
+			It("Should return true when tag is among multiple tags", func() {
+				tags := []Tag{
+					{Type: "team", Value: "platform"},
+					{Type: "scope", Value: "workspace"},
+					{Type: "priority", Value: "high"},
+				}
+				Expect(isWorkspaceConfigurable(tags)).To(BeTrue())
+
+				logger.Log("Correctly identified workspace-configurable flag with multiple tags")
+			})
+
+			It("Should return false for flags without workspace tag", func() {
+				tags := []Tag{
+					{Type: "scope", Value: "platform"},
+				}
+				Expect(isWorkspaceConfigurable(tags)).To(BeFalse())
+
+				logger.Log("Correctly identified platform-only flag")
+			})
+
+			It("Should return false for flags with no tags", func() {
+				tags := []Tag{}
+				Expect(isWorkspaceConfigurable(tags)).To(BeFalse())
+
+				logger.Log("Correctly identified flag with no tags as platform-only")
+			})
+
+			It("Should return false for nil tags", func() {
+				var tags []Tag = nil
+				Expect(isWorkspaceConfigurable(tags)).To(BeFalse())
+
+				logger.Log("Correctly handled nil tags")
+			})
+
+			It("Should return false for different tag type", func() {
+				tags := []Tag{
+					{Type: "category", Value: "workspace"},
+				}
+				Expect(isWorkspaceConfigurable(tags)).To(BeFalse())
+
+				logger.Log("Correctly rejected wrong tag type")
+			})
+
+			It("Should return false for different tag value", func() {
+				tags := []Tag{
+					{Type: "scope", Value: "internal"},
+				}
+				Expect(isWorkspaceConfigurable(tags)).To(BeFalse())
+
+				logger.Log("Correctly rejected wrong tag value")
+			})
+		})
+	})
 })

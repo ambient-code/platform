@@ -24,10 +24,12 @@ const (
 )
 
 var (
-	unleashAdminURL   = os.Getenv("UNLEASH_ADMIN_URL")   // e.g., https://unleash.example.com
-	unleashAdminToken = os.Getenv("UNLEASH_ADMIN_TOKEN") // Admin API token
-	unleashProject    = os.Getenv("UNLEASH_PROJECT")     // Unleash project ID (default: "default")
-	unleashEnv        = os.Getenv("UNLEASH_ENVIRONMENT") // Environment (default: "development")
+	unleashAdminURL          = os.Getenv("UNLEASH_ADMIN_URL")           // e.g., https://unleash.example.com
+	unleashAdminToken        = os.Getenv("UNLEASH_ADMIN_TOKEN")         // Admin API token
+	unleashProject           = os.Getenv("UNLEASH_PROJECT")             // Unleash project ID (default: "default")
+	unleashEnv               = os.Getenv("UNLEASH_ENVIRONMENT")         // Environment (default: "development")
+	unleashWorkspaceTagType  = os.Getenv("UNLEASH_WORKSPACE_TAG_TYPE")  // Tag type for workspace-configurable flags (default: "scope")
+	unleashWorkspaceTagValue = os.Getenv("UNLEASH_WORKSPACE_TAG_VALUE") // Tag value for workspace-configurable flags (default: "workspace")
 )
 
 // FeatureToggle represents a feature toggle with workspace override status
@@ -91,6 +93,41 @@ func getWorkspaceOverrides(ctx context.Context, namespace string) (map[string]st
 		return nil, err
 	}
 	return cm.Data, nil
+}
+
+// isWorkspaceConfigurable checks if a feature flag has the workspace-configurable tag.
+// Only flags with this tag are shown in the workspace admin UI.
+// Flags without this tag are platform-only and can only be managed via Unleash UI.
+func isWorkspaceConfigurable(tags []Tag) bool {
+	tagType := getWorkspaceTagType()
+	tagValue := getWorkspaceTagValue()
+
+	for _, tag := range tags {
+		if tag.Type == tagType && tag.Value == tagValue {
+			return true
+		}
+	}
+	return false
+}
+
+func getWorkspaceTagType() string {
+	if unleashWorkspaceTagType == "" {
+		unleashWorkspaceTagType = os.Getenv("UNLEASH_WORKSPACE_TAG_TYPE")
+	}
+	if unleashWorkspaceTagType == "" {
+		return "scope"
+	}
+	return unleashWorkspaceTagType
+}
+
+func getWorkspaceTagValue() string {
+	if unleashWorkspaceTagValue == "" {
+		unleashWorkspaceTagValue = os.Getenv("UNLEASH_WORKSPACE_TAG_VALUE")
+	}
+	if unleashWorkspaceTagValue == "" {
+		return "workspace"
+	}
+	return unleashWorkspaceTagValue
 }
 
 // ListFeatureFlags handles GET /api/projects/:projectName/feature-flags
@@ -172,9 +209,16 @@ func ListFeatureFlags(c *gin.Context) {
 	}
 
 	// Transform to our format with workspace override status
+	// Only include flags that are workspace-configurable (have the required tag)
 	targetEnv := getUnleashEnv()
 	features := make([]FeatureToggle, 0, len(unleashResp.Features))
 	for _, f := range unleashResp.Features {
+		// Filter: Only show flags with workspace-configurable tag
+		// Platform-only flags (without tag) are hidden from workspace admin UI
+		if !isWorkspaceConfigurable(f.Tags) {
+			continue
+		}
+
 		// Determine Unleash enabled state in target environment
 		unleashEnabled := false
 		envStates := make([]EnvState, 0, len(f.Environments))
