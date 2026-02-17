@@ -159,7 +159,7 @@ func ListFeatureFlags(c *gin.Context) {
 
 	if resp.StatusCode != http.StatusOK {
 		log.Printf("Unleash Admin API returned %d: %s", resp.StatusCode, string(body))
-		c.Data(resp.StatusCode, "application/json", body)
+		c.JSON(http.StatusBadGateway, gin.H{"error": "Failed to fetch feature flags from Unleash"})
 		return
 	}
 
@@ -381,6 +381,16 @@ func GetFeatureFlag(c *gin.Context) {
 	if err != nil {
 		log.Printf("Failed to read Unleash response: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read response"})
+		return
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("Unleash Admin API returned %d for flag %s: %s", resp.StatusCode, flagName, string(body))
+		if resp.StatusCode == http.StatusNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Feature flag not found"})
+		} else {
+			c.JSON(http.StatusBadGateway, gin.H{"error": "Failed to fetch feature flag from Unleash"})
+		}
 		return
 	}
 
