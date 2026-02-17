@@ -16,6 +16,7 @@ import { useProject, useUpdateProject } from "@/services/queries/use-projects";
 import { useSecretsValues, useUpdateSecrets, useIntegrationSecrets, useUpdateIntegrationSecrets } from "@/services/queries/use-secrets";
 import { useClusterInfo } from "@/hooks/use-cluster-info";
 import { useMemo } from "react";
+import { FeatureFlagsSettings } from "./feature-flags-settings";
 
 type SettingsSectionProps = {
   projectName: string;
@@ -542,6 +543,9 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
           </div>
         </CardContent>
       </Card>
+
+      {/* Feature Flags Section */}
+      <FeatureFlagsSettings projectName={projectName} />
     </div>
   );
 }
