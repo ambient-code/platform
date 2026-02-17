@@ -5,6 +5,7 @@
 .PHONY: local-test local-test-dev local-test-quick test-all local-url local-troubleshoot local-port-forward local-stop-port-forward
 .PHONY: push-all registry-login setup-hooks remove-hooks check-minikube check-kind check-kubectl dev-bootstrap
 .PHONY: e2e-test e2e-setup e2e-clean deploy-langfuse-openshift
+.PHONY: deploy-unleash deploy-unleash-kind deploy-unleash-openshift unleash-port-forward unleash-status unleash-clean
 .PHONY: setup-minio minio-console minio-logs minio-status
 .PHONY: validate-makefile lint-makefile check-shell makefile-health
 .PHONY: _create-operator-config _auto-port-forward _show-access-info _build-and-load
@@ -667,6 +668,47 @@ e2e-clean: kind-down ## Alias for kind-down (backward compatibility)
 deploy-langfuse-openshift: ## Deploy Langfuse to OpenShift/ROSA cluster
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Deploying Langfuse to OpenShift cluster..."
 	@cd e2e && ./scripts/deploy-langfuse.sh --openshift
+
+##@ Unleash Feature Flags
+
+deploy-unleash: ## Deploy Unleash (auto-detect platform)
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Deploying Unleash feature flag server..."
+	@./e2e/scripts/deploy-unleash.sh
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Unleash deployed"
+
+deploy-unleash-kind: check-kind check-kubectl ## Deploy Unleash to kind cluster
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Deploying Unleash to kind cluster..."
+	@./e2e/scripts/deploy-unleash.sh --kubernetes
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Unleash deployed to kind"
+	@echo ""
+	@echo "$(COLOR_BOLD)Next steps:$(COLOR_RESET)"
+	@echo "  1. Run: $(COLOR_BLUE)make unleash-port-forward$(COLOR_RESET)"
+	@echo "  2. Access Unleash UI at: http://localhost:4242"
+	@echo "  3. Login: admin / unleash4all"
+
+deploy-unleash-openshift: ## Deploy Unleash to OpenShift/CRC cluster
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Deploying Unleash to OpenShift cluster..."
+	@./e2e/scripts/deploy-unleash.sh --openshift
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Unleash deployed to OpenShift"
+
+unleash-port-forward: check-kubectl ## Port-forward Unleash (localhost:4242)
+	@echo "$(COLOR_BOLD)🔌 Port forwarding Unleash$(COLOR_RESET)"
+	@echo ""
+	@echo "  Unleash UI: http://localhost:4242"
+	@echo "  Login: admin / unleash4all"
+	@echo ""
+	@echo "$(COLOR_YELLOW)Press Ctrl+C to stop$(COLOR_RESET)"
+	@kubectl port-forward svc/unleash 4242:4242 -n unleash
+
+unleash-status: check-kubectl ## Show Unleash deployment status
+	@echo "$(COLOR_BOLD)Unleash Status$(COLOR_RESET)"
+	@kubectl get deployment,pod,svc -l 'app.kubernetes.io/name in (unleash,postgresql)' -n unleash 2>/dev/null || \
+		echo "$(COLOR_RED)✗$(COLOR_RESET) Unleash not found. Run 'make deploy-unleash' first."
+
+unleash-clean: check-kubectl ## Remove Unleash deployment
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Removing Unleash..."
+	@kubectl delete namespace unleash --ignore-not-found=true --timeout=60s
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Unleash removed"
 
 ##@ Internal Helpers (do not call directly)
 

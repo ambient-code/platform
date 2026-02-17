@@ -95,6 +95,7 @@ In production, put an OAuth/ingress proxy in front of the app to set these heade
 - `FEEDBACK_URL` (optional)
   - URL for the feedback link in the masthead. If not set, the link will not appear.
 - Optional dev helpers: `OC_USER`, `OC_EMAIL`, `OC_TOKEN`, `ENABLE_OC_WHOAMI=1`
+- **Feature flags (Unleash)**: see [docs/feature-flags](../../docs/feature-flags/README.md) for env vars, usage in components, and deployment.
 
 You can also put these in a `.env.local` file in this folder:
 ```
