@@ -63,6 +63,7 @@ nav:
   - Reference:
     - Overview: reference/index.md
     - Constitution: reference/constitution.md
+    - Session Environment Variables: reference/session-environment-variables.md
     - Glossary: reference/glossary.md
   - Deployment Guides:
     - GitHub App Setup: GITHUB_APP_SETUP.md
