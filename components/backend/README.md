@@ -179,6 +179,10 @@ make deps-verify       # Verify dependencies
 make check-env         # Verify Go, kubectl, docker installed
 ```
 
+### Feature flags (Unleash)
+
+See [docs/feature-flags](../../docs/feature-flags/README.md) for env vars, handler usage, and examples.
+
 ## Architecture
 
 See `CLAUDE.md` in project root for:
@@ -193,6 +197,8 @@ See `CLAUDE.md` in project root for:
 - `handlers/sessions.go` - AgenticSession lifecycle, user/SA client usage
 - `handlers/middleware.go` - Auth patterns, token extraction, RBAC
 - `handlers/helpers.go` - Utility functions (StringPtr, BoolPtr)
+- `handlers/featureflags.go` - Feature flag helpers (see docs/feature-flags/)
+- `featureflags/featureflags.go` - Unleash client init
 - `types/common.go` - Type definitions
 - `server/server.go` - Server setup, middleware chain, token redaction
 - `routes.go` - HTTP route definitions and registration
