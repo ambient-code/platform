@@ -4,6 +4,9 @@ This section provides comprehensive reference material for the Ambient Code Plat
 
 ## Quick Reference
 
+### **[Session Environment Variables](session-environment-variables.md)**
+Complete reference for all environment variables injected into session pods, organized by functional category with container cross-reference and default values.
+
 ### **[Glossary](glossary.md)** 📖
 Definitions of terms, concepts, and acronyms used throughout the Ambient Code Platform system and documentation.
 
