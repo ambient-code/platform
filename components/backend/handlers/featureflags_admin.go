@@ -223,10 +223,7 @@ func ListFeatureFlags(c *gin.Context) {
 		unleashEnabled := false
 		envStates := make([]EnvState, 0, len(f.Environments))
 		for _, env := range f.Environments {
-			envStates = append(envStates, EnvState{
-				Name:    env.Name,
-				Enabled: env.Enabled,
-			})
+			envStates = append(envStates, EnvState(env))
 			if env.Name == targetEnv {
 				unleashEnabled = env.Enabled
 			}
@@ -303,78 +300,10 @@ func EvaluateFeatureFlag(c *gin.Context) {
 		}
 	}
 
-	// 2. Fall back to Unleash
-	if getUnleashAdminURL() == "" || getUnleashAdminToken() == "" {
-		// Unleash not configured, default to disabled
-		c.JSON(http.StatusOK, gin.H{
-			"flag":    flagName,
-			"enabled": false,
-			"source":  "default",
-		})
-		return
-	}
-
-	url := fmt.Sprintf("%s/api/admin/projects/%s/features/%s",
-		strings.TrimSuffix(getUnleashAdminURL(), "/"),
-		getUnleashProject(),
-		flagName)
-
-	resp, err := unleashAdminRequest("GET", url, nil)
-	if err != nil {
-		log.Printf("Failed to connect to Unleash Admin API: %v", err)
-		// Return disabled as fallback
-		c.JSON(http.StatusOK, gin.H{
-			"flag":    flagName,
-			"enabled": false,
-			"source":  "default",
-			"error":   "Unleash unavailable",
-		})
-		return
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusNotFound {
-		c.JSON(http.StatusOK, gin.H{
-			"flag":    flagName,
-			"enabled": false,
-			"source":  "default",
-		})
-		return
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		log.Printf("Unleash Admin API returned %d: %s", resp.StatusCode, string(body))
-		c.JSON(http.StatusOK, gin.H{
-			"flag":    flagName,
-			"enabled": false,
-			"source":  "default",
-		})
-		return
-	}
-
-	body, _ := io.ReadAll(resp.Body)
-	var feature unleashFeature
-	if err := json.Unmarshal(body, &feature); err != nil {
-		log.Printf("Failed to parse Unleash feature response: %v", err)
-		c.JSON(http.StatusOK, gin.H{
-			"flag":    flagName,
-			"enabled": false,
-			"source":  "default",
-		})
-		return
-	}
-
-	// Get enabled state for target environment
-	targetEnv := getUnleashEnv()
-	enabled := false
-	for _, env := range feature.Environments {
-		if env.Name == targetEnv {
-			enabled = env.Enabled
-			break
-		}
-	}
-
+	// 2. Fall back to Unleash Client SDK (generates metrics for flag evaluation)
+	// This uses the initialized Unleash Go SDK which properly tracks usage metrics.
+	// The SDK was initialized in main.go via featureflags.Init().
+	enabled := FeatureEnabledForRequest(c, flagName)
 	c.JSON(http.StatusOK, gin.H{
 		"flag":    flagName,
 		"enabled": enabled,

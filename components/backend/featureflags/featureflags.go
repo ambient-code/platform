@@ -50,13 +50,13 @@ func IsEnabled(flagName string) bool {
 // IsEnabledWithContext returns true if the flag is enabled for the given user context.
 // Use for strategies that depend on userId, sessionId, or remoteAddress.
 // When Unleash is not configured, returns false.
-func IsEnabledWithContext(flagName string, userId, sessionId, remoteAddress string) bool {
+func IsEnabledWithContext(flagName string, userID, sessionID, remoteAddress string) bool {
 	if !initialized {
 		return false
 	}
 	ctx := unleashContext.Context{
-		UserId:        userId,
-		SessionId:     sessionId,
+		UserId:        userID,
+		SessionId:     sessionID,
 		RemoteAddress: remoteAddress,
 	}
 	return unleash.IsEnabled(flagName, unleash.WithContext(ctx))
