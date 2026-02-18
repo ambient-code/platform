@@ -851,6 +851,16 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 					PeriodSeconds:       5,
 				},
 				VolumeMounts: []corev1.VolumeMount{{Name: "workspace", MountPath: "/workspace"}},
+				Resources: corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse(appConfig.ContentCPURequest),
+						corev1.ResourceMemory: resource.MustParse(appConfig.ContentMemoryRequest),
+					},
+					Limits: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse(appConfig.ContentCPULimit),
+						corev1.ResourceMemory: resource.MustParse(appConfig.ContentMemoryLimit),
+					},
+				},
 			},
 			{
 				Name:            "ambient-code-runner",
@@ -1138,12 +1148,12 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 
 				Resources: corev1.ResourceRequirements{
 					Requests: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("500m"),
-						corev1.ResourceMemory: resource.MustParse("512Mi"),
+						corev1.ResourceCPU:    resource.MustParse(appConfig.RunnerCPURequest),
+						corev1.ResourceMemory: resource.MustParse(appConfig.RunnerMemoryRequest),
 					},
 					Limits: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("2000m"), // 2 cores for MCP + Claude SDK
-						corev1.ResourceMemory: resource.MustParse("4Gi"),   // Increased for Playwright/Chromium + dev server
+						corev1.ResourceCPU:    resource.MustParse(appConfig.RunnerCPULimit),
+						corev1.ResourceMemory: resource.MustParse(appConfig.RunnerMemoryLimit),
 					},
 				},
 			},
@@ -1177,12 +1187,12 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 				},
 				Resources: corev1.ResourceRequirements{
 					Requests: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("100m"),
-						corev1.ResourceMemory: resource.MustParse("128Mi"),
+						corev1.ResourceCPU:    resource.MustParse(appConfig.StateSyncCPURequest),
+						corev1.ResourceMemory: resource.MustParse(appConfig.StateSyncMemoryRequest),
 					},
 					Limits: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("1000m"), // Increased from 200m for MCP startup
-						corev1.ResourceMemory: resource.MustParse("1Gi"),   // Increased from 256Mi
+						corev1.ResourceCPU:    resource.MustParse(appConfig.StateSyncCPULimit),
+						corev1.ResourceMemory: resource.MustParse(appConfig.StateSyncMemoryLimit),
 					},
 				},
 			},
@@ -1255,6 +1265,11 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 	log.Printf("Session %s will fetch credentials at runtime from backend API", name)
 
 	// Do not mount runner Secret volume; runner fetches tokens on demand
+
+	// Ensure LimitRange exists in the session namespace (guardrail for future containers)
+	if err := ensureLimitRange(sessionNamespace); err != nil {
+		log.Printf("Warning: failed to ensure LimitRange in %s: %v", sessionNamespace, err)
+	}
 
 	// Create the pod
 	createdPod, err := config.K8sClient.CoreV1().Pods(sessionNamespace).Create(context.TODO(), pod, v1.CreateOptions{})
@@ -2027,6 +2042,54 @@ func deletePodAndPerPodService(namespace, podName, sessionName string) error {
 	// NOTE: PVC is kept for all sessions and only deleted via garbage collection
 	// when the session CR is deleted. This allows sessions to be restarted.
 
+	return nil
+}
+
+// ensureLimitRange creates or updates a LimitRange in the given namespace so that any
+// container without explicit resource requests/limits gets safe defaults and containers
+// below the minimum are rejected by the API server.
+func ensureLimitRange(namespace string) error {
+	lr := &corev1.LimitRange{
+		ObjectMeta: v1.ObjectMeta{
+			Name:      "session-container-defaults",
+			Namespace: namespace,
+		},
+		Spec: corev1.LimitRangeSpec{
+			Limits: []corev1.LimitRangeItem{
+				{
+					Type: corev1.LimitTypeContainer,
+					Default: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("500m"),
+						corev1.ResourceMemory: resource.MustParse("2Gi"),
+					},
+					DefaultRequest: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("100m"),
+						corev1.ResourceMemory: resource.MustParse("1Gi"),
+					},
+					Min: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("50m"),
+						corev1.ResourceMemory: resource.MustParse("1Gi"),
+					},
+					Max: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("4"),
+						corev1.ResourceMemory: resource.MustParse("8Gi"),
+					},
+				},
+			},
+		},
+	}
+
+	_, err := config.K8sClient.CoreV1().LimitRanges(namespace).Create(context.TODO(), lr, v1.CreateOptions{})
+	if err != nil {
+		if errors.IsAlreadyExists(err) {
+			_, err = config.K8sClient.CoreV1().LimitRanges(namespace).Update(context.TODO(), lr, v1.UpdateOptions{})
+			if err != nil {
+				return fmt.Errorf("update LimitRange: %w", err)
+			}
+		} else {
+			return fmt.Errorf("create LimitRange: %w", err)
+		}
+	}
 	return nil
 }
 

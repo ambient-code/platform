@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: session-container-defaults
+spec:
+  limits:
+  - type: Container
+    default:          # applied as limit if container omits limits
+      cpu: "500m"
+      memory: "2Gi"
+    defaultRequest:   # applied as request if container omits requests
+      cpu: "100m"
+      memory: "1Gi"
+    min:              # API server rejects containers below these
+      cpu: "50m"
+      memory: "1Gi"
+    max:              # API server rejects containers above these
+      cpu: "4"
+      memory: "8Gi"
