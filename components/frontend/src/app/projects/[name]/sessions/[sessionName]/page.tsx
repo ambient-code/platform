@@ -1031,11 +1031,12 @@ export default function ProjectSessionDetailPage({
           .map(childMsg => {
             const childTC = childMsg.toolCalls?.[0];
             if (!childTC) return null;
+            renderedToolCalls.add(childTC.id);  // Track to prevent duplicates below
             // Use timestamp from child message if available
             return createToolMessage(childTC, childMsg.timestamp || new Date().toISOString());
           })
           .filter((c): c is ToolUseMessages => c !== null);
-        
+
         // Also include any streaming children from pendingToolCalls
         for (const [childId, childTool] of pendingToolCalls) {
           if (childTool.parentToolUseId === toolId && !renderedToolCalls.has(childId)) {
@@ -2500,7 +2501,7 @@ export default function ProjectSessionDetailPage({
                         workflowMetadata={workflowMetadata}
                         onCommandClick={handleCommandClick}
                         isRunActive={isRunActive}
-                        showWelcomeExperience={!["Completed", "Failed", "Stopped", "Stopping"].includes(session?.status?.phase || "")}
+                        showWelcomeExperience={session?.status?.phase === "Running"}
                         activeWorkflow={workflowManagement.activeWorkflow}
                         userHasInteracted={userHasInteracted}
                         queuedMessages={sessionQueue.messages}
@@ -2572,7 +2573,7 @@ export default function ProjectSessionDetailPage({
                           workflowMetadata={workflowMetadata}
                           onCommandClick={handleCommandClick}
                           isRunActive={isRunActive}
-                          showWelcomeExperience={!["Completed", "Failed", "Stopped", "Stopping"].includes(session?.status?.phase || "")}
+                          showWelcomeExperience={session?.status?.phase === "Running"}
                           activeWorkflow={workflowManagement.activeWorkflow}
                           userHasInteracted={userHasInteracted}
                           queuedMessages={sessionQueue.messages}

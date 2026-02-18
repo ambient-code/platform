@@ -59,9 +59,11 @@ func registerRoutes(r *gin.Engine) {
 			// OAuth integration - requires user auth like all other session endpoints
 			projectGroup.GET("/agentic-sessions/:sessionName/oauth/:provider/url", handlers.GetOAuthURL)
 
-			// AG-UI Protocol endpoints (HttpAgent-compatible)
+			// AG-UI Protocol endpoints (middleware pattern)
 			// See: https://docs.ag-ui.com/quickstart/introduction
-			// Runner is a FastAPI server - backend proxies requests and streams SSE responses
+			// POST /agui/run  → starts a run, returns JSON metadata; events broadcast to subscribers
+			// GET  /agui/events → SSE stream of all thread events (history + live)
+			projectGroup.GET("/agentic-sessions/:sessionName/agui/events", websocket.HandleAGUIEvents)
 			projectGroup.POST("/agentic-sessions/:sessionName/agui/run", websocket.HandleAGUIRunProxy)
 			projectGroup.POST("/agentic-sessions/:sessionName/agui/interrupt", websocket.HandleAGUIInterrupt)
 			projectGroup.POST("/agentic-sessions/:sessionName/agui/feedback", websocket.HandleAGUIFeedback)

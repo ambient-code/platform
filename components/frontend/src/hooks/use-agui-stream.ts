@@ -18,6 +18,7 @@ import {
   AGUIMessage,
   AGUIRole,
   AGUIStepStartedEvent,
+  AGUIToolCall,
   isRunStartedEvent,
   isRunFinishedEvent,
   isRunErrorEvent,
@@ -30,6 +31,141 @@ import {
   isMessagesSnapshotEvent,
   isActivitySnapshotEvent,
 } from '@/types/agui'
+
+/**
+ * Normalize MESSAGES_SNAPSHOT data to match the internal AGUIMessage format.
+ *
+ * The runner sends snapshots with two structural differences from streaming:
+ * 1. OpenAI-format toolCalls ({type:"function", function:{name,arguments}})
+ *    instead of flat AGUIToolCall ({name, args})
+ * 2. Sub-agent child tool results as separate flat role=tool messages instead
+ *    of nested toolCalls entries with parentToolUseId on the assistant message
+ *
+ * This function converts both to match the structure built by streaming handlers,
+ * so the page rendering code (which builds hierarchy from parentToolUseId) works
+ * correctly for both live-streamed and snapshot-restored sessions.
+ */
+function normalizeSnapshotMessages(snapshotMessages: AGUIMessage[]): AGUIMessage[] {
+  // Shallow-clone messages so we can mutate toolCalls arrays safely
+  const messages = snapshotMessages.map(m => ({
+    ...m,
+    toolCalls: m.toolCalls ? [...m.toolCalls] : undefined,
+  }))
+
+  // Step 1: Normalize toolCalls format (OpenAI function → flat AGUIToolCall)
+  for (const msg of messages) {
+    if (msg.toolCalls && Array.isArray(msg.toolCalls)) {
+      msg.toolCalls = msg.toolCalls.map(tc => {
+        // OpenAI format: {id, type:"function", function:{name, arguments}}
+        const fn = (tc as Record<string, unknown>).function as
+          { name?: string; arguments?: string } | undefined
+        if (fn && !tc.name) {
+          const normalized: AGUIToolCall = {
+            id: tc.id,
+            name: fn.name || 'unknown_tool',
+            args: fn.arguments || '',
+            type: tc.type,
+            parentToolUseId: tc.parentToolUseId,
+            result: tc.result,
+            status: tc.status,
+          }
+          return normalized
+        }
+        return tc
+      })
+    }
+  }
+
+  // Step 2: Identify parent tool call IDs from assistant messages' toolCalls
+  const parentToolCallIds = new Set<string>()
+  for (const msg of messages) {
+    if (msg.role === 'assistant' && msg.toolCalls) {
+      for (const tc of msg.toolCalls) {
+        if (tc.id) parentToolCallIds.add(tc.id)
+      }
+    }
+  }
+
+  if (parentToolCallIds.size === 0) return messages
+
+  // Step 3: Find parent tool result message indices
+  const parentResultIndex = new Map<string, number>()
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i]
+    if (msg.role === 'tool' && msg.toolCallId && parentToolCallIds.has(msg.toolCallId)) {
+      parentResultIndex.set(msg.toolCallId, i)
+    }
+  }
+
+  // Step 4: Nest child tool messages under their parent tool call
+  const indicesToRemove = new Set<number>()
+
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i]
+    if (msg.role !== 'tool' || !msg.toolCallId) continue
+
+    if (parentToolCallIds.has(msg.toolCallId)) {
+      // This is a parent tool result — move content to the parent's toolCall.result
+      const parentId = msg.toolCallId
+      for (const assistantMsg of messages) {
+        if (assistantMsg.role !== 'assistant' || !assistantMsg.toolCalls) continue
+        const parentTC = assistantMsg.toolCalls.find(tc => tc.id === parentId)
+        if (parentTC) {
+          parentTC.result = msg.content || ''
+          if (!parentTC.status) parentTC.status = 'completed'
+          indicesToRemove.add(i)
+          break
+        }
+      }
+      continue
+    }
+
+    // This is potentially a child tool result.
+    // Find the nearest parent whose result message comes AFTER this child.
+    let bestParentId: string | null = null
+    let bestParentResultIdx = Infinity
+    for (const [parentId, resultIdx] of parentResultIndex) {
+      if (resultIdx > i && resultIdx < bestParentResultIdx) {
+        bestParentId = parentId
+        bestParentResultIdx = resultIdx
+      }
+    }
+    if (!bestParentId) continue
+
+    // Verify this child appears after the assistant message that owns the parent
+    let isAfterAssistant = false
+    for (let a = i - 1; a >= 0; a--) {
+      if (messages[a].role === 'assistant' &&
+          messages[a].toolCalls?.some(tc => tc.id === bestParentId)) {
+        isAfterAssistant = true
+        break
+      }
+    }
+    if (!isAfterAssistant) continue
+
+    // Add child as a toolCalls entry with parentToolUseId on the assistant message
+    for (const assistantMsg of messages) {
+      if (assistantMsg.role !== 'assistant' || !assistantMsg.toolCalls) continue
+      if (!assistantMsg.toolCalls.some(tc => tc.id === bestParentId)) continue
+
+      if (!assistantMsg.toolCalls.some(tc => tc.id === msg.toolCallId)) {
+        assistantMsg.toolCalls.push({
+          id: msg.toolCallId,
+          name: msg.name || 'tool',
+          args: '',
+          result: msg.content || '',
+          status: 'completed',
+          parentToolUseId: bestParentId,
+        })
+      }
+      indicesToRemove.add(i)
+      break
+    }
+  }
+
+  // Step 5: Remove nested messages from top level
+  return messages.filter((_, idx) => !indicesToRemove.has(idx))
+}
 
 type UseAGUIStreamOptions = {
   projectName: string
@@ -228,26 +364,46 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
         }
 
         if (isToolCallStartEvent(event)) {
-          // Runner's ag_ui.core uses snake_case: parent_tool_call_id
+          // AG-UI spec: parentMessageId links tool call to the assistant message that invoked it
+          // Runner may also send parent_tool_call_id (snake_case) for hierarchical nesting
           const parentToolId = (event as unknown as { parent_tool_call_id?: string }).parent_tool_call_id;
-          
+          const parentMessageId = (event as unknown as { parentMessageId?: string }).parentMessageId;
+
+          // Determine effective parent tool ID for hierarchy.
+          // AG-UI sub-agents set parentMessageId to the PARENT TOOL CALL ID,
+          // so if parentMessageId matches a known tool call, treat it as a parent-child relationship.
+          let effectiveParentToolId = parentToolId;
+          if (!effectiveParentToolId && parentMessageId) {
+            if (newState.pendingToolCalls.has(parentMessageId)) {
+              effectiveParentToolId = parentMessageId;
+            } else {
+              for (let i = newState.messages.length - 1; i >= 0; i--) {
+                if (newState.messages[i].toolCalls?.some(tc => tc.id === parentMessageId)) {
+                  effectiveParentToolId = parentMessageId;
+                  break;
+                }
+              }
+            }
+          }
+
           // Store in pendingToolCalls Map to support parallel tool calls
           const updatedPending = new Map(newState.pendingToolCalls);
           updatedPending.set(event.toolCallId, {
             id: event.toolCallId,
             name: event.toolCallName || 'unknown_tool',
             args: '',
-            parentToolUseId: parentToolId,
-            timestamp: event.timestamp,  // Capture timestamp from event
+            parentToolUseId: effectiveParentToolId,
+            parentMessageId: parentMessageId,
+            timestamp: event.timestamp,
           });
           newState.pendingToolCalls = updatedPending;
-          
+
           // Also update currentToolCall for backward compat (UI rendering)
           newState.currentToolCall = {
             id: event.toolCallId,
             name: event.toolCallName,
             args: '',
-            parentToolUseId: parentToolId,
+            parentToolUseId: effectiveParentToolId,
           }
           return newState
         }
@@ -278,21 +434,21 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
 
         if (isToolCallEndEvent(event)) {
           const toolCallId = event.toolCallId || newState.currentToolCall?.id || crypto.randomUUID()
-          
+
           // Get tool info from pendingToolCalls Map (supports parallel tool calls)
           const pendingTool = newState.pendingToolCalls.get(toolCallId);
           const toolCallName = pendingTool?.name || newState.currentToolCall?.name || 'unknown_tool'
           const toolCallArgs = pendingTool?.args || newState.currentToolCall?.args || ''
           const parentToolUseId = pendingTool?.parentToolUseId || newState.currentToolCall?.parentToolUseId
-          
-          // Defense in depth: Check if this tool already exists (shouldn't happen with fixed backend)
-          const toolAlreadyExists = newState.messages.some(msg => 
+          // AG-UI spec: parentMessageId links this tool call to its assistant message
+          const parentMessageId = pendingTool?.parentMessageId
+
+          // Defense in depth: Check if this tool already exists
+          const toolAlreadyExists = newState.messages.some(msg =>
             msg.toolCalls?.some(tc => tc.id === toolCallId)
           );
-          
+
           if (toolAlreadyExists) {
-            console.warn(`[useAGUIStream] BACKEND BUG: Tool ${toolCallName} (${toolCallId.substring(0, 8)}) already exists, skipping duplicate`);
-            // Remove from pending maps and return
             const updatedPendingTools = new Map(newState.pendingToolCalls);
             updatedPendingTools.delete(toolCallId);
             newState.pendingToolCalls = updatedPendingTools;
@@ -301,32 +457,31 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
             }
             return newState;
           }
-          
-          // Create completed tool call
+
+          // Create completed tool call — per AG-UI spec, TOOL_CALL_END has no
+          // result field. Results arrive via a separate TOOL_CALL_RESULT event.
           const completedToolCall = {
             id: toolCallId,
             name: toolCallName,
             args: toolCallArgs,
-            result: event.result,
-            status: event.error ? 'error' as const : 'completed' as const,
-            error: event.error,
+            result: undefined as string | undefined,
+            status: 'completed' as const,
             parentToolUseId: parentToolUseId,
           }
-          
+
           const messages = [...newState.messages]
-          
+
           // Remove from pendingToolCalls Map
           const updatedPendingTools = new Map(newState.pendingToolCalls);
           updatedPendingTools.delete(toolCallId);
           newState.pendingToolCalls = updatedPendingTools;
-          
-          // If this tool has a parent, try to attach to it
+
+          // If this tool has a parent tool (hierarchical nesting), try to attach to it
           if (parentToolUseId) {
             let foundParent = false
-            
+
             // Check if parent is still pending (streaming, not finished yet)
             if (newState.pendingToolCalls.has(parentToolUseId)) {
-              // Parent is still streaming - store as pending child
               const updatedPending = new Map(newState.pendingChildren);
               const pending = updatedPending.get(parentToolUseId) || []
               updatedPending.set(parentToolUseId, [...pending, {
@@ -334,7 +489,7 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
                 role: AGUIRole.TOOL,
                 toolCallId: toolCallId,
                 name: toolCallName,
-                content: event.result || event.error || '',
+                content: '',
                 toolCalls: [completedToolCall],
               }])
               newState.pendingChildren = updatedPending;
@@ -343,20 +498,17 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
               }
               return newState
             }
-            
-            // Search for parent in messages
+
+            // Search for parent tool in messages
             for (let i = messages.length - 1; i >= 0; i--) {
-              // Check if parent is in this message's toolCalls array
               if (messages[i].toolCalls) {
                 const parentToolIdx = messages[i].toolCalls!.findIndex(tc => tc.id === parentToolUseId)
                 if (parentToolIdx !== -1) {
-                  // Found parent! Check if child already attached
                   const childExists = messages[i].toolCalls!.some(tc => tc.id === toolCallId);
                   if (!childExists) {
-                    const existingToolCalls = messages[i].toolCalls || []
                     messages[i] = {
                       ...messages[i],
-                      toolCalls: [...existingToolCalls, completedToolCall]
+                      toolCalls: [...(messages[i].toolCalls || []), completedToolCall]
                     }
                   }
                   foundParent = true
@@ -364,7 +516,7 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
                 }
               }
             }
-            
+
             if (foundParent) {
               newState.messages = messages
               if (newState.currentToolCall?.id === toolCallId) {
@@ -372,50 +524,50 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
               }
               return newState
             }
-            
-            // Parent not found - will attach to assistant message below
-            console.warn(`[useAGUIStream] Parent ${parentToolUseId.substring(0, 8)} not found for child ${toolCallName}, attaching to assistant`)
           }
-          
-          // This is either a top-level tool or parent wasn't found
-          // Attach to last assistant message
+
+          // Attach to the correct assistant message.
+          // AG-UI spec: use parentMessageId to find the exact assistant message.
+          // Fallback: search backwards for the last assistant message.
           let foundAssistant = false
           for (let i = messages.length - 1; i >= 0; i--) {
-            if (messages[i].role === AGUIRole.ASSISTANT) {
+            const isTargetMessage = parentMessageId
+              ? messages[i].id === parentMessageId
+              : messages[i].role === AGUIRole.ASSISTANT
+
+            if (isTargetMessage) {
               const existingToolCalls = messages[i].toolCalls || []
-              
-              // Check if tool already exists in this message
+
               if (existingToolCalls.some(tc => tc.id === toolCallId)) {
                 foundAssistant = true;
                 break;
               }
-              
-              // If this tool just finished and has pending children, attach them all now!
+
               const pendingForThisTool = newState.pendingChildren.get(toolCallId) || []
               const childToolCalls = pendingForThisTool.flatMap(child => child.toolCalls || [])
-              
+
               messages[i] = {
                 ...messages[i],
                 toolCalls: [...existingToolCalls, completedToolCall, ...childToolCalls]
               }
-              
+
               if (pendingForThisTool.length > 0) {
                 const updatedPending = new Map(newState.pendingChildren);
                 updatedPending.delete(toolCallId);
                 newState.pendingChildren = updatedPending;
               }
-              
+
               foundAssistant = true
               break
             }
           }
-          
-          // If no assistant, add as standalone
+
+          // If target message not found, add as standalone tool message
           if (!foundAssistant) {
             const toolMessage: AGUIMessage = {
               id: crypto.randomUUID(),
               role: AGUIRole.TOOL,
-              content: event.result || event.error || '',
+              content: '',
               toolCallId: toolCallId,
               name: toolCallName,
               toolCalls: [completedToolCall],
@@ -423,9 +575,67 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
             }
             messages.push(toolMessage)
           }
-          
+
           newState.messages = messages
           newState.currentToolCall = null
+          return newState
+        }
+
+        // Handle TOOL_CALL_RESULT — the runner sends results as a separate event
+        // after TOOL_CALL_END (which may have no result field).
+        if (event.type === AGUIEventType.TOOL_CALL_RESULT) {
+          const toolCallId = event.toolCallId
+          const resultContent = event.content || ''
+          if (toolCallId) {
+            let found = false
+
+            // Search in committed messages first
+            const messages = [...newState.messages]
+            for (let i = messages.length - 1; i >= 0; i--) {
+              if (messages[i].toolCalls) {
+                const tcIdx = messages[i].toolCalls!.findIndex(tc => tc.id === toolCallId)
+                if (tcIdx >= 0) {
+                  const updatedToolCalls = [...messages[i].toolCalls!]
+                  updatedToolCalls[tcIdx] = {
+                    ...updatedToolCalls[tcIdx],
+                    result: resultContent,
+                    status: 'completed',
+                  }
+                  messages[i] = { ...messages[i], toolCalls: updatedToolCalls }
+                  newState.messages = messages
+                  found = true
+                  break
+                }
+              }
+            }
+
+            // If not found, search in pendingChildren (child tools waiting for parent to finish)
+            if (!found && newState.pendingChildren.size > 0) {
+              const updatedPendingChildren = new Map(newState.pendingChildren)
+              for (const [parentId, children] of updatedPendingChildren) {
+                for (let j = 0; j < children.length; j++) {
+                  if (children[j].toolCalls) {
+                    const tcIdx = children[j].toolCalls!.findIndex(tc => tc.id === toolCallId)
+                    if (tcIdx >= 0) {
+                      const updatedChildren = [...children]
+                      const updatedToolCalls = [...updatedChildren[j].toolCalls!]
+                      updatedToolCalls[tcIdx] = {
+                        ...updatedToolCalls[tcIdx],
+                        result: resultContent,
+                        status: 'completed',
+                      }
+                      updatedChildren[j] = { ...updatedChildren[j], toolCalls: updatedToolCalls }
+                      updatedPendingChildren.set(parentId, updatedChildren)
+                      newState.pendingChildren = updatedPendingChildren
+                      found = true
+                      break
+                    }
+                  }
+                }
+                if (found) break
+              }
+            }
+          }
           return newState
         }
 
@@ -450,20 +660,117 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
         }
 
         if (isMessagesSnapshotEvent(event)) {
-          
+
           // Filter out hidden messages from snapshot
           const visibleMessages = event.messages.filter(msg => {
             const isHidden = hiddenMessageIdsRef.current.has(msg.id)
             return !isHidden
           })
-          
-          // CRITICAL: Don't replace messages - merge snapshot with any in-progress streaming messages
-          // Snapshot contains completed messages, but streaming might have started new messages
-          // that aren't in the snapshot yet
-          const snapshotIds = new Set(visibleMessages.map(m => m.id))
-          const streamingMessages = newState.messages.filter(m => !snapshotIds.has(m.id))
-          
-          newState.messages = [...visibleMessages, ...streamingMessages]
+
+          // Normalize snapshot: convert OpenAI toolCalls format and reconstruct
+          // parent-child tool call hierarchy (sub-agents).  Without this, child
+          // tool results appear as flat separate messages instead of nested.
+          const normalizedMessages = normalizeSnapshotMessages(visibleMessages)
+
+          // Merge normalized snapshot into existing messages while preserving
+          // chronological order.  The runner may send partial snapshots (current
+          // run only, not cumulative), so we can't just replace.
+          const snapshotMap = new Map(normalizedMessages.map(m => [m.id, m]))
+          const existingIds = new Set(newState.messages.map(m => m.id))
+
+          // Update existing messages in-place with snapshot data.
+          // For assistant messages with toolCalls, merge tool call arrays to
+          // preserve names/args from streaming events that the snapshot lacks.
+          const merged: AGUIMessage[] = newState.messages.map(msg => {
+            const snapshotVersion = snapshotMap.get(msg.id)
+            if (!snapshotVersion) return msg
+
+            // For assistant messages, merge toolCalls to preserve streaming data
+            if (msg.role === 'assistant' && msg.toolCalls?.length && snapshotVersion.toolCalls?.length) {
+              const mergedToolCalls = [...snapshotVersion.toolCalls]
+              for (const existingTC of msg.toolCalls) {
+                const snapshotTC = mergedToolCalls.find(tc => tc.id === existingTC.id)
+                if (snapshotTC) {
+                  // Prefer existing tool name if snapshot only has generic name
+                  if (existingTC.name && existingTC.name !== 'tool' &&
+                      (!snapshotTC.name || snapshotTC.name === 'tool')) {
+                    snapshotTC.name = existingTC.name
+                  }
+                  // Prefer existing args if snapshot has none
+                  if (existingTC.args && !snapshotTC.args) {
+                    snapshotTC.args = existingTC.args
+                  }
+                  // Preserve parentToolUseId from either source
+                  if (existingTC.parentToolUseId && !snapshotTC.parentToolUseId) {
+                    snapshotTC.parentToolUseId = existingTC.parentToolUseId
+                  }
+                } else {
+                  // Existing tool call not in snapshot — keep it
+                  mergedToolCalls.push(existingTC)
+                }
+              }
+              return { ...snapshotVersion, toolCalls: mergedToolCalls }
+            }
+
+            return snapshotVersion
+          })
+
+          // Insert new snapshot messages at the correct position based on
+          // the snapshot's ordering. For each new message, find the next
+          // message in the snapshot that already exists in state and insert
+          // before it. This prevents user messages from being appended after
+          // assistant messages when the snapshot has them in [user, assistant] order.
+          for (let i = 0; i < normalizedMessages.length; i++) {
+            const msg = normalizedMessages[i]
+            if (existingIds.has(msg.id)) continue // Already in merged
+
+            // Find the next snapshot message that exists in the merged list
+            let insertBeforeId: string | null = null
+            for (let j = i + 1; j < normalizedMessages.length; j++) {
+              if (existingIds.has(normalizedMessages[j].id)) {
+                insertBeforeId = normalizedMessages[j].id
+                break
+              }
+            }
+
+            if (insertBeforeId) {
+              const idx = merged.findIndex(m => m.id === insertBeforeId)
+              if (idx >= 0) {
+                merged.splice(idx, 0, msg)
+              } else {
+                merged.push(msg)
+              }
+            } else {
+              merged.push(msg)
+            }
+            existingIds.add(msg.id)
+          }
+
+          // Remove redundant standalone role=tool messages that are now nested
+          // in an assistant message's toolCalls (from normalization).  Without
+          // this cleanup, the standalone messages' toolCalls arrays (which lack
+          // parentToolUseId) overwrite the normalized entries in page.tsx's
+          // allToolCalls map, destroying the parent-child hierarchy.
+          const nestedToolCallIds = new Set<string>()
+          for (const msg of merged) {
+            if (msg.role === 'assistant' && msg.toolCalls) {
+              for (const tc of msg.toolCalls) {
+                nestedToolCallIds.add(tc.id)
+              }
+            }
+          }
+          newState.messages = merged.filter(msg => {
+            if (msg.role !== 'tool') return true
+            // Remove if this message's toolCallId is already in an assistant's toolCalls
+            if (msg.toolCallId && nestedToolCallIds.has(msg.toolCallId)) return false
+            // Remove if any of its embedded toolCalls overlap with nested IDs
+            if (msg.toolCalls?.some(tc => nestedToolCallIds.has(tc.id))) return false
+            return true
+          })
+          // Clear pendingChildren — the normalized snapshot subsumes any
+          // pending child data from streaming, preventing duplicate children
+          // when page.tsx builds the hierarchy from multiple sources.
+          newState.pendingChildren = new Map()
           return newState
         }
 
@@ -527,6 +834,8 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
             const messageId = rawData.messageId as string
             if (messageId) {
               hiddenMessageIdsRef.current.add(messageId)
+              // Remove the message if it was already added (race condition)
+              newState.messages = newState.messages.filter(m => m.id !== messageId)
             }
             return newState
           }
@@ -560,10 +869,11 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
           
           // Handle user message echoes from backend
           if (actualRawData?.role === 'user' && actualRawData?.content) {
-            // Check if this message already exists to prevent duplicates
+            // Check if this message already exists or is hidden (auto-sent prompts)
             const messageId = (actualRawData.id as string) || crypto.randomUUID()
             const exists = newState.messages.some(m => m.id === messageId)
-            if (!exists) {
+            const isHidden = hiddenMessageIdsRef.current.has(messageId)
+            if (!exists && !isHidden) {
               const msg: AGUIMessage = {
                 id: messageId,
                 role: AGUIRole.USER,
@@ -757,13 +1067,6 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
   // AG-UI server pattern: POST returns SSE stream directly
   const sendMessage = useCallback(
     async (content: string) => {
-      // Set status to connected when starting a new message
-      setState((prev) => ({
-        ...prev,
-        status: 'connected',
-        error: null,
-      }))
-
       // Send to backend via run endpoint - this returns an SSE stream
       const runUrl = `/api/projects/${encodeURIComponent(projectName)}/agentic-sessions/${encodeURIComponent(sessionName)}/agui/run`
 
@@ -773,6 +1076,19 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
         content,
       }
 
+      // Add user message to state immediately for instant UI feedback.
+      // This prevents ordering issues when MESSAGES_SNAPSHOT arrives later
+      // (the snapshot merge will find this message by ID and update in-place
+      // rather than appending it after the assistant message).
+      setState((prev) => ({
+        ...prev,
+        status: 'connected',
+        error: null,
+        messages: [...prev.messages, {
+          ...userMessage,
+          timestamp: new Date().toISOString(),
+        } as AGUIMessage],
+      }))
 
       try {
         const response = await fetch(runUrl, {
@@ -809,8 +1125,12 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
           setIsRunActive(true)
         }
         
-        // Ensure we're connected to the thread stream to receive events
-        if (state.status !== 'connected') {
+        // Ensure we're connected to the thread stream to receive events.
+        // Check the EventSource ref directly instead of state.status to avoid
+        // stale closure issues (state.status may still be 'completed' from the
+        // previous run, which would cause an unnecessary reconnect and replay
+        // of all past events — producing a visible flash of old messages).
+        if (!eventSourceRef.current) {
           connect()
         }
       } catch (error) {
@@ -823,7 +1143,7 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
         throw error
       }
     },
-    [projectName, sessionName, state.threadId, state.runId, state.status, connect],
+    [projectName, sessionName, state.threadId, state.runId, connect],
   )
 
   // Auto-connect on mount if enabled (client-side only)

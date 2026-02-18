@@ -33,11 +33,112 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-// ─── POST /agui/run — main CopilotKit entry point ───────────────────
+// ─── GET /agui/events — SSE event stream ─────────────────────────────
+//
+// HandleAGUIEvents serves the AG-UI event stream over SSE.  Clients
+// (typically EventSource) connect here to receive all events for a
+// session — both persisted history and live events from active runs.
+//
+// This is the "read" side of the AG-UI middleware pattern:
+//
+//	POST /agui/run  → starts a run, returns JSON metadata immediately
+//	GET  /agui/events → SSE stream of all thread events (past + future)
+func HandleAGUIEvents(c *gin.Context) {
+	projectName := c.Param("projectName")
+	sessionName := c.Param("sessionName")
 
-// HandleAGUIRunProxy proxies AG-UI run requests to the runner's FastAPI
-// server.  CopilotKit's HttpAgent POSTs here with Accept: text/event-stream
-// and receives an SSE stream back.
+	// SECURITY: Authenticate + RBAC (read access)
+	reqK8s, _ := handlers.GetK8sClientsForRequest(c)
+	if reqK8s == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
+	if !checkAccess(reqK8s, projectName, sessionName, "get") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Unauthorized"})
+		c.Abort()
+		return
+	}
+
+	log.Printf("AGUI Events: client connected for %s/%s", projectName, sessionName)
+
+	// ── SSE response headers ─────────────────────────────────────
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Header("X-Accel-Buffering", "no")
+	c.Writer.WriteHeader(http.StatusOK)
+
+	// Subscribe to live broadcast pipe BEFORE loading persisted events.
+	// This ordering prevents a race where events published between
+	// loadEvents() and subscribeLive() would be missed by the client.
+	liveCh, cleanup := subscribeLive(sessionName)
+	defer cleanup()
+
+	events := loadEvents(sessionName)
+
+	if len(events) > 0 {
+		// Check if the last run is finished.
+		runFinished := false
+		if last := events[len(events)-1]; last != nil {
+			if t, _ := last["type"].(string); t == types.EventTypeRunFinished {
+				runFinished = true
+			}
+		}
+
+		if runFinished {
+			// Finished runs get compacted replay (fast, small).
+			compacted := compactStreamingEvents(events)
+			log.Printf("AGUI Events: %d raw → %d compacted events for %s (finished)", len(events), len(compacted), sessionName)
+			for _, evt := range compacted {
+				writeSSEEvent(c.Writer, evt)
+			}
+		} else {
+			// Active run — send raw events to preserve streaming structure.
+			log.Printf("AGUI Events: replaying %d raw events for %s (running)", len(events), sessionName)
+			for _, evt := range events {
+				writeSSEEvent(c.Writer, evt)
+			}
+		}
+		c.Writer.Flush()
+	}
+
+	// Drain live events buffered during replay — they are already
+	// covered by the persisted events we just sent.
+	drainLiveChannel(liveCh)
+
+	// Tail live events until client disconnects.
+	// Send SSE comments as keepalive every 15s to prevent proxies
+	// (Next.js, nginx, ALB) from dropping the idle connection.
+	heartbeat := time.NewTicker(15 * time.Second)
+	defer heartbeat.Stop()
+
+	clientGone := c.Request.Context().Done()
+	for {
+		select {
+		case <-clientGone:
+			log.Printf("AGUI Events: client disconnected for %s", sessionName)
+			return
+		case line, ok := <-liveCh:
+			if !ok {
+				return
+			}
+			fmt.Fprint(c.Writer, line)
+			c.Writer.Flush()
+		case <-heartbeat.C:
+			// SSE comment — ignored by EventSource but keeps connection alive
+			fmt.Fprint(c.Writer, ": heartbeat\n\n")
+			c.Writer.Flush()
+		}
+	}
+}
+
+// ─── POST /agui/run — start a new run ────────────────────────────────
+//
+// HandleAGUIRunProxy accepts an AG-UI run request, forwards it to the
+// runner pod in a background goroutine, and returns JSON metadata
+// immediately.  Events are persisted and broadcast to GET /agui/events
+// subscribers via the live broadcast pipe.
 func HandleAGUIRunProxy(c *gin.Context) {
 	projectName := c.Param("projectName")
 	sessionName := c.Param("sessionName")
@@ -63,13 +164,6 @@ func HandleAGUIRunProxy(c *gin.Context) {
 		return
 	}
 
-	// Count actual messages for reconnect detection
-	var rawMessages []json.RawMessage
-	if len(input.Messages) > 0 {
-		_ = json.Unmarshal(input.Messages, &rawMessages)
-	}
-	hasMessages := len(rawMessages) > 0
-
 	// Generate or use provided IDs
 	threadID := input.ThreadID
 	if threadID == "" {
@@ -82,11 +176,17 @@ func HandleAGUIRunProxy(c *gin.Context) {
 	input.ThreadID = threadID
 	input.RunID = runID
 
+	// Count actual messages
+	var rawMessages []json.RawMessage
+	if len(input.Messages) > 0 {
+		_ = json.Unmarshal(input.Messages, &rawMessages)
+	}
+
 	log.Printf("AGUI Proxy: run=%s session=%s/%s msgs=%d", truncID(runID), projectName, sessionName, len(rawMessages))
 
-	// Trigger display name generation on first real user message
-	if hasMessages {
-		var minimalMsgs []types.Message
+	// Parse messages for display name generation and hidden metadata
+	var minimalMsgs []types.Message
+	if len(rawMessages) > 0 {
 		for _, raw := range rawMessages {
 			var msg types.Message
 			if err := json.Unmarshal(raw, &msg); err == nil {
@@ -96,105 +196,45 @@ func HandleAGUIRunProxy(c *gin.Context) {
 		go triggerDisplayNameGenerationIfNeeded(projectName, sessionName, minimalMsgs)
 	}
 
-	// ── SSE response ─────────────────────────────────────────────────
-	c.Header("Content-Type", "text/event-stream")
-	c.Header("Cache-Control", "no-cache")
-	c.Header("Connection", "keep-alive")
-	c.Header("X-Accel-Buffering", "no")
-	c.Writer.WriteHeader(http.StatusOK)
-
-	// ── Reconnect (page refresh): replay history then tail for live events ──
-	// Subscribe to the live broadcast pipe FIRST, then load persisted events.
-	// This ordering prevents a race where events published between
-	// loadEvents() and subscribeLive() would be missed by the client.
-	if !hasMessages {
-		log.Printf("AGUI Proxy (reconnect): serving history for %s/%s", projectName, sessionName)
-
-		// Subscribe to live pipe BEFORE loading events from disk so we
-		// capture any events published while we read the file.
-		liveCh, cleanup := subscribeLive(sessionName)
-		defer cleanup()
-
-		events := loadEvents(sessionName)
-
-		// No events — fresh session, return immediately.
-		if len(events) == 0 {
-			log.Printf("AGUI Proxy (reconnect): no events for %s", sessionName)
-			return
-		}
-
-		// Check if the run is finished.
-		runFinished := false
-		if last := events[len(events)-1]; last != nil {
-			if t, _ := last["type"].(string); t == types.EventTypeRunFinished {
-				runFinished = true
-			}
-		}
-
-		// Finished runs get compacted replay (fast, small).
-		// Active runs get raw events (preserves streaming structure for CopilotKit).
-		if runFinished {
-			compacted := compactStreamingEvents(events)
-			log.Printf("AGUI Proxy (reconnect): %d raw → %d compacted events for %s (finished)", len(events), len(compacted), sessionName)
-			for _, evt := range compacted {
-				writeSSEEvent(c.Writer, evt)
-			}
-			c.Writer.Flush()
-			return // cleanup() via defer; subscription was cheap and harmless
-		}
-
-		// Active run — send raw events as-is.
-		log.Printf("AGUI Proxy (reconnect): replaying %d raw events for %s (running)", len(events), sessionName)
-		for _, evt := range events {
-			writeSSEEvent(c.Writer, evt)
-		}
-		c.Writer.Flush()
-
-		// Drain live events buffered during replay — they are already
-		// covered by the persisted events we just sent.  Because
-		// persistStreamedEvent is called synchronously before publishLine,
-		// any event in the live channel was also on disk when loadEvents()
-		// ran (or arrived during replay, which is already replayed).
-		drainLiveChannel(liveCh)
-
-		clientGone := c.Request.Context().Done()
-		for {
-			select {
-			case <-clientGone:
-				log.Printf("AGUI Proxy (reconnect): client disconnected for %s", sessionName)
-				return
-			case line, ok := <-liveCh:
-				if !ok {
-					return
-				}
-				fmt.Fprint(c.Writer, line)
-				c.Writer.Flush()
-
-				// Check if this line contains RUN_FINISHED
-				trimmed := strings.TrimSpace(line)
-				if strings.HasPrefix(trimmed, "data: ") && strings.Contains(trimmed, `"type":"RUN_FINISHED"`) {
-					log.Printf("AGUI Proxy (reconnect): run finished for %s", sessionName)
-					return
-				}
-			}
+	// Emit message_metadata RAW events for hidden messages (e.g. auto-sent
+	// workflow prompts).  These must be persisted and broadcast BEFORE the
+	// runner starts emitting events so GET /agui/events subscribers hide
+	// the messages before they arrive via TEXT_MESSAGE_* events.
+	for _, msg := range minimalMsgs {
+		if isMessageHidden(msg.Metadata) {
+			emitHiddenMessageMetadata(sessionName, runID, threadID, msg.ID)
 		}
 	}
 
-	// ── New message: forward to runner ────────────────────────────
-	runnerURL := getRunnerEndpoint(projectName, sessionName)
+	// ── Forward to runner in background, return JSON immediately ──
 	bodyBytes, err := json.Marshal(input)
 	if err != nil {
-		writeSSEError(c.Writer, "Failed to serialize input", threadID, runID)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to serialize input"})
 		return
 	}
 
+	runnerURL := getRunnerEndpoint(projectName, sessionName)
+
+	// Start background goroutine to proxy runner SSE → persist + broadcast
+	go proxyRunnerStream(runnerURL, bodyBytes, sessionName, runID, threadID)
+
+	// Return metadata immediately — events arrive via GET /agui/events
+	c.JSON(http.StatusOK, gin.H{
+		"runId":    runID,
+		"threadId": threadID,
+	})
+}
+
+// proxyRunnerStream connects to the runner's SSE endpoint, reads events,
+// persists them, and publishes them to the live broadcast pipe.  Runs in
+// a background goroutine so the POST /agui/run handler can return immediately.
+func proxyRunnerStream(runnerURL string, bodyBytes []byte, sessionName, runID, threadID string) {
 	log.Printf("AGUI Proxy: connecting to runner at %s", runnerURL)
 	resp, err := connectToRunner(runnerURL, bodyBytes)
 	if err != nil {
 		log.Printf("AGUI Proxy: runner unavailable for %s: %v", sessionName, err)
-		writeSSERun(c.Writer, "RUN_STARTED", threadID, runID)
-		writeSSEError(c.Writer, "Runner is not available", threadID, runID)
-		c.Writer.Flush()
+		// Publish error events so GET /agui/events subscribers see the failure
+		publishAndPersistErrorEvents(sessionName, runID, threadID, "Runner is not available")
 		return
 	}
 	defer resp.Body.Close()
@@ -202,15 +242,12 @@ func HandleAGUIRunProxy(c *gin.Context) {
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		log.Printf("AGUI Proxy: runner returned %d: %s", resp.StatusCode, string(body))
-		writeSSERun(c.Writer, "RUN_STARTED", threadID, runID)
-		writeSSEError(c.Writer, fmt.Sprintf("Runner error: HTTP %d", resp.StatusCode), threadID, runID)
-		c.Writer.Flush()
+		publishAndPersistErrorEvents(sessionName, runID, threadID, fmt.Sprintf("Runner error: HTTP %d", resp.StatusCode))
 		return
 	}
 
-	// ── Pipe SSE from runner to client, persist each event ───────────
+	// Pipe SSE from runner: persist each event and broadcast to subscribers
 	reader := bufio.NewReader(resp.Body)
-
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
@@ -222,21 +259,77 @@ func HandleAGUIRunProxy(c *gin.Context) {
 
 		trimmed := strings.TrimSpace(line)
 
-		// Persist every event synchronously to JSONL (backup for recovery).
+		// Persist every data event to JSONL
 		if strings.HasPrefix(trimmed, "data: ") {
 			jsonData := strings.TrimPrefix(trimmed, "data: ")
 			persistStreamedEvent(sessionName, runID, threadID, jsonData)
 		}
 
-		// Publish raw SSE line to any connect handler tailing this session.
+		// Publish raw SSE line to all GET /agui/events subscribers
 		publishLine(sessionName, line)
-
-		// Forward raw SSE line to client
-		fmt.Fprint(c.Writer, line)
-		c.Writer.Flush()
 	}
 
-	log.Printf("AGUI Proxy: run %s stream ended", runID[:8])
+	log.Printf("AGUI Proxy: run %s stream ended", truncID(runID))
+}
+
+// publishAndPersistErrorEvents generates RUN_STARTED + RUN_ERROR events,
+// persists them, and publishes to the live broadcast so subscribers get
+// notified of runner failures.
+func publishAndPersistErrorEvents(sessionName, runID, threadID, message string) {
+	// RUN_STARTED
+	startEvt := map[string]interface{}{
+		"type":     "RUN_STARTED",
+		"threadId": threadID,
+		"runId":    runID,
+	}
+	persistEvent(sessionName, startEvt)
+	startData, _ := json.Marshal(startEvt)
+	publishLine(sessionName, fmt.Sprintf("data: %s\n\n", startData))
+
+	// RUN_ERROR
+	errEvt := map[string]interface{}{
+		"type":     "RUN_ERROR",
+		"message":  message,
+		"threadId": threadID,
+		"runId":    runID,
+	}
+	persistEvent(sessionName, errEvt)
+	errData, _ := json.Marshal(errEvt)
+	publishLine(sessionName, fmt.Sprintf("data: %s\n\n", errData))
+}
+
+// ─── Hidden message helpers ──────────────────────────────────────────
+
+// isMessageHidden checks if a message's metadata contains hidden: true.
+func isMessageHidden(metadata interface{}) bool {
+	if metadata == nil {
+		return false
+	}
+	m, ok := metadata.(map[string]interface{})
+	if !ok {
+		return false
+	}
+	hidden, _ := m["hidden"].(bool)
+	return hidden
+}
+
+// emitHiddenMessageMetadata persists and broadcasts a RAW event that
+// tells the frontend to hide a specific message (e.g. auto-sent workflow
+// prompts or initial prompts).
+func emitHiddenMessageMetadata(sessionName, runID, threadID, messageID string) {
+	evt := map[string]interface{}{
+		"type":     "RAW",
+		"threadId": threadID,
+		"runId":    runID,
+		"event": map[string]interface{}{
+			"type":      "message_metadata",
+			"messageId": messageID,
+			"hidden":    true,
+		},
+	}
+	persistEvent(sessionName, evt)
+	data, _ := json.Marshal(evt)
+	publishLine(sessionName, fmt.Sprintf("data: %s\n\n", data))
 }
 
 // persistStreamedEvent parses a raw JSON event, ensures IDs, and

@@ -340,15 +340,15 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
           </div>
         )}
 
-        {/* Show loading indicator when agent is actively processing */}
-        {shouldShowMessages && isRunActive && filteredMessages.length > 0 && (
+        {/* Show loading indicator when agent is actively processing (run started but not finished) */}
+        {shouldShowMessages && isRunActive && (
           <div className="pl-12 pr-4 py-2">
             <LoadingDots />
           </div>
         )}
 
-        {/* Show empty state only if no welcome experience and no messages */}
-        {!showWelcomeExperience && filteredMessages.length === 0 && (
+        {/* Show empty state only if no welcome experience, no messages, and session is running or terminal */}
+        {!showWelcomeExperience && !isCreating && filteredMessages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
             <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-50" />
             <p className="text-sm">No messages yet</p>

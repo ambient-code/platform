@@ -26,6 +26,7 @@ export const AGUIEventType = {
   TOOL_CALL_START: 'TOOL_CALL_START',
   TOOL_CALL_ARGS: 'TOOL_CALL_ARGS',
   TOOL_CALL_END: 'TOOL_CALL_END',
+  TOOL_CALL_RESULT: 'TOOL_CALL_RESULT',
 
   // State management events
   STATE_SNAPSHOT: 'STATE_SNAPSHOT',
@@ -193,6 +194,14 @@ export type AGUIToolCallEndEvent = AGUIBaseEvent & {
   duration?: number
 }
 
+export type AGUIToolCallResultEvent = AGUIBaseEvent & {
+  type: typeof AGUIEventType.TOOL_CALL_RESULT
+  toolCallId: string
+  content?: string
+  role?: string
+  messageId?: string
+}
+
 // State events
 export type AGUIStateSnapshotEvent = AGUIBaseEvent & {
   type: typeof AGUIEventType.STATE_SNAPSHOT
@@ -319,6 +328,7 @@ export type PendingToolCall = {
   name: string
   args: string
   parentToolUseId?: string
+  parentMessageId?: string  // AG-UI spec: links tool call to its assistant message
   timestamp?: string  // Timestamp from TOOL_CALL_START event
 }
 
