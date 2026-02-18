@@ -24,16 +24,26 @@ import type {
   PlatformEvent,
   PlatformMessage,
   PlatformToolCall,
+  PlatformRawEvent,
   AGUIMetaEvent,
   PlatformActivitySnapshotEvent,
   PlatformActivityDeltaEvent,
   WireToolCallStartEvent,
+  RunStartedEvent,
+  RunFinishedEvent,
+  RunErrorEvent,
+  TextMessageStartEvent,
+  TextMessageContentEvent,
+  TextMessageEndEvent,
   ToolCallArgsEvent,
+  ToolCallEndEvent,
   ToolCallResultEvent,
   StateDeltaEvent,
+  MessagesSnapshotEvent,
   StepStartedEvent,
   ReasoningMessageStartEvent,
   ReasoningMessageContentEvent,
+  ReasoningMessageEndEvent,
 } from '@/types/agui'
 import { normalizeSnapshotMessages } from './normalize-snapshot'
 
@@ -153,7 +163,7 @@ export function processAGUIEvent(
   }
 
   if (event.type === EventType.RAW) {
-    return handleRawEvent(newState, event, callbacks)
+    return handleRawEvent(newState, event as PlatformRawEvent, callbacks)
   }
 
   if (event.type === 'META') {
@@ -167,28 +177,26 @@ export function processAGUIEvent(
 
 function handleRunStarted(
   state: AGUIClientState,
-  event: ReturnType<typeof Object>,
+  event: RunStartedEvent,
   callbacks: EventHandlerCallbacks,
 ): AGUIClientState {
-  const e = event as { threadId: string; runId: string }
-  state.threadId = e.threadId
-  state.runId = e.runId
+  state.threadId = event.threadId
+  state.runId = event.runId
   state.status = 'connected'
   state.error = null
-  callbacks.currentRunIdRef.current = e.runId
+  callbacks.currentRunIdRef.current = event.runId
   callbacks.setIsRunActive(true)
   return state
 }
 
 function handleRunFinished(
   state: AGUIClientState,
-  event: PlatformEvent,
+  event: RunFinishedEvent,
   callbacks: EventHandlerCallbacks,
 ): AGUIClientState {
   state.status = 'completed'
-  const e = event as { runId?: string; timestamp?: number }
 
-  if (callbacks.currentRunIdRef.current === e.runId) {
+  if (callbacks.currentRunIdRef.current === event.runId) {
     callbacks.setIsRunActive(false)
     callbacks.currentRunIdRef.current = null
   }
@@ -199,7 +207,7 @@ function handleRunFinished(
       id: state.currentMessage.id || crypto.randomUUID(),
       role: 'assistant' as const,
       content: state.currentMessage.content,
-      timestamp: String(e.timestamp ?? ''),
+      timestamp: String(event.timestamp ?? ''),
     } as PlatformMessage
     state.messages = [...state.messages, msg]
     callbacks.onMessage?.(msg)
@@ -213,7 +221,7 @@ function handleRunFinished(
       role: 'assistant' as const,
       content: state.currentReasoning.content,
       metadata: { type: 'reasoning_block' },
-      timestamp: String(e.timestamp ?? ''),
+      timestamp: String(event.timestamp ?? ''),
     } as PlatformMessage
     state.messages = [...state.messages, msg]
     callbacks.onMessage?.(msg)
@@ -225,13 +233,12 @@ function handleRunFinished(
 
 function handleRunError(
   state: AGUIClientState,
-  event: PlatformEvent,
+  event: RunErrorEvent,
   callbacks: EventHandlerCallbacks,
 ): AGUIClientState {
   state.status = 'error'
-  const e = event as { message: string }
-  state.error = e.message
-  callbacks.onError?.(e.message)
+  state.error = event.message
+  callbacks.onError?.(event.message)
   callbacks.setIsRunActive(false)
   callbacks.currentRunIdRef.current = null
   return state
@@ -239,27 +246,25 @@ function handleRunError(
 
 function handleTextMessageStart(
   state: AGUIClientState,
-  event: PlatformEvent,
+  event: TextMessageStartEvent,
 ): AGUIClientState {
-  const e = event as { messageId?: string; role: string; timestamp?: number }
   state.currentMessage = {
-    id: e.messageId || null,
-    role: e.role,
+    id: event.messageId || null,
+    role: event.role,
     content: '',
-    timestamp: String(e.timestamp ?? ''),
+    timestamp: String(event.timestamp ?? ''),
   }
   return state
 }
 
 function handleTextMessageContent(
   state: AGUIClientState,
-  event: PlatformEvent,
+  event: TextMessageContentEvent,
 ): AGUIClientState {
-  const e = event as { delta: string }
   if (state.currentMessage) {
     state.currentMessage = {
       ...state.currentMessage,
-      content: (state.currentMessage.content || '') + e.delta,
+      content: (state.currentMessage.content || '') + event.delta,
     }
   }
   return state
@@ -267,12 +272,11 @@ function handleTextMessageContent(
 
 function handleTextMessageEnd(
   state: AGUIClientState,
-  event: PlatformEvent,
+  event: TextMessageEndEvent,
   callbacks: EventHandlerCallbacks,
 ): AGUIClientState {
   if (state.currentMessage?.content) {
     const messageId = state.currentMessage.id || crypto.randomUUID()
-    const e = event as { timestamp?: number }
 
     // Skip hidden messages (auto-sent initial/workflow prompts)
     if (callbacks.hiddenMessageIdsRef.current.has(messageId)) {
@@ -298,7 +302,7 @@ function handleTextMessageEnd(
         id: messageId,
         role: state.currentMessage.role || 'assistant',
         content: state.currentMessage.content,
-        timestamp: String(e.timestamp ?? ''),
+        timestamp: String(event.timestamp ?? ''),
       } as PlatformMessage
       state.messages = [...state.messages, msg]
       callbacks.onMessage?.(msg)
@@ -380,11 +384,10 @@ function handleToolCallArgs(
 
 function handleToolCallEnd(
   state: AGUIClientState,
-  event: PlatformEvent,
+  event: ToolCallEndEvent,
   callbacks: EventHandlerCallbacks,
 ): AGUIClientState {
-  const e = event as { toolCallId?: string; timestamp?: number }
-  const toolCallId = e.toolCallId || state.currentToolCall?.id || crypto.randomUUID()
+  const toolCallId = event.toolCallId || state.currentToolCall?.id || crypto.randomUUID()
 
   // Get tool info from pendingToolCalls Map (supports parallel tool calls)
   const pendingTool = state.pendingToolCalls.get(toolCallId)
@@ -521,7 +524,7 @@ function handleToolCallEnd(
       content: '',
       toolCallId: toolCallId,
       toolCalls: [completedToolCall],
-      timestamp: String(e.timestamp ?? ''),
+      timestamp: String(event.timestamp ?? ''),
     } as PlatformMessage
     messages.push(toolMessage)
     callbacks.onMessage?.(toolMessage)
@@ -611,13 +614,11 @@ function handleStateDelta(
 
 function handleMessagesSnapshot(
   state: AGUIClientState,
-  event: PlatformEvent,
+  event: MessagesSnapshotEvent,
   callbacks: EventHandlerCallbacks,
 ): AGUIClientState {
-  const e = event as { messages: PlatformMessage[] }
-
   // Filter out hidden messages from snapshot
-  const visibleMessages = (e.messages as PlatformMessage[]).filter(msg => {
+  const visibleMessages = (event.messages as PlatformMessage[]).filter(msg => {
     const isHidden = callbacks.hiddenMessageIdsRef.current.has(msg.id)
     return !isHidden
   })
@@ -833,17 +834,16 @@ function handleReasoningMessageContent(
 
 function handleReasoningMessageEnd(
   state: AGUIClientState,
-  event: PlatformEvent,
+  event: ReasoningMessageEndEvent,
   callbacks: EventHandlerCallbacks,
 ): AGUIClientState {
   if (state.currentReasoning?.content) {
-    const e = event as { timestamp?: number }
     const msg = {
       id: state.currentReasoning.id || crypto.randomUUID(),
       role: 'assistant' as const,
       content: state.currentReasoning.content,
       metadata: { type: 'reasoning_block' },
-      timestamp: String(e.timestamp ?? ''),
+      timestamp: String(event.timestamp ?? ''),
     } as PlatformMessage
     state.messages = [...state.messages, msg]
     callbacks.onMessage?.(msg)
@@ -856,12 +856,10 @@ function handleReasoningMessageEnd(
 
 function handleRawEvent(
   state: AGUIClientState,
-  event: PlatformEvent,
+  event: PlatformRawEvent,
   callbacks: EventHandlerCallbacks,
 ): AGUIClientState {
-  type RawEventData = { event?: Record<string, unknown>; data?: Record<string, unknown> }
-  const rawEvent = event as unknown as RawEventData
-  const rawData = rawEvent.event || rawEvent.data
+  const rawData = event.event || event.data
 
   // Handle message metadata (for hiding auto-sent messages)
   if (rawData?.type === 'message_metadata' && rawData?.hidden) {
@@ -880,20 +878,18 @@ function handleRawEvent(
     return state
   }
 
-  const actualRawData = rawData
-
   // Handle thinking blocks from Claude SDK
-  if (actualRawData?.type === 'thinking_block') {
+  if (rawData?.type === 'thinking_block') {
     const msg = {
       id: crypto.randomUUID(),
       role: 'assistant' as const,
-      content: actualRawData.thinking as string || '',
+      content: String(rawData.thinking ?? ''),
       metadata: {
         type: 'thinking_block',
-        thinking: actualRawData.thinking as string,
-        signature: actualRawData.signature as string,
+        thinking: String(rawData.thinking ?? ''),
+        signature: String(rawData.signature ?? ''),
       },
-      timestamp: String((event as { timestamp?: number }).timestamp ?? ''),
+      timestamp: String(event.timestamp ?? ''),
     } as PlatformMessage
     state.messages = [...state.messages, msg]
     callbacks.onMessage?.(msg)
@@ -901,16 +897,16 @@ function handleRawEvent(
   }
 
   // Handle user message echoes from backend
-  if (actualRawData?.role === 'user' && actualRawData?.content) {
-    const messageId = (actualRawData.id as string) || crypto.randomUUID()
+  if (rawData?.role === 'user' && rawData?.content) {
+    const messageId = String(rawData.id ?? '') || crypto.randomUUID()
     const exists = state.messages.some(m => m.id === messageId)
     const isHidden = callbacks.hiddenMessageIdsRef.current.has(messageId)
     if (!exists && !isHidden) {
       const msg = {
         id: messageId,
         role: 'user' as const,
-        content: actualRawData.content as string,
-        timestamp: String((event as { timestamp?: number }).timestamp ?? ''),
+        content: String(rawData.content),
+        timestamp: String(event.timestamp ?? ''),
       } as PlatformMessage
       state.messages = [...state.messages, msg]
       callbacks.onMessage?.(msg)
@@ -919,12 +915,12 @@ function handleRawEvent(
   }
 
   // Handle other message data
-  if (actualRawData?.role && actualRawData?.content) {
+  if (rawData?.role && rawData?.content) {
     const msg = {
-      id: (actualRawData.id as string) || crypto.randomUUID(),
-      role: actualRawData.role as string,
-      content: actualRawData.content as string,
-      timestamp: String((event as { timestamp?: number }).timestamp ?? ''),
+      id: String(rawData.id ?? '') || crypto.randomUUID(),
+      role: String(rawData.role),
+      content: String(rawData.content),
+      timestamp: String(event.timestamp ?? ''),
     } as PlatformMessage
     state.messages = [...state.messages, msg]
     callbacks.onMessage?.(msg)

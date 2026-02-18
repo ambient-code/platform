@@ -95,6 +95,16 @@ export type WireToolCallStartEvent = ToolCallStartEvent & {
   parent_tool_call_id?: string
 }
 
+/** Platform raw event — extends core RawEvent with optional data field.
+ *  The backend may send payload in either `event` or `data`. */
+export type PlatformRawEvent = {
+  type: typeof EventType.RAW
+  timestamp?: number
+  event?: Record<string, unknown>
+  data?: Record<string, unknown>
+  source?: string
+}
+
 // ── Platform Activity types ──
 // The core ActivitySnapshotEvent/ActivityDeltaEvent are per-message, not
 // array-based. The platform uses an array-based model for UI rendering.
