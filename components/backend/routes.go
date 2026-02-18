@@ -2,9 +2,15 @@ package main
 
 import (
 	"ambient-code-backend/handlers"
+	"ambient-code-backend/webhook"
 	"ambient-code-backend/websocket"
 
 	"github.com/gin-gonic/gin"
+)
+
+// Package-level variable for webhook handler (set from main package)
+var (
+	WebhookHandler *webhook.WebhookHandler
 )
 
 func registerContentRoutes(r *gin.Engine) {
@@ -25,6 +31,15 @@ func registerRoutes(r *gin.Engine) {
 	// API routes
 	api := r.Group("/api")
 	{
+		// GitHub webhook endpoint (public, verified via HMAC signature) (FR-001)
+		api.POST("/github/webhook", func(c *gin.Context) {
+			if WebhookHandler != nil {
+				WebhookHandler.HandleWebhook(c)
+			} else {
+				c.JSON(500, gin.H{"error": "Webhook handler not initialized"})
+			}
+		})
+
 		// Public endpoints (no auth required)
 		api.GET("/workflows/ootb", handlers.ListOOTBWorkflows)
 
