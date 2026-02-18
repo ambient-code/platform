@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 
+	"ambient-code-backend/featureflags"
 	"ambient-code-backend/git"
 	"ambient-code-backend/github"
 	"ambient-code-backend/handlers"
@@ -90,6 +91,9 @@ func main() {
 	}
 
 	server.InitConfig()
+
+	// Optional: Unleash feature flags (when UNLEASH_URL and UNLEASH_CLIENT_KEY are set)
+	featureflags.Init()
 
 	// Initialize git package
 	git.GetProjectSettingsResource = k8s.GetProjectSettingsResource

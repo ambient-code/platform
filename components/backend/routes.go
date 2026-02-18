@@ -109,6 +109,15 @@ func registerRoutes(r *gin.Engine) {
 			projectGroup.GET("/integration-secrets", handlers.ListIntegrationSecrets)
 			projectGroup.PUT("/integration-secrets", handlers.UpdateIntegrationSecrets)
 
+			// Feature flags admin endpoints (workspace-scoped with Unleash fallback)
+			projectGroup.GET("/feature-flags", handlers.ListFeatureFlags)
+			projectGroup.GET("/feature-flags/evaluate/:flagName", handlers.EvaluateFeatureFlag)
+			projectGroup.GET("/feature-flags/:flagName", handlers.GetFeatureFlag)
+			projectGroup.PUT("/feature-flags/:flagName/override", handlers.SetFeatureFlagOverride)
+			projectGroup.DELETE("/feature-flags/:flagName/override", handlers.DeleteFeatureFlagOverride)
+			projectGroup.POST("/feature-flags/:flagName/enable", handlers.EnableFeatureFlag)
+			projectGroup.POST("/feature-flags/:flagName/disable", handlers.DisableFeatureFlag)
+
 			// GitLab authentication endpoints (DEPRECATED - moved to cluster-scoped)
 			// Kept for backward compatibility, will be removed in future version
 			projectGroup.POST("/auth/gitlab/connect", handlers.ConnectGitLabGlobal)

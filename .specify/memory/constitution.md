@@ -1,7 +1,15 @@
 <!--
 Sync Impact Report - Constitution Update
-Version: 1.0.0
-Last Updated: 2025-11-13
+Version: 1.0.0 → 1.1.0 (MINOR)
+Last Updated: 2026-02-16
+
+Changelog (v1.1.0):
+  - ADDED: Principle XI: Feature Flag Discipline
+    * All new features MUST be gated behind a feature flag
+    * Flag naming conventions and lifecycle management
+    * Default-off deployment strategy for production safety
+    * Cleanup requirements for graduated flags
+  - Version bump: v1.0.0 → v1.1.0 (new principle added)
 
 Changelog (v1.0.0):
   - RATIFIED: Constitution officially ratified and adopted
@@ -40,7 +48,7 @@ Changelog (v0.0.1):
 Templates Status:
   ✅ plan-template.md - References constitution check dynamically
   ✅ tasks-template.md - Added Phase 3.9 for commit planning/validation (T036-T040)
-  ✅ spec-template.md - No updates needed
+  ✅ spec-template.md - No updates needed (feature flag requirement applies at implementation)
 
 Follow-up TODOs:
   - Implement /metrics endpoints in all components
@@ -49,6 +57,7 @@ Follow-up TODOs:
   - Add commit size validation tooling (pre-commit hook or CI check)
   - Update PR template to include commit discipline checklist
   - Continue vTeam → ACP migration incrementally (docs → UI → code)
+  - Document feature flag naming conventions in developer guide
 -->
 
 # ACP Constitution
@@ -255,6 +264,54 @@ Each commit MUST be atomic, reviewable, and independently testable:
 
 **Rationale**: Large commits hide bugs, slow reviews, complicate bisecting, and create merge conflicts. Specific thresholds provide objective guidance while exceptions handle legitimate cases. Small, focused commits enable faster feedback, easier debugging (git bisect), and safer reverts.
 
+### XI. Feature Flag Discipline
+
+All new features MUST be gated behind feature flags:
+
+**Mandatory Requirements**:
+
+- **Flag Gating**: Every new user-facing feature MUST be controlled by a feature flag
+- **Default Off**: Feature flags MUST default to `false` (disabled) in production
+- **Gradual Rollout**: Features MUST support percentage-based or tenant-based rollout
+- **Kill Switch**: Every feature flag MUST act as an instant kill switch for its feature
+
+**Flag Naming Convention**:
+
+- Format: `<component>.<feature>.<aspect>` (e.g., `backend.rfe-workflow.enabled`)
+- Use lowercase with hyphens for multi-word names
+- Include `enabled` suffix for on/off toggles
+- Include `percentage` suffix for gradual rollouts
+
+**Implementation Requirements**:
+
+- **Backend**: Check flag before executing feature logic; return 404 or appropriate error when disabled
+- **Frontend**: Conditionally render UI components; hide disabled features from navigation
+- **Operator**: Skip reconciliation for flagged features when disabled
+- **API Contracts**: Flagged endpoints MUST return consistent error responses when feature is disabled
+
+**Flag Lifecycle**:
+
+1. **Development**: Flag created, defaults to `false`
+2. **Testing**: Flag enabled in test/staging environments
+3. **Rollout**: Gradual enablement (10% → 50% → 100%) in production
+4. **Graduation**: Flag removed after feature is stable (minimum 2 weeks at 100%)
+5. **Cleanup**: Dead flag code MUST be removed within 30 days of graduation
+
+**Flag Storage**:
+
+- Flags stored in ProjectSettings CR for project-scoped features
+- Cluster-wide flags in ConfigMap `ambient-code-feature-flags`
+- Frontend flags fetched via `/api/feature-flags` endpoint with caching
+
+**Exceptions** (requires justification in PR):
+
+- **Bug Fixes**: Critical bug fixes do not require flags
+- **Internal Refactoring**: Non-user-facing changes do not require flags
+- **Infrastructure**: Logging, metrics, observability changes do not require flags
+- **Security Patches**: Security fixes MUST NOT be gated (immediate deployment required)
+
+**Rationale**: Feature flags enable safe deployments, instant rollback without redeploy, A/B testing, and gradual rollouts. They decouple deployment from release, reducing blast radius of bugs and enabling faster iteration. Flags that linger become technical debt, hence strict cleanup requirements.
+
 ## Development Standards
 
 ### Go Code (Backend & Operator)
@@ -273,6 +330,12 @@ Each commit MUST be atomic, reviewable, and independently testable:
 - Service account: ONLY for CR writes and token minting
 - Status updates: Use `UpdateStatus` subresource
 - Watch loops: Reconnect on channel close with backoff
+
+**Feature Flags**: See Principle XI: Feature Flag Discipline
+
+- Import feature flag package: `featureflags`
+- Check flags early in handler: `if !featureflags.IsEnabled(ctx, "feature.name") { return }`
+- Include flag name in structured logs when feature is disabled
 
 ### Frontend Code (NextJS)
 
@@ -294,6 +357,12 @@ Each commit MUST be atomic, reviewable, and independently testable:
 - Colocate single-use components with pages
 - All routes MUST have `page.tsx`, `loading.tsx`, `error.tsx`
 - Components over 200 lines MUST be broken down
+
+**Feature Flags**: See Principle XI: Feature Flag Discipline
+
+- Use `FeatureFlagProvider` context for flag access
+- Conditionally render with `<FeatureFlag name="feature.name">` wrapper
+- Hide navigation items for disabled features
 
 ### Python Code (Runner)
 
@@ -368,6 +437,12 @@ npm run build  # Must pass with 0 errors, 0 warnings
 - Drop all capabilities by default
 - Use non-root users where possible
 
+**Feature Flag Verification**:
+
+- Verify new features are gated behind flags
+- Confirm flags default to `false` in production manifests
+- Test feature behavior with flag both enabled and disabled
+
 ### Production Requirements
 
 **Security**: Apply Principle II security requirements. Additionally: Scan container images for vulnerabilities before deployment.
@@ -381,6 +456,13 @@ npm run build  # Must pass with 0 errors, 0 warnings
 - Plan for job concurrency and queue management
 - Design for multi-tenancy with shared infrastructure
 - Do not use etcd as a database for unbounded objects like CRs. Use an external database like Postgres.
+
+**Feature Flags**:
+
+- All new features deployed with flags defaulting to `false`
+- Gradual rollout via flag percentage or tenant targeting
+- Monitor error rates and latency during rollout
+- Maintain rollback capability via flag disable
 
 ## Governance
 
@@ -404,6 +486,7 @@ npm run build  # Must pass with 0 errors, 0 warnings
 - Pre-commit checklists MUST be followed for backend, frontend, and operator code
 - Complexity violations MUST be justified in implementation plans
 - Constitution supersedes all other practices and guidelines
+- New features MUST include feature flag implementation per Principle XI
 
 ### Development Guidance
 
@@ -413,5 +496,4 @@ Runtime development guidance is maintained in:
 - Component-specific README files
 - MkDocs documentation in `/docs`
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+**Version**: 1.1.0 | **Ratified**: 2025-11-13 | **Last Amended**: 2026-02-16
