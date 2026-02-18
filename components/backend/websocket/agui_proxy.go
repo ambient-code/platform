@@ -27,7 +27,16 @@ const (
 	// activityDebounceInterval is the minimum interval between CR status updates for lastActivityTime.
 	// Inactivity timeout is measured in hours, so minute-level granularity is sufficient.
 	activityDebounceInterval = 60 * time.Second
+
+	// activityUpdateTimeout bounds how long a single activity status update can take.
+	activityUpdateTimeout = 10 * time.Second
 )
+
+// activityUpdateSem limits concurrent goroutines spawned by updateLastActivityTime.
+// With 60s debounce, at most one goroutine per session is active at a time under normal
+// conditions; this cap protects against pathological bursts (e.g., many sessions starting
+// simultaneously with immediate=true).
+var activityUpdateSem = make(chan struct{}, 50)
 
 // lastActivityUpdateTimes tracks the last time we updated lastActivityTime on the CR
 // for each session to avoid excessive API calls. Key: "namespace/sessionName"
@@ -641,10 +650,20 @@ func updateLastActivityTime(projectName, sessionName string, immediate bool) {
 
 	lastActivityUpdateTimes.Store(key, now)
 
+	// Bound concurrency: drop the update if all slots are busy (debounce will retry later).
+	select {
+	case activityUpdateSem <- struct{}{}:
+	default:
+		return
+	}
+
 	// Run in goroutine to avoid blocking event processing
 	go func() {
+		defer func() { <-activityUpdateSem }()
+
 		gvr := handlers.GetAgenticSessionV1Alpha1Resource()
-		ctx := context.Background()
+		ctx, cancel := context.WithTimeout(context.Background(), activityUpdateTimeout)
+		defer cancel()
 
 		obj, err := handlers.DynamicClient.Resource(gvr).Namespace(projectName).Get(ctx, sessionName, metav1.GetOptions{})
 		if err != nil {
