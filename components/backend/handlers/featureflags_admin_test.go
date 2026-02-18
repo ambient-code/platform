@@ -817,9 +817,10 @@ var _ = Describe("Feature Flags Admin Handler", Label(test_constants.LabelUnit, 
 				httpUtils.GetResponseJSON(&response)
 				Expect(response["flag"]).To(Equal("my-flag"))
 				Expect(response["enabled"]).To(Equal(false))
-				Expect(response["source"]).To(Equal("default"))
+				// Source is "unleash" because we use the Client SDK (which returns false when not configured)
+				Expect(response["source"]).To(Equal("unleash"))
 
-				logger.Log("Correctly returned default disabled when nothing configured")
+				logger.Log("Correctly returned disabled from Unleash SDK when nothing configured")
 			})
 
 			It("Should require flag name parameter", func() {
@@ -910,7 +911,8 @@ var _ = Describe("Feature Flags Admin Handler", Label(test_constants.LabelUnit, 
 				var responseC map[string]interface{}
 				httpUtils.GetResponseJSON(&responseC)
 				Expect(responseC["enabled"]).To(Equal(false))
-				Expect(responseC["source"]).To(Equal("default"))
+				// Source is "unleash" because we use the Client SDK (returns false when not configured)
+				Expect(responseC["source"]).To(Equal("unleash"))
 
 				logger.Log("Successfully verified override precedence logic")
 			})

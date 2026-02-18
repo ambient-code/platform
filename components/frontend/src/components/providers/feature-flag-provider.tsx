@@ -11,7 +11,6 @@ import { FlagProvider } from '@unleash/proxy-client-react';
 import { useState, useEffect, type ReactNode } from 'react';
 
 const UNLEASH_APP_NAME = 'ambient-code-platform';
-const REFRESH_INTERVAL_SEC = 15;
 
 // Get client key from environment or use placeholder
 // The placeholder key is used when Unleash is not configured - the SDK requires a non-empty string
@@ -48,7 +47,6 @@ export function FeatureFlagProvider({ children }: FeatureFlagProviderProps) {
         clientKey: UNLEASH_CLIENT_KEY,
         appName: UNLEASH_APP_NAME,
         environment: process.env.NEXT_PUBLIC_UNLEASH_ENV_CONTEXT_FIELD || 'development',
-        refreshInterval: REFRESH_INTERVAL_SEC,
       }}
     >
       {children}
