@@ -231,14 +231,14 @@ var _ = Describe("Middleware Handlers", Label(test_constants.LabelUnit, test_con
 	})
 
 	Describe("extractRequestToken", func() {
-		It("Should prefer Authorization: Bearer over X-Forwarded-Access-Token", func() {
+		It("Should prefer X-Forwarded-Access-Token over Authorization: Bearer", func() {
 			c := httpUtils.CreateTestGinContext("GET", "/health", nil)
 			c.Request.Header.Set("Authorization", "Bearer bearer-token")
 			c.Request.Header.Set("X-Forwarded-Access-Token", "forwarded-token")
 
 			token, src, hasAuth, hasFwd := extractRequestToken(c)
-			Expect(token).To(Equal("bearer-token"))
-			Expect(src).To(Equal("authorization"))
+			Expect(token).To(Equal("forwarded-token"))
+			Expect(src).To(Equal("x-forwarded-access-token"))
 			Expect(hasAuth).To(BeTrue())
 			Expect(hasFwd).To(BeTrue())
 		})

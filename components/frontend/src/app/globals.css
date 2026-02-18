@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 @import "../styles/syntax-highlighting.css";
 
 @custom-variant dark (&:is(.dark *));

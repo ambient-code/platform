@@ -26,6 +26,11 @@ type EnvConfig = {
   OC_USER?: string;
   OC_EMAIL?: string;
   ENABLE_OC_WHOAMI?: boolean;
+
+  // Unleash feature flags (server-side only, optional)
+  UNLEASH_URL?: string;
+  UNLEASH_CLIENT_KEY?: string;
+  UNLEASH_APP_NAME?: string;
 };
 
 function getEnv(key: string, defaultValue?: string): string {
@@ -66,6 +71,9 @@ export const env: EnvConfig = {
   OC_USER: getOptionalEnv('OC_USER'),
   OC_EMAIL: getOptionalEnv('OC_EMAIL'),
   ENABLE_OC_WHOAMI: getBooleanEnv('ENABLE_OC_WHOAMI', false),
+  UNLEASH_URL: getOptionalEnv('UNLEASH_URL'),
+  UNLEASH_CLIENT_KEY: getOptionalEnv('UNLEASH_CLIENT_KEY'),
+  UNLEASH_APP_NAME: getOptionalEnv('UNLEASH_APP_NAME') || 'ambient-code-platform',
 };
 
 /**

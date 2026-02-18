@@ -5,6 +5,7 @@ import { Navigation } from "@/components/navigation";
 import { QueryProvider } from "@/components/providers/query-provider";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import { SyntaxThemeProvider } from "@/components/providers/syntax-theme-provider";
+import { FeatureFlagProvider } from "@/components/providers/feature-flag-provider";
 import { Toaster } from "@/components/ui/toaster";
 import { env } from "@/lib/env";
 
@@ -41,11 +42,13 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <SyntaxThemeProvider />
-          <QueryProvider>
-            <Navigation feedbackUrl={feedbackUrl} />
-            <main className="flex-1 bg-background overflow-auto">{children}</main>
-            <Toaster />
-          </QueryProvider>
+          <FeatureFlagProvider>
+            <QueryProvider>
+              <Navigation feedbackUrl={feedbackUrl} />
+              <main className="flex-1 bg-background overflow-auto">{children}</main>
+              <Toaster />
+            </QueryProvider>
+          </FeatureFlagProvider>
         </ThemeProvider>
       </body>
     </html>

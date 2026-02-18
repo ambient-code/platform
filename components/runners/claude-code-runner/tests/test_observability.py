@@ -2,11 +2,22 @@
 
 import logging
 import os
+import sys
+import types
 from unittest.mock import Mock, patch
 
 import pytest
 
-from observability import ObservabilityManager, _privacy_masking_function
+# Ensure a mock 'langfuse' module exists in sys.modules so that:
+# 1. `from langfuse import ...` inside initialize() succeeds in test env
+# 2. `@patch("langfuse.Langfuse")` can resolve the target module
+if "langfuse" not in sys.modules:
+    _mock_langfuse = types.ModuleType("langfuse")
+    _mock_langfuse.Langfuse = Mock  # type: ignore[attr-defined]
+    _mock_langfuse.propagate_attributes = Mock  # type: ignore[attr-defined]
+    sys.modules["langfuse"] = _mock_langfuse
+
+from ambient_runner.observability import ObservabilityManager, _privacy_masking_function
 
 
 @pytest.fixture
@@ -420,7 +431,7 @@ class TestFinalize:
         await manager.finalize()
 
     @pytest.mark.asyncio
-    @patch("observability.with_sync_timeout")
+    @patch("ambient_runner.observability.with_sync_timeout")
     async def test_finalize_closes_turn(self, mock_timeout):
         """Test finalize closes open turn."""
         mock_timeout.return_value = (True, None)
@@ -448,7 +459,7 @@ class TestFinalize:
         mock_timeout.assert_called_once()
 
     @pytest.mark.asyncio
-    @patch("observability.with_sync_timeout")
+    @patch("ambient_runner.observability.with_sync_timeout")
     async def test_finalize_flush_timeout(self, mock_timeout, caplog):
         """Test finalize when flush times out."""
         mock_timeout.return_value = (False, None)  # Timeout
@@ -474,7 +485,7 @@ class TestCleanupOnError:
         await manager.cleanup_on_error(ValueError("test error"))
 
     @pytest.mark.asyncio
-    @patch("observability.with_sync_timeout")
+    @patch("ambient_runner.observability.with_sync_timeout")
     async def test_cleanup_on_error(self, mock_timeout):
         """Test cleanup_on_error marks turn as error."""
         mock_timeout.return_value = (True, None)
@@ -508,7 +519,7 @@ class TestCleanupOnError:
         mock_timeout.assert_called_once()
 
     @pytest.mark.asyncio
-    @patch("observability.with_sync_timeout")
+    @patch("ambient_runner.observability.with_sync_timeout")
     async def test_cleanup_flush_timeout(self, mock_timeout, caplog):
         """Test cleanup when flush times out."""
         mock_timeout.return_value = (False, None)  # Timeout

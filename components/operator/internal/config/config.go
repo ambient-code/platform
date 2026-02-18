@@ -24,7 +24,6 @@ type Config struct {
 	Namespace              string
 	BackendNamespace       string
 	AmbientCodeRunnerImage string
-	ContentServiceImage    string
 	StateSyncImage         string
 	ImagePullPolicy        corev1.PullPolicy
 	S3Endpoint             string
@@ -90,12 +89,6 @@ func LoadConfig() *Config {
 		ambientCodeRunnerImage = "quay.io/ambient_code/vteam_claude_runner:latest"
 	}
 
-	// Image for per-namespace content service (defaults to backend image)
-	contentServiceImage := os.Getenv("CONTENT_SERVICE_IMAGE")
-	if contentServiceImage == "" {
-		contentServiceImage = "quay.io/ambient_code/vteam_backend:latest"
-	}
-
 	// Get state-sync image from environment or use default
 	stateSyncImage := os.Getenv("STATE_SYNC_IMAGE")
 	if stateSyncImage == "" {
@@ -132,7 +125,6 @@ func LoadConfig() *Config {
 		Namespace:              namespace,
 		BackendNamespace:       backendNamespace,
 		AmbientCodeRunnerImage: ambientCodeRunnerImage,
-		ContentServiceImage:    contentServiceImage,
 		StateSyncImage:         stateSyncImage,
 		ImagePullPolicy:        imagePullPolicy,
 		S3Endpoint:             s3Endpoint,

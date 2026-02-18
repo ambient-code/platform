@@ -1,4 +1,14 @@
 // Package websocket provides AG-UI protocol endpoints including HTTP proxy to runner.
+//
+// agui_proxy.go — HTTP handlers that proxy AG-UI requests to the runner pod
+// and persist every event to the append-only event log.
+//
+// Two jobs:
+//  1. Passthrough: POST to runner, pipe SSE back to client.
+//  2. Persist: append every event to agui-events.jsonl as it flows through.
+//
+// Reconnection is handled by InMemoryAgentRunner on the frontend.
+// The backend only persists events for cross-restart recovery.
 package websocket
 
 import (
@@ -21,6 +31,7 @@ import (
 	authv1 "k8s.io/api/authorization/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/client-go/kubernetes"
 )
 
 const (
@@ -42,50 +53,137 @@ var activityUpdateSem = make(chan struct{}, 50)
 // for each session to avoid excessive API calls. Key: "namespace/sessionName"
 var lastActivityUpdateTimes sync.Map
 
-// HandleAGUIRunProxy proxies AG-UI run requests to runner's FastAPI server
-// This replaces the WebSocket-based communication with HTTP/SSE
-func HandleAGUIRunProxy(c *gin.Context) {
+// sessionProjectMap maps sessionName → projectName so that persistStreamedEvent
+// (which only receives sessionID) can look up the project for activity tracking.
+// Populated by HandleAGUIRunProxy on each run request.
+var sessionProjectMap sync.Map
+
+// HandleAGUIEvents serves the AG-UI event stream over SSE.  Clients
+// (typically EventSource) connect here to receive all events for a
+// session — both persisted history and live events from active runs.
+//
+// This is the "read" side of the AG-UI middleware pattern:
+//
+//	POST /agui/run  → starts a run, returns JSON metadata immediately
+//	GET  /agui/events → SSE stream of all thread events (past + future)
+func HandleAGUIEvents(c *gin.Context) {
 	projectName := c.Param("projectName")
 	sessionName := c.Param("sessionName")
 
-	// SECURITY: Authenticate user and get user-scoped K8s client
+	// SECURITY: Authenticate + RBAC (read access)
 	reqK8s, _ := handlers.GetK8sClientsForRequest(c)
 	if reqK8s == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 		c.Abort()
 		return
 	}
-
-	// SECURITY: Verify user has permission to update this session
-	ctx := context.Background()
-	ssar := &authv1.SelfSubjectAccessReview{
-		Spec: authv1.SelfSubjectAccessReviewSpec{
-			ResourceAttributes: &authv1.ResourceAttributes{
-				Group:     "vteam.ambient-code",
-				Resource:  "agenticsessions",
-				Verb:      "update",
-				Namespace: projectName,
-				Name:      sessionName,
-			},
-		},
-	}
-	res, err := reqK8s.AuthorizationV1().SelfSubjectAccessReviews().Create(ctx, ssar, metav1.CreateOptions{})
-	if err != nil || !res.Status.Allowed {
-		log.Printf("AGUI Proxy: User not authorized to update session %s/%s", projectName, sessionName)
+	if !checkAccess(reqK8s, projectName, sessionName, "get") {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Unauthorized"})
 		c.Abort()
 		return
 	}
 
-	log.Printf("AGUI Proxy: Forwarding run request for %s/%s", projectName, sessionName)
+	log.Printf("AGUI Events: client connected for %s/%s", projectName, sessionName)
 
+	// ── SSE response headers ─────────────────────────────────────
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Header("X-Accel-Buffering", "no")
+	c.Writer.WriteHeader(http.StatusOK)
+
+	// Subscribe to live broadcast pipe BEFORE loading persisted events.
+	// This ordering prevents a race where events published between
+	// loadEvents() and subscribeLive() would be missed by the client.
+	liveCh, cleanup := subscribeLive(sessionName)
+	defer cleanup()
+
+	events := loadEvents(sessionName)
+
+	if len(events) > 0 {
+		// Check if the last run is finished.
+		runFinished := false
+		if last := events[len(events)-1]; last != nil {
+			if t, _ := last["type"].(string); t == types.EventTypeRunFinished {
+				runFinished = true
+			}
+		}
+
+		if runFinished {
+			// Finished runs get compacted replay (fast, small).
+			compacted := compactStreamingEvents(events)
+			log.Printf("AGUI Events: %d raw → %d compacted events for %s (finished)", len(events), len(compacted), sessionName)
+			for _, evt := range compacted {
+				writeSSEEvent(c.Writer, evt)
+			}
+		} else {
+			// Active run — send raw events to preserve streaming structure.
+			log.Printf("AGUI Events: replaying %d raw events for %s (running)", len(events), sessionName)
+			for _, evt := range events {
+				writeSSEEvent(c.Writer, evt)
+			}
+		}
+		c.Writer.Flush()
+	}
+
+	// Drain live events buffered during replay — they are already
+	// covered by the persisted events we just sent.
+	drainLiveChannel(liveCh)
+
+	// Tail live events until client disconnects.
+	// Send SSE comments as keepalive every 15s to prevent proxies
+	// (Next.js, nginx, ALB) from dropping the idle connection.
+	heartbeat := time.NewTicker(15 * time.Second)
+	defer heartbeat.Stop()
+
+	clientGone := c.Request.Context().Done()
+	for {
+		select {
+		case <-clientGone:
+			log.Printf("AGUI Events: client disconnected for %s", sessionName)
+			return
+		case line, ok := <-liveCh:
+			if !ok {
+				return
+			}
+			fmt.Fprint(c.Writer, line)
+			c.Writer.Flush()
+		case <-heartbeat.C:
+			// SSE comment — ignored by EventSource but keeps connection alive
+			fmt.Fprint(c.Writer, ": heartbeat\n\n")
+			c.Writer.Flush()
+		}
+	}
+}
+
+// HandleAGUIRunProxy accepts an AG-UI run request, forwards it to the
+// runner pod in a background goroutine, and returns JSON metadata
+// immediately.  Events are persisted and broadcast to GET /agui/events
+// subscribers via the live broadcast pipe.
+func HandleAGUIRunProxy(c *gin.Context) {
+	projectName := c.Param("projectName")
+	sessionName := c.Param("sessionName")
+
+	// SECURITY: Authenticate + RBAC
+	reqK8s, _ := handlers.GetK8sClientsForRequest(c)
+	if reqK8s == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
+	if !checkAccess(reqK8s, projectName, sessionName, "update") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Unauthorized"})
+		c.Abort()
+		return
+	}
+
+	// Parse input (messages are json.RawMessage pass-through)
 	var input types.RunAgentInput
 	if err := c.ShouldBindJSON(&input); err != nil {
 		log.Printf("AGUI Proxy: Failed to parse input: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid input: %v", err)})
 		return
 	}
-	log.Printf("AGUI Proxy: Input has %d messages", len(input.Messages))
 
 	// Generate or use provided IDs
 	threadID := input.ThreadID
@@ -99,326 +197,230 @@ func HandleAGUIRunProxy(c *gin.Context) {
 	input.ThreadID = threadID
 	input.RunID = runID
 
-	log.Printf("AGUI Proxy: Creating run %s for session %s (threadId=%s)", runID, sessionName, threadID)
-
-	// Create run state for tracking
-	runState := &AGUIRunState{
-		ThreadID:     threadID,
-		RunID:        runID,
-		ParentRunID:  input.ParentRunID,
-		SessionID:    sessionName,
-		ProjectName:  projectName,
-		Status:       "running",
-		StartedAt:    time.Now(),
-		subscribers:  make(map[chan *types.BaseEvent]bool),
-		fullEventSub: make(map[chan interface{}]bool),
+	// Count actual messages
+	var rawMessages []json.RawMessage
+	if len(input.Messages) > 0 {
+		_ = json.Unmarshal(input.Messages, &rawMessages)
 	}
 
-	aguiRunsMu.Lock()
-	aguiRuns[runID] = runState
-	aguiRunsMu.Unlock()
+	log.Printf("AGUI Proxy: run=%s session=%s/%s msgs=%d", truncID(runID), projectName, sessionName, len(rawMessages))
 
-	// Persist run metadata
-	go persistRunMetadata(sessionName, types.AGUIRunMetadata{
-		ThreadID:    threadID,
-		RunID:       runID,
-		ParentRunID: input.ParentRunID,
-		SessionName: sessionName,
-		ProjectName: projectName,
-		StartedAt:   runState.StartedAt.Format(time.RFC3339),
-		Status:      "running",
-	})
+	// Store project→session mapping for activity tracking in persistStreamedEvent
+	sessionProjectMap.Store(sessionName, projectName)
 
-	// NOTE: User messages are now echoed by the runner (AG-UI server pattern)
-	// The runner emits TEXT_MESSAGE_START/CONTENT/END events which are persisted
-	// when they stream through this proxy. No need to echo them here.
-
-	// Trigger async display name generation on first user message
-	// This generates a descriptive name using Claude Haiku based on the message
-	go triggerDisplayNameGenerationIfNeeded(projectName, sessionName, input.Messages)
-
-	// Get runner endpoint
-	runnerURL, err := getRunnerEndpoint(projectName, sessionName)
-	if err != nil {
-		log.Printf("AGUI Proxy: Failed to get runner endpoint: %v", err)
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Runner not available"})
-		return
+	// Parse messages for display name generation and hidden metadata
+	var minimalMsgs []types.Message
+	if len(rawMessages) > 0 {
+		for _, raw := range rawMessages {
+			var msg types.Message
+			if err := json.Unmarshal(raw, &msg); err == nil {
+				minimalMsgs = append(minimalMsgs, msg)
+			}
+		}
+		go triggerDisplayNameGenerationIfNeeded(projectName, sessionName, minimalMsgs)
 	}
 
-	log.Printf("AGUI Proxy: Runner endpoint: %s", runnerURL)
+	// Emit message_metadata RAW events for hidden messages (e.g. auto-sent
+	// workflow prompts).  These must be persisted and broadcast BEFORE the
+	// runner starts emitting events so GET /agui/events subscribers hide
+	// the messages before they arrive via TEXT_MESSAGE_* events.
+	for _, msg := range minimalMsgs {
+		if isMessageHidden(msg.Metadata) {
+			emitHiddenMessageMetadata(sessionName, runID, threadID, msg.ID)
+		}
+	}
 
-	// Serialize input for proxy request
+	// ── Forward to runner in background, return JSON immediately ──
 	bodyBytes, err := json.Marshal(input)
 	if err != nil {
-		log.Printf("AGUI Proxy: Failed to serialize input: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to serialize input"})
 		return
 	}
 
-	log.Printf("AGUI Proxy: Run %s starting, will consume runner stream in background", runID)
+	runnerURL := getRunnerEndpoint(projectName, sessionName)
 
-	// Start background goroutine that owns the entire HTTP lifecycle
-	// This ensures the connection stays open after we return to client
-	// Note: We use context.Background() (not request context) because this goroutine
-	// must continue running after the HTTP request completes. The timeout and terminal
-	// event handling prevent unbounded goroutine accumulation.
-	go func() {
-		// Create request with long timeout (detached from client request lifecycle)
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Hour)
-		defer cancel()
+	// Start background goroutine to proxy runner SSE → persist + broadcast
+	go proxyRunnerStream(runnerURL, bodyBytes, sessionName, runID, threadID)
 
-		// Execute request with retries (runner may not be ready immediately after startup)
-		client := &http.Client{
-			Timeout: 0, // No timeout, context handles it
-		}
-
-		var resp *http.Response
-		maxRetries := 15
-		retryDelay := 500 * time.Millisecond
-
-		for attempt := 1; attempt <= maxRetries; attempt++ {
-			// Create fresh request for each attempt (body reader needs reset)
-			proxyReq, err := http.NewRequestWithContext(ctx, "POST", runnerURL, bytes.NewReader(bodyBytes))
-			if err != nil {
-				log.Printf("AGUI Proxy: Failed to create request in background: %v", err)
-				updateRunStatus(runID, "error")
-				return
-			}
-
-			// Forward headers
-			proxyReq.Header.Set("Content-Type", "application/json")
-			proxyReq.Header.Set("Accept", "text/event-stream")
-
-			resp, err = client.Do(proxyReq)
-			if err == nil {
-				break // Success!
-			}
-
-			// Check if it's a connection refused error (runner not ready yet)
-			errStr := err.Error()
-			isConnectionRefused := strings.Contains(errStr, "connection refused") ||
-				strings.Contains(errStr, "no such host") ||
-				strings.Contains(errStr, "dial tcp")
-
-			if !isConnectionRefused || attempt == maxRetries {
-				log.Printf("AGUI Proxy: Background request failed after %d attempts: %v", attempt, err)
-				updateRunStatus(runID, "error")
-				return
-			}
-
-			log.Printf("AGUI Proxy: Runner not ready (attempt %d/%d), retrying in %v...", attempt, maxRetries, retryDelay)
-
-			select {
-			case <-ctx.Done():
-				log.Printf("AGUI Proxy: Context cancelled during retry for run %s", runID)
-				return
-			case <-time.After(retryDelay):
-				// Exponential backoff with cap at 5 seconds
-				retryDelay = time.Duration(float64(retryDelay) * 1.5)
-				if retryDelay > 5*time.Second {
-					retryDelay = 5 * time.Second
-				}
-			}
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(resp.Body)
-			log.Printf("AGUI Proxy: Runner returned status %d: %s", resp.StatusCode, string(body))
-			updateRunStatus(runID, "error")
-			return
-		}
-
-		log.Printf("AGUI Proxy: Background stream started for run %s", runID)
-
-		reader := bufio.NewReader(resp.Body)
-
-		for {
-			// Check if context was cancelled (timeout or cleanup)
-			select {
-			case <-ctx.Done():
-				log.Printf("AGUI Proxy: Context cancelled for run %s", runID)
-				return
-			default:
-			}
-
-			line, err := reader.ReadString('\n')
-			if err != nil {
-				if err == io.EOF {
-					log.Printf("AGUI Proxy: Background stream ended for run %s", runID)
-					break
-				}
-				log.Printf("AGUI Proxy: Background stream read error: %v", err)
-				break
-			}
-
-			// Parse and persist SSE events
-			line = strings.TrimSpace(line)
-			if strings.HasPrefix(line, "data: ") {
-				jsonData := strings.TrimPrefix(line, "data: ")
-				handleStreamedEvent(sessionName, runID, threadID, jsonData, runState)
-			}
-		}
-
-		// Mark run as completed
-		aguiRunsMu.RLock()
-		currentStatus := "completed"
-		if state, exists := aguiRuns[runID]; exists && state.Status == "error" {
-			currentStatus = "error"
-		}
-		aguiRunsMu.RUnlock()
-
-		updateRunStatus(runID, currentStatus)
-		log.Printf("AGUI Proxy: Background stream completed for run %s (status=%s)", runID, currentStatus)
-	}()
-
-	// Return run metadata immediately (don't wait for stream)
-	// Events will be broadcast to GET /agui/events subscribers
-	streamURL := fmt.Sprintf("/api/projects/%s/agentic-sessions/%s/agui/events", projectName, sessionName)
-
+	// Return metadata immediately — events arrive via GET /agui/events
 	c.JSON(http.StatusOK, gin.H{
-		"threadId":  threadID,
-		"runId":     runID,
-		"streamUrl": streamURL,
-		"status":    "started",
+		"runId":    runID,
+		"threadId": threadID,
 	})
 }
 
-// handleStreamedEvent parses and persists a streamed AG-UI event
-func handleStreamedEvent(sessionID, runID, threadID, jsonData string, runState *AGUIRunState) {
-	var event map[string]interface{}
-	if err := json.Unmarshal([]byte(jsonData), &event); err != nil {
-		log.Printf("AGUI Proxy: Failed to parse event JSON: %v", err)
+// proxyRunnerStream connects to the runner's SSE endpoint, reads events,
+// persists them, and publishes them to the live broadcast pipe.  Runs in
+// a background goroutine so the POST /agui/run handler can return immediately.
+func proxyRunnerStream(runnerURL string, bodyBytes []byte, sessionName, runID, threadID string) {
+	log.Printf("AGUI Proxy: connecting to runner at %s", runnerURL)
+	resp, err := connectToRunner(runnerURL, bodyBytes)
+	if err != nil {
+		log.Printf("AGUI Proxy: runner unavailable for %s: %v", sessionName, err)
+		// Publish error events so GET /agui/events subscribers see the failure
+		publishAndPersistErrorEvents(sessionName, runID, threadID, "Runner is not available")
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		log.Printf("AGUI Proxy: runner returned %d: %s", resp.StatusCode, string(body))
+		publishAndPersistErrorEvents(sessionName, runID, threadID, fmt.Sprintf("Runner error: HTTP %d", resp.StatusCode))
 		return
 	}
 
-	eventType, _ := event["type"].(string)
+	// Pipe SSE from runner: persist each event and broadcast to subscribers
+	reader := bufio.NewReader(resp.Body)
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			if err != io.EOF {
+				log.Printf("AGUI Proxy: stream read error: %v", err)
+			}
+			break
+		}
 
-	// Ensure threadId, runId, and timestamp are set
-	if _, ok := event["threadId"]; !ok {
+		trimmed := strings.TrimSpace(line)
+
+		// Persist every data event to JSONL
+		if strings.HasPrefix(trimmed, "data: ") {
+			jsonData := strings.TrimPrefix(trimmed, "data: ")
+			persistStreamedEvent(sessionName, runID, threadID, jsonData)
+		}
+
+		// Publish raw SSE line to all GET /agui/events subscribers
+		publishLine(sessionName, line)
+	}
+
+	log.Printf("AGUI Proxy: run %s stream ended", truncID(runID))
+}
+
+// publishAndPersistErrorEvents generates RUN_STARTED + RUN_ERROR events,
+// persists them, and publishes to the live broadcast so subscribers get
+// notified of runner failures.
+func publishAndPersistErrorEvents(sessionName, runID, threadID, message string) {
+	// RUN_STARTED
+	startEvt := map[string]interface{}{
+		"type":     "RUN_STARTED",
+		"threadId": threadID,
+		"runId":    runID,
+	}
+	persistEvent(sessionName, startEvt)
+	startData, _ := json.Marshal(startEvt)
+	publishLine(sessionName, fmt.Sprintf("data: %s\n\n", startData))
+
+	// RUN_ERROR
+	errEvt := map[string]interface{}{
+		"type":     "RUN_ERROR",
+		"message":  message,
+		"threadId": threadID,
+		"runId":    runID,
+	}
+	persistEvent(sessionName, errEvt)
+	errData, _ := json.Marshal(errEvt)
+	publishLine(sessionName, fmt.Sprintf("data: %s\n\n", errData))
+}
+
+// ─── Hidden message helpers ──────────────────────────────────────────
+
+// isMessageHidden checks if a message's metadata contains hidden: true.
+func isMessageHidden(metadata interface{}) bool {
+	if metadata == nil {
+		return false
+	}
+	m, ok := metadata.(map[string]interface{})
+	if !ok {
+		return false
+	}
+	hidden, _ := m["hidden"].(bool)
+	return hidden
+}
+
+// emitHiddenMessageMetadata persists and broadcasts a RAW event that
+// tells the frontend to hide a specific message (e.g. auto-sent workflow
+// prompts or initial prompts).
+func emitHiddenMessageMetadata(sessionName, runID, threadID, messageID string) {
+	evt := map[string]interface{}{
+		"type":     "RAW",
+		"threadId": threadID,
+		"runId":    runID,
+		"event": map[string]interface{}{
+			"type":      "message_metadata",
+			"messageId": messageID,
+			"hidden":    true,
+		},
+	}
+	persistEvent(sessionName, evt)
+	data, _ := json.Marshal(evt)
+	publishLine(sessionName, fmt.Sprintf("data: %s\n\n", data))
+}
+
+// persistStreamedEvent parses a raw JSON event, ensures IDs, and
+// appends it to the event log.  No in-memory state, no broadcasting.
+//
+// NOTE: We intentionally do NOT inject timestamps.  The AG-UI spec
+// defines timestamp as z.number().optional() (epoch ms).  If the
+// runner omits it, the field stays absent — the proxy should not
+// invent fields the source didn't emit.
+func persistStreamedEvent(sessionID, runID, threadID, jsonData string) {
+	var event map[string]interface{}
+	if err := json.Unmarshal([]byte(jsonData), &event); err != nil {
+		return
+	}
+
+	// Ensure required fields (threadId + runId are needed for compaction)
+	if event["threadId"] == nil || event["threadId"] == "" {
 		event["threadId"] = threadID
 	}
-	if _, ok := event["runId"]; !ok {
+	if event["runId"] == nil || event["runId"] == "" {
 		event["runId"] = runID
 	}
-	// Add timestamp if not present - critical for message timestamp tracking
-	if _, ok := event["timestamp"]; !ok {
-		event["timestamp"] = time.Now().UTC().Format(types.AGUITimestampFormat)
+
+	persistEvent(sessionID, event)
+
+	// Update lastActivityTime on CR for activity events (debounced).
+	// Extract event type to check; projectName is derived from the
+	// sessionID-to-project mapping populated by HandleAGUIRunProxy.
+	eventType, _ := event["type"].(string)
+	if isActivityEvent(eventType) {
+		if projectName, ok := sessionProjectMap.Load(sessionID); ok {
+			updateLastActivityTime(projectName.(string), sessionID, eventType == types.EventTypeRunStarted)
+		}
 	}
-
-	// Check for terminal events
-	switch eventType {
-	case types.EventTypeRunFinished:
-		updateRunStatus(runID, "completed")
-	case types.EventTypeRunError:
-		updateRunStatus(runID, "error")
-	}
-
-	// Update lastActivityTime on CR for activity events (debounced)
-	if isActivityEvent(eventType) && runState != nil {
-		updateLastActivityTime(runState.ProjectName, runState.SessionID, eventType == types.EventTypeRunStarted)
-	}
-
-	// Persist event
-	persistAGUIEventMap(sessionID, runID, event)
-
-	// Broadcast to subscribers (for SSE /events endpoint)
-	if runState != nil {
-		runState.BroadcastFull(event)
-	}
-
-	// Also broadcast to thread subscribers
-	broadcastToThread(sessionID, event)
 }
 
-// updateRunStatus updates the status of a run
-func updateRunStatus(runID, status string) {
-	aguiRunsMu.Lock()
-	if state, exists := aguiRuns[runID]; exists {
-		state.Status = status
-		// Update persisted metadata
-		go persistRunMetadata(state.SessionID, types.AGUIRunMetadata{
-			ThreadID:    state.ThreadID,
-			RunID:       state.RunID,
-			ParentRunID: state.ParentRunID,
-			SessionName: state.SessionID,
-			ProjectName: state.ProjectName,
-			StartedAt:   state.StartedAt.Format(time.RFC3339),
-			Status:      status,
-		})
-	}
-	aguiRunsMu.Unlock()
-}
+// ─── POST /agui/interrupt ────────────────────────────────────────────
 
-// HandleAGUIInterrupt sends interrupt signal to runner to stop current execution
-// POST /api/projects/:projectName/agentic-sessions/:sessionName/agui/interrupt
+// HandleAGUIInterrupt sends interrupt signal to the runner.
 func HandleAGUIInterrupt(c *gin.Context) {
 	projectName := c.Param("projectName")
 	sessionName := c.Param("sessionName")
 
-	// SECURITY: Authenticate user and get user-scoped K8s client
 	reqK8s, _ := handlers.GetK8sClientsForRequest(c)
 	if reqK8s == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 		c.Abort()
 		return
 	}
-
-	// SECURITY: Verify user has permission to update this session
-	ctx := context.Background()
-	ssar := &authv1.SelfSubjectAccessReview{
-		Spec: authv1.SelfSubjectAccessReviewSpec{
-			ResourceAttributes: &authv1.ResourceAttributes{
-				Group:     "vteam.ambient-code",
-				Resource:  "agenticsessions",
-				Verb:      "update",
-				Namespace: projectName,
-				Name:      sessionName,
-			},
-		},
-	}
-	res, err := reqK8s.AuthorizationV1().SelfSubjectAccessReviews().Create(ctx, ssar, metav1.CreateOptions{})
-	if err != nil || !res.Status.Allowed {
-		log.Printf("AGUI Interrupt: User not authorized to update session %s/%s", projectName, sessionName)
+	if !checkAccess(reqK8s, projectName, sessionName, "update") {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Unauthorized"})
 		c.Abort()
 		return
 	}
 
-	log.Printf("AGUI Interrupt: Request for %s/%s", projectName, sessionName)
-
-	var input struct {
-		RunID string `json:"runId"`
-	}
-	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "runId required"})
-		return
-	}
-
-	// Get runner endpoint
-	runnerURL, err := getRunnerEndpoint(projectName, sessionName)
-	if err != nil {
-		log.Printf("AGUI Interrupt: Failed to get runner endpoint: %v", err)
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Runner not available"})
-		return
-	}
-
+	runnerURL := getRunnerEndpoint(projectName, sessionName)
 	interruptURL := strings.TrimSuffix(runnerURL, "/") + "/interrupt"
-	log.Printf("AGUI Interrupt: Forwarding to runner: %s", interruptURL)
 
-	// POST to runner's interrupt endpoint
 	req, err := http.NewRequest("POST", interruptURL, bytes.NewReader([]byte("{}")))
 	if err != nil {
-		log.Printf("AGUI Interrupt: Failed to create request: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
 	if err != nil {
-		log.Printf("AGUI Interrupt: Request failed: %v", err)
 		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 		return
 	}
@@ -426,129 +428,302 @@ func HandleAGUIInterrupt(c *gin.Context) {
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		log.Printf("AGUI Interrupt: Runner returned %d: %s", resp.StatusCode, string(body))
 		c.JSON(resp.StatusCode, gin.H{"error": string(body)})
 		return
 	}
 
-	log.Printf("AGUI Interrupt: Successfully interrupted run %s", input.RunID)
 	c.JSON(http.StatusOK, gin.H{"message": "Interrupt signal sent"})
 }
 
-// HandleMCPStatus proxies MCP status requests to runner
-// GET /api/projects/:projectName/agentic-sessions/:sessionName/mcp/status
-func HandleMCPStatus(c *gin.Context) {
+// ─── POST /agui/feedback ─────────────────────────────────────────────
+
+// HandleAGUIFeedback forwards feedback to the runner, which sends it to
+// Langfuse and returns a RAW event.  The backend persists that event
+// so it survives reconnects.
+//
+// RAW events don't need to be within run boundaries (RUN_STARTED/
+// RUN_FINISHED), unlike CUSTOM events which cause AG-UI validation
+// errors when replayed outside a run.
+func HandleAGUIFeedback(c *gin.Context) {
 	projectName := c.Param("projectName")
 	sessionName := c.Param("sessionName")
 
-	// SECURITY: Authenticate user and get user-scoped K8s client
 	reqK8s, _ := handlers.GetK8sClientsForRequest(c)
 	if reqK8s == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 		c.Abort()
 		return
 	}
-
-	// SECURITY: Verify user has permission to read this session
-	ctx := context.Background()
-	ssar := &authv1.SelfSubjectAccessReview{
-		Spec: authv1.SelfSubjectAccessReviewSpec{
-			ResourceAttributes: &authv1.ResourceAttributes{
-				Group:     "vteam.ambient-code",
-				Resource:  "agenticsessions",
-				Verb:      "get",
-				Namespace: projectName,
-				Name:      sessionName,
-			},
-		},
-	}
-	res, err := reqK8s.AuthorizationV1().SelfSubjectAccessReviews().Create(ctx, ssar, metav1.CreateOptions{})
-	if err != nil || !res.Status.Allowed {
-		log.Printf("MCP Status: User not authorized to read session %s/%s", projectName, sessionName)
+	if !checkAccess(reqK8s, projectName, sessionName, "update") {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Unauthorized"})
 		c.Abort()
 		return
 	}
 
-	// Get runner endpoint
-	runnerURL, err := getRunnerEndpoint(projectName, sessionName)
-	if err != nil {
-		log.Printf("MCP Status: Failed to get runner endpoint: %v", err)
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Runner not available"})
+	var metaEvent map[string]interface{}
+	if err := c.ShouldBindJSON(&metaEvent); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid feedback event: %v", err)})
 		return
 	}
 
-	mcpStatusURL := strings.TrimSuffix(runnerURL, "/") + "/mcp/status"
-	log.Printf("MCP Status: Forwarding to runner: %s", mcpStatusURL)
-
-	// GET from runner's MCP status endpoint
-	req, err := http.NewRequest("GET", mcpStatusURL, nil)
-	if err != nil {
-		log.Printf("MCP Status: Failed to create request: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	eventType, _ := metaEvent["type"].(string)
+	if eventType != types.EventTypeMeta {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Expected META event type"})
 		return
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
+	// Forward to runner — it sends to Langfuse and returns a RAW event
+	runnerURL := getRunnerEndpoint(projectName, sessionName)
+	feedbackURL := strings.TrimSuffix(runnerURL, "/") + "/feedback"
+
+	bodyBytes, _ := json.Marshal(metaEvent)
+	req, err := http.NewRequest("POST", feedbackURL, bytes.NewReader(bodyBytes))
 	if err != nil {
-		log.Printf("MCP Status: Request failed: %v", err)
-		// Runner might not be running yet - return empty list
-		c.JSON(http.StatusOK, gin.H{"servers": []interface{}{}, "totalCount": 0})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create request"})
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
+	if err != nil {
+		c.JSON(http.StatusAccepted, gin.H{"error": "Runner unavailable — feedback not recorded", "status": "failed"})
 		return
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		log.Printf("MCP Status: Runner returned %d: %s", resp.StatusCode, string(body))
+		log.Printf("AGUI Feedback: runner returned %d for %s: %s", resp.StatusCode, sessionName, string(body))
+		c.JSON(resp.StatusCode, gin.H{"error": "Runner rejected feedback", "status": "failed"})
+		return
+	}
+
+	// Runner returned a RAW event — persist it directly (no run wrapping needed).
+	var rawEvent map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&rawEvent); err != nil {
+		log.Printf("AGUI Feedback: failed to decode runner response for %s: %v", sessionName, err)
+		c.JSON(http.StatusOK, gin.H{"message": "Feedback sent but not persisted", "status": "sent"})
+		return
+	}
+
+	go func() {
+		threadID := sessionName
+		rawEvent["threadId"] = threadID
+		persistEvent(sessionName, rawEvent)
+	}()
+
+	c.JSON(http.StatusOK, gin.H{"message": "Feedback submitted", "status": "sent"})
+}
+
+// ─── GET /agui/capabilities ──────────────────────────────────────────
+
+// HandleCapabilities proxies GET /capabilities to the runner.
+func HandleCapabilities(c *gin.Context) {
+	projectName := c.Param("projectName")
+	sessionName := c.Param("sessionName")
+
+	reqK8s, _ := handlers.GetK8sClientsForRequest(c)
+	if reqK8s == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
+	if !checkAccess(reqK8s, projectName, sessionName, "get") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Unauthorized"})
+		c.Abort()
+		return
+	}
+
+	runnerURL := getRunnerEndpoint(projectName, sessionName)
+	capURL := strings.TrimSuffix(runnerURL, "/") + "/capabilities"
+
+	req, err := http.NewRequest("GET", capURL, nil)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"framework": "unknown"})
+		return
+	}
+	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"framework":         "unknown",
+			"agent_features":    []interface{}{},
+			"platform_features": []interface{}{},
+			"file_system":       false,
+			"mcp":               false,
+		})
+		return
+	}
+	defer resp.Body.Close()
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		c.JSON(http.StatusOK, gin.H{"framework": "unknown"})
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+
+// ─── GET /mcp/status ─────────────────────────────────────────────────
+
+// HandleMCPStatus proxies MCP status requests to the runner.
+func HandleMCPStatus(c *gin.Context) {
+	projectName := c.Param("projectName")
+	sessionName := c.Param("sessionName")
+
+	reqK8s, _ := handlers.GetK8sClientsForRequest(c)
+	if reqK8s == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
+	if !checkAccess(reqK8s, projectName, sessionName, "get") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Unauthorized"})
+		c.Abort()
+		return
+	}
+
+	runnerURL := getRunnerEndpoint(projectName, sessionName)
+	mcpURL := strings.TrimSuffix(runnerURL, "/") + "/mcp/status"
+
+	req, err := http.NewRequest("GET", mcpURL, nil)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"servers": []interface{}{}, "totalCount": 0})
+		return
+	}
+	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"servers": []interface{}{}, "totalCount": 0})
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
 		c.JSON(http.StatusOK, gin.H{"servers": []interface{}{}, "totalCount": 0})
 		return
 	}
 
-	// Forward runner response to client
 	var result map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		log.Printf("MCP Status: Failed to decode response: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse runner response"})
+		c.JSON(http.StatusOK, gin.H{"servers": []interface{}{}, "totalCount": 0})
 		return
 	}
-
 	c.JSON(http.StatusOK, result)
 }
 
-// getRunnerEndpoint returns the AG-UI server endpoint for a session
-// The operator creates a Service named "session-{sessionName}" in the project namespace
-func getRunnerEndpoint(projectName, sessionName string) (string, error) {
-	// Use naming convention for service discovery
-	// Format: http://session-{sessionName}.{projectName}.svc.cluster.local:8001/
-	// The operator creates this Service automatically when spawning the runner Job
-	return fmt.Sprintf("http://session-%s.%s.svc.cluster.local:8001/", sessionName, projectName), nil
+// ─── Runner connection ───────────────────────────────────────────────
+
+// runnerHTTPClient is a shared HTTP client for long-lived SSE connections
+// to runner pods.  Reusing the transport avoids per-call socket churn and
+// background goroutine growth under load.
+var runnerHTTPClient = &http.Client{
+	Timeout: 0, // No overall timeout — SSE streams are long-lived
+	Transport: &http.Transport{
+		IdleConnTimeout:       5 * time.Minute,  // Close idle connections after 5 min
+		ResponseHeaderTimeout: 30 * time.Second, // Fail fast if runner doesn't respond to headers
+	},
 }
 
-// broadcastToThread sends event to all thread-level subscribers
-func broadcastToThread(sessionID string, event interface{}) {
-	threadSubscribersMu.RLock()
-	subs, exists := threadSubscribers[sessionID]
-	threadSubscribersMu.RUnlock()
+// connectToRunner POSTs to the runner with fast-fail behaviour.
+//   - 2 attempts max
+//   - Immediate fail on "no such host" (runner pod doesn't exist)
+//   - 1s retry only on "connection refused" (runner still starting)
+func connectToRunner(runnerURL string, bodyBytes []byte) (*http.Response, error) {
+	maxAttempts := 2
+	retryDelay := 1 * time.Second
 
-	if !exists {
-		return
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		req, err := http.NewRequest("POST", runnerURL, bytes.NewReader(bodyBytes))
+		if err != nil {
+			return nil, fmt.Errorf("failed to create request: %w", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "text/event-stream")
+
+		resp, err := runnerHTTPClient.Do(req)
+		if err == nil {
+			return resp, nil
+		}
+
+		errStr := err.Error()
+		// "no such host" = runner pod/service doesn't exist — no point retrying
+		if strings.Contains(errStr, "no such host") {
+			return nil, fmt.Errorf("runner not available: %w", err)
+		}
+
+		// Only retry on connection refused (runner starting up)
+		if !strings.Contains(errStr, "connection refused") && !strings.Contains(errStr, "dial tcp") {
+			return nil, fmt.Errorf("runner request failed: %w", err)
+		}
+
+		if attempt < maxAttempts {
+			log.Printf("AGUI Proxy: runner not ready (attempt %d/%d), retrying in %v", attempt, maxAttempts, retryDelay)
+			time.Sleep(retryDelay)
+		}
 	}
 
-	for ch := range subs {
+	return nil, fmt.Errorf("runner not available after %d attempts", maxAttempts)
+}
+
+// getRunnerEndpoint returns the AG-UI server endpoint for a session.
+// The operator creates a Service named "session-{sessionName}" in the
+// project namespace.
+func getRunnerEndpoint(projectName, sessionName string) string {
+	return fmt.Sprintf("http://session-%s.%s.svc.cluster.local:8001/", sessionName, projectName)
+}
+
+// drainLiveChannel discards any buffered lines already in the channel.
+// Called after replaying persisted events to skip duplicates that were
+// published to the live pipe while the replay was in progress.
+func drainLiveChannel(ch <-chan string) {
+	for {
 		select {
-		case ch <- event:
+		case <-ch:
+			// discard — already replayed from persisted events
 		default:
-			// Channel full, skip
+			return // buffer is empty
 		}
 	}
 }
 
-// triggerDisplayNameGenerationIfNeeded checks if the session needs a display name
-// and triggers async generation using the first REAL user message (not auto-sent initialPrompt)
+// truncID returns the first 8 chars of an ID for logging, or the
+// full string if shorter.
+func truncID(id string) string {
+	if len(id) > 8 {
+		return id[:8]
+	}
+	return id
+}
+
+// ─── Auth helper ─────────────────────────────────────────────────────
+
+// checkAccess performs a SelfSubjectAccessReview for the given verb on
+// the AgenticSession resource.
+func checkAccess(reqK8s kubernetes.Interface, projectName, sessionName, verb string) bool {
+	ssar := &authv1.SelfSubjectAccessReview{
+		Spec: authv1.SelfSubjectAccessReviewSpec{
+			ResourceAttributes: &authv1.ResourceAttributes{
+				Group:     "vteam.ambient-code",
+				Resource:  "agenticsessions",
+				Verb:      verb,
+				Namespace: projectName,
+				Name:      sessionName,
+			},
+		},
+	}
+	res, err := reqK8s.AuthorizationV1().SelfSubjectAccessReviews().Create(
+		context.Background(), ssar, metav1.CreateOptions{},
+	)
+	if err != nil || !res.Status.Allowed {
+		return false
+	}
+	return true
+}
+
+// ─── Display name generation ─────────────────────────────────────────
+
+// triggerDisplayNameGenerationIfNeeded checks if the session needs a
+// display name and triggers async generation using the first user message.
 func triggerDisplayNameGenerationIfNeeded(projectName, sessionName string, messages []types.Message) {
-	// Extract first user message
 	var userMessage string
 	for _, msg := range messages {
 		if msg.Role == "user" && msg.Content != "" {
@@ -556,64 +731,41 @@ func triggerDisplayNameGenerationIfNeeded(projectName, sessionName string, messa
 			break
 		}
 	}
-
 	if userMessage == "" {
-		log.Printf("DisplayNameGen: No user message found in run request for %s/%s", projectName, sessionName)
 		return
 	}
 
-	// Check if session already has a display name
 	if handlers.DynamicClient == nil {
-		log.Printf("DisplayNameGen: DynamicClient not initialized, skipping display name generation")
 		return
 	}
 
 	gvr := handlers.GetAgenticSessionV1Alpha1Resource()
-	ctx := context.Background()
-
-	item, err := handlers.DynamicClient.Resource(gvr).Namespace(projectName).Get(ctx, sessionName, metav1.GetOptions{})
+	item, err := handlers.DynamicClient.Resource(gvr).Namespace(projectName).Get(
+		context.Background(), sessionName, metav1.GetOptions{},
+	)
 	if err != nil {
-		log.Printf("DisplayNameGen: Failed to get session %s/%s: %v", projectName, sessionName, err)
 		return
 	}
 
-	// Extract spec using unstructured helpers (per CLAUDE.md guidelines)
 	spec, found, err := unstructured.NestedMap(item.Object, "spec")
 	if err != nil || !found {
-		log.Printf("DisplayNameGen: Failed to get spec for %s/%s", projectName, sessionName)
 		return
 	}
 
-	// Skip if this message is the auto-sent initialPrompt (not a real user message)
+	// Skip if this message is the auto-sent initialPrompt
 	initialPrompt, _, _ := unstructured.NestedString(spec, "initialPrompt")
 	if initialPrompt != "" && strings.TrimSpace(userMessage) == strings.TrimSpace(initialPrompt) {
-		log.Printf("DisplayNameGen: Skipping auto-sent initialPrompt for %s/%s", projectName, sessionName)
 		return
 	}
 
-	// Check if display name generation is needed
 	if !handlers.ShouldGenerateDisplayName(spec) {
-		log.Printf("DisplayNameGen: Session %s/%s already has display name, skipping", projectName, sessionName)
 		return
 	}
 
-	// Extract session context for better name generation
 	sessionCtx := handlers.ExtractSessionContext(spec)
-
-	log.Printf("DisplayNameGen: Triggering async generation for %s/%s with message: %q",
-		projectName, sessionName, truncateForLog(userMessage, 50))
-
-	// Trigger async generation (runs in background, fails silently)
 	handlers.GenerateDisplayNameAsync(projectName, sessionName, userMessage, sessionCtx)
 }
 
-// truncateForLog truncates a string for logging purposes
-func truncateForLog(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen] + "..."
-}
 
 // isActivityEvent returns true for AG-UI event types that indicate session activity.
 func isActivityEvent(eventType string) bool {
@@ -686,142 +838,4 @@ func updateLastActivityTime(projectName, sessionName string, immediate bool) {
 			log.Printf("Activity tracking: failed to update lastActivityTime for %s/%s: %v", projectName, sessionName, err)
 		}
 	}()
-}
-
-// HandleAGUIFeedback forwards AG-UI META events (user feedback) to the runner
-// POST /api/projects/:projectName/agentic-sessions/:sessionName/agui/feedback
-// Frontend constructs the full META event, backend validates and forwards
-// See: https://docs.ag-ui.com/drafts/meta-events#user-feedback
-func HandleAGUIFeedback(c *gin.Context) {
-	// SECURITY: Sanitize URL path params to prevent log injection
-	projectName := handlers.SanitizeForLog(c.Param("projectName"))
-	sessionName := handlers.SanitizeForLog(c.Param("sessionName"))
-
-	// SECURITY: Authenticate user and get user-scoped K8s client
-	reqK8s, _ := handlers.GetK8sClientsForRequest(c)
-	if reqK8s == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
-		c.Abort()
-		return
-	}
-
-	// SECURITY: Verify user has permission to update this session
-	ctx := context.Background()
-	ssar := &authv1.SelfSubjectAccessReview{
-		Spec: authv1.SelfSubjectAccessReviewSpec{
-			ResourceAttributes: &authv1.ResourceAttributes{
-				Group:     "vteam.ambient-code",
-				Resource:  "agenticsessions",
-				Verb:      "update",
-				Namespace: projectName,
-				Name:      sessionName,
-			},
-		},
-	}
-	res, err := reqK8s.AuthorizationV1().SelfSubjectAccessReviews().Create(ctx, ssar, metav1.CreateOptions{})
-	if err != nil || !res.Status.Allowed {
-		log.Printf("AGUI Feedback: User not authorized to update session %s/%s", projectName, sessionName)
-		c.JSON(http.StatusForbidden, gin.H{"error": "Unauthorized"})
-		c.Abort()
-		return
-	}
-
-	// Parse AG-UI META event from frontend
-	// Frontend constructs the full event, we just validate and forward
-	var metaEvent map[string]interface{}
-	if err := c.ShouldBindJSON(&metaEvent); err != nil {
-		log.Printf("AGUI Feedback: Failed to parse META event: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid META event: %v", err)})
-		return
-	}
-
-	// Validate it's a META event
-	eventType, ok := metaEvent["type"].(string)
-	if !ok || eventType != types.EventTypeMeta {
-		log.Printf("AGUI Feedback: Invalid event type: %v", eventType)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Expected META event type"})
-		return
-	}
-
-	// Extract metaType for logging
-	metaType, _ := metaEvent["metaType"].(string)
-	username := handlers.SanitizeForLog(c.GetHeader("X-Forwarded-User"))
-	log.Printf("AGUI Feedback: Received %s feedback from %s for session %s/%s",
-		handlers.SanitizeForLog(metaType), username, projectName, sessionName)
-
-	// Get runner endpoint
-	runnerURL, err := getRunnerEndpoint(projectName, sessionName)
-	if err != nil {
-		log.Printf("AGUI Feedback: Failed to get runner endpoint: %v", err)
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Runner not available"})
-		return
-	}
-
-	// Serialize event for POST to runner (forward as-is)
-	bodyBytes, err := json.Marshal(metaEvent)
-	if err != nil {
-		log.Printf("AGUI Feedback: Failed to serialize META event: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to serialize event"})
-		return
-	}
-
-	// POST to runner's feedback endpoint
-	feedbackURL := strings.TrimSuffix(runnerURL, "/") + "/feedback"
-	log.Printf("AGUI Feedback: Forwarding META event to runner: %s", feedbackURL)
-
-	req, err := http.NewRequest("POST", feedbackURL, bytes.NewReader(bodyBytes))
-	if err != nil {
-		log.Printf("AGUI Feedback: Failed to create request: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		// Runner might not be running - log but don't fail (feedback is best-effort)
-		log.Printf("AGUI Feedback: Request failed (runner may not be running): %v", err)
-		c.JSON(http.StatusAccepted, gin.H{
-			"message": "Feedback queued (runner not available)",
-			"status":  "pending",
-		})
-		return
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
-		body, _ := io.ReadAll(resp.Body)
-		log.Printf("AGUI Feedback: Runner returned %d: %s", resp.StatusCode, string(body))
-		c.JSON(resp.StatusCode, gin.H{"error": string(body)})
-		return
-	}
-
-	log.Printf("AGUI Feedback: Successfully forwarded %s feedback to runner", handlers.SanitizeForLog(metaType))
-
-	// Broadcast the META event on the event stream so UI can see feedback submissions
-	// This allows the frontend to display "Feedback submitted" or track which traces have feedback
-	broadcastToThread(sessionName, metaEvent)
-
-	// CRITICAL: Persist the META event so it survives reconnects and session restarts
-	// Without this, feedback events are lost when clients disconnect
-	// Extract runId from event payload if present (feedback is associated with a specific run/message)
-	runID := ""
-	if payload, ok := metaEvent["payload"].(map[string]interface{}); ok {
-		if rid, ok := payload["runId"].(string); ok {
-			runID = rid
-		}
-	}
-	// Fallback: try top-level runId
-	if runID == "" {
-		if rid, ok := metaEvent["runId"].(string); ok {
-			runID = rid
-		}
-	}
-	go persistAGUIEventMap(sessionName, runID, metaEvent)
-
-	c.JSON(http.StatusOK, gin.H{
-		"message": "Feedback submitted successfully",
-		"status":  "sent",
-	})
 }

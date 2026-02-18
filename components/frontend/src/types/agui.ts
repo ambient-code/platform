@@ -1,220 +1,115 @@
 /**
  * AG-UI Protocol Types
- * TypeScript types for AG-UI events and messages.
- * 
+ *
+ * Re-exports canonical types from @ag-ui/client (@ag-ui/core) and defines
+ * platform-specific extensions for hierarchical tool calls, message metadata,
+ * and streaming client state.
+ *
  * Reference: https://docs.ag-ui.com/concepts/events
  * Reference: https://docs.ag-ui.com/concepts/messages
  */
 
-// AG-UI Event Types
-export const AGUIEventType = {
-  // Lifecycle events
-  RUN_STARTED: 'RUN_STARTED',
-  RUN_FINISHED: 'RUN_FINISHED',
-  RUN_ERROR: 'RUN_ERROR',
+// ── Core AG-UI types (re-exported from @ag-ui/client) ──
 
-  // Step events
-  STEP_STARTED: 'STEP_STARTED',
-  STEP_FINISHED: 'STEP_FINISHED',
+export {
+  EventType,
+  type BaseEvent,
+  type RunAgentInput,
+  type AGUIEvent,
+  type Message,
+  type Role,
+  type ToolCall,
+  type FunctionCall,
+  type Tool,
+  type Context,
+  type State,
+  type RunStartedEvent,
+  type RunFinishedEvent,
+  type RunErrorEvent,
+  type TextMessageStartEvent,
+  type TextMessageContentEvent,
+  type TextMessageEndEvent,
+  type ToolCallStartEvent,
+  type ToolCallArgsEvent,
+  type ToolCallEndEvent,
+  type ToolCallResultEvent,
+  type StateSnapshotEvent,
+  type StateDeltaEvent,
+  type MessagesSnapshotEvent,
+  type StepStartedEvent,
+  type StepFinishedEvent,
+  type ReasoningStartEvent,
+  type ReasoningMessageStartEvent,
+  type ReasoningMessageContentEvent,
+  type ReasoningMessageEndEvent,
+  type ReasoningEndEvent,
+} from '@ag-ui/client'
 
-  // Text message events (streaming)
-  TEXT_MESSAGE_START: 'TEXT_MESSAGE_START',
-  TEXT_MESSAGE_CONTENT: 'TEXT_MESSAGE_CONTENT',
-  TEXT_MESSAGE_END: 'TEXT_MESSAGE_END',
+import { EventType } from '@ag-ui/client'
+import type {
+  ToolCall,
+  Message,
+  RunStartedEvent,
+  RunFinishedEvent,
+  RunErrorEvent,
+  TextMessageStartEvent,
+  TextMessageContentEvent,
+  TextMessageEndEvent,
+  ToolCallStartEvent,
+  ToolCallEndEvent,
+  StateSnapshotEvent,
+  MessagesSnapshotEvent,
+} from '@ag-ui/client'
 
-  // Tool call events (streaming)
-  TOOL_CALL_START: 'TOOL_CALL_START',
-  TOOL_CALL_ARGS: 'TOOL_CALL_ARGS',
-  TOOL_CALL_END: 'TOOL_CALL_END',
-
-  // State management events
-  STATE_SNAPSHOT: 'STATE_SNAPSHOT',
-  STATE_DELTA: 'STATE_DELTA',
-
-  // Message snapshot for restore/reconnect
-  MESSAGES_SNAPSHOT: 'MESSAGES_SNAPSHOT',
-
-  // Activity events
-  ACTIVITY_SNAPSHOT: 'ACTIVITY_SNAPSHOT',
-  ACTIVITY_DELTA: 'ACTIVITY_DELTA',
-
-  // Raw event
-  RAW: 'RAW',
-  
-  // Meta events (user feedback, annotations, etc.)
-  META: 'META',
-} as const
-
-export type AGUIEventTypeValue = (typeof AGUIEventType)[keyof typeof AGUIEventType]
-
-// AG-UI Message Roles
-export const AGUIRole = {
-  USER: 'user',
-  ASSISTANT: 'assistant',
-  SYSTEM: 'system',
-  TOOL: 'tool',
-  DEVELOPER: 'developer',
-  ACTIVITY: 'activity',
-} as const
-
-export type AGUIRoleValue = (typeof AGUIRole)[keyof typeof AGUIRole]
-
-// Base event structure
-export type AGUIBaseEvent = {
-  type: AGUIEventTypeValue
-  threadId: string
-  runId: string
-  timestamp: string
-  messageId?: string
-  parentRunId?: string
-}
-
-// Run input/output types
-export type AGUIRunAgentInput = {
-  threadId?: string
-  runId?: string
-  parentRunId?: string
-  messages?: AGUIMessage[]
-  state?: Record<string, unknown>
-  tools?: AGUIToolDefinition[]
-  context?: Record<string, unknown>
-}
-
-export type AGUIRunAgentOutput = {
-  threadId: string
-  runId: string
-  parentRunId?: string
-  streamUrl?: string
-}
-
-// Message type
-export type AGUIMessage = {
-  id: string
-  role: AGUIRoleValue
-  content?: string
-  toolCalls?: AGUIToolCall[]
-  toolCallId?: string
-  name?: string
-  timestamp?: string
-  metadata?: unknown
-  parentToolUseId?: string  // For hierarchical tool calls (sub-agents)
-  children?: AGUIMessage[]  // Nested tool calls under this tool
-}
-
-// Tool types
-export type AGUIToolCall = {
-  id: string
-  name: string
-  args: string
-  type?: string
-  parentToolUseId?: string  // For parent-child relationships (sub-agents)
+// ── Platform Extension: PlatformToolCall ──
+// Extends core ToolCall with platform-specific tracking fields
+// for hierarchical tool calls (sub-agents), result caching, and timing.
+export type PlatformToolCall = ToolCall & {
+  parentToolUseId?: string
   result?: string
   status?: 'pending' | 'running' | 'completed' | 'error'
   error?: string
   duration?: number
 }
 
-export type AGUIToolDefinition = {
-  name: string
-  description?: string
-  parameters?: Record<string, unknown>
-}
-
-// Lifecycle events
-export type AGUIRunStartedEvent = AGUIBaseEvent & {
-  type: typeof AGUIEventType.RUN_STARTED
-  input?: AGUIRunAgentInput
-}
-
-export type AGUIRunFinishedEvent = AGUIBaseEvent & {
-  type: typeof AGUIEventType.RUN_FINISHED
-  output?: unknown
-}
-
-export type AGUIRunErrorEvent = AGUIBaseEvent & {
-  type: typeof AGUIEventType.RUN_ERROR
-  error: string
-  code?: string
-  details?: string
-}
-
-// Step events
-export type AGUIStepStartedEvent = AGUIBaseEvent & {
-  type: typeof AGUIEventType.STEP_STARTED
-  stepId: string
-  stepName: string
-}
-
-export type AGUIStepFinishedEvent = AGUIBaseEvent & {
-  type: typeof AGUIEventType.STEP_FINISHED
-  stepId: string
-  stepName: string
-  duration?: number
-}
-
-// Text message events
-export type AGUITextMessageStartEvent = AGUIBaseEvent & {
-  type: typeof AGUIEventType.TEXT_MESSAGE_START
-  role: AGUIRoleValue
-}
-
-export type AGUITextMessageContentEvent = AGUIBaseEvent & {
-  type: typeof AGUIEventType.TEXT_MESSAGE_CONTENT
-  delta: string
-}
-
-export type AGUITextMessageEndEvent = AGUIBaseEvent & {
-  type: typeof AGUIEventType.TEXT_MESSAGE_END
-}
-
-// Tool call events
-export type AGUIToolCallStartEvent = AGUIBaseEvent & {
-  type: typeof AGUIEventType.TOOL_CALL_START
-  toolCallId: string
-  toolCallName: string
-  parentMessageId?: string
+// ── Platform Extension: PlatformMessage ──
+// Extends core Message union with platform-specific fields.
+// Because Message is a discriminated union (A | B | C), the intersection
+// distributes: (A & Ext) | (B & Ext) | (C & Ext), preserving discrimination.
+export type PlatformMessage = Message & {
+  timestamp?: string
+  metadata?: unknown
+  name?: string  // Tool name (not on core ToolMessage, but platform sends it)
+  toolCalls?: PlatformToolCall[]
+  toolCallId?: string  // Present on tool-role messages
   parentToolUseId?: string
+  children?: PlatformMessage[]
 }
 
-export type AGUIToolCallArgsEvent = AGUIBaseEvent & {
-  type: typeof AGUIEventType.TOOL_CALL_ARGS
-  toolCallId: string
-  delta: string
+// ── Wire event types for platform-specific fields ──
+// The backend sends extra fields not in the core schema. Since AG-UI schemas
+// use "passthrough", these survive JSON parsing but need explicit types.
+
+/** ToolCallStartEvent with backend's extra snake_case parent field */
+export type WireToolCallStartEvent = ToolCallStartEvent & {
+  parent_tool_call_id?: string
 }
 
-export type AGUIToolCallEndEvent = AGUIBaseEvent & {
-  type: typeof AGUIEventType.TOOL_CALL_END
-  toolCallId: string
-  result?: string
-  error?: string
-  duration?: number
+/** Platform raw event — extends core RawEvent with optional data field.
+ *  The backend may send payload in either `event` or `data`. */
+export type PlatformRawEvent = {
+  type: typeof EventType.RAW
+  timestamp?: number
+  event?: Record<string, unknown>
+  data?: Record<string, unknown>
+  source?: string
 }
 
-// State events
-export type AGUIStateSnapshotEvent = AGUIBaseEvent & {
-  type: typeof AGUIEventType.STATE_SNAPSHOT
-  state: Record<string, unknown>
-}
+// ── Platform Activity types ──
+// The core ActivitySnapshotEvent/ActivityDeltaEvent are per-message, not
+// array-based. The platform uses an array-based model for UI rendering.
 
-export type AGUIStateDeltaEvent = AGUIBaseEvent & {
-  type: typeof AGUIEventType.STATE_DELTA
-  delta: AGUIStatePatch[]
-}
-
-export type AGUIStatePatch = {
-  op: 'add' | 'remove' | 'replace'
-  path: string
-  value?: unknown
-}
-
-// Message snapshot event
-export type AGUIMessagesSnapshotEvent = AGUIBaseEvent & {
-  type: typeof AGUIEventType.MESSAGES_SNAPSHOT
-  messages: AGUIMessage[]
-}
-
-// Activity types
-export type AGUIActivity = {
+export type PlatformActivity = {
   id: string
   type: string
   title?: string
@@ -223,92 +118,47 @@ export type AGUIActivity = {
   data?: Record<string, unknown>
 }
 
-export type AGUIActivitySnapshotEvent = AGUIBaseEvent & {
-  type: typeof AGUIEventType.ACTIVITY_SNAPSHOT
-  activities: AGUIActivity[]
-}
-
-export type AGUIActivityDeltaEvent = AGUIBaseEvent & {
-  type: typeof AGUIEventType.ACTIVITY_DELTA
-  delta: AGUIActivityPatch[]
-}
-
-export type AGUIActivityPatch = {
+export type PlatformActivityPatch = {
   op: 'add' | 'update' | 'remove'
-  activity: AGUIActivity
+  activity: PlatformActivity
 }
 
-// Raw event
-export type AGUIRawEvent = AGUIBaseEvent & {
-  type: typeof AGUIEventType.RAW
-  data: unknown
+/** Platform's array-based ACTIVITY_SNAPSHOT (differs from core's per-message model) */
+export type PlatformActivitySnapshotEvent = {
+  type: typeof EventType.ACTIVITY_SNAPSHOT
+  timestamp?: number
+  activities?: PlatformActivity[]
 }
+
+/** Platform's array-based ACTIVITY_DELTA (differs from core's per-message model) */
+export type PlatformActivityDeltaEvent = {
+  type: typeof EventType.ACTIVITY_DELTA
+  timestamp?: number
+  delta: PlatformActivityPatch[]
+}
+
+// ── Platform-specific types (no core equivalent) ──
 
 // Meta event (user feedback, annotations, etc.)
 export type AGUIMetaEvent = {
-  type: typeof AGUIEventType.META
-  metaType: string  // e.g., 'thumbs_up', 'thumbs_down'
+  type: 'META'
+  metaType: string
   payload: Record<string, unknown>
   threadId: string
-  ts?: number  // Unix timestamp in milliseconds
+  ts?: number
 }
 
-// Union of all event types
-export type AGUIEvent =
-  | AGUIRunStartedEvent
-  | AGUIRunFinishedEvent
-  | AGUIRunErrorEvent
-  | AGUIStepStartedEvent
-  | AGUIStepFinishedEvent
-  | AGUITextMessageStartEvent
-  | AGUITextMessageContentEvent
-  | AGUITextMessageEndEvent
-  | AGUIToolCallStartEvent
-  | AGUIToolCallArgsEvent
-  | AGUIToolCallEndEvent
-  | AGUIStateSnapshotEvent
-  | AGUIStateDeltaEvent
-  | AGUIMessagesSnapshotEvent
-  | AGUIActivitySnapshotEvent
-  | AGUIActivityDeltaEvent
-  | AGUIRawEvent
-  | AGUIMetaEvent
+// Union of all events the platform handles (core + META)
+export type PlatformEvent = import('@ag-ui/client').AGUIEvent | AGUIMetaEvent
 
-// Run metadata type
-export type AGUIRunMetadata = {
-  threadId: string
-  runId: string
-  parentRunId?: string
-  sessionName: string
-  projectName: string
-  startedAt: string
-  finishedAt?: string
-  status: 'running' | 'completed' | 'error'
-  eventCount?: number
-  restartCount?: number
-}
-
-// History response type
-export type AGUIHistoryResponse = {
-  threadId: string
-  runId?: string
-  messages: AGUIMessage[]
-  runs: AGUIRunMetadata[]
-}
-
-// Runs response type
-export type AGUIRunsResponse = {
-  threadId: string
-  runs: AGUIRunMetadata[]
-}
-
-// Pending tool call being streamed
+// Pending tool call during streaming (flat format for accumulation)
 export type PendingToolCall = {
   id: string
   name: string
   args: string
   parentToolUseId?: string
-  timestamp?: string  // Timestamp from TOOL_CALL_START event
+  parentMessageId?: string
+  timestamp?: string
 }
 
 // Feedback type for messages
@@ -319,14 +169,14 @@ export type AGUIClientState = {
   threadId: string | null
   runId: string | null
   status: 'idle' | 'connecting' | 'connected' | 'error' | 'completed'
-  messages: AGUIMessage[]
+  messages: PlatformMessage[]
   state: Record<string, unknown>
-  activities: AGUIActivity[]
+  activities: PlatformActivity[]
   currentMessage: {
     id: string | null
-    role: AGUIRoleValue | null
+    role: string | null
     content: string
-    timestamp?: string  // Timestamp from TEXT_MESSAGE_START event
+    timestamp?: string
   } | null
   // DEPRECATED: Use pendingToolCalls instead for parallel tool call support
   currentToolCall: {
@@ -338,54 +188,61 @@ export type AGUIClientState = {
   // Track ALL in-progress tool calls (supports parallel tool execution)
   pendingToolCalls: Map<string, PendingToolCall>
   // Track child tools that finished before their parent
-  pendingChildren: Map<string, AGUIMessage[]>
+  pendingChildren: Map<string, PlatformMessage[]>
   error: string | null
   // Track feedback for messages (messageId -> feedback type)
   messageFeedback: Map<string, MessageFeedback>
+  // Buffer for reasoning content during streaming
+  currentReasoning: {
+    id: string | null
+    content: string
+    timestamp?: string
+  } | null
 }
 
-// Type guard functions
-export function isRunStartedEvent(event: AGUIEvent): event is AGUIRunStartedEvent {
-  return event.type === AGUIEventType.RUN_STARTED
+// ── Type Guards ──
+// Narrow parsed SSE events to specific core event types.
+
+export function isRunStartedEvent(event: { type: string }): event is RunStartedEvent {
+  return event.type === EventType.RUN_STARTED
 }
 
-export function isRunFinishedEvent(event: AGUIEvent): event is AGUIRunFinishedEvent {
-  return event.type === AGUIEventType.RUN_FINISHED
+export function isRunFinishedEvent(event: { type: string }): event is RunFinishedEvent {
+  return event.type === EventType.RUN_FINISHED
 }
 
-export function isRunErrorEvent(event: AGUIEvent): event is AGUIRunErrorEvent {
-  return event.type === AGUIEventType.RUN_ERROR
+export function isRunErrorEvent(event: { type: string }): event is RunErrorEvent {
+  return event.type === EventType.RUN_ERROR
 }
 
-export function isTextMessageStartEvent(event: AGUIEvent): event is AGUITextMessageStartEvent {
-  return event.type === AGUIEventType.TEXT_MESSAGE_START
+export function isTextMessageStartEvent(event: { type: string }): event is TextMessageStartEvent {
+  return event.type === EventType.TEXT_MESSAGE_START
 }
 
-export function isTextMessageContentEvent(event: AGUIEvent): event is AGUITextMessageContentEvent {
-  return event.type === AGUIEventType.TEXT_MESSAGE_CONTENT
+export function isTextMessageContentEvent(event: { type: string }): event is TextMessageContentEvent {
+  return event.type === EventType.TEXT_MESSAGE_CONTENT
 }
 
-export function isTextMessageEndEvent(event: AGUIEvent): event is AGUITextMessageEndEvent {
-  return event.type === AGUIEventType.TEXT_MESSAGE_END
+export function isTextMessageEndEvent(event: { type: string }): event is TextMessageEndEvent {
+  return event.type === EventType.TEXT_MESSAGE_END
 }
 
-export function isToolCallStartEvent(event: AGUIEvent): event is AGUIToolCallStartEvent {
-  return event.type === AGUIEventType.TOOL_CALL_START
+export function isToolCallStartEvent(event: { type: string }): event is ToolCallStartEvent {
+  return event.type === EventType.TOOL_CALL_START
 }
 
-export function isToolCallEndEvent(event: AGUIEvent): event is AGUIToolCallEndEvent {
-  return event.type === AGUIEventType.TOOL_CALL_END
+export function isToolCallEndEvent(event: { type: string }): event is ToolCallEndEvent {
+  return event.type === EventType.TOOL_CALL_END
 }
 
-export function isStateSnapshotEvent(event: AGUIEvent): event is AGUIStateSnapshotEvent {
-  return event.type === AGUIEventType.STATE_SNAPSHOT
+export function isStateSnapshotEvent(event: { type: string }): event is StateSnapshotEvent {
+  return event.type === EventType.STATE_SNAPSHOT
 }
 
-export function isMessagesSnapshotEvent(event: AGUIEvent): event is AGUIMessagesSnapshotEvent {
-  return event.type === AGUIEventType.MESSAGES_SNAPSHOT
+export function isMessagesSnapshotEvent(event: { type: string }): event is MessagesSnapshotEvent {
+  return event.type === EventType.MESSAGES_SNAPSHOT
 }
 
-export function isActivitySnapshotEvent(event: AGUIEvent): event is AGUIActivitySnapshotEvent {
-  return event.type === AGUIEventType.ACTIVITY_SNAPSHOT
+export function isActivitySnapshotEvent(event: { type: string }): event is PlatformActivitySnapshotEvent {
+  return event.type === EventType.ACTIVITY_SNAPSHOT
 }
-

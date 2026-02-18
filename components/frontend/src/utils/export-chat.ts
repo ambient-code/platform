@@ -3,7 +3,7 @@
  * Converts AG-UI events to human-readable Markdown and supports download/PDF export.
  */
 
-import { AGUIEventType } from '@/types/agui';
+import { EventType } from '@/types/agui';
 import type { AgenticSession } from '@/types/agentic-session';
 import type { SessionExportResponse } from '@/services/api/sessions';
 
@@ -47,17 +47,17 @@ function assembleBlocks(events: unknown[]): ConversationBlock[] {
     const ev = raw;
 
     switch (ev.type) {
-      case AGUIEventType.TEXT_MESSAGE_START:
+      case EventType.TEXT_MESSAGE_START:
         currentRole = ev.role ?? 'assistant';
         currentContent = '';
         currentTimestamp = ev.timestamp;
         break;
 
-      case AGUIEventType.TEXT_MESSAGE_CONTENT:
+      case EventType.TEXT_MESSAGE_CONTENT:
         if (ev.delta) currentContent += ev.delta;
         break;
 
-      case AGUIEventType.TEXT_MESSAGE_END:
+      case EventType.TEXT_MESSAGE_END:
         if (currentRole && currentContent.trim()) {
           blocks.push({ kind: 'message', role: currentRole, content: currentContent.trim(), timestamp: currentTimestamp });
         }
@@ -66,20 +66,20 @@ function assembleBlocks(events: unknown[]): ConversationBlock[] {
         currentTimestamp = undefined;
         break;
 
-      case AGUIEventType.TOOL_CALL_START:
+      case EventType.TOOL_CALL_START:
         if (ev.toolCallId) {
           toolCalls.set(ev.toolCallId, { name: ev.toolCallName ?? 'unknown', args: '', timestamp: ev.timestamp });
         }
         break;
 
-      case AGUIEventType.TOOL_CALL_ARGS:
+      case EventType.TOOL_CALL_ARGS:
         if (ev.toolCallId) {
           const tc = toolCalls.get(ev.toolCallId);
           if (tc && ev.delta) tc.args += ev.delta;
         }
         break;
 
-      case AGUIEventType.TOOL_CALL_END:
+      case EventType.TOOL_CALL_END:
         if (ev.toolCallId) {
           const tc = toolCalls.get(ev.toolCallId);
           if (tc) {

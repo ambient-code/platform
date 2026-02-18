@@ -37,7 +37,7 @@ func TestIsActivityEvent(t *testing.T) {
 		{"TOOL_CALL_ARGS", types.EventTypeToolCallArgs},
 		{"TOOL_CALL_END", types.EventTypeToolCallEnd},
 		{"STATE_SNAPSHOT", types.EventTypeStateSnapshot},
-		{"STATE_DELTA", types.EventTypStateDelta},
+		{"STATE_DELTA", types.EventTypeStateDelta},
 		{"MESSAGES_SNAPSHOT", types.EventTypeMessagesSnapshot},
 		{"RAW", types.EventTypeRaw},
 		{"META", types.EventTypeMeta},
