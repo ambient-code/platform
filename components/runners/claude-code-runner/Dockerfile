@@ -17,6 +17,11 @@ RUN dnf module reset -y nodejs && \
     dnf install -y nodejs npm && \
     dnf clean all
 
+# Install Go
+# Use Go 1.21 from AppStream (latest LTS version in UBI9)
+RUN dnf install -y go-toolset && \
+    dnf clean all
+
 # # Install Chromium for Playwright MCP (enables headless browser automation)
 # # Required for self-development workflow where runner tests frontend changes locally
 # # Using Playwright's bundled Chromium as it's self-contained and works on UBI9
