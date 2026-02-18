@@ -17,12 +17,17 @@ import (
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"ambient-code-operator/internal/config"
 )
 
 var (
 	meter metric.Meter
+
+	// cachedClient uses the controller-runtime informer cache for reads,
+	// avoiding direct API server hits every 30s for gauge callbacks.
+	cachedClient client.Client
 
 	// Session lifecycle metrics (histograms)
 	sessionStartupDuration metric.Float64Histogram
@@ -48,7 +53,12 @@ var (
 // InitMetrics initializes OpenTelemetry metrics.
 // Set OTEL_EXPORTER_OTLP_ENDPOINT to configure the collector address.
 // Leave unset or empty to disable metrics export (no-op).
-func InitMetrics(ctx context.Context) (func(), error) {
+// If c is non-nil, gauge callbacks will use the informer cache instead of
+// hitting the API server directly (saves a cluster-wide LIST every 30s).
+func InitMetrics(ctx context.Context, c ...client.Client) (func(), error) {
+	if len(c) > 0 && c[0] != nil {
+		cachedClient = c[0]
+	}
 	// Get OTLP endpoint from environment; skip if not configured
 	endpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
 	if endpoint == "" {
@@ -316,33 +326,49 @@ func initGauges() error {
 	return nil
 }
 
-// countSessionsByPhase counts sessions in the given phases, grouped by namespace
+// countSessionsByPhase counts sessions in the given phases, grouped by namespace.
+// When cachedClient is set (controller-runtime), reads from the informer cache
+// instead of making a cluster-wide LIST against the API server every 30s.
 func countSessionsByPhase(ctx context.Context, phases ...string) map[string]int64 {
 	counts := make(map[string]int64)
-
-	// Use config.DynamicClient to list sessions
-	if config.DynamicClient == nil {
-		return counts
-	}
-
-	gvr := schema.GroupVersionResource{
-		Group:    "vteam.ambient-code",
-		Version:  "v1alpha1",
-		Resource: "agenticsessions",
-	}
-
-	list, err := config.DynamicClient.Resource(gvr).List(ctx, v1.ListOptions{})
-	if err != nil {
-		log.Printf("Failed to list sessions for metrics: %v", err)
-		return counts
-	}
 
 	phaseSet := make(map[string]bool)
 	for _, p := range phases {
 		phaseSet[p] = true
 	}
 
-	for _, item := range list.Items {
+	sessionList := &unstructured.UnstructuredList{}
+	sessionList.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "vteam.ambient-code",
+		Version: "v1alpha1",
+		Kind:    "AgenticSessionList",
+	})
+
+	if cachedClient != nil {
+		// Use informer cache - no API server round-trip
+		if err := cachedClient.List(ctx, sessionList); err != nil {
+			log.Printf("Failed to list sessions for metrics (cached): %v", err)
+			return counts
+		}
+	} else {
+		// Fallback to direct API call if cached client not available
+		if config.DynamicClient == nil {
+			return counts
+		}
+		gvr := schema.GroupVersionResource{
+			Group:    "vteam.ambient-code",
+			Version:  "v1alpha1",
+			Resource: "agenticsessions",
+		}
+		list, err := config.DynamicClient.Resource(gvr).List(ctx, v1.ListOptions{})
+		if err != nil {
+			log.Printf("Failed to list sessions for metrics: %v", err)
+			return counts
+		}
+		sessionList.Items = list.Items
+	}
+
+	for _, item := range sessionList.Items {
 		ns := item.GetNamespace()
 		status, found, _ := unstructured.NestedMap(item.Object, "status")
 		if !found {

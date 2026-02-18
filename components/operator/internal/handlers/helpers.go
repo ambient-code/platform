@@ -14,6 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 )
 
 const (
@@ -221,31 +222,17 @@ func updateAnnotations(sessionNamespace, name string, annotations map[string]str
 	return nil
 }
 
-// clearAnnotation removes a specific annotation from the AgenticSession CR.
+// clearAnnotation removes a specific annotation from the AgenticSession CR
+// using a single JSON merge patch (1 API call) instead of GET + full UPDATE (2 API calls).
 func clearAnnotation(sessionNamespace, name, annotationKey string) error {
 	gvr := types.GetAgenticSessionResource()
 
-	obj, err := config.DynamicClient.Resource(gvr).Namespace(sessionNamespace).Get(context.TODO(), name, v1.GetOptions{})
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return nil
-		}
-		return fmt.Errorf("failed to get AgenticSession %s: %w", name, err)
-	}
+	// JSON merge patch: setting a key to null removes it
+	patch := []byte(fmt.Sprintf(`{"metadata":{"annotations":{%q:null}}}`, annotationKey))
 
-	annotations := obj.GetAnnotations()
-	if annotations == nil {
-		return nil
-	}
-
-	if _, exists := annotations[annotationKey]; !exists {
-		return nil
-	}
-
-	delete(annotations, annotationKey)
-	obj.SetAnnotations(annotations)
-
-	_, err = config.DynamicClient.Resource(gvr).Namespace(sessionNamespace).Update(context.TODO(), obj, v1.UpdateOptions{})
+	_, err := config.DynamicClient.Resource(gvr).Namespace(sessionNamespace).Patch(
+		context.TODO(), name, k8stypes.MergePatchType, patch, v1.PatchOptions{},
+	)
 	if err != nil && !errors.IsNotFound(err) {
 		return fmt.Errorf("failed to clear annotation %s for %s: %w", annotationKey, name, err)
 	}
