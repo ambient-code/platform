@@ -766,7 +766,6 @@ func triggerDisplayNameGenerationIfNeeded(projectName, sessionName string, messa
 	handlers.GenerateDisplayNameAsync(projectName, sessionName, userMessage, sessionCtx)
 }
 
-
 // isActivityEvent returns true for AG-UI event types that indicate session activity.
 func isActivityEvent(eventType string) bool {
 	switch eventType {
