@@ -18,7 +18,6 @@ import {
   MoreVertical,
   ChevronLeft,
   ChevronRight,
-  AlertCircle,
 } from "lucide-react";
 import {
   ResizablePanelGroup,
@@ -29,8 +28,8 @@ import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 // Custom components
-import { CopilotSessionProvider, CopilotChatView } from "@/components/session/CopilotChatPanel";
-import type { InputEnhancementsCtxType } from "@/components/session/session-contexts";
+import MessagesTab from "@/components/session/MessagesTab";
+import { SessionStartingEvents } from "@/components/session/SessionStartingEvents";
 import { FileTree, type FileTreeNode } from "@/components/file-tree";
 
 import { Button } from "@/components/ui/button";
@@ -78,8 +77,11 @@ import { useFileOperations } from "./hooks/use-file-operations";
 import { useSessionQueue } from "@/hooks/use-session-queue";
 import type { DirectoryOption, DirectoryRemote } from "./lib/types";
 
-import type { ReconciledRepo, SessionRepo, AgenticSession, AgenticSessionPhase } from "@/types/agentic-session";
-import { SessionStartingEvents } from "@/components/session/SessionStartingEvents";
+import type { MessageObject, ToolUseMessages, HierarchicalToolMessage, ReconciledRepo, SessionRepo } from "@/types/agentic-session";
+import type { AGUIToolCall } from "@/types/agui";
+
+// AG-UI streaming
+import { useAGUIStream } from "@/hooks/use-agui-stream";
 
 // React Query hooks
 import {
@@ -88,6 +90,7 @@ import {
   useDeleteSession,
   useContinueSession,
   useReposStatus,
+  useCurrentUser,
 } from "@/services/queries";
 import {
   useWorkspaceList,
@@ -99,6 +102,7 @@ import {
 } from "@/services/queries/use-workflows";
 import { useIntegrationsStatus } from "@/services/queries/use-integrations";
 import { useMutation } from "@tanstack/react-query";
+import { FeedbackProvider } from "@/contexts/FeedbackContext";
 
 // Constants for artifact auto-refresh timing
 // Moved outside component to avoid unnecessary effect re-runs
@@ -106,128 +110,32 @@ import { useMutation } from "@tanstack/react-query";
 // Wait 1 second after last tool completion to batch rapid writes together
 // Prevents excessive API calls during burst writes (e.g., when Claude creates multiple files in quick succession)
 // Testing: 500ms was too aggressive (hit API rate limits), 2000ms felt sluggish to users
-
+const ARTIFACTS_DEBOUNCE_MS = 1000;
 
 // Wait 2 seconds after session completes before final artifact refresh
 // Backend can take 1-2 seconds to flush final artifacts to storage
 // Ensures users see all artifacts even if final writes occur after status transition
 const COMPLETION_DELAY_MS = 2000;
 
-// NOTE: isCompletedToolUseMessage type guard removed — was only used by the
-// old streamMessages useMemo. CopilotKit handles tool rendering now.
-
-// ─── Workflow connect bridge ──────────────────────────────────────────
-//
-// Headless component that sits inside CopilotSessionProvider.
-// When connectSignal changes (workflow activated), it calls
-// agent.connectAgent() to replay persisted events — picking up
-// server-initiated events like the runner's workflow greeting.
-
-import { useAgent } from "@copilotkit/react-core/v2";
-
-function WorkflowConnectBridge({
-  sessionName,
-  connectSignal,
-}: {
-  sessionName: string;
-  connectSignal: number;
-}) {
-  const { agent } = useAgent({ agentId: sessionName });
-
-  useEffect(() => {
-    if (connectSignal === 0) return; // skip initial mount
-    agent.connectAgent().catch((err: unknown) => {
-      console.warn("[WorkflowConnectBridge] connectAgent failed:", err);
-    });
-  }, [connectSignal, agent]);
-
-  return null;
-}
-
-// ─── Phase-aware overlay for non-running sessions ─────────────────────
-
-type SessionPhaseOverlayProps = {
-  phase: AgenticSessionPhase;
-  session: AgenticSession | undefined;
-  projectName: string;
-  sessionName: string;
-  onResume: () => void;
-  isResuming: boolean;
-};
-
-function SessionPhaseOverlay({
-  phase,
-  session,
-  projectName,
-  sessionName,
-  onResume,
-  isResuming,
-}: SessionPhaseOverlayProps) {
-  // Creating / Pending — show live pod events timeline
-  if (phase === "Creating" || phase === "Pending") {
-    return (
-      <SessionStartingEvents
-        projectName={projectName}
-        sessionName={sessionName}
-      />
-    );
+/**
+ * Type guard to check if a message is a completed ToolUseMessages with result.
+ * Extracted for testability and proper validation.
+ * Uses proper type assertion and validation.
+ */
+function isCompletedToolUseMessage(msg: MessageObject | ToolUseMessages): msg is ToolUseMessages {
+  if (msg.type !== "tool_use_messages") {
+    return false;
   }
-
-  // Stopping — simple spinner
-  if (phase === "Stopping") {
-    return (
-      <div className="flex flex-col items-center justify-center h-full">
-        <Loader2 className="h-10 w-10 animate-spin text-orange-500 mb-3" />
-        <h3 className="font-semibold text-lg">Stopping Session</h3>
-        <p className="text-sm text-muted-foreground mt-1">
-          Saving workspace state...
-        </p>
-      </div>
-    );
-  }
-
-  // Failed — show error from conditions
-  if (phase === "Failed") {
-    const conditions = session?.status?.conditions ?? [];
-    const failedCondition = conditions.find(
-      (c) => c.status === "False" && c.message,
-    );
-    const errorMessage =
-      failedCondition?.message ?? "Session failed unexpectedly.";
-    const errorReason = failedCondition?.reason;
-
-    return (
-      <div className="flex flex-col items-center justify-center h-full px-4">
-        <div className="max-w-md w-full text-center">
-          <div className="mb-4 rounded-full bg-red-500/10 p-4 inline-flex">
-            <AlertCircle className="h-8 w-8 text-red-500" />
-          </div>
-          <h3 className="font-semibold text-lg mb-2">Session Failed</h3>
-          {errorReason && (
-            <Badge variant="destructive" className="mb-3 text-xs">
-              {errorReason}
-            </Badge>
-          )}
-          <p className="text-sm text-muted-foreground mb-6 break-words">
-            {errorMessage}
-          </p>
-          <Button onClick={onResume} size="lg" className="w-full" disabled={isResuming}>
-            {isResuming ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Resuming...
-              </>
-            ) : (
-              "Retry Session"
-            )}
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  // Fallback (shouldn't normally be reached — Stopped/Completed use CopilotChatView)
-  return null;
+  
+  // Cast to ToolUseMessages for proper type checking
+  const toolMsg = msg as ToolUseMessages;
+  
+  return (
+    toolMsg.resultBlock !== undefined &&
+    toolMsg.resultBlock !== null &&
+    typeof toolMsg.resultBlock === "object" &&
+    toolMsg.resultBlock.content !== null
+  );
 }
 
 export default function ProjectSessionDetailPage({
@@ -238,6 +146,7 @@ export default function ProjectSessionDetailPage({
   const router = useRouter();
   const [projectName, setProjectName] = useState<string>("");
   const [sessionName, setSessionName] = useState<string>("");
+  const [chatInput, setChatInput] = useState("");
   const [backHref, setBackHref] = useState<string | null>(null);
   const [openAccordionItems, setOpenAccordionItems] = useState<string[]>([]);
   const [contextModalOpen, setContextModalOpen] = useState(false);
@@ -245,9 +154,6 @@ export default function ProjectSessionDetailPage({
   const [repoChanging, setRepoChanging] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userHasInteracted, setUserHasInteracted] = useState(false);
-  // Incremented after workflow activation to signal CopilotKit to reconnect
-  // via connectAgent() — picks up server-initiated events (e.g. greeting).
-  const [connectSignal, setConnectSignal] = useState(0);
 
   // Left panel visibility and size state (persisted to localStorage)
   const [leftPanelVisible, setLeftPanelVisible] = useState(() => {
@@ -305,6 +211,9 @@ export default function ProjectSessionDetailPage({
   const { data: integrationsStatus } = useIntegrationsStatus();
   const githubConfigured = integrationsStatus?.github?.active != null;
   
+  // Get current user for feedback context
+  const { data: currentUser } = useCurrentUser();
+
   // Extract phase for sidebar state management
   const phase = session?.status?.phase || "Pending";
 
@@ -315,17 +224,86 @@ export default function ProjectSessionDetailPage({
     phase === "Running" // Only poll when session is running
   );
 
+  // Track the current Langfuse trace ID for feedback association
+  const [langfuseTraceId, setLangfuseTraceId] = useState<string | null>(null);
+  
+  // AG-UI streaming hook - replaces useSessionMessages and useSendChatMessage
+  // Note: autoConnect is intentionally false to avoid SSR hydration mismatch
+  // Connection is triggered manually in useEffect after client hydration
+  const aguiStream = useAGUIStream({
+    projectName: projectName || "",
+    sessionName: sessionName || "",
+    autoConnect: false, // Manual connection after hydration
+    onError: (err) => console.error("AG-UI stream error:", err),
+    onTraceId: (traceId) => setLangfuseTraceId(traceId),  // Capture Langfuse trace ID for feedback
+  });
+  const aguiState = aguiStream.state;
+  const aguiSendMessage = aguiStream.sendMessage;
+  const aguiInterrupt = aguiStream.interrupt;
+  const isRunActive = aguiStream.isRunActive;
+  const aguiConnectRef = useRef(aguiStream.connect);
+  
+  // Keep connect ref up to date
+  useEffect(() => {
+    aguiConnectRef.current = aguiStream.connect;
+  }, [aguiStream.connect]);
+
+  // Connect to AG-UI event stream for history and live updates
+  // AG-UI pattern: GET /agui/events streams ALL thread events (past + future)
+  // POST /agui/run creates runs, events broadcast to GET subscribers
+  const hasConnectedRef = useRef(false);
+  const disconnectRef = useRef(aguiStream.disconnect);
+  
+  // Keep disconnect ref up to date without triggering re-renders
+  useEffect(() => {
+    disconnectRef.current = aguiStream.disconnect;
+  }, [aguiStream.disconnect]);
+  
+  useEffect(() => {
+    if (!projectName || !sessionName) return;
+    
+    // Connect once on mount and keep connection open
+    if (!hasConnectedRef.current) {
+      hasConnectedRef.current = true;
+      aguiConnectRef.current();
+    }
+    
+    // CRITICAL: Disconnect when navigating away to prevent hung connections
+    return () => {
+      console.log('[Session Detail] Unmounting, disconnecting AG-UI stream');
+      disconnectRef.current();
+      hasConnectedRef.current = false;
+    };
+    // NOTE: Only depend on projectName and sessionName - NOT aguiStream
+    // aguiStream is an object that changes every render, which would cause infinite reconnects
+  }, [projectName, sessionName]);
+
+  // Auto-send initial prompt (handles session start, workflow activation, restarts)
+  // AG-UI pattern: Client (or backend) initiates runs via POST /agui/run
+  const lastProcessedPromptRef = useRef<string>("");
+  
+  useEffect(() => {
+    if (!session || !aguiSendMessage) return;
+    
+    const initialPrompt = session?.spec?.initialPrompt;
+    
+    // NOTE: Initial prompt execution handled by backend auto-trigger (StartSession handler)
+    // Backend waits for subscriber before executing, ensuring events are received
+    // This works for both UI and headless/API usage
+    
+    // Track that we've seen this prompt (for workflow changes)
+    if (initialPrompt && lastProcessedPromptRef.current !== initialPrompt) {
+      lastProcessedPromptRef.current = initialPrompt;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.spec?.initialPrompt, session?.status?.phase, aguiState.messages.length, aguiState.status]);
+
   // Workflow management hook
   const workflowManagement = useWorkflowManagement({
     projectName,
     sessionName,
     sessionPhase: session?.status?.phase,
-    onWorkflowActivated: () => {
-      refetchSession();
-      // Signal the CopilotKit bridge to call connectAgent() — this replays
-      // persisted events including the runner's workflow greeting.
-      setConnectSignal((n) => n + 1);
-    },
+    onWorkflowActivated: refetchSession,
   });
 
   // Poll session status when workflow is queued
@@ -382,8 +360,30 @@ export default function ProjectSessionDetailPage({
     return () => clearInterval(pollInterval);
   }, [sessionQueue.messages, session?.status?.phase, refetchSession]);
 
-  // Note: Message sending is handled by CopilotKit's chat component.
-  // Queued messages are cleared when session becomes Running and CopilotKit connects.
+  // Process queued messages when session becomes Running
+  useEffect(() => {
+    const phase = session?.status?.phase;
+    const unsentMessages = sessionQueue.messages.filter(m => !m.sentAt);
+    
+    if (phase === "Running" && unsentMessages.length > 0) {
+      // Session is now running, send all queued messages
+      const processMessages = async () => {
+        for (const messageItem of unsentMessages) {
+          try {
+            await aguiSendMessage(messageItem.content);
+            sessionQueue.markMessageSent(messageItem.id);
+            // Small delay between messages to avoid overwhelming the system
+            await new Promise(resolve => setTimeout(resolve, 100));
+          } catch (err) {
+            errorToast(err instanceof Error ? err.message : "Failed to send queued message");
+          }
+        }
+      };
+      
+      processMessages();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.status?.phase, sessionQueue.messages.length]);
 
   // Repo management mutations
   const addRepoMutation = useMutation({
@@ -644,7 +644,7 @@ export default function ProjectSessionDetailPage({
 
   // Note: userHasInteracted is only set when:
   // 1. User explicitly selects a workflow (handleWelcomeWorkflowSelect -> onUserInteraction)
-  // 2. User sends a message via CopilotKit chat
+  // 2. User sends a message (sendChat sets it to true)
   // It should NOT be set automatically when backend messages arrive
 
   // Load remotes from session annotations (one-time initialization)
@@ -733,29 +733,399 @@ export default function ProjectSessionDetailPage({
     handleWorkflowChange(workflowId);
   };
 
-  // Session has real messages when phase indicates activity has occurred.
-  // CopilotKit handles all message display — this is for sidebar logic only.
-  const hasRealMessages = useMemo(() => {
-    const phase = session?.status?.phase;
-    return phase === "Running" || phase === "Completed";
-  }, [session?.status?.phase]);
+  // Convert AG-UI messages to display format with hierarchical tool call rendering
+  const streamMessages: Array<MessageObject | ToolUseMessages | HierarchicalToolMessage> = useMemo(() => {
+    
+    // Helper function to parse tool arguments
+    const parseToolArgs = (args: string | undefined): Record<string, unknown> => {
+      if (!args) return {};
+      try {
+        const parsed = JSON.parse(args);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          return parsed as Record<string, unknown>;
+        }
+        return { value: parsed };
+      } catch {
+        return { _raw: String(args || '') };
+      }
+    };
 
-  // Input enhancements — bridges page-level state (upload, queue) to CopilotKit's
-  // custom Input component via context.  See session-contexts.ts.
-  const inputEnhancements = useMemo<InputEnhancementsCtxType>(() => ({
-    onPasteImage: async (file: File) => {
-      await uploadFileMutation.mutateAsync({ type: "local", file });
-    },
-    sessionPhase: phase,
-    queuedMessages: sessionQueue.messages,
-    onCancelQueuedMessage: (id: string) => sessionQueue.cancelMessage(id),
-    onUpdateQueuedMessage: (id: string, content: string) => sessionQueue.updateMessage(id, content),
-    onClearQueue: () => sessionQueue.clearMessages(),
-    queuedCount: sessionQueue.pendingCount,
-    isRunActive: phase === "Running",
-    onMarkSent: (id: string) => sessionQueue.markMessageSent(id),
-    onQueueMessage: (content: string) => sessionQueue.addMessage(content),
-  }), [phase, sessionQueue, uploadFileMutation]);
+    // Helper function to create a tool message from a tool call
+    const createToolMessage = (
+      tc: AGUIToolCall,
+      timestamp: string
+    ): ToolUseMessages => {
+      const toolInput = parseToolArgs(tc.args);
+      return {
+        type: "tool_use_messages",
+        timestamp,
+        toolUseBlock: {
+          type: "tool_use_block",
+          id: tc.id,
+          name: tc.name,
+          input: toolInput,
+        },
+        resultBlock: {
+          type: "tool_result_block",
+          tool_use_id: tc.id,
+          content: tc.result || null,
+          is_error: tc.status === "error",
+        },
+      };
+    };
+
+    const result: Array<MessageObject | ToolUseMessages | HierarchicalToolMessage> = [];
+    
+    // Phase A: Collect all tool calls from all messages for hierarchy building
+    const allToolCalls = new Map<string, { tc: AGUIToolCall; timestamp: string }>();
+    
+    for (const msg of aguiState.messages) {
+      // Use msg.timestamp from backend, fallback to current time for legacy messages
+      // Note: After backend fix, new messages will have proper timestamps
+      const timestamp = msg.timestamp || new Date().toISOString();
+      
+      if (msg.toolCalls && Array.isArray(msg.toolCalls)) {
+        for (const tc of msg.toolCalls) {
+          if (tc && tc.id && tc.name) {
+            allToolCalls.set(tc.id, { tc, timestamp });
+          }
+        }
+      }
+    }
+    
+    // Add currently streaming tool call to the map if present
+    // This ensures streaming tools (both parents and children) are included in hierarchy
+    // CRITICAL: Don't require name - add even if name is null to prevent orphaned children
+    if (aguiState.currentToolCall?.id) {
+      const streamingToolId = aguiState.currentToolCall.id;
+      const streamingParentId = aguiState.currentToolCall.parentToolUseId;
+      const toolName = aguiState.currentToolCall.name || "unknown_tool";  // Default if null
+      
+      // Create a pseudo-tool-call for the streaming tool
+      const streamingTC: AGUIToolCall = {
+        id: streamingToolId,
+        name: toolName,
+        args: aguiState.currentToolCall.args || "",
+        type: "function",
+        parentToolUseId: streamingParentId,
+        status: "running",
+      };
+      
+      if (!allToolCalls.has(streamingToolId)) {
+        allToolCalls.set(streamingToolId, { 
+          tc: streamingTC, 
+          // Use timestamp from currentToolCall if available, fallback to current time for legacy
+          timestamp: aguiState.pendingToolCalls?.get(streamingToolId)?.timestamp || new Date().toISOString() 
+        });
+      }
+    }
+    
+    // Add pending children to render map so they show during streaming!
+    // These are children that finished before their parent tool finished
+    if (aguiState.pendingChildren && aguiState.pendingChildren.size > 0) {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      for (const [parentId, children] of aguiState.pendingChildren.entries()) {
+        for (const childMsg of children) {
+          if (childMsg.toolCalls) {
+            for (const tc of childMsg.toolCalls) {
+              if (!allToolCalls.has(tc.id)) {
+                allToolCalls.set(tc.id, {
+                  tc: tc,
+                  // Use timestamp from child message if available, fallback to current time
+                  timestamp: childMsg.timestamp || new Date().toISOString(),
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    // Phase B: Build parent-child relationships
+    const topLevelTools = new Set<string>();
+    const childrenByParent = new Map<string, string[]>();
+    
+    for (const [toolId, { tc }] of allToolCalls) {
+      if (tc.parentToolUseId) {
+        // This is a child tool call
+        if (!childrenByParent.has(tc.parentToolUseId)) {
+          childrenByParent.set(tc.parentToolUseId, []);
+        }
+        childrenByParent.get(tc.parentToolUseId)!.push(toolId);
+      } else {
+        // This is a top-level tool call
+        topLevelTools.add(toolId);
+      }
+    }
+    
+    // Handle orphaned children - but DON'T promote to top-level if parent is streaming
+    for (const [toolId, { tc }] of allToolCalls) {
+      if (tc.parentToolUseId && !allToolCalls.has(tc.parentToolUseId)) {
+        // Check if parent is the currently streaming tool
+        if (aguiState.currentToolCall?.id === tc.parentToolUseId) {
+          // Don't promote to top-level - parent is streaming and will appear
+        } else {
+          // Parent truly not found, render as top-level (fallback)
+          console.warn(`  ⚠️ Orphaned child: ${tc.name} (${toolId.substring(0, 8)}) - parent ${tc.parentToolUseId.substring(0, 8)} not found`);
+          topLevelTools.add(toolId);
+        }
+      }
+    }
+    
+    // Track which tool calls we've already rendered
+    const renderedToolCalls = new Set<string>();
+    
+    // Phase C: Process messages and build hierarchical structure
+    for (const msg of aguiState.messages) {
+      // Use msg.timestamp from backend, fallback to current time for legacy messages
+      const timestamp = msg.timestamp || new Date().toISOString();
+      
+      // Handle text content by role
+      if (msg.role === "user") {
+        result.push({
+          type: "user_message",
+          id: msg.id,  // Preserve message ID for feedback association
+          content: { type: "text_block", text: msg.content || "" },
+          timestamp,
+        });
+      } else if (msg.role === "assistant") {
+        // Check if this is a thinking block (from RAW event)
+        const metadata = msg.metadata as Record<string, unknown> | undefined;
+        if (metadata?.type === "thinking_block") {
+          result.push({
+            type: "agent_message",
+            id: msg.id,  // Preserve message ID for feedback association
+            content: {
+              type: "thinking_block",
+              thinking: metadata.thinking as string || "",
+              signature: metadata.signature as string || "",
+            },
+            model: "claude",
+            timestamp,
+          });
+        } else if (msg.content) {
+          // Only push text message if there's actual content
+          result.push({
+            type: "agent_message",
+            id: msg.id,  // Preserve message ID for feedback association
+            content: { type: "text_block", text: msg.content },
+            model: "claude",
+            timestamp,
+          });
+        }
+      } else if (msg.role === "tool") {
+        // Standalone tool results (not from toolCalls array)
+        if (msg.toolCallId && !allToolCalls.has(msg.toolCallId)) {
+          result.push({
+            type: "tool_use_messages",
+            timestamp,
+            toolUseBlock: {
+              type: "tool_use_block",
+              id: msg.toolCallId,
+              name: msg.name || "tool",
+              input: {},
+            },
+            resultBlock: {
+              type: "tool_result_block",
+              tool_use_id: msg.toolCallId,
+              content: msg.content || null,
+              is_error: false,
+            },
+          });
+        }
+      } else if (msg.role === "system") {
+        result.push({
+          type: "system_message",
+          subtype: "system.message",
+          data: { message: msg.content || "" },
+          timestamp,
+        });
+      }
+      
+      // Handle tool calls embedded in this message
+      if (msg.toolCalls && Array.isArray(msg.toolCalls)) {
+        for (const tc of msg.toolCalls) {
+          if (!tc || !tc.id || !tc.name) continue;
+          
+          // Skip if already rendered or if it's a child (will be rendered inside parent)
+          if (renderedToolCalls.has(tc.id)) {
+            continue;
+          }
+          if (!topLevelTools.has(tc.id)) {
+            continue;
+          }
+          
+          // Build children array for this tool call
+          const childIds = childrenByParent.get(tc.id) || [];
+          
+          const children: ToolUseMessages[] = childIds
+            .map(childId => {
+              const childData = allToolCalls.get(childId);
+              if (!childData) return null;
+              renderedToolCalls.add(childId);
+              return createToolMessage(childData.tc, childData.timestamp);
+            })
+            .filter((c): c is ToolUseMessages => c !== null);
+          
+          // Create the hierarchical tool message
+          const toolInput = parseToolArgs(tc.args);
+          
+          const toolMessage: HierarchicalToolMessage = {
+            type: "tool_use_messages",
+            timestamp,
+            toolUseBlock: {
+              type: "tool_use_block",
+              id: tc.id,
+              name: tc.name,
+              input: toolInput,
+            },
+            resultBlock: {
+              type: "tool_result_block",
+              tool_use_id: tc.id,
+              content: tc.result || null,
+              is_error: tc.status === "error",
+            },
+            children: children.length > 0 ? children : undefined,
+          };
+          
+          result.push(toolMessage);
+          renderedToolCalls.add(tc.id);
+        }
+      }
+    }
+    
+    // Add streaming message if currently streaming
+    if (aguiState.currentMessage?.content) {
+      result.push({
+        type: "agent_message",
+        content: { type: "text_block", text: aguiState.currentMessage.content },
+        model: "claude",
+        // Use timestamp from currentMessage (captured from TEXT_MESSAGE_START), fallback to current time
+        timestamp: aguiState.currentMessage.timestamp || new Date().toISOString(),
+        streaming: true,
+      } as MessageObject & { streaming?: boolean });
+    }
+    
+    // Render ALL currently streaming tool calls (supports parallel tool execution)
+    // CRITICAL: This renders tools immediately when TOOL_CALL_START arrives,
+    // not waiting until TOOL_CALL_END like the allToolCalls map approach does
+    const pendingToolCalls = aguiState.pendingToolCalls || new Map();
+    
+    for (const [toolId, pendingTool] of pendingToolCalls) {
+      if (renderedToolCalls.has(toolId)) continue;
+      
+      const toolName = pendingTool.name || "unknown_tool";
+      const toolArgs = pendingTool.args || "";
+      const streamingParentId = pendingTool.parentToolUseId;
+      
+      // Only render if this is a top-level tool (not a child waiting for parent)
+      // Children will be rendered nested inside their parent
+      const isTopLevel = !streamingParentId || !pendingToolCalls.has(streamingParentId);
+      
+      if (isTopLevel) {
+        const toolInput = parseToolArgs(toolArgs);
+        
+        // Get any pending children for this tool (children that finished before parent)
+        const pendingForThis = aguiState.pendingChildren?.get(toolId) || [];
+        const children: ToolUseMessages[] = pendingForThis
+          .map(childMsg => {
+            const childTC = childMsg.toolCalls?.[0];
+            if (!childTC) return null;
+            // Use timestamp from child message if available
+            return createToolMessage(childTC, childMsg.timestamp || new Date().toISOString());
+          })
+          .filter((c): c is ToolUseMessages => c !== null);
+        
+        // Also include any streaming children from pendingToolCalls
+        for (const [childId, childTool] of pendingToolCalls) {
+          if (childTool.parentToolUseId === toolId && !renderedToolCalls.has(childId)) {
+            const childInput = parseToolArgs(childTool.args || "");
+            children.push({
+              type: "tool_use_messages",
+              // Use timestamp from pending tool call (captured from TOOL_CALL_START)
+              timestamp: childTool.timestamp || new Date().toISOString(),
+              toolUseBlock: {
+                type: "tool_use_block",
+                id: childId,
+                name: childTool.name,
+                input: childInput,
+              },
+              resultBlock: {
+                type: "tool_result_block",
+                tool_use_id: childId,
+                content: null,  // Still streaming
+                is_error: false,
+              },
+            });
+            renderedToolCalls.add(childId);
+          }
+        }
+        
+        // Also include any children from the childrenByParent map
+        const childIds = childrenByParent.get(toolId) || [];
+        for (const childId of childIds) {
+          if (renderedToolCalls.has(childId)) continue;
+          const childData = allToolCalls.get(childId);
+          if (childData) {
+            children.push(createToolMessage(childData.tc, childData.timestamp));
+            renderedToolCalls.add(childId);
+          }
+        }
+        
+        const streamingToolMessage: HierarchicalToolMessage = {
+          type: "tool_use_messages",
+          // Use timestamp from pending tool call (captured from TOOL_CALL_START)
+          timestamp: pendingTool.timestamp || new Date().toISOString(),
+          toolUseBlock: {
+            type: "tool_use_block",
+            id: toolId,
+            name: toolName,
+            input: toolInput,
+          },
+          resultBlock: {
+            type: "tool_result_block",
+            tool_use_id: toolId,
+            content: null,  // No result yet - still running!
+            is_error: false,
+          },
+          children: children.length > 0 ? children : undefined,
+        };
+        
+        result.push(streamingToolMessage);
+        renderedToolCalls.add(toolId);
+      }
+    }
+    
+    return result;
+  }, [
+    aguiState.messages,
+    aguiState.currentMessage,
+    aguiState.currentToolCall,
+    aguiState.pendingToolCalls,  // CRITICAL: Include so UI updates when new tools start
+    aguiState.pendingChildren,   // CRITICAL: Include so UI updates when children finish
+  ]);
+
+  // Check if there are any real messages (user or assistant messages, not just system)
+  const hasRealMessages = useMemo(() => {
+    return streamMessages.some(
+      (msg) => msg.type === "user_message" || msg.type === "agent_message"
+    );
+  }, [streamMessages]);
+
+  // Clear queued messages when first agent response arrives
+  useEffect(() => {
+    const sentMessages = sessionQueue.messages.filter(m => m.sentAt);
+    if (sentMessages.length > 0 && streamMessages.length > 0) {
+      // Check if there's at least one agent message (response to our queued messages)
+      const hasAgentResponse = streamMessages.some(
+        msg => msg.type === "agent_message" || msg.type === "tool_use_messages"
+      );
+      
+      if (hasAgentResponse) {
+        sessionQueue.clearMessages();
+      }
+    }
+  }, [sessionQueue, streamMessages]);
 
   // Load workflow from session when session data and workflows are available
   // Syncs the workflow panel with the workflow reported by the API
@@ -788,22 +1158,49 @@ export default function ProjectSessionDetailPage({
     }
   }, [session, ootbWorkflows, workflowManagement, hasRealMessages]);
 
-  // Auto-refresh artifacts periodically while session is running
-  // CopilotKit handles chat — we just poll artifacts during active sessions
+  // Auto-refresh artifacts when messages complete
+  // UX improvement: Automatically refresh the artifacts panel when Claude writes new files,
+  // so users can see their changes immediately without manually clicking the refresh button
+  const previousToolResultCount = useRef(0);
+  const artifactsRefreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const completionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasRefreshedOnCompletionRef = useRef(false);
 
+  // Memoize the completed tool count to avoid redundant filtering
+  // Uses extracted type guard for testability and proper validation
+  const completedToolCount = useMemo(() => {
+    return streamMessages.filter(isCompletedToolUseMessage).length;
+  }, [streamMessages]);
+
   useEffect(() => {
-    const phase = session?.status?.phase;
-    if (phase !== "Running") return;
+    // Initialize on first mount to avoid triggering refresh for existing tools
+    if (previousToolResultCount.current === 0 && completedToolCount > 0) {
+      previousToolResultCount.current = completedToolCount;
+      return;
+    }
 
-    // Poll artifacts every 10 seconds while session is running
-    const interval = setInterval(() => {
+    // If we have new completed tools, refresh artifacts after a short delay
+    if (completedToolCount > previousToolResultCount.current && completedToolCount > 0) {
+      // Clear any pending refresh timeout
+      if (artifactsRefreshTimeoutRef.current) {
+        clearTimeout(artifactsRefreshTimeoutRef.current);
+      }
+
+      // Debounce refresh to avoid excessive calls during rapid tool completions
+      artifactsRefreshTimeoutRef.current = setTimeout(() => {
         refetchArtifactsFiles();
-    }, 10_000);
+      }, ARTIFACTS_DEBOUNCE_MS);
 
-    return () => clearInterval(interval);
-  }, [session?.status?.phase, refetchArtifactsFiles]);
+      previousToolResultCount.current = completedToolCount;
+    }
+
+    // Cleanup timeout on unmount or effect re-run
+    return () => {
+      if (artifactsRefreshTimeoutRef.current) {
+        clearTimeout(artifactsRefreshTimeoutRef.current);
+      }
+    };
+  }, [completedToolCount, refetchArtifactsFiles]);
 
   // Also refresh artifacts when session completes (catch any final artifacts)
   useEffect(() => {
@@ -886,8 +1283,42 @@ export default function ProjectSessionDetailPage({
     );
   };
 
-  // NOTE: sendChat, handleCommandClick, handleInterrupt removed.
-  // CopilotKit's <CopilotChat> component handles all message sending and interruption.
+  const sendChat = async () => {
+    if (!chatInput.trim()) return;
+
+    const finalMessage = chatInput.trim();
+    setChatInput("");
+
+    // Mark user interaction when they send first message
+    setUserHasInteracted(true);
+
+    const phase = session?.status?.phase;
+    
+    // If session is not yet running, queue the message for later
+    // This includes: undefined (loading), "Pending", "Creating", or any other non-Running state
+    if (!phase || phase !== "Running") {
+      sessionQueue.addMessage(finalMessage);
+      return;
+    }
+
+    try {
+      await aguiSendMessage(finalMessage);
+    } catch (err) {
+      errorToast(err instanceof Error ? err.message : "Failed to send message");
+    }
+  };
+
+  const handleCommandClick = async (slashCommand: string) => {
+    try {
+      await aguiSendMessage(slashCommand);
+      successToast(`Command ${slashCommand} sent`);
+    } catch (err) {
+      errorToast(err instanceof Error ? err.message : "Failed to send command");
+    }
+  };
+
+  // LEGACY: Old handleInterrupt removed - now using aguiInterrupt from useAGUIStream
+  // which calls the proper AG-UI interrupt endpoint that signals Claude SDK
 
   // Loading state
   if (isLoading || !projectName || !sessionName) {
@@ -1034,9 +1465,7 @@ export default function ProjectSessionDetailPage({
           </div>
         )}
 
-        {/* Main content area — single CopilotKit provider for both layouts */}
-        <CopilotSessionProvider projectName={projectName} sessionName={sessionName}>
-        <WorkflowConnectBridge sessionName={sessionName} connectSignal={connectSignal} />
+        {/* Main content area */}
         <div className="flex-grow overflow-hidden bg-card">
           <div className="h-full relative">
               {/* Mobile sidebar overlay */}
@@ -2043,40 +2472,53 @@ export default function ProjectSessionDetailPage({
                     )}
 
                     <div className="flex flex-col flex-1 overflow-hidden">
-                      {/* Phase-aware chat area */}
-                      {phase === "Running" || ["Stopped", "Completed"].includes(phase) ? (
-                        <CopilotChatView
+                      {(phase === "Creating" || phase === "Pending") && (
+                        <SessionStartingEvents
                           projectName={projectName}
                           sessionName={sessionName}
-                          className="flex-1"
-                          isSessionActive={phase === "Running"}
-                          workflowMetadata={workflowMetadata}
-                          onResume={phase !== "Running" ? handleContinue : undefined}
-                          isResuming={continueMutation.isPending}
-                          inputEnhancements={inputEnhancements}
-                          renderWelcome={(hasMessages) => (
-                            <WelcomeExperience
-                              ootbWorkflows={ootbWorkflows}
-                              onWorkflowSelect={handleWelcomeWorkflowSelect}
-                              onUserInteraction={() => setUserHasInteracted(true)}
-                              userHasInteracted={userHasInteracted}
-                              sessionPhase={phase}
-                              hasRealMessages={hasMessages}
-                              onLoadWorkflow={() => setCustomWorkflowDialogOpen(true)}
-                              selectedWorkflow={workflowManagement.selectedWorkflow}
-                            />
-                          )}
-                        />
-                      ) : (
-                        <SessionPhaseOverlay
-                          phase={phase}
-                          session={session}
-                          projectName={projectName}
-                          sessionName={sessionName}
-                          onResume={handleContinue}
-                          isResuming={continueMutation.isPending}
                         />
                       )}
+                      <FeedbackProvider
+                        projectName={projectName}
+                        sessionName={sessionName}
+                        username={currentUser?.username || currentUser?.displayName || "anonymous"}
+                        initialPrompt={session?.spec?.initialPrompt}
+                        activeWorkflow={workflowManagement.activeWorkflow || undefined}
+                        messages={streamMessages}
+                        traceId={langfuseTraceId || undefined}
+                        messageFeedback={aguiState.messageFeedback}
+                      >
+                      <MessagesTab
+                        session={session}
+                        streamMessages={streamMessages}
+                        chatInput={chatInput}
+                        setChatInput={setChatInput}
+                        onSendChat={() => Promise.resolve(sendChat())}
+                        onInterrupt={aguiInterrupt}
+                        onGoToResults={() => {}}
+                        onContinue={handleContinue}
+                        workflowMetadata={workflowMetadata}
+                        onCommandClick={handleCommandClick}
+                        isRunActive={isRunActive}
+                        showWelcomeExperience={!["Completed", "Failed", "Stopped", "Stopping"].includes(session?.status?.phase || "")}
+                        activeWorkflow={workflowManagement.activeWorkflow}
+                        userHasInteracted={userHasInteracted}
+                        queuedMessages={sessionQueue.messages}
+                        hasRealMessages={hasRealMessages}
+                        welcomeExperienceComponent={
+                          <WelcomeExperience
+                            ootbWorkflows={ootbWorkflows}
+                            onWorkflowSelect={handleWelcomeWorkflowSelect}
+                            onUserInteraction={() => setUserHasInteracted(true)}
+                            userHasInteracted={userHasInteracted}
+                            sessionPhase={session?.status?.phase}
+                            hasRealMessages={hasRealMessages}
+                            onLoadWorkflow={() => setCustomWorkflowDialogOpen(true)}
+                            selectedWorkflow={workflowManagement.selectedWorkflow}
+                          />
+                        }
+                      />
+                      </FeedbackProvider>
                     </div>
                   </CardContent>
                 </Card>
@@ -2102,47 +2544,59 @@ export default function ProjectSessionDetailPage({
                       </div>
                     )}
                     <div className="flex flex-col flex-1 overflow-hidden">
-                      {/* Phase-aware chat area — mobile */}
-                      {phase === "Running" || ["Stopped", "Completed"].includes(phase) ? (
-                        <CopilotChatView
+                      {(phase === "Creating" || phase === "Pending") && (
+                        <SessionStartingEvents
                           projectName={projectName}
                           sessionName={sessionName}
-                          className="flex-1"
-                          isSessionActive={phase === "Running"}
+                        />
+                      )}
+                      <FeedbackProvider
+                        projectName={projectName}
+                        sessionName={sessionName}
+                        username={currentUser?.username || currentUser?.displayName || "anonymous"}
+                        initialPrompt={session?.spec?.initialPrompt}
+                        activeWorkflow={workflowManagement.activeWorkflow || undefined}
+                        messages={streamMessages}
+                        traceId={langfuseTraceId || undefined}
+                        messageFeedback={aguiState.messageFeedback}
+                      >
+                        <MessagesTab
+                          session={session}
+                          streamMessages={streamMessages}
+                          chatInput={chatInput}
+                          setChatInput={setChatInput}
+                          onSendChat={() => Promise.resolve(sendChat())}
+                          onInterrupt={aguiInterrupt}
+                          onGoToResults={() => {}}
+                          onContinue={handleContinue}
                           workflowMetadata={workflowMetadata}
-                          onResume={phase !== "Running" ? handleContinue : undefined}
-                          isResuming={continueMutation.isPending}
-                          inputEnhancements={inputEnhancements}
-                          renderWelcome={(hasMessages) => (
+                          onCommandClick={handleCommandClick}
+                          isRunActive={isRunActive}
+                          showWelcomeExperience={!["Completed", "Failed", "Stopped", "Stopping"].includes(session?.status?.phase || "")}
+                          activeWorkflow={workflowManagement.activeWorkflow}
+                          userHasInteracted={userHasInteracted}
+                          queuedMessages={sessionQueue.messages}
+                          hasRealMessages={hasRealMessages}
+                          welcomeExperienceComponent={
                             <WelcomeExperience
                               ootbWorkflows={ootbWorkflows}
                               onWorkflowSelect={handleWelcomeWorkflowSelect}
                               onUserInteraction={() => setUserHasInteracted(true)}
                               userHasInteracted={userHasInteracted}
-                              sessionPhase={phase}
-                              hasRealMessages={hasMessages}
+                              sessionPhase={session?.status?.phase}
+                              hasRealMessages={hasRealMessages}
                               onLoadWorkflow={() => setCustomWorkflowDialogOpen(true)}
                               selectedWorkflow={workflowManagement.selectedWorkflow}
                             />
-                          )}
+                          }
                         />
-                      ) : (
-                        <SessionPhaseOverlay
-                          phase={phase}
-                          session={session}
-                          projectName={projectName}
-                          sessionName={sessionName}
-                          onResume={handleContinue}
-                          isResuming={continueMutation.isPending}
-                        />
-                      )}
+                      </FeedbackProvider>
                     </div>
                   </CardContent>
                 </Card>
             </div>
           </div>
         </div>
-        </CopilotSessionProvider>
       </div>
 
       {/* Modals */}

@@ -176,3 +176,95 @@ export type CloneAgenticSessionResponse = {
   session: AgenticSession;
 };
 
+// Message content block types
+export type TextBlock = {
+  type: 'text_block';
+  text: string;
+};
+
+export type ThinkingBlock = {
+  type: 'thinking_block';
+  thinking: string;
+  signature: string;
+};
+
+export type ToolUseBlock = {
+  type: 'tool_use_block';
+  id: string;
+  name: string;
+  input: Record<string, unknown>;
+};
+
+export type ToolResultBlock = {
+  type: 'tool_result_block';
+  tool_use_id: string;
+  content?: string | Array<Record<string, unknown>> | null;
+  is_error?: boolean | null;
+};
+
+export type ContentBlock = TextBlock | ThinkingBlock | ToolUseBlock | ToolResultBlock;
+
+// Message types
+export type UserMessage = {
+  type: 'user_message';
+  content: ContentBlock | string;
+  timestamp: string;
+};
+
+export type AgentMessage = {
+  type: 'agent_message';
+  content: ContentBlock;
+  model: string;
+  timestamp: string;
+};
+
+export type SystemMessage = {
+  type: 'system_message';
+  subtype: string;
+  data: Record<string, unknown>;
+  timestamp: string;
+};
+
+export type ResultMessage = {
+  type: 'result_message';
+  subtype: string;
+  duration_ms: number;
+  duration_api_ms: number;
+  is_error: boolean;
+  num_turns: number;
+  session_id: string;
+  total_cost_usd?: number | null;
+  usage?: Record<string, unknown> | null;
+  result?: string | null;
+  timestamp: string;
+};
+
+export type ToolUseMessages = {
+  type: 'tool_use_messages';
+  toolUseBlock: ToolUseBlock;
+  resultBlock: ToolResultBlock;
+  timestamp: string;
+};
+
+export type AgentRunningMessage = {
+  type: 'agent_running';
+  timestamp: string;
+};
+
+export type AgentWaitingMessage = {
+  type: 'agent_waiting';
+  timestamp: string;
+};
+
+export type Message =
+  | UserMessage
+  | AgentMessage
+  | SystemMessage
+  | ResultMessage
+  | ToolUseMessages
+  | AgentRunningMessage
+  | AgentWaitingMessage;
+
+export type GetSessionMessagesResponse = {
+  messages: Message[];
+};
