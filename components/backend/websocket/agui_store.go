@@ -264,9 +264,7 @@ func compactStreamingEvents(events []map[string]interface{}) []map[string]interf
 		if p.end != nil {
 			compacted = append(compacted, p.end)
 		}
-		for _, o := range p.otherEvents {
-			compacted = append(compacted, o)
-		}
+		compacted = append(compacted, p.otherEvents...)
 		delete(textByID, id)
 	}
 
@@ -292,9 +290,7 @@ func compactStreamingEvents(events []map[string]interface{}) []map[string]interf
 		if p.end != nil {
 			compacted = append(compacted, p.end)
 		}
-		for _, o := range p.otherEvents {
-			compacted = append(compacted, o)
-		}
+		compacted = append(compacted, p.otherEvents...)
 		delete(toolByID, id)
 	}
 

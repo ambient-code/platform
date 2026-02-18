@@ -2229,8 +2229,6 @@ func StopSession(c *gin.Context) {
 	c.JSON(http.StatusAccepted, session)
 }
 
-// GetSessionK8sResources returns job, pod, and PVC information for a session
-// GET /api/projects/:projectName/agentic-sessions/:sessionName/k8s-resources
 // GetSessionPodEvents returns Kubernetes events for the session's runner pod.
 // The pod name follows the convention {sessionName}-runner (set by the operator).
 func GetSessionPodEvents(c *gin.Context) {

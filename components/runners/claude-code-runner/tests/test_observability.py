@@ -2,9 +2,20 @@
 
 import logging
 import os
+import sys
+import types
 from unittest.mock import Mock, patch
 
 import pytest
+
+# Ensure a mock 'langfuse' module exists in sys.modules so that:
+# 1. `from langfuse import ...` inside initialize() succeeds in test env
+# 2. `@patch("langfuse.Langfuse")` can resolve the target module
+if "langfuse" not in sys.modules:
+    _mock_langfuse = types.ModuleType("langfuse")
+    _mock_langfuse.Langfuse = Mock  # type: ignore[attr-defined]
+    _mock_langfuse.propagate_attributes = Mock  # type: ignore[attr-defined]
+    sys.modules["langfuse"] = _mock_langfuse
 
 from ambient_runner.observability import ObservabilityManager, _privacy_masking_function
 

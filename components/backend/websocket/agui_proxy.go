@@ -33,8 +33,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-// ─── GET /agui/events — SSE event stream ─────────────────────────────
-//
 // HandleAGUIEvents serves the AG-UI event stream over SSE.  Clients
 // (typically EventSource) connect here to receive all events for a
 // session — both persisted history and live events from active runs.
@@ -133,8 +131,6 @@ func HandleAGUIEvents(c *gin.Context) {
 	}
 }
 
-// ─── POST /agui/run — start a new run ────────────────────────────────
-//
 // HandleAGUIRunProxy accepts an AG-UI run request, forwards it to the
 // runner pod in a background goroutine, and returns JSON metadata
 // immediately.  Events are persisted and broadcast to GET /agui/events
@@ -635,27 +631,6 @@ func connectToRunner(runnerURL string, bodyBytes []byte) (*http.Response, error)
 // project namespace.
 func getRunnerEndpoint(projectName, sessionName string) string {
 	return fmt.Sprintf("http://session-%s.%s.svc.cluster.local:8001/", sessionName, projectName)
-}
-
-// ─── SSE formatting helpers ──────────────────────────────────────────
-
-func writeSSERun(w http.ResponseWriter, eventType, threadID, runID string) {
-	data, _ := json.Marshal(map[string]string{
-		"type":     eventType,
-		"threadId": threadID,
-		"runId":    runID,
-	})
-	fmt.Fprintf(w, "data: %s\n\n", data)
-}
-
-func writeSSEError(w http.ResponseWriter, message, threadID, runID string) {
-	data, _ := json.Marshal(map[string]string{
-		"type":     "RUN_ERROR",
-		"message":  message,
-		"threadId": threadID,
-		"runId":    runID,
-	})
-	fmt.Fprintf(w, "data: %s\n\n", data)
 }
 
 // drainLiveChannel discards any buffered lines already in the channel.
