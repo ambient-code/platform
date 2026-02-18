@@ -264,6 +264,123 @@ if [ -n "$ACTIVE_WORKFLOW_GIT_URL" ] && [ "$ACTIVE_WORKFLOW_GIT_URL" != "null" ]
     fi
 fi
 
+# ========================================
+# Restore git repo state from S3 backup
+# ========================================
+echo "========================================="
+echo "Checking for git repo state backup..."
+echo "========================================="
+
+S3_REPO_STATE="${S3_PATH}/repo-state/"
+
+if rclone --config /tmp/.config/rclone/rclone.conf lsf "${S3_REPO_STATE}" 2>/dev/null | grep -q .; then
+    echo "Found git repo state backup, restoring..."
+
+    REPO_STATE_DIR="/tmp/repo-state"
+    rm -rf "${REPO_STATE_DIR}"
+    mkdir -p "${REPO_STATE_DIR}"
+
+    # Download repo state from S3
+    rclone --config /tmp/.config/rclone/rclone.conf copy "${S3_REPO_STATE}" "${REPO_STATE_DIR}/" \
+        --transfers 8 \
+        --fast-list \
+        --progress 2>&1 || echo "  Warning: failed to download repo state"
+
+    for repo_state_dir in "${REPO_STATE_DIR}"/*/; do
+        [ -d "${repo_state_dir}" ] || continue
+
+        REPO_NAME=$(basename "${repo_state_dir}")
+        REPO_DIR="/workspace/repos/${REPO_NAME}"
+        METADATA_FILE="${repo_state_dir}/metadata.json"
+
+        echo "  Restoring git state for ${REPO_NAME}..."
+
+        if [ ! -f "${METADATA_FILE}" ]; then
+            echo "  WARNING: No metadata.json for ${REPO_NAME}, skipping"
+            continue
+        fi
+
+        # Read metadata
+        REMOTE_URL=$(jq -r '.remoteUrl // empty' "${METADATA_FILE}" 2>/dev/null || echo "")
+        SAVED_BRANCH=$(jq -r '.currentBranch // "main"' "${METADATA_FILE}" 2>/dev/null || echo "main")
+        SAVED_HEAD=$(jq -r '.headSha // empty' "${METADATA_FILE}" 2>/dev/null || echo "")
+
+        # If repo was not already cloned (e.g., runtime-added repo), clone it
+        if [ ! -d "${REPO_DIR}" ] && [ -n "${REMOTE_URL}" ]; then
+            # Redact credentials from URL for logging
+            SAFE_URL=$(echo "${REMOTE_URL}" | sed 's|://[^@]*@|://|')
+            echo "  Cloning missing repo ${REPO_NAME} from ${SAFE_URL}..."
+            git config --global --add safe.directory "${REPO_DIR}" 2>/dev/null || true
+            git clone "${REMOTE_URL}" "${REPO_DIR}" 2>&1 || {
+                echo "  WARNING: Failed to clone ${REPO_NAME}, skipping restore"
+                continue
+            }
+        fi
+
+        if [ ! -d "${REPO_DIR}/.git" ] && [ ! -f "${REPO_DIR}/.git" ]; then
+            echo "  WARNING: ${REPO_DIR} is not a git repo, skipping restore"
+            continue
+        fi
+
+        git config --global --add safe.directory "${REPO_DIR}" 2>/dev/null || true
+
+        # Import local branches from bundle using fetch (creates local branch refs)
+        if [ -f "${repo_state_dir}/repo.bundle" ]; then
+            echo "  Fetching refs from bundle for ${REPO_NAME}..."
+            # Detach HEAD so fetch can update all branches (including the checked-out one)
+            git -C "${REPO_DIR}" checkout --detach 2>/dev/null || true
+            git -C "${REPO_DIR}" fetch "${repo_state_dir}/repo.bundle" "+refs/heads/*:refs/heads/*" 2>&1 || {
+                echo "  WARNING: Failed to fetch refs from bundle for ${REPO_NAME}"
+            }
+        fi
+
+        # Fetch all remotes to ensure refs are up to date
+        git -C "${REPO_DIR}" fetch --all 2>/dev/null || true
+
+        # Checkout the saved branch
+        if [ "${SAVED_BRANCH}" != "unknown" ] && [ -n "${SAVED_BRANCH}" ]; then
+            echo "  Checking out branch: ${SAVED_BRANCH}"
+            git -C "${REPO_DIR}" checkout "${SAVED_BRANCH}" 2>&1 || {
+                echo "  WARNING: Failed to checkout ${SAVED_BRANCH}, staying on current branch"
+            }
+        fi
+
+        # Apply uncommitted changes (best-effort)
+        if [ -f "${repo_state_dir}/uncommitted.patch" ] && [ -s "${repo_state_dir}/uncommitted.patch" ]; then
+            echo "  Applying uncommitted changes..."
+            git -C "${REPO_DIR}" apply --allow-empty "${repo_state_dir}/uncommitted.patch" 2>&1 || {
+                echo "  WARNING: Failed to apply uncommitted changes for ${REPO_NAME} (conflicts likely)"
+            }
+        fi
+
+        # Apply staged changes (best-effort)
+        if [ -f "${repo_state_dir}/staged.patch" ] && [ -s "${repo_state_dir}/staged.patch" ]; then
+            echo "  Applying staged changes..."
+            git -C "${REPO_DIR}" apply --cached --allow-empty "${repo_state_dir}/staged.patch" 2>&1 || {
+                echo "  WARNING: Failed to apply staged changes for ${REPO_NAME} (conflicts likely)"
+            }
+        fi
+
+        # Verify HEAD SHA matches expectation
+        CURRENT_HEAD=$(git -C "${REPO_DIR}" rev-parse HEAD 2>/dev/null || echo "")
+        if [ -n "${SAVED_HEAD}" ] && [ -n "${CURRENT_HEAD}" ] && [ "${SAVED_HEAD}" != "${CURRENT_HEAD}" ]; then
+            echo "  WARNING: HEAD diverged for ${REPO_NAME}: expected ${SAVED_HEAD:0:8}, got ${CURRENT_HEAD:0:8}"
+        fi
+
+        echo "  Restored ${REPO_NAME} (branch: ${SAVED_BRANCH})"
+    done
+
+    # Clean up
+    rm -rf "${REPO_STATE_DIR}"
+    echo "Git repo state restore complete"
+else
+    echo "No git repo state backup found"
+fi
+
+# Set permissions on repos after restore (repos may have been cloned or restored)
+chown -R 1001:0 /workspace/repos 2>/dev/null || true
+chmod -R 777 /workspace/repos 2>/dev/null || true
+
 echo "========================================="
 echo "Workspace initialized successfully"
 echo "========================================="

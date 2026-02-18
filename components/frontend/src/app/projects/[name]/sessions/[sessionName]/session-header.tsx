@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { RefreshCw, Octagon, Trash2, Copy, MoreVertical, Info, Play, Pencil, Download, FileText, Printer, Loader2, HardDrive } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { RefreshCw, Octagon, Trash2, Copy, MoreVertical, Info, Play, Pencil, Download, FileText, Printer, Loader2, HardDrive, Clock } from 'lucide-react';
 import { CloneSessionDialog } from '@/components/clone-session-dialog';
 import { SessionDetailsModal } from '@/components/session-details-modal';
 import { EditSessionNameDialog } from '@/components/edit-session-name-dialog';
@@ -51,6 +52,7 @@ export function SessionHeader({
   const canStop = isRunning || phase === "Creating";
   const canResume = phase === "Stopped";
   const canDelete = phase === "Completed" || phase === "Failed" || phase === "Stopped";
+  const stoppedDueToInactivity = phase === "Stopped" && session.status?.stoppedReason === "inactivity";
 
   const { refetch: fetchExportData } = useSessionExport(projectName, session.metadata.name, false);
   const { data: mcpStatus } = useMcpStatus(projectName, session.metadata.name, isRunning);
@@ -270,7 +272,15 @@ export function SessionHeader({
   // Actions only (Stop/Resume buttons) - for below breadcrumb
   if (renderMode === 'actions-only') {
     return (
-      <div>
+      <div className="space-y-2">
+        {stoppedDueToInactivity && (
+          <Alert variant="info">
+            <Clock className="h-4 w-4" />
+            <AlertDescription>
+              This session was automatically stopped after being idle. You can resume it to continue working.
+            </AlertDescription>
+          </Alert>
+        )}
         <div className="flex items-start justify-start">
           <div className="flex gap-2">
             {canStop && (
@@ -305,7 +315,15 @@ export function SessionHeader({
 
   // Full mode (original layout)
   return (
-    <div>
+    <div className="space-y-2">
+      {stoppedDueToInactivity && (
+        <Alert variant="info">
+          <Clock className="h-4 w-4" />
+          <AlertDescription>
+            This session was automatically stopped after being idle. You can resume it to continue working.
+          </AlertDescription>
+        </Alert>
+      )}
       <div className="flex items-start justify-end">
         <div className="flex gap-2">
           <Button

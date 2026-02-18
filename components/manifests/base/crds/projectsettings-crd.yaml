@@ -62,6 +62,11 @@ spec:
                       - "github"
                       - "gitlab"
                       description: "Git hosting provider (auto-detected from URL if not specified)"
+              inactivityTimeoutSeconds:
+                type: integer
+                minimum: 0
+                default: 86400
+                description: "Default inactivity timeout for sessions in this project (seconds). 0 disables. Overridden by session-level spec.inactivityTimeout."
           status:
             type: object
             properties:

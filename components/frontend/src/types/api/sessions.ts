@@ -45,6 +45,7 @@ export type AgenticSessionSpec = {
   initialPrompt?: string;
   llmSettings: LLMSettings;
   timeout: number;
+  inactivityTimeout?: number;
   displayName?: string;
   project?: string;
   interactive?: boolean;
@@ -89,6 +90,8 @@ export type AgenticSessionStatus = {
   phase: AgenticSessionPhase;
   startTime?: string;
   completionTime?: string;
+  lastActivityTime?: string;
+  stoppedReason?: "user" | "inactivity";
   jobName?: string;
   runnerPodName?: string;
   reconciledRepos?: ReconciledRepo[];

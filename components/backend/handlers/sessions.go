@@ -245,6 +245,14 @@ func parseStatus(status map[string]interface{}) *types.AgenticSessionStatus {
 		result.CompletionTime = types.StringPtr(completionTime)
 	}
 
+	if lastActivityTime, ok := status["lastActivityTime"].(string); ok && strings.TrimSpace(lastActivityTime) != "" {
+		result.LastActivityTime = types.StringPtr(lastActivityTime)
+	}
+
+	if stoppedReason, ok := status["stoppedReason"].(string); ok && stoppedReason != "" {
+		result.StoppedReason = types.StringPtr(stoppedReason)
+	}
+
 	// jobName and runnerPodName removed - they go stale on restarts
 	// Use GET /k8s-resources endpoint for live job/pod information
 

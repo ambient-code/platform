@@ -79,6 +79,10 @@ spec:
                 type: integer
                 default: 300
                 description: "Timeout in seconds for the agentic session"
+              inactivityTimeout:
+                type: integer
+                minimum: 0
+                description: "Seconds of inactivity before auto-stopping an interactive session. 0 disables auto-shutdown. If omitted, falls back to project-level inactivityTimeoutSeconds, then 24h default."
               activeWorkflow:
                 type: object
                 description: "Active workflow configuration for dynamic workflow switching"
@@ -172,6 +176,16 @@ spec:
                   appliedAt:
                     type: string
                     format: date-time
+              lastActivityTime:
+                type: string
+                format: date-time
+                description: "Timestamp of last recorded AG-UI activity in this session."
+              stoppedReason:
+                type: string
+                enum:
+                - "user"
+                - "inactivity"
+                description: "Reason the session was stopped."
               sdkSessionId:
                 type: string
                 description: "SDK session identifier captured for resume support."

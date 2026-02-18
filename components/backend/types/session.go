@@ -18,6 +18,7 @@ type AgenticSessionSpec struct {
 	DisplayName          string             `json:"displayName"`
 	LLMSettings          LLMSettings        `json:"llmSettings"`
 	Timeout              int                `json:"timeout"`
+	InactivityTimeout    *int               `json:"inactivityTimeout,omitempty"`
 	UserContext          *UserContext       `json:"userContext,omitempty"`
 	BotAccount           *BotAccountRef     `json:"botAccount,omitempty"`
 	ResourceOverrides    *ResourceOverrides `json:"resourceOverrides,omitempty"`
@@ -41,6 +42,8 @@ type AgenticSessionStatus struct {
 	Phase              string              `json:"phase,omitempty"`
 	StartTime          *string             `json:"startTime,omitempty"`
 	CompletionTime     *string             `json:"completionTime,omitempty"`
+	LastActivityTime   *string             `json:"lastActivityTime,omitempty"`
+	StoppedReason      *string             `json:"stoppedReason,omitempty"`
 	ReconciledRepos    []ReconciledRepo    `json:"reconciledRepos,omitempty"`
 	ReconciledWorkflow *ReconciledWorkflow `json:"reconciledWorkflow,omitempty"`
 	SDKSessionID       string              `json:"sdkSessionId,omitempty"`

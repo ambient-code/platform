@@ -37,6 +37,12 @@ func ResetToPending(ctx context.Context, session *unstructured.Unstructured) err
 
 	statusPatch := NewStatusPatch(namespace, name)
 	statusPatch.SetField("phase", "Pending")
+	statusPatch.SetField("startTime", time.Now().UTC().Format(time.RFC3339))
+	// Clear fields from the previous run so stale values don't cause
+	// immediate re-stop or incorrect UI display.
+	statusPatch.DeleteField("completionTime")
+	statusPatch.DeleteField("lastActivityTime")
+	statusPatch.DeleteField("stoppedReason")
 	statusPatch.AddCondition(conditionUpdate{
 		Type:    conditionPodCreated,
 		Status:  "False",
@@ -44,7 +50,14 @@ func ResetToPending(ctx context.Context, session *unstructured.Unstructured) err
 		Message: "Pod not found, will recreate",
 	})
 
-	return statusPatch.Apply()
+	if err := statusPatch.Apply(); err != nil {
+		return err
+	}
+
+	// Clear stop-related annotations from previous stop
+	_ = clearAnnotation(namespace, name, stopReasonAnnotation)
+
+	return nil
 }
 
 // TransitionToStopped transitions a session to Stopped phase.
@@ -52,26 +65,42 @@ func TransitionToStopped(ctx context.Context, session *unstructured.Unstructured
 	namespace := session.GetNamespace()
 	name := session.GetName()
 
+	// Determine stop reason from annotation (inactivity vs user)
+	stopReason := "user"
+	conditionReason := "UserStopped"
+	conditionPodMsg := "Pod deleted by user stop request"
+	conditionRunnerMsg := "Runner stopped by user"
+	conditionReadyMsg := "Session stopped by user"
+	annotations := session.GetAnnotations()
+	if annotations != nil && annotations[stopReasonAnnotation] == "inactivity" {
+		stopReason = "inactivity"
+		conditionReason = "InactivityTimeout"
+		conditionPodMsg = "Pod deleted due to inactivity timeout"
+		conditionRunnerMsg = "Runner stopped due to inactivity"
+		conditionReadyMsg = "Session stopped due to inactivity"
+	}
+
 	statusPatch := NewStatusPatch(namespace, name)
 	statusPatch.SetField("phase", "Stopped")
 	statusPatch.SetField("completionTime", time.Now().UTC().Format(time.RFC3339))
+	statusPatch.SetField("stoppedReason", stopReason)
 	statusPatch.AddCondition(conditionUpdate{
 		Type:    conditionReady,
 		Status:  "False",
-		Reason:  "UserStopped",
-		Message: "Session stopped by user",
+		Reason:  conditionReason,
+		Message: conditionReadyMsg,
 	})
 	statusPatch.AddCondition(conditionUpdate{
 		Type:    conditionPodCreated,
 		Status:  "False",
-		Reason:  "UserStopped",
-		Message: "Pod deleted by user stop request",
+		Reason:  conditionReason,
+		Message: conditionPodMsg,
 	})
 	statusPatch.AddCondition(conditionUpdate{
 		Type:    conditionRunnerStarted,
 		Status:  "False",
-		Reason:  "UserStopped",
-		Message: "Runner stopped by user",
+		Reason:  conditionReason,
+		Message: conditionRunnerMsg,
 	})
 
 	if err := statusPatch.Apply(); err != nil {
@@ -81,6 +110,7 @@ func TransitionToStopped(ctx context.Context, session *unstructured.Unstructured
 	// Clear annotations
 	_ = clearAnnotation(namespace, name, "ambient-code.io/desired-phase")
 	_ = clearAnnotation(namespace, name, "ambient-code.io/stop-requested-at")
+	_ = clearAnnotation(namespace, name, stopReasonAnnotation)
 
 	// Cleanup secrets
 	deleteCtx, cancel := context.WithTimeout(ctx, 30*time.Second)

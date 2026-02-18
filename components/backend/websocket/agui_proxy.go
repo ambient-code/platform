@@ -13,6 +13,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -21,6 +22,16 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
+
+const (
+	// activityDebounceInterval is the minimum interval between CR status updates for lastActivityTime.
+	// Inactivity timeout is measured in hours, so minute-level granularity is sufficient.
+	activityDebounceInterval = 60 * time.Second
+)
+
+// lastActivityUpdateTimes tracks the last time we updated lastActivityTime on the CR
+// for each session to avoid excessive API calls. Key: "namespace/sessionName"
+var lastActivityUpdateTimes sync.Map
 
 // HandleAGUIRunProxy proxies AG-UI run requests to runner's FastAPI server
 // This replaces the WebSocket-based communication with HTTP/SSE
@@ -292,6 +303,11 @@ func handleStreamedEvent(sessionID, runID, threadID, jsonData string, runState *
 		updateRunStatus(runID, "completed")
 	case types.EventTypeRunError:
 		updateRunStatus(runID, "error")
+	}
+
+	// Update lastActivityTime on CR for activity events (debounced)
+	if isActivityEvent(eventType) && runState != nil {
+		updateLastActivityTime(runState.ProjectName, runState.SessionID, eventType == types.EventTypeRunStarted)
 	}
 
 	// Persist event
@@ -588,6 +604,69 @@ func truncateForLog(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen] + "..."
+}
+
+// isActivityEvent returns true for AG-UI event types that indicate session activity.
+func isActivityEvent(eventType string) bool {
+	switch eventType {
+	case types.EventTypeRunStarted,
+		types.EventTypeTextMessageStart,
+		types.EventTypeTextMessageContent,
+		types.EventTypeToolCallStart:
+		return true
+	default:
+		return false
+	}
+}
+
+// updateLastActivityTime updates the lastActivityTime field on the AgenticSession CR status.
+// Updates are debounced to avoid excessive API calls. RUN_STARTED events bypass the debounce
+// to immediately mark the session as active.
+func updateLastActivityTime(projectName, sessionName string, immediate bool) {
+	if handlers.DynamicClient == nil {
+		log.Printf("Activity tracking: DynamicClient is nil, skipping update for %s/%s", projectName, sessionName)
+		return
+	}
+
+	key := projectName + "/" + sessionName
+	now := time.Now()
+
+	if !immediate {
+		if lastUpdate, ok := lastActivityUpdateTimes.Load(key); ok {
+			if now.Sub(lastUpdate.(time.Time)) < activityDebounceInterval {
+				return // Debounce: too soon since last update
+			}
+		}
+	}
+
+	lastActivityUpdateTimes.Store(key, now)
+
+	// Run in goroutine to avoid blocking event processing
+	go func() {
+		gvr := handlers.GetAgenticSessionV1Alpha1Resource()
+		ctx := context.Background()
+
+		obj, err := handlers.DynamicClient.Resource(gvr).Namespace(projectName).Get(ctx, sessionName, metav1.GetOptions{})
+		if err != nil {
+			log.Printf("Activity tracking: failed to get session %s/%s: %v", projectName, sessionName, err)
+			return
+		}
+
+		status, _, _ := unstructured.NestedMap(obj.Object, "status")
+		if status == nil {
+			status = make(map[string]any)
+		}
+		status["lastActivityTime"] = now.UTC().Format(time.RFC3339)
+		if err := unstructured.SetNestedField(obj.Object, status, "status"); err != nil {
+			log.Printf("Activity tracking: failed to set status for %s/%s: %v", projectName, sessionName, err)
+			return
+		}
+
+		_, err = handlers.DynamicClient.Resource(gvr).Namespace(projectName).UpdateStatus(ctx, obj, metav1.UpdateOptions{})
+		if err != nil {
+			log.Printf("Activity tracking: failed to update lastActivityTime for %s/%s: %v", projectName, sessionName, err)
+		}
+	}()
 }
 
 // HandleAGUIFeedback forwards AG-UI META events (user feedback) to the runner

@@ -186,30 +186,48 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 			// Pod is gone - safe to transition to Stopped
 			log.Printf("[Stopping] Session %s/%s: pod deleted, transitioning to Stopped", sessionNamespace, name)
 
+			// Determine stop reason from annotation (inactivity vs user)
+			// TODO(controller-runtime-migration): This duplicates the logic in
+			// reconciler.go:TransitionToStopped(). Once the legacy watch handler
+			// is fully replaced by the controller-runtime reconciler, remove this
+			// block and rely solely on TransitionToStopped().
+			stopReason := "user"
+			conditionReason := "UserStopped"
+			conditionPodMsg := "Pod deleted by user stop request"
+			conditionRunnerMsg := "Runner stopped by user"
+			if annotations != nil && annotations[stopReasonAnnotation] == "inactivity" {
+				stopReason = "inactivity"
+				conditionReason = "InactivityTimeout"
+				conditionPodMsg = "Pod deleted due to inactivity timeout"
+				conditionRunnerMsg = "Runner stopped due to inactivity"
+			}
+
 			// Set phase=Stopped explicitly
 			statusPatch.SetField("phase", "Stopped")
 			statusPatch.SetField("completionTime", time.Now().UTC().Format(time.RFC3339))
+			statusPatch.SetField("stoppedReason", stopReason)
 			// Update progress-tracking conditions to reflect stopped state
 			statusPatch.AddCondition(conditionUpdate{
 				Type:    conditionPodCreated,
 				Status:  "False",
-				Reason:  "UserStopped",
-				Message: "Pod deleted by user stop request",
+				Reason:  conditionReason,
+				Message: conditionPodMsg,
 			})
 			statusPatch.AddCondition(conditionUpdate{
 				Type:    conditionRunnerStarted,
 				Status:  "False",
-				Reason:  "UserStopped",
-				Message: "Runner stopped by user",
+				Reason:  conditionReason,
+				Message: conditionRunnerMsg,
 			})
 
 			if err := statusPatch.Apply(); err != nil {
 				log.Printf("[Stopping] Warning: failed to update status: %v", err)
 			}
 
-			// Now clear the desired-phase annotation
+			// Now clear the desired-phase and stop-reason annotations
 			_ = clearAnnotation(sessionNamespace, name, "ambient-code.io/desired-phase")
 			_ = clearAnnotation(sessionNamespace, name, "ambient-code.io/stop-requested-at")
+			_ = clearAnnotation(sessionNamespace, name, stopReasonAnnotation)
 
 			log.Printf("[Stopping] Session %s/%s: transitioned to Stopped", sessionNamespace, name)
 		} else if err != nil {
@@ -730,7 +748,7 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 	// Create the Pod directly (no Job wrapper for faster startup)
 	podSpec := corev1.PodSpec{
 		RestartPolicy:                 corev1.RestartPolicyNever,
-		TerminationGracePeriodSeconds: int64Ptr(30), // Allow time for state-sync final sync
+		TerminationGracePeriodSeconds: int64Ptr(60), // Allow time for state-sync git backup + final sync
 		// Explicitly set service account for pod creation permissions
 		AutomountServiceAccountToken: boolPtr(false),
 		Volumes: []corev1.Volume{
@@ -995,6 +1013,10 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 							corev1.EnvVar{Name: "CLOUD_ML_REGION", Value: os.Getenv("CLOUD_ML_REGION")},
 							corev1.EnvVar{Name: "ANTHROPIC_VERTEX_PROJECT_ID", Value: os.Getenv("ANTHROPIC_VERTEX_PROJECT_ID")},
 							corev1.EnvVar{Name: "GOOGLE_APPLICATION_CREDENTIALS", Value: os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")},
+							// Prevent the Claude Code CLI from hanging on the GCE metadata server
+							// in non-GCE environments (e.g., kind, on-prem). The CLI tries to reach
+							// 169.254.169.254 for auth and blocks indefinitely if unreachable.
+							corev1.EnvVar{Name: "GCE_METADATA_HOST", Value: "disabled"},
 						)
 					} else {
 						// Explicitly set to 0 when Vertex is disabled
@@ -1158,6 +1180,10 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 					ReadOnlyRootFilesystem:   boolPtr(false),
 					Capabilities: &corev1.Capabilities{
 						Drop: []corev1.Capability{"ALL"},
+						// DAC_READ_SEARCH allows reading files/dirs regardless of permission bits.
+						// Needed because repos cloned at runtime by the runner (UID 1001) have 700
+						// permissions, and state-sync runs as root with all caps dropped.
+						Add: []corev1.Capability{"DAC_READ_SEARCH"},
 					},
 				},
 				Env: []corev1.EnvVar{
@@ -1735,6 +1761,16 @@ func monitorPod(podName, sessionName, sessionNamespace string) {
 				log.Printf("AgenticSession %s was stopped; stopping pod monitoring", sessionName)
 				return
 			}
+		}
+
+		// Check inactivity timeout for running sessions
+		if shouldAutoStop(sessionObj) {
+			log.Printf("[Inactivity] Session %s/%s: idle beyond timeout, triggering auto-stop", sessionNamespace, sessionName)
+			if err := triggerInactivityStop(sessionNamespace, sessionName); err != nil {
+				log.Printf("[Inactivity] Failed to auto-stop %s/%s: %v", sessionNamespace, sessionName, err)
+				continue // Retry on next tick instead of abandoning the monitor
+			}
+			return
 		}
 
 		if err := ensureFreshRunnerToken(context.TODO(), sessionObj); err != nil {

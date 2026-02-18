@@ -243,7 +243,7 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
                           </Link>
                         </TableCell>
                         <TableCell>
-                          <SessionPhaseBadge phase={phase} />
+                          <SessionPhaseBadge phase={phase} stoppedReason={session.status?.stoppedReason} />
                         </TableCell>
                         <TableCell>
                           <span className="text-xs px-2 py-1 rounded border bg-muted/50">

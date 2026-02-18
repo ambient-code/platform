@@ -1521,6 +1521,11 @@ export default function ProjectSessionDetailPage({
                         {["Stopped", "Completed", "Failed"].includes(phase) && (
                           <div className="max-w-sm">
                             <h3 className="font-semibold text-lg mb-4">Session Hibernated</h3>
+                            {phase === "Stopped" && session?.status?.stoppedReason === "inactivity" && (
+                              <p className="text-sm text-muted-foreground mb-4">
+                                This session was automatically stopped after being idle. You can resume it to continue working.
+                              </p>
+                            )}
                             
                             {/* Session details */}
                             <div className="space-y-3 mb-6 text-left">
@@ -2044,6 +2049,11 @@ export default function ProjectSessionDetailPage({
                             {["Stopped", "Completed", "Failed"].includes(phase) && (
                               <div className="max-w-sm">
                                 <h3 className="font-semibold text-lg mb-4">Session Hibernated</h3>
+                                {phase === "Stopped" && session?.status?.stoppedReason === "inactivity" && (
+                                  <p className="text-sm text-muted-foreground mb-4">
+                                    This session was automatically stopped after being idle. You can resume it to continue working.
+                                  </p>
+                                )}
                                 <Button onClick={handleContinue} size="lg" className="w-full" disabled={continueMutation.isPending}>
                                   {continueMutation.isPending ? (
                                     <>
