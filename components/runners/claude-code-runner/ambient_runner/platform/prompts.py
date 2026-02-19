@@ -65,6 +65,12 @@ RESTART_TOOL_DESCRIPTION = (
     "broken state or need to reset."
 )
 
+CORRECTION_DETECTION_INSTRUCTIONS = (
+    "When the user corrects your work or points out a mistake, call "
+    "`log_correction` (corrections MCP server) **before** fixing the issue. "
+    "See the tool description for categories, severity, and scope guidance.\n\n"
+)
+
 
 # ---------------------------------------------------------------------------
 # Prompt builder
@@ -176,6 +182,14 @@ def build_workspace_context_prompt(
 
     # Rubric evaluation instructions
     prompt += _build_rubric_prompt_section(ambient_config)
+
+    # Corrections feedback instructions (only when Langfuse is configured)
+    langfuse_enabled = os.getenv("LANGFUSE_ENABLED", "").strip().lower() in (
+        "1", "true", "yes"
+    )
+    if langfuse_enabled:
+        prompt += "## Corrections Feedback\n\n"
+        prompt += CORRECTION_DETECTION_INSTRUCTIONS
 
     return prompt
 

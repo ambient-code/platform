@@ -44,6 +44,7 @@ def build_mcp_servers(context: RunnerContext, cwd_path: str, obs: Any = None) ->
         create_rubric_mcp_tool,
         load_rubric_content,
     )
+    from ambient_runner.bridges.claude.corrections import create_correction_mcp_tool
 
     mcp_servers = load_mcp_config(context, cwd_path) or {}
 
@@ -74,6 +75,19 @@ def build_mcp_servers(context: RunnerContext, cwd_path: str, obs: Any = None) ->
                 f"Added rubric evaluation MCP tool "
                 f"(categories: {list(rubric_config.get('schema', {}).keys())})"
             )
+
+    # Corrections feedback tool (always available)
+    correction_tool = create_correction_mcp_tool(
+        obs=obs,
+        session_id=context.session_id,
+        sdk_tool_decorator=sdk_tool,
+    )
+    if correction_tool:
+        correction_server = create_sdk_mcp_server(
+            name="corrections", version="1.0.0", tools=[correction_tool]
+        )
+        mcp_servers["corrections"] = correction_server
+        logger.info("Added corrections feedback MCP tool (log_correction)")
 
     return mcp_servers
 

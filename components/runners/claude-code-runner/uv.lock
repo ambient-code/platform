@@ -494,20 +494,34 @@ wheels = [
 
 [[package]]
 name = "claude-code-runner"
-version = "0.2.0"
+version = "0.3.0"
 source = { editable = "." }
 dependencies = [
     { name = "ag-ui-protocol" },
     { name = "aiohttp" },
-    { name = "anthropic", extra = ["vertex"] },
-    { name = "claude-agent-sdk" },
     { name = "fastapi" },
-    { name = "langfuse" },
-    { name = "mcp-atlassian" },
     { name = "pydantic" },
     { name = "pyjwt" },
     { name = "requests" },
     { name = "uvicorn", extra = ["standard"] },
+]
+
+[package.optional-dependencies]
+all = [
+    { name = "anthropic", extra = ["vertex"] },
+    { name = "claude-agent-sdk" },
+    { name = "langfuse" },
+    { name = "mcp-atlassian" },
+]
+claude = [
+    { name = "anthropic", extra = ["vertex"] },
+    { name = "claude-agent-sdk" },
+]
+mcp-atlassian = [
+    { name = "mcp-atlassian" },
+]
+observability = [
+    { name = "langfuse" },
 ]
 
 [package.dev-dependencies]
@@ -524,16 +538,18 @@ dev = [
 requires-dist = [
     { name = "ag-ui-protocol", specifier = ">=0.1.0" },
     { name = "aiohttp", specifier = ">=3.8.0" },
-    { name = "anthropic", extras = ["vertex"], specifier = ">=0.68.0" },
-    { name = "claude-agent-sdk", specifier = ">=0.1.23" },
+    { name = "anthropic", extras = ["vertex"], marker = "extra == 'claude'", specifier = ">=0.68.0" },
+    { name = "claude-agent-sdk", marker = "extra == 'claude'", specifier = ">=0.1.23" },
+    { name = "claude-code-runner", extras = ["claude", "observability", "mcp-atlassian"], marker = "extra == 'all'" },
     { name = "fastapi", specifier = ">=0.100.0" },
-    { name = "langfuse", specifier = ">=3.0.0" },
-    { name = "mcp-atlassian", specifier = ">=0.11.9" },
+    { name = "langfuse", marker = "extra == 'observability'", specifier = ">=3.0.0" },
+    { name = "mcp-atlassian", marker = "extra == 'mcp-atlassian'", specifier = ">=0.11.9" },
     { name = "pydantic", specifier = ">=2.0.0" },
     { name = "pyjwt", specifier = ">=2.8.0" },
     { name = "requests", specifier = ">=2.31.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.23.0" },
 ]
+provides-extras = ["claude", "observability", "mcp-atlassian", "all"]
 
 [package.metadata.requires-dev]
 dev = [

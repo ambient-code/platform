@@ -2484,12 +2484,14 @@ export default function ProjectSessionDetailPage({
                       </div>
                     )}
 
-                    <div className="flex flex-col flex-1 overflow-hidden">
+                    <div className="relative flex flex-col flex-1 overflow-hidden">
                       {(phase === "Creating" || phase === "Pending") && (
-                        <SessionStartingEvents
-                          projectName={projectName}
-                          sessionName={sessionName}
-                        />
+                        <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-10">
+                          <SessionStartingEvents
+                            projectName={projectName}
+                            sessionName={sessionName}
+                          />
+                        </div>
                       )}
                       <FeedbackProvider
                         projectName={projectName}
@@ -2556,12 +2558,14 @@ export default function ProjectSessionDetailPage({
                         </Alert>
                       </div>
                     )}
-                    <div className="flex flex-col flex-1 overflow-hidden">
+                    <div className="relative flex flex-col flex-1 overflow-hidden">
                       {(phase === "Creating" || phase === "Pending") && (
-                        <SessionStartingEvents
-                          projectName={projectName}
-                          sessionName={sessionName}
-                        />
+                        <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-10">
+                          <SessionStartingEvents
+                            projectName={projectName}
+                            sessionName={sessionName}
+                          />
+                        </div>
                       )}
                       <FeedbackProvider
                         projectName={projectName}
