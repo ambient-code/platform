@@ -10,7 +10,7 @@
 |-----------|---------|------|------|
 | **backend** | etcd (K8s CRDs + Namespaces + Secrets) | REST API for frontend. 88 endpoints. Gin + K8s dynamic client. | **Replace entirely** |
 | **public-api** | None (stateless gateway) | Thin proxy: translates `/v1/sessions` ↔ backend's `/api/projects/:p/agentic-sessions/:s`. DTO transformation. | **Remove** — ambient-api-server serves the SDK contract directly |
-| **ambient-api-server** | PostgreSQL (gorm) | REST API with 12 Kinds (Agent, Skill, Task, Workflow, WorkflowSkill, WorkflowTask, Session, User, Project, ProjectSettings, Permission, RepositoryRef). rh-trex-ai framework. | **Expand** to cover all backend functionality |
+| **ambient-api-server** | PostgreSQL (gorm) | REST API with 4 Kinds (Session, User, Project, ProjectSettings). rh-trex-ai framework. Session fully expanded (~30 fields). | **Expand** to cover all backend functionality |
 | **operator** | Watches K8s CRDs | Creates Jobs/Pods from AgenticSession CRs. | **Keep** — unchanged. Reads CRs, not Postgres. |
 | **control-plane** (planned) | Reads Postgres, writes K8s | Reconciler: Postgres rows → K8s resources (Session CR, Namespace, RoleBindings). Syncs CR status back to Postgres. | **Build** |
 | **SDK** (Go + Python) | None | Client library. Wraps the OpenAPI spec into language-friendly clients. | **Expand** — derives types from OpenAPI spec |
@@ -23,47 +23,48 @@
 
 #### Session
 
-The largest gap. The backend Session is a rich Kubernetes CRD with spec/status/lifecycle. The API server Session is a minimal 6-field stub.
+Session fields have been expanded from the original 6-field stub to ~30 fields. All data and runtime status fields are now implemented.
 
-| Field | Backend (CRD spec) | API Server (Postgres) | Gap |
-|-------|--------------------|-----------------------|-----|
-| `name` / `displayName` | `spec.displayName` | `Name string` | ✅ exists (naming differs) |
-| `prompt` / `initialPrompt` | `spec.initialPrompt` | `Prompt *string` | ✅ exists (naming differs) |
-| `repos` | `spec.repos[]` = `{url, branch, autoPush}` | `RepoUrl *string` (single URL!) | **MAJOR GAP** — need `Repos jsonb` array |
-| `interactive` | `spec.interactive` (bool) | — | **MISSING** |
-| `timeout` | `spec.timeout` (int, seconds) | — | **MISSING** |
-| `llm_model` | `spec.llmSettings.model` | — | **MISSING** |
-| `llm_temperature` | `spec.llmSettings.temperature` | — | **MISSING** |
-| `llm_max_tokens` | `spec.llmSettings.maxTokens` | — | **MISSING** |
-| `workflow_id` | resolved → `spec.activeWorkflow{gitUrl,branch,path}` | `WorkflowId *string` | ✅ FK exists, but missing `branch`, `path` on Workflow |
-| `created_by_user_id` | resolved → `spec.userContext{userId,displayName,groups}` | `CreatedByUserId *string` | ✅ FK exists |
-| `assigned_user_id` | — (no direct CRD field) | `AssignedUserId *string` | ✅ API-only field |
-| `parent_session_id` | `createRequest.parent_session_id` | — | **MISSING** — self-referencing FK |
-| `bot_account_name` | `spec.botAccount.name` | — | **MISSING** |
-| `resource_overrides` | `spec.resourceOverrides{cpu,memory,storageClass,priorityClass}` | — | **MISSING** — jsonb |
-| `environment_variables` | `spec.environmentVariables` (map[string]string) | — | **MISSING** — jsonb |
-| `labels` | `metadata.labels` | — | **MISSING** — jsonb |
-| `annotations` | `metadata.annotations` | — | **MISSING** — jsonb |
+ < /dev/null |  Field | Backend (CRD spec) | API Server (Postgres) | Status |
+|-------|--------------------|-----------------------|--------|
+| `name` / `displayName` | `spec.displayName` | `Name string` | ✅ |
+| `prompt` / `initialPrompt` | `spec.initialPrompt` | `Prompt *string` | ✅ |
+| `repos` | `spec.repos[]` | `Repos *string` (jsonb) | ✅ |
+| `interactive` | `spec.interactive` (bool) | `Interactive *bool` | ✅ |
+| `timeout` | `spec.timeout` (int, seconds) | `Timeout *int32` | ✅ |
+| `llm_model` | `spec.llmSettings.model` | `LlmModel *string` | ✅ |
+| `llm_temperature` | `spec.llmSettings.temperature` | `LlmTemperature *float64` | ✅ |
+| `llm_max_tokens` | `spec.llmSettings.maxTokens` | `LlmMaxTokens *int32` | ✅ |
+| `workflow_id` | `spec.activeWorkflow` | `WorkflowId *string` | ✅ |
+| `created_by_user_id` | `spec.userContext.userId` | `CreatedByUserId *string` | ✅ |
+| `assigned_user_id` | — | `AssignedUserId *string` | ✅ |
+| `parent_session_id` | parent session ref | `ParentSessionId *string` | ✅ |
+| `bot_account_name` | `spec.botAccount.name` | `BotAccountName *string` | ✅ |
+| `resource_overrides` | `spec.resourceOverrides` | `ResourceOverrides *string` (jsonb) | ✅ |
+| `environment_variables` | `spec.environmentVariables` | `EnvironmentVariables *string` (jsonb) | ✅ |
+| `labels` | `metadata.labels` | `SessionLabels *string` (jsonb) | ✅ |
+| `annotations` | `metadata.annotations` | `SessionAnnotations *string` (jsonb) | ✅ |
+| `project_id` | derived from namespace | `ProjectId *string` | ✅ |
 | **Status / Runtime fields** | | | |
-| `phase` | `status.phase` (enum: Pending,Creating,Running,Stopping,Stopped,Completed,Failed) | — | **MISSING** — critical for SDK `WaitForCompletion` |
-| `start_time` | `status.startTime` | — | **MISSING** |
-| `completion_time` | `status.completionTime` | — | **MISSING** |
-| `sdk_session_id` | `status.sdkSessionId` | — | **MISSING** |
-| `sdk_restart_count` | `status.sdkRestartCount` | — | **MISSING** |
-| `conditions` | `status.conditions[]` = `{type,status,reason,message,lastTransitionTime}` | — | **MISSING** — jsonb |
-| `reconciled_repos` | `status.reconciledRepos[]` = `{url,branch,name,status,clonedAt,branches,currentActiveBranch,defaultBranch}` | — | **MISSING** — jsonb |
-| `reconciled_workflow` | `status.reconciledWorkflow{gitUrl,branch,path,status,appliedAt}` | — | **MISSING** — jsonb |
-| `kube_cr_name` | derived from `metadata.name` | — | **MISSING** — reconciler tracking |
-| `kube_cr_uid` | `metadata.uid` | — | **MISSING** — reconciler tracking |
-| `kube_namespace` | `metadata.namespace` | — | **MISSING** — derived from project |
+| `phase` | `status.phase` | `Phase *string` | ✅ |
+| `start_time` | `status.startTime` | `StartTime *time.Time` | ✅ |
+| `completion_time` | `status.completionTime` | `CompletionTime *time.Time` | ✅ |
+| `sdk_session_id` | `status.sdkSessionId` | `SdkSessionId *string` | ✅ |
+| `sdk_restart_count` | `status.sdkRestartCount` | `SdkRestartCount *int32` | ✅ |
+| `conditions` | `status.conditions[]` | `Conditions *string` (jsonb) | ✅ |
+| `reconciled_repos` | `status.reconciledRepos[]` | `ReconciledRepos *string` (jsonb) | ✅ |
+| `reconciled_workflow` | `status.reconciledWorkflow` | `ReconciledWorkflow *string` (jsonb) | ✅ |
+| `kube_cr_name` | derived from `metadata.name` | `KubeCrName *string` | ✅ |
+| `kube_cr_uid` | `metadata.uid` | `KubeCrUid *string` | ✅ |
+| `kube_namespace` | `metadata.namespace` | `KubeNamespace *string` | ✅ |
 
-**Session action endpoints missing from API server:**
+**Session action endpoints:**
 
 | Backend Endpoint | Purpose | API Server |
 |-----------------|---------|------------|
 | `POST .../clone` | Clone session to another project | **MISSING** |
-| `POST .../start` | Trigger session start | **MISSING** — latency-sensitive. Backend patches CRD directly. API server must write `phase` to Postgres AND trigger reconciler (pg_notify) for immediate CR creation. Cannot wait for polling. |
-| `POST .../stop` | Trigger session stop | **MISSING** — same latency concern. Write `phase=Stopping` to Postgres + pg_notify. Reconciler patches CR `phase`. |
+| `POST .../start` | Trigger session start | ✅ Implemented |
+| `POST .../stop` | Trigger session stop | ✅ Implemented |
 | `PUT .../displayname` | Update display name | Covered by PATCH |
 | `POST .../repos` | Add repo to session | **MISSING** |
 | `DELETE .../repos/:name` | Remove repo from session | **MISSING** |
@@ -187,7 +188,7 @@ These are **not Kinds** in the CRUD sense but are operational endpoints the back
 | `updated_at` | timestamptz | gorm-maintained |
 | `deleted_at` | timestamptz, nullable | Soft delete index |
 
-### sessions (expanded from 6 → ~30 fields)
+### sessions (~30 fields, fully implemented)
 
 **Data fields (API-mutable, set at creation or via PATCH):**
 
@@ -196,38 +197,38 @@ These are **not Kinds** in the CRUD sense but are operational endpoints the back
 | `name` | text, not null | Display name. Maps to CRD `spec.displayName`. | ✅ exists |
 | `prompt` | text | Initial prompt. Maps to CRD `spec.initialPrompt`. | ✅ exists |
 | `repo_url` | text | **DEPRECATE** — replaced by `repos` jsonb | ✅ exists, deprecate |
-| `repos` | jsonb | `[{url, branch, auto_push}]` — multi-repo support | **ADD** |
-| `interactive` | boolean, default true | Chat vs batch mode | **ADD** |
-| `timeout` | int, default 300 | Session timeout in seconds | **ADD** |
-| `llm_model` | text | LLM model selection. No hardcoded default — inherit from ProjectSettings or deployment config. | **ADD** |
-| `llm_temperature` | float, default 0.7 | | **ADD** |
-| `llm_max_tokens` | int, default 4000 | | **ADD** |
+| `repos` | jsonb | `[{url, branch, auto_push}]` — multi-repo support | ✅ done |
+| `interactive` | boolean, default true | Chat vs batch mode | ✅ done |
+| `timeout` | int, default 300 | Session timeout in seconds | ✅ done |
+| `llm_model` | text | LLM model selection. Default: "sonnet". | ✅ done |
+| `llm_temperature` | float, default 0.7 | | ✅ done |
+| `llm_max_tokens` | int, default 4000 | | ✅ done |
 | `workflow_id` | text, FK → workflows | Resolved to git coordinates when building CR | ✅ exists |
 | `created_by_user_id` | text, FK → users | Who created it | ✅ exists |
 | `assigned_user_id` | text, FK → users | Who is assigned | ✅ exists |
-| `parent_session_id` | text, FK → sessions | Self-referencing for chaining | **ADD** |
-| `bot_account_name` | text | Bot account for git operations | **ADD** |
-| `resource_overrides` | jsonb | `{cpu, memory, storage_class, priority_class}` | **ADD** |
-| `environment_variables` | jsonb | Key-value map passed to runner | **ADD** |
-| `labels` | jsonb | K8s label pass-through | **ADD** |
-| `annotations` | jsonb | K8s annotation pass-through | **ADD** |
-| `project_id` | text, FK → projects | Multi-tenant scoping. Reconciler resolves `project.name` from this FK for CRD `spec.project` field. | **ADD** |
+| `parent_session_id` | text, FK → sessions | Self-referencing for chaining | ✅ done |
+| `bot_account_name` | text | Bot account for git operations | ✅ done |
+| `resource_overrides` | jsonb | `{cpu, memory, storage_class, priority_class}` | ✅ done |
+| `environment_variables` | jsonb | Key-value map passed to runner | ✅ done |
+| `labels` | jsonb | K8s label pass-through | ✅ done |
+| `annotations` | jsonb | K8s annotation pass-through | ✅ done |
+| `project_id` | text, FK → projects | Multi-tenant scoping. Reconciler resolves `project.name` from this FK for CRD `spec.project` field. | ✅ done |
 
 **Runtime status fields (synced from K8s CR by reconciler, read-only via API):**
 
 | Column | Type | Notes | Gap Status |
 |--------|------|-------|------------|
-| `phase` | text | Pending, Creating, Running, Stopping, Stopped, Completed, Failed | **ADD** |
-| `start_time` | timestamptz | When runner started executing | **ADD** |
-| `completion_time` | timestamptz | When session reached terminal phase | **ADD** |
-| `sdk_session_id` | text | SDK session ID for resume | **ADD** |
-| `sdk_restart_count` | int, default 0 | Number of SDK restarts | **ADD** |
-| `conditions` | jsonb | `[{type, status, reason, message, last_transition_time}]` | **ADD** |
-| `reconciled_repos` | jsonb | `[{url, branch, name, status, cloned_at}]` | **ADD** |
-| `reconciled_workflow` | jsonb | `{git_url, branch, path, status, applied_at}` | **ADD** |
-| `kube_cr_name` | text | DNS-safe name of the Session CR in K8s | **ADD** |
-| `kube_cr_uid` | text | K8s UID after CR creation | **ADD** |
-| `kube_namespace` | text | Namespace where CR lives | **ADD** |
+| `phase` | text | Pending, Creating, Running, Stopping, Stopped, Completed, Failed | ✅ done |
+| `start_time` | timestamptz | When runner started executing | ✅ done |
+| `completion_time` | timestamptz | When session reached terminal phase | ✅ done |
+| `sdk_session_id` | text | SDK session ID for resume | ✅ done |
+| `sdk_restart_count` | int, default 0 | Number of SDK restarts | ✅ done |
+| `conditions` | jsonb | `[{type, status, reason, message, last_transition_time}]` | ✅ done |
+| `reconciled_repos` | jsonb | `[{url, branch, name, status, cloned_at}]` | ✅ done |
+| `reconciled_workflow` | jsonb | `{git_url, branch, path, status, applied_at}` | ✅ done |
+| `kube_cr_name` | text | DNS-safe name of the Session CR in K8s | ✅ done |
+| `kube_cr_uid` | text | K8s UID after CR creation | ✅ done |
+| `kube_namespace` | text | Namespace where CR lives | ✅ done |
 
 ### projects (new Kind)
 
