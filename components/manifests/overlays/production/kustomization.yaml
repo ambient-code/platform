@@ -15,9 +15,12 @@ resources:
 - route.yaml
 - backend-route.yaml
 - public-api-route.yaml
+- unleash-route.yaml
 - operator-config-openshift.yaml
 
 # Patches for production environment
+# Unleash: init container to create database (RHEL doesn't support init scripts)
+# PostgreSQL: use RHEL image with proper env vars and mount paths (JSON patch)
 patches:
 - path: namespace-patch.yaml
   target:
@@ -31,13 +34,21 @@ patches:
   target:
     kind: Service
     name: frontend-service
-# PostgreSQL: use RHEL image with proper env vars and mount paths (JSON patch)
+- path: unleash-oauth-deployment-patch.yaml
+  target:
+    kind: Deployment
+    name: unleash
+- path: unleash-oauth-service-patch.yaml
+  target:
+    kind: Service
+    name: unleash
+- path: unleash-init-db-patch.yaml
 - path: postgresql-json-patch.yaml
   target:
     group: apps
-    version: v1
     kind: Deployment
     name: postgresql
+    version: v1
 
 # Production images
 images:
@@ -77,4 +88,3 @@ images:
 - name: quay.io/ambient_code/vteam_state_sync:latest
   newName: quay.io/ambient_code/vteam_state_sync
   newTag: latest
-# PostgreSQL: RHEL image handled via JSON patch (postgresql-json-patch.yaml)

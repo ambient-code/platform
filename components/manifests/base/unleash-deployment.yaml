@@ -1,0 +1,97 @@
+# Unleash Feature Flag Server
+# Uses shared PostgreSQL instance from postgresql-deployment.yaml
+---
+# Unleash Server Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: unleash
+  labels:
+    app: unleash
+    app.kubernetes.io/name: unleash
+    app.kubernetes.io/component: server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: unleash
+  template:
+    metadata:
+      labels:
+        app: unleash
+        app.kubernetes.io/name: unleash
+    spec:
+      containers:
+      - name: unleash
+        image: unleashorg/unleash-server:5.11.3
+        ports:
+        - containerPort: 4242
+          name: http
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: unleash-credentials
+              key: database-url
+        - name: DATABASE_SSL
+          valueFrom:
+            secretKeyRef:
+              name: unleash-credentials
+              key: database-ssl
+        - name: LOG_LEVEL
+          value: "info"
+        # Pre-configured API tokens for development/testing
+        # Change these in production!
+        - name: INIT_ADMIN_API_TOKENS
+          valueFrom:
+            secretKeyRef:
+              name: unleash-credentials
+              key: admin-api-token
+        - name: INIT_CLIENT_API_TOKENS
+          valueFrom:
+            secretKeyRef:
+              name: unleash-credentials
+              key: client-api-token
+        - name: INIT_FRONTEND_API_TOKENS
+          valueFrom:
+            secretKeyRef:
+              name: unleash-credentials
+              key: frontend-api-token
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 4242
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 4242
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 5
+---
+# Unleash Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: unleash
+  labels:
+    app: unleash
+    app.kubernetes.io/name: unleash
+spec:
+  type: ClusterIP
+  ports:
+  - port: 4242
+    targetPort: 4242
+    name: http
+  selector:
+    app: unleash
