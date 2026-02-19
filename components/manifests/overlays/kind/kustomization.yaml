@@ -12,6 +12,7 @@ resources:
 - operator-config.yaml
 - minio-credentials.yaml
 - postgresql-credentials.yaml
+- unleash-credentials.yaml
 # PostgreSQL init scripts for database creation (kind only)
 - postgresql-init-scripts.yaml
 
