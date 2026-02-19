@@ -31,6 +31,13 @@ patches:
   target:
     kind: Service
     name: frontend-service
+# PostgreSQL: use RHEL image with proper env vars and mount paths (JSON patch)
+- path: postgresql-json-patch.yaml
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: postgresql
 
 # Production images
 images:
@@ -58,12 +65,13 @@ images:
 - name: quay.io/ambient_code/vteam_operator:latest
   newName: quay.io/ambient_code/vteam_operator
   newTag: latest
-- name: quay.io/ambient_code/vteam_state_sync:latest
-  newName: quay.io/ambient_code/vteam_state_sync
-  newTag: latest
 - name: quay.io/ambient_code/vteam_public_api
   newName: quay.io/ambient_code/vteam_public_api
   newTag: latest
 - name: quay.io/ambient_code/vteam_public_api:latest
   newName: quay.io/ambient_code/vteam_public_api
   newTag: latest
+- name: quay.io/ambient_code/vteam_state_sync:latest
+  newName: quay.io/ambient_code/vteam_state_sync
+  newTag: latest
+# PostgreSQL: RHEL image handled via JSON patch (postgresql-json-patch.yaml)
