@@ -5,15 +5,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
 	"strings"
-	"time"
-
 	"sync"
+	"time"
 
 	"ambient-code-operator/internal/config"
 	"ambient-code-operator/internal/types"
@@ -697,7 +697,7 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 			writeGroup.Go(func() error {
 				log.Printf("Runner token secret %s not found, creating it now", runnerTokenSecretName)
 				if err := regenerateRunnerToken(sessionNamespace, name, currentObj); err != nil {
-					return fmt.Errorf("failed to provision runner token for session %s: %v", name, err)
+					return fmt.Errorf("failed to provision runner token for session %s: %w", name, ErrTokenProvision)
 				}
 				log.Printf("Successfully provisioned runner token for session %s", name)
 				return nil
@@ -709,7 +709,7 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 
 	if err := writeGroup.Wait(); err != nil {
 		// Vertex copy failure is fatal; token failure is fatal
-		if strings.Contains(err.Error(), "runner token") {
+		if stderrors.Is(err, ErrTokenProvision) {
 			errMsg := fmt.Sprintf("Failed to provision runner token: %v", err)
 			log.Print(errMsg)
 			statusPatch.SetField("phase", "Failed")
@@ -2222,6 +2222,9 @@ func regenerateRunnerToken(sessionNamespace, sessionName string, session *unstru
 
 // NOTE: Sync functions below are now unused - credentials are fetched at runtime via backend API
 // This supersedes PR #562's volume mounting approach with just-in-time credential fetching
+
+// ErrTokenProvision indicates runner token provisioning failed.
+var ErrTokenProvision = stderrors.New("token provision failed")
 
 // Helper functions
 var (
