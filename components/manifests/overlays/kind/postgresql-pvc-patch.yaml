@@ -1,0 +1,9 @@
+# Reduce PostgreSQL PVC size for kind local development
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgresql-data
+spec:
+  resources:
+    requests:
+      storage: 1Gi

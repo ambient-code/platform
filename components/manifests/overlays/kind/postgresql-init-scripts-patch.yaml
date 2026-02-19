@@ -1,0 +1,15 @@
+# JSON patch to add init-scripts volume and volumeMount to PostgreSQL
+# This enables automatic database creation via /docker-entrypoint-initdb.d/
+- op: add
+  path: /spec/template/spec/containers/0/volumeMounts/-
+  value:
+    name: init-scripts
+    mountPath: /docker-entrypoint-initdb.d
+    readOnly: true
+- op: add
+  path: /spec/template/spec/volumes/-
+  value:
+    name: init-scripts
+    configMap:
+      name: postgresql-init-scripts
+      defaultMode: 0755
