@@ -981,10 +981,11 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 							corev1.EnvVar{Name: "CLOUD_ML_REGION", Value: os.Getenv("CLOUD_ML_REGION")},
 							corev1.EnvVar{Name: "ANTHROPIC_VERTEX_PROJECT_ID", Value: os.Getenv("ANTHROPIC_VERTEX_PROJECT_ID")},
 							corev1.EnvVar{Name: "GOOGLE_APPLICATION_CREDENTIALS", Value: os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")},
-							// Prevent the Claude Code CLI from hanging on the GCE metadata server
-							// in non-GCE environments (e.g., kind, on-prem). The CLI tries to reach
-							// 169.254.169.254 for auth and blocks indefinitely if unreachable.
-							corev1.EnvVar{Name: "GCE_METADATA_HOST", Value: "disabled"},
+							// Prevent the Claude Code CLI from trying to reach the GCE metadata
+							// server (169.254.169.254) in non-GCP environments. This must be a
+							// non-functional domain instead of just a random string like "disabled".
+							corev1.EnvVar{Name: "GCE_METADATA_HOST", Value: "metadata.invalid"},
+							corev1.EnvVar{Name: "GCE_METADATA_TIMEOUT", Value: "1"},
 						)
 					} else {
 						// Explicitly set to 0 when Vertex is disabled
