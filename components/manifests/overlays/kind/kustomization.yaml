@@ -11,6 +11,7 @@ resources:
 # Ingress removed - using NodePort for direct access in kind
 - operator-config.yaml
 - minio-credentials.yaml
+- postgresql-credentials.yaml
 
 # Patches for e2e environment
 patches:
@@ -42,6 +43,11 @@ patches:
   target:
     kind: Service
     name: public-api-service
+# PostgreSQL: smaller PVC for local dev
+- path: postgresql-pvc-patch.yaml
+  target:
+    kind: PersistentVolumeClaim
+    name: postgresql-data
 
 # JSON patches to set imagePullPolicy for all deployments
 patchesJson6902:

@@ -12,6 +12,7 @@ resources:
 - backend-route.yaml
 - frontend-route.yaml
 - operator-config-crc.yaml
+- postgresql-credentials.yaml
 
 # Patches for local dev environment
 patchesStrategicMerge:
@@ -21,6 +22,8 @@ patchesStrategicMerge:
 - pvc-patch.yaml
 - backend-clusterrole-patch.yaml
 - operator-clusterrole-patch.yaml
+# PostgreSQL: use RHEL image (CRC has Red Hat registry access)
+- postgresql-patch.yaml
 
 # Name prefix for local dev resources
 namePrefix: vteam-
@@ -39,3 +42,7 @@ images:
 - name: quay.io/ambient_code/vteam_claude_runner
   newName: quay.io/ambient_code/vteam_claude_runner
   newTag: latest
+# PostgreSQL: use RHEL image (CRC has Red Hat registry access)
+- name: postgres
+  newName: registry.redhat.io/rhel10/postgresql-16
+  newTag: "10.1"

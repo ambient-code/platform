@@ -147,6 +147,7 @@ reports/
 
 # Secrets (should use .example templates)
 **/minio-credentials-secret.yaml
+**/postgresql-credentials-secret.yaml
 
 # Build artifacts and logs
 build.log

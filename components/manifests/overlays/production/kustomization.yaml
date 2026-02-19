@@ -31,6 +31,11 @@ patches:
   target:
     kind: Service
     name: frontend-service
+# PostgreSQL: use RHEL image with POSTGRESQL_* env vars
+- path: postgresql-patch.yaml
+  target:
+    kind: Deployment
+    name: postgresql
 
 # Production images
 images:
@@ -67,3 +72,7 @@ images:
 - name: quay.io/ambient_code/vteam_public_api:latest
   newName: quay.io/ambient_code/vteam_public_api
   newTag: latest
+# PostgreSQL: use RHEL image for production
+- name: postgres
+  newName: registry.redhat.io/rhel10/postgresql-16
+  newTag: "10.1"

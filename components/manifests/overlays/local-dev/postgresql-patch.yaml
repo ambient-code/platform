@@ -1,0 +1,33 @@
+# Patch PostgreSQL deployment for local-dev (RHEL image on CRC)
+# RHEL PostgreSQL uses different env var names than official postgres image
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgresql
+spec:
+  template:
+    spec:
+      containers:
+      - name: postgresql
+        # RHEL PostgreSQL image (CRC has Red Hat registry access)
+        image: registry.redhat.io/rhel10/postgresql-16:10.1
+        env:
+        # RHEL image uses POSTGRESQL_* env vars
+        - name: POSTGRESQL_USER
+          valueFrom:
+            secretKeyRef:
+              name: postgresql-credentials
+              key: db.user
+        - name: POSTGRESQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgresql-credentials
+              key: db.password
+        - name: POSTGRESQL_DATABASE
+          valueFrom:
+            secretKeyRef:
+              name: postgresql-credentials
+              key: db.name
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/pgsql/data

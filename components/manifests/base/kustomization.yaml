@@ -15,6 +15,7 @@ resources:
 - public-api-deployment.yaml
 - workspace-pvc.yaml
 - minio-deployment.yaml
+- postgresql-deployment.yaml
 
 # Default images (can be overridden by overlays)
 images:

@@ -1,0 +1,160 @@
+# Shared PostgreSQL instance for platform services
+# Uses official postgres image from Docker Hub
+# Databases are created via init scripts ConfigMap
+---
+# PostgreSQL PVC
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgresql-data
+  labels:
+    app: postgresql
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/component: database
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+---
+# Init scripts ConfigMap - creates databases for each service
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgresql-init-scripts
+  labels:
+    app: postgresql
+    app.kubernetes.io/name: postgresql
+data:
+  # Create databases for platform services
+  # Add new services here as needed
+  init-databases.sh: |
+    #!/bin/bash
+    set -e
+
+    # Function to create database if it doesn't exist
+    create_db_if_not_exists() {
+      local db_name=$1
+      echo "Checking database: $db_name"
+      psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" <<-EOSQL
+        SELECT 'CREATE DATABASE $db_name'
+        WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '$db_name')\gexec
+        GRANT ALL PRIVILEGES ON DATABASE $db_name TO $POSTGRES_USER;
+    EOSQL
+      echo "Database $db_name ready"
+    }
+
+    # Create databases for each service
+    # Unleash feature flags
+    create_db_if_not_exists "unleash"
+
+    # Add more databases here as services are added:
+    # create_db_if_not_exists "langfuse"
+    # create_db_if_not_exists "other_service"
+
+    echo "All databases initialized successfully"
+---
+# PostgreSQL Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgresql
+  labels:
+    app: postgresql
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/component: database
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgresql
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: postgresql
+        app.kubernetes.io/name: postgresql
+    spec:
+      containers:
+      - name: postgresql
+        image: postgres:16
+        ports:
+        - containerPort: 5432
+          name: postgresql
+        env:
+        # Standard postgres image env vars mapped to db.* secret keys
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: postgresql-credentials
+              key: db.user
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgresql-credentials
+              key: db.password
+        - name: POSTGRES_DB
+          valueFrom:
+            secretKeyRef:
+              name: postgresql-credentials
+              key: db.name
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/postgresql/data
+        - name: init-scripts
+          mountPath: /docker-entrypoint-initdb.d
+          readOnly: true
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        readinessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - postgres
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+        livenessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - postgres
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: postgresql-data
+      - name: init-scripts
+        configMap:
+          name: postgresql-init-scripts
+          defaultMode: 0755
+---
+# PostgreSQL Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgresql
+  labels:
+    app: postgresql
+    app.kubernetes.io/name: postgresql
+spec:
+  type: ClusterIP
+  ports:
+  - port: 5432
+    targetPort: 5432
+    name: postgresql
+  selector:
+    app: postgresql
