@@ -21,8 +21,16 @@ patchesStrategicMerge:
 - pvc-patch.yaml
 - backend-clusterrole-patch.yaml
 - operator-clusterrole-patch.yaml
-# PostgreSQL: use RHEL image (CRC has Red Hat registry access)
-- postgresql-patch.yaml
+
+# JSON patches for proper replacement (not merge)
+patchesJson6902:
+# PostgreSQL: use RHEL image with proper env vars and mount paths
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: postgresql
+  path: postgresql-json-patch.yaml
 
 # Name prefix for local dev resources
 namePrefix: vteam-
@@ -41,7 +49,4 @@ images:
 - name: quay.io/ambient_code/vteam_claude_runner
   newName: quay.io/ambient_code/vteam_claude_runner
   newTag: latest
-# PostgreSQL: use RHEL image (CRC has Red Hat registry access)
-- name: postgres
-  newName: registry.redhat.io/rhel10/postgresql-16
-  newTag: "10.1"
+# PostgreSQL: RHEL image handled via JSON patch (postgresql-json-patch.yaml)

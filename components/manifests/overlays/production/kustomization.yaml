@@ -31,12 +31,6 @@ patches:
   target:
     kind: Service
     name: frontend-service
-# PostgreSQL: use RHEL image with POSTGRESQL_* env vars
-- path: postgresql-patch.yaml
-  target:
-    kind: Deployment
-    name: postgresql
-
 # Production images
 images:
 - name: quay.io/ambient_code/vteam_backend
@@ -72,7 +66,14 @@ images:
 - name: quay.io/ambient_code/vteam_public_api:latest
   newName: quay.io/ambient_code/vteam_public_api
   newTag: latest
-# PostgreSQL: use RHEL image for production
-- name: postgres
-  newName: registry.redhat.io/rhel10/postgresql-16
-  newTag: "10.1"
+# PostgreSQL: RHEL image handled via JSON patch (postgresql-json-patch.yaml)
+
+# JSON patches for proper replacement (not merge)
+patchesJson6902:
+# PostgreSQL: use RHEL image with proper env vars and mount paths
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: postgresql
+  path: postgresql-json-patch.yaml

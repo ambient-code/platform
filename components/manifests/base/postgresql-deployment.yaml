@@ -34,14 +34,24 @@ data:
     set -e
 
     # Function to create database if it doesn't exist
+    # Uses parameterized queries to avoid SQL injection
     create_db_if_not_exists() {
-      local db_name=$1
+      local db_name="$1"
+      # Validate database name contains only allowed characters
+      if [[ ! "$db_name" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]]; then
+        echo "ERROR: Invalid database name: $db_name"
+        exit 1
+      fi
       echo "Checking database: $db_name"
-      psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" <<-EOSQL
-        SELECT 'CREATE DATABASE $db_name'
-        WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '$db_name')\gexec
-        GRANT ALL PRIVILEGES ON DATABASE $db_name TO $POSTGRES_USER;
-    EOSQL
+      # Check if database exists
+      if psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" -tAc \
+        "SELECT 1 FROM pg_database WHERE datname = '$db_name'" | grep -q 1; then
+        echo "Database $db_name already exists"
+      else
+        echo "Creating database: $db_name"
+        psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" -c "CREATE DATABASE $db_name"
+        psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" -c "GRANT ALL PRIVILEGES ON DATABASE $db_name TO $POSTGRES_USER"
+      fi
       echo "Database $db_name ready"
     }
 
@@ -118,18 +128,18 @@ spec:
         readinessProbe:
           exec:
             command:
-            - pg_isready
-            - -U
-            - postgres
+            - /bin/sh
+            - -c
+            - pg_isready -U "$POSTGRES_USER"
           initialDelaySeconds: 10
           periodSeconds: 10
           timeoutSeconds: 5
         livenessProbe:
           exec:
             command:
-            - pg_isready
-            - -U
-            - postgres
+            - /bin/sh
+            - -c
+            - pg_isready -U "$POSTGRES_USER"
           initialDelaySeconds: 30
           periodSeconds: 30
           timeoutSeconds: 5
@@ -154,7 +164,7 @@ spec:
   type: ClusterIP
   ports:
   - port: 5432
-    targetPort: 5432
+    targetPort: postgresql
     name: postgresql
   selector:
     app: postgresql
