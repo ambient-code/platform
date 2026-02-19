@@ -1,0 +1,5 @@
+# Use locally-built images pre-loaded into kind cluster
+# Set IfNotPresent so Kubernetes uses images from `kind load docker-image`
+- op: replace
+  path: /spec/template/spec/containers/0/imagePullPolicy
+  value: IfNotPresent

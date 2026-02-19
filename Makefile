@@ -3,7 +3,7 @@
 .PHONY: local-dev-token
 .PHONY: local-logs local-logs-backend local-logs-frontend local-logs-operator local-shell local-shell-frontend
 .PHONY: local-test local-test-dev local-test-quick test-all local-url local-troubleshoot local-port-forward local-stop-port-forward
-.PHONY: push-all registry-login setup-hooks remove-hooks check-minikube check-kind check-kubectl dev-bootstrap
+.PHONY: push-all registry-login setup-hooks remove-hooks check-minikube check-kind check-kubectl dev-bootstrap kind-rebuild
 .PHONY: e2e-test e2e-setup e2e-clean deploy-langfuse-openshift
 .PHONY: setup-minio minio-console minio-logs minio-status
 .PHONY: validate-makefile lint-makefile check-shell makefile-health
@@ -61,8 +61,13 @@ RUNNER_IMAGE ?= vteam_claude_runner:latest
 STATE_SYNC_IMAGE ?= vteam_state_sync:latest
 PUBLIC_API_IMAGE ?= vteam_public_api:latest
 
+# Podman prefixes image names with localhost/ — kind load needs to use the same
+# name so containerd can match the image reference used in the deployment spec
+KIND_IMAGE_PREFIX := $(if $(filter podman,$(CONTAINER_ENGINE)),localhost/,)
+
 # Vertex AI Configuration (for LOCAL_VERTEX=true)
 # These inherit from environment if set, or can be overridden on command line
+LOCAL_IMAGES ?= false
 LOCAL_VERTEX ?= false
 ANTHROPIC_VERTEX_PROJECT_ID ?= $(shell echo $$ANTHROPIC_VERTEX_PROJECT_ID)
 CLOUD_ML_REGION ?= $(shell echo $$CLOUD_ML_REGION)
@@ -109,6 +114,8 @@ help: ## Display this help message
 	@echo '  PLATFORM=$(PLATFORM) (detected: $(DETECTED_PLATFORM) from $(HOST_OS)/$(HOST_ARCH))'
 	@echo ''
 	@echo '$(COLOR_BOLD)Examples:$(COLOR_RESET)'
+	@echo '  make kind-up LOCAL_IMAGES=true    Build from source and deploy to kind (requires podman)'
+	@echo '  make kind-rebuild                 Rebuild and reload all components in kind'
 	@echo '  make local-up CONTAINER_ENGINE=docker'
 	@echo '  make local-reload-backend'
 	@echo '  make build-all PLATFORM=linux/arm64'
@@ -293,8 +300,15 @@ local-clean: check-minikube ## Delete minikube cluster completely
 local-status: check-kubectl ## Show status of local deployment
 	@echo "$(COLOR_BOLD)📊 Ambient Code Platform Status$(COLOR_RESET)"
 	@echo ""
-	@echo "$(COLOR_BOLD)Minikube:$(COLOR_RESET)"
-	@minikube status 2>/dev/null || echo "$(COLOR_RED)✗$(COLOR_RESET) Minikube not running"
+	@if kind get clusters 2>/dev/null | grep -q '^ambient-local$$'; then \
+		echo "$(COLOR_BOLD)Kind:$(COLOR_RESET)"; \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Cluster 'ambient-local' running"; \
+	elif command -v minikube >/dev/null 2>&1; then \
+		echo "$(COLOR_BOLD)Minikube:$(COLOR_RESET)"; \
+		minikube status 2>/dev/null || echo "$(COLOR_RED)✗$(COLOR_RESET) Minikube not running"; \
+	else \
+		echo "$(COLOR_RED)✗$(COLOR_RESET) No local cluster found (kind or minikube)"; \
+	fi
 	@echo ""
 	@echo "$(COLOR_BOLD)Pods:$(COLOR_RESET)"
 	@kubectl get pods -n $(NAMESPACE) -o wide 2>/dev/null || echo "$(COLOR_RED)✗$(COLOR_RESET) Namespace not found"
@@ -302,7 +316,14 @@ local-status: check-kubectl ## Show status of local deployment
 	@echo "$(COLOR_BOLD)Services:$(COLOR_RESET)"
 	@kubectl get svc -n $(NAMESPACE) 2>/dev/null | grep -E "NAME|NodePort" || echo "No services found"
 	@echo ""
-	@$(MAKE) --no-print-directory _show-access-info
+	@if kind get clusters 2>/dev/null | grep -q '^ambient-local$$'; then \
+		echo "$(COLOR_BOLD)Access URLs:$(COLOR_RESET)"; \
+		echo "  Run in another terminal: $(COLOR_BLUE)make kind-port-forward$(COLOR_RESET)"; \
+		echo "  Frontend: $(COLOR_BLUE)http://localhost:8080$(COLOR_RESET)"; \
+		echo "  Backend:  $(COLOR_BLUE)http://localhost:8081$(COLOR_RESET)"; \
+	else \
+		$(MAKE) --no-print-directory _show-access-info; \
+	fi
 
 local-sync-version: ## Sync version from git to local deployment manifests
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Syncing version from git..."
@@ -560,7 +581,7 @@ clean: ## Clean up Kubernetes resources
 
 ##@ Kind Local Development
 
-kind-up: check-kind check-kubectl ## Start kind cluster with Quay.io images (production-like)
+kind-up: check-kind check-kubectl ## Start kind cluster (LOCAL_IMAGES=true to build from source, requires podman)
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Starting kind cluster..."
 	@cd e2e && CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/setup-kind.sh
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for API server to be accessible..."
@@ -576,8 +597,22 @@ kind-up: check-kind check-kubectl ## Start kind cluster with Quay.io images (pro
 		fi; \
 		sleep 3; \
 	done
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Deploying with Quay.io images..."
-	@kubectl apply --validate=false -k components/manifests/overlays/kind/
+	@if [ "$(LOCAL_IMAGES)" = "true" ]; then \
+		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building images from source..."; \
+		$(MAKE) --no-print-directory build-all; \
+		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Loading images into kind..."; \
+		for img in $(BACKEND_IMAGE) $(FRONTEND_IMAGE) $(OPERATOR_IMAGE) $(RUNNER_IMAGE) $(STATE_SYNC_IMAGE) $(PUBLIC_API_IMAGE); do \
+			echo "  Loading $(KIND_IMAGE_PREFIX)$$img..."; \
+			$(if $(filter podman,$(CONTAINER_ENGINE)),KIND_EXPERIMENTAL_PROVIDER=podman) \
+			kind load docker-image $(KIND_IMAGE_PREFIX)$$img --name ambient-local; \
+		done; \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Images loaded"; \
+		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Deploying with locally-built images..."; \
+		kubectl apply --validate=false -k components/manifests/overlays/kind-local/; \
+	else \
+		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Deploying with Quay.io images..."; \
+		kubectl apply --validate=false -k components/manifests/overlays/kind/; \
+	fi
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for pods..."
 	@cd e2e && ./scripts/wait-for-ready.sh
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Initializing MinIO..."
@@ -659,6 +694,23 @@ test-e2e-setup: ## Install e2e test dependencies
 	cd e2e && npm install
 
 e2e-setup: test-e2e-setup ## Alias for test-e2e-setup (backward compatibility)
+
+kind-rebuild: check-kind check-kubectl build-all ## Rebuild, reload, and restart all components in kind
+	@kind get clusters 2>/dev/null | grep -q '^ambient-local$$' || \
+		(echo "$(COLOR_RED)✗$(COLOR_RESET) Kind cluster 'ambient-local' not found. Run 'make kind-up LOCAL_IMAGES=true' first." && exit 1)
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Loading images into kind..."
+	@for img in $(BACKEND_IMAGE) $(FRONTEND_IMAGE) $(OPERATOR_IMAGE) $(RUNNER_IMAGE) $(STATE_SYNC_IMAGE) $(PUBLIC_API_IMAGE); do \
+		echo "  Loading $(KIND_IMAGE_PREFIX)$$img..."; \
+		$(if $(filter podman,$(CONTAINER_ENGINE)),KIND_EXPERIMENTAL_PROVIDER=podman) \
+		kind load docker-image $(KIND_IMAGE_PREFIX)$$img --name ambient-local; \
+	done
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Images loaded"
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Applying kind-local manifests..."
+	@kubectl apply --validate=false -k components/manifests/overlays/kind-local/ $(QUIET_REDIRECT)
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Restarting deployments..."
+	@kubectl rollout restart deployment -n $(NAMESPACE) $(QUIET_REDIRECT)
+	@kubectl rollout status deployment -n $(NAMESPACE) --timeout=120s $(QUIET_REDIRECT)
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) All components rebuilt and restarted"
 
 kind-clean: kind-down ## Alias for kind-down
 
