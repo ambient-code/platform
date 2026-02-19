@@ -334,6 +334,17 @@ func (r *AgenticSessionReconciler) reconcileRunning(ctx context.Context, session
 		}
 	}
 
+	// Check inactivity timeout - auto-stop idle sessions
+	if handlers.ShouldAutoStop(session) {
+		logger.Info("Session idle beyond inactivity timeout, triggering auto-stop", "name", name)
+		if err := handlers.TriggerInactivityStop(namespace, name); err != nil {
+			logger.Error(err, "Failed to auto-stop inactive session", "name", name)
+			// Non-fatal, will retry on next reconcile
+		} else {
+			return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
+		}
+	}
+
 	// Refresh runner token if needed
 	if err := handlers.EnsureFreshRunnerToken(ctx, session); err != nil {
 		logger.Error(err, "Failed to refresh runner token", "name", name)

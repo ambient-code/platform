@@ -91,14 +91,6 @@ func main() {
 		"runnerImage", appConfig.AmbientCodeRunnerImage,
 	)
 
-	// Initialize OpenTelemetry metrics
-	shutdownMetrics, err := controller.InitMetrics(context.Background())
-	if err != nil {
-		logger.Error(err, "Failed to initialize OpenTelemetry metrics, continuing without metrics")
-	} else {
-		defer shutdownMetrics()
-	}
-
 	// Validate Vertex AI configuration at startup if enabled
 	if os.Getenv("CLAUDE_CODE_USE_VERTEX") == "1" {
 		if err := preflight.ValidateVertexConfig(appConfig.Namespace); err != nil {
@@ -123,6 +115,14 @@ func main() {
 	if err != nil {
 		logger.Error(err, "Unable to create manager")
 		os.Exit(1)
+	}
+
+	// Initialize OpenTelemetry metrics (pass cached client so gauges use informer cache)
+	shutdownMetrics, err := controller.InitMetrics(context.Background(), mgr.GetClient())
+	if err != nil {
+		logger.Error(err, "Failed to initialize OpenTelemetry metrics, continuing without metrics")
+	} else {
+		defer shutdownMetrics()
 	}
 
 	// Set up AgenticSession controller with concurrent reconcilers

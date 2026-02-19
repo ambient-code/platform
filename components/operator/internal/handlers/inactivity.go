@@ -1,7 +1,8 @@
 // Package handlers provides inactivity timeout detection and auto-stop logic
-// for agentic sessions. The operator's monitorPod loop calls shouldAutoStop()
-// on each tick to check whether a Running session has exceeded its configured
-// inactivity timeout, and triggerInactivityStop() to initiate the shutdown.
+// for agentic sessions. The controller's reconcileRunning phase calls
+// ShouldAutoStop() on each reconciliation to check whether a Running session
+// has exceeded its configured inactivity timeout, and TriggerInactivityStop()
+// to initiate the shutdown.
 package handlers
 
 import (
@@ -109,9 +110,9 @@ func resolveInactivityTimeout(sessionObj *unstructured.Unstructured) int64 {
 
 // --- Auto-stop detection ---
 
-// shouldAutoStop checks whether the session should be auto-stopped due to inactivity.
+// ShouldAutoStop checks whether the session should be auto-stopped due to inactivity.
 // Only applies to Running sessions.
-func shouldAutoStop(sessionObj *unstructured.Unstructured) bool {
+func ShouldAutoStop(sessionObj *unstructured.Unstructured) bool {
 	status, _, _ := unstructured.NestedMap(sessionObj.Object, "status")
 	if status == nil {
 		return false
@@ -160,9 +161,9 @@ func shouldAutoStop(sessionObj *unstructured.Unstructured) bool {
 
 // --- Auto-stop trigger ---
 
-// triggerInactivityStop sets the desired-phase annotation to Stopped with a stop-reason
+// TriggerInactivityStop sets the desired-phase annotation to Stopped with a stop-reason
 // annotation for inactivity. It re-reads the CR to avoid race conditions.
-func triggerInactivityStop(namespace, name string) error {
+func TriggerInactivityStop(namespace, name string) error {
 	gvr := types.GetAgenticSessionResource()
 
 	// Re-read the CR to get fresh state (race condition protection)
@@ -175,7 +176,7 @@ func triggerInactivityStop(namespace, name string) error {
 	}
 
 	// Re-check that session is still idle (user may have sent a message)
-	if !shouldAutoStop(obj) {
+	if !ShouldAutoStop(obj) {
 		log.Printf("[Inactivity] Session %s/%s: no longer idle after re-check, skipping auto-stop", namespace, name)
 		return nil
 	}
