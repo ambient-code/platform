@@ -5,7 +5,7 @@ metadata:
   name: vteam-production
 
 # Namespace for all resources (can be overridden with kustomize edit set namespace)
-namespace: ambient-code
+namespace: myproject
 
 # Resources (base + production-specific)
 # github-app-secret.yaml - excluded from automated deployment to prevent overwriting existing secret values
@@ -38,32 +38,32 @@ images:
   newName: quay.io/ambient_code/vteam_backend
   newTag: latest
 - name: quay.io/ambient_code/vteam_backend:latest
-  newName: quay.io/ambient_code/vteam_backend
+  newName: image-registry.openshift-image-registry.svc:5000/myproject/vteam_backend
   newTag: latest
 - name: quay.io/ambient_code/vteam_claude_runner
   newName: quay.io/ambient_code/vteam_claude_runner
   newTag: latest
 - name: quay.io/ambient_code/vteam_claude_runner:latest
-  newName: quay.io/ambient_code/vteam_claude_runner
+  newName: image-registry.openshift-image-registry.svc:5000/myproject/vteam_claude_runner
   newTag: latest
 - name: quay.io/ambient_code/vteam_frontend
   newName: quay.io/ambient_code/vteam_frontend
   newTag: latest
 - name: quay.io/ambient_code/vteam_frontend:latest
-  newName: quay.io/ambient_code/vteam_frontend
+  newName: image-registry.openshift-image-registry.svc:5000/myproject/vteam_frontend
   newTag: latest
 - name: quay.io/ambient_code/vteam_operator
   newName: quay.io/ambient_code/vteam_operator
   newTag: latest
 - name: quay.io/ambient_code/vteam_operator:latest
-  newName: quay.io/ambient_code/vteam_operator
-  newTag: latest
-- name: quay.io/ambient_code/vteam_state_sync:latest
-  newName: quay.io/ambient_code/vteam_state_sync
+  newName: image-registry.openshift-image-registry.svc:5000/myproject/vteam_operator
   newTag: latest
 - name: quay.io/ambient_code/vteam_public_api
   newName: quay.io/ambient_code/vteam_public_api
   newTag: latest
 - name: quay.io/ambient_code/vteam_public_api:latest
   newName: quay.io/ambient_code/vteam_public_api
+  newTag: latest
+- name: quay.io/ambient_code/vteam_state_sync:latest
+  newName: image-registry.openshift-image-registry.svc:5000/myproject/vteam_state_sync
   newTag: latest
