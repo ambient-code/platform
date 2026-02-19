@@ -6,7 +6,6 @@ Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **ProjectId** | Pointer to **string** |  | [optional] 
 **GroupAccess** | Pointer to **string** |  | [optional] 
-**RunnerSecrets** | Pointer to **string** |  | [optional] 
 **Repositories** | Pointer to **string** |  | [optional] 
 
 ## Methods
@@ -77,31 +76,6 @@ SetGroupAccess sets GroupAccess field to given value.
 `func (o *ProjectSettingsPatchRequest) HasGroupAccess() bool`
 
 HasGroupAccess returns a boolean if a field has been set.
-
-### GetRunnerSecrets
-
-`func (o *ProjectSettingsPatchRequest) GetRunnerSecrets() string`
-
-GetRunnerSecrets returns the RunnerSecrets field if non-nil, zero value otherwise.
-
-### GetRunnerSecretsOk
-
-`func (o *ProjectSettingsPatchRequest) GetRunnerSecretsOk() (*string, bool)`
-
-GetRunnerSecretsOk returns a tuple with the RunnerSecrets field if it's non-nil, zero value otherwise
-and a boolean to check if the value has been set.
-
-### SetRunnerSecrets
-
-`func (o *ProjectSettingsPatchRequest) SetRunnerSecrets(v string)`
-
-SetRunnerSecrets sets RunnerSecrets field to given value.
-
-### HasRunnerSecrets
-
-`func (o *ProjectSettingsPatchRequest) HasRunnerSecrets() bool`
-
-HasRunnerSecrets returns a boolean if a field has been set.
 
 ### GetRepositories
 

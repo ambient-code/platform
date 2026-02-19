@@ -219,8 +219,6 @@ components:
               type: string
             group_access:
               type: string
-            runner_secrets:
-              type: string
             repositories:
               type: string
             created_at:
@@ -244,8 +242,6 @@ components:
         project_id:
           type: string
         group_access:
-          type: string
-        runner_secrets:
           type: string
         repositories:
           type: string

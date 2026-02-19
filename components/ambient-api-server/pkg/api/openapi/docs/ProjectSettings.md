@@ -11,7 +11,6 @@ Name | Type | Description | Notes
 **UpdatedAt** | Pointer to **time.Time** |  | [optional] 
 **ProjectId** | **string** |  | 
 **GroupAccess** | Pointer to **string** |  | [optional] 
-**RunnerSecrets** | Pointer to **string** |  | [optional] 
 **Repositories** | Pointer to **string** |  | [optional] 
 
 ## Methods
@@ -202,31 +201,6 @@ SetGroupAccess sets GroupAccess field to given value.
 `func (o *ProjectSettings) HasGroupAccess() bool`
 
 HasGroupAccess returns a boolean if a field has been set.
-
-### GetRunnerSecrets
-
-`func (o *ProjectSettings) GetRunnerSecrets() string`
-
-GetRunnerSecrets returns the RunnerSecrets field if non-nil, zero value otherwise.
-
-### GetRunnerSecretsOk
-
-`func (o *ProjectSettings) GetRunnerSecretsOk() (*string, bool)`
-
-GetRunnerSecretsOk returns a tuple with the RunnerSecrets field if it's non-nil, zero value otherwise
-and a boolean to check if the value has been set.
-
-### SetRunnerSecrets
-
-`func (o *ProjectSettings) SetRunnerSecrets(v string)`
-
-SetRunnerSecrets sets RunnerSecrets field to given value.
-
-### HasRunnerSecrets
-
-`func (o *ProjectSettings) HasRunnerSecrets() bool`
-
-HasRunnerSecrets returns a boolean if a field has been set.
 
 ### GetRepositories
 

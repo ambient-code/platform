@@ -37,10 +37,9 @@ func newProjectSettings(id string) (*projectSettings.ProjectSettings, error) {
 	}
 
 	result, svcErr := psService.Create(context.Background(), &projectSettings.ProjectSettings{
-		ProjectId:     project.ID,
-		GroupAccess:   stringPtr(`[{"group_name":"admins","role":"admin"}]`),
-		RunnerSecrets: stringPtr(`{"api_key":"redacted"}`),
-		Repositories:  stringPtr(`[{"url":"https://github.com/test/repo","branch":"main"}]`),
+		ProjectId:    project.ID,
+		GroupAccess:  stringPtr(`[{"group_name":"admins","role":"admin"}]`),
+		Repositories: stringPtr(`[{"url":"https://github.com/test/repo","branch":"main"}]`),
 	})
 	if svcErr != nil {
 		return nil, fmt.Errorf("projectSettings.Create: %s", svcErr.Error())

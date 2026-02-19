@@ -72,9 +72,6 @@ func (h projectSettingsHandler) Patch(w http.ResponseWriter, r *http.Request) {
 			if patch.GroupAccess != nil {
 				found.GroupAccess = patch.GroupAccess
 			}
-			if patch.RunnerSecrets != nil {
-				found.RunnerSecrets = patch.RunnerSecrets
-			}
 			if patch.Repositories != nil {
 				found.Repositories = patch.Repositories
 			}

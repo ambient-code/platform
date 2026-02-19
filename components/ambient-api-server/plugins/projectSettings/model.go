@@ -7,10 +7,9 @@ import (
 
 type ProjectSettings struct {
 	api.Meta
-	ProjectId     string  `json:"project_id" gorm:"uniqueIndex;not null"`
-	GroupAccess   *string `json:"group_access"`
-	RunnerSecrets *string `json:"runner_secrets"`
-	Repositories  *string `json:"repositories"`
+	ProjectId    string  `json:"project_id" gorm:"uniqueIndex;not null"`
+	GroupAccess  *string `json:"group_access"`
+	Repositories *string `json:"repositories"`
 }
 
 type ProjectSettingsList []*ProjectSettings
@@ -30,8 +29,7 @@ func (d *ProjectSettings) BeforeCreate(tx *gorm.DB) error {
 }
 
 type ProjectSettingsPatchRequest struct {
-	ProjectId     *string `json:"project_id,omitempty"`
-	GroupAccess   *string `json:"group_access,omitempty"`
-	RunnerSecrets *string `json:"runner_secrets,omitempty"`
-	Repositories  *string `json:"repositories,omitempty"`
+	ProjectId    *string `json:"project_id,omitempty"`
+	GroupAccess  *string `json:"group_access,omitempty"`
+	Repositories *string `json:"repositories,omitempty"`
 }

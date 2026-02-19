@@ -9,6 +9,7 @@ import (
 
 	"github.com/ambient/platform/components/ambient-api-server/pkg/api/openapi"
 	"github.com/openshift-online/rh-trex-ai/pkg/api/presenters"
+	"github.com/openshift-online/rh-trex-ai/pkg/auth"
 	"github.com/openshift-online/rh-trex-ai/pkg/errors"
 	"github.com/openshift-online/rh-trex-ai/pkg/handlers"
 	"github.com/openshift-online/rh-trex-ai/pkg/services"
@@ -40,6 +41,9 @@ func (h sessionHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Action: func() (interface{}, *errors.ServiceError) {
 			ctx := r.Context()
 			sessionModel := ConvertSession(session)
+			if username := auth.GetUsernameFromContext(ctx); username != "" {
+				sessionModel.CreatedByUserId = &username
+			}
 			sessionModel, err := h.session.Create(ctx, sessionModel)
 			if err != nil {
 				return nil, err
@@ -168,7 +172,7 @@ func (h sessionHandler) Start(w http.ResponseWriter, r *http.Request) {
 		ErrorHandler: handlers.HandleError,
 	}
 
-	handlers.HandleDelete(w, r, cfg, http.StatusOK)
+	handlers.HandleGet(w, r, cfg)
 }
 
 func (h sessionHandler) Stop(w http.ResponseWriter, r *http.Request) {
@@ -185,7 +189,7 @@ func (h sessionHandler) Stop(w http.ResponseWriter, r *http.Request) {
 		ErrorHandler: handlers.HandleError,
 	}
 
-	handlers.HandleDelete(w, r, cfg, http.StatusOK)
+	handlers.HandleGet(w, r, cfg)
 }
 
 func (h sessionHandler) List(w http.ResponseWriter, r *http.Request) {

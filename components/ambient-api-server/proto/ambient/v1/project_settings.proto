@@ -10,14 +10,16 @@ message ProjectSettings {
   ObjectReference metadata = 1;
   string project_id = 2;
   optional string group_access = 3;
-  optional string runner_secrets = 4;
+  reserved 4;
+  reserved "runner_secrets";
   optional string repositories = 5;
 }
 
 message CreateProjectSettingsRequest {
   string project_id = 1;
   optional string group_access = 2;
-  optional string runner_secrets = 3;
+  reserved 3;
+  reserved "runner_secrets";
   optional string repositories = 4;
 }
 
@@ -29,7 +31,8 @@ message UpdateProjectSettingsRequest {
   string id = 1;
   optional string project_id = 2;
   optional string group_access = 3;
-  optional string runner_secrets = 4;
+  reserved 4;
+  reserved "runner_secrets";
   optional string repositories = 5;
 }
 

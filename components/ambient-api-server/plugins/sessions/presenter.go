@@ -34,6 +34,8 @@ func ConvertSession(session openapi.Session) *Session {
 
 	if session.CreatedAt != nil {
 		c.CreatedAt = *session.CreatedAt
+	}
+	if session.UpdatedAt != nil {
 		c.UpdatedAt = *session.UpdatedAt
 	}
 

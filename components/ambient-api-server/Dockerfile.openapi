@@ -16,4 +16,5 @@ WORKDIR /local
 RUN bash /usr/local/bin/docker-entrypoint.sh generate -i /local/openapi/openapi.yaml -g go -o /local/pkg/api/openapi
 RUN rm /local/pkg/api/openapi/go.mod /local/pkg/api/openapi/go.sum
 RUN rm -rf /local/pkg/api/openapi/test
+RUN rm -rf /local/pkg/api/openapi/git_push.sh
 RUN gofmt -w /local/pkg/api/openapi

@@ -50,10 +50,9 @@ func TestProjectSettingsPost(t *testing.T) {
 	Expect(err).NotTo(HaveOccurred())
 
 	psInput := openapi.ProjectSettings{
-		ProjectId:     project.ID,
-		GroupAccess:   openapi.PtrString(`[{"group_name":"devs","role":"edit"}]`),
-		RunnerSecrets: openapi.PtrString(`{}`),
-		Repositories:  openapi.PtrString(`[]`),
+		ProjectId:    project.ID,
+		GroupAccess:  openapi.PtrString(`[{"group_name":"devs","role":"edit"}]`),
+		Repositories: openapi.PtrString(`[]`),
 	}
 
 	psOutput, resp, err := client.DefaultAPI.ApiAmbientApiServerV1ProjectSettingsPost(ctx).ProjectSettings(psInput).Execute()

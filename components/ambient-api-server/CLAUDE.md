@@ -91,10 +91,10 @@ Modifiers: `:required` (non-nullable), `:optional` (nullable, default)
 
 ## Upstream Framework (rh-trex-ai)
 
-The `go.mod` uses a `replace` directive pointing to the local clone:
+The `go.mod` references the published module. For local development against an unreleased upstream, contributors can temporarily add a `replace` directive (do not commit it):
 
 ```
-replace github.com/openshift-online/rh-trex-ai => /home/mturansk/projects/src/github.com/openshift-online/rh-trex-ai
+replace github.com/openshift-online/rh-trex-ai => ../../../openshift-online/rh-trex-ai
 ```
 
 Key upstream packages consumed:
@@ -201,7 +201,7 @@ Auth: `Authorization: Bearer <token>`. Pagination: `?page=1&size=100` (1-indexed
 - All Go code uses `go fmt`; `golangci-lint run` must pass
 - No `panic()` in production code
 - Table-driven tests with subtests
-- OpenAPI client is generated — do not edit `pkg/api/openapi/` manually
+- OpenAPI client is generated — **Never** edit `pkg/api/openapi/` manually
 - Plugin imports in `main.go` are side-effect imports (`_ "..."`)
 - `api.Meta` provides `ID`, `CreatedAt`, `UpdatedAt`, `DeletedAt` to all models
 - `BeforeCreate` gorm hook assigns `api.NewID()` (KSUID)
