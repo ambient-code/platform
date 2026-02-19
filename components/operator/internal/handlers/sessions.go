@@ -636,10 +636,11 @@ func handleAgenticSessionEvent(ctx context.Context, obj *unstructured.Unstructur
 	if !vertexEnabled {
 		if !runnerSecretsExist {
 			if runnerSecretsCheckErr != nil && !errors.IsNotFound(runnerSecretsCheckErr) {
-				log.Printf("Error checking runner secret %s: %v", runnerSecretsName, runnerSecretsCheckErr)
-			} else {
-				log.Printf("Runner secret %s missing in %s (Vertex disabled)", runnerSecretsName, sessionNamespace)
+				// Transient error (network, RBAC, etc.) — let the reconciler retry
+				return fmt.Errorf("transient error checking runner secret %s: %w", runnerSecretsName, runnerSecretsCheckErr)
 			}
+			// Definitively missing — fail the session
+			log.Printf("Runner secret %s missing in %s (Vertex disabled)", runnerSecretsName, sessionNamespace)
 			statusPatch.AddCondition(conditionUpdate{Type: conditionSecretsReady, Status: "False", Reason: "RunnerSecretMissing", Message: fmt.Sprintf("Secret %s missing", runnerSecretsName)})
 			_ = statusPatch.Apply()
 			return fmt.Errorf("runner secret %s missing in namespace %s", runnerSecretsName, sessionNamespace)
@@ -698,7 +699,7 @@ func handleAgenticSessionEvent(ctx context.Context, obj *unstructured.Unstructur
 			writeGroup.Go(func() error {
 				log.Printf("Runner token secret %s not found, creating it now", runnerTokenSecretName)
 				if err := regenerateRunnerToken(sessionNamespace, name, currentObj); err != nil {
-					return fmt.Errorf("failed to provision runner token for session %s: %w", name, ErrTokenProvision)
+					return fmt.Errorf("failed to provision runner token for session %s: %w: %w", name, ErrTokenProvision, err)
 				}
 				log.Printf("Successfully provisioned runner token for session %s", name)
 				return nil
