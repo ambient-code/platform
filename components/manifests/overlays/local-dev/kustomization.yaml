@@ -12,7 +12,6 @@ resources:
 - backend-route.yaml
 - frontend-route.yaml
 - operator-config-crc.yaml
-- postgresql-credentials.yaml
 
 # Patches for local dev environment
 patchesStrategicMerge:
