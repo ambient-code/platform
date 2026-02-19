@@ -41,7 +41,7 @@ import (
 // - 🔜 Future: Break into ReconcilePending, ReconcileRunning, ReconcileStopped functions
 //
 // This transitional approach allows framework adoption without rewriting 2,300 lines at once.
-func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
+func handleAgenticSessionEvent(ctx context.Context, obj *unstructured.Unstructured) error {
 	name := obj.GetName()
 	sessionNamespace := obj.GetNamespace()
 
@@ -510,7 +510,7 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 		podAlreadyExists                               bool
 	)
 
-	readGroup, readCtx := errgroup.WithContext(context.TODO())
+	readGroup, readCtx := errgroup.WithContext(ctx)
 
 	// GET vertex secret from operator namespace (if Vertex enabled)
 	if vertexEnabled {
@@ -650,7 +650,7 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 	// ── Stage 2: Parallel writes (secret copies + token provisioning) ───
 	ambientVertexSecretCopied := false
 	ambientLangfuseSecretCopied := false
-	writeGroup, writeCtx := errgroup.WithContext(context.TODO())
+	writeGroup, writeCtx := errgroup.WithContext(ctx)
 
 	// Copy vertex secret to session namespace
 	if vertexEnabled && vertexSecret != nil {
@@ -693,7 +693,8 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 
 	// Provision runner token if missing
 	if !runnerTokenExists {
-		if runnerTokenCheckErr != nil && errors.IsNotFound(runnerTokenCheckErr) {
+		if errors.IsNotFound(runnerTokenCheckErr) {
+			// Secret definitively does not exist — provision it
 			writeGroup.Go(func() error {
 				log.Printf("Runner token secret %s not found, creating it now", runnerTokenSecretName)
 				if err := regenerateRunnerToken(sessionNamespace, name, currentObj); err != nil {
@@ -703,19 +704,24 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 				return nil
 			})
 		} else if runnerTokenCheckErr != nil {
-			log.Printf("Warning: error checking runner token secret: %v", runnerTokenCheckErr)
+			// Transient error (network, RBAC, etc.) — return retriable error
+			// instead of silently proceeding without a token
+			return fmt.Errorf("transient error checking runner token secret %s: %w", runnerTokenSecretName, runnerTokenCheckErr)
 		}
 	}
 
 	if err := writeGroup.Wait(); err != nil {
-		// Vertex copy failure is fatal; token failure is fatal
+		// Any writeGroup failure is fatal — set phase=Failed so the session
+		// does not spin forever in Pending retries.
+		reason := "WriteGroupFailed"
 		if stderrors.Is(err, ErrTokenProvision) {
-			errMsg := fmt.Sprintf("Failed to provision runner token: %v", err)
-			log.Print(errMsg)
-			statusPatch.SetField("phase", "Failed")
-			statusPatch.AddCondition(conditionUpdate{Type: conditionReady, Status: "False", Reason: "TokenProvisionFailed", Message: errMsg})
-			_ = statusPatch.Apply()
+			reason = "TokenProvisionFailed"
 		}
+		errMsg := fmt.Sprintf("Failed during secret provisioning: %v", err)
+		log.Print(errMsg)
+		statusPatch.SetField("phase", "Failed")
+		statusPatch.AddCondition(conditionUpdate{Type: conditionReady, Status: "False", Reason: reason, Message: errMsg})
+		_ = statusPatch.Apply()
 		return err
 	}
 
