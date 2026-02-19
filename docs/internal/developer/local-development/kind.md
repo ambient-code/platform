@@ -105,34 +105,71 @@ make test-e2e      # Test
 make kind-down     # Cleanup
 ```
 
-### Iterative Development
+### Building from Source
 
-Quick iteration without recreating cluster:
+Build all components from your local source tree and deploy to kind.
+
+> **Note:** `LOCAL_IMAGES=true` requires **Podman** as the container engine. The `kind-local` overlay expects the `localhost/` image prefix that Podman uses natively.
 
 ```bash
-# Initial setup
-make kind-up
+# Build, load, and deploy in one step (requires CONTAINER_ENGINE=podman)
+make kind-up LOCAL_IMAGES=true
 
-# Edit e2e/.env to change images or add API key
-vim e2e/.env
-
-# Recreate cluster to pick up changes
-make kind-down
-make kind-up
-
-# Test
-make test-e2e
-
-# Repeat...
+# Combine with Vertex AI
+make kind-up LOCAL_IMAGES=true LOCAL_VERTEX=true
 ```
 
-**Example `e2e/.env`:**
-```bash
-# Test custom backend build
-IMAGE_BACKEND=quay.io/your-org/vteam_backend:fix-123
+This builds all container images from source, loads them into the kind cluster, and deploys using the `kind-local` overlay (which sets `imagePullPolicy: IfNotPresent`).
 
-# Enable agent testing
-ANTHROPIC_API_KEY=sk-ant-api03-...
+#### Iterating After Code Changes
+
+After the initial `kind-up LOCAL_IMAGES=true`, use `kind-rebuild` to pick up code changes without recreating the cluster:
+
+```bash
+# Rebuild all components, reload into kind, restart deployments
+make kind-rebuild
+```
+
+To rebuild a single component (faster):
+
+```bash
+# Example: backend change
+make build-backend && \
+  kind load docker-image vteam_backend:latest --name ambient-local && \
+  kubectl rollout restart deployment/backend-api -n ambient-code
+```
+
+| Component | Build target | Deployment to restart |
+|-----------|-------------|----------------------|
+| Backend | `make build-backend` | `backend-api` |
+| Frontend | `make build-frontend` | `frontend` |
+| Operator | `make build-operator` | `agentic-operator` |
+| Public API | `make build-public-api` | `public-api` |
+| Runner | `make build-runner` | *(none -- picked up by next session)* |
+| State Sync | `make build-state-sync` | *(none -- picked up by next session)* |
+
+#### Verify Which Images Are Running
+
+```bash
+# Check deployment images
+kubectl get deployments -n ambient-code \
+  -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.template.spec.containers[0].image}{"\n"}{end}'
+
+# Check runner image configured in operator
+kubectl get configmap operator-config -n ambient-code \
+  -o jsonpath='{.data.AMBIENT_CODE_RUNNER_IMAGE}'
+```
+
+With `LOCAL_IMAGES=true`, images show as `localhost/vteam_*:latest` (Podman prefix, no `quay.io`).
+
+### With Quay Images (Default)
+
+Best for testing without rebuilding:
+
+```bash
+make kind-up       # Deploy with pre-built Quay.io images
+make test-e2e      # Test
+make kind-down     # Cleanup
 ```
 
 ---
