@@ -1,0 +1,301 @@
+openapi: 3.0.0
+info:
+  title: {{.Project}} API
+  description: {{.Project}} API
+  version: 0.0.1
+servers:
+  - url: http://localhost:8000
+    description: current domain
+  - url: https://api.openshift.com
+    description: Main (production) server
+  - url: https://api.stage.openshift.com
+    description: Staging server
+paths:
+  /api/{{.Project}}/v1/{{.KindLowerPlural}}:
+    get:
+      summary: Returns a list of {{.KindLowerPlural}}
+      security:
+        - Bearer: []
+      responses:
+        '200':
+          description: A JSON array of {{.KindLowerSingular}} objects
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/{{.Kind}}List'
+        '401':
+          description: Auth token is invalid
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '403':
+          description: Unauthorized to perform operation
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '500':
+          description: Unexpected error occurred
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/size'
+        - $ref: '#/components/parameters/search'
+        - $ref: '#/components/parameters/orderBy'
+        - $ref: '#/components/parameters/fields'
+    post:
+      summary: Create a new {{.KindLowerSingular}}
+      security:
+        - Bearer: []
+      requestBody:
+        description: {{.Kind}} data
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/{{.Kind}}'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/{{.Kind}}'
+        '400':
+          description: Validation errors occurred
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '401':
+          description: Auth token is invalid
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '403':
+          description: Unauthorized to perform operation
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '409':
+          description: {{.Kind}} already exists
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '500':
+          description: An unexpected error occurred creating the {{.KindLowerSingular}}
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+  /api/{{.Project}}/v1/{{.KindLowerPlural}}/{id}:
+    get:
+      summary: Get an {{.KindLowerSingular}} by id
+      security:
+        - Bearer: []
+      responses:
+        '200':
+          description: {{.Kind}} found by id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/{{.Kind}}'
+        '401':
+          description: Auth token is invalid
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '403':
+          description: Unauthorized to perform operation
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '404':
+          description: No {{.KindLowerSingular}} with specified id exists
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '500':
+          description: Unexpected error occurred
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+    patch:
+      summary: Update an {{.KindLowerSingular}}
+      security:
+        - Bearer: []
+      requestBody:
+        description: Updated {{.KindLowerSingular}} data
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/{{.Kind}}PatchRequest'
+      responses:
+        '200':
+          description: {{.Kind}} updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/{{.Kind}}'
+        '400':
+          description: Validation errors occurred
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '401':
+          description: Auth token is invalid
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '403':
+          description: Unauthorized to perform operation
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '404':
+          description: No {{.KindLowerSingular}} with specified id exists
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '409':
+          description: {{.Kind}} already exists
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '500':
+          description: Unexpected error updating {{.KindLowerSingular}}
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+    parameters:
+      - $ref: '#/components/parameters/id'
+components:
+  schemas:
+    {{.Kind}}:
+      allOf:
+        - $ref: 'openapi.yaml#/components/schemas/ObjectReference'
+        - type: object
+          properties:
+            foo:
+              type: string
+    {{.Kind}}List:
+      allOf:
+        - $ref: 'openapi.yaml#/components/schemas/List'
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/{{.Kind}}'
+    {{.Kind}}PatchRequest:
+      type: object
+  parameters:
+    id:
+      name: id
+      in: path
+      description: The id of record
+      required: true
+      schema:
+        type: string
+    page:
+      name: page
+      in: query
+      description: Page number of record list when record list exceeds specified page size
+      schema:
+        type: integer
+        default: 1
+        minimum: 1
+      required: false
+    size:
+      name: size
+      in: query
+      description: Maximum number of records to return
+      schema:
+        type: integer
+        default: 100
+        minimum: 0
+      required: false
+    search:
+      name: search
+      in: query
+      required: false
+      description: |-
+        Specifies the search criteria. The syntax of this parameter is
+        similar to the syntax of the _where_ clause of an SQL statement,
+        using the names of the json attributes / column names of the account. 
+        For example, in order to retrieve all the accounts with a username
+        starting with `my`:
+
+        ```sql
+        username like 'my%'
+        ```
+
+        The search criteria can also be applied on related resource.
+        For example, in order to retrieve all the subscriptions labeled by `foo=bar`,
+
+        ```sql
+        subscription_labels.key = 'foo' and subscription_labels.value = 'bar'
+        ```
+
+        If the parameter isn't provided, or if the value is empty, then
+        all the accounts that the user has permission to see will be
+        returned.
+      schema:
+        type: string
+    orderBy:
+      name: orderBy
+      in: query
+      required: false
+      description: |-
+        Specifies the order by criteria. The syntax of this parameter is
+        similar to the syntax of the _order by_ clause of an SQL statement,
+        but using the names of the json attributes / column of the account.
+        For example, in order to retrieve all accounts ordered by username:
+
+        ```sql
+        username asc
+        ```
+
+        Or in order to retrieve all accounts ordered by username _and_ first name:
+
+        ```sql
+        username asc, firstName asc
+        ```
+
+        If the parameter isn't provided, or if the value is empty, then
+        no explicit ordering will be applied.
+      schema:
+        type: string
+    fields:
+      name: fields
+      in: query
+      required: false
+      description: |-
+        Supplies a comma-separated list of fields to be returned.
+        Fields of sub-structures and of arrays use <structure>.<field> notation.
+        <stucture>.* means all field of a structure
+        Example: For each Subscription to get id, href, plan(id and kind) and labels (all fields)
+
+        ```
+        ocm get subscriptions --parameter fields=id,href,plan.id,plan.kind,labels.* --parameter fetchLabels=true
+        ```
+      schema:
+        type: string

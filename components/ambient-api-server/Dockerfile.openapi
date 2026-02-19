@@ -1,0 +1,19 @@
+FROM openapitools/openapi-generator-cli:v7.16.0
+
+RUN apt-get update
+RUN apt-get install -y make sudo git golang-1.21
+
+RUN mkdir -p /local
+COPY . /local
+
+ENV PATH="/uhc/bin:/usr/lib/go-1.21/bin/:${PATH}"
+ENV GOPATH="/uhc"
+ENV GOBIN /usr/lib/go-1.21/bin/
+ENV CGO_ENABLED=0
+
+WORKDIR /local
+
+RUN bash /usr/local/bin/docker-entrypoint.sh generate -i /local/openapi/openapi.yaml -g go -o /local/pkg/api/openapi
+RUN rm /local/pkg/api/openapi/go.mod /local/pkg/api/openapi/go.sum
+RUN rm -rf /local/pkg/api/openapi/test
+RUN gofmt -w /local/pkg/api/openapi
