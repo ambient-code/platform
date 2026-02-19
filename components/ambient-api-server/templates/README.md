@@ -8,13 +8,13 @@ When deploying to production, the only template necessary is the service templat
 
 `templates/service-template.yml`
 
-This is the main service template that deploys two objects, the `uhc-acct-mngr` deployment and the related service.
+This is the main service template that deploys two objects, the `ambient-api-server` deployment and the related service.
 
 ## Route template
 
 `templates/route-template.yml`
 
-This template just deploys a route with the select `app:uhc-acct-mngr` to map to the service deployed by the service template.
+This template just deploys a route with the selector `app:ambient-api-server` to map to the service deployed by the service template.
 
 TLS is used by default for the route. No port is specified, all ports are allowed.
 
@@ -22,10 +22,10 @@ TLS is used by default for the route. No port is specified, all ports are allowe
 
 `templates/db-template.yml`
 
-This template deploys a simple postgresl-9.4 database deployment with a TLS-enabled service.
+This template deploys a PostgreSQL database deployment with a TLS-enabled service.
 
 ## Secrets template
 
 `templates/secrets-template.yml`
 
-This template deploys the `uhc-acct-mngr` secret with all of the necessary secret key/value pairs.
+This template deploys the `ambient-api-server` secret with all of the necessary secret key/value pairs.

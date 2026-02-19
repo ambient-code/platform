@@ -49,8 +49,8 @@ func init() {
 	flags.AddGoFlagSet(flag.CommandLine)
 
 	flags.StringVar(&kind, "kind", kind, "the name of the kind.  e.g Account or User")
-	flags.StringVar(&repo, "repo", repo, "the name of the repo.  e.g github.com/yourproject")
-	flags.StringVar(&project, "project", project, "the name of the project.  e.g rh-trex")
+	flags.StringVar(&repo, "repo", repo, "the module path of the repo (e.g. github.com/ambient/platform/components)")
+	flags.StringVar(&project, "project", project, "the name of the project.  e.g ambient-api-server")
 	flags.StringVar(&fields, "fields", fields, "comma-separated list of custom fields in format name:type (e.g. 'name:string,age:int,active:bool')")
 	flags.StringVar(&plural, "plural", plural, "the plural form of the kind. If not provided, uses irregular plurals map or adds 's'")
 	flags.StringVar(&library, "library", library, "the module path of the rh-trex-ai library (e.g. github.com/openshift-online/rh-trex-ai)")

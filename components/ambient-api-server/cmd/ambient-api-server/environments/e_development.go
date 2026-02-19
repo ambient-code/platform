@@ -41,7 +41,7 @@ func (e *DevEnvImpl) Flags() map[string]string {
 		"v":                      "10",
 		"enable-authz":           "false",
 		"debug":                  "false",
-		"enable-mock":             "true",
+		"enable-mock":            "true",
 		"enable-https":           "false",
 		"enable-metrics-https":   "false",
 		"api-server-hostname":    "localhost",

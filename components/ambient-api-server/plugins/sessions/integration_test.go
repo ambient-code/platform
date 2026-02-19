@@ -10,8 +10,8 @@ import (
 	. "github.com/onsi/gomega"
 	"gopkg.in/resty.v1"
 
-	"github.com/ambient/platform/components/ambient-api-server/plugins/sessions"
 	"github.com/ambient/platform/components/ambient-api-server/pkg/api/openapi"
+	"github.com/ambient/platform/components/ambient-api-server/plugins/sessions"
 	"github.com/ambient/platform/components/ambient-api-server/test"
 	"github.com/openshift-online/rh-trex-ai/pkg/environments"
 )
@@ -259,12 +259,12 @@ func TestSessionStatusPatchMultipleFields(t *testing.T) {
 
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	statusPatch := openapi.SessionStatusPatchRequest{
-		Phase:        openapi.PtrString("Running"),
-		StartTime:    &now,
-		SdkSessionId: openapi.PtrString("sdk-abc-123"),
-		Conditions:   openapi.PtrString(`[{"type":"Ready","status":"True"}]`),
+		Phase:         openapi.PtrString("Running"),
+		StartTime:     &now,
+		SdkSessionId:  openapi.PtrString("sdk-abc-123"),
+		Conditions:    openapi.PtrString(`[{"type":"Ready","status":"True"}]`),
 		KubeNamespace: openapi.PtrString("ambient-code"),
-		KubeCrUid:    openapi.PtrString("uid-xyz-456"),
+		KubeCrUid:     openapi.PtrString("uid-xyz-456"),
 	}
 	patched, resp, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsIdStatusPatch(ctx, sessionModel.ID).SessionStatusPatchRequest(statusPatch).Execute()
 	Expect(err).NotTo(HaveOccurred(), "Error patching session status: %v", err)

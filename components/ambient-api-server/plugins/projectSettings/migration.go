@@ -11,7 +11,7 @@ func migration() *gormigrate.Migration {
 	type ProjectSettings struct {
 		db.Model
 		ProjectId     string `gorm:"uniqueIndex;not null"`
-		GroupAccess    *string
+		GroupAccess   *string
 		RunnerSecrets *string
 		Repositories  *string
 	}

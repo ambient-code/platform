@@ -6,8 +6,8 @@ RUN apt-get install -y make sudo git golang-1.21
 RUN mkdir -p /local
 COPY . /local
 
-ENV PATH="/uhc/bin:/usr/lib/go-1.21/bin/:${PATH}"
-ENV GOPATH="/uhc"
+ENV PATH="/ambient/bin:/usr/lib/go-1.21/bin/:${PATH}"
+ENV GOPATH="/ambient"
 ENV GOBIN /usr/lib/go-1.21/bin/
 ENV CGO_ENABLED=0
 

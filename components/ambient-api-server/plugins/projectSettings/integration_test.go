@@ -51,7 +51,7 @@ func TestProjectSettingsPost(t *testing.T) {
 
 	psInput := openapi.ProjectSettings{
 		ProjectId:     project.ID,
-		GroupAccess:    openapi.PtrString(`[{"group_name":"devs","role":"edit"}]`),
+		GroupAccess:   openapi.PtrString(`[{"group_name":"devs","role":"edit"}]`),
 		RunnerSecrets: openapi.PtrString(`{}`),
 		Repositories:  openapi.PtrString(`[]`),
 	}
