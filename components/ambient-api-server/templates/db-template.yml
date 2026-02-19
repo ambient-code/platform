@@ -26,7 +26,7 @@ parameters:
     description: Password for the PostgreSQL connection user.
     displayName: PostgreSQL Password
     required: true
-    value: TheBlurstOfTimes
+    value: placeholder
 
   - name: DATABASE_NAME
     description: Name of the PostgreSQL database accessed.

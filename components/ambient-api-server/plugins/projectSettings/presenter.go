@@ -35,7 +35,7 @@ func PresentProjectSettings(ps *ProjectSettings) openapi.ProjectSettings {
 		CreatedAt:     openapi.PtrTime(ps.CreatedAt),
 		UpdatedAt:     openapi.PtrTime(ps.UpdatedAt),
 		ProjectId:     ps.ProjectId,
-		GroupAccess:    ps.GroupAccess,
+		GroupAccess:   ps.GroupAccess,
 		RunnerSecrets: ps.RunnerSecrets,
 		Repositories:  ps.Repositories,
 	}
