@@ -4,8 +4,6 @@ import (
 	"context"
 
 	"gorm.io/gorm"
-
-	"github.com/openshift-online/rh-trex-ai/pkg/errors"
 )
 
 var _ SessionDao = &sessionDaoMock{}
@@ -33,15 +31,37 @@ func (d *sessionDaoMock) Create(ctx context.Context, session *Session) (*Session
 }
 
 func (d *sessionDaoMock) Replace(ctx context.Context, session *Session) (*Session, error) {
-	return nil, errors.NotImplemented("Session").AsError()
+	for i, s := range d.sessions {
+		if s.ID == session.ID {
+			d.sessions[i] = session
+			return session, nil
+		}
+	}
+	return nil, gorm.ErrRecordNotFound
 }
 
 func (d *sessionDaoMock) Delete(ctx context.Context, id string) error {
-	return errors.NotImplemented("Session").AsError()
+	for i, s := range d.sessions {
+		if s.ID == id {
+			d.sessions = append(d.sessions[:i], d.sessions[i+1:]...)
+			return nil
+		}
+	}
+	return gorm.ErrRecordNotFound
 }
 
 func (d *sessionDaoMock) FindByIDs(ctx context.Context, ids []string) (SessionList, error) {
-	return nil, errors.NotImplemented("Session").AsError()
+	idSet := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		idSet[id] = true
+	}
+	var result SessionList
+	for _, s := range d.sessions {
+		if idSet[s.ID] {
+			result = append(result, s)
+		}
+	}
+	return result, nil
 }
 
 func (d *sessionDaoMock) All(ctx context.Context) (SessionList, error) {

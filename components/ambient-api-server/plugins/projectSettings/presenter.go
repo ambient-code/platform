@@ -15,11 +15,12 @@ func ConvertProjectSettings(ps openapi.ProjectSettings) *ProjectSettings {
 	}
 	c.ProjectId = ps.ProjectId
 	c.GroupAccess = ps.GroupAccess
-	c.RunnerSecrets = ps.RunnerSecrets
 	c.Repositories = ps.Repositories
 
 	if ps.CreatedAt != nil {
 		c.CreatedAt = *ps.CreatedAt
+	}
+	if ps.UpdatedAt != nil {
 		c.UpdatedAt = *ps.UpdatedAt
 	}
 
@@ -29,14 +30,13 @@ func ConvertProjectSettings(ps openapi.ProjectSettings) *ProjectSettings {
 func PresentProjectSettings(ps *ProjectSettings) openapi.ProjectSettings {
 	reference := presenters.PresentReference(ps.ID, ps)
 	return openapi.ProjectSettings{
-		Id:            reference.Id,
-		Kind:          reference.Kind,
-		Href:          reference.Href,
-		CreatedAt:     openapi.PtrTime(ps.CreatedAt),
-		UpdatedAt:     openapi.PtrTime(ps.UpdatedAt),
-		ProjectId:     ps.ProjectId,
-		GroupAccess:   ps.GroupAccess,
-		RunnerSecrets: ps.RunnerSecrets,
-		Repositories:  ps.Repositories,
+		Id:           reference.Id,
+		Kind:         reference.Kind,
+		Href:         reference.Href,
+		CreatedAt:    openapi.PtrTime(ps.CreatedAt),
+		UpdatedAt:    openapi.PtrTime(ps.UpdatedAt),
+		ProjectId:    ps.ProjectId,
+		GroupAccess:  ps.GroupAccess,
+		Repositories: ps.Repositories,
 	}
 }

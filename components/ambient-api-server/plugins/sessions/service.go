@@ -12,11 +12,6 @@ import (
 
 const sessionsLockType db.LockType = "sessions"
 
-var (
-	DisableAdvisoryLock     = false
-	UseBlockingAdvisoryLock = true
-)
-
 type SessionService interface {
 	Get(ctx context.Context, id string) (*Session, *errors.ServiceError)
 	Create(ctx context.Context, session *Session) (*Session, *errors.ServiceError)
@@ -58,7 +53,7 @@ func (s *sqlSessionService) OnUpsert(ctx context.Context, id string) error {
 		return err
 	}
 
-	logger.Infof("Do idempotent somethings with this session: %s", session.ID)
+	logger.Infof("Session upsert event: %s", session.ID)
 
 	return nil
 }
@@ -96,28 +91,16 @@ func (s *sqlSessionService) Create(ctx context.Context, session *Session) (*Sess
 }
 
 func (s *sqlSessionService) Replace(ctx context.Context, session *Session) (*Session, *errors.ServiceError) {
-	if !DisableAdvisoryLock {
-		if UseBlockingAdvisoryLock {
-			lockOwnerID, err := s.lockFactory.NewAdvisoryLock(ctx, session.ID, sessionsLockType)
-			if err != nil {
-				return nil, errors.DatabaseAdvisoryLock(err)
-			}
-			defer s.lockFactory.Unlock(ctx, lockOwnerID)
-		} else {
-			lockOwnerID, locked, err := s.lockFactory.NewNonBlockingLock(ctx, session.ID, sessionsLockType)
-			if err != nil {
-				return nil, errors.DatabaseAdvisoryLock(err)
-			}
-			if !locked {
-				return nil, services.HandleCreateError("Session", errors.New(errors.ErrorConflict, "row locked"))
-			}
-			defer s.lockFactory.Unlock(ctx, lockOwnerID)
-		}
-	}
-
-	session, err := s.sessionDao.Replace(ctx, session)
+	lockOwnerID, err := s.lockFactory.NewAdvisoryLock(ctx, session.ID, sessionsLockType)
 	if err != nil {
-		return nil, services.HandleUpdateError("Session", err)
+		return nil, errors.DatabaseAdvisoryLock(err)
+	}
+	defer s.lockFactory.Unlock(ctx, lockOwnerID)
+
+	var replaceErr error
+	session, replaceErr = s.sessionDao.Replace(ctx, session)
+	if replaceErr != nil {
+		return nil, services.HandleUpdateError("Session", replaceErr)
 	}
 
 	_, evErr := s.events.Create(ctx, &api.Event{
@@ -173,6 +156,16 @@ func (s *sqlSessionService) AllByProjectId(ctx context.Context, projectId string
 	return sessions, nil
 }
 
+var validPhases = map[string]bool{
+	"Pending":   true,
+	"Creating":  true,
+	"Running":   true,
+	"Stopping":  true,
+	"Stopped":   true,
+	"Completed": true,
+	"Failed":    true,
+}
+
 func (s *sqlSessionService) UpdateStatus(ctx context.Context, id string, patch *SessionStatusPatchRequest) (*Session, *errors.ServiceError) {
 	session, err := s.sessionDao.Get(ctx, id)
 	if err != nil {
@@ -180,6 +173,9 @@ func (s *sqlSessionService) UpdateStatus(ctx context.Context, id string, patch *
 	}
 
 	if patch.Phase != nil {
+		if !validPhases[*patch.Phase] {
+			return nil, errors.Validation("invalid phase %q; must be one of: Pending, Creating, Running, Stopping, Stopped, Completed, Failed", *patch.Phase)
+		}
 		session.Phase = patch.Phase
 	}
 	if patch.StartTime != nil {

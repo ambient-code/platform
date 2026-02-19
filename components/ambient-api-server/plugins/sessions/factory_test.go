@@ -22,14 +22,17 @@ func newUser(name string) (*users.User, error) {
 	return result, nil
 }
 
+var sessionCounter int
+
 func newSession(id string) (*sessions.Session, error) {
 	sessionService := sessions.Service(&environments.Environment().Services)
 
-	creator, err := newUser("test-creator")
+	sessionCounter++
+	creator, err := newUser(fmt.Sprintf("test-creator-%d", sessionCounter))
 	if err != nil {
 		return nil, fmt.Errorf("newUser(creator): %w", err)
 	}
-	assignee, err := newUser("test-assignee")
+	assignee, err := newUser(fmt.Sprintf("test-assignee-%d", sessionCounter))
 	if err != nil {
 		return nil, fmt.Errorf("newUser(assignee): %w", err)
 	}

@@ -1710,8 +1710,6 @@ components:
             type: string
           group_access:
             type: string
-          runner_secrets:
-            type: string
           repositories:
             type: string
           created_at:
@@ -1725,7 +1723,6 @@ components:
         type: object
       example:
         updated_at: 2000-01-23T04:56:07.000+00:00
-        runner_secrets: runner_secrets
         project_id: project_id
         repositories: repositories
         kind: kind
@@ -1749,7 +1746,6 @@ components:
         page: 0
         items:
         - updated_at: 2000-01-23T04:56:07.000+00:00
-          runner_secrets: runner_secrets
           project_id: project_id
           repositories: repositories
           kind: kind
@@ -1758,7 +1754,6 @@ components:
           href: href
           group_access: group_access
         - updated_at: 2000-01-23T04:56:07.000+00:00
-          runner_secrets: runner_secrets
           project_id: project_id
           repositories: repositories
           kind: kind
@@ -1768,7 +1763,6 @@ components:
           group_access: group_access
     ProjectSettingsPatchRequest:
       example:
-        runner_secrets: runner_secrets
         project_id: project_id
         repositories: repositories
         group_access: group_access
@@ -1776,8 +1770,6 @@ components:
         project_id:
           type: string
         group_access:
-          type: string
-        runner_secrets:
           type: string
         repositories:
           type: string

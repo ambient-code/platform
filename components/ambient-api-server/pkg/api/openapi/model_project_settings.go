@@ -23,15 +23,14 @@ var _ MappedNullable = &ProjectSettings{}
 
 // ProjectSettings struct for ProjectSettings
 type ProjectSettings struct {
-	Id            *string    `json:"id,omitempty"`
-	Kind          *string    `json:"kind,omitempty"`
-	Href          *string    `json:"href,omitempty"`
-	CreatedAt     *time.Time `json:"created_at,omitempty"`
-	UpdatedAt     *time.Time `json:"updated_at,omitempty"`
-	ProjectId     string     `json:"project_id"`
-	GroupAccess   *string    `json:"group_access,omitempty"`
-	RunnerSecrets *string    `json:"runner_secrets,omitempty"`
-	Repositories  *string    `json:"repositories,omitempty"`
+	Id           *string    `json:"id,omitempty"`
+	Kind         *string    `json:"kind,omitempty"`
+	Href         *string    `json:"href,omitempty"`
+	CreatedAt    *time.Time `json:"created_at,omitempty"`
+	UpdatedAt    *time.Time `json:"updated_at,omitempty"`
+	ProjectId    string     `json:"project_id"`
+	GroupAccess  *string    `json:"group_access,omitempty"`
+	Repositories *string    `json:"repositories,omitempty"`
 }
 
 type _ProjectSettings ProjectSettings
@@ -270,38 +269,6 @@ func (o *ProjectSettings) SetGroupAccess(v string) {
 	o.GroupAccess = &v
 }
 
-// GetRunnerSecrets returns the RunnerSecrets field value if set, zero value otherwise.
-func (o *ProjectSettings) GetRunnerSecrets() string {
-	if o == nil || IsNil(o.RunnerSecrets) {
-		var ret string
-		return ret
-	}
-	return *o.RunnerSecrets
-}
-
-// GetRunnerSecretsOk returns a tuple with the RunnerSecrets field value if set, nil otherwise
-// and a boolean to check if the value has been set.
-func (o *ProjectSettings) GetRunnerSecretsOk() (*string, bool) {
-	if o == nil || IsNil(o.RunnerSecrets) {
-		return nil, false
-	}
-	return o.RunnerSecrets, true
-}
-
-// HasRunnerSecrets returns a boolean if a field has been set.
-func (o *ProjectSettings) HasRunnerSecrets() bool {
-	if o != nil && !IsNil(o.RunnerSecrets) {
-		return true
-	}
-
-	return false
-}
-
-// SetRunnerSecrets gets a reference to the given string and assigns it to the RunnerSecrets field.
-func (o *ProjectSettings) SetRunnerSecrets(v string) {
-	o.RunnerSecrets = &v
-}
-
 // GetRepositories returns the Repositories field value if set, zero value otherwise.
 func (o *ProjectSettings) GetRepositories() string {
 	if o == nil || IsNil(o.Repositories) {
@@ -362,9 +329,6 @@ func (o ProjectSettings) ToMap() (map[string]interface{}, error) {
 	toSerialize["project_id"] = o.ProjectId
 	if !IsNil(o.GroupAccess) {
 		toSerialize["group_access"] = o.GroupAccess
-	}
-	if !IsNil(o.RunnerSecrets) {
-		toSerialize["runner_secrets"] = o.RunnerSecrets
 	}
 	if !IsNil(o.Repositories) {
 		toSerialize["repositories"] = o.Repositories

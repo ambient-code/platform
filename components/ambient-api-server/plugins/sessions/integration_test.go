@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -68,7 +69,8 @@ func TestSessionPost(t *testing.T) {
 	Expect(*sessionOutput.Id).NotTo(BeEmpty(), "Expected ID assigned on creation")
 	Expect(*sessionOutput.Kind).To(Equal("Session"))
 	Expect(*sessionOutput.Href).To(Equal(fmt.Sprintf("/api/ambient-api-server/v1/sessions/%s", *sessionOutput.Id)))
-	Expect(sessionOutput.CreatedByUserId).To(BeNil(), "created_by_user_id must be ignored on create (read-only field)")
+	Expect(sessionOutput.CreatedByUserId).NotTo(BeNil(), "created_by_user_id must be set from JWT")
+	Expect(*sessionOutput.CreatedByUserId).To(Equal(strings.ToLower(account.Username())), "created_by_user_id must match authenticated user, not client-supplied value")
 
 	jwtToken := ctx.Value(openapi.ContextAccessToken)
 	restyResp, err := resty.R().
@@ -176,7 +178,8 @@ func TestSessionExpandedFields(t *testing.T) {
 	Expect(created.KubeCrName).NotTo(BeNil(), "kube_cr_name should be auto-set")
 	Expect(*created.KubeCrName).To(Equal(*created.Id), "kube_cr_name should equal session ID")
 
-	Expect(created.CreatedByUserId).To(BeNil(), "created_by_user_id must be ignored on create (read-only)")
+	Expect(created.CreatedByUserId).NotTo(BeNil(), "created_by_user_id must be set from JWT")
+	Expect(*created.CreatedByUserId).To(Equal(strings.ToLower(account.Username())), "created_by_user_id must match authenticated user, not client-supplied value")
 	Expect(created.Phase).To(BeNil(), "phase should be nil on creation")
 	Expect(created.StartTime).To(BeNil(), "start_time should be nil on creation")
 
@@ -666,7 +669,9 @@ func TestSessionCreatedByUserIdReadOnly(t *testing.T) {
 	created, resp, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsPost(ctx).Session(sessionInput).Execute()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusCreated))
-	Expect(created.CreatedByUserId).To(BeNil(), "created_by_user_id must not be settable via POST")
+	expectedUsername := strings.ToLower(account.Username())
+	Expect(created.CreatedByUserId).NotTo(BeNil(), "created_by_user_id must be set from JWT")
+	Expect(*created.CreatedByUserId).To(Equal(expectedUsername), "created_by_user_id must match authenticated user, not attacker-supplied value")
 
 	jwtToken := ctx.Value(openapi.ContextAccessToken)
 	restyResp, err := resty.R().
@@ -681,7 +686,7 @@ func TestSessionCreatedByUserIdReadOnly(t *testing.T) {
 	Expect(err).NotTo(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
 	Expect(fetched.Name).To(Equal("patched-name"), "name should be updated by PATCH")
-	Expect(fetched.CreatedByUserId).To(BeNil(), "created_by_user_id must not be settable via PATCH")
+	Expect(*fetched.CreatedByUserId).To(Equal(expectedUsername), "created_by_user_id must not be changed via PATCH")
 }
 
 func TestSessionAll(t *testing.T) {
