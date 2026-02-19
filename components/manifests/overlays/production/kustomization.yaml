@@ -31,6 +31,13 @@ patches:
   target:
     kind: Service
     name: frontend-service
+# PostgreSQL: use RHEL image with proper env vars and mount paths (JSON patch)
+- path: postgresql-json-patch.yaml
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: postgresql
 
 # Production images
 images:
@@ -38,25 +45,25 @@ images:
   newName: quay.io/ambient_code/vteam_backend
   newTag: latest
 - name: quay.io/ambient_code/vteam_backend:latest
-  newName: quay.io/mskarbek/vteam_backend
+  newName: quay.io/ambient_code/vteam_backend
   newTag: latest
 - name: quay.io/ambient_code/vteam_claude_runner
   newName: quay.io/ambient_code/vteam_claude_runner
   newTag: latest
 - name: quay.io/ambient_code/vteam_claude_runner:latest
-  newName: quay.io/mskarbek/vteam_claude_runner
+  newName: quay.io/ambient_code/vteam_claude_runner
   newTag: latest
 - name: quay.io/ambient_code/vteam_frontend
   newName: quay.io/ambient_code/vteam_frontend
   newTag: latest
 - name: quay.io/ambient_code/vteam_frontend:latest
-  newName: quay.io/mskarbek/vteam_frontend
+  newName: quay.io/ambient_code/vteam_frontend
   newTag: latest
 - name: quay.io/ambient_code/vteam_operator
   newName: quay.io/ambient_code/vteam_operator
   newTag: latest
 - name: quay.io/ambient_code/vteam_operator:latest
-  newName: quay.io/mskarbek/vteam_operator
+  newName: quay.io/ambient_code/vteam_operator
   newTag: latest
 - name: quay.io/ambient_code/vteam_public_api
   newName: quay.io/ambient_code/vteam_public_api
@@ -65,16 +72,6 @@ images:
   newName: quay.io/ambient_code/vteam_public_api
   newTag: latest
 - name: quay.io/ambient_code/vteam_state_sync:latest
-  newName: quay.io/mskarbek/vteam_state_sync
+  newName: quay.io/ambient_code/vteam_state_sync
   newTag: latest
 # PostgreSQL: RHEL image handled via JSON patch (postgresql-json-patch.yaml)
-
-# JSON patches for proper replacement (not merge)
-# PostgreSQL: use RHEL image with proper env vars and mount paths
-patchesJson6902:
-- path: postgresql-json-patch.yaml
-  target:
-    group: apps
-    kind: Deployment
-    name: postgresql
-    version: v1

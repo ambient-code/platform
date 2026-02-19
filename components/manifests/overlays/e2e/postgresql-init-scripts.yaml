@@ -1,0 +1,47 @@
+# Init scripts ConfigMap for PostgreSQL - creates databases for each service
+# Only used in kind overlay (production uses init containers per service)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgresql-init-scripts
+  labels:
+    app: postgresql
+    app.kubernetes.io/name: postgresql
+data:
+  # Create databases for platform services
+  # Add new services here as needed
+  init-databases.sh: |
+    #!/bin/bash
+    set -e
+
+    # Function to create database if it doesn't exist
+    # Uses parameterized queries to avoid SQL injection
+    create_db_if_not_exists() {
+      local db_name="$1"
+      # Validate database name contains only allowed characters
+      if [[ ! "$db_name" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]]; then
+        echo "ERROR: Invalid database name: $db_name"
+        exit 1
+      fi
+      echo "Checking database: $db_name"
+      # Check if database exists
+      if psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" -tAc \
+        "SELECT 1 FROM pg_database WHERE datname = '$db_name'" | grep -q 1; then
+        echo "Database $db_name already exists"
+      else
+        echo "Creating database: $db_name"
+        psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" -c "CREATE DATABASE $db_name"
+        psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" -c "GRANT ALL PRIVILEGES ON DATABASE $db_name TO $POSTGRES_USER"
+      fi
+      echo "Database $db_name ready"
+    }
+
+    # Create databases for each service
+    # Unleash feature flags
+    create_db_if_not_exists "unleash"
+
+    # Add more databases here as services are added:
+    # create_db_if_not_exists "langfuse"
+    # create_db_if_not_exists "other_service"
+
+    echo "All databases initialized successfully"

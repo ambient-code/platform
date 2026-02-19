@@ -12,6 +12,9 @@ resources:
 # backend-ingress removed - all traffic goes through frontend (Next.js proxies to backend)
 - operator-config.yaml
 - minio-credentials.yaml
+- postgresql-credentials.yaml
+# PostgreSQL init scripts for database creation
+- postgresql-init-scripts.yaml
 
 # Patches for e2e environment
 patches:
@@ -35,27 +38,32 @@ patches:
   target:
     kind: Deployment
     name: agentic-operator
-
 # JSON patches to set imagePullPolicy for all deployments
-patchesJson6902:
-- target:
+- path: image-pull-policy-patch.yaml
+  target:
     group: apps
     version: v1
     kind: Deployment
     name: backend-api
-  path: image-pull-policy-patch.yaml
-- target:
+- path: image-pull-policy-patch.yaml
+  target:
     group: apps
     version: v1
     kind: Deployment
     name: frontend
-  path: image-pull-policy-patch.yaml
-- target:
+- path: image-pull-policy-patch.yaml
+  target:
     group: apps
     version: v1
     kind: Deployment
     name: agentic-operator
-  path: image-pull-policy-patch.yaml
+# PostgreSQL: add init-scripts volume for database creation
+- path: postgresql-init-scripts-patch.yaml
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: postgresql
 
 # E2E images - use local builds (all components)
 # Runner image is controlled by AMBIENT_CODE_RUNNER_IMAGE in operator-env-patch
