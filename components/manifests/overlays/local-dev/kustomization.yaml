@@ -14,13 +14,21 @@ resources:
 - operator-config-crc.yaml
 
 # Patches for local dev environment
-patchesStrategicMerge:
-- backend-deployment-patch.yaml
-- frontend-deployment-patch.yaml
-- operator-patch.yaml
-- pvc-patch.yaml
-- backend-clusterrole-patch.yaml
-- operator-clusterrole-patch.yaml
+patches:
+# Strategic merge patches
+- path: backend-deployment-patch.yaml
+- path: frontend-deployment-patch.yaml
+- path: operator-patch.yaml
+- path: pvc-patch.yaml
+- path: backend-clusterrole-patch.yaml
+- path: operator-clusterrole-patch.yaml
+# PostgreSQL: use RHEL image with proper env vars and mount paths (JSON patch)
+- path: postgresql-json-patch.yaml
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: postgresql
 
 # Name prefix for local dev resources
 namePrefix: vteam-
@@ -39,3 +47,4 @@ images:
 - name: quay.io/ambient_code/vteam_claude_runner
   newName: quay.io/ambient_code/vteam_claude_runner
   newTag: latest
+# PostgreSQL: RHEL image handled via JSON patch (postgresql-json-patch.yaml)
