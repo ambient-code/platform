@@ -1,5 +1,5 @@
 # JSON patch to replace PostgreSQL container for RHEL image
-# Replaces volumeMounts to fix mount path and remove init-scripts (not used by RHEL)
+# Replaces volumeMounts to fix mount path for RHEL data directory
 # Replaces env vars for RHEL naming convention (POSTGRESQL_* instead of POSTGRES_*)
 # Replaces probes to use POSTGRESQL_USER env var
 - op: replace
@@ -40,6 +40,3 @@
   - /bin/sh
   - -c
   - pg_isready -U "$POSTGRESQL_USER"
-# Remove init-scripts volume (not used by RHEL image)
-- op: remove
-  path: /spec/template/spec/volumes/1
