@@ -27,7 +27,7 @@ Name | Type | Description | Notes
 **EnvironmentVariables** | Pointer to **string** |  | [optional] 
 **Labels** | Pointer to **string** |  | [optional] 
 **Annotations** | Pointer to **string** |  | [optional] 
-**ProjectId** | Pointer to **string** |  | [optional] 
+**ProjectId** | Pointer to **string** | Immutable after creation. Set at creation time only. | [optional] 
 **Phase** | Pointer to **string** |  | [optional] [readonly] 
 **StartTime** | Pointer to **time.Time** |  | [optional] [readonly] 
 **CompletionTime** | Pointer to **time.Time** |  | [optional] [readonly] 

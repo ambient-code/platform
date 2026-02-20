@@ -62,11 +62,11 @@ func (d *Session) BeforeCreate(tx *gorm.DB) error {
 		defaultModel := "sonnet"
 		d.LlmModel = &defaultModel
 	}
-	if d.LlmTemperature == nil || *d.LlmTemperature == 0 {
+	if d.LlmTemperature == nil {
 		defaultTemp := 0.7
 		d.LlmTemperature = &defaultTemp
 	}
-	if d.LlmMaxTokens == nil || *d.LlmMaxTokens == 0 {
+	if d.LlmMaxTokens == nil {
 		defaultTokens := int32(4000)
 		d.LlmMaxTokens = &defaultTokens
 	}
@@ -92,7 +92,6 @@ type SessionPatchRequest struct {
 	EnvironmentVariables *string  `json:"environment_variables,omitempty"`
 	SessionLabels        *string  `json:"labels,omitempty"`
 	SessionAnnotations   *string  `json:"annotations,omitempty"`
-	ProjectId            *string  `json:"project_id,omitempty"`
 }
 
 type SessionStatusPatchRequest struct {

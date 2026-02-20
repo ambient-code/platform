@@ -373,6 +373,7 @@ components:
               type: string
             project_id:
               type: string
+              description: Immutable after creation. Set at creation time only.
             phase:
               type: string
               readOnly: true
@@ -458,8 +459,6 @@ components:
         labels:
           type: string
         annotations:
-          type: string
-        project_id:
           type: string
     SessionStatusPatchRequest:
       type: object
