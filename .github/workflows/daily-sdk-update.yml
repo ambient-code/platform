@@ -1,0 +1,183 @@
+name: Daily Claude Agent SDK Update
+
+on:
+  schedule:
+    # Run daily at 8 AM UTC
+    - cron: '0 8 * * *'
+
+  workflow_dispatch: # Allow manual triggering
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update-sdk:
+    name: Update claude-agent-sdk to latest
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Get latest SDK version from PyPI
+        id: pypi
+        run: |
+          LATEST=$(pip index versions claude-agent-sdk 2>/dev/null \
+            | head -1 \
+            | sed 's/claude-agent-sdk (\(.*\))/\1/' \
+            | awk '{print $1}')
+
+          if [ -z "$LATEST" ]; then
+            echo "Failed to fetch latest version from PyPI"
+            exit 1
+          fi
+
+          echo "latest=$LATEST" >> "$GITHUB_OUTPUT"
+          echo "Latest claude-agent-sdk on PyPI: $LATEST"
+
+      - name: Get current minimum version
+        id: current
+        run: |
+          CURRENT=$(grep 'claude-agent-sdk>=' \
+            components/runners/claude-code-runner/pyproject.toml \
+            | sed 's/.*>=\([0-9][0-9.]*\).*/\1/')
+
+          if [ -z "$CURRENT" ]; then
+            echo "Failed to parse current version from pyproject.toml"
+            exit 1
+          fi
+
+          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
+          echo "Current minimum version: $CURRENT"
+
+      - name: Check if update is needed
+        id: check
+        run: |
+          LATEST="${{ steps.pypi.outputs.latest }}"
+          CURRENT="${{ steps.current.outputs.current }}"
+
+          if [ "$LATEST" = "$CURRENT" ]; then
+            echo "Already up to date ($CURRENT)"
+            echo "needs_update=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Update available: $CURRENT -> $LATEST"
+            echo "needs_update=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check for existing PR
+        if: steps.check.outputs.needs_update == 'true'
+        id: existing_pr
+        run: |
+          EXISTING=$(gh pr list \
+            --head "auto/update-claude-agent-sdk" \
+            --state open \
+            --json number \
+            --jq 'length')
+
+          if [ "$EXISTING" -gt 0 ]; then
+            echo "Open PR already exists for SDK update branch"
+            echo "pr_exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "pr_exists=false" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update pyproject.toml
+        if: steps.check.outputs.needs_update == 'true' && steps.existing_pr.outputs.pr_exists == 'false'
+        run: |
+          LATEST="${{ steps.pypi.outputs.latest }}"
+          CURRENT="${{ steps.current.outputs.current }}"
+
+          sed -i "s/\"claude-agent-sdk>=${CURRENT}\"/\"claude-agent-sdk>=${LATEST}\"/" \
+            components/runners/claude-code-runner/pyproject.toml
+
+          echo "Updated pyproject.toml:"
+          grep claude-agent-sdk components/runners/claude-code-runner/pyproject.toml
+
+      - name: Validate update
+        if: steps.check.outputs.needs_update == 'true' && steps.existing_pr.outputs.pr_exists == 'false'
+        run: |
+          LATEST="${{ steps.pypi.outputs.latest }}"
+
+          # Verify the file was updated correctly
+          if ! grep -q "claude-agent-sdk>=${LATEST}" components/runners/claude-code-runner/pyproject.toml; then
+            echo "Validation failed: pyproject.toml does not contain expected version"
+            exit 1
+          fi
+
+          echo "Validation passed"
+
+      - name: Create branch, commit, and open PR
+        if: steps.check.outputs.needs_update == 'true' && steps.existing_pr.outputs.pr_exists == 'false'
+        run: |
+          LATEST="${{ steps.pypi.outputs.latest }}"
+          CURRENT="${{ steps.current.outputs.current }}"
+          BRANCH="auto/update-claude-agent-sdk"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Delete remote branch if it exists (leftover from a merged/closed PR)
+          git push origin --delete "$BRANCH" 2>/dev/null || true
+
+          git checkout -b "$BRANCH"
+          git add components/runners/claude-code-runner/pyproject.toml
+          git commit -m "chore(runner): update claude-agent-sdk >=${CURRENT} to >=${LATEST}
+
+          Automated daily update of the Claude Agent SDK minimum version.
+
+          Release notes: https://pypi.org/project/claude-agent-sdk/${LATEST}/"
+
+          git push -u origin "$BRANCH"
+
+          gh pr create \
+            --title "chore(runner): update claude-agent-sdk to >=${LATEST}" \
+            --body "$(cat <<EOF
+          ## Summary
+
+          - Updates \`claude-agent-sdk\` minimum version from \`>=${CURRENT}\` to \`>=${LATEST}\`
+          - File changed: \`components/runners/claude-code-runner/pyproject.toml\`
+
+          ## Release Info
+
+          PyPI: https://pypi.org/project/claude-agent-sdk/${LATEST}/
+
+          ## Test Plan
+
+          - [ ] Runner tests pass (\`runner-tests\` workflow)
+          - [ ] Container image builds successfully (\`components-build-deploy\` workflow)
+
+          ---
+          *Auto-generated by daily-sdk-update workflow*
+          EOF
+          )" \
+            --base main \
+            --head "$BRANCH" \
+            --label "dependencies"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Summary
+        if: always()
+        run: |
+          LATEST="${{ steps.pypi.outputs.latest }}"
+          CURRENT="${{ steps.current.outputs.current }}"
+
+          if [ "${{ steps.check.outputs.needs_update }}" == "false" ]; then
+            echo "## ✓ claude-agent-sdk is up to date ($CURRENT)" >> "$GITHUB_STEP_SUMMARY"
+          elif [ "${{ steps.existing_pr.outputs.pr_exists }}" == "true" ]; then
+            echo "## ⏭ Update PR already exists" >> "$GITHUB_STEP_SUMMARY"
+            echo "An open PR for \`auto/update-claude-agent-sdk\` already exists." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "## ✅ PR created: claude-agent-sdk ${CURRENT} → ${LATEST}" >> "$GITHUB_STEP_SUMMARY"
+          fi
