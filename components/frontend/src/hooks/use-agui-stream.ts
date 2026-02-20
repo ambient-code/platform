@@ -50,10 +50,12 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
   const eventBufferRef = useRef<PlatformEvent[]>([])
   const rafIdRef = useRef<number | null>(null)
 
-  // Refs for stable sendMessage (avoids recreating callback on every state change)
-  const stateThreadIdRef = useRef<string | null>(null)
-  const stateRunIdRef = useRef<string | null>(null)
-  const stateStatusRef = useRef<string>('idle')
+  // Ref snapshot of state fields used by sendMessage (avoids recreating callback on every state change)
+  const stateSnapshotRef = useRef<{
+    threadId: string | null
+    runId: string | null
+    status: AGUIClientState['status']
+  }>({ threadId: null, runId: null, status: 'idle' })
 
 
   // Exponential backoff config for reconnection
@@ -73,11 +75,13 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
     }
   }, [])
 
-  // Keep sendMessage refs in sync with state
+  // Keep sendMessage snapshot in sync with state
   useEffect(() => {
-    stateThreadIdRef.current = state.threadId
-    stateRunIdRef.current = state.runId
-    stateStatusRef.current = state.status
+    stateSnapshotRef.current = {
+      threadId: state.threadId,
+      runId: state.runId,
+      status: state.status,
+    }
   }, [state.threadId, state.runId, state.status])
 
   // Process incoming AG-UI events
@@ -105,11 +109,12 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
     processEventRef.current = processEvent
   }, [processEvent])
 
-  // Flush all buffered events in a single synchronous pass
-  // React 18 batches all setState calls within the same synchronous callback,
-  // so N events → N setState calls → 1 re-render (instead of N re-renders)
+  // Flush all buffered events in a single synchronous pass.
+  // React 18+ batches all setState calls within the same synchronous callback,
+  // so N events → N setState calls → 1 re-render (instead of N re-renders).
   const flushEventBuffer = useCallback(() => {
     rafIdRef.current = null
+    if (!mountedRef.current) return
     const events = eventBufferRef.current
     if (events.length === 0) return
     eventBufferRef.current = []
@@ -312,8 +317,8 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            threadId: stateThreadIdRef.current || sessionName,
-            parentRunId: stateRunIdRef.current,
+            threadId: stateSnapshotRef.current.threadId || sessionName,
+            parentRunId: stateSnapshotRef.current.runId,
             messages: [userMessage],
           }),
         })
@@ -341,7 +346,7 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
         }
 
         // Ensure we're connected to the thread stream to receive events
-        if (stateStatusRef.current !== 'connected') {
+        if (stateSnapshotRef.current.status !== 'connected') {
           connect()
         }
       } catch (error) {
