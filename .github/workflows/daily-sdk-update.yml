@@ -11,14 +11,19 @@ permissions:
   contents: write
   pull-requests: write
 
+concurrency:
+  group: daily-sdk-update
+  cancel-in-progress: false
+
 jobs:
   update-sdk:
     name: Update claude-agent-sdk to latest
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: main
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -26,7 +31,7 @@ jobs:
       - name: Get latest SDK version from PyPI
         id: pypi
         run: |
-          LATEST=$(curl -sf https://pypi.org/pypi/claude-agent-sdk/json | jq -r '.info.version')
+          LATEST=$(curl -sf --max-time 30 https://pypi.org/pypi/claude-agent-sdk/json | jq -r '.info.version')
 
           if [ -z "$LATEST" ] || [ "$LATEST" = "null" ]; then
             echo "Failed to fetch latest version from PyPI"
@@ -58,10 +63,10 @@ jobs:
 
       - name: Check if update is needed
         id: check
+        env:
+          LATEST: ${{ steps.pypi.outputs.latest }}
+          CURRENT: ${{ steps.current.outputs.current }}
         run: |
-          LATEST="${{ steps.pypi.outputs.latest }}"
-          CURRENT="${{ steps.current.outputs.current }}"
-
           # Use version sort — if current sorts last, we are already up to date
           NEWEST=$(printf '%s\n%s' "$CURRENT" "$LATEST" | sort -V | tail -1)
 
@@ -94,10 +99,10 @@ jobs:
 
       - name: Update pyproject.toml
         if: steps.check.outputs.needs_update == 'true' && steps.existing_pr.outputs.pr_exists == 'false'
+        env:
+          LATEST: ${{ steps.pypi.outputs.latest }}
+          CURRENT: ${{ steps.current.outputs.current }}
         run: |
-          LATEST="${{ steps.pypi.outputs.latest }}"
-          CURRENT="${{ steps.current.outputs.current }}"
-
           # Escape dots for sed regex
           CURRENT_ESC=$(echo "$CURRENT" | sed 's/\./\\./g')
 
@@ -115,16 +120,18 @@ jobs:
 
       - name: Create branch, commit, and open PR
         if: steps.check.outputs.needs_update == 'true' && steps.existing_pr.outputs.pr_exists == 'false'
+        env:
+          LATEST: ${{ steps.pypi.outputs.latest }}
+          CURRENT: ${{ steps.current.outputs.current }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          LATEST="${{ steps.pypi.outputs.latest }}"
-          CURRENT="${{ steps.current.outputs.current }}"
           BRANCH="auto/update-claude-agent-sdk"
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
           # Delete remote branch if it exists (leftover from a merged/closed PR)
-          git push origin --delete "$BRANCH" 2>/dev/null || true
+          git push origin --delete "$BRANCH" 2>&1 || echo "Branch $BRANCH did not exist or could not be deleted"
 
           git checkout -b "$BRANCH"
           git add components/runners/claude-code-runner/pyproject.toml
@@ -157,24 +164,27 @@ jobs:
             --title "chore(runner): update claude-agent-sdk to >=${LATEST}" \
             --body "$PR_BODY" \
             --base main \
-            --head "$BRANCH" \
-            --label "dependencies"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            --head "$BRANCH"
 
       - name: Summary
         if: always()
+        env:
+          NEEDS_UPDATE: ${{ steps.check.outputs.needs_update }}
+          PR_EXISTS: ${{ steps.existing_pr.outputs.pr_exists }}
+          CURRENT: ${{ steps.current.outputs.current }}
+          LATEST: ${{ steps.pypi.outputs.latest }}
+          JOB_STATUS: ${{ job.status }}
         run: |
-          if [ "${{ steps.check.outputs.needs_update }}" = "false" ]; then
+          if [ "$NEEDS_UPDATE" = "false" ]; then
             echo "## No update needed" >> "$GITHUB_STEP_SUMMARY"
-            echo "claude-agent-sdk \`${{ steps.current.outputs.current }}\` is already the latest." >> "$GITHUB_STEP_SUMMARY"
-          elif [ "${{ steps.existing_pr.outputs.pr_exists }}" = "true" ]; then
+            echo "claude-agent-sdk \`${CURRENT}\` is already the latest." >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$PR_EXISTS" = "true" ]; then
             echo "## Update PR already exists" >> "$GITHUB_STEP_SUMMARY"
             echo "An open PR for branch \`auto/update-claude-agent-sdk\` already exists." >> "$GITHUB_STEP_SUMMARY"
-          elif [ "${{ job.status }}" = "failure" ]; then
+          elif [ "$JOB_STATUS" = "failure" ]; then
             echo "## Update failed" >> "$GITHUB_STEP_SUMMARY"
             echo "Check the logs above for details." >> "$GITHUB_STEP_SUMMARY"
           else
             echo "## PR created" >> "$GITHUB_STEP_SUMMARY"
-            echo "claude-agent-sdk \`${{ steps.current.outputs.current }}\` -> \`${{ steps.pypi.outputs.latest }}\`" >> "$GITHUB_STEP_SUMMARY"
+            echo "claude-agent-sdk \`${CURRENT}\` -> \`${LATEST}\`" >> "$GITHUB_STEP_SUMMARY"
           fi
