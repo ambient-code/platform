@@ -1,7 +1,7 @@
 openapi: 3.0.0
 info:
   contact:
-    email: admin@your.project.com
+    email: ambient-code@redhat.com
   description: Ambient API Server
   license:
     name: Apache-2.0
@@ -12,9 +12,9 @@ servers:
 - description: current domain
   url: http://localhost:8000
 - description: Production
-  url: https://api.your.project.com
+  url: https://api.ambient-code.com
 - description: Staging
-  url: https://api.stage.your.project.com
+  url: https://api.stage.ambient-code.com
 security:
 - Bearer: []
 paths:
@@ -1351,6 +1351,7 @@ components:
           annotations:
             type: string
           project_id:
+            description: Immutable after creation. Set at creation time only.
             type: string
           phase:
             readOnly: true
@@ -1525,7 +1526,6 @@ components:
         timeout: 0
         labels: labels
         environment_variables: environment_variables
-        project_id: project_id
         bot_account_name: bot_account_name
         repos: repos
         name: name
@@ -1566,8 +1566,6 @@ components:
         labels:
           type: string
         annotations:
-          type: string
-        project_id:
           type: string
       type: object
     SessionStatusPatchRequest:

@@ -40,18 +40,14 @@ main.go → imports plugins (init side-effects) → registers routes, controller
 
 ## Domain Model
 
-Eight resource Kinds following the "AS agent WITH skills DO tasks" workflow pattern:
+Four resource Kinds currently implemented. Additional Kinds (Agent, Skill, Task, Workflow, WorkflowSkill, WorkflowTask) are planned for Phase 2 — see `DATA_MODEL_COMPARISON.md` for the full roadmap.
 
-| Kind | Key Fields | Purpose |
-|------|-----------|---------|
-| **Agent** | name, repo_url, prompt | AI agent definition |
-| **Skill** | name, repo_url, prompt | Capability a workflow can use |
-| **Task** | name, repo_url, prompt | Unit of work in a workflow |
-| **Workflow** | name, repo_url, prompt, agent_id | Orchestration binding agent → skills → tasks |
-| **WorkflowSkill** | workflow_id, skill_id, position | Join: workflow ↔ skill (ordered) |
-| **WorkflowTask** | workflow_id, task_id, position | Join: workflow ↔ task (ordered) |
-| **Session** | name, repo_url, prompt, workflow_id, created_by_user_id, assigned_user_id | Execution instance of a workflow |
-| **User** | username, name | Platform user |
+| Kind | Key Fields | Purpose | Status |
+|------|-----------|---------|--------|
+| **Session** | name, repo_url, prompt, workflow_id, created_by_user_id, assigned_user_id | Execution instance of a workflow | ✅ Implemented |
+| **User** | username, name | Platform user | ✅ Implemented |
+| **Project** | name, display_name, description | Multi-tenant project scoping | ✅ Implemented |
+| **ProjectSettings** | project_id, group_access, repositories | Project configuration | ✅ Implemented |
 
 **→ Load `docs/data-model.md` for field details, relationships, and database schema.**
 
@@ -175,7 +171,7 @@ All routes under `/api/ambient-api-server/v1/`:
 | PATCH | `/{kinds}/{id}` | Patch |
 | DELETE | `/{kinds}/{id}` | Delete |
 
-Kinds: `agents`, `skills`, `tasks`, `workflows`, `sessions`, `workflow_skills`, `workflow_tasks`, `users`
+Kinds: `sessions`, `users`, `projects`, `project_settings`
 
 ## Cross-Session Coordination
 

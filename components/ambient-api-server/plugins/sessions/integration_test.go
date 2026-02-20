@@ -822,3 +822,50 @@ func TestSessionListSearch(t *testing.T) {
 	Expect(list.Total).To(Equal(int32(1)))
 	Expect(*list.Items[0].Id).To(Equal(sessions[0].ID))
 }
+
+func TestSessionProjectIdImmutableViaPatch(t *testing.T) {
+	h, client := test.RegisterIntegration(t)
+
+	account := h.NewRandAccount()
+	ctx := h.NewAuthenticatedContext(account)
+
+	sessionInput := openapi.Session{
+		Name:      "project-immutable-test",
+		ProjectId: openapi.PtrString("original-project"),
+	}
+	created, resp, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsPost(ctx).Session(sessionInput).Execute()
+	Expect(err).NotTo(HaveOccurred())
+	Expect(resp.StatusCode).To(Equal(http.StatusCreated))
+	Expect(*created.ProjectId).To(Equal("original-project"))
+
+	jwtToken := ctx.Value(openapi.ContextAccessToken)
+	restyResp, err := resty.R().
+		SetHeader("Content-Type", "application/json").
+		SetHeader("Authorization", fmt.Sprintf("Bearer %s", jwtToken)).
+		SetBody(`{"project_id":"hijacked-project","name":"patched-name"}`).
+		Patch(h.RestURL(fmt.Sprintf("/sessions/%s", *created.Id)))
+	Expect(err).NotTo(HaveOccurred())
+	Expect(restyResp.StatusCode()).To(Equal(http.StatusOK))
+
+	fetched, resp, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsIdGet(ctx, *created.Id).Execute()
+	Expect(err).NotTo(HaveOccurred())
+	Expect(resp.StatusCode).To(Equal(http.StatusOK))
+	Expect(fetched.Name).To(Equal("patched-name"), "name should be updated by PATCH")
+	Expect(*fetched.ProjectId).To(Equal("original-project"), "project_id must not be changed via PATCH")
+}
+
+func TestSessionLlmTemperatureZeroAllowed(t *testing.T) {
+	h, client := test.RegisterIntegration(t)
+
+	account := h.NewRandAccount()
+	ctx := h.NewAuthenticatedContext(account)
+
+	sessionInput := openapi.Session{
+		Name:           "zero-temp-test",
+		LlmTemperature: openapi.PtrFloat64(0.0),
+	}
+	created, resp, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsPost(ctx).Session(sessionInput).Execute()
+	Expect(err).NotTo(HaveOccurred())
+	Expect(resp.StatusCode).To(Equal(http.StatusCreated))
+	Expect(*created.LlmTemperature).To(BeNumerically("~", 0.0, 0.001), "temperature 0.0 must be preserved, not overwritten by default")
+}

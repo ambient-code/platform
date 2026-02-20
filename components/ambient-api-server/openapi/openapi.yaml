@@ -4,16 +4,16 @@ info:
   description: Ambient API Server
   version: "1.0.0"
   contact:
-    email: admin@your.project.com
+    email: ambient-code@redhat.com
   license:
     name: Apache-2.0
     url: https://www.apache.org/licenses/LICENSE-2.0.html
 servers:
   - url: http://localhost:8000
     description: current domain
-  - url: https://api.your.project.com
+  - url: https://api.ambient-code.com
     description: Production
-  - url: https://api.stage.your.project.com
+  - url: https://api.stage.ambient-code.com
     description: Staging
 paths:
   /api/ambient-api-server/v1/sessions:
