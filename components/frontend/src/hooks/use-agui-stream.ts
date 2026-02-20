@@ -45,6 +45,17 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
   const reconnectAttemptsRef = useRef(0)
   const mountedRef = useRef(false)
 
+  // Event batching: buffer SSE events and flush via requestAnimationFrame
+  // This prevents re-rendering on every token during streaming (~20-50 events/sec → 1 render/frame)
+  const eventBufferRef = useRef<PlatformEvent[]>([])
+  const rafIdRef = useRef<number | null>(null)
+
+  // Refs for stable sendMessage (avoids recreating callback on every state change)
+  const stateThreadIdRef = useRef<string | null>(null)
+  const stateRunIdRef = useRef<string | null>(null)
+  const stateStatusRef = useRef<string>('idle')
+
+
   // Exponential backoff config for reconnection
   const MAX_RECONNECT_DELAY = 30000 // 30 seconds max
   const BASE_RECONNECT_DELAY = 1000 // 1 second base
@@ -54,8 +65,20 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
     mountedRef.current = true
     return () => {
       mountedRef.current = false
+      // Cancel any pending rAF flush on unmount
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current)
+        rafIdRef.current = null
+      }
     }
   }, [])
+
+  // Keep sendMessage refs in sync with state
+  useEffect(() => {
+    stateThreadIdRef.current = state.threadId
+    stateRunIdRef.current = state.runId
+    stateStatusRef.current = state.status
+  }, [state.threadId, state.runId, state.status])
 
   // Process incoming AG-UI events
   const processEvent = useCallback(
@@ -75,6 +98,33 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
     },
     [onEvent, onMessage, onError, onTraceId],
   )
+
+  // Keep a ref to processEvent for use inside rAF callbacks (avoids stale closures)
+  const processEventRef = useRef(processEvent)
+  useEffect(() => {
+    processEventRef.current = processEvent
+  }, [processEvent])
+
+  // Flush all buffered events in a single synchronous pass
+  // React 18 batches all setState calls within the same synchronous callback,
+  // so N events → N setState calls → 1 re-render (instead of N re-renders)
+  const flushEventBuffer = useCallback(() => {
+    rafIdRef.current = null
+    const events = eventBufferRef.current
+    if (events.length === 0) return
+    eventBufferRef.current = []
+
+    for (const event of events) {
+      processEventRef.current(event)
+    }
+  }, [])
+
+  // Schedule a flush on the next animation frame (~60fps max)
+  const scheduleFlush = useCallback(() => {
+    if (rafIdRef.current === null) {
+      rafIdRef.current = requestAnimationFrame(flushEventBuffer)
+    }
+  }, [flushEventBuffer])
 
   // Connect to the AG-UI event stream
   const connect = useCallback(
@@ -113,7 +163,9 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
       eventSource.onmessage = (e) => {
         try {
           const event = JSON.parse(e.data) as PlatformEvent
-          processEvent(event)
+          // Buffer events and flush via requestAnimationFrame for batched rendering
+          eventBufferRef.current.push(event)
+          scheduleFlush()
         } catch (err) {
           console.error('Failed to parse AG-UI event:', err)
         }
@@ -164,11 +216,18 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
         }, delay)
       }
     },
-    [projectName, sessionName, processEvent, onConnected, onError, onDisconnected],
+    [projectName, sessionName, scheduleFlush, onConnected, onError, onDisconnected],
   )
 
   // Disconnect from the event stream
   const disconnect = useCallback(() => {
+    // Cancel any pending rAF flush and clear buffered events
+    if (rafIdRef.current !== null) {
+      cancelAnimationFrame(rafIdRef.current)
+      rafIdRef.current = null
+    }
+    eventBufferRef.current = []
+
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current)
       reconnectTimeoutRef.current = null
@@ -222,6 +281,7 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
 
   // Send a message to start/continue the conversation
   // AG-UI server pattern: POST returns SSE stream directly
+  // Uses refs for threadId/runId/status so the callback is stable across state changes
   const sendMessage = useCallback(
     async (content: string) => {
       // Send to backend via run endpoint - this returns an SSE stream
@@ -244,6 +304,7 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
         } as PlatformMessage],
       }))
 
+
       try {
         const response = await fetch(runUrl, {
           method: 'POST',
@@ -251,8 +312,8 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            threadId: state.threadId || sessionName,
-            parentRunId: state.runId,
+            threadId: stateThreadIdRef.current || sessionName,
+            parentRunId: stateRunIdRef.current,
             messages: [userMessage],
           }),
         })
@@ -279,8 +340,8 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
           setIsRunActive(true)
         }
 
-        // Ensure we're connected to the thread stream to receive events.
-        if (!eventSourceRef.current) {
+        // Ensure we're connected to the thread stream to receive events
+        if (stateStatusRef.current !== 'connected') {
           connect()
         }
       } catch (error) {
@@ -293,7 +354,7 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
         throw error
       }
     },
-    [projectName, sessionName, state.threadId, state.runId, connect],
+    [projectName, sessionName, connect],
   )
 
   // Auto-connect on mount if enabled (client-side only)
