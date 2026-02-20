@@ -3,12 +3,13 @@
 Tests for the feedback loop query/aggregation script.
 
 Validates:
-1. Score grouping by repo_url and workflow
+1. Score grouping by workflow (repo_url, branch, path)
 2. Prompt generation content and structure
 3. Session creation API calls
 4. Dry run mode
 """
 
+import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -29,29 +30,32 @@ from query_corrections import (
 
 
 def _make_score(
-    category="wrong_approach",
-    severity=2,
-    scope="repo_context",
-    description="Test correction",
-    repo_url="https://github.com/org/repo",
-    workflow="workflows/bug-fix",
+    correction_type="incorrect",
+    agent_action="Used wrong approach",
+    user_correction="Should have done it this way",
+    workflow_repo_url="https://github.com/org/workflows",
+    workflow_branch="main",
+    workflow_path="workflows/bug-fix",
+    repos=None,
     session_name="session-1",
     trace_id="trace-abc",
-    correction_details=None,
 ):
-    """Helper to create a test score object."""
+    """Helper to create a test score object matching the new schema."""
+    if repos is None:
+        repos = [{"url": "https://github.com/org/repo", "branch": "main"}]
     metadata = {
-        "category": category,
-        "scope": scope,
-        "repo_url": repo_url,
-        "workflow": workflow,
+        "correction_type": correction_type,
+        "agent_action": agent_action,
+        "user_correction": user_correction,
+        "workflow_repo_url": workflow_repo_url,
+        "workflow_branch": workflow_branch,
+        "workflow_path": workflow_path,
+        "repos": json.dumps(repos),
         "session_name": session_name,
     }
-    if correction_details:
-        metadata["correction_details"] = correction_details
     return {
-        "value": severity,
-        "comment": description,
+        "value": correction_type,  # CATEGORICAL: value is the type string
+        "comment": f"Agent did: {agent_action}\nUser corrected to: {user_correction}",
         "traceId": trace_id,
         "metadata": metadata,
         "createdAt": "2026-02-15T10:00:00Z",
@@ -63,86 +67,106 @@ def _make_score(
 # ------------------------------------------------------------------
 
 
-def test_groups_by_repo_and_workflow():
-    """Scores grouped into (repo_url, workflow) buckets."""
+def test_groups_by_workflow():
+    """Scores grouped into (workflow_repo_url, workflow_branch, workflow_path) buckets."""
     scores = [
-        _make_score(repo_url="https://github.com/org/repo-a", workflow="wf-1"),
-        _make_score(repo_url="https://github.com/org/repo-a", workflow="wf-1"),
-        _make_score(repo_url="https://github.com/org/repo-b", workflow="wf-2"),
+        _make_score(workflow_path="workflows/wf-1"),
+        _make_score(workflow_path="workflows/wf-1"),
+        _make_score(workflow_path="workflows/wf-2"),
     ]
     groups = group_corrections(scores)
     assert len(groups) == 2
 
-    # Find groups by repo
-    group_a = next(g for g in groups if "repo-a" in g["repo_url"])
-    group_b = next(g for g in groups if "repo-b" in g["repo_url"])
+    group_1 = next(g for g in groups if g["workflow_path"] == "workflows/wf-1")
+    group_2 = next(g for g in groups if g["workflow_path"] == "workflows/wf-2")
 
-    assert group_a["total_count"] == 2
-    assert group_b["total_count"] == 1
+    assert group_1["total_count"] == 2
+    assert group_2["total_count"] == 1
 
 
-def test_calculates_avg_severity():
-    """Average severity is computed correctly."""
+def test_counts_correction_types():
+    """Correction type counts are accurate."""
     scores = [
-        _make_score(severity=1),
-        _make_score(severity=3),
-        _make_score(severity=2),
+        _make_score(correction_type="incomplete"),
+        _make_score(correction_type="incomplete"),
+        _make_score(correction_type="incorrect"),
     ]
     groups = group_corrections(scores)
-    assert len(groups) == 1
-    assert groups[0]["avg_severity"] == 2.0
+    counts = groups[0]["correction_type_counts"]
+    assert counts["incomplete"] == 2
+    assert counts["incorrect"] == 1
 
 
-def test_counts_categories():
-    """Category counts are accurate."""
+def test_deduplicates_repos():
+    """Same repo URL appearing in multiple corrections is deduplicated."""
+    repo = [{"url": "https://github.com/org/repo", "branch": "main"}]
     scores = [
-        _make_score(category="wrong_approach"),
-        _make_score(category="wrong_approach"),
-        _make_score(category="style_violation"),
+        _make_score(repos=repo),
+        _make_score(repos=repo),
+        _make_score(repos=repo),
     ]
     groups = group_corrections(scores)
-    counts = groups[0]["category_counts"]
-    assert counts["wrong_approach"] == 2
-    assert counts["style_violation"] == 1
+    assert len(groups[0]["repos"]) == 1
 
 
-def test_counts_scopes():
-    """Scope counts are accurate."""
+def test_collects_repos_across_corrections():
+    """Repos from different corrections in same group are collected."""
     scores = [
-        _make_score(scope="repo_context"),
-        _make_score(scope="repo_context"),
-        _make_score(scope="workflow_instructions"),
+        _make_score(repos=[{"url": "https://github.com/org/repo-a", "branch": "main"}]),
+        _make_score(repos=[{"url": "https://github.com/org/repo-b", "branch": "main"}]),
     ]
     groups = group_corrections(scores)
-    counts = groups[0]["scope_counts"]
-    assert counts["repo_context"] == 2
-    assert counts["workflow_instructions"] == 1
+    repo_urls = {r["url"] for r in groups[0]["repos"]}
+    assert "https://github.com/org/repo-a" in repo_urls
+    assert "https://github.com/org/repo-b" in repo_urls
 
 
 def test_handles_missing_metadata():
     """Scores with missing metadata fields are handled gracefully."""
     scores = [
-        {"value": 2, "comment": "test", "metadata": None},
-        {"value": 3, "comment": "test2", "metadata": {}},
+        {"value": "incorrect", "comment": "test", "metadata": None},
+        {"value": "incomplete", "comment": "test2", "metadata": {}},
     ]
     groups = group_corrections(scores)
     assert len(groups) == 1
-    assert groups[0]["repo_url"] == "unknown"
-    assert groups[0]["workflow"] == "unknown"
+    assert groups[0]["workflow_repo_url"] == ""
+    assert groups[0]["workflow_path"] == ""
     assert groups[0]["total_count"] == 2
 
 
 def test_sorted_by_count_descending():
     """Groups sorted by total_count descending."""
     scores = [
-        _make_score(repo_url="https://github.com/org/small", workflow="wf"),
-        _make_score(repo_url="https://github.com/org/big", workflow="wf"),
-        _make_score(repo_url="https://github.com/org/big", workflow="wf"),
-        _make_score(repo_url="https://github.com/org/big", workflow="wf"),
+        _make_score(workflow_path="workflows/small"),
+        _make_score(workflow_path="workflows/big"),
+        _make_score(workflow_path="workflows/big"),
+        _make_score(workflow_path="workflows/big"),
     ]
     groups = group_corrections(scores)
-    assert groups[0]["repo_url"] == "https://github.com/org/big"
+    assert groups[0]["workflow_path"] == "workflows/big"
     assert groups[0]["total_count"] == 3
+
+
+def test_extracts_agent_action_and_user_correction():
+    """agent_action and user_correction are extracted from metadata."""
+    scores = [
+        _make_score(
+            agent_action="I modified the wrong file",
+            user_correction="Should have edited config.py not main.py",
+        )
+    ]
+    groups = group_corrections(scores)
+    correction = groups[0]["corrections"][0]
+    assert correction["agent_action"] == "I modified the wrong file"
+    assert correction["user_correction"] == "Should have edited config.py not main.py"
+
+
+def test_correction_type_from_score_value():
+    """correction_type is taken from the score's value field (CATEGORICAL)."""
+    scores = [{"value": "out_of_scope", "metadata": {}, "traceId": "t1"}]
+    groups = group_corrections(scores)
+    correction = groups[0]["corrections"][0]
+    assert correction["correction_type"] == "out_of_scope"
 
 
 # ------------------------------------------------------------------
@@ -150,86 +174,108 @@ def test_sorted_by_count_descending():
 # ------------------------------------------------------------------
 
 
-def test_prompt_includes_all_corrections():
-    """Prompt includes details from all corrections in group."""
+def test_prompt_includes_workflow_info():
+    """Prompt includes workflow repo, branch, and path."""
     group = {
-        "repo_url": "https://github.com/org/repo",
-        "workflow": "workflows/test",
+        "workflow_repo_url": "https://github.com/org/workflows",
+        "workflow_branch": "main",
+        "workflow_path": "workflows/bug-fix",
+        "repos": [],
+        "corrections": [],
+        "total_count": 2,
+        "correction_type_counts": {"incomplete": 2},
+    }
+    prompt = build_improvement_prompt(group)
+    assert "https://github.com/org/workflows" in prompt
+    assert "workflows/bug-fix" in prompt
+    assert "main" in prompt
+
+
+def test_prompt_includes_all_corrections():
+    """Prompt includes agent_action and user_correction for each correction."""
+    group = {
+        "workflow_repo_url": "https://github.com/org/workflows",
+        "workflow_branch": "main",
+        "workflow_path": "workflows/test",
+        "repos": [],
         "corrections": [
             {
-                "category": "wrong_approach",
-                "severity": 3,
-                "scope": "repo_context",
-                "description": "Used wrong pattern",
-                "correction_details": "Should use factory pattern",
+                "correction_type": "incorrect",
+                "agent_action": "Used wrong pattern",
+                "user_correction": "Should use factory pattern",
                 "session_name": "session-1",
                 "trace_id": "trace-1",
             },
             {
-                "category": "missing_context",
-                "severity": 2,
-                "scope": "workflow_instructions",
-                "description": "Didn't know about auth flow",
-                "correction_details": "",
+                "correction_type": "incomplete",
+                "agent_action": "Forgot to update tests",
+                "user_correction": "Always update tests when changing logic",
                 "session_name": "session-2",
                 "trace_id": "trace-2",
             },
         ],
         "total_count": 2,
-        "avg_severity": 2.5,
-        "category_counts": {"wrong_approach": 1, "missing_context": 1},
-        "scope_counts": {"repo_context": 1, "workflow_instructions": 1},
+        "correction_type_counts": {"incorrect": 1, "incomplete": 1},
     }
 
     prompt = build_improvement_prompt(group)
 
-    assert "https://github.com/org/repo" in prompt
-    assert "workflows/test" in prompt
-    assert "wrong_approach" in prompt
-    assert "missing_context" in prompt
     assert "Used wrong pattern" in prompt
     assert "Should use factory pattern" in prompt
-    assert "Didn't know about auth flow" in prompt
-    assert "2 corrections" in prompt.lower() or "2 user corrections" in prompt.lower()
+    assert "Forgot to update tests" in prompt
+    assert "Always update tests when changing logic" in prompt
 
 
-def test_prompt_identifies_top_category():
-    """Prompt highlights the most common category."""
+def test_prompt_identifies_top_correction_type():
+    """Prompt highlights the most common correction type."""
     group = {
-        "repo_url": "https://github.com/org/repo",
-        "workflow": "wf",
+        "workflow_repo_url": "https://github.com/org/workflows",
+        "workflow_branch": "main",
+        "workflow_path": "wf",
+        "repos": [],
         "corrections": [],
         "total_count": 5,
-        "avg_severity": 2.0,
-        "category_counts": {"wrong_approach": 3, "style_violation": 2},
-        "scope_counts": {"repo_context": 5},
+        "correction_type_counts": {"incomplete": 3, "incorrect": 2},
     }
 
     prompt = build_improvement_prompt(group)
-    assert "wrong_approach" in prompt
+    assert "incomplete" in prompt
     assert "3 occurrences" in prompt
 
 
-def test_prompt_maps_scopes_to_files():
-    """Prompt maps scopes to correct file targets."""
+def test_prompt_includes_repos_section():
+    """Prompt includes target repos when present."""
     group = {
-        "repo_url": "https://github.com/org/repo",
-        "workflow": "wf",
+        "workflow_repo_url": "https://github.com/org/workflows",
+        "workflow_branch": "main",
+        "workflow_path": "wf",
+        "repos": [
+            {"url": "https://github.com/org/my-repo", "branch": "main"},
+        ],
         "corrections": [],
-        "total_count": 3,
-        "avg_severity": 2.0,
-        "category_counts": {"wrong_approach": 3},
-        "scope_counts": {
-            "workflow_instructions": 1,
-            "repo_context": 1,
-            "code_patterns": 1,
-        },
+        "total_count": 2,
+        "correction_type_counts": {"incorrect": 2},
     }
 
     prompt = build_improvement_prompt(group)
-    assert ".ambient/" in prompt
-    assert "CLAUDE.md" in prompt
-    assert ".claude/patterns/" in prompt
+    assert "https://github.com/org/my-repo" in prompt
+    assert "Target Repositories" in prompt
+
+
+def test_prompt_no_repos_section_when_empty():
+    """Prompt omits Target Repositories section when repos list is empty."""
+    group = {
+        "workflow_repo_url": "https://github.com/org/workflows",
+        "workflow_branch": "main",
+        "workflow_path": "wf",
+        "repos": [],
+        "corrections": [],
+        "total_count": 2,
+        "correction_type_counts": {"incorrect": 2},
+    }
+
+    prompt = build_improvement_prompt(group)
+    assert "Target Repositories" not in prompt
 
 
 # ------------------------------------------------------------------
@@ -246,8 +292,10 @@ def test_sends_correct_api_request(mock_post):
     mock_post.return_value = mock_resp
 
     group = {
-        "repo_url": "https://github.com/org/my-repo",
-        "workflow": "workflows/test",
+        "workflow_repo_url": "https://github.com/org/workflows",
+        "workflow_branch": "main",
+        "workflow_path": "workflows/test",
+        "repos": [{"url": "https://github.com/org/my-repo", "branch": "main"}],
         "total_count": 3,
     }
 
@@ -264,23 +312,23 @@ def test_sends_correct_api_request(mock_post):
 
     mock_post.assert_called_once()
 
-    # requests.post(url, headers=..., json=..., timeout=...)
     call_args, call_kwargs = mock_post.call_args
 
-    # Check URL (first positional arg)
     url = call_args[0] if call_args else call_kwargs.get("url", "")
     assert "test-project" in url
 
-    # Check auth header
     headers = call_kwargs.get("headers", {})
     assert headers["Authorization"] == "Bearer bot-token-123"
 
-    # Check body
     body = call_kwargs["json"]
     assert body["initialPrompt"] == "Test prompt content"
     assert body["environmentVariables"]["LANGFUSE_MASK_MESSAGES"] == "false"
     assert body["labels"]["feedback-loop"] == "true"
-    assert body["repos"][0]["url"] == "https://github.com/org/my-repo"
+
+    # Workflow repo is first, target repo is second
+    assert body["repos"][0]["url"] == "https://github.com/org/workflows"
+    assert body["repos"][0]["branch"] == "main"
+    assert body["repos"][1]["url"] == "https://github.com/org/my-repo"
 
 
 @patch("query_corrections.requests.post")
@@ -290,8 +338,10 @@ def test_handles_api_errors(mock_post):
     mock_post.side_effect = _requests.RequestException("Connection refused")
 
     group = {
-        "repo_url": "https://github.com/org/repo",
-        "workflow": "wf",
+        "workflow_repo_url": "https://github.com/org/workflows",
+        "workflow_branch": "main",
+        "workflow_path": "wf",
+        "repos": [],
         "total_count": 2,
     }
 
@@ -306,8 +356,8 @@ def test_handles_api_errors(mock_post):
     assert result is None
 
 
-def test_no_repo_when_url_invalid():
-    """repos field omitted when repo_url is not a valid HTTP URL."""
+def test_no_repos_when_workflow_url_invalid():
+    """repos field omitted when workflow_repo_url is not a valid HTTP URL."""
     with patch("query_corrections.requests.post") as mock_post:
         mock_resp = MagicMock()
         mock_resp.json.return_value = {"name": "session-1"}
@@ -315,8 +365,10 @@ def test_no_repo_when_url_invalid():
         mock_post.return_value = mock_resp
 
         group = {
-            "repo_url": "unknown",
-            "workflow": "wf",
+            "workflow_repo_url": "",
+            "workflow_branch": "",
+            "workflow_path": "wf",
+            "repos": [],
             "total_count": 2,
         }
 
@@ -332,6 +384,34 @@ def test_no_repo_when_url_invalid():
         assert "repos" not in body
 
 
+def test_workflow_branch_included_in_repo():
+    """workflow_branch is passed on the workflow repo entry."""
+    with patch("query_corrections.requests.post") as mock_post:
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {"name": "session-1"}
+        mock_resp.raise_for_status = MagicMock()
+        mock_post.return_value = mock_resp
+
+        group = {
+            "workflow_repo_url": "https://github.com/org/workflows",
+            "workflow_branch": "feat/my-branch",
+            "workflow_path": "wf",
+            "repos": [],
+            "total_count": 2,
+        }
+
+        create_improvement_session(
+            api_url="https://api.example.com",
+            api_token="token",
+            project="proj",
+            prompt="prompt",
+            group=group,
+        )
+
+        body = mock_post.call_args[1]["json"]
+        assert body["repos"][0]["branch"] == "feat/my-branch"
+
+
 # ------------------------------------------------------------------
 # Runner
 # ------------------------------------------------------------------
@@ -342,18 +422,23 @@ if __name__ == "__main__":
     print("=" * 60)
 
     tests = [
-        ("Grouping: by repo and workflow", test_groups_by_repo_and_workflow),
-        ("Grouping: avg severity", test_calculates_avg_severity),
-        ("Grouping: category counts", test_counts_categories),
-        ("Grouping: scope counts", test_counts_scopes),
+        ("Grouping: by workflow", test_groups_by_workflow),
+        ("Grouping: correction type counts", test_counts_correction_types),
+        ("Grouping: deduplicates repos", test_deduplicates_repos),
+        ("Grouping: collects repos across corrections", test_collects_repos_across_corrections),
         ("Grouping: missing metadata", test_handles_missing_metadata),
         ("Grouping: sorted descending", test_sorted_by_count_descending),
+        ("Grouping: agent_action and user_correction extracted", test_extracts_agent_action_and_user_correction),
+        ("Grouping: correction_type from score value", test_correction_type_from_score_value),
+        ("Prompt: includes workflow info", test_prompt_includes_workflow_info),
         ("Prompt: includes all corrections", test_prompt_includes_all_corrections),
-        ("Prompt: top category", test_prompt_identifies_top_category),
-        ("Prompt: scope to file map", test_prompt_maps_scopes_to_files),
+        ("Prompt: top correction type", test_prompt_identifies_top_correction_type),
+        ("Prompt: repos section present", test_prompt_includes_repos_section),
+        ("Prompt: no repos section when empty", test_prompt_no_repos_section_when_empty),
         ("Session: correct API request", test_sends_correct_api_request),
         ("Session: handles API errors", test_handles_api_errors),
-        ("Session: no repo for invalid URL", test_no_repo_when_url_invalid),
+        ("Session: no repos for invalid URL", test_no_repos_when_workflow_url_invalid),
+        ("Session: workflow branch in repo", test_workflow_branch_included_in_repo),
     ]
 
     passed = 0

@@ -66,9 +66,11 @@ RESTART_TOOL_DESCRIPTION = (
 )
 
 CORRECTION_DETECTION_INSTRUCTIONS = (
-    "When the user corrects your work or points out a mistake, call "
-    "`log_correction` (corrections MCP server) **before** fixing the issue. "
-    "See the tool description for categories, severity, and scope guidance.\n\n"
+    "## CRITICAL: Automatic Correction Logging\n\n"
+    "**BEFORE acting on user feedback that changes something you already did or assumed, ALWAYS ask yourself: \"Is the user steering me away from a previous action or decision?\"**\n\n"
+    "If YES → Call `log_correction` FIRST, then fix.\n\n"
+    "**Rule: Any message that redirects, corrects, or changes your previous work or assumptions = log it. When in doubt, log it.**\n\n"
+    "This includes quality issues, but also: redirections, preference changes, missed requirements, wrong scope, or any context that changes what you should have done. Do NOT treat these as simple new requests.\n"
 )
 
 

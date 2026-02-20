@@ -10,10 +10,6 @@ on:
         description: 'Number of days to look back for corrections'
         required: false
         default: '7'
-      min_severity:
-        description: 'Minimum severity to include (1=low, 2=medium, 3=high)'
-        required: false
-        default: '2'
       min_corrections:
         description: 'Minimum corrections per group to trigger improvement'
         required: false
@@ -60,6 +56,5 @@ jobs:
             --api-token "$AMBIENT_BOT_TOKEN" \
             --project "$AMBIENT_PROJECT" \
             --since-days "${{ github.event.inputs.since_days || '7' }}" \
-            --min-severity "${{ github.event.inputs.min_severity || '2' }}" \
             --min-corrections "${{ github.event.inputs.min_corrections || '2' }}" \
             ${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }}

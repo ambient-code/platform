@@ -2,12 +2,13 @@
 Corrections feedback MCP tool for capturing human corrections.
 
 When a user corrects the agent's work during a session, this tool
-logs the correction to Langfuse as a structured score with category,
-severity, scope, and contextual metadata. A downstream feedback loop
-(GitHub Action) periodically queries these scores and creates
+logs the correction to Langfuse as a categorical score capturing what
+the agent did and what the user corrected it to. A downstream feedback
+loop (GitHub Action) periodically queries these scores and creates
 improvement sessions to update workflow instructions and repo context.
 """
 
+import json
 import logging
 import os
 from typing import Any
@@ -19,94 +20,62 @@ logger = logging.getLogger(__name__)
 # Constants
 # ------------------------------------------------------------------
 
-CORRECTION_CATEGORIES = [
-    "wrong_approach",
-    "missing_context",
-    "incorrect_output",
-    "style_violation",
-    "security_issue",
-    "incomplete_work",
-    "overcomplicated",
-    "wrong_scope",
-    "misunderstood_requirements",
-]
-
-CORRECTION_SCOPES = [
-    "workflow_instructions",
-    "repo_context",
-    "code_patterns",
-    "documentation",
+CORRECTION_TYPES = [
+    "incomplete",    # missed something that should have been done
+    "incorrect",     # did the wrong thing
+    "out_of_scope",  # worked on wrong files / area
+    "style",         # right result, wrong approach or pattern
 ]
 
 CORRECTION_TOOL_DESCRIPTION = (
-    "Log a correction when the user points out an error, corrects your work, "
-    "or provides feedback about mistakes. Call this BEFORE fixing the issue.\n\n"
-    "Trigger when the user: says you did something wrong or made a mistake, "
-    "asks you to redo or fix previous work, points out bugs/errors/security issues, "
-    "says you modified the wrong files or missed relevant ones, indicates you "
-    "over-engineered or under-delivered, clarifies requirements you misunderstood, "
-    "or provides context you should have known.\n\n"
-    "Pick the category that best describes what went wrong, rate severity "
-    "(1=minor, 2=significant, 3=critical), and choose the scope that needs "
-    "updating to prevent recurrence. Be honest and specific in the description."
+    "Log a correction whenever the user redirects, corrects, or changes what "
+    "you did or assumed. Call this BEFORE fixing the issue.\n\n"
+    "Use broad judgment — if the user is steering you away from something you "
+    "already did or decided, that is a correction. This includes: pointing out "
+    "errors or bugs, asking you to redo work, clarifying what they actually "
+    "wanted, saying you missed something, telling you the approach was wrong, "
+    "or providing any context that changes what you should have done. When in "
+    "doubt, log it.\n\n"
+    "Fields:\n"
+    "- agent_action: what you did or assumed (be honest and specific)\n"
+    "- user_correction: exactly what the user said should have happened instead\n"
+    "- correction_type: pick the best fit — "
+    "incomplete (missed something), "
+    "incorrect (did the wrong thing), "
+    "out_of_scope (wrong files or area), "
+    "style (right result but wrong approach or pattern)"
 )
 
 CORRECTION_INPUT_SCHEMA: dict = {
     "type": "object",
     "properties": {
-        "category": {
+        "correction_type": {
             "type": "string",
-            "enum": CORRECTION_CATEGORIES,
+            "enum": CORRECTION_TYPES,
             "description": (
                 "The type of correction: "
-                "wrong_approach (fundamentally wrong strategy), "
-                "missing_context (lacked necessary knowledge), "
-                "incorrect_output (bugs or errors in output), "
-                "style_violation (didn't follow code style/patterns), "
-                "security_issue (introduced or missed vulnerability), "
-                "incomplete_work (didn't finish the task fully), "
-                "overcomplicated (over-engineered the solution), "
-                "wrong_scope (modified wrong files or missed relevant ones), "
-                "misunderstood_requirements (misinterpreted what was needed)."
+                "incomplete (missed something that should have been done), "
+                "incorrect (did the wrong thing), "
+                "out_of_scope (worked on wrong files or area), "
+                "style (right result but wrong approach or pattern)."
             ),
         },
-        "severity": {
-            "type": "integer",
-            "enum": [1, 2, 3],
-            "description": (
-                "Severity of the correction: "
-                "1 = low (minor/cosmetic), "
-                "2 = medium (significant/functional), "
-                "3 = high (critical/blocking)."
-            ),
-        },
-        "scope": {
-            "type": "string",
-            "enum": CORRECTION_SCOPES,
-            "description": (
-                "What should be updated to prevent this in the future: "
-                "workflow_instructions (update .ambient/ workflow files), "
-                "repo_context (update CLAUDE.md or .claude/ context files), "
-                "code_patterns (update .claude/patterns/ files), "
-                "documentation (update relevant docs)."
-            ),
-        },
-        "description": {
+        "agent_action": {
             "type": "string",
             "description": (
-                "Detailed description of what went wrong and what the "
-                "correct approach should have been."
+                "What the agent did or assumed. Be honest and specific about "
+                "the action taken or assumption made before the correction."
             ),
         },
-        "correction_details": {
+        "user_correction": {
             "type": "string",
             "description": (
-                "Specific details about the fix applied or the correct "
-                "solution. Optional but recommended for actionable feedback."
+                "What the user said should have happened instead. Capture "
+                "their correction as accurately as possible."
             ),
         },
     },
-    "required": ["category", "severity", "scope", "description"],
+    "required": ["correction_type", "agent_action", "user_correction"],
 }
 
 
@@ -140,18 +109,14 @@ def create_correction_mcp_tool(
     )
     async def log_correction_tool(args: dict) -> dict:
         """Log a correction to Langfuse for the feedback loop."""
-        category = args.get("category", "")
-        severity = args.get("severity", 2)
-        scope = args.get("scope", "")
-        description = args.get("description", "")
-        correction_details = args.get("correction_details")
+        correction_type = args.get("correction_type", "")
+        agent_action = args.get("agent_action", "")
+        user_correction = args.get("user_correction", "")
 
         success, error = _log_correction_to_langfuse(
-            category=category,
-            severity=severity,
-            scope=scope,
-            description=description,
-            correction_details=correction_details,
+            correction_type=correction_type,
+            agent_action=agent_action,
+            user_correction=user_correction,
             obs=_obs,
             session_id=_session_id,
         )
@@ -162,8 +127,7 @@ def create_correction_mcp_tool(
                     {
                         "type": "text",
                         "text": (
-                            f"Correction logged: category={category}, "
-                            f"severity={severity}, scope={scope}. "
+                            f"Correction logged: type={correction_type}. "
                             "This will be reviewed in the next feedback loop cycle."
                         ),
                     }
@@ -185,15 +149,45 @@ def create_correction_mcp_tool(
 # ------------------------------------------------------------------
 
 
+def _parse_repos_json() -> list:
+    """Parse REPOS_JSON env var into a list of repo dicts.
+
+    Returns:
+        List of dicts with 'url' and 'branch' keys, or empty list.
+    """
+    raw = os.getenv("REPOS_JSON", "").strip()
+    if not raw:
+        return []
+    try:
+        repos = json.loads(raw)
+        if not isinstance(repos, list):
+            return []
+        result = []
+        for r in repos:
+            if isinstance(r, dict) and r.get("url"):
+                result.append({
+                    "url": r.get("url", ""),
+                    "branch": r.get("branch", ""),
+                })
+        return result
+    except Exception:
+        return []
+
+
 def _get_session_context() -> dict:
     """Auto-capture session context from environment variables.
 
     Returns:
-        Dict with repo_url, workflow, session_name, and project.
+        Dict with workflow (repo_url, branch, path), repos list,
+        session_name, and project.
     """
     return {
-        "repo_url": os.getenv("ACTIVE_WORKFLOW_GIT_URL", "").strip(),
-        "workflow": os.getenv("ACTIVE_WORKFLOW_PATH", "").strip(),
+        "workflow": {
+            "repo_url": os.getenv("ACTIVE_WORKFLOW_GIT_URL", "").strip(),
+            "branch": os.getenv("ACTIVE_WORKFLOW_BRANCH", "").strip(),
+            "path": os.getenv("ACTIVE_WORKFLOW_PATH", "").strip(),
+        },
+        "repos": _parse_repos_json(),
         "session_name": os.getenv("AGENTIC_SESSION_NAME", "").strip(),
         "project": os.getenv("AGENTIC_SESSION_NAMESPACE", "").strip(),
     }
@@ -205,18 +199,13 @@ def _get_session_context() -> dict:
 
 
 def _log_correction_to_langfuse(
-    category: str,
-    severity: int,
-    scope: str,
-    description: str,
-    correction_details: str | None,
+    correction_type: str,
+    agent_action: str,
+    user_correction: str,
     obs: Any,
     session_id: str,
 ) -> tuple[bool, str | None]:
-    """Log a correction score to Langfuse.
-
-    Mirrors the rubric tool's ``_log_to_langfuse`` pattern from tools.py.
-    """
+    """Log a correction score to Langfuse."""
     try:
         langfuse_client = getattr(obs, "langfuse_client", None) if obs else None
         using_obs_client = langfuse_client is not None
@@ -260,23 +249,30 @@ def _log_correction_to_langfuse(
 
         context = _get_session_context()
 
+        comment = (
+            f"Agent did: {agent_action[:500]}\n"
+            f"User corrected to: {user_correction[:500]}"
+        )
+
+        repos = context["repos"]
         metadata = {
-            "category": category,
-            "scope": scope,
+            "correction_type": correction_type,
+            "agent_action": agent_action[:500],
+            "user_correction": user_correction[:500],
             "session_id": session_id,
             "session_name": context["session_name"],
             "project": context["project"],
-            "repo_url": context["repo_url"],
-            "workflow": context["workflow"],
+            "workflow_repo_url": context["workflow"]["repo_url"],
+            "workflow_branch": context["workflow"]["branch"],
+            "workflow_path": context["workflow"]["path"],
+            "repos": json.dumps(repos) if repos else "",
         }
-        if correction_details:
-            metadata["correction_details"] = correction_details[:500]
 
         kwargs: dict = {
             "name": "session-correction",
-            "value": severity,
-            "data_type": "NUMERIC",
-            "comment": description[:500] if description else None,
+            "value": correction_type,
+            "data_type": "CATEGORICAL",
+            "comment": comment,
             "metadata": metadata,
         }
         if trace_id:
@@ -287,8 +283,7 @@ def _log_correction_to_langfuse(
 
         logger.info(
             f"Correction logged to Langfuse: "
-            f"category={category}, severity={severity}, "
-            f"scope={scope}, trace_id={trace_id}"
+            f"type={correction_type}, trace_id={trace_id}"
         )
         return True, None
 
