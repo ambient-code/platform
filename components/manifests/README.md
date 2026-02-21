@@ -131,7 +131,7 @@ spec:
     spec:
       containers:
       - name: oauth-proxy  # Add OAuth sidecar
-        image: quay.io/openshift/origin-oauth-proxy:4.14
+        image: quay.io/openshift/origin-oauth-proxy:4.21
         # ... OAuth configuration
 ```
 

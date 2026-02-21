@@ -75,7 +75,8 @@ jobs:
         if: (!cancelled())
         shell: bash
         run: |
-          pip install junit2html
+          pip install uv
+          uv pip install --system junit2html
           junit2html ${{ env.TESTS_DIR }}/reports/${{ env.JUNIT_FILENAME }} ${{ env.TESTS_DIR }}/reports/test-report.html
         continue-on-error: true
 
