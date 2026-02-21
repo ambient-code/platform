@@ -8,16 +8,18 @@ RUN apk add --no-cache git
 
 # Copy go mod files first for caching
 COPY go.mod go.sum* ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
 
 # Copy source code
 COPY . .
 
 # Build the binary
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o public-api .
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o public-api .
 
 # Runtime stage
-FROM alpine:3.19
+FROM alpine:3.21
 
 # Add ca-certificates for HTTPS requests
 RUN apk --no-cache add ca-certificates

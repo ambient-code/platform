@@ -1,7 +1,21 @@
 # Build stage
-FROM registry.access.redhat.com/ubi9/go-toolset:1.24 AS builder
+FROM golang:1.24-alpine AS builder
 
-# Build arguments for metadata
+WORKDIR /app
+
+# Install git for fetching dependencies
+RUN apk add --no-cache git
+
+# Copy go mod and sum files
+COPY go.mod go.sum ./
+
+# Download dependencies
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
+
+# Copy the source code
+COPY . .
+
+# Build arguments for metadata (placed after COPY to avoid busting cache)
 ARG GIT_COMMIT=unknown
 ARG GIT_BRANCH=unknown
 ARG GIT_REPO=unknown
@@ -9,27 +23,15 @@ ARG GIT_VERSION=unknown
 ARG BUILD_DATE=unknown
 ARG BUILD_USER=unknown
 
-USER 0
-WORKDIR /app
-
-# Copy go mod and sum files
-COPY go.mod go.sum ./
-
-# Download dependencies
-RUN go mod download
-
-# Copy the source code
-COPY . .
-
 # Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o operator .
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o operator .
 
-# Final stage
+# Runtime stage
 FROM registry.access.redhat.com/ubi9/ubi-minimal:latest
 
 WORKDIR /app
-
-RUN microdnf install -y procps && microdnf clean all
 
 # Copy the binary from builder stage
 COPY --from=builder /app/operator .
