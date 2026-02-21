@@ -118,10 +118,16 @@ jobs:
           echo "Updated pyproject.toml:"
           grep claude-agent-sdk components/runners/claude-code-runner/pyproject.toml
 
+      - name: Install uv
+        if: steps.check.outputs.needs_update == 'true' && steps.existing_pr.outputs.pr_exists == 'false'
+        uses: astral-sh/setup-uv@eac588ad8def6316056a12d4907a9d4d84ff7a3b # v7.3.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: components/runners/claude-code-runner/uv.lock
+
       - name: Regenerate uv.lock
         if: steps.check.outputs.needs_update == 'true' && steps.existing_pr.outputs.pr_exists == 'false'
         run: |
-          pip install uv
           cd components/runners/claude-code-runner
           uv lock
           echo "uv.lock regenerated"
