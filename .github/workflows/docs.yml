@@ -31,8 +31,8 @@ jobs:
       - name: Install Python and dependencies
         run: |
           microdnf install -y python3.11 python3.11-pip
-          python3.11 -m pip install --upgrade pip
-          python3.11 -m pip install -r requirements-docs.txt
+          python3.11 -m pip install --upgrade pip uv
+          uv pip install --system -r requirements-docs.txt
 
       - name: Build documentation
         run: |
