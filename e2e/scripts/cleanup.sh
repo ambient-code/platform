@@ -23,8 +23,26 @@ fi
 
 echo ""
 echo "Deleting kind cluster..."
-if kind get clusters 2>/dev/null | grep -q "^ambient-local$"; then
-  kind delete cluster --name ambient-local
+# Try to delete regardless of provider — kind delete is idempotent and
+# the cluster may have been created with a different CONTAINER_ENGINE
+# than the current default.  Check both docker and podman providers.
+deleted=false
+if kind delete cluster --name ambient-local 2>/dev/null; then
+  deleted=true
+fi
+if [ "$deleted" = false ] && [ "$CONTAINER_ENGINE" != "podman" ]; then
+  # Cluster might have been created with podman
+  if KIND_EXPERIMENTAL_PROVIDER=podman kind delete cluster --name ambient-local 2>/dev/null; then
+    deleted=true
+  fi
+fi
+if [ "$deleted" = false ] && [ "$CONTAINER_ENGINE" = "podman" ]; then
+  # Cluster might have been created with docker
+  if KIND_EXPERIMENTAL_PROVIDER="" kind delete cluster --name ambient-local 2>/dev/null; then
+    deleted=true
+  fi
+fi
+if [ "$deleted" = true ]; then
   echo "   ✓ Cluster deleted"
 else
   echo "   ℹ️  Cluster 'ambient-local' not found (already deleted?)"
