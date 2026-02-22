@@ -1,0 +1,64 @@
+syntax = "proto3";
+
+package ambient.v1;
+
+option go_package = "github.com/ambient/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1;ambient_v1";
+
+import "ambient/v1/common.proto";
+
+message User {
+  ObjectReference metadata = 1;
+  string username = 2;
+  string name = 3;
+  optional string email = 4;
+}
+
+message CreateUserRequest {
+  string username = 1;
+  string name = 2;
+  optional string email = 3;
+}
+
+message GetUserRequest {
+  string id = 1;
+}
+
+message UpdateUserRequest {
+  string id = 1;
+  optional string username = 2;
+  optional string name = 3;
+  optional string email = 4;
+}
+
+message DeleteUserRequest {
+  string id = 1;
+}
+
+message ListUsersRequest {
+  int32 page = 1;
+  int32 size = 2;
+}
+
+message ListUsersResponse {
+  repeated User items = 1;
+  ListMeta metadata = 2;
+}
+
+message DeleteUserResponse {}
+
+message WatchUsersRequest {}
+
+message UserWatchEvent {
+  EventType type = 1;
+  User user = 2;
+  string resource_id = 3;
+}
+
+service UserService {
+  rpc GetUser(GetUserRequest) returns (User);
+  rpc CreateUser(CreateUserRequest) returns (User);
+  rpc UpdateUser(UpdateUserRequest) returns (User);
+  rpc DeleteUser(DeleteUserRequest) returns (DeleteUserResponse);
+  rpc ListUsers(ListUsersRequest) returns (ListUsersResponse);
+  rpc WatchUsers(WatchUsersRequest) returns (stream UserWatchEvent);
+}

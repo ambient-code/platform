@@ -1,0 +1,80 @@
+package {{.KindLowerPlural}}
+
+import (
+	"net/http"
+
+	"github.com/gorilla/mux"
+	"{{.Library}}/pkg/environments"
+	"{{.Library}}/pkg/registry"
+	pkgserver "{{.Library}}/pkg/server"
+	"{{.Library}}/pkg/api"
+	"{{.Library}}/pkg/api/presenters"
+	"{{.Library}}/pkg/auth"
+	"{{.Library}}/pkg/controllers"
+	"{{.Library}}/pkg/db"
+	"{{.Library}}/plugins/events"
+	"{{.Library}}/plugins/generic"
+)
+
+type ServiceLocator func() {{.Kind}}Service
+
+func NewServiceLocator(env *environments.Env) ServiceLocator {
+	return func() {{.Kind}}Service {
+		return New{{.Kind}}Service(
+			db.NewAdvisoryLockFactory(env.Database.SessionFactory),
+			New{{.Kind}}Dao(&env.Database.SessionFactory),
+			events.Service(&env.Services),
+		)
+	}
+}
+
+func Service(s *environments.Services) {{.Kind}}Service {
+	if s == nil {
+		return nil
+	}
+	if obj := s.GetService("{{.KindPlural}}"); obj != nil {
+		locator := obj.(ServiceLocator)
+		return locator()
+	}
+	return nil
+}
+
+func init() {
+	registry.RegisterService("{{.KindPlural}}", func(env interface{}) interface{} {
+		return NewServiceLocator(env.(*environments.Env))
+	})
+
+	pkgserver.RegisterRoutes("{{.KindLowerPlural}}", func(apiV1Router *mux.Router, services pkgserver.ServicesInterface, authMiddleware auth.JWTMiddleware, authzMiddleware auth.AuthorizationMiddleware) {
+		envServices := services.(*environments.Services)
+		{{.KindLowerSingular}}Handler := New{{.Kind}}Handler(Service(envServices), generic.Service(envServices))
+
+		{{.KindLowerPlural}}Router := apiV1Router.PathPrefix("/{{.KindSnakeCasePlural}}").Subrouter()
+		{{.KindLowerPlural}}Router.HandleFunc("", {{.KindLowerSingular}}Handler.List).Methods(http.MethodGet)
+		{{.KindLowerPlural}}Router.HandleFunc("/{id}", {{.KindLowerSingular}}Handler.Get).Methods(http.MethodGet)
+		{{.KindLowerPlural}}Router.HandleFunc("", {{.KindLowerSingular}}Handler.Create).Methods(http.MethodPost)
+		{{.KindLowerPlural}}Router.HandleFunc("/{id}", {{.KindLowerSingular}}Handler.Patch).Methods(http.MethodPatch)
+		{{.KindLowerPlural}}Router.HandleFunc("/{id}", {{.KindLowerSingular}}Handler.Delete).Methods(http.MethodDelete)
+		{{.KindLowerPlural}}Router.Use(authMiddleware.AuthenticateAccountJWT)
+		{{.KindLowerPlural}}Router.Use(authzMiddleware.AuthorizeApi)
+	})
+
+	pkgserver.RegisterController("{{.KindPlural}}", func(manager *controllers.KindControllerManager, services pkgserver.ServicesInterface) {
+		{{.KindLowerSingular}}Services := Service(services.(*environments.Services))
+
+		manager.Add(&controllers.ControllerConfig{
+			Source: "{{.KindPlural}}",
+			Handlers: map[api.EventType][]controllers.ControllerHandlerFunc{
+				api.CreateEventType: {{ "{" }}{{.KindLowerSingular}}Services.OnUpsert},
+				api.UpdateEventType: {{ "{" }}{{.KindLowerSingular}}Services.OnUpsert},
+				api.DeleteEventType: {{ "{" }}{{.KindLowerSingular}}Services.OnDelete},
+			},
+		})
+	})
+
+	presenters.RegisterPath({{.Kind}}{}, "{{.KindSnakeCasePlural}}")
+	presenters.RegisterPath(&{{.Kind}}{}, "{{.KindSnakeCasePlural}}")
+	presenters.RegisterKind({{.Kind}}{}, "{{.Kind}}")
+	presenters.RegisterKind(&{{.Kind}}{}, "{{.Kind}}")
+
+	db.RegisterMigration(migration())
+}

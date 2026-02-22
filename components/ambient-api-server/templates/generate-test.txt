@@ -1,0 +1,175 @@
+package {{.KindLowerPlural}}_test
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"testing"
+{{- $hasTime := false}}
+{{- range .Fields}}
+{{- if eq .GoType "time.Time"}}
+{{- $hasTime = true}}
+{{- end}}
+{{- end}}
+{{- if $hasTime}}
+	"time"
+{{- end}}
+
+	. "github.com/onsi/gomega"
+	"gopkg.in/resty.v1"
+
+	"{{.Repo}}/{{.Project}}/pkg/api/openapi"
+	"{{.Repo}}/{{.Project}}/test"
+)
+
+func Test{{.Kind}}Get(t *testing.T) {
+	h, client := test.RegisterIntegration(t)
+
+	account := h.NewRandAccount()
+	ctx := h.NewAuthenticatedContext(account)
+
+	_, _, err := client.DefaultAPI.Api{{.ProjectPascalCase}}V1{{.KindPlural}}IdGet(context.Background(), "foo").Execute()
+	Expect(err).To(HaveOccurred(), "Expected 401 but got nil error")
+
+	_, resp, err := client.DefaultAPI.Api{{.ProjectPascalCase}}V1{{.KindPlural}}IdGet(ctx, "foo").Execute()
+	Expect(err).To(HaveOccurred(), "Expected 404")
+	Expect(resp.StatusCode).To(Equal(http.StatusNotFound))
+
+	{{.KindLowerSingular}}Model, err := new{{.Kind}}(h.NewID())
+	Expect(err).NotTo(HaveOccurred())
+
+	{{.KindLowerSingular}}Output, resp, err := client.DefaultAPI.Api{{.ProjectPascalCase}}V1{{.KindPlural}}IdGet(ctx, {{.KindLowerSingular}}Model.ID).Execute()
+	Expect(err).NotTo(HaveOccurred())
+	Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+	Expect(*{{.KindLowerSingular}}Output.Id).To(Equal({{.KindLowerSingular}}Model.ID), "found object does not match test object")
+	Expect(*{{.KindLowerSingular}}Output.Kind).To(Equal("{{.Kind}}"))
+	Expect(*{{.KindLowerSingular}}Output.Href).To(Equal(fmt.Sprintf("/api/{{.Project}}/v1/{{.KindSnakeCasePlural}}/%s", {{.KindLowerSingular}}Model.ID)))
+	Expect(*{{.KindLowerSingular}}Output.CreatedAt).To(BeTemporally("~", {{.KindLowerSingular}}Model.CreatedAt))
+	Expect(*{{.KindLowerSingular}}Output.UpdatedAt).To(BeTemporally("~", {{.KindLowerSingular}}Model.UpdatedAt))
+}
+
+func Test{{.Kind}}Post(t *testing.T) {
+	h, client := test.RegisterIntegration(t)
+
+	account := h.NewRandAccount()
+	ctx := h.NewAuthenticatedContext(account)
+
+	{{.KindLowerSingular}}Input := openapi.{{.Kind}}{
+{{- range .Fields}}
+{{- if .Nullable}}
+{{- if eq .Type "string"}}
+		{{.Name}}:    openapi.PtrString("test-{{.NameSnakeCase}}"),
+{{- else if eq .Type "int"}}
+		{{.Name}}:    openapi.PtrInt32(42),
+{{- else if eq .Type "int64"}}
+		{{.Name}}:    openapi.PtrInt64(42),
+{{- else if eq .Type "bool"}}
+		{{.Name}}:    openapi.PtrBool(true),
+{{- else if eq .Type "float"}}
+		{{.Name}}:    openapi.PtrFloat64(3.14),
+{{- else if eq .Type "time"}}
+		{{.Name}}:    openapi.PtrTime(time.Now()),
+{{- end}}
+{{- else}}
+{{- if eq .Type "string"}}
+		{{.Name}}:    "test-{{.NameSnakeCase}}",
+{{- else if eq .Type "int"}}
+		{{.Name}}:    42,
+{{- else if eq .Type "int64"}}
+		{{.Name}}:    42,
+{{- else if eq .Type "bool"}}
+		{{.Name}}:    true,
+{{- else if eq .Type "float"}}
+		{{.Name}}:    3.14,
+{{- else if eq .Type "time"}}
+		{{.Name}}:    time.Now(),
+{{- end}}
+{{- end}}
+{{- end}}
+	}
+
+	{{.KindLowerSingular}}Output, resp, err := client.DefaultAPI.Api{{.ProjectPascalCase}}V1{{.KindPlural}}Post(ctx).{{.Kind}}({{.KindLowerSingular}}Input).Execute()
+	Expect(err).NotTo(HaveOccurred(), "Error posting object:  %v", err)
+	Expect(resp.StatusCode).To(Equal(http.StatusCreated))
+	Expect(*{{.KindLowerSingular}}Output.Id).NotTo(BeEmpty(), "Expected ID assigned on creation")
+	Expect(*{{.KindLowerSingular}}Output.Kind).To(Equal("{{.Kind}}"))
+	Expect(*{{.KindLowerSingular}}Output.Href).To(Equal(fmt.Sprintf("/api/{{.Project}}/v1/{{.KindSnakeCasePlural}}/%s", *{{.KindLowerSingular}}Output.Id)))
+
+	jwtToken := ctx.Value(openapi.ContextAccessToken)
+	restyResp, err := resty.R().
+		SetHeader("Content-Type", "application/json").
+		SetHeader("Authorization", fmt.Sprintf("Bearer %s", jwtToken)).
+		SetBody(`{ this is invalid }`).
+		Post(h.RestURL("/{{.KindSnakeCasePlural}}"))
+
+	Expect(restyResp.StatusCode()).To(Equal(http.StatusBadRequest))
+}
+
+func Test{{.Kind}}Patch(t *testing.T) {
+	h, client := test.RegisterIntegration(t)
+
+	account := h.NewRandAccount()
+	ctx := h.NewAuthenticatedContext(account)
+
+	{{.KindLowerSingular}}Model, err := new{{.Kind}}(h.NewID())
+	Expect(err).NotTo(HaveOccurred())
+
+	{{.KindLowerSingular}}Output, resp, err := client.DefaultAPI.Api{{.ProjectPascalCase}}V1{{.KindPlural}}IdPatch(ctx, {{.KindLowerSingular}}Model.ID).{{.Kind}}PatchRequest(openapi.{{.Kind}}PatchRequest{}).Execute()
+	Expect(err).NotTo(HaveOccurred(), "Error posting object:  %v", err)
+	Expect(resp.StatusCode).To(Equal(http.StatusOK))
+	Expect(*{{.KindLowerSingular}}Output.Id).To(Equal({{.KindLowerSingular}}Model.ID))
+	Expect(*{{.KindLowerSingular}}Output.CreatedAt).To(BeTemporally("~", {{.KindLowerSingular}}Model.CreatedAt))
+	Expect(*{{.KindLowerSingular}}Output.Kind).To(Equal("{{.Kind}}"))
+	Expect(*{{.KindLowerSingular}}Output.Href).To(Equal(fmt.Sprintf("/api/{{.Project}}/v1/{{.KindSnakeCasePlural}}/%s", *{{.KindLowerSingular}}Output.Id)))
+
+	jwtToken := ctx.Value(openapi.ContextAccessToken)
+	restyResp, err := resty.R().
+		SetHeader("Content-Type", "application/json").
+		SetHeader("Authorization", fmt.Sprintf("Bearer %s", jwtToken)).
+		SetBody(`{ this is invalid }`).
+		Patch(h.RestURL("/{{.KindSnakeCasePlural}}/foo"))
+
+	Expect(restyResp.StatusCode()).To(Equal(http.StatusBadRequest))
+}
+
+func Test{{.Kind}}Paging(t *testing.T) {
+	h, client := test.RegisterIntegration(t)
+
+	account := h.NewRandAccount()
+	ctx := h.NewAuthenticatedContext(account)
+
+	_, err := new{{.Kind}}List("Bronto", 20)
+	Expect(err).NotTo(HaveOccurred())
+
+	list, _, err := client.DefaultAPI.Api{{.ProjectPascalCase}}V1{{.KindPlural}}Get(ctx).Execute()
+	Expect(err).NotTo(HaveOccurred(), "Error getting {{.KindLowerSingular}} list: %v", err)
+	Expect(len(list.Items)).To(Equal(20))
+	Expect(list.Size).To(Equal(int32(20)))
+	Expect(list.Total).To(Equal(int32(20)))
+	Expect(list.Page).To(Equal(int32(1)))
+
+	list, _, err = client.DefaultAPI.Api{{.ProjectPascalCase}}V1{{.KindPlural}}Get(ctx).Page(2).Size(5).Execute()
+	Expect(err).NotTo(HaveOccurred(), "Error getting {{.KindLowerSingular}} list: %v", err)
+	Expect(len(list.Items)).To(Equal(5))
+	Expect(list.Size).To(Equal(int32(5)))
+	Expect(list.Total).To(Equal(int32(20)))
+	Expect(list.Page).To(Equal(int32(2)))
+}
+
+func Test{{.Kind}}ListSearch(t *testing.T) {
+	h, client := test.RegisterIntegration(t)
+
+	account := h.NewRandAccount()
+	ctx := h.NewAuthenticatedContext(account)
+
+	{{.KindLowerPlural}}, err := new{{.Kind}}List("bronto", 20)
+	Expect(err).NotTo(HaveOccurred())
+
+	search := fmt.Sprintf("id in ('%s')", {{.KindLowerPlural}}[0].ID)
+	list, _, err := client.DefaultAPI.Api{{.ProjectPascalCase}}V1{{.KindPlural}}Get(ctx).Search(search).Execute()
+	Expect(err).NotTo(HaveOccurred(), "Error getting {{.KindLowerSingular}} list: %v", err)
+	Expect(len(list.Items)).To(Equal(1))
+	Expect(list.Total).To(Equal(int32(1)))
+	Expect(*list.Items[0].Id).To(Equal({{.KindLowerPlural}}[0].ID))
+}

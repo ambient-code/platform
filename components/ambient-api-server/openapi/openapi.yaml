@@ -1,0 +1,167 @@
+openapi: 3.0.0
+info:
+  title: Ambient API Server
+  description: Ambient API Server
+  version: "1.0.0"
+  contact:
+    email: ambient-code@redhat.com
+  license:
+    name: Apache-2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+servers:
+  - url: http://localhost:8000
+    description: current domain
+  - url: https://api.ambient-code.com
+    description: Production
+  - url: https://api.stage.ambient-code.com
+    description: Staging
+paths:
+  /api/ambient-api-server/v1/sessions:
+    $ref: 'openapi.sessions.yaml#/paths/~1api~1ambient-api-server~1v1~1sessions'
+  /api/ambient-api-server/v1/sessions/{id}:
+    $ref: 'openapi.sessions.yaml#/paths/~1api~1ambient-api-server~1v1~1sessions~1{id}'
+  /api/ambient-api-server/v1/sessions/{id}/status:
+    $ref: 'openapi.sessions.yaml#/paths/~1api~1ambient-api-server~1v1~1sessions~1{id}~1status'
+  /api/ambient-api-server/v1/sessions/{id}/start:
+    $ref: 'openapi.sessions.yaml#/paths/~1api~1ambient-api-server~1v1~1sessions~1{id}~1start'
+  /api/ambient-api-server/v1/sessions/{id}/stop:
+    $ref: 'openapi.sessions.yaml#/paths/~1api~1ambient-api-server~1v1~1sessions~1{id}~1stop'
+  /api/ambient-api-server/v1/projects:
+    $ref: 'openapi.projects.yaml#/paths/~1api~1ambient-api-server~1v1~1projects'
+  /api/ambient-api-server/v1/projects/{id}:
+    $ref: 'openapi.projects.yaml#/paths/~1api~1ambient-api-server~1v1~1projects~1{id}'
+  /api/ambient-api-server/v1/project_settings:
+    $ref: 'openapi.projectSettings.yaml#/paths/~1api~1ambient-api-server~1v1~1project_settings'
+  /api/ambient-api-server/v1/project_settings/{id}:
+    $ref: 'openapi.projectSettings.yaml#/paths/~1api~1ambient-api-server~1v1~1project_settings~1{id}'
+  /api/ambient-api-server/v1/users:
+    $ref: 'openapi.users.yaml#/paths/~1api~1ambient-api-server~1v1~1users'
+  /api/ambient-api-server/v1/users/{id}:
+    $ref: 'openapi.users.yaml#/paths/~1api~1ambient-api-server~1v1~1users~1{id}'
+  # AUTO-ADD NEW PATHS
+components:
+  securitySchemes:
+    Bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    ObjectReference:
+      type: object
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+        href:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    List:
+      type: object
+      properties:
+        kind:
+          type: string
+        page:
+          type: integer
+        size:
+          type: integer
+        total:
+          type: integer
+      required:
+        - kind
+        - page
+        - size
+        - total
+        - items
+    Error:
+      allOf:
+      - $ref: '#/components/schemas/ObjectReference'
+      - type: object
+        properties:
+          code:
+            type: string
+          reason:
+            type: string
+          operation_id:
+            type: string
+    Session:
+      $ref: 'openapi.sessions.yaml#/components/schemas/Session'
+    SessionList:
+      $ref: 'openapi.sessions.yaml#/components/schemas/SessionList'
+    SessionPatchRequest:
+      $ref: 'openapi.sessions.yaml#/components/schemas/SessionPatchRequest'
+    SessionStatusPatchRequest:
+      $ref: 'openapi.sessions.yaml#/components/schemas/SessionStatusPatchRequest'
+    Project:
+      $ref: 'openapi.projects.yaml#/components/schemas/Project'
+    ProjectList:
+      $ref: 'openapi.projects.yaml#/components/schemas/ProjectList'
+    ProjectPatchRequest:
+      $ref: 'openapi.projects.yaml#/components/schemas/ProjectPatchRequest'
+    ProjectSettings:
+      $ref: 'openapi.projectSettings.yaml#/components/schemas/ProjectSettings'
+    ProjectSettingsList:
+      $ref: 'openapi.projectSettings.yaml#/components/schemas/ProjectSettingsList'
+    ProjectSettingsPatchRequest:
+      $ref: 'openapi.projectSettings.yaml#/components/schemas/ProjectSettingsPatchRequest'
+    User:
+      $ref: 'openapi.users.yaml#/components/schemas/User'
+    UserList:
+      $ref: 'openapi.users.yaml#/components/schemas/UserList'
+    UserPatchRequest:
+      $ref: 'openapi.users.yaml#/components/schemas/UserPatchRequest'
+    # AUTO-ADD NEW SCHEMAS
+  parameters:
+    id:
+      name: id
+      in: path
+      description: The id of record
+      required: true
+      schema:
+        type: string
+    page:
+      name: page
+      in: query
+      description: Page number of record list when record list exceeds specified page size
+      schema:
+        type: integer
+        default: 1
+        minimum: 1
+      required: false
+    size:
+      name: size
+      in: query
+      description: Maximum number of records to return
+      schema:
+        type: integer
+        default: 100
+        minimum: 0
+      required: false
+    search:
+      name: search
+      in: query
+      required: false
+      description: Specifies the search criteria
+      schema:
+        type: string
+    orderBy:
+      name: orderBy
+      in: query
+      required: false
+      description: Specifies the order by criteria
+      schema:
+        type: string
+    fields:
+      name: fields
+      in: query
+      required: false
+      description: Supplies a comma-separated list of fields to be returned
+      schema:
+        type: string
+security:
+  - Bearer: []

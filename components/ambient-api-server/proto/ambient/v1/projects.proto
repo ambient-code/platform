@@ -1,0 +1,72 @@
+syntax = "proto3";
+
+package ambient.v1;
+
+option go_package = "github.com/ambient/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1;ambient_v1";
+
+import "ambient/v1/common.proto";
+
+message Project {
+  ObjectReference metadata = 1;
+  string name = 2;
+  optional string display_name = 3;
+  optional string description = 4;
+  optional string labels = 5;
+  optional string annotations = 6;
+  optional string status = 7;
+}
+
+message CreateProjectRequest {
+  string name = 1;
+  optional string display_name = 2;
+  optional string description = 3;
+  optional string labels = 4;
+  optional string annotations = 5;
+}
+
+message GetProjectRequest {
+  string id = 1;
+}
+
+message UpdateProjectRequest {
+  string id = 1;
+  optional string name = 2;
+  optional string display_name = 3;
+  optional string description = 4;
+  optional string labels = 5;
+  optional string annotations = 6;
+  optional string status = 7;
+}
+
+message DeleteProjectRequest {
+  string id = 1;
+}
+
+message ListProjectsRequest {
+  int32 page = 1;
+  int32 size = 2;
+}
+
+message ListProjectsResponse {
+  repeated Project items = 1;
+  ListMeta metadata = 2;
+}
+
+message DeleteProjectResponse {}
+
+message WatchProjectsRequest {}
+
+message ProjectWatchEvent {
+  EventType type = 1;
+  Project project = 2;
+  string resource_id = 3;
+}
+
+service ProjectService {
+  rpc GetProject(GetProjectRequest) returns (Project);
+  rpc CreateProject(CreateProjectRequest) returns (Project);
+  rpc UpdateProject(UpdateProjectRequest) returns (Project);
+  rpc DeleteProject(DeleteProjectRequest) returns (DeleteProjectResponse);
+  rpc ListProjects(ListProjectsRequest) returns (ListProjectsResponse);
+  rpc WatchProjects(WatchProjectsRequest) returns (stream ProjectWatchEvent);
+}

@@ -11,6 +11,7 @@ on:
       - 'components/backend/**'
       - 'components/frontend/**'
       - 'components/public-api/**'
+      - 'components/ambient-api-server/**'
   pull_request_target:
     branches: [main]
     paths:
@@ -21,6 +22,7 @@ on:
       - 'components/backend/**'
       - 'components/frontend/**'
       - 'components/public-api/**'
+      - 'components/ambient-api-server/**'
   workflow_dispatch:
     inputs:
       force_build_all:
@@ -29,7 +31,7 @@ on:
         type: boolean
         default: false
       components:
-        description: 'Components to build (comma-separated: frontend,backend,operator,claude-runner,state-sync,public-api) - leave empty for all'
+        description: 'Components to build (comma-separated: frontend,backend,operator,claude-runner,state-sync,public-api,ambient-api-server) - leave empty for all'
         required: false
         type: string
         default: ''
@@ -48,6 +50,7 @@ jobs:
       claude-runner: ${{ steps.filter.outputs.claude-runner }}
       state-sync: ${{ steps.filter.outputs.state-sync }}
       public-api: ${{ steps.filter.outputs.public-api }}
+      ambient-api-server: ${{ steps.filter.outputs.ambient-api-server }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -71,6 +74,8 @@ jobs:
               - 'components/runners/state-sync/**'
             public-api:
               - 'components/public-api/**'
+            ambient-api-server:
+              - 'components/ambient-api-server/**'
 
   build-and-push:
     runs-on: ubuntu-latest
@@ -113,6 +118,11 @@ jobs:
             image: quay.io/ambient_code/vteam_public_api
             dockerfile: ./components/public-api/Dockerfile
             changed: ${{ needs.detect-changes.outputs.public-api }}
+          - name: ambient-api-server
+            context: ./components/ambient-api-server
+            image: quay.io/ambient_code/vteam_api_server
+            dockerfile: ./components/ambient-api-server/Dockerfile
+            changed: ${{ needs.detect-changes.outputs.ambient-api-server }}
     steps:
       - name: Checkout code
         if: matrix.component.changed == 'true' || github.event.inputs.force_build_all == 'true' || contains(github.event.inputs.components, matrix.component.name) || (github.event_name == 'workflow_dispatch' && github.event.inputs.components == '' && github.event.inputs.force_build_all != 'true')
