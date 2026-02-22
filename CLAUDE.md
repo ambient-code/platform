@@ -122,24 +122,13 @@ make kind-up
 # Full guide: docs/developer/local-development/kind.md
 ```
 
-**Alternative: OpenShift Local (CRC) - for OpenShift-specific features:**
+**Alternative: Minikube - for local builds:**
 
 ```bash
-# Prerequisites: brew install crc
-# Get free Red Hat pull secret from console.redhat.com/openshift/create/local
-make dev-start
+# Prerequisites: minikube installed
+make local-up
 
-# Access at https://vteam-frontend-vteam-dev.apps-crc.testing
-```
-
-**Hot-reloading development:**
-
-```bash
-# Terminal 1
-DEV_MODE=true make dev-start
-
-# Terminal 2 (separate terminal)
-make dev-sync
+# Access at http://localhost:8080
 ```
 
 ### Building Components
@@ -224,23 +213,28 @@ markdownlint docs/**/*.md
 
 ```bash
 # View logs
-make dev-logs              # Both backend and frontend
-make dev-logs-backend      # Backend only
-make dev-logs-frontend     # Frontend only
-make dev-logs-operator     # Operator only
+make local-logs              # All components (backend, frontend, operator)
+make local-logs-backend      # Backend only
+make local-logs-frontend     # Frontend only
+make local-logs-operator     # Operator only
 
-# Operator management
-make dev-restart-operator  # Restart operator deployment
-make dev-operator-status   # Show operator status and events
+# Status and troubleshooting
+make local-status            # Show status of local deployment
+make local-troubleshoot      # Show troubleshooting information
+
+# Rebuild components
+make local-rebuild           # Rebuild and reload all components
+make local-reload-backend    # Rebuild and reload backend only
+make local-reload-frontend   # Rebuild and reload frontend only
+make local-reload-operator   # Rebuild and reload operator only
 
 # Cleanup
-make dev-stop              # Stop processes, keep CRC running
-make dev-stop-cluster      # Stop processes and shutdown CRC
-make dev-clean             # Stop and delete OpenShift project
+make local-down              # Stop platform, keep cluster running
+make local-clean             # Delete cluster completely (minikube)
+make kind-down               # Delete kind cluster
 
 # Testing
-make dev-test              # Run smoke tests
-make dev-test-operator     # Test operator only
+make local-test              # Quick smoke test
 ```
 
 ## Key Architecture Patterns
