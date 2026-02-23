@@ -17,12 +17,17 @@ import (
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"ambient-code-operator/internal/config"
 )
 
 var (
 	meter metric.Meter
+
+	// cachedClient uses the controller-runtime informer cache for reads,
+	// avoiding direct API server hits every 30s for gauge callbacks.
+	cachedClient client.Client
 
 	// Session lifecycle metrics (histograms)
 	sessionStartupDuration metric.Float64Histogram
@@ -48,7 +53,12 @@ var (
 // InitMetrics initializes OpenTelemetry metrics.
 // Set OTEL_EXPORTER_OTLP_ENDPOINT to configure the collector address.
 // Leave unset or empty to disable metrics export (no-op).
-func InitMetrics(ctx context.Context) (func(), error) {
+// If c is non-nil, gauge callbacks will use the informer cache instead of
+// hitting the API server directly (saves a cluster-wide LIST every 30s).
+func InitMetrics(ctx context.Context, c ...client.Client) (func(), error) {
+	if len(c) > 0 && c[0] != nil {
+		cachedClient = c[0]
+	}
 	// Get OTLP endpoint from environment; skip if not configured
 	endpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
 	if endpoint == "" {
@@ -316,33 +326,49 @@ func initGauges() error {
 	return nil
 }
 
-// countSessionsByPhase counts sessions in the given phases, grouped by namespace
+// countSessionsByPhase counts sessions in the given phases, grouped by namespace.
+// When cachedClient is set (controller-runtime), reads from the informer cache
+// instead of making a cluster-wide LIST against the API server every 30s.
 func countSessionsByPhase(ctx context.Context, phases ...string) map[string]int64 {
 	counts := make(map[string]int64)
-
-	// Use config.DynamicClient to list sessions
-	if config.DynamicClient == nil {
-		return counts
-	}
-
-	gvr := schema.GroupVersionResource{
-		Group:    "vteam.ambient-code",
-		Version:  "v1alpha1",
-		Resource: "agenticsessions",
-	}
-
-	list, err := config.DynamicClient.Resource(gvr).List(ctx, v1.ListOptions{})
-	if err != nil {
-		log.Printf("Failed to list sessions for metrics: %v", err)
-		return counts
-	}
 
 	phaseSet := make(map[string]bool)
 	for _, p := range phases {
 		phaseSet[p] = true
 	}
 
-	for _, item := range list.Items {
+	sessionList := &unstructured.UnstructuredList{}
+	sessionList.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "vteam.ambient-code",
+		Version: "v1alpha1",
+		Kind:    "AgenticSessionList",
+	})
+
+	if cachedClient != nil {
+		// Use informer cache - no API server round-trip
+		if err := cachedClient.List(ctx, sessionList); err != nil {
+			log.Printf("Failed to list sessions for metrics (cached): %v", err)
+			return counts
+		}
+	} else {
+		// Fallback to direct API call if cached client not available
+		if config.DynamicClient == nil {
+			return counts
+		}
+		gvr := schema.GroupVersionResource{
+			Group:    "vteam.ambient-code",
+			Version:  "v1alpha1",
+			Resource: "agenticsessions",
+		}
+		list, err := config.DynamicClient.Resource(gvr).List(ctx, v1.ListOptions{})
+		if err != nil {
+			log.Printf("Failed to list sessions for metrics: %v", err)
+			return counts
+		}
+		sessionList.Items = list.Items
+	}
+
+	for _, item := range sessionList.Items {
 		ns := item.GetNamespace()
 		status, found, _ := unstructured.NestedMap(item.Object, "status")
 		if !found {
@@ -362,21 +388,35 @@ func countSessionsByPhase(ctx context.Context, phases ...string) map[string]int6
 	return counts
 }
 
+// metricsEnabled returns true when instruments have been initialised.
+// All Record* functions check this to avoid nil-pointer panics when
+// OTEL_EXPORTER_OTLP_ENDPOINT is unset.
+func metricsEnabled() bool { return meter != nil }
+
 // Record functions for metrics
 
 // === Duration metrics (histograms) ===
 
 func RecordSessionStartupDuration(namespace string, duration float64) {
+	if !metricsEnabled() {
+		return
+	}
 	sessionStartupDuration.Record(context.Background(), duration,
 		metric.WithAttributes(attribute.String("namespace", namespace)))
 }
 
 func RecordSessionTotalDuration(namespace string, duration float64) {
+	if !metricsEnabled() {
+		return
+	}
 	sessionTotalDuration.Record(context.Background(), duration,
 		metric.WithAttributes(attribute.String("namespace", namespace)))
 }
 
 func RecordReconcileDuration(phase string, duration float64, success bool) {
+	if !metricsEnabled() {
+		return
+	}
 	successStr := "true"
 	if !success {
 		successStr = "false"
@@ -389,11 +429,17 @@ func RecordReconcileDuration(phase string, duration float64, success bool) {
 }
 
 func RecordTokenProvisionDuration(namespace string, duration float64) {
+	if !metricsEnabled() {
+		return
+	}
 	tokenProvisionDuration.Record(context.Background(), duration,
 		metric.WithAttributes(attribute.String("namespace", namespace)))
 }
 
 func RecordImagePullDuration(namespace, image string, duration float64) {
+	if !metricsEnabled() {
+		return
+	}
 	imagePullDuration.Record(context.Background(), duration,
 		metric.WithAttributes(
 			attribute.String("namespace", namespace),
@@ -404,6 +450,9 @@ func RecordImagePullDuration(namespace, image string, duration float64) {
 // === Lifecycle counters ===
 
 func RecordPhaseTransition(namespace, fromPhase, toPhase string) {
+	if !metricsEnabled() {
+		return
+	}
 	sessionPhaseTransitions.Add(context.Background(), 1,
 		metric.WithAttributes(
 			attribute.String("namespace", namespace),
@@ -413,6 +462,9 @@ func RecordPhaseTransition(namespace, fromPhase, toPhase string) {
 }
 
 func RecordSessionCompleted(namespace, finalPhase string) {
+	if !metricsEnabled() {
+		return
+	}
 	sessionsCompleted.Add(context.Background(), 1,
 		metric.WithAttributes(
 			attribute.String("namespace", namespace),
@@ -421,6 +473,9 @@ func RecordSessionCompleted(namespace, finalPhase string) {
 }
 
 func RecordSessionCreatedByUser(namespace, user string) {
+	if !metricsEnabled() {
+		return
+	}
 	sessionsByUser.Add(context.Background(), 1,
 		metric.WithAttributes(
 			attribute.String("namespace", namespace),
@@ -429,6 +484,9 @@ func RecordSessionCreatedByUser(namespace, user string) {
 }
 
 func RecordSessionCreatedByProject(namespace string) {
+	if !metricsEnabled() {
+		return
+	}
 	sessionsByProject.Add(context.Background(), 1,
 		metric.WithAttributes(attribute.String("namespace", namespace)))
 }
@@ -436,6 +494,9 @@ func RecordSessionCreatedByProject(namespace string) {
 // === Error counters ===
 
 func RecordReconcileRetry(namespace, phase string) {
+	if !metricsEnabled() {
+		return
+	}
 	reconcileRetries.Add(context.Background(), 1,
 		metric.WithAttributes(
 			attribute.String("namespace", namespace),
@@ -444,11 +505,17 @@ func RecordReconcileRetry(namespace, phase string) {
 }
 
 func RecordSessionTimeout(namespace string) {
+	if !metricsEnabled() {
+		return
+	}
 	sessionTimeouts.Add(context.Background(), 1,
 		metric.WithAttributes(attribute.String("namespace", namespace)))
 }
 
 func RecordS3Error(namespace, operation string) {
+	if !metricsEnabled() {
+		return
+	}
 	s3Errors.Add(context.Background(), 1,
 		metric.WithAttributes(
 			attribute.String("namespace", namespace),
@@ -457,11 +524,17 @@ func RecordS3Error(namespace, operation string) {
 }
 
 func RecordTokenRefreshError(namespace string) {
+	if !metricsEnabled() {
+		return
+	}
 	tokenRefreshErrors.Add(context.Background(), 1,
 		metric.WithAttributes(attribute.String("namespace", namespace)))
 }
 
 func RecordPodRestart(namespace, session string) {
+	if !metricsEnabled() {
+		return
+	}
 	podRestarts.Add(context.Background(), 1,
 		metric.WithAttributes(
 			attribute.String("namespace", namespace),

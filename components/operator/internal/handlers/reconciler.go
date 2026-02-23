@@ -27,7 +27,7 @@ import (
 func ReconcilePendingSession(ctx context.Context, session *unstructured.Unstructured, appConfig *config.Config) error {
 	// Delegate to existing handleAgenticSessionEvent logic
 	// This is a wrapper that allows the existing code to be called from the controller
-	return handleAgenticSessionEvent(session)
+	return handleAgenticSessionEvent(ctx, session)
 }
 
 // ResetToPending transitions a session back to Pending phase.

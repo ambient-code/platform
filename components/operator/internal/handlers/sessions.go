@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"io"
 	"log"
@@ -17,6 +18,8 @@ import (
 	"ambient-code-operator/internal/config"
 	"ambient-code-operator/internal/types"
 
+	"golang.org/x/sync/errgroup"
+
 	authnv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -26,12 +29,6 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	intstr "k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/util/retry"
-)
-
-// Track which pods are currently being monitored to prevent duplicate goroutines
-var (
-	monitoredPods   = make(map[string]bool)
-	monitoredPodsMu sync.Mutex
 )
 
 // handleAgenticSessionEvent is the legacy reconciliation function containing all session
@@ -44,25 +41,18 @@ var (
 // - 🔜 Future: Break into ReconcilePending, ReconcileRunning, ReconcileStopped functions
 //
 // This transitional approach allows framework adoption without rewriting 2,300 lines at once.
-func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
+func handleAgenticSessionEvent(ctx context.Context, obj *unstructured.Unstructured) error {
 	name := obj.GetName()
 	sessionNamespace := obj.GetNamespace()
 
-	// Verify the resource still exists before processing (in its own namespace)
-	gvr := types.GetAgenticSessionResource()
-	currentObj, err := config.DynamicClient.Resource(gvr).Namespace(sessionNamespace).Get(context.TODO(), name, v1.GetOptions{})
-	if err != nil {
-		if errors.IsNotFound(err) {
-			log.Printf("AgenticSession %s no longer exists, skipping processing", name)
-			return nil
-		}
-		return fmt.Errorf("failed to verify AgenticSession %s exists: %v", name, err)
-	}
+	// Use the object passed in from controller-runtime's informer cache (already fresh).
+	// No need to re-GET from the API server - the cache is event-driven and up to date.
+	currentObj := obj
 
 	// Create status accumulator - all status changes will be batched into a single API call
 	statusPatch := NewStatusPatch(sessionNamespace, name)
 
-	// Get the current status from the fresh object (status may be empty right after creation
+	// Get the current status (status may be empty right after creation
 	// because the API server drops .status on create when the status subresource is enabled)
 	stMap, found, _ := unstructured.NestedMap(currentObj.Object, "status")
 	phase := ""
@@ -99,7 +89,7 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 
 		// Delete old pod if it exists (from previous run)
 		podName := fmt.Sprintf("%s-runner", name)
-		_, err = config.K8sClient.CoreV1().Pods(sessionNamespace).Get(context.TODO(), podName, v1.GetOptions{})
+		_, err := config.K8sClient.CoreV1().Pods(sessionNamespace).Get(context.TODO(), podName, v1.GetOptions{})
 		if err == nil {
 			log.Printf("[DesiredPhase] Cleaning up old pod %s before restart", podName)
 			if err := deletePodAndPerPodService(sessionNamespace, podName, name); err != nil {
@@ -390,19 +380,7 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 		podName := fmt.Sprintf("%s-runner", name)
 		_, err := config.K8sClient.CoreV1().Pods(sessionNamespace).Get(context.TODO(), podName, v1.GetOptions{})
 		if err == nil {
-			// Pod exists, start monitoring if not already running
-			monitorKey := fmt.Sprintf("%s/%s", sessionNamespace, podName)
-			monitoredPodsMu.Lock()
-			alreadyMonitoring := monitoredPods[monitorKey]
-			if !alreadyMonitoring {
-				monitoredPods[monitorKey] = true
-				monitoredPodsMu.Unlock()
-				log.Printf("Resuming monitoring for existing pod %s (session in Creating phase)", podName)
-				go monitorPod(podName, name, sessionNamespace)
-			} else {
-				monitoredPodsMu.Unlock()
-				log.Printf("Pod %s already being monitored, skipping duplicate", podName)
-			}
+			// Pod exists - controller-runtime reconciler handles monitoring via pod watches
 			return nil
 		} else if errors.IsNotFound(err) {
 			// Pod doesn't exist but phase is Creating - check if this is due to a stop request
@@ -505,125 +483,119 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 	// Load config for this session
 	appConfig := config.LoadConfig()
 
-	// Check for ambient-vertex secret in the operator's namespace and copy it if Vertex is enabled
-	// This will be used to conditionally mount the secret as a volume
-	ambientVertexSecretCopied := false
 	operatorNamespace := appConfig.BackendNamespace // Assuming operator runs in same namespace as backend
 	vertexEnabled := os.Getenv("CLAUDE_CODE_USE_VERTEX") == "1"
-
-	// Only attempt to copy the secret if Vertex AI is enabled
-	if vertexEnabled {
-		if ambientVertexSecret, err := config.K8sClient.CoreV1().Secrets(operatorNamespace).Get(context.TODO(), types.AmbientVertexSecretName, v1.GetOptions{}); err == nil {
-			// Secret exists in operator namespace, copy it to the session namespace
-			log.Printf("Found %s secret in %s, copying to %s", types.AmbientVertexSecretName, operatorNamespace, sessionNamespace)
-			// Create context with timeout for secret copy operation
-			copyCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			defer cancel()
-			if err := copySecretToNamespace(copyCtx, ambientVertexSecret, sessionNamespace, currentObj); err != nil {
-				return fmt.Errorf("failed to copy %s secret from %s to %s (CLAUDE_CODE_USE_VERTEX=1): %w", types.AmbientVertexSecretName, operatorNamespace, sessionNamespace, err)
-			}
-			ambientVertexSecretCopied = true
-			log.Printf("Successfully copied %s secret to %s", types.AmbientVertexSecretName, sessionNamespace)
-		} else if !errors.IsNotFound(err) {
-			errMsg := fmt.Sprintf("Failed to check for %s secret: %v", types.AmbientVertexSecretName, err)
-			statusPatch.SetField("phase", "Failed")
-			statusPatch.AddCondition(conditionUpdate{
-				Type:    conditionSecretsReady,
-				Status:  "False",
-				Reason:  "SecretCheckFailed",
-				Message: errMsg,
-			})
-			statusPatch.AddCondition(conditionUpdate{
-				Type:    conditionReady,
-				Status:  "False",
-				Reason:  "VertexSecretError",
-				Message: errMsg,
-			})
-			_ = statusPatch.Apply()
-			return fmt.Errorf("failed to check for %s secret in %s (CLAUDE_CODE_USE_VERTEX=1): %w", types.AmbientVertexSecretName, operatorNamespace, err)
-		} else {
-			// Vertex enabled but secret not found - fail fast
-			errMsg := fmt.Sprintf("CLAUDE_CODE_USE_VERTEX=1 but %s secret not found in namespace %s. Create it with: kubectl create secret generic %s --from-file=ambient-code-key.json=/path/to/sa.json -n %s",
-				types.AmbientVertexSecretName, operatorNamespace, types.AmbientVertexSecretName, operatorNamespace)
-			statusPatch.SetField("phase", "Failed")
-			statusPatch.AddCondition(conditionUpdate{
-				Type:    conditionSecretsReady,
-				Status:  "False",
-				Reason:  "VertexSecretMissing",
-				Message: errMsg,
-			})
-			statusPatch.AddCondition(conditionUpdate{
-				Type:    conditionReady,
-				Status:  "False",
-				Reason:  "VertexSecretMissing",
-				Message: "Vertex AI enabled but ambient-vertex secret not found",
-			})
-			_ = statusPatch.Apply()
-			return fmt.Errorf("CLAUDE_CODE_USE_VERTEX=1 but %s secret not found in namespace %s", types.AmbientVertexSecretName, operatorNamespace)
-		}
-	} else {
-		log.Printf("Vertex AI disabled (CLAUDE_CODE_USE_VERTEX=0), skipping %s secret copy", types.AmbientVertexSecretName)
-	}
-
-	// Check for Langfuse secret in the operator's namespace and copy it if enabled
-	ambientLangfuseSecretCopied := false
 	langfuseEnabled := os.Getenv("LANGFUSE_ENABLED") != "" && os.Getenv("LANGFUSE_ENABLED") != "0" && os.Getenv("LANGFUSE_ENABLED") != "false"
-
-	if langfuseEnabled {
-		if langfuseSecret, err := config.K8sClient.CoreV1().Secrets(operatorNamespace).Get(context.TODO(), "ambient-admin-langfuse-secret", v1.GetOptions{}); err == nil {
-			// Secret exists in operator namespace, copy it to the session namespace
-			log.Printf("Found ambient-admin-langfuse-secret in %s, copying to %s", operatorNamespace, sessionNamespace)
-			// Create context with timeout for secret copy operation
-			copyCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			defer cancel()
-			if err := copySecretToNamespace(copyCtx, langfuseSecret, sessionNamespace, currentObj); err != nil {
-				log.Printf("Warning: Failed to copy Langfuse secret: %v. Langfuse observability will be disabled for this session.", err)
-			} else {
-				ambientLangfuseSecretCopied = true
-				log.Printf("Successfully copied Langfuse secret to %s", sessionNamespace)
-			}
-		} else if !errors.IsNotFound(err) {
-			log.Printf("Warning: Failed to check for Langfuse secret in %s: %v. Langfuse observability will be disabled for this session.", operatorNamespace, err)
-		} else {
-			// Langfuse enabled but secret not found - log warning and continue without Langfuse
-			log.Printf("Warning: LANGFUSE_ENABLED is set but ambient-admin-langfuse-secret not found in namespace %s. Langfuse observability will be disabled for this session.", operatorNamespace)
-		}
-	} else {
-		log.Printf("Langfuse disabled, skipping secret copy")
-	}
-
-	// Create a Kubernetes Pod for this AgenticSession
 	podName := fmt.Sprintf("%s-runner", name)
-
-	// Ensure runner token exists before creating pod
-	// This handles cases where sessions are created directly via kubectl (bypassing the backend)
-	// or when the backend failed to provision the token
 	runnerTokenSecretName := fmt.Sprintf("ambient-runner-token-%s", name)
-	if _, err := config.K8sClient.CoreV1().Secrets(sessionNamespace).Get(context.TODO(), runnerTokenSecretName, v1.GetOptions{}); err != nil {
-		if errors.IsNotFound(err) {
-			log.Printf("Runner token secret %s not found, creating it now", runnerTokenSecretName)
-			if err := regenerateRunnerToken(sessionNamespace, name, currentObj); err != nil {
-				errMsg := fmt.Sprintf("Failed to provision runner token: %v", err)
-				log.Print(errMsg)
-				statusPatch.SetField("phase", "Failed")
-				statusPatch.AddCondition(conditionUpdate{
-					Type:    conditionReady,
-					Status:  "False",
-					Reason:  "TokenProvisionFailed",
-					Message: errMsg,
-				})
-				_ = statusPatch.Apply()
-				return fmt.Errorf("failed to provision runner token for session %s: %v", name, err)
-			}
-			log.Printf("Successfully provisioned runner token for session %s", name)
-		} else {
-			log.Printf("Warning: error checking runner token secret: %v", err)
-		}
+	const runnerSecretsName = "ambient-runner-secrets"               // ANTHROPIC_API_KEY only (ignored when Vertex enabled)
+	const integrationSecretsName = "ambient-non-vertex-integrations" // GIT_*, JIRA_*, custom keys (optional)
+
+	// ── Stage 1: Parallel reads ─────────────────────────────────────────
+	// Fetch all required secrets and config concurrently to reduce API round-trips.
+	// Under load (20+ sessions), sequential reads saturate the API server.
+	var (
+		mu                                             sync.Mutex // protects shared results below
+		vertexSecret                                   *corev1.Secret
+		vertexSecretErr                                error
+		langfuseSecret                                 *corev1.Secret
+		langfuseSecretErr                              error
+		runnerTokenExists                              bool
+		runnerTokenCheckErr                            error
+		runnerSecretsExist                             bool
+		runnerSecretsCheckErr                          error
+		integrationSecretsExist                        bool
+		s3Endpoint, s3Bucket, s3AccessKey, s3SecretKey string
+		s3Err                                          error
+		podAlreadyExists                               bool
+	)
+
+	readGroup, readCtx := errgroup.WithContext(ctx)
+
+	// GET vertex secret from operator namespace (if Vertex enabled)
+	if vertexEnabled {
+		readGroup.Go(func() error {
+			secret, err := config.K8sClient.CoreV1().Secrets(operatorNamespace).Get(readCtx, types.AmbientVertexSecretName, v1.GetOptions{})
+			mu.Lock()
+			vertexSecret = secret
+			vertexSecretErr = err
+			mu.Unlock()
+			return nil // Never fail the group - we evaluate errors below
+		})
 	}
 
-	// Check if pod already exists in the session's namespace
-	_, err = config.K8sClient.CoreV1().Pods(sessionNamespace).Get(context.TODO(), podName, v1.GetOptions{})
-	if err == nil {
+	// GET langfuse secret from operator namespace (if Langfuse enabled)
+	if langfuseEnabled {
+		readGroup.Go(func() error {
+			secret, err := config.K8sClient.CoreV1().Secrets(operatorNamespace).Get(readCtx, "ambient-admin-langfuse-secret", v1.GetOptions{})
+			mu.Lock()
+			langfuseSecret = secret
+			langfuseSecretErr = err
+			mu.Unlock()
+			return nil
+		})
+	}
+
+	// GET runner token secret
+	readGroup.Go(func() error {
+		_, err := config.K8sClient.CoreV1().Secrets(sessionNamespace).Get(readCtx, runnerTokenSecretName, v1.GetOptions{})
+		mu.Lock()
+		if err == nil {
+			runnerTokenExists = true
+		}
+		runnerTokenCheckErr = err
+		mu.Unlock()
+		return nil
+	})
+
+	// GET runner secrets (only when Vertex disabled)
+	if !vertexEnabled {
+		readGroup.Go(func() error {
+			_, err := config.K8sClient.CoreV1().Secrets(sessionNamespace).Get(readCtx, runnerSecretsName, v1.GetOptions{})
+			mu.Lock()
+			runnerSecretsExist = (err == nil)
+			runnerSecretsCheckErr = err
+			mu.Unlock()
+			return nil
+		})
+	}
+
+	// GET integration secrets
+	readGroup.Go(func() error {
+		_, err := config.K8sClient.CoreV1().Secrets(sessionNamespace).Get(readCtx, integrationSecretsName, v1.GetOptions{})
+		mu.Lock()
+		integrationSecretsExist = (err == nil)
+		mu.Unlock()
+		if err != nil && !errors.IsNotFound(err) {
+			log.Printf("Error checking for %s secret in %s: %v", integrationSecretsName, sessionNamespace, err)
+		}
+		return nil
+	})
+
+	// GET S3 config
+	readGroup.Go(func() error {
+		ep, bkt, ak, sk, err := getS3ConfigForProject(sessionNamespace, appConfig)
+		mu.Lock()
+		s3Endpoint, s3Bucket, s3AccessKey, s3SecretKey, s3Err = ep, bkt, ak, sk, err
+		mu.Unlock()
+		return nil
+	})
+
+	// GET pod existence check
+	readGroup.Go(func() error {
+		_, err := config.K8sClient.CoreV1().Pods(sessionNamespace).Get(readCtx, podName, v1.GetOptions{})
+		mu.Lock()
+		podAlreadyExists = (err == nil)
+		mu.Unlock()
+		return nil
+	})
+
+	_ = readGroup.Wait() // All goroutines return nil; errors are in result vars
+
+	// ── Evaluate parallel read results ──────────────────────────────────
+
+	// Early exit: pod already exists
+	if podAlreadyExists {
 		log.Printf("Pod %s already exists for AgenticSession %s", podName, name)
 		statusPatch.SetField("phase", "Creating")
 		statusPatch.SetField("observedGeneration", currentObj.GetGeneration())
@@ -634,10 +606,127 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 			Message: "Runner pod already exists",
 		})
 		_ = statusPatch.Apply()
-		// Clear desired-phase annotation if it exists (pod already created)
 		_ = clearAnnotation(sessionNamespace, name, "ambient-code.io/desired-phase")
 		return nil
 	}
+
+	// Evaluate vertex secret read
+	if vertexEnabled {
+		if vertexSecretErr != nil {
+			if !errors.IsNotFound(vertexSecretErr) {
+				errMsg := fmt.Sprintf("Failed to check for %s secret: %v", types.AmbientVertexSecretName, vertexSecretErr)
+				statusPatch.SetField("phase", "Failed")
+				statusPatch.AddCondition(conditionUpdate{Type: conditionSecretsReady, Status: "False", Reason: "SecretCheckFailed", Message: errMsg})
+				statusPatch.AddCondition(conditionUpdate{Type: conditionReady, Status: "False", Reason: "VertexSecretError", Message: errMsg})
+				_ = statusPatch.Apply()
+				return fmt.Errorf("failed to check for %s secret in %s (CLAUDE_CODE_USE_VERTEX=1): %w", types.AmbientVertexSecretName, operatorNamespace, vertexSecretErr)
+			}
+			// Vertex enabled but secret not found - fail fast
+			errMsg := fmt.Sprintf("CLAUDE_CODE_USE_VERTEX=1 but %s secret not found in namespace %s. Create it with: kubectl create secret generic %s --from-file=ambient-code-key.json=/path/to/sa.json -n %s",
+				types.AmbientVertexSecretName, operatorNamespace, types.AmbientVertexSecretName, operatorNamespace)
+			statusPatch.SetField("phase", "Failed")
+			statusPatch.AddCondition(conditionUpdate{Type: conditionSecretsReady, Status: "False", Reason: "VertexSecretMissing", Message: errMsg})
+			statusPatch.AddCondition(conditionUpdate{Type: conditionReady, Status: "False", Reason: "VertexSecretMissing", Message: "Vertex AI enabled but ambient-vertex secret not found"})
+			_ = statusPatch.Apply()
+			return fmt.Errorf("CLAUDE_CODE_USE_VERTEX=1 but %s secret not found in namespace %s", types.AmbientVertexSecretName, operatorNamespace)
+		}
+	}
+
+	// Evaluate runner secrets (when Vertex disabled)
+	if !vertexEnabled {
+		if !runnerSecretsExist {
+			if runnerSecretsCheckErr != nil && !errors.IsNotFound(runnerSecretsCheckErr) {
+				// Transient error (network, RBAC, etc.) — let the reconciler retry
+				return fmt.Errorf("transient error checking runner secret %s: %w", runnerSecretsName, runnerSecretsCheckErr)
+			}
+			// Definitively missing — fail the session
+			log.Printf("Runner secret %s missing in %s (Vertex disabled)", runnerSecretsName, sessionNamespace)
+			statusPatch.AddCondition(conditionUpdate{Type: conditionSecretsReady, Status: "False", Reason: "RunnerSecretMissing", Message: fmt.Sprintf("Secret %s missing", runnerSecretsName)})
+			_ = statusPatch.Apply()
+			return fmt.Errorf("runner secret %s missing in namespace %s", runnerSecretsName, sessionNamespace)
+		}
+		log.Printf("Found runner secret %s in %s (Vertex disabled)", runnerSecretsName, sessionNamespace)
+	}
+
+	// ── Stage 2: Parallel writes (secret copies + token provisioning) ───
+	ambientVertexSecretCopied := false
+	ambientLangfuseSecretCopied := false
+	writeGroup, writeCtx := errgroup.WithContext(ctx)
+
+	// Copy vertex secret to session namespace
+	if vertexEnabled && vertexSecret != nil {
+		writeGroup.Go(func() error {
+			copyCtx, cancel := context.WithTimeout(writeCtx, 30*time.Second)
+			defer cancel()
+			if err := copySecretToNamespace(copyCtx, vertexSecret, sessionNamespace, currentObj); err != nil {
+				return fmt.Errorf("failed to copy %s secret from %s to %s (CLAUDE_CODE_USE_VERTEX=1): %w", types.AmbientVertexSecretName, operatorNamespace, sessionNamespace, err)
+			}
+			mu.Lock()
+			ambientVertexSecretCopied = true
+			mu.Unlock()
+			log.Printf("Successfully copied %s secret to %s", types.AmbientVertexSecretName, sessionNamespace)
+			return nil
+		})
+	}
+
+	// Copy langfuse secret to session namespace
+	if langfuseEnabled && langfuseSecret != nil {
+		writeGroup.Go(func() error {
+			copyCtx, cancel := context.WithTimeout(writeCtx, 30*time.Second)
+			defer cancel()
+			if err := copySecretToNamespace(copyCtx, langfuseSecret, sessionNamespace, currentObj); err != nil {
+				log.Printf("Warning: Failed to copy Langfuse secret: %v. Langfuse observability will be disabled for this session.", err)
+				return nil // Non-fatal
+			}
+			mu.Lock()
+			ambientLangfuseSecretCopied = true
+			mu.Unlock()
+			log.Printf("Successfully copied Langfuse secret to %s", sessionNamespace)
+			return nil
+		})
+	} else if langfuseEnabled && langfuseSecretErr != nil {
+		if !errors.IsNotFound(langfuseSecretErr) {
+			log.Printf("Warning: Failed to check for Langfuse secret in %s: %v. Langfuse observability will be disabled for this session.", operatorNamespace, langfuseSecretErr)
+		} else {
+			log.Printf("Warning: LANGFUSE_ENABLED is set but ambient-admin-langfuse-secret not found in namespace %s. Langfuse observability will be disabled for this session.", operatorNamespace)
+		}
+	}
+
+	// Provision runner token if missing
+	if !runnerTokenExists {
+		if errors.IsNotFound(runnerTokenCheckErr) {
+			// Secret definitively does not exist — provision it
+			writeGroup.Go(func() error {
+				log.Printf("Runner token secret %s not found, creating it now", runnerTokenSecretName)
+				if err := regenerateRunnerToken(sessionNamespace, name, currentObj); err != nil {
+					return fmt.Errorf("failed to provision runner token for session %s: %w: %w", name, ErrTokenProvision, err)
+				}
+				log.Printf("Successfully provisioned runner token for session %s", name)
+				return nil
+			})
+		} else if runnerTokenCheckErr != nil {
+			// Transient error (network, RBAC, etc.) — return retriable error
+			// instead of silently proceeding without a token
+			return fmt.Errorf("transient error checking runner token secret %s: %w", runnerTokenSecretName, runnerTokenCheckErr)
+		}
+	}
+
+	if err := writeGroup.Wait(); err != nil {
+		// Any writeGroup failure is fatal — set phase=Failed so the session
+		// does not spin forever in Pending retries.
+		reason := "WriteGroupFailed"
+		if stderrors.Is(err, ErrTokenProvision) {
+			reason = "TokenProvisionFailed"
+		}
+		errMsg := fmt.Sprintf("Failed during secret provisioning: %v", err)
+		log.Print(errMsg)
+		statusPatch.SetField("phase", "Failed")
+		statusPatch.AddCondition(conditionUpdate{Type: conditionReady, Status: "False", Reason: reason, Message: errMsg})
+		_ = statusPatch.Apply()
+		return err
+	}
+
+	// ── Continue with spec extraction and pod building ───────────────────
 
 	// Extract spec information from the fresh object
 	spec, _, _ := unstructured.NestedMap(currentObj.Object, "spec")
@@ -651,43 +740,6 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 	model, _, _ := unstructured.NestedString(llmSettings, "model")
 	temperature, _, _ := unstructured.NestedFloat64(llmSettings, "temperature")
 	maxTokens, _, _ := unstructured.NestedInt64(llmSettings, "maxTokens")
-
-	// Hardcoded secret names (convention over configuration)
-	const runnerSecretsName = "ambient-runner-secrets"               // ANTHROPIC_API_KEY only (ignored when Vertex enabled)
-	const integrationSecretsName = "ambient-non-vertex-integrations" // GIT_*, JIRA_*, custom keys (optional)
-
-	// Only check for runner secrets when Vertex is disabled
-	// When Vertex is enabled, ambient-vertex secret is used instead
-	if !vertexEnabled {
-		if _, err := config.K8sClient.CoreV1().Secrets(sessionNamespace).Get(context.TODO(), runnerSecretsName, v1.GetOptions{}); err != nil {
-			if !errors.IsNotFound(err) {
-				log.Printf("Error checking runner secret %s: %v", runnerSecretsName, err)
-			} else {
-				log.Printf("Runner secret %s missing in %s (Vertex disabled)", runnerSecretsName, sessionNamespace)
-			}
-			statusPatch.AddCondition(conditionUpdate{
-				Type:    conditionSecretsReady,
-				Status:  "False",
-				Reason:  "RunnerSecretMissing",
-				Message: fmt.Sprintf("Secret %s missing", runnerSecretsName),
-			})
-			_ = statusPatch.Apply()
-			return fmt.Errorf("runner secret %s missing in namespace %s", runnerSecretsName, sessionNamespace)
-		}
-		log.Printf("Found runner secret %s in %s (Vertex disabled)", runnerSecretsName, sessionNamespace)
-	} else {
-		log.Printf("Vertex AI enabled, skipping runner secret %s validation", runnerSecretsName)
-	}
-
-	integrationSecretsExist := false
-	if _, err := config.K8sClient.CoreV1().Secrets(sessionNamespace).Get(context.TODO(), integrationSecretsName, v1.GetOptions{}); err == nil {
-		integrationSecretsExist = true
-		log.Printf("Found %s secret in %s, will inject as env vars", integrationSecretsName, sessionNamespace)
-	} else if !errors.IsNotFound(err) {
-		log.Printf("Error checking for %s secret in %s: %v", integrationSecretsName, sessionNamespace, err)
-	} else {
-		log.Printf("No %s secret found in %s (optional, skipping)", integrationSecretsName, sessionNamespace)
-	}
 
 	statusPatch.AddCondition(conditionUpdate{
 		Type:    conditionSecretsReady,
@@ -717,18 +769,14 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 	}
 	log.Printf("Session %s initiated by user: %s (userId: %s)", name, userName, userID)
 
-	// NOTE: Google email no longer fetched by operator - runner fetches credentials at runtime
-	// Runner will set USER_GOOGLE_EMAIL from backend API response in _populate_runtime_credentials()
-
-	// Get S3 configuration for this project (from project secret or operator defaults)
-	s3Endpoint, s3Bucket, s3AccessKey, s3SecretKey, err := getS3ConfigForProject(sessionNamespace, appConfig)
-	if err != nil {
-		log.Printf("Warning: S3 not available for project %s: %v (sessions will use ephemeral storage only)", sessionNamespace, err)
+	// S3 config already fetched in parallel above
+	if s3Err != nil {
+		log.Printf("Warning: S3 not available for project %s: %v (sessions will use ephemeral storage only)", sessionNamespace, s3Err)
 		statusPatch.AddCondition(conditionUpdate{
 			Type:    "S3Available",
 			Status:  "False",
 			Reason:  "NotConfigured",
-			Message: fmt.Sprintf("S3 storage not configured: %v. Session state will not persist across pod restarts. Configure S3 in project settings.", err),
+			Message: fmt.Sprintf("S3 storage not configured: %v. Session state will not persist across pod restarts. Configure S3 in project settings.", s3Err),
 		})
 		// Set empty values - init-hydrate and state-sync will skip S3 operations
 		s3Endpoint = ""
@@ -1327,19 +1375,6 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 		log.Printf("Created AG-UI service session-%s for AgenticSession %s", name, name)
 	}
 
-	// Start monitoring the pod (only if not already being monitored)
-	monitorKey := fmt.Sprintf("%s/%s", sessionNamespace, podName)
-	monitoredPodsMu.Lock()
-	alreadyMonitoring := monitoredPods[monitorKey]
-	if !alreadyMonitoring {
-		monitoredPods[monitorKey] = true
-		monitoredPodsMu.Unlock()
-		go monitorPod(podName, name, sessionNamespace)
-	} else {
-		monitoredPodsMu.Unlock()
-		log.Printf("Pod %s already being monitored, skipping duplicate goroutine", podName)
-	}
-
 	return nil
 }
 
@@ -1662,232 +1697,6 @@ func reconcileActiveWorkflowWithPatch(sessionNamespace, sessionName string, spec
 	})
 
 	return nil
-}
-
-func monitorPod(podName, sessionName, sessionNamespace string) {
-	monitorKey := fmt.Sprintf("%s/%s", sessionNamespace, podName)
-
-	// Remove from monitoring map when this goroutine exits
-	defer func() {
-		monitoredPodsMu.Lock()
-		delete(monitoredPods, monitorKey)
-		monitoredPodsMu.Unlock()
-		log.Printf("Stopped monitoring pod %s (goroutine exiting)", podName)
-	}()
-
-	log.Printf("Starting pod monitoring for %s (session: %s/%s)", podName, sessionNamespace, sessionName)
-	ticker := time.NewTicker(5 * time.Second)
-	defer ticker.Stop()
-
-	for range ticker.C {
-		// Create status accumulator for this tick - all updates batched into single API call
-		statusPatch := NewStatusPatch(sessionNamespace, sessionName)
-
-		gvr := types.GetAgenticSessionResource()
-		sessionObj, err := config.DynamicClient.Resource(gvr).Namespace(sessionNamespace).Get(context.TODO(), sessionName, v1.GetOptions{})
-		if err != nil {
-			if errors.IsNotFound(err) {
-				log.Printf("AgenticSession %s deleted; stopping job monitoring", sessionName)
-				return
-			}
-			log.Printf("Failed to fetch AgenticSession %s: %v", sessionName, err)
-			continue
-		}
-
-		// Check if session was stopped or is stopping - exit monitor loop immediately
-		// This prevents the monitor from overwriting phase=Stopping with phase=Failed
-		// when the pod exits with non-zero (e.g. state-sync exit 137 during termination)
-		sessionStatus, _, _ := unstructured.NestedMap(sessionObj.Object, "status")
-		if sessionStatus != nil {
-			if currentPhase, ok := sessionStatus["phase"].(string); ok {
-				if currentPhase == "Stopped" || currentPhase == "Stopping" {
-					log.Printf("AgenticSession %s phase is %s; stopping pod monitoring", sessionName, currentPhase)
-					return
-				}
-			}
-		}
-		// Also check desired-phase annotation as a belt-and-braces guard
-		// (the annotation is set before phase transitions, so catches early race)
-		sessionAnnotations := sessionObj.GetAnnotations()
-		if sessionAnnotations != nil {
-			if dp := strings.TrimSpace(sessionAnnotations["ambient-code.io/desired-phase"]); dp == "Stopped" {
-				log.Printf("AgenticSession %s has desired-phase=Stopped; stopping pod monitoring", sessionName)
-				return
-			}
-		}
-
-		// Check inactivity timeout for running sessions
-		if shouldAutoStop(sessionObj) {
-			log.Printf("[Inactivity] Session %s/%s: idle beyond timeout, triggering auto-stop", sessionNamespace, sessionName)
-			if err := triggerInactivityStop(sessionNamespace, sessionName); err != nil {
-				log.Printf("[Inactivity] Failed to auto-stop %s/%s: %v", sessionNamespace, sessionName, err)
-				continue // Retry on next tick instead of abandoning the monitor
-			}
-			return
-		}
-
-		if err := ensureFreshRunnerToken(context.TODO(), sessionObj); err != nil {
-			log.Printf("Failed to refresh runner token for %s/%s: %v", sessionNamespace, sessionName, err)
-		}
-
-		pod, err := config.K8sClient.CoreV1().Pods(sessionNamespace).Get(context.TODO(), podName, v1.GetOptions{})
-		if err != nil {
-			if errors.IsNotFound(err) {
-				log.Printf("Pod %s deleted; stopping monitor", podName)
-				return
-			}
-			log.Printf("Error fetching pod %s: %v", podName, err)
-			continue
-		}
-		// Note: We don't store pod name in status (pods are ephemeral, can be recreated)
-		// Use k8s-resources endpoint or kubectl for live pod info
-
-		if pod.Spec.NodeName != "" {
-			statusPatch.AddCondition(conditionUpdate{Type: conditionPodScheduled, Status: "True", Reason: "Scheduled", Message: fmt.Sprintf("Scheduled on %s", pod.Spec.NodeName)})
-		} else {
-			surfacePodSchedulingFailure(pod, statusPatch)
-		}
-
-		if pod.Status.Phase == corev1.PodSucceeded {
-			statusPatch.SetField("phase", "Completed")
-			statusPatch.SetField("completionTime", time.Now().UTC().Format(time.RFC3339))
-			statusPatch.AddCondition(conditionUpdate{Type: conditionReady, Status: "False", Reason: "Completed", Message: "Session finished"})
-			_ = statusPatch.Apply()
-			_ = ensureSessionIsInteractive(sessionNamespace, sessionName)
-			_ = deletePodAndPerPodService(sessionNamespace, podName, sessionName)
-			return
-		}
-
-		if pod.Status.Phase == corev1.PodFailed {
-			// Collect detailed error message from pod and containers
-			errorMsg := pod.Status.Message
-			if errorMsg == "" {
-				errorMsg = pod.Status.Reason
-			}
-
-			// Check init containers for errors
-			for _, initStatus := range pod.Status.InitContainerStatuses {
-				if initStatus.State.Terminated != nil && initStatus.State.Terminated.ExitCode != 0 {
-					msg := fmt.Sprintf("Init container %s failed (exit %d): %s",
-						initStatus.Name,
-						initStatus.State.Terminated.ExitCode,
-						initStatus.State.Terminated.Message)
-					if initStatus.State.Terminated.Reason != "" {
-						msg = fmt.Sprintf("%s - %s", msg, initStatus.State.Terminated.Reason)
-					}
-					errorMsg = msg
-					break
-				}
-				if initStatus.State.Waiting != nil && initStatus.State.Waiting.Reason != "" {
-					errorMsg = fmt.Sprintf("Init container %s: %s - %s",
-						initStatus.Name,
-						initStatus.State.Waiting.Reason,
-						initStatus.State.Waiting.Message)
-					break
-				}
-			}
-
-			// Check main containers for errors if init passed
-			if errorMsg == "" || errorMsg == "PodFailed" {
-				for _, containerStatus := range pod.Status.ContainerStatuses {
-					if containerStatus.State.Terminated != nil && containerStatus.State.Terminated.ExitCode != 0 {
-						errorMsg = fmt.Sprintf("Container %s failed (exit %d): %s - %s",
-							containerStatus.Name,
-							containerStatus.State.Terminated.ExitCode,
-							containerStatus.State.Terminated.Reason,
-							containerStatus.State.Terminated.Message)
-						break
-					}
-					if containerStatus.State.Waiting != nil {
-						errorMsg = fmt.Sprintf("Container %s: %s - %s",
-							containerStatus.Name,
-							containerStatus.State.Waiting.Reason,
-							containerStatus.State.Waiting.Message)
-						break
-					}
-				}
-			}
-
-			if errorMsg == "" {
-				errorMsg = "Pod failed with unknown error"
-			}
-
-			log.Printf("Pod %s failed: %s", podName, errorMsg)
-			statusPatch.SetField("phase", "Failed")
-			statusPatch.SetField("completionTime", time.Now().UTC().Format(time.RFC3339))
-			statusPatch.AddCondition(conditionUpdate{Type: conditionReady, Status: "False", Reason: "PodFailed", Message: errorMsg})
-			_ = statusPatch.Apply()
-			_ = ensureSessionIsInteractive(sessionNamespace, sessionName)
-			_ = deletePodAndPerPodService(sessionNamespace, podName, sessionName)
-			return
-		}
-
-		runner := getContainerStatusByName(pod, "ambient-code-runner")
-		if runner == nil {
-			// Apply any accumulated changes (e.g., PodScheduled) before continuing
-			_ = statusPatch.Apply()
-			continue
-		}
-
-		if runner.State.Running != nil {
-			statusPatch.SetField("phase", "Running")
-			statusPatch.AddCondition(conditionUpdate{Type: conditionRunnerStarted, Status: "True", Reason: "ContainerRunning", Message: "Runner container is executing"})
-			statusPatch.AddCondition(conditionUpdate{Type: conditionReady, Status: "True", Reason: "Running", Message: "Session is running"})
-			_ = statusPatch.Apply()
-			continue
-		}
-
-		if runner.State.Waiting != nil {
-			waiting := runner.State.Waiting
-			errorStates := map[string]bool{"ImagePullBackOff": true, "ErrImagePull": true, "CrashLoopBackOff": true, "CreateContainerConfigError": true, "InvalidImageName": true}
-			if errorStates[waiting.Reason] {
-				msg := fmt.Sprintf("Runner waiting: %s - %s", waiting.Reason, waiting.Message)
-				statusPatch.SetField("phase", "Failed")
-				statusPatch.SetField("completionTime", time.Now().UTC().Format(time.RFC3339))
-				statusPatch.AddCondition(conditionUpdate{Type: conditionReady, Status: "False", Reason: waiting.Reason, Message: msg})
-				_ = statusPatch.Apply()
-				_ = ensureSessionIsInteractive(sessionNamespace, sessionName)
-				_ = deletePodAndPerPodService(sessionNamespace, podName, sessionName)
-				return
-			}
-		}
-
-		if runner.State.Terminated != nil {
-			term := runner.State.Terminated
-			now := time.Now().UTC().Format(time.RFC3339)
-
-			statusPatch.SetField("completionTime", now)
-			switch term.ExitCode {
-			case 0:
-				statusPatch.SetField("phase", "Completed")
-				statusPatch.AddCondition(conditionUpdate{Type: conditionReady, Status: "False", Reason: "Completed", Message: "Runner finished"})
-			case 2:
-				msg := fmt.Sprintf("Runner exited due to prerequisite failure: %s", term.Message)
-				statusPatch.SetField("phase", "Failed")
-				statusPatch.AddCondition(conditionUpdate{
-					Type:    conditionReady,
-					Status:  "False",
-					Reason:  "PrerequisiteFailed",
-					Message: msg,
-				})
-			default:
-				msg := fmt.Sprintf("Runner exited with code %d: %s", term.ExitCode, term.Reason)
-				if term.Message != "" {
-					msg = fmt.Sprintf("%s - %s", msg, term.Message)
-				}
-				statusPatch.SetField("phase", "Failed")
-				statusPatch.AddCondition(conditionUpdate{Type: conditionReady, Status: "False", Reason: "RunnerExit", Message: msg})
-			}
-
-			_ = statusPatch.Apply()
-			_ = ensureSessionIsInteractive(sessionNamespace, sessionName)
-			_ = deletePodAndPerPodService(sessionNamespace, podName, sessionName)
-			return
-		}
-
-		// Apply any accumulated changes at end of tick
-		_ = statusPatch.Apply()
-	}
 }
 
 // getContainerStatusByName returns the ContainerStatus for a given container name
@@ -2416,6 +2225,9 @@ func regenerateRunnerToken(sessionNamespace, sessionName string, session *unstru
 
 // NOTE: Sync functions below are now unused - credentials are fetched at runtime via backend API
 // This supersedes PR #562's volume mounting approach with just-in-time credential fetching
+
+// ErrTokenProvision indicates runner token provisioning failed.
+var ErrTokenProvision = stderrors.New("token provision failed")
 
 // Helper functions
 var (

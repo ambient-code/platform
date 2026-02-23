@@ -98,7 +98,7 @@ func resetTimeoutCache() {
 }
 
 // ==============================
-// shouldAutoStop tests
+// ShouldAutoStop tests
 // ==============================
 
 func TestShouldAutoStop(t *testing.T) {
@@ -112,7 +112,7 @@ func TestShouldAutoStop(t *testing.T) {
 		obj := newSessionObj("s1", "ns1",
 			withSpec(map[string]any{"inactivityTimeout": int64(300)}),
 		)
-		if shouldAutoStop(obj) {
+		if ShouldAutoStop(obj) {
 			t.Error("expected false when status is missing")
 		}
 	})
@@ -127,7 +127,7 @@ func TestShouldAutoStop(t *testing.T) {
 					"lastActivityTime": time.Now().Add(-1 * time.Hour).UTC().Format(time.RFC3339),
 				}),
 			)
-			if shouldAutoStop(obj) {
+			if ShouldAutoStop(obj) {
 				t.Errorf("expected false for phase %q", phase)
 			}
 		}
@@ -142,7 +142,7 @@ func TestShouldAutoStop(t *testing.T) {
 				"lastActivityTime": time.Now().Add(-48 * time.Hour).UTC().Format(time.RFC3339),
 			}),
 		)
-		if shouldAutoStop(obj) {
+		if ShouldAutoStop(obj) {
 			t.Error("expected false when timeout is 0 (disabled)")
 		}
 	})
@@ -156,7 +156,7 @@ func TestShouldAutoStop(t *testing.T) {
 				"lastActivityTime": time.Now().Add(-10 * time.Minute).UTC().Format(time.RFC3339),
 			}),
 		)
-		if shouldAutoStop(obj) {
+		if ShouldAutoStop(obj) {
 			t.Error("expected false when within timeout window")
 		}
 	})
@@ -170,7 +170,7 @@ func TestShouldAutoStop(t *testing.T) {
 				"lastActivityTime": time.Now().Add(-10 * time.Minute).UTC().Format(time.RFC3339),
 			}),
 		)
-		if !shouldAutoStop(obj) {
+		if !ShouldAutoStop(obj) {
 			t.Error("expected true when beyond timeout (600s idle > 300s timeout)")
 		}
 	})
@@ -184,7 +184,7 @@ func TestShouldAutoStop(t *testing.T) {
 				"startTime": time.Now().Add(-10 * time.Minute).UTC().Format(time.RFC3339),
 			}),
 		)
-		if !shouldAutoStop(obj) {
+		if !ShouldAutoStop(obj) {
 			t.Error("expected true when falling back to startTime (600s > 300s)")
 		}
 	})
@@ -198,7 +198,7 @@ func TestShouldAutoStop(t *testing.T) {
 				"phase": "Running",
 			}),
 		)
-		if !shouldAutoStop(obj) {
+		if !ShouldAutoStop(obj) {
 			t.Error("expected true when falling back to creationTimestamp (600s > 300s)")
 		}
 	})
@@ -211,7 +211,7 @@ func TestShouldAutoStop(t *testing.T) {
 				"phase": "Running",
 			}),
 		)
-		if shouldAutoStop(obj) {
+		if ShouldAutoStop(obj) {
 			t.Error("expected false when no timestamps are available")
 		}
 	})
@@ -226,7 +226,7 @@ func TestShouldAutoStop(t *testing.T) {
 			}),
 		)
 		// 1 hour < 24 hours → should not auto-stop
-		if shouldAutoStop(obj) {
+		if ShouldAutoStop(obj) {
 			t.Error("expected false when using default 24h timeout and only 1h idle")
 		}
 	})
@@ -315,7 +315,7 @@ func TestResolveInactivityTimeout(t *testing.T) {
 }
 
 // ==============================
-// triggerInactivityStop tests
+// TriggerInactivityStop tests
 // ==============================
 
 func TestTriggerInactivityStop(t *testing.T) {
@@ -334,7 +334,7 @@ func TestTriggerInactivityStop(t *testing.T) {
 		)
 		setupFakeDynamicClient(session)
 
-		err := triggerInactivityStop("ns1", "idle-session")
+		err := TriggerInactivityStop("ns1", "idle-session")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -369,7 +369,7 @@ func TestTriggerInactivityStop(t *testing.T) {
 		)
 		setupFakeDynamicClient(session)
 
-		err := triggerInactivityStop("ns1", "active-session")
+		err := TriggerInactivityStop("ns1", "active-session")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -392,7 +392,7 @@ func TestTriggerInactivityStop(t *testing.T) {
 		resetTimeoutCache()
 		setupFakeDynamicClient()
 
-		err := triggerInactivityStop("ns1", "nonexistent")
+		err := TriggerInactivityStop("ns1", "nonexistent")
 		if err != nil {
 			t.Errorf("expected nil error for NotFound, got: %v", err)
 		}
