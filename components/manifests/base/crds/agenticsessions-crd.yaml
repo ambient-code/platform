@@ -37,10 +37,6 @@ spec:
                       type: boolean
                       default: false
                       description: "When true, automatically commit and push changes to this repository after session completion"
-              interactive:
-                type: boolean
-                description: "When true, run session in interactive chat mode using inbox/outbox files"
-                default: true
               initialPrompt:
                 type: string
                 description: "Initial prompt used only on first SDK invocation for brand new sessions (ignored on continuations or workflow restarts)."
@@ -82,7 +78,7 @@ spec:
               inactivityTimeout:
                 type: integer
                 minimum: 0
-                description: "Seconds of inactivity before auto-stopping an interactive session. 0 disables auto-shutdown. If omitted, falls back to project-level inactivityTimeoutSeconds, then 24h default."
+                description: "Seconds of inactivity before auto-stopping a session. 0 disables auto-shutdown. If omitted, falls back to project-level inactivityTimeoutSeconds, then 24h default."
               activeWorkflow:
                 type: object
                 description: "Active workflow configuration for dynamic workflow switching"

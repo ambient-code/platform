@@ -26,7 +26,6 @@ export type AgenticSessionSpec = {
 	inactivityTimeout?: number;
 	displayName?: string;
 	project?: string;
-	interactive?: boolean;
 	// Multi-repo support
 	repos?: SessionRepo[];
 	// Active workflow for dynamic workflow switching
@@ -190,7 +189,6 @@ export type CreateAgenticSessionRequest = {
 	project?: string;
 	parent_session_id?: string;
   	environmentVariables?: Record<string, string>;
-	interactive?: boolean;
 	// Multi-repo support
 	repos?: SessionRepo[];
 	labels?: Record<string, string>;

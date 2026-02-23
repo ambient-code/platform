@@ -55,7 +55,6 @@ def app():
     """Create the full Ambient app with ClaudeBridge."""
     os.environ.setdefault("SESSION_ID", "e2e-test")
     os.environ.setdefault("WORKSPACE_PATH", "/tmp/e2e-workspace")
-    os.environ.setdefault("INTERACTIVE", "true")
     # Ensure workspace exists
     os.makedirs("/tmp/e2e-workspace", exist_ok=True)
     return create_ambient_app(ClaudeBridge(), title="E2E Test Runner")

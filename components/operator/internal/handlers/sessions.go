@@ -645,8 +645,6 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 	_ = reconcileActiveWorkflowWithPatch(sessionNamespace, name, spec, currentObj, statusPatch)
 	prompt, _, _ := unstructured.NestedString(spec, "initialPrompt")
 	timeout, _, _ := unstructured.NestedInt64(spec, "timeout")
-	interactive, _, _ := unstructured.NestedBool(spec, "interactive")
-
 	llmSettings, _, _ := unstructured.NestedMap(spec, "llmSettings")
 	model, _, _ := unstructured.NestedString(llmSettings, "model")
 	temperature, _, _ := unstructured.NestedFloat64(llmSettings, "temperature")
@@ -879,7 +877,7 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 				Env: func() []corev1.EnvVar {
 					base := []corev1.EnvVar{
 						{Name: "DEBUG", Value: "true"},
-						{Name: "INTERACTIVE", Value: fmt.Sprintf("%t", interactive)},
+						{Name: "INTERACTIVE", Value: "true"},
 						{Name: "AGENTIC_SESSION_NAME", Value: name},
 						{Name: "AGENTIC_SESSION_NAMESPACE", Value: sessionNamespace},
 						// Provide session id and workspace path for the runner wrapper
@@ -1753,7 +1751,6 @@ func monitorPod(podName, sessionName, sessionNamespace string) {
 			statusPatch.SetField("completionTime", time.Now().UTC().Format(time.RFC3339))
 			statusPatch.AddCondition(conditionUpdate{Type: conditionReady, Status: "False", Reason: "Completed", Message: "Session finished"})
 			_ = statusPatch.Apply()
-			_ = ensureSessionIsInteractive(sessionNamespace, sessionName)
 			_ = deletePodAndPerPodService(sessionNamespace, podName, sessionName)
 			return
 		}
@@ -1817,7 +1814,6 @@ func monitorPod(podName, sessionName, sessionNamespace string) {
 			statusPatch.SetField("completionTime", time.Now().UTC().Format(time.RFC3339))
 			statusPatch.AddCondition(conditionUpdate{Type: conditionReady, Status: "False", Reason: "PodFailed", Message: errorMsg})
 			_ = statusPatch.Apply()
-			_ = ensureSessionIsInteractive(sessionNamespace, sessionName)
 			_ = deletePodAndPerPodService(sessionNamespace, podName, sessionName)
 			return
 		}
@@ -1846,7 +1842,6 @@ func monitorPod(podName, sessionName, sessionNamespace string) {
 				statusPatch.SetField("completionTime", time.Now().UTC().Format(time.RFC3339))
 				statusPatch.AddCondition(conditionUpdate{Type: conditionReady, Status: "False", Reason: waiting.Reason, Message: msg})
 				_ = statusPatch.Apply()
-				_ = ensureSessionIsInteractive(sessionNamespace, sessionName)
 				_ = deletePodAndPerPodService(sessionNamespace, podName, sessionName)
 				return
 			}
@@ -1880,7 +1875,6 @@ func monitorPod(podName, sessionName, sessionNamespace string) {
 			}
 
 			_ = statusPatch.Apply()
-			_ = ensureSessionIsInteractive(sessionNamespace, sessionName)
 			_ = deletePodAndPerPodService(sessionNamespace, podName, sessionName)
 			return
 		}

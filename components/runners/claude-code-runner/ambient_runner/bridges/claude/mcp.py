@@ -77,10 +77,12 @@ def build_mcp_servers(context: RunnerContext, cwd_path: str, obs: Any = None) ->
             )
 
     # Corrections feedback tool (always available)
+    has_rubric = "rubric" in mcp_servers
     correction_tool = create_correction_mcp_tool(
         obs=obs,
         session_id=context.session_id,
         sdk_tool_decorator=sdk_tool,
+        has_rubric=has_rubric,
     )
     if correction_tool:
         correction_server = create_sdk_mcp_server(

@@ -265,7 +265,6 @@ var _ = Describe("Sessions Handler", Label(test_constants.LabelUnit, test_consta
 							"branch": "main",
 						},
 					},
-					"interactive": false,
 				}
 
 				context := httpUtils.CreateTestGinContext("POST", "/api/projects/"+testNamespace+"/agentic-sessions", sessionRequest)
@@ -807,9 +806,6 @@ func createTestSession(name, namespace string, k8sUtils *test_utils.K8sTestUtils
 		},
 	}
 	unstructured.SetNestedSlice(session.Object, repos, "spec", "repos")
-
-	// Set interactive field properly for deep copy compatibility
-	unstructured.SetNestedField(session.Object, false, "spec", "interactive")
 
 	// Set status
 	unstructured.SetNestedField(session.Object, "Pending", "status", "phase")

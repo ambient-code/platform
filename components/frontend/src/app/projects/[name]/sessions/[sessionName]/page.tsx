@@ -2520,6 +2520,9 @@ export default function ProjectSessionDetailPage({
                         userHasInteracted={userHasInteracted}
                         queuedMessages={sessionQueue.messages}
                         hasRealMessages={hasRealMessages}
+                        onCancelQueuedMessage={sessionQueue.cancelMessage}
+                        onUpdateQueuedMessage={sessionQueue.updateMessage}
+                        onClearQueue={sessionQueue.clearMessages}
                         welcomeExperienceComponent={
                           <WelcomeExperience
                             ootbWorkflows={ootbWorkflows}
@@ -2594,6 +2597,9 @@ export default function ProjectSessionDetailPage({
                           userHasInteracted={userHasInteracted}
                           queuedMessages={sessionQueue.messages}
                           hasRealMessages={hasRealMessages}
+                          onCancelQueuedMessage={sessionQueue.cancelMessage}
+                          onUpdateQueuedMessage={sessionQueue.updateMessage}
+                          onClearQueue={sessionQueue.clearMessages}
                           welcomeExperienceComponent={
                             <WelcomeExperience
                               ootbWorkflows={ootbWorkflows}

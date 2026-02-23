@@ -162,7 +162,6 @@ NEVER store mutable global state in endpoint modules.
 |----------|---------|---------|
 | `SESSION_ID` | `"unknown"` | RunnerContext creation |
 | `WORKSPACE_PATH` | `"/workspace"` | RunnerContext creation |
-| `INTERACTIVE` | `"true"` | Auto-prompt decision |
 | `IS_RESUME` | `""` | Auto-prompt + session continuation |
 | `INITIAL_PROMPT` | `""` | Auto-execute on startup |
 | `AGUI_HOST` | `"0.0.0.0"` | `run_ambient_app()` |

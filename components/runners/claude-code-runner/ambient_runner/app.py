@@ -73,7 +73,7 @@ def create_ambient_app(
     Handles the full platform lifecycle:
 
     1. **Startup** — creates ``RunnerContext`` from env vars, sets it on the
-       bridge, and fires the auto-prompt for non-interactive sessions.
+       bridge, and fires the auto-prompt if INITIAL_PROMPT is set.
     2. **Request handling** — all Ambient endpoints are registered and
        delegate to the bridge.
     3. **Shutdown** — calls ``bridge.shutdown()`` for graceful cleanup.
@@ -106,25 +106,24 @@ def create_ambient_app(
         if is_resume:
             logger.info("IS_RESUME=true — this is a resumed session")
 
-        # Auto-prompt for non-interactive, non-resumed sessions
-        is_interactive = os.getenv("INTERACTIVE", "true").strip().lower() == "true"
+        # Auto-execute INITIAL_PROMPT when present (skipped only for resumes,
+        # where the conversation is continued rather than re-started).
         initial_prompt = os.getenv("INITIAL_PROMPT", "").strip()
 
         if initial_prompt:
-            if not is_interactive and not is_resume:
+            if not is_resume:
                 logger.info(
                     f"INITIAL_PROMPT detected ({len(initial_prompt)} chars) "
-                    f"— auto-executing for non-interactive session"
+                    f"— auto-executing"
                 )
                 task = asyncio.create_task(
                     _auto_execute_initial_prompt(initial_prompt, session_id)
                 )
                 task.add_done_callback(_log_auto_exec_failure)
             else:
-                mode = "resumed" if is_resume else "interactive"
                 logger.info(
                     f"INITIAL_PROMPT detected ({len(initial_prompt)} chars) "
-                    f"but not auto-executing ({mode} session)"
+                    f"but not auto-executing (resumed session)"
                 )
 
         logger.info(f"AG-UI server ready for session {session_id}")
@@ -231,13 +230,19 @@ def add_ambient_endpoints(
 # ------------------------------------------------------------------
 
 
-async def _auto_execute_initial_prompt(prompt: str, session_id: str) -> None:
-    """Auto-execute INITIAL_PROMPT for non-interactive sessions.
+_AUTO_PROMPT_MAX_RETRIES = 8
+_AUTO_PROMPT_INITIAL_DELAY = 2.0
+_AUTO_PROMPT_MAX_DELAY = 30.0
 
-    Waits briefly then POSTs the prompt to the backend's AG-UI run
-    endpoint, which routes it back through the runner's ``POST /``.
+
+async def _auto_execute_initial_prompt(prompt: str, session_id: str) -> None:
+    """Auto-execute INITIAL_PROMPT on session startup with retry backoff.
+
+    The runner pod may be ready before the K8s Service DNS propagates,
+    so the first few attempts can fail with "runner not available".
+    Retries with exponential backoff until the backend accepts the request.
     """
-    delay_seconds = float(os.getenv("INITIAL_PROMPT_DELAY_SECONDS", "1"))
+    delay_seconds = float(os.getenv("INITIAL_PROMPT_DELAY_SECONDS", "2"))
     logger.info(f"Waiting {delay_seconds}s before auto-executing INITIAL_PROMPT...")
     await asyncio.sleep(delay_seconds)
 
@@ -278,27 +283,45 @@ async def _auto_execute_initial_prompt(prompt: str, session_id: str) -> None:
     if bot_token:
         headers["Authorization"] = f"Bearer {bot_token}"
 
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                url,
-                json=payload,
-                headers=headers,
-                timeout=aiohttp.ClientTimeout(total=30),
-            ) as resp:
-                if resp.status == 200:
-                    logger.info(
-                        f"INITIAL_PROMPT auto-execution started: {await resp.json()}"
-                    )
-                else:
-                    logger.warning(
-                        f"INITIAL_PROMPT failed with status {resp.status}: "
-                        f"{(await resp.text())[:200]}"
-                    )
-    except Exception as e:
-        logger.warning(
-            f"INITIAL_PROMPT auto-execution error (backend will retry): {e}"
-        )
+    backoff = _AUTO_PROMPT_INITIAL_DELAY
+    for attempt in range(1, _AUTO_PROMPT_MAX_RETRIES + 1):
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    url,
+                    json=payload,
+                    headers=headers,
+                    timeout=aiohttp.ClientTimeout(total=30),
+                ) as resp:
+                    body = await resp.text()
+                    if resp.status == 200:
+                        logger.info("INITIAL_PROMPT auto-execution started")
+                        return
+
+                    if "not available" in body.lower() or resp.status >= 500:
+                        logger.warning(
+                            f"INITIAL_PROMPT attempt {attempt}/{_AUTO_PROMPT_MAX_RETRIES} "
+                            f"failed (status {resp.status}), retrying in {backoff:.0f}s"
+                        )
+                    else:
+                        logger.error(
+                            f"INITIAL_PROMPT failed with status {resp.status}: "
+                            f"{body[:200]}"
+                        )
+                        return
+        except Exception as e:
+            logger.warning(
+                f"INITIAL_PROMPT attempt {attempt}/{_AUTO_PROMPT_MAX_RETRIES} "
+                f"error: {e}, retrying in {backoff:.0f}s"
+            )
+
+        await asyncio.sleep(backoff)
+        backoff = min(backoff * 2, _AUTO_PROMPT_MAX_DELAY)
+        payload["runId"] = str(uuid.uuid4())
+
+    logger.error(
+        f"INITIAL_PROMPT auto-execution failed after {_AUTO_PROMPT_MAX_RETRIES} attempts"
+    )
 
 
 # ------------------------------------------------------------------

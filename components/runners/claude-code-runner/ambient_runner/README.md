@@ -295,9 +295,8 @@ from ambient_runner.platform.prompts import (
 |----------|---------|-------------|
 | `SESSION_ID` | `"unknown"` | Unique session identifier |
 | `WORKSPACE_PATH` | `"/workspace"` | Root workspace directory |
-| `INTERACTIVE` | `"true"` | Enable interactive mode |
 | `IS_RESUME` | `""` | Set to `"true"` for resumed sessions |
-| `INITIAL_PROMPT` | `""` | Auto-execute this prompt on startup (non-interactive only) |
+| `INITIAL_PROMPT` | `""` | Auto-execute this prompt on startup |
 | `INITIAL_PROMPT_DELAY_SECONDS` | `"1"` | Delay before auto-prompt execution |
 | `AGUI_HOST` | `"0.0.0.0"` | Server bind address |
 | `AGUI_PORT` | `"8000"` | Server bind port |

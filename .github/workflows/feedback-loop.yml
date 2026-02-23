@@ -39,7 +39,8 @@ jobs:
       - name: Install dependencies
         run: pip install -r scripts/feedback-loop/requirements.txt
 
-      - name: Run feedback loop
+      - name: Query corrections and create improvement sessions
+        id: feedback
         env:
           LANGFUSE_HOST: ${{ secrets.LANGFUSE_HOST }}
           LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
@@ -57,4 +58,18 @@ jobs:
             --project "$AMBIENT_PROJECT" \
             --since-days "${{ github.event.inputs.since_days || '7' }}" \
             --min-corrections "${{ github.event.inputs.min_corrections || '2' }}" \
+            --output-file /tmp/feedback-output.json \
             ${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }}
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "### Feedback Loop Results" >> $GITHUB_STEP_SUMMARY
+          if [ -f /tmp/feedback-output.json ]; then
+            CORRECTIONS=$(python3 -c "import json; d=json.load(open('/tmp/feedback-output.json')); print(d.get('corrections_found', 0))")
+            SESSIONS=$(python3 -c "import json; d=json.load(open('/tmp/feedback-output.json')); print(d.get('sessions_created', 0))")
+            echo "- **Corrections found**: $CORRECTIONS" >> $GITHUB_STEP_SUMMARY
+            echo "- **Sessions created**: $SESSIONS" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- No output file generated" >> $GITHUB_STEP_SUMMARY
+          fi

@@ -140,8 +140,6 @@ func TransitionToFailed(ctx context.Context, session *unstructured.Unstructured,
 		return err
 	}
 
-	_ = ensureSessionIsInteractive(namespace, name)
-
 	return nil
 }
 
@@ -250,7 +248,6 @@ func UpdateSessionFromPodStatus(ctx context.Context, session *unstructured.Unstr
 		if err := statusPatch.Apply(); err != nil {
 			return err
 		}
-		_ = ensureSessionIsInteractive(namespace, name)
 		return DeletePodAndServices(ctx, namespace, podName, name)
 
 	case corev1.PodFailed:
@@ -267,7 +264,6 @@ func UpdateSessionFromPodStatus(ctx context.Context, session *unstructured.Unstr
 		if err := statusPatch.Apply(); err != nil {
 			return err
 		}
-		_ = ensureSessionIsInteractive(namespace, name)
 		return DeletePodAndServices(ctx, namespace, podName, name)
 	}
 
@@ -316,7 +312,6 @@ func UpdateSessionFromPodStatus(ctx context.Context, session *unstructured.Unstr
 			if err := statusPatch.Apply(); err != nil {
 				return err
 			}
-			_ = ensureSessionIsInteractive(namespace, name)
 			return DeletePodAndServices(ctx, namespace, podName, name)
 		}
 	}
@@ -361,7 +356,6 @@ func UpdateSessionFromPodStatus(ctx context.Context, session *unstructured.Unstr
 		if err := statusPatch.Apply(); err != nil {
 			return err
 		}
-		_ = ensureSessionIsInteractive(namespace, name)
 		return DeletePodAndServices(ctx, namespace, podName, name)
 	}
 

@@ -247,7 +247,7 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
                         </TableCell>
                         <TableCell>
                           <span className="text-xs px-2 py-1 rounded border bg-muted/50">
-                            {session.spec?.interactive ? 'Interactive' : 'Headless'}
+                            Interactive
                           </span>
                         </TableCell>
                         <TableCell className="hidden md:table-cell">

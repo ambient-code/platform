@@ -106,10 +106,6 @@ func parseSpec(spec map[string]interface{}) types.AgenticSessionSpec {
 		result.InitialPrompt = prompt
 	}
 
-	if interactive, ok := spec["interactive"].(bool); ok {
-		result.Interactive = interactive
-	}
-
 	if displayName, ok := spec["displayName"].(string); ok {
 		result.DisplayName = displayName
 	}
@@ -638,11 +634,6 @@ func CreateSession(c *gin.Context) {
 		spec["environmentVariables"] = envVars
 	}
 
-	// Interactive flag
-	if req.Interactive != nil {
-		session["spec"].(map[string]interface{})["interactive"] = *req.Interactive
-	}
-
 	// Set multi-repo configuration on spec (simplified format)
 	{
 		spec := session["spec"].(map[string]interface{})
@@ -650,7 +641,6 @@ func CreateSession(c *gin.Context) {
 			arr := make([]map[string]interface{}, 0, len(req.Repos))
 			for _, r := range req.Repos {
 				m := map[string]interface{}{"url": r.URL}
-				// Fill in branch if not provided (auto-generate from session name)
 				if r.Branch != nil && strings.TrimSpace(*r.Branch) != "" {
 					m["branch"] = *r.Branch
 				} else {
@@ -665,11 +655,40 @@ func CreateSession(c *gin.Context) {
 		}
 	}
 
-	// Add userContext derived from authenticated caller; ignore client-supplied userId
+	// Set active workflow if provided
+	if req.ActiveWorkflow != nil && strings.TrimSpace(req.ActiveWorkflow.GitURL) != "" {
+		spec := session["spec"].(map[string]interface{})
+		branch := req.ActiveWorkflow.Branch
+		if branch == "" {
+			branch = "main"
+		}
+		workflowMap := map[string]interface{}{
+			"gitUrl": req.ActiveWorkflow.GitURL,
+			"branch": branch,
+		}
+		if req.ActiveWorkflow.Path != "" {
+			workflowMap["path"] = req.ActiveWorkflow.Path
+		}
+		spec["activeWorkflow"] = workflowMap
+	}
+
+	// Add userContext from authenticated caller identity.
+	// Prefer forwarded headers (OAuth proxy); fall back to SelfSubjectReview
+	// for headless/API callers that authenticate directly with a bearer token.
 	{
 		uidVal, _ := c.Get("userID")
 		uid, _ := uidVal.(string)
 		uid = strings.TrimSpace(uid)
+
+		if uid == "" {
+			if resolved, err := resolveTokenIdentity(c.Request.Context(), reqK8s); err == nil {
+				uid = strings.ReplaceAll(resolved, ":", "-")
+				log.Printf("Resolved token identity via SelfSubjectReview: %s", uid)
+			} else {
+				log.Printf("Could not resolve token identity: %v", err)
+			}
+		}
+
 		if uid != "" {
 			displayName := ""
 			if v, ok := c.Get("userName"); ok {
@@ -683,7 +702,6 @@ func CreateSession(c *gin.Context) {
 					groups = gg
 				}
 			}
-			// Fallbacks for non-identity fields only
 			if displayName == "" && req.UserContext != nil {
 				displayName = req.UserContext.DisplayName
 			}
@@ -2089,14 +2107,6 @@ func StartSession(c *gin.Context) {
 
 	item.SetAnnotations(annotations)
 
-	// For headless sessions being continued, force interactive mode
-	if spec, ok := item.Object["spec"].(map[string]interface{}); ok {
-		if interactive, ok := spec["interactive"].(bool); !ok || !interactive {
-			spec["interactive"] = true
-			log.Printf("StartSession: Converting headless session to interactive for continuation")
-		}
-	}
-
 	// Update spec and annotations (operator will observe and handle job lifecycle)
 	updated, err := k8sDyn.Resource(gvr).Namespace(project).Update(context.TODO(), item, v1.UpdateOptions{})
 	if err != nil {
@@ -2132,17 +2142,6 @@ func StartSession(c *gin.Context) {
 func ensureRuntimeMutationAllowed(item *unstructured.Unstructured) error {
 	if item == nil {
 		return fmt.Errorf("session not loaded")
-	}
-
-	spec, _ := item.Object["spec"].(map[string]interface{})
-	interactive := false
-	if spec != nil {
-		if v, ok := spec["interactive"].(bool); ok {
-			interactive = v
-		}
-	}
-	if !interactive {
-		return fmt.Errorf("session is not interactive")
 	}
 
 	status, _ := item.Object["status"].(map[string]interface{})
@@ -2199,14 +2198,6 @@ func StopSession(c *gin.Context) {
 	annotations["ambient-code.io/desired-phase"] = "Stopped"
 	annotations["ambient-code.io/stop-requested-at"] = time.Now().Format(time.RFC3339)
 	item.SetAnnotations(annotations)
-
-	// Force interactive mode so session can be restarted later
-	if spec, ok := item.Object["spec"].(map[string]interface{}); ok {
-		if interactive, ok := spec["interactive"].(bool); !ok || !interactive {
-			spec["interactive"] = true
-			log.Printf("StopSession: Converting headless session to interactive for future restart capability")
-		}
-	}
 
 	// Update spec and annotations (operator will observe and handle job cleanup)
 	updated, err := k8sDyn.Resource(gvr).Namespace(project).Update(context.TODO(), item, v1.UpdateOptions{})
