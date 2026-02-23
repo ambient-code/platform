@@ -47,4 +47,7 @@ images:
 - name: quay.io/ambient_code/vteam_claude_runner
   newName: quay.io/ambient_code/vteam_claude_runner
   newTag: latest
+- name: quay.io/ambient_code/vteam_api_server
+  newName: quay.io/ambient_code/vteam_api_server
+  newTag: latest
 # PostgreSQL: RHEL image handled via JSON patch (postgresql-json-patch.yaml)

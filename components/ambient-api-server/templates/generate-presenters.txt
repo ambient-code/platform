@@ -1,0 +1,92 @@
+package {{.KindLowerPlural}}
+
+import (
+{{- $hasTime := false}}
+{{- range .Fields}}
+{{- if eq .Type "time"}}
+{{- $hasTime = true}}
+{{- end}}
+{{- end}}
+{{- if $hasTime}}
+	"time"
+
+{{- end}}
+	"{{.Library}}/pkg/api"
+	"{{.Repo}}/{{.Project}}/pkg/api/openapi"
+	"{{.Library}}/pkg/api/presenters"
+	"{{.Library}}/pkg/util"
+)
+
+func Convert{{.Kind}}({{.KindLowerSingular}} openapi.{{.Kind}}) *{{.Kind}} {
+	c := &{{.Kind}}{
+		Meta: api.Meta{
+			ID: util.NilToEmptyString({{.KindLowerSingular}}.Id),
+		},
+	}
+{{- range .Fields}}
+{{- if .Nullable}}
+{{- if eq .Type "int"}}
+	if {{$.KindLowerSingular}}.{{.Name}} != nil {
+		c.{{.Name}} = openapi.PtrInt(int(*{{$.KindLowerSingular}}.{{.Name}}))
+	}
+{{- else}}
+	c.{{.Name}} = {{$.KindLowerSingular}}.{{.Name}}
+{{- end}}
+{{- else}}
+{{- if eq .Type "string"}}
+	c.{{.Name}} = {{$.KindLowerSingular}}.{{.Name}}
+{{- else if eq .Type "int"}}
+	c.{{.Name}} = int({{$.KindLowerSingular}}.{{.Name}})
+{{- else if eq .Type "int64"}}
+	c.{{.Name}} = {{$.KindLowerSingular}}.{{.Name}}
+{{- else if eq .Type "bool"}}
+	c.{{.Name}} = {{$.KindLowerSingular}}.{{.Name}}
+{{- else if eq .Type "float"}}
+	c.{{.Name}} = {{$.KindLowerSingular}}.{{.Name}}
+{{- else if eq .Type "time"}}
+	c.{{.Name}} = {{$.KindLowerSingular}}.{{.Name}}
+{{- end}}
+{{- end}}
+{{- end}}
+
+	if {{.KindLowerSingular}}.CreatedAt != nil {
+		c.CreatedAt = *{{.KindLowerSingular}}.CreatedAt
+		c.UpdatedAt = *{{.KindLowerSingular}}.UpdatedAt
+	}
+
+	return c
+}
+
+func Present{{.Kind}}({{.KindLowerSingular}} *{{.Kind}}) openapi.{{.Kind}} {
+	reference := presenters.PresentReference({{.KindLowerSingular}}.ID, {{.KindLowerSingular}})
+	return openapi.{{.Kind}}{
+		Id:        reference.Id,
+		Kind:      reference.Kind,
+		Href:      reference.Href,
+		CreatedAt: openapi.PtrTime({{.KindLowerSingular}}.CreatedAt),
+		UpdatedAt: openapi.PtrTime({{.KindLowerSingular}}.UpdatedAt),
+{{- range .Fields}}
+{{- if .Nullable}}
+{{- if eq .Type "int"}}
+		{{.Name}}: func() *int32 { if {{$.KindLowerSingular}}.{{.Name}} != nil { return openapi.PtrInt32(int32(*{{$.KindLowerSingular}}.{{.Name}})) }; return nil }(),
+{{- else}}
+		{{.Name}}: {{$.KindLowerSingular}}.{{.Name}},
+{{- end}}
+{{- else}}
+{{- if eq .Type "string"}}
+		{{.Name}}: {{$.KindLowerSingular}}.{{.Name}},
+{{- else if eq .Type "int"}}
+		{{.Name}}: int32({{$.KindLowerSingular}}.{{.Name}}),
+{{- else if eq .Type "int64"}}
+		{{.Name}}: {{$.KindLowerSingular}}.{{.Name}},
+{{- else if eq .Type "bool"}}
+		{{.Name}}: {{$.KindLowerSingular}}.{{.Name}},
+{{- else if eq .Type "float"}}
+		{{.Name}}: {{$.KindLowerSingular}}.{{.Name}},
+{{- else if eq .Type "time"}}
+		{{.Name}}: {{$.KindLowerSingular}}.{{.Name}},
+{{- end}}
+{{- end}}
+{{- end}}
+	}
+}

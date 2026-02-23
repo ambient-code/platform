@@ -1,0 +1,27 @@
+package {{.KindLowerPlural}}
+
+import (
+	"gorm.io/gorm"
+
+	"github.com/go-gormigrate/gormigrate/v2"
+	"{{.Library}}/pkg/db"
+)
+
+func migration() *gormigrate.Migration {
+	type {{.Kind}} struct {
+		db.Model
+{{- range .Fields}}
+		{{.Name}} {{.GoType}}
+{{- end}}
+	}
+
+	return &gormigrate.Migration{
+		ID: "{{.ID}}",
+		Migrate: func(tx *gorm.DB) error {
+			return tx.AutoMigrate(&{{.Kind}}{})
+		},
+		Rollback: func(tx *gorm.DB) error {
+			return tx.Migrator().DropTable(&{{.Kind}}{})
+		},
+	}
+}

@@ -1,0 +1,107 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ambient-api-server-db
+  labels:
+    app: ambient-api-server
+    component: database
+spec:
+  ports:
+    - name: postgresql
+      port: 5432
+      protocol: TCP
+      targetPort: 5432
+  selector:
+    app: ambient-api-server
+    component: database
+  type: ClusterIP
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ambient-api-server-db-data
+  labels:
+    app: ambient-api-server
+    component: database
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ambient-api-server-db
+  labels:
+    app: ambient-api-server
+    component: database
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ambient-api-server
+      component: database
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: ambient-api-server
+        component: database
+    spec:
+      containers:
+        - name: postgresql
+          image: docker.io/library/postgres:16.2
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  key: db.user
+                  name: ambient-api-server-db
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: db.password
+                  name: ambient-api-server-db
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  key: db.name
+                  name: ambient-api-server-db
+            - name: PGDATA
+              value: /var/lib/pgsql/data/pgdata
+          ports:
+            - containerPort: 5432
+              protocol: TCP
+          livenessProbe:
+            tcpSocket:
+              port: 5432
+            initialDelaySeconds: 120
+            timeoutSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - exec /usr/bin/pg_isready -U $POSTGRES_USER -d $POSTGRES_DB -h localhost -p 5432
+            initialDelaySeconds: 5
+            timeoutSeconds: 1
+          volumeMounts:
+            - mountPath: /var/lib/pgsql/data
+              name: ambient-api-server-db-data
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
+      volumes:
+        - name: ambient-api-server-db-data
+          persistentVolumeClaim:
+            claimName: ambient-api-server-db-data

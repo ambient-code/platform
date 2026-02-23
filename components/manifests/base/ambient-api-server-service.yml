@@ -1,0 +1,174 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ambient-api-server
+  labels:
+    app: ambient-api-server
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ambient-api-server
+  labels:
+    app: ambient-api-server
+    component: api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ambient-api-server
+      component: api
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: ambient-api-server
+        component: api
+    spec:
+      serviceAccountName: ambient-api-server
+      initContainers:
+        - name: migration
+          image: quay.io/ambient_code/vteam_api_server:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - /usr/local/bin/ambient-api-server
+            - migrate
+            - --db-host-file=/secrets/db/db.host
+            - --db-port-file=/secrets/db/db.port
+            - --db-user-file=/secrets/db/db.user
+            - --db-password-file=/secrets/db/db.password
+            - --db-name-file=/secrets/db/db.name
+            - --alsologtostderr
+            - -v=10
+          volumeMounts:
+            - name: db-secrets
+              mountPath: /secrets/db
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
+      containers:
+        - name: api-server
+          image: quay.io/ambient_code/vteam_api_server:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - /usr/local/bin/ambient-api-server
+            - serve
+            - --db-host-file=/secrets/db/db.host
+            - --db-port-file=/secrets/db/db.port
+            - --db-user-file=/secrets/db/db.user
+            - --db-password-file=/secrets/db/db.password
+            - --db-name-file=/secrets/db/db.name
+            - --enable-jwt=false
+            - --enable-authz=false
+            - --enable-https=false
+            - --api-server-bindaddress=:8000
+            - --metrics-server-bindaddress=:4433
+            - --health-check-server-bindaddress=:4434
+            - --db-sslmode=disable
+            - --db-max-open-connections=50
+            - --enable-db-debug=false
+            - --enable-metrics-https=false
+            - --enable-sentry=false
+            - --http-read-timeout=5s
+            - --http-write-timeout=30s
+            - --cors-allowed-origins=*
+            - --cors-allowed-headers=X-Ambient-Project
+            - --alsologtostderr
+            - -v=10
+          env:
+            - name: OCM_ENV
+              value: development
+          ports:
+            - name: api
+              containerPort: 8000
+              protocol: TCP
+            - name: metrics
+              containerPort: 4433
+              protocol: TCP
+            - name: health
+              containerPort: 4434
+              protocol: TCP
+          volumeMounts:
+            - name: db-secrets
+              mountPath: /secrets/db
+            - name: app-secrets
+              mountPath: /secrets/service
+            - name: auth-config
+              mountPath: /configs/authentication
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: 1
+              memory: 1Gi
+          livenessProbe:
+            httpGet:
+              path: /api/ambient-api-server
+              port: 8000
+              scheme: HTTP
+            initialDelaySeconds: 15
+            periodSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /healthcheck
+              port: 4434
+              scheme: HTTP
+              httpHeaders:
+                - name: User-Agent
+                  value: Probe
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
+      volumes:
+        - name: db-secrets
+          secret:
+            secretName: ambient-api-server-db
+        - name: app-secrets
+          secret:
+            secretName: ambient-api-server
+        - name: auth-config
+          configMap:
+            name: ambient-api-server-auth
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ambient-api-server
+  labels:
+    app: ambient-api-server
+    component: api
+  annotations:
+    description: Exposes the ambient-api-server REST API
+spec:
+  selector:
+    app: ambient-api-server
+    component: api
+  ports:
+    - name: api
+      port: 8000
+      targetPort: 8000
+      protocol: TCP
+    - name: metrics
+      port: 4433
+      targetPort: 4433
+      protocol: TCP
+    - name: health
+      port: 4434
+      targetPort: 4434
+      protocol: TCP

@@ -1,0 +1,157 @@
+package {{.KindLowerPlural}}
+
+import (
+	"net/http"
+
+	"github.com/gorilla/mux"
+
+	"{{.Repo}}/{{.Project}}/pkg/api/openapi"
+	"{{.Library}}/pkg/api/presenters"
+	"{{.Library}}/pkg/errors"
+	"{{.Library}}/pkg/handlers"
+	"{{.Library}}/pkg/services"
+)
+
+var _ handlers.RestHandler = {{.KindLowerSingular}}Handler{}
+
+type {{.KindLowerSingular}}Handler struct {
+	{{.KindLowerSingular}} {{.Kind}}Service
+	generic  services.GenericService
+}
+
+func New{{.Kind}}Handler({{.KindLowerSingular}} {{.Kind}}Service, generic services.GenericService) *{{.KindLowerSingular}}Handler {
+	return &{{.KindLowerSingular}}Handler{
+		{{.KindLowerSingular}}: {{.KindLowerSingular}},
+		generic:  generic,
+	}
+}
+
+func (h {{.KindLowerSingular}}Handler) Create(w http.ResponseWriter, r *http.Request) {
+	var {{.KindLowerSingular}} openapi.{{.Kind}}
+	cfg := &handlers.HandlerConfig{
+		Body: &{{.KindLowerSingular}},
+		Validators: []handlers.Validate{
+			handlers.ValidateEmpty(&{{.KindLowerSingular}}, "Id", "id"),
+		},
+		Action: func() (interface{}, *errors.ServiceError) {
+			ctx := r.Context()
+			{{.KindLowerSingular}}Model := Convert{{.Kind}}({{.KindLowerSingular}})
+			{{.KindLowerSingular}}Model, err := h.{{.KindLowerSingular}}.Create(ctx, {{.KindLowerSingular}}Model)
+			if err != nil {
+				return nil, err
+			}
+			return Present{{.Kind}}({{.KindLowerSingular}}Model), nil
+		},
+		ErrorHandler: handlers.HandleError,
+	}
+
+	handlers.Handle(w, r, cfg, http.StatusCreated)
+}
+
+func (h {{.KindLowerSingular}}Handler) Patch(w http.ResponseWriter, r *http.Request) {
+	var patch openapi.{{.Kind}}PatchRequest
+
+	cfg := &handlers.HandlerConfig{
+		Body: &patch,
+		Validators: []handlers.Validate{},
+		Action: func() (interface{}, *errors.ServiceError) {
+			ctx := r.Context()
+			id := mux.Vars(r)["id"]
+			found, err := h.{{.KindLowerSingular}}.Get(ctx, id)
+			if err != nil {
+				return nil, err
+			}
+
+{{range .Fields}}			if patch.{{.Name}} != nil {
+{{- if and .NeedsIntConversion .Required}}
+				found.{{.Name}} = int(*patch.{{.Name}})
+{{- else if and .NeedsIntConversion .Nullable}}
+				{{.NameCamelCase}}Val := int(*patch.{{.Name}})
+				found.{{.Name}} = &{{.NameCamelCase}}Val
+{{- else if .Required}}
+				found.{{.Name}} = *patch.{{.Name}}
+{{- else}}
+				found.{{.Name}} = patch.{{.Name}}
+{{- end}}
+			}
+{{end}}
+			{{.KindLowerSingular}}Model, err := h.{{.KindLowerSingular}}.Replace(ctx, found)
+			if err != nil {
+				return nil, err
+			}
+			return Present{{.Kind}}({{.KindLowerSingular}}Model), nil
+		},
+		ErrorHandler: handlers.HandleError,
+	}
+
+	handlers.Handle(w, r, cfg, http.StatusOK)
+}
+
+func (h {{.KindLowerSingular}}Handler) List(w http.ResponseWriter, r *http.Request) {
+	cfg := &handlers.HandlerConfig{
+		Action: func() (interface{}, *errors.ServiceError) {
+			ctx := r.Context()
+
+			listArgs := services.NewListArguments(r.URL.Query())
+			var {{.KindLowerPlural}} []{{.Kind}}
+			paging, err := h.generic.List(ctx, "id", listArgs, &{{.KindLowerPlural}})
+			if err != nil {
+				return nil, err
+			}
+			{{.KindLowerSingular}}List := openapi.{{.Kind}}List{
+				Kind:  "{{.Kind}}List",
+				Page:  int32(paging.Page),
+				Size:  int32(paging.Size),
+				Total: int32(paging.Total),
+				Items: []openapi.{{.Kind}}{},
+			}
+
+			for _, {{.KindLowerSingular}} := range {{.KindLowerPlural}} {
+				converted := Present{{.Kind}}(&{{.KindLowerSingular}})
+				{{.KindLowerSingular}}List.Items = append({{.KindLowerSingular}}List.Items, converted)
+			}
+			if listArgs.Fields != nil {
+				filteredItems, err := presenters.SliceFilter(listArgs.Fields, {{.KindLowerSingular}}List.Items)
+				if err != nil {
+					return nil, err
+				}
+				return filteredItems, nil
+			}
+			return {{.KindLowerSingular}}List, nil
+		},
+	}
+
+	handlers.HandleList(w, r, cfg)
+}
+
+func (h {{.KindLowerSingular}}Handler) Get(w http.ResponseWriter, r *http.Request) {
+	cfg := &handlers.HandlerConfig{
+		Action: func() (interface{}, *errors.ServiceError) {
+			id := mux.Vars(r)["id"]
+			ctx := r.Context()
+			{{.KindLowerSingular}}, err := h.{{.KindLowerSingular}}.Get(ctx, id)
+			if err != nil {
+				return nil, err
+			}
+
+			return Present{{.Kind}}({{.KindLowerSingular}}), nil
+		},
+	}
+
+	handlers.HandleGet(w, r, cfg)
+}
+
+func (h {{.KindLowerSingular}}Handler) Delete(w http.ResponseWriter, r *http.Request) {
+	cfg := &handlers.HandlerConfig{
+		Action: func() (interface{}, *errors.ServiceError) {
+			id := mux.Vars(r)["id"]
+			ctx := r.Context()
+			err := h.{{.KindLowerSingular}}.Delete(ctx, id)
+			if err != nil {
+				return nil, err
+			}
+			return nil, nil
+		},
+	}
+	handlers.HandleDelete(w, r, cfg, http.StatusNoContent)
+}

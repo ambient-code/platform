@@ -1,0 +1,160 @@
+---
+apiVersion: v1
+kind: Template
+metadata:
+  name: ambient-api-server-db
+  annotations:
+    description: PostgreSQL database service for the Ambient API Server
+    iconClass: icon-postgresql
+    openshift.io/display-name: Ambient API Server PostgreSQL Database
+    tags: database,postgresql
+parameters:
+
+  - name: DATABASE_SERVICE_NAME
+    description: The name of the OpenShift Service exposed for the database.
+    displayName: Database Service Name
+    required: true
+    value: ambient-api-server-db
+
+  - name: DATABASE_USER
+    description: Username for PostgreSQL user that will be used for accessing the database.
+    displayName: PostgreSQL Username
+    required: true
+    value: ambient
+
+  - name: DATABASE_PASSWORD
+    description: Password for the PostgreSQL connection user.
+    displayName: PostgreSQL Password
+    required: true
+    value: placeholder
+
+  - name: DATABASE_NAME
+    description: Name of the PostgreSQL database accessed.
+    displayName: PostgreSQL Database Name
+    required: true
+    value: ambient_api_server
+
+  - name: DATABASE_VOLUME_CAPACITY
+    description: Volume space available for data, e.g. 512Mi, 2Gi.
+    displayName: Volume Capacity
+    required: true
+    value: 512Mi
+
+  - name: POSTGRESQL_VERSION
+    description: Version of PostgreSQL image to be used (10 or latest).
+    displayName: Version of PostgreSQL Image
+    required: true
+    value: "16.2"
+
+objects:
+
+  - apiVersion: v1
+    kind: Service
+    metadata:
+      annotations:
+        template.openshift.io/expose-uri: postgres://{.spec.clusterIP}:{.spec.ports[?(.name==\postgresql\)].port}
+      name: ${DATABASE_SERVICE_NAME}
+    spec:
+      ports:
+        - name: postgresql
+          nodePort: 0
+          port: 5432
+          protocol: TCP
+          targetPort: 5432
+      selector:
+        name: ${DATABASE_SERVICE_NAME}
+      sessionAffinity: None
+      type: ClusterIP
+    status:
+      loadBalancer: {}
+
+  - apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: ${DATABASE_SERVICE_NAME}
+    spec:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: ${DATABASE_VOLUME_CAPACITY}
+
+  - apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      annotations:
+        template.alpha.openshift.io/wait-for-ready: "true"
+      name: ${DATABASE_SERVICE_NAME}
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          name: ${DATABASE_SERVICE_NAME}
+      strategy:
+        type: Recreate
+      template:
+        metadata:
+          labels:
+            name: ${DATABASE_SERVICE_NAME}
+        spec:
+          containers:
+            - capabilities: {}
+              env:
+                - name: POSTGRES_USER
+                  valueFrom:
+                    secretKeyRef:
+                      key: db.user
+                      name: ${DATABASE_SERVICE_NAME}
+                - name: POSTGRES_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      key: db.password
+                      name: ${DATABASE_SERVICE_NAME}
+                - name: POSTGRES_DB
+                  valueFrom:
+                    secretKeyRef:
+                      key: db.name
+                      name: ${DATABASE_SERVICE_NAME}
+                - name: PGDATA
+                  value: /var/lib/pgsql/data/pgdata
+              image: docker.io/library/postgres:${POSTGRESQL_VERSION}
+              imagePullPolicy: IfNotPresent
+              livenessProbe:
+                tcpSocket:
+                  port: 5432
+                initialDelaySeconds: 120
+                timeoutSeconds: 10
+              name: postgresql
+              ports:
+                - containerPort: 5432
+                  protocol: TCP
+              readinessProbe:
+                exec:
+                  command:
+                    - /bin/sh
+                    - -c
+                    - exec /usr/bin/pg_isready -U $POSTGRES_USER -d $POSTGRES_DB -h localhost -p 5432
+                initialDelaySeconds: 5
+                timeoutSeconds: 1
+              terminationMessagePath: /dev/termination-log
+              volumeMounts:
+                - mountPath: /var/lib/pgsql/data
+                  name: ${DATABASE_SERVICE_NAME}-data
+          dnsPolicy: ClusterFirst
+          restartPolicy: Always
+          volumes:
+            - name: ${DATABASE_SERVICE_NAME}-data
+              persistentVolumeClaim:
+                claimName: ${DATABASE_SERVICE_NAME}
+    status: {}
+
+  - apiVersion: v1
+    kind: Secret
+    metadata:
+      name: ${DATABASE_SERVICE_NAME}
+    stringData:
+      db.host: ${DATABASE_SERVICE_NAME}
+      db.name: ${DATABASE_NAME}
+      db.password: ${DATABASE_PASSWORD}
+      db.user: ${DATABASE_USER}
+      db.port: "5432"
