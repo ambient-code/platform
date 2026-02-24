@@ -32,6 +32,19 @@ spec:
         - name: VTEAM_VERSION
           value: "v0.0.7"
         # Note: Langfuse feedback now handled by runner, not frontend
+        # Unleash feature flags (optional - proxy routes disabled when not set)
+        - name: UNLEASH_URL
+          valueFrom:
+            secretKeyRef:
+              name: unleash-credentials
+              key: unleash-url
+              optional: true
+        - name: UNLEASH_CLIENT_KEY
+          valueFrom:
+            secretKeyRef:
+              name: unleash-credentials
+              key: client-api-token
+              optional: true
         resources:
           requests:
             cpu: 100m

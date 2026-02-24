@@ -15,6 +15,7 @@ import { successToast, errorToast } from "@/hooks/use-toast";
 import { useProject, useUpdateProject } from "@/services/queries/use-projects";
 import { useSecretsValues, useUpdateSecrets, useIntegrationSecrets, useUpdateIntegrationSecrets } from "@/services/queries/use-secrets";
 import { useClusterInfo } from "@/hooks/use-cluster-info";
+import { FeatureFlagsSection } from "./feature-flags-section";
 import { useMemo } from "react";
 
 type SettingsSectionProps = {
@@ -542,6 +543,8 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
           </div>
         </CardContent>
       </Card>
+
+      <FeatureFlagsSection projectName={projectName} />
     </div>
   );
 }
