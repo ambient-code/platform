@@ -2,65 +2,55 @@
 
 import React, { useState } from "react";
 import { cn } from "@/lib/utils";
-import { Badge } from "@/components/ui/badge";
-import { Loader2, Brain } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import type { ThinkingBlock } from "@/types/agentic-session";
 
 export type ThinkingMessageProps = {
   block: ThinkingBlock;
+  streaming?: boolean;
   className?: string;
 };
 
-export const ThinkingMessage: React.FC<ThinkingMessageProps> = ({ block, className }) => {
+export const ThinkingMessage: React.FC<ThinkingMessageProps> = ({ block, streaming, className }) => {
   const [expanded, setExpanded] = useState(false);
+  const text = block.thinking || "";
 
   return (
-    <div className={cn("mb-4", className)}>
-      <div className="flex items-start space-x-3">
-        <div className="flex-shrink-0">
-          <div className="w-8 h-8 rounded-full flex items-center justify-center bg-yellow-500">
-            <Brain className="w-4 h-4 text-white" />
-          </div>
+    <div className={cn("py-1", className)}>
+      <button
+        type="button"
+        className="flex items-center gap-1.5 w-full text-left group"
+        onClick={() => setExpanded((e) => !e)}
+      >
+        <ChevronRight
+          className={cn(
+            "h-3.5 w-3.5 shrink-0 text-muted-foreground/60 transition-transform duration-150",
+            expanded && "rotate-90",
+          )}
+        />
+        <span className="text-xs font-medium text-muted-foreground/70">
+          Thinking
+          {streaming && !expanded && (
+            <span className="ml-1 animate-pulse">...</span>
+          )}
+        </span>
+        {!expanded && text && (
+          <span className="text-xs text-muted-foreground/50 truncate min-w-0">
+            &mdash; {text}
+          </span>
+        )}
+      </button>
+
+      {expanded && (
+        <div className="mt-1 ml-5">
+          <pre className="text-xs text-muted-foreground/60 whitespace-pre-wrap break-words leading-relaxed">
+            {text}
+            {streaming && <span className="animate-pulse">&#9608;</span>}
+          </pre>
         </div>
-
-        <div className="flex-1 min-w-0">
-          <div className="bg-card rounded-lg border shadow-sm p-3">
-            <div className="flex items-center justify-between mb-2">
-              <Badge variant="outline" className="text-xs">Thinking</Badge>
-              <button
-                className="text-xs text-link hover:underline"
-                onClick={() => setExpanded((e) => !e)}
-              >
-                {expanded ? "Hide" : "Show"} details
-              </button>
-            </div>
-
-            {!expanded && (
-              <div className="flex items-center text-muted-foreground text-xs">
-                <Loader2 className="w-3 h-3 mr-2 animate-spin" /> Hidden reasoning available
-              </div>
-            )}
-
-            {expanded && (
-              <div className="space-y-3">
-                  <div className="text-xs">
-                    <div className="mb-1 text-muted-foreground">
-                      <span className="font-semibold">Signature:</span> {block.signature}
-                    </div>
-                    <pre className="bg-muted/50 border rounded p-2 whitespace-pre-wrap break-words text-foreground">
-                      {block.thinking}
-                    </pre>
-                  </div>
-                
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+      )}
     </div>
   );
 };
 
 export default ThinkingMessage;
-
-

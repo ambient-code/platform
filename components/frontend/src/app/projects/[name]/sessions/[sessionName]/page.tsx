@@ -894,13 +894,14 @@ export default function ProjectSessionDetailPage({
         // Check if this is a thinking block (from RAW event)
         const metadata = msg.metadata as Record<string, unknown> | undefined;
         if (metadata?.type === "thinking_block") {
+          const thinkingText = (metadata.thinking as string) || (typeof msg.content === 'string' ? msg.content : '') || "";
           result.push({
             type: "agent_message",
-            id: msg.id,  // Preserve message ID for feedback association
+            id: msg.id,
             content: {
               type: "thinking_block",
-              thinking: metadata.thinking as string || "",
-              signature: metadata.signature as string || "",
+              thinking: thinkingText,
+              signature: (metadata.signature as string) || "",
             },
             model: "claude",
             timestamp,
@@ -996,6 +997,21 @@ export default function ProjectSessionDetailPage({
       }
     }
     
+    // Add streaming thinking if currently thinking
+    if (aguiState.currentThinking?.content) {
+      result.push({
+        type: "agent_message",
+        content: {
+          type: "thinking_block",
+          thinking: aguiState.currentThinking.content,
+          signature: "",
+        },
+        model: "claude",
+        timestamp: aguiState.currentThinking.timestamp || new Date().toISOString(),
+        streaming: true,
+      } as MessageObject & { streaming?: boolean });
+    }
+
     // Add streaming message if currently streaming
     if (aguiState.currentMessage?.content) {
       result.push({
@@ -1103,6 +1119,7 @@ export default function ProjectSessionDetailPage({
   }, [
     aguiState.messages,
     aguiState.currentMessage,
+    aguiState.currentThinking,
     aguiState.currentToolCall,
     aguiState.pendingToolCalls,  // CRITICAL: Include so UI updates when new tools start
     aguiState.pendingChildren,   // CRITICAL: Include so UI updates when children finish

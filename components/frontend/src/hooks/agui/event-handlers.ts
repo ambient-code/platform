@@ -170,6 +170,27 @@ export function processAGUIEvent(
     return handleMetaEvent(newState, event as AGUIMetaEvent)
   }
 
+  // ── Thinking events (custom, not in AG-UI EventType enum) ──
+  if (event.type === 'THINKING_START') {
+    return newState
+  }
+
+  if (event.type === 'THINKING_TEXT_MESSAGE_START') {
+    return handleThinkingMessageStart(newState)
+  }
+
+  if (event.type === 'THINKING_TEXT_MESSAGE_CONTENT') {
+    return handleThinkingMessageContent(newState, event as { type: string; delta: string })
+  }
+
+  if (event.type === 'THINKING_TEXT_MESSAGE_END') {
+    return handleThinkingMessageEnd(newState, event, callbacks)
+  }
+
+  if (event.type === 'THINKING_END') {
+    return newState
+  }
+
   return newState
 }
 
@@ -227,6 +248,25 @@ function handleRunFinished(
     callbacks.onMessage?.(msg)
   }
   state.currentReasoning = null
+
+  // Flush any pending thinking
+  if (state.currentThinking?.content) {
+    const thinkingText = state.currentThinking.content
+    const msg = {
+      id: state.currentThinking.id || crypto.randomUUID(),
+      role: 'assistant' as const,
+      content: thinkingText,
+      metadata: {
+        type: 'thinking_block',
+        thinking: thinkingText,
+        signature: '',
+      },
+      timestamp: String(event.timestamp ?? ''),
+    } as PlatformMessage
+    state.messages = [...state.messages, msg]
+    callbacks.onMessage?.(msg)
+  }
+  state.currentThinking = null
 
   return state
 }
@@ -940,5 +980,56 @@ function handleMetaEvent(
     feedbackMap.set(messageId, metaType)
     state.messageFeedback = feedbackMap
   }
+  return state
+}
+
+// ── Thinking event handlers (custom streaming thinking blocks) ──
+
+function handleThinkingMessageStart(
+  state: AGUIClientState,
+): AGUIClientState {
+  state.currentThinking = {
+    id: crypto.randomUUID(),
+    content: '',
+    timestamp: new Date().toISOString(),
+  }
+  return state
+}
+
+function handleThinkingMessageContent(
+  state: AGUIClientState,
+  event: { type: string; delta: string },
+): AGUIClientState {
+  if (state.currentThinking) {
+    state.currentThinking = {
+      ...state.currentThinking,
+      content: (state.currentThinking.content || '') + event.delta,
+    }
+  }
+  return state
+}
+
+function handleThinkingMessageEnd(
+  state: AGUIClientState,
+  event: { type: string; timestamp?: number },
+  callbacks: EventHandlerCallbacks,
+): AGUIClientState {
+  if (state.currentThinking?.content) {
+    const thinkingText = state.currentThinking.content
+    const msg = {
+      id: state.currentThinking.id || crypto.randomUUID(),
+      role: 'assistant' as const,
+      content: thinkingText,
+      metadata: {
+        type: 'thinking_block',
+        thinking: thinkingText,
+        signature: '',
+      },
+      timestamp: String(event.timestamp ?? state.currentThinking.timestamp ?? ''),
+    } as PlatformMessage
+    state.messages = [...state.messages, msg]
+    callbacks.onMessage?.(msg)
+  }
+  state.currentThinking = null
   return state
 }
