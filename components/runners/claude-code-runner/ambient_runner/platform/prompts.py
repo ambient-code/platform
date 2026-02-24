@@ -39,7 +39,11 @@ GIT_PUSH_STEPS = (
     "\nAfter making changes to any auto-push repository:\n"
     "1. Use `git add` to stage your changes\n"
     '2. Use `git commit -m "description"` to commit with a descriptive message\n'
-    "3. Use `git push origin {branch}` to push to the remote repository\n\n"
+    "3. Use `git push -u origin {branch}` to push to the remote repository\n"
+    "   (this creates the branch on the remote if it doesn't exist yet)\n"
+    "4. Create a pull request using `gh pr create` targeting the default branch\n\n"
+    "**IMPORTANT**: NEVER push directly to `main` or `master`. Always work on "
+    "the feature branch (`{branch}`). If push fails, do NOT fall back to main.\n\n"
 )
 
 RUBRIC_EVALUATION_HEADER = "## Rubric Evaluation\n\n"

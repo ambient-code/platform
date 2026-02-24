@@ -86,7 +86,7 @@ const ExpandableMarkdown: React.FC<ExpandableMarkdownProps> = ({
         </pre>
       );
     },
-    p: ({ children }) => <p className="text-muted-foreground leading-relaxed mb-2 text-sm">{children}</p>,
+    p: ({ children }) => <div className="text-muted-foreground leading-relaxed mb-2 text-sm">{children}</div>,
     h1: ({ children }) => <h1 className="text-lg font-bold text-foreground mb-2">{children}</h1>,
     h2: ({ children }) => <h2 className="text-md font-semibold text-foreground mb-2">{children}</h2>,
     h3: ({ children }) => <h3 className="text-sm font-medium text-foreground mb-1">{children}</h3>,

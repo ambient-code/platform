@@ -337,8 +337,10 @@ You are analyzing {total} corrections collected from Ambient Code Platform sessi
 4. **Be surgical**: Only update files directly related to the corrections.
    Preserve existing content. Add or modify — do not replace wholesale.
 
-5. **Commit and push**: Create a branch, commit your changes with a descriptive
-   message, and push.
+5. **Commit, push, and open a PR**: Commit your changes with a descriptive
+   message, push to the feature branch using `git push -u origin <branch>`,
+   then create a pull request with `gh pr create` targeting the default branch.
+   NEVER push directly to main or master.
 
 ## Requirements
 
@@ -361,6 +363,11 @@ def _repo_short_name(url: str) -> str:
     """Extract short name from a repo URL."""
     name = url.rstrip("/").split("/")[-1]
     return name[:-4] if name.endswith(".git") else name
+
+
+def _normalise_url(url: str) -> str:
+    """Normalise a repo URL for comparison (strip trailing / and .git)."""
+    return url.strip().rstrip("/").removesuffix(".git")
 
 
 def create_improvement_session(
@@ -554,6 +561,11 @@ def main():
         help="Disable SSL certificate verification (for self-signed certs)",
     )
     parser.add_argument(
+        "--repos-filter",
+        default="",
+        help="Comma-separated repo URLs to process (empty = all repos)",
+    )
+    parser.add_argument(
         "--output-file",
         default="",
         help="Write JSON summary to this file (for CI/CD integration)",
@@ -622,6 +634,27 @@ def main():
         save_last_run(datetime.now(timezone.utc))
         _write_output(args.output_file, corrections_found, 0, [])
         return
+
+    # Filter by repo allowlist
+    if args.repos_filter:
+        allowed = {
+            _normalise_url(u)
+            for u in args.repos_filter.split(",")
+            if u.strip()
+        }
+        before = len(qualifying)
+        qualifying = [
+            g for g in qualifying
+            if _normalise_url(g["target_repo_url"]) in allowed
+        ]
+        filtered = before - len(qualifying)
+        if filtered:
+            logger.info(f"Repos filter: skipped {filtered} groups not in allowlist")
+        if not qualifying:
+            logger.info("No groups match the repos filter. Exiting.")
+            save_last_run(datetime.now(timezone.utc))
+            _write_output(args.output_file, corrections_found, 0, [])
+            return
 
     # Process each qualifying group
     for group in qualifying:

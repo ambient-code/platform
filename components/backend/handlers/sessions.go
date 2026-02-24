@@ -634,7 +634,10 @@ func CreateSession(c *gin.Context) {
 		spec["environmentVariables"] = envVars
 	}
 
-	// Set multi-repo configuration on spec (simplified format)
+	// Set multi-repo configuration on spec.
+	// When no branch is specified, the hydrate script clones the repo's
+	// default branch (main/master). The runner derives the feature branch
+	// name (ambient/session-xxx) from AGENTIC_SESSION_NAME.
 	{
 		spec := session["spec"].(map[string]interface{})
 		if len(req.Repos) > 0 {
@@ -643,8 +646,6 @@ func CreateSession(c *gin.Context) {
 				m := map[string]interface{}{"url": r.URL}
 				if r.Branch != nil && strings.TrimSpace(*r.Branch) != "" {
 					m["branch"] = *r.Branch
-				} else {
-					m["branch"] = ComputeAutoBranch(name)
 				}
 				if r.AutoPush != nil {
 					m["autoPush"] = *r.AutoPush

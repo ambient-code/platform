@@ -184,23 +184,33 @@ if [ -n "$REPOS_JSON" ] && [ "$REPOS_JSON" != "null" ] && [ "$REPOS_JSON" != "" 
         i=0
         while [ $i -lt $REPO_COUNT ]; do
             REPO_URL=$(echo "$REPOS_JSON" | jq -r ".[$i].url // empty" 2>/dev/null || echo "")
-            REPO_BRANCH=$(echo "$REPOS_JSON" | jq -r ".[$i].branch // \"main\"" 2>/dev/null || echo "main")
+            REPO_BRANCH=$(echo "$REPOS_JSON" | jq -r ".[$i].branch // empty" 2>/dev/null || echo "")
             
             # Derive repo name from URL
             REPO_NAME=$(basename "$REPO_URL" .git 2>/dev/null || echo "")
             
             if [ -n "$REPO_NAME" ] && [ -n "$REPO_URL" ] && [ "$REPO_URL" != "null" ]; then
                 REPO_DIR="/workspace/repos/$REPO_NAME"
-                echo "  Cloning $REPO_NAME (branch: $REPO_BRANCH)..."
                 
                 # Mark repo directory as safe
                 git config --global --add safe.directory "$REPO_DIR" 2>/dev/null || true
                 
-                # Clone repository (for private repos, runner will handle token injection)
-                if git clone --branch "$REPO_BRANCH" --single-branch "$REPO_URL" "$REPO_DIR" 2>&1; then
-                    echo "  ✓ Cloned $REPO_NAME"
+                # Clone repository. When branch is specified, clone that branch.
+                # When empty, clone the repo's default branch (main/master/etc).
+                if [ -n "$REPO_BRANCH" ]; then
+                    echo "  Cloning $REPO_NAME (branch: $REPO_BRANCH)..."
+                    if git clone --branch "$REPO_BRANCH" --single-branch "$REPO_URL" "$REPO_DIR" 2>&1; then
+                        echo "  ✓ Cloned $REPO_NAME (branch: $REPO_BRANCH)"
+                    else
+                        echo "  ⚠ Failed to clone $REPO_NAME (may require authentication)"
+                    fi
                 else
-                    echo "  ⚠ Failed to clone $REPO_NAME (may require authentication)"
+                    echo "  Cloning $REPO_NAME (default branch)..."
+                    if git clone "$REPO_URL" "$REPO_DIR" 2>&1; then
+                        echo "  ✓ Cloned $REPO_NAME (default branch)"
+                    else
+                        echo "  ⚠ Failed to clone $REPO_NAME (may require authentication)"
+                    fi
                 fi
             fi
             i=$((i + 1))
