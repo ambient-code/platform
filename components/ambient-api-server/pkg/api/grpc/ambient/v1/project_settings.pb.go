@@ -26,7 +26,6 @@ type ProjectSettings struct {
 	Metadata      *ObjectReference       `protobuf:"bytes,1,opt,name=metadata,proto3" json:"metadata,omitempty"`
 	ProjectId     string                 `protobuf:"bytes,2,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
 	GroupAccess   *string                `protobuf:"bytes,3,opt,name=group_access,json=groupAccess,proto3,oneof" json:"group_access,omitempty"`
-	RunnerSecrets *string                `protobuf:"bytes,4,opt,name=runner_secrets,json=runnerSecrets,proto3,oneof" json:"runner_secrets,omitempty"`
 	Repositories  *string                `protobuf:"bytes,5,opt,name=repositories,proto3,oneof" json:"repositories,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -83,13 +82,6 @@ func (x *ProjectSettings) GetGroupAccess() string {
 	return ""
 }
 
-func (x *ProjectSettings) GetRunnerSecrets() string {
-	if x != nil && x.RunnerSecrets != nil {
-		return *x.RunnerSecrets
-	}
-	return ""
-}
-
 func (x *ProjectSettings) GetRepositories() string {
 	if x != nil && x.Repositories != nil {
 		return *x.Repositories
@@ -101,7 +93,6 @@ type CreateProjectSettingsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
 	GroupAccess   *string                `protobuf:"bytes,2,opt,name=group_access,json=groupAccess,proto3,oneof" json:"group_access,omitempty"`
-	RunnerSecrets *string                `protobuf:"bytes,3,opt,name=runner_secrets,json=runnerSecrets,proto3,oneof" json:"runner_secrets,omitempty"`
 	Repositories  *string                `protobuf:"bytes,4,opt,name=repositories,proto3,oneof" json:"repositories,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -147,13 +138,6 @@ func (x *CreateProjectSettingsRequest) GetProjectId() string {
 func (x *CreateProjectSettingsRequest) GetGroupAccess() string {
 	if x != nil && x.GroupAccess != nil {
 		return *x.GroupAccess
-	}
-	return ""
-}
-
-func (x *CreateProjectSettingsRequest) GetRunnerSecrets() string {
-	if x != nil && x.RunnerSecrets != nil {
-		return *x.RunnerSecrets
 	}
 	return ""
 }
@@ -214,7 +198,6 @@ type UpdateProjectSettingsRequest struct {
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	ProjectId     *string                `protobuf:"bytes,2,opt,name=project_id,json=projectId,proto3,oneof" json:"project_id,omitempty"`
 	GroupAccess   *string                `protobuf:"bytes,3,opt,name=group_access,json=groupAccess,proto3,oneof" json:"group_access,omitempty"`
-	RunnerSecrets *string                `protobuf:"bytes,4,opt,name=runner_secrets,json=runnerSecrets,proto3,oneof" json:"runner_secrets,omitempty"`
 	Repositories  *string                `protobuf:"bytes,5,opt,name=repositories,proto3,oneof" json:"repositories,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -267,13 +250,6 @@ func (x *UpdateProjectSettingsRequest) GetProjectId() string {
 func (x *UpdateProjectSettingsRequest) GetGroupAccess() string {
 	if x != nil && x.GroupAccess != nil {
 		return *x.GroupAccess
-	}
-	return ""
-}
-
-func (x *UpdateProjectSettingsRequest) GetRunnerSecrets() string {
-	if x != nil && x.RunnerSecrets != nil {
-		return *x.RunnerSecrets
 	}
 	return ""
 }
@@ -570,39 +546,33 @@ var File_ambient_v1_project_settings_proto protoreflect.FileDescriptor
 const file_ambient_v1_project_settings_proto_rawDesc = "" +
 	"\n" +
 	"!ambient/v1/project_settings.proto\x12\n" +
-	"ambient.v1\x1a\x17ambient/v1/common.proto\"\x9b\x02\n" +
+	"ambient.v1\x1a\x17ambient/v1/common.proto\"\xf2\x01\n" +
 	"\x0fProjectSettings\x127\n" +
 	"\bmetadata\x18\x01 \x01(\v2\x1b.ambient.v1.ObjectReferenceR\bmetadata\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x02 \x01(\tR\tprojectId\x12&\n" +
-	"\fgroup_access\x18\x03 \x01(\tH\x00R\vgroupAccess\x88\x01\x01\x12*\n" +
-	"\x0erunner_secrets\x18\x04 \x01(\tH\x01R\rrunnerSecrets\x88\x01\x01\x12'\n" +
-	"\frepositories\x18\x05 \x01(\tH\x02R\frepositories\x88\x01\x01B\x0f\n" +
-	"\r_group_accessB\x11\n" +
-	"\x0f_runner_secretsB\x0f\n" +
-	"\r_repositories\"\xef\x01\n" +
+	"\fgroup_access\x18\x03 \x01(\tH\x00R\vgroupAccess\x88\x01\x01\x12'\n" +
+	"\frepositories\x18\x05 \x01(\tH\x01R\frepositories\x88\x01\x01B\x0f\n" +
+	"\r_group_accessB\x0f\n" +
+	"\r_repositoriesJ\x04\b\x04\x10\x05R\x0erunner_secrets\"\xc6\x01\n" +
 	"\x1cCreateProjectSettingsRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12&\n" +
-	"\fgroup_access\x18\x02 \x01(\tH\x00R\vgroupAccess\x88\x01\x01\x12*\n" +
-	"\x0erunner_secrets\x18\x03 \x01(\tH\x01R\rrunnerSecrets\x88\x01\x01\x12'\n" +
-	"\frepositories\x18\x04 \x01(\tH\x02R\frepositories\x88\x01\x01B\x0f\n" +
-	"\r_group_accessB\x11\n" +
-	"\x0f_runner_secretsB\x0f\n" +
-	"\r_repositories\"+\n" +
+	"\fgroup_access\x18\x02 \x01(\tH\x00R\vgroupAccess\x88\x01\x01\x12'\n" +
+	"\frepositories\x18\x04 \x01(\tH\x01R\frepositories\x88\x01\x01B\x0f\n" +
+	"\r_group_accessB\x0f\n" +
+	"\r_repositoriesJ\x04\b\x03\x10\x04R\x0erunner_secrets\"+\n" +
 	"\x19GetProjectSettingsRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\"\x93\x02\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"\xea\x01\n" +
 	"\x1cUpdateProjectSettingsRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\"\n" +
 	"\n" +
 	"project_id\x18\x02 \x01(\tH\x00R\tprojectId\x88\x01\x01\x12&\n" +
-	"\fgroup_access\x18\x03 \x01(\tH\x01R\vgroupAccess\x88\x01\x01\x12*\n" +
-	"\x0erunner_secrets\x18\x04 \x01(\tH\x02R\rrunnerSecrets\x88\x01\x01\x12'\n" +
-	"\frepositories\x18\x05 \x01(\tH\x03R\frepositories\x88\x01\x01B\r\n" +
+	"\fgroup_access\x18\x03 \x01(\tH\x01R\vgroupAccess\x88\x01\x01\x12'\n" +
+	"\frepositories\x18\x05 \x01(\tH\x02R\frepositories\x88\x01\x01B\r\n" +
 	"\v_project_idB\x0f\n" +
-	"\r_group_accessB\x11\n" +
-	"\x0f_runner_secretsB\x0f\n" +
-	"\r_repositories\".\n" +
+	"\r_group_accessB\x0f\n" +
+	"\r_repositoriesJ\x04\b\x04\x10\x05R\x0erunner_secrets\".\n" +
 	"\x1cDeleteProjectSettingsRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"D\n" +
 	"\x1aListProjectSettingsRequest\x12\x12\n" +

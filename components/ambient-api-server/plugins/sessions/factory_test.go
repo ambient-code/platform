@@ -82,7 +82,4 @@ func newSessionList(namePrefix string, count int) ([]*sessions.Session, error) {
 	}
 	return items, nil
 }
-func stringPtr(s string) *string    { return &s }
-func boolPtr(b bool) *bool          { return &b }
-func int32Ptr(i int32) *int32       { return &i }
-func float64Ptr(f float64) *float64 { return &f }
+func stringPtr(s string) *string { return &s }

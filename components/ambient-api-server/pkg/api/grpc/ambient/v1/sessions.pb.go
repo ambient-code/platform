@@ -1111,7 +1111,7 @@ var File_ambient_v1_sessions_proto protoreflect.FileDescriptor
 const file_ambient_v1_sessions_proto_rawDesc = "" +
 	"\n" +
 	"\x19ambient/v1/sessions.proto\x12\n" +
-	"ambient.v1\x1a\x17ambient/v1/common.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xab\x0e\n" +
+	"ambient.v1\x1a\x17ambient/v1/common.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x87\x0e\n" +
 	"\aSession\x127\n" +
 	"\bmetadata\x18\x01 \x01(\v2\x1b.ambient.v1.ObjectReferenceR\bmetadata\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1e\n" +
@@ -1121,44 +1121,42 @@ const file_ambient_v1_sessions_proto_rawDesc = "" +
 	"\x10assigned_user_id\x18\x06 \x01(\tH\x03R\x0eassignedUserId\x88\x01\x01\x12$\n" +
 	"\vworkflow_id\x18\a \x01(\tH\x04R\n" +
 	"workflowId\x88\x01\x01\x12\x19\n" +
-	"\x05repos\x18\b \x01(\tH\x05R\x05repos\x88\x01\x01\x12%\n" +
-	"\vinteractive\x18\t \x01(\bH\x06R\vinteractive\x88\x01\x01\x12\x1d\n" +
+	"\x05repos\x18\b \x01(\tH\x05R\x05repos\x88\x01\x01\x12\x1d\n" +
 	"\atimeout\x18\n" +
-	" \x01(\x05H\aR\atimeout\x88\x01\x01\x12 \n" +
-	"\tllm_model\x18\v \x01(\tH\bR\bllmModel\x88\x01\x01\x12,\n" +
-	"\x0fllm_temperature\x18\f \x01(\x01H\tR\x0ellmTemperature\x88\x01\x01\x12)\n" +
-	"\x0ellm_max_tokens\x18\r \x01(\x05H\n" +
-	"R\fllmMaxTokens\x88\x01\x01\x12/\n" +
-	"\x11parent_session_id\x18\x0e \x01(\tH\vR\x0fparentSessionId\x88\x01\x01\x12-\n" +
-	"\x10bot_account_name\x18\x0f \x01(\tH\fR\x0ebotAccountName\x88\x01\x01\x122\n" +
-	"\x12resource_overrides\x18\x10 \x01(\tH\rR\x11resourceOverrides\x88\x01\x01\x128\n" +
-	"\x15environment_variables\x18\x11 \x01(\tH\x0eR\x14environmentVariables\x88\x01\x01\x12\x1b\n" +
-	"\x06labels\x18\x12 \x01(\tH\x0fR\x06labels\x88\x01\x01\x12%\n" +
-	"\vannotations\x18\x13 \x01(\tH\x10R\vannotations\x88\x01\x01\x12\"\n" +
+	" \x01(\x05H\x06R\atimeout\x88\x01\x01\x12 \n" +
+	"\tllm_model\x18\v \x01(\tH\aR\bllmModel\x88\x01\x01\x12,\n" +
+	"\x0fllm_temperature\x18\f \x01(\x01H\bR\x0ellmTemperature\x88\x01\x01\x12)\n" +
+	"\x0ellm_max_tokens\x18\r \x01(\x05H\tR\fllmMaxTokens\x88\x01\x01\x12/\n" +
+	"\x11parent_session_id\x18\x0e \x01(\tH\n" +
+	"R\x0fparentSessionId\x88\x01\x01\x12-\n" +
+	"\x10bot_account_name\x18\x0f \x01(\tH\vR\x0ebotAccountName\x88\x01\x01\x122\n" +
+	"\x12resource_overrides\x18\x10 \x01(\tH\fR\x11resourceOverrides\x88\x01\x01\x128\n" +
+	"\x15environment_variables\x18\x11 \x01(\tH\rR\x14environmentVariables\x88\x01\x01\x12\x1b\n" +
+	"\x06labels\x18\x12 \x01(\tH\x0eR\x06labels\x88\x01\x01\x12%\n" +
+	"\vannotations\x18\x13 \x01(\tH\x0fR\vannotations\x88\x01\x01\x12\"\n" +
 	"\n" +
-	"project_id\x18\x14 \x01(\tH\x11R\tprojectId\x88\x01\x01\x12\x19\n" +
-	"\x05phase\x18\x15 \x01(\tH\x12R\x05phase\x88\x01\x01\x12>\n" +
+	"project_id\x18\x14 \x01(\tH\x10R\tprojectId\x88\x01\x01\x12\x19\n" +
+	"\x05phase\x18\x15 \x01(\tH\x11R\x05phase\x88\x01\x01\x12>\n" +
 	"\n" +
-	"start_time\x18\x16 \x01(\v2\x1a.google.protobuf.TimestampH\x13R\tstartTime\x88\x01\x01\x12H\n" +
-	"\x0fcompletion_time\x18\x17 \x01(\v2\x1a.google.protobuf.TimestampH\x14R\x0ecompletionTime\x88\x01\x01\x12)\n" +
-	"\x0esdk_session_id\x18\x18 \x01(\tH\x15R\fsdkSessionId\x88\x01\x01\x12/\n" +
-	"\x11sdk_restart_count\x18\x19 \x01(\x05H\x16R\x0fsdkRestartCount\x88\x01\x01\x12#\n" +
+	"start_time\x18\x16 \x01(\v2\x1a.google.protobuf.TimestampH\x12R\tstartTime\x88\x01\x01\x12H\n" +
+	"\x0fcompletion_time\x18\x17 \x01(\v2\x1a.google.protobuf.TimestampH\x13R\x0ecompletionTime\x88\x01\x01\x12)\n" +
+	"\x0esdk_session_id\x18\x18 \x01(\tH\x14R\fsdkSessionId\x88\x01\x01\x12/\n" +
+	"\x11sdk_restart_count\x18\x19 \x01(\x05H\x15R\x0fsdkRestartCount\x88\x01\x01\x12#\n" +
 	"\n" +
-	"conditions\x18\x1a \x01(\tH\x17R\n" +
+	"conditions\x18\x1a \x01(\tH\x16R\n" +
 	"conditions\x88\x01\x01\x12.\n" +
-	"\x10reconciled_repos\x18\x1b \x01(\tH\x18R\x0freconciledRepos\x88\x01\x01\x124\n" +
-	"\x13reconciled_workflow\x18\x1c \x01(\tH\x19R\x12reconciledWorkflow\x88\x01\x01\x12%\n" +
-	"\fkube_cr_name\x18\x1d \x01(\tH\x1aR\n" +
+	"\x10reconciled_repos\x18\x1b \x01(\tH\x17R\x0freconciledRepos\x88\x01\x01\x124\n" +
+	"\x13reconciled_workflow\x18\x1c \x01(\tH\x18R\x12reconciledWorkflow\x88\x01\x01\x12%\n" +
+	"\fkube_cr_name\x18\x1d \x01(\tH\x19R\n" +
 	"kubeCrName\x88\x01\x01\x12#\n" +
-	"\vkube_cr_uid\x18\x1e \x01(\tH\x1bR\tkubeCrUid\x88\x01\x01\x12*\n" +
-	"\x0ekube_namespace\x18\x1f \x01(\tH\x1cR\rkubeNamespace\x88\x01\x01B\v\n" +
+	"\vkube_cr_uid\x18\x1e \x01(\tH\x1aR\tkubeCrUid\x88\x01\x01\x12*\n" +
+	"\x0ekube_namespace\x18\x1f \x01(\tH\x1bR\rkubeNamespace\x88\x01\x01B\v\n" +
 	"\t_repo_urlB\t\n" +
 	"\a_promptB\x15\n" +
 	"\x13_created_by_user_idB\x13\n" +
 	"\x11_assigned_user_idB\x0e\n" +
 	"\f_workflow_idB\b\n" +
-	"\x06_reposB\x0e\n" +
-	"\f_interactiveB\n" +
+	"\x06_reposB\n" +
 	"\n" +
 	"\b_timeoutB\f\n" +
 	"\n" +
@@ -1182,7 +1180,8 @@ const file_ambient_v1_sessions_proto_rawDesc = "" +
 	"\x14_reconciled_workflowB\x0f\n" +
 	"\r_kube_cr_nameB\x0e\n" +
 	"\f_kube_cr_uidB\x11\n" +
-	"\x0f_kube_namespace\"\xb5\b\n" +
+	"\x0f_kube_namespaceJ\x04\b\t\x10\n" +
+	"R\vinteractive\"\x91\b\n" +
 	"\x14CreateSessionRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1e\n" +
 	"\brepo_url\x18\x02 \x01(\tH\x00R\arepoUrl\x88\x01\x01\x12\x1b\n" +
@@ -1191,29 +1190,27 @@ const file_ambient_v1_sessions_proto_rawDesc = "" +
 	"\x10assigned_user_id\x18\x05 \x01(\tH\x03R\x0eassignedUserId\x88\x01\x01\x12$\n" +
 	"\vworkflow_id\x18\x06 \x01(\tH\x04R\n" +
 	"workflowId\x88\x01\x01\x12\x19\n" +
-	"\x05repos\x18\a \x01(\tH\x05R\x05repos\x88\x01\x01\x12%\n" +
-	"\vinteractive\x18\b \x01(\bH\x06R\vinteractive\x88\x01\x01\x12\x1d\n" +
-	"\atimeout\x18\t \x01(\x05H\aR\atimeout\x88\x01\x01\x12 \n" +
+	"\x05repos\x18\a \x01(\tH\x05R\x05repos\x88\x01\x01\x12\x1d\n" +
+	"\atimeout\x18\t \x01(\x05H\x06R\atimeout\x88\x01\x01\x12 \n" +
 	"\tllm_model\x18\n" +
-	" \x01(\tH\bR\bllmModel\x88\x01\x01\x12,\n" +
-	"\x0fllm_temperature\x18\v \x01(\x01H\tR\x0ellmTemperature\x88\x01\x01\x12)\n" +
-	"\x0ellm_max_tokens\x18\f \x01(\x05H\n" +
-	"R\fllmMaxTokens\x88\x01\x01\x12/\n" +
-	"\x11parent_session_id\x18\r \x01(\tH\vR\x0fparentSessionId\x88\x01\x01\x12-\n" +
-	"\x10bot_account_name\x18\x0e \x01(\tH\fR\x0ebotAccountName\x88\x01\x01\x122\n" +
-	"\x12resource_overrides\x18\x0f \x01(\tH\rR\x11resourceOverrides\x88\x01\x01\x128\n" +
-	"\x15environment_variables\x18\x10 \x01(\tH\x0eR\x14environmentVariables\x88\x01\x01\x12\x1b\n" +
-	"\x06labels\x18\x11 \x01(\tH\x0fR\x06labels\x88\x01\x01\x12%\n" +
-	"\vannotations\x18\x12 \x01(\tH\x10R\vannotations\x88\x01\x01\x12\"\n" +
+	" \x01(\tH\aR\bllmModel\x88\x01\x01\x12,\n" +
+	"\x0fllm_temperature\x18\v \x01(\x01H\bR\x0ellmTemperature\x88\x01\x01\x12)\n" +
+	"\x0ellm_max_tokens\x18\f \x01(\x05H\tR\fllmMaxTokens\x88\x01\x01\x12/\n" +
+	"\x11parent_session_id\x18\r \x01(\tH\n" +
+	"R\x0fparentSessionId\x88\x01\x01\x12-\n" +
+	"\x10bot_account_name\x18\x0e \x01(\tH\vR\x0ebotAccountName\x88\x01\x01\x122\n" +
+	"\x12resource_overrides\x18\x0f \x01(\tH\fR\x11resourceOverrides\x88\x01\x01\x128\n" +
+	"\x15environment_variables\x18\x10 \x01(\tH\rR\x14environmentVariables\x88\x01\x01\x12\x1b\n" +
+	"\x06labels\x18\x11 \x01(\tH\x0eR\x06labels\x88\x01\x01\x12%\n" +
+	"\vannotations\x18\x12 \x01(\tH\x0fR\vannotations\x88\x01\x01\x12\"\n" +
 	"\n" +
-	"project_id\x18\x13 \x01(\tH\x11R\tprojectId\x88\x01\x01B\v\n" +
+	"project_id\x18\x13 \x01(\tH\x10R\tprojectId\x88\x01\x01B\v\n" +
 	"\t_repo_urlB\t\n" +
 	"\a_promptB\x15\n" +
 	"\x13_created_by_user_idB\x13\n" +
 	"\x11_assigned_user_idB\x0e\n" +
 	"\f_workflow_idB\b\n" +
-	"\x06_reposB\x0e\n" +
-	"\f_interactiveB\n" +
+	"\x06_reposB\n" +
 	"\n" +
 	"\b_timeoutB\f\n" +
 	"\n" +
@@ -1226,9 +1223,9 @@ const file_ambient_v1_sessions_proto_rawDesc = "" +
 	"\x16_environment_variablesB\t\n" +
 	"\a_labelsB\x0e\n" +
 	"\f_annotationsB\r\n" +
-	"\v_project_id\"#\n" +
+	"\v_project_idJ\x04\b\b\x10\tR\vinteractive\"#\n" +
 	"\x11GetSessionRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\"\x8a\b\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"\xe6\a\n" +
 	"\x14UpdateSessionRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\x04name\x18\x02 \x01(\tH\x00R\x04name\x88\x01\x01\x12\x1e\n" +
@@ -1237,29 +1234,27 @@ const file_ambient_v1_sessions_proto_rawDesc = "" +
 	"\x10assigned_user_id\x18\x05 \x01(\tH\x03R\x0eassignedUserId\x88\x01\x01\x12$\n" +
 	"\vworkflow_id\x18\x06 \x01(\tH\x04R\n" +
 	"workflowId\x88\x01\x01\x12\x19\n" +
-	"\x05repos\x18\a \x01(\tH\x05R\x05repos\x88\x01\x01\x12%\n" +
-	"\vinteractive\x18\b \x01(\bH\x06R\vinteractive\x88\x01\x01\x12\x1d\n" +
-	"\atimeout\x18\t \x01(\x05H\aR\atimeout\x88\x01\x01\x12 \n" +
+	"\x05repos\x18\a \x01(\tH\x05R\x05repos\x88\x01\x01\x12\x1d\n" +
+	"\atimeout\x18\t \x01(\x05H\x06R\atimeout\x88\x01\x01\x12 \n" +
 	"\tllm_model\x18\n" +
-	" \x01(\tH\bR\bllmModel\x88\x01\x01\x12,\n" +
-	"\x0fllm_temperature\x18\v \x01(\x01H\tR\x0ellmTemperature\x88\x01\x01\x12)\n" +
-	"\x0ellm_max_tokens\x18\f \x01(\x05H\n" +
-	"R\fllmMaxTokens\x88\x01\x01\x12/\n" +
-	"\x11parent_session_id\x18\r \x01(\tH\vR\x0fparentSessionId\x88\x01\x01\x12-\n" +
-	"\x10bot_account_name\x18\x0e \x01(\tH\fR\x0ebotAccountName\x88\x01\x01\x122\n" +
-	"\x12resource_overrides\x18\x0f \x01(\tH\rR\x11resourceOverrides\x88\x01\x01\x128\n" +
-	"\x15environment_variables\x18\x10 \x01(\tH\x0eR\x14environmentVariables\x88\x01\x01\x12\x1b\n" +
-	"\x06labels\x18\x11 \x01(\tH\x0fR\x06labels\x88\x01\x01\x12%\n" +
-	"\vannotations\x18\x12 \x01(\tH\x10R\vannotations\x88\x01\x01\x12\"\n" +
+	" \x01(\tH\aR\bllmModel\x88\x01\x01\x12,\n" +
+	"\x0fllm_temperature\x18\v \x01(\x01H\bR\x0ellmTemperature\x88\x01\x01\x12)\n" +
+	"\x0ellm_max_tokens\x18\f \x01(\x05H\tR\fllmMaxTokens\x88\x01\x01\x12/\n" +
+	"\x11parent_session_id\x18\r \x01(\tH\n" +
+	"R\x0fparentSessionId\x88\x01\x01\x12-\n" +
+	"\x10bot_account_name\x18\x0e \x01(\tH\vR\x0ebotAccountName\x88\x01\x01\x122\n" +
+	"\x12resource_overrides\x18\x0f \x01(\tH\fR\x11resourceOverrides\x88\x01\x01\x128\n" +
+	"\x15environment_variables\x18\x10 \x01(\tH\rR\x14environmentVariables\x88\x01\x01\x12\x1b\n" +
+	"\x06labels\x18\x11 \x01(\tH\x0eR\x06labels\x88\x01\x01\x12%\n" +
+	"\vannotations\x18\x12 \x01(\tH\x0fR\vannotations\x88\x01\x01\x12\"\n" +
 	"\n" +
-	"project_id\x18\x13 \x01(\tH\x11R\tprojectId\x88\x01\x01B\a\n" +
+	"project_id\x18\x13 \x01(\tH\x10R\tprojectId\x88\x01\x01B\a\n" +
 	"\x05_nameB\v\n" +
 	"\t_repo_urlB\t\n" +
 	"\a_promptB\x13\n" +
 	"\x11_assigned_user_idB\x0e\n" +
 	"\f_workflow_idB\b\n" +
-	"\x06_reposB\x0e\n" +
-	"\f_interactiveB\n" +
+	"\x06_reposB\n" +
 	"\n" +
 	"\b_timeoutB\f\n" +
 	"\n" +
@@ -1272,7 +1267,7 @@ const file_ambient_v1_sessions_proto_rawDesc = "" +
 	"\x16_environment_variablesB\t\n" +
 	"\a_labelsB\x0e\n" +
 	"\f_annotationsB\r\n" +
-	"\v_project_id\"\xbe\x05\n" +
+	"\v_project_idJ\x04\b\b\x10\tR\vinteractive\"\xbe\x05\n" +
 	"\x1aUpdateSessionStatusRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x19\n" +
 	"\x05phase\x18\x02 \x01(\tH\x00R\x05phase\x88\x01\x01\x12>\n" +
