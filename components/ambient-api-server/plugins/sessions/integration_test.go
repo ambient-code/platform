@@ -73,7 +73,7 @@ func TestSessionPost(t *testing.T) {
 	Expect(*sessionOutput.CreatedByUserId).To(Equal(strings.ToLower(account.Username())), "created_by_user_id must match authenticated user, not client-supplied value")
 
 	jwtToken := ctx.Value(openapi.ContextAccessToken)
-	restyResp, err := resty.R().
+	restyResp, _ := resty.R().
 		SetHeader("Content-Type", "application/json").
 		SetHeader("Authorization", fmt.Sprintf("Bearer %s", jwtToken)).
 		SetBody(`{ this is invalid }`).
@@ -100,7 +100,7 @@ func TestSessionPatch(t *testing.T) {
 	Expect(*sessionOutput.Href).To(Equal(fmt.Sprintf("/api/ambient-api-server/v1/sessions/%s", *sessionOutput.Id)))
 
 	jwtToken := ctx.Value(openapi.ContextAccessToken)
-	restyResp, err := resty.R().
+	restyResp, _ := resty.R().
 		SetHeader("Content-Type", "application/json").
 		SetHeader("Authorization", fmt.Sprintf("Bearer %s", jwtToken)).
 		SetBody(`{ this is invalid }`).
@@ -147,7 +147,6 @@ func TestSessionExpandedFields(t *testing.T) {
 		Prompt:               openapi.PtrString("do something"),
 		CreatedByUserId:      openapi.PtrString(creator.ID),
 		Repos:                openapi.PtrString(`[{"url":"https://github.com/test/repo","branch":"main"}]`),
-		Interactive:          openapi.PtrBool(true),
 		Timeout:              openapi.PtrInt32(3600),
 		LlmModel:             openapi.PtrString("claude-sonnet-4-20250514"),
 		LlmTemperature:       openapi.PtrFloat64(0.7),
@@ -164,7 +163,6 @@ func TestSessionExpandedFields(t *testing.T) {
 	Expect(resp.StatusCode).To(Equal(http.StatusCreated))
 
 	Expect(*created.Repos).To(Equal(`[{"url":"https://github.com/test/repo","branch":"main"}]`))
-	Expect(*created.Interactive).To(BeTrue())
 	Expect(*created.Timeout).To(Equal(int32(3600)))
 	Expect(*created.LlmModel).To(Equal("claude-sonnet-4-20250514"))
 	Expect(*created.LlmTemperature).To(BeNumerically("~", 0.7, 0.001))
@@ -186,7 +184,6 @@ func TestSessionExpandedFields(t *testing.T) {
 	fetched, resp, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsIdGet(ctx, *created.Id).Execute()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
-	Expect(*fetched.Interactive).To(BeTrue())
 	Expect(*fetched.LlmModel).To(Equal("claude-sonnet-4-20250514"))
 	Expect(*fetched.KubeCrName).To(Equal(*created.Id))
 
@@ -199,7 +196,6 @@ func TestSessionExpandedFields(t *testing.T) {
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
 	Expect(*patched.LlmModel).To(Equal("claude-opus-4-20250514"))
 	Expect(*patched.Timeout).To(Equal(int32(7200)))
-	Expect(*patched.Interactive).To(BeTrue(), "interactive should be unchanged after patch")
 }
 
 func TestSessionParentChild(t *testing.T) {
@@ -382,14 +378,11 @@ func TestSessionStart(t *testing.T) {
 	Expect(err).NotTo(HaveOccurred(), "Error starting session: %v", err)
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
 	Expect(*started.Phase).To(Equal("Pending"))
-	Expect(started.Interactive).NotTo(BeNil(), "interactive should be set by start")
-	Expect(*started.Interactive).To(BeTrue(), "start should force interactive=true")
 
 	fetched, resp, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsIdGet(ctx, sessionModel.ID).Execute()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
 	Expect(*fetched.Phase).To(Equal("Pending"))
-	Expect(*fetched.Interactive).To(BeTrue(), "interactive should persist after start")
 }
 
 func TestSessionStop(t *testing.T) {

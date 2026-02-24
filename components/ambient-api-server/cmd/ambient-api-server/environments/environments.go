@@ -13,7 +13,7 @@ const AmbientEnvKey = "AMBIENT_ENV"
 
 func init() {
 	if v := os.Getenv(AmbientEnvKey); v != "" {
-		os.Setenv(pkgenv.EnvironmentStringKey, v)
+		_ = os.Setenv(pkgenv.EnvironmentStringKey, v)
 	}
 
 	_, filename, _, _ := runtime.Caller(0)

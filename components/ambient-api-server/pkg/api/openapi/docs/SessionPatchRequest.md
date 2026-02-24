@@ -10,7 +10,6 @@ Name | Type | Description | Notes
 **AssignedUserId** | Pointer to **string** |  | [optional] 
 **WorkflowId** | Pointer to **string** |  | [optional] 
 **Repos** | Pointer to **string** |  | [optional] 
-**Interactive** | Pointer to **bool** |  | [optional] 
 **Timeout** | Pointer to **int32** |  | [optional] 
 **LlmModel** | Pointer to **string** |  | [optional] 
 **LlmTemperature** | Pointer to **float64** |  | [optional] 
@@ -190,31 +189,6 @@ SetRepos sets Repos field to given value.
 `func (o *SessionPatchRequest) HasRepos() bool`
 
 HasRepos returns a boolean if a field has been set.
-
-### GetInteractive
-
-`func (o *SessionPatchRequest) GetInteractive() bool`
-
-GetInteractive returns the Interactive field if non-nil, zero value otherwise.
-
-### GetInteractiveOk
-
-`func (o *SessionPatchRequest) GetInteractiveOk() (*bool, bool)`
-
-GetInteractiveOk returns a tuple with the Interactive field if it's non-nil, zero value otherwise
-and a boolean to check if the value has been set.
-
-### SetInteractive
-
-`func (o *SessionPatchRequest) SetInteractive(v bool)`
-
-SetInteractive sets Interactive field to given value.
-
-### HasInteractive
-
-`func (o *SessionPatchRequest) HasInteractive() bool`
-
-HasInteractive returns a boolean if a field has been set.
 
 ### GetTimeout
 

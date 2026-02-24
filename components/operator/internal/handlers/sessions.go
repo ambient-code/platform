@@ -877,7 +877,6 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 				Env: func() []corev1.EnvVar {
 					base := []corev1.EnvVar{
 						{Name: "DEBUG", Value: "true"},
-						{Name: "INTERACTIVE", Value: "true"},
 						{Name: "AGENTIC_SESSION_NAME", Value: name},
 						{Name: "AGENTIC_SESSION_NAMESPACE", Value: sessionNamespace},
 						// Provide session id and workspace path for the runner wrapper

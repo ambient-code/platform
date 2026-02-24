@@ -234,7 +234,7 @@ paths:
   /api/ambient-api-server/v1/sessions/{id}/start:
     post:
       summary: Start a session
-      description: Transitions session phase to Pending. Valid from empty/nil, Stopped, Failed, or Completed phase. Also sets interactive=true.
+      description: Transitions session phase to Pending. Valid from empty/nil, Stopped, Failed, or Completed phase.
       security:
         - Bearer: []
       responses:
@@ -348,8 +348,6 @@ components:
               type: string
             repos:
               type: string
-            interactive:
-              type: boolean
             timeout:
               type: integer
             llm_model:
@@ -437,8 +435,6 @@ components:
           type: string
         repos:
           type: string
-        interactive:
-          type: boolean
         timeout:
           type: integer
         llm_model:
