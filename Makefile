@@ -3,7 +3,7 @@
 .PHONY: local-dev-token
 .PHONY: local-logs local-logs-backend local-logs-frontend local-logs-operator local-shell local-shell-frontend
 .PHONY: local-test local-test-dev local-test-quick test-all local-url local-troubleshoot local-port-forward local-stop-port-forward
-.PHONY: push-all registry-login setup-hooks remove-hooks check-minikube check-kind check-kubectl dev-bootstrap
+.PHONY: push-all registry-login setup-hooks remove-hooks lint check-minikube check-kind check-kubectl dev-bootstrap
 .PHONY: e2e-test e2e-setup e2e-clean deploy-langfuse-openshift
 .PHONY: setup-minio minio-console minio-logs minio-status
 .PHONY: validate-makefile lint-makefile check-shell makefile-health
@@ -160,16 +160,26 @@ build-api-server: ## Build ambient API server image
 		-t $(API_SERVER_IMAGE) .
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) API server built: $(API_SERVER_IMAGE)"
 
-##@ Git Hooks
+##@ Git Hooks & Linting
 
-setup-hooks: ## Install git hooks for branch protection
+setup-hooks: ## Install pre-commit hooks (linters + branch protection)
 	@./scripts/install-git-hooks.sh
 
-remove-hooks: ## Remove git hooks
+remove-hooks: ## Remove pre-commit hooks
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Removing git hooks..."
-	@rm -f .git/hooks/pre-commit
-	@rm -f .git/hooks/pre-push
+	@if command -v pre-commit >/dev/null 2>&1; then \
+		pre-commit uninstall && pre-commit uninstall --hook-type pre-push; \
+	else \
+		rm -f .git/hooks/pre-commit .git/hooks/pre-push; \
+	fi
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Git hooks removed"
+
+lint: ## Run all pre-commit linters on the entire repo
+	@if ! command -v pre-commit >/dev/null 2>&1; then \
+		echo "$(COLOR_RED)✗$(COLOR_RESET) pre-commit not installed. Run: make setup-hooks"; \
+		exit 1; \
+	fi
+	pre-commit run --all-files
 
 ##@ Registry Operations
 

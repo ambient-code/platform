@@ -201,6 +201,10 @@ if [ -n "$REPOS_JSON" ] && [ "$REPOS_JSON" != "null" ] && [ "$REPOS_JSON" != "" 
                     echo "  Cloning $REPO_NAME (branch: $REPO_BRANCH)..."
                     if git clone --branch "$REPO_BRANCH" --single-branch "$REPO_URL" "$REPO_DIR" 2>&1; then
                         echo "  ✓ Cloned $REPO_NAME (branch: $REPO_BRANCH)"
+                        # Install pre-commit hooks if the repo has a config
+                        if [ -f "$REPO_DIR/.pre-commit-config.yaml" ] && command -v pre-commit &>/dev/null; then
+                            (cd "$REPO_DIR" && pre-commit install 2>/dev/null) || true
+                        fi
                     else
                         echo "  ⚠ Failed to clone $REPO_NAME (may require authentication)"
                     fi
@@ -208,6 +212,10 @@ if [ -n "$REPOS_JSON" ] && [ "$REPOS_JSON" != "null" ] && [ "$REPOS_JSON" != "" 
                     echo "  Cloning $REPO_NAME (default branch)..."
                     if git clone --single-branch "$REPO_URL" "$REPO_DIR" 2>&1; then
                         echo "  ✓ Cloned $REPO_NAME (default branch)"
+                        # Install pre-commit hooks if the repo has a config
+                        if [ -f "$REPO_DIR/.pre-commit-config.yaml" ] && command -v pre-commit &>/dev/null; then
+                            (cd "$REPO_DIR" && pre-commit install 2>/dev/null) || true
+                        fi
                     else
                         echo "  ⚠ Failed to clone $REPO_NAME (may require authentication)"
                     fi
