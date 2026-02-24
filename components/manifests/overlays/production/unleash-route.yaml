@@ -12,7 +12,7 @@ spec:
     name: unleash
     weight: 100
   port:
-    targetPort: unleash-ui
+    targetPort: http
   tls:
     termination: edge
     insecureEdgeTerminationPolicy: Redirect

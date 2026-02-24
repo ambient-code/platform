@@ -34,14 +34,6 @@ patches:
   target:
     kind: Service
     name: frontend-service
-- path: unleash-oauth-deployment-patch.yaml
-  target:
-    kind: Deployment
-    name: unleash
-- path: unleash-oauth-service-patch.yaml
-  target:
-    kind: Service
-    name: unleash
 - path: unleash-init-db-patch.yaml
 - path: postgresql-json-patch.yaml
   target:

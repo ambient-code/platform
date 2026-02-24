@@ -57,6 +57,11 @@ spec:
             secretKeyRef:
               name: unleash-credentials
               key: frontend-api-token
+        - name: UNLEASH_DEFAULT_ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: unleash-credentials
+              key: default-admin-password
         resources:
           requests:
             cpu: 100m
