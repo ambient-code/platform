@@ -63,7 +63,7 @@ func TestProjectSettingsPost(t *testing.T) {
 	Expect(*psOutput.Href).To(Equal(fmt.Sprintf("/api/ambient-api-server/v1/project_settings/%s", *psOutput.Id)))
 
 	jwtToken := ctx.Value(openapi.ContextAccessToken)
-	restyResp, err := resty.R().
+	restyResp, _ := resty.R().
 		SetHeader("Content-Type", "application/json").
 		SetHeader("Authorization", fmt.Sprintf("Bearer %s", jwtToken)).
 		SetBody(`{ this is invalid }`).
@@ -90,7 +90,7 @@ func TestProjectSettingsPatch(t *testing.T) {
 	Expect(*psOutput.Href).To(Equal(fmt.Sprintf("/api/ambient-api-server/v1/project_settings/%s", *psOutput.Id)))
 
 	jwtToken := ctx.Value(openapi.ContextAccessToken)
-	restyResp, err := resty.R().
+	restyResp, _ := resty.R().
 		SetHeader("Content-Type", "application/json").
 		SetHeader("Authorization", fmt.Sprintf("Bearer %s", jwtToken)).
 		SetBody(`{ this is invalid }`).

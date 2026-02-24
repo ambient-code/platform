@@ -47,7 +47,7 @@ func NewHelper(t *testing.T) *Helper {
 		}
 		if logLevel := os.Getenv("LOGLEVEL"); logLevel != "" {
 			glog.Infof("Using custom loglevel: %s", logLevel)
-			pflag.CommandLine.Set("-v", logLevel)
+			_ = pflag.CommandLine.Set("-v", logLevel)
 		}
 		pflag.Parse()
 
@@ -148,7 +148,7 @@ func (helper *Helper) startHealthCheckServer() {
 }
 
 func (helper *Helper) RestartServer() {
-	helper.stopAPIServer()
+	_ = helper.stopAPIServer()
 	helper.startAPIServer()
 	glog.V(10).Info("Test API server restarted")
 }
