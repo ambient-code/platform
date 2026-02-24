@@ -168,7 +168,12 @@ def build_workspace_context_prompt(
             repo for repo in repos_cfg if repo.get("autoPush", False)
         ]
         if auto_push_repos:
-            push_branch = feature_branch or "ambient/<session-id>"
+            if not feature_branch:
+                logger.warning(
+                    "AGENTIC_SESSION_NAME not set; git-push prompt will "
+                    "use placeholder branch name"
+                )
+            push_branch = feature_branch or "ambient/<session-name>"
             prompt += GIT_PUSH_INSTRUCTIONS_HEADER
             prompt += GIT_PUSH_INSTRUCTIONS_BODY
             for repo in auto_push_repos:

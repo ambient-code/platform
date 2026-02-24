@@ -254,7 +254,9 @@ class TestBuildWorkspaceContextPrompt:
         assert "repos/my-repo/" in prompt
         assert "git add" in prompt
         assert "git commit" in prompt
-        assert "git push origin" in prompt
+        assert "git push -u origin" in prompt
+        assert "gh pr create" in prompt
+        assert "NEVER push directly to `main`" in prompt
 
     def test_prompt_excludes_git_instructions_without_autopush(self):
         """Test that git push instructions are excluded when autoPush=false."""
@@ -279,7 +281,7 @@ class TestBuildWorkspaceContextPrompt:
         assert "Git Push Instructions" not in prompt
         assert "git add" not in prompt
         assert "git commit" not in prompt
-        assert "git push origin" not in prompt
+        assert "git push -u origin" not in prompt
 
     def test_prompt_includes_multiple_autopush_repos(self):
         """Test that all autoPush repos are listed in instructions."""

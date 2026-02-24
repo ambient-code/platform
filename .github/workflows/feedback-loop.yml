@@ -60,7 +60,7 @@ jobs:
             --since-days "${{ github.event.inputs.since_days || '7' }}" \
             --min-corrections "${{ github.event.inputs.min_corrections || '2' }}" \
             --output-file /tmp/feedback-output.json \
-            ${{ env.REPOS_FILTER != '' && format('--repos-filter "{0}"', env.REPOS_FILTER) || '' }} \
+            --repos-filter "$REPOS_FILTER" \
             ${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }}
 
       - name: Summary

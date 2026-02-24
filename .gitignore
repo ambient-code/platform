@@ -145,6 +145,9 @@ reports/
 .security-scan/
 .security-scan.zip
 
+# Feedback loop runtime state
+scripts/feedback-loop/.last-run
+
 # Secrets (should use .example templates)
 **/minio-credentials-secret.yaml
 **/postgresql-credentials-secret.yaml

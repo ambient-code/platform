@@ -206,7 +206,7 @@ if [ -n "$REPOS_JSON" ] && [ "$REPOS_JSON" != "null" ] && [ "$REPOS_JSON" != "" 
                     fi
                 else
                     echo "  Cloning $REPO_NAME (default branch)..."
-                    if git clone "$REPO_URL" "$REPO_DIR" 2>&1; then
+                    if git clone --single-branch "$REPO_URL" "$REPO_DIR" 2>&1; then
                         echo "  ✓ Cloned $REPO_NAME (default branch)"
                     else
                         echo "  ⚠ Failed to clone $REPO_NAME (may require authentication)"

@@ -366,8 +366,15 @@ def _repo_short_name(url: str) -> str:
 
 
 def _normalise_url(url: str) -> str:
-    """Normalise a repo URL for comparison (strip trailing / and .git)."""
-    return url.strip().rstrip("/").removesuffix(".git")
+    """Normalise a repo URL for comparison.
+
+    Handles trailing ``/``, ``.git`` suffix, and SSH-to-HTTPS conversion
+    (``git@github.com:org/repo`` → ``https://github.com/org/repo``).
+    """
+    u = url.strip().rstrip("/").removesuffix(".git")
+    if u.startswith("git@"):
+        u = u.replace(":", "/", 1).replace("git@", "https://", 1)
+    return u.lower()
 
 
 def create_improvement_session(
