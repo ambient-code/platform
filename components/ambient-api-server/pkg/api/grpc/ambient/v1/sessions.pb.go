@@ -32,7 +32,6 @@ type Session struct {
 	AssignedUserId       *string                `protobuf:"bytes,6,opt,name=assigned_user_id,json=assignedUserId,proto3,oneof" json:"assigned_user_id,omitempty"`
 	WorkflowId           *string                `protobuf:"bytes,7,opt,name=workflow_id,json=workflowId,proto3,oneof" json:"workflow_id,omitempty"`
 	Repos                *string                `protobuf:"bytes,8,opt,name=repos,proto3,oneof" json:"repos,omitempty"`
-	Interactive          *bool                  `protobuf:"varint,9,opt,name=interactive,proto3,oneof" json:"interactive,omitempty"`
 	Timeout              *int32                 `protobuf:"varint,10,opt,name=timeout,proto3,oneof" json:"timeout,omitempty"`
 	LlmModel             *string                `protobuf:"bytes,11,opt,name=llm_model,json=llmModel,proto3,oneof" json:"llm_model,omitempty"`
 	LlmTemperature       *float64               `protobuf:"fixed64,12,opt,name=llm_temperature,json=llmTemperature,proto3,oneof" json:"llm_temperature,omitempty"`
@@ -143,13 +142,6 @@ func (x *Session) GetRepos() string {
 		return *x.Repos
 	}
 	return ""
-}
-
-func (x *Session) GetInteractive() bool {
-	if x != nil && x.Interactive != nil {
-		return *x.Interactive
-	}
-	return false
 }
 
 func (x *Session) GetTimeout() int32 {
@@ -315,7 +307,6 @@ type CreateSessionRequest struct {
 	AssignedUserId       *string                `protobuf:"bytes,5,opt,name=assigned_user_id,json=assignedUserId,proto3,oneof" json:"assigned_user_id,omitempty"`
 	WorkflowId           *string                `protobuf:"bytes,6,opt,name=workflow_id,json=workflowId,proto3,oneof" json:"workflow_id,omitempty"`
 	Repos                *string                `protobuf:"bytes,7,opt,name=repos,proto3,oneof" json:"repos,omitempty"`
-	Interactive          *bool                  `protobuf:"varint,8,opt,name=interactive,proto3,oneof" json:"interactive,omitempty"`
 	Timeout              *int32                 `protobuf:"varint,9,opt,name=timeout,proto3,oneof" json:"timeout,omitempty"`
 	LlmModel             *string                `protobuf:"bytes,10,opt,name=llm_model,json=llmModel,proto3,oneof" json:"llm_model,omitempty"`
 	LlmTemperature       *float64               `protobuf:"fixed64,11,opt,name=llm_temperature,json=llmTemperature,proto3,oneof" json:"llm_temperature,omitempty"`
@@ -408,13 +399,6 @@ func (x *CreateSessionRequest) GetRepos() string {
 		return *x.Repos
 	}
 	return ""
-}
-
-func (x *CreateSessionRequest) GetInteractive() bool {
-	if x != nil && x.Interactive != nil {
-		return *x.Interactive
-	}
-	return false
 }
 
 func (x *CreateSessionRequest) GetTimeout() int32 {
@@ -547,7 +531,6 @@ type UpdateSessionRequest struct {
 	AssignedUserId       *string                `protobuf:"bytes,5,opt,name=assigned_user_id,json=assignedUserId,proto3,oneof" json:"assigned_user_id,omitempty"`
 	WorkflowId           *string                `protobuf:"bytes,6,opt,name=workflow_id,json=workflowId,proto3,oneof" json:"workflow_id,omitempty"`
 	Repos                *string                `protobuf:"bytes,7,opt,name=repos,proto3,oneof" json:"repos,omitempty"`
-	Interactive          *bool                  `protobuf:"varint,8,opt,name=interactive,proto3,oneof" json:"interactive,omitempty"`
 	Timeout              *int32                 `protobuf:"varint,9,opt,name=timeout,proto3,oneof" json:"timeout,omitempty"`
 	LlmModel             *string                `protobuf:"bytes,10,opt,name=llm_model,json=llmModel,proto3,oneof" json:"llm_model,omitempty"`
 	LlmTemperature       *float64               `protobuf:"fixed64,11,opt,name=llm_temperature,json=llmTemperature,proto3,oneof" json:"llm_temperature,omitempty"`
@@ -640,13 +623,6 @@ func (x *UpdateSessionRequest) GetRepos() string {
 		return *x.Repos
 	}
 	return ""
-}
-
-func (x *UpdateSessionRequest) GetInteractive() bool {
-	if x != nil && x.Interactive != nil {
-		return *x.Interactive
-	}
-	return false
 }
 
 func (x *UpdateSessionRequest) GetTimeout() int32 {

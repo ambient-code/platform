@@ -17,7 +17,6 @@ type Session struct {
 	WorkflowId      *string `json:"workflow_id"`
 
 	Repos                *string  `json:"repos"`
-	Interactive          *bool    `json:"interactive"`
 	Timeout              *int32   `json:"timeout"`
 	LlmModel             *string  `json:"llm_model"`
 	LlmTemperature       *float64 `json:"llm_temperature"`
@@ -81,7 +80,6 @@ type SessionPatchRequest struct {
 	AssignedUserId       *string  `json:"assigned_user_id,omitempty"`
 	WorkflowId           *string  `json:"workflow_id,omitempty"`
 	Repos                *string  `json:"repos,omitempty"`
-	Interactive          *bool    `json:"interactive,omitempty"`
 	Timeout              *int32   `json:"timeout,omitempty"`
 	LlmModel             *string  `json:"llm_model,omitempty"`
 	LlmTemperature       *float64 `json:"llm_temperature,omitempty"`

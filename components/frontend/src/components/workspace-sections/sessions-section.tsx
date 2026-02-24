@@ -212,7 +212,6 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
                   <TableRow>
                     <TableHead className="min-w-[180px]">Name</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Mode</TableHead>
                     <TableHead className="hidden md:table-cell">Model</TableHead>
                     <TableHead className="hidden lg:table-cell">Created</TableHead>
                     <TableHead className="hidden xl:table-cell">Cost</TableHead>
@@ -244,11 +243,6 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
                         </TableCell>
                         <TableCell>
                           <SessionPhaseBadge phase={phase} stoppedReason={session.status?.stoppedReason} />
-                        </TableCell>
-                        <TableCell>
-                          <span className="text-xs px-2 py-1 rounded border bg-muted/50">
-                            Interactive
-                          </span>
                         </TableCell>
                         <TableCell className="hidden md:table-cell">
                           <span className="text-sm text-muted-foreground truncate max-w-[120px] block">

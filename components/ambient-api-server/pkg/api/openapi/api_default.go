@@ -2160,7 +2160,7 @@ func (r ApiApiAmbientApiServerV1SessionsIdStartPostRequest) Execute() (*Session,
 /*
 ApiAmbientApiServerV1SessionsIdStartPost Start a session
 
-Transitions session phase to Pending. Valid from empty/nil, Stopped, Failed, or Completed phase. Also sets interactive=true.
+Transitions session phase to Pending. Valid from empty/nil, Stopped, Failed, or Completed phase.
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 	@param id The id of record

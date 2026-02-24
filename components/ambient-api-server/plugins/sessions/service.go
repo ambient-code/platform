@@ -240,9 +240,6 @@ func (s *sqlSessionService) Start(ctx context.Context, id string) (*Session, *er
 
 	pending := "Pending"
 	session.Phase = &pending
-	// Start always enables interactive mode — started sessions are interactive by definition
-	interactive := true
-	session.Interactive = &interactive
 
 	session, err = s.sessionDao.Replace(ctx, session)
 	if err != nil {
