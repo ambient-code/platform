@@ -365,6 +365,7 @@ echo -e "${YELLOW}Waiting for deployments to be ready...${NC}"
 oc rollout status deployment/backend-api --namespace=${NAMESPACE} --timeout=300s
 oc rollout status deployment/agentic-operator --namespace=${NAMESPACE} --timeout=300s
 oc rollout status deployment/frontend --namespace=${NAMESPACE} --timeout=300s
+oc rollout status deployment/unleash --namespace=${NAMESPACE} --timeout=300s
 
 # Get service and route information
 echo -e "${BLUE}Getting service and route information...${NC}"

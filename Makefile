@@ -5,6 +5,7 @@
 .PHONY: local-test local-test-dev local-test-quick test-all local-url local-troubleshoot local-port-forward local-stop-port-forward
 .PHONY: push-all registry-login setup-hooks remove-hooks check-minikube check-kind check-kubectl dev-bootstrap
 .PHONY: e2e-test e2e-setup e2e-clean deploy-langfuse-openshift
+.PHONY: unleash-port-forward unleash-status
 .PHONY: setup-minio minio-console minio-logs minio-status
 .PHONY: validate-makefile lint-makefile check-shell makefile-health
 .PHONY: _create-operator-config _auto-port-forward _show-access-info _build-and-load
@@ -674,6 +675,27 @@ e2e-clean: kind-down ## Alias for kind-down (backward compatibility)
 deploy-langfuse-openshift: ## Deploy Langfuse to OpenShift/ROSA cluster
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Deploying Langfuse to OpenShift cluster..."
 	@cd e2e && ./scripts/deploy-langfuse.sh --openshift
+
+##@ Unleash Feature Flags
+# Note: Unleash is deployed automatically via 'make deploy' as part of the platform manifests.
+# Before deploying, create the unleash-credentials secret from the example:
+#   cp components/manifests/base/unleash-credentials-secret.yaml.example unleash-credentials-secret.yaml
+#   # Edit the file to set your credentials
+#   kubectl apply -f unleash-credentials-secret.yaml -n ambient-code
+
+unleash-port-forward: check-kubectl ## Port-forward Unleash (localhost:4242)
+	@echo "$(COLOR_BOLD)🔌 Port forwarding Unleash$(COLOR_RESET)"
+	@echo ""
+	@echo "  Unleash UI: http://localhost:4242"
+	@echo "  Login: admin / unleash4all"
+	@echo ""
+	@echo "$(COLOR_YELLOW)Press Ctrl+C to stop$(COLOR_RESET)"
+	@kubectl port-forward svc/unleash 4242:4242 -n $${NAMESPACE:-ambient-code}
+
+unleash-status: check-kubectl ## Show Unleash deployment status
+	@echo "$(COLOR_BOLD)Unleash Status$(COLOR_RESET)"
+	@kubectl get deployment,pod,svc -l 'app.kubernetes.io/name in (unleash,postgresql)' -n $${NAMESPACE:-ambient-code} 2>/dev/null || \
+		echo "$(COLOR_RED)✗$(COLOR_RESET) Unleash not found. Run 'make deploy' first."
 
 ##@ Internal Helpers (do not call directly)
 
