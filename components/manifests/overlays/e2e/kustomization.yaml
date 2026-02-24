@@ -78,4 +78,3 @@ images:
 - name: quay.io/ambient_code/vteam_operator
   newName: vteam_operator
   newTag: latest
-

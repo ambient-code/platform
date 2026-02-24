@@ -132,7 +132,7 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
     const integrationData: Record<string, string> = {};
 
     // NOTE: GIT_USER_* removed - git identity now auto-derived from GitHub/GitLab credentials
-    
+
     // S3 Storage configuration
     integrationData["STORAGE_MODE"] = storageMode;
     if (storageMode === "custom") {
@@ -548,4 +548,3 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
     </div>
   );
 }
-
