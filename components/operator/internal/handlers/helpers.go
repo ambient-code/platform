@@ -160,7 +160,6 @@ func mutateAgenticSessionStatus(sessionNamespace, name string, mutator func(stat
 	return nil
 }
 
-
 // updateAnnotations updates annotations on the AgenticSession CR.
 func updateAnnotations(sessionNamespace, name string, annotations map[string]string) error {
 	gvr := types.GetAgenticSessionResource()

@@ -51,17 +51,17 @@ type AgenticSessionStatus struct {
 }
 
 type CreateAgenticSessionRequest struct {
-	InitialPrompt   string       `json:"initialPrompt,omitempty"`
-	DisplayName     string       `json:"displayName,omitempty"`
-	LLMSettings     *LLMSettings `json:"llmSettings,omitempty"`
-	Timeout         *int         `json:"timeout,omitempty"`
-	ParentSessionID string       `json:"parent_session_id,omitempty"`
-	Repos                []SimpleRepo         `json:"repos,omitempty"`
-	ActiveWorkflow       *WorkflowSelection   `json:"activeWorkflow,omitempty"`
-	UserContext          *UserContext          `json:"userContext,omitempty"`
-	EnvironmentVariables map[string]string     `json:"environmentVariables,omitempty"`
-	Labels               map[string]string     `json:"labels,omitempty"`
-	Annotations          map[string]string     `json:"annotations,omitempty"`
+	InitialPrompt        string             `json:"initialPrompt,omitempty"`
+	DisplayName          string             `json:"displayName,omitempty"`
+	LLMSettings          *LLMSettings       `json:"llmSettings,omitempty"`
+	Timeout              *int               `json:"timeout,omitempty"`
+	ParentSessionID      string             `json:"parent_session_id,omitempty"`
+	Repos                []SimpleRepo       `json:"repos,omitempty"`
+	ActiveWorkflow       *WorkflowSelection `json:"activeWorkflow,omitempty"`
+	UserContext          *UserContext       `json:"userContext,omitempty"`
+	EnvironmentVariables map[string]string  `json:"environmentVariables,omitempty"`
+	Labels               map[string]string  `json:"labels,omitempty"`
+	Annotations          map[string]string  `json:"annotations,omitempty"`
 }
 
 type CloneSessionRequest struct {
