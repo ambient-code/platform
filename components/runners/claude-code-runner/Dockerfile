@@ -54,8 +54,8 @@ RUN dnf module reset -y nodejs && \
 #       "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD": "0"
 #     }
 #   }
-# Install uv (provides uvx for package execution)
-RUN pip install --no-cache-dir uv
+# Install uv (provides uvx for package execution) and pre-commit (for repo hooks)
+RUN pip install --no-cache-dir uv pre-commit
 
 # Create working directory
 WORKDIR /app

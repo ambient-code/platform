@@ -68,6 +68,55 @@ mkdocs serve  # http://127.0.0.1:8000
 - **No `any` types in frontend**: Use proper types, `unknown`, or generic constraints
 - **Conventional commits**: Squashed on merge to `main`
 
+## Pre-commit Hooks
+
+The project uses the [pre-commit](https://pre-commit.com/) framework to run linters locally before every commit. Configuration lives in `.pre-commit-config.yaml`.
+
+### Install
+
+```bash
+make setup-hooks
+```
+
+### What Runs
+
+**On every `git commit`:**
+
+| Hook | Scope |
+|------|-------|
+| trailing-whitespace, end-of-file-fixer, check-yaml, check-added-large-files, check-merge-conflict, detect-private-key | All files |
+| ruff-format, ruff (check + fix) | Python (runners, scripts) |
+| gofmt, go vet, golangci-lint | Go (backend, operator, public-api — per-module) |
+| eslint | Frontend TypeScript/JavaScript |
+| branch-protection | Blocks commits to main/master/production |
+
+**On every `git push`:**
+
+| Hook | Scope |
+|------|-------|
+| push-protection | Blocks pushes to main/master/production |
+
+### Run Manually
+
+```bash
+make lint                                    # All hooks, all files
+pre-commit run gofmt-check --all-files       # Single hook
+pre-commit run --files path/to/file.go       # Single file
+```
+
+### Skip Hooks
+
+```bash
+git commit --no-verify    # Skip pre-commit hooks
+git push --no-verify      # Skip pre-push hooks
+```
+
+### Notes
+
+- Go and ESLint wrappers (`scripts/pre-commit/`) skip gracefully if the toolchain is not installed
+- `tsc --noEmit` and `npm run build` are **not** included (slow; CI gates on them)
+- Branch/push protection scripts remain in `scripts/git-hooks/` and are invoked by pre-commit
+
 ## More Info
 
 See [BOOKMARKS.md](BOOKMARKS.md) for architecture decisions, development context, code patterns, and component-specific guides.

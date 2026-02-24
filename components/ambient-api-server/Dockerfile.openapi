@@ -1,4 +1,4 @@
-FROM openapitools/openapi-generator-cli:v7.16.0
+FROM docker.io/openapitools/openapi-generator-cli:v7.16.0
 
 RUN apt-get update
 RUN apt-get install -y make sudo git golang-1.21

@@ -26,7 +26,6 @@ type SessionPatchRequest struct {
 	AssignedUserId       *string  `json:"assigned_user_id,omitempty"`
 	WorkflowId           *string  `json:"workflow_id,omitempty"`
 	Repos                *string  `json:"repos,omitempty"`
-	Interactive          *bool    `json:"interactive,omitempty"`
 	Timeout              *int32   `json:"timeout,omitempty"`
 	LlmModel             *string  `json:"llm_model,omitempty"`
 	LlmTemperature       *float64 `json:"llm_temperature,omitempty"`
@@ -246,38 +245,6 @@ func (o *SessionPatchRequest) HasRepos() bool {
 // SetRepos gets a reference to the given string and assigns it to the Repos field.
 func (o *SessionPatchRequest) SetRepos(v string) {
 	o.Repos = &v
-}
-
-// GetInteractive returns the Interactive field value if set, zero value otherwise.
-func (o *SessionPatchRequest) GetInteractive() bool {
-	if o == nil || IsNil(o.Interactive) {
-		var ret bool
-		return ret
-	}
-	return *o.Interactive
-}
-
-// GetInteractiveOk returns a tuple with the Interactive field value if set, nil otherwise
-// and a boolean to check if the value has been set.
-func (o *SessionPatchRequest) GetInteractiveOk() (*bool, bool) {
-	if o == nil || IsNil(o.Interactive) {
-		return nil, false
-	}
-	return o.Interactive, true
-}
-
-// HasInteractive returns a boolean if a field has been set.
-func (o *SessionPatchRequest) HasInteractive() bool {
-	if o != nil && !IsNil(o.Interactive) {
-		return true
-	}
-
-	return false
-}
-
-// SetInteractive gets a reference to the given bool and assigns it to the Interactive field.
-func (o *SessionPatchRequest) SetInteractive(v bool) {
-	o.Interactive = &v
 }
 
 // GetTimeout returns the Timeout field value if set, zero value otherwise.
@@ -627,9 +594,6 @@ func (o SessionPatchRequest) ToMap() (map[string]interface{}, error) {
 	}
 	if !IsNil(o.Repos) {
 		toSerialize["repos"] = o.Repos
-	}
-	if !IsNil(o.Interactive) {
-		toSerialize["interactive"] = o.Interactive
 	}
 	if !IsNil(o.Timeout) {
 		toSerialize["timeout"] = o.Timeout

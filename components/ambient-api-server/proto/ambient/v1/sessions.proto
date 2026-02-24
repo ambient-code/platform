@@ -16,7 +16,8 @@ message Session {
   optional string assigned_user_id = 6;
   optional string workflow_id = 7;
   optional string repos = 8;
-  optional bool interactive = 9;
+  reserved 9;
+  reserved "interactive";
   optional int32 timeout = 10;
   optional string llm_model = 11;
   optional double llm_temperature = 12;
@@ -49,7 +50,8 @@ message CreateSessionRequest {
   optional string assigned_user_id = 5;
   optional string workflow_id = 6;
   optional string repos = 7;
-  optional bool interactive = 8;
+  reserved 8;
+  reserved "interactive";
   optional int32 timeout = 9;
   optional string llm_model = 10;
   optional double llm_temperature = 11;
@@ -75,7 +77,8 @@ message UpdateSessionRequest {
   optional string assigned_user_id = 5;
   optional string workflow_id = 6;
   optional string repos = 7;
-  optional bool interactive = 8;
+  reserved 8;
+  reserved "interactive";
   optional int32 timeout = 9;
   optional string llm_model = 10;
   optional double llm_temperature = 11;

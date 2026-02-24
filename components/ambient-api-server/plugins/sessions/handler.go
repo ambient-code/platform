@@ -88,9 +88,6 @@ func (h sessionHandler) Patch(w http.ResponseWriter, r *http.Request) {
 			if patch.Repos != nil {
 				found.Repos = patch.Repos
 			}
-			if patch.Interactive != nil {
-				found.Interactive = patch.Interactive
-			}
 			if patch.Timeout != nil {
 				found.Timeout = patch.Timeout
 			}

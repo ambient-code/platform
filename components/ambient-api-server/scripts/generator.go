@@ -203,15 +203,15 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 
 		w := bufio.NewWriter(f)
 		err = kindTmpl.Execute(w, k)
 		if err != nil {
 			panic(err)
 		}
-		w.Flush()
-		f.Sync()
+		_ = w.Flush()
+		_ = f.Sync()
 
 		// Run gofmt on generated Go files
 		if filepath.Ext(outputPath) == ".go" {
@@ -307,11 +307,12 @@ func parseFields(fieldsStr string) ([]Field, error) {
 		// Check for :required or :optional suffix
 		if len(parts) == 3 {
 			modifier := strings.TrimSpace(parts[2])
-			if modifier == "required" {
+			switch modifier {
+			case "required":
 				nullable = false
-			} else if modifier == "optional" {
+			case "optional":
 				nullable = true
-			} else {
+			default:
 				return nil, fmt.Errorf("invalid field modifier: %s (expected 'required' or 'optional')", modifier)
 			}
 		}
@@ -433,8 +434,8 @@ func modifyOpenapi(mainPath string, kindPath string) {
 	kindFileName := strings.Split(kindPath, "/")[1]
 	for _, line := range endpointStrings {
 		endpointStr := strings.TrimSpace(line)
-		endpointStr = strings.Replace(endpointStr, "/", "~1", -1)
-		endpointStr = strings.Replace(endpointStr, ":", "", -1)
+		endpointStr = strings.ReplaceAll(endpointStr, "/", "~1")
+		endpointStr = strings.ReplaceAll(endpointStr, ":", "")
 		refPath := fmt.Sprintf(`    $ref: '%s#/paths/%s'`, kindFileName, endpointStr)
 		pathsLine := fmt.Sprintf("%s%s", line, refPath)
 		writeAfterLine(mainPath, openApiEndpointMatchingLine, pathsLine)
@@ -442,7 +443,7 @@ func modifyOpenapi(mainPath string, kindPath string) {
 	schemaStrings := readBetweenLines(kindPath, openApiSchemaStart, openApiSchemaEnd)
 	for _, line := range schemaStrings {
 		schemaStr := strings.TrimSpace(line)
-		schemaStr = strings.Replace(schemaStr, ":", "", -1)
+		schemaStr = strings.ReplaceAll(schemaStr, ":", "")
 		refPath := fmt.Sprintf(`      $ref: '%s#/components/schemas/%s'`, kindFileName, schemaStr)
 		pathsLine := fmt.Sprintf("%s%s", line, refPath)
 		writeAfterLine(mainPath, openApiSchemaMatchingLine, pathsLine)
@@ -471,7 +472,7 @@ func readBetweenLines(path string, startLine string, endLine string) []string {
 			matchedString.WriteString(fileScanner.Text() + "\n")
 		}
 	}
-	readFile.Close()
+	_ = readFile.Close()
 	return totalMatches
 }
 
@@ -480,8 +481,7 @@ func writeAfterLine(path string, matchingLine string, lineToWrite string) {
 	if err != nil {
 		panic(err)
 	}
-	_ = strings.Replace(string(input), matchingLine, lineToWrite+"\n"+matchingLine, -1)
-	output := bytes.Replace(input, []byte(matchingLine), []byte(lineToWrite+"\n"+matchingLine), -1)
+	output := bytes.ReplaceAll(input, []byte(matchingLine), []byte(lineToWrite+"\n"+matchingLine))
 	if err = os.WriteFile(path, output, 0666); err != nil {
 		fmt.Println(err)
 		os.Exit(1)

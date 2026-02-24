@@ -198,6 +198,12 @@ export type AGUIClientState = {
     content: string
     timestamp?: string
   } | null
+  // Buffer for thinking content during streaming (THINKING_* events)
+  currentThinking: {
+    id: string | null
+    content: string
+    timestamp?: string
+  } | null
 }
 
 // ── Type Guards ──

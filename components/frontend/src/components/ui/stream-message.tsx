@@ -98,7 +98,7 @@ export const StreamMessage: React.FC<StreamMessageProps> = ({ message, onGoToRes
       }
       switch (m.content.type) {
         case "thinking_block":
-          return <ThinkingMessage block={m.content} />
+          return <ThinkingMessage block={m.content} streaming={isStreaming} />
         case "text_block":
           return (
             <Message 
