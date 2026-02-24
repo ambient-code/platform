@@ -29,6 +29,9 @@ func main() {
 
 	projectName := os.Getenv("AMBIENT_PROJECT")
 	if projectName == "" {
+		projectName = os.Getenv("ANTHROPIC_VERTEX_PROJECT_ID")
+	}
+	if projectName == "" {
 		projectName = "sdk-demo"
 	}
 
