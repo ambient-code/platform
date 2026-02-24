@@ -19,8 +19,14 @@ logger = logging.getLogger(__name__)
 
 
 DEFAULT_ALLOWED_TOOLS = [
-    "Read", "Write", "Bash", "Glob", "Grep", "Edit",
-    "MultiEdit", "WebSearch",
+    "Read",
+    "Write",
+    "Bash",
+    "Glob",
+    "Grep",
+    "Edit",
+    "MultiEdit",
+    "WebSearch",
 ]
 
 
@@ -45,6 +51,7 @@ def build_mcp_servers(context: RunnerContext, cwd_path: str, obs: Any = None) ->
         load_rubric_content,
     )
     from ambient_runner.bridges.claude.corrections import create_correction_mcp_tool
+    from ambient_runner.bridges.claude.feedback_tool import create_feedback_mcp_tool
 
     mcp_servers = load_mcp_config(context, cwd_path) or {}
 
@@ -91,6 +98,19 @@ def build_mcp_servers(context: RunnerContext, cwd_path: str, obs: Any = None) ->
         mcp_servers["corrections"] = correction_server
         logger.info("Added corrections feedback MCP tool (log_correction)")
 
+    # Global feedback tool (always available)
+    feedback_tool = create_feedback_mcp_tool(
+        obs=obs,
+        session_id=context.session_id,
+        sdk_tool_decorator=sdk_tool,
+    )
+    if feedback_tool:
+        feedback_server = create_sdk_mcp_server(
+            name="feedback", version="1.0.0", tools=[feedback_tool]
+        )
+        mcp_servers["feedback"] = feedback_server
+        logger.info("Added global feedback MCP tool (submit_feedback)")
+
     return mcp_servers
 
 
@@ -118,7 +138,9 @@ def log_auth_status(mcp_servers: dict) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _read_google_credentials(workspace_path: Path, secret_path: Path) -> Dict[str, Any] | None:
+def _read_google_credentials(
+    workspace_path: Path, secret_path: Path
+) -> Dict[str, Any] | None:
     cred_path = workspace_path if workspace_path.exists() else secret_path
     if not cred_path.exists():
         return None
@@ -144,20 +166,28 @@ def _parse_token_expiry(expiry_str: str) -> datetime | None:
         return None
 
 
-def _validate_google_token(user_creds: Dict[str, Any], user_email: str) -> tuple[bool | None, str]:
+def _validate_google_token(
+    user_creds: Dict[str, Any], user_email: str
+) -> tuple[bool | None, str]:
     if not user_creds.get("access_token") or not user_creds.get("refresh_token"):
         return False, "Google OAuth credentials incomplete - missing or empty tokens"
 
     if "token_expiry" in user_creds and user_creds["token_expiry"]:
         expiry = _parse_token_expiry(user_creds["token_expiry"])
         if expiry is None:
-            return None, f"Google OAuth authenticated as {user_email} (token expiry format invalid)"
+            return (
+                None,
+                f"Google OAuth authenticated as {user_email} (token expiry format invalid)",
+            )
 
         now = datetime.now(timezone.utc)
         if expiry <= now and not user_creds.get("refresh_token"):
             return False, "Google OAuth token expired - re-authenticate"
         if expiry <= now:
-            return None, f"Google OAuth authenticated as {user_email} (token refresh needed)"
+            return (
+                None,
+                f"Google OAuth authenticated as {user_email} (token refresh needed)",
+            )
 
     return True, f"Google OAuth authenticated as {user_email}"
 
@@ -165,11 +195,16 @@ def _validate_google_token(user_creds: Dict[str, Any], user_email: str) -> tuple
 def check_mcp_authentication(server_name: str) -> tuple[bool | None, str | None]:
     """Check if credentials are available and valid for known MCP servers."""
     if server_name == "google-workspace":
-        workspace_path = Path("/workspace/.google_workspace_mcp/credentials/credentials.json")
+        workspace_path = Path(
+            "/workspace/.google_workspace_mcp/credentials/credentials.json"
+        )
         secret_path = Path("/app/.google_workspace_mcp/credentials/credentials.json")
         creds = _read_google_credentials(workspace_path, secret_path)
         if creds is None:
-            return False, "Google OAuth not configured - authenticate via Integrations page"
+            return (
+                False,
+                "Google OAuth not configured - authenticate via Integrations page",
+            )
 
         try:
             user_email = os.environ.get("USER_GOOGLE_EMAIL", "")
@@ -195,7 +230,9 @@ def check_mcp_authentication(server_name: str) -> tuple[bool | None, str | None]
             import urllib.request as _urllib_request
 
             base = os.getenv("BACKEND_API_URL", "").rstrip("/")
-            project = os.getenv("PROJECT_NAME") or os.getenv("AGENTIC_SESSION_NAMESPACE", "")
+            project = os.getenv("PROJECT_NAME") or os.getenv(
+                "AGENTIC_SESSION_NAMESPACE", ""
+            )
             session_id = os.getenv("SESSION_ID", "")
 
             if base and project and session_id:
@@ -208,7 +245,10 @@ def check_mcp_authentication(server_name: str) -> tuple[bool | None, str | None]
                     with _urllib_request.urlopen(req, timeout=3) as resp:
                         data = json.loads(resp.read())
                         if data.get("apiToken"):
-                            return True, "Jira credentials available (not yet loaded in session)"
+                            return (
+                                True,
+                                "Jira credentials available (not yet loaded in session)",
+                            )
                 except Exception:
                     pass
         except Exception:
