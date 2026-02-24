@@ -157,6 +157,15 @@ func generateGo(spec *Spec, outDir string, header GeneratedHeader) error {
 		return fmt.Errorf("execute list_options template: %w", err)
 	}
 
+	// Generate main HTTP client
+	httpClientTmpl, err := loadTemplate(filepath.Join(tmplDir, "http_client.go.tmpl"))
+	if err != nil {
+		return fmt.Errorf("load http_client template: %w", err)
+	}
+	if err := executeTemplate(httpClientTmpl, filepath.Join(clientDir, "client.go"), goTemplateData{Header: header, Spec: spec}); err != nil {
+		return fmt.Errorf("execute http_client template: %w", err)
+	}
+
 	return nil
 }
 
@@ -265,6 +274,24 @@ func generatePython(spec *Spec, outDir string, header GeneratedHeader) error {
 	}
 	if err := executeTemplate(iteratorTmpl, filepath.Join(pkgDir, "_iterator.py"), pythonTemplateData{Header: header, Spec: spec}); err != nil {
 		return fmt.Errorf("execute iterator template: %w", err)
+	}
+
+	// Generate main HTTP client
+	httpClientTmpl, err := loadTemplate(filepath.Join(tmplDir, "http_client.py.tmpl"))
+	if err != nil {
+		return fmt.Errorf("load http_client template: %w", err)
+	}
+	if err := executeTemplate(httpClientTmpl, filepath.Join(pkgDir, "client.py"), pythonTemplateData{Header: header, Spec: spec}); err != nil {
+		return fmt.Errorf("execute http_client template: %w", err)
+	}
+
+	// Generate __init__.py
+	initTmpl, err := loadTemplate(filepath.Join(tmplDir, "__init__.py.tmpl"))
+	if err != nil {
+		return fmt.Errorf("load __init__.py template: %w", err)
+	}
+	if err := executeTemplate(initTmpl, filepath.Join(pkgDir, "__init__.py"), pythonTemplateData{Header: header, Spec: spec}); err != nil {
+		return fmt.Errorf("execute __init__.py template: %w", err)
 	}
 
 	return nil

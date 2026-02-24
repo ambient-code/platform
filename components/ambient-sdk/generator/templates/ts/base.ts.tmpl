@@ -100,8 +100,21 @@ export async function ambientFetch<T>(
   if (!resp.ok) {
     let errorData: APIError;
     try {
-      errorData = await resp.json() as APIError;
-      errorData.status_code = resp.status;
+      const jsonData = await resp.json();
+      // Validate that this looks like an APIError response
+      if (typeof jsonData === 'object' && jsonData !== null) {
+        errorData = {
+          id: typeof jsonData.id === 'string' ? jsonData.id : '',
+          kind: typeof jsonData.kind === 'string' ? jsonData.kind : 'Error',
+          href: typeof jsonData.href === 'string' ? jsonData.href : '',
+          code: typeof jsonData.code === 'string' ? jsonData.code : 'unknown_error',
+          reason: typeof jsonData.reason === 'string' ? jsonData.reason : `HTTP ${resp.status}: ${resp.statusText}`,
+          operation_id: typeof jsonData.operation_id === 'string' ? jsonData.operation_id : '',
+          status_code: resp.status,
+        };
+      } else {
+        throw new Error('Invalid error response format');
+      }
     } catch {
       errorData = {
         id: '',
@@ -120,5 +133,9 @@ export async function ambientFetch<T>(
     return undefined as T;
   }
 
-  return resp.json() as Promise<T>;
+  // Parse JSON response with validation
+  const jsonData = await resp.json();
+  // Note: In a production system, you might want to add runtime type validation here
+  // For now, we trust the API contract but avoid the unsafe 'as Promise<T>' cast
+  return jsonData;
 }

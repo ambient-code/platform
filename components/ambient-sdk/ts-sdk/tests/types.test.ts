@@ -2,18 +2,11 @@ import {
   SessionBuilder,
   SessionPatchBuilder,
   SessionStatusPatchBuilder,
-  AgentBuilder,
   ProjectBuilder,
-  WorkflowBuilder,
-  UserBuilder,
-  SkillBuilder,
-  TaskBuilder,
-  WorkflowSkillBuilder,
-  WorkflowTaskBuilder,
+  ProjectPatchBuilder,
   ProjectSettingsBuilder,
-  PermissionBuilder,
-  RepositoryRefBuilder,
-  ProjectKeyBuilder,
+  ProjectSettingsPatchBuilder,
+  UserBuilder,
 } from '../src';
 import type {
   Session,
@@ -21,30 +14,12 @@ import type {
   SessionCreateRequest,
   SessionPatchRequest,
   SessionStatusPatchRequest,
-  Agent,
-  AgentList,
   Project,
   ProjectList,
-  ProjectKey,
-  ProjectKeyList,
-  Workflow,
-  WorkflowList,
-  User,
-  UserList,
-  Skill,
-  SkillList,
-  Task,
-  TaskList,
-  WorkflowSkill,
-  WorkflowSkillList,
-  WorkflowTask,
-  WorkflowTaskList,
   ProjectSettings,
   ProjectSettingsList,
-  Permission,
-  PermissionList,
-  RepositoryRef,
-  RepositoryRefList,
+  User,
+  UserList,
   ObjectReference,
   ListMeta,
   ListOptions,
@@ -183,10 +158,10 @@ describe('SessionStatusPatchBuilder', () => {
   });
 });
 
-describe('All 12 resource builders exist and build', () => {
-  it('AgentBuilder', () => {
-    const req = new AgentBuilder().name('agent-1').build();
-    expect(req.name).toBe('agent-1');
+describe('All 4 resource builders exist and build', () => {
+  it('SessionBuilder', () => {
+    const req = new SessionBuilder().name('session-1').build();
+    expect(req.name).toBe('session-1');
   });
 
   it('ProjectBuilder', () => {
@@ -199,118 +174,34 @@ describe('All 12 resource builders exist and build', () => {
     expect(req.project_id).toBe('proj-1');
   });
 
-  it('WorkflowBuilder', () => {
-    const req = new WorkflowBuilder().name('workflow-1').build();
-    expect(req.name).toBe('workflow-1');
-  });
-
   it('UserBuilder', () => {
     const req = new UserBuilder().name('user-1').username('user1').build();
     expect(req.name).toBe('user-1');
     expect(req.username).toBe('user1');
   });
 
-  it('SkillBuilder', () => {
-    const req = new SkillBuilder().name('skill-1').build();
-    expect(req.name).toBe('skill-1');
+  it('UserBuilder throws when name is missing', () => {
+    expect(() => new UserBuilder().username('user1').build()).toThrow('name is required');
   });
 
-  it('TaskBuilder', () => {
-    const req = new TaskBuilder().name('task-1').build();
-    expect(req.name).toBe('task-1');
-  });
-
-  it('WorkflowSkillBuilder', () => {
-    const req = new WorkflowSkillBuilder().skillId('sk-1').workflowId('wf-1').position(1).build();
-    expect(req.skill_id).toBe('sk-1');
-    expect(req.workflow_id).toBe('wf-1');
-  });
-
-  it('WorkflowTaskBuilder', () => {
-    const req = new WorkflowTaskBuilder().taskId('t-1').workflowId('wf-1').position(1).build();
-    expect(req.task_id).toBe('t-1');
-    expect(req.workflow_id).toBe('wf-1');
-  });
-
-  it('PermissionBuilder', () => {
-    const req = new PermissionBuilder().subjectType('user').subjectName('alice').role('admin').build();
-    expect(req.subject_type).toBe('user');
-    expect(req.subject_name).toBe('alice');
-    expect(req.role).toBe('admin');
-  });
-
-  it('PermissionBuilder throws when role is missing', () => {
-    expect(() => new PermissionBuilder().subjectType('user').subjectName('alice').build()).toThrow('role is required');
-  });
-
-  it('PermissionBuilder throws when subject_name is missing', () => {
-    expect(() => new PermissionBuilder().subjectType('user').role('admin').build()).toThrow('subject_name is required');
-  });
-
-  it('PermissionBuilder throws when subject_type is missing', () => {
-    expect(() => new PermissionBuilder().subjectName('alice').role('admin').build()).toThrow('subject_type is required');
-  });
-
-  it('RepositoryRefBuilder', () => {
-    const req = new RepositoryRefBuilder().name('my-repo').url('https://github.com/org/repo').branch('main').build();
-    expect(req.name).toBe('my-repo');
-    expect(req.url).toBe('https://github.com/org/repo');
-    expect(req.branch).toBe('main');
-  });
-
-  it('RepositoryRefBuilder throws when name is missing', () => {
-    expect(() => new RepositoryRefBuilder().url('https://github.com/org/repo').build()).toThrow('name is required');
-  });
-
-  it('RepositoryRefBuilder throws when url is missing', () => {
-    expect(() => new RepositoryRefBuilder().name('my-repo').build()).toThrow('url is required');
-  });
-
-  it('ProjectKeyBuilder', () => {
-    const req = new ProjectKeyBuilder().name('my-api-key').projectId('proj-1').build();
-    expect(req.name).toBe('my-api-key');
-    expect(req.project_id).toBe('proj-1');
-  });
-
-  it('ProjectKeyBuilder throws when name is missing', () => {
-    expect(() => new ProjectKeyBuilder().projectId('proj-1').build()).toThrow('name is required');
+  it('UserBuilder throws when username is missing', () => {
+    expect(() => new UserBuilder().name('user-1').build()).toThrow('username is required');
   });
 });
 
 describe('PatchBuilder for each resource', () => {
-  it('AgentPatchBuilder exists', () => {
-    const { AgentPatchBuilder } = require('../src');
-    const patch = new AgentPatchBuilder().name('updated').build();
+  it('SessionPatchBuilder exists', () => {
+    const patch = new SessionPatchBuilder().name('updated').build();
     expect(patch.name).toBe('updated');
   });
 
   it('ProjectPatchBuilder exists', () => {
-    const { ProjectPatchBuilder } = require('../src');
     const patch = new ProjectPatchBuilder().name('updated').build();
     expect(patch.name).toBe('updated');
   });
 
-  it('WorkflowPatchBuilder exists', () => {
-    const { WorkflowPatchBuilder } = require('../src');
-    const patch = new WorkflowPatchBuilder().name('updated').build();
-    expect(patch.name).toBe('updated');
-  });
-
-  it('PermissionPatchBuilder exists', () => {
-    const { PermissionPatchBuilder } = require('../src');
-    const patch = new PermissionPatchBuilder().role('view').build();
-    expect(patch.role).toBe('view');
-  });
-
-  it('RepositoryRefPatchBuilder exists', () => {
-    const { RepositoryRefPatchBuilder } = require('../src');
-    const patch = new RepositoryRefPatchBuilder().branch('develop').build();
-    expect(patch.branch).toBe('develop');
-  });
-
-  it('ProjectKeyPatchBuilder exists', () => {
-    const { ProjectKeyPatchBuilder } = require('../src');
-    const patch = new ProjectKeyPatchBuilder().name('renamed').build();
-    expect(patch.name).toBe('renamed');
+  it('ProjectSettingsPatchBuilder exists', () => {
+    const patch = new ProjectSettingsPatchBuilder().projectId('proj-2').build();
+    expect(patch.project_id).toBe('proj-2');
   });
 });

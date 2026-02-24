@@ -9,18 +9,9 @@ describe('AmbientClient construction', () => {
     });
     expect(client).toBeDefined();
     expect(client.sessions).toBeDefined();
-    expect(client.agents).toBeDefined();
     expect(client.projects).toBeDefined();
-    expect(client.workflows).toBeDefined();
-    expect(client.tasks).toBeDefined();
-    expect(client.skills).toBeDefined();
-    expect(client.users).toBeDefined();
-    expect(client.workflowSkills).toBeDefined();
-    expect(client.workflowTasks).toBeDefined();
     expect(client.projectSettings).toBeDefined();
-    expect(client.permissions).toBeDefined();
-    expect(client.repositoryRefs).toBeDefined();
-    expect(client.projectKeys).toBeDefined();
+    expect(client.users).toBeDefined();
   });
 
   it('throws when baseUrl is missing', () => {
@@ -118,10 +109,7 @@ describe('Resource API accessor properties', () => {
   });
 
   const resourcesWithUpdate = [
-    'sessions', 'agents', 'projects', 'workflows',
-    'tasks', 'skills', 'users', 'workflowSkills',
-    'workflowTasks', 'projectSettings', 'permissions',
-    'repositoryRefs',
+    'sessions', 'projectSettings',
   ] as const;
 
   for (const name of resourcesWithUpdate) {
@@ -135,15 +123,16 @@ describe('Resource API accessor properties', () => {
     });
   }
 
-  it('projectKeys API has create/get/list/delete/listAll but not update', () => {
-    const api = client.projectKeys as Record<string, unknown>;
-    expect(typeof api.create).toBe('function');
-    expect(typeof api.get).toBe('function');
-    expect(typeof api.list).toBe('function');
-    expect(typeof api.delete).toBe('function');
-    expect(typeof api.listAll).toBe('function');
-    expect(api.update).toBeUndefined();
-  });
+  const resourcesWithDelete = [
+    'projects', 'projectSettings',
+  ] as const;
+
+  for (const name of resourcesWithDelete) {
+    it(`${name} API has delete method`, () => {
+      const api = client[name] as Record<string, unknown>;
+      expect(typeof api.delete).toBe('function');
+    });
+  }
 
   it('sessions API has start/stop/updateStatus methods', () => {
     expect(typeof client.sessions.start).toBe('function');
@@ -151,20 +140,11 @@ describe('Resource API accessor properties', () => {
     expect(typeof client.sessions.updateStatus).toBe('function');
   });
 
-  it('projects API has delete method', () => {
-    expect(typeof (client.projects as Record<string, unknown>).delete).toBe('function');
-  });
-
-  it('users API has delete method', () => {
-    expect(typeof (client.users as Record<string, unknown>).delete).toBe('function');
-  });
-
-  it('agents API does not have start/stop', () => {
-    expect((client.agents as Record<string, unknown>).start).toBeUndefined();
-    expect((client.agents as Record<string, unknown>).stop).toBeUndefined();
-  });
-
-  it('projectKeys API has delete', () => {
-    expect(typeof (client.projectKeys as Record<string, unknown>).delete).toBe('function');
+  it('users API has basic CRUD methods', () => {
+    const api = client.users as Record<string, unknown>;
+    expect(typeof api.create).toBe('function');
+    expect(typeof api.get).toBe('function');
+    expect(typeof api.list).toBe('function');
+    expect(typeof api.listAll).toBe('function');
   });
 });
