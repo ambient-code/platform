@@ -11,7 +11,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { PlatformEvent, PlatformMessage } from '@/types/agui'
+import type { AGUIClientState, PlatformEvent, PlatformMessage } from '@/types/agui'
 import { processAGUIEvent } from './agui/event-handlers'
 import type { EventHandlerCallbacks } from './agui/event-handlers'
 import { initialState } from './agui/types'
