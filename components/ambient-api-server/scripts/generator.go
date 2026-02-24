@@ -307,14 +307,14 @@ func parseFields(fieldsStr string) ([]Field, error) {
 		// Check for :required or :optional suffix
 		if len(parts) == 3 {
 			modifier := strings.TrimSpace(parts[2])
-		switch modifier {
-		case "required":
-			nullable = false
-		case "optional":
-			nullable = true
-		default:
-			return nil, fmt.Errorf("invalid field modifier: %s (expected 'required' or 'optional')", modifier)
-		}
+			switch modifier {
+			case "required":
+				nullable = false
+			case "optional":
+				nullable = true
+			default:
+				return nil, fmt.Errorf("invalid field modifier: %s (expected 'required' or 'optional')", modifier)
+			}
 		}
 
 		field, err := mapFieldType(name, fieldType, nullable)
