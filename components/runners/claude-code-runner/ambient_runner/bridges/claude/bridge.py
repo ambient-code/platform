@@ -169,7 +169,11 @@ class ClaudeBridge(PlatformBridge):
     async def get_mcp_status(self) -> dict:
         """Get MCP server status via an ephemeral SDK client."""
         if not self._context:
-            return {"servers": [], "totalCount": 0, "message": "Context not initialized"}
+            return {
+                "servers": [],
+                "totalCount": 0,
+                "message": "Context not initialized",
+            }
 
         try:
             from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
@@ -217,8 +221,7 @@ class ClaudeBridge(PlatformBridge):
                         {
                             "name": t.get("name", ""),
                             "annotations": {
-                                k: v
-                                for k, v in (t.get("annotations") or {}).items()
+                                k: v for k, v in (t.get("annotations") or {}).items()
                             },
                         }
                         for t in raw_tools
@@ -227,9 +230,7 @@ class ClaudeBridge(PlatformBridge):
                     servers_list.append(
                         {
                             "name": srv.get("name", ""),
-                            "displayName": server_info.get(
-                                "name", srv.get("name", "")
-                            ),
+                            "displayName": server_info.get("name", srv.get("name", "")),
                             "status": srv.get("status", "unknown"),
                             "version": server_info.get("version", ""),
                             "tools": tools,
@@ -278,8 +279,7 @@ class ClaudeBridge(PlatformBridge):
         await self._setup_platform()
         self._ready = True
         logger.info(
-            f"Platform ready — model: {self._configured_model}, "
-            f"cwd: {self._cwd_path}"
+            f"Platform ready — model: {self._configured_model}, cwd: {self._cwd_path}"
         )
 
     async def _setup_platform(self) -> None:
@@ -291,7 +291,10 @@ class ClaudeBridge(PlatformBridge):
         # Claude-specific auth
         from ambient_runner.bridges.claude.auth import setup_sdk_authentication
         from ambient_runner.platform.auth import populate_runtime_credentials
-        from ambient_runner.platform.workspace import resolve_workspace_paths, validate_prerequisites
+        from ambient_runner.platform.workspace import (
+            resolve_workspace_paths,
+            validate_prerequisites,
+        )
 
         await validate_prerequisites(self._context)
         _api_key, _use_vertex, configured_model = await setup_sdk_authentication(
@@ -301,6 +304,11 @@ class ClaudeBridge(PlatformBridge):
 
         # Workspace paths
         cwd_path, add_dirs = resolve_workspace_paths(self._context)
+
+        # Inject platform slash commands (before Claude Code launches)
+        from ambient_runner.platform.commands import inject_platform_commands
+
+        inject_platform_commands()
 
         # Observability (before MCP so rubric tool can access it)
         await self._setup_observability(configured_model)
@@ -319,9 +327,7 @@ class ClaudeBridge(PlatformBridge):
         # System prompt
         from ambient_runner.bridges.claude.prompts import build_sdk_system_prompt
 
-        system_prompt = build_sdk_system_prompt(
-            self._context.workspace_path, cwd_path
-        )
+        system_prompt = build_sdk_system_prompt(self._context.workspace_path, cwd_path)
 
         # Store results
         self._configured_model = configured_model
@@ -349,9 +355,7 @@ class ClaudeBridge(PlatformBridge):
             )
             await obs.initialize(
                 prompt="(pending)",
-                namespace=self._context.get_env(
-                    "AGENTIC_SESSION_NAMESPACE", "unknown"
-                ),
+                namespace=self._context.get_env("AGENTIC_SESSION_NAMESPACE", "unknown"),
                 model=configured_model,
             )
             self._obs = obs
@@ -401,4 +405,3 @@ class ClaudeBridge(PlatformBridge):
         adapter._stderr_lines = self._stderr_lines  # type: ignore[attr-defined]
         self._adapter = adapter
         logger.info("Adapter built (persistent, will be reused across runs)")
-

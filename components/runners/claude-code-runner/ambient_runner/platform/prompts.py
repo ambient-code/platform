@@ -195,16 +195,11 @@ def build_workspace_context_prompt(
     # Rubric evaluation instructions
     prompt += _build_rubric_prompt_section(ambient_config)
 
-    # Corrections and feedback instructions (only when Langfuse is configured)
-    langfuse_enabled = os.getenv("LANGFUSE_ENABLED", "").strip().lower() in (
-        "1",
-        "true",
-        "yes",
-    )
-    if langfuse_enabled:
-        prompt += "## Corrections Feedback\n\n"
-        prompt += CORRECTION_DETECTION_INSTRUCTIONS
-        prompt += FEEDBACK_INSTRUCTIONS
+    # Corrections and feedback instructions (always enabled; tools gracefully
+    # degrade when Langfuse is unavailable by logging to stdout instead)
+    prompt += "## Corrections Feedback\n\n"
+    prompt += CORRECTION_DETECTION_INSTRUCTIONS
+    prompt += FEEDBACK_INSTRUCTIONS
 
     return prompt
 

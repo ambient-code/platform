@@ -2,9 +2,11 @@
 Global /feedback SDK tool for capturing user satisfaction during sessions.
 
 When a user expresses satisfaction, dissatisfaction, or provides qualitative
-feedback about the session or agent output, this tool logs it to Langfuse
-as a scored event. It is available in every session regardless of workflow
-configuration.
+feedback about the session or agent output, this tool records it. When
+Langfuse is configured, feedback is logged as a scored event; otherwise it
+falls back to stdout (pod logs) so feedback is never lost.
+
+Available in every session regardless of workflow configuration.
 """
 
 import logging
@@ -125,8 +127,20 @@ def create_feedback_mcp_tool(
 
 
 # ------------------------------------------------------------------
-# Langfuse logging
+# Langfuse logging (with stdout fallback)
 # ------------------------------------------------------------------
+
+
+def _log_feedback_fallback(
+    reason: str, rating: str, comment: str, session_id: str
+) -> tuple[bool, None]:
+    """Log feedback to stdout when Langfuse is unavailable."""
+    logger.info(
+        f"Feedback ({reason}): rating={rating}, "
+        f"comment={comment[:500] if comment else ''}, "
+        f"session_id={session_id}"
+    )
+    return True, None
 
 
 def _log_feedback_to_langfuse(
@@ -147,7 +161,9 @@ def _log_feedback_to_langfuse(
                 "yes",
             )
             if not langfuse_enabled:
-                return False, "Langfuse not enabled."
+                return _log_feedback_fallback(
+                    "no Langfuse", rating, comment, session_id
+                )
 
             from langfuse import Langfuse
 
@@ -156,7 +172,9 @@ def _log_feedback_to_langfuse(
             host = os.getenv("LANGFUSE_HOST", "").strip()
 
             if not (public_key and secret_key and host):
-                return False, "Langfuse credentials missing."
+                return _log_feedback_fallback(
+                    "Langfuse creds missing", rating, comment, session_id
+                )
 
             langfuse_client = Langfuse(
                 public_key=public_key,
@@ -206,7 +224,9 @@ def _log_feedback_to_langfuse(
         return True, None
 
     except ImportError:
-        return False, "Langfuse package not installed."
+        return _log_feedback_fallback(
+            "langfuse not installed", rating, comment, session_id
+        )
     except Exception as e:
         msg = str(e)
         logger.error(f"Failed to log feedback to Langfuse: {msg}")

@@ -5,7 +5,7 @@ Test global feedback MCP tool.
 Validates:
 1. Tool creation and schema structure
 2. Langfuse score creation with correct parameters
-3. Error handling for missing Langfuse / credentials
+3. Graceful fallback to stdout when Langfuse is unavailable
 4. Comment truncation
 5. Rating to boolean mapping
 """
@@ -233,7 +233,7 @@ def test_logging_uses_last_trace_id_fallback():
 
 
 def test_logging_without_langfuse_enabled():
-    """Returns failure when Langfuse not enabled and no obs client."""
+    """Falls back to stdout logging when Langfuse not enabled."""
     mock_obs = MagicMock()
     mock_obs.langfuse_client = None
 
@@ -245,12 +245,12 @@ def test_logging_without_langfuse_enabled():
             session_id="session-1",
         )
 
-    assert success is False
-    assert "not enabled" in error
+    assert success is True
+    assert error is None
 
 
 def test_logging_without_credentials():
-    """Returns failure when Langfuse enabled but credentials missing."""
+    """Falls back to stdout logging when Langfuse enabled but credentials missing."""
     mock_obs = MagicMock()
     mock_obs.langfuse_client = None
 
@@ -263,12 +263,12 @@ def test_logging_without_credentials():
                 session_id="session-1",
             )
 
-    assert success is False
-    assert "credentials missing" in error.lower()
+    assert success is True
+    assert error is None
 
 
 def test_logging_with_no_obs():
-    """Returns failure when obs is None and Langfuse not enabled."""
+    """Falls back to stdout logging when obs is None and Langfuse not enabled."""
     with patch.dict(os.environ, {}, clear=True):
         success, error = _log_feedback_to_langfuse(
             rating="positive",
@@ -277,7 +277,8 @@ def test_logging_with_no_obs():
             session_id="session-1",
         )
 
-    assert success is False
+    assert success is True
+    assert error is None
 
 
 def test_comment_truncation():
@@ -325,9 +326,9 @@ if __name__ == "__main__":
         ),
         ("Logging: no trace_id", test_logging_without_trace_id),
         ("Logging: last_trace_id fallback", test_logging_uses_last_trace_id_fallback),
-        ("Logging: not enabled", test_logging_without_langfuse_enabled),
-        ("Logging: no credentials", test_logging_without_credentials),
-        ("Logging: no obs", test_logging_with_no_obs),
+        ("Logging: fallback when not enabled", test_logging_without_langfuse_enabled),
+        ("Logging: fallback when no credentials", test_logging_without_credentials),
+        ("Logging: fallback when no obs", test_logging_with_no_obs),
         ("Logging: comment truncation", test_comment_truncation),
     ]
 
