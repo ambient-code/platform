@@ -1,0 +1,115 @@
+name: CI Failure Resolver
+
+on:
+  workflow_dispatch:
+    inputs:
+      prs:
+        description: 'PR(s): "123", "123,456", or "all"'
+        required: true
+      max_attempts:
+        description: "Max fix attempts per PR"
+        default: "3"
+
+jobs:
+  gather-prs:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.get.outputs.matrix }}
+    steps:
+      - id: get
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ inputs.prs }}" = "all" ]; then
+            PRS=$(gh pr list --state open --json number,statusCheckRollup \
+              --jq '[.[] | select(.statusCheckRollup[]? | .status == "COMPLETED" and .conclusion == "FAILURE") | .number] | unique')
+          else
+            PRS=$(echo "${{ inputs.prs }}" | tr ',' '\n' | jq -R 'tonumber' | jq -s .)
+          fi
+          echo "matrix={\"pr\":${PRS:-[]}}" >> $GITHUB_OUTPUT
+
+  fix-pr:
+    needs: gather-prs
+    if: fromJson(needs.gather-prs.outputs.matrix).pr[0] != null
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.gather-prs.outputs.matrix) }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      REPO: ${{ github.repository }}
+      PR: ${{ matrix.pr }}
+      MAX: ${{ inputs.max_attempts }}
+    steps:
+      - name: Analyze and classify
+        id: analyze
+        run: |
+          # Get attempt count
+          ATTEMPT=$(gh pr view $PR --repo $REPO --json labels \
+            --jq '[.labels[].name | capture("ci-fix-attempt-(?<n>[0-9]+)").n // empty | tonumber] | max // 0')
+          NEXT=$((ATTEMPT + 1))
+          echo "attempt=$NEXT" >> $GITHUB_OUTPUT
+
+          [ "$NEXT" -gt "$MAX" ] && echo "action=escalate" >> $GITHUB_OUTPUT && exit 0
+
+          # Fetch logs
+          HEAD=$(gh pr view $PR --repo $REPO --json headRefOid --jq '.headRefOid')
+          RUN_ID=$(gh api "repos/$REPO/actions/runs?head_sha=${HEAD}&status=failure&per_page=1" --jq '.workflow_runs[0].id // empty')
+          [ -z "$RUN_ID" ] && echo "action=skip" >> $GITHUB_OUTPUT && exit 0
+
+          gh run view "$RUN_ID" --repo $REPO --log-failed 2>&1 | tail -500 > /tmp/logs.txt
+          echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
+
+          # Classify with Claude
+          LOGS=$(cat /tmp/logs.txt | jq -Rs .)
+          RESULT=$(curl -s https://api.anthropic.com/v1/messages \
+            -H "Content-Type: application/json" \
+            -H "x-api-key: $ANTHROPIC_API_KEY" \
+            -H "anthropic-version: 2023-06-01" \
+            -d "{\"model\":\"claude-sonnet-4-20250514\",\"max_tokens\":256,\"messages\":[{\"role\":\"user\",\"content\":\"Classify this CI failure as JSON only: {\\\"category\\\": \\\"flake_network|flake_timeout|flake_race|error_code|error_test|unknown\\\", \\\"summary\\\": \\\"one sentence\\\", \\\"is_flake\\\": bool}\\n\\nLogs:\\n${LOGS}\"}]}" \
+            | jq -r '.content[0].text')
+
+          echo "classification=$RESULT" >> $GITHUB_OUTPUT
+          IS_FLAKE=$(echo "$RESULT" | jq -r '.is_flake')
+
+          [ "$IS_FLAKE" = "true" ] && [ "$ATTEMPT" -eq 0 ] && echo "action=retry" >> $GITHUB_OUTPUT && exit 0
+          echo "action=fix" >> $GITHUB_OUTPUT
+
+      - name: Retry flaky CI
+        if: steps.analyze.outputs.action == 'retry'
+        run: gh run rerun ${{ steps.analyze.outputs.run_id }} --repo $REPO --failed
+
+      - name: Escalate
+        if: steps.analyze.outputs.action == 'escalate'
+        run: |
+          gh label create ci-needs-human --repo $REPO --color D93F0B 2>/dev/null || true
+          gh pr edit $PR --repo $REPO --add-label ci-needs-human
+          gh pr comment $PR --repo $REPO --body "🚨 CI fix bot reached max attempts ($MAX). Manual fix needed."
+
+      - name: Checkout & label
+        if: steps.analyze.outputs.action == 'fix'
+        uses: actions/checkout@v4
+        with:
+          ref: refs/pull/${{ matrix.pr }}/head
+          fetch-depth: 0
+
+      - if: steps.analyze.outputs.action == 'fix'
+        run: |
+          PREV=$((${{ steps.analyze.outputs.attempt }} - 1))
+          gh pr edit $PR --repo $REPO --remove-label "ci-fix-attempt-${PREV}" 2>/dev/null || true
+          gh label create "ci-fix-attempt-${{ steps.analyze.outputs.attempt }}" --repo $REPO --color FFA500 2>/dev/null || true
+          gh pr edit $PR --repo $REPO --add-label "ci-fix-attempt-${{ steps.analyze.outputs.attempt }}"
+
+      - name: Fix with agent
+        if: steps.analyze.outputs.action == 'fix'
+        uses: anthropics/claude-code-action@beta
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            Fix CI on PR #${{ env.PR }} (attempt ${{ steps.analyze.outputs.attempt }}/${{ env.MAX }}).
+            Classification: ${{ steps.analyze.outputs.classification }}
+            Logs:
+            $(cat /tmp/logs.txt)
+
+            Flake → harden test. Error → fix bug. Commit as "fix(ci): <summary>" and push.
