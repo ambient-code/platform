@@ -9,6 +9,7 @@ Owns the entire Claude session lifecycle:
 - Interrupt and graceful shutdown
 """
 
+import asyncio
 import logging
 import os
 from typing import Any, AsyncIterator, Optional
@@ -164,17 +165,24 @@ class ClaudeBridge(PlatformBridge):
         self._first_run = True
         self._adapter = None
         if self._session_manager:
-            import asyncio
-
-            try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    asyncio.ensure_future(self._session_manager.shutdown())
-                else:
-                    loop.run_until_complete(self._session_manager.shutdown())
-            except Exception:
-                pass
+            manager = self._session_manager
             self._session_manager = None
+            try:
+                loop = asyncio.get_running_loop()
+                future = asyncio.ensure_future(manager.shutdown())
+                future.add_done_callback(
+                    lambda f: logger.warning(
+                        "mark_dirty: session_manager shutdown error: %s", f.exception()
+                    )
+                    if f.exception()
+                    else None
+                )
+            except RuntimeError:
+                # No running loop — safe to block
+                try:
+                    asyncio.run(manager.shutdown())
+                except Exception as e:
+                    logger.warning("mark_dirty: session_manager shutdown error: %s", e)
         logger.info("ClaudeBridge: marked dirty — will reinitialise on next run")
 
     def get_error_context(self) -> str:

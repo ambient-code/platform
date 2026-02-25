@@ -127,6 +127,8 @@ jobs:
 
       - name: Extract session config
         id: config
+        env:
+          MATRIX_INDEX: ${{ matrix.index }}
         run: |
           python3 << 'PYEOF'
           import hashlib, json, os
@@ -134,7 +136,8 @@ jobs:
           with open('sessions.json') as f:
               sessions = json.load(f)
 
-          s = sessions[${{ matrix.index }}]
+          index = int(os.environ["MATRIX_INDEX"])
+          s = sessions[index]
 
           out = os.environ['GITHUB_OUTPUT']
           with open(out, 'a') as f:
