@@ -129,7 +129,7 @@ jobs:
         id: config
         run: |
           python3 << 'PYEOF'
-          import json, os
+          import hashlib, json, os
 
           with open('sessions.json') as f:
               sessions = json.load(f)
@@ -142,10 +142,13 @@ jobs:
               f.write(f"repos={json.dumps(s.get('repos', []))}\n")
               f.write(f"labels={json.dumps(s.get('labels', {}))}\n")
               f.write(f"environment-variables={json.dumps(s.get('environment_variables', {}))}\n")
-              # Prompt may be multi-line — use EOF delimiter
-              f.write("prompt<<GHEOF\n")
-              f.write(s['prompt'])
-              f.write("\nGHEOF\n")
+              # Prompt is multi-line — use a unique EOF delimiter
+              prompt = s['prompt']
+              tag = hashlib.sha256(prompt.encode()).hexdigest()[:12]
+              delim = f"GHEOF_{tag}"
+              f.write(f"prompt<<{delim}\n")
+              f.write(prompt)
+              f.write(f"\n{delim}\n")
           PYEOF
 
       - name: Create improvement session
@@ -176,13 +179,6 @@ jobs:
     timeout-minutes: 5
 
     steps:
-      - name: Download query results
-        if: needs.query-corrections.outputs.session_count != '0'
-        uses: actions/download-artifact@v4
-        with:
-          name: session-configs
-        continue-on-error: true
-
       - name: Final summary
         run: |
           echo "### Feedback Loop — Final Summary" >> $GITHUB_STEP_SUMMARY

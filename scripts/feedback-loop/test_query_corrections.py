@@ -539,7 +539,7 @@ def test_no_repos_when_url_invalid():
 
 
 def test_session_config_workflow_target():
-    """Workflow config has correct display name, labels, repos, and workflow."""
+    """Workflow config has correct display name, labels, and repos."""
     group = {
         "target_type": "workflow",
         "target_repo_url": "https://github.com/org/workflows",
@@ -553,8 +553,6 @@ def test_session_config_workflow_target():
 
     config = build_session_config(
         group,
-        workflow_git_url="https://github.com/org/internal-workflows.git",
-        workflow_branch="main",
         api_url="https://ambient.example.com/api",
     )
 
@@ -565,8 +563,6 @@ def test_session_config_workflow_target():
     assert config["repos"][0]["url"] == "https://github.com/org/workflows"
     assert config["repos"][0]["branch"] == "main"
     assert config["repos"][0]["autoPush"] is True
-    assert config["workflow"]["gitUrl"] == "https://github.com/org/internal-workflows.git"
-    assert config["workflow"]["path"] == "feedback-loop"
     assert config["environment_variables"]["AMBIENT_UI_URL"] == "https://ambient.example.com"
     assert "prompt" in config
     assert len(config["prompt"]) > 0
@@ -591,7 +587,6 @@ def test_session_config_repo_target():
     assert config["labels"]["target-type"] == "repo"
     assert config["repos"][0]["url"] == "https://github.com/org/my-app.git"
     assert config["repos"][0]["branch"] == "dev"
-    assert config["workflow"] == {}
 
 
 def test_session_config_no_repos_for_empty_url():
@@ -611,24 +606,6 @@ def test_session_config_no_repos_for_empty_url():
 
     assert config["repos"] == []
     assert config["display_name"] == "Feedback Loop: unknown (repo)"
-
-
-def test_session_config_no_workflow_when_not_provided():
-    """workflow is empty dict when workflow_git_url is not provided."""
-    group = {
-        "target_type": "workflow",
-        "target_repo_url": "https://github.com/org/wf",
-        "target_branch": "main",
-        "target_path": "workflows/test",
-        "corrections": [],
-        "total_count": 2,
-        "correction_type_counts": {"incomplete": 2},
-        "source_counts": {"human": 2},
-    }
-
-    config = build_session_config(group)
-
-    assert config["workflow"] == {}
 
 
 def test_session_config_no_ui_url_without_api_url():
@@ -685,7 +662,6 @@ if __name__ == "__main__":
         ("Config: workflow target", test_session_config_workflow_target),
         ("Config: repo target", test_session_config_repo_target),
         ("Config: no repos for empty URL", test_session_config_no_repos_for_empty_url),
-        ("Config: no workflow when not provided", test_session_config_no_workflow_when_not_provided),
         ("Config: no UI URL without api_url", test_session_config_no_ui_url_without_api_url),
     ]
 

@@ -21,10 +21,10 @@ Usage:
 """
 
 import argparse
+import hashlib
 import json
 import logging
 import os
-import sys
 import time
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
@@ -395,20 +395,18 @@ def _derive_ui_url(api_url: str) -> str:
 
 def build_session_config(
     group: dict,
-    workflow_git_url: str = "",
-    workflow_branch: str = "main",
     api_url: str = "",
 ) -> dict:
     """Build a session config dict suitable for the ambient-action inputs.
 
-    Extracts the config-building logic (display name, labels, repos, env vars,
-    workflow) without making any API calls.  Used in ``--output-mode matrix``
-    to produce a ``sessions.json`` file that a GitHub Actions matrix job can
-    feed into ``ambient-code/ambient-action@v2``.
+    Extracts the config-building logic (display name, labels, repos, env vars)
+    without making any API calls.  Used in ``--output-mode matrix`` to produce
+    a ``sessions.json`` file that a GitHub Actions matrix job can feed into
+    ``ambient-code/ambient-action@v2``.
 
     Returns:
         Dict with keys: prompt, display_name, repos, labels,
-        environment_variables, workflow.
+        environment_variables.
     """
     target_type = group["target_type"]
     target_repo_url = group["target_repo_url"]
@@ -440,18 +438,10 @@ def build_session_config(
         "environment_variables": {
             "LANGFUSE_MASK_MESSAGES": "false",
         },
-        "workflow": {},
     }
 
     if ui_url:
         config["environment_variables"]["AMBIENT_UI_URL"] = ui_url
-
-    if workflow_git_url:
-        config["workflow"] = {
-            "gitUrl": workflow_git_url,
-            "branch": workflow_branch,
-            "path": "feedback-loop",
-        }
 
     if target_repo_url and target_repo_url.startswith("http"):
         repo_entry: dict = {"url": target_repo_url, "autoPush": True}
@@ -470,7 +460,10 @@ def _write_github_output(key: str, value: str) -> None:
     try:
         with open(output_path, "a") as f:
             if "\n" in value:
-                f.write(f"{key}<<GHEOF\n{value}\nGHEOF\n")
+                # Use a unique delimiter to avoid collision with prompt content
+                tag = hashlib.sha256(value.encode()).hexdigest()[:12]
+                delim = f"GHEOF_{tag}"
+                f.write(f"{key}<<{delim}\n{value}\n{delim}\n")
             else:
                 f.write(f"{key}={value}\n")
     except OSError as e:
@@ -741,16 +734,6 @@ def main():
         help="Write JSON summary to this file (for CI/CD integration)",
     )
     parser.add_argument(
-        "--workflow-git-url",
-        default="",
-        help="Git URL of the workflow repo containing the feedback-loop workflow",
-    )
-    parser.add_argument(
-        "--workflow-branch",
-        default="main",
-        help="Branch of the workflow repo (default: main)",
-    )
-    parser.add_argument(
         "--output-mode",
         choices=["direct", "matrix"],
         default="direct",
@@ -862,8 +845,6 @@ def main():
         for group in qualifying:
             config = build_session_config(
                 group,
-                workflow_git_url=args.workflow_git_url,
-                workflow_branch=args.workflow_branch,
                 api_url=args.api_url,
             )
             session_configs.append(config)
