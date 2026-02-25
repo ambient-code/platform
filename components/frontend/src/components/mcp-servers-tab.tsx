@@ -24,14 +24,18 @@ type OpenCodeServer = {
 function toInternal(servers: Record<string, unknown>): Record<string, McpServerConfig> {
   const result: Record<string, McpServerConfig> = {};
   for (const [name, raw] of Object.entries(servers)) {
+    if (!raw || typeof raw !== "object") continue;
     const srv = raw as Record<string, unknown>;
-    if (Array.isArray(srv.command)) {
-      // OpenCode format: command is an array
+    if (Array.isArray(srv.command) && srv.command.every((c) => typeof c === "string")) {
+      // OpenCode format: command is an array of strings
       const [cmd = "", ...args] = srv.command as string[];
-      result[name] = { command: cmd, args, env: (srv.environment ?? {}) as Record<string, string> };
-    } else {
+      const env = srv.environment && typeof srv.environment === "object" ? (srv.environment as Record<string, string>) : {};
+      result[name] = { command: cmd, args, env };
+    } else if (typeof srv.command === "string") {
       // Claude Code format: command is a string, args is separate
-      result[name] = srv as McpServerConfig;
+      const args = Array.isArray(srv.args) ? (srv.args as string[]) : [];
+      const env = srv.env && typeof srv.env === "object" ? (srv.env as Record<string, string>) : {};
+      result[name] = { command: srv.command, args, env };
     }
   }
   return result;

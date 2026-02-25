@@ -154,6 +154,55 @@ var allowedMcpCommands = map[string]bool{
 	"podman":  true,
 }
 
+// dangerousArgPatterns contains argument patterns that could enable code execution.
+var dangerousArgPatterns = []string{
+	"-c",
+	"--eval",
+	"--exec",
+	"-e",
+	"--input-type=module",
+	"--import",
+	"-p",
+	"--print",
+}
+
+// blockedEnvVars contains environment variables that could be used for privilege escalation.
+var blockedEnvVars = map[string]bool{
+	"PATH":            true,
+	"LD_PRELOAD":      true,
+	"LD_LIBRARY_PATH": true,
+	"PYTHONPATH":      true,
+	"NODE_PATH":       true,
+	"NODE_OPTIONS":    true,
+	"PYTHONSTARTUP":   true,
+	"PYTHONHOME":      true,
+}
+
+// validateMcpArgs checks that arguments don't contain dangerous patterns that could
+// enable arbitrary code execution.
+func validateMcpArgs(args []string) error {
+	for i, arg := range args {
+		lowerArg := strings.ToLower(arg)
+		for _, pattern := range dangerousArgPatterns {
+			if lowerArg == pattern || strings.HasPrefix(lowerArg, pattern+"=") {
+				return fmt.Errorf("argument %d (%q) contains blocked pattern %q", i, arg, pattern)
+			}
+		}
+	}
+	return nil
+}
+
+// validateMcpEnv checks that environment variables don't include blocked keys
+// that could be used for privilege escalation.
+func validateMcpEnv(env map[string]string) error {
+	for key := range env {
+		if blockedEnvVars[strings.ToUpper(key)] {
+			return fmt.Errorf("environment variable %q is not allowed", key)
+		}
+	}
+	return nil
+}
+
 // TestMcpServer handles POST /api/projects/:projectName/mcp-config/test
 // Spawns a temporary Pod using the runner image to test an MCP server connection.
 func TestMcpServer(c *gin.Context) {
@@ -170,6 +219,18 @@ func TestMcpServer(c *gin.Context) {
 		}
 		sort.Strings(names)
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("command %q is not allowed; permitted commands: %s", req.Command, strings.Join(names, ", "))})
+		return
+	}
+
+	// Validate args to prevent code execution via dangerous flags
+	if err := validateMcpArgs(req.Args); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid arguments: %v", err)})
+		return
+	}
+
+	// Validate env vars to prevent privilege escalation
+	if err := validateMcpEnv(req.Env); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid environment: %v", err)})
 		return
 	}
 
