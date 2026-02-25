@@ -40,6 +40,17 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
   const [showSystemMessages, setShowSystemMessages] = useState(false);
   const [waitingDotCount, setWaitingDotCount] = useState(0);
 
+  // Pending answer ref for AskUserQuestion tool responses.
+  // When set, the next render triggers a send.
+  const pendingAnswerRef = useRef<string | null>(null);
+  
+  // Autocomplete state
+  const [autocompleteOpen, setAutocompleteOpen] = useState(false);
+  const [autocompleteType, setAutocompleteType] = useState<'agent' | 'command' | null>(null);
+  const [autocompleteFilter, setAutocompleteFilter] = useState('');
+  const [autocompleteTriggerPos, setAutocompleteTriggerPos] = useState(0);
+  const [autocompleteSelectedIndex, setAutocompleteSelectedIndex] = useState(0);
+  
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
 
@@ -82,6 +93,15 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
   useEffect(() => {
     scrollToBottom();
   }, []);
+
+  // Send pending AskUserQuestion answer once chatInput is updated
+  useEffect(() => {
+    if (pendingAnswerRef.current !== null && chatInput === pendingAnswerRef.current) {
+      pendingAnswerRef.current = null;
+      handleSendChat();
+    }
+  }, [chatInput]); // eslint-disable-line react-hooks/exhaustive-deps
+
 
   useEffect(() => {
     const unsentCount = queuedMessages.filter(m => !m.sentAt).length;
@@ -137,7 +157,16 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
         {showWelcomeExperience && welcomeExperienceComponent}
 
         {shouldShowMessages && filteredMessages.map((m, idx) => (
-          <StreamMessage key={`sm-${idx}`} message={m} isNewest={idx === filteredMessages.length - 1} onGoToResults={onGoToResults} />
+          <StreamMessage
+            key={`sm-${idx}`}
+            message={m}
+            isNewest={idx === filteredMessages.length - 1}
+            onGoToResults={onGoToResults}
+            onSubmitAnswer={(answer) => {
+              pendingAnswerRef.current = answer;
+              setChatInput(answer);
+            }}
+          />
         ))}
 
         {/* Queued messages with cancel buttons */}

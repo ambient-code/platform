@@ -65,6 +65,12 @@ from .handlers import (
     emit_system_message_events,
 )
 
+# Built-in Claude tools that should halt the stream like frontend tools.
+# These are HITL (human-in-the-loop) tools that require user input before
+# the agent can continue.  The adapter treats them identically to frontend
+# tools registered via ``input_data.tools``.
+BUILTIN_FRONTEND_TOOLS: set[str] = {"AskUserQuestion"}
+
 logger = logging.getLogger(__name__)
 
 # Configure logger if not already configured
@@ -219,6 +225,19 @@ class ClaudeAgentAdapter:
         # Current state tracking per run (for state management)
         self._current_state: Optional[Any] = None
 
+        # Whether the last run halted due to a frontend tool (caller should interrupt)
+        self._halted: bool = False
+
+    @property
+    def halted(self) -> bool:
+        """Whether the last run halted due to a frontend tool.
+
+        When ``True`` the caller should interrupt the underlying SDK client
+        to prevent it from auto-approving the halted tool call with a
+        placeholder result.
+        """
+        return self._halted
+
     async def run(
         self,
         input_data: RunAgentInput,
@@ -244,8 +263,9 @@ class ClaudeAgentAdapter:
         thread_id = input_data.thread_id or str(uuid.uuid4())
         run_id = input_data.run_id or str(uuid.uuid4())
         
-        # Clear result data from any previous run
+        # Clear result data and halt flag from any previous run
         self._last_result_data = None
+        self._halted = False
         
         # Initialize state tracking for this run
         self._current_state = input_data.state
@@ -764,8 +784,13 @@ class ClaudeAgentAdapter:
                                 )
 
                             # Check if this is a frontend tool (using unprefixed name for comparison)
-                            # Frontend tools should halt the stream so client can execute handler
-                            is_frontend_tool = current_tool_display_name in frontend_tool_names
+                            # Frontend tools should halt the stream so client can execute handler.
+                            # Also halt for built-in HITL tools (e.g. AskUserQuestion) that
+                            # require user input before the agent can continue.
+                            is_frontend_tool = (
+                                current_tool_display_name in frontend_tool_names
+                                or current_tool_display_name in BUILTIN_FRONTEND_TOOLS
+                            )
                             
                             if is_frontend_tool:
                                 # Flush before halt (message_stop won't fire after interrupt)
@@ -791,8 +816,10 @@ class ClaudeAgentAdapter:
                                 logger.debug(f"Frontend tool halt: {current_tool_display_name}")
 
                                 # NOTE: interrupt is the caller's responsibility
-                                # (e.g. worker.interrupt() from the platform layer)
-                                
+                                # (e.g. worker.interrupt() from the platform layer).
+                                # Check adapter.halted after the stream ends.
+
+                                self._halted = True
                                 halt_event_stream = True
                                 # Continue consuming remaining events for cleanup
                                 continue

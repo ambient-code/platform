@@ -307,7 +307,17 @@ const extractTextFromResultContent = (content: unknown): string => {
 // Generate smart summary for tool calls based on tool name and input
 const generateToolSummary = (toolName: string, input?: Record<string, unknown>): string => {
   if (!input || Object.keys(input).length === 0) return formatToolName(toolName);
-  
+
+  // AskUserQuestion - show first question text
+  if (toolName.toLowerCase().replace(/[^a-z]/g, "") === "askuserquestion") {
+    const questions = input.questions as Array<{ question: string }> | undefined;
+    if (questions?.length) {
+      const suffix = questions.length > 1 ? ` (+${questions.length - 1} more)` : "";
+      return `Asking: "${questions[0].question}"${suffix}`;
+    }
+    return "Asking a question";
+  }
+
   // WebSearch - show query
   if (toolName.toLowerCase().includes("websearch") || toolName.toLowerCase().includes("web_search")) {
     const query = input.query as string | undefined;
