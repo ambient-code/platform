@@ -11,6 +11,8 @@ from pathlib import Path
 import aiohttp
 from fastapi import APIRouter, HTTPException, Request
 
+from ambient_runner.platform.config import load_ambient_config
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -134,8 +136,27 @@ async def clone_workflow_at_runtime(git_url: str, branch: str, subpath: str) -> 
 
 
 async def _trigger_workflow_greeting(git_url: str, branch: str, path: str, context):
-    """POST a greeting prompt to the backend after a workflow change."""
+    """Send the workflow's startupPrompt (from ambient.json) after a workflow change.
+
+    If the workflow has no startupPrompt, no greeting is sent.
+    """
     try:
+        workspace_path = os.getenv("WORKSPACE_PATH", "/workspace")
+        workflow_name = git_url.split("/")[-1].removesuffix(".git")
+        if path:
+            workflow_name = path.split("/")[-1]
+
+        workflow_dir = str(Path(workspace_path) / "workflows" / workflow_name)
+        config = load_ambient_config(workflow_dir) if Path(workflow_dir).exists() else {}
+        startup_prompt = (config.get("startupPrompt") or "").strip()
+
+        if not startup_prompt:
+            logger.info(
+                f"Workflow '{workflow_name}' has no startupPrompt in ambient.json, "
+                f"skipping greeting"
+            )
+            return
+
         backend_url = os.getenv("BACKEND_API_URL", "").rstrip("/")
         project_name = os.getenv("AGENTIC_SESSION_NAMESPACE", "").strip()
         session_id = context.session_id if context else "unknown"
@@ -145,9 +166,6 @@ async def _trigger_workflow_greeting(git_url: str, branch: str, path: str, conte
             return
 
         url = f"{backend_url}/projects/{project_name}/agentic-sessions/{session_id}/agui/run"
-        workflow_name = git_url.split("/")[-1].removesuffix(".git")
-        if path:
-            workflow_name = path.split("/")[-1]
 
         payload = {
             "threadId": session_id,
@@ -155,8 +173,8 @@ async def _trigger_workflow_greeting(git_url: str, branch: str, path: str, conte
             "messages": [{
                 "id": str(uuid.uuid4()),
                 "role": "user",
-                "content": f"Greet the user and explain that the {workflow_name} workflow is now active. Briefly describe what this workflow helps with. Keep it concise and friendly.",
-                "metadata": {"hidden": True, "autoSent": True, "source": "workflow_activation"},
+                "content": startup_prompt,
+                "metadata": {"hidden": True, "autoSent": True, "source": "workflow_startup_prompt"},
             }],
         }
 
@@ -168,8 +186,8 @@ async def _trigger_workflow_greeting(git_url: str, branch: str, path: str, conte
         async with aiohttp.ClientSession() as session:
             async with session.post(url, json=payload, headers=headers) as resp:
                 if resp.status == 200:
-                    logger.info(f"Workflow greeting started: {await resp.json()}")
+                    logger.info(f"Workflow startupPrompt sent for '{workflow_name}'")
                 else:
-                    logger.error(f"Workflow greeting failed: {resp.status} - {await resp.text()}")
+                    logger.error(f"Workflow startupPrompt failed: {resp.status} - {await resp.text()}")
     except Exception as e:
-        logger.error(f"Failed to trigger workflow greeting: {e}")
+        logger.error(f"Failed to send workflow startupPrompt: {e}")

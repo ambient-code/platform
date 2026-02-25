@@ -1,0 +1,39 @@
+name: PR Merge Review
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  create-session:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Create PR review session
+        id: session
+        uses: ambient-code/ambient-action@v0.0.2
+        with:
+          api-url: ${{ secrets.AMBIENT_API_URL }}
+          api-token: ${{ secrets.AMBIENT_BOT_TOKEN }}
+          project: ${{ secrets.AMBIENT_PROJECT }}
+          prompt: >-
+            Review all open PRs in https://github.com/ambient-code/platform
+            for merge readiness.
+
+      - name: Session summary
+        if: always()
+        env:
+          SESSION_NAME: ${{ steps.session.outputs.session-name }}
+          SESSION_UID: ${{ steps.session.outputs.session-uid }}
+        run: |
+          echo "### PR Merge Review" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -n "$SESSION_NAME" ]; then
+            echo "- **Session**: \`$SESSION_NAME\`" >> $GITHUB_STEP_SUMMARY
+            echo "- **UID**: \`$SESSION_UID\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Status**: Failed to create session" >> $GITHUB_STEP_SUMMARY
+          fi
