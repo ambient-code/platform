@@ -236,6 +236,16 @@ def _extract_target_fields(metadata: dict) -> tuple[str, str, str, str]:
 # ------------------------------------------------------------------
 
 
+def _sanitize_prompt_text(text: str) -> str:
+    """Remove shell-interpreted characters from text embedded in prompts.
+
+    The prompt is passed through bash eval by ambient-action, so
+    backticks (command substitution), $ (variable expansion), and
+    angle brackets (redirects) must be stripped or replaced.
+    """
+    return text.replace("`", "'").replace("$", "").replace("<", "(").replace(">", ")")
+
+
 def build_improvement_prompt(group: dict) -> str:
     """Build an improvement prompt for an Ambient session.
 
@@ -259,10 +269,12 @@ def build_improvement_prompt(group: dict) -> str:
     for i, c in enumerate(corrections, 1):
         source_label = c.get("source", "human")
         source_tag = " [rubric]" if source_label == "rubric" else ""
+        agent_action = _sanitize_prompt_text(c["agent_action"])
+        user_correction = _sanitize_prompt_text(c["user_correction"])
         corrections_detail += (
             f"### Correction {i} ({c['correction_type']}{source_tag})\n"
-            f"- **Agent did**: {c['agent_action']}\n"
-            f"- **User corrected to**: {c['user_correction']}\n"
+            f"- **Agent did**: {agent_action}\n"
+            f"- **User corrected to**: {user_correction}\n"
         )
         if c.get("session_name"):
             corrections_detail += f"- **Session**: {c['session_name']}\n"
@@ -281,15 +293,15 @@ def build_improvement_prompt(group: dict) -> str:
     if target_type == "workflow":
         target_description = (
             f"- **Target type**: workflow\n"
-            f"- **Workflow path**: `{target_path}`\n"
+            f"- **Workflow path**: {target_path}\n"
             f"- **Workflow repo**: {target_repo_url} (branch: {target_branch or 'default'})"
         )
         task_instructions = (
             "2. **Make targeted improvements**:\n"
-            f"   - Update workflow files in `{target_path}` (system prompt, instructions)\n"
+            f"   - Update workflow files in {target_path} (system prompt, instructions)\n"
             "     where the workflow is guiding the agent incorrectly or incompletely\n"
             "   - Update rubric criteria if rubric-sourced corrections indicate misaligned expectations\n"
-            "   - Update `.claude/patterns/` files if the agent consistently used wrong patterns"
+            "   - Update .claude/patterns/ files if the agent consistently used wrong patterns"
         )
     else:
         target_description = (
@@ -298,9 +310,9 @@ def build_improvement_prompt(group: dict) -> str:
         )
         task_instructions = (
             "2. **Make targeted improvements**:\n"
-            "   - Update `CLAUDE.md` or `.claude/` context files where the agent\n"
+            "   - Update CLAUDE.md or .claude/ context files where the agent\n"
             "     lacked necessary knowledge about this repository\n"
-            "   - Update `.claude/patterns/` files if the agent consistently used wrong patterns\n"
+            "   - Update .claude/patterns/ files if the agent consistently used wrong patterns\n"
             "   - Add missing documentation that would have prevented these corrections"
         )
 
@@ -338,13 +350,13 @@ You are analyzing {total} corrections collected from Ambient Code Platform sessi
    Preserve existing content. Add or modify — do not replace wholesale.
 
 5. **Commit, push, and open a PR**: Commit your changes with a descriptive
-   message, push to the feature branch using `git push -u origin <branch>`,
-   then create a pull request with `gh pr create` targeting the default branch.
-   NEVER push directly to main or master.
+   message, push to a feature branch, then create a pull request targeting the
+   default branch. NEVER push directly to main or master.
 
    **Include a link to this improvement session in the PR body.** Build the URL
-   from environment variables:
-   `$AMBIENT_UI_URL/projects/$AGENTIC_SESSION_NAMESPACE/sessions/$AGENTIC_SESSION_NAME`
+   by reading the environment variables AMBIENT_UI_URL, AGENTIC_SESSION_NAMESPACE,
+   and AGENTIC_SESSION_NAME, then construct:
+   AMBIENT_UI_URL/projects/AGENTIC_SESSION_NAMESPACE/sessions/AGENTIC_SESSION_NAME
    Add it under a "Session" heading so reviewers can trace the PR back to this session.
 
 ## Requirements
