@@ -6,6 +6,7 @@ namespace: vteam-dev
 # Resources (base + local-dev-specific)
 resources:
 - ../../base
+- ambient-api-server-route.yaml
 - build-configs.yaml
 - dev-users.yaml
 - frontend-auth.yaml

@@ -12,6 +12,7 @@ namespace: ambient-code
 # Manage this secret separately: oc apply -f github-app-secret.yaml -n ambient-code
 resources:
 - ../../base
+- ambient-api-server-route.yaml
 - route.yaml
 - backend-route.yaml
 - public-api-route.yaml
