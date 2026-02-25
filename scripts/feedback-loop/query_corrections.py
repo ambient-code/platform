@@ -342,6 +342,11 @@ You are analyzing {total} corrections collected from Ambient Code Platform sessi
    then create a pull request with `gh pr create` targeting the default branch.
    NEVER push directly to main or master.
 
+   **Include a link to this improvement session in the PR body.** Build the URL
+   from environment variables:
+   `$AMBIENT_UI_URL/projects/$AGENTIC_SESSION_NAMESPACE/sessions/$AGENTIC_SESSION_NAME`
+   Add it under a "Session" heading so reviewers can trace the PR back to this session.
+
 ## Requirements
 
 - Do NOT over-generalize from isolated incidents
@@ -377,18 +382,33 @@ def _normalise_url(url: str) -> str:
     return u.lower()
 
 
-def create_improvement_session(
-    api_url: str,
-    api_token: str,
-    project: str,
-    prompt: str,
+def _derive_ui_url(api_url: str) -> str:
+    """Derive the UI base URL from the backend API URL.
+
+    Strips the ``/api`` suffix (if present) to get the UI host.
+    """
+    base = api_url.rstrip("/")
+    if base.endswith("/api"):
+        base = base[: -len("/api")]
+    return base
+
+
+def build_session_config(
     group: dict,
-    verify_ssl: bool = True,
-) -> dict | None:
-    """Create an Ambient session via the backend API.
+    workflow_git_url: str = "",
+    workflow_branch: str = "main",
+    api_url: str = "",
+) -> dict:
+    """Build a session config dict suitable for the ambient-action inputs.
+
+    Extracts the config-building logic (display name, labels, repos, env vars,
+    workflow) without making any API calls.  Used in ``--output-mode matrix``
+    to produce a ``sessions.json`` file that a GitHub Actions matrix job can
+    feed into ``ambient-code/ambient-action@v2``.
 
     Returns:
-        Session creation response dict, or None on failure.
+        Dict with keys: prompt, display_name, repos, labels,
+        environment_variables, workflow.
     """
     target_type = group["target_type"]
     target_repo_url = group["target_repo_url"]
@@ -404,11 +424,95 @@ def create_improvement_session(
     else:
         display_name = f"Feedback Loop: {repo_short} (repo)"
 
+    ui_url = _derive_ui_url(api_url) if api_url else ""
+
+    prompt = build_improvement_prompt(group)
+
+    config: dict = {
+        "prompt": prompt,
+        "display_name": display_name,
+        "repos": [],
+        "labels": {
+            "feedback-loop": "true",
+            "target-type": target_type,
+            "source": "github-action",
+        },
+        "environment_variables": {
+            "LANGFUSE_MASK_MESSAGES": "false",
+        },
+        "workflow": {},
+    }
+
+    if ui_url:
+        config["environment_variables"]["AMBIENT_UI_URL"] = ui_url
+
+    if workflow_git_url:
+        config["workflow"] = {
+            "gitUrl": workflow_git_url,
+            "branch": workflow_branch,
+            "path": "feedback-loop",
+        }
+
+    if target_repo_url and target_repo_url.startswith("http"):
+        repo_entry: dict = {"url": target_repo_url, "autoPush": True}
+        if target_branch:
+            repo_entry["branch"] = target_branch
+        config["repos"] = [repo_entry]
+
+    return config
+
+
+def _write_github_output(key: str, value: str) -> None:
+    """Append a key=value pair to $GITHUB_OUTPUT (no-op outside CI)."""
+    output_path = os.environ.get("GITHUB_OUTPUT", "")
+    if not output_path:
+        return
+    try:
+        with open(output_path, "a") as f:
+            if "\n" in value:
+                f.write(f"{key}<<GHEOF\n{value}\nGHEOF\n")
+            else:
+                f.write(f"{key}={value}\n")
+    except OSError as e:
+        logger.warning(f"Could not write to GITHUB_OUTPUT: {e}")
+
+
+def create_improvement_session(
+    api_url: str,
+    api_token: str,
+    project: str,
+    prompt: str,
+    group: dict,
+    verify_ssl: bool = True,
+) -> dict | None:
+    """Create an Ambient session via the backend API.
+
+    Returns:
+        Session creation response dict (with added ``session_url`` key),
+        or None on failure.
+    """
+    target_type = group["target_type"]
+    target_repo_url = group["target_repo_url"]
+    target_branch = group["target_branch"]
+    target_path = group["target_path"]
+
+    repo_short = _repo_short_name(target_repo_url) if target_repo_url else "unknown"
+    if target_type == "workflow":
+        path_short = target_path.rstrip("/").split("/")[-1] if target_path else ""
+        display_name = f"Feedback Loop: {repo_short}"
+        if path_short:
+            display_name += f" ({path_short})"
+    else:
+        display_name = f"Feedback Loop: {repo_short} (repo)"
+
+    ui_url = _derive_ui_url(api_url)
+
     body: dict = {
         "initialPrompt": prompt,
         "displayName": display_name,
         "environmentVariables": {
             "LANGFUSE_MASK_MESSAGES": "false",
+            "AMBIENT_UI_URL": ui_url,
         },
         "labels": {
             "feedback-loop": "true",
@@ -440,9 +544,12 @@ def create_improvement_session(
             )
             resp.raise_for_status()
             result = resp.json()
+            session_name = result.get("name", "unknown")
+            session_url = f"{ui_url}/projects/{project}/sessions/{session_name}"
+            result["session_url"] = session_url
             logger.info(
-                f"Created improvement session: {result.get('name', 'unknown')} "
-                f"for {target_type}:{repo_short}"
+                f"Created improvement session: {session_name} "
+                f"for {target_type}:{repo_short} ({session_url})"
             )
             return result
         except requests.RequestException as e:
@@ -496,9 +603,9 @@ def save_last_run(ts: datetime) -> None:
 # ------------------------------------------------------------------
 
 
-def _group_summary(group: dict) -> dict:
+def _group_summary(group: dict, session_result: dict | None = None) -> dict:
     """Build a compact summary dict for one group (safe for JSON output)."""
-    return {
+    summary = {
         "target_type": group.get("target_type", ""),
         "target_repo_url": group.get("target_repo_url", ""),
         "target_path": group.get("target_path", ""),
@@ -506,6 +613,59 @@ def _group_summary(group: dict) -> dict:
         "correction_type_counts": group.get("correction_type_counts", {}),
         "source_counts": group.get("source_counts", {}),
     }
+    if session_result:
+        summary["session_name"] = session_result.get("name", "")
+        summary["session_url"] = session_result.get("session_url", "")
+    return summary
+
+
+def _write_matrix_outputs(
+    output_file: str,
+    session_configs: list[dict],
+    corrections_found: int = 0,
+    dry_run: bool = False,
+) -> None:
+    """Write session configs and GitHub Actions outputs for matrix mode.
+
+    Writes ``sessions.json`` (next to *output_file*) and a
+    ``query-results.json`` summary.  Also sets ``session_count``,
+    ``indices``, and ``dry_run`` as GitHub Actions outputs.
+    """
+    output_dir = Path(output_file).parent if output_file else Path(".")
+
+    # Write sessions.json
+    sessions_path = output_dir / "sessions.json"
+    try:
+        with open(sessions_path, "w") as f:
+            json.dump(session_configs, f, indent=2)
+        logger.info(f"Session configs written to {sessions_path}")
+    except Exception as e:
+        logger.error(f"Failed to write sessions.json: {e}")
+
+    # Write query-results.json (for the summary job)
+    results_path = output_dir / "query-results.json"
+    try:
+        summary = {
+            "corrections_found": corrections_found,
+            "session_count": len(session_configs),
+            "dry_run": dry_run,
+            "sessions": [
+                {"display_name": c.get("display_name", ""), "target_type": c.get("labels", {}).get("target-type", "")}
+                for c in session_configs
+            ],
+        }
+        with open(results_path, "w") as f:
+            json.dump(summary, f, indent=2)
+        logger.info(f"Query results written to {results_path}")
+    except Exception as e:
+        logger.error(f"Failed to write query-results.json: {e}")
+
+    # Set GitHub Actions outputs
+    count = len(session_configs)
+    indices = json.dumps(list(range(count))) if count > 0 else "[]"
+    _write_github_output("session_count", str(count))
+    _write_github_output("indices", indices)
+    _write_github_output("dry_run", str(dry_run).lower())
 
 
 def _write_output(
@@ -513,16 +673,19 @@ def _write_output(
     corrections_found: int,
     sessions_created: int,
     groups: list[dict],
+    sessions: list[dict] | None = None,
 ) -> None:
     """Write a JSON summary to *output_file* if a path was provided."""
     if not output_file:
         return
     try:
-        summary = {
+        summary: dict = {
             "corrections_found": corrections_found,
             "sessions_created": sessions_created,
             "groups": groups,
         }
+        if sessions:
+            summary["sessions"] = sessions
         with open(output_file, "w") as f:
             json.dump(summary, f, indent=2)
         logger.info(f"Output written to {output_file}")
@@ -577,7 +740,26 @@ def main():
         default="",
         help="Write JSON summary to this file (for CI/CD integration)",
     )
-
+    parser.add_argument(
+        "--workflow-git-url",
+        default="",
+        help="Git URL of the workflow repo containing the feedback-loop workflow",
+    )
+    parser.add_argument(
+        "--workflow-branch",
+        default="main",
+        help="Branch of the workflow repo (default: main)",
+    )
+    parser.add_argument(
+        "--output-mode",
+        choices=["direct", "matrix"],
+        default="direct",
+        help=(
+            "Output mode: 'direct' creates sessions via API (default), "
+            "'matrix' writes session configs to sessions.json for use with "
+            "ambient-action in a GitHub Actions matrix strategy"
+        ),
+    )
     args = parser.parse_args()
     verify_ssl = not args.no_verify_ssl
     if not verify_ssl:
@@ -609,11 +791,16 @@ def main():
     corrections_found = len(scores)
     sessions_created = 0
     groups_summary: list[dict] = []
+    sessions_info: list[dict] = []
+
+    is_matrix = args.output_mode == "matrix"
 
     if not scores:
         logger.info("No corrections found in the specified period. Exiting.")
         save_last_run(datetime.now(timezone.utc))
         _write_output(args.output_file, 0, 0, [])
+        if is_matrix:
+            _write_matrix_outputs(args.output_file, [], corrections_found=0, dry_run=args.dry_run)
         return
 
     # Group corrections
@@ -640,6 +827,8 @@ def main():
         logger.info("No groups meet the minimum corrections threshold. Exiting.")
         save_last_run(datetime.now(timezone.utc))
         _write_output(args.output_file, corrections_found, 0, [])
+        if is_matrix:
+            _write_matrix_outputs(args.output_file, [], corrections_found=corrections_found, dry_run=args.dry_run)
         return
 
     # Filter by repo allowlist
@@ -661,9 +850,45 @@ def main():
             logger.info("No groups match the repos filter. Exiting.")
             save_last_run(datetime.now(timezone.utc))
             _write_output(args.output_file, corrections_found, 0, [])
+            if is_matrix:
+                _write_matrix_outputs(args.output_file, [], corrections_found=corrections_found, dry_run=args.dry_run)
             return
 
-    # Process each qualifying group
+    # ------------------------------------------------------------------
+    # Matrix mode: write session configs for ambient-action
+    # ------------------------------------------------------------------
+    if is_matrix:
+        session_configs = []
+        for group in qualifying:
+            config = build_session_config(
+                group,
+                workflow_git_url=args.workflow_git_url,
+                workflow_branch=args.workflow_branch,
+                api_url=args.api_url,
+            )
+            session_configs.append(config)
+            label = f"{group['target_type']}:{group['target_repo_url']}"
+            if group["target_path"]:
+                label += f" / {group['target_path']}"
+            logger.info(f"  Session config built for {label}")
+            groups_summary.append(_group_summary(group))
+
+        _write_matrix_outputs(
+            args.output_file,
+            session_configs,
+            corrections_found=corrections_found,
+            dry_run=args.dry_run,
+        )
+
+        save_last_run(datetime.now(timezone.utc))
+        logger.info(
+            f"Matrix mode: {len(session_configs)} session configs written"
+        )
+        return
+
+    # ------------------------------------------------------------------
+    # Direct mode: create sessions via API (original behavior)
+    # ------------------------------------------------------------------
     for group in qualifying:
         prompt = build_improvement_prompt(group)
 
@@ -689,7 +914,13 @@ def main():
         )
         if result:
             sessions_created += 1
-        groups_summary.append(_group_summary(group))
+            repo_short = _repo_short_name(group["target_repo_url"]) if group["target_repo_url"] else "unknown"
+            sessions_info.append({
+                "name": result.get("name", ""),
+                "url": result.get("session_url", ""),
+                "target": f"{group['target_type']}:{repo_short}",
+            })
+        groups_summary.append(_group_summary(group, session_result=result))
 
     # Save last run timestamp
     save_last_run(datetime.now(timezone.utc))
@@ -699,7 +930,10 @@ def main():
     else:
         logger.info(f"Created {sessions_created}/{len(qualifying)} improvement sessions")
 
-    _write_output(args.output_file, corrections_found, sessions_created, groups_summary)
+    _write_output(
+        args.output_file, corrections_found, sessions_created,
+        groups_summary, sessions=sessions_info,
+    )
 
 
 if __name__ == "__main__":

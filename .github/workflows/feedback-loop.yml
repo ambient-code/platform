@@ -23,9 +23,16 @@ permissions:
   contents: read
 
 jobs:
-  feedback-loop:
+  # ------------------------------------------------------------------
+  # Job 1: Query Langfuse, group corrections, write session configs
+  # ------------------------------------------------------------------
+  query-corrections:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
+    outputs:
+      session_count: ${{ steps.query.outputs.session_count }}
+      indices: ${{ steps.query.outputs.indices }}
+      dry_run: ${{ steps.query.outputs.dry_run }}
 
     steps:
       - name: Checkout repository
@@ -39,8 +46,8 @@ jobs:
       - name: Install dependencies
         run: pip install -r scripts/feedback-loop/requirements.txt
 
-      - name: Query corrections and create improvement sessions
-        id: feedback
+      - name: Query corrections and build session configs
+        id: query
         env:
           LANGFUSE_HOST: ${{ secrets.LANGFUSE_HOST }}
           LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
@@ -49,7 +56,9 @@ jobs:
           AMBIENT_BOT_TOKEN: ${{ secrets.AMBIENT_BOT_TOKEN }}
           AMBIENT_PROJECT: ${{ secrets.AMBIENT_PROJECT }}
           REPOS_FILTER: ${{ secrets.FEEDBACK_LOOP_REPOS_FILTER }}
+          WORKFLOW_GIT_URL: ${{ secrets.FEEDBACK_WORKFLOW_GIT_URL }}
         run: |
+          mkdir -p /tmp/feedback-loop
           python scripts/feedback-loop/query_corrections.py \
             --langfuse-host "$LANGFUSE_HOST" \
             --langfuse-public-key "$LANGFUSE_PUBLIC_KEY" \
@@ -59,19 +68,130 @@ jobs:
             --project "$AMBIENT_PROJECT" \
             --since-days "${{ github.event.inputs.since_days || '7' }}" \
             --min-corrections "${{ github.event.inputs.min_corrections || '2' }}" \
-            --output-file /tmp/feedback-output.json \
+            --output-file /tmp/feedback-loop/output.json \
             --repos-filter "$REPOS_FILTER" \
+            --workflow-git-url "$WORKFLOW_GIT_URL" \
+            --output-mode matrix \
             ${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }}
 
-      - name: Summary
+      - name: Upload session configs
+        if: steps.query.outputs.session_count != '0'
+        uses: actions/upload-artifact@v4
+        with:
+          name: session-configs
+          path: /tmp/feedback-loop/sessions.json
+          retention-days: 1
+
+      - name: Query summary
         if: always()
         run: |
-          echo "### Feedback Loop Results" >> $GITHUB_STEP_SUMMARY
-          if [ -f /tmp/feedback-output.json ]; then
-            CORRECTIONS=$(python3 -c "import json; d=json.load(open('/tmp/feedback-output.json')); print(d.get('corrections_found', 0))")
-            SESSIONS=$(python3 -c "import json; d=json.load(open('/tmp/feedback-output.json')); print(d.get('sessions_created', 0))")
-            echo "- **Corrections found**: $CORRECTIONS" >> $GITHUB_STEP_SUMMARY
-            echo "- **Sessions created**: $SESSIONS" >> $GITHUB_STEP_SUMMARY
+          echo "### Feedback Loop — Query Results" >> $GITHUB_STEP_SUMMARY
+          if [ -f /tmp/feedback-loop/query-results.json ]; then
+            python3 -c "
+          import json
+          d = json.load(open('/tmp/feedback-loop/query-results.json'))
+          print(f'- **Corrections found**: {d[\"corrections_found\"]}')
+          print(f'- **Sessions to create**: {d[\"session_count\"]}')
+          if d.get('dry_run'):
+              print('- **Mode**: dry run (no sessions will be created)')
+          print()
+          sessions = d.get('sessions', [])
+          if sessions:
+              print('#### Planned Sessions')
+              print()
+              for s in sessions:
+                  print(f'- {s[\"display_name\"]} ({s[\"target_type\"]})')
+          " >> $GITHUB_STEP_SUMMARY 2>/dev/null || true
           else
-            echo "- No output file generated" >> $GITHUB_STEP_SUMMARY
+            echo "- No query results generated" >> $GITHUB_STEP_SUMMARY
           fi
+
+  # ------------------------------------------------------------------
+  # Job 2: Create sessions via ambient-action (one per matrix index)
+  # ------------------------------------------------------------------
+  create-sessions:
+    needs: query-corrections
+    if: >-
+      needs.query-corrections.outputs.session_count != '0' &&
+      needs.query-corrections.outputs.dry_run != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        index: ${{ fromJSON(needs.query-corrections.outputs.indices) }}
+      fail-fast: false
+
+    steps:
+      - name: Download session configs
+        uses: actions/download-artifact@v4
+        with:
+          name: session-configs
+
+      - name: Extract session config
+        id: config
+        run: |
+          python3 << 'PYEOF'
+          import json, os
+
+          with open('sessions.json') as f:
+              sessions = json.load(f)
+
+          s = sessions[${{ matrix.index }}]
+
+          out = os.environ['GITHUB_OUTPUT']
+          with open(out, 'a') as f:
+              f.write(f"display-name={s['display_name']}\n")
+              f.write(f"repos={json.dumps(s.get('repos', []))}\n")
+              f.write(f"labels={json.dumps(s.get('labels', {}))}\n")
+              f.write(f"environment-variables={json.dumps(s.get('environment_variables', {}))}\n")
+              f.write(f"workflow={json.dumps(s.get('workflow', {}))}\n")
+              # Prompt may be multi-line — use EOF delimiter
+              f.write("prompt<<GHEOF\n")
+              f.write(s['prompt'])
+              f.write("\nGHEOF\n")
+          PYEOF
+
+      - name: Create improvement session
+        id: session
+        uses: ambient-code/ambient-action@v2
+        with:
+          api-url: ${{ secrets.AMBIENT_API_URL }}
+          api-token: ${{ secrets.AMBIENT_BOT_TOKEN }}
+          project: ${{ secrets.AMBIENT_PROJECT }}
+          prompt: ${{ steps.config.outputs.prompt }}
+          display-name: ${{ steps.config.outputs.display-name }}
+          repos: ${{ steps.config.outputs.repos }}
+          labels: ${{ steps.config.outputs.labels }}
+          environment-variables: ${{ steps.config.outputs.environment-variables }}
+          workflow: ${{ steps.config.outputs.workflow }}
+
+      - name: Session summary
+        if: always()
+        run: |
+          echo "- **${{ steps.config.outputs.display-name }}**: session \`${{ steps.session.outputs.session-name }}\` created" >> $GITHUB_STEP_SUMMARY
+
+  # ------------------------------------------------------------------
+  # Job 3: Aggregate summary
+  # ------------------------------------------------------------------
+  summary:
+    needs: [query-corrections, create-sessions]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Download query results
+        if: needs.query-corrections.outputs.session_count != '0'
+        uses: actions/download-artifact@v4
+        with:
+          name: session-configs
+        continue-on-error: true
+
+      - name: Final summary
+        run: |
+          echo "### Feedback Loop — Final Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          QUERY_RESULT="${{ needs.query-corrections.result }}"
+          SESSION_RESULT="${{ needs.create-sessions.result }}"
+          echo "- **Query job**: ${QUERY_RESULT}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Session creation**: ${SESSION_RESULT:-skipped}" >> $GITHUB_STEP_SUMMARY

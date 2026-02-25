@@ -22,6 +22,7 @@ from query_corrections import (
     _extract_target_fields,
     _repo_short_name,
     build_improvement_prompt,
+    build_session_config,
     create_improvement_session,
     group_corrections,
 )
@@ -533,6 +534,123 @@ def test_no_repos_when_url_invalid():
 
 
 # ------------------------------------------------------------------
+# build_session_config tests
+# ------------------------------------------------------------------
+
+
+def test_session_config_workflow_target():
+    """Workflow config has correct display name, labels, repos, and workflow."""
+    group = {
+        "target_type": "workflow",
+        "target_repo_url": "https://github.com/org/workflows",
+        "target_branch": "main",
+        "target_path": "workflows/bug-fix",
+        "corrections": [],
+        "total_count": 3,
+        "correction_type_counts": {"incomplete": 3},
+        "source_counts": {"human": 3},
+    }
+
+    config = build_session_config(
+        group,
+        workflow_git_url="https://github.com/org/internal-workflows.git",
+        workflow_branch="main",
+        api_url="https://ambient.example.com/api",
+    )
+
+    assert config["display_name"] == "Feedback Loop: workflows (bug-fix)"
+    assert config["labels"]["feedback-loop"] == "true"
+    assert config["labels"]["target-type"] == "workflow"
+    assert config["labels"]["source"] == "github-action"
+    assert config["repos"][0]["url"] == "https://github.com/org/workflows"
+    assert config["repos"][0]["branch"] == "main"
+    assert config["repos"][0]["autoPush"] is True
+    assert config["workflow"]["gitUrl"] == "https://github.com/org/internal-workflows.git"
+    assert config["workflow"]["path"] == "feedback-loop"
+    assert config["environment_variables"]["AMBIENT_UI_URL"] == "https://ambient.example.com"
+    assert "prompt" in config
+    assert len(config["prompt"]) > 0
+
+
+def test_session_config_repo_target():
+    """Repo config has '(repo)' in display name and correct labels."""
+    group = {
+        "target_type": "repo",
+        "target_repo_url": "https://github.com/org/my-app.git",
+        "target_branch": "dev",
+        "target_path": "",
+        "corrections": [],
+        "total_count": 2,
+        "correction_type_counts": {"incorrect": 2},
+        "source_counts": {"human": 2},
+    }
+
+    config = build_session_config(group, api_url="https://api.example.com")
+
+    assert config["display_name"] == "Feedback Loop: my-app (repo)"
+    assert config["labels"]["target-type"] == "repo"
+    assert config["repos"][0]["url"] == "https://github.com/org/my-app.git"
+    assert config["repos"][0]["branch"] == "dev"
+    assert config["workflow"] == {}
+
+
+def test_session_config_no_repos_for_empty_url():
+    """repos list is empty when target_repo_url is empty."""
+    group = {
+        "target_type": "repo",
+        "target_repo_url": "",
+        "target_branch": "",
+        "target_path": "",
+        "corrections": [],
+        "total_count": 2,
+        "correction_type_counts": {"incorrect": 2},
+        "source_counts": {"human": 2},
+    }
+
+    config = build_session_config(group)
+
+    assert config["repos"] == []
+    assert config["display_name"] == "Feedback Loop: unknown (repo)"
+
+
+def test_session_config_no_workflow_when_not_provided():
+    """workflow is empty dict when workflow_git_url is not provided."""
+    group = {
+        "target_type": "workflow",
+        "target_repo_url": "https://github.com/org/wf",
+        "target_branch": "main",
+        "target_path": "workflows/test",
+        "corrections": [],
+        "total_count": 2,
+        "correction_type_counts": {"incomplete": 2},
+        "source_counts": {"human": 2},
+    }
+
+    config = build_session_config(group)
+
+    assert config["workflow"] == {}
+
+
+def test_session_config_no_ui_url_without_api_url():
+    """AMBIENT_UI_URL omitted from env vars when api_url is empty."""
+    group = {
+        "target_type": "repo",
+        "target_repo_url": "https://github.com/org/app",
+        "target_branch": "",
+        "target_path": "",
+        "corrections": [],
+        "total_count": 2,
+        "correction_type_counts": {"incorrect": 2},
+        "source_counts": {"human": 2},
+    }
+
+    config = build_session_config(group)
+
+    assert "AMBIENT_UI_URL" not in config["environment_variables"]
+    assert config["environment_variables"]["LANGFUSE_MASK_MESSAGES"] == "false"
+
+
+# ------------------------------------------------------------------
 # Runner
 # ------------------------------------------------------------------
 
@@ -564,6 +682,11 @@ if __name__ == "__main__":
         ("Session: repo target session", test_repo_target_session),
         ("Session: handles API errors", test_handles_api_errors),
         ("Session: no repos for invalid URL", test_no_repos_when_url_invalid),
+        ("Config: workflow target", test_session_config_workflow_target),
+        ("Config: repo target", test_session_config_repo_target),
+        ("Config: no repos for empty URL", test_session_config_no_repos_for_empty_url),
+        ("Config: no workflow when not provided", test_session_config_no_workflow_when_not_provided),
+        ("Config: no UI URL without api_url", test_session_config_no_ui_url_without_api_url),
     ]
 
     passed = 0
