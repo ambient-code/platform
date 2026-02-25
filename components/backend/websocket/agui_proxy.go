@@ -623,13 +623,16 @@ var runnerHTTPClient = &http.Client{
 	},
 }
 
-// connectToRunner POSTs to the runner with fast-fail behaviour.
-//   - 2 attempts max
-//   - Immediate fail on "no such host" (runner pod doesn't exist)
-//   - 1s retry only on "connection refused" (runner still starting)
+// connectToRunner POSTs to the runner with retry and exponential backoff.
+//
+// The runner pod may not be reachable immediately after creation due to
+// container startup time and K8s Service DNS propagation. Retries on
+// "connection refused", "no such host", and "dial tcp" errors with
+// exponential backoff (500ms initial, 1.5x, capped at 5s, 15 attempts).
 func connectToRunner(runnerURL string, bodyBytes []byte) (*http.Response, error) {
-	maxAttempts := 2
-	retryDelay := 1 * time.Second
+	maxAttempts := 15
+	retryDelay := 500 * time.Millisecond
+	maxDelay := 5 * time.Second
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		req, err := http.NewRequest("POST", runnerURL, bytes.NewReader(bodyBytes))
@@ -645,19 +648,21 @@ func connectToRunner(runnerURL string, bodyBytes []byte) (*http.Response, error)
 		}
 
 		errStr := err.Error()
-		// "no such host" = runner pod/service doesn't exist — no point retrying
-		if strings.Contains(errStr, "no such host") {
-			return nil, fmt.Errorf("runner not available: %w", err)
-		}
+		isTransient := strings.Contains(errStr, "connection refused") ||
+			strings.Contains(errStr, "no such host") ||
+			strings.Contains(errStr, "dial tcp")
 
-		// Only retry on connection refused (runner starting up)
-		if !strings.Contains(errStr, "connection refused") && !strings.Contains(errStr, "dial tcp") {
+		if !isTransient {
 			return nil, fmt.Errorf("runner request failed: %w", err)
 		}
 
 		if attempt < maxAttempts {
 			log.Printf("AGUI Proxy: runner not ready (attempt %d/%d), retrying in %v", attempt, maxAttempts, retryDelay)
 			time.Sleep(retryDelay)
+			retryDelay = time.Duration(float64(retryDelay) * 1.5)
+			if retryDelay > maxDelay {
+				retryDelay = maxDelay
+			}
 		}
 	}
 
