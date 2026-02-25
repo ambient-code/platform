@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, List, Optional
+from typing import Any, Optional
 
 from ._base import ListMeta, _parse_datetime
 
@@ -57,7 +57,7 @@ class {{.Resource.Name}}List:
     page: int = 0
     size: int = 0
     total: int = 0
-    items: List[{{.Resource.Name}}] = ()
+    items: list[{{.Resource.Name}}] = ()
 
     @classmethod
     def from_dict(cls, data: dict) -> {{.Resource.Name}}List:

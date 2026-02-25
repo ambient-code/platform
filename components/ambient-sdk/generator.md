@@ -1,12 +1,16 @@
-# SDK Generator Specification
+# Ambient SDK Generator
+
+## Overview
+
+The Ambient SDK generator automatically produces Go, Python, and TypeScript client libraries from the canonical OpenAPI specification. This ensures the SDKs stay in perfect sync with the API server while providing idiomatic, type-safe interfaces in each language.
 
 ## Problem
 
-The SDK has 8 resources that follow identical CRUD patterns. Hand-writing clients for each resource in two languages (Go, Python) produces ~3,000 lines of near-identical code that drifts from the API server's OpenAPI spec between releases. When the API server adds fields, resources, or endpoints, the SDK must be updated in lockstep — manually doing this is error-prone and slow.
+The SDK handles multiple resources that follow identical CRUD patterns. Hand-writing clients for each resource across three languages (Go, Python, TypeScript) would produce thousands of lines of near-identical code that drifts from the API server's OpenAPI spec between releases. When the API server adds fields, resources, or endpoints, the SDK must be updated in lockstep — manually doing this is error-prone and slow.
 
 ## Goal
 
-A code generator that reads the canonical `openapi.yaml` and produces idiomatic Go and Python SDK code. The generated SDKs use the **Builder pattern** for human-readable request construction while keeping response types simple and transparent. Re-running the generator on any OpenAPI change produces a correct SDK with zero manual intervention.
+A code generator that reads the canonical `openapi.yaml` and produces idiomatic Go, Python, and TypeScript SDK code. The generated SDKs use the **Builder pattern** for human-readable request construction while keeping response types simple and transparent. Re-running the generator on any OpenAPI change produces a correct SDK with zero manual intervention.
 
 ## OpenAPI Shape Analysis
 
@@ -32,20 +36,64 @@ Every list endpoint accepts 5 query params: `page`, `size`, `search`, `orderBy`,
 
 Every resource supports: `GET /resources` (list), `POST /resources` (create), `GET /resources/{id}` (get), `PATCH /resources/{id}` (update). User additionally supports `DELETE`.
 
-### Current 8 resources and their specific fields
+### Current 4 resources and their specific fields
 
-| Resource      | Specific Fields (beyond ObjectReference)             | Required        | Has Delete |
-|---------------|-----------------------------------------------------|-----------------|------------|
-| Session       | name, repo_url, prompt, created_by_user_id, assigned_user_id, workflow_id | name | No |
-| Agent         | name, repo_url, prompt                               | name            | No         |
-| Task          | name, repo_url, prompt                               | name            | No         |
-| Skill         | name, repo_url, prompt                               | name            | No         |
-| Workflow      | name, repo_url, prompt, agent_id                     | name            | No         |
-| User          | username, name, created_at*, updated_at*             | username, name  | Yes        |
-| WorkflowSkill | workflow_id, skill_id, position (int32)              | all three       | No         |
-| WorkflowTask  | workflow_id, task_id, position (int32)               | all three       | No         |
+| Resource        | Specific Fields (beyond ObjectReference)                                    | Required        | Has Delete |
+|-----------------|-----------------------------------------------------------------------------|-----------------|------------|
+| Session         | name, prompt, interactive, timeout, llm_*, repos, phase, start_time, etc.  | name, prompt    | No         |
+| Project         | name, display_name, description, repos, members                             | name            | Yes        |
+| ProjectSettings | project_id, settings, updated_by                                           | project_id      | Yes        |
+| User            | username, email, display_name                                               | username, email | No         |
 
-*User re-declares created_at/updated_at from ObjectReference (redundant but harmless).
+The API has been significantly pruned from 8 resources to 4 core resources that represent the essential platform entities.
+
+## Quick Start
+
+### Running the Generator
+
+```bash
+# From the generator directory
+cd components/ambient-sdk/generator
+
+# Generate all three SDKs
+go run . \
+  --spec ../../ambient-api-server/openapi/openapi.yaml \
+  --go-out ../go-sdk \
+  --python-out ../python-sdk \
+  --ts-out ../ts-sdk
+
+# Or generate just one SDK
+go run . --spec ../../ambient-api-server/openapi/openapi.yaml --go-out ../go-sdk
+```
+
+### Command Line Options
+
+| Flag | Required | Description |
+|------|----------|-------------|
+| `--spec` | Yes | Path to the main OpenAPI specification file |
+| `--go-out` | No | Output directory for Go SDK (generates if specified) |
+| `--python-out` | No | Output directory for Python SDK (generates if specified) |
+| `--ts-out` | No | Output directory for TypeScript SDK (generates if specified) |
+
+At least one output directory must be specified.
+
+### Generated Output Structure
+
+```
+ambient-sdk/
+├── go-sdk/              # Go SDK output
+│   ├── client/          # API client methods
+│   ├── types/           # Resource types and builders
+│   └── examples/        # Usage examples
+├── python-sdk/          # Python SDK output
+│   ├── ambient_platform/ # Main package
+│   ├── examples/        # Usage examples
+│   └── tests/           # Generated tests
+└── ts-sdk/              # TypeScript SDK output
+    ├── src/             # Source files
+    ├── examples/        # Usage examples
+    └── tests/           # Generated tests
+```
 
 ## Architecture
 
@@ -63,11 +111,16 @@ ambient-sdk/
 │   │   │   ├── client.go.tmpl    # Per-resource client methods
 │   │   │   ├── base.go.tmpl      # ObjectReference, List, Error, ListOptions
 │   │   │   └── iterator.go.tmpl  # Pagination iterator
-│   │   └── python/
-│   │       ├── types.py.tmpl     # Per-resource dataclass + builder
-│   │       ├── client.py.tmpl    # Per-resource client methods
-│   │       ├── base.py.tmpl      # ObjectReference, List, Error
-│   │       └── iterator.py.tmpl  # Pagination iterator
+│   │   ├── python/
+│   │   │   ├── types.py.tmpl     # Per-resource dataclass + builder
+│   │   │   ├── client.py.tmpl    # Per-resource client methods
+│   │   │   ├── base.py.tmpl      # ObjectReference, List, Error
+│   │   │   └── iterator.py.tmpl  # Pagination iterator
+│   │   └── ts/
+│   │       ├── types.ts.tmpl     # Per-resource interface + builder
+│   │       ├── client.ts.tmpl    # Per-resource client methods
+│   │       ├── base.ts.tmpl      # ObjectReference, List, Error
+│   │       └── index.ts.tmpl     # Main exports
 │   └── generator_test.go         # Golden-file tests
 │
 ├── go-sdk/                       # GENERATED OUTPUT (do not hand-edit)
@@ -92,25 +145,77 @@ ambient-sdk/
 │   │   ├── __init__.py           # hand-written (public exports, version)
 │   │   ├── _base.py              # generated: ObjectReference, ListMeta, APIError
 │   │   ├── session.py            # generated: Session, SessionBuilder, SessionPatch
-│   │   ├── agent.py              # generated: Agent, AgentBuilder, ...
+│   │   ├── project.py            # generated: Project, ProjectBuilder, ...
 │   │   ├── ... (one per resource)
 │   │   ├── client.py             # HAND-WRITTEN: AmbientClient, auth, from_env(), context manager
 │   │   ├── _session_api.py       # generated: SessionAPI mixin
-│   │   ├── _agent_api.py         # generated: AgentAPI mixin
+│   │   ├── _project_api.py       # generated: ProjectAPI mixin
 │   │   ├── ... (one per resource)
 │   │   ├── _iterator.py          # generated: pagination iterator
 │   │   └── exceptions.py         # hand-written
 │   ├── examples/main.py
 │   ├── pyproject.toml
 │   └── README.md
+│
+└── ts-sdk/                       # GENERATED OUTPUT (do not hand-edit)
+    ├── src/
+    │   ├── base.ts               # generated: ObjectReference, List, APIError
+    │   ├── session.ts            # generated: Session interface + builder
+    │   ├── project.ts            # generated: Project interface + builder
+    │   ├── ... (one per resource)
+    │   ├── client.ts             # generated: AmbientClient class
+    │   ├── session_api.ts        # generated: SessionAPI methods
+    │   ├── project_api.ts        # generated: ProjectAPI methods
+    │   ├── ... (one per resource)
+    │   └── index.ts              # generated: main exports
+    ├── package.json
+    ├── tsconfig.json
+    └── README.md
 ```
 
 ### Why a custom generator instead of openapi-generator?
 
 1. **Builder pattern.** Standard openapi-generator emits flat structs/classes with constructors. We want `NewSessionBuilder().Name("x").Prompt("y").Build()` — that requires custom templates regardless.
-2. **Minimal dependencies.** Go SDK stays stdlib-only. Python SDK stays httpx-only. openapi-generator introduces runtime libraries.
-3. **The spec is highly uniform.** 8 resources, same CRUD pattern, same pagination, same error schema. A custom generator is ~500 lines of Go; openapi-generator is a 200MB Java runtime generating thousands of lines of framework code we'd immediately delete.
-4. **Security.** Hand-written `SecureToken`, `sanitizeLogAttrs`, and token validation stay outside the generated boundary. We don't want a generator touching auth code.
+2. **Minimal dependencies.** Go SDK stays stdlib-only. Python SDK stays httpx-only. TypeScript SDK has minimal deps. openapi-generator introduces runtime libraries.
+3. **The spec is highly uniform.** 4 resources, same CRUD pattern, same pagination, same error schema. A custom generator is ~800 lines of Go; openapi-generator is a 200MB Java runtime generating thousands of lines of framework code we'd immediately delete.
+4. **Security.** Hand-written token handling, URL validation, and log sanitization stay outside the generated boundary. We don't want a generator touching auth code.
+5. **Type safety.** Full compile-time validation in Go, mypy compliance in Python, and strict TypeScript types.
+
+## Security Features
+
+The generator includes several security enhancements:
+
+### URL Injection Protection
+- All ID parameters are URL-escaped using `url.PathEscape()`
+- Prevents path traversal attacks through resource IDs
+- Applied automatically in all generated client methods
+
+### Input Validation
+- Placeholder URL detection (`example.com`, `placeholder`)
+- Token format validation (OpenShift `sha256~`, JWT, GitHub tokens)
+- Required field validation in builders
+
+### Log Security
+- Token redaction in logs (`[REDACTED]` replacement)
+- URL sanitization to prevent credential leakage
+- Safe error message formatting
+
+### TypeScript Safety
+- No unsafe type casting (`as any`)
+- Proper type validation with runtime checks
+- Explicit error handling for invalid responses
+
+Example security validation:
+
+```typescript
+// Generated TypeScript with validation
+function validateResponse(data: unknown): Session {
+  if (!isRecord(data)) {
+    throw new Error('Invalid response format');
+  }
+  return data as Session; // Safe after validation
+}
+```
 
 ## Builder Pattern Design
 
@@ -796,7 +901,7 @@ generator/
 
 | Test | What it validates |
 |------|-------------------|
-| `TestParseOpenAPISpec` | Parser resolves `$ref`, `allOf`, extracts all 8 resources with correct fields |
+| `TestParseOpenAPISpec` | Parser resolves `$ref`, `allOf`, extracts all 4 resources with correct fields |
 | `TestGenerateGoTypes` | Generated Go types match golden files (field names, JSON tags, types) |
 | `TestGeneratePythonTypes` | Generated Python dataclasses match golden files |
 | `TestGenerateGoClient` | Generated API methods match golden files (method signatures, paths) |
@@ -1013,8 +1118,89 @@ The e2e suite doubles as a **platform health check**. Running it against a live 
 - Is project scoping enforced?
 - Is the control plane picking up new sessions?
 - Is the operator creating Jobs?
-- Are all 8 resource types functioning?
+- Are all 4 resource types functioning?
 - Is pagination correct?
 - Are error responses structured correctly?
 
 This makes the SDK e2e suite the **baseline smoke test** that Overlord requested — run it before and after any deployment to verify the platform is healthy.
+
+## CI Integration
+
+The SDK generator is integrated into the CI/CD pipeline with automated testing and validation.
+
+### GitHub Actions Workflow
+
+The `ambient-sdk.yml` workflow handles:
+
+1. **Change Detection** - Only runs when SDK or OpenAPI files change
+2. **Generator Validation** - Ensures the generator builds and produces valid output
+3. **Multi-language Testing** - Tests Go, Python, and TypeScript SDKs in parallel
+4. **Integration Testing** - Cross-language compatibility verification
+
+### Workflow Triggers
+
+```yaml
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'components/ambient-sdk/**'
+      - 'components/ambient-api-server/openapi/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'components/ambient-sdk/**'
+      - 'components/ambient-api-server/openapi/**'
+```
+
+### Test Matrix
+
+| Language | Tests | Coverage |
+|----------|-------|----------|
+| Go | `go test ./...`, `golangci-lint`, build validation | Types, clients, examples |
+| Python | `pytest`, `mypy`, `black`, `isort` | Types, clients, examples |
+| TypeScript | `npm test`, `tsc --noEmit`, ESLint | Types, clients, examples |
+
+### Regeneration Detection
+
+The CI automatically detects when SDKs are out of sync with the OpenAPI specification:
+
+1. Runs the generator on the current spec
+2. Compares output with committed SDK files
+3. Fails if there are differences
+
+This prevents SDK drift and ensures developers regenerate SDKs when the API changes.
+
+### Environment Variables for Testing
+
+| Variable | Purpose | Example |
+|----------|---------|---------|
+| `AMBIENT_TOKEN` | Test authentication | `sha256~test-token` |
+| `AMBIENT_PROJECT` | Test project scoping | `test-project` |
+| `AMBIENT_API_URL` | Test API endpoint | `http://localhost:8080` |
+
+## Development Workflow
+
+### Making Changes
+
+1. **Update OpenAPI specification** in `components/ambient-api-server/openapi/`
+2. **Regenerate SDKs** using the generator
+3. **Run tests** to ensure compatibility
+4. **Update examples** if APIs changed significantly
+
+### Adding New Resources
+
+1. **Add OpenAPI spec** for the new resource
+2. **Update parser.go** to include the new resource file
+3. **Regenerate all SDKs** - new types and clients are created automatically
+4. **Add integration tests** for the new resource
+
+### Template Updates
+
+When modifying templates:
+
+1. **Test against current spec** to ensure valid output
+2. **Run golden file tests** to verify format consistency  
+3. **Update documentation** if template behavior changes
+
+The generator's modular design ensures that updates to templates automatically apply to all current and future resources.
