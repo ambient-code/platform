@@ -100,7 +100,7 @@ spec:
               optional: true
         # OOTB Workflows Configuration
         - name: OOTB_WORKFLOWS_REPO
-          value: "https://github.com/ambient-code/ootb-ambient-workflows.git"
+          value: "https://github.com/ambient-code/workflows.git"
         - name: OOTB_WORKFLOWS_BRANCH
           value: "main"
         - name: OOTB_WORKFLOWS_PATH

@@ -1761,7 +1761,7 @@ func ListOOTBWorkflows(c *gin.Context) {
 	// Read OOTB repo configuration from environment
 	ootbRepo := strings.TrimSpace(os.Getenv("OOTB_WORKFLOWS_REPO"))
 	if ootbRepo == "" {
-		ootbRepo = "https://github.com/ambient-code/ootb-ambient-workflows.git"
+		ootbRepo = "https://github.com/ambient-code/workflows.git"
 	}
 
 	ootbBranch := strings.TrimSpace(os.Getenv("OOTB_WORKFLOWS_BRANCH"))

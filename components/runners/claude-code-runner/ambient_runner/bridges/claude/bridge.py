@@ -153,10 +153,28 @@ class ClaudeBridge(PlatformBridge):
         logger.info("ClaudeBridge: shutdown complete")
 
     def mark_dirty(self) -> None:
-        """Signal adapter rebuild on next run (repo/workflow change)."""
+        """Signal adapter rebuild on next run (repo/workflow change).
+
+        Destroys existing session workers so the new MCP server
+        configuration (e.g. updated correction tool targets) is applied
+        to the CLI process on the next run.  Conversation state is
+        preserved via the CLI's ``--resume`` mechanism.
+        """
         self._ready = False
         self._first_run = True
         self._adapter = None
+        if self._session_manager:
+            import asyncio
+
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    asyncio.ensure_future(self._session_manager.shutdown())
+                else:
+                    loop.run_until_complete(self._session_manager.shutdown())
+            except Exception:
+                pass
+            self._session_manager = None
         logger.info("ClaudeBridge: marked dirty — will reinitialise on next run")
 
     def get_error_context(self) -> str:
