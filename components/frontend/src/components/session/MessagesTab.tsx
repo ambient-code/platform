@@ -56,6 +56,17 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
   const [showSystemMessages, setShowSystemMessages] = useState(false);
   const [waitingDotCount, setWaitingDotCount] = useState(0);
 
+  // Pending answer ref for AskUserQuestion tool responses.
+  // When set, the next render triggers a send.
+  const pendingAnswerRef = useRef<string | null>(null);
+  
+  // Autocomplete state
+  const [autocompleteOpen, setAutocompleteOpen] = useState(false);
+  const [autocompleteType, setAutocompleteType] = useState<'agent' | 'command' | null>(null);
+  const [autocompleteFilter, setAutocompleteFilter] = useState('');
+  const [autocompleteTriggerPos, setAutocompleteTriggerPos] = useState(0);
+  const [autocompleteSelectedIndex, setAutocompleteSelectedIndex] = useState(0);
+  
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
   // How many messages (counting from the end) are currently rendered.
@@ -140,6 +151,15 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
     scrollToBottom();
   }, []);
 
+  // Send pending AskUserQuestion answer once chatInput is updated
+  useEffect(() => {
+    if (pendingAnswerRef.current !== null && chatInput === pendingAnswerRef.current) {
+      pendingAnswerRef.current = null;
+      handleSendChat();
+    }
+  }, [chatInput]); // eslint-disable-line react-hooks/exhaustive-deps
+
+
   useEffect(() => {
     const unsentCount = queuedMessages.filter(m => !m.sentAt).length;
     if (unsentCount === 0) return;
@@ -213,6 +233,10 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
             isNewest={idx === visibleMessages.length - 1}
             onGoToResults={onGoToResults}
             agentName={agentName}
+            onSubmitAnswer={(answer) => {
+              pendingAnswerRef.current = answer;
+              setChatInput(answer);
+            }}
           />
         ))}
 

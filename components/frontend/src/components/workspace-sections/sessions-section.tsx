@@ -22,7 +22,9 @@ import {
 } from '@/components/ui/pagination';
 import { getPageNumbers } from '@/lib/pagination';
 import { EmptyState } from '@/components/empty-state';
-import { SessionPhaseBadge } from '@/components/status-badge';
+import { SessionStatusDot } from '@/components/session-status-dot';
+import { AgentStatusIndicator } from '@/components/agent-status-indicator';
+import { deriveAgentStatusFromPhase } from '@/hooks/use-agent-status';
 import { CreateSessionDialog } from '@/components/create-session-dialog';
 import { EditSessionNameDialog } from '@/components/edit-session-name-dialog';
 
@@ -326,7 +328,10 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
                           </HoverCard>
                         </TableCell>
                         <TableCell>
-                          <SessionPhaseBadge phase={phase} stoppedReason={session.status?.stoppedReason} />
+                          <div className="flex items-center gap-2">
+                            <SessionStatusDot phase={phase} />
+                            <AgentStatusIndicator status={deriveAgentStatusFromPhase(phase)} compact />
+                          </div>
                         </TableCell>
                         <TableCell className="hidden md:table-cell">
                           <div className="text-sm truncate max-w-[160px]">
