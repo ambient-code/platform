@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ProjectSubpageHeader } from '@/components/project-subpage-header';
 import { ErrorMessage } from '@/components/error-message';
 import { EmptyState } from '@/components/empty-state';
@@ -37,6 +38,7 @@ export default function ProjectKeysPage() {
   const [newKeyName, setNewKeyName] = useState('');
   const [newKeyDesc, setNewKeyDesc] = useState('');
   const [newKeyRole, setNewKeyRole] = useState<'view' | 'edit' | 'admin'>('edit');
+  const [newKeyExpiresInDays, setNewKeyExpiresInDays] = useState<number>(90);
   const [oneTimeKey, setOneTimeKey] = useState<string | null>(null);
   const [oneTimeKeyName, setOneTimeKeyName] = useState<string>('');
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -49,6 +51,7 @@ export default function ProjectKeysPage() {
       name: newKeyName.trim(),
       description: newKeyDesc.trim() || undefined,
       role: newKeyRole,
+      expiresInDays: newKeyExpiresInDays,
     };
 
     createKeyMutation.mutate(
@@ -67,7 +70,7 @@ export default function ProjectKeysPage() {
         },
       }
     );
-  }, [newKeyName, newKeyDesc, newKeyRole, projectName, createKeyMutation]);
+  }, [newKeyName, newKeyDesc, newKeyRole, newKeyExpiresInDays, projectName, createKeyMutation]);
 
   const openDeleteDialog = useCallback((keyId: string, keyName: string) => {
     setKeyToDelete({ id: keyId, name: keyName });
@@ -169,6 +172,7 @@ export default function ProjectKeysPage() {
                   <TableHead>Name</TableHead>
                   <TableHead>Description</TableHead>
                   <TableHead>Created</TableHead>
+                  <TableHead>Expires</TableHead>
                   <TableHead>Last Used</TableHead>
                   <TableHead>Role</TableHead>
                   <TableHead>Actions</TableHead>
@@ -190,6 +194,13 @@ export default function ProjectKeysPage() {
                           formatDistanceToNow(new Date(k.createdAt), { addSuffix: true })
                         ) : (
                           <span className="text-muted-foreground">Unknown</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {k.expiresAt ? (
+                          formatDistanceToNow(new Date(k.expiresAt), { addSuffix: true })
+                        ) : (
+                          <span className="text-muted-foreground">N/A</span>
                         )}
                       </TableCell>
                       <TableCell>
@@ -307,6 +318,25 @@ export default function ProjectKeysPage() {
                   );
                 })}
               </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="key-lifetime">Token Lifetime</Label>
+              <Select
+                value={String(newKeyExpiresInDays)}
+                onValueChange={(value) => setNewKeyExpiresInDays(Number(value))}
+                disabled={createKeyMutation.isPending}
+              >
+                <SelectTrigger id="key-lifetime">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="30">30 days</SelectItem>
+                  <SelectItem value="60">60 days</SelectItem>
+                  <SelectItem value="90">90 days (Default)</SelectItem>
+                  <SelectItem value="180">180 days</SelectItem>
+                  <SelectItem value="365">365 days</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <DialogFooter>

@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams, useSearchParams } from 'next/navigation';
-import { Star, Settings, Users, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useParams, useSearchParams, usePathname } from 'next/navigation';
+import { Star, Settings, Users, Key, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import Link from 'next/link';
 import { cn } from '@/lib/utils';
 
 import { Button } from '@/components/ui/button';
@@ -26,6 +27,7 @@ type Section = 'sessions' | 'sharing' | 'settings';
 export default function ProjectDetailsPage() {
   const params = useParams();
   const searchParams = useSearchParams();
+  const pathname = usePathname();
   const projectName = params?.name as string;
 
   // Fetch project data for display name and description
@@ -58,6 +60,7 @@ export default function ProjectDetailsPage() {
   const navItems = [
     { id: 'sessions' as Section, label: 'Sessions', icon: Star },
     { id: 'sharing' as Section, label: 'Sharing', icon: Users },
+    { id: 'keys', label: 'API Keys', icon: Key, href: `/projects/${projectName}/keys` },
     { id: 'settings' as Section, label: 'Workspace Settings', icon: Settings },
   ];
 
@@ -142,19 +145,35 @@ export default function ProjectDetailsPage() {
                       <CardContent className="px-4 pb-4 pt-2">
                         <div className="space-y-1">
                           {navItems.map((item) => {
-                            const isActive = activeSection === item.id;
                             const Icon = item.icon;
-                            return (
-                              <Button
-                                key={item.id}
-                                variant={isActive ? "secondary" : "ghost"}
-                                className={cn("w-full justify-start", isActive && "font-semibold")}
-                                onClick={() => setActiveSection(item.id)}
-                              >
-                                <Icon className="w-4 h-4 mr-2" />
-                                <span className="truncate">{item.label}</span>
-                              </Button>
-                            );
+                            // Check if this is a link or a section
+                            if ('href' in item && item.href) {
+                              const isActive = pathname === item.href;
+                              return (
+                                <Link key={item.id} href={item.href}>
+                                  <Button
+                                    variant={isActive ? "secondary" : "ghost"}
+                                    className={cn("w-full justify-start", isActive && "font-semibold")}
+                                  >
+                                    <Icon className="w-4 h-4 mr-2" />
+                                    <span className="truncate">{item.label}</span>
+                                  </Button>
+                                </Link>
+                              );
+                            } else {
+                              const isActive = activeSection === item.id;
+                              return (
+                                <Button
+                                  key={item.id}
+                                  variant={isActive ? "secondary" : "ghost"}
+                                  className={cn("w-full justify-start", isActive && "font-semibold")}
+                                  onClick={() => setActiveSection(item.id as Section)}
+                                >
+                                  <Icon className="w-4 h-4 mr-2" />
+                                  <span className="truncate">{item.label}</span>
+                                </Button>
+                              );
+                            }
                           })}
                         </div>
                       </CardContent>

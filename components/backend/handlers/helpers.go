@@ -26,6 +26,11 @@ func SanitizeForLog(input string) string {
 	return logSanitizeRegex.ReplaceAllString(input, "")
 }
 
+// int64Ptr returns a pointer to an int64 value
+func int64Ptr(i int64) *int64 {
+	return &i
+}
+
 // GetProjectSettingsResource returns the GroupVersionResource for ProjectSettings
 func GetProjectSettingsResource() schema.GroupVersionResource {
 	return schema.GroupVersionResource{
