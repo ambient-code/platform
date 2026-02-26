@@ -258,7 +258,11 @@ func HandleGitHubUserOAuthCallback(c *gin.Context) {
 func exchangeOAuthCodeForUserToken(clientID, clientSecret, code string) (string, error) {
 	redirectURI := os.Getenv("GITHUB_APP_REDIRECT_URI")
 	if redirectURI == "" {
-		redirectURI = fmt.Sprintf("%s/api/auth/github/user/callback", os.Getenv("BACKEND_URL"))
+		backendURL := os.Getenv("BACKEND_URL")
+		if backendURL == "" {
+			log.Printf("WARNING: Neither GITHUB_APP_REDIRECT_URI nor BACKEND_URL is set, GitHub OAuth token exchange may fail")
+		}
+		redirectURI = fmt.Sprintf("%s/api/auth/github/user/callback", backendURL)
 	}
 	reqBody := strings.NewReader(fmt.Sprintf(
 		"client_id=%s&client_secret=%s&code=%s&redirect_uri=%s",
