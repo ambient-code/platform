@@ -386,7 +386,12 @@ func ListSessions(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	list, err := k8sDyn.Resource(gvr).Namespace(project).List(ctx, v1.ListOptions{})
+	listOpts := v1.ListOptions{}
+	if labelSelector := c.Query("labelSelector"); labelSelector != "" {
+		listOpts.LabelSelector = labelSelector
+	}
+
+	list, err := k8sDyn.Resource(gvr).Namespace(project).List(ctx, listOpts)
 	if err != nil {
 		log.Printf("Failed to list agentic sessions in project %s: %v", project, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list agentic sessions"})

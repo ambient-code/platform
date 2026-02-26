@@ -32,6 +32,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { LabelEditor } from "@/components/label-editor";
 import type { CreateAgenticSessionRequest } from "@/types/agentic-session";
 import { useCreateSession } from "@/services/queries/use-sessions";
 import { useIntegrationsStatus } from "@/services/queries/use-integrations";
@@ -66,6 +67,7 @@ export function CreateSessionDialog({
   onSuccess,
 }: CreateSessionDialogProps) {
   const [open, setOpen] = useState(false);
+  const [labels, setLabels] = useState<Record<string, string>>({});
   const router = useRouter();
   const createSessionMutation = useCreateSession();
 
@@ -102,6 +104,9 @@ export function CreateSessionDialog({
     if (trimmedName) {
       request.displayName = trimmedName;
     }
+    if (Object.keys(labels).length > 0) {
+      request.labels = labels;
+    }
 
     createSessionMutation.mutate(
       { projectName, data: request },
@@ -124,6 +129,7 @@ export function CreateSessionDialog({
     setOpen(newOpen);
     if (!newOpen) {
       form.reset();
+      setLabels({});
     }
   };
 
@@ -191,140 +197,24 @@ export function CreateSessionDialog({
                 )}
               />
 
+              {/* Labels */}
+              <div className="w-full space-y-2">
+                <FormLabel>Labels</FormLabel>
+                <LabelEditor
+                  labels={labels}
+                  onChange={setLabels}
+                  disabled={createSessionMutation.isPending}
+                  suggestions={["team", "type", "priority", "feature"]}
+                />
+              </div>
+
               {/* Integration auth status */}
               <div className="w-full space-y-2">
                 <FormLabel>Integrations</FormLabel>
-                {/* GitHub card */}
-                {githubConfigured ? (
-                  <div className="flex items-start justify-between gap-3 p-3 border rounded-lg bg-background/50">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <div className="flex-shrink-0">
-                          <CheckCircle2 className="h-4 w-4 text-green-600" />
-                        </div>
-                        <h4 className="font-medium text-sm">GitHub</h4>
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Authenticated. Git push and repository access enabled.
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-start gap-3 p-3 border rounded-lg bg-background/50">
-                    <div className="flex-shrink-0">
-                      <AlertTriangle className="h-4 w-4 text-amber-500" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h4 className="font-medium text-sm">GitHub</h4>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Not connected.{" "}
-                        <Link href="/integrations" className="text-primary hover:underline">
-                          Set up
-                        </Link>{" "}
-                        to enable repository access.
-                      </p>
-                    </div>
-                  </div>
-                )}
-                {/* GitLab card */}
-                {gitlabConfigured ? (
-                  <div className="flex items-start justify-between gap-3 p-3 border rounded-lg bg-background/50">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <div className="flex-shrink-0">
-                          <CheckCircle2 className="h-4 w-4 text-green-600" />
-                        </div>
-                        <h4 className="font-medium text-sm">GitLab</h4>
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Authenticated. Git push and repository access enabled.
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-start gap-3 p-3 border rounded-lg bg-background/50">
-                    <div className="flex-shrink-0">
-                      <AlertTriangle className="h-4 w-4 text-amber-500" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h4 className="font-medium text-sm">GitLab</h4>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Not connected.{" "}
-                        <Link href="/integrations" className="text-primary hover:underline">
-                          Set up
-                        </Link>{" "}
-                        to enable repository access.
-                      </p>
-                    </div>
-                  </div>
-                )}
-                {/* Google Workspace card */}
-                {googleConfigured ? (
-                  <div className="flex items-start justify-between gap-3 p-3 border rounded-lg bg-background/50">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <div className="flex-shrink-0">
-                          <CheckCircle2 className="h-4 w-4 text-green-600" />
-                        </div>
-                        <h4 className="font-medium text-sm">Google Workspace</h4>
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Authenticated. Drive, Calendar, and Gmail access enabled.
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-start gap-3 p-3 border rounded-lg bg-background/50">
-                    <div className="flex-shrink-0">
-                      <AlertTriangle className="h-4 w-4 text-amber-500" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h4 className="font-medium text-sm">Google Workspace</h4>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Not connected.{" "}
-                        <Link href="/integrations" className="text-primary hover:underline">
-                          Set up
-                        </Link>{" "}
-                        to enable Drive, Calendar, and Gmail access.
-                      </p>
-                    </div>
-                  </div>
-                )}
-                {/* Jira card */}
-                {atlassianConfigured ? (
-                  <div className="flex items-start justify-between gap-3 p-3 border rounded-lg bg-background/50">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <div className="flex-shrink-0">
-                          <CheckCircle2 className="h-4 w-4 text-green-600" />
-                        </div>
-                        <h4 className="font-medium text-sm">Jira</h4>
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Authenticated. Issue and project access enabled.
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-start gap-3 p-3 border rounded-lg bg-background/50">
-                    <div className="flex-shrink-0">
-                      <AlertTriangle className="h-4 w-4 text-amber-500" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h4 className="font-medium text-sm">Jira</h4>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Not connected.{" "}
-                        <Link
-                          href="/integrations"
-                          className="text-primary hover:underline"
-                        >
-                          Set up
-                        </Link>{" "}
-                        to enable issue and project access.
-                      </p>
-                    </div>
-                  </div>
-                )}
+                <IntegrationCard name="GitHub" connected={githubConfigured} connectedText="Git push and repository access enabled." disconnectedText="to enable repository access." />
+                <IntegrationCard name="GitLab" connected={gitlabConfigured} connectedText="Git push and repository access enabled." disconnectedText="to enable repository access." />
+                <IntegrationCard name="Google Workspace" connected={googleConfigured} connectedText="Drive, Calendar, and Gmail access enabled." disconnectedText="to enable Drive, Calendar, and Gmail access." />
+                <IntegrationCard name="Jira" connected={atlassianConfigured} connectedText="Issue and project access enabled." disconnectedText="to enable issue and project access." />
               </div>
 
               <DialogFooter>
@@ -348,5 +238,40 @@ export function CreateSessionDialog({
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+function IntegrationCard({ name, connected, connectedText, disconnectedText }: {
+  name: string;
+  connected: boolean;
+  connectedText: string;
+  disconnectedText: string;
+}) {
+  return (
+    <div className="flex items-start gap-3 p-3 border rounded-lg bg-background/50">
+      <div className="flex-shrink-0">
+        {connected ? (
+          <CheckCircle2 className="h-4 w-4 text-green-600" />
+        ) : (
+          <AlertTriangle className="h-4 w-4 text-amber-500" />
+        )}
+      </div>
+      <div className="flex-1 min-w-0">
+        <h4 className="font-medium text-sm">{name}</h4>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          {connected ? (
+            <>Authenticated. {connectedText}</>
+          ) : (
+            <>
+              Not connected.{" "}
+              <Link href="/integrations" className="text-primary hover:underline">
+                Set up
+              </Link>{" "}
+              {disconnectedText}
+            </>
+          )}
+        </p>
+      </div>
+    </div>
   );
 }
