@@ -509,12 +509,6 @@ func getSessionCreationTimestamp(session types.AgenticSession) string {
 
 // isInternalLabel returns true for Kubernetes/Helm system labels that should
 // be excluded from user-facing label aggregation.
-func isInternalLabel(key string) bool {
-	return strings.Contains(key, "kubernetes.io/") ||
-		strings.HasPrefix(key, "helm.sh/") ||
-		strings.HasPrefix(key, "app.kubernetes.io/")
-}
-
 // paginateSessions applies offset/limit pagination to the session list
 func paginateSessions(sessions []types.AgenticSession, offset, limit int) ([]types.AgenticSession, bool, int) {
 	total := len(sessions)
@@ -1017,57 +1011,6 @@ func PatchSession(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Session patched successfully", "annotations": updated.GetAnnotations(), "labels": updated.GetLabels()})
-}
-
-func ListSessionLabels(c *gin.Context) {
-	project := c.GetString("project")
-
-	_, k8sDyn := GetK8sClientsForRequest(c)
-	if k8sDyn == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
-		c.Abort()
-		return
-	}
-
-	gvr := GetAgenticSessionV1Alpha1Resource()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	list, err := k8sDyn.Resource(gvr).Namespace(project).List(ctx, v1.ListOptions{})
-	if err != nil {
-		log.Printf("Failed to list agentic sessions for labels in project %s: %v", project, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list sessions"})
-		return
-	}
-
-	// Aggregate user-defined label keys and their distinct values,
-	// skipping internal Kubernetes/Helm labels
-	labelMap := map[string]map[string]bool{}
-	for _, item := range list.Items {
-		for k, v := range item.GetLabels() {
-			if isInternalLabel(k) {
-				continue
-			}
-			if _, ok := labelMap[k]; !ok {
-				labelMap[k] = map[string]bool{}
-			}
-			labelMap[k][v] = true
-		}
-	}
-
-	// Convert sets to sorted slices
-	result := map[string][]string{}
-	for k, vals := range labelMap {
-		sorted := make([]string, 0, len(vals))
-		for v := range vals {
-			sorted = append(sorted, v)
-		}
-		sort.Strings(sorted)
-		result[k] = sorted
-	}
-
-	c.JSON(http.StatusOK, gin.H{"labels": result})
 }
 
 func UpdateSession(c *gin.Context) {

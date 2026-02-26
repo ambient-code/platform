@@ -21,6 +21,10 @@ import { successToast, errorToast } from '@/hooks/use-toast';
 import { useDebounce } from '@/hooks/use-debounce';
 import { DEFAULT_PAGE_SIZE } from '@/types/api';
 
+function isInternalLabel(key: string): boolean {
+  return key.includes('kubernetes.io/') || key.startsWith('helm.sh/') || key.startsWith('app.kubernetes.io/');
+}
+
 type SessionsSectionProps = {
   projectName: string;
 };
@@ -306,9 +310,9 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
                           </span>
                         </TableCell>
                         <TableCell className="hidden lg:table-cell">
-                          {session.metadata?.labels && Object.keys(session.metadata.labels).length > 0 ? (
+                          {session.metadata?.labels && Object.keys(session.metadata.labels).filter(k => !isInternalLabel(k)).length > 0 ? (
                             <div className="flex flex-wrap gap-1 max-w-[200px]">
-                              {Object.entries(session.metadata.labels).map(([key, value]) => (
+                              {Object.entries(session.metadata.labels).filter(([key]) => !isInternalLabel(key)).map(([key, value]) => (
                                 <Badge
                                   key={key}
                                   variant="secondary"
