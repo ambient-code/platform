@@ -92,6 +92,7 @@ import {
   useContinueSession,
   useReposStatus,
   useCurrentUser,
+  sessionKeys,
 } from "@/services/queries";
 import {
   useWorkspaceList,
@@ -102,7 +103,7 @@ import {
   useWorkflowMetadata,
 } from "@/services/queries/use-workflows";
 import { useIntegrationsStatus } from "@/services/queries/use-integrations";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { FeedbackProvider } from "@/contexts/FeedbackContext";
 
 // Constants for artifact auto-refresh timing
@@ -145,6 +146,7 @@ export default function ProjectSessionDetailPage({
   params: Promise<{ name: string; sessionName: string }>;
 }) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [projectName, setProjectName] = useState<string>("");
   const [sessionName, setSessionName] = useState<string>("");
   const [backHref, setBackHref] = useState<string | null>(null);
@@ -152,6 +154,7 @@ export default function ProjectSessionDetailPage({
   const [contextModalOpen, setContextModalOpen] = useState(false);
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [repoChanging, setRepoChanging] = useState(false);
+  const [pendingRepo, setPendingRepo] = useState<{ url: string; branch: string; status: "Cloning" } | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userHasInteracted, setUserHasInteracted] = useState(false);
 
@@ -392,6 +395,7 @@ export default function ProjectSessionDetailPage({
   const addRepoMutation = useMutation({
     mutationFn: async (repo: { url: string; branch: string; autoPush?: boolean }) => {
       setRepoChanging(true);
+      setPendingRepo({ url: repo.url, branch: repo.branch, status: "Cloning" });
       const response = await fetch(
         `/api/projects/${projectName}/agentic-sessions/${sessionName}/repos`,
         {
@@ -405,9 +409,12 @@ export default function ProjectSessionDetailPage({
       return { ...result, inputRepo: repo };
     },
     onSuccess: async (data) => {
-      successToast("Repository cloning...");
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+      // Refresh both data sources so the real repo entry replaces the optimistic one
       await refetchSession();
+      await queryClient.invalidateQueries({
+        queryKey: sessionKeys.reposStatus(projectName, sessionName),
+      });
+      setPendingRepo(null);
 
       if (data.name && data.inputRepo) {
         try {
@@ -441,6 +448,7 @@ export default function ProjectSessionDetailPage({
       successToast("Repository added successfully");
     },
     onError: (error: Error) => {
+      setPendingRepo(null);
       setRepoChanging(false);
       errorToast(error.message || "Failed to add repository");
     },
@@ -457,9 +465,11 @@ export default function ProjectSessionDetailPage({
       return response.json();
     },
     onSuccess: async () => {
-      successToast("Repository removing...");
-      await new Promise((resolve) => setTimeout(resolve, 2000));
       await refetchSession();
+      // Invalidate runner repos cache so the removed repo disappears immediately
+      queryClient.invalidateQueries({
+        queryKey: sessionKeys.reposStatus(projectName, sessionName),
+      });
       setRepoChanging(false);
       successToast("Repository removed successfully");
     },
@@ -468,6 +478,12 @@ export default function ProjectSessionDetailPage({
       errorToast(error.message || "Failed to remove repository");
     },
   });
+
+  // Name of the repo currently being removed (if any).
+  // Used to mark it with status "Removing" in the repos list.
+  const removingRepoName = removeRepoMutation.isPending
+    ? removeRepoMutation.variables
+    : null;
 
   // File upload mutation
   const uploadFileMutation = useMutation({
@@ -1640,7 +1656,15 @@ export default function ProjectSessionDetailPage({
                     />
 
                     <RepositoriesAccordion
-                      repositories={reposStatus?.repos || session?.status?.reconciledRepos || session?.spec?.repos || []}
+                      repositories={[
+                        ...(pendingRepo ? [pendingRepo] : []),
+                        ...(reposStatus?.repos || session?.status?.reconciledRepos || session?.spec?.repos || []).map(
+                          (r) => {
+                            const name = ('name' in r ? r.name : undefined) || r.url?.split('/').pop()?.replace('.git', '');
+                            return name === removingRepoName ? { ...r, status: "Removing" as const } : r;
+                          },
+                        ),
+                      ]}
                       uploadedFiles={fileUploadsList.map((f) => ({
                         name: f.name,
                         path: f.path,
@@ -2115,7 +2139,15 @@ export default function ProjectSessionDetailPage({
                             onResume={handleContinue}
                           />
                           <RepositoriesAccordion
-                            repositories={reposStatus?.repos || session?.status?.reconciledRepos || session?.spec?.repos || []}
+                            repositories={[
+                              ...(pendingRepo ? [pendingRepo] : []),
+                              ...(reposStatus?.repos || session?.status?.reconciledRepos || session?.spec?.repos || []).map(
+                                (r) => {
+                                  const name = ('name' in r ? r.name : undefined) || r.url?.split('/').pop()?.replace('.git', '');
+                                  return name === removingRepoName ? { ...r, status: "Removing" as const } : r;
+                                },
+                              ),
+                            ]}
                             uploadedFiles={fileUploadsList.map((f) => ({ name: f.name, path: f.path, size: f.size }))}
                             onAddRepository={() => setContextModalOpen(true)}
                             onRemoveRepository={(repoName) => removeRepoMutation.mutate(repoName)}
