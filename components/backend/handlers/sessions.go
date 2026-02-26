@@ -393,6 +393,10 @@ func ListSessions(c *gin.Context) {
 
 	list, err := k8sDyn.Resource(gvr).Namespace(project).List(ctx, listOpts)
 	if err != nil {
+		if errors.IsInvalid(err) || errors.IsBadRequest(err) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid label selector format"})
+			return
+		}
 		log.Printf("Failed to list agentic sessions in project %s: %v", project, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list agentic sessions"})
 		return
@@ -503,6 +507,14 @@ func getSessionCreationTimestamp(session types.AgenticSession) string {
 	return ""
 }
 
+// isInternalLabel returns true for Kubernetes/Helm system labels that should
+// be excluded from user-facing label aggregation.
+func isInternalLabel(key string) bool {
+	return strings.Contains(key, "kubernetes.io/") ||
+		strings.HasPrefix(key, "helm.sh/") ||
+		strings.HasPrefix(key, "app.kubernetes.io/")
+}
+
 // paginateSessions applies offset/limit pagination to the session list
 func paginateSessions(sessions []types.AgenticSession, offset, limit int) ([]types.AgenticSession, bool, int) {
 	total := len(sessions)
@@ -577,6 +589,10 @@ func CreateSession(c *gin.Context) {
 		"namespace": project,
 	}
 	if len(req.Labels) > 0 {
+		if err := validateLabels(req.Labels); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Invalid labels: %v", err)})
+			return
+		}
 		labels := map[string]interface{}{}
 		for k, v := range req.Labels {
 			labels[k] = v
@@ -975,6 +991,21 @@ func PatchSession(c *gin.Context) {
 			_ = unstructured.SetNestedMap(metadata, anns, "annotations")
 			_ = unstructured.SetNestedMap(item.Object, metadata, "metadata")
 		}
+
+		if labelsPatch, ok := metaPatch["labels"].(map[string]interface{}); ok {
+			labels := item.GetLabels()
+			if labels == nil {
+				labels = map[string]string{}
+			}
+			for k, v := range labelsPatch {
+				if v == nil {
+					delete(labels, k) // null value = delete the label
+				} else if strVal, ok := v.(string); ok {
+					labels[k] = strVal
+				}
+			}
+			item.SetLabels(labels)
+		}
 	}
 
 	// Update the resource
@@ -985,7 +1016,58 @@ func PatchSession(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Session patched successfully", "annotations": updated.GetAnnotations()})
+	c.JSON(http.StatusOK, gin.H{"message": "Session patched successfully", "annotations": updated.GetAnnotations(), "labels": updated.GetLabels()})
+}
+
+func ListSessionLabels(c *gin.Context) {
+	project := c.GetString("project")
+
+	_, k8sDyn := GetK8sClientsForRequest(c)
+	if k8sDyn == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
+
+	gvr := GetAgenticSessionV1Alpha1Resource()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	list, err := k8sDyn.Resource(gvr).Namespace(project).List(ctx, v1.ListOptions{})
+	if err != nil {
+		log.Printf("Failed to list agentic sessions for labels in project %s: %v", project, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list sessions"})
+		return
+	}
+
+	// Aggregate user-defined label keys and their distinct values,
+	// skipping internal Kubernetes/Helm labels
+	labelMap := map[string]map[string]bool{}
+	for _, item := range list.Items {
+		for k, v := range item.GetLabels() {
+			if isInternalLabel(k) {
+				continue
+			}
+			if _, ok := labelMap[k]; !ok {
+				labelMap[k] = map[string]bool{}
+			}
+			labelMap[k][v] = true
+		}
+	}
+
+	// Convert sets to sorted slices
+	result := map[string][]string{}
+	for k, vals := range labelMap {
+		sorted := make([]string, 0, len(vals))
+		for v := range vals {
+			sorted = append(sorted, v)
+		}
+		sort.Strings(sorted)
+		result[k] = sorted
+	}
+
+	c.JSON(http.StatusOK, gin.H{"labels": result})
 }
 
 func UpdateSession(c *gin.Context) {

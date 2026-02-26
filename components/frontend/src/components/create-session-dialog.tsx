@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import Link from "next/link";
-import { AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Loader2, X, Plus, ChevronDown } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -32,7 +32,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { LabelEditor } from "@/components/label-editor";
+import { Badge } from "@/components/ui/badge";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { CreateAgenticSessionRequest } from "@/types/agentic-session";
 import { useCreateSession } from "@/services/queries/use-sessions";
 import { useIntegrationsStatus } from "@/services/queries/use-integrations";
@@ -204,7 +205,7 @@ export function CreateSessionDialog({
                   labels={labels}
                   onChange={setLabels}
                   disabled={createSessionMutation.isPending}
-                  suggestions={["team", "type", "priority", "feature"]}
+                  suggestions={["issue", "research", "team", "type", "other"]}
                 />
               </div>
 
@@ -241,12 +242,14 @@ export function CreateSessionDialog({
   );
 }
 
-function IntegrationCard({ name, connected, connectedText, disconnectedText }: {
+type IntegrationCardProps = {
   name: string;
   connected: boolean;
   connectedText: string;
   disconnectedText: string;
-}) {
+};
+
+function IntegrationCard({ name, connected, connectedText, disconnectedText }: IntegrationCardProps) {
   return (
     <div className="flex items-start gap-3 p-3 border rounded-lg bg-background/50">
       <div className="flex-shrink-0">
@@ -272,6 +275,164 @@ function IntegrationCard({ name, connected, connectedText, disconnectedText }: {
           )}
         </p>
       </div>
+    </div>
+  );
+}
+
+// K8s label segment: 1-63 chars, alphanumeric start/end, dashes/dots/underscores allowed
+const K8S_LABEL_REGEX = /^[a-zA-Z0-9]([a-zA-Z0-9._-]{0,61}[a-zA-Z0-9])?$/;
+
+function isValidLabelSegment(s: string): boolean {
+  return s.length > 0 && s.length <= 63 && K8S_LABEL_REGEX.test(s);
+}
+
+type LabelEditorProps = {
+  labels: Record<string, string>;
+  onChange: (labels: Record<string, string>) => void;
+  disabled?: boolean;
+  suggestions?: string[];
+};
+
+const DEFAULT_SUGGESTIONS = ["issue", "research", "team", "type", "other"];
+
+function LabelEditor({
+  labels,
+  onChange,
+  disabled = false,
+  suggestions = DEFAULT_SUGGESTIONS,
+}: LabelEditorProps) {
+  const [inputValue, setInputValue] = useState("");
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
+
+  const handleRemove = useCallback(
+    (key: string) => {
+      const next = { ...labels };
+      delete next[key];
+      onChange(next);
+    },
+    [labels, onChange]
+  );
+
+  const handleAdd = useCallback(() => {
+    const trimmed = inputValue.trim();
+    if (!trimmed) return;
+
+    const colonIdx = trimmed.indexOf(":");
+    if (colonIdx <= 0 || colonIdx === trimmed.length - 1) return;
+
+    const key = trimmed.slice(0, colonIdx).trim();
+    const value = trimmed.slice(colonIdx + 1).trim();
+    if (!key || !value) return;
+
+    if (!isValidLabelSegment(key)) {
+      setValidationError(`Key "${key}" must be 1-63 alphanumeric chars (dashes, dots, underscores allowed)`);
+      return;
+    }
+    if (!isValidLabelSegment(value)) {
+      setValidationError(`Value "${value}" must be 1-63 alphanumeric chars (dashes, dots, underscores allowed)`);
+      return;
+    }
+
+    setValidationError(null);
+    onChange({ ...labels, [key]: value });
+    setInputValue("");
+  }, [inputValue, labels, onChange]);
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleAdd();
+    }
+  };
+
+  const handleSuggestionClick = (suggestion: string) => {
+    setInputValue(`${suggestion}:`);
+    setSuggestionsOpen(false);
+    setValidationError(null);
+  };
+
+  const entries = Object.entries(labels);
+
+  return (
+    <div className="space-y-2">
+      {entries.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {entries.map(([key, value]) => (
+            <Badge key={key} variant="secondary" className="gap-1 pr-1">
+              <span className="font-semibold">{key}</span>
+              <span className="text-muted-foreground">=</span>
+              <span>{value}</span>
+              {!disabled && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-4 w-4 ml-0.5"
+                  onClick={() => handleRemove(key)}
+                  aria-label={`Remove label ${key}`}
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              )}
+            </Badge>
+          ))}
+        </div>
+      )}
+
+      {!disabled && (
+        <div className="flex gap-2">
+          <div className="flex-1">
+            <Input
+              value={inputValue}
+              onChange={(e) => { setInputValue(e.target.value); setValidationError(null); }}
+              onKeyDown={handleKeyDown}
+              placeholder="key:value"
+              disabled={disabled}
+            />
+          </div>
+          <Popover open={suggestionsOpen} onOpenChange={setSuggestionsOpen}>
+            <PopoverTrigger asChild>
+              <Button type="button" variant="outline" size="sm" className="h-9 px-2" disabled={disabled}>
+                <ChevronDown className="h-4 w-4" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-40 p-1">
+              {suggestions.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => handleSuggestionClick(s)}
+                  className="w-full text-left text-sm px-2 py-1.5 rounded hover:bg-accent"
+                >
+                  {s}
+                </button>
+              ))}
+            </PopoverContent>
+          </Popover>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-9"
+            onClick={handleAdd}
+            disabled={disabled || !inputValue.includes(":")}
+          >
+            <Plus className="h-4 w-4 mr-1" />
+            Add
+          </Button>
+        </div>
+      )}
+
+      {validationError && (
+        <p className="text-xs text-destructive">{validationError}</p>
+      )}
+
+      {!disabled && !validationError && (
+        <p className="text-xs text-muted-foreground">
+          Add labels as key:value pairs. Use the dropdown for common keys.
+        </p>
+      )}
     </div>
   );
 }
