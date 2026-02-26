@@ -11,6 +11,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -214,7 +215,12 @@ func HandleGitHubUserOAuthCallback(c *gin.Context) {
 		}
 	}
 	// Exchange code → user token
-	token, err := exchangeOAuthCodeForUserToken(clientID, clientSecret, code)
+	backendURL := os.Getenv("BACKEND_URL")
+	if backendURL == "" {
+		backendURL = "http://localhost:8080"
+	}
+	redirectURI := fmt.Sprintf("%s/auth/github/user/callback", backendURL)
+	token, err := exchangeOAuthCodeForUserToken(clientID, clientSecret, code, redirectURI)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": "oauth exchange failed"})
 		return
@@ -254,9 +260,12 @@ func HandleGitHubUserOAuthCallback(c *gin.Context) {
 	c.Redirect(http.StatusFound, retURL)
 }
 
-func exchangeOAuthCodeForUserToken(clientID, clientSecret, code string) (string, error) {
-	reqBody := strings.NewReader(fmt.Sprintf("client_id=%s&client_secret=%s&code=%s", clientID, clientSecret, code))
-	req, _ := http.NewRequest(http.MethodPost, "https://github.com/login/oauth/access_token", reqBody)
+func exchangeOAuthCodeForUserToken(clientID, clientSecret, code, redirectURI string) (string, error) {
+	reqBody := strings.NewReader(fmt.Sprintf("client_id=%s&client_secret=%s&code=%s&redirect_uri=%s&grant_type=authorization_code", clientID, clientSecret, code, url.QueryEscape(redirectURI)))
+	req, err := http.NewRequest(http.MethodPost, "https://github.com/login/oauth/access_token", reqBody)
+	if err != nil {
+		return "", fmt.Errorf("failed to create token exchange request: %w", err)
+	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	resp, err := http.DefaultClient.Do(req)
@@ -426,7 +435,12 @@ func LinkGitHubInstallationGlobal(c *gin.Context) {
 	clientID := os.Getenv("GITHUB_CLIENT_ID")
 	clientSecret := os.Getenv("GITHUB_CLIENT_SECRET")
 	if req.Code != "" && clientID != "" && clientSecret != "" {
-		token, err := exchangeOAuthCodeForUserToken(clientID, clientSecret, req.Code)
+		backendURL := os.Getenv("BACKEND_URL")
+		if backendURL == "" {
+			backendURL = "http://localhost:8080"
+		}
+		redirectURI := fmt.Sprintf("%s/auth/github/user/callback", backendURL)
+		token, err := exchangeOAuthCodeForUserToken(clientID, clientSecret, req.Code, redirectURI)
 		if err != nil {
 			log.Printf("LinkGitHubInstallationGlobal: OAuth code exchange failed for user=%s: %v", userIDStr, err)
 			// Fall through to best-effort enrichment below
