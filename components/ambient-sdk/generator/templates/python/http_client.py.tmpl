@@ -23,6 +23,8 @@ if TYPE_CHECKING:
 
 class AmbientClient:
     """HTTP client for the Ambient Platform API."""
+    
+    _base_path = "/api/ambient-api-server/v1"
 
     def __init__(
         self,
@@ -71,17 +73,32 @@ class AmbientClient:
     def _validate_config(self) -> None:
         """Validate client configuration."""
         if not self._base_url:
-            raise ValueError("base_url cannot be empty")
+            raise ValueError("base URL cannot be empty")
         
         if "example.com" in self._base_url or "placeholder" in self._base_url:
             raise ValueError("Placeholder URLs are not allowed")
         
         parsed = urlparse(self._base_url)
         if parsed.scheme not in ("http", "https"):
-            raise ValueError("Only HTTP and HTTPS schemes are supported")
+            raise ValueError("URL scheme must be http or https")
+        
+        if not self._token:
+            raise ValueError("token cannot be empty")
+        
+        if len(self._token) < 20:
+            raise ValueError("token is too short (minimum 20 characters)")
+        
+        if self._token in ("YOUR_TOKEN_HERE", "PLACEHOLDER_TOKEN"):
+            raise ValueError("placeholder token is not allowed")
         
         if not self._project:
             raise ValueError("project cannot be empty")
+        
+        if len(self._project) > 63:
+            raise ValueError("project name cannot exceed 63 characters")
+        
+        if not re.match(r'^[a-z0-9-]+$', self._project):
+            raise ValueError("project name must contain only alphanumeric characters and hyphens")
 
     def _request(
         self,
@@ -152,6 +169,7 @@ class AmbientClient:
         self.close()
 
 {{- range .Spec.Resources}}
+    @property
     def {{.Name | snakeCase | lower | pluralize}}(self) -> {{.Name}}API:
         """Get the {{.Name}} API interface."""
         if self._{{.Name | snakeCase}}_api is None:

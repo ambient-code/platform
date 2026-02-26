@@ -54,9 +54,21 @@ func NewClient(baseURL, token, project string, opts ...ClientOption) (*Client, e
 	if token == "" {
 		return nil, fmt.Errorf("token is required")
 	}
+	
+	if len(token) < 20 {
+		return nil, fmt.Errorf("token is too short (minimum 20 characters)")
+	}
+	
+	if token == "YOUR_TOKEN_HERE" || token == "PLACEHOLDER_TOKEN" {
+		return nil, fmt.Errorf("placeholder token is not allowed")
+	}
 
 	if project == "" {
 		return nil, fmt.Errorf("project is required")
+	}
+	
+	if len(project) > 63 {
+		return nil, fmt.Errorf("project name cannot exceed 63 characters")
 	}
 
 	if err := validateURL(baseURL); err != nil {
