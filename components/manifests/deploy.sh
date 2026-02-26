@@ -34,13 +34,11 @@ command_exists() {
 oauth_setup() {
     echo -e "${YELLOW}Configuring OpenShift OAuth for the frontend...${NC}"
 
-    # Determine Route name (try known names then fallback by label)
+    # Determine Route name
     ROUTE_NAME_CANDIDATE="${ROUTE_NAME:-}"
     if [[ -z "$ROUTE_NAME_CANDIDATE" ]]; then
         if oc get route frontend-route -n ${NAMESPACE} >/dev/null 2>&1; then
             ROUTE_NAME_CANDIDATE="frontend-route"
-        elif oc get route frontend -n ${NAMESPACE} >/dev/null 2>&1; then
-            ROUTE_NAME_CANDIDATE="frontend"
         else
             ROUTE_NAME_CANDIDATE=$(oc get route -n ${NAMESPACE} -l app=frontend -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
         fi
@@ -387,13 +385,9 @@ echo ""
 echo -e "${BLUE}Routes:${NC}"
 oc get route -n ${NAMESPACE} || true
 if [[ -z "${ROUTE_NAME:-}" ]]; then
-    if oc get route frontend-route -n ${NAMESPACE} >/dev/null 2>&1; then
-        ROUTE_NAME="frontend-route"
-    elif oc get route frontend -n ${NAMESPACE} >/dev/null 2>&1; then
-        ROUTE_NAME="frontend"
-    fi
+    ROUTE_NAME="frontend-route"
 fi
-ROUTE_HOST=$(oc get route ${ROUTE_NAME:-frontend-route} -n ${NAMESPACE} -o jsonpath='{.spec.host}' 2>/dev/null || true)
+ROUTE_HOST=$(oc get route ${ROUTE_NAME} -n ${NAMESPACE} -o jsonpath='{.spec.host}' 2>/dev/null || true)
 echo ""
 
 # Cleanup generated files
