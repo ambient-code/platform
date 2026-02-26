@@ -138,8 +138,7 @@ export const AskUserQuestionMessage: React.FC<AskUserQuestionMessageProps> = ({
               <label
                 key={opt.label}
                 className={cn(
-                  "flex gap-2.5 p-1.5 rounded cursor-pointer transition-colors",
-                  opt.description ? "items-start" : "items-center",
+                  "flex items-start gap-2 p-1.5 rounded cursor-pointer transition-colors",
                   isSelected ? "bg-accent" : "hover:bg-muted/50",
                   disabled && "cursor-default opacity-60"
                 )}
@@ -150,12 +149,12 @@ export const AskUserQuestionMessage: React.FC<AskUserQuestionMessageProps> = ({
                     handleMultiSelect(q.question, opt.label, checked === true)
                   }
                   disabled={disabled}
-                  className={opt.description ? "mt-1" : ""}
+                  className="mt-0.5"
                 />
                 <div className="min-w-0">
-                  <span className="text-sm leading-5">{opt.label}</span>
+                  <span className="text-sm">{opt.label}</span>
                   {opt.description && (
-                    <p className="text-xs text-muted-foreground leading-tight mt-0.5">{opt.description}</p>
+                    <p className="text-xs text-muted-foreground leading-tight">{opt.description}</p>
                   )}
                 </div>
               </label>
@@ -180,17 +179,16 @@ export const AskUserQuestionMessage: React.FC<AskUserQuestionMessageProps> = ({
               <label
                 key={opt.label}
                 className={cn(
-                  "flex gap-2.5 p-1.5 rounded cursor-pointer transition-colors",
-                  opt.description ? "items-start" : "items-center",
+                  "flex items-start gap-2 p-1.5 rounded cursor-pointer transition-colors",
                   isSelected ? "bg-accent" : "hover:bg-muted/50",
                   disabled && "cursor-default opacity-60"
                 )}
               >
-                <RadioGroupItem value={opt.label} className={cn("flex-shrink-0", opt.description ? "mt-1" : "")} />
+                <RadioGroupItem value={opt.label} className="mt-0.5" />
                 <div className="min-w-0">
-                  <span className="text-sm leading-5">{opt.label}</span>
+                  <span className="text-sm">{opt.label}</span>
                   {opt.description && (
-                    <p className="text-xs text-muted-foreground leading-tight mt-0.5">{opt.description}</p>
+                    <p className="text-xs text-muted-foreground leading-tight">{opt.description}</p>
                   )}
                 </div>
               </label>
@@ -201,14 +199,14 @@ export const AskUserQuestionMessage: React.FC<AskUserQuestionMessageProps> = ({
         {/* Other / freeform option */}
         <label
           className={cn(
-            "flex items-center gap-2.5 p-1.5 rounded cursor-pointer transition-colors",
+            "flex items-start gap-2 p-1.5 rounded cursor-pointer transition-colors",
             isOther ? "bg-accent" : "hover:bg-muted/50",
             disabled && "cursor-default opacity-60"
           )}
           onClick={() => !disabled && handleOtherToggle(q.question)}
         >
           <div className={cn(
-            "aspect-square h-4 w-4 rounded-full border border-primary flex items-center justify-center flex-shrink-0",
+            "mt-0.5 aspect-square h-4 w-4 rounded-full border border-primary flex items-center justify-center flex-shrink-0",
             disabled && "opacity-50"
           )}>
             {isOther && <div className="h-2.5 w-2.5 rounded-full bg-current" />}

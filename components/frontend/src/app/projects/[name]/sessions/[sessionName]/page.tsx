@@ -933,6 +933,12 @@ export default function ProjectSessionDetailPage({
 
       // Handle text content by role
       if (msg.role === "user") {
+        // Hide AskUserQuestion response messages from the chat
+        const msgMeta = msg.metadata as Record<string, unknown> | undefined;
+        if (msgMeta?.type === "ask_user_question_response") {
+          continue;
+        }
+
         result.push({
           type: "user_message",
           id: msg.id,  // Preserve message ID for feedback association
@@ -1390,6 +1396,17 @@ export default function ProjectSessionDetailPage({
       await aguiSendMessage(finalMessage);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to send message");
+    }
+  };
+
+  // Send an AskUserQuestion response (hidden from chat, properly formatted)
+  const sendToolAnswer = async (formattedAnswer: string) => {
+    try {
+      await aguiSendMessage(formattedAnswer, {
+        type: "ask_user_question_response",
+      });
+    } catch (err) {
+      errorToast(err instanceof Error ? err.message : "Failed to send answer");
     }
   };
 
@@ -2627,6 +2644,7 @@ export default function ProjectSessionDetailPage({
                         chatInput={chatInput}
                         setChatInput={setChatInput}
                         onSendChat={() => Promise.resolve(sendChat())}
+                        onSendToolAnswer={sendToolAnswer}
                         onInterrupt={aguiInterrupt}
                         onGoToResults={() => {}}
                         onContinue={handleContinue}
@@ -2705,6 +2723,7 @@ export default function ProjectSessionDetailPage({
                           chatInput={chatInput}
                           setChatInput={setChatInput}
                           onSendChat={() => Promise.resolve(sendChat())}
+                          onSendToolAnswer={sendToolAnswer}
                           onInterrupt={aguiInterrupt}
                           onGoToResults={() => {}}
                           onContinue={handleContinue}
