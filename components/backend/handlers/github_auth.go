@@ -11,6 +11,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -255,7 +256,13 @@ func HandleGitHubUserOAuthCallback(c *gin.Context) {
 }
 
 func exchangeOAuthCodeForUserToken(clientID, clientSecret, code string) (string, error) {
-	reqBody := strings.NewReader(fmt.Sprintf("client_id=%s&client_secret=%s&code=%s", clientID, clientSecret, code))
+	redirectURI := os.Getenv("GITHUB_APP_REDIRECT_URI")
+	if redirectURI == "" {
+		redirectURI = fmt.Sprintf("%s/api/auth/github/user/callback", os.Getenv("BACKEND_URL"))
+	}
+	reqBody := strings.NewReader(fmt.Sprintf(
+		"client_id=%s&client_secret=%s&code=%s&redirect_uri=%s",
+		clientID, clientSecret, code, url.QueryEscape(redirectURI)))
 	req, _ := http.NewRequest(http.MethodPost, "https://github.com/login/oauth/access_token", reqBody)
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
