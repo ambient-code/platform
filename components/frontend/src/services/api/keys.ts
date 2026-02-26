@@ -10,6 +10,7 @@ export type ProjectKey = {
   name: string;
   description?: string;
   createdAt?: string;
+  expiresAt?: string;
   lastUsedAt?: string;
   role?: 'view' | 'edit' | 'admin';
 };
@@ -18,6 +19,7 @@ export type CreateKeyRequest = {
   name: string;
   description?: string;
   role?: 'view' | 'edit' | 'admin';
+  expirationDays?: number;
 };
 
 export type CreateKeyResponse = {
@@ -25,6 +27,7 @@ export type CreateKeyResponse = {
   name: string;
   key: string;
   description?: string;
+  expiresAt?: string;
   role?: 'view' | 'edit' | 'admin';
 };
 

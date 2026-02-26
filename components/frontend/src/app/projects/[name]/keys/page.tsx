@@ -37,6 +37,7 @@ export default function ProjectKeysPage() {
   const [newKeyName, setNewKeyName] = useState('');
   const [newKeyDesc, setNewKeyDesc] = useState('');
   const [newKeyRole, setNewKeyRole] = useState<'view' | 'edit' | 'admin'>('edit');
+  const [newKeyExpiration, setNewKeyExpiration] = useState<number>(30);
   const [oneTimeKey, setOneTimeKey] = useState<string | null>(null);
   const [oneTimeKeyName, setOneTimeKeyName] = useState<string>('');
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -49,6 +50,7 @@ export default function ProjectKeysPage() {
       name: newKeyName.trim(),
       description: newKeyDesc.trim() || undefined,
       role: newKeyRole,
+      expirationDays: newKeyExpiration,
     };
 
     createKeyMutation.mutate(
@@ -60,6 +62,7 @@ export default function ProjectKeysPage() {
           setOneTimeKeyName(data.name);
           setNewKeyName('');
           setNewKeyDesc('');
+          setNewKeyExpiration(30);
           setShowCreate(false);
         },
         onError: (error) => {
@@ -67,7 +70,7 @@ export default function ProjectKeysPage() {
         },
       }
     );
-  }, [newKeyName, newKeyDesc, newKeyRole, projectName, createKeyMutation]);
+  }, [newKeyName, newKeyDesc, newKeyRole, newKeyExpiration, projectName, createKeyMutation]);
 
   const openDeleteDialog = useCallback((keyId: string, keyName: string) => {
     setKeyToDelete({ id: keyId, name: keyName });
@@ -169,6 +172,7 @@ export default function ProjectKeysPage() {
                   <TableHead>Name</TableHead>
                   <TableHead>Description</TableHead>
                   <TableHead>Created</TableHead>
+                  <TableHead>Expires</TableHead>
                   <TableHead>Last Used</TableHead>
                   <TableHead>Role</TableHead>
                   <TableHead>Actions</TableHead>
@@ -188,6 +192,13 @@ export default function ProjectKeysPage() {
                       <TableCell>
                         {k.createdAt ? (
                           formatDistanceToNow(new Date(k.createdAt), { addSuffix: true })
+                        ) : (
+                          <span className="text-muted-foreground">Unknown</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {k.expiresAt ? (
+                          formatDistanceToNow(new Date(k.expiresAt), { addSuffix: true })
                         ) : (
                           <span className="text-muted-foreground">Unknown</span>
                         )}
@@ -307,6 +318,24 @@ export default function ProjectKeysPage() {
                   );
                 })}
               </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="key-expiration">Token Lifetime</Label>
+              <select
+                id="key-expiration"
+                className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
+                value={newKeyExpiration}
+                onChange={(e) => setNewKeyExpiration(Number(e.target.value))}
+                disabled={createKeyMutation.isPending}
+              >
+                <option value={7}>7 days</option>
+                <option value={30}>30 days (default)</option>
+                <option value={90}>90 days</option>
+                <option value={365}>365 days (1 year)</option>
+              </select>
+              <p className="text-xs text-muted-foreground">
+                The key will expire after the selected duration. Maximum lifetime is 365 days.
+              </p>
             </div>
           </div>
           <DialogFooter>

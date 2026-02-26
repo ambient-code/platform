@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams, useSearchParams } from 'next/navigation';
-import { Star, Settings, Users, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useParams, useSearchParams, useRouter, usePathname } from 'next/navigation';
+import { Star, Settings, Users, Key, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 import { Button } from '@/components/ui/button';
@@ -21,11 +21,13 @@ import { SharingSection } from '@/components/workspace-sections/sharing-section'
 import { SettingsSection } from '@/components/workspace-sections/settings-section';
 import { useProject } from '@/services/queries/use-projects';
 
-type Section = 'sessions' | 'sharing' | 'settings';
+type Section = 'sessions' | 'sharing' | 'settings' | 'keys';
 
 export default function ProjectDetailsPage() {
   const params = useParams();
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
   const projectName = params?.name as string;
 
   // Fetch project data for display name and description
@@ -50,16 +52,29 @@ export default function ProjectDetailsPage() {
   // Update active section when query parameter changes
   useEffect(() => {
     const sectionParam = searchParams.get('section') as Section;
-    if (sectionParam && ['sessions', 'sharing', 'settings'].includes(sectionParam)) {
+    if (sectionParam && ['sessions', 'sharing', 'settings', 'keys'].includes(sectionParam)) {
       setActiveSection(sectionParam);
     }
   }, [searchParams]);
 
+  // Check if we're on the keys page
+  const isOnKeysPage = pathname?.includes('/keys');
+
   const navItems = [
     { id: 'sessions' as Section, label: 'Sessions', icon: Star },
     { id: 'sharing' as Section, label: 'Sharing', icon: Users },
+    { id: 'keys' as Section, label: 'Keys', icon: Key },
     { id: 'settings' as Section, label: 'Workspace Settings', icon: Settings },
   ];
+
+  // Handle navigation item click
+  const handleNavItemClick = (itemId: Section) => {
+    if (itemId === 'keys') {
+      router.push(`/projects/${projectName}/keys`);
+    } else {
+      setActiveSection(itemId);
+    }
+  };
 
   // Loading state
   if (!projectName || projectLoading) {
@@ -142,14 +157,14 @@ export default function ProjectDetailsPage() {
                       <CardContent className="px-4 pb-4 pt-2">
                         <div className="space-y-1">
                           {navItems.map((item) => {
-                            const isActive = activeSection === item.id;
+                            const isActive = item.id === 'keys' ? isOnKeysPage : activeSection === item.id;
                             const Icon = item.icon;
                             return (
                               <Button
                                 key={item.id}
                                 variant={isActive ? "secondary" : "ghost"}
                                 className={cn("w-full justify-start", isActive && "font-semibold")}
-                                onClick={() => setActiveSection(item.id)}
+                                onClick={() => handleNavItemClick(item.id)}
                               >
                                 <Icon className="w-4 h-4 mr-2" />
                                 <span className="truncate">{item.label}</span>

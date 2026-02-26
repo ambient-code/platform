@@ -317,6 +317,7 @@ func ListProjectKeys(c *gin.Context) {
 		ID          string `json:"id"`
 		Name        string `json:"name"`
 		CreatedAt   string `json:"createdAt"`
+		ExpiresAt   string `json:"expiresAt,omitempty"`
 		LastUsedAt  string `json:"lastUsedAt"`
 		Description string `json:"description,omitempty"`
 		Role        string `json:"role,omitempty"`
@@ -327,6 +328,9 @@ func ListProjectKeys(c *gin.Context) {
 		ki := KeyInfo{ID: sa.Name, Name: sa.Annotations["ambient-code.io/key-name"], Description: sa.Annotations["ambient-code.io/description"], Role: roleBySA[sa.Name]}
 		if t := sa.CreationTimestamp; !t.IsZero() {
 			ki.CreatedAt = t.Format(time.RFC3339)
+		}
+		if exp := sa.Annotations["ambient-code.io/expires-at"]; exp != "" {
+			ki.ExpiresAt = exp
 		}
 		if lu := sa.Annotations["ambient-code.io/last-used-at"]; lu != "" {
 			ki.LastUsedAt = lu
@@ -353,9 +357,10 @@ func CreateProjectKey(c *gin.Context) {
 	}
 
 	var req struct {
-		Name        string `json:"name" binding:"required"`
-		Description string `json:"description"`
-		Role        string `json:"role"`
+		Name           string `json:"name" binding:"required"`
+		Description    string `json:"description"`
+		Role           string `json:"role"`
+		ExpirationDays int    `json:"expirationDays"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -380,6 +385,21 @@ func CreateProjectKey(c *gin.Context) {
 		return
 	}
 
+	// Determine token expiration: default 30 days, max 365 days, min 1 day
+	expirationDays := req.ExpirationDays
+	if expirationDays <= 0 {
+		expirationDays = 30 // Default to 30 days
+	}
+	if expirationDays > 365 {
+		expirationDays = 365 // Cap at 365 days
+	}
+	if expirationDays < 1 {
+		expirationDays = 1 // Minimum 1 day
+	}
+
+	expirationSeconds := int64(expirationDays * 24 * 60 * 60)
+	expiresAt := time.Now().Add(time.Duration(expirationSeconds) * time.Second)
+
 	// Create a dedicated ServiceAccount per key
 	ts := time.Now().Unix()
 	saName := fmt.Sprintf("ambient-key-%s-%d", sanitizeName(req.Name), ts)
@@ -392,6 +412,7 @@ func CreateProjectKey(c *gin.Context) {
 				"ambient-code.io/key-name":    req.Name,
 				"ambient-code.io/description": req.Description,
 				"ambient-code.io/created-at":  time.Now().Format(time.RFC3339),
+				"ambient-code.io/expires-at":  expiresAt.Format(time.RFC3339),
 				"ambient-code.io/role":        role,
 			},
 		},
@@ -424,8 +445,12 @@ func CreateProjectKey(c *gin.Context) {
 		return
 	}
 
-	// Issue a one-time JWT token for this ServiceAccount (no audience; used as API key)
-	tr := &authnv1.TokenRequest{Spec: authnv1.TokenRequestSpec{}}
+	// Issue a one-time JWT token for this ServiceAccount with expiration
+	tr := &authnv1.TokenRequest{
+		Spec: authnv1.TokenRequestSpec{
+			ExpirationSeconds: &expirationSeconds,
+		},
+	}
 	tok, err := k8sClient.CoreV1().ServiceAccounts(projectName).CreateToken(context.TODO(), saName, tr, v1.CreateOptions{})
 	if err != nil {
 		log.Printf("Failed to create token for SA %s/%s: %v", projectName, saName, err)
@@ -439,6 +464,7 @@ func CreateProjectKey(c *gin.Context) {
 		"key":         tok.Status.Token,
 		"description": req.Description,
 		"role":        role,
+		"expiresAt":   expiresAt.Format(time.RFC3339),
 		"lastUsedAt":  "",
 	})
 }
