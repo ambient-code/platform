@@ -166,7 +166,7 @@ export function McpServerDialog({ open, onOpenChange, onSave, saving, projectNam
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>Cancel</Button>
-          <Button onClick={handleSubmit} disabled={saving || !name.trim() || !command.trim() || testStatus !== 'success'}>
+          <Button onClick={handleSubmit} disabled={saving || !name.trim() || !command.trim() || (!isEditing && testStatus !== 'success')}>
             {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
             {isEditing ? "Update" : "Add"}
           </Button>

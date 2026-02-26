@@ -150,8 +150,6 @@ var allowedMcpCommands = map[string]bool{
 	"python3": true,
 	"uvx":     true,
 	"uv":      true,
-	"docker":  true,
-	"podman":  true,
 }
 
 // dangerousArgPatterns contains argument patterns that could enable code execution.
@@ -302,7 +300,7 @@ func TestMcpServer(c *gin.Context) {
 	_, err := k8sClient.CoreV1().Pods(projectName).Create(ctx, pod, metav1.CreateOptions{})
 	if err != nil {
 		log.Printf("Failed to create MCP test pod in %s: %v", projectName, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to create test pod: %v", err)})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create test pod"})
 		return
 	}
 
