@@ -317,7 +317,7 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
     sendMessage,
     interrupt,
     isConnected: state.status === 'connected',
-    isStreaming: state.currentMessage !== null || state.currentToolCall !== null || state.pendingToolCalls.size > 0 || state.currentThinking !== null,
+    isStreaming: state.currentMessage !== null || state.currentToolCall !== null || state.pendingToolCalls.size > 0,
     isRunActive,
   }
 }

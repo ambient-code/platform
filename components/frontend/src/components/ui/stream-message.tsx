@@ -52,6 +52,7 @@ export const StreamMessage: React.FC<StreamMessageProps> = ({ message, onGoToRes
           resultBlock={message.resultBlock}
           timestamp={message.timestamp}
           onSubmitAnswer={onSubmitAnswer}
+          isNewest={isNewest}
         />
       );
     }

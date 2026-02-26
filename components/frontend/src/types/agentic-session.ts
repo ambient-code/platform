@@ -185,6 +185,7 @@ export type AgenticSessionStatus = {
 	startTime?: string;
 	completionTime?: string;
 	lastActivityTime?: string;
+	agentStatus?: "working" | "idle" | "waiting_input";
 	stoppedReason?: "user" | "inactivity";
 	reconciledRepos?: ReconciledRepo[];
 	reconciledWorkflow?: ReconciledWorkflow;

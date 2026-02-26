@@ -16,6 +16,7 @@ export type MessagesTabProps = {
   chatInput: string;
   setChatInput: (v: string) => void;
   onSendChat: () => Promise<void>;
+  onSendToolAnswer?: (formattedAnswer: string) => Promise<void>;
   onInterrupt: () => Promise<void>;
   onGoToResults?: () => void;
   onContinue: () => void;
@@ -35,14 +36,12 @@ export type MessagesTabProps = {
 };
 
 
-const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chatInput, setChatInput, onSendChat, onInterrupt, onGoToResults, onContinue, workflowMetadata, onCommandClick, isRunActive = false, showWelcomeExperience, welcomeExperienceComponent, activeWorkflow, userHasInteracted = false, queuedMessages = [], hasRealMessages = false, onCancelQueuedMessage, onUpdateQueuedMessage, onPasteImage, onClearQueue }) => {
+const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chatInput, setChatInput, onSendChat, onSendToolAnswer, onInterrupt, onGoToResults, onContinue, workflowMetadata, onCommandClick, isRunActive = false, showWelcomeExperience, welcomeExperienceComponent, activeWorkflow, userHasInteracted = false, queuedMessages = [], hasRealMessages = false, onCancelQueuedMessage, onUpdateQueuedMessage, onPasteImage, onClearQueue }) => {
+  const [interrupting, setInterrupting] = useState(false);
   const [sendingChat, setSendingChat] = useState(false);
   const [showSystemMessages, setShowSystemMessages] = useState(false);
   const [waitingDotCount, setWaitingDotCount] = useState(0);
 
-  // Pending answer ref for AskUserQuestion tool responses.
-  // When set, the next render triggers a send.
-  const pendingAnswerRef = useRef<string | null>(null);
   
   // Autocomplete state
   const [autocompleteOpen, setAutocompleteOpen] = useState(false);
@@ -94,13 +93,6 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
     scrollToBottom();
   }, []);
 
-  // Send pending AskUserQuestion answer once chatInput is updated
-  useEffect(() => {
-    if (pendingAnswerRef.current !== null && chatInput === pendingAnswerRef.current) {
-      pendingAnswerRef.current = null;
-      handleSendChat();
-    }
-  }, [chatInput]); // eslint-disable-line react-hooks/exhaustive-deps
 
 
   useEffect(() => {
@@ -162,10 +154,7 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
             message={m}
             isNewest={idx === filteredMessages.length - 1}
             onGoToResults={onGoToResults}
-            onSubmitAnswer={(answer) => {
-              pendingAnswerRef.current = answer;
-              setChatInput(answer);
-            }}
+            onSubmitAnswer={onSendToolAnswer}
           />
         ))}
 

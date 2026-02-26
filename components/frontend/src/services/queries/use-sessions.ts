@@ -40,6 +40,32 @@ export function useSessionsPaginated(projectName: string, params: PaginationPara
     queryFn: () => sessionsApi.listSessionsPaginated(projectName, params),
     enabled: !!projectName,
     placeholderData: keepPreviousData, // Keep previous data while fetching new page
+    // Smart polling: tier interval based on the most active session in the list
+    refetchInterval: (query) => {
+      const data = query.state.data as { items?: AgenticSession[] } | undefined;
+      const items = data?.items;
+      if (!items?.length) return false;
+
+      // Tier 1: Any session transitioning phases → poll aggressively (2s)
+      const hasTransitioning = items.some((s) => {
+        const phase = s.status?.phase;
+        return phase === 'Pending' || phase === 'Creating' || phase === 'Stopping';
+      });
+      if (hasTransitioning) return 2000;
+
+      // Tier 2: Any session with agent actively working → moderate (5s)
+      const hasWorking = items.some((s) => {
+        return s.status?.phase === 'Running' && s.status?.agentStatus === 'working';
+      });
+      if (hasWorking) return 5000;
+
+      // Tier 3: Any session running but agent idle/waiting → slow (15s)
+      const hasRunning = items.some((s) => s.status?.phase === 'Running');
+      if (hasRunning) return 15000;
+
+      // Tier 4: All sessions terminal → no polling
+      return false;
+    },
   });
 }
 

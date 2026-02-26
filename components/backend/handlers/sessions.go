@@ -245,6 +245,10 @@ func parseStatus(status map[string]interface{}) *types.AgenticSessionStatus {
 		result.LastActivityTime = types.StringPtr(lastActivityTime)
 	}
 
+	if agentStatus, ok := status["agentStatus"].(string); ok && agentStatus != "" {
+		result.AgentStatus = types.StringPtr(agentStatus)
+	}
+
 	if stoppedReason, ok := status["stoppedReason"].(string); ok && stoppedReason != "" {
 		result.StoppedReason = types.StringPtr(stoppedReason)
 	}
