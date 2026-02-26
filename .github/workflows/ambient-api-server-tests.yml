@@ -40,11 +40,11 @@ jobs:
       - name: Create secrets directory
         run: |
           mkdir -p secrets
-          echo "localhost" > secrets/db.host
-          echo "5432" > secrets/db.port
-          echo "ambient_api_server" > secrets/db.name
-          echo "postgres" > secrets/db.user
-          echo "postgres" > secrets/db.password
+          printf '%s' 'localhost' > secrets/db.host
+          printf '%s' '5432' > secrets/db.port
+          printf '%s' 'ambient_api_server' > secrets/db.name
+          printf '%s' 'postgres' > secrets/db.user
+          printf '%s' 'postgres' > secrets/db.password
 
       - name: Run tests
         run: make test
