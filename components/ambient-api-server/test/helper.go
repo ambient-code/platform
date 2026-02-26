@@ -206,7 +206,7 @@ func (helper *Helper) GRPCAddress() string {
 }
 
 func (helper *Helper) RestURL(path string) string {
-	return fmt.Sprintf("http://%s/api/ambient-api-server/v1%s", helper.apiServerAddress, path)
+	return fmt.Sprintf("http://%s/api/ambient/v1%s", helper.apiServerAddress, path)
 }
 
 func (helper *Helper) NewApiClient() *openapi.APIClient {

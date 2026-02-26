@@ -281,7 +281,7 @@ objects:
                 memory: ${MEMORY_LIMIT}
             livenessProbe:
               httpGet:
-                path: /api/ambient-api-server
+                path: /api/ambient
                 port: 8000
                 scheme: HTTPS
               initialDelaySeconds: 15

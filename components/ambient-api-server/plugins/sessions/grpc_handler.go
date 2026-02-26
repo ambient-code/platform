@@ -2,15 +2,19 @@ package sessions
 
 import (
 	"context"
-	"fmt"
 
+	"github.com/golang/glog"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
+	"github.com/ambient/platform/components/ambient-api-server/pkg/api"
 	localgrpc "github.com/ambient/platform/components/ambient-api-server/pkg/api/grpc"
 	pb "github.com/ambient/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1"
 	"github.com/openshift-online/rh-trex-ai/pkg/auth"
 	"github.com/openshift-online/rh-trex-ai/pkg/server"
 	"github.com/openshift-online/rh-trex-ai/pkg/server/grpcutil"
 	"github.com/openshift-online/rh-trex-ai/pkg/services"
-	"google.golang.org/grpc"
 )
 
 type sessionGRPCHandler struct {
@@ -53,7 +57,6 @@ func (h *sessionGRPCHandler) CreateSession(ctx context.Context, req *pb.CreateSe
 		AssignedUserId:       req.AssignedUserId,
 		WorkflowId:           req.WorkflowId,
 		Repos:                req.Repos,
-		Interactive:          req.Interactive,
 		Timeout:              req.Timeout,
 		LlmModel:             req.LlmModel,
 		LlmMaxTokens:         req.LlmMaxTokens,
@@ -109,9 +112,6 @@ func (h *sessionGRPCHandler) UpdateSession(ctx context.Context, req *pb.UpdateSe
 	}
 	if req.Repos != nil {
 		found.Repos = req.Repos
-	}
-	if req.Interactive != nil {
-		found.Interactive = req.Interactive
 	}
 	if req.Timeout != nil {
 		found.Timeout = req.Timeout
@@ -247,13 +247,13 @@ func (h *sessionGRPCHandler) ListSessions(ctx context.Context, req *pb.ListSessi
 func (h *sessionGRPCHandler) WatchSessions(req *pb.WatchSessionsRequest, stream grpc.ServerStreamingServer[pb.SessionWatchEvent]) error {
 	broker := h.brokerFunc()
 	if broker == nil {
-		return fmt.Errorf("event broker not available")
+		return status.Error(codes.Unavailable, "event broker not available")
 	}
 
 	ctx := stream.Context()
 	sub, err := broker.Subscribe(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to subscribe to event broker: %w", err)
+		return status.Errorf(codes.Internal, "failed to subscribe to event broker: %v", err)
 	}
 
 	for {
@@ -274,9 +274,10 @@ func (h *sessionGRPCHandler) WatchSessions(req *pb.WatchSessionsRequest, stream 
 				ResourceId: event.SourceID,
 			}
 
-			if event.EventType != "delete" {
+			if event.EventType != api.DeleteEventType {
 				session, svcErr := h.service.Get(ctx, event.SourceID)
 				if svcErr != nil {
+					glog.Errorf("WatchSessions: failed to get session %s: %v", event.SourceID, svcErr)
 					continue
 				}
 				watchEvent.Session = sessionToProto(session)

@@ -1,6 +1,6 @@
 paths:
   # NEW ENDPOINT START
-  /api/ambient-api-server/v1/sessions:
+  /api/ambient/v1/sessions:
   # NEW ENDPOINT END
     get:
       summary: Returns a list of sessions
@@ -86,7 +86,7 @@ paths:
               schema:
                 $ref: 'openapi.yaml#/components/schemas/Error'
   # NEW ENDPOINT START
-  /api/ambient-api-server/v1/sessions/{id}:
+  /api/ambient/v1/sessions/{id}:
   # NEW ENDPOINT END
     get:
       summary: Get an session by id
@@ -179,7 +179,7 @@ paths:
                 $ref: 'openapi.yaml#/components/schemas/Error'
     parameters:
       - $ref: '#/components/parameters/id'
-  /api/ambient-api-server/v1/sessions/{id}/status:
+  /api/ambient/v1/sessions/{id}/status:
     patch:
       summary: Update session status fields
       description: Write-back endpoint for control plane to sync runtime status from Kubernetes CR
@@ -231,7 +231,7 @@ paths:
                 $ref: 'openapi.yaml#/components/schemas/Error'
     parameters:
       - $ref: '#/components/parameters/id'
-  /api/ambient-api-server/v1/sessions/{id}/start:
+  /api/ambient/v1/sessions/{id}/start:
     post:
       summary: Start a session
       description: Transitions session phase to Pending. Valid from empty/nil, Stopped, Failed, or Completed phase.
@@ -276,7 +276,7 @@ paths:
                 $ref: 'openapi.yaml#/components/schemas/Error'
     parameters:
       - $ref: '#/components/parameters/id'
-  /api/ambient-api-server/v1/sessions/{id}/stop:
+  /api/ambient/v1/sessions/{id}/stop:
     post:
       summary: Stop a session
       description: Transitions session phase to Stopping. Valid from Running, Creating, or Pending phase.
@@ -569,7 +569,7 @@ components:
           Example: For each Subscription to get id, href, plan(id and kind) and labels (all fields)
 
           ```
-          curl "/api/ambient-api-server/v1/sessions?fields=id,href,name,project_id"
+          curl "/api/ambient/v1/sessions?fields=id,href,name,project_id"
           ```
         schema:
           type: string

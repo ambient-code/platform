@@ -122,10 +122,10 @@ The service will be available at `http://localhost:8000`.
 ## API Endpoints
 
 After generating Kinds, API endpoints follow this pattern:
-- `GET /api/ambient-api-server/v1/{kinds}` - List all items
-- `POST /api/ambient-api-server/v1/{kinds}` - Create new item
-- `GET /api/ambient-api-server/v1/{kinds}/{id}` - Get specific item
-- `PATCH /api/ambient-api-server/v1/{kinds}/{id}` - Update specific item
+- `GET /api/ambient/v1/{kinds}` - List all items
+- `POST /api/ambient/v1/{kinds}` - Create new item
+- `GET /api/ambient/v1/{kinds}/{id}` - Get specific item
+- `PATCH /api/ambient/v1/{kinds}/{id}` - Update specific item
 
 ## Development Workflow
 
@@ -133,7 +133,7 @@ After generating Kinds, API endpoints follow this pattern:
 2. **Run migrations**: `./ambient-api-server migrate`
 3. **Test the API**: `make test && make test-integration`
 4. **Start service**: `make run-no-auth`
-5. **Test endpoints**: `curl http://localhost:8000/api/ambient-api-server/v1/my_kinds`
+5. **Test endpoints**: `curl http://localhost:8000/api/ambient/v1/my_kinds`
 
 ## Project Structure
 

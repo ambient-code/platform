@@ -21,8 +21,8 @@ func init() {
 
 	trex.Init(trex.Config{
 		ServiceName:    "ambient-api-server",
-		BasePath:       "/api/ambient-api-server/v1",
-		ErrorHref:      "/api/ambient-api-server/v1/errors/",
+		BasePath:       "/api/ambient/v1",
+		ErrorHref:      "/api/ambient/v1/errors/",
 		MetadataID:     "ambient-api-server",
 		ProjectRootDir: projectRoot,
 	})

@@ -23,23 +23,23 @@ func TestSessionGet(t *testing.T) {
 	account := h.NewRandAccount()
 	ctx := h.NewAuthenticatedContext(account)
 
-	_, _, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsIdGet(context.Background(), "foo").Execute()
+	_, _, err := client.DefaultAPI.ApiAmbientV1SessionsIdGet(context.Background(), "foo").Execute()
 	Expect(err).To(HaveOccurred(), "Expected 401 but got nil error")
 
-	_, resp, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsIdGet(ctx, "foo").Execute()
+	_, resp, err := client.DefaultAPI.ApiAmbientV1SessionsIdGet(ctx, "foo").Execute()
 	Expect(err).To(HaveOccurred(), "Expected 404")
 	Expect(resp.StatusCode).To(Equal(http.StatusNotFound))
 
 	sessionModel, err := newSession(h.NewID())
 	Expect(err).NotTo(HaveOccurred())
 
-	sessionOutput, resp, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsIdGet(ctx, sessionModel.ID).Execute()
+	sessionOutput, resp, err := client.DefaultAPI.ApiAmbientV1SessionsIdGet(ctx, sessionModel.ID).Execute()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
 
 	Expect(*sessionOutput.Id).To(Equal(sessionModel.ID), "found object does not match test object")
 	Expect(*sessionOutput.Kind).To(Equal("Session"))
-	Expect(*sessionOutput.Href).To(Equal(fmt.Sprintf("/api/ambient-api-server/v1/sessions/%s", sessionModel.ID)))
+	Expect(*sessionOutput.Href).To(Equal(fmt.Sprintf("/api/ambient/v1/sessions/%s", sessionModel.ID)))
 	Expect(*sessionOutput.CreatedAt).To(BeTemporally("~", sessionModel.CreatedAt))
 	Expect(*sessionOutput.UpdatedAt).To(BeTemporally("~", sessionModel.UpdatedAt))
 }
@@ -63,12 +63,12 @@ func TestSessionPost(t *testing.T) {
 		AssignedUserId:  openapi.PtrString(assignee.ID),
 	}
 
-	sessionOutput, resp, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsPost(ctx).Session(sessionInput).Execute()
+	sessionOutput, resp, err := client.DefaultAPI.ApiAmbientV1SessionsPost(ctx).Session(sessionInput).Execute()
 	Expect(err).NotTo(HaveOccurred(), "Error posting object:  %v", err)
 	Expect(resp.StatusCode).To(Equal(http.StatusCreated))
 	Expect(*sessionOutput.Id).NotTo(BeEmpty(), "Expected ID assigned on creation")
 	Expect(*sessionOutput.Kind).To(Equal("Session"))
-	Expect(*sessionOutput.Href).To(Equal(fmt.Sprintf("/api/ambient-api-server/v1/sessions/%s", *sessionOutput.Id)))
+	Expect(*sessionOutput.Href).To(Equal(fmt.Sprintf("/api/ambient/v1/sessions/%s", *sessionOutput.Id)))
 	Expect(sessionOutput.CreatedByUserId).NotTo(BeNil(), "created_by_user_id must be set from JWT")
 	Expect(*sessionOutput.CreatedByUserId).To(Equal(strings.ToLower(account.Username())), "created_by_user_id must match authenticated user, not client-supplied value")
 
@@ -91,13 +91,13 @@ func TestSessionPatch(t *testing.T) {
 	sessionModel, err := newSession(h.NewID())
 	Expect(err).NotTo(HaveOccurred())
 
-	sessionOutput, resp, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsIdPatch(ctx, sessionModel.ID).SessionPatchRequest(openapi.SessionPatchRequest{}).Execute()
+	sessionOutput, resp, err := client.DefaultAPI.ApiAmbientV1SessionsIdPatch(ctx, sessionModel.ID).SessionPatchRequest(openapi.SessionPatchRequest{}).Execute()
 	Expect(err).NotTo(HaveOccurred(), "Error posting object:  %v", err)
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
 	Expect(*sessionOutput.Id).To(Equal(sessionModel.ID))
 	Expect(*sessionOutput.CreatedAt).To(BeTemporally("~", sessionModel.CreatedAt))
 	Expect(*sessionOutput.Kind).To(Equal("Session"))
-	Expect(*sessionOutput.Href).To(Equal(fmt.Sprintf("/api/ambient-api-server/v1/sessions/%s", *sessionOutput.Id)))
+	Expect(*sessionOutput.Href).To(Equal(fmt.Sprintf("/api/ambient/v1/sessions/%s", *sessionOutput.Id)))
 
 	jwtToken := ctx.Value(openapi.ContextAccessToken)
 	restyResp, _ := resty.R().
@@ -118,14 +118,14 @@ func TestSessionPaging(t *testing.T) {
 	_, err := newSessionList("Bronto", 20)
 	Expect(err).NotTo(HaveOccurred())
 
-	list, _, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsGet(ctx).Execute()
+	list, _, err := client.DefaultAPI.ApiAmbientV1SessionsGet(ctx).Execute()
 	Expect(err).NotTo(HaveOccurred(), "Error getting session list: %v", err)
 	Expect(len(list.Items)).To(Equal(20))
 	Expect(list.Size).To(Equal(int32(20)))
 	Expect(list.Total).To(Equal(int32(20)))
 	Expect(list.Page).To(Equal(int32(1)))
 
-	list, _, err = client.DefaultAPI.ApiAmbientApiServerV1SessionsGet(ctx).Page(2).Size(5).Execute()
+	list, _, err = client.DefaultAPI.ApiAmbientV1SessionsGet(ctx).Page(2).Size(5).Execute()
 	Expect(err).NotTo(HaveOccurred(), "Error getting session list: %v", err)
 	Expect(len(list.Items)).To(Equal(5))
 	Expect(list.Size).To(Equal(int32(5)))
@@ -158,7 +158,7 @@ func TestSessionExpandedFields(t *testing.T) {
 		Annotations:          openapi.PtrString(`{"owner":"ci"}`),
 	}
 
-	created, resp, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsPost(ctx).Session(sessionInput).Execute()
+	created, resp, err := client.DefaultAPI.ApiAmbientV1SessionsPost(ctx).Session(sessionInput).Execute()
 	Expect(err).NotTo(HaveOccurred(), "Error creating expanded session: %v", err)
 	Expect(resp.StatusCode).To(Equal(http.StatusCreated))
 
@@ -181,7 +181,7 @@ func TestSessionExpandedFields(t *testing.T) {
 	Expect(created.Phase).To(BeNil(), "phase should be nil on creation")
 	Expect(created.StartTime).To(BeNil(), "start_time should be nil on creation")
 
-	fetched, resp, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsIdGet(ctx, *created.Id).Execute()
+	fetched, resp, err := client.DefaultAPI.ApiAmbientV1SessionsIdGet(ctx, *created.Id).Execute()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
 	Expect(*fetched.LlmModel).To(Equal("claude-sonnet-4-20250514"))
@@ -191,7 +191,7 @@ func TestSessionExpandedFields(t *testing.T) {
 		LlmModel: openapi.PtrString("claude-opus-4-20250514"),
 		Timeout:  openapi.PtrInt32(7200),
 	}
-	patched, resp, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsIdPatch(ctx, *created.Id).SessionPatchRequest(patchReq).Execute()
+	patched, resp, err := client.DefaultAPI.ApiAmbientV1SessionsIdPatch(ctx, *created.Id).SessionPatchRequest(patchReq).Execute()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
 	Expect(*patched.LlmModel).To(Equal("claude-opus-4-20250514"))
@@ -213,12 +213,12 @@ func TestSessionParentChild(t *testing.T) {
 		ParentSessionId: openapi.PtrString(parent.ID),
 	}
 
-	child, resp, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsPost(ctx).Session(childInput).Execute()
+	child, resp, err := client.DefaultAPI.ApiAmbientV1SessionsPost(ctx).Session(childInput).Execute()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusCreated))
 	Expect(*child.ParentSessionId).To(Equal(parent.ID))
 
-	fetched, resp, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsIdGet(ctx, *child.Id).Execute()
+	fetched, resp, err := client.DefaultAPI.ApiAmbientV1SessionsIdGet(ctx, *child.Id).Execute()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
 	Expect(*fetched.ParentSessionId).To(Equal(parent.ID))
@@ -236,12 +236,12 @@ func TestSessionStatusPatch(t *testing.T) {
 	statusPatch := openapi.SessionStatusPatchRequest{
 		Phase: openapi.PtrString("Running"),
 	}
-	patched, resp, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsIdStatusPatch(ctx, sessionModel.ID).SessionStatusPatchRequest(statusPatch).Execute()
+	patched, resp, err := client.DefaultAPI.ApiAmbientV1SessionsIdStatusPatch(ctx, sessionModel.ID).SessionStatusPatchRequest(statusPatch).Execute()
 	Expect(err).NotTo(HaveOccurred(), "Error patching session status: %v", err)
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
 	Expect(*patched.Phase).To(Equal("Running"))
 
-	fetched, resp, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsIdGet(ctx, sessionModel.ID).Execute()
+	fetched, resp, err := client.DefaultAPI.ApiAmbientV1SessionsIdGet(ctx, sessionModel.ID).Execute()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
 	Expect(*fetched.Phase).To(Equal("Running"))
@@ -265,7 +265,7 @@ func TestSessionStatusPatchMultipleFields(t *testing.T) {
 		KubeNamespace: openapi.PtrString("ambient-code"),
 		KubeCrUid:     openapi.PtrString("uid-xyz-456"),
 	}
-	patched, resp, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsIdStatusPatch(ctx, sessionModel.ID).SessionStatusPatchRequest(statusPatch).Execute()
+	patched, resp, err := client.DefaultAPI.ApiAmbientV1SessionsIdStatusPatch(ctx, sessionModel.ID).SessionStatusPatchRequest(statusPatch).Execute()
 	Expect(err).NotTo(HaveOccurred(), "Error patching session status: %v", err)
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
 	Expect(*patched.Phase).To(Equal("Running"))
@@ -288,18 +288,18 @@ func TestSessionStatusPatchPreservesData(t *testing.T) {
 		LlmModel: openapi.PtrString("claude-sonnet-4-20250514"),
 		Timeout:  openapi.PtrInt32(3600),
 	}
-	created, resp, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsPost(ctx).Session(sessionInput).Execute()
+	created, resp, err := client.DefaultAPI.ApiAmbientV1SessionsPost(ctx).Session(sessionInput).Execute()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusCreated))
 
 	statusPatch := openapi.SessionStatusPatchRequest{
 		Phase: openapi.PtrString("Running"),
 	}
-	_, resp, err = client.DefaultAPI.ApiAmbientApiServerV1SessionsIdStatusPatch(ctx, *created.Id).SessionStatusPatchRequest(statusPatch).Execute()
+	_, resp, err = client.DefaultAPI.ApiAmbientV1SessionsIdStatusPatch(ctx, *created.Id).SessionStatusPatchRequest(statusPatch).Execute()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
 
-	fetched, resp, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsIdGet(ctx, *created.Id).Execute()
+	fetched, resp, err := client.DefaultAPI.ApiAmbientV1SessionsIdGet(ctx, *created.Id).Execute()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
 	Expect(fetched.Name).To(Equal("preserve-data-session"))
@@ -318,7 +318,7 @@ func TestSessionStatusPatchNotFound(t *testing.T) {
 	statusPatch := openapi.SessionStatusPatchRequest{
 		Phase: openapi.PtrString("Running"),
 	}
-	_, resp, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsIdStatusPatch(ctx, "nonexistent-id").SessionStatusPatchRequest(statusPatch).Execute()
+	_, resp, err := client.DefaultAPI.ApiAmbientV1SessionsIdStatusPatch(ctx, "nonexistent-id").SessionStatusPatchRequest(statusPatch).Execute()
 	Expect(err).To(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusNotFound))
 }
@@ -335,7 +335,7 @@ func TestSessionRegularPatchIgnoresStatus(t *testing.T) {
 	statusPatch := openapi.SessionStatusPatchRequest{
 		Phase: openapi.PtrString("Running"),
 	}
-	_, resp, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsIdStatusPatch(ctx, sessionModel.ID).SessionStatusPatchRequest(statusPatch).Execute()
+	_, resp, err := client.DefaultAPI.ApiAmbientV1SessionsIdStatusPatch(ctx, sessionModel.ID).SessionStatusPatchRequest(statusPatch).Execute()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
 
@@ -348,7 +348,7 @@ func TestSessionRegularPatchIgnoresStatus(t *testing.T) {
 	Expect(err).NotTo(HaveOccurred())
 	Expect(restyResp.StatusCode()).To(Equal(http.StatusOK))
 
-	fetched, resp, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsIdGet(ctx, sessionModel.ID).Execute()
+	fetched, resp, err := client.DefaultAPI.ApiAmbientV1SessionsIdGet(ctx, sessionModel.ID).Execute()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
 	Expect(fetched.Name).To(Equal("updated-name"))
@@ -361,7 +361,7 @@ func TestSessionStatusPatchAuth(t *testing.T) {
 	statusPatch := openapi.SessionStatusPatchRequest{
 		Phase: openapi.PtrString("Running"),
 	}
-	_, _, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsIdStatusPatch(context.Background(), "some-id").SessionStatusPatchRequest(statusPatch).Execute()
+	_, _, err := client.DefaultAPI.ApiAmbientV1SessionsIdStatusPatch(context.Background(), "some-id").SessionStatusPatchRequest(statusPatch).Execute()
 	Expect(err).To(HaveOccurred(), "Expected 401 but got nil error")
 }
 
@@ -374,12 +374,12 @@ func TestSessionStart(t *testing.T) {
 	sessionModel, err := newSession(h.NewID())
 	Expect(err).NotTo(HaveOccurred())
 
-	started, resp, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsIdStartPost(ctx, sessionModel.ID).Execute()
+	started, resp, err := client.DefaultAPI.ApiAmbientV1SessionsIdStartPost(ctx, sessionModel.ID).Execute()
 	Expect(err).NotTo(HaveOccurred(), "Error starting session: %v", err)
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
 	Expect(*started.Phase).To(Equal("Pending"))
 
-	fetched, resp, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsIdGet(ctx, sessionModel.ID).Execute()
+	fetched, resp, err := client.DefaultAPI.ApiAmbientV1SessionsIdGet(ctx, sessionModel.ID).Execute()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
 	Expect(*fetched.Phase).To(Equal("Pending"))
@@ -397,16 +397,16 @@ func TestSessionStop(t *testing.T) {
 	statusPatch := openapi.SessionStatusPatchRequest{
 		Phase: openapi.PtrString("Running"),
 	}
-	_, resp, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsIdStatusPatch(ctx, sessionModel.ID).SessionStatusPatchRequest(statusPatch).Execute()
+	_, resp, err := client.DefaultAPI.ApiAmbientV1SessionsIdStatusPatch(ctx, sessionModel.ID).SessionStatusPatchRequest(statusPatch).Execute()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
 
-	stopped, resp, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsIdStopPost(ctx, sessionModel.ID).Execute()
+	stopped, resp, err := client.DefaultAPI.ApiAmbientV1SessionsIdStopPost(ctx, sessionModel.ID).Execute()
 	Expect(err).NotTo(HaveOccurred(), "Error stopping session: %v", err)
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
 	Expect(*stopped.Phase).To(Equal("Stopping"))
 
-	fetched, resp, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsIdGet(ctx, sessionModel.ID).Execute()
+	fetched, resp, err := client.DefaultAPI.ApiAmbientV1SessionsIdGet(ctx, sessionModel.ID).Execute()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
 	Expect(*fetched.Phase).To(Equal("Stopping"))
@@ -424,11 +424,11 @@ func TestSessionStartAlreadyRunning(t *testing.T) {
 	statusPatch := openapi.SessionStatusPatchRequest{
 		Phase: openapi.PtrString("Running"),
 	}
-	_, resp, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsIdStatusPatch(ctx, sessionModel.ID).SessionStatusPatchRequest(statusPatch).Execute()
+	_, resp, err := client.DefaultAPI.ApiAmbientV1SessionsIdStatusPatch(ctx, sessionModel.ID).SessionStatusPatchRequest(statusPatch).Execute()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
 
-	_, resp, err = client.DefaultAPI.ApiAmbientApiServerV1SessionsIdStartPost(ctx, sessionModel.ID).Execute()
+	_, resp, err = client.DefaultAPI.ApiAmbientV1SessionsIdStartPost(ctx, sessionModel.ID).Execute()
 	Expect(err).To(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusConflict))
 }
@@ -445,11 +445,11 @@ func TestSessionStopAlreadyStopped(t *testing.T) {
 	statusPatch := openapi.SessionStatusPatchRequest{
 		Phase: openapi.PtrString("Stopped"),
 	}
-	_, resp, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsIdStatusPatch(ctx, sessionModel.ID).SessionStatusPatchRequest(statusPatch).Execute()
+	_, resp, err := client.DefaultAPI.ApiAmbientV1SessionsIdStatusPatch(ctx, sessionModel.ID).SessionStatusPatchRequest(statusPatch).Execute()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
 
-	_, resp, err = client.DefaultAPI.ApiAmbientApiServerV1SessionsIdStopPost(ctx, sessionModel.ID).Execute()
+	_, resp, err = client.DefaultAPI.ApiAmbientV1SessionsIdStopPost(ctx, sessionModel.ID).Execute()
 	Expect(err).To(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusConflict))
 }
@@ -466,11 +466,11 @@ func TestSessionStartFromFailed(t *testing.T) {
 	statusPatch := openapi.SessionStatusPatchRequest{
 		Phase: openapi.PtrString("Failed"),
 	}
-	_, resp, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsIdStatusPatch(ctx, sessionModel.ID).SessionStatusPatchRequest(statusPatch).Execute()
+	_, resp, err := client.DefaultAPI.ApiAmbientV1SessionsIdStatusPatch(ctx, sessionModel.ID).SessionStatusPatchRequest(statusPatch).Execute()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
 
-	started, resp, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsIdStartPost(ctx, sessionModel.ID).Execute()
+	started, resp, err := client.DefaultAPI.ApiAmbientV1SessionsIdStartPost(ctx, sessionModel.ID).Execute()
 	Expect(err).NotTo(HaveOccurred(), "Error starting session from Failed: %v", err)
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
 	Expect(*started.Phase).To(Equal("Pending"))
@@ -488,11 +488,11 @@ func TestSessionStartFromCompleted(t *testing.T) {
 	statusPatch := openapi.SessionStatusPatchRequest{
 		Phase: openapi.PtrString("Completed"),
 	}
-	_, resp, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsIdStatusPatch(ctx, sessionModel.ID).SessionStatusPatchRequest(statusPatch).Execute()
+	_, resp, err := client.DefaultAPI.ApiAmbientV1SessionsIdStatusPatch(ctx, sessionModel.ID).SessionStatusPatchRequest(statusPatch).Execute()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
 
-	started, resp, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsIdStartPost(ctx, sessionModel.ID).Execute()
+	started, resp, err := client.DefaultAPI.ApiAmbientV1SessionsIdStartPost(ctx, sessionModel.ID).Execute()
 	Expect(err).NotTo(HaveOccurred(), "Error starting session from Completed: %v", err)
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
 	Expect(*started.Phase).To(Equal("Pending"))
@@ -510,11 +510,11 @@ func TestSessionStopFromPending(t *testing.T) {
 	statusPatch := openapi.SessionStatusPatchRequest{
 		Phase: openapi.PtrString("Pending"),
 	}
-	_, resp, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsIdStatusPatch(ctx, sessionModel.ID).SessionStatusPatchRequest(statusPatch).Execute()
+	_, resp, err := client.DefaultAPI.ApiAmbientV1SessionsIdStatusPatch(ctx, sessionModel.ID).SessionStatusPatchRequest(statusPatch).Execute()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
 
-	stopped, resp, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsIdStopPost(ctx, sessionModel.ID).Execute()
+	stopped, resp, err := client.DefaultAPI.ApiAmbientV1SessionsIdStopPost(ctx, sessionModel.ID).Execute()
 	Expect(err).NotTo(HaveOccurred(), "Error stopping session from Pending: %v", err)
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
 	Expect(*stopped.Phase).To(Equal("Stopping"))
@@ -526,7 +526,7 @@ func TestSessionStartNotFound(t *testing.T) {
 	account := h.NewRandAccount()
 	ctx := h.NewAuthenticatedContext(account)
 
-	_, resp, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsIdStartPost(ctx, "nonexistent-id").Execute()
+	_, resp, err := client.DefaultAPI.ApiAmbientV1SessionsIdStartPost(ctx, "nonexistent-id").Execute()
 	Expect(err).To(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusNotFound))
 }
@@ -534,7 +534,7 @@ func TestSessionStartNotFound(t *testing.T) {
 func TestSessionStartAuth(t *testing.T) {
 	_, client := test.RegisterIntegration(t)
 
-	_, _, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsIdStartPost(context.Background(), "some-id").Execute()
+	_, _, err := client.DefaultAPI.ApiAmbientV1SessionsIdStartPost(context.Background(), "some-id").Execute()
 	Expect(err).To(HaveOccurred(), "Expected 401 but got nil error")
 }
 
@@ -547,7 +547,7 @@ func TestSessionLifecycle(t *testing.T) {
 	sessionModel, err := newSession(h.NewID())
 	Expect(err).NotTo(HaveOccurred())
 
-	started, resp, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsIdStartPost(ctx, sessionModel.ID).Execute()
+	started, resp, err := client.DefaultAPI.ApiAmbientV1SessionsIdStartPost(ctx, sessionModel.ID).Execute()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
 	Expect(*started.Phase).To(Equal("Pending"))
@@ -555,11 +555,11 @@ func TestSessionLifecycle(t *testing.T) {
 	statusPatch := openapi.SessionStatusPatchRequest{
 		Phase: openapi.PtrString("Running"),
 	}
-	_, resp, err = client.DefaultAPI.ApiAmbientApiServerV1SessionsIdStatusPatch(ctx, sessionModel.ID).SessionStatusPatchRequest(statusPatch).Execute()
+	_, resp, err = client.DefaultAPI.ApiAmbientV1SessionsIdStatusPatch(ctx, sessionModel.ID).SessionStatusPatchRequest(statusPatch).Execute()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
 
-	stopped, resp, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsIdStopPost(ctx, sessionModel.ID).Execute()
+	stopped, resp, err := client.DefaultAPI.ApiAmbientV1SessionsIdStopPost(ctx, sessionModel.ID).Execute()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
 	Expect(*stopped.Phase).To(Equal("Stopping"))
@@ -567,11 +567,11 @@ func TestSessionLifecycle(t *testing.T) {
 	statusPatch = openapi.SessionStatusPatchRequest{
 		Phase: openapi.PtrString("Stopped"),
 	}
-	_, resp, err = client.DefaultAPI.ApiAmbientApiServerV1SessionsIdStatusPatch(ctx, sessionModel.ID).SessionStatusPatchRequest(statusPatch).Execute()
+	_, resp, err = client.DefaultAPI.ApiAmbientV1SessionsIdStatusPatch(ctx, sessionModel.ID).SessionStatusPatchRequest(statusPatch).Execute()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
 
-	restarted, resp, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsIdStartPost(ctx, sessionModel.ID).Execute()
+	restarted, resp, err := client.DefaultAPI.ApiAmbientV1SessionsIdStartPost(ctx, sessionModel.ID).Execute()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
 	Expect(*restarted.Phase).To(Equal("Pending"))
@@ -579,18 +579,18 @@ func TestSessionLifecycle(t *testing.T) {
 	statusPatch = openapi.SessionStatusPatchRequest{
 		Phase: openapi.PtrString("Running"),
 	}
-	_, resp, err = client.DefaultAPI.ApiAmbientApiServerV1SessionsIdStatusPatch(ctx, sessionModel.ID).SessionStatusPatchRequest(statusPatch).Execute()
+	_, resp, err = client.DefaultAPI.ApiAmbientV1SessionsIdStatusPatch(ctx, sessionModel.ID).SessionStatusPatchRequest(statusPatch).Execute()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
 
 	statusPatch = openapi.SessionStatusPatchRequest{
 		Phase: openapi.PtrString("Failed"),
 	}
-	_, resp, err = client.DefaultAPI.ApiAmbientApiServerV1SessionsIdStatusPatch(ctx, sessionModel.ID).SessionStatusPatchRequest(statusPatch).Execute()
+	_, resp, err = client.DefaultAPI.ApiAmbientV1SessionsIdStatusPatch(ctx, sessionModel.ID).SessionStatusPatchRequest(statusPatch).Execute()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
 
-	restartedFromFailed, resp, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsIdStartPost(ctx, sessionModel.ID).Execute()
+	restartedFromFailed, resp, err := client.DefaultAPI.ApiAmbientV1SessionsIdStartPost(ctx, sessionModel.ID).Execute()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
 	Expect(*restartedFromFailed.Phase).To(Equal("Pending"))
@@ -607,7 +607,7 @@ func TestSessionLlmDefaults(t *testing.T) {
 		Prompt: openapi.PtrString("test prompt"),
 	}
 
-	created, resp, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsPost(ctx).Session(sessionInput).Execute()
+	created, resp, err := client.DefaultAPI.ApiAmbientV1SessionsPost(ctx).Session(sessionInput).Execute()
 	Expect(err).NotTo(HaveOccurred(), "Error creating session without LLM fields: %v", err)
 	Expect(resp.StatusCode).To(Equal(http.StatusCreated))
 
@@ -618,7 +618,7 @@ func TestSessionLlmDefaults(t *testing.T) {
 	Expect(created.LlmMaxTokens).NotTo(BeNil(), "llm_max_tokens should be defaulted")
 	Expect(*created.LlmMaxTokens).To(Equal(int32(4000)))
 
-	fetched, resp, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsIdGet(ctx, *created.Id).Execute()
+	fetched, resp, err := client.DefaultAPI.ApiAmbientV1SessionsIdGet(ctx, *created.Id).Execute()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
 	Expect(*fetched.LlmModel).To(Equal("sonnet"))
@@ -640,7 +640,7 @@ func TestSessionLlmDefaultsPreservedWhenProvided(t *testing.T) {
 		LlmMaxTokens:   openapi.PtrInt32(8000),
 	}
 
-	created, resp, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsPost(ctx).Session(sessionInput).Execute()
+	created, resp, err := client.DefaultAPI.ApiAmbientV1SessionsPost(ctx).Session(sessionInput).Execute()
 	Expect(err).NotTo(HaveOccurred(), "Error creating session with custom LLM fields: %v", err)
 	Expect(resp.StatusCode).To(Equal(http.StatusCreated))
 
@@ -659,7 +659,7 @@ func TestSessionCreatedByUserIdReadOnly(t *testing.T) {
 		Name:            "readonly-test",
 		CreatedByUserId: openapi.PtrString("attacker-injected-user-id"),
 	}
-	created, resp, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsPost(ctx).Session(sessionInput).Execute()
+	created, resp, err := client.DefaultAPI.ApiAmbientV1SessionsPost(ctx).Session(sessionInput).Execute()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusCreated))
 	expectedUsername := strings.ToLower(account.Username())
@@ -675,7 +675,7 @@ func TestSessionCreatedByUserIdReadOnly(t *testing.T) {
 	Expect(err).NotTo(HaveOccurred())
 	Expect(restyResp.StatusCode()).To(Equal(http.StatusOK))
 
-	fetched, resp, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsIdGet(ctx, *created.Id).Execute()
+	fetched, resp, err := client.DefaultAPI.ApiAmbientV1SessionsIdGet(ctx, *created.Id).Execute()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
 	Expect(fetched.Name).To(Equal("patched-name"), "name should be updated by PATCH")
@@ -727,7 +727,7 @@ func TestSessionListFilterByProjectId(t *testing.T) {
 	Expect(err).NotTo(HaveOccurred())
 
 	alphaSearch := "project_id = 'project-alpha'"
-	list, _, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsGet(ctx).Search(alphaSearch).Execute()
+	list, _, err := client.DefaultAPI.ApiAmbientV1SessionsGet(ctx).Search(alphaSearch).Execute()
 	Expect(err).NotTo(HaveOccurred(), "Error filtering sessions by project_id: %v", err)
 	Expect(len(list.Items)).To(Equal(2))
 	for _, item := range list.Items {
@@ -735,13 +735,13 @@ func TestSessionListFilterByProjectId(t *testing.T) {
 	}
 
 	betaSearch := "project_id = 'project-beta'"
-	list, _, err = client.DefaultAPI.ApiAmbientApiServerV1SessionsGet(ctx).Search(betaSearch).Execute()
+	list, _, err = client.DefaultAPI.ApiAmbientV1SessionsGet(ctx).Search(betaSearch).Execute()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(len(list.Items)).To(Equal(1))
 	Expect(*list.Items[0].ProjectId).To(Equal("project-beta"))
 
 	noMatchSearch := "project_id = 'project-nonexistent'"
-	list, _, err = client.DefaultAPI.ApiAmbientApiServerV1SessionsGet(ctx).Search(noMatchSearch).Execute()
+	list, _, err = client.DefaultAPI.ApiAmbientV1SessionsGet(ctx).Search(noMatchSearch).Execute()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(len(list.Items)).To(Equal(0))
 }
@@ -809,7 +809,7 @@ func TestSessionListSearch(t *testing.T) {
 	Expect(err).NotTo(HaveOccurred())
 
 	search := fmt.Sprintf("id in ('%s')", sessions[0].ID)
-	list, _, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsGet(ctx).Search(search).Execute()
+	list, _, err := client.DefaultAPI.ApiAmbientV1SessionsGet(ctx).Search(search).Execute()
 	Expect(err).NotTo(HaveOccurred(), "Error getting session list: %v", err)
 	Expect(len(list.Items)).To(Equal(1))
 	Expect(list.Total).To(Equal(int32(1)))
@@ -826,7 +826,7 @@ func TestSessionProjectIdImmutableViaPatch(t *testing.T) {
 		Name:      "project-immutable-test",
 		ProjectId: openapi.PtrString("original-project"),
 	}
-	created, resp, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsPost(ctx).Session(sessionInput).Execute()
+	created, resp, err := client.DefaultAPI.ApiAmbientV1SessionsPost(ctx).Session(sessionInput).Execute()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusCreated))
 	Expect(*created.ProjectId).To(Equal("original-project"))
@@ -840,7 +840,7 @@ func TestSessionProjectIdImmutableViaPatch(t *testing.T) {
 	Expect(err).NotTo(HaveOccurred())
 	Expect(restyResp.StatusCode()).To(Equal(http.StatusOK))
 
-	fetched, resp, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsIdGet(ctx, *created.Id).Execute()
+	fetched, resp, err := client.DefaultAPI.ApiAmbientV1SessionsIdGet(ctx, *created.Id).Execute()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
 	Expect(fetched.Name).To(Equal("patched-name"), "name should be updated by PATCH")
@@ -857,7 +857,7 @@ func TestSessionLlmTemperatureZeroAllowed(t *testing.T) {
 		Name:           "zero-temp-test",
 		LlmTemperature: openapi.PtrFloat64(0.0),
 	}
-	created, resp, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsPost(ctx).Session(sessionInput).Execute()
+	created, resp, err := client.DefaultAPI.ApiAmbientV1SessionsPost(ctx).Session(sessionInput).Execute()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusCreated))
 	Expect(*created.LlmTemperature).To(BeNumerically("~", 0.0, 0.001), "temperature 0.0 must be preserved, not overwritten by default")

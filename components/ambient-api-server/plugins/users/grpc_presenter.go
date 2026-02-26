@@ -16,7 +16,7 @@ func userToProto(u *User) *pb.User {
 			CreatedAt: timestamppb.New(u.CreatedAt),
 			UpdatedAt: timestamppb.New(u.UpdatedAt),
 			Kind:      "User",
-			Href:      "/api/ambient-api-server/v1/users/" + u.ID,
+			Href:      "/api/ambient/v1/users/" + u.ID,
 		},
 		Username: u.Username,
 		Name:     u.Name,

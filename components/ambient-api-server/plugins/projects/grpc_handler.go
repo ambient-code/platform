@@ -2,14 +2,18 @@ package projects
 
 import (
 	"context"
-	"fmt"
 
+	"github.com/golang/glog"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
+	"github.com/ambient/platform/components/ambient-api-server/pkg/api"
 	localgrpc "github.com/ambient/platform/components/ambient-api-server/pkg/api/grpc"
 	pb "github.com/ambient/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1"
 	"github.com/openshift-online/rh-trex-ai/pkg/server"
 	"github.com/openshift-online/rh-trex-ai/pkg/server/grpcutil"
 	"github.com/openshift-online/rh-trex-ai/pkg/services"
-	"google.golang.org/grpc"
 )
 
 type projectGRPCHandler struct {
@@ -143,13 +147,13 @@ func (h *projectGRPCHandler) ListProjects(ctx context.Context, req *pb.ListProje
 func (h *projectGRPCHandler) WatchProjects(req *pb.WatchProjectsRequest, stream grpc.ServerStreamingServer[pb.ProjectWatchEvent]) error {
 	broker := h.brokerFunc()
 	if broker == nil {
-		return fmt.Errorf("event broker not available")
+		return status.Error(codes.Unavailable, "event broker not available")
 	}
 
 	ctx := stream.Context()
 	sub, err := broker.Subscribe(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to subscribe to event broker: %w", err)
+		return status.Errorf(codes.Internal, "failed to subscribe to event broker: %v", err)
 	}
 
 	for {
@@ -170,9 +174,10 @@ func (h *projectGRPCHandler) WatchProjects(req *pb.WatchProjectsRequest, stream 
 				ResourceId: event.SourceID,
 			}
 
-			if event.EventType != "delete" {
+			if event.EventType != api.DeleteEventType {
 				project, svcErr := h.service.Get(ctx, event.SourceID)
 				if svcErr != nil {
+					glog.Errorf("WatchProjects: failed to get project %s: %v", event.SourceID, svcErr)
 					continue
 				}
 				watchEvent.Project = projectToProto(project)

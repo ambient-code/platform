@@ -16,7 +16,7 @@ func projectSettingsToProto(ps *ProjectSettings) *pb.ProjectSettings {
 			CreatedAt: timestamppb.New(ps.CreatedAt),
 			UpdatedAt: timestamppb.New(ps.UpdatedAt),
 			Kind:      "ProjectSettings",
-			Href:      "/api/ambient-api-server/v1/project_settings/" + ps.ID,
+			Href:      "/api/ambient/v1/project_settings/" + ps.ID,
 		},
 		ProjectId:    ps.ProjectId,
 		GroupAccess:  ps.GroupAccess,

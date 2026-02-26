@@ -16,7 +16,7 @@ func projectToProto(p *Project) *pb.Project {
 			CreatedAt: timestamppb.New(p.CreatedAt),
 			UpdatedAt: timestamppb.New(p.UpdatedAt),
 			Kind:      "Project",
-			Href:      "/api/ambient-api-server/v1/projects/" + p.ID,
+			Href:      "/api/ambient/v1/projects/" + p.ID,
 		},
 		Name:        p.Name,
 		DisplayName: p.DisplayName,

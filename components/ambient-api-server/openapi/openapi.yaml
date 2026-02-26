@@ -16,28 +16,28 @@ servers:
   - url: https://api.stage.ambient-code.com
     description: Staging
 paths:
-  /api/ambient-api-server/v1/sessions:
-    $ref: 'openapi.sessions.yaml#/paths/~1api~1ambient-api-server~1v1~1sessions'
-  /api/ambient-api-server/v1/sessions/{id}:
-    $ref: 'openapi.sessions.yaml#/paths/~1api~1ambient-api-server~1v1~1sessions~1{id}'
-  /api/ambient-api-server/v1/sessions/{id}/status:
-    $ref: 'openapi.sessions.yaml#/paths/~1api~1ambient-api-server~1v1~1sessions~1{id}~1status'
-  /api/ambient-api-server/v1/sessions/{id}/start:
-    $ref: 'openapi.sessions.yaml#/paths/~1api~1ambient-api-server~1v1~1sessions~1{id}~1start'
-  /api/ambient-api-server/v1/sessions/{id}/stop:
-    $ref: 'openapi.sessions.yaml#/paths/~1api~1ambient-api-server~1v1~1sessions~1{id}~1stop'
-  /api/ambient-api-server/v1/projects:
-    $ref: 'openapi.projects.yaml#/paths/~1api~1ambient-api-server~1v1~1projects'
-  /api/ambient-api-server/v1/projects/{id}:
-    $ref: 'openapi.projects.yaml#/paths/~1api~1ambient-api-server~1v1~1projects~1{id}'
-  /api/ambient-api-server/v1/project_settings:
-    $ref: 'openapi.projectSettings.yaml#/paths/~1api~1ambient-api-server~1v1~1project_settings'
-  /api/ambient-api-server/v1/project_settings/{id}:
-    $ref: 'openapi.projectSettings.yaml#/paths/~1api~1ambient-api-server~1v1~1project_settings~1{id}'
-  /api/ambient-api-server/v1/users:
-    $ref: 'openapi.users.yaml#/paths/~1api~1ambient-api-server~1v1~1users'
-  /api/ambient-api-server/v1/users/{id}:
-    $ref: 'openapi.users.yaml#/paths/~1api~1ambient-api-server~1v1~1users~1{id}'
+  /api/ambient/v1/sessions:
+    $ref: 'openapi.sessions.yaml#/paths/~1api~1ambient~1v1~1sessions'
+  /api/ambient/v1/sessions/{id}:
+    $ref: 'openapi.sessions.yaml#/paths/~1api~1ambient~1v1~1sessions~1{id}'
+  /api/ambient/v1/sessions/{id}/status:
+    $ref: 'openapi.sessions.yaml#/paths/~1api~1ambient~1v1~1sessions~1{id}~1status'
+  /api/ambient/v1/sessions/{id}/start:
+    $ref: 'openapi.sessions.yaml#/paths/~1api~1ambient~1v1~1sessions~1{id}~1start'
+  /api/ambient/v1/sessions/{id}/stop:
+    $ref: 'openapi.sessions.yaml#/paths/~1api~1ambient~1v1~1sessions~1{id}~1stop'
+  /api/ambient/v1/projects:
+    $ref: 'openapi.projects.yaml#/paths/~1api~1ambient~1v1~1projects'
+  /api/ambient/v1/projects/{id}:
+    $ref: 'openapi.projects.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}'
+  /api/ambient/v1/project_settings:
+    $ref: 'openapi.projectSettings.yaml#/paths/~1api~1ambient~1v1~1project_settings'
+  /api/ambient/v1/project_settings/{id}:
+    $ref: 'openapi.projectSettings.yaml#/paths/~1api~1ambient~1v1~1project_settings~1{id}'
+  /api/ambient/v1/users:
+    $ref: 'openapi.users.yaml#/paths/~1api~1ambient~1v1~1users'
+  /api/ambient/v1/users/{id}:
+    $ref: 'openapi.users.yaml#/paths/~1api~1ambient~1v1~1users~1{id}'
   # AUTO-ADD NEW PATHS
 components:
   securitySchemes:

@@ -3,6 +3,7 @@ package projects_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	. "github.com/onsi/gomega"
 	"google.golang.org/grpc"
@@ -66,4 +67,56 @@ func TestProjectGRPCCrud(t *testing.T) {
 	st, ok := status.FromError(err)
 	Expect(ok).To(BeTrue())
 	Expect(st.Code()).To(Equal(codes.NotFound))
+}
+
+func TestProjectGRPCWatch(t *testing.T) {
+	h, _ := test.RegisterIntegration(t)
+
+	account := h.NewRandAccount()
+	token := h.CreateJWTString(account)
+
+	h.StartControllersServer()
+	time.Sleep(500 * time.Millisecond)
+
+	conn, err := grpc.NewClient(
+		h.GRPCAddress(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	Expect(err).NotTo(HaveOccurred())
+	defer conn.Close()
+
+	client := pb.NewProjectServiceClient(conn)
+	ctx := metadata.AppendToOutgoingContext(context.Background(), "authorization", "Bearer "+token)
+
+	watchCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	stream, err := client.WatchProjects(watchCtx, &pb.WatchProjectsRequest{})
+	Expect(err).NotTo(HaveOccurred())
+
+	received := make(chan *pb.ProjectWatchEvent, 10)
+	go func() {
+		for {
+			event, err := stream.Recv()
+			if err != nil {
+				return
+			}
+			received <- event
+		}
+	}()
+
+	time.Sleep(200 * time.Millisecond)
+
+	created, err := client.CreateProject(ctx, &pb.CreateProjectRequest{
+		Name: "watch-test-project",
+	})
+	Expect(err).NotTo(HaveOccurred())
+
+	select {
+	case event := <-received:
+		Expect(event.GetType()).To(Equal(pb.EventType_EVENT_TYPE_CREATED))
+		Expect(event.GetResourceId()).To(Equal(created.GetMetadata().GetId()))
+	case <-time.After(10 * time.Second):
+		t.Fatal("Timed out waiting for watch event")
+	}
 }
