@@ -2,7 +2,6 @@ package set
 
 import (
 	"fmt"
-	"strconv"
 
 	"github.com/ambient-code/platform/components/ambient-cli/pkg/config"
 	"github.com/spf13/cobra"
@@ -11,7 +10,7 @@ import (
 var Cmd = &cobra.Command{
 	Use:   "set <key> <value>",
 	Short: "Set a configuration value",
-	Long:  "Set a configuration value by key. Valid keys: api_url, project, insecure, pager.",
+	Long:  "Set a configuration value by key. Valid keys: api_url, project, pager.",
 	Args:  cobra.ExactArgs(2),
 	RunE:  run,
 }
@@ -30,16 +29,10 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 		cfg.APIUrl = value
 	case "project":
 		cfg.Project = value
-	case "insecure":
-		b, err := strconv.ParseBool(value)
-		if err != nil {
-			return fmt.Errorf("invalid boolean value for insecure: %s", value)
-		}
-		cfg.Insecure = b
 	case "pager":
 		cfg.Pager = value
 	default:
-		return fmt.Errorf("unknown config key: %s (valid keys: api_url, project, insecure, pager)", key)
+		return fmt.Errorf("unknown config key: %s (valid keys: api_url, project, pager)", key)
 	}
 
 	if err := config.Save(cfg); err != nil {

@@ -1,6 +1,6 @@
-# ambient CLI
+# acpctl
 
-Command-line interface for the Ambient Code Platform API server. Follows the `oc`/`kubectl` verb-noun pattern (`ambient get sessions`).
+Command-line interface for the Ambient Code Platform API server. Follows the `oc`/`kubectl` verb-noun pattern (`acpctl get sessions`).
 
 ## Build
 
@@ -8,11 +8,11 @@ Command-line interface for the Ambient Code Platform API server. Follows the `oc
 make build
 ```
 
-This produces an `ambient` binary in the current directory with embedded version info.
+This produces an `acpctl` binary in the current directory with embedded version info.
 
 ```bash
-./ambient version
-# ambient v0.0.25-16-g88393d5 (commit: 88393d5, built: 2026-02-25T03:22:58Z)
+./acpctl version
+# acpctl v0.0.25-16-g88393d5 (commit: 88393d5, built: 2026-02-25T03:22:58Z)
 ```
 
 ## Quick Start
@@ -21,92 +21,91 @@ This produces an `ambient` binary in the current directory with embedded version
 
 ```bash
 # With a token and API server URL
-./ambient login --token <your-token> --url http://localhost:8000 --project myproject
+./acpctl login --token <your-token> --url http://localhost:8000 --project myproject
 
 # Verify
-./ambient whoami
+./acpctl whoami
 ```
 
 ### 2. Configure defaults
 
 ```bash
 # Set or change the default project
-./ambient config set project myproject
+./acpctl config set project myproject
 
 # View current settings
-./ambient config get api_url
-./ambient config get project
+./acpctl config get api_url
+./acpctl config get project
 ```
 
 ### 3. List resources
 
 ```bash
 # List sessions (table format)
-./ambient get sessions
+./acpctl get sessions
 
 # List projects
-./ambient get projects
+./acpctl get projects
 
 # JSON output
-./ambient get sessions -o json
+./acpctl get sessions -o json
 
 # Single resource by ID
-./ambient get session <session-id>
+./acpctl get session <session-id>
 ```
 
 ### 4. Create resources
 
 ```bash
 # Create a project
-./ambient create project --name my-project --display-name "My Project"
+./acpctl create project --name my-project --display-name "My Project"
 
 # Create a session
-./ambient create session --name fix-bug-123 \
+./acpctl create session --name fix-bug-123 \
   --prompt "Fix the null pointer in handler.go" \
   --repo-url https://github.com/org/repo \
   --model sonnet
 
 # Create with all options
-./ambient create session --name refactor-auth \
+./acpctl create session --name refactor-auth \
   --prompt "Refactor the auth middleware" \
   --model sonnet \
   --max-tokens 4000 \
   --temperature 0.7 \
   --timeout 3600 \
-  --interactive
 ```
 
 ### 5. Session lifecycle
 
 ```bash
 # Start a session
-./ambient start <session-id>
+./acpctl start <session-id>
 
 # Stop a session
-./ambient stop <session-id>
+./acpctl stop <session-id>
 ```
 
 ### 6. Inspect resources
 
 ```bash
 # Full JSON detail of a session
-./ambient describe session <session-id>
+./acpctl describe session <session-id>
 
 # Full JSON detail of a project
-./ambient describe project <project-id>
+./acpctl describe project <project-id>
 ```
 
 ### 7. Delete resources
 
 ```bash
-./ambient delete project <project-id>
-./ambient delete project-settings <id>
+./acpctl delete project <project-id>
+./acpctl delete project-settings <id>
 ```
 
 ### 8. Log out
 
 ```bash
-./ambient logout
+./acpctl logout
 ```
 
 ## Try It Now (No Server Required)
@@ -117,26 +116,26 @@ These commands work without a running API server:
 make build
 
 # Version and help
-./ambient version
-./ambient --help
-./ambient get --help
-./ambient create --help
+./acpctl version
+./acpctl --help
+./acpctl get --help
+./acpctl create --help
 
 # Login and config flow
-./ambient login --token test-token --url http://localhost:8000 --project demo
-./ambient whoami
-./ambient config get api_url
-./ambient config get project
-./ambient config set project other-project
-./ambient config get project
+./acpctl login --token test-token --url http://localhost:8000 --project demo
+./acpctl whoami
+./acpctl config get api_url
+./acpctl config get project
+./acpctl config set project other-project
+./acpctl config get project
 
 # Shell completion
-./ambient completion bash
-./ambient completion zsh
+./acpctl completion bash
+./acpctl completion zsh
 
 # Logout
-./ambient logout
-./ambient whoami  # errors: "not logged in"
+./acpctl logout
+./acpctl whoami  # errors: "not logged in"
 ```
 
 ## Configuration
@@ -169,7 +168,7 @@ Environment variables also work (override config file values):
 
 ## Dependencies
 
-- [Go SDK](../ambient-sdk/go-sdk/) via `replace` directive — zero-dep HTTP client for the Ambient API
+- [Go SDK](../acpctl-sdk/go-sdk/) via `replace` directive — zero-dep HTTP client for the Ambient API
 - [cobra](https://github.com/spf13/cobra) — command framework
 - [golang-jwt](https://github.com/golang-jwt/jwt) — token introspection for `whoami`
 - [x/term](https://pkg.go.dev/golang.org/x/term) — terminal detection for table output

@@ -1,4 +1,4 @@
-BINARY    := ambient
+BINARY    := acpctl
 MODULE    := github.com/ambient-code/platform/components/ambient-cli
 PKG       := $(MODULE)/pkg/info
 
@@ -26,6 +26,7 @@ vet:
 	go vet ./...
 
 lint: fmt vet
+	golangci-lint run
 
 test:
 	go test ./...

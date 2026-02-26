@@ -21,7 +21,7 @@ import (
 )
 
 var root = &cobra.Command{
-	Use:           "ambient",
+	Use:           "acpctl",
 	Short:         "Ambient Code Platform CLI",
 	Long:          "Command-line interface for the Ambient Code Platform API server.",
 	SilenceUsage:  true,

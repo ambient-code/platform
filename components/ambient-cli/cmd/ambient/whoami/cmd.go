@@ -1,7 +1,6 @@
 package whoami
 
 import (
-	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -26,7 +25,7 @@ func run(cmd *cobra.Command, _ []string) error {
 
 	token := cfg.GetToken()
 	if token == "" {
-		return fmt.Errorf("not logged in; run 'ambient login' first")
+		return fmt.Errorf("not logged in; run 'acpctl login' first")
 	}
 
 	out := cmd.OutOrStdout()
@@ -61,6 +60,5 @@ func run(cmd *cobra.Command, _ []string) error {
 	fmt.Fprintf(out, "API URL:    %s\n", cfg.GetAPIUrl())
 	fmt.Fprintf(out, "Project:    %s\n", cfg.GetProject())
 
-	_ = context.Background()
 	return nil
 }

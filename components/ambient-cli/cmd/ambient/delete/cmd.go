@@ -10,16 +10,28 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var deleteArgs struct {
+	yes bool
+}
+
 var Cmd = &cobra.Command{
 	Use:   "delete <resource> <name>",
 	Short: "Delete a resource",
 	Long: `Delete a resource by ID.
 
 Valid resource types:
+  session    (aliases: sess) — stops then deletes a session
   project    (aliases: proj)
-  project-settings (aliases: ps)`,
+  project-settings (aliases: ps)
+
+Note: Session deletion is not yet supported by the API.
+Use 'acpctl stop' to terminate a running session.`,
 	Args: cobra.ExactArgs(2),
 	RunE: run,
+}
+
+func init() {
+	Cmd.Flags().BoolVarP(&deleteArgs.yes, "yes", "y", false, "Skip confirmation prompt")
 }
 
 func run(cmd *cobra.Command, cmdArgs []string) error {
@@ -33,6 +45,15 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+
+	if !deleteArgs.yes {
+		fmt.Fprintf(cmd.OutOrStdout(), "Delete %s/%s? [y/N]: ", resource, name)
+		var confirm string
+		if _, err := fmt.Fscanln(cmd.InOrStdin(), &confirm); err != nil || strings.ToLower(confirm) != "y" {
+			fmt.Fprintln(cmd.OutOrStdout(), "Aborted.")
+			return nil
+		}
+	}
 
 	switch resource {
 	case "project", "projects", "proj":

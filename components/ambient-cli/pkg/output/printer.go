@@ -20,9 +20,13 @@ type Printer struct {
 	format Format
 }
 
-func NewPrinter(format Format) *Printer {
+func NewPrinter(format Format, writers ...io.Writer) *Printer {
+	w := io.Writer(os.Stdout)
+	if len(writers) > 0 && writers[0] != nil {
+		w = writers[0]
+	}
 	return &Printer{
-		writer: os.Stdout,
+		writer: w,
 		format: format,
 	}
 }

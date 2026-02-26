@@ -12,7 +12,6 @@ type Config struct {
 	AccessToken  string `json:"access_token,omitempty"`
 	RefreshToken string `json:"refresh_token,omitempty"`
 	Project      string `json:"project,omitempty"`
-	Insecure     bool   `json:"insecure,omitempty"`
 	Pager        string `json:"pager,omitempty"`
 }
 

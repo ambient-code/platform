@@ -10,7 +10,7 @@ import (
 var Cmd = &cobra.Command{
 	Use:   "get <key>",
 	Short: "Get a configuration value",
-	Long:  "Get a configuration value by key. Valid keys: api_url, project, insecure, pager.",
+	Long:  "Get a configuration value by key. Valid keys: api_url, project, pager.",
 	Args:  cobra.ExactArgs(1),
 	RunE:  run,
 }
@@ -29,8 +29,6 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 		value = cfg.GetAPIUrl()
 	case "project":
 		value = cfg.GetProject()
-	case "insecure":
-		value = fmt.Sprintf("%t", cfg.Insecure)
 	case "pager":
 		value = cfg.Pager
 	case "access_token":
@@ -38,11 +36,12 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 			value = "[REDACTED]"
 		}
 	default:
-		return fmt.Errorf("unknown config key: %s (valid keys: api_url, project, insecure, pager)", key)
+		return fmt.Errorf("unknown config key: %s (valid keys: api_url, project, pager)", key)
 	}
 
-	if value != "" {
-		fmt.Fprintln(cmd.OutOrStdout(), value)
+	if value == "" {
+		value = "(not set)"
 	}
+	fmt.Fprintln(cmd.OutOrStdout(), value)
 	return nil
 }

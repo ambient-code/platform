@@ -16,12 +16,12 @@ func NewClientFromConfig() (*sdkclient.Client, error) {
 
 	token := cfg.GetToken()
 	if token == "" {
-		return nil, fmt.Errorf("not logged in; run 'ambient login' first")
+		return nil, fmt.Errorf("not logged in; run 'acpctl login' first")
 	}
 
 	project := cfg.GetProject()
 	if project == "" {
-		return nil, fmt.Errorf("no project set; run 'ambient config set project <name>' or set AMBIENT_PROJECT")
+		return nil, fmt.Errorf("no project set; run 'acpctl config set project <name>' or set AMBIENT_PROJECT")
 	}
 
 	apiURL := cfg.GetAPIUrl()
@@ -30,6 +30,6 @@ func NewClientFromConfig() (*sdkclient.Client, error) {
 		apiURL,
 		token,
 		project,
-		sdkclient.WithUserAgent("ambient-cli/"+info.Version),
+		sdkclient.WithUserAgent("acpctl/"+info.Version),
 	)
 }

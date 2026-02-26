@@ -15,6 +15,7 @@ import (
 
 var args struct {
 	outputFormat string
+	limit        int
 }
 
 var Cmd = &cobra.Command{
@@ -28,11 +29,12 @@ Valid resource types:
   project-settings (aliases: projectsettings, ps)`,
 	Args:    cobra.RangeArgs(1, 2),
 	RunE:    run,
-	Example: "  ambient get sessions\n  ambient get session my-session-id\n  ambient get projects -o json",
+	Example: "  acpctl get sessions\n  acpctl get session my-session-id\n  acpctl get projects -o json",
 }
 
 func init() {
 	Cmd.Flags().StringVarP(&args.outputFormat, "output", "o", "", "Output format: json|wide")
+	Cmd.Flags().IntVar(&args.limit, "limit", 100, "Maximum number of items to return")
 }
 
 func run(cmd *cobra.Command, cmdArgs []string) error {
@@ -94,7 +96,7 @@ func getSessions(ctx context.Context, client *sdkclient.Client, printer *output.
 		return printSessionTable(printer, []sdktypes.Session{*session})
 	}
 
-	opts := sdktypes.NewListOptions().Size(100).Build()
+	opts := sdktypes.NewListOptions().Size(args.limit).Build()
 	list, err := client.Sessions().List(ctx, opts)
 	if err != nil {
 		return fmt.Errorf("list sessions: %w", err)
@@ -141,7 +143,7 @@ func getProjects(ctx context.Context, client *sdkclient.Client, printer *output.
 		return printProjectTable(printer, []sdktypes.Project{*project})
 	}
 
-	opts := sdktypes.NewListOptions().Size(100).Build()
+	opts := sdktypes.NewListOptions().Size(args.limit).Build()
 	list, err := client.Projects().List(ctx, opts)
 	if err != nil {
 		return fmt.Errorf("list projects: %w", err)
@@ -183,7 +185,7 @@ func getProjectSettings(ctx context.Context, client *sdkclient.Client, printer *
 		return printProjectSettingsTable(printer, []sdktypes.ProjectSettings{*settings})
 	}
 
-	opts := sdktypes.NewListOptions().Size(100).Build()
+	opts := sdktypes.NewListOptions().Size(args.limit).Build()
 	list, err := client.ProjectSettings().List(ctx, opts)
 	if err != nil {
 		return fmt.Errorf("list project-settings: %w", err)

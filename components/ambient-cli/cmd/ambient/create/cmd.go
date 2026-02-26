@@ -24,7 +24,7 @@ Valid resource types:
 	RunE: run,
 }
 
-var sessionArgs struct {
+var createArgs struct {
 	name        string
 	prompt      string
 	repoURL     string
@@ -32,29 +32,22 @@ var sessionArgs struct {
 	maxTokens   int
 	temperature float64
 	timeout     int
-	interactive bool
-	outputJSON  bool
-}
-
-var projectArgs struct {
-	name        string
 	displayName string
 	description string
 	outputJSON  bool
 }
 
 func init() {
-	Cmd.Flags().StringVar(&sessionArgs.name, "name", "", "Resource name (required)")
-	Cmd.Flags().StringVar(&sessionArgs.prompt, "prompt", "", "Session prompt")
-	Cmd.Flags().StringVar(&sessionArgs.repoURL, "repo-url", "", "Repository URL")
-	Cmd.Flags().StringVar(&sessionArgs.model, "model", "", "LLM model")
-	Cmd.Flags().IntVar(&sessionArgs.maxTokens, "max-tokens", 0, "LLM max tokens")
-	Cmd.Flags().Float64Var(&sessionArgs.temperature, "temperature", 0, "LLM temperature")
-	Cmd.Flags().IntVar(&sessionArgs.timeout, "timeout", 0, "Session timeout in seconds")
-	Cmd.Flags().BoolVar(&sessionArgs.interactive, "interactive", false, "Interactive mode")
-	Cmd.Flags().StringVar(&projectArgs.displayName, "display-name", "", "Project display name")
-	Cmd.Flags().StringVar(&projectArgs.description, "description", "", "Project description")
-	Cmd.Flags().BoolVarP(&sessionArgs.outputJSON, "json", "o", false, "Output as JSON")
+	Cmd.Flags().StringVar(&createArgs.name, "name", "", "Resource name (required)")
+	Cmd.Flags().StringVar(&createArgs.prompt, "prompt", "", "Session prompt")
+	Cmd.Flags().StringVar(&createArgs.repoURL, "repo-url", "", "Repository URL")
+	Cmd.Flags().StringVar(&createArgs.model, "model", "", "LLM model")
+	Cmd.Flags().IntVar(&createArgs.maxTokens, "max-tokens", 0, "LLM max tokens")
+	Cmd.Flags().Float64Var(&createArgs.temperature, "temperature", 0, "LLM temperature")
+	Cmd.Flags().IntVar(&createArgs.timeout, "timeout", 0, "Session timeout in seconds")
+	Cmd.Flags().StringVar(&createArgs.displayName, "display-name", "", "Project display name")
+	Cmd.Flags().StringVar(&createArgs.description, "description", "", "Project description")
+	Cmd.Flags().BoolVarP(&createArgs.outputJSON, "json", "o", false, "Output as JSON")
 }
 
 func run(cmd *cobra.Command, cmdArgs []string) error {
@@ -71,34 +64,30 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 }
 
 func createSession(cmd *cobra.Command) error {
-	if sessionArgs.name == "" {
+	if createArgs.name == "" {
 		return fmt.Errorf("--name is required")
 	}
 
-	builder := sdktypes.NewSessionBuilder().Name(sessionArgs.name)
+	builder := sdktypes.NewSessionBuilder().Name(createArgs.name)
 
-	if sessionArgs.prompt != "" {
-		builder.Prompt(sessionArgs.prompt)
+	if createArgs.prompt != "" {
+		builder.Prompt(createArgs.prompt)
 	}
-	if sessionArgs.repoURL != "" {
-		builder.RepoURL(sessionArgs.repoURL)
+	if createArgs.repoURL != "" {
+		builder.RepoURL(createArgs.repoURL)
 	}
-	if sessionArgs.model != "" {
-		builder.LlmModel(sessionArgs.model)
+	if createArgs.model != "" {
+		builder.LlmModel(createArgs.model)
 	}
-	if sessionArgs.maxTokens > 0 {
-		builder.LlmMaxTokens(sessionArgs.maxTokens)
+	if createArgs.maxTokens > 0 {
+		builder.LlmMaxTokens(createArgs.maxTokens)
 	}
-	if sessionArgs.temperature > 0 {
-		builder.LlmTemperature(sessionArgs.temperature)
+	if createArgs.temperature > 0 {
+		builder.LlmTemperature(createArgs.temperature)
 	}
-	if sessionArgs.timeout > 0 {
-		builder.Timeout(sessionArgs.timeout)
+	if createArgs.timeout > 0 {
+		builder.Timeout(createArgs.timeout)
 	}
-	if sessionArgs.interactive {
-		builder.Interactive(true)
-	}
-
 	session, err := builder.Build()
 	if err != nil {
 		return fmt.Errorf("build session: %w", err)
@@ -117,7 +106,7 @@ func createSession(cmd *cobra.Command) error {
 		return fmt.Errorf("create session: %w", err)
 	}
 
-	if sessionArgs.outputJSON {
+	if createArgs.outputJSON {
 		printer := output.NewPrinter(output.FormatJSON)
 		return printer.PrintJSON(created)
 	}
@@ -127,17 +116,17 @@ func createSession(cmd *cobra.Command) error {
 }
 
 func createProject(cmd *cobra.Command) error {
-	if sessionArgs.name == "" {
+	if createArgs.name == "" {
 		return fmt.Errorf("--name is required")
 	}
 
-	builder := sdktypes.NewProjectBuilder().Name(sessionArgs.name)
+	builder := sdktypes.NewProjectBuilder().Name(createArgs.name)
 
-	if projectArgs.displayName != "" {
-		builder.DisplayName(projectArgs.displayName)
+	if createArgs.displayName != "" {
+		builder.DisplayName(createArgs.displayName)
 	}
-	if projectArgs.description != "" {
-		builder.Description(projectArgs.description)
+	if createArgs.description != "" {
+		builder.Description(createArgs.description)
 	}
 
 	project, err := builder.Build()
@@ -158,7 +147,7 @@ func createProject(cmd *cobra.Command) error {
 		return fmt.Errorf("create project: %w", err)
 	}
 
-	if sessionArgs.outputJSON {
+	if createArgs.outputJSON {
 		printer := output.NewPrinter(output.FormatJSON)
 		return printer.PrintJSON(created)
 	}

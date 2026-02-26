@@ -9,19 +9,19 @@ import (
 var Cmd = &cobra.Command{
 	Use:   "completion <shell>",
 	Short: "Generate shell completion scripts",
-	Long: `Generate shell completion scripts for ambient CLI.
+	Long: `Generate shell completion scripts for acpctl.
 
 Supported shells: bash, zsh, fish, powershell
 
 Example:
   # Bash
-  ambient completion bash > /etc/bash_completion.d/ambient
+  acpctl completion bash > /etc/bash_completion.d/acpctl
 
   # Zsh
-  ambient completion zsh > "${fpath[1]}/_ambient"
+  acpctl completion zsh > "${fpath[1]}/_acpctl"
 
   # Fish
-  ambient completion fish > ~/.config/fish/completions/ambient.fish`,
+  acpctl completion fish > ~/.config/fish/completions/acpctl.fish`,
 	Args:      cobra.ExactArgs(1),
 	ValidArgs: []string{"bash", "zsh", "fish", "powershell"},
 	RunE:      run,
