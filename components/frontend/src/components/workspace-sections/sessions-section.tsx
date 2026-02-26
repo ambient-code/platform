@@ -261,6 +261,7 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-[20px] px-0"></TableHead>
                     <TableHead className="min-w-[180px]">Name</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="hidden md:table-cell">Model</TableHead>
@@ -279,6 +280,9 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
 
                     return (
                       <TableRow key={session.metadata?.uid || session.metadata?.name}>
+                        <TableCell className="w-[20px] px-0 pr-1">
+                          <SessionStatusDot phase={phase} />
+                        </TableCell>
                         <TableCell className="font-medium min-w-[180px]">
                           <HoverCard openDelay={300} closeDelay={100}>
                             <HoverCardTrigger asChild>
@@ -328,10 +332,11 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
                           </HoverCard>
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-2">
-                            <SessionStatusDot phase={phase} />
-                            <AgentStatusIndicator status={deriveAgentStatusFromPhase(phase)} compact />
-                          </div>
+                          <AgentStatusIndicator status={
+                            (phase === 'Completed' || phase === 'Failed' || phase === 'Stopped')
+                              ? deriveAgentStatusFromPhase(phase)
+                              : (session.status?.agentStatus ?? deriveAgentStatusFromPhase(phase))
+                          } />
                         </TableCell>
                         <TableCell className="hidden md:table-cell">
                           <div className="text-sm truncate max-w-[160px]">

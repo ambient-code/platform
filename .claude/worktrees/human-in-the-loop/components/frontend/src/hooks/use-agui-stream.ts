@@ -235,15 +235,14 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
       }
 
       // Add user message to state immediately for instant UI feedback.
-      const userMsgWithTimestamp = {
-        ...userMessage,
-        timestamp: new Date().toISOString(),
-      } as PlatformMessage
       setState((prev) => ({
         ...prev,
         status: 'connected',
         error: null,
-        messages: [...prev.messages, userMsgWithTimestamp],
+        messages: [...prev.messages, {
+          ...userMessage,
+          timestamp: new Date().toISOString(),
+        } as PlatformMessage],
       }))
 
       try {
@@ -318,7 +317,7 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
     sendMessage,
     interrupt,
     isConnected: state.status === 'connected',
-    isStreaming: state.currentMessage !== null || state.currentToolCall !== null || state.pendingToolCalls.size > 0 || state.currentReasoning !== null,
+    isStreaming: state.currentMessage !== null || state.currentToolCall !== null || state.pendingToolCalls.size > 0,
     isRunActive,
   }
 }
