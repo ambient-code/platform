@@ -3,7 +3,7 @@ import { AmbientClient, AmbientAPIError } from '../src';
 describe('AmbientClient construction', () => {
   it('creates client with valid config', () => {
     const client = new AmbientClient({
-      baseUrl: 'https://api.example.com',
+      baseUrl: 'https://api.ambient-platform.com',
       token: 'sha256~abcdefghijklmnopqrstuvwxyz1234567890',
       project: 'test-project',
     });
@@ -17,14 +17,14 @@ describe('AmbientClient construction', () => {
   it('throws when baseUrl is missing', () => {
     expect(() => new AmbientClient({
       baseUrl: '',
-      token: 'test-token',
+      token: 'sha256~abcdefghijklmnopqrstuvwxyz1234567890',
       project: 'test-project',
     })).toThrow('baseUrl is required');
   });
 
   it('throws when token is missing', () => {
     expect(() => new AmbientClient({
-      baseUrl: 'https://api.example.com',
+      baseUrl: 'https://api.ambient-platform.com',
       token: '',
       project: 'test-project',
     })).toThrow('token is required');
@@ -32,8 +32,8 @@ describe('AmbientClient construction', () => {
 
   it('throws when project is missing', () => {
     expect(() => new AmbientClient({
-      baseUrl: 'https://api.example.com',
-      token: 'test-token',
+      baseUrl: 'https://api.ambient-platform.com',
+      token: 'sha256~abcdefghijklmnopqrstuvwxyz1234567890',
       project: '',
     })).toThrow('project is required');
   });
@@ -41,7 +41,7 @@ describe('AmbientClient construction', () => {
   it('strips trailing slashes from baseUrl', () => {
     const client = new AmbientClient({
       baseUrl: 'https://api.example.com///',
-      token: 'test-token',
+      token: 'sha256~abcdefghijklmnopqrstuvwxyz1234567890',
       project: 'test-project',
     });
     expect(client).toBeDefined();
@@ -75,7 +75,7 @@ describe('AmbientClient.fromEnv', () => {
   });
 
   it('throws when AMBIENT_PROJECT is missing', () => {
-    process.env.AMBIENT_TOKEN = 'test-token';
+    process.env.AMBIENT_TOKEN = 'sha256~abcdefghijklmnopqrstuvwxyz1234567890';
     delete process.env.AMBIENT_PROJECT;
     expect(() => AmbientClient.fromEnv()).toThrow('AMBIENT_PROJECT environment variable is required');
   });

@@ -10,7 +10,6 @@ from ambient_platform import (
     ListOptions,
     APIError,
 )
-from ambient_platform.exceptions import AmbientAPIError
 
 
 def main():

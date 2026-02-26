@@ -67,7 +67,6 @@ describe('Session types', () => {
       name: 'test-session',
       prompt: 'do something',
       phase: 'pending',
-      interactive: false,
       timeout: 3600,
       llm_model: 'claude-sonnet-4-20250514',
       llm_temperature: 0.7,
@@ -119,13 +118,11 @@ describe('SessionBuilder', () => {
       .name('my-session')
       .prompt('analyze code')
       .llmModel('claude-sonnet-4-20250514')
-      .interactive(false)
       .timeout(3600)
       .build();
     expect(req.name).toBe('my-session');
     expect(req.prompt).toBe('analyze code');
     expect(req.llm_model).toBe('claude-sonnet-4-20250514');
-    expect(req.interactive).toBe(false);
     expect(req.timeout).toBe(3600);
   });
 

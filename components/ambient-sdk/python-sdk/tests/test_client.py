@@ -148,8 +148,8 @@ class TestClientResourceAccessors:
     def test_projects_accessor(self):
         assert self.client.projects is not None
 
-    def test_project_settingss_accessor(self):
-        assert self.client.project_settingss is not None
+    def test_project_settings_accessor(self):
+        assert self.client.project_settings is not None
 
     def test_users_accessor(self):
         assert self.client.users is not None
