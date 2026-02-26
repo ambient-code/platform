@@ -15,6 +15,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { InputWithHistory } from "@/components/input-with-history";
+import { useInputHistory } from "@/hooks/use-input-history";
 
 // Maximum file size: 10MB for all file types
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB unified limit
@@ -51,6 +53,7 @@ export function UploadFileModal({
   const [fileSizeError, setFileSizeError] = useState<string | null>(null);
   const [isValidating, setIsValidating] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { addToHistory: addUrlToHistory } = useInputHistory("upload-file:url");
 
   const handleSubmit = async () => {
     setIsStartingService(false);
@@ -68,6 +71,9 @@ export function UploadFileModal({
       }
     } else {
       if (!fileUrl.trim()) return;
+
+      // Save URL to history before uploading
+      addUrlToHistory(fileUrl.trim());
 
       // Extract filename from URL
       const urlParts = fileUrl.split("/");
@@ -217,7 +223,8 @@ export function UploadFileModal({
           <TabsContent value="url" className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="file-url">File URL</Label>
-              <Input
+              <InputWithHistory
+                historyKey="upload-file:url"
                 id="file-url"
                 type="url"
                 placeholder="https://example.com/file.pdf"
