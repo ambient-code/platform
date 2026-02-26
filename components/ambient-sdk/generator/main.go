@@ -301,7 +301,14 @@ func loadTemplate(path string) (*template.Template, error) {
 	funcMap := template.FuncMap{
 		"snakeCase":     toSnakeCase,
 		"lower":         strings.ToLower,
-		"title":         strings.Title,
+		"title": func(s string) string {
+			if s == "" {
+				return s
+			}
+			r := []rune(s)
+			r[0] = []rune(strings.ToUpper(string(r[0])))[0]
+			return string(r)
+		},
 		"goName":        toGoName,
 		"pythonDefault": func(f Field) string { return pythonDefault(f.Type, f.Format) },
 		"isDateTime":    isDateTimeField,

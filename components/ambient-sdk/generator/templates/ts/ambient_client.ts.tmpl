@@ -20,8 +20,22 @@ export class AmbientClient {
     if (!config.token) {
       throw new Error('token is required');
     }
+    if (config.token.length < 20) {
+      throw new Error('token is too short (minimum 20 characters)');
+    }
+    if (config.token === 'YOUR_TOKEN_HERE' || config.token === 'PLACEHOLDER_TOKEN') {
+      throw new Error('placeholder token is not allowed');
+    }
     if (!config.project) {
       throw new Error('project is required');
+    }
+    if (config.project.length > 63) {
+      throw new Error('project name cannot exceed 63 characters');
+    }
+
+    const url = new URL(config.baseUrl);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      throw new Error('only HTTP and HTTPS schemes are supported');
     }
 
     this.config = {

@@ -82,7 +82,6 @@ func runFullLifecycle(ctx context.Context, c *client.Client, projectName string)
 	session, err := types.NewSessionBuilder().
 		Name("sdk-demo-session").
 		Prompt("Analyze the repository structure and summarize the key components").
-		Interactive(true).
 		Timeout(300).
 		LlmModel("claude-sonnet-4-20250514").
 		LlmTemperature(0.7).
@@ -101,7 +100,6 @@ func runFullLifecycle(ctx context.Context, c *client.Client, projectName string)
 	fmt.Printf("  Created session: %s\n", createdSession.Name)
 	fmt.Printf("  Session ID:      %s\n", createdSession.ID)
 	fmt.Printf("  Phase:           %s\n", phaseOrDefault(createdSession.Phase))
-	fmt.Printf("  Interactive:     %v\n", createdSession.Interactive)
 	fmt.Printf("  Model:           %s\n", createdSession.LlmModel)
 	fmt.Printf("  Repos:           %s\n", createdSession.Repos)
 	fmt.Println()

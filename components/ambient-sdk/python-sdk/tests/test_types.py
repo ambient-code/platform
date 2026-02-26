@@ -3,39 +3,19 @@ from datetime import datetime, timezone
 
 from ambient_platform import (
     Session,
-    SessionBuilder,
-    SessionList,
     SessionPatch,
-    Agent,
-    AgentBuilder,
-    Task,
-    Skill,
+    SessionStatusPatch,
     User,
-    UserBuilder,
-    Workflow,
-    WorkflowBuilder,
-    WorkflowSkill,
-    WorkflowSkillBuilder,
-    WorkflowTask,
-    WorkflowTaskBuilder,
     Project,
-    ProjectBuilder,
     ProjectPatch,
     ProjectSettings,
-    ProjectSettingsBuilder,
-    Permission,
-    PermissionBuilder,
-    PermissionList,
-    PermissionPatch,
-    RepositoryRef,
-    RepositoryRefBuilder,
-    RepositoryRefList,
-    RepositoryRefPatch,
-    ProjectKey,
-    ProjectKeyBuilder,
-    ProjectKeyList,
-    ProjectKeyPatch,
+    ProjectSettingsPatch,
+    UserPatch,
 )
+from ambient_platform.session import SessionBuilder, SessionList
+from ambient_platform.project import ProjectBuilder, ProjectList
+from ambient_platform.project_settings import ProjectSettingsBuilder, ProjectSettingsList
+from ambient_platform.user import UserBuilder, UserList
 from ambient_platform._base import ListOptions, APIError, ObjectReference, _parse_datetime
 
 
@@ -60,19 +40,18 @@ class TestSessionBuilder:
             Session.builder().prompt("test").build()
 
 
-class TestSessionBuilderWP4:
+class TestSessionBuilderFields:
     def test_all_writable_fields(self):
         data = (
             Session.builder()
-            .name("wp4-session")
+            .name("full-session")
             .prompt("test prompt")
-            .interactive(True)
             .llm_model("claude-4-opus")
             .llm_temperature(0.7)
             .llm_max_tokens(4096)
             .repos('[{"url":"https://github.com/org/repo"}]')
             .labels("env=dev,team=platform")
-            .annotations("note=wp4-test")
+            .annotations("note=test")
             .project_id("proj-1")
             .parent_session_id("parent-123")
             .bot_account_name("bot-1")
@@ -81,7 +60,6 @@ class TestSessionBuilderWP4:
             .timeout(3600)
             .build()
         )
-        assert data["interactive"] is True
         assert data["llm_temperature"] == 0.7
         assert data["llm_max_tokens"] == 4096
         assert data["llm_model"] == "claude-4-opus"
@@ -113,7 +91,6 @@ class TestSessionBuilderWP4:
         for writable_field in [
             "name",
             "prompt",
-            "interactive",
             "llm_model",
             "llm_temperature",
             "llm_max_tokens",
@@ -135,18 +112,10 @@ class TestSessionBuilderWP4:
             )
 
 
-class TestSessionFromDictWP4:
+class TestSessionFromDict:
     def test_float_field(self):
         s = Session.from_dict({"name": "t", "llm_temperature": 0.85})
         assert s.llm_temperature == 0.85
-
-    def test_bool_field(self):
-        s = Session.from_dict({"name": "t", "interactive": True})
-        assert s.interactive is True
-
-    def test_bool_default(self):
-        s = Session.from_dict({"name": "t"})
-        assert s.interactive is False
 
     def test_float_default(self):
         s = Session.from_dict({"name": "t"})
@@ -178,13 +147,12 @@ class TestSessionFromDictWP4:
         assert s.start_time is not None
         assert s.completion_time is not None
 
-    def test_full_wp4_session(self):
+    def test_full_session(self):
         s = Session.from_dict({
-            "id": "sess-wp4",
+            "id": "sess-1",
             "kind": "Session",
             "name": "full-session",
             "prompt": "analyze code",
-            "interactive": True,
             "llm_model": "claude-4-opus",
             "llm_temperature": 0.7,
             "llm_max_tokens": 4096,
@@ -196,23 +164,20 @@ class TestSessionFromDictWP4:
             "bot_account_name": "bot-1",
             "parent_session_id": "parent-sess",
         })
-        assert s.interactive is True
         assert s.llm_temperature == 0.7
         assert s.phase == "completed"
         assert s.bot_account_name == "bot-1"
 
 
-class TestSessionPatchWP4:
-    def test_patch_new_types(self):
+class TestSessionPatch:
+    def test_patch_fields(self):
         patch = (
             SessionPatch()
-            .interactive(True)
             .llm_temperature(0.9)
             .llm_max_tokens(8192)
             .timeout(7200)
         )
         data = patch.to_dict()
-        assert data["interactive"] is True
         assert data["llm_temperature"] == 0.9
         assert data["llm_max_tokens"] == 8192
         assert data["timeout"] == 7200
@@ -236,11 +201,15 @@ class TestSessionPatchWP4:
                 f"Patch should NOT have readOnly method: {readonly_field}"
             )
 
+    def test_sets_only_specified_fields(self):
+        patch = SessionPatch().prompt("updated prompt")
+        data = patch.to_dict()
+        assert data == {"prompt": "updated prompt"}
+        assert "name" not in data
 
-class TestSessionStatusPatchWP5:
+
+class TestSessionStatusPatch:
     def test_all_fields(self):
-        from ambient_platform import SessionStatusPatch
-
         patch = (
             SessionStatusPatch()
             .phase("Running")
@@ -260,17 +229,12 @@ class TestSessionStatusPatchWP5:
         assert len(data) == 8
 
     def test_sparse_update(self):
-        from ambient_platform import SessionStatusPatch
-
         patch = SessionStatusPatch().phase("Completed")
         data = patch.to_dict()
         assert data == {"phase": "Completed"}
         assert "kube_namespace" not in data
 
     def test_datetime_fields(self):
-        from ambient_platform import SessionStatusPatch
-        from datetime import datetime, timezone
-
         now = datetime.now(tz=timezone.utc)
         patch = SessionStatusPatch().start_time(now).completion_time(now)
         data = patch.to_dict()
@@ -278,8 +242,6 @@ class TestSessionStatusPatchWP5:
         assert data["completion_time"] == now
 
     def test_has_all_10_methods(self):
-        from ambient_platform import SessionStatusPatch
-
         patch = SessionStatusPatch()
         expected_methods = [
             "phase",
@@ -295,17 +257,6 @@ class TestSessionStatusPatchWP5:
         ]
         for method in expected_methods:
             assert hasattr(patch, method), f"Missing method: {method}"
-
-
-class TestAgentBuilder:
-    def test_valid_with_project_id(self):
-        data = Agent.builder().name("my-agent").project_id("proj-1").build()
-        assert data["name"] == "my-agent"
-        assert data["project_id"] == "proj-1"
-
-    def test_missing_name_raises(self):
-        with pytest.raises(ValueError, match="name is required"):
-            Agent.builder().prompt("test").build()
 
 
 class TestProjectBuilder:
@@ -337,7 +288,6 @@ class TestProjectSettingsBuilder:
             ProjectSettings.builder()
             .project_id("proj-123")
             .group_access("admin,dev")
-            .runner_secrets("secret-ref")
             .repositories("repo1,repo2")
             .build()
         )
@@ -350,11 +300,10 @@ class TestProjectSettingsBuilder:
 
 
 class TestUserBuilder:
-    def test_valid_with_groups(self):
-        data = User.builder().name("Alice").username("alice").groups("admin,dev").build()
+    def test_valid(self):
+        data = User.builder().name("Alice").username("alice").build()
         assert data["name"] == "Alice"
         assert data["username"] == "alice"
-        assert data["groups"] == "admin,dev"
 
     def test_missing_name_raises(self):
         with pytest.raises(ValueError, match="name is required"):
@@ -363,49 +312,6 @@ class TestUserBuilder:
     def test_missing_username_raises(self):
         with pytest.raises(ValueError, match="username is required"):
             User.builder().name("Alice").build()
-
-
-class TestWorkflowBuilder:
-    def test_new_wp3_fields(self):
-        data = (
-            Workflow.builder()
-            .name("ci-workflow")
-            .project_id("proj-1")
-            .branch("main")
-            .path("/workflows/ci")
-            .agent_id("agent-1")
-            .build()
-        )
-        assert data["branch"] == "main"
-        assert data["path"] == "/workflows/ci"
-        assert data["project_id"] == "proj-1"
-        assert data["agent_id"] == "agent-1"
-
-
-class TestWorkflowSkillBuilder:
-    def test_valid(self):
-        data = (
-            WorkflowSkill.builder()
-            .workflow_id("wf-1")
-            .skill_id("sk-1")
-            .position(1)
-            .build()
-        )
-        assert data["workflow_id"] == "wf-1"
-        assert data["position"] == 1
-
-
-class TestWorkflowTaskBuilder:
-    def test_valid(self):
-        data = (
-            WorkflowTask.builder()
-            .workflow_id("wf-1")
-            .task_id("task-1")
-            .position(2)
-            .build()
-        )
-        assert data["task_id"] == "task-1"
-        assert data["position"] == 2
 
 
 class TestListOptions:
@@ -438,12 +344,6 @@ class TestListOptions:
 
 
 class TestPatchBuilder:
-    def test_sets_only_specified_fields(self):
-        patch = SessionPatch().prompt("updated prompt")
-        data = patch.to_dict()
-        assert data == {"prompt": "updated prompt"}
-        assert "name" not in data
-
     def test_project_patch_all_fields(self):
         patch = (
             ProjectPatch()
@@ -510,7 +410,6 @@ class TestFromDict:
             "id": "ps-1",
             "project_id": "proj-1",
             "group_access": "admin",
-            "runner_secrets": "ref",
         }
         ps = ProjectSettings.from_dict(data)
         assert ps.project_id == "proj-1"
@@ -532,6 +431,19 @@ class TestFromDict:
         assert sl.page == 1
         assert len(sl.items) == 2
         assert sl.items[0].name == "a"
+
+    def test_user_from_dict(self):
+        data = {
+            "id": "user-1",
+            "kind": "User",
+            "name": "Alice",
+            "username": "alice",
+            "email": "alice@example.com",
+        }
+        u = User.from_dict(data)
+        assert u.name == "Alice"
+        assert u.username == "alice"
+        assert u.email == "alice@example.com"
 
 
 class TestParseDatetime:
@@ -572,188 +484,3 @@ class TestObjectReference:
         ref = ObjectReference(id="test")
         with pytest.raises(AttributeError):
             ref.id = "changed"
-
-
-class TestPermissionBuilder:
-    def test_valid(self):
-        data = (
-            Permission.builder()
-            .subject_type("user")
-            .subject_name("alice")
-            .role("admin")
-            .project_id("proj-1")
-            .build()
-        )
-        assert data["subject_type"] == "user"
-        assert data["subject_name"] == "alice"
-        assert data["role"] == "admin"
-        assert data["project_id"] == "proj-1"
-
-    def test_missing_role_raises(self):
-        with pytest.raises(ValueError, match="role is required"):
-            Permission.builder().subject_type("user").subject_name("alice").build()
-
-    def test_missing_subject_name_raises(self):
-        with pytest.raises(ValueError, match="subject_name is required"):
-            Permission.builder().subject_type("user").role("admin").build()
-
-    def test_missing_subject_type_raises(self):
-        with pytest.raises(ValueError, match="subject_type is required"):
-            Permission.builder().subject_name("alice").role("admin").build()
-
-
-class TestPermissionFromDict:
-    def test_permission_from_dict(self):
-        data = {
-            "id": "perm-1",
-            "kind": "Permission",
-            "subject_type": "user",
-            "subject_name": "alice",
-            "role": "admin",
-            "project_id": "proj-1",
-            "created_at": "2026-02-15T10:00:00Z",
-        }
-        p = Permission.from_dict(data)
-        assert p.id == "perm-1"
-        assert p.subject_type == "user"
-        assert p.role == "admin"
-
-    def test_permission_list_from_dict(self):
-        data = {
-            "kind": "PermissionList",
-            "page": 1,
-            "size": 100,
-            "total": 1,
-            "items": [{"id": "perm-1", "role": "admin"}],
-        }
-        pl = PermissionList.from_dict(data)
-        assert pl.total == 1
-        assert len(pl.items) == 1
-
-
-class TestPermissionPatch:
-    def test_sets_fields(self):
-        patch = PermissionPatch().role("view").subject_name("bob")
-        data = patch.to_dict()
-        assert data["role"] == "view"
-        assert data["subject_name"] == "bob"
-
-
-class TestRepositoryRefBuilder:
-    def test_valid(self):
-        data = (
-            RepositoryRef.builder()
-            .name("my-repo")
-            .url("https://github.com/org/repo")
-            .branch("main")
-            .provider("github")
-            .build()
-        )
-        assert data["name"] == "my-repo"
-        assert data["url"] == "https://github.com/org/repo"
-        assert data["branch"] == "main"
-        assert data["provider"] == "github"
-
-    def test_missing_name_raises(self):
-        with pytest.raises(ValueError, match="name is required"):
-            RepositoryRef.builder().url("https://github.com/org/repo").build()
-
-    def test_missing_url_raises(self):
-        with pytest.raises(ValueError, match="url is required"):
-            RepositoryRef.builder().name("my-repo").build()
-
-
-class TestRepositoryRefFromDict:
-    def test_repository_ref_from_dict(self):
-        data = {
-            "id": "ref-1",
-            "kind": "RepositoryRef",
-            "name": "my-repo",
-            "url": "https://github.com/org/repo",
-            "branch": "main",
-            "provider": "github",
-            "owner": "org",
-            "repo_name": "repo",
-        }
-        r = RepositoryRef.from_dict(data)
-        assert r.name == "my-repo"
-        assert r.provider == "github"
-        assert r.owner == "org"
-
-    def test_repository_ref_list_from_dict(self):
-        data = {
-            "kind": "RepositoryRefList",
-            "page": 1,
-            "size": 100,
-            "total": 2,
-            "items": [
-                {"id": "r1", "name": "repo-a"},
-                {"id": "r2", "name": "repo-b"},
-            ],
-        }
-        rl = RepositoryRefList.from_dict(data)
-        assert rl.total == 2
-        assert len(rl.items) == 2
-
-
-class TestRepositoryRefPatch:
-    def test_sets_fields(self):
-        patch = RepositoryRefPatch().branch("develop").url("https://github.com/org/other")
-        data = patch.to_dict()
-        assert data["branch"] == "develop"
-        assert data["url"] == "https://github.com/org/other"
-
-
-class TestProjectKeyBuilder:
-    def test_valid(self):
-        data = ProjectKey.builder().name("my-api-key").project_id("proj-1").build()
-        assert data["name"] == "my-api-key"
-        assert data["project_id"] == "proj-1"
-
-    def test_missing_name_raises(self):
-        with pytest.raises(ValueError, match="name is required"):
-            ProjectKey.builder().project_id("proj-1").build()
-
-
-class TestProjectKeyFromDict:
-    def test_project_key_from_dict(self):
-        data = {
-            "id": "pk-1",
-            "kind": "ProjectKey",
-            "name": "my-api-key",
-            "key_prefix": "ak_12345",
-            "plaintext_key": "ak_the-full-key",
-            "project_id": "proj-1",
-            "created_at": "2026-02-15T10:00:00Z",
-            "expires_at": "2026-03-15T10:00:00Z",
-        }
-        pk = ProjectKey.from_dict(data)
-        assert pk.id == "pk-1"
-        assert pk.name == "my-api-key"
-        assert pk.key_prefix == "ak_12345"
-        assert pk.plaintext_key == "ak_the-full-key"
-        assert pk.expires_at is not None
-
-    def test_project_key_list_from_dict(self):
-        data = {
-            "kind": "ProjectKeyList",
-            "page": 1,
-            "size": 100,
-            "total": 2,
-            "items": [
-                {"id": "pk1", "name": "key-a", "key_prefix": "ak_12345"},
-                {"id": "pk2", "name": "key-b", "key_prefix": "ak_67890"},
-            ],
-        }
-        pkl = ProjectKeyList.from_dict(data)
-        assert pkl.total == 2
-        assert len(pkl.items) == 2
-        assert pkl.items[0].key_prefix == "ak_12345"
-
-
-class TestProjectKeyPatch:
-    def test_sets_fields(self):
-        patch = ProjectKeyPatch().name("renamed-key")
-        data = patch.to_dict()
-        assert data["name"] == "renamed-key"
-        assert len(data) == 1
