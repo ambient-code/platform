@@ -9,7 +9,7 @@ RUN dnf install -y 'dnf-command(config-manager)' && \
     dnf install -y git jq && \
     dnf clean all
 
-    
+
 # Install Node.js
 # Use UBI AppStream to avoid conflicts with preinstalled nodejs-full-i18n
 RUN dnf module reset -y nodejs && \

@@ -1,115 +1,65 @@
-# Byte-compiled / optimized / DLL files
+# =============================================================================
+# Ambient Code Platform .gitignore
+# =============================================================================
+
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
-
-# C extensions
 *.so
-
-# Distribution / packaging
-.Python
-build/
-develop-eggs/
+*.egg-info/
+*.egg
+.installed.cfg
+MANIFEST
 dist/
-downloads/
+build/
+wheels/
+.Python
+develop-eggs/
 eggs/
 .eggs/
-lib64/
-parts/
 sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
-
-# PyInstaller
-*.manifest
-*.spec
-
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Unit test / coverage reports
 htmlcov/
 .tox/
 .coverage
 .coverage.*
 .cache
+.pytest_cache/
+.hypothesis/
 nosetests.xml
 coverage.xml
 *.cover
-.hypothesis/
-.pytest_cache/
-
-# Translations
+pip-log.txt
+pip-delete-this-directory.txt
 *.mo
 *.pot
 
-# Django stuff:
-*.log
-local_settings.py
-db.sqlite3
+# Go
+vendor/
 
-# Flask stuff:
-instance/
-.webassets-cache
+# Node / Frontend
+node_modules/
+.next/
+components/frontend/.next/
 
-# Scrapy stuff:
-.scrapy
-
-# Sphinx documentation
-docs/_build/
-
-# PyBuilder
-target/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# pyenv
-.python-version
-
-# celery beat schedule file
-celerybeat-schedule
-
-# SageMath parsed files
-*.sage.py
-
-# Environments
-.env
-.env.uat
-.dev-bootstrap.env
-.venv
+# Virtual environments
+.venv*/
 env/
 venv/
 ENV/
 env.bak/
 venv.bak/
 
-# Spyder project settings
-.spyderproject
-.spyproject
+# Environment files
+.env
+.env.uat
+.dev-bootstrap.env
 
-# Rope project settings
-.ropeproject
+# Build artifacts and logs
+*.log
+!components/**/*.log
 
-# mkdocs documentation
-/site
-
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-.claude/settings.local.json
-
-# Design documentation
-.design/
-
-# macOS system files
+# macOS
 .DS_Store
 .DS_Store?
 ._*
@@ -118,10 +68,22 @@ dmypy.json
 ehthumbs.db
 Thumbs.db
 
-.playwright-mcp/
-.stories/
-.testplans/
-.spikes/
+# IDE / AI assistant configuration
+.cursor/
+.tessl/
+.specify/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Claude Code
+.claude/settings.local.json
+
+# mkdocs
+/site
+docs/_build/
 
 # E2E testing
 e2e/.env.test
@@ -129,31 +91,37 @@ e2e/node_modules/
 e2e/cypress/screenshots/
 e2e/cypress/videos/
 
-# Langfuse secrets and deployment credentials
+# Langfuse credentials
 e2e/.env.langfuse
 e2e/langfuse/.env.langfuse-keys
 
-# AI assistant configuration
-.cursor/
-.tessl/
+# Design / spike artifacts (transient)
+.design/
+.playwright-mcp/
+.stories/
+.testplans/
+.spikes/
 
-# Test Reporting
+# Test reporting
 logs/
 reports/
 
-# Security scan artifacts (transient)
+# Security scan artifacts
 .security-scan/
 .security-scan.zip
 
 # Feedback loop runtime state
 scripts/feedback-loop/.last-run
 
-# Secrets (should use .example templates)
+# Secrets (use .example templates instead)
 **/minio-credentials-secret.yaml
 **/postgresql-credentials-secret.yaml
 **/unleash-credentials-secret.yaml
 
-# Build artifacts and logs
-build.log
-*.log
-!components/**/*.log
+# One-off analysis and experiments
+repomix-analysis/
+Prompts/
+hack/
+
+# Personal exports
+*.csv
