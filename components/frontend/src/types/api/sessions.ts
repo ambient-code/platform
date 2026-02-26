@@ -128,6 +128,11 @@ export type CreateAgenticSessionRequest = {
   userContext?: UserContext;
   labels?: Record<string, string>;
   annotations?: Record<string, string>;
+  activeWorkflow?: {
+    gitUrl: string;
+    branch: string;
+    path?: string;
+  };
 };
 
 export type CreateAgenticSessionResponse = {
