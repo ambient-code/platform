@@ -3,6 +3,7 @@ package sessions
 import (
 	"net/http"
 
+	pb "github.com/ambient/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1"
 	"github.com/gorilla/mux"
 	"github.com/openshift-online/rh-trex-ai/pkg/api"
 	"github.com/openshift-online/rh-trex-ai/pkg/api/presenters"
@@ -14,6 +15,7 @@ import (
 	pkgserver "github.com/openshift-online/rh-trex-ai/pkg/server"
 	"github.com/openshift-online/rh-trex-ai/plugins/events"
 	"github.com/openshift-online/rh-trex-ai/plugins/generic"
+	"google.golang.org/grpc"
 )
 
 type ServiceLocator func() SessionService
@@ -78,6 +80,19 @@ func init() {
 	presenters.RegisterPath(&Session{}, "sessions")
 	presenters.RegisterKind(Session{}, "Session")
 	presenters.RegisterKind(&Session{}, "Session")
+
+	pkgserver.RegisterGRPCService("sessions", func(grpcServer *grpc.Server, services pkgserver.ServicesInterface) {
+		envServices := services.(*environments.Services)
+		sessionService := Service(envServices)
+		genericService := generic.Service(envServices)
+		brokerFunc := func() *pkgserver.EventBroker {
+			if obj := envServices.GetService("EventBroker"); obj != nil {
+				return obj.(*pkgserver.EventBroker)
+			}
+			return nil
+		}
+		pb.RegisterSessionServiceServer(grpcServer, NewSessionGRPCHandler(sessionService, genericService, brokerFunc))
+	})
 
 	db.RegisterMigration(migration())
 	db.RegisterMigration(constraintMigration())
