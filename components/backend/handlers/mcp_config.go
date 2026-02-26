@@ -13,7 +13,6 @@ import (
 
 const mcpConfigMapName = "ambient-mcp-config"
 const mcpConfigKey = "mcp.json"
-const httpToolsKey = "http-tools.json"
 
 // getConfigMapKey reads a key from the ambient-mcp-config ConfigMap and returns
 // its parsed JSON. If the ConfigMap or key does not exist, returns emptyValue.
@@ -126,11 +125,3 @@ func GetMcpConfig(c *gin.Context) {
 
 // UpdateMcpConfig handles PUT /api/projects/:projectName/mcp-config
 func UpdateMcpConfig(c *gin.Context) { updateConfigMapKey(c, mcpConfigKey) }
-
-// GetHTTPTools handles GET /api/projects/:projectName/http-tools
-func GetHTTPTools(c *gin.Context) {
-	getConfigMapKey(c, httpToolsKey, gin.H{"tools": []interface{}{}})
-}
-
-// UpdateHTTPTools handles PUT /api/projects/:projectName/http-tools
-func UpdateHTTPTools(c *gin.Context) { updateConfigMapKey(c, httpToolsKey) }

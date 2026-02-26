@@ -109,8 +109,6 @@ func registerRoutes(r *gin.Engine) {
 			projectGroup.GET("/mcp-config", handlers.GetMcpConfig)
 			projectGroup.PUT("/mcp-config", handlers.UpdateMcpConfig)
 			projectGroup.POST("/mcp-config/test", handlers.TestMcpServer)
-			projectGroup.GET("/http-tools", handlers.GetHTTPTools)
-			projectGroup.PUT("/http-tools", handlers.UpdateHTTPTools)
 
 			// GitLab authentication endpoints (DEPRECATED - moved to cluster-scoped)
 			// Kept for backward compatibility, will be removed in future version
