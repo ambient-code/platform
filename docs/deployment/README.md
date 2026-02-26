@@ -130,7 +130,7 @@ See [ADR-0002: User Token Authentication](../adr/0002-user-token-authentication.
 curl https://backend-route/health
 
 # Frontend accessibility
-curl https://frontend-route/
+curl https://frontend/
 
 # Operator status
 oc get pods -n ambient-code -l app=agentic-operator
@@ -217,7 +217,7 @@ podman pull quay.io/ambient_code/vteam_backend:latest
 
 ```bash
 # Check route
-oc get route frontend-route -n ambient-code
+oc get route frontend -n ambient-code
 
 # Check service
 oc get svc frontend-service -n ambient-code

@@ -34,13 +34,14 @@ command_exists() {
 oauth_setup() {
     echo -e "${YELLOW}Configuring OpenShift OAuth for the frontend...${NC}"
 
-    # Determine Route name (try known names then fallback by label)
+    # Determine Route name (canonical name is 'frontend')
     ROUTE_NAME_CANDIDATE="${ROUTE_NAME:-}"
     if [[ -z "$ROUTE_NAME_CANDIDATE" ]]; then
-        if oc get route frontend-route -n ${NAMESPACE} >/dev/null 2>&1; then
-            ROUTE_NAME_CANDIDATE="frontend-route"
-        elif oc get route frontend -n ${NAMESPACE} >/dev/null 2>&1; then
+        if oc get route frontend -n ${NAMESPACE} >/dev/null 2>&1; then
             ROUTE_NAME_CANDIDATE="frontend"
+        elif oc get route frontend-route -n ${NAMESPACE} >/dev/null 2>&1; then
+            # Backwards compatibility fallback
+            ROUTE_NAME_CANDIDATE="frontend-route"
         else
             ROUTE_NAME_CANDIDATE=$(oc get route -n ${NAMESPACE} -l app=frontend -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
         fi
@@ -48,7 +49,7 @@ oauth_setup() {
 
     if [[ -z "$ROUTE_NAME_CANDIDATE" ]]; then
         echo -e "${RED}❌ Could not find a Route for the frontend in namespace ${NAMESPACE}.${NC}"
-        echo -e "${YELLOW}Make sure manifests are applied and a Route exists (e.g., name 'frontend-route').${NC}"
+        echo -e "${YELLOW}Make sure manifests are applied and a Route exists (name should be 'frontend').${NC}"
         return 1
     fi
     ROUTE_NAME="$ROUTE_NAME_CANDIDATE"
@@ -387,13 +388,14 @@ echo ""
 echo -e "${BLUE}Routes:${NC}"
 oc get route -n ${NAMESPACE} || true
 if [[ -z "${ROUTE_NAME:-}" ]]; then
-    if oc get route frontend-route -n ${NAMESPACE} >/dev/null 2>&1; then
-        ROUTE_NAME="frontend-route"
-    elif oc get route frontend -n ${NAMESPACE} >/dev/null 2>&1; then
+    if oc get route frontend -n ${NAMESPACE} >/dev/null 2>&1; then
         ROUTE_NAME="frontend"
+    elif oc get route frontend-route -n ${NAMESPACE} >/dev/null 2>&1; then
+        # Backwards compatibility fallback
+        ROUTE_NAME="frontend-route"
     fi
 fi
-ROUTE_HOST=$(oc get route ${ROUTE_NAME:-frontend-route} -n ${NAMESPACE} -o jsonpath='{.spec.host}' 2>/dev/null || true)
+ROUTE_HOST=$(oc get route ${ROUTE_NAME:-frontend} -n ${NAMESPACE} -o jsonpath='{.spec.host}' 2>/dev/null || true)
 echo ""
 
 # Cleanup generated files

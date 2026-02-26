@@ -28,7 +28,7 @@ The Ambient Code Platform is an OpenShift-native platform that deploys a backend
 3. **Access the UI**:
    ```bash
    # Get the route URL
-   oc get route frontend-route -n ambient-code
+   oc get route frontend -n ambient-code
 
    # Or use port forwarding as fallback
    kubectl port-forward svc/frontend-service 3000:3000 -n ambient-code

@@ -9,11 +9,11 @@ Admin (one-time per cluster):
 1. Set the Route host to your cluster domain
 ```bash
 ROUTE_DOMAIN=$(oc get ingresses.config cluster -o jsonpath='{.spec.domain}')
-oc -n ambient-code patch route frontend-route --type=merge -p '{"spec":{"host":"ambient-code.'"$ROUTE_DOMAIN"'"}}'
+oc -n ambient-code patch route frontend --type=merge -p '{"spec":{"host":"ambient-code.'"$ROUTE_DOMAIN"'"}}'
 ```
 2. Create OAuthClient and keep the secret
 ```bash
-ROUTE_HOST=$(oc -n ambient-code get route frontend-route -o jsonpath='{.spec.host}')
+ROUTE_HOST=$(oc -n ambient-code get route frontend -o jsonpath='{.spec.host}')
 SECRET="$(openssl rand -base64 32 | tr -d '\n=+/0OIl')"; echo "$SECRET"
 cat <<EOF | oc apply -f -
 apiVersion: oauth.openshift.io/v1
@@ -36,7 +36,7 @@ oc -n ambient-code create secret generic frontend-oauth-config \
   --dry-run=client -o yaml | oc apply -f -
 oc -n ambient-code rollout restart deployment/frontend
 ```
-4. Open the app: `oc -n ambient-code get route frontend-route -o jsonpath='{.spec.host}' | sed 's#^#https://#'`
+4. Open the app: `oc -n ambient-code get route frontend -o jsonpath='{.spec.host}' | sed 's#^#https://#'`
 
 ### Prerequisites
 - oc CLI configured to your cluster
