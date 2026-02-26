@@ -78,55 +78,10 @@ jobs:
           claude_args: |
             --allowedTools "Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh issue list:*)"
           prompt: |
-            REPO: ${{ github.repository }}
-            PR NUMBER: ${{ github.event.pull_request.number }}
+            1. Read .claude/commands/amber.review.md (master project instructions)
+            2. amber.review PR ${{ github.event.pull_request.number }} in ${{ github.repository }}
 
-            Load the following memory system files to understand repository standards:
-
-            1. Read CLAUDE.md (master project instructions)
-            2. Read .claude/context/backend-development.md
-            3. Read .claude/context/frontend-development.md
-            4. Read .claude/context/security-standards.md
-            5. Read .claude/patterns/k8s-client-usage.md
-            6. Read .claude/patterns/error-handling.md
-            7. Read .claude/patterns/react-query-usage.md
-
-            After loading all memory files, perform a comprehensive code review following the standards and patterns you just loaded.
-
-            Focus on:
-            1. **Code Quality** - Does it follow CLAUDE.md patterns?
-            2. **Security** - Check security standards (user token auth, RBAC, token redaction)
-            3. **Performance** - Any bottlenecks?
-            4. **Testing** - Adequate coverage?
-            5. **Architecture** - Follows project structure from memory context?
-            6. **Error Handling** - Follows error handling patterns?
-
-            Use `gh pr comment` to post your review with this format:
-
-            # Claude Code Review
-
-            ## Summary
-            [Brief overview]
-
-            ## Issues by Severity
-
-            ### 🚫 Blocker Issues
-            [Must fix before merge]
-
-            ### 🔴 Critical Issues
-            [Should fix before merge]
-
-            ### 🟡 Major Issues
-            [Important to address]
-
-            ### 🔵 Minor Issues
-            [Nice-to-have improvements]
-
-            ## Positive Highlights
-            [Things done well]
-
-            ## Recommendations
-            [Prioritized action items]
+            After completing the review, use `gh pr comment` to post your findings.
 
       - name: Add workflow link with memory system visibility
         if: steps.amber-review.conclusion == 'success'
