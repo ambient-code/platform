@@ -37,6 +37,8 @@ var (
 	GetBackendNamespace        func() string
 )
 
+var defaultHTTPClient = &http.Client{Timeout: 30 * time.Second}
+
 // ProjectSettings represents the project configuration
 type ProjectSettings struct {
 	RunnerSecret string
@@ -377,7 +379,7 @@ func checkGitHubPathExists(ctx context.Context, owner, repo, branch, path, token
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/vnd.github.v3+json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := defaultHTTPClient.Do(req)
 	if err != nil {
 		return false, err
 	}
@@ -1055,10 +1057,13 @@ func PushRepo(ctx context.Context, repoDir, commitMessage, outputRepoURL, branch
 	gitUserEmail := ""
 
 	if githubToken != "" {
-		req, _ := http.NewRequest("GET", "https://api.github.com/user", nil)
+		req, err := http.NewRequest("GET", "https://api.github.com/user", nil)
+		if err != nil {
+			return "", fmt.Errorf("failed to create HTTP request: %w", err)
+		}
 		req.Header.Set("Authorization", "token "+githubToken)
 		req.Header.Set("Accept", "application/vnd.github+json")
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := defaultHTTPClient.Do(req)
 		if err == nil {
 			defer resp.Body.Close()
 			switch resp.StatusCode {
@@ -1284,7 +1289,7 @@ func ReadGitHubFile(ctx context.Context, owner, repo, branch, path, token string
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/vnd.github.v3.raw")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := defaultHTTPClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -1316,7 +1321,7 @@ func CheckBranchExists(ctx context.Context, repoURL, branchName, githubToken str
 	req.Header.Set("Authorization", "Bearer "+githubToken)
 	req.Header.Set("Accept", "application/vnd.github.v3+json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := defaultHTTPClient.Do(req)
 	if err != nil {
 		return false, err
 	}
@@ -1366,7 +1371,7 @@ func validateGitHubPushAccess(ctx context.Context, repoURL, githubToken string) 
 	req.Header.Set("Authorization", "Bearer "+githubToken)
 	req.Header.Set("Accept", "application/vnd.github.v3+json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := defaultHTTPClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to check repository access: %w", err)
 	}
@@ -1435,7 +1440,7 @@ func validateGitLabPushAccess(ctx context.Context, repoURL, gitlabToken string) 
 	req.Header.Set("Authorization", "Bearer "+gitlabToken)
 	req.Header.Set("Accept", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := defaultHTTPClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to check repository access: %w", err)
 	}
@@ -1498,7 +1503,7 @@ func validateGitLabPushAccess(ctx context.Context, repoURL, gitlabToken string) 
 		userReq.Header.Set("Authorization", "Bearer "+gitlabToken)
 		userReq.Header.Set("Accept", "application/json")
 
-		userResp, err := http.DefaultClient.Do(userReq)
+		userResp, err := defaultHTTPClient.Do(userReq)
 		if err != nil {
 			return fmt.Errorf("failed to get user info: %w", err)
 		}
@@ -1796,11 +1801,13 @@ func configureGitIdentity(ctx context.Context, repoDir, githubToken string) {
 
 	// Try to fetch from GitHub API if token provided
 	if githubToken != "" && (gitUserName == "" || gitUserEmail == "") {
-		req, _ := http.NewRequest("GET", "https://api.github.com/user", nil)
-		req.Header.Set("Authorization", "token "+githubToken)
-		req.Header.Set("Accept", "application/vnd.github+json")
+		req, err := http.NewRequest("GET", "https://api.github.com/user", nil)
+		if err != nil {
+			log.Printf("configureGitIdentity: failed to create HTTP request: %v", err)
+			// Continue with fallback to env vars or defaults
+		} else {
 
-		if resp, err := http.DefaultClient.Do(req); err == nil {
+		if resp, err := defaultHTTPClient.Do(req); err == nil {
 			defer resp.Body.Close()
 			if resp.StatusCode == 200 {
 				if body, err := io.ReadAll(resp.Body); err == nil {
@@ -1821,6 +1828,7 @@ func configureGitIdentity(ctx context.Context, repoDir, githubToken string) {
 					}
 				}
 			}
+		}
 		}
 	}
 

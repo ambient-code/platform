@@ -44,6 +44,8 @@ var (
 	// LEGACY: SendMessageToSession removed - AG-UI server uses HTTP/SSE instead of WebSocket
 )
 
+var defaultHTTPClient = &http.Client{Timeout: 30 * time.Second}
+
 // ootbWorkflowsCache provides in-memory caching for OOTB workflows to avoid GitHub API rate limits.
 // The cache stores workflows by repo URL key and expires after ootbCacheTTL.
 type ootbWorkflowsCache struct {
@@ -735,7 +737,11 @@ func CreateSession(c *gin.Context) {
 	// Best-effort prefill of agent markdown into PVC workspace for immediate UI availability
 	// Uses AGENT_PERSONAS or AGENT_PERSONA if provided in request environment variables
 	func() {
-		defer func() { _ = recover() }()
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("Warning: persona prefill recovered from panic: %v", r)
+			}
+		}()
 		personasCsv := ""
 		if v, ok := req.EnvironmentVariables["AGENT_PERSONAS"]; ok && strings.TrimSpace(v) != "" {
 			personasCsv = v
@@ -1642,7 +1648,12 @@ func GetWorkflowMetadata(c *gin.Context) {
 	log.Printf("GetWorkflowMetadata: project=%s session=%s endpoint=%s", project, sessionName, endpoint)
 
 	// Create and send request to content pod
-	req, _ := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, u, nil)
+	req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, u, nil)
+	if err != nil {
+		log.Printf("GetWorkflowMetadata: failed to create HTTP request: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create request"})
+		return
+	}
 	if strings.TrimSpace(token) != "" {
 		req.Header.Set("Authorization", token)
 	}
@@ -2903,7 +2914,7 @@ func PushSessionRepo(c *gin.Context) {
 	}
 
 	log.Printf("pushSessionRepo: proxy push project=%s session=%s repoIndex=%d repoPath=%s endpoint=%s", project, session, body.RepoIndex, resolvedRepoPath, endpoint+"/content/github/push")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := defaultHTTPClient.Do(req)
 	if err != nil {
 		// Log actual error for debugging, but return generic message to avoid leaking internal details
 		log.Printf("Bad gateway error: %v", err)
@@ -2987,7 +2998,7 @@ func AbandonSessionRepo(c *gin.Context) {
 	}
 	req.Header.Set("Content-Type", "application/json")
 	log.Printf("abandonSessionRepo: proxy abandon project=%s session=%s repoIndex=%d repoPath=%s", project, session, body.RepoIndex, repoPath)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := defaultHTTPClient.Do(req)
 	if err != nil {
 		// Log actual error for debugging, but return generic message to avoid leaking internal details
 		log.Printf("Bad gateway error: %v", err)
@@ -3037,14 +3048,19 @@ func DiffSessionRepo(c *gin.Context) {
 	endpoint := fmt.Sprintf("http://%s.%s.svc.cluster.local:8001", serviceName, project)
 	log.Printf("DiffSessionRepo: using service %s", serviceName)
 	url := fmt.Sprintf("%s/content/github/diff?repoPath=%s", endpoint, url.QueryEscape(repoPath))
-	req, _ := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, url, nil)
+	if err != nil {
+		log.Printf("DiffSessionRepo: failed to create HTTP request: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create request"})
+		return
+	}
 	if v := c.GetHeader("Authorization"); v != "" {
 		req.Header.Set("Authorization", v)
 	}
 	if v := c.GetHeader("X-Forwarded-Access-Token"); v != "" {
 		req.Header.Set("X-Forwarded-Access-Token", v)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := defaultHTTPClient.Do(req)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"files": gin.H{
@@ -3199,7 +3215,7 @@ func GetGitStatus(c *gin.Context) {
 		}
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := defaultHTTPClient.Do(req)
 	if err != nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "runner unavailable"})
 		return
@@ -3311,7 +3327,7 @@ func ConfigureGitRemote(c *gin.Context) {
 		log.Printf("ConfigureGitRemote: unknown provider detected, proceeding without authentication")
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := defaultHTTPClient.Do(req)
 	if err != nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "runner unavailable"})
 		return
@@ -3436,7 +3452,7 @@ func SynchronizeGit(c *gin.Context) {
 		}
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := defaultHTTPClient.Do(req)
 	if err != nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "runner unavailable"})
 		return
@@ -3481,7 +3497,12 @@ func GetGitMergeStatus(c *gin.Context) {
 	endpoint := fmt.Sprintf("http://%s.%s.svc.cluster.local:8001/content/git-merge-status?path=%s&branch=%s",
 		serviceName, project, url.QueryEscape(absPath), url.QueryEscape(branch))
 
-	req, _ := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, endpoint, nil)
+	req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, endpoint, nil)
+	if err != nil {
+		log.Printf("GetGitMergeStatus: failed to create HTTP request: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create request"})
+		return
+	}
 	if v := c.GetHeader("Authorization"); v != "" {
 		req.Header.Set("Authorization", v)
 	}
@@ -3505,7 +3526,7 @@ func GetGitMergeStatus(c *gin.Context) {
 		}
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := defaultHTTPClient.Do(req)
 	if err != nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "runner unavailable"})
 		return
@@ -3597,7 +3618,7 @@ func GitPullSession(c *gin.Context) {
 		}
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := defaultHTTPClient.Do(req)
 	if err != nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "runner unavailable"})
 		return
@@ -3694,7 +3715,7 @@ func GitPushSession(c *gin.Context) {
 		}
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := defaultHTTPClient.Do(req)
 	if err != nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "runner unavailable"})
 		return
@@ -3764,7 +3785,7 @@ func GitCreateBranchSession(c *gin.Context) {
 		req.Header.Set("Authorization", v)
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := defaultHTTPClient.Do(req)
 	if err != nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "runner unavailable"})
 		return
@@ -3815,7 +3836,7 @@ func GitListBranchesSession(c *gin.Context) {
 		req.Header.Set("Authorization", v)
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := defaultHTTPClient.Do(req)
 	if err != nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "runner unavailable"})
 		return
