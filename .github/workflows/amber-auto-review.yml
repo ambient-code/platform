@@ -79,7 +79,7 @@ jobs:
             --allowedTools "Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh issue list:*)"
           prompt: |
             Read .claude/commands/amber.review.md and follow its instructions exactly.
-            Arguments: REPO: github-repo PR NUMBER: pr-number
+            Arguments: REPO: ${{ github.repository }}  PR NUMBER: ${{ github.event.pull_request.number }}
             After completing the review, use gh pr comment to post your findings.
 
       - name: Add workflow link with memory system visibility
