@@ -48,6 +48,5 @@ func (e *UnitTestingEnvImpl) Flags() map[string]string {
 		"enable-authz":         "true",
 		"debug":                "false",
 		"enable-mock":          "true",
-		"enable-sentry":        "false",
 	}
 }
