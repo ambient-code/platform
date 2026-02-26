@@ -79,6 +79,11 @@ parameters:
   description: Health check server bind address
   value: :4434
 
+- name: GRPC_SERVER_BINDADDRESS
+  displayName: gRPC Server Bindaddress
+  description: gRPC server bind address
+  value: :9000
+
 - name: API_SERVER_HOSTNAME
   displayName: API Server Hostname
   description: Server's public hostname
@@ -268,10 +273,24 @@ objects:
             - --sentry-key-file=/secrets/service/sentry.key
             - --http-read-timeout=${HTTP_READ_TIMEOUT}
             - --http-write-timeout=${HTTP_WRITE_TIMEOUT}
+            - --grpc-server-bindaddress=${GRPC_SERVER_BINDADDRESS}
             - --cors-allowed-origins=${CORS_ALLOWED_ORIGINS}
             - --cors-allowed-headers=${CORS_ALLOWED_HEADERS}
             - --alsologtostderr
             - -v=${GLOG_V}
+            ports:
+            - name: rest
+              containerPort: 8000
+              protocol: TCP
+            - name: grpc
+              containerPort: 9000
+              protocol: TCP
+            - name: metrics
+              containerPort: 4433
+              protocol: TCP
+            - name: healthcheck
+              containerPort: 4434
+              protocol: TCP
             resources:
               requests:
                 cpu: ${CPU_REQUEST}
@@ -346,3 +365,21 @@ objects:
       ports:
       - port: 4434
         targetPort: 4434
+
+  - kind: Service
+    apiVersion: v1
+    metadata:
+      name: ambient-api-server-grpc
+      labels:
+        app: ambient-api-server
+        port: grpc
+      annotations:
+        description: Exposes the ambient-api-server gRPC endpoint
+        service.beta.openshift.io/serving-cert-secret-name: ambient-api-server-grpc-tls
+    spec:
+      selector:
+        app: ambient-api-server
+      ports:
+      - port: 9000
+        targetPort: 9000
+        name: grpc
