@@ -6,6 +6,7 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -108,10 +109,7 @@ func NewClientFromEnv(opts ...ClientOption) (*Client, error) {
 
 	project := os.Getenv("AMBIENT_PROJECT")
 	if project == "" {
-		project = os.Getenv("ANTHROPIC_VERTEX_PROJECT_ID")
-	}
-	if project == "" {
-		return nil, fmt.Errorf("AMBIENT_PROJECT or ANTHROPIC_VERTEX_PROJECT_ID environment variable is required")
+		return nil, fmt.Errorf("AMBIENT_PROJECT environment variable is required")
 	}
 
 	return NewClient(baseURL, token, project, opts...)
@@ -126,7 +124,8 @@ func (c *Client) do(ctx context.Context, method, path string, body []byte, expec
 	}
 
 	if body != nil {
-		req.Body = io.NopCloser(strings.NewReader(string(body)))
+		req.Body = io.NopCloser(bytes.NewReader(body))
+		req.ContentLength = int64(len(body))
 		req.Header.Set("Content-Type", "application/json")
 	}
 

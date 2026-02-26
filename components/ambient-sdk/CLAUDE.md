@@ -71,10 +71,9 @@ ambient-sdk/
 
 - **Go 1.21+**, standard library only (no third-party deps)
 - `go fmt ./...` and `golangci-lint run` enforced
-- `SecureToken` type wraps tokens and implements `slog.LogValuer` for automatic redaction
-- `sanitizeLogAttrs` in `client.go` provides defense-in-depth log sanitization
+- Token stored as plain string with URL sanitization via `sanitizeLogURL()`
 - All client constructors return `(*Client, error)` — token validation is mandatory
-- Input validation via `Validate()` methods on request types
+- Input validation in `NewClient()` for token length and placeholder detection
 
 ### Python SDK
 

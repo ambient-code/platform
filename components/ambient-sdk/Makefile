@@ -1,6 +1,7 @@
 SPEC_PATH ?= ../ambient-api-server/openapi/openapi.yaml
 GO_OUT     = go-sdk
 PYTHON_OUT = python-sdk/ambient_platform
+TS_OUT     = ts-sdk
 GENERATOR  = generator
 
 .PHONY: generate-sdk verify-sdk build-generator clean
@@ -12,12 +13,14 @@ generate-sdk: build-generator
 	./bin/ambient-sdk-generator \
 		-spec $(SPEC_PATH) \
 		-go-out $(GO_OUT) \
-		-python-out $(PYTHON_OUT)
+		-python-out $(PYTHON_OUT) \
+		-ts-out $(TS_OUT)
 	cd $(GO_OUT) && go fmt ./...
 
 verify-sdk: generate-sdk
 	cd $(GO_OUT) && go build ./...
 	cd python-sdk && python3 -c "from ambient_platform import *"
+	cd $(TS_OUT) && npm run build
 	@echo "SDK verification passed"
 
 clean:
