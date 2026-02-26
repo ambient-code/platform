@@ -16,7 +16,7 @@ jobs:
     steps:
       - name: Create PR review session
         id: session
-        uses: ambient-code/ambient-action@v2
+        uses: ambient-code/ambient-action@v0.0.2
         with:
           api-url: ${{ secrets.AMBIENT_API_URL }}
           api-token: ${{ secrets.AMBIENT_BOT_TOKEN }}
