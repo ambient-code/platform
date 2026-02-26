@@ -34,10 +34,14 @@ export const sessionKeys = {
 /**
  * Hook to fetch sessions for a project with pagination support
  */
-export function useSessionsPaginated(projectName: string, params: PaginationParams = {}) {
+export function useSessionsPaginated(
+  projectName: string,
+  params: PaginationParams = {},
+  labelSelector?: string
+) {
   return useQuery({
-    queryKey: sessionKeys.list(projectName, params),
-    queryFn: () => sessionsApi.listSessionsPaginated(projectName, params),
+    queryKey: [...sessionKeys.list(projectName, params), labelSelector ?? ""] as const,
+    queryFn: () => sessionsApi.listSessionsPaginated(projectName, params, labelSelector),
     enabled: !!projectName,
     placeholderData: keepPreviousData, // Keep previous data while fetching new page
   });
