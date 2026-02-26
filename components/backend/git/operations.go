@@ -1055,10 +1055,13 @@ func PushRepo(ctx context.Context, repoDir, commitMessage, outputRepoURL, branch
 	gitUserEmail := ""
 
 	if githubToken != "" {
-		req, _ := http.NewRequest("GET", "https://api.github.com/user", nil)
-		req.Header.Set("Authorization", "token "+githubToken)
-		req.Header.Set("Accept", "application/vnd.github+json")
-		resp, err := http.DefaultClient.Do(req)
+		req, err := http.NewRequest("GET", "https://api.github.com/user", nil)
+		if err != nil {
+			log.Printf("gitPushRepo: failed to create HTTP request: %v", err)
+		} else {
+			req.Header.Set("Authorization", "token "+githubToken)
+			req.Header.Set("Accept", "application/vnd.github+json")
+			resp, err := http.DefaultClient.Do(req)
 		if err == nil {
 			defer resp.Body.Close()
 			switch resp.StatusCode {
@@ -1091,6 +1094,7 @@ func PushRepo(ctx context.Context, repoDir, commitMessage, outputRepoURL, branch
 			}
 		} else {
 			log.Printf("gitPushRepo: failed to fetch GitHub user: %v", err)
+		}
 		}
 	}
 
@@ -1796,11 +1800,14 @@ func configureGitIdentity(ctx context.Context, repoDir, githubToken string) {
 
 	// Try to fetch from GitHub API if token provided
 	if githubToken != "" && (gitUserName == "" || gitUserEmail == "") {
-		req, _ := http.NewRequest("GET", "https://api.github.com/user", nil)
-		req.Header.Set("Authorization", "token "+githubToken)
-		req.Header.Set("Accept", "application/vnd.github+json")
+		req, err := http.NewRequest("GET", "https://api.github.com/user", nil)
+		if err != nil {
+			log.Printf("configureGitIdentity: failed to create HTTP request: %v", err)
+		} else {
+			req.Header.Set("Authorization", "token "+githubToken)
+			req.Header.Set("Accept", "application/vnd.github+json")
 
-		if resp, err := http.DefaultClient.Do(req); err == nil {
+			if resp, err := http.DefaultClient.Do(req); err == nil {
 			defer resp.Body.Close()
 			if resp.StatusCode == 200 {
 				if body, err := io.ReadAll(resp.Body); err == nil {
@@ -1820,6 +1827,7 @@ func configureGitIdentity(ctx context.Context, repoDir, githubToken string) {
 						}
 					}
 				}
+			}
 			}
 		}
 	}

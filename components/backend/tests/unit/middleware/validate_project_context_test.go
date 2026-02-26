@@ -62,7 +62,10 @@ func setupRouter() *gin.Engine {
 // Authorization header and project name.
 func doRequest(router *gin.Engine, project, authHeader string) *httptest.ResponseRecorder {
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/projects/"+project+"/sessions", nil)
+	req, err := http.NewRequest("GET", "/api/projects/"+project+"/sessions", nil)
+	if err != nil {
+		panic(fmt.Sprintf("failed to create test request: %v", err))
+	}
 	if authHeader != "" {
 		req.Header.Set("Authorization", authHeader)
 	}

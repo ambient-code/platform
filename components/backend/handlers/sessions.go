@@ -735,7 +735,11 @@ func CreateSession(c *gin.Context) {
 	// Best-effort prefill of agent markdown into PVC workspace for immediate UI availability
 	// Uses AGENT_PERSONAS or AGENT_PERSONA if provided in request environment variables
 	func() {
-		defer func() { _ = recover() }()
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("Warning: recovered panic in persona prefill: %v", r)
+			}
+		}()
 		personasCsv := ""
 		if v, ok := req.EnvironmentVariables["AGENT_PERSONAS"]; ok && strings.TrimSpace(v) != "" {
 			personasCsv = v
@@ -1642,7 +1646,12 @@ func GetWorkflowMetadata(c *gin.Context) {
 	log.Printf("GetWorkflowMetadata: project=%s session=%s endpoint=%s", project, sessionName, endpoint)
 
 	// Create and send request to content pod
-	req, _ := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, u, nil)
+	req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, u, nil)
+	if err != nil {
+		log.Printf("GetWorkflowMetadata: failed to create HTTP request: %v", err)
+		c.JSON(http.StatusOK, gin.H{"commands": []interface{}{}, "agents": []interface{}{}})
+		return
+	}
 	if strings.TrimSpace(token) != "" {
 		req.Header.Set("Authorization", token)
 	}
@@ -3037,7 +3046,19 @@ func DiffSessionRepo(c *gin.Context) {
 	endpoint := fmt.Sprintf("http://%s.%s.svc.cluster.local:8001", serviceName, project)
 	log.Printf("DiffSessionRepo: using service %s", serviceName)
 	url := fmt.Sprintf("%s/content/github/diff?repoPath=%s", endpoint, url.QueryEscape(repoPath))
-	req, _ := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, url, nil)
+	if err != nil {
+		log.Printf("DiffSessionRepo: failed to create HTTP request: %v", err)
+		c.JSON(http.StatusOK, gin.H{
+			"files": gin.H{
+				"added":   0,
+				"removed": 0,
+			},
+			"total_added":   0,
+			"total_removed": 0,
+		})
+		return
+	}
 	if v := c.GetHeader("Authorization"); v != "" {
 		req.Header.Set("Authorization", v)
 	}
@@ -3481,7 +3502,12 @@ func GetGitMergeStatus(c *gin.Context) {
 	endpoint := fmt.Sprintf("http://%s.%s.svc.cluster.local:8001/content/git-merge-status?path=%s&branch=%s",
 		serviceName, project, url.QueryEscape(absPath), url.QueryEscape(branch))
 
-	req, _ := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, endpoint, nil)
+	req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, endpoint, nil)
+	if err != nil {
+		log.Printf("GetGitMergeStatus: failed to create HTTP request: %v", err)
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "failed to create request"})
+		return
+	}
 	if v := c.GetHeader("Authorization"); v != "" {
 		req.Header.Set("Authorization", v)
 	}

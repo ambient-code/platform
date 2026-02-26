@@ -256,7 +256,10 @@ func HandleGitHubUserOAuthCallback(c *gin.Context) {
 
 func exchangeOAuthCodeForUserToken(clientID, clientSecret, code string) (string, error) {
 	reqBody := strings.NewReader(fmt.Sprintf("client_id=%s&client_secret=%s&code=%s", clientID, clientSecret, code))
-	req, _ := http.NewRequest(http.MethodPost, "https://github.com/login/oauth/access_token", reqBody)
+	req, err := http.NewRequest(http.MethodPost, "https://github.com/login/oauth/access_token", reqBody)
+	if err != nil {
+		return "", fmt.Errorf("failed to create HTTP request: %w", err)
+	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	resp, err := http.DefaultClient.Do(req)
@@ -277,7 +280,10 @@ func exchangeOAuthCodeForUserToken(clientID, clientSecret, code string) (string,
 }
 
 func userOwnsInstallation(userToken string, installationID int64) (bool, string, error) {
-	req, _ := http.NewRequest(http.MethodGet, "https://api.github.com/user/installations", nil)
+	req, err := http.NewRequest(http.MethodGet, "https://api.github.com/user/installations", nil)
+	if err != nil {
+		return false, "", fmt.Errorf("failed to create HTTP request: %w", err)
+	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("Authorization", "token "+userToken)
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
