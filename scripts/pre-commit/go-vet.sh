@@ -13,6 +13,7 @@ REPO_ROOT="$(git rev-parse --show-toplevel)"
 
 # Known Go module directories (relative to repo root)
 GO_MODULES=(
+    "components/ambient-api-server"
     "components/backend"
     "components/operator"
     "components/public-api"
