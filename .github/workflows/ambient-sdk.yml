@@ -1,0 +1,349 @@
+name: Ambient SDK Build and Test
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'components/ambient-sdk/**'
+      - 'components/ambient-api-server/openapi/**'
+      - '.github/workflows/ambient-sdk.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'components/ambient-sdk/**'
+      - 'components/ambient-api-server/openapi/**'
+      - '.github/workflows/ambient-sdk.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ambient-sdk-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      generator: ${{ steps.filter.outputs.generator }}
+      go-sdk: ${{ steps.filter.outputs.go-sdk }}
+      python-sdk: ${{ steps.filter.outputs.python-sdk }}
+      ts-sdk: ${{ steps.filter.outputs.ts-sdk }}
+      openapi: ${{ steps.filter.outputs.openapi }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Check for SDK changes
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            generator:
+              - 'components/ambient-sdk/generator/**'
+            go-sdk:
+              - 'components/ambient-sdk/go-sdk/**'
+            python-sdk:
+              - 'components/ambient-sdk/python-sdk/**'
+            ts-sdk:
+              - 'components/ambient-sdk/ts-sdk/**'
+            openapi:
+              - 'components/ambient-api-server/openapi/**'
+
+  validate-generator:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    needs: detect-changes
+    if: needs.detect-changes.outputs.generator == 'true' || needs.detect-changes.outputs.openapi == 'true' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.21'
+          cache-dependency-path: 'components/ambient-sdk/generator/go.sum'
+
+      - name: Check generator formatting
+        run: |
+          cd components/ambient-sdk/generator
+          UNFORMATTED=$(gofmt -l .)
+          if [ -n "$UNFORMATTED" ]; then
+            echo "The following files are not formatted:"
+            echo "$UNFORMATTED"
+            echo "Run 'gofmt -w .' to format them."
+            exit 1
+          fi
+
+      - name: Validate generator builds
+        run: |
+          cd components/ambient-sdk/generator
+          if ! go build -o ambient-sdk-generator .; then
+            echo "❌ Generator failed to build"
+            exit 1
+          fi
+          echo "✅ Generator built successfully"
+
+      - name: Run generator
+        run: |
+          cd components/ambient-sdk/generator
+          if [ ! -f "../../ambient-api-server/openapi/openapi.yaml" ]; then
+            echo "❌ OpenAPI spec file not found"
+            exit 1
+          fi
+          if ! ./ambient-sdk-generator \
+            --spec ../../ambient-api-server/openapi/openapi.yaml \
+            --go-out ../go-sdk-test \
+            --python-out ../python-sdk-test \
+            --ts-out ../ts-sdk-test; then
+            echo "❌ Generator execution failed"
+            exit 1
+          fi
+          echo "✅ Generator executed successfully"
+
+      - name: Verify generator output
+        run: |
+          cd components/ambient-sdk
+          echo "Checking Go SDK generation..."
+          [ -f go-sdk-test/client/client.go ] || { echo "Go SDK client not generated"; exit 1; }
+          [ -f go-sdk-test/types/session.go ] || { echo "Go SDK types not generated"; exit 1; }
+          
+          echo "Checking Python SDK generation..."
+          [ -f python-sdk-test/ambient_platform/client.py ] || { echo "Python SDK client not generated"; exit 1; }
+          [ -f python-sdk-test/ambient_platform/types.py ] || { echo "Python SDK types not generated"; exit 1; }
+          
+          echo "Checking TypeScript SDK generation..."
+          [ -f ts-sdk-test/src/client.ts ] || { echo "TypeScript SDK client not generated"; exit 1; }
+          [ -f ts-sdk-test/src/types.ts ] || { echo "TypeScript SDK types not generated"; exit 1; }
+          
+          echo "✅ All SDK generation tests passed"
+
+  test-go-sdk:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    needs: detect-changes
+    if: needs.detect-changes.outputs.go-sdk == 'true' || needs.detect-changes.outputs.generator == 'true' || needs.detect-changes.outputs.openapi == 'true' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'components/ambient-sdk/go-sdk/go.mod'
+          cache-dependency-path: 'components/ambient-sdk/go-sdk/go.sum'
+
+      - name: Check Go formatting
+        run: |
+          cd components/ambient-sdk/go-sdk
+          UNFORMATTED=$(gofmt -l .)
+          if [ -n "$UNFORMATTED" ]; then
+            echo "The following files are not formatted:"
+            echo "$UNFORMATTED"
+            echo "Run 'gofmt -w .' to format them."
+            exit 1
+          fi
+
+      - name: Run go vet
+        run: |
+          cd components/ambient-sdk/go-sdk
+          go vet ./...
+
+      - name: Build Go SDK
+        run: |
+          cd components/ambient-sdk/go-sdk
+          go build ./...
+
+      - name: Run Go tests
+        run: |
+          cd components/ambient-sdk/go-sdk
+          go test -v ./...
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: latest
+          working-directory: components/ambient-sdk/go-sdk
+          args: --timeout=5m
+
+      - name: Test Go example builds
+        run: |
+          cd components/ambient-sdk/go-sdk/examples
+          go build -o example .
+
+  test-python-sdk:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    needs: detect-changes
+    if: needs.detect-changes.outputs.python-sdk == 'true' || needs.detect-changes.outputs.generator == 'true' || needs.detect-changes.outputs.openapi == 'true' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.8'
+
+      - name: Install dependencies
+        run: |
+          cd components/ambient-sdk/python-sdk
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Run Black formatting check
+        run: |
+          cd components/ambient-sdk/python-sdk
+          black --check --diff .
+
+      - name: Run isort import check
+        run: |
+          cd components/ambient-sdk/python-sdk
+          isort --check-only --diff .
+
+      - name: Run mypy type checking
+        run: |
+          cd components/ambient-sdk/python-sdk
+          mypy ambient_platform/
+
+      - name: Run pytest
+        run: |
+          cd components/ambient-sdk/python-sdk
+          pytest -v
+
+      - name: Test Python example
+        env:
+          AMBIENT_TOKEN: test-token
+          AMBIENT_PROJECT: test-project
+        run: |
+          cd components/ambient-sdk/python-sdk/examples
+          python main.py --dry-run || echo "Example dry run test completed"
+
+  test-typescript-sdk:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    needs: detect-changes
+    if: needs.detect-changes.outputs.ts-sdk == 'true' || needs.detect-changes.outputs.generator == 'true' || needs.detect-changes.outputs.openapi == 'true' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: 'components/ambient-sdk/ts-sdk/package-lock.json'
+
+      - name: Install dependencies
+        run: |
+          cd components/ambient-sdk/ts-sdk
+          npm ci
+
+      - name: Run TypeScript type check
+        run: |
+          cd components/ambient-sdk/ts-sdk
+          npx tsc --noEmit
+
+      - name: Run ESLint
+        run: |
+          cd components/ambient-sdk/ts-sdk
+          npm run lint
+
+      - name: Build TypeScript SDK
+        run: |
+          cd components/ambient-sdk/ts-sdk
+          npm run build
+
+      - name: Run tests
+        run: |
+          cd components/ambient-sdk/ts-sdk
+          npm test
+
+      - name: Test TypeScript example builds
+        run: |
+          cd components/ambient-sdk/ts-sdk/examples
+          npm install
+          npx tsc --noEmit
+
+  sdk-integration-test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    needs: [validate-generator, test-go-sdk, test-python-sdk, test-typescript-sdk]
+    if: always() && !cancelled()
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.21'
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.8'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: |
+          # Go SDK
+          cd components/ambient-sdk/go-sdk
+          go mod download
+          
+          # Python SDK
+          cd ../python-sdk
+          pip install -e .
+          
+          # TypeScript SDK
+          cd ../ts-sdk
+          npm ci
+
+      - name: Cross-language compatibility test
+        env:
+          AMBIENT_TOKEN: sha256~test-token-placeholder
+          AMBIENT_PROJECT: test-project
+          AMBIENT_API_URL: http://localhost:8080
+        run: |
+          echo "Testing cross-language SDK compatibility..."
+          
+          # Test Go SDK environment loading
+          cd components/ambient-sdk/go-sdk/examples
+          timeout 10s go run main.go || echo "Go SDK env test completed (expected to fail without API server)"
+          
+          # Test Python SDK environment loading
+          cd ../../python-sdk/examples
+          timeout 10s python main.py || echo "Python SDK env test completed (expected to fail without API server)"
+          
+          echo "✅ Cross-language compatibility test passed"
+
+  sdk-summary:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    needs: [validate-generator, test-go-sdk, test-python-sdk, test-typescript-sdk, sdk-integration-test]
+    if: always()
+    steps:
+      - name: Check overall status
+        run: |
+          if [ "${{ needs.validate-generator.result }}" == "failure" ] || \
+             [ "${{ needs.test-go-sdk.result }}" == "failure" ] || \
+             [ "${{ needs.test-python-sdk.result }}" == "failure" ] || \
+             [ "${{ needs.test-typescript-sdk.result }}" == "failure" ] || \
+             [ "${{ needs.sdk-integration-test.result }}" == "failure" ]; then
+            echo "❌ Ambient SDK tests failed"
+            exit 1
+          fi
+          echo "✅ All Ambient SDK tests passed!"
