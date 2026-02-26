@@ -95,8 +95,11 @@ export function CreateSessionDialog({
     if (!projectName) return;
 
     // Auto-add any valid pending label input the user forgot to click +Add for
-    if (labelEditorRef.current && !labelEditorRef.current.flush()) {
-      return; // invalid partial text — let them fix it
+    let effectiveLabels = labels;
+    if (labelEditorRef.current) {
+      const result = labelEditorRef.current.flush();
+      if (!result.ok) return; // invalid partial text — let them fix it
+      effectiveLabels = result.labels;
     }
 
     const request: CreateAgenticSessionRequest = {
@@ -111,8 +114,8 @@ export function CreateSessionDialog({
     if (trimmedName) {
       request.displayName = trimmedName;
     }
-    if (Object.keys(labels).length > 0) {
-      request.labels = labels;
+    if (Object.keys(effectiveLabels).length > 0) {
+      request.labels = effectiveLabels;
     }
 
     createSessionMutation.mutate(

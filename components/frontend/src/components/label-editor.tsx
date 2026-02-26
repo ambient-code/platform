@@ -15,11 +15,13 @@ type LabelEditorProps = {
   suggestions?: string[];
 };
 
+export type FlushResult =
+  | { ok: true; labels: Record<string, string> }
+  | { ok: false };
+
 export type LabelEditorHandle = {
-  /** Auto-add any valid pending input. Returns true if input was empty or added, false if invalid/partial text remains. */
-  flush: () => boolean;
-  /** Whether the input field has non-empty text. */
-  hasPendingInput: () => boolean;
+  /** Auto-add any valid pending input. Returns the complete updated labels map on success, or { ok: false } if invalid partial text remains. */
+  flush: () => FlushResult;
 };
 
 const DEFAULT_SUGGESTIONS = ["issue", "research", "team", "type", "other"];
@@ -53,7 +55,7 @@ export const LabelEditor = forwardRef<LabelEditorHandle, LabelEditorProps>(
 
     const tryAdd = useCallback((): boolean => {
       const result = parseLabel(inputValue);
-      if (result === null) return true; // empty input, nothing to add
+      if (result === null) return true;
       if ("error" in result) {
         setValidationError(result.error);
         return false;
@@ -65,9 +67,20 @@ export const LabelEditor = forwardRef<LabelEditorHandle, LabelEditorProps>(
     }, [inputValue, labels, onChange]);
 
     useImperativeHandle(ref, () => ({
-      flush: tryAdd,
-      hasPendingInput: () => inputValue.trim().length > 0,
-    }), [tryAdd, inputValue]);
+      flush: (): FlushResult => {
+        const result = parseLabel(inputValue);
+        if (result === null) return { ok: true, labels }; // nothing pending
+        if ("error" in result) {
+          setValidationError(result.error);
+          return { ok: false };
+        }
+        const updated = { ...labels, [result.key]: result.value };
+        setValidationError(null);
+        onChange(updated);
+        setInputValue("");
+        return { ok: true, labels: updated };
+      },
+    }), [inputValue, labels, onChange]);
 
     const handleRemove = useCallback(
       (key: string) => {

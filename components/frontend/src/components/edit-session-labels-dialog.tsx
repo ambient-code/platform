@@ -40,11 +40,13 @@ export function EditSessionLabelsDialog({
 
   const handleSave = () => {
     // Auto-add any valid pending input the user forgot to click +Add for
-    if (editorRef.current && !editorRef.current.flush()) {
-      // Invalid partial text — let the user fix it
-      return;
+    let effectiveLabels = labels;
+    if (editorRef.current) {
+      const result = editorRef.current.flush();
+      if (!result.ok) return;
+      effectiveLabels = result.labels;
     }
-    onSave(labels);
+    onSave(effectiveLabels);
   };
 
   const hasChanged = JSON.stringify(labels) !== JSON.stringify(currentLabels);
