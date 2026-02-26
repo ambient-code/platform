@@ -1,0 +1,5 @@
+ts-sdk/dist/
+ts-sdk/node_modules/
+python-sdk/*.egg-info/
+python-sdk/venv/
+.claude/settings.local.json
