@@ -228,7 +228,7 @@ function handleRunFinished(
       id: state.currentMessage.id || crypto.randomUUID(),
       role: 'assistant' as const,
       content: state.currentMessage.content,
-      timestamp: new Date(event.timestamp ?? Date.now()).toISOString(),
+      timestamp: event.timestamp ? new Date(event.timestamp).toISOString() : (state.currentMessage.timestamp || new Date().toISOString()),
     } as PlatformMessage
     state.messages = [...state.messages, msg]
     callbacks.onMessage?.(msg)
@@ -242,7 +242,7 @@ function handleRunFinished(
       role: 'assistant' as const,
       content: state.currentReasoning.content,
       metadata: { type: 'reasoning_block' },
-      timestamp: new Date(event.timestamp ?? Date.now()).toISOString(),
+      timestamp: event.timestamp ? new Date(event.timestamp).toISOString() : (state.currentReasoning.timestamp || new Date().toISOString()),
     } as PlatformMessage
     state.messages = [...state.messages, msg]
     callbacks.onMessage?.(msg)
@@ -261,7 +261,7 @@ function handleRunFinished(
         thinking: thinkingText,
         signature: '',
       },
-      timestamp: new Date(event.timestamp ?? Date.now()).toISOString(),
+      timestamp: event.timestamp ? new Date(event.timestamp).toISOString() : (state.currentThinking.timestamp || new Date().toISOString()),
     } as PlatformMessage
     state.messages = [...state.messages, msg]
     callbacks.onMessage?.(msg)
@@ -342,7 +342,9 @@ function handleTextMessageEnd(
         id: messageId,
         role: state.currentMessage.role || 'assistant',
         content: state.currentMessage.content,
-        timestamp: new Date(event.timestamp ?? Date.now()).toISOString(),
+        // Prefer server end-event timestamp; fall back to the start-event timestamp
+        // already captured in state to avoid replacing it with a new Date.now().
+        timestamp: event.timestamp ? new Date(event.timestamp).toISOString() : (state.currentMessage.timestamp || new Date().toISOString()),
       } as PlatformMessage
       state.messages = [...state.messages, msg]
       callbacks.onMessage?.(msg)
@@ -564,7 +566,7 @@ function handleToolCallEnd(
       content: '',
       toolCallId: toolCallId,
       toolCalls: [completedToolCall],
-      timestamp: new Date(event.timestamp ?? Date.now()).toISOString(),
+      timestamp: event.timestamp ? new Date(event.timestamp).toISOString() : (pendingTool?.timestamp || new Date().toISOString()),
     } as PlatformMessage
     messages.push(toolMessage)
     callbacks.onMessage?.(toolMessage)
@@ -702,10 +704,10 @@ function handleMessagesSnapshot(
           mergedToolCalls.push(existingTC)
         }
       }
-      return { ...snapshotVersion, toolCalls: mergedToolCalls }
+      return { ...snapshotVersion, toolCalls: mergedToolCalls, timestamp: snapshotVersion.timestamp || msg.timestamp }
     }
 
-    return snapshotVersion
+    return { ...snapshotVersion, timestamp: snapshotVersion.timestamp || msg.timestamp }
   })
 
   // Insert new snapshot messages at the correct position
@@ -883,7 +885,7 @@ function handleReasoningMessageEnd(
       role: 'assistant' as const,
       content: state.currentReasoning.content,
       metadata: { type: 'reasoning_block' },
-      timestamp: new Date(event.timestamp ?? Date.now()).toISOString(),
+      timestamp: event.timestamp ? new Date(event.timestamp).toISOString() : (state.currentReasoning.timestamp || new Date().toISOString()),
     } as PlatformMessage
     state.messages = [...state.messages, msg]
     callbacks.onMessage?.(msg)
@@ -1025,6 +1027,7 @@ function handleThinkingMessageEnd(
         thinking: thinkingText,
         signature: '',
       },
+      // Prefer server end-event timestamp; fall back to the start-event timestamp.
       timestamp: event.timestamp ? new Date(event.timestamp).toISOString() : (state.currentThinking.timestamp || new Date().toISOString()),
     } as PlatformMessage
     state.messages = [...state.messages, msg]
