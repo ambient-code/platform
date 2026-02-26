@@ -12,6 +12,7 @@ Owns the entire Claude session lifecycle:
 import asyncio
 import logging
 import os
+import time
 from typing import Any, AsyncIterator, Optional
 
 from ag_ui.core import BaseEvent, RunAgentInput
@@ -28,6 +29,9 @@ logger = logging.getLogger(__name__)
 
 # Maximum stderr lines kept in ring buffer for error reporting
 _MAX_STDERR_LINES = 50
+
+# Minimum seconds between credential refreshes to avoid hammering the backend
+_CREDS_REFRESH_INTERVAL_SEC = 60
 
 
 class ClaudeBridge(PlatformBridge):
@@ -55,6 +59,7 @@ class ClaudeBridge(PlatformBridge):
         self._allowed_tools: list[str] = []
         self._system_prompt: dict = {}
         self._stderr_lines: list[str] = []
+        self._last_creds_refresh: float = 0.0
 
     # ------------------------------------------------------------------
     # PlatformBridge interface
@@ -85,6 +90,14 @@ class ClaudeBridge(PlatformBridge):
         """Full run lifecycle: lazy setup → adapter → session worker → tracing."""
         # 1. Lazy platform setup
         await self._ensure_ready()
+
+        # Refresh credentials if stale (tokens may have expired)
+        now = time.monotonic()
+        if now - self._last_creds_refresh > _CREDS_REFRESH_INTERVAL_SEC:
+            from ambient_runner.platform.auth import populate_runtime_credentials
+
+            await populate_runtime_credentials(self._context)
+            self._last_creds_refresh = now
 
         # 2. Ensure adapter exists
         self._ensure_adapter()
@@ -316,14 +329,12 @@ class ClaudeBridge(PlatformBridge):
 
         # Claude-specific auth
         from ambient_runner.bridges.claude.auth import setup_sdk_authentication
-        from ambient_runner.platform.auth import populate_runtime_credentials
         from ambient_runner.platform.workspace import resolve_workspace_paths, validate_prerequisites
 
         await validate_prerequisites(self._context)
         _api_key, _use_vertex, configured_model = await setup_sdk_authentication(
             self._context
         )
-        await populate_runtime_credentials(self._context)
 
         # Workspace paths
         cwd_path, add_dirs = resolve_workspace_paths(self._context)

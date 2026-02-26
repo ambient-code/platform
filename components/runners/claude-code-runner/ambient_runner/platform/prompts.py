@@ -28,6 +28,21 @@ MCP_INTEGRATIONS_PROMPT = (
     "and configure Jira credentials there.\n\n"
 )
 
+GITHUB_TOKEN_PROMPT = (
+    "## GitHub Access\n"
+    "A `GITHUB_TOKEN` environment variable is set in this session. "
+    "You can use `git` and `gh` CLI commands to interact with GitHub repositories "
+    "(clone, push, create PRs, manage issues, etc.). "
+    "The token is automatically used by git and the GitHub CLI.\n\n"
+)
+
+GITLAB_TOKEN_PROMPT = (
+    "## GitLab Access\n"
+    "A `GITLAB_TOKEN` environment variable is set in this session. "
+    "You can use `git` commands to interact with GitLab repositories. "
+    "The token is automatically used for git operations.\n\n"
+)
+
 GIT_PUSH_INSTRUCTIONS_HEADER = "## Git Push Instructions\n\n"
 
 GIT_PUSH_INSTRUCTIONS_BODY = (
@@ -183,6 +198,12 @@ def build_workspace_context_prompt(
 
     # MCP integration setup instructions
     prompt += MCP_INTEGRATIONS_PROMPT
+
+    # Token visibility — tell Claude what credentials are available
+    if os.getenv("GITHUB_TOKEN"):
+        prompt += GITHUB_TOKEN_PROMPT
+    if os.getenv("GITLAB_TOKEN"):
+        prompt += GITLAB_TOKEN_PROMPT
 
     # Workflow instructions
     if ambient_config.get("systemPrompt"):
