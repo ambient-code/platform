@@ -106,6 +106,10 @@ func registerRoutes(r *gin.Engine) {
 			projectGroup.POST("/feature-flags/:flagName/enable", handlers.EnableFeatureFlag)
 			projectGroup.POST("/feature-flags/:flagName/disable", handlers.DisableFeatureFlag)
 
+			projectGroup.GET("/mcp-config", handlers.GetMcpConfig)
+			projectGroup.PUT("/mcp-config", handlers.UpdateMcpConfig)
+			projectGroup.POST("/mcp-config/test", handlers.TestMcpServer)
+
 			// GitLab authentication endpoints (DEPRECATED - moved to cluster-scoped)
 			// Kept for backward compatibility, will be removed in future version
 			projectGroup.POST("/auth/gitlab/connect", handlers.ConnectGitLabGlobal)
