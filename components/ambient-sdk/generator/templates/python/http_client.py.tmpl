@@ -130,7 +130,7 @@ class AmbientClient:
         try:
             if response.content and expect_json:
                 error_data = response.json()
-                if isinstance(error_data, dict) and "error" in error_data:
+                if isinstance(error_data, dict) and "code" in error_data:
                     raise APIError.from_dict(error_data, response.status_code)
         except (json.JSONDecodeError, ValueError):
             pass
@@ -152,7 +152,7 @@ class AmbientClient:
         self.close()
 
 {{- range .Spec.Resources}}
-    def {{.Name | snakeCase | lower}}s(self) -> {{.Name}}API:
+    def {{.Name | snakeCase | lower | pluralize}}(self) -> {{.Name}}API:
         """Get the {{.Name}} API interface."""
         if self._{{.Name | snakeCase}}_api is None:
             from ._{{.Name | snakeCase}}_api import {{.Name}}API

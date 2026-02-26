@@ -180,6 +180,12 @@ func (c *Client) doWithQuery(ctx context.Context, method, path string, body []by
 		if opts.Search != "" {
 			params.Set("search", opts.Search)
 		}
+		if opts.OrderBy != "" {
+			params.Set("orderBy", opts.OrderBy)
+		}
+		if opts.Fields != "" {
+			params.Set("fields", opts.Fields)
+		}
 		if len(params) > 0 {
 			queryPath += "?" + params.Encode()
 		}

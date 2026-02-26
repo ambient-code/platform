@@ -17,20 +17,6 @@ This SDK is one piece of a multi-component system coordinated via `../working.md
 | **Operator** | Kubernetes controller | Internal only — spawns Jobs from CRs |
 | **Runner** | Claude Code CLI executor | Internal only — runs inside Job pods |
 
-Cross-session coordination with `ambient-api-server` and `ambient-control-plane` happens through `../working.md`. Read it before making contract-breaking changes.
-
-**ALWAYS** report changes, suggestions, and next steps in `../working.md` because we are in active development mode. I *will* remove this directive when we're done, but we're not done yet. **ALWAYS** report status to working.md via the coordinator server.
-
-### Coordinator Server Protocol
-
-The coordinator server at `http://localhost:4345` manages `../working.md`. Each agent owns a section between `<!-- BEGIN:SDK -->` and `<!-- END:SDK -->` markers.
-
-- **Post your update:** Write content to a temp file, then `curl -s -X POST http://localhost:4345/agent/sdk -H 'Content-Type: text/plain' --data-binary @/tmp/sdk_update.md`
-- **Read your section only:** `curl -s http://localhost:4345/agent/sdk`
-- **Read full document:** `curl -s http://localhost:4345/raw`
-- **Do NOT use** `POST /update` with JSON — that endpoint does not exist. Use `/agent/sdk` with `text/plain`.
-- Always write to a temp file first and use `--data-binary @file` to avoid shell mangling of markdown.
-
 ## Quick Reference
 
 ```bash

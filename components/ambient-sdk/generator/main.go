@@ -307,6 +307,7 @@ func loadTemplate(path string) (*template.Template, error) {
 		"isDateTime":    isDateTimeField,
 		"isWritable":    func(f Field) bool { return !f.ReadOnly },
 		"camelCase":     toCamelCase,
+		"pluralize":     pluralize,
 		"lowerFirst":    lowerFirst,
 		"tsDefault":     func(f Field) string { return tsDefault(f.Type, f.Format) },
 		"hasTimeImport": func(fields []Field) bool {
