@@ -564,9 +564,9 @@ func CreateSession(c *gin.Context) {
 		timeout = *req.Timeout
 	}
 
-	// Generate unique name (timestamp-based)
+	// Generate unique name (millisecond timestamp for burst-creation safety)
 	// Note: Runner will create branch as "ambient/{session-name}"
-	timestamp := time.Now().Unix()
+	timestamp := time.Now().UnixMilli()
 	name := fmt.Sprintf("session-%d", timestamp)
 
 	// Create the custom resource
