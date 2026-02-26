@@ -39,7 +39,7 @@ func (p *Printer) Format() Format {
 	return p.format
 }
 
-func (p *Printer) PrintJSON(v interface{}) error {
+func (p *Printer) PrintJSON(v any) error {
 	data, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal JSON: %w", err)

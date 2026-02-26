@@ -16,6 +16,7 @@ GO_MODULES=(
     "components/backend"
     "components/operator"
     "components/public-api"
+    "components/ambient-cli"
 )
 
 # Determine which modules are affected by the staged files

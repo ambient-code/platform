@@ -20,12 +20,8 @@ var Cmd = &cobra.Command{
 	Long: `Delete a resource by ID.
 
 Valid resource types:
-  session    (aliases: sess) — stops then deletes a session
   project    (aliases: proj)
-  project-settings (aliases: ps)
-
-Note: Session deletion is not yet supported by the API.
-Use 'acpctl stop' to terminate a running session.`,
+  project-settings (aliases: ps)`,
 	Args: cobra.ExactArgs(2),
 	RunE: run,
 }

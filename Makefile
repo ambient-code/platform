@@ -1,4 +1,4 @@
-.PHONY: help setup build-all build-frontend build-backend build-operator build-runner build-state-sync build-public-api deploy clean check-architecture
+.PHONY: help setup build-all build-frontend build-backend build-operator build-runner build-state-sync build-public-api build-cli deploy clean check-architecture
 .PHONY: local-up local-down local-clean local-status local-rebuild local-reload-backend local-reload-frontend local-reload-operator local-sync-version
 .PHONY: local-dev-token
 .PHONY: local-logs local-logs-backend local-logs-frontend local-logs-operator local-shell local-shell-frontend
@@ -160,6 +160,21 @@ build-api-server: ## Build ambient API server image
 	@cd components/ambient-api-server && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
 		-t $(API_SERVER_IMAGE) .
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) API server built: $(API_SERVER_IMAGE)"
+
+build-cli: ## Build acpctl CLI binary
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building acpctl CLI..."
+	@cd components/ambient-cli && make build
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) CLI built: components/ambient-cli/acpctl"
+
+lint-cli: ## Lint acpctl CLI
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Linting acpctl CLI..."
+	@cd components/ambient-cli && make lint
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) CLI lint passed"
+
+test-cli: ## Test acpctl CLI
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Testing acpctl CLI..."
+	@cd components/ambient-cli && make test
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) CLI tests passed"
 
 ##@ Git Hooks & Linting
 
