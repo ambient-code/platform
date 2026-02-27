@@ -2,6 +2,9 @@
 # Ambient Code Platform .gitignore
 # =============================================================================
 
+# Astro / Starlight (docs)
+docs/.astro/
+
 # Python
 __pycache__/
 *.py[cod]

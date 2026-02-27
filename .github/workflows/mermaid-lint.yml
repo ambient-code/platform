@@ -3,13 +3,13 @@ name: Mermaid Lint
 on:
   pull_request:
     paths:
-      - "docs/**/*.mmd"
+      - "docs/src/content/docs/**/*.mmd"
       - ".github/workflows/mermaid-lint.yml"
   push:
     branches:
       - main
     paths:
-      - "docs/**/*.mmd"
+      - "docs/src/content/docs/**/*.mmd"
 
 jobs:
   mermaid-lint:
@@ -42,7 +42,7 @@ jobs:
       - name: Find Mermaid files
         id: find-mermaid
         run: |
-          files=$(find docs -name "*.mmd" | tr '\n' ' ')
+          files=$(find docs/src/content/docs -name "*.mmd" | tr '\n' ' ')
           echo "files=$files" >> $GITHUB_OUTPUT
 
       - name: Validate Mermaid syntax
@@ -89,10 +89,10 @@ jobs:
           echo ""
 
           # Find all .mmd files
-          mmd_files=$(find docs -name "*.mmd" -type f)
+          mmd_files=$(find docs/src/content/docs -name "*.mmd" -type f)
 
           # Find all markdown files that might reference diagrams
-          md_files=$(find docs -name "*.md" -type f)
+          md_files=$(find docs/src/content/docs -name "*.md" -type f)
 
           BROKEN=0
           for mmd in $mmd_files; do
@@ -116,7 +116,7 @@ jobs:
                 mmd_ref=$(echo "$ref" | grep -oE '[^/]+\.mmd' || true)
 
                 if [ -n "$mmd_ref" ]; then
-                  if ! find docs -name "$mmd_ref" -type f | grep -q .; then
+                  if ! find docs/src/content/docs -name "$mmd_ref" -type f | grep -q .; then
                     echo "✗ BROKEN REFERENCE in $md: $mmd_ref (file not found)"
                     BROKEN=1
                   fi

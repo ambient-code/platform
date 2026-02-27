@@ -14,7 +14,7 @@ Kubernetes-native AI automation platform that orchestrates agentic sessions thro
 - `components/public-api/` - Stateless HTTP gateway, proxies to backend (no direct K8s access)
 - `components/manifests/` - Kustomize-based deployment manifests and overlays
 - `e2e/` - Cypress end-to-end tests
-- `docs/` - MkDocs documentation site
+- `docs/` - Astro Starlight documentation site
 
 ## Key Files
 
@@ -58,7 +58,7 @@ cd components/frontend && npm run build  # Must pass with 0 errors, 0 warnings
 cd components/runners/claude-code-runner && uv venv && uv pip install -e .
 
 # Docs
-mkdocs serve  # http://127.0.0.1:8000
+cd docs && npm run dev  # http://localhost:4321
 ```
 
 ## Critical Context
