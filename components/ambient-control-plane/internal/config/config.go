@@ -35,6 +35,12 @@ func Load() (*ControlPlaneConfig, error) {
 		return nil, fmt.Errorf("AMBIENT_API_TOKEN environment variable is required")
 	}
 
+	switch cfg.Mode {
+	case "kube", "local", "test":
+	default:
+		return nil, fmt.Errorf("unknown MODE %q: must be one of kube, local, test", cfg.Mode)
+	}
+
 	return cfg, nil
 }
 

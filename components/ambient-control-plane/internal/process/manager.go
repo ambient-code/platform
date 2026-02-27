@@ -519,9 +519,6 @@ func splitCommand(cmd string) []string {
 	if len(current) > 0 {
 		parts = append(parts, string(current))
 	}
-	if len(parts) == 0 {
-		return strings.Fields(cmd)
-	}
 	return parts
 }
 

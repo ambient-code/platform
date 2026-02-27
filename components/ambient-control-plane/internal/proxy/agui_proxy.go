@@ -27,6 +27,8 @@ func NewAGUIProxy(listenAddr, corsOrigin string, manager *process.Manager, logge
 	if corsOrigin == "" {
 		corsOrigin = "http://localhost:3000"
 		l.Warn().Str("cors_origin", corsOrigin).Msg("CORS_ALLOWED_ORIGIN not set, using localhost default")
+	} else if corsOrigin == "*" {
+		l.Warn().Msg("CORS_ALLOWED_ORIGIN is set to wildcard '*', all origins allowed")
 	}
 	return &AGUIProxy{
 		listenAddr: listenAddr,

@@ -353,18 +353,6 @@ func (inf *Informer) handleProjectSettingsWatch(ctx context.Context, we watcher.
 	return nil
 }
 
-func (inf *Informer) dispatch(ctx context.Context, event ResourceEvent) {
-	select {
-	case inf.eventCh <- event:
-	case <-ctx.Done():
-	default:
-		inf.logger.Warn().
-			Str("resource", event.Resource).
-			Str("event_type", string(event.Type)).
-			Msg("event channel full, dropping event")
-	}
-}
-
 func (inf *Informer) dispatchBlocking(ctx context.Context, event ResourceEvent) {
 	select {
 	case inf.eventCh <- event:

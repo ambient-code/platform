@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"math/rand/v2"
 	"sync"
 	"time"
 
@@ -229,9 +230,10 @@ func protoEventType(t pb.EventType) EventType {
 func backoffDuration(attempt int) time.Duration {
 	base := float64(time.Second)
 	d := base * math.Pow(2, float64(attempt))
-	max := float64(30 * time.Second)
-	if d > max {
-		d = max
+	maxBackoff := float64(30 * time.Second)
+	if d > maxBackoff {
+		d = maxBackoff
 	}
-	return time.Duration(d)
+	jitter := d * 0.25 * (rand.Float64()*2 - 1)
+	return time.Duration(d + jitter)
 }

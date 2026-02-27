@@ -187,11 +187,15 @@ func (r *LocalSessionReconciler) stopSession(ctx context.Context, session types.
 		return nil
 	}
 
-	if err := r.processManager.Stop(session.ID); err != nil {
-		r.logger.Warn().Err(err).Str("session_id", session.ID).Msg("error stopping process")
-	}
+	r.writePhase(ctx, session.ID, PhaseStopping, "")
 
-	r.writePhaseWithCompletionTime(ctx, session.ID, PhaseStopped)
+	go func() {
+		if err := r.processManager.Stop(session.ID); err != nil {
+			r.logger.Warn().Err(err).Str("session_id", session.ID).Msg("error stopping process")
+		}
+		r.writePhaseWithCompletionTime(r.shutdownCtx, session.ID, PhaseStopped)
+	}()
+
 	return nil
 }
 
