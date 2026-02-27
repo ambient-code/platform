@@ -1,3 +1,4 @@
 secrets/
 ambient-api-server
 .claude/settings.local.json
+db.password

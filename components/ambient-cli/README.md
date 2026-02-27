@@ -163,7 +163,7 @@ Environment variables also work (override config file values):
 | `make clean` | Remove binary |
 | `make fmt` | Format code |
 | `make vet` | Run go vet |
-| `make lint` | Format + vet |
+| `make lint` | Vet + golangci-lint |
 | `make test` | Run tests |
 
 ## Dependencies

@@ -69,7 +69,7 @@ func TestSaveAndLoad(t *testing.T) {
 		t.Errorf("APIUrl mismatch: got %s, want %s", loaded.APIUrl, cfg.APIUrl)
 	}
 	if loaded.AccessToken != cfg.AccessToken {
-		t.Errorf("AccessToken mismatch: got %s, want %s", loaded.AccessToken, cfg.AccessToken)
+		t.Errorf("AccessToken mismatch: got len=%d, want len=%d", len(loaded.AccessToken), len(cfg.AccessToken))
 	}
 	if loaded.Project != cfg.Project {
 		t.Errorf("Project mismatch: got %s, want %s", loaded.Project, cfg.Project)
