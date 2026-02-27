@@ -122,6 +122,10 @@ func (m *Manager) Spawn(ctx context.Context, sessionID string, env map[string]st
 	}
 
 	workspace := filepath.Join(m.workspaceRoot, sessionID)
+	if !strings.HasPrefix(filepath.Clean(workspace)+string(filepath.Separator), filepath.Clean(m.workspaceRoot)+string(filepath.Separator)) {
+		m.portPool.Release(sessionID)
+		return nil, fmt.Errorf("invalid session ID %q: path traversal detected", sessionID)
+	}
 	if err := os.MkdirAll(workspace, 0o755); err != nil {
 		m.portPool.Release(sessionID)
 		return nil, fmt.Errorf("creating workspace %s: %w", workspace, err)

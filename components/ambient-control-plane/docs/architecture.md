@@ -2,18 +2,26 @@
 
 ## Design Philosophy
 
-The ambient-control-plane follows the Kubernetes controller pattern adapted for a plain REST API:
+The ambient-control-plane follows the Kubernetes controller pattern, bridging the ambient-api-server with Kubernetes:
 
 | Kubernetes | ambient-control-plane |
 |---|---|
 | kube-apiserver | ambient-api-server |
 | kube-controller-manager | ambient-control-plane |
-| Watch streams (HTTP/2 chunked) | Poll-and-diff with in-memory cache |
-| CustomResource CRDs | OpenAPI-generated model types |
+| Watch streams (HTTP/2 chunked) | gRPC watch streams |
+| CustomResource CRDs | Go SDK types |
 | client-go informers | `internal/informer` package |
 | controller reconcile loops | `internal/reconciler` package |
 
-The key difference: ambient-api-server has no watch/SSE endpoint, so the informer synthesizes events by polling list endpoints and diffing against cached state.
+## Operating Modes
+
+The control plane supports three modes via the `MODE` environment variable:
+
+| Mode | Description | Dependencies |
+|---|---|---|
+| `kube` (default) | Reconciles into Kubernetes (CRs, Namespaces, RoleBindings) | K8s cluster |
+| `local` | Spawns runner processes directly, AG-UI proxy | Filesystem only |
+| `test` | Tally reconcilers, counts events, no side effects | None |
 
 ## Component Responsibilities
 
@@ -21,105 +29,52 @@ The key difference: ambient-api-server has no watch/SSE endpoint, so the informe
 
 Entry point. Responsibilities:
 
-1. Load configuration from environment variables
-2. Build the OpenAPI client with server URL, HTTP timeout, and optional bearer token
-3. Create the informer with the configured poll interval
-4. Instantiate and register all reconcilers
-5. Start the informer loop
-6. Handle graceful shutdown via `signal.NotifyContext(SIGINT, SIGTERM)`
-
-The `run()` function returns an error, and `main()` prints it and exits non-zero. When the context is cancelled (shutdown signal), `run()` returns `nil` — this is intentional so a clean shutdown is not treated as an error.
-
-```go
-err = inf.Run(ctx)
-if err != nil && ctx.Err() != nil {
-    logger.Info().Msg("shutdown complete")
-    return nil
-}
-return err
-```
+1. Load configuration from environment variables (validates `AMBIENT_API_TOKEN`)
+2. Build the Go SDK client with server URL, token, and project
+3. Establish gRPC connection (with optional TLS)
+4. Create the informer with watch manager
+5. Instantiate and register mode-specific reconcilers
+6. Start the informer run loop
+7. Handle graceful shutdown via `signal.NotifyContext(SIGINT, SIGTERM)`
 
 ### `internal/config/config.go`
 
-Pure environment-variable-based configuration. No config files, no flags. Returns a `ControlPlaneConfig` struct or an error if any env var has an invalid value.
+Pure environment-variable-based configuration. No config files, no flags. Returns a `ControlPlaneConfig` struct or an error if `AMBIENT_API_TOKEN` is missing.
 
-| Field | Env Var | Type | Default |
-|---|---|---|---|
-| `APIServerURL` | `AMBIENT_API_SERVER_URL` | string | `http://localhost:8000` |
-| `APIToken` | `AMBIENT_API_TOKEN` | string | (empty) |
-| `PollInterval` | `POLL_INTERVAL_SECONDS` | duration | 5s |
-| `WorkerCount` | `WORKER_COUNT` | int | 2 |
-| `LogLevel` | `LOG_LEVEL` | string | `info` |
+See CLAUDE.md for the full environment variable reference.
+
+### `internal/watcher/watcher.go`
+
+Manages gRPC watch streams with automatic reconnection. Each resource type gets its own goroutine running a `watchLoop` that:
+
+1. Opens a gRPC watch stream
+2. Receives events and dispatches to registered handlers
+3. On stream error, applies exponential backoff (capped at 30s) and reconnects
 
 ### `internal/informer/informer.go`
 
-The informer is the core engine. It maintains three independent in-memory caches (one per resource type) and a handler registry.
+The informer is the core engine. It maintains three in-memory caches (sessions, projects, project_settings) and a handler registry.
 
-#### Data Structures
-
-```go
-type Informer struct {
-    client        *openapi.APIClient
-    pollInterval  time.Duration
-    handlers      map[string][]EventHandler      // resource → handlers
-    mu            sync.RWMutex                    // protects handlers map
-    logger        zerolog.Logger
-    sessionCache  map[string]openapi.Session      // id → last-known state
-    workflowCache map[string]openapi.Workflow
-    taskCache     map[string]openapi.Task
-}
-```
-
-#### Event Types
-
-```go
-type ResourceEvent struct {
-    Type      EventType      // ADDED | MODIFIED | DELETED
-    Resource  string         // "sessions" | "workflows" | "tasks"
-    Object    interface{}    // current state (typed as openapi.Session etc.)
-    OldObject interface{}    // previous state (only set for MODIFIED)
-}
-```
-
-#### Poll-and-Diff Algorithm
-
-Each sync cycle (per resource type) follows this algorithm:
+#### Startup Sequence
 
 ```
-1. GET /api/ambient-api-server/v1/{resource} → list all items
-2. For each item in the API response:
-   a. If item.id NOT in cache → ADDED event, add to cache
-   b. If item.id in cache AND item.updated_at != cached.updated_at → MODIFIED event, update cache
-   c. If item.id in cache AND timestamps match → no event (unchanged)
-3. For each item in cache NOT in the API response → DELETED event, remove from cache
+1. Initial sync: paginated SDK list calls populate caches, fire ADDED events (blocking dispatch)
+2. Start dispatch loop goroutine (reads from buffered event channel)
+3. Wire gRPC watch handlers
+4. Start gRPC watch streams (one goroutine per resource)
 ```
 
-This approach correctly handles:
-- New resources appearing between polls
-- Resources being updated (detected via `updated_at` timestamp)
-- Resources being deleted from the API server
-- First sync populates the cache and fires ADDED events for all existing resources
+#### Event Flow
 
-#### Sync Order
-
-Resources sync in a fixed order: sessions → workflows → tasks. If any sync fails, the remaining resource types are skipped for that cycle. The next cycle retries all.
-
-#### Handler Dispatch
-
-Handlers are called synchronously in registration order. A failing handler is logged but does not prevent other handlers from executing or block future events.
-
-```go
-func (inf *Informer) dispatch(ctx context.Context, event ResourceEvent) {
-    inf.mu.RLock()
-    handlers := inf.handlers[event.Resource]
-    inf.mu.RUnlock()
-    for _, handler := range handlers {
-        if err := handler(ctx, event); err != nil {
-            inf.logger.Error().Err(err).Str("resource", event.Resource).Msg("handler failed")
-        }
-    }
-}
 ```
+gRPC watch event → handleXxxWatch() → cache update (under mutex) → dispatchBlocking → event channel → dispatchLoop → handlers
+```
+
+All watch handlers use `dispatchBlocking` to ensure no events are lost under backpressure.
+
+#### Cache Consistency
+
+Watch handlers hold `inf.mu.Lock()` during cache mutations and build the event while holding the lock. The lock is released before dispatching to prevent deadlock (dispatch → handler → RLock would deadlock with Lock).
 
 ### `internal/reconciler/reconciler.go`
 
@@ -132,77 +87,47 @@ type Reconciler interface {
 }
 ```
 
-`Resource()` returns the resource string that matches the informer's handler registration (e.g. `"sessions"`). `Reconcile()` receives every event for that resource.
+#### Implementations (kube mode)
 
-#### Current Implementations
+| Reconciler | Resource | SDK Type | K8s Resources |
+|---|---|---|---|
+| `SessionReconciler` | `sessions` | `types.Session` | AgenticSession CRs |
+| `ProjectReconciler` | `projects` | `types.Project` | Namespaces |
+| `ProjectSettingsReconciler` | `project_settings` | `types.ProjectSettings` | RoleBindings |
 
-Three reconcilers exist as skeleton implementations:
+#### Write-Back Echo Detection
 
-| Reconciler | Resource | OpenAPI Type |
-|---|---|---|
-| `SessionReconciler` | `"sessions"` | `openapi.Session` |
-| `WorkflowReconciler` | `"workflows"` | `openapi.Workflow` |
-| `TaskReconciler` | `"tasks"` | `openapi.Task` |
+When a reconciler writes status back to the API server, the response's `UpdatedAt` timestamp is stored. On the next watch event, if `session.UpdatedAt` matches the stored timestamp, the event is skipped to prevent infinite update loops.
 
-Each reconciler:
-1. Type-asserts `event.Object` to the correct OpenAPI model
-2. Switches on `event.Type` (ADDED/MODIFIED/DELETED)
-3. Logs the event with resource ID and name
-4. Returns `nil` (no business logic yet)
+### `internal/kubeclient/kubeclient.go`
 
-#### Registration Pattern
+Kubernetes dynamic client wrapper. Provides typed methods for AgenticSession CRDs, Namespaces, and RoleBindings using `k8s.io/client-go/dynamic`.
 
-In `main.go`, reconcilers are instantiated and registered via a helper:
+### `internal/process/manager.go` (local mode)
 
-```go
-func registerReconciler(inf *informer.Informer, rec reconciler.Reconciler) {
-    inf.RegisterHandler(rec.Resource(), rec.Reconcile)
-}
-```
+Runner process lifecycle management:
+- Port pool allocation with availability checking
+- Workspace directory creation per session
+- Environment variable allowlisting (security: only approved vars inherited)
+- Process group management (`Setpgid` + kill `-pgid`)
+- SIGTERM → SIGKILL escalation with configurable grace period
+- Stderr ring buffer for last N lines
 
-## Adding a New Resource Reconciler
+### `internal/proxy/agui_proxy.go` (local mode)
 
-To watch a new API resource (e.g. Agents):
-
-1. **Add a cache field** to `Informer` struct in `informer.go`:
-   ```go
-   agentCache map[string]openapi.Agent
-   ```
-
-2. **Initialize the cache** in `New()`:
-   ```go
-   agentCache: make(map[string]openapi.Agent),
-   ```
-
-3. **Add a sync method** following the `syncSessions` pattern — list from API, diff against cache, dispatch events.
-
-4. **Call the sync method** from `syncAll()`.
-
-5. **Create a reconciler** in `reconciler.go`:
-   ```go
-   type AgentReconciler struct { ... }
-   func (r *AgentReconciler) Resource() string { return "agents" }
-   func (r *AgentReconciler) Reconcile(ctx context.Context, event informer.ResourceEvent) error { ... }
-   ```
-
-6. **Register in main.go**:
-   ```go
-   agentReconciler := reconciler.NewAgentReconciler(apiClient, logger)
-   registerReconciler(inf, agentReconciler)
-   ```
+Reverse proxy routing AG-UI protocol requests to runner processes by session ID. Supports SSE streaming, health checks, and standard HTTP proxying with configurable CORS.
 
 ## Known Limitations
 
-- **No pagination in sync**: The informer calls list endpoints without pagination parameters, relying on the default page size (100). Resources beyond page 1 are not synced.
-- **No watch/SSE**: Changes are detected only at poll boundaries. Latency = 0 to `POLL_INTERVAL_SECONDS`.
-- **Sequential sync**: Resource types sync sequentially within a cycle. A slow or failing API call delays all subsequent syncs.
+- **List-then-watch gap**: Resources created between initial sync completing and gRPC streams establishing may be missed until a subsequent watch event.
+- **`any` type in events**: `ResourceEvent.Object` and `WatchEvent.Object` use `any`, requiring type assertions in reconcilers. Future improvement: use generics.
 - **In-memory cache only**: Cache is lost on restart. The first sync after restart fires ADDED events for all existing resources.
-- **No retry/backoff**: Failed sync cycles are logged but not retried with exponential backoff.
-- **`interface{}` in events**: `ResourceEvent.Object` is `interface{}`, requiring type assertions in reconcilers. Future improvement: use generics.
-- **WorkerCount unused**: The `WorkerCount` config field is loaded but not yet used — reconcilers run synchronously in the informer goroutine.
+- **Write-back echo is timestamp-based**: Relies on `UpdatedAt` microsecond truncation equality. A resource-version approach would be more robust.
 
 ## Concurrency Model
 
-Currently single-goroutine: the informer's `Run()` loop does all polling, diffing, and handler dispatch in one goroutine. The `sync.RWMutex` on the handler map exists to allow safe handler registration before `Run()` is called, but during operation there is no concurrent access.
-
-Future improvement: use a work queue with `WorkerCount` goroutines consuming events, decoupling poll speed from reconciliation latency.
+The informer uses a multi-goroutine architecture:
+- One goroutine per gRPC watch stream (3 total: sessions, projects, project_settings)
+- One dispatch loop goroutine consuming from a buffered channel (capacity 256)
+- Watch handlers block on channel send (`dispatchBlocking`) ensuring no event loss
+- Cache access protected by `sync.RWMutex` (write lock for mutations, read lock for handler dispatch)

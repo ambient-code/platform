@@ -28,6 +28,7 @@ test:
 lint:
 	gofmt -l .
 	go vet ./...
+	@if command -v golangci-lint >/dev/null 2>&1; then golangci-lint run; else echo "golangci-lint not installed, skipping"; fi
 
 .PHONY: fmt
 fmt:

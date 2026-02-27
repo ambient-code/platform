@@ -260,7 +260,7 @@ func (inf *Informer) handleSessionWatch(ctx context.Context, we watcher.WatchEve
 	inf.mu.Unlock()
 
 	if event.Resource != "" {
-		inf.dispatch(ctx, event)
+		inf.dispatchBlocking(ctx, event)
 	}
 	return nil
 }
@@ -300,7 +300,7 @@ func (inf *Informer) handleProjectWatch(ctx context.Context, we watcher.WatchEve
 	inf.mu.Unlock()
 
 	if event.Resource != "" {
-		inf.dispatch(ctx, event)
+		inf.dispatchBlocking(ctx, event)
 	}
 	return nil
 }
@@ -340,7 +340,7 @@ func (inf *Informer) handleProjectSettingsWatch(ctx context.Context, we watcher.
 	inf.mu.Unlock()
 
 	if event.Resource != "" {
-		inf.dispatch(ctx, event)
+		inf.dispatchBlocking(ctx, event)
 	}
 	return nil
 }

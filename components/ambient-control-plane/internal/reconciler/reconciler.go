@@ -198,7 +198,10 @@ func (r *SessionReconciler) handleDeleted(ctx context.Context, session types.Ses
 
 func (r *SessionReconciler) updateCR(ctx context.Context, session types.Session, existing *unstructured.Unstructured) error {
 	updated := existing.DeepCopy()
-	spec := buildSpec(session)
+	spec, err := buildSpec(session)
+	if err != nil {
+		return fmt.Errorf("building spec for session %s: %w", session.ID, err)
+	}
 	if err := unstructured.SetNestedField(updated.Object, spec, "spec"); err != nil {
 		return fmt.Errorf("setting spec on CR: %w", err)
 	}
@@ -320,6 +323,11 @@ func autoBranchName(session types.Session) string {
 func sessionToUnstructured(session types.Session, namespace string) (*unstructured.Unstructured, error) {
 	crName := crNameForSession(session)
 
+	spec, err := buildSpec(session)
+	if err != nil {
+		return nil, fmt.Errorf("building spec for CR %s: %w", crName, err)
+	}
+
 	obj := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "vteam.ambient-code/v1alpha1",
@@ -328,7 +336,7 @@ func sessionToUnstructured(session types.Session, namespace string) (*unstructur
 				"name":      crName,
 				"namespace": namespace,
 			},
-			"spec": buildSpec(session),
+			"spec": spec,
 		},
 	}
 
@@ -363,7 +371,7 @@ func sessionToUnstructured(session types.Session, namespace string) (*unstructur
 	return obj, nil
 }
 
-func buildSpec(session types.Session) map[string]interface{} {
+func buildSpec(session types.Session) (map[string]interface{}, error) {
 	spec := map[string]interface{}{}
 
 	spec["displayName"] = session.Name
@@ -383,16 +391,17 @@ func buildSpec(session types.Session) map[string]interface{} {
 	branch := autoBranchName(session)
 	if session.Repos != "" {
 		var repos []interface{}
-		if err := json.Unmarshal([]byte(session.Repos), &repos); err == nil {
-			for _, r := range repos {
-				if m, ok := r.(map[string]interface{}); ok {
-					if _, hasBranch := m["branch"]; !hasBranch {
-						m["branch"] = branch
-					}
+		if err := json.Unmarshal([]byte(session.Repos), &repos); err != nil {
+			return nil, fmt.Errorf("parsing repos JSON: %w", err)
+		}
+		for _, r := range repos {
+			if m, ok := r.(map[string]interface{}); ok {
+				if _, hasBranch := m["branch"]; !hasBranch {
+					m["branch"] = branch
 				}
 			}
-			spec["repos"] = repos
 		}
+		spec["repos"] = repos
 	} else if session.RepoURL != "" {
 		spec["repos"] = []interface{}{
 			map[string]interface{}{
@@ -424,16 +433,18 @@ func buildSpec(session types.Session) map[string]interface{} {
 
 	if session.ResourceOverrides != "" {
 		var overrides map[string]interface{}
-		if err := json.Unmarshal([]byte(session.ResourceOverrides), &overrides); err == nil {
-			spec["resourceOverrides"] = overrides
+		if err := json.Unmarshal([]byte(session.ResourceOverrides), &overrides); err != nil {
+			return nil, fmt.Errorf("parsing resourceOverrides JSON: %w", err)
 		}
+		spec["resourceOverrides"] = overrides
 	}
 
 	if session.EnvironmentVariables != "" {
 		var envVars map[string]interface{}
-		if err := json.Unmarshal([]byte(session.EnvironmentVariables), &envVars); err == nil {
-			spec["environmentVariables"] = envVars
+		if err := json.Unmarshal([]byte(session.EnvironmentVariables), &envVars); err != nil {
+			return nil, fmt.Errorf("parsing environmentVariables JSON: %w", err)
 		}
+		spec["environmentVariables"] = envVars
 	}
 
 	if session.CreatedByUserID != "" {
@@ -442,7 +453,7 @@ func buildSpec(session types.Session) map[string]interface{} {
 		}
 	}
 
-	return spec
+	return spec, nil
 }
 
 const (
@@ -666,6 +677,10 @@ func (r *ProjectSettingsReconciler) reconcileRoleBindings(ctx context.Context, p
 			continue
 		}
 		rbName := fmt.Sprintf("ambient-%s-%s", entry.Group, entry.Role)
+		if !isValidK8sName(rbName) {
+			r.logger.Warn().Str("rolebinding", rbName).Msg("generated RoleBinding name is not a valid K8s name, skipping")
+			continue
+		}
 		if err := r.ensureRoleBinding(ctx, namespace, rbName, entry); err != nil {
 			r.logger.Warn().Err(err).Str("namespace", namespace).Str("rolebinding", rbName).Msg("failed to reconcile role binding")
 		}
