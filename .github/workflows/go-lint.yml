@@ -13,6 +13,9 @@ on:
       - 'components/ambient-api-server/**/*.go'
       - 'components/ambient-api-server/go.mod'
       - 'components/ambient-api-server/go.sum'
+      - 'components/ambient-control-plane/**/*.go'
+      - 'components/ambient-control-plane/go.mod'
+      - 'components/ambient-control-plane/go.sum'
       - '.github/workflows/go-lint.yml'
   pull_request:
     branches: [main]
@@ -26,6 +29,9 @@ on:
       - 'components/ambient-api-server/**/*.go'
       - 'components/ambient-api-server/go.mod'
       - 'components/ambient-api-server/go.sum'
+      - 'components/ambient-control-plane/**/*.go'
+      - 'components/ambient-control-plane/go.mod'
+      - 'components/ambient-control-plane/go.sum'
       - '.github/workflows/go-lint.yml'
   workflow_dispatch:
 
@@ -40,6 +46,7 @@ jobs:
       backend: ${{ steps.filter.outputs.backend }}
       operator: ${{ steps.filter.outputs.operator }}
       ambient-api-server: ${{ steps.filter.outputs.ambient-api-server }}
+      ambient-control-plane: ${{ steps.filter.outputs.ambient-control-plane }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -61,6 +68,10 @@ jobs:
               - 'components/ambient-api-server/**/*.go'
               - 'components/ambient-api-server/go.mod'
               - 'components/ambient-api-server/go.sum'
+            ambient-control-plane:
+              - 'components/ambient-control-plane/**/*.go'
+              - 'components/ambient-control-plane/go.mod'
+              - 'components/ambient-control-plane/go.sum'
 
   lint-backend:
     runs-on: ubuntu-latest
@@ -185,14 +196,52 @@ jobs:
           working-directory: components/ambient-api-server
           args: --timeout=5m
 
+  lint-ambient-control-plane:
+    runs-on: ubuntu-latest
+    needs: detect-go-changes
+    if: needs.detect-go-changes.outputs.ambient-control-plane == 'true' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'components/ambient-control-plane/go.mod'
+          cache-dependency-path: 'components/ambient-control-plane/go.sum'
+
+      - name: Check gofmt
+        run: |
+          cd components/ambient-control-plane
+          UNFORMATTED=$(gofmt -l .)
+          if [ -n "$UNFORMATTED" ]; then
+            echo "The following files are not formatted:"
+            echo "$UNFORMATTED"
+            echo ""
+            echo "Run 'gofmt -w .' to format them."
+            exit 1
+          fi
+
+      - name: Run go vet
+        run: |
+          cd components/ambient-control-plane
+          go vet ./...
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: latest
+          working-directory: components/ambient-control-plane
+          args: --timeout=5m
+
   lint-summary:
     runs-on: ubuntu-latest
-    needs: [detect-go-changes, lint-backend, lint-operator, lint-ambient-api-server]
+    needs: [detect-go-changes, lint-backend, lint-operator, lint-ambient-api-server, lint-ambient-control-plane]
     if: always()
     steps:
       - name: Check overall status
         run: |
-          if [ "${{ needs.lint-backend.result }}" == "failure" ] || [ "${{ needs.lint-operator.result }}" == "failure" ] || [ "${{ needs.lint-ambient-api-server.result }}" == "failure" ]; then
+          if [ "${{ needs.lint-backend.result }}" == "failure" ] || [ "${{ needs.lint-operator.result }}" == "failure" ] || [ "${{ needs.lint-ambient-api-server.result }}" == "failure" ] || [ "${{ needs.lint-ambient-control-plane.result }}" == "failure" ]; then
             echo "Go linting failed"
             exit 1
           fi
