@@ -136,7 +136,7 @@ func (inf *Informer) syncSessions(ctx context.Context) error {
 	inf.mu.Unlock()
 
 	for _, session := range allSessions {
-		inf.dispatch(ctx, ResourceEvent{
+		inf.dispatchBlocking(ctx, ResourceEvent{
 			Type:     EventAdded,
 			Resource: "sessions",
 			Object:   session,
@@ -169,7 +169,7 @@ func (inf *Informer) syncProjects(ctx context.Context) error {
 	inf.mu.Unlock()
 
 	for _, project := range allProjects {
-		inf.dispatch(ctx, ResourceEvent{
+		inf.dispatchBlocking(ctx, ResourceEvent{
 			Type:     EventAdded,
 			Resource: "projects",
 			Object:   project,
@@ -202,7 +202,7 @@ func (inf *Informer) syncProjectSettings(ctx context.Context) error {
 	inf.mu.Unlock()
 
 	for _, ps := range allSettings {
-		inf.dispatch(ctx, ResourceEvent{
+		inf.dispatchBlocking(ctx, ResourceEvent{
 			Type:     EventAdded,
 			Resource: "project_settings",
 			Object:   ps,
@@ -231,12 +231,22 @@ func (inf *Informer) handleSessionWatch(ctx context.Context, we watcher.WatchEve
 	inf.mu.Lock()
 	switch we.Type {
 	case watcher.EventCreated:
-		session := protoSessionToSDK(we.Object.(*pb.Session))
+		pbSession, ok := we.Object.(*pb.Session)
+		if !ok {
+			inf.mu.Unlock()
+			return fmt.Errorf("unexpected watch event object type %T for sessions", we.Object)
+		}
+		session := protoSessionToSDK(pbSession)
 		inf.sessionCache[session.ID] = session
 		event = ResourceEvent{Type: EventAdded, Resource: "sessions", Object: session}
 
 	case watcher.EventUpdated:
-		session := protoSessionToSDK(we.Object.(*pb.Session))
+		pbSession, ok := we.Object.(*pb.Session)
+		if !ok {
+			inf.mu.Unlock()
+			return fmt.Errorf("unexpected watch event object type %T for sessions", we.Object)
+		}
+		session := protoSessionToSDK(pbSession)
 		old := inf.sessionCache[session.ID]
 		inf.sessionCache[session.ID] = session
 		event = ResourceEvent{Type: EventModified, Resource: "sessions", Object: session, OldObject: old}
@@ -261,12 +271,22 @@ func (inf *Informer) handleProjectWatch(ctx context.Context, we watcher.WatchEve
 	inf.mu.Lock()
 	switch we.Type {
 	case watcher.EventCreated:
-		project := protoProjectToSDK(we.Object.(*pb.Project))
+		pbProject, ok := we.Object.(*pb.Project)
+		if !ok {
+			inf.mu.Unlock()
+			return fmt.Errorf("unexpected watch event object type %T for projects", we.Object)
+		}
+		project := protoProjectToSDK(pbProject)
 		inf.projectCache[project.ID] = project
 		event = ResourceEvent{Type: EventAdded, Resource: "projects", Object: project}
 
 	case watcher.EventUpdated:
-		project := protoProjectToSDK(we.Object.(*pb.Project))
+		pbProject, ok := we.Object.(*pb.Project)
+		if !ok {
+			inf.mu.Unlock()
+			return fmt.Errorf("unexpected watch event object type %T for projects", we.Object)
+		}
+		project := protoProjectToSDK(pbProject)
 		old := inf.projectCache[project.ID]
 		inf.projectCache[project.ID] = project
 		event = ResourceEvent{Type: EventModified, Resource: "projects", Object: project, OldObject: old}
@@ -291,12 +311,22 @@ func (inf *Informer) handleProjectSettingsWatch(ctx context.Context, we watcher.
 	inf.mu.Lock()
 	switch we.Type {
 	case watcher.EventCreated:
-		ps := protoProjectSettingsToSDK(we.Object.(*pb.ProjectSettings))
+		pbPS, ok := we.Object.(*pb.ProjectSettings)
+		if !ok {
+			inf.mu.Unlock()
+			return fmt.Errorf("unexpected watch event object type %T for project_settings", we.Object)
+		}
+		ps := protoProjectSettingsToSDK(pbPS)
 		inf.projectSettingsCache[ps.ID] = ps
 		event = ResourceEvent{Type: EventAdded, Resource: "project_settings", Object: ps}
 
 	case watcher.EventUpdated:
-		ps := protoProjectSettingsToSDK(we.Object.(*pb.ProjectSettings))
+		pbPS, ok := we.Object.(*pb.ProjectSettings)
+		if !ok {
+			inf.mu.Unlock()
+			return fmt.Errorf("unexpected watch event object type %T for project_settings", we.Object)
+		}
+		ps := protoProjectSettingsToSDK(pbPS)
 		old := inf.projectSettingsCache[ps.ID]
 		inf.projectSettingsCache[ps.ID] = ps
 		event = ResourceEvent{Type: EventModified, Resource: "project_settings", Object: ps, OldObject: old}
@@ -324,6 +354,13 @@ func (inf *Informer) dispatch(ctx context.Context, event ResourceEvent) {
 			Str("resource", event.Resource).
 			Str("event_type", string(event.Type)).
 			Msg("event channel full, dropping event")
+	}
+}
+
+func (inf *Informer) dispatchBlocking(ctx context.Context, event ResourceEvent) {
+	select {
+	case inf.eventCh <- event:
+	case <-ctx.Done():
 	}
 }
 

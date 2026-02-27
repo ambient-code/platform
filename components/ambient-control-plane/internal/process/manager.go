@@ -594,11 +594,14 @@ func (rw *ringWriter) String() string {
 }
 
 type zerologLineWriter struct {
+	mu     sync.Mutex
 	logger zerolog.Logger
 	buf    []byte
 }
 
 func (w *zerologLineWriter) Write(p []byte) (n int, err error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	w.buf = append(w.buf, p...)
 	for {
 		idx := -1

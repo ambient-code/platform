@@ -23,14 +23,16 @@ type AGUIProxy struct {
 }
 
 func NewAGUIProxy(listenAddr, corsOrigin string, manager *process.Manager, logger zerolog.Logger) *AGUIProxy {
+	l := logger.With().Str("component", "agui-proxy").Logger()
 	if corsOrigin == "" {
 		corsOrigin = "http://localhost:3000"
+		l.Warn().Str("cors_origin", corsOrigin).Msg("CORS_ALLOWED_ORIGIN not set, using localhost default")
 	}
 	return &AGUIProxy{
 		listenAddr: listenAddr,
 		corsOrigin: corsOrigin,
 		manager:    manager,
-		logger:     logger.With().Str("component", "agui-proxy").Logger(),
+		logger:     l,
 	}
 }
 
@@ -54,7 +56,9 @@ func (p *AGUIProxy) Start(ctx context.Context) error {
 
 	go func() {
 		<-ctx.Done()
-		p.server.Shutdown(context.Background())
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		p.server.Shutdown(shutdownCtx)
 	}()
 
 	err := p.server.ListenAndServe()

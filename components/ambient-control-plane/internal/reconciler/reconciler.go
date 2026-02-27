@@ -101,6 +101,9 @@ func (r *SessionReconciler) handleAdded(ctx context.Context, session types.Sessi
 	if crName == "" {
 		return fmt.Errorf("session %s has no kube_cr_name or id", session.Name)
 	}
+	if !isValidK8sName(crName) {
+		return fmt.Errorf("session CR name %q is not a valid Kubernetes resource name", crName)
+	}
 
 	existing, err := r.kube.GetAgenticSession(ctx, crName)
 	if err == nil {
@@ -146,6 +149,9 @@ func (r *SessionReconciler) handleModified(ctx context.Context, session types.Se
 	crName := crNameForSession(session)
 	if crName == "" {
 		return fmt.Errorf("session %s has no kube_cr_name or id", session.Name)
+	}
+	if !isValidK8sName(crName) {
+		return fmt.Errorf("session CR name %q is not a valid Kubernetes resource name", crName)
 	}
 
 	existing, err := r.kube.GetAgenticSession(ctx, crName)
@@ -328,27 +334,29 @@ func sessionToUnstructured(session types.Session, namespace string) (*unstructur
 
 	if session.Labels != "" {
 		var labelMap map[string]string
-		if err := json.Unmarshal([]byte(session.Labels), &labelMap); err == nil {
-			labels := make(map[string]interface{}, len(labelMap))
-			for k, v := range labelMap {
-				labels[k] = v
-			}
-			if err := unstructured.SetNestedField(obj.Object, labels, "metadata", "labels"); err != nil {
-				return nil, fmt.Errorf("setting labels on CR %s: %w", crName, err)
-			}
+		if err := json.Unmarshal([]byte(session.Labels), &labelMap); err != nil {
+			return nil, fmt.Errorf("parsing labels JSON for CR %s: %w", crName, err)
+		}
+		labels := make(map[string]interface{}, len(labelMap))
+		for k, v := range labelMap {
+			labels[k] = v
+		}
+		if err := unstructured.SetNestedField(obj.Object, labels, "metadata", "labels"); err != nil {
+			return nil, fmt.Errorf("setting labels on CR %s: %w", crName, err)
 		}
 	}
 
 	if session.Annotations != "" {
 		var annotationMap map[string]string
-		if err := json.Unmarshal([]byte(session.Annotations), &annotationMap); err == nil {
-			annotations := make(map[string]interface{}, len(annotationMap))
-			for k, v := range annotationMap {
-				annotations[k] = v
-			}
-			if err := unstructured.SetNestedField(obj.Object, annotations, "metadata", "annotations"); err != nil {
-				return nil, fmt.Errorf("setting annotations on CR %s: %w", crName, err)
-			}
+		if err := json.Unmarshal([]byte(session.Annotations), &annotationMap); err != nil {
+			return nil, fmt.Errorf("parsing annotations JSON for CR %s: %w", crName, err)
+		}
+		annotations := make(map[string]interface{}, len(annotationMap))
+		for k, v := range annotationMap {
+			annotations[k] = v
+		}
+		if err := unstructured.SetNestedField(obj.Object, annotations, "metadata", "annotations"); err != nil {
+			return nil, fmt.Errorf("setting annotations on CR %s: %w", crName, err)
 		}
 	}
 

@@ -43,18 +43,13 @@ func run() error {
 
 	logger := setupLogger(cfg.LogLevel)
 
-	mode := os.Getenv("MODE")
-	if mode == "" {
-		mode = "kube"
-	}
-
 	logger.Info().
 		Str("version", version).
 		Str("build_time", buildTime).
 		Str("api_server", cfg.APIServerURL).
 		Str("grpc_server", cfg.GRPCServerAddr).
 		Bool("grpc_tls", cfg.GRPCUseTLS).
-		Str("mode", mode).
+		Str("mode", cfg.Mode).
 		Msg("starting ambient-control-plane")
 
 	sdk, err := buildSDKClient(cfg)
@@ -84,7 +79,7 @@ func run() error {
 	watchMgr := watcher.NewWatchManager(grpcConn, logger)
 	inf := informer.New(sdk, watchMgr, logger)
 
-	if mode == "test" {
+	if cfg.Mode == "test" {
 		sessionTally := reconciler.NewTallyReconciler("sessions", sdk, logger)
 		projectTally := reconciler.NewTallyReconciler("projects", sdk, logger)
 		settingsTally := reconciler.NewTallyReconciler("project_settings", sdk, logger)
@@ -96,7 +91,7 @@ func run() error {
 		logger.Info().
 			Str("mode", "test").
 			Msg("running in test mode (tally reconcilers, no side effects)")
-	} else if mode == "local" {
+	} else if cfg.Mode == "local" {
 		localCfg := config.LoadLocalConfig()
 
 		procManager := process.NewManager(process.ManagerConfig{

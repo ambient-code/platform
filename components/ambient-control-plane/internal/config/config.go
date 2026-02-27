@@ -15,6 +15,7 @@ type ControlPlaneConfig struct {
 	LogLevel       string
 	Kubeconfig     string
 	Namespace      string
+	Mode           string
 }
 
 func Load() (*ControlPlaneConfig, error) {
@@ -27,6 +28,7 @@ func Load() (*ControlPlaneConfig, error) {
 		LogLevel:       envOrDefault("LOG_LEVEL", "info"),
 		Kubeconfig:     os.Getenv("KUBECONFIG"),
 		Namespace:      envOrDefault("NAMESPACE", "ambient-code"),
+		Mode:           envOrDefault("MODE", "kube"),
 	}
 
 	if cfg.APIToken == "" {
