@@ -297,6 +297,17 @@ function handleRunError(
   }
   state.currentToolCall = null
 
+  // Surface the error as a chat message so the user sees it inline
+  const errorMsg = {
+    id: crypto.randomUUID(),
+    role: 'assistant' as const,
+    content: `**Error:** ${event.message}`,
+    timestamp: new Date().toISOString(),
+    metadata: { type: 'run_error' },
+  } as PlatformMessage
+  state.messages = [...state.messages, errorMsg]
+  callbacks.onMessage?.(errorMsg)
+
   callbacks.onError?.(event.message)
   callbacks.setIsRunActive(false)
   callbacks.currentRunIdRef.current = null

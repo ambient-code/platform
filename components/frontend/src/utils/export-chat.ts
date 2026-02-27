@@ -6,6 +6,7 @@
 import { EventType } from '@/types/agui';
 import type { AgenticSession } from '@/types/agentic-session';
 import type { SessionExportResponse } from '@/services/api/sessions';
+import { formatTimestamp } from '@/lib/format-timestamp';
 
 type ExportEvent = {
   type: string;
@@ -107,15 +108,6 @@ function assembleBlocks(events: unknown[]): ConversationBlock[] {
   }
 
   return blocks;
-}
-
-function formatTimestamp(ts?: string): string {
-  if (!ts) return '';
-  try {
-    return new Date(ts).toLocaleString();
-  } catch {
-    return ts;
-  }
 }
 
 function prettyJson(raw: string): string {

@@ -8,6 +8,7 @@ enabling Claude-powered agents to work with any AG-UI compatible frontend.
 import os
 import logging
 import json
+import time
 import uuid
 from typing import AsyncIterator, Optional, List, Dict, Any, Union, TYPE_CHECKING
 
@@ -66,6 +67,12 @@ from .handlers import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _now_ms() -> int:
+    """Current time as epoch milliseconds for AG-UI event timestamps."""
+    return int(time.time() * 1000)
+
 
 # Configure logger if not already configured
 if not logger.handlers:
@@ -262,6 +269,7 @@ class ClaudeAgentAdapter:
                 type=EventType.RUN_STARTED,
                 thread_id=thread_id,
                 run_id=run_id,
+                timestamp=_now_ms(),
                 parent_run_id=input_data.parent_run_id,  # Pass through for lineage tracking
                 input={
                     "thread_id": thread_id,
@@ -636,6 +644,7 @@ class ClaudeAgentAdapter:
                                         run_id=run_id,
                                         message_id=current_message_id,
                                         role="assistant",
+                                        timestamp=_now_ms(),
                                     )
                                 has_streamed_text = True
                                 if pending_msg is not None:
@@ -698,6 +707,7 @@ class ClaudeAgentAdapter:
                                     tool_call_id=current_tool_call_id,
                                     tool_call_name=current_tool_display_name,  # Use unprefixed name for frontend matching!
                                     parent_message_id=current_message_id,  # Link to parent message
+                                    timestamp=_now_ms(),
                                 )
                     
                     elif event_type == 'content_block_stop':
@@ -902,7 +912,7 @@ class ClaudeAgentAdapter:
                     
                     if not has_streamed_text and result_text:
                         result_msg_id = str(uuid.uuid4())
-                        yield TextMessageStartEvent(type=EventType.TEXT_MESSAGE_START, thread_id=thread_id, run_id=run_id, message_id=result_msg_id, role="assistant")
+                        yield TextMessageStartEvent(type=EventType.TEXT_MESSAGE_START, thread_id=thread_id, run_id=run_id, message_id=result_msg_id, role="assistant", timestamp=_now_ms())
                         yield TextMessageContentEvent(type=EventType.TEXT_MESSAGE_CONTENT, thread_id=thread_id, run_id=run_id, message_id=result_msg_id, delta=result_text)
                         yield TextMessageEndEvent(type=EventType.TEXT_MESSAGE_END, thread_id=thread_id, run_id=run_id, message_id=result_msg_id)
 
