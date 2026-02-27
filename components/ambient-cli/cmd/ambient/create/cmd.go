@@ -63,7 +63,17 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 	}
 }
 
+func warnUnusedFlags(cmd *cobra.Command, names ...string) {
+	for _, name := range names {
+		if cmd.Flags().Changed(name) {
+			fmt.Fprintf(cmd.ErrOrStderr(), "Warning: --%s is not applicable to this resource type and will be ignored\n", name)
+		}
+	}
+}
+
 func createSession(cmd *cobra.Command) error {
+	warnUnusedFlags(cmd, "display-name", "description")
+
 	if createArgs.name == "" {
 		return fmt.Errorf("--name is required")
 	}
@@ -71,22 +81,22 @@ func createSession(cmd *cobra.Command) error {
 	builder := sdktypes.NewSessionBuilder().Name(createArgs.name)
 
 	if createArgs.prompt != "" {
-		builder.Prompt(createArgs.prompt)
+		builder = builder.Prompt(createArgs.prompt)
 	}
 	if createArgs.repoURL != "" {
-		builder.RepoURL(createArgs.repoURL)
+		builder = builder.RepoURL(createArgs.repoURL)
 	}
 	if createArgs.model != "" {
-		builder.LlmModel(createArgs.model)
+		builder = builder.LlmModel(createArgs.model)
 	}
 	if createArgs.maxTokens > 0 {
-		builder.LlmMaxTokens(createArgs.maxTokens)
+		builder = builder.LlmMaxTokens(createArgs.maxTokens)
 	}
 	if createArgs.temperature > 0 {
-		builder.LlmTemperature(createArgs.temperature)
+		builder = builder.LlmTemperature(createArgs.temperature)
 	}
 	if createArgs.timeout > 0 {
-		builder.Timeout(createArgs.timeout)
+		builder = builder.Timeout(createArgs.timeout)
 	}
 	session, err := builder.Build()
 	if err != nil {
@@ -116,6 +126,8 @@ func createSession(cmd *cobra.Command) error {
 }
 
 func createProject(cmd *cobra.Command) error {
+	warnUnusedFlags(cmd, "prompt", "repo-url", "model", "max-tokens", "temperature", "timeout")
+
 	if createArgs.name == "" {
 		return fmt.Errorf("--name is required")
 	}
@@ -123,10 +135,10 @@ func createProject(cmd *cobra.Command) error {
 	builder := sdktypes.NewProjectBuilder().Name(createArgs.name)
 
 	if createArgs.displayName != "" {
-		builder.DisplayName(createArgs.displayName)
+		builder = builder.DisplayName(createArgs.displayName)
 	}
 	if createArgs.description != "" {
-		builder.Description(createArgs.description)
+		builder = builder.Description(createArgs.description)
 	}
 
 	project, err := builder.Build()

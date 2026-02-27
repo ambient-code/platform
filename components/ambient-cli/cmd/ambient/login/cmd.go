@@ -2,6 +2,7 @@ package login
 
 import (
 	"fmt"
+	"net/url"
 	"time"
 
 	"github.com/ambient-code/platform/components/ambient-cli/pkg/config"
@@ -42,6 +43,10 @@ func run(cmd *cobra.Command, _ []string) error {
 	cfg.AccessToken = args.token
 
 	if args.url != "" {
+		parsed, err := url.Parse(args.url)
+		if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+			return fmt.Errorf("invalid URL %q: must be a valid URL with scheme and host (e.g. https://api.example.com)", args.url)
+		}
 		cfg.APIUrl = args.url
 	}
 

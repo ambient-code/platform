@@ -8,11 +8,10 @@ import (
 )
 
 type Config struct {
-	APIUrl       string `json:"api_url,omitempty"`
-	AccessToken  string `json:"access_token,omitempty"`
-	RefreshToken string `json:"refresh_token,omitempty"`
-	Project      string `json:"project,omitempty"`
-	Pager        string `json:"pager,omitempty"`
+	APIUrl      string `json:"api_url,omitempty"`
+	AccessToken string `json:"access_token,omitempty"`
+	Project     string `json:"project,omitempty"`
+	Pager       string `json:"pager,omitempty"`
 }
 
 func Location() (string, error) {
@@ -73,13 +72,8 @@ func Save(cfg *Config) error {
 	return nil
 }
 
-func (c *Config) Armed() bool {
-	return c.AccessToken != "" || c.RefreshToken != ""
-}
-
 func (c *Config) Disarm() {
 	c.AccessToken = ""
-	c.RefreshToken = ""
 }
 
 func (c *Config) GetAPIUrl() string {
