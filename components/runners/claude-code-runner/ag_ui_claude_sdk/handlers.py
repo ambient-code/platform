@@ -43,42 +43,44 @@ async def handle_tool_use_block(
 ) -> tuple[Optional[Any], AsyncIterator[BaseEvent]]:
     """
     Handle ToolUseBlock from Claude SDK.
-    
+
     Intercepts state management tool calls and emits STATE_SNAPSHOT.
     For regular tools, emits TOOL_CALL_START/ARGS events.
-    
+
     Args:
         block: ToolUseBlock from Claude SDK
         message: Parent message containing the block
         thread_id: Thread identifier
         run_id: Run identifier
         current_state: Current state for state management tools
-        
+
     Returns:
         Tuple of (updated_state, event_generator)
     """
-    tool_name = getattr(block, 'name', '') or 'unknown'
-    tool_input = getattr(block, 'input', {}) or {}
-    tool_id = getattr(block, 'id', None) or str(uuid.uuid4())
-    parent_tool_use_id = getattr(message, 'parent_tool_use_id', None)
-    
+    tool_name = getattr(block, "name", "") or "unknown"
+    tool_input = getattr(block, "input", {}) or {}
+    tool_id = getattr(block, "id", None) or str(uuid.uuid4())
+    parent_tool_use_id = getattr(message, "parent_tool_use_id", None)
+
     # Strip MCP prefix for client matching (same as streaming path)
     tool_display_name = strip_mcp_prefix(tool_name)
     if tool_display_name != tool_name:
-        logger.debug(f"Stripped MCP prefix in handler: {tool_name} -> {tool_display_name}")
-    
+        logger.debug(
+            f"Stripped MCP prefix in handler: {tool_name} -> {tool_display_name}"
+        )
+
     logger.debug(f"ToolUseBlock detected: {tool_name}")
-    
+
     async def event_gen():
         nonlocal current_state
-        
+
         # Intercept state management tool calls (check both prefixed and unprefixed names)
         if tool_name in (STATE_MANAGEMENT_TOOL_NAME, STATE_MANAGEMENT_TOOL_FULL_NAME):
             logger.debug("Intercepting ag_ui_update_state tool call")
-            
+
             # Extract state updates from tool input
             state_updates = tool_input.get("state_updates", {})
-            
+
             # Parse if it's a JSON string
             if isinstance(state_updates, str):
                 try:
@@ -87,22 +89,21 @@ async def handle_tool_use_block(
                 except json.JSONDecodeError as e:
                     logger.warning(f"Failed to parse state_updates JSON: {e}")
                     state_updates = {}
-            
+
             # Update current state
             if isinstance(current_state, dict) and isinstance(state_updates, dict):
                 current_state = {**current_state, **state_updates}
             else:
                 current_state = state_updates
-            
+
             # Emit STATE_SNAPSHOT with updated state
             yield StateSnapshotEvent(
-                type=EventType.STATE_SNAPSHOT,
-                snapshot=current_state
+                type=EventType.STATE_SNAPSHOT, snapshot=current_state
             )
-            
+
             logger.debug(f"Emitted STATE_SNAPSHOT with updated state")
             return  # Skip normal tool call events
-        
+
         # Regular tool handling for non-state tools
         yield ToolCallStartEvent(
             type=EventType.TOOL_CALL_START,
@@ -112,7 +113,7 @@ async def handle_tool_use_block(
             tool_call_name=tool_display_name,  # Use unprefixed name
             parent_message_id=parent_tool_use_id,
         )
-        
+
         if tool_input:
             args_json = json.dumps(tool_input)
             yield ToolCallArgsEvent(
@@ -122,7 +123,7 @@ async def handle_tool_use_block(
                 tool_call_id=tool_id,
                 delta=args_json,
             )
-    
+
     return current_state, event_gen()
 
 
@@ -134,24 +135,24 @@ async def handle_tool_result_block(
 ) -> AsyncIterator[BaseEvent]:
     """
     Handle ToolResultBlock from Claude SDK.
-    
+
     Emits TOOL_CALL_END and TOOL_CALL_RESULT events.
     Nested tool results (with parent_tool_use_id) are also emitted - they represent
     sub-agent calls (e.g., Task calling WebSearch).
-    
+
     Args:
         block: ToolResultBlock from Claude SDK
         thread_id: Thread identifier
         run_id: Run identifier
         parent_tool_use_id: Parent tool ID if this is a nested result
-        
+
     Yields:
         AG-UI tool result events
     """
-    tool_use_id = getattr(block, 'tool_use_id', None)
-    content = getattr(block, 'content', None)
-    is_error = getattr(block, 'is_error', None)
-    
+    tool_use_id = getattr(block, "tool_use_id", None)
+    content = getattr(block, "content", None)
+    is_error = getattr(block, "is_error", None)
+
     # Parse tool result content for frontend rendering
     # Claude SDK tools return: [{"type": "text", "text": "{json_data}"}]
     # Frontend expects just the parsed json_data
@@ -180,7 +181,7 @@ async def handle_tool_result_block(
                 result_str = json.dumps(content)
         except (TypeError, ValueError):
             result_str = str(content)
-    
+
     if tool_use_id:
         # Emit ToolCallEnd to signal completion
         yield ToolCallEndEvent(
@@ -189,7 +190,7 @@ async def handle_tool_result_block(
             run_id=run_id,
             tool_call_id=tool_use_id,
         )
-        
+
         # Emit ToolCallResult with the actual result content
         result_message_id = f"{tool_use_id}-result"
         yield ToolCallResultEvent(
@@ -210,20 +211,20 @@ async def handle_thinking_block(
 ) -> AsyncIterator[BaseEvent]:
     """
     Handle ThinkingBlock from Claude SDK.
-    
+
     Emits THINKING_TEXT_MESSAGE events and optional signature custom event.
-    
+
     Args:
         block: ThinkingBlock from Claude SDK
         thread_id: Thread identifier
         run_id: Run identifier
-        
+
     Yields:
         AG-UI thinking events
     """
-    thinking_text = getattr(block, 'thinking', '')
-    signature = getattr(block, 'signature', '')
-    
+    thinking_text = getattr(block, "thinking", "")
+    signature = getattr(block, "signature", "")
+
     # Emit proper ThinkingTextMessage events for thinking blocks
     if thinking_text:
         # Emit THINKING_START/END wrappers (like LangGraph pattern)
@@ -243,7 +244,7 @@ async def handle_thinking_block(
         yield ThinkingEndEvent(
             type=EventType.THINKING_END,
         )
-    
+
     # Also emit signature as custom event if present
     if signature:
         yield CustomEvent(
@@ -256,18 +257,16 @@ async def handle_thinking_block(
 
 
 def emit_system_message_events(
-    thread_id: str, 
-    run_id: str, 
-    message: str
+    thread_id: str, run_id: str, message: str
 ) -> list[BaseEvent]:
     """
     Create system message events.
-    
+
     Args:
         thread_id: Thread identifier
         run_id: Run identifier
         message: System message text
-        
+
     Returns:
         List of events to yield
     """

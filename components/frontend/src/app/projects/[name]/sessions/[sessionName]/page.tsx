@@ -240,7 +240,10 @@ export default function ProjectSessionDetailPage({
     projectName: projectName || "",
     sessionName: sessionName || "",
     autoConnect: false, // Manual connection after hydration
-    onError: (err) => console.error("AG-UI stream error:", err),
+    onError: (err) => {
+      console.error("AG-UI stream error:", err)
+      errorToast(err)
+    },
     onTraceId: (traceId) => setLangfuseTraceId(traceId),  // Capture Langfuse trace ID for feedback
   });
   const aguiState = aguiStream.state;
