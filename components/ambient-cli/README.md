@@ -168,7 +168,7 @@ Environment variables also work (override config file values):
 
 ## Dependencies
 
-- [Go SDK](../acpctl-sdk/go-sdk/) via `replace` directive — zero-dep HTTP client for the Ambient API
+- [Go SDK](../ambient-sdk/go-sdk/) via `replace` directive — zero-dep HTTP client for the Ambient API
 - [cobra](https://github.com/spf13/cobra) — command framework
 - [golang-jwt](https://github.com/golang-jwt/jwt) — token introspection for `whoami`
 - [x/term](https://pkg.go.dev/golang.org/x/term) — terminal detection for table output

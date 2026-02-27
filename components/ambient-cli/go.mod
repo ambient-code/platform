@@ -1,6 +1,6 @@
 module github.com/ambient-code/platform/components/ambient-cli
 
-go 1.24.4
+go 1.24
 
 require (
 	github.com/ambient-code/platform/components/ambient-sdk/go-sdk v0.0.0

@@ -241,8 +241,17 @@ jobs:
     steps:
       - name: Check overall status
         run: |
-          if [ "${{ needs.lint-backend.result }}" == "failure" ] || [ "${{ needs.lint-operator.result }}" == "failure" ] || [ "${{ needs.lint-ambient-api-server.result }}" == "failure" ] || [ "${{ needs.lint-ambient-cli.result }}" == "failure" ]; then
-            echo "Go linting failed"
-            exit 1
-          fi
+          for job in lint-backend lint-operator lint-ambient-api-server lint-ambient-cli; do
+            result="${{ needs.lint-backend.result }}"
+            case "$job" in
+              lint-operator) result="${{ needs.lint-operator.result }}" ;;
+              lint-ambient-api-server) result="${{ needs.lint-ambient-api-server.result }}" ;;
+              lint-ambient-cli) result="${{ needs.lint-ambient-cli.result }}" ;;
+            esac
+            if [ "$result" == "failure" ] || [ "$result" == "cancelled" ]; then
+              echo "$job: $result"
+              echo "Go linting failed"
+              exit 1
+            fi
+          done
           echo "All Go linting checks passed!"

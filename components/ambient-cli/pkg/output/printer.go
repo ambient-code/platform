@@ -23,7 +23,7 @@ func ParseFormat(s string) (Format, error) {
 		}
 		return Format(s), nil
 	default:
-		return "", fmt.Errorf("unknown output format %q: valid formats are json, wide", s)
+		return "", fmt.Errorf("unknown output format %q: valid formats are table, json, wide", s)
 	}
 }
 
