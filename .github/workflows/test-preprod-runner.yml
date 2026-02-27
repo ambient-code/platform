@@ -1,0 +1,25 @@
+name: "TEST: preprod runner"
+on:
+  push:
+    paths:
+      - .github/workflows/test-preprod-runner.yml
+      - scripts/verify-preprod-access.sh
+  workflow_dispatch:
+
+jobs:
+  hello:
+    runs-on: [self-hosted, preprod]
+    steps:
+      - run: echo "Hello from $(hostname)"
+
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts
+
+      - name: Install oc
+        uses: redhat-actions/oc-installer@v1
+        with:
+          oc_version: 'latest'
+
+      - name: Verify cluster access
+        run: ./scripts/verify-preprod-access.sh
