@@ -3,6 +3,8 @@ import starlight from '@astrojs/starlight';
 import rehypeMermaid from 'rehype-mermaid';
 
 export default defineConfig({
+  site: 'https://ambient-code.github.io',
+  base: '/platform/',
   integrations: [
     starlight({
       title: 'Ambient Code Platform',
