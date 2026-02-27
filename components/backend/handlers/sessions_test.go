@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
@@ -254,7 +255,30 @@ var _ = Describe("Sessions Handler", Label(test_constants.LabelUnit, test_consta
 	})
 
 	Describe("CreateSession", func() {
+		// Helper to create ambient-runner-secrets for tests that need it
+		createRunnerSecret := func() {
+			secret := &corev1.Secret{
+				ObjectMeta: v1.ObjectMeta{
+					Name:      "ambient-runner-secrets",
+					Namespace: testNamespace,
+				},
+				Type: corev1.SecretTypeOpaque,
+				StringData: map[string]string{
+					"ANTHROPIC_API_KEY": "sk-test-key-12345",
+				},
+			}
+			_, err := k8sUtils.K8sClient.CoreV1().Secrets(testNamespace).Create(ctx, secret, v1.CreateOptions{})
+			if err != nil && !errors.IsAlreadyExists(err) {
+				Expect(err).NotTo(HaveOccurred())
+			}
+		}
+
 		Context("When creating a valid session", func() {
+			BeforeEach(func() {
+				// Create runner secret before each test in this context
+				createRunnerSecret()
+			})
+
 			It("Should create session with required fields", func() {
 				// Arrange
 				sessionRequest := map[string]interface{}{
@@ -343,6 +367,11 @@ var _ = Describe("Sessions Handler", Label(test_constants.LabelUnit, test_consta
 		})
 
 		Context("When creating session with edge case data", func() {
+			BeforeEach(func() {
+				// Create runner secret before each test in this context
+				createRunnerSecret()
+			})
+
 			It("Should handle empty initial prompt", func() {
 				// Arrange
 				sessionRequest := map[string]interface{}{
@@ -405,6 +434,133 @@ var _ = Describe("Sessions Handler", Label(test_constants.LabelUnit, test_consta
 
 				// Assert - handler currently accepts invalid URLs (validation at runtime)
 				httpUtils.AssertHTTPStatus(http.StatusCreated)
+			})
+		})
+
+		Context("When API keys are not configured", func() {
+			It("Should block session creation when ambient-runner-secrets is missing (Vertex disabled)", func() {
+				// Arrange - ensure Vertex is disabled
+				originalVertexValue := os.Getenv("CLAUDE_CODE_USE_VERTEX")
+				os.Setenv("CLAUDE_CODE_USE_VERTEX", "0")
+				defer os.Setenv("CLAUDE_CODE_USE_VERTEX", originalVertexValue)
+
+				// Ensure ambient-runner-secrets does NOT exist in test namespace
+				_ = k8sUtils.K8sClient.CoreV1().Secrets(testNamespace).Delete(ctx, "ambient-runner-secrets", v1.DeleteOptions{})
+
+				sessionRequest := map[string]interface{}{
+					"initialPrompt": "Test prompt",
+					"repos": []interface{}{
+						map[string]interface{}{
+							"url":    "https://github.com/test/repo.git",
+							"branch": "main",
+						},
+					},
+				}
+
+				context := httpUtils.CreateTestGinContext("POST", "/api/projects/"+testNamespace+"/agentic-sessions", sessionRequest)
+				httpUtils.SetAuthHeader(testToken)
+				httpUtils.SetProjectContext(testNamespace)
+
+				// Act
+				CreateSession(context)
+
+				// Assert
+				httpUtils.AssertHTTPStatus(http.StatusBadRequest)
+
+				var response map[string]interface{}
+				httpUtils.GetResponseJSON(&response)
+				Expect(response).To(HaveKey("error"))
+				errorMsg, ok := response["error"].(string)
+				Expect(ok).To(BeTrue())
+				Expect(errorMsg).To(ContainSubstring("ANTHROPIC_API_KEY not configured"))
+				Expect(errorMsg).To(ContainSubstring(testNamespace))
+
+				logger.Log("Successfully blocked session creation: %s", errorMsg)
+			})
+
+			It("Should allow session creation when ambient-runner-secrets exists (Vertex disabled)", func() {
+				// Arrange - ensure Vertex is disabled
+				originalVertexValue := os.Getenv("CLAUDE_CODE_USE_VERTEX")
+				os.Setenv("CLAUDE_CODE_USE_VERTEX", "0")
+				defer os.Setenv("CLAUDE_CODE_USE_VERTEX", originalVertexValue)
+
+				// Create ambient-runner-secrets
+				secret := &corev1.Secret{
+					ObjectMeta: v1.ObjectMeta{
+						Name:      "ambient-runner-secrets",
+						Namespace: testNamespace,
+					},
+					Type: corev1.SecretTypeOpaque,
+					StringData: map[string]string{
+						"ANTHROPIC_API_KEY": "sk-test-key-12345",
+					},
+				}
+				_, err := k8sUtils.K8sClient.CoreV1().Secrets(testNamespace).Create(ctx, secret, v1.CreateOptions{})
+				Expect(err).NotTo(HaveOccurred())
+
+				sessionRequest := map[string]interface{}{
+					"initialPrompt": "Test prompt",
+					"repos": []interface{}{
+						map[string]interface{}{
+							"url":    "https://github.com/test/repo.git",
+							"branch": "main",
+						},
+					},
+				}
+
+				context := httpUtils.CreateTestGinContext("POST", "/api/projects/"+testNamespace+"/agentic-sessions", sessionRequest)
+				httpUtils.SetAuthHeader(testToken)
+				httpUtils.SetProjectContext(testNamespace)
+
+				// Act
+				CreateSession(context)
+
+				// Assert
+				httpUtils.AssertHTTPStatus(http.StatusCreated)
+
+				var response map[string]interface{}
+				httpUtils.GetResponseJSON(&response)
+				Expect(response).To(HaveKey("name"))
+				Expect(response).To(HaveKey("uid"))
+
+				logger.Log("Successfully created session with API key configured")
+			})
+
+			It("Should skip validation when Vertex AI is enabled", func() {
+				// Arrange - enable Vertex AI
+				originalVertexValue := os.Getenv("CLAUDE_CODE_USE_VERTEX")
+				os.Setenv("CLAUDE_CODE_USE_VERTEX", "1")
+				defer os.Setenv("CLAUDE_CODE_USE_VERTEX", originalVertexValue)
+
+				// Ensure ambient-runner-secrets does NOT exist (should not matter with Vertex)
+				_ = k8sUtils.K8sClient.CoreV1().Secrets(testNamespace).Delete(ctx, "ambient-runner-secrets", v1.DeleteOptions{})
+
+				sessionRequest := map[string]interface{}{
+					"initialPrompt": "Test prompt",
+					"repos": []interface{}{
+						map[string]interface{}{
+							"url":    "https://github.com/test/repo.git",
+							"branch": "main",
+						},
+					},
+				}
+
+				context := httpUtils.CreateTestGinContext("POST", "/api/projects/"+testNamespace+"/agentic-sessions", sessionRequest)
+				httpUtils.SetAuthHeader(testToken)
+				httpUtils.SetProjectContext(testNamespace)
+
+				// Act
+				CreateSession(context)
+
+				// Assert - should succeed even without ambient-runner-secrets
+				httpUtils.AssertHTTPStatus(http.StatusCreated)
+
+				var response map[string]interface{}
+				httpUtils.GetResponseJSON(&response)
+				Expect(response).To(HaveKey("name"))
+				Expect(response).To(HaveKey("uid"))
+
+				logger.Log("Successfully created session with Vertex AI enabled (no API key validation)")
 			})
 		})
 	})
