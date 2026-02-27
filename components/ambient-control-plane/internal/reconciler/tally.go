@@ -64,14 +64,15 @@ func (r *TallyReconciler) Reconcile(ctx context.Context, event informer.Resource
 		r.seenIDs[resourceID] = struct{}{}
 	}
 	r.lastEventAt = time.Now()
+	added, modified, deleted := r.tally.Added, r.tally.Modified, r.tally.Deleted
 	r.mu.Unlock()
 
 	r.logger.Info().
 		Str("event", string(event.Type)).
 		Str("resource_id", resourceID).
-		Int("total_added", r.tally.Added).
-		Int("total_modified", r.tally.Modified).
-		Int("total_deleted", r.tally.Deleted).
+		Int("total_added", added).
+		Int("total_modified", modified).
+		Int("total_deleted", deleted).
 		Msg("tally updated")
 
 	return nil
