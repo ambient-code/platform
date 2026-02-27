@@ -28,10 +28,6 @@ var (
 
 type TimeFunc func() time.Time
 
-const (
-	grpcPort = ":9777"
-)
-
 type Helper struct {
 	testutil.BaseHelper
 	APIServer         pkgserver.Server
@@ -42,6 +38,7 @@ type Helper struct {
 	TimeFunc          TimeFunc
 	teardowns         []func() error
 	apiServerAddress  string
+	grpcServerAddress string
 }
 
 func NewHelper(t *testing.T) *Helper {
@@ -187,12 +184,12 @@ func (helper *Helper) stopControllersServer() error {
 
 func (helper *Helper) startGRPCServer() {
 	env := environments.Environment()
-	env.Config.GRPC.BindAddress = grpcPort
 	helper.GRPCServer = pkgserver.NewDefaultGRPCServer(env)
 	listener, err := helper.GRPCServer.Listen()
 	if err != nil {
 		glog.Fatalf("Unable to start Test gRPC server: %s", err)
 	}
+	helper.grpcServerAddress = listener.Addr().String()
 	go func() {
 		glog.V(10).Info("Test gRPC server started")
 		helper.GRPCServer.Serve(listener)
@@ -210,7 +207,7 @@ func (helper *Helper) stopGRPCServer() error {
 }
 
 func (helper *Helper) GRPCAddress() string {
-	return "localhost" + grpcPort
+	return helper.grpcServerAddress
 }
 
 func (helper *Helper) RestURL(path string) string {

@@ -58,5 +58,6 @@ func (e *IntegrationTestingEnvImpl) Flags() map[string]string {
 		"api-server-bindaddress":          "localhost:0",
 		"metrics-server-bindaddress":      "localhost:0",
 		"health-check-server-bindaddress": "localhost:0",
+		"grpc-server-bindaddress":         "localhost:0",
 	}
 }
