@@ -125,7 +125,7 @@ export const AskUserQuestionMessage: React.FC<AskUserQuestionMessageProps> = ({
 
   const currentQuestion = questions[activeTab] || questions[0];
 
-  const renderQuestionOptions = (q: AskUserQuestionItem, qIdx: number) => {
+  const renderQuestionOptions = (q: AskUserQuestionItem) => {
     const isOther = usingOther[q.question];
 
     if (q.multiSelect) {
@@ -295,7 +295,7 @@ export const AskUserQuestionMessage: React.FC<AskUserQuestionMessageProps> = ({
             <p className="text-sm text-foreground mb-2">{currentQuestion.question}</p>
 
             {/* Options */}
-            {renderQuestionOptions(currentQuestion, activeTab)}
+            {renderQuestionOptions(currentQuestion)}
 
             {/* Footer */}
             {!disabled && (

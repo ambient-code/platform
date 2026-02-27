@@ -37,19 +37,10 @@ export type MessagesTabProps = {
 
 
 const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chatInput, setChatInput, onSendChat, onSendToolAnswer, onInterrupt, onGoToResults, onContinue, workflowMetadata, onCommandClick, isRunActive = false, showWelcomeExperience, welcomeExperienceComponent, activeWorkflow, userHasInteracted = false, queuedMessages = [], hasRealMessages = false, onCancelQueuedMessage, onUpdateQueuedMessage, onPasteImage, onClearQueue }) => {
-  const [interrupting, setInterrupting] = useState(false);
   const [sendingChat, setSendingChat] = useState(false);
   const [showSystemMessages, setShowSystemMessages] = useState(false);
   const [waitingDotCount, setWaitingDotCount] = useState(0);
 
-  
-  // Autocomplete state
-  const [autocompleteOpen, setAutocompleteOpen] = useState(false);
-  const [autocompleteType, setAutocompleteType] = useState<'agent' | 'command' | null>(null);
-  const [autocompleteFilter, setAutocompleteFilter] = useState('');
-  const [autocompleteTriggerPos, setAutocompleteTriggerPos] = useState(0);
-  const [autocompleteSelectedIndex, setAutocompleteSelectedIndex] = useState(0);
-  
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
 
