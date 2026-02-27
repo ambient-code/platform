@@ -23,7 +23,7 @@ func findFreePort(t *testing.T) int {
 		t.Fatalf("finding free port: %v", err)
 	}
 	port := ln.Addr().(*net.TCPAddr).Port
-	ln.Close()
+	_ = ln.Close()
 	return port
 }
 
@@ -38,7 +38,7 @@ func findFreePorts(t *testing.T, count int) (int, int) {
 				allFree = false
 				break
 			}
-			ln.Close()
+			_ = ln.Close()
 		}
 		if allFree {
 			return s, s + count - 1
@@ -111,7 +111,7 @@ func TestProxyUnknownSession(t *testing.T) {
 	if err != nil {
 		t.Fatalf("request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("expected 404, got %d", resp.StatusCode)
@@ -137,7 +137,7 @@ func TestProxyHealthEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("expected 200, got %d", resp.StatusCode)
@@ -164,7 +164,7 @@ func TestProxyCORSHeaders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OPTIONS request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusNoContent {
 		t.Errorf("expected 204 for OPTIONS, got %d", resp.StatusCode)
@@ -262,7 +262,7 @@ func TestProxyForwardsToRunner(t *testing.T) {
 			if err != nil {
 				t.Fatalf("request: %v", err)
 			}
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 
 			if resp.StatusCode != http.StatusOK {
 				t.Errorf("expected 200, got %d", resp.StatusCode)
@@ -295,7 +295,7 @@ func TestProxySSEStreaming(t *testing.T) {
 		}
 
 		for _, evt := range events {
-			fmt.Fprint(w, evt)
+				_, _ = fmt.Fprint(w, evt)
 			flusher.Flush()
 			time.Sleep(10 * time.Millisecond)
 		}
@@ -340,7 +340,7 @@ func TestProxySSEStreaming(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SSE request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
@@ -377,7 +377,7 @@ func TestProxyBadRequest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", resp.StatusCode)
@@ -414,7 +414,7 @@ func TestProxyUnknownEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("expected 404, got %d", resp.StatusCode)
@@ -444,7 +444,7 @@ func TestProxyShutdown(t *testing.T) {
 	if err != nil {
 		t.Fatalf("pre-shutdown request: %v", err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	cancel()
 

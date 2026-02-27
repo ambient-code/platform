@@ -79,7 +79,8 @@ func run() error {
 	watchMgr := watcher.NewWatchManager(grpcConn, logger)
 	inf := informer.New(sdk, watchMgr, logger)
 
-	if cfg.Mode == "test" {
+	switch cfg.Mode {
+	case "test":
 		sessionTally := reconciler.NewTallyReconciler("sessions", sdk, logger)
 		projectTally := reconciler.NewTallyReconciler("projects", sdk, logger)
 		settingsTally := reconciler.NewTallyReconciler("project_settings", sdk, logger)
@@ -91,7 +92,7 @@ func run() error {
 		logger.Info().
 			Str("mode", "test").
 			Msg("running in test mode (tally reconcilers, no side effects)")
-	} else if cfg.Mode == "local" {
+	case "local":
 		localCfg := config.LoadLocalConfig()
 
 		procManager := process.NewManager(process.ManagerConfig{
@@ -126,7 +127,7 @@ func run() error {
 			localReconciler.Close()
 			procManager.Shutdown(context.Background())
 		}()
-	} else {
+	default:
 		kube, err := kubeclient.New(cfg.Kubeconfig, cfg.Namespace, logger)
 		if err != nil {
 			return fmt.Errorf("initializing kubernetes client: %w", err)

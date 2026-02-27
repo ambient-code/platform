@@ -24,10 +24,11 @@ type AGUIProxy struct {
 
 func NewAGUIProxy(listenAddr, corsOrigin string, manager *process.Manager, logger zerolog.Logger) *AGUIProxy {
 	l := logger.With().Str("component", "agui-proxy").Logger()
-	if corsOrigin == "" {
+	switch corsOrigin {
+	case "":
 		corsOrigin = "http://localhost:3000"
 		l.Warn().Str("cors_origin", corsOrigin).Msg("CORS_ALLOWED_ORIGIN not set, using localhost default")
-	} else if corsOrigin == "*" {
+	case "*":
 		l.Warn().Msg("CORS_ALLOWED_ORIGIN is set to wildcard '*', all origins allowed")
 	}
 	return &AGUIProxy{
@@ -101,18 +102,18 @@ func (p *AGUIProxy) handleRequest(w http.ResponseWriter, r *http.Request) {
 
 	targetURL := fmt.Sprintf("http://127.0.0.1:%d", rp.Port)
 
-	switch {
-	case suffix == "/agui/events" || suffix == "/agui/events/":
+	switch strings.TrimSuffix(suffix, "/") {
+	case "/agui/events":
 		p.proxySSE(w, r, rp.Port, targetURL)
-	case suffix == "/agui/run" || suffix == "/agui/run/":
+	case "/agui/run":
 		p.proxyRequest(w, r, targetURL, "/")
-	case suffix == "/agui/interrupt" || suffix == "/agui/interrupt/":
+	case "/agui/interrupt":
 		p.proxyRequest(w, r, targetURL, "/interrupt")
-	case suffix == "/health" || suffix == "/health/":
+	case "/health":
 		p.proxyRequest(w, r, targetURL, "/health")
-	case suffix == "/mcp/status" || suffix == "/mcp/status/":
+	case "/mcp/status":
 		p.proxyRequest(w, r, targetURL, "/mcp/status")
-	case suffix == "/repos/status" || suffix == "/repos/status/":
+	case "/repos/status":
 		p.proxyRequest(w, r, targetURL, "/repos/status")
 	default:
 		p.writeError(w, http.StatusNotFound, "unknown endpoint: "+suffix)

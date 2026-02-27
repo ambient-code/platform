@@ -166,7 +166,7 @@ func (r *LocalSessionReconciler) asyncHealthCheck(ctx context.Context, rp *proce
 			resp, err := r.healthClient.Get(fmt.Sprintf("http://127.0.0.1:%d/health", rp.Port))
 			if err == nil {
 				statusOK := resp.StatusCode == http.StatusOK
-				resp.Body.Close()
+				_ = resp.Body.Close()
 				if statusOK {
 					r.logger.Info().Str("session_id", sessionID).Int("port", rp.Port).Msg("health check passed")
 					r.writePhaseWithStartTime(ctx, sessionID, PhaseRunning)

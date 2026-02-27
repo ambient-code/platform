@@ -140,7 +140,7 @@ func (m *Manager) Spawn(ctx context.Context, sessionID string, env map[string]st
 	}
 	stderrFile, err := os.OpenFile(stderrPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
-		stdoutFile.Close()
+		_ = stdoutFile.Close()
 		m.portPool.Release(sessionID)
 		return nil, fmt.Errorf("creating stderr log: %w", err)
 	}
@@ -165,8 +165,8 @@ func (m *Manager) Spawn(ctx context.Context, sessionID string, env map[string]st
 
 	if err := cmd.Start(); err != nil {
 		cancel()
-		stdoutFile.Close()
-		stderrFile.Close()
+		_ = stdoutFile.Close()
+		_ = stderrFile.Close()
 		m.portPool.Release(sessionID)
 		return nil, fmt.Errorf("starting runner process: %w", err)
 	}
@@ -358,8 +358,8 @@ func (m *Manager) waitForExit(rp *RunnerProcess, stderrRing *ringWriter, stdoutF
 	rp.exitCode = &exitCode
 	rp.mu.Unlock()
 
-	stdoutFile.Close()
-	stderrFile.Close()
+	_ = stdoutFile.Close()
+	_ = stderrFile.Close()
 
 	m.logger.Info().
 		Str("session_id", rp.SessionID).
@@ -527,7 +527,7 @@ func isPortAvailable(port int) bool {
 	if err != nil {
 		return false
 	}
-	ln.Close()
+	_ = ln.Close()
 	return true
 }
 
