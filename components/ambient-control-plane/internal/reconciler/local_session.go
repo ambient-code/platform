@@ -166,7 +166,7 @@ func (r *LocalSessionReconciler) asyncHealthCheck(ctx context.Context, rp *proce
 
 	r.logger.Warn().Str("session_id", sessionID).Msg("health check timed out after 15s")
 	r.writePhase(ctx, sessionID, PhaseFailed, "HealthCheckTimeout: no response after 15s")
-	r.processManager.Kill(sessionID)
+	_ = r.processManager.Kill(sessionID)
 }
 
 func (r *LocalSessionReconciler) stopSession(ctx context.Context, session types.Session) error {

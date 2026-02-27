@@ -76,7 +76,19 @@ func run() error {
 	watchMgr := watcher.NewWatchManager(grpcConn, logger)
 	inf := informer.New(sdk, watchMgr, logger)
 
-	if mode == "local" {
+	if mode == "test" {
+		sessionTally := reconciler.NewTallyReconciler("sessions", sdk, logger)
+		projectTally := reconciler.NewTallyReconciler("projects", sdk, logger)
+		settingsTally := reconciler.NewTallyReconciler("project_settings", sdk, logger)
+
+		registerReconciler(inf, sessionTally)
+		registerReconciler(inf, projectTally)
+		registerReconciler(inf, settingsTally)
+
+		logger.Info().
+			Str("mode", "test").
+			Msg("running in test mode (tally reconcilers, no side effects)")
+	} else if mode == "local" {
 		localCfg := config.LoadLocalConfig()
 
 		procManager := process.NewManager(process.ManagerConfig{
@@ -94,7 +106,7 @@ func run() error {
 
 		registerReconciler(inf, localReconciler)
 
-		go aguiProxy.Start(ctx)
+		go func() { _ = aguiProxy.Start(ctx) }()
 		go localReconciler.ReapLoop(ctx)
 
 		logger.Info().

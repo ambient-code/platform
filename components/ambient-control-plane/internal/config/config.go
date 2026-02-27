@@ -8,15 +8,15 @@ import (
 )
 
 type ControlPlaneConfig struct {
-	APIServerURL string
-	APIToken     string
-	APIProject   string
+	APIServerURL   string
+	APIToken       string
+	APIProject     string
 	GRPCServerAddr string
-	PollInterval time.Duration
-	WorkerCount  int
-	LogLevel     string
-	Kubeconfig   string
-	Namespace    string
+	PollInterval   time.Duration
+	WorkerCount    int
+	LogLevel       string
+	Kubeconfig     string
+	Namespace      string
 }
 
 func Load() (*ControlPlaneConfig, error) {
@@ -68,7 +68,7 @@ func LoadLocalConfig() *LocalConfig {
 	cfg.PortRangeStart = 9100
 	cfg.PortRangeEnd = 9199
 	if portRange := os.Getenv("LOCAL_PORT_RANGE"); portRange != "" {
-		fmt.Sscanf(portRange, "%d-%d", &cfg.PortRangeStart, &cfg.PortRangeEnd)
+		_, _ = fmt.Sscanf(portRange, "%d-%d", &cfg.PortRangeStart, &cfg.PortRangeEnd)
 	}
 
 	maxSessions, err := strconv.Atoi(envOrDefault("LOCAL_MAX_SESSIONS", "10"))

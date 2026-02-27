@@ -320,7 +320,7 @@ func sessionToUnstructured(session types.Session, namespace string) *unstructure
 			for k, v := range labelMap {
 				labels[k] = v
 			}
-			unstructured.SetNestedField(obj.Object, labels, "metadata", "labels")
+			_ = unstructured.SetNestedField(obj.Object, labels, "metadata", "labels")
 		}
 	}
 
@@ -331,7 +331,7 @@ func sessionToUnstructured(session types.Session, namespace string) *unstructure
 			for k, v := range annotationMap {
 				annotations[k] = v
 			}
-			unstructured.SetNestedField(obj.Object, annotations, "metadata", "annotations")
+			_ = unstructured.SetNestedField(obj.Object, annotations, "metadata", "annotations")
 		}
 	}
 
@@ -632,7 +632,7 @@ func (r *ProjectSettingsReconciler) ensureRoleBinding(ctx context.Context, names
 	existing, err := r.kube.GetRoleBinding(ctx, namespace, rbName)
 	if err == nil {
 		updated := existing.DeepCopy()
-		unstructured.SetNestedField(updated.Object, entry.Role, "roleRef", "name")
+		_ = unstructured.SetNestedField(updated.Object, entry.Role, "roleRef", "name")
 		subjects := []interface{}{
 			map[string]interface{}{
 				"kind":     "Group",
@@ -640,7 +640,7 @@ func (r *ProjectSettingsReconciler) ensureRoleBinding(ctx context.Context, names
 				"apiGroup": "rbac.authorization.k8s.io",
 			},
 		}
-		unstructured.SetNestedSlice(updated.Object, subjects, "subjects")
+		_ = unstructured.SetNestedSlice(updated.Object, subjects, "subjects")
 		_, err = r.kube.UpdateRoleBinding(ctx, namespace, updated)
 		return err
 	}
