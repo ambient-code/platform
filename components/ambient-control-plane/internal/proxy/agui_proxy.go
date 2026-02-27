@@ -60,7 +60,7 @@ func (p *AGUIProxy) Start(ctx context.Context) error {
 		<-ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		p.server.Shutdown(shutdownCtx)
+		_ = p.server.Shutdown(shutdownCtx)
 	}()
 
 	err := p.server.ListenAndServe()

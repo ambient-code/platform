@@ -12,19 +12,6 @@ import (
 	"github.com/rs/zerolog"
 )
 
-func testManager(t *testing.T, portStart, portEnd int) *Manager {
-	t.Helper()
-	tmpDir := t.TempDir()
-	logger := zerolog.New(zerolog.NewTestWriter(t)).With().Timestamp().Logger()
-	return NewManager(ManagerConfig{
-		WorkspaceRoot: tmpDir,
-		RunnerCommand: "sleep 30",
-		PortStart:     portStart,
-		PortEnd:       portEnd,
-		MaxSessions:   10,
-	}, logger)
-}
-
 func findAvailablePorts(t *testing.T, count int) (int, int) {
 	t.Helper()
 	start := 19100
@@ -83,7 +70,7 @@ func TestPortRelease(t *testing.T) {
 	pp := NewPortPool(start, end)
 
 	p1, _ := pp.Allocate("session-a")
-	pp.Allocate("session-b")
+	_, _ = pp.Allocate("session-b")
 
 	pp.Release("session-a")
 
@@ -336,9 +323,7 @@ func TestEnvironmentInheritance(t *testing.T) {
 
 func splitLines(s string) []string {
 	var lines []string
-	for _, l := range filepath.SplitList(s) {
-		lines = append(lines, l)
-	}
+	lines = append(lines, filepath.SplitList(s)...)
 	start := 0
 	for i := 0; i <= len(s); i++ {
 		if i == len(s) || s[i] == '\n' {
@@ -498,7 +483,7 @@ func TestIdempotentSpawn(t *testing.T) {
 
 func TestRingWriter(t *testing.T) {
 	rw := newRingWriter(3)
-	rw.Write([]byte("line1\nline2\nline3\nline4\nline5\n"))
+	_, _ = rw.Write([]byte("line1\nline2\nline3\nline4\nline5\n"))
 
 	result := rw.String()
 	expected := "line3\nline4\nline5"
@@ -509,9 +494,9 @@ func TestRingWriter(t *testing.T) {
 
 func TestRingWriterPartialLines(t *testing.T) {
 	rw := newRingWriter(3)
-	rw.Write([]byte("partial"))
-	rw.Write([]byte(" line\n"))
-	rw.Write([]byte("second\n"))
+	_, _ = rw.Write([]byte("partial"))
+	_, _ = rw.Write([]byte(" line\n"))
+	_, _ = rw.Write([]byte("second\n"))
 
 	result := rw.String()
 	expected := "partial line\nsecond"
@@ -559,7 +544,9 @@ func TestProcessExitEvent(t *testing.T) {
 	tmpDir := t.TempDir()
 	logger := zerolog.New(zerolog.NewTestWriter(t)).With().Timestamp().Logger()
 	scriptPath := filepath.Join(tmpDir, "fail.sh")
-	os.WriteFile(scriptPath, []byte("#!/bin/sh\necho error-output >&2\nexit 42\n"), 0o755)
+	if err := os.WriteFile(scriptPath, []byte("#!/bin/sh\necho error-output >&2\nexit 42\n"), 0o755); err != nil {
+		t.Fatalf("writing test script: %v", err)
+	}
 
 	m := NewManager(ManagerConfig{
 		WorkspaceRoot: tmpDir,

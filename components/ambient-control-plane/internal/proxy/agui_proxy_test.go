@@ -104,7 +104,7 @@ func TestProxyUnknownSession(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	go p.Start(ctx)
+	go func() { _ = p.Start(ctx) }()
 	time.Sleep(200 * time.Millisecond)
 
 	resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/sessions/nonexistent/agui/events", proxyPort))
@@ -118,7 +118,7 @@ func TestProxyUnknownSession(t *testing.T) {
 	}
 
 	var body map[string]string
-	json.NewDecoder(resp.Body).Decode(&body)
+	_ = json.NewDecoder(resp.Body).Decode(&body)
 	if body["error"] != "session not found" {
 		t.Errorf("expected 'session not found', got %q", body["error"])
 	}
@@ -130,7 +130,7 @@ func TestProxyHealthEndpoint(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	go p.Start(ctx)
+	go func() { _ = p.Start(ctx) }()
 	time.Sleep(200 * time.Millisecond)
 
 	resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/health", proxyPort))
@@ -144,7 +144,7 @@ func TestProxyHealthEndpoint(t *testing.T) {
 	}
 
 	var body map[string]string
-	json.NewDecoder(resp.Body).Decode(&body)
+	_ = json.NewDecoder(resp.Body).Decode(&body)
 	if body["status"] != "ok" {
 		t.Errorf("expected status 'ok', got %q", body["status"])
 	}
@@ -156,7 +156,7 @@ func TestProxyCORSHeaders(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	go p.Start(ctx)
+	go func() { _ = p.Start(ctx) }()
 	time.Sleep(200 * time.Millisecond)
 
 	req, _ := http.NewRequest(http.MethodOptions, fmt.Sprintf("http://127.0.0.1:%d/sessions/test/agui/events", proxyPort), nil)
@@ -186,19 +186,19 @@ func TestProxyForwardsToRunner(t *testing.T) {
 		switch r.URL.Path {
 		case "/health":
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{"status":"healthy"}`))
+			_, _ = w.Write([]byte(`{"status":"healthy"}`))
 		case "/":
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{"run":"started"}`))
+			_, _ = w.Write([]byte(`{"run":"started"}`))
 		case "/interrupt":
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{"interrupted":true}`))
+			_, _ = w.Write([]byte(`{"interrupted":true}`))
 		case "/mcp/status":
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{"mcp":"connected"}`))
+			_, _ = w.Write([]byte(`{"mcp":"connected"}`))
 		case "/repos/status":
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{"repos":"cloned"}`))
+			_, _ = w.Write([]byte(`{"repos":"cloned"}`))
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -232,7 +232,7 @@ func TestProxyForwardsToRunner(t *testing.T) {
 
 	pCtx, pCancel := context.WithCancel(context.Background())
 	defer pCancel()
-	go p.Start(pCtx)
+	go func() { _ = p.Start(pCtx) }()
 	time.Sleep(200 * time.Millisecond)
 
 	tests := []struct {
@@ -329,7 +329,7 @@ func TestProxySSEStreaming(t *testing.T) {
 
 	pCtx, pCancel := context.WithCancel(context.Background())
 	defer pCancel()
-	go p.Start(pCtx)
+	go func() { _ = p.Start(pCtx) }()
 	time.Sleep(200 * time.Millisecond)
 
 	req, _ := http.NewRequest("GET", fmt.Sprintf("http://127.0.0.1:%d/sessions/sse-session/agui/events", proxyPort), nil)
@@ -370,7 +370,7 @@ func TestProxyBadRequest(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	go p.Start(ctx)
+	go func() { _ = p.Start(ctx) }()
 	time.Sleep(200 * time.Millisecond)
 
 	resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/sessions/", proxyPort))
@@ -407,7 +407,7 @@ func TestProxyUnknownEndpoint(t *testing.T) {
 
 	pCtx, pCancel := context.WithCancel(context.Background())
 	defer pCancel()
-	go p.Start(pCtx)
+	go func() { _ = p.Start(pCtx) }()
 	time.Sleep(200 * time.Millisecond)
 
 	resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/sessions/endpoint-test/unknown/path", proxyPort))
@@ -421,7 +421,7 @@ func TestProxyUnknownEndpoint(t *testing.T) {
 	}
 
 	var body map[string]string
-	json.NewDecoder(resp.Body).Decode(&body)
+	_ = json.NewDecoder(resp.Body).Decode(&body)
 	if !strings.Contains(body["error"], "unknown endpoint") {
 		t.Errorf("expected 'unknown endpoint' error, got %q", body["error"])
 	}

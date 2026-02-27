@@ -71,7 +71,7 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("connecting to gRPC server: %w", err)
 	}
-	defer grpcConn.Close()
+	defer func() { _ = grpcConn.Close() }()
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()

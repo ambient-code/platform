@@ -263,7 +263,7 @@ func TestUpdateAgenticSession(t *testing.T) {
 		t.Fatalf("get failed: %v", err)
 	}
 
-	unstructured.SetNestedField(existing.Object, "updated prompt", "spec", "initialPrompt")
+	_ = unstructured.SetNestedField(existing.Object, "updated prompt", "spec", "initialPrompt")
 	updated, err := kc.UpdateAgenticSession(context.Background(), existing)
 	if err != nil {
 		t.Fatalf("update failed: %v", err)
@@ -573,7 +573,7 @@ func TestUpdateRoleBinding(t *testing.T) {
 	kc := newFakeKubeClientWithNamespaces("default", rb)
 
 	existing, _ := kc.GetRoleBinding(context.Background(), "my-project", "ambient-devs-edit")
-	unstructured.SetNestedField(existing.Object, "admin", "roleRef", "name")
+	_ = unstructured.SetNestedField(existing.Object, "admin", "roleRef", "name")
 
 	updated, err := kc.UpdateRoleBinding(context.Background(), "my-project", existing)
 	if err != nil {
