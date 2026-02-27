@@ -783,9 +783,7 @@ export default function ProjectSessionDetailPage({
     const allToolCalls = new Map<string, { tc: PlatformToolCall; timestamp: string }>();
 
     for (const msg of aguiState.messages) {
-      // Use msg.timestamp from backend, fallback to current time for legacy messages
-      // Note: After backend fix, new messages will have proper timestamps
-      const timestamp = msg.timestamp || new Date().toISOString();
+      const timestamp = msg.timestamp || "";
 
       if (msg.toolCalls && Array.isArray(msg.toolCalls)) {
         for (const tc of msg.toolCalls) {
@@ -819,8 +817,7 @@ export default function ProjectSessionDetailPage({
       if (!allToolCalls.has(streamingToolId)) {
         allToolCalls.set(streamingToolId, {
           tc: streamingTC,
-          // Use timestamp from currentToolCall if available, fallback to current time for legacy
-          timestamp: aguiState.pendingToolCalls?.get(streamingToolId)?.timestamp || new Date().toISOString()
+          timestamp: aguiState.pendingToolCalls?.get(streamingToolId)?.timestamp || ""
         });
       }
     }
@@ -836,8 +833,7 @@ export default function ProjectSessionDetailPage({
               if (!allToolCalls.has(tc.id)) {
                 allToolCalls.set(tc.id, {
                   tc: tc,
-                  // Use timestamp from child message if available, fallback to current time
-                  timestamp: childMsg.timestamp || new Date().toISOString(),
+                  timestamp: childMsg.timestamp || "",
                 });
               }
             }
@@ -882,8 +878,7 @@ export default function ProjectSessionDetailPage({
 
     // Phase C: Process messages and build hierarchical structure
     for (const msg of aguiState.messages) {
-      // Use msg.timestamp from backend, fallback to current time for legacy messages
-      const timestamp = msg.timestamp || new Date().toISOString();
+      const timestamp = msg.timestamp || "";
 
       // Handle text content by role
       if (msg.role === "user") {
@@ -1010,7 +1005,7 @@ export default function ProjectSessionDetailPage({
           signature: "",
         },
         model: "claude",
-        timestamp: aguiState.currentThinking.timestamp || new Date().toISOString(),
+        timestamp: aguiState.currentThinking.timestamp || "",
         streaming: true,
       } as MessageObject & { streaming?: boolean });
     }
@@ -1021,8 +1016,7 @@ export default function ProjectSessionDetailPage({
         type: "agent_message",
         content: { type: "text_block", text: aguiState.currentMessage.content },
         model: "claude",
-        // Use timestamp from currentMessage (captured from TEXT_MESSAGE_START), fallback to current time
-        timestamp: aguiState.currentMessage.timestamp || new Date().toISOString(),
+        timestamp: aguiState.currentMessage.timestamp || "",
         streaming: true,
       } as MessageObject & { streaming?: boolean });
     }
@@ -1053,8 +1047,7 @@ export default function ProjectSessionDetailPage({
             const childTC = childMsg.toolCalls?.[0];
             if (!childTC) return null;
             renderedToolCalls.add(childTC.id);  // Track to prevent duplicates below
-            // Use timestamp from child message if available
-            return createToolMessage(childTC, childMsg.timestamp || new Date().toISOString());
+            return createToolMessage(childTC, childMsg.timestamp || "");
           })
           .filter((c): c is ToolUseMessages => c !== null);
 
@@ -1064,8 +1057,7 @@ export default function ProjectSessionDetailPage({
             const childInput = parseToolArgs(childTool.args || "");
             children.push({
               type: "tool_use_messages",
-              // Use timestamp from pending tool call (captured from TOOL_CALL_START)
-              timestamp: childTool.timestamp || new Date().toISOString(),
+              timestamp: childTool.timestamp || "",
               toolUseBlock: {
                 type: "tool_use_block",
                 id: childId,
@@ -1096,8 +1088,7 @@ export default function ProjectSessionDetailPage({
 
         const streamingToolMessage: HierarchicalToolMessage = {
           type: "tool_use_messages",
-          // Use timestamp from pending tool call (captured from TOOL_CALL_START)
-          timestamp: pendingTool.timestamp || new Date().toISOString(),
+          timestamp: pendingTool.timestamp || "",
           toolUseBlock: {
             type: "tool_use_block",
             id: toolId,
