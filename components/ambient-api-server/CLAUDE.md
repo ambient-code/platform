@@ -5,7 +5,7 @@ REST API microservice for the Ambient Code Platform. Built on the [rh-trex-ai](h
 ## Quick Reference
 
 ```bash
-make test              # AMBIENT_ENV=integration_testing go test -p 1 -v ./...
+make test              # hubAMBIENT_ENV=integration_testing go test -p 1 -v ./...
 make binary            # Build binary
 make run               # Migrate + serve (with auth)
 make run-no-auth       # Migrate + serve (no auth, dev mode)

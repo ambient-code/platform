@@ -476,8 +476,8 @@ github.com/opencontainers/image-spec v1.1.1 h1:y0fUlFfIZhPF1W537XOLg0/fcx6zcHCJw
 github.com/opencontainers/image-spec v1.1.1/go.mod h1:qpqAh3Dmcf36wStyyWU+kCeDgrGnAve2nCC8+7h8Q0M=
 github.com/openshift-online/ocm-sdk-go v0.1.334 h1:45WSkXEsmpGekMa9kO6NpEG8PW5/gfmMekr7kL+1KvQ=
 github.com/openshift-online/ocm-sdk-go v0.1.334/go.mod h1:KYOw8kAKAHyPrJcQoVR82CneQ4ofC02Na4cXXaTq4Nw=
-github.com/openshift-online/rh-trex-ai v0.0.5 h1:BcVHQUoDDCYCnqScWDDZm8gFjP8gEp1PM3WMHCmzNZY=
-github.com/openshift-online/rh-trex-ai v0.0.5/go.mod h1:aI2oixlzVNHjyBmDgBtSIhdFAt6RpotOHDCmInGEYWI=
+github.com/openshift-online/rh-trex-ai v0.0.6 h1:Z/JdZnDIOoEoZehAEhjyajJTZ4b2vPLmIvD0PSdAn/M=
+github.com/openshift-online/rh-trex-ai v0.0.6/go.mod h1:aI2oixlzVNHjyBmDgBtSIhdFAt6RpotOHDCmInGEYWI=
 github.com/openzipkin/zipkin-go v0.1.6/go.mod h1:QgAqvLzwWbR/WpD4A3cGpPtJrZXNIiJc5AZX7/PBEpw=
 github.com/pierrec/lz4 v2.0.5+incompatible/go.mod h1:pdkljMzZIN41W+lC3N2tnIh5sFi+IEE17M5jbnwPHcY=
 github.com/pingcap/errors v0.11.4 h1:lFuQV/oaUMGcD2tqt+01ROSmJs75VG1ToEOkZIZ4nE4=

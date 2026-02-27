@@ -73,10 +73,11 @@ func NewHelper(t *testing.T) *Helper {
 
 		_, jwkMockTeardown := helper.StartJWKCertServerMock()
 		helper.teardowns = []func() error{
-			helper.CleanDB,
+			helper.stopControllersServer,
 			jwkMockTeardown,
 			helper.stopGRPCServer,
 			helper.stopAPIServer,
+			helper.CleanDB,
 			helper.teardownEnv,
 		}
 		helper.initControllersServer()
@@ -175,6 +176,13 @@ func (helper *Helper) initControllersServer() {
 
 func (helper *Helper) StartControllersServer() {
 	go helper.ControllersServer.Start()
+}
+
+func (helper *Helper) stopControllersServer() error {
+	if helper.ControllersServer != nil {
+		helper.ControllersServer.Stop()
+	}
+	return nil
 }
 
 func (helper *Helper) startGRPCServer() {
