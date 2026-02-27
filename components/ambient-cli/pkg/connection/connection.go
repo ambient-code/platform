@@ -8,6 +8,9 @@ import (
 	sdkclient "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/client"
 )
 
+// NewClientFromConfig creates an SDK client from the saved configuration.
+// TODO: Add TLS skip-verify support once the SDK exposes WithHTTPClient option.
+// OpenShift/on-prem deployments with self-signed certs will need this.
 func NewClientFromConfig() (*sdkclient.Client, error) {
 	cfg, err := config.Load()
 	if err != nil {

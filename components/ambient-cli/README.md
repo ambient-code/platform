@@ -72,7 +72,7 @@ This produces an `acpctl` binary in the current directory with embedded version 
   --model sonnet \
   --max-tokens 4000 \
   --temperature 0.7 \
-  --timeout 3600 \
+  --timeout 3600
 ```
 
 ### 5. Session lifecycle

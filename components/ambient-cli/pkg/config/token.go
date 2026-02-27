@@ -13,6 +13,8 @@ func TokenExpiry(tokenStr string) (time.Time, error) {
 		return time.Time{}, nil
 	}
 
+	// ParseUnverified is intentional: the CLI only reads claims (e.g. exp) for
+	// local display and cannot verify the server's signing key.
 	parser := jwt.NewParser()
 	claims := jwt.MapClaims{}
 	_, _, err := parser.ParseUnverified(tokenStr, claims)

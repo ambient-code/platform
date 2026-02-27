@@ -14,7 +14,7 @@ LDFLAGS := -s -w \
 .PHONY: build clean fmt vet lint test
 
 build:
-	go build -ldflags "$(LDFLAGS)" -o $(BINARY) ./cmd/ambient/
+	go build -ldflags "$(LDFLAGS)" -o $(BINARY) ./cmd/acpctl/
 
 clean:
 	rm -f $(BINARY)

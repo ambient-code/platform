@@ -413,7 +413,7 @@ local-reload-operator: ## Rebuild and reload operator only
 
 ##@ Testing
 
-test-all: local-test-quick local-test-dev ## Run all tests (quick + comprehensive)
+test-all: test-cli local-test-quick local-test-dev ## Run all tests (quick + comprehensive)
 
 ##@ Quality Assurance
 
