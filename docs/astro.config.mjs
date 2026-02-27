@@ -8,6 +8,7 @@ export default defineConfig({
   integrations: [
     starlight({
       title: 'Ambient Code Platform',
+      favicon: '/favicon.ico',
       description:
         'AI-powered automation platform for intelligent agentic workflows',
       social: [
