@@ -23,6 +23,13 @@ jobs:
       actions: read
 
     steps:
+      - name: Checkout base ref (for command file security)
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
+          fetch-depth: 1
+          path: base-ref
+
       - name: Checkout PR head
         uses: actions/checkout@v6
         with:
@@ -78,7 +85,14 @@ jobs:
           claude_args: |
             --allowedTools "Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh issue list:*)"
           prompt: |
-            Read .claude/commands/amber.review.md and follow its instructions exactly.
+            ## Security Note
+            For fork PRs, read the command file from base-ref/.claude/commands/amber.review.md 
+            For same-repo PRs, read from .claude/commands/amber.review.md
+            This prevents prompt injection while allowing prompt improvements to be tested.
+            
+            Fork PR: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
+            
+            Read the appropriate command file and follow its instructions exactly.
             Arguments: REPO: ${{ github.repository }}  PR NUMBER: ${{ github.event.pull_request.number }}
             After completing the review, use gh pr comment to post your findings.
 

@@ -93,7 +93,7 @@ Assign each finding exactly one severity level:
 Output the review in this exact format:
 
 ```markdown
-# Amber Code Review
+# Claude Code Review
 
 ## Summary
 [1-3 sentence overview of the changes and overall assessment]
