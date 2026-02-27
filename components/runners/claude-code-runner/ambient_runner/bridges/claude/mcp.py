@@ -40,6 +40,7 @@ def build_mcp_servers(context: RunnerContext, cwd_path: str, obs: Any = None) ->
 
     from ambient_runner.platform.config import load_mcp_config
     from ambient_runner.bridges.claude.tools import (
+        create_refresh_credentials_tool,
         create_restart_session_tool,
         create_rubric_mcp_tool,
         load_rubric_content,
@@ -48,13 +49,14 @@ def build_mcp_servers(context: RunnerContext, cwd_path: str, obs: Any = None) ->
 
     mcp_servers = load_mcp_config(context, cwd_path) or {}
 
-    # Session control tool
+    # Session control tools
     restart_tool = create_restart_session_tool(None, sdk_tool)
+    refresh_creds_tool = create_refresh_credentials_tool(context, sdk_tool)
     session_server = create_sdk_mcp_server(
-        name="session", version="1.0.0", tools=[restart_tool]
+        name="session", version="1.0.0", tools=[restart_tool, refresh_creds_tool]
     )
     mcp_servers["session"] = session_server
-    logger.info("Added session control MCP tools (restart_session)")
+    logger.info("Added session control MCP tools (restart_session, refresh_credentials)")
 
     # Rubric evaluation tool
     rubric_content, rubric_config = load_rubric_content(cwd_path)
