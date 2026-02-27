@@ -58,7 +58,6 @@ import {
 import { Label } from "@/components/ui/label";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { SessionHeader } from "./session-header";
-import { getPhaseColor } from "@/utils/session-helpers";
 import { SessionStatusDot } from "@/components/session-status-dot";
 import { AgentStatusIndicator } from "@/components/agent-status-indicator";
 import { useAgentStatus } from "@/hooks/use-agent-status";

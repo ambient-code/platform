@@ -32,6 +32,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/util/retry"
 )
 
 const (
@@ -900,36 +901,44 @@ func updateAgentStatus(projectName, sessionName, newStatus string) {
 		ctx, cancel := context.WithTimeout(context.Background(), activityUpdateTimeout)
 		defer cancel()
 
-		obj, err := handlers.DynamicClient.Resource(gvr).Namespace(projectName).Get(ctx, sessionName, metav1.GetOptions{})
-		if err != nil {
-			log.Printf("Agent status: failed to get session %s/%s: %v", projectName, sessionName, err)
-			return
-		}
-
-		status, _, _ := unstructured.NestedMap(obj.Object, "status")
-		if status == nil {
-			status = make(map[string]any)
-		}
-
-		// Skip RUN_FINISHED → "idle" if current status is "waiting_input".
-		// waiting_input is more informative and should persist until the next RUN_STARTED.
-		if newStatus == "idle" {
-			if current, _ := status["agentStatus"].(string); current == "waiting_input" {
-				return
+		var now time.Time
+		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			obj, err := handlers.DynamicClient.Resource(gvr).Namespace(projectName).Get(ctx, sessionName, metav1.GetOptions{})
+			if err != nil {
+				return err
 			}
-		}
 
-		status["agentStatus"] = newStatus
-		// Also update lastActivityTime to avoid a separate API call.
-		now := time.Now()
-		status["lastActivityTime"] = now.UTC().Format(time.RFC3339)
+			status, found, err := unstructured.NestedMap(obj.Object, "status")
+			if err != nil {
+				log.Printf("Agent status: failed to read nested status for %s/%s: %v", projectName, sessionName, err)
+				return nil // non-retryable
+			}
+			if !found || status == nil {
+				status = make(map[string]any)
+			}
 
-		if err := unstructured.SetNestedField(obj.Object, status, "status"); err != nil {
-			log.Printf("Agent status: failed to set status for %s/%s: %v", projectName, sessionName, err)
-			return
-		}
+			// Skip RUN_FINISHED → "idle" if current status is "waiting_input".
+			// waiting_input is more informative and should persist until the next RUN_STARTED.
+			if newStatus == "idle" {
+				if current, _ := status["agentStatus"].(string); current == "waiting_input" {
+					return nil
+				}
+			}
 
-		_, err = handlers.DynamicClient.Resource(gvr).Namespace(projectName).UpdateStatus(ctx, obj, metav1.UpdateOptions{})
+			status["agentStatus"] = newStatus
+			// Also update lastActivityTime to avoid a separate API call.
+			now = time.Now()
+			status["lastActivityTime"] = now.UTC().Format(time.RFC3339)
+
+			if err := unstructured.SetNestedField(obj.Object, status, "status"); err != nil {
+				log.Printf("Agent status: failed to set status for %s/%s: %v", projectName, sessionName, err)
+				return nil // non-retryable
+			}
+
+			_, err = handlers.DynamicClient.Resource(gvr).Namespace(projectName).UpdateStatus(ctx, obj, metav1.UpdateOptions{})
+			return err
+		})
+
 		if err != nil {
 			log.Printf("Agent status: failed to update agentStatus to %s for %s/%s: %v", newStatus, projectName, sessionName, err)
 		} else {
