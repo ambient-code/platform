@@ -85,5 +85,5 @@ When the session completes:
 
 ## Next Steps
 
-- **[Core Concepts](/getting-started/concepts/)** -- Understand workspaces, sessions, and workflows in depth.
-- **[GitHub Action](/extensions/github-action/)** -- Trigger sessions from CI/CD pipelines.
+- **[Core Concepts](concepts/)** -- Understand workspaces, sessions, and workflows in depth.
+- **[GitHub Action](../extensions/github-action/)** -- Trigger sessions from CI/CD pipelines.

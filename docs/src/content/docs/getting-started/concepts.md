@@ -13,7 +13,7 @@ Each workspace has:
 - **Members and roles** -- Control who can create sessions, manage integrations, or administer the workspace.
 - **Settings** -- Default model configuration and API keys.
 
-Learn more in [Workspaces](/concepts/workspaces/).
+Learn more in [Workspaces](../concepts/workspaces/).
 
 ## Sessions
 
@@ -32,7 +32,7 @@ While running, you can interact with the agent through a chat interface, observe
 - **Repositories** -- One or more git repos cloned into the session workspace.
 - **Workflow** -- An optional structured template guiding the agent's approach.
 
-Learn more in [Sessions](/concepts/sessions/).
+Learn more in [Sessions](../concepts/sessions/).
 
 ## Integrations
 
@@ -47,7 +47,7 @@ Integrations connect ACP to external services so agents can read from and write 
 
 Once connected, every session can use them.
 
-Learn more in [Integrations](/concepts/integrations/).
+Learn more in [Integrations](../concepts/integrations/).
 
 ## Workflows
 
@@ -62,7 +62,7 @@ Workflows are structured task templates that guide how an agent approaches a pro
 
 **Custom workflows** can be loaded from any git repository, letting teams codify their own processes and share them across the organization.
 
-Learn more in [Workflows](/concepts/workflows/).
+Learn more in [Workflows](../concepts/workflows/).
 
 ## Context and Artifacts
 
@@ -70,7 +70,7 @@ Learn more in [Workflows](/concepts/workflows/).
 
 **Artifacts** are the outputs a session produces: modified files, generated documents, pull requests, and any other files the agent creates during execution. You can browse and download artifacts from the session detail page.
 
-Learn more in [Context and Artifacts](/concepts/context-and-artifacts/).
+Learn more in [Context and Artifacts](../concepts/context-and-artifacts/).
 
 ## MCP Tools
 
@@ -80,5 +80,5 @@ MCP tools are configured at the workspace level and made available to all sessio
 
 ## Next Steps
 
-- **[Quickstart (UI)](/getting-started/quickstart-ui/)** -- Create your first session.
-- **[GitHub Action](/extensions/github-action/)** -- Automate sessions from CI/CD.
+- **[Quickstart (UI)](quickstart-ui/)** -- Create your first session.
+- **[GitHub Action](../extensions/github-action/)** -- Automate sessions from CI/CD.

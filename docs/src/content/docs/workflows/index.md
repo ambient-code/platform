@@ -22,10 +22,10 @@ The platform ships with these ready-to-use workflows:
 
 | Workflow | Description | Commands |
 |----------|-------------|----------|
-| [**Bugfix**](/workflows/bugfix/) | Systematic bug resolution with reproduction, diagnosis, fix, testing, and PR submission | `/assess`, `/reproduce`, `/diagnose`, `/fix`, `/test`, `/review`, `/document`, `/pr` |
-| [**Triage**](/workflows/triage/) | Issue backlog analysis with actionable reports and bulk operations | Conversational |
-| [**Spec-kit**](/workflows/spec-kit/) | Specification-driven development for feature planning and implementation | Key commands include `/speckit.specify`, `/speckit.plan`, `/speckit.tasks`, `/speckit.implement` |
-| [**PRD / RFE**](/workflows/prd-rfe/) | Product requirements documentation and RFE task breakdown | Key commands include `/prd.discover`, `/prd.create`, `/rfe.breakdown`, `/rfe.prioritize` |
+| [**Bugfix**](bugfix/) | Systematic bug resolution with reproduction, diagnosis, fix, testing, and PR submission | `/assess`, `/reproduce`, `/diagnose`, `/fix`, `/test`, `/review`, `/document`, `/pr` |
+| [**Triage**](triage/) | Issue backlog analysis with actionable reports and bulk operations | Conversational |
+| [**Spec-kit**](spec-kit/) | Specification-driven development for feature planning and implementation | Key commands include `/speckit.specify`, `/speckit.plan`, `/speckit.tasks`, `/speckit.implement` |
+| [**PRD / RFE**](prd-rfe/) | Product requirements documentation and RFE task breakdown | Key commands include `/prd.discover`, `/prd.create`, `/rfe.breakdown`, `/rfe.prioritize` |
 
 The platform also includes the **Amber Interview** workflow for collecting user feedback and a **Claude.md Generator** workflow. See the [workflows repository](https://github.com/ambient-code/workflows) for the full list.
 
@@ -41,4 +41,4 @@ You can also switch workflows on a running session from the session sidebar.
 
 ## Custom workflows
 
-If the built-in workflows do not cover your process, you can bring your own workflow from any Git repository. See the [Custom Workflows](/workflows/custom/) guide for details on creating and loading custom workflows.
+If the built-in workflows do not cover your process, you can bring your own workflow from any Git repository. See the [Custom Workflows](custom/) guide for details on creating and loading custom workflows.

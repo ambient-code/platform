@@ -61,7 +61,7 @@ Amber works with any prompt, but she is especially effective when paired with a 
 | **Spec-kit** | Generate a detailed specification from requirements, then implement to spec. |
 | **Amber Interview** | Gather context and requirements through a structured question-and-answer format. |
 
-See [Workflows](/concepts/workflows) for the full list and details on creating custom workflows.
+See [Workflows](../concepts/workflows) for the full list and details on creating custom workflows.
 
 ## Amber's capabilities
 

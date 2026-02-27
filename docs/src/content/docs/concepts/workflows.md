@@ -20,14 +20,14 @@ The platform ships with several ready-to-use workflows:
 
 | Workflow | What it does |
 |----------|-------------|
-| [**Bugfix**](/workflows/bugfix/) | Systematic multi-phase bug resolution: assess, reproduce, diagnose, fix, test, review, document, and submit a PR. |
-| [**Triage**](/workflows/triage/) | Analyzes an issue backlog, categorizes items by severity and effort, and produces actionable reports with bulk operations. |
-| [**Spec-kit**](/workflows/spec-kit/) | Specification-driven development: generates a detailed spec from requirements, plans implementation, breaks into tasks, and implements. |
-| [**PRD / RFE**](/workflows/prd-rfe/) | Creates Product Requirements Documents and breaks them into actionable Request for Enhancement items with prioritization. |
+| [**Bugfix**](../workflows/bugfix/) | Systematic multi-phase bug resolution: assess, reproduce, diagnose, fix, test, review, document, and submit a PR. |
+| [**Triage**](../workflows/triage/) | Analyzes an issue backlog, categorizes items by severity and effort, and produces actionable reports with bulk operations. |
+| [**Spec-kit**](../workflows/spec-kit/) | Specification-driven development: generates a detailed spec from requirements, plans implementation, breaks into tasks, and implements. |
+| [**PRD / RFE**](../workflows/prd-rfe/) | Creates Product Requirements Documents and breaks them into actionable Request for Enhancement items with prioritization. |
 | **Amber Interview** | Guided interview format for collecting user feedback through structured Q&A. (No detail page.) |
 | **Template** | A minimal starting point for building your own custom workflow. (No detail page.) |
 
-See the [Workflows section](/workflows/) for detailed documentation on the linked workflows above, including commands, phases, generated artifacts, and tips.
+See the [Workflows section](../workflows/) for detailed documentation on the linked workflows above, including commands, phases, generated artifacts, and tips.
 
 ### Using a workflow in a session
 
@@ -41,7 +41,7 @@ You can switch workflows on a running session at any time from the session sideb
 
 ## Custom workflows
 
-If the built-in workflows do not fit your process, you can create your own from any Git repository. See [Custom Workflows](/workflows/custom/) for the full guide, including directory structure, `ambient.json` configuration, and development workflow.
+If the built-in workflows do not fit your process, you can create your own from any Git repository. See [Custom Workflows](../workflows/custom/) for the full guide, including directory structure, `ambient.json` configuration, and development workflow.
 
 ### Quick overview
 
@@ -58,4 +58,4 @@ A custom workflow lives in a Git repository that the platform can access. The on
 
 To load a custom workflow, select **Custom Workflow...** from the workflow dropdown in the session sidebar and enter the Git URL, branch, and path.
 
-For detailed workflow internals, advanced configuration, and the full `ambient.json` schema, see [Custom Workflows](/workflows/custom/) and the [workflows repository](https://github.com/ambient-code/workflows).
+For detailed workflow internals, advanced configuration, and the full `ambient.json` schema, see [Custom Workflows](../workflows/custom/) and the [workflows repository](https://github.com/ambient-code/workflows).

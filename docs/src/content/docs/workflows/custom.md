@@ -189,7 +189,7 @@ Run without human intervention -- triggered by GitHub Actions, scheduled jobs, o
 - **Minimize reliance on slash commands.** The system prompt should drive the agent through all phases automatically. Workflows can still define commands for optional interactive use, but the autonomous path should not depend on a human typing them.
 - **Pass structured inputs.** Repo URLs, JQL queries, issue numbers -- not vague prompts.
 
-Most workflows support both autonomous and interactive use. For example, [Bugfix](/workflows/bugfix/) and [Triage](/workflows/triage/) work well autonomously but also provide slash commands for interactive sessions.
+Most workflows support both autonomous and interactive use. For example, [Bugfix](bugfix/) and [Triage](triage/) work well autonomously but also provide slash commands for interactive sessions.
 
 ### Interactive workflows
 
@@ -201,7 +201,7 @@ A human collaborates with the agent, guiding the process and providing judgment.
 - **Pause at decision points.** "Before submitting the PR, present the changes and wait for approval."
 - **Keep commands focused.** One command, one job. Don't bundle diagnose + fix + test into a single command.
 
-Examples: [Spec-kit](/workflows/spec-kit/), [PRD/RFE](/workflows/prd-rfe/).
+Examples: [Spec-kit](spec-kit/), [PRD/RFE](prd-rfe/).
 
 ---
 

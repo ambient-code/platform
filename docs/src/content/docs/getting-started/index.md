@@ -24,17 +24,17 @@ Sessions run as Kubernetes Jobs with full isolation. Each session gets its own w
 
 ## Key Capabilities
 
-**Workspaces** -- Multi-tenant project containers where teams organize sessions, configure integrations, and manage permissions. Learn more in [Workspaces](/concepts/workspaces/).
+**Workspaces** -- Multi-tenant project containers where teams organize sessions, configure integrations, and manage permissions. Learn more in [Workspaces](../concepts/workspaces/).
 
-**Sessions** -- AI agent execution environments with a chat interface, configurable model settings, timeout controls, and artifact output. Learn more in [Sessions](/concepts/sessions/).
+**Sessions** -- AI agent execution environments with a chat interface, configurable model settings, timeout controls, and artifact output. Learn more in [Sessions](../concepts/sessions/).
 
-**Integrations** -- Connect GitHub (App or PAT), GitLab (OAuth), Jira (OAuth), and Google Workspace (OAuth) so agents can read and write to your existing tools. Learn more in [Integrations](/concepts/integrations/).
+**Integrations** -- Connect GitHub (App or PAT), GitLab (OAuth), Jira (OAuth), and Google Workspace (OAuth) so agents can read and write to your existing tools. Learn more in [Integrations](../concepts/integrations/).
 
-**Workflows** -- Structured task templates that guide agent behavior. Use the built-in templates or point to a custom workflow in any git repo. Learn more in [Workflows](/concepts/workflows/).
+**Workflows** -- Structured task templates that guide agent behavior. Use the built-in templates or point to a custom workflow in any git repo. Learn more in [Workflows](../concepts/workflows/).
 
 **Multi-repo support** -- Clone multiple repositories into a single session for cross-repo analysis and changes.
 
 ## Getting Started
 
-- **[Quickstart (UI)](/getting-started/quickstart-ui/)** -- Create your first session through the web interface.
-- **[Core Concepts](/getting-started/concepts/)** -- Understand the building blocks before diving in.
+- **[Quickstart (UI)](quickstart-ui/)** -- Create your first session through the web interface.
+- **[Core Concepts](concepts/)** -- Understand the building blocks before diving in.
