@@ -30,18 +30,35 @@ Once the cluster is running, access the platform at `http://localhost:8080`. Ope
 
 ## Components
 
-| Component | Path | Technology |
-|-----------|------|------------|
-| Backend | `components/backend/` | Go + Gin |
-| Frontend | `components/frontend/` | NextJS + Shadcn |
-| Operator | `components/operator/` | Go + controller-runtime |
-| Runner | `components/runners/claude-code-runner/` | Python |
-| Public API | `components/public-api/` | Go + Gin |
-
 Each component has its own README with build instructions, test commands, and development tips.
+
+| Component | Technology | README |
+|-----------|------------|--------|
+| Backend | Go + Gin | [components/backend/](https://github.com/ambient-code/platform/tree/main/components/backend) |
+| Frontend | NextJS + Shadcn | [components/frontend/](https://github.com/ambient-code/platform/tree/main/components/frontend) |
+| Operator | Go + controller-runtime | [components/operator/](https://github.com/ambient-code/platform/tree/main/components/operator) |
+| Runner | Python | [components/runners/claude-code-runner/](https://github.com/ambient-code/platform/tree/main/components/runners/claude-code-runner) |
+| Public API | Go + Gin | [components/public-api/](https://github.com/ambient-code/platform/tree/main/components/public-api) |
+
+---
+
+## Developer docs
+
+Internal developer documentation lives alongside these docs in [`docs/internal/`](https://github.com/ambient-code/platform/tree/main/docs/internal):
+
+| Section | What's there |
+|---------|-------------|
+| [Architecture](https://github.com/ambient-code/platform/tree/main/docs/internal/architecture) | System diagrams, component structure, session lifecycle |
+| [ADRs](https://github.com/ambient-code/platform/tree/main/docs/internal/adr) | Architectural Decision Records (Kubernetes-native, user token auth, language choices, etc.) |
+| [Design](https://github.com/ambient-code/platform/tree/main/docs/internal/design) | Technical design docs (session reconciliation, runner-operator contract, status redesign) |
+| [Deployment](https://github.com/ambient-code/platform/tree/main/docs/internal/deployment) | OpenShift deployment, OAuth, git authentication, S3 storage |
+| [Integrations](https://github.com/ambient-code/platform/tree/main/docs/internal/integrations) | GitHub App, GitLab, Google Workspace setup |
+| [Local dev](https://github.com/ambient-code/platform/tree/main/docs/internal/developer/local-development) | Kind, CRC, Minikube, and hybrid development setup |
+| [Testing](https://github.com/ambient-code/platform/tree/main/docs/internal/testing) | E2E testing guide, test overview |
+| [Observability](https://github.com/ambient-code/platform/tree/main/docs/internal/observability) | Langfuse, operator metrics, Grafana dashboards |
 
 ---
 
 ## Contribution guidelines
 
-See `CONTRIBUTING.md` in the repository root for the full contribution workflow -- branching strategy, pull request conventions, code standards, and commit message format.
+See [`CONTRIBUTING.md`](https://github.com/ambient-code/platform/blob/main/CONTRIBUTING.md) for the full contribution workflow -- branching strategy, pull request conventions, code standards, and commit message format.
