@@ -520,6 +520,40 @@ func TestRingWriterPartialLines(t *testing.T) {
 	}
 }
 
+func TestSplitCommand(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected []string
+	}{
+		{"python script.py", []string{"python", "script.py"}},
+		{"sleep 30", []string{"sleep", "30"}},
+		{`python "my script.py"`, []string{"python", "my script.py"}},
+		{`python 'my script.py'`, []string{"python", "my script.py"}},
+		{`cmd "arg one" "arg two"`, []string{"cmd", "arg one", "arg two"}},
+		{`cmd "arg with 'nested'" rest`, []string{"cmd", "arg with 'nested'", "rest"}},
+		{"cmd\targ1\t\targ2", []string{"cmd", "arg1", "arg2"}},
+		{`  cmd  arg  `, []string{"cmd", "arg"}},
+		{"single", []string{"single"}},
+		{`"quoted cmd" arg`, []string{"quoted cmd", "arg"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := splitCommand(tt.input)
+			if len(got) != len(tt.expected) {
+				t.Fatalf("splitCommand(%q) = %v (len %d), want %v (len %d)",
+					tt.input, got, len(got), tt.expected, len(tt.expected))
+			}
+			for i := range got {
+				if got[i] != tt.expected[i] {
+					t.Errorf("splitCommand(%q)[%d] = %q, want %q",
+						tt.input, i, got[i], tt.expected[i])
+				}
+			}
+		})
+	}
+}
+
 func TestProcessExitEvent(t *testing.T) {
 	start, end := findAvailablePorts(t, 3)
 	tmpDir := t.TempDir()

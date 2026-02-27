@@ -285,11 +285,33 @@ func (m *Manager) Shutdown(ctx context.Context) {
 		close(done)
 	}()
 
+	deadline := time.After(10 * time.Second)
+	if d, ok := ctx.Deadline(); ok {
+		deadline = time.After(time.Until(d))
+	}
+
 	select {
 	case <-done:
 		m.logger.Info().Msg("all processes exited gracefully")
-	case <-time.After(10 * time.Second):
-		m.logger.Warn().Msg("sending SIGKILL to remaining processes")
+	case <-ctx.Done():
+		m.logger.Warn().Msg("context cancelled, sending SIGKILL to remaining processes")
+		for _, rp := range sessions {
+			select {
+			case <-rp.ExitCh:
+			default:
+				if rp.Cmd.Process != nil {
+					pgid, err := syscall.Getpgid(rp.Cmd.Process.Pid)
+					if err == nil {
+						_ = syscall.Kill(-pgid, syscall.SIGKILL)
+					}
+				}
+			}
+		}
+		for _, rp := range sessions {
+			<-rp.ExitCh
+		}
+	case <-deadline:
+		m.logger.Warn().Msg("shutdown deadline reached, sending SIGKILL to remaining processes")
 		for _, rp := range sessions {
 			select {
 			case <-rp.ExitCh:

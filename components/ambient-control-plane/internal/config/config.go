@@ -29,6 +29,10 @@ func Load() (*ControlPlaneConfig, error) {
 		Namespace:      envOrDefault("NAMESPACE", "ambient-code"),
 	}
 
+	if cfg.APIToken == "" {
+		return nil, fmt.Errorf("AMBIENT_API_TOKEN environment variable is required")
+	}
+
 	return cfg, nil
 }
 

@@ -128,6 +128,7 @@ func run() error {
 
 		go func() {
 			<-ctx.Done()
+			localReconciler.Close()
 			procManager.Shutdown(context.Background())
 		}()
 	} else {
@@ -161,10 +162,6 @@ func run() error {
 }
 
 func buildSDKClient(cfg *config.ControlPlaneConfig) (*sdkclient.Client, error) {
-	if cfg.APIToken == "" {
-		return nil, fmt.Errorf("AMBIENT_API_TOKEN is required")
-	}
-
 	project := cfg.APIProject
 	if project == "" {
 		project = "default"

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -110,7 +111,10 @@ func (r *SessionReconciler) handleAdded(ctx context.Context, session types.Sessi
 		return fmt.Errorf("checking for existing CR %s: %w", crName, err)
 	}
 
-	cr := sessionToUnstructured(session, r.kube.Namespace())
+	cr, err := sessionToUnstructured(session, r.kube.Namespace())
+	if err != nil {
+		return fmt.Errorf("building CR for session %s: %w", session.ID, err)
+	}
 	created, err := r.kube.CreateAgenticSession(ctx, cr)
 	if err != nil {
 		return fmt.Errorf("creating CR %s: %w", crName, err)
@@ -147,7 +151,10 @@ func (r *SessionReconciler) handleModified(ctx context.Context, session types.Se
 	existing, err := r.kube.GetAgenticSession(ctx, crName)
 	if errors.IsNotFound(err) {
 		r.logger.Info().Str("cr_name", crName).Msg("CR not found for modified session, creating")
-		cr := sessionToUnstructured(session, r.kube.Namespace())
+		cr, err := sessionToUnstructured(session, r.kube.Namespace())
+		if err != nil {
+			return fmt.Errorf("building CR for session %s: %w", session.ID, err)
+		}
 		created, err := r.kube.CreateAgenticSession(ctx, cr)
 		if err != nil {
 			return fmt.Errorf("creating CR %s: %w", crName, err)
@@ -205,7 +212,7 @@ func (r *SessionReconciler) writeStatusToAPI(ctx context.Context, sessionID stri
 		return
 	}
 
-	patch := crStatusToStatusPatch(cr)
+	patch := r.crStatusToStatusPatch(cr)
 
 	response, err := r.sdk.Sessions().UpdateStatus(ctx, sessionID, patch)
 	if err != nil {
@@ -223,7 +230,7 @@ func (r *SessionReconciler) writeStatusToAPI(ctx context.Context, sessionID stri
 		Msg("wrote status back to API server")
 }
 
-func crStatusToStatusPatch(cr *unstructured.Unstructured) map[string]any {
+func (r *SessionReconciler) crStatusToStatusPatch(cr *unstructured.Unstructured) map[string]any {
 	patch := types.NewSessionStatusPatchBuilder()
 
 	if uid := string(cr.GetUID()); uid != "" {
@@ -260,18 +267,24 @@ func crStatusToStatusPatch(cr *unstructured.Unstructured) map[string]any {
 	if conditions, found, _ := unstructured.NestedSlice(cr.Object, "status", "conditions"); found {
 		if data, err := json.Marshal(conditions); err == nil {
 			patch.Conditions(string(data))
+		} else {
+			r.logger.Warn().Err(err).Str("cr", cr.GetName()).Msg("failed to marshal conditions")
 		}
 	}
 
 	if reconciledRepos, found, _ := unstructured.NestedSlice(cr.Object, "status", "reconciledRepos"); found {
 		if data, err := json.Marshal(reconciledRepos); err == nil {
 			patch.ReconciledRepos(string(data))
+		} else {
+			r.logger.Warn().Err(err).Str("cr", cr.GetName()).Msg("failed to marshal reconciledRepos")
 		}
 	}
 
 	if reconciledWorkflow, found, _ := unstructured.NestedMap(cr.Object, "status", "reconciledWorkflow"); found {
 		if data, err := json.Marshal(reconciledWorkflow); err == nil {
 			patch.ReconciledWorkflow(string(data))
+		} else {
+			r.logger.Warn().Err(err).Str("cr", cr.GetName()).Msg("failed to marshal reconciledWorkflow")
 		}
 	}
 
@@ -298,7 +311,7 @@ func autoBranchName(session types.Session) string {
 	return "ambient/session"
 }
 
-func sessionToUnstructured(session types.Session, namespace string) *unstructured.Unstructured {
+func sessionToUnstructured(session types.Session, namespace string) (*unstructured.Unstructured, error) {
 	crName := crNameForSession(session)
 
 	obj := &unstructured.Unstructured{
@@ -321,7 +334,7 @@ func sessionToUnstructured(session types.Session, namespace string) *unstructure
 				labels[k] = v
 			}
 			if err := unstructured.SetNestedField(obj.Object, labels, "metadata", "labels"); err != nil {
-				return nil
+				return nil, fmt.Errorf("setting labels on CR %s: %w", crName, err)
 			}
 		}
 	}
@@ -334,12 +347,12 @@ func sessionToUnstructured(session types.Session, namespace string) *unstructure
 				annotations[k] = v
 			}
 			if err := unstructured.SetNestedField(obj.Object, annotations, "metadata", "annotations"); err != nil {
-				return nil
+				return nil, fmt.Errorf("setting annotations on CR %s: %w", crName, err)
 			}
 		}
 	}
 
-	return obj
+	return obj, nil
 }
 
 func buildSpec(session types.Session) map[string]interface{} {
@@ -474,10 +487,19 @@ func (r *ProjectReconciler) Reconcile(ctx context.Context, event informer.Resour
 	}
 }
 
+var validK8sName = regexp.MustCompile(`^[a-z0-9]([a-z0-9\-]*[a-z0-9])?$`)
+
+func isValidK8sName(name string) bool {
+	return len(name) <= 63 && validK8sName.MatchString(name)
+}
+
 func (r *ProjectReconciler) ensureNamespace(ctx context.Context, project types.Project) error {
 	nsName := project.Name
 	if nsName == "" {
 		return fmt.Errorf("project has no name")
+	}
+	if !isValidK8sName(nsName) {
+		return fmt.Errorf("project name %q is not a valid Kubernetes namespace name (must match RFC 1123 DNS label)", nsName)
 	}
 
 	existing, err := r.kube.GetNamespace(ctx, nsName)
@@ -626,6 +648,9 @@ func (r *ProjectSettingsReconciler) reconcileRoleBindings(ctx context.Context, p
 	namespace := project.Name
 	if namespace == "" {
 		return fmt.Errorf("project %s has no name", ps.ProjectID)
+	}
+	if !isValidK8sName(namespace) {
+		return fmt.Errorf("project name %q is not a valid Kubernetes namespace name", namespace)
 	}
 
 	for _, entry := range entries {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -21,6 +22,8 @@ type LocalSessionReconciler struct {
 	logger          zerolog.Logger
 	lastWritebackAt sync.Map
 	healthClient    *http.Client
+	shutdownCtx     context.Context
+	shutdownCancel  context.CancelFunc
 }
 
 func NewLocalSessionReconciler(
@@ -28,11 +31,14 @@ func NewLocalSessionReconciler(
 	pm *process.Manager,
 	logger zerolog.Logger,
 ) *LocalSessionReconciler {
+	ctx, cancel := context.WithCancel(context.Background())
 	return &LocalSessionReconciler{
 		sdk:            sdk,
 		processManager: pm,
 		logger:         logger.With().Str("reconciler", "local-sessions").Logger(),
 		healthClient:   &http.Client{Timeout: 1 * time.Second},
+		shutdownCtx:    ctx,
+		shutdownCancel: cancel,
 	}
 }
 
@@ -189,8 +195,12 @@ func (r *LocalSessionReconciler) stopSession(ctx context.Context, session types.
 	return nil
 }
 
+func (r *LocalSessionReconciler) Close() {
+	r.shutdownCancel()
+}
+
 func (r *LocalSessionReconciler) HandleProcessExit(event process.ProcessExitEvent) {
-	ctx := context.Background()
+	ctx := r.shutdownCtx
 
 	phase := PhaseCompleted
 	if event.ExitCode != 0 {
@@ -360,7 +370,7 @@ func buildConditions(phase, reason string) string {
 		runnerStarted = "True"
 	case PhaseFailed:
 		if reason != "" {
-			if len(reason) > 7 && reason[:7] == "Process" {
+			if strings.HasPrefix(reason, "Process") {
 				processSpawned = "False"
 			}
 			healthPassed = "False"
