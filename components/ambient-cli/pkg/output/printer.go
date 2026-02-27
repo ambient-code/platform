@@ -15,6 +15,18 @@ const (
 	FormatWide  Format = "wide"
 )
 
+func ParseFormat(s string) (Format, error) {
+	switch Format(s) {
+	case FormatTable, FormatJSON, FormatWide, "":
+		if s == "" {
+			return FormatTable, nil
+		}
+		return Format(s), nil
+	default:
+		return "", fmt.Errorf("unknown output format %q: valid formats are json, wide", s)
+	}
+}
+
 type Printer struct {
 	writer io.Writer
 	format Format

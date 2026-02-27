@@ -10,6 +10,7 @@ Kubernetes-native AI automation platform that orchestrates agentic sessions thro
 - `components/frontend/` - NextJS web UI for session management and monitoring
 - `components/operator/` - Go Kubernetes controller, watches CRDs and creates Jobs
 - `components/runners/claude-code-runner/` - Python runner executing Claude Code CLI in Job pods
+- `components/ambient-cli/` - Go CLI (`acpctl`), manages agentic sessions from the command line
 - `components/public-api/` - Stateless HTTP gateway, proxies to backend (no direct K8s access)
 - `components/manifests/` - Kustomize-based deployment manifests and overlays
 - `e2e/` - Cypress end-to-end tests

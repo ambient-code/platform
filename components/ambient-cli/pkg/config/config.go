@@ -11,7 +11,7 @@ type Config struct {
 	APIUrl      string `json:"api_url,omitempty"`
 	AccessToken string `json:"access_token,omitempty"`
 	Project     string `json:"project,omitempty"`
-	Pager       string `json:"pager,omitempty"`
+	Pager       string `json:"pager,omitempty"` // TODO: Wire pager support into output commands (e.g. pipe through less)
 }
 
 func Location() (string, error) {
@@ -72,7 +72,7 @@ func Save(cfg *Config) error {
 	return nil
 }
 
-func (c *Config) Disarm() {
+func (c *Config) ClearToken() {
 	c.AccessToken = ""
 }
 

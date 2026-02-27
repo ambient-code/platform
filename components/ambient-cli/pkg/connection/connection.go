@@ -2,6 +2,7 @@ package connection
 
 import (
 	"fmt"
+	"net/url"
 
 	"github.com/ambient-code/platform/components/ambient-cli/pkg/config"
 	"github.com/ambient-code/platform/components/ambient-cli/pkg/info"
@@ -28,6 +29,10 @@ func NewClientFromConfig() (*sdkclient.Client, error) {
 	}
 
 	apiURL := cfg.GetAPIUrl()
+	parsed, err := url.Parse(apiURL)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return nil, fmt.Errorf("invalid API URL %q: must include scheme and host (e.g. https://api.example.com)", apiURL)
+	}
 
 	return sdkclient.NewClient(
 		apiURL,
