@@ -113,7 +113,11 @@ func TestProjectSettingsGRPCWatch(t *testing.T) {
 			if err != nil {
 				return
 			}
-			received <- event
+			select {
+			case received <- event:
+			case <-watchCtx.Done():
+				return
+			}
 		}
 	}()
 
@@ -125,12 +129,44 @@ func TestProjectSettingsGRPCWatch(t *testing.T) {
 		GroupAccess: &groupAccess,
 	})
 	Expect(err).NotTo(HaveOccurred())
+	resourceID := created.GetMetadata().GetId()
 
 	select {
 	case event := <-received:
 		Expect(event.GetType()).To(Equal(pb.EventType_EVENT_TYPE_CREATED))
-		Expect(event.GetResourceId()).To(Equal(created.GetMetadata().GetId()))
+		Expect(event.GetResourceId()).To(Equal(resourceID))
+		Expect(event.GetProjectSettings()).NotTo(BeNil())
+		Expect(event.GetProjectSettings().GetGroupAccess()).To(Equal("admin"))
 	case <-time.After(10 * time.Second):
-		t.Fatal("Timed out waiting for watch event")
+		t.Fatal("Timed out waiting for CREATED watch event")
+	}
+
+	updatedAccess := "editor"
+	_, err = client.UpdateProjectSettings(ctx, &pb.UpdateProjectSettingsRequest{
+		Id:          resourceID,
+		GroupAccess: &updatedAccess,
+	})
+	Expect(err).NotTo(HaveOccurred())
+
+	select {
+	case event := <-received:
+		Expect(event.GetType()).To(Equal(pb.EventType_EVENT_TYPE_UPDATED))
+		Expect(event.GetResourceId()).To(Equal(resourceID))
+		Expect(event.GetProjectSettings()).NotTo(BeNil())
+		Expect(event.GetProjectSettings().GetGroupAccess()).To(Equal("editor"))
+	case <-time.After(10 * time.Second):
+		t.Fatal("Timed out waiting for UPDATED watch event")
+	}
+
+	_, err = client.DeleteProjectSettings(ctx, &pb.DeleteProjectSettingsRequest{Id: resourceID})
+	Expect(err).NotTo(HaveOccurred())
+
+	select {
+	case event := <-received:
+		Expect(event.GetType()).To(Equal(pb.EventType_EVENT_TYPE_DELETED))
+		Expect(event.GetResourceId()).To(Equal(resourceID))
+		Expect(event.GetProjectSettings()).To(BeNil())
+	case <-time.After(10 * time.Second):
+		t.Fatal("Timed out waiting for DELETED watch event")
 	}
 }

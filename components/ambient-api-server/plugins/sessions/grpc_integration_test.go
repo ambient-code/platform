@@ -172,7 +172,11 @@ func TestSessionGRPCWatch(t *testing.T) {
 			if err != nil {
 				return
 			}
-			received <- event
+			select {
+			case received <- event:
+			case <-watchCtx.Done():
+				return
+			}
 		}
 	}()
 
@@ -183,12 +187,43 @@ func TestSessionGRPCWatch(t *testing.T) {
 		Prompt: stringPtr("watch test"),
 	})
 	Expect(err).NotTo(HaveOccurred())
+	resourceID := created.GetMetadata().GetId()
 
 	select {
 	case event := <-received:
 		Expect(event.GetType()).To(Equal(pb.EventType_EVENT_TYPE_CREATED))
-		Expect(event.GetResourceId()).To(Equal(created.GetMetadata().GetId()))
+		Expect(event.GetResourceId()).To(Equal(resourceID))
+		Expect(event.GetSession()).NotTo(BeNil())
+		Expect(event.GetSession().GetName()).To(Equal("watch-test-session"))
 	case <-time.After(10 * time.Second):
-		t.Fatal("Timed out waiting for watch event")
+		t.Fatal("Timed out waiting for CREATED watch event")
+	}
+
+	_, err = client.UpdateSession(ctx, &pb.UpdateSessionRequest{
+		Id:   resourceID,
+		Name: stringPtr("updated-watch-session"),
+	})
+	Expect(err).NotTo(HaveOccurred())
+
+	select {
+	case event := <-received:
+		Expect(event.GetType()).To(Equal(pb.EventType_EVENT_TYPE_UPDATED))
+		Expect(event.GetResourceId()).To(Equal(resourceID))
+		Expect(event.GetSession()).NotTo(BeNil())
+		Expect(event.GetSession().GetName()).To(Equal("updated-watch-session"))
+	case <-time.After(10 * time.Second):
+		t.Fatal("Timed out waiting for UPDATED watch event")
+	}
+
+	_, err = client.DeleteSession(ctx, &pb.DeleteSessionRequest{Id: resourceID})
+	Expect(err).NotTo(HaveOccurred())
+
+	select {
+	case event := <-received:
+		Expect(event.GetType()).To(Equal(pb.EventType_EVENT_TYPE_DELETED))
+		Expect(event.GetResourceId()).To(Equal(resourceID))
+		Expect(event.GetSession()).To(BeNil())
+	case <-time.After(10 * time.Second):
+		t.Fatal("Timed out waiting for DELETED watch event")
 	}
 }

@@ -101,7 +101,11 @@ func TestProjectGRPCWatch(t *testing.T) {
 			if err != nil {
 				return
 			}
-			received <- event
+			select {
+			case received <- event:
+			case <-watchCtx.Done():
+				return
+			}
 		}
 	}()
 
@@ -111,12 +115,44 @@ func TestProjectGRPCWatch(t *testing.T) {
 		Name: "watch-test-project",
 	})
 	Expect(err).NotTo(HaveOccurred())
+	resourceID := created.GetMetadata().GetId()
 
 	select {
 	case event := <-received:
 		Expect(event.GetType()).To(Equal(pb.EventType_EVENT_TYPE_CREATED))
-		Expect(event.GetResourceId()).To(Equal(created.GetMetadata().GetId()))
+		Expect(event.GetResourceId()).To(Equal(resourceID))
+		Expect(event.GetProject()).NotTo(BeNil())
+		Expect(event.GetProject().GetName()).To(Equal("watch-test-project"))
 	case <-time.After(10 * time.Second):
-		t.Fatal("Timed out waiting for watch event")
+		t.Fatal("Timed out waiting for CREATED watch event")
+	}
+
+	updatedName := "updated-watch-project"
+	_, err = client.UpdateProject(ctx, &pb.UpdateProjectRequest{
+		Id:   resourceID,
+		Name: &updatedName,
+	})
+	Expect(err).NotTo(HaveOccurred())
+
+	select {
+	case event := <-received:
+		Expect(event.GetType()).To(Equal(pb.EventType_EVENT_TYPE_UPDATED))
+		Expect(event.GetResourceId()).To(Equal(resourceID))
+		Expect(event.GetProject()).NotTo(BeNil())
+		Expect(event.GetProject().GetName()).To(Equal("updated-watch-project"))
+	case <-time.After(10 * time.Second):
+		t.Fatal("Timed out waiting for UPDATED watch event")
+	}
+
+	_, err = client.DeleteProject(ctx, &pb.DeleteProjectRequest{Id: resourceID})
+	Expect(err).NotTo(HaveOccurred())
+
+	select {
+	case event := <-received:
+		Expect(event.GetType()).To(Equal(pb.EventType_EVENT_TYPE_DELETED))
+		Expect(event.GetResourceId()).To(Equal(resourceID))
+		Expect(event.GetProject()).To(BeNil())
+	case <-time.After(10 * time.Second):
+		t.Fatal("Timed out waiting for DELETED watch event")
 	}
 }
