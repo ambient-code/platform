@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-	"time"
 )
 
 type ControlPlaneConfig struct {
@@ -12,8 +11,7 @@ type ControlPlaneConfig struct {
 	APIToken       string
 	APIProject     string
 	GRPCServerAddr string
-	PollInterval   time.Duration
-	WorkerCount    int
+	GRPCUseTLS     bool
 	LogLevel       string
 	Kubeconfig     string
 	Namespace      string
@@ -25,22 +23,11 @@ func Load() (*ControlPlaneConfig, error) {
 		APIToken:       os.Getenv("AMBIENT_API_TOKEN"),
 		APIProject:     envOrDefault("AMBIENT_API_PROJECT", "default"),
 		GRPCServerAddr: envOrDefault("AMBIENT_GRPC_SERVER_ADDR", "localhost:8001"),
+		GRPCUseTLS:     os.Getenv("AMBIENT_GRPC_USE_TLS") == "true",
 		LogLevel:       envOrDefault("LOG_LEVEL", "info"),
 		Kubeconfig:     os.Getenv("KUBECONFIG"),
 		Namespace:      envOrDefault("NAMESPACE", "ambient-code"),
 	}
-
-	pollSeconds, err := strconv.Atoi(envOrDefault("POLL_INTERVAL_SECONDS", "2"))
-	if err != nil {
-		return nil, fmt.Errorf("invalid POLL_INTERVAL_SECONDS: %w", err)
-	}
-	cfg.PollInterval = time.Duration(pollSeconds) * time.Second
-
-	workers, err := strconv.Atoi(envOrDefault("WORKER_COUNT", "2"))
-	if err != nil {
-		return nil, fmt.Errorf("invalid WORKER_COUNT: %w", err)
-	}
-	cfg.WorkerCount = workers
 
 	return cfg, nil
 }
@@ -48,6 +35,7 @@ func Load() (*ControlPlaneConfig, error) {
 type LocalConfig struct {
 	WorkspaceRoot  string
 	ProxyAddr      string
+	CORSOrigin     string
 	PortRangeStart int
 	PortRangeEnd   int
 	RunnerCommand  string
@@ -60,6 +48,7 @@ func LoadLocalConfig() *LocalConfig {
 	cfg := &LocalConfig{
 		WorkspaceRoot: envOrDefault("LOCAL_WORKSPACE_ROOT", defaultWorkspaceRoot()),
 		ProxyAddr:     envOrDefault("LOCAL_PROXY_ADDR", "127.0.0.1:9080"),
+		CORSOrigin:    os.Getenv("CORS_ALLOWED_ORIGIN"),
 		RunnerCommand: envOrDefault("LOCAL_RUNNER_COMMAND", "python local_entry.py"),
 		BossURL:       os.Getenv("BOSS_URL"),
 		BossSpace:     envOrDefault("BOSS_SPACE", "default"),

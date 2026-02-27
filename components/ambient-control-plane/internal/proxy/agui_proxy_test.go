@@ -62,7 +62,7 @@ func testProxyWithManager(t *testing.T) (*AGUIProxy, *process.Manager, int) {
 
 	proxyPort := findFreePort(t)
 	proxyAddr := fmt.Sprintf("127.0.0.1:%d", proxyPort)
-	p := NewAGUIProxy(proxyAddr, mgr, logger)
+	p := NewAGUIProxy(proxyAddr, "", mgr, logger)
 
 	return p, mgr, proxyPort
 }
@@ -228,7 +228,7 @@ func TestProxyForwardsToRunner(t *testing.T) {
 
 	proxyPort := findFreePort(t)
 	proxyAddr := fmt.Sprintf("127.0.0.1:%d", proxyPort)
-	p := NewAGUIProxy(proxyAddr, mgr, logger)
+	p := NewAGUIProxy(proxyAddr, "", mgr, logger)
 
 	pCtx, pCancel := context.WithCancel(context.Background())
 	defer pCancel()
@@ -325,7 +325,7 @@ func TestProxySSEStreaming(t *testing.T) {
 
 	proxyPort := findFreePort(t)
 	proxyAddr := fmt.Sprintf("127.0.0.1:%d", proxyPort)
-	p := NewAGUIProxy(proxyAddr, mgr, logger)
+	p := NewAGUIProxy(proxyAddr, "", mgr, logger)
 
 	pCtx, pCancel := context.WithCancel(context.Background())
 	defer pCancel()
@@ -403,7 +403,7 @@ func TestProxyUnknownEndpoint(t *testing.T) {
 
 	proxyPort := findFreePort(t)
 	proxyAddr := fmt.Sprintf("127.0.0.1:%d", proxyPort)
-	p := NewAGUIProxy(proxyAddr, mgr, logger)
+	p := NewAGUIProxy(proxyAddr, "", mgr, logger)
 
 	pCtx, pCancel := context.WithCancel(context.Background())
 	defer pCancel()

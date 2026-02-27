@@ -320,7 +320,9 @@ func sessionToUnstructured(session types.Session, namespace string) *unstructure
 			for k, v := range labelMap {
 				labels[k] = v
 			}
-			_ = unstructured.SetNestedField(obj.Object, labels, "metadata", "labels")
+			if err := unstructured.SetNestedField(obj.Object, labels, "metadata", "labels"); err != nil {
+				return nil
+			}
 		}
 	}
 
@@ -331,7 +333,9 @@ func sessionToUnstructured(session types.Session, namespace string) *unstructure
 			for k, v := range annotationMap {
 				annotations[k] = v
 			}
-			_ = unstructured.SetNestedField(obj.Object, annotations, "metadata", "annotations")
+			if err := unstructured.SetNestedField(obj.Object, annotations, "metadata", "annotations"); err != nil {
+				return nil
+			}
 		}
 	}
 
@@ -611,9 +615,17 @@ func (r *ProjectSettingsReconciler) reconcileRoleBindings(ctx context.Context, p
 		return nil
 	}
 
-	namespace := ps.ProjectID
-	if namespace == "" {
+	if ps.ProjectID == "" {
 		return fmt.Errorf("project settings has no project_id")
+	}
+
+	project, err := r.sdk.Projects().Get(ctx, ps.ProjectID)
+	if err != nil {
+		return fmt.Errorf("looking up project %s for namespace: %w", ps.ProjectID, err)
+	}
+	namespace := project.Name
+	if namespace == "" {
+		return fmt.Errorf("project %s has no name", ps.ProjectID)
 	}
 
 	for _, entry := range entries {
@@ -631,20 +643,33 @@ func (r *ProjectSettingsReconciler) reconcileRoleBindings(ctx context.Context, p
 func (r *ProjectSettingsReconciler) ensureRoleBinding(ctx context.Context, namespace, rbName string, entry GroupAccessEntry) error {
 	existing, err := r.kube.GetRoleBinding(ctx, namespace, rbName)
 	if err == nil {
-		updated := existing.DeepCopy()
-		_ = unstructured.SetNestedField(updated.Object, entry.Role, "roleRef", "name")
-		subjects := []interface{}{
-			map[string]interface{}{
-				"kind":     "Group",
-				"name":     entry.Group,
-				"apiGroup": "rbac.authorization.k8s.io",
-			},
+		existingRole, _, _ := unstructured.NestedString(existing.Object, "roleRef", "name")
+		if existingRole != entry.Role {
+			if err := r.kube.DeleteRoleBinding(ctx, namespace, rbName); err != nil && !errors.IsNotFound(err) {
+				return fmt.Errorf("deleting role binding %s/%s for roleRef change: %w", namespace, rbName, err)
+			}
+			r.logger.Info().
+				Str("namespace", namespace).
+				Str("rolebinding", rbName).
+				Str("old_role", existingRole).
+				Str("new_role", entry.Role).
+				Msg("deleted role binding for immutable roleRef change, recreating")
+		} else {
+			updated := existing.DeepCopy()
+			subjects := []interface{}{
+				map[string]interface{}{
+					"kind":     "Group",
+					"name":     entry.Group,
+					"apiGroup": "rbac.authorization.k8s.io",
+				},
+			}
+			if err := unstructured.SetNestedSlice(updated.Object, subjects, "subjects"); err != nil {
+				return fmt.Errorf("setting subjects on role binding %s/%s: %w", namespace, rbName, err)
+			}
+			_, err = r.kube.UpdateRoleBinding(ctx, namespace, updated)
+			return err
 		}
-		_ = unstructured.SetNestedSlice(updated.Object, subjects, "subjects")
-		_, err = r.kube.UpdateRoleBinding(ctx, namespace, updated)
-		return err
-	}
-	if !errors.IsNotFound(err) {
+	} else if !errors.IsNotFound(err) {
 		return err
 	}
 

@@ -8,6 +8,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/ambient/platform/components/ambient-control-plane/internal/process"
 	"github.com/rs/zerolog"
@@ -15,14 +16,19 @@ import (
 
 type AGUIProxy struct {
 	listenAddr string
+	corsOrigin string
 	manager    *process.Manager
 	logger     zerolog.Logger
 	server     *http.Server
 }
 
-func NewAGUIProxy(listenAddr string, manager *process.Manager, logger zerolog.Logger) *AGUIProxy {
+func NewAGUIProxy(listenAddr, corsOrigin string, manager *process.Manager, logger zerolog.Logger) *AGUIProxy {
+	if corsOrigin == "" {
+		corsOrigin = "http://localhost:3000"
+	}
 	return &AGUIProxy{
 		listenAddr: listenAddr,
+		corsOrigin: corsOrigin,
 		manager:    manager,
 		logger:     logger.With().Str("component", "agui-proxy").Logger(),
 	}
@@ -37,8 +43,11 @@ func (p *AGUIProxy) Start(ctx context.Context) error {
 	})
 
 	p.server = &http.Server{
-		Addr:    p.listenAddr,
-		Handler: p.corsMiddleware(mux),
+		Addr:         p.listenAddr,
+		Handler:      p.corsMiddleware(mux),
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 120 * time.Second,
+		IdleTimeout:  120 * time.Second,
 	}
 
 	p.logger.Info().Str("addr", p.listenAddr).Msg("starting AG-UI proxy")
@@ -57,7 +66,7 @@ func (p *AGUIProxy) Start(ctx context.Context) error {
 
 func (p *AGUIProxy) corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "http://localhost:3000")
+		w.Header().Set("Access-Control-Allow-Origin", p.corsOrigin)
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		w.Header().Set("Access-Control-Expose-Headers", "Content-Type")

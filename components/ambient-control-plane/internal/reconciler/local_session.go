@@ -2,6 +2,7 @@ package reconciler
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"sync"
@@ -139,11 +140,16 @@ func (r *LocalSessionReconciler) spawnSession(ctx context.Context, session types
 	return nil
 }
 
+const (
+	healthCheckInterval = 500 * time.Millisecond
+	healthCheckAttempts = 30
+)
+
 func (r *LocalSessionReconciler) asyncHealthCheck(ctx context.Context, rp *process.RunnerProcess, sessionID string) {
-	ticker := time.NewTicker(500 * time.Millisecond)
+	ticker := time.NewTicker(healthCheckInterval)
 	defer ticker.Stop()
 
-	for i := 0; i < 30; i++ {
+	for i := 0; i < healthCheckAttempts; i++ {
 		select {
 		case <-rp.ExitCh:
 			r.logger.Warn().Str("session_id", sessionID).Msg("process exited during health check")
@@ -334,6 +340,12 @@ func slugify(name string) string {
 	return string(result)
 }
 
+type conditionEntry struct {
+	Type   string `json:"type"`
+	Status string `json:"status"`
+	Reason string `json:"reason,omitempty"`
+}
+
 func buildConditions(phase, reason string) string {
 	processSpawned := "True"
 	healthPassed := "Unknown"
@@ -362,8 +374,15 @@ func buildConditions(phase, reason string) string {
 		runnerStarted = "False"
 	}
 
-	return fmt.Sprintf(
-		`[{"type":"ProcessSpawned","status":"%s"},{"type":"HealthCheckPassed","status":"%s"},{"type":"RunnerStarted","status":"%s","reason":"%s"}]`,
-		processSpawned, healthPassed, runnerStarted, reason,
-	)
+	conditions := []conditionEntry{
+		{Type: "ProcessSpawned", Status: processSpawned},
+		{Type: "HealthCheckPassed", Status: healthPassed},
+		{Type: "RunnerStarted", Status: runnerStarted, Reason: reason},
+	}
+
+	data, err := json.Marshal(conditions)
+	if err != nil {
+		return "[]"
+	}
+	return string(data)
 }

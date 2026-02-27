@@ -2,6 +2,7 @@ package watcher
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"math"
 	"sync"
@@ -221,7 +222,7 @@ func protoEventType(t pb.EventType) EventType {
 	case pb.EventType_EVENT_TYPE_DELETED:
 		return EventDeleted
 	default:
-		return EventUpdated
+		return EventType(fmt.Sprintf("UNKNOWN(%d)", int32(t)))
 	}
 }
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"os"
 	"os/signal"
@@ -18,6 +19,7 @@ import (
 	"github.com/ambient/platform/components/ambient-control-plane/internal/watcher"
 	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
@@ -51,9 +53,8 @@ func run() error {
 		Str("build_time", buildTime).
 		Str("api_server", cfg.APIServerURL).
 		Str("grpc_server", cfg.GRPCServerAddr).
+		Bool("grpc_tls", cfg.GRPCUseTLS).
 		Str("mode", mode).
-		Dur("poll_interval", cfg.PollInterval).
-		Int("workers", cfg.WorkerCount).
 		Msg("starting ambient-control-plane")
 
 	sdk, err := buildSDKClient(cfg)
@@ -61,9 +62,16 @@ func run() error {
 		return fmt.Errorf("building SDK client: %w", err)
 	}
 
+	var grpcCreds grpc.DialOption
+	if cfg.GRPCUseTLS {
+		grpcCreds = grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12}))
+	} else {
+		grpcCreds = grpc.WithTransportCredentials(insecure.NewCredentials())
+	}
+
 	grpcConn, err := grpc.NewClient(
 		cfg.GRPCServerAddr,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpcCreds,
 	)
 	if err != nil {
 		return fmt.Errorf("connecting to gRPC server: %w", err)
@@ -101,7 +109,7 @@ func run() error {
 			BossSpace:     localCfg.BossSpace,
 		}, logger)
 
-		aguiProxy := proxy.NewAGUIProxy(localCfg.ProxyAddr, procManager, logger)
+		aguiProxy := proxy.NewAGUIProxy(localCfg.ProxyAddr, localCfg.CORSOrigin, procManager, logger)
 		localReconciler := reconciler.NewLocalSessionReconciler(sdk, procManager, logger)
 
 		registerReconciler(inf, localReconciler)
@@ -153,9 +161,8 @@ func run() error {
 }
 
 func buildSDKClient(cfg *config.ControlPlaneConfig) (*sdkclient.Client, error) {
-	token := cfg.APIToken
-	if token == "" {
-		token = "control-plane-internal"
+	if cfg.APIToken == "" {
+		return nil, fmt.Errorf("AMBIENT_API_TOKEN is required")
 	}
 
 	project := cfg.APIProject
@@ -165,7 +172,7 @@ func buildSDKClient(cfg *config.ControlPlaneConfig) (*sdkclient.Client, error) {
 
 	return sdkclient.NewClient(
 		cfg.APIServerURL,
-		token,
+		cfg.APIToken,
 		project,
 		sdkclient.WithTimeout(30*time.Second),
 	)

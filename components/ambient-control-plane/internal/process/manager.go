@@ -147,7 +147,7 @@ func (m *Manager) Spawn(ctx context.Context, sessionID string, env map[string]st
 
 	envSlice := m.buildEnv(sessionID, port, workspace, env)
 
-	parts := strings.Fields(m.runnerCmd)
+	parts := splitCommand(m.runnerCmd)
 	cmd := exec.CommandContext(procCtx, parts[0], parts[1:]...)
 	cmd.Dir = workspace
 	cmd.Env = envSlice
@@ -218,7 +218,9 @@ func (m *Manager) Stop(sessionID string) error {
 		return m.killProcess(rp)
 	}
 
-	syscall.Kill(-pgid, syscall.SIGTERM)
+	if err := syscall.Kill(-pgid, syscall.SIGTERM); err != nil {
+		return m.killProcess(rp)
+	}
 
 	select {
 	case <-rp.ExitCh:
@@ -240,7 +242,7 @@ func (m *Manager) killProcess(rp *RunnerProcess) error {
 		rp.Cancel()
 		return nil
 	}
-	syscall.Kill(-pgid, syscall.SIGKILL)
+	_ = syscall.Kill(-pgid, syscall.SIGKILL)
 	<-rp.ExitCh
 	return nil
 }
@@ -270,7 +272,7 @@ func (m *Manager) Shutdown(ctx context.Context) {
 		if rp.Cmd.Process != nil {
 			pgid, err := syscall.Getpgid(rp.Cmd.Process.Pid)
 			if err == nil {
-				syscall.Kill(-pgid, syscall.SIGTERM)
+				_ = syscall.Kill(-pgid, syscall.SIGTERM)
 			}
 		}
 	}
@@ -295,7 +297,7 @@ func (m *Manager) Shutdown(ctx context.Context) {
 				if rp.Cmd.Process != nil {
 					pgid, err := syscall.Getpgid(rp.Cmd.Process.Pid)
 					if err == nil {
-						syscall.Kill(-pgid, syscall.SIGKILL)
+						_ = syscall.Kill(-pgid, syscall.SIGKILL)
 					}
 				}
 			}
@@ -457,6 +459,39 @@ func (pp *PortPool) PortForSession(sessionID string) (int, bool) {
 	defer pp.mu.Unlock()
 	port, ok := pp.byID[sessionID]
 	return port, ok
+}
+
+func splitCommand(cmd string) []string {
+	var parts []string
+	var current []byte
+	var inQuote byte
+
+	for i := 0; i < len(cmd); i++ {
+		c := cmd[i]
+		if inQuote != 0 {
+			if c == inQuote {
+				inQuote = 0
+			} else {
+				current = append(current, c)
+			}
+		} else if c == '"' || c == '\'' {
+			inQuote = c
+		} else if c == ' ' || c == '\t' {
+			if len(current) > 0 {
+				parts = append(parts, string(current))
+				current = current[:0]
+			}
+		} else {
+			current = append(current, c)
+		}
+	}
+	if len(current) > 0 {
+		parts = append(parts, string(current))
+	}
+	if len(parts) == 0 {
+		return strings.Fields(cmd)
+	}
+	return parts
 }
 
 func isPortAvailable(port int) bool {

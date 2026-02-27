@@ -35,6 +35,7 @@ type Informer struct {
 	handlers     map[string][]EventHandler
 	mu           sync.RWMutex
 	logger       zerolog.Logger
+	eventCh      chan ResourceEvent
 
 	sessionCache         map[string]types.Session
 	projectCache         map[string]types.Project
@@ -47,6 +48,7 @@ func New(sdk *sdkclient.Client, watchManager *watcher.WatchManager, logger zerol
 		watchManager:         watchManager,
 		handlers:             make(map[string][]EventHandler),
 		logger:               logger.With().Str("component", "informer").Logger(),
+		eventCh:              make(chan ResourceEvent, 256),
 		sessionCache:         make(map[string]types.Session),
 		projectCache:         make(map[string]types.Project),
 		projectSettingsCache: make(map[string]types.ProjectSettings),
@@ -66,12 +68,37 @@ func (inf *Informer) Run(ctx context.Context) error {
 		inf.logger.Warn().Err(err).Msg("initial sync failed, will rely on watch events")
 	}
 
+	go inf.dispatchLoop(ctx)
+
 	inf.wireWatchHandlers()
 
 	inf.logger.Info().Msg("starting gRPC watch streams")
 	inf.watchManager.Run(ctx)
 
 	return ctx.Err()
+}
+
+func (inf *Informer) dispatchLoop(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case event := <-inf.eventCh:
+			inf.mu.RLock()
+			handlers := inf.handlers[event.Resource]
+			inf.mu.RUnlock()
+
+			for _, handler := range handlers {
+				if err := handler(ctx, event); err != nil {
+					inf.logger.Error().
+						Err(err).
+						Str("resource", event.Resource).
+						Str("event_type", string(event.Type)).
+						Msg("handler failed")
+				}
+			}
+		}
+	}
 }
 
 func (inf *Informer) initialSync(ctx context.Context) error {
@@ -102,8 +129,13 @@ func (inf *Informer) syncSessions(ctx context.Context) error {
 		opts.Page++
 	}
 
+	inf.mu.Lock()
 	for _, session := range allSessions {
 		inf.sessionCache[session.ID] = session
+	}
+	inf.mu.Unlock()
+
+	for _, session := range allSessions {
 		inf.dispatch(ctx, ResourceEvent{
 			Type:     EventAdded,
 			Resource: "sessions",
@@ -130,8 +162,13 @@ func (inf *Informer) syncProjects(ctx context.Context) error {
 		opts.Page++
 	}
 
+	inf.mu.Lock()
 	for _, project := range allProjects {
 		inf.projectCache[project.ID] = project
+	}
+	inf.mu.Unlock()
+
+	for _, project := range allProjects {
 		inf.dispatch(ctx, ResourceEvent{
 			Type:     EventAdded,
 			Resource: "projects",
@@ -158,8 +195,13 @@ func (inf *Informer) syncProjectSettings(ctx context.Context) error {
 		opts.Page++
 	}
 
+	inf.mu.Lock()
 	for _, ps := range allSettings {
 		inf.projectSettingsCache[ps.ID] = ps
+	}
+	inf.mu.Unlock()
+
+	for _, ps := range allSettings {
 		inf.dispatch(ctx, ResourceEvent{
 			Type:     EventAdded,
 			Resource: "project_settings",
@@ -184,84 +226,104 @@ func (inf *Informer) wireWatchHandlers() {
 }
 
 func (inf *Informer) handleSessionWatch(ctx context.Context, we watcher.WatchEvent) error {
+	var event ResourceEvent
+
+	inf.mu.Lock()
 	switch we.Type {
 	case watcher.EventCreated:
 		session := protoSessionToSDK(we.Object.(*pb.Session))
 		inf.sessionCache[session.ID] = session
-		inf.dispatch(ctx, ResourceEvent{Type: EventAdded, Resource: "sessions", Object: session})
+		event = ResourceEvent{Type: EventAdded, Resource: "sessions", Object: session}
 
 	case watcher.EventUpdated:
 		session := protoSessionToSDK(we.Object.(*pb.Session))
 		old := inf.sessionCache[session.ID]
 		inf.sessionCache[session.ID] = session
-		inf.dispatch(ctx, ResourceEvent{Type: EventModified, Resource: "sessions", Object: session, OldObject: old})
+		event = ResourceEvent{Type: EventModified, Resource: "sessions", Object: session, OldObject: old}
 
 	case watcher.EventDeleted:
 		if old, found := inf.sessionCache[we.ResourceID]; found {
 			delete(inf.sessionCache, we.ResourceID)
-			inf.dispatch(ctx, ResourceEvent{Type: EventDeleted, Resource: "sessions", Object: old})
+			event = ResourceEvent{Type: EventDeleted, Resource: "sessions", Object: old}
 		}
+	}
+	inf.mu.Unlock()
+
+	if event.Resource != "" {
+		inf.dispatch(ctx, event)
 	}
 	return nil
 }
 
 func (inf *Informer) handleProjectWatch(ctx context.Context, we watcher.WatchEvent) error {
+	var event ResourceEvent
+
+	inf.mu.Lock()
 	switch we.Type {
 	case watcher.EventCreated:
 		project := protoProjectToSDK(we.Object.(*pb.Project))
 		inf.projectCache[project.ID] = project
-		inf.dispatch(ctx, ResourceEvent{Type: EventAdded, Resource: "projects", Object: project})
+		event = ResourceEvent{Type: EventAdded, Resource: "projects", Object: project}
 
 	case watcher.EventUpdated:
 		project := protoProjectToSDK(we.Object.(*pb.Project))
 		old := inf.projectCache[project.ID]
 		inf.projectCache[project.ID] = project
-		inf.dispatch(ctx, ResourceEvent{Type: EventModified, Resource: "projects", Object: project, OldObject: old})
+		event = ResourceEvent{Type: EventModified, Resource: "projects", Object: project, OldObject: old}
 
 	case watcher.EventDeleted:
 		if old, found := inf.projectCache[we.ResourceID]; found {
 			delete(inf.projectCache, we.ResourceID)
-			inf.dispatch(ctx, ResourceEvent{Type: EventDeleted, Resource: "projects", Object: old})
+			event = ResourceEvent{Type: EventDeleted, Resource: "projects", Object: old}
 		}
+	}
+	inf.mu.Unlock()
+
+	if event.Resource != "" {
+		inf.dispatch(ctx, event)
 	}
 	return nil
 }
 
 func (inf *Informer) handleProjectSettingsWatch(ctx context.Context, we watcher.WatchEvent) error {
+	var event ResourceEvent
+
+	inf.mu.Lock()
 	switch we.Type {
 	case watcher.EventCreated:
 		ps := protoProjectSettingsToSDK(we.Object.(*pb.ProjectSettings))
 		inf.projectSettingsCache[ps.ID] = ps
-		inf.dispatch(ctx, ResourceEvent{Type: EventAdded, Resource: "project_settings", Object: ps})
+		event = ResourceEvent{Type: EventAdded, Resource: "project_settings", Object: ps}
 
 	case watcher.EventUpdated:
 		ps := protoProjectSettingsToSDK(we.Object.(*pb.ProjectSettings))
 		old := inf.projectSettingsCache[ps.ID]
 		inf.projectSettingsCache[ps.ID] = ps
-		inf.dispatch(ctx, ResourceEvent{Type: EventModified, Resource: "project_settings", Object: ps, OldObject: old})
+		event = ResourceEvent{Type: EventModified, Resource: "project_settings", Object: ps, OldObject: old}
 
 	case watcher.EventDeleted:
 		if old, found := inf.projectSettingsCache[we.ResourceID]; found {
 			delete(inf.projectSettingsCache, we.ResourceID)
-			inf.dispatch(ctx, ResourceEvent{Type: EventDeleted, Resource: "project_settings", Object: old})
+			event = ResourceEvent{Type: EventDeleted, Resource: "project_settings", Object: old}
 		}
+	}
+	inf.mu.Unlock()
+
+	if event.Resource != "" {
+		inf.dispatch(ctx, event)
 	}
 	return nil
 }
 
 func (inf *Informer) dispatch(ctx context.Context, event ResourceEvent) {
-	inf.mu.RLock()
-	handlers := inf.handlers[event.Resource]
-	inf.mu.RUnlock()
-
-	for _, handler := range handlers {
-		if err := handler(ctx, event); err != nil {
-			inf.logger.Error().
-				Err(err).
-				Str("resource", event.Resource).
-				Str("event_type", string(event.Type)).
-				Msg("handler failed")
-		}
+	select {
+	case inf.eventCh <- event:
+	case <-ctx.Done():
+	default:
+		inf.logger.Warn().
+			Str("resource", event.Resource).
+			Str("event_type", string(event.Type)).
+			Msg("event channel full, dropping event")
 	}
 }
 
