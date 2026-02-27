@@ -171,6 +171,8 @@ make kind-up LOCAL_VERTEX=true \
 **Reconfigure existing cluster:**
 ```bash
 # If cluster is already running, run the setup script directly
+# GOOGLE_APPLICATION_CREDENTIALS must be set (not just passed to make)
+export GOOGLE_APPLICATION_CREDENTIALS=~/.config/gcloud/application_default_credentials.json
 ./scripts/setup-vertex-kind.sh
 ```
 
@@ -206,9 +208,73 @@ CONTAINER_REGISTRY=quay.io/your-org
 make kind-down && make kind-up
 ```
 
+### Running Sessions (Not Just E2E Tests)
+
+To run interactive sessions from the UI (not just automated e2e tests), the runner
+needs credentials. How you set this up depends on your AI provider:
+
+**With Vertex AI (recommended):** Run `setup-vertex-kind.sh` (see [Vertex AI](#vertex-ai-optional)
+above). Sessions work out of the box — the operator automatically copies the
+`ambient-vertex` secret into each project namespace and skips `ambient-runner-secrets`
+validation.
+
+**With a direct Anthropic API key:** You must create the runner secret in each project
+namespace manually (the `e2e/.env` `ANTHROPIC_API_KEY` only applies to e2e test setup):
+```bash
+kubectl create secret generic ambient-runner-secrets \
+  --from-literal=ANTHROPIC_API_KEY=sk-ant-... \
+  -n <your-project-namespace>
+```
+
+### Running Frontend Locally (Fast Iteration)
+
+For frontend-only changes, skip image rebuilds entirely. Run NextJS with
+hot-reload against the kind cluster backend:
+
+```bash
+# Terminal 1: port-forward the backend
+kubectl port-forward svc/backend-service 8081:8080 -n ambient-code
+
+# Terminal 2: start the frontend dev server
+cd components/frontend
+npm install  # first time only
+
+# Create .env.local with the test user token
+# .env.local is gitignored — do NOT commit it (contains a live cluster token)
+TOKEN=$(kubectl get secret test-user-token -n ambient-code \
+  -o jsonpath='{.data.token}' | base64 -d)
+cat > .env.local <<EOF
+OC_TOKEN=$TOKEN
+BACKEND_URL=http://localhost:8081/api
+EOF
+
+npm run dev
+# Open http://localhost:3000
+```
+
+Every file save triggers instant hot-reload — no Docker build, no kind load,
+no rollout restart. See [Hybrid Local Development](hybrid.md) for more details.
+
 ---
 
 ## Troubleshooting
+
+### Insufficient memory
+
+**Symptom:** Pods stuck in `Pending` with "Insufficient memory" events.
+
+**Cause:** The single-node kind cluster has limited memory. Running all
+platform pods plus session runner pods can exceed it.
+
+**Fix:** Scale down non-essential deployments:
+```bash
+# These are safe to remove for local development
+kubectl scale deployment ambient-api-server ambient-api-server-db \
+  public-api unleash --replicas=0 -n ambient-code
+
+# If running frontend locally, also scale down the in-cluster frontend
+kubectl scale deployment frontend --replicas=0 -n ambient-code
+```
 
 ### Cluster won't start
 

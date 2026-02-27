@@ -485,20 +485,43 @@ For **frontend-only changes**, skip image rebuilds entirely. Run NextJS locally 
 
 ```bash
 # Terminal 1: port-forward backend from kind cluster
-kubectl port-forward svc/backend-service 8080:8080 -n ambient-code
+kubectl port-forward svc/backend-service 8081:8080 -n ambient-code
 
-# Terminal 2: run frontend dev server with auth token
+# Terminal 2: set up frontend with auth token
 cd components/frontend
-OC_TOKEN=$(kubectl get secret test-user-token -n ambient-code -o jsonpath='{.data.token}' | base64 -d) npm run dev
+npm install  # first time only
 
+# Create .env.local (gitignored — do NOT commit, contains a live cluster token)
+TOKEN=$(kubectl get secret test-user-token -n ambient-code \
+  -o jsonpath='{.data.token}' | base64 -d)
+cat > .env.local <<EOF
+OC_TOKEN=$TOKEN
+BACKEND_URL=http://localhost:8081/api
+EOF
+
+npm run dev
 # Open http://localhost:3000
 ```
 
 **Why this works:**
-- The frontend's `BACKEND_URL` defaults to `http://localhost:8080/api`
-- NextJS API routes proxy all requests to the backend at that URL
-- `OC_TOKEN` is injected into `X-Forwarded-Access-Token` headers for authentication
+- `BACKEND_URL` points NextJS API routes to the port-forwarded backend
+- `OC_TOKEN` is forwarded as both `X-Forwarded-Access-Token` and `Authorization: Bearer` headers (the backend's `ExtractServiceAccountFromAuth` reads `Authorization` for JWT parsing)
 - Every file save triggers instant hot-reload — no Docker build, no kind load, no rollout restart
+
+**Running sessions (not just browsing the UI):**
+
+With **Vertex AI** enabled (`setup-vertex-kind.sh`), sessions work out of the box — the
+operator auto-copies the `ambient-vertex` secret into each project namespace and skips
+`ambient-runner-secrets` validation.
+
+With a **direct Anthropic API key** (no Vertex), you must create the runner secret in
+each project namespace manually:
+
+```bash
+kubectl create secret generic ambient-runner-secrets \
+  --from-literal=ANTHROPIC_API_KEY=sk-ant-... \
+  -n <your-project-namespace>
+```
 
 **When to use:**
 - Frontend-only changes (components, styles, pages, API routes)
