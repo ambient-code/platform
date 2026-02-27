@@ -84,6 +84,13 @@ RESTART_TOOL_DESCRIPTION = (
     "broken state or need to reset."
 )
 
+REFRESH_CREDENTIALS_TOOL_DESCRIPTION = (
+    "Refresh all platform credentials (GitHub, Google, GitLab, Jira). "
+    "Call this tool if you encounter authentication errors such as 401/403 "
+    "responses, expired tokens, or MCP server auth failures. "
+    "This fetches fresh tokens from the platform backend."
+)
+
 CORRECTION_DETECTION_INSTRUCTIONS = (
     "## CRITICAL: Automatic Correction Logging\n\n"
     "**BEFORE acting on user feedback that changes something you already did or assumed, ALWAYS ask yourself: \"Is the user steering me away from a previous action or decision?\"**\n\n"
