@@ -787,3 +787,77 @@ class TestWorkflowContextTracking:
         assert metadata["workflow_url"] == "https://github.com/org/wf.git"
         assert "workflow_branch" not in metadata
         assert "workflow_path" not in metadata
+
+    @pytest.mark.asyncio
+    @patch("langfuse.propagate_attributes")
+    @patch("langfuse.Langfuse")
+    async def test_empty_derived_name_uses_unknown_and_omits_tag(
+        self, mock_langfuse_class, mock_propagate, manager, caplog
+    ):
+        """Test that a URL whose last segment is empty produces workflow_name='unknown' and no tag."""
+        mock_langfuse_class.return_value = Mock()
+        mock_ctx = Mock()
+        mock_ctx.__enter__ = Mock()
+        mock_ctx.__exit__ = Mock()
+        mock_propagate.return_value = mock_ctx
+
+        env_vars = {
+            "LANGFUSE_ENABLED": "true",
+            "LANGFUSE_PUBLIC_KEY": "pk-lf-public",
+            "LANGFUSE_SECRET_KEY": "sk-lf-secret",
+            "LANGFUSE_HOST": "http://localhost:3000",
+        }
+
+        # .git-only last segment strips to "" after removesuffix, producing an empty derived name
+        with patch.dict(os.environ, env_vars, clear=True):
+            with caplog.at_level(logging.INFO):
+                await manager.initialize(
+                    "test prompt",
+                    "test-namespace",
+                    workflow_url="https://github.com/org/.git",
+                )
+
+        call_kwargs = mock_propagate.call_args[1]
+        metadata = call_kwargs["metadata"]
+        tags = call_kwargs["tags"]
+
+        assert metadata["workflow_name"] == "unknown"
+        assert not any(t.startswith("workflow:") for t in tags)
+        assert "name could not be derived" in caplog.text
+
+    @pytest.mark.asyncio
+    @patch("langfuse.propagate_attributes")
+    @patch("langfuse.Langfuse")
+    async def test_workflow_values_are_sanitized(
+        self, mock_langfuse_class, mock_propagate, manager
+    ):
+        """Test that workflow metadata values have control characters stripped."""
+        mock_langfuse_class.return_value = Mock()
+        mock_ctx = Mock()
+        mock_ctx.__enter__ = Mock()
+        mock_ctx.__exit__ = Mock()
+        mock_propagate.return_value = mock_ctx
+
+        env_vars = {
+            "LANGFUSE_ENABLED": "true",
+            "LANGFUSE_PUBLIC_KEY": "pk-lf-public",
+            "LANGFUSE_SECRET_KEY": "sk-lf-secret",
+            "LANGFUSE_HOST": "http://localhost:3000",
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            await manager.initialize(
+                "test prompt",
+                "test-namespace",
+                workflow_url="https://github.com/org/wf.git",
+                workflow_branch="main\nX-Injected: header",
+                workflow_path="workflows/fix\x00evil",
+            )
+
+        call_kwargs = mock_propagate.call_args[1]
+        metadata = call_kwargs["metadata"]
+
+        assert "\n" not in metadata["workflow_branch"]
+        assert "\x00" not in metadata["workflow_path"]
+        assert metadata["workflow_branch"] == "mainX-Injected: header"
+        assert metadata["workflow_path"] == "workflows/fixevil"

@@ -51,6 +51,7 @@ from urllib.parse import urlparse
 from ambient_runner.platform.security_utils import (
     sanitize_exception_message,
     sanitize_model_name,
+    validate_and_sanitize_for_logging,
     with_sync_timeout,
 )
 
@@ -275,18 +276,27 @@ class ObservabilityManager:
             # read those and pass the values here so traces can be filtered by workflow.
             workflow_url = (workflow_url or "").strip()
             if workflow_url:
-                derived_name = workflow_url.rstrip("/").split("/")[-1].removesuffix(".git").strip()
+                raw_name = workflow_url.rstrip("/").split("/")[-1].removesuffix(".git").strip()
+                derived_name = sanitize_model_name(raw_name) or ""
                 metadata["workflow_name"] = derived_name or "unknown"
-                metadata["workflow_url"] = workflow_url
+                metadata["workflow_url"] = validate_and_sanitize_for_logging(workflow_url)
                 if workflow_branch:
-                    metadata["workflow_branch"] = workflow_branch.strip()
+                    metadata["workflow_branch"] = validate_and_sanitize_for_logging(
+                        workflow_branch.strip()
+                    )
                 if workflow_path:
-                    metadata["workflow_path"] = workflow_path.strip()
+                    metadata["workflow_path"] = validate_and_sanitize_for_logging(
+                        workflow_path.strip()
+                    )
                 if derived_name:
                     tags.append(f"workflow:{derived_name}")
-                logging.info(
-                    f"Langfuse: Workflow '{derived_name}' added to session metadata and tags"
-                )
+                    logging.info(
+                        f"Langfuse: Workflow '{derived_name}' added to session metadata and tags"
+                    )
+                else:
+                    logging.info(
+                        "Langfuse: Workflow added to session metadata (name could not be derived)"
+                    )
 
             # Enter propagate_attributes context - all traces share session_id/user_id/tags/metadata
             # Each turn will be a separate trace, automatically grouped by session_id
