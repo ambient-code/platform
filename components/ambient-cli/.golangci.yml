@@ -1,0 +1,30 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  enable:
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - misspell
+  disable:
+    - errcheck      # Disabled: too many false positives with defer cleanup
+
+  settings:
+    staticcheck:
+      checks: ["all", "-SA1019"]
+
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - staticcheck
+          - govet
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  new: false

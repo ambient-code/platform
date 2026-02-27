@@ -1,0 +1,64 @@
+// Package output provides formatters for CLI command results including table, JSON, and wide output.
+package output
+
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"os"
+)
+
+type Format string
+
+const (
+	FormatTable Format = "table"
+	FormatJSON  Format = "json"
+	FormatWide  Format = "wide"
+)
+
+func ParseFormat(s string) (Format, error) {
+	switch Format(s) {
+	case FormatTable, FormatJSON, "":
+		if s == "" {
+			return FormatTable, nil
+		}
+		return Format(s), nil
+	case FormatWide:
+		return "", fmt.Errorf("wide output format is not yet implemented; use table or json")
+	default:
+		return "", fmt.Errorf("unknown output format %q: valid formats are table, json", s)
+	}
+}
+
+type Printer struct {
+	writer io.Writer
+	format Format
+}
+
+func NewPrinter(format Format, writers ...io.Writer) *Printer {
+	w := io.Writer(os.Stdout)
+	if len(writers) > 0 && writers[0] != nil {
+		w = writers[0]
+	}
+	return &Printer{
+		writer: w,
+		format: format,
+	}
+}
+
+func (p *Printer) Writer() io.Writer {
+	return p.writer
+}
+
+func (p *Printer) Format() Format {
+	return p.format
+}
+
+func (p *Printer) PrintJSON(v any) error {
+	data, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal JSON: %w", err)
+	}
+	_, err = fmt.Fprintln(p.writer, string(data))
+	return err
+}
