@@ -357,7 +357,7 @@ Your PR should include:
 
 The recommended way to develop and test Ambient Code Platform locally is using **Kind (Kubernetes in Docker)**. This provides a lightweight Kubernetes environment that matches our CI/CD setup.
 
-> **Migrating from Minikube?** Kind is faster, lighter, and matches CI. See [Local Development Guide](docs-internal/developer/local-development/) for comparison.
+> **Migrating from Minikube?** Kind is faster, lighter, and matches CI. See [Local Development Guide](docs/internal/developer/local-development/) for comparison.
 
 ### Installing Kind and Prerequisites
 
@@ -426,7 +426,7 @@ make kind-up
 
 #### Alternative: Minikube (Older Approach)
 
-If Kind doesn't work for you, see the [Minikube setup guide](docs-internal/developer/local-development/minikube.md).
+If Kind doesn't work for you, see the [Minikube setup guide](docs/internal/developer/local-development/minikube.md).
 
 ### Additional Development Commands
 
@@ -553,7 +553,7 @@ If you're stuck or have questions:
    - [CLAUDE.md](CLAUDE.md) - Comprehensive development standards
    - [README.md](README.md) - Project overview and quick start
    - [BOOKMARKS.md](BOOKMARKS.md) - Developer bookmarks and reference index
-   - [docs-internal/](docs-internal/) - Architecture, design, and developer docs
+   - [docs/internal/](docs/internal/) - Architecture, design, and developer docs
 
 2. **Search existing issues:**
    - Check if your issue has already been reported

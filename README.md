@@ -39,12 +39,12 @@ User Creates Session -> Backend Creates CR -> Operator Spawns Job ->
 Pod Runs Claude CLI -> Results Stored in CR -> UI Displays Progress
 ```
 
-See [docs-internal/architecture/](docs-internal/architecture/) for detailed architecture documentation.
+See [docs/internal/architecture/](docs/internal/architecture/) for detailed architecture documentation.
 
 ## Documentation
 
 - **User documentation** -- see the [documentation site](docs/) built with Astro Starlight
-- **Developer/architecture docs** -- see [docs-internal/](docs-internal/)
+- **Developer/architecture docs** -- see [docs/internal/](docs/internal/)
 - **Component READMEs** -- each component has its own README with development instructions
 
 ### Key Links
@@ -54,9 +54,9 @@ See [docs-internal/architecture/](docs-internal/architecture/) for detailed arch
 | Contributing | [CONTRIBUTING.md](CONTRIBUTING.md) |
 | Development standards | [CLAUDE.md](CLAUDE.md) |
 | Developer bookmarks | [BOOKMARKS.md](BOOKMARKS.md) |
-| Architecture decisions | [docs-internal/adr/](docs-internal/adr/) |
-| Testing | [docs-internal/testing/](docs-internal/testing/) |
-| Local dev setup | [docs-internal/developer/local-development/](docs-internal/developer/local-development/) |
+| Architecture decisions | [docs/internal/adr/](docs/internal/adr/) |
+| Testing | [docs/internal/testing/](docs/internal/testing/) |
+| Local dev setup | [docs/internal/developer/local-development/](docs/internal/developer/local-development/) |
 
 ## Components
 
