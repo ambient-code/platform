@@ -1,3 +1,4 @@
+// Package delete implements the delete subcommand with interactive confirmation.
 package delete
 
 import (
@@ -34,6 +35,19 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 	resource := strings.ToLower(cmdArgs[0])
 	name := cmdArgs[1]
 
+	if !deleteArgs.yes {
+		fmt.Fprintf(cmd.OutOrStdout(), "Delete %s/%s? [y/N]: ", resource, name)
+		var confirm string
+		_, err := fmt.Fscanln(cmd.InOrStdin(), &confirm)
+		if err != nil {
+			return fmt.Errorf("interactive confirmation required; use --yes/-y to skip")
+		}
+		if strings.ToLower(confirm) != "y" {
+			fmt.Fprintln(cmd.OutOrStdout(), "Aborted.")
+			return nil
+		}
+	}
+
 	client, err := connection.NewClientFromConfig()
 	if err != nil {
 		return err
@@ -41,15 +55,6 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-
-	if !deleteArgs.yes {
-		fmt.Fprintf(cmd.OutOrStdout(), "Delete %s/%s? [y/N]: ", resource, name)
-		var confirm string
-		if _, err := fmt.Fscanln(cmd.InOrStdin(), &confirm); err != nil || strings.ToLower(confirm) != "y" {
-			fmt.Fprintln(cmd.OutOrStdout(), "Aborted.")
-			return nil
-		}
-	}
 
 	switch resource {
 	case "project", "projects", "proj":

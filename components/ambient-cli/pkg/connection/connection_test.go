@@ -29,7 +29,7 @@ func writeConfig(t *testing.T, cfg *config.Config) {
 
 func TestNewClientFromConfigEmptyToken(t *testing.T) {
 	writeConfig(t, &config.Config{
-		APIUrl:  "https://api.example.com",
+		APIUrl:  "https://acpctl-test.localhost:8000",
 		Project: "myproject",
 	})
 	_, err := NewClientFromConfig()

@@ -1,3 +1,4 @@
+// Package set implements the config set subcommand for writing configuration values.
 package set
 
 import (

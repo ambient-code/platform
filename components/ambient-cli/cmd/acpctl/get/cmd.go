@@ -1,3 +1,4 @@
+// Package get implements the get subcommand for listing and retrieving resources.
 package get
 
 import (

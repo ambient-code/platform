@@ -1,3 +1,4 @@
+// Package completion generates shell completion scripts for supported shells.
 package completion
 
 import (

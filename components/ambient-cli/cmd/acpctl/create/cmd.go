@@ -1,3 +1,4 @@
+// Package create implements the create subcommand for sessions and projects.
 package create
 
 import (
@@ -8,6 +9,7 @@ import (
 
 	"github.com/ambient-code/platform/components/ambient-cli/pkg/connection"
 	"github.com/ambient-code/platform/components/ambient-cli/pkg/output"
+	sdkclient "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/client"
 	sdktypes "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
 	"github.com/spf13/cobra"
 )
@@ -25,16 +27,16 @@ Valid resource types:
 }
 
 var createArgs struct {
-	name        string
-	prompt      string
-	repoURL     string
-	model       string
-	maxTokens   int
-	temperature float64
-	timeout     int
-	displayName string
-	description string
-	outputJSON  bool
+	name         string
+	prompt       string
+	repoURL      string
+	model        string
+	maxTokens    int
+	temperature  float64
+	timeout      int
+	displayName  string
+	description  string
+	outputFormat string
 }
 
 func init() {
@@ -47,17 +49,25 @@ func init() {
 	Cmd.Flags().IntVar(&createArgs.timeout, "timeout", 0, "Session timeout in seconds")
 	Cmd.Flags().StringVar(&createArgs.displayName, "display-name", "", "Project display name")
 	Cmd.Flags().StringVar(&createArgs.description, "description", "", "Project description")
-	Cmd.Flags().BoolVar(&createArgs.outputJSON, "json", false, "Output as JSON")
+	Cmd.Flags().StringVarP(&createArgs.outputFormat, "output", "o", "", "Output format: json")
 }
 
 func run(cmd *cobra.Command, cmdArgs []string) error {
 	resource := strings.ToLower(cmdArgs[0])
 
+	client, err := connection.NewClientFromConfig()
+	if err != nil {
+		return err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	switch resource {
 	case "session", "sess":
-		return createSession(cmd)
+		return createSession(cmd, ctx, client)
 	case "project", "proj":
-		return createProject(cmd)
+		return createProject(cmd, ctx, client)
 	default:
 		return fmt.Errorf("unknown resource type: %s\nValid types: session, project", cmdArgs[0])
 	}
@@ -71,7 +81,7 @@ func warnUnusedFlags(cmd *cobra.Command, names ...string) {
 	}
 }
 
-func createSession(cmd *cobra.Command) error {
+func createSession(cmd *cobra.Command, ctx context.Context, client *sdkclient.Client) error {
 	warnUnusedFlags(cmd, "display-name", "description")
 
 	if createArgs.name == "" {
@@ -103,20 +113,12 @@ func createSession(cmd *cobra.Command) error {
 		return fmt.Errorf("build session: %w", err)
 	}
 
-	client, err := connection.NewClientFromConfig()
-	if err != nil {
-		return err
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
 	created, err := client.Sessions().Create(ctx, session)
 	if err != nil {
 		return fmt.Errorf("create session: %w", err)
 	}
 
-	if createArgs.outputJSON {
+	if createArgs.outputFormat == "json" {
 		printer := output.NewPrinter(output.FormatJSON)
 		return printer.PrintJSON(created)
 	}
@@ -125,7 +127,7 @@ func createSession(cmd *cobra.Command) error {
 	return nil
 }
 
-func createProject(cmd *cobra.Command) error {
+func createProject(cmd *cobra.Command, ctx context.Context, client *sdkclient.Client) error {
 	warnUnusedFlags(cmd, "prompt", "repo-url", "model", "max-tokens", "temperature", "timeout")
 
 	if createArgs.name == "" {
@@ -146,20 +148,12 @@ func createProject(cmd *cobra.Command) error {
 		return fmt.Errorf("build project: %w", err)
 	}
 
-	client, err := connection.NewClientFromConfig()
-	if err != nil {
-		return err
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
 	created, err := client.Projects().Create(ctx, project)
 	if err != nil {
 		return fmt.Errorf("create project: %w", err)
 	}
 
-	if createArgs.outputJSON {
+	if createArgs.outputFormat == "json" {
 		printer := output.NewPrinter(output.FormatJSON)
 		return printer.PrintJSON(created)
 	}

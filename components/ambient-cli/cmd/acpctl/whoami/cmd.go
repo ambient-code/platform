@@ -1,3 +1,4 @@
+// Package whoami implements the whoami subcommand for displaying current user identity.
 package whoami
 
 import (

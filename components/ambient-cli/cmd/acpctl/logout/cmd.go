@@ -1,3 +1,4 @@
+// Package logout implements the logout subcommand for clearing saved credentials.
 package logout
 
 import (

@@ -1,3 +1,4 @@
+// Package stop implements the stop subcommand for halting agentic sessions.
 package stop
 
 import (

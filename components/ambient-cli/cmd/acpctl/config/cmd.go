@@ -1,3 +1,4 @@
+// Package config implements the config get and config set subcommands.
 package config
 
 import (

@@ -1,3 +1,4 @@
+// Package get implements the config get subcommand for reading configuration values.
 package get
 
 import (

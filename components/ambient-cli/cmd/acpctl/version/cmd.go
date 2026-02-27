@@ -1,3 +1,4 @@
+// Package version implements the version subcommand displaying build metadata.
 package version
 
 import (

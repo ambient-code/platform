@@ -18,13 +18,15 @@ const (
 
 func ParseFormat(s string) (Format, error) {
 	switch Format(s) {
-	case FormatTable, FormatJSON, FormatWide, "":
+	case FormatTable, FormatJSON, "":
 		if s == "" {
 			return FormatTable, nil
 		}
 		return Format(s), nil
+	case FormatWide:
+		return "", fmt.Errorf("wide output format is not yet implemented; use table or json")
 	default:
-		return "", fmt.Errorf("unknown output format %q: valid formats are table, json, wide", s)
+		return "", fmt.Errorf("unknown output format %q: valid formats are table, json", s)
 	}
 }
 

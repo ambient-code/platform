@@ -1,3 +1,4 @@
+// Package describe implements the describe subcommand for detailed resource output.
 package describe
 
 import (

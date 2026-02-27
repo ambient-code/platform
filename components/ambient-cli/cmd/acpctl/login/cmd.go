@@ -1,3 +1,4 @@
+// Package login implements the login subcommand for saving credentials.
 package login
 
 import (
@@ -58,8 +59,12 @@ func run(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("save config: %w", err)
 	}
 
-	location, _ := config.Location()
-	fmt.Fprintf(cmd.OutOrStdout(), "Login successful. Configuration saved to %s\n", location)
+	location, err := config.Location()
+	if err != nil {
+		fmt.Fprintln(cmd.OutOrStdout(), "Login successful. Configuration saved.")
+	} else {
+		fmt.Fprintf(cmd.OutOrStdout(), "Login successful. Configuration saved to %s\n", location)
+	}
 
 	if exp, err := config.TokenExpiry(args.token); err == nil && !exp.IsZero() {
 		if time.Until(exp) < 0 {
