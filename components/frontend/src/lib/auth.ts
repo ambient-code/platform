@@ -48,6 +48,12 @@ export function buildForwardHeaders(request: Request, extra?: Record<string, str
   if (xfUsername) headers['X-Forwarded-Preferred-Username'] = xfUsername;
   if (xfGroups) headers['X-Forwarded-Groups'] = xfGroups;
   if (project) headers['X-OpenShift-Project'] = project;
+  // Set both headers so the backend can use whichever it needs:
+  // - X-Forwarded-Access-Token is the primary token the backend trusts
+  // - Authorization is needed by ExtractServiceAccountFromAuth / updateAccessKeyLastUsedAnnotation
+  // In production behind the OAuth proxy, Authorization may already carry an OAuth
+  // session token; overwriting it with the K8s token is intentional — it ensures
+  // the backend sees a consistent K8s-compatible token in both headers.
   if (token) {
     headers['X-Forwarded-Access-Token'] = token;
     headers['Authorization'] = `Bearer ${token}`;
@@ -91,7 +97,10 @@ export function buildForwardHeaders(request: Request, extra?: Record<string, str
         }
         if (needsToken) {
           const t = await tryExec('oc whoami -t');
-          if (t) headers['X-Forwarded-Access-Token'] = t;
+          if (t) {
+            headers['X-Forwarded-Access-Token'] = t;
+            headers['Authorization'] = `Bearer ${t}`;
+          }
         }
       } catch {
         // ignore
@@ -140,7 +149,10 @@ export async function buildForwardHeadersAsync(request: Request, extra?: Record<
     }
     if (needsToken) {
       const t = await tryExec('oc whoami -t');
-      if (t) headers['X-Forwarded-Access-Token'] = t;
+      if (t) {
+        headers['X-Forwarded-Access-Token'] = t;
+        headers['Authorization'] = `Bearer ${t}`;
+      }
     }
   }
 
