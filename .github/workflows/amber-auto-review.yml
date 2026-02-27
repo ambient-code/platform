@@ -37,6 +37,18 @@ jobs:
           ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 0
 
+      - name: Determine command file path (security)
+        id: command-path
+        run: |
+          # Deterministic security logic - no AI reasoning involved
+          if [ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]; then
+            echo "Fork PR detected - using base ref for security"
+            echo "path=base-ref/.claude/commands/amber.review.md" >> $GITHUB_OUTPUT
+          else
+            echo "Same repo PR - allowing PR changes for testing"
+            echo "path=.claude/commands/amber.review.md" >> $GITHUB_OUTPUT
+          fi
+
       - name: Minimize old Claude review comments
         continue-on-error: true
         env:
@@ -85,14 +97,7 @@ jobs:
           claude_args: |
             --allowedTools "Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh issue list:*)"
           prompt: |
-            ## Security Note
-            For fork PRs, read the command file from base-ref/.claude/commands/amber.review.md 
-            For same-repo PRs, read from .claude/commands/amber.review.md
-            This prevents prompt injection while allowing prompt improvements to be tested.
-            
-            Fork PR: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
-            
-            Read the appropriate command file and follow its instructions exactly.
+            Read ${{ steps.command-path.outputs.path }} and follow its instructions exactly.
             Arguments: REPO: ${{ github.repository }}  PR NUMBER: ${{ github.event.pull_request.number }}
             After completing the review, use gh pr comment to post your findings.
 
