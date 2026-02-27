@@ -63,7 +63,12 @@ func LoadLocalConfig() *LocalConfig {
 	cfg.PortRangeStart = 9100
 	cfg.PortRangeEnd = 9199
 	if portRange := os.Getenv("LOCAL_PORT_RANGE"); portRange != "" {
-		_, _ = fmt.Sscanf(portRange, "%d-%d", &cfg.PortRangeStart, &cfg.PortRangeEnd)
+		n, _ := fmt.Sscanf(portRange, "%d-%d", &cfg.PortRangeStart, &cfg.PortRangeEnd)
+		if n != 2 || cfg.PortRangeStart > cfg.PortRangeEnd {
+			cfg.PortRangeStart = 9100
+			cfg.PortRangeEnd = 9199
+			fmt.Fprintf(os.Stderr, "WARNING: invalid LOCAL_PORT_RANGE %q, using default 9100-9199\n", portRange)
+		}
 	}
 
 	maxSessions, err := strconv.Atoi(envOrDefault("LOCAL_MAX_SESSIONS", "10"))

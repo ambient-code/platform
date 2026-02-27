@@ -70,10 +70,6 @@ func buildRestConfig(kubeconfig string) (*rest.Config, error) {
 		return clientcmd.BuildConfigFromFlags("", kubeconfig)
 	}
 
-	if envPath := os.Getenv("KUBECONFIG"); envPath != "" {
-		return clientcmd.BuildConfigFromFlags("", envPath)
-	}
-
 	home, _ := os.UserHomeDir()
 	localPath := home + "/.kube/config"
 	if _, err := os.Stat(localPath); err == nil {

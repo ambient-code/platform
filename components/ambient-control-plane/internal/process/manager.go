@@ -488,6 +488,11 @@ func (pp *PortPool) PortForSession(sessionID string) (int, bool) {
 }
 
 func splitCommand(cmd string) []string {
+	cmd = strings.TrimSpace(cmd)
+	if cmd == "" {
+		return nil
+	}
+
 	var parts []string
 	var current []byte
 	var inQuote byte

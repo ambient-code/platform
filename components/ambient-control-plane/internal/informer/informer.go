@@ -3,6 +3,7 @@ package informer
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 
 	sdkclient "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/client"
@@ -102,14 +103,21 @@ func (inf *Informer) dispatchLoop(ctx context.Context) {
 }
 
 func (inf *Informer) initialSync(ctx context.Context) error {
+	var errs []string
 	if err := inf.syncSessions(ctx); err != nil {
 		inf.logger.Error().Err(err).Msg("initial session sync failed")
+		errs = append(errs, err.Error())
 	}
 	if err := inf.syncProjects(ctx); err != nil {
 		inf.logger.Error().Err(err).Msg("initial project sync failed")
+		errs = append(errs, err.Error())
 	}
 	if err := inf.syncProjectSettings(ctx); err != nil {
 		inf.logger.Error().Err(err).Msg("initial project_settings sync failed")
+		errs = append(errs, err.Error())
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("initial sync failures: %s", strings.Join(errs, "; "))
 	}
 	return nil
 }

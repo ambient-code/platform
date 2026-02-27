@@ -136,7 +136,10 @@ func (r *SessionReconciler) isWritebackEcho(session types.Session) bool {
 	if !ok {
 		return false
 	}
-	lastWB := val.(time.Time)
+	lastWB, ok2 := val.(time.Time)
+	if !ok2 {
+		return false
+	}
 	return session.UpdatedAt.Truncate(time.Microsecond).Equal(lastWB)
 }
 
