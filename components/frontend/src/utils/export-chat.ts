@@ -170,6 +170,14 @@ export function convertEventsToMarkdown(
 
   const blocks = assembleBlocks(exportData.aguiEvents ?? []);
 
+  // Prepend the session's initial prompt as the first user message.
+  // It is auto-executed by the runner with hidden=true, so it never appears
+  // in the TEXT_MESSAGE event stream — but it should be visible in exports.
+  const initialPrompt = session.spec.initialPrompt?.trim();
+  if (initialPrompt) {
+    blocks.unshift({ kind: 'message', role: 'user', content: initialPrompt });
+  }
+
   if (blocks.length === 0) {
     lines.push('*No conversation content found.*');
     return lines.join('\n');
