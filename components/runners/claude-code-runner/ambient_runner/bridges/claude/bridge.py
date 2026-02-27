@@ -395,6 +395,9 @@ class ClaudeBridge(PlatformBridge):
                     "AGENTIC_SESSION_NAMESPACE", "unknown"
                 ),
                 model=configured_model,
+                workflow_url=self._context.get_env("ACTIVE_WORKFLOW_GIT_URL", ""),
+                workflow_branch=self._context.get_env("ACTIVE_WORKFLOW_BRANCH", ""),
+                workflow_path=self._context.get_env("ACTIVE_WORKFLOW_PATH", ""),
             )
             self._obs = obs
         except Exception as e:
