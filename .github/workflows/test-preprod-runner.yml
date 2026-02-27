@@ -1,0 +1,12 @@
+name: "TEST: preprod runner"
+on:
+  push:
+    paths:
+      - .github/workflows/test-preprod-runner.yml
+  workflow_dispatch:
+
+jobs:
+  hello:
+    runs-on: [self-hosted, preprod]
+    steps:
+      - run: echo "Hello from $(hostname)"
