@@ -154,7 +154,7 @@ func (h *projectSettingsGRPCHandler) WatchProjectSettings(req *pb.WatchProjectSe
 				return nil
 			}
 
-			if event.Source != "ProjectSettings" {
+			if event.Source != EventSource {
 				continue
 			}
 

@@ -165,7 +165,7 @@ func (h *projectGRPCHandler) WatchProjects(req *pb.WatchProjectsRequest, stream 
 				return nil
 			}
 
-			if event.Source != "Projects" {
+			if event.Source != EventSource {
 				continue
 			}
 

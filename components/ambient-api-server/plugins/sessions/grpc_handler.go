@@ -265,7 +265,7 @@ func (h *sessionGRPCHandler) WatchSessions(req *pb.WatchSessionsRequest, stream 
 				return nil
 			}
 
-			if event.Source != "Sessions" {
+			if event.Source != EventSource {
 				continue
 			}
 

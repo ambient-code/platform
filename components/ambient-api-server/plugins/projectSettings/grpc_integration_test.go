@@ -27,7 +27,7 @@ func TestProjectSettingsGRPCCrud(t *testing.T) {
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	Expect(err).NotTo(HaveOccurred())
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	client := pb.NewProjectSettingsServiceClient(conn)
 	projectClient := pb.NewProjectServiceClient(conn)
@@ -89,7 +89,7 @@ func TestProjectSettingsGRPCWatch(t *testing.T) {
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	Expect(err).NotTo(HaveOccurred())
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	projectClient := pb.NewProjectServiceClient(conn)
 	client := pb.NewProjectSettingsServiceClient(conn)

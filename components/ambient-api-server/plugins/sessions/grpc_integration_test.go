@@ -27,7 +27,7 @@ func TestSessionGRPCCrud(t *testing.T) {
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	Expect(err).NotTo(HaveOccurred())
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	client := pb.NewSessionServiceClient(conn)
 	ctx := metadata.AppendToOutgoingContext(context.Background(), "authorization", "Bearer "+token)
@@ -89,7 +89,7 @@ func TestSessionGRPCUpdateStatus(t *testing.T) {
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	Expect(err).NotTo(HaveOccurred())
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	client := pb.NewSessionServiceClient(conn)
 	ctx := metadata.AppendToOutgoingContext(context.Background(), "authorization", "Bearer "+token)
@@ -119,7 +119,7 @@ func TestSessionGRPCErrors(t *testing.T) {
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	Expect(err).NotTo(HaveOccurred())
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	client := pb.NewSessionServiceClient(conn)
 	ctx := metadata.AppendToOutgoingContext(context.Background(), "authorization", "Bearer "+token)
@@ -154,7 +154,7 @@ func TestSessionGRPCWatch(t *testing.T) {
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	Expect(err).NotTo(HaveOccurred())
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	client := pb.NewSessionServiceClient(conn)
 	ctx := metadata.AppendToOutgoingContext(context.Background(), "authorization", "Bearer "+token)

@@ -157,7 +157,7 @@ func (h *userGRPCHandler) WatchUsers(req *pb.WatchUsersRequest, stream grpc.Serv
 				return nil
 			}
 
-			if event.Source != "Users" {
+			if event.Source != EventSource {
 				continue
 			}
 

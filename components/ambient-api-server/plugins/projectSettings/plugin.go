@@ -18,6 +18,8 @@ import (
 	"google.golang.org/grpc"
 )
 
+const EventSource = "ProjectSettings"
+
 type ServiceLocator func() ProjectSettingsService
 
 func NewServiceLocator(env *environments.Env) ServiceLocator {
@@ -60,11 +62,11 @@ func init() {
 		router.Use(authzMiddleware.AuthorizeApi)
 	})
 
-	pkgserver.RegisterController("ProjectSettings", func(manager *controllers.KindControllerManager, services pkgserver.ServicesInterface) {
+	pkgserver.RegisterController(EventSource, func(manager *controllers.KindControllerManager, services pkgserver.ServicesInterface) {
 		psServices := Service(services.(*environments.Services))
 
 		manager.Add(&controllers.ControllerConfig{
-			Source: "ProjectSettings",
+			Source: EventSource,
 			Handlers: map[api.EventType][]controllers.ControllerHandlerFunc{
 				api.CreateEventType: {psServices.OnUpsert},
 				api.UpdateEventType: {psServices.OnUpsert},
