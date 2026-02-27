@@ -1,3 +1,4 @@
+// Package config manages CLI configuration persistence and environment variable overrides.
 package config
 
 import (
@@ -77,28 +78,28 @@ func (c *Config) ClearToken() {
 }
 
 func (c *Config) GetAPIUrl() string {
-	if c.APIUrl != "" {
-		return c.APIUrl
-	}
 	if env := os.Getenv("AMBIENT_API_URL"); env != "" {
 		return env
+	}
+	if c.APIUrl != "" {
+		return c.APIUrl
 	}
 	return "http://localhost:8000"
 }
 
 func (c *Config) GetProject() string {
-	if c.Project != "" {
-		return c.Project
-	}
 	if env := os.Getenv("AMBIENT_PROJECT"); env != "" {
 		return env
+	}
+	if c.Project != "" {
+		return c.Project
 	}
 	return ""
 }
 
 func (c *Config) GetToken() string {
-	if c.AccessToken != "" {
-		return c.AccessToken
+	if env := os.Getenv("AMBIENT_TOKEN"); env != "" {
+		return env
 	}
-	return os.Getenv("AMBIENT_TOKEN")
+	return c.AccessToken
 }

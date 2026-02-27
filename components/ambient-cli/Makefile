@@ -25,8 +25,8 @@ fmt:
 vet:
 	go vet ./...
 
-lint: fmt vet
+lint: vet
 	golangci-lint run
 
 test:
-	go test ./...
+	go test -race ./...

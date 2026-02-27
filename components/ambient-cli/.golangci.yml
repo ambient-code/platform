@@ -11,7 +11,7 @@ linters:
     - unused
     - misspell
   disable:
-    - errcheck
+    - errcheck      # Disabled: too many false positives with defer cleanup
 
   settings:
     staticcheck:

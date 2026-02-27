@@ -100,6 +100,14 @@ func TestGetAPIUrlFromEnv(t *testing.T) {
 	}
 }
 
+func TestGetAPIUrlEnvOverridesConfig(t *testing.T) {
+	t.Setenv("AMBIENT_API_URL", "https://env.example.com")
+	cfg := &Config{APIUrl: "https://config.example.com"}
+	if got := cfg.GetAPIUrl(); got != "https://env.example.com" {
+		t.Errorf("env should override config: got %s, want https://env.example.com", got)
+	}
+}
+
 func TestGetTokenFromConfig(t *testing.T) {
 	t.Setenv("AMBIENT_TOKEN", "")
 	cfg := &Config{AccessToken: "my-token"}

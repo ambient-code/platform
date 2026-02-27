@@ -1,3 +1,4 @@
+// Package connection creates authenticated SDK clients from CLI configuration.
 package connection
 
 import (
