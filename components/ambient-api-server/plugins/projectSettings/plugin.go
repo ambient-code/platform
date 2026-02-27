@@ -3,6 +3,7 @@ package projectSettings
 import (
 	"net/http"
 
+	pb "github.com/ambient/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1"
 	"github.com/gorilla/mux"
 	"github.com/openshift-online/rh-trex-ai/pkg/api"
 	"github.com/openshift-online/rh-trex-ai/pkg/api/presenters"
@@ -14,7 +15,10 @@ import (
 	pkgserver "github.com/openshift-online/rh-trex-ai/pkg/server"
 	"github.com/openshift-online/rh-trex-ai/plugins/events"
 	"github.com/openshift-online/rh-trex-ai/plugins/generic"
+	"google.golang.org/grpc"
 )
+
+const EventSource = "ProjectSettings"
 
 type ServiceLocator func() ProjectSettingsService
 
@@ -58,11 +62,11 @@ func init() {
 		router.Use(authzMiddleware.AuthorizeApi)
 	})
 
-	pkgserver.RegisterController("ProjectSettings", func(manager *controllers.KindControllerManager, services pkgserver.ServicesInterface) {
+	pkgserver.RegisterController(EventSource, func(manager *controllers.KindControllerManager, services pkgserver.ServicesInterface) {
 		psServices := Service(services.(*environments.Services))
 
 		manager.Add(&controllers.ControllerConfig{
-			Source: "ProjectSettings",
+			Source: EventSource,
 			Handlers: map[api.EventType][]controllers.ControllerHandlerFunc{
 				api.CreateEventType: {psServices.OnUpsert},
 				api.UpdateEventType: {psServices.OnUpsert},
@@ -75,6 +79,19 @@ func init() {
 	presenters.RegisterPath(&ProjectSettings{}, "project_settings")
 	presenters.RegisterKind(ProjectSettings{}, "ProjectSettings")
 	presenters.RegisterKind(&ProjectSettings{}, "ProjectSettings")
+
+	pkgserver.RegisterGRPCService("project_settings", func(grpcServer *grpc.Server, services pkgserver.ServicesInterface) {
+		envServices := services.(*environments.Services)
+		psService := Service(envServices)
+		genericService := generic.Service(envServices)
+		brokerFunc := func() *pkgserver.EventBroker {
+			if obj := envServices.GetService("EventBroker"); obj != nil {
+				return obj.(*pkgserver.EventBroker)
+			}
+			return nil
+		}
+		pb.RegisterProjectSettingsServiceServer(grpcServer, NewProjectSettingsGRPCHandler(psService, genericService, brokerFunc))
+	})
 
 	db.RegisterMigration(migration())
 	db.RegisterMigration(constraintMigration())

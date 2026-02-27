@@ -161,7 +161,7 @@ Selected via `AMBIENT_ENV` env var (shimmed to upstream `API_ENV`). Each environ
 
 ## API Endpoints
 
-All routes under `/api/ambient-api-server/v1/`:
+All routes under `/api/ambient/v1/`:
 
 | Method | Path | Operation |
 |--------|------|-----------|
@@ -186,9 +186,9 @@ This file coordinates development across concurrent Claude sessions. Protocol:
 
 | Resource | Endpoint | Change Detection |
 |----------|----------|------------------|
-| Sessions | `GET /api/ambient-api-server/v1/sessions` | `updated_at` diff |
-| Workflows | `GET /api/ambient-api-server/v1/workflows` | `updated_at` diff |
-| Tasks | `GET /api/ambient-api-server/v1/tasks` | `updated_at` diff |
+| Sessions | `GET /api/ambient/v1/sessions` | `updated_at` diff |
+| Workflows | `GET /api/ambient/v1/workflows` | `updated_at` diff |
+| Tasks | `GET /api/ambient/v1/tasks` | `updated_at` diff |
 
 Auth: `Authorization: Bearer <token>`. Pagination: `?page=1&size=100` (1-indexed).
 

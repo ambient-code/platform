@@ -1,5 +1,5 @@
 paths:
-  /api/ambient-api-server/v1/project_settings:
+  /api/ambient/v1/project_settings:
     get:
       summary: Returns a list of project settings
       security:
@@ -83,7 +83,7 @@ paths:
             application/json:
               schema:
                 $ref: 'openapi.yaml#/components/schemas/Error'
-  /api/ambient-api-server/v1/project_settings/{id}:
+  /api/ambient/v1/project_settings/{id}:
     get:
       summary: Get a project settings by id
       security:

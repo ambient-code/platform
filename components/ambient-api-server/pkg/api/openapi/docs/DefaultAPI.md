@@ -4,33 +4,33 @@ All URIs are relative to *http://localhost:8000*
 
 Method | HTTP request | Description
 ------------- | ------------- | -------------
-[**ApiAmbientApiServerV1ProjectSettingsGet**](DefaultAPI.md#ApiAmbientApiServerV1ProjectSettingsGet) | **Get** /api/ambient-api-server/v1/project_settings | Returns a list of project settings
-[**ApiAmbientApiServerV1ProjectSettingsIdDelete**](DefaultAPI.md#ApiAmbientApiServerV1ProjectSettingsIdDelete) | **Delete** /api/ambient-api-server/v1/project_settings/{id} | Delete a project settings by id
-[**ApiAmbientApiServerV1ProjectSettingsIdGet**](DefaultAPI.md#ApiAmbientApiServerV1ProjectSettingsIdGet) | **Get** /api/ambient-api-server/v1/project_settings/{id} | Get a project settings by id
-[**ApiAmbientApiServerV1ProjectSettingsIdPatch**](DefaultAPI.md#ApiAmbientApiServerV1ProjectSettingsIdPatch) | **Patch** /api/ambient-api-server/v1/project_settings/{id} | Update a project settings
-[**ApiAmbientApiServerV1ProjectSettingsPost**](DefaultAPI.md#ApiAmbientApiServerV1ProjectSettingsPost) | **Post** /api/ambient-api-server/v1/project_settings | Create a new project settings
-[**ApiAmbientApiServerV1ProjectsGet**](DefaultAPI.md#ApiAmbientApiServerV1ProjectsGet) | **Get** /api/ambient-api-server/v1/projects | Returns a list of projects
-[**ApiAmbientApiServerV1ProjectsIdDelete**](DefaultAPI.md#ApiAmbientApiServerV1ProjectsIdDelete) | **Delete** /api/ambient-api-server/v1/projects/{id} | Delete a project by id
-[**ApiAmbientApiServerV1ProjectsIdGet**](DefaultAPI.md#ApiAmbientApiServerV1ProjectsIdGet) | **Get** /api/ambient-api-server/v1/projects/{id} | Get a project by id
-[**ApiAmbientApiServerV1ProjectsIdPatch**](DefaultAPI.md#ApiAmbientApiServerV1ProjectsIdPatch) | **Patch** /api/ambient-api-server/v1/projects/{id} | Update a project
-[**ApiAmbientApiServerV1ProjectsPost**](DefaultAPI.md#ApiAmbientApiServerV1ProjectsPost) | **Post** /api/ambient-api-server/v1/projects | Create a new project
-[**ApiAmbientApiServerV1SessionsGet**](DefaultAPI.md#ApiAmbientApiServerV1SessionsGet) | **Get** /api/ambient-api-server/v1/sessions | Returns a list of sessions
-[**ApiAmbientApiServerV1SessionsIdGet**](DefaultAPI.md#ApiAmbientApiServerV1SessionsIdGet) | **Get** /api/ambient-api-server/v1/sessions/{id} | Get an session by id
-[**ApiAmbientApiServerV1SessionsIdPatch**](DefaultAPI.md#ApiAmbientApiServerV1SessionsIdPatch) | **Patch** /api/ambient-api-server/v1/sessions/{id} | Update an session
-[**ApiAmbientApiServerV1SessionsIdStartPost**](DefaultAPI.md#ApiAmbientApiServerV1SessionsIdStartPost) | **Post** /api/ambient-api-server/v1/sessions/{id}/start | Start a session
-[**ApiAmbientApiServerV1SessionsIdStatusPatch**](DefaultAPI.md#ApiAmbientApiServerV1SessionsIdStatusPatch) | **Patch** /api/ambient-api-server/v1/sessions/{id}/status | Update session status fields
-[**ApiAmbientApiServerV1SessionsIdStopPost**](DefaultAPI.md#ApiAmbientApiServerV1SessionsIdStopPost) | **Post** /api/ambient-api-server/v1/sessions/{id}/stop | Stop a session
-[**ApiAmbientApiServerV1SessionsPost**](DefaultAPI.md#ApiAmbientApiServerV1SessionsPost) | **Post** /api/ambient-api-server/v1/sessions | Create a new session
-[**ApiAmbientApiServerV1UsersGet**](DefaultAPI.md#ApiAmbientApiServerV1UsersGet) | **Get** /api/ambient-api-server/v1/users | Returns a list of users
-[**ApiAmbientApiServerV1UsersIdGet**](DefaultAPI.md#ApiAmbientApiServerV1UsersIdGet) | **Get** /api/ambient-api-server/v1/users/{id} | Get an user by id
-[**ApiAmbientApiServerV1UsersIdPatch**](DefaultAPI.md#ApiAmbientApiServerV1UsersIdPatch) | **Patch** /api/ambient-api-server/v1/users/{id} | Update an user
-[**ApiAmbientApiServerV1UsersPost**](DefaultAPI.md#ApiAmbientApiServerV1UsersPost) | **Post** /api/ambient-api-server/v1/users | Create a new user
+[**ApiAmbientV1ProjectSettingsGet**](DefaultAPI.md#ApiAmbientV1ProjectSettingsGet) | **Get** /api/ambient/v1/project_settings | Returns a list of project settings
+[**ApiAmbientV1ProjectSettingsIdDelete**](DefaultAPI.md#ApiAmbientV1ProjectSettingsIdDelete) | **Delete** /api/ambient/v1/project_settings/{id} | Delete a project settings by id
+[**ApiAmbientV1ProjectSettingsIdGet**](DefaultAPI.md#ApiAmbientV1ProjectSettingsIdGet) | **Get** /api/ambient/v1/project_settings/{id} | Get a project settings by id
+[**ApiAmbientV1ProjectSettingsIdPatch**](DefaultAPI.md#ApiAmbientV1ProjectSettingsIdPatch) | **Patch** /api/ambient/v1/project_settings/{id} | Update a project settings
+[**ApiAmbientV1ProjectSettingsPost**](DefaultAPI.md#ApiAmbientV1ProjectSettingsPost) | **Post** /api/ambient/v1/project_settings | Create a new project settings
+[**ApiAmbientV1ProjectsGet**](DefaultAPI.md#ApiAmbientV1ProjectsGet) | **Get** /api/ambient/v1/projects | Returns a list of projects
+[**ApiAmbientV1ProjectsIdDelete**](DefaultAPI.md#ApiAmbientV1ProjectsIdDelete) | **Delete** /api/ambient/v1/projects/{id} | Delete a project by id
+[**ApiAmbientV1ProjectsIdGet**](DefaultAPI.md#ApiAmbientV1ProjectsIdGet) | **Get** /api/ambient/v1/projects/{id} | Get a project by id
+[**ApiAmbientV1ProjectsIdPatch**](DefaultAPI.md#ApiAmbientV1ProjectsIdPatch) | **Patch** /api/ambient/v1/projects/{id} | Update a project
+[**ApiAmbientV1ProjectsPost**](DefaultAPI.md#ApiAmbientV1ProjectsPost) | **Post** /api/ambient/v1/projects | Create a new project
+[**ApiAmbientV1SessionsGet**](DefaultAPI.md#ApiAmbientV1SessionsGet) | **Get** /api/ambient/v1/sessions | Returns a list of sessions
+[**ApiAmbientV1SessionsIdGet**](DefaultAPI.md#ApiAmbientV1SessionsIdGet) | **Get** /api/ambient/v1/sessions/{id} | Get an session by id
+[**ApiAmbientV1SessionsIdPatch**](DefaultAPI.md#ApiAmbientV1SessionsIdPatch) | **Patch** /api/ambient/v1/sessions/{id} | Update an session
+[**ApiAmbientV1SessionsIdStartPost**](DefaultAPI.md#ApiAmbientV1SessionsIdStartPost) | **Post** /api/ambient/v1/sessions/{id}/start | Start a session
+[**ApiAmbientV1SessionsIdStatusPatch**](DefaultAPI.md#ApiAmbientV1SessionsIdStatusPatch) | **Patch** /api/ambient/v1/sessions/{id}/status | Update session status fields
+[**ApiAmbientV1SessionsIdStopPost**](DefaultAPI.md#ApiAmbientV1SessionsIdStopPost) | **Post** /api/ambient/v1/sessions/{id}/stop | Stop a session
+[**ApiAmbientV1SessionsPost**](DefaultAPI.md#ApiAmbientV1SessionsPost) | **Post** /api/ambient/v1/sessions | Create a new session
+[**ApiAmbientV1UsersGet**](DefaultAPI.md#ApiAmbientV1UsersGet) | **Get** /api/ambient/v1/users | Returns a list of users
+[**ApiAmbientV1UsersIdGet**](DefaultAPI.md#ApiAmbientV1UsersIdGet) | **Get** /api/ambient/v1/users/{id} | Get an user by id
+[**ApiAmbientV1UsersIdPatch**](DefaultAPI.md#ApiAmbientV1UsersIdPatch) | **Patch** /api/ambient/v1/users/{id} | Update an user
+[**ApiAmbientV1UsersPost**](DefaultAPI.md#ApiAmbientV1UsersPost) | **Post** /api/ambient/v1/users | Create a new user
 
 
 
-## ApiAmbientApiServerV1ProjectSettingsGet
+## ApiAmbientV1ProjectSettingsGet
 
-> ProjectSettingsList ApiAmbientApiServerV1ProjectSettingsGet(ctx).Page(page).Size(size).Search(search).OrderBy(orderBy).Fields(fields).Execute()
+> ProjectSettingsList ApiAmbientV1ProjectSettingsGet(ctx).Page(page).Size(size).Search(search).OrderBy(orderBy).Fields(fields).Execute()
 
 Returns a list of project settings
 
@@ -55,13 +55,13 @@ func main() {
 
 	configuration := openapiclient.NewConfiguration()
 	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.DefaultAPI.ApiAmbientApiServerV1ProjectSettingsGet(context.Background()).Page(page).Size(size).Search(search).OrderBy(orderBy).Fields(fields).Execute()
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1ProjectSettingsGet(context.Background()).Page(page).Size(size).Search(search).OrderBy(orderBy).Fields(fields).Execute()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientApiServerV1ProjectSettingsGet``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ProjectSettingsGet``: %v\n", err)
 		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
 	}
-	// response from `ApiAmbientApiServerV1ProjectSettingsGet`: ProjectSettingsList
-	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientApiServerV1ProjectSettingsGet`: %v\n", resp)
+	// response from `ApiAmbientV1ProjectSettingsGet`: ProjectSettingsList
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1ProjectSettingsGet`: %v\n", resp)
 }
 ```
 
@@ -71,7 +71,7 @@ func main() {
 
 ### Other Parameters
 
-Other parameters are passed through a pointer to a apiApiAmbientApiServerV1ProjectSettingsGetRequest struct via the builder pattern
+Other parameters are passed through a pointer to a apiApiAmbientV1ProjectSettingsGetRequest struct via the builder pattern
 
 
 Name | Type | Description  | Notes
@@ -100,9 +100,9 @@ Name | Type | Description  | Notes
 [[Back to README]](../README.md)
 
 
-## ApiAmbientApiServerV1ProjectSettingsIdDelete
+## ApiAmbientV1ProjectSettingsIdDelete
 
-> ApiAmbientApiServerV1ProjectSettingsIdDelete(ctx, id).Execute()
+> ApiAmbientV1ProjectSettingsIdDelete(ctx, id).Execute()
 
 Delete a project settings by id
 
@@ -123,9 +123,9 @@ func main() {
 
 	configuration := openapiclient.NewConfiguration()
 	apiClient := openapiclient.NewAPIClient(configuration)
-	r, err := apiClient.DefaultAPI.ApiAmbientApiServerV1ProjectSettingsIdDelete(context.Background(), id).Execute()
+	r, err := apiClient.DefaultAPI.ApiAmbientV1ProjectSettingsIdDelete(context.Background(), id).Execute()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientApiServerV1ProjectSettingsIdDelete``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ProjectSettingsIdDelete``: %v\n", err)
 		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
 	}
 }
@@ -141,7 +141,7 @@ Name | Type | Description  | Notes
 
 ### Other Parameters
 
-Other parameters are passed through a pointer to a apiApiAmbientApiServerV1ProjectSettingsIdDeleteRequest struct via the builder pattern
+Other parameters are passed through a pointer to a apiApiAmbientV1ProjectSettingsIdDeleteRequest struct via the builder pattern
 
 
 Name | Type | Description  | Notes
@@ -166,9 +166,9 @@ Name | Type | Description  | Notes
 [[Back to README]](../README.md)
 
 
-## ApiAmbientApiServerV1ProjectSettingsIdGet
+## ApiAmbientV1ProjectSettingsIdGet
 
-> ProjectSettings ApiAmbientApiServerV1ProjectSettingsIdGet(ctx, id).Execute()
+> ProjectSettings ApiAmbientV1ProjectSettingsIdGet(ctx, id).Execute()
 
 Get a project settings by id
 
@@ -189,13 +189,13 @@ func main() {
 
 	configuration := openapiclient.NewConfiguration()
 	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.DefaultAPI.ApiAmbientApiServerV1ProjectSettingsIdGet(context.Background(), id).Execute()
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1ProjectSettingsIdGet(context.Background(), id).Execute()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientApiServerV1ProjectSettingsIdGet``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ProjectSettingsIdGet``: %v\n", err)
 		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
 	}
-	// response from `ApiAmbientApiServerV1ProjectSettingsIdGet`: ProjectSettings
-	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientApiServerV1ProjectSettingsIdGet`: %v\n", resp)
+	// response from `ApiAmbientV1ProjectSettingsIdGet`: ProjectSettings
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1ProjectSettingsIdGet`: %v\n", resp)
 }
 ```
 
@@ -209,7 +209,7 @@ Name | Type | Description  | Notes
 
 ### Other Parameters
 
-Other parameters are passed through a pointer to a apiApiAmbientApiServerV1ProjectSettingsIdGetRequest struct via the builder pattern
+Other parameters are passed through a pointer to a apiApiAmbientV1ProjectSettingsIdGetRequest struct via the builder pattern
 
 
 Name | Type | Description  | Notes
@@ -234,9 +234,9 @@ Name | Type | Description  | Notes
 [[Back to README]](../README.md)
 
 
-## ApiAmbientApiServerV1ProjectSettingsIdPatch
+## ApiAmbientV1ProjectSettingsIdPatch
 
-> ProjectSettings ApiAmbientApiServerV1ProjectSettingsIdPatch(ctx, id).ProjectSettingsPatchRequest(projectSettingsPatchRequest).Execute()
+> ProjectSettings ApiAmbientV1ProjectSettingsIdPatch(ctx, id).ProjectSettingsPatchRequest(projectSettingsPatchRequest).Execute()
 
 Update a project settings
 
@@ -258,13 +258,13 @@ func main() {
 
 	configuration := openapiclient.NewConfiguration()
 	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.DefaultAPI.ApiAmbientApiServerV1ProjectSettingsIdPatch(context.Background(), id).ProjectSettingsPatchRequest(projectSettingsPatchRequest).Execute()
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1ProjectSettingsIdPatch(context.Background(), id).ProjectSettingsPatchRequest(projectSettingsPatchRequest).Execute()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientApiServerV1ProjectSettingsIdPatch``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ProjectSettingsIdPatch``: %v\n", err)
 		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
 	}
-	// response from `ApiAmbientApiServerV1ProjectSettingsIdPatch`: ProjectSettings
-	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientApiServerV1ProjectSettingsIdPatch`: %v\n", resp)
+	// response from `ApiAmbientV1ProjectSettingsIdPatch`: ProjectSettings
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1ProjectSettingsIdPatch`: %v\n", resp)
 }
 ```
 
@@ -278,7 +278,7 @@ Name | Type | Description  | Notes
 
 ### Other Parameters
 
-Other parameters are passed through a pointer to a apiApiAmbientApiServerV1ProjectSettingsIdPatchRequest struct via the builder pattern
+Other parameters are passed through a pointer to a apiApiAmbientV1ProjectSettingsIdPatchRequest struct via the builder pattern
 
 
 Name | Type | Description  | Notes
@@ -304,9 +304,9 @@ Name | Type | Description  | Notes
 [[Back to README]](../README.md)
 
 
-## ApiAmbientApiServerV1ProjectSettingsPost
+## ApiAmbientV1ProjectSettingsPost
 
-> ProjectSettings ApiAmbientApiServerV1ProjectSettingsPost(ctx).ProjectSettings(projectSettings).Execute()
+> ProjectSettings ApiAmbientV1ProjectSettingsPost(ctx).ProjectSettings(projectSettings).Execute()
 
 Create a new project settings
 
@@ -327,13 +327,13 @@ func main() {
 
 	configuration := openapiclient.NewConfiguration()
 	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.DefaultAPI.ApiAmbientApiServerV1ProjectSettingsPost(context.Background()).ProjectSettings(projectSettings).Execute()
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1ProjectSettingsPost(context.Background()).ProjectSettings(projectSettings).Execute()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientApiServerV1ProjectSettingsPost``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ProjectSettingsPost``: %v\n", err)
 		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
 	}
-	// response from `ApiAmbientApiServerV1ProjectSettingsPost`: ProjectSettings
-	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientApiServerV1ProjectSettingsPost`: %v\n", resp)
+	// response from `ApiAmbientV1ProjectSettingsPost`: ProjectSettings
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1ProjectSettingsPost`: %v\n", resp)
 }
 ```
 
@@ -343,7 +343,7 @@ func main() {
 
 ### Other Parameters
 
-Other parameters are passed through a pointer to a apiApiAmbientApiServerV1ProjectSettingsPostRequest struct via the builder pattern
+Other parameters are passed through a pointer to a apiApiAmbientV1ProjectSettingsPostRequest struct via the builder pattern
 
 
 Name | Type | Description  | Notes
@@ -368,9 +368,9 @@ Name | Type | Description  | Notes
 [[Back to README]](../README.md)
 
 
-## ApiAmbientApiServerV1ProjectsGet
+## ApiAmbientV1ProjectsGet
 
-> ProjectList ApiAmbientApiServerV1ProjectsGet(ctx).Page(page).Size(size).Search(search).OrderBy(orderBy).Fields(fields).Execute()
+> ProjectList ApiAmbientV1ProjectsGet(ctx).Page(page).Size(size).Search(search).OrderBy(orderBy).Fields(fields).Execute()
 
 Returns a list of projects
 
@@ -395,13 +395,13 @@ func main() {
 
 	configuration := openapiclient.NewConfiguration()
 	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.DefaultAPI.ApiAmbientApiServerV1ProjectsGet(context.Background()).Page(page).Size(size).Search(search).OrderBy(orderBy).Fields(fields).Execute()
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1ProjectsGet(context.Background()).Page(page).Size(size).Search(search).OrderBy(orderBy).Fields(fields).Execute()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientApiServerV1ProjectsGet``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ProjectsGet``: %v\n", err)
 		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
 	}
-	// response from `ApiAmbientApiServerV1ProjectsGet`: ProjectList
-	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientApiServerV1ProjectsGet`: %v\n", resp)
+	// response from `ApiAmbientV1ProjectsGet`: ProjectList
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1ProjectsGet`: %v\n", resp)
 }
 ```
 
@@ -411,7 +411,7 @@ func main() {
 
 ### Other Parameters
 
-Other parameters are passed through a pointer to a apiApiAmbientApiServerV1ProjectsGetRequest struct via the builder pattern
+Other parameters are passed through a pointer to a apiApiAmbientV1ProjectsGetRequest struct via the builder pattern
 
 
 Name | Type | Description  | Notes
@@ -440,9 +440,9 @@ Name | Type | Description  | Notes
 [[Back to README]](../README.md)
 
 
-## ApiAmbientApiServerV1ProjectsIdDelete
+## ApiAmbientV1ProjectsIdDelete
 
-> ApiAmbientApiServerV1ProjectsIdDelete(ctx, id).Execute()
+> ApiAmbientV1ProjectsIdDelete(ctx, id).Execute()
 
 Delete a project by id
 
@@ -463,9 +463,9 @@ func main() {
 
 	configuration := openapiclient.NewConfiguration()
 	apiClient := openapiclient.NewAPIClient(configuration)
-	r, err := apiClient.DefaultAPI.ApiAmbientApiServerV1ProjectsIdDelete(context.Background(), id).Execute()
+	r, err := apiClient.DefaultAPI.ApiAmbientV1ProjectsIdDelete(context.Background(), id).Execute()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientApiServerV1ProjectsIdDelete``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ProjectsIdDelete``: %v\n", err)
 		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
 	}
 }
@@ -481,7 +481,7 @@ Name | Type | Description  | Notes
 
 ### Other Parameters
 
-Other parameters are passed through a pointer to a apiApiAmbientApiServerV1ProjectsIdDeleteRequest struct via the builder pattern
+Other parameters are passed through a pointer to a apiApiAmbientV1ProjectsIdDeleteRequest struct via the builder pattern
 
 
 Name | Type | Description  | Notes
@@ -506,9 +506,9 @@ Name | Type | Description  | Notes
 [[Back to README]](../README.md)
 
 
-## ApiAmbientApiServerV1ProjectsIdGet
+## ApiAmbientV1ProjectsIdGet
 
-> Project ApiAmbientApiServerV1ProjectsIdGet(ctx, id).Execute()
+> Project ApiAmbientV1ProjectsIdGet(ctx, id).Execute()
 
 Get a project by id
 
@@ -529,13 +529,13 @@ func main() {
 
 	configuration := openapiclient.NewConfiguration()
 	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.DefaultAPI.ApiAmbientApiServerV1ProjectsIdGet(context.Background(), id).Execute()
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1ProjectsIdGet(context.Background(), id).Execute()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientApiServerV1ProjectsIdGet``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ProjectsIdGet``: %v\n", err)
 		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
 	}
-	// response from `ApiAmbientApiServerV1ProjectsIdGet`: Project
-	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientApiServerV1ProjectsIdGet`: %v\n", resp)
+	// response from `ApiAmbientV1ProjectsIdGet`: Project
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1ProjectsIdGet`: %v\n", resp)
 }
 ```
 
@@ -549,7 +549,7 @@ Name | Type | Description  | Notes
 
 ### Other Parameters
 
-Other parameters are passed through a pointer to a apiApiAmbientApiServerV1ProjectsIdGetRequest struct via the builder pattern
+Other parameters are passed through a pointer to a apiApiAmbientV1ProjectsIdGetRequest struct via the builder pattern
 
 
 Name | Type | Description  | Notes
@@ -574,9 +574,9 @@ Name | Type | Description  | Notes
 [[Back to README]](../README.md)
 
 
-## ApiAmbientApiServerV1ProjectsIdPatch
+## ApiAmbientV1ProjectsIdPatch
 
-> Project ApiAmbientApiServerV1ProjectsIdPatch(ctx, id).ProjectPatchRequest(projectPatchRequest).Execute()
+> Project ApiAmbientV1ProjectsIdPatch(ctx, id).ProjectPatchRequest(projectPatchRequest).Execute()
 
 Update a project
 
@@ -598,13 +598,13 @@ func main() {
 
 	configuration := openapiclient.NewConfiguration()
 	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.DefaultAPI.ApiAmbientApiServerV1ProjectsIdPatch(context.Background(), id).ProjectPatchRequest(projectPatchRequest).Execute()
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1ProjectsIdPatch(context.Background(), id).ProjectPatchRequest(projectPatchRequest).Execute()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientApiServerV1ProjectsIdPatch``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ProjectsIdPatch``: %v\n", err)
 		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
 	}
-	// response from `ApiAmbientApiServerV1ProjectsIdPatch`: Project
-	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientApiServerV1ProjectsIdPatch`: %v\n", resp)
+	// response from `ApiAmbientV1ProjectsIdPatch`: Project
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1ProjectsIdPatch`: %v\n", resp)
 }
 ```
 
@@ -618,7 +618,7 @@ Name | Type | Description  | Notes
 
 ### Other Parameters
 
-Other parameters are passed through a pointer to a apiApiAmbientApiServerV1ProjectsIdPatchRequest struct via the builder pattern
+Other parameters are passed through a pointer to a apiApiAmbientV1ProjectsIdPatchRequest struct via the builder pattern
 
 
 Name | Type | Description  | Notes
@@ -644,9 +644,9 @@ Name | Type | Description  | Notes
 [[Back to README]](../README.md)
 
 
-## ApiAmbientApiServerV1ProjectsPost
+## ApiAmbientV1ProjectsPost
 
-> Project ApiAmbientApiServerV1ProjectsPost(ctx).Project(project).Execute()
+> Project ApiAmbientV1ProjectsPost(ctx).Project(project).Execute()
 
 Create a new project
 
@@ -667,13 +667,13 @@ func main() {
 
 	configuration := openapiclient.NewConfiguration()
 	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.DefaultAPI.ApiAmbientApiServerV1ProjectsPost(context.Background()).Project(project).Execute()
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1ProjectsPost(context.Background()).Project(project).Execute()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientApiServerV1ProjectsPost``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ProjectsPost``: %v\n", err)
 		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
 	}
-	// response from `ApiAmbientApiServerV1ProjectsPost`: Project
-	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientApiServerV1ProjectsPost`: %v\n", resp)
+	// response from `ApiAmbientV1ProjectsPost`: Project
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1ProjectsPost`: %v\n", resp)
 }
 ```
 
@@ -683,7 +683,7 @@ func main() {
 
 ### Other Parameters
 
-Other parameters are passed through a pointer to a apiApiAmbientApiServerV1ProjectsPostRequest struct via the builder pattern
+Other parameters are passed through a pointer to a apiApiAmbientV1ProjectsPostRequest struct via the builder pattern
 
 
 Name | Type | Description  | Notes
@@ -708,9 +708,9 @@ Name | Type | Description  | Notes
 [[Back to README]](../README.md)
 
 
-## ApiAmbientApiServerV1SessionsGet
+## ApiAmbientV1SessionsGet
 
-> SessionList ApiAmbientApiServerV1SessionsGet(ctx).Page(page).Size(size).Search(search).OrderBy(orderBy).Fields(fields).Execute()
+> SessionList ApiAmbientV1SessionsGet(ctx).Page(page).Size(size).Search(search).OrderBy(orderBy).Fields(fields).Execute()
 
 Returns a list of sessions
 
@@ -735,13 +735,13 @@ func main() {
 
 	configuration := openapiclient.NewConfiguration()
 	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.DefaultAPI.ApiAmbientApiServerV1SessionsGet(context.Background()).Page(page).Size(size).Search(search).OrderBy(orderBy).Fields(fields).Execute()
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1SessionsGet(context.Background()).Page(page).Size(size).Search(search).OrderBy(orderBy).Fields(fields).Execute()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientApiServerV1SessionsGet``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1SessionsGet``: %v\n", err)
 		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
 	}
-	// response from `ApiAmbientApiServerV1SessionsGet`: SessionList
-	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientApiServerV1SessionsGet`: %v\n", resp)
+	// response from `ApiAmbientV1SessionsGet`: SessionList
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1SessionsGet`: %v\n", resp)
 }
 ```
 
@@ -751,7 +751,7 @@ func main() {
 
 ### Other Parameters
 
-Other parameters are passed through a pointer to a apiApiAmbientApiServerV1SessionsGetRequest struct via the builder pattern
+Other parameters are passed through a pointer to a apiApiAmbientV1SessionsGetRequest struct via the builder pattern
 
 
 Name | Type | Description  | Notes
@@ -780,9 +780,9 @@ Name | Type | Description  | Notes
 [[Back to README]](../README.md)
 
 
-## ApiAmbientApiServerV1SessionsIdGet
+## ApiAmbientV1SessionsIdGet
 
-> Session ApiAmbientApiServerV1SessionsIdGet(ctx, id).Execute()
+> Session ApiAmbientV1SessionsIdGet(ctx, id).Execute()
 
 Get an session by id
 
@@ -803,13 +803,13 @@ func main() {
 
 	configuration := openapiclient.NewConfiguration()
 	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.DefaultAPI.ApiAmbientApiServerV1SessionsIdGet(context.Background(), id).Execute()
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1SessionsIdGet(context.Background(), id).Execute()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientApiServerV1SessionsIdGet``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1SessionsIdGet``: %v\n", err)
 		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
 	}
-	// response from `ApiAmbientApiServerV1SessionsIdGet`: Session
-	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientApiServerV1SessionsIdGet`: %v\n", resp)
+	// response from `ApiAmbientV1SessionsIdGet`: Session
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1SessionsIdGet`: %v\n", resp)
 }
 ```
 
@@ -823,7 +823,7 @@ Name | Type | Description  | Notes
 
 ### Other Parameters
 
-Other parameters are passed through a pointer to a apiApiAmbientApiServerV1SessionsIdGetRequest struct via the builder pattern
+Other parameters are passed through a pointer to a apiApiAmbientV1SessionsIdGetRequest struct via the builder pattern
 
 
 Name | Type | Description  | Notes
@@ -848,9 +848,9 @@ Name | Type | Description  | Notes
 [[Back to README]](../README.md)
 
 
-## ApiAmbientApiServerV1SessionsIdPatch
+## ApiAmbientV1SessionsIdPatch
 
-> Session ApiAmbientApiServerV1SessionsIdPatch(ctx, id).SessionPatchRequest(sessionPatchRequest).Execute()
+> Session ApiAmbientV1SessionsIdPatch(ctx, id).SessionPatchRequest(sessionPatchRequest).Execute()
 
 Update an session
 
@@ -872,13 +872,13 @@ func main() {
 
 	configuration := openapiclient.NewConfiguration()
 	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.DefaultAPI.ApiAmbientApiServerV1SessionsIdPatch(context.Background(), id).SessionPatchRequest(sessionPatchRequest).Execute()
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1SessionsIdPatch(context.Background(), id).SessionPatchRequest(sessionPatchRequest).Execute()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientApiServerV1SessionsIdPatch``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1SessionsIdPatch``: %v\n", err)
 		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
 	}
-	// response from `ApiAmbientApiServerV1SessionsIdPatch`: Session
-	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientApiServerV1SessionsIdPatch`: %v\n", resp)
+	// response from `ApiAmbientV1SessionsIdPatch`: Session
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1SessionsIdPatch`: %v\n", resp)
 }
 ```
 
@@ -892,7 +892,7 @@ Name | Type | Description  | Notes
 
 ### Other Parameters
 
-Other parameters are passed through a pointer to a apiApiAmbientApiServerV1SessionsIdPatchRequest struct via the builder pattern
+Other parameters are passed through a pointer to a apiApiAmbientV1SessionsIdPatchRequest struct via the builder pattern
 
 
 Name | Type | Description  | Notes
@@ -918,9 +918,9 @@ Name | Type | Description  | Notes
 [[Back to README]](../README.md)
 
 
-## ApiAmbientApiServerV1SessionsIdStartPost
+## ApiAmbientV1SessionsIdStartPost
 
-> Session ApiAmbientApiServerV1SessionsIdStartPost(ctx, id).Execute()
+> Session ApiAmbientV1SessionsIdStartPost(ctx, id).Execute()
 
 Start a session
 
@@ -943,13 +943,13 @@ func main() {
 
 	configuration := openapiclient.NewConfiguration()
 	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.DefaultAPI.ApiAmbientApiServerV1SessionsIdStartPost(context.Background(), id).Execute()
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1SessionsIdStartPost(context.Background(), id).Execute()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientApiServerV1SessionsIdStartPost``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1SessionsIdStartPost``: %v\n", err)
 		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
 	}
-	// response from `ApiAmbientApiServerV1SessionsIdStartPost`: Session
-	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientApiServerV1SessionsIdStartPost`: %v\n", resp)
+	// response from `ApiAmbientV1SessionsIdStartPost`: Session
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1SessionsIdStartPost`: %v\n", resp)
 }
 ```
 
@@ -963,7 +963,7 @@ Name | Type | Description  | Notes
 
 ### Other Parameters
 
-Other parameters are passed through a pointer to a apiApiAmbientApiServerV1SessionsIdStartPostRequest struct via the builder pattern
+Other parameters are passed through a pointer to a apiApiAmbientV1SessionsIdStartPostRequest struct via the builder pattern
 
 
 Name | Type | Description  | Notes
@@ -988,9 +988,9 @@ Name | Type | Description  | Notes
 [[Back to README]](../README.md)
 
 
-## ApiAmbientApiServerV1SessionsIdStatusPatch
+## ApiAmbientV1SessionsIdStatusPatch
 
-> Session ApiAmbientApiServerV1SessionsIdStatusPatch(ctx, id).SessionStatusPatchRequest(sessionStatusPatchRequest).Execute()
+> Session ApiAmbientV1SessionsIdStatusPatch(ctx, id).SessionStatusPatchRequest(sessionStatusPatchRequest).Execute()
 
 Update session status fields
 
@@ -1014,13 +1014,13 @@ func main() {
 
 	configuration := openapiclient.NewConfiguration()
 	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.DefaultAPI.ApiAmbientApiServerV1SessionsIdStatusPatch(context.Background(), id).SessionStatusPatchRequest(sessionStatusPatchRequest).Execute()
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1SessionsIdStatusPatch(context.Background(), id).SessionStatusPatchRequest(sessionStatusPatchRequest).Execute()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientApiServerV1SessionsIdStatusPatch``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1SessionsIdStatusPatch``: %v\n", err)
 		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
 	}
-	// response from `ApiAmbientApiServerV1SessionsIdStatusPatch`: Session
-	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientApiServerV1SessionsIdStatusPatch`: %v\n", resp)
+	// response from `ApiAmbientV1SessionsIdStatusPatch`: Session
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1SessionsIdStatusPatch`: %v\n", resp)
 }
 ```
 
@@ -1034,7 +1034,7 @@ Name | Type | Description  | Notes
 
 ### Other Parameters
 
-Other parameters are passed through a pointer to a apiApiAmbientApiServerV1SessionsIdStatusPatchRequest struct via the builder pattern
+Other parameters are passed through a pointer to a apiApiAmbientV1SessionsIdStatusPatchRequest struct via the builder pattern
 
 
 Name | Type | Description  | Notes
@@ -1060,9 +1060,9 @@ Name | Type | Description  | Notes
 [[Back to README]](../README.md)
 
 
-## ApiAmbientApiServerV1SessionsIdStopPost
+## ApiAmbientV1SessionsIdStopPost
 
-> Session ApiAmbientApiServerV1SessionsIdStopPost(ctx, id).Execute()
+> Session ApiAmbientV1SessionsIdStopPost(ctx, id).Execute()
 
 Stop a session
 
@@ -1085,13 +1085,13 @@ func main() {
 
 	configuration := openapiclient.NewConfiguration()
 	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.DefaultAPI.ApiAmbientApiServerV1SessionsIdStopPost(context.Background(), id).Execute()
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1SessionsIdStopPost(context.Background(), id).Execute()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientApiServerV1SessionsIdStopPost``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1SessionsIdStopPost``: %v\n", err)
 		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
 	}
-	// response from `ApiAmbientApiServerV1SessionsIdStopPost`: Session
-	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientApiServerV1SessionsIdStopPost`: %v\n", resp)
+	// response from `ApiAmbientV1SessionsIdStopPost`: Session
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1SessionsIdStopPost`: %v\n", resp)
 }
 ```
 
@@ -1105,7 +1105,7 @@ Name | Type | Description  | Notes
 
 ### Other Parameters
 
-Other parameters are passed through a pointer to a apiApiAmbientApiServerV1SessionsIdStopPostRequest struct via the builder pattern
+Other parameters are passed through a pointer to a apiApiAmbientV1SessionsIdStopPostRequest struct via the builder pattern
 
 
 Name | Type | Description  | Notes
@@ -1130,9 +1130,9 @@ Name | Type | Description  | Notes
 [[Back to README]](../README.md)
 
 
-## ApiAmbientApiServerV1SessionsPost
+## ApiAmbientV1SessionsPost
 
-> Session ApiAmbientApiServerV1SessionsPost(ctx).Session(session).Execute()
+> Session ApiAmbientV1SessionsPost(ctx).Session(session).Execute()
 
 Create a new session
 
@@ -1153,13 +1153,13 @@ func main() {
 
 	configuration := openapiclient.NewConfiguration()
 	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.DefaultAPI.ApiAmbientApiServerV1SessionsPost(context.Background()).Session(session).Execute()
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1SessionsPost(context.Background()).Session(session).Execute()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientApiServerV1SessionsPost``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1SessionsPost``: %v\n", err)
 		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
 	}
-	// response from `ApiAmbientApiServerV1SessionsPost`: Session
-	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientApiServerV1SessionsPost`: %v\n", resp)
+	// response from `ApiAmbientV1SessionsPost`: Session
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1SessionsPost`: %v\n", resp)
 }
 ```
 
@@ -1169,7 +1169,7 @@ func main() {
 
 ### Other Parameters
 
-Other parameters are passed through a pointer to a apiApiAmbientApiServerV1SessionsPostRequest struct via the builder pattern
+Other parameters are passed through a pointer to a apiApiAmbientV1SessionsPostRequest struct via the builder pattern
 
 
 Name | Type | Description  | Notes
@@ -1194,9 +1194,9 @@ Name | Type | Description  | Notes
 [[Back to README]](../README.md)
 
 
-## ApiAmbientApiServerV1UsersGet
+## ApiAmbientV1UsersGet
 
-> UserList ApiAmbientApiServerV1UsersGet(ctx).Page(page).Size(size).Search(search).OrderBy(orderBy).Fields(fields).Execute()
+> UserList ApiAmbientV1UsersGet(ctx).Page(page).Size(size).Search(search).OrderBy(orderBy).Fields(fields).Execute()
 
 Returns a list of users
 
@@ -1221,13 +1221,13 @@ func main() {
 
 	configuration := openapiclient.NewConfiguration()
 	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.DefaultAPI.ApiAmbientApiServerV1UsersGet(context.Background()).Page(page).Size(size).Search(search).OrderBy(orderBy).Fields(fields).Execute()
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1UsersGet(context.Background()).Page(page).Size(size).Search(search).OrderBy(orderBy).Fields(fields).Execute()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientApiServerV1UsersGet``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1UsersGet``: %v\n", err)
 		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
 	}
-	// response from `ApiAmbientApiServerV1UsersGet`: UserList
-	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientApiServerV1UsersGet`: %v\n", resp)
+	// response from `ApiAmbientV1UsersGet`: UserList
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1UsersGet`: %v\n", resp)
 }
 ```
 
@@ -1237,7 +1237,7 @@ func main() {
 
 ### Other Parameters
 
-Other parameters are passed through a pointer to a apiApiAmbientApiServerV1UsersGetRequest struct via the builder pattern
+Other parameters are passed through a pointer to a apiApiAmbientV1UsersGetRequest struct via the builder pattern
 
 
 Name | Type | Description  | Notes
@@ -1266,9 +1266,9 @@ Name | Type | Description  | Notes
 [[Back to README]](../README.md)
 
 
-## ApiAmbientApiServerV1UsersIdGet
+## ApiAmbientV1UsersIdGet
 
-> User ApiAmbientApiServerV1UsersIdGet(ctx, id).Execute()
+> User ApiAmbientV1UsersIdGet(ctx, id).Execute()
 
 Get an user by id
 
@@ -1289,13 +1289,13 @@ func main() {
 
 	configuration := openapiclient.NewConfiguration()
 	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.DefaultAPI.ApiAmbientApiServerV1UsersIdGet(context.Background(), id).Execute()
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1UsersIdGet(context.Background(), id).Execute()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientApiServerV1UsersIdGet``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1UsersIdGet``: %v\n", err)
 		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
 	}
-	// response from `ApiAmbientApiServerV1UsersIdGet`: User
-	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientApiServerV1UsersIdGet`: %v\n", resp)
+	// response from `ApiAmbientV1UsersIdGet`: User
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1UsersIdGet`: %v\n", resp)
 }
 ```
 
@@ -1309,7 +1309,7 @@ Name | Type | Description  | Notes
 
 ### Other Parameters
 
-Other parameters are passed through a pointer to a apiApiAmbientApiServerV1UsersIdGetRequest struct via the builder pattern
+Other parameters are passed through a pointer to a apiApiAmbientV1UsersIdGetRequest struct via the builder pattern
 
 
 Name | Type | Description  | Notes
@@ -1334,9 +1334,9 @@ Name | Type | Description  | Notes
 [[Back to README]](../README.md)
 
 
-## ApiAmbientApiServerV1UsersIdPatch
+## ApiAmbientV1UsersIdPatch
 
-> User ApiAmbientApiServerV1UsersIdPatch(ctx, id).UserPatchRequest(userPatchRequest).Execute()
+> User ApiAmbientV1UsersIdPatch(ctx, id).UserPatchRequest(userPatchRequest).Execute()
 
 Update an user
 
@@ -1358,13 +1358,13 @@ func main() {
 
 	configuration := openapiclient.NewConfiguration()
 	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.DefaultAPI.ApiAmbientApiServerV1UsersIdPatch(context.Background(), id).UserPatchRequest(userPatchRequest).Execute()
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1UsersIdPatch(context.Background(), id).UserPatchRequest(userPatchRequest).Execute()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientApiServerV1UsersIdPatch``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1UsersIdPatch``: %v\n", err)
 		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
 	}
-	// response from `ApiAmbientApiServerV1UsersIdPatch`: User
-	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientApiServerV1UsersIdPatch`: %v\n", resp)
+	// response from `ApiAmbientV1UsersIdPatch`: User
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1UsersIdPatch`: %v\n", resp)
 }
 ```
 
@@ -1378,7 +1378,7 @@ Name | Type | Description  | Notes
 
 ### Other Parameters
 
-Other parameters are passed through a pointer to a apiApiAmbientApiServerV1UsersIdPatchRequest struct via the builder pattern
+Other parameters are passed through a pointer to a apiApiAmbientV1UsersIdPatchRequest struct via the builder pattern
 
 
 Name | Type | Description  | Notes
@@ -1404,9 +1404,9 @@ Name | Type | Description  | Notes
 [[Back to README]](../README.md)
 
 
-## ApiAmbientApiServerV1UsersPost
+## ApiAmbientV1UsersPost
 
-> User ApiAmbientApiServerV1UsersPost(ctx).User(user).Execute()
+> User ApiAmbientV1UsersPost(ctx).User(user).Execute()
 
 Create a new user
 
@@ -1427,13 +1427,13 @@ func main() {
 
 	configuration := openapiclient.NewConfiguration()
 	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.DefaultAPI.ApiAmbientApiServerV1UsersPost(context.Background()).User(user).Execute()
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1UsersPost(context.Background()).User(user).Execute()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientApiServerV1UsersPost``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1UsersPost``: %v\n", err)
 		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
 	}
-	// response from `ApiAmbientApiServerV1UsersPost`: User
-	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientApiServerV1UsersPost`: %v\n", resp)
+	// response from `ApiAmbientV1UsersPost`: User
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1UsersPost`: %v\n", resp)
 }
 ```
 
@@ -1443,7 +1443,7 @@ func main() {
 
 ### Other Parameters
 
-Other parameters are passed through a pointer to a apiApiAmbientApiServerV1UsersPostRequest struct via the builder pattern
+Other parameters are passed through a pointer to a apiApiAmbientV1UsersPostRequest struct via the builder pattern
 
 
 Name | Type | Description  | Notes

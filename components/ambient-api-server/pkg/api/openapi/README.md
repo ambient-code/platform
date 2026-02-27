@@ -78,27 +78,27 @@ All URIs are relative to *http://localhost:8000*
 
 Class | Method | HTTP request | Description
 ------------ | ------------- | ------------- | -------------
-*DefaultAPI* | [**ApiAmbientApiServerV1ProjectSettingsGet**](docs/DefaultAPI.md#apiambientapiserverv1projectsettingsget) | **Get** /api/ambient-api-server/v1/project_settings | Returns a list of project settings
-*DefaultAPI* | [**ApiAmbientApiServerV1ProjectSettingsIdDelete**](docs/DefaultAPI.md#apiambientapiserverv1projectsettingsiddelete) | **Delete** /api/ambient-api-server/v1/project_settings/{id} | Delete a project settings by id
-*DefaultAPI* | [**ApiAmbientApiServerV1ProjectSettingsIdGet**](docs/DefaultAPI.md#apiambientapiserverv1projectsettingsidget) | **Get** /api/ambient-api-server/v1/project_settings/{id} | Get a project settings by id
-*DefaultAPI* | [**ApiAmbientApiServerV1ProjectSettingsIdPatch**](docs/DefaultAPI.md#apiambientapiserverv1projectsettingsidpatch) | **Patch** /api/ambient-api-server/v1/project_settings/{id} | Update a project settings
-*DefaultAPI* | [**ApiAmbientApiServerV1ProjectSettingsPost**](docs/DefaultAPI.md#apiambientapiserverv1projectsettingspost) | **Post** /api/ambient-api-server/v1/project_settings | Create a new project settings
-*DefaultAPI* | [**ApiAmbientApiServerV1ProjectsGet**](docs/DefaultAPI.md#apiambientapiserverv1projectsget) | **Get** /api/ambient-api-server/v1/projects | Returns a list of projects
-*DefaultAPI* | [**ApiAmbientApiServerV1ProjectsIdDelete**](docs/DefaultAPI.md#apiambientapiserverv1projectsiddelete) | **Delete** /api/ambient-api-server/v1/projects/{id} | Delete a project by id
-*DefaultAPI* | [**ApiAmbientApiServerV1ProjectsIdGet**](docs/DefaultAPI.md#apiambientapiserverv1projectsidget) | **Get** /api/ambient-api-server/v1/projects/{id} | Get a project by id
-*DefaultAPI* | [**ApiAmbientApiServerV1ProjectsIdPatch**](docs/DefaultAPI.md#apiambientapiserverv1projectsidpatch) | **Patch** /api/ambient-api-server/v1/projects/{id} | Update a project
-*DefaultAPI* | [**ApiAmbientApiServerV1ProjectsPost**](docs/DefaultAPI.md#apiambientapiserverv1projectspost) | **Post** /api/ambient-api-server/v1/projects | Create a new project
-*DefaultAPI* | [**ApiAmbientApiServerV1SessionsGet**](docs/DefaultAPI.md#apiambientapiserverv1sessionsget) | **Get** /api/ambient-api-server/v1/sessions | Returns a list of sessions
-*DefaultAPI* | [**ApiAmbientApiServerV1SessionsIdGet**](docs/DefaultAPI.md#apiambientapiserverv1sessionsidget) | **Get** /api/ambient-api-server/v1/sessions/{id} | Get an session by id
-*DefaultAPI* | [**ApiAmbientApiServerV1SessionsIdPatch**](docs/DefaultAPI.md#apiambientapiserverv1sessionsidpatch) | **Patch** /api/ambient-api-server/v1/sessions/{id} | Update an session
-*DefaultAPI* | [**ApiAmbientApiServerV1SessionsIdStartPost**](docs/DefaultAPI.md#apiambientapiserverv1sessionsidstartpost) | **Post** /api/ambient-api-server/v1/sessions/{id}/start | Start a session
-*DefaultAPI* | [**ApiAmbientApiServerV1SessionsIdStatusPatch**](docs/DefaultAPI.md#apiambientapiserverv1sessionsidstatuspatch) | **Patch** /api/ambient-api-server/v1/sessions/{id}/status | Update session status fields
-*DefaultAPI* | [**ApiAmbientApiServerV1SessionsIdStopPost**](docs/DefaultAPI.md#apiambientapiserverv1sessionsidstoppost) | **Post** /api/ambient-api-server/v1/sessions/{id}/stop | Stop a session
-*DefaultAPI* | [**ApiAmbientApiServerV1SessionsPost**](docs/DefaultAPI.md#apiambientapiserverv1sessionspost) | **Post** /api/ambient-api-server/v1/sessions | Create a new session
-*DefaultAPI* | [**ApiAmbientApiServerV1UsersGet**](docs/DefaultAPI.md#apiambientapiserverv1usersget) | **Get** /api/ambient-api-server/v1/users | Returns a list of users
-*DefaultAPI* | [**ApiAmbientApiServerV1UsersIdGet**](docs/DefaultAPI.md#apiambientapiserverv1usersidget) | **Get** /api/ambient-api-server/v1/users/{id} | Get an user by id
-*DefaultAPI* | [**ApiAmbientApiServerV1UsersIdPatch**](docs/DefaultAPI.md#apiambientapiserverv1usersidpatch) | **Patch** /api/ambient-api-server/v1/users/{id} | Update an user
-*DefaultAPI* | [**ApiAmbientApiServerV1UsersPost**](docs/DefaultAPI.md#apiambientapiserverv1userspost) | **Post** /api/ambient-api-server/v1/users | Create a new user
+*DefaultAPI* | [**ApiAmbientV1ProjectSettingsGet**](docs/DefaultAPI.md#apiambientv1projectsettingsget) | **Get** /api/ambient/v1/project_settings | Returns a list of project settings
+*DefaultAPI* | [**ApiAmbientV1ProjectSettingsIdDelete**](docs/DefaultAPI.md#apiambientv1projectsettingsiddelete) | **Delete** /api/ambient/v1/project_settings/{id} | Delete a project settings by id
+*DefaultAPI* | [**ApiAmbientV1ProjectSettingsIdGet**](docs/DefaultAPI.md#apiambientv1projectsettingsidget) | **Get** /api/ambient/v1/project_settings/{id} | Get a project settings by id
+*DefaultAPI* | [**ApiAmbientV1ProjectSettingsIdPatch**](docs/DefaultAPI.md#apiambientv1projectsettingsidpatch) | **Patch** /api/ambient/v1/project_settings/{id} | Update a project settings
+*DefaultAPI* | [**ApiAmbientV1ProjectSettingsPost**](docs/DefaultAPI.md#apiambientv1projectsettingspost) | **Post** /api/ambient/v1/project_settings | Create a new project settings
+*DefaultAPI* | [**ApiAmbientV1ProjectsGet**](docs/DefaultAPI.md#apiambientv1projectsget) | **Get** /api/ambient/v1/projects | Returns a list of projects
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdDelete**](docs/DefaultAPI.md#apiambientv1projectsiddelete) | **Delete** /api/ambient/v1/projects/{id} | Delete a project by id
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdGet**](docs/DefaultAPI.md#apiambientv1projectsidget) | **Get** /api/ambient/v1/projects/{id} | Get a project by id
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdPatch**](docs/DefaultAPI.md#apiambientv1projectsidpatch) | **Patch** /api/ambient/v1/projects/{id} | Update a project
+*DefaultAPI* | [**ApiAmbientV1ProjectsPost**](docs/DefaultAPI.md#apiambientv1projectspost) | **Post** /api/ambient/v1/projects | Create a new project
+*DefaultAPI* | [**ApiAmbientV1SessionsGet**](docs/DefaultAPI.md#apiambientv1sessionsget) | **Get** /api/ambient/v1/sessions | Returns a list of sessions
+*DefaultAPI* | [**ApiAmbientV1SessionsIdGet**](docs/DefaultAPI.md#apiambientv1sessionsidget) | **Get** /api/ambient/v1/sessions/{id} | Get an session by id
+*DefaultAPI* | [**ApiAmbientV1SessionsIdPatch**](docs/DefaultAPI.md#apiambientv1sessionsidpatch) | **Patch** /api/ambient/v1/sessions/{id} | Update an session
+*DefaultAPI* | [**ApiAmbientV1SessionsIdStartPost**](docs/DefaultAPI.md#apiambientv1sessionsidstartpost) | **Post** /api/ambient/v1/sessions/{id}/start | Start a session
+*DefaultAPI* | [**ApiAmbientV1SessionsIdStatusPatch**](docs/DefaultAPI.md#apiambientv1sessionsidstatuspatch) | **Patch** /api/ambient/v1/sessions/{id}/status | Update session status fields
+*DefaultAPI* | [**ApiAmbientV1SessionsIdStopPost**](docs/DefaultAPI.md#apiambientv1sessionsidstoppost) | **Post** /api/ambient/v1/sessions/{id}/stop | Stop a session
+*DefaultAPI* | [**ApiAmbientV1SessionsPost**](docs/DefaultAPI.md#apiambientv1sessionspost) | **Post** /api/ambient/v1/sessions | Create a new session
+*DefaultAPI* | [**ApiAmbientV1UsersGet**](docs/DefaultAPI.md#apiambientv1usersget) | **Get** /api/ambient/v1/users | Returns a list of users
+*DefaultAPI* | [**ApiAmbientV1UsersIdGet**](docs/DefaultAPI.md#apiambientv1usersidget) | **Get** /api/ambient/v1/users/{id} | Get an user by id
+*DefaultAPI* | [**ApiAmbientV1UsersIdPatch**](docs/DefaultAPI.md#apiambientv1usersidpatch) | **Patch** /api/ambient/v1/users/{id} | Update an user
+*DefaultAPI* | [**ApiAmbientV1UsersPost**](docs/DefaultAPI.md#apiambientv1userspost) | **Post** /api/ambient/v1/users | Create a new user
 
 
 ## Documentation For Models

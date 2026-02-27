@@ -27,14 +27,14 @@ func main() {
 
 	fmt.Println("=== Create User ===")
 	user := openapi.NewUser("jdoe", "Jane Doe")
-	createdUser, _, err := client.DefaultAPI.ApiAmbientApiServerV1UsersPost(ctx).User(*user).Execute()
+	createdUser, _, err := client.DefaultAPI.ApiAmbientV1UsersPost(ctx).User(*user).Execute()
 	if err != nil {
 		log.Fatalf("create user: %v", err)
 	}
 	prettyPrint(createdUser)
 
 	fmt.Println("\n=== List Users ===")
-	userList, _, err := client.DefaultAPI.ApiAmbientApiServerV1UsersGet(ctx).Execute()
+	userList, _, err := client.DefaultAPI.ApiAmbientV1UsersGet(ctx).Execute()
 	if err != nil {
 		log.Fatalf("list users: %v", err)
 	}
@@ -43,14 +43,14 @@ func main() {
 	fmt.Println("\n=== Create Session ===")
 	session := openapi.NewSession("test-session")
 	session.SetPrompt("Implement a REST endpoint for health checks.")
-	createdSession, _, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsPost(ctx).Session(*session).Execute()
+	createdSession, _, err := client.DefaultAPI.ApiAmbientV1SessionsPost(ctx).Session(*session).Execute()
 	if err != nil {
 		log.Fatalf("create session: %v", err)
 	}
 	prettyPrint(createdSession)
 
 	fmt.Println("\n=== List Sessions ===")
-	sessionList, _, err := client.DefaultAPI.ApiAmbientApiServerV1SessionsGet(ctx).Execute()
+	sessionList, _, err := client.DefaultAPI.ApiAmbientV1SessionsGet(ctx).Execute()
 	if err != nil {
 		log.Fatalf("list sessions: %v", err)
 	}
