@@ -329,12 +329,17 @@ class ClaudeBridge(PlatformBridge):
 
         # Claude-specific auth
         from ambient_runner.bridges.claude.auth import setup_sdk_authentication
+        from ambient_runner.platform.auth import populate_runtime_credentials
         from ambient_runner.platform.workspace import resolve_workspace_paths, validate_prerequisites
 
         await validate_prerequisites(self._context)
         _api_key, _use_vertex, configured_model = await setup_sdk_authentication(
             self._context
         )
+
+        # Populate credentials before building system prompt (prompt checks env vars)
+        await populate_runtime_credentials(self._context)
+        self._last_creds_refresh = time.monotonic()
 
         # Workspace paths
         cwd_path, add_dirs = resolve_workspace_paths(self._context)

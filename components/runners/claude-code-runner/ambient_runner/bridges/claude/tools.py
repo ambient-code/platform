@@ -70,6 +70,9 @@ def create_restart_session_tool(adapter_ref, sdk_tool_decorator):
 # ------------------------------------------------------------------
 
 
+_TOOL_REFRESH_MIN_INTERVAL_SEC = 30
+
+
 def create_refresh_credentials_tool(context_ref, sdk_tool_decorator):
     """Create the refresh_credentials MCP tool.
 
@@ -80,6 +83,9 @@ def create_refresh_credentials_tool(context_ref, sdk_tool_decorator):
     Returns:
         Decorated async tool function.
     """
+    import time as _time
+
+    last_tool_refresh = [0.0]  # mutable ref for closure
 
     @sdk_tool_decorator(
         "refresh_credentials",
@@ -88,10 +94,22 @@ def create_refresh_credentials_tool(context_ref, sdk_tool_decorator):
     )
     async def refresh_credentials_tool(args: dict) -> dict:
         """Tool that refreshes all platform credentials (GitHub, Google, etc.)."""
+        now = _time.monotonic()
+        if now - last_tool_refresh[0] < _TOOL_REFRESH_MIN_INTERVAL_SEC:
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "Credentials were refreshed recently. Try again later.",
+                    }
+                ]
+            }
+
         from ambient_runner.platform.auth import populate_runtime_credentials
 
         try:
             await populate_runtime_credentials(context_ref)
+            last_tool_refresh[0] = _time.monotonic()
             logger.info("Credentials refreshed by Claude via MCP tool")
 
             refreshed = []
@@ -116,13 +134,13 @@ def create_refresh_credentials_tool(context_ref, sdk_tool_decorator):
                     }
                 ]
             }
-        except Exception as e:
-            logger.error(f"Credential refresh failed: {e}")
+        except Exception:
+            logger.error("Credential refresh failed", exc_info=True)
             return {
                 "content": [
                     {
                         "type": "text",
-                        "text": f"Credential refresh failed: {e}",
+                        "text": "Credential refresh failed. Check runner logs for details.",
                     }
                 ],
                 "isError": True,
