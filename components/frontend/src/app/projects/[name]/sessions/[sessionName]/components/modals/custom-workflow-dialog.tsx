@@ -6,6 +6,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { InputWithHistory } from "@/components/input-with-history";
+import { useInputHistory } from "@/hooks/use-input-history";
 
 type CustomWorkflowDialogProps = {
   open: boolean;
@@ -23,16 +25,20 @@ export function CustomWorkflowDialog({
   const [customWorkflowUrl, setCustomWorkflowUrl] = useState("");
   const [customWorkflowBranch, setCustomWorkflowBranch] = useState("main");
   const [customWorkflowPath, setCustomWorkflowPath] = useState("");
+  const { addToHistory: addUrlToHistory } = useInputHistory("custom-workflow:url");
 
   const handleSubmit = () => {
     if (!customWorkflowUrl.trim()) return;
-    
+
+    // Save URL to history before submitting
+    addUrlToHistory(customWorkflowUrl.trim());
+
     onSubmit(
       customWorkflowUrl.trim(),
       customWorkflowBranch.trim() || "main",
       customWorkflowPath.trim() || ""
     );
-    
+
     // Reset form
     setCustomWorkflowUrl("");
     setCustomWorkflowBranch("main");
@@ -52,7 +58,8 @@ export function CustomWorkflowDialog({
         <div className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="workflow-url">Git Repository URL *</Label>
-            <Input
+            <InputWithHistory
+              historyKey="custom-workflow:url"
               id="workflow-url"
               placeholder="https://github.com/org/workflow-repo.git"
               value={customWorkflowUrl}

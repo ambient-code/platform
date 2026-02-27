@@ -5,6 +5,7 @@ Tools are created dynamically per-run and registered as in-process
 MCP servers alongside the Claude Agent SDK.
 
 - ``restart_session`` — allows Claude to request a session restart
+- ``refresh_credentials`` — allows Claude to refresh auth tokens mid-run
 - ``evaluate_rubric`` — logs a rubric evaluation score to Langfuse
 """
 
@@ -14,7 +15,10 @@ import os
 from pathlib import Path
 from typing import Any
 
-from ambient_runner.platform.prompts import RESTART_TOOL_DESCRIPTION
+from ambient_runner.platform.prompts import (
+    REFRESH_CREDENTIALS_TOOL_DESCRIPTION,
+    RESTART_TOOL_DESCRIPTION,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +63,90 @@ def create_restart_session_tool(adapter_ref, sdk_tool_decorator):
         }
 
     return restart_session_tool
+
+
+# ------------------------------------------------------------------
+# Credential refresh tool
+# ------------------------------------------------------------------
+
+
+_TOOL_REFRESH_MIN_INTERVAL_SEC = 30
+
+
+def create_refresh_credentials_tool(context_ref, sdk_tool_decorator):
+    """Create the refresh_credentials MCP tool.
+
+    Args:
+        context_ref: RunnerContext instance (used to fetch fresh tokens).
+        sdk_tool_decorator: The ``tool`` decorator from ``claude_agent_sdk``.
+
+    Returns:
+        Decorated async tool function.
+    """
+    import time as _time
+
+    last_tool_refresh = [0.0]  # mutable ref for closure
+
+    @sdk_tool_decorator(
+        "refresh_credentials",
+        REFRESH_CREDENTIALS_TOOL_DESCRIPTION,
+        {},
+    )
+    async def refresh_credentials_tool(args: dict) -> dict:
+        """Tool that refreshes all platform credentials (GitHub, Google, etc.)."""
+        now = _time.monotonic()
+        if now - last_tool_refresh[0] < _TOOL_REFRESH_MIN_INTERVAL_SEC:
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "Credentials were refreshed recently. Try again later.",
+                    }
+                ]
+            }
+
+        from ambient_runner.platform.auth import populate_runtime_credentials
+
+        try:
+            await populate_runtime_credentials(context_ref)
+            last_tool_refresh[0] = _time.monotonic()
+            logger.info("Credentials refreshed by Claude via MCP tool")
+
+            refreshed = []
+            if os.getenv("GITHUB_TOKEN"):
+                refreshed.append("GitHub")
+            if os.getenv("GITLAB_TOKEN"):
+                refreshed.append("GitLab")
+            if os.getenv("JIRA_API_TOKEN"):
+                refreshed.append("Jira")
+            if os.getenv("USER_GOOGLE_EMAIL"):
+                refreshed.append("Google")
+
+            summary = ", ".join(refreshed) if refreshed else "none detected"
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            f"Credentials refreshed successfully. "
+                            f"Active integrations: {summary}."
+                        ),
+                    }
+                ]
+            }
+        except Exception:
+            logger.error("Credential refresh failed", exc_info=True)
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "Credential refresh failed. Check runner logs for details.",
+                    }
+                ],
+                "isError": True,
+            }
+
+    return refresh_credentials_tool
 
 
 # ------------------------------------------------------------------

@@ -31,11 +31,14 @@ type TimeFunc func() time.Time
 type Helper struct {
 	testutil.BaseHelper
 	APIServer         pkgserver.Server
+	GRPCServer        pkgserver.Server
+	ControllersServer *pkgserver.ControllersServer
 	MetricsServer     pkgserver.Server
 	HealthCheckServer pkgserver.Server
 	TimeFunc          TimeFunc
 	teardowns         []func() error
 	apiServerAddress  string
+	grpcServerAddress string
 }
 
 func NewHelper(t *testing.T) *Helper {
@@ -67,12 +70,16 @@ func NewHelper(t *testing.T) *Helper {
 
 		_, jwkMockTeardown := helper.StartJWKCertServerMock()
 		helper.teardowns = []func() error{
-			helper.CleanDB,
+			helper.stopControllersServer,
 			jwkMockTeardown,
+			helper.stopGRPCServer,
 			helper.stopAPIServer,
+			helper.CleanDB,
 			helper.teardownEnv,
 		}
+		helper.initControllersServer()
 		helper.startAPIServer()
+		helper.startGRPCServer()
 		helper.startMetricsServer()
 		helper.startHealthCheckServer()
 	})
@@ -159,8 +166,52 @@ func (helper *Helper) RestartMetricsServer() {
 	glog.V(10).Info("Test metrics server restarted")
 }
 
+func (helper *Helper) initControllersServer() {
+	env := environments.Environment()
+	helper.ControllersServer = pkgserver.NewDefaultControllersServer(env)
+}
+
+func (helper *Helper) StartControllersServer() {
+	go helper.ControllersServer.Start()
+}
+
+func (helper *Helper) stopControllersServer() error {
+	if helper.ControllersServer != nil {
+		helper.ControllersServer.Stop()
+	}
+	return nil
+}
+
+func (helper *Helper) startGRPCServer() {
+	env := environments.Environment()
+	helper.GRPCServer = pkgserver.NewDefaultGRPCServer(env)
+	listener, err := helper.GRPCServer.Listen()
+	if err != nil {
+		glog.Fatalf("Unable to start Test gRPC server: %s", err)
+	}
+	helper.grpcServerAddress = listener.Addr().String()
+	go func() {
+		glog.V(10).Info("Test gRPC server started")
+		helper.GRPCServer.Serve(listener)
+		glog.V(10).Info("Test gRPC server stopped")
+	}()
+}
+
+func (helper *Helper) stopGRPCServer() error {
+	if helper.GRPCServer != nil {
+		if err := helper.GRPCServer.Stop(); err != nil {
+			return fmt.Errorf("unable to stop grpc server: %s", err.Error())
+		}
+	}
+	return nil
+}
+
+func (helper *Helper) GRPCAddress() string {
+	return helper.grpcServerAddress
+}
+
 func (helper *Helper) RestURL(path string) string {
-	return fmt.Sprintf("http://%s/api/ambient-api-server/v1%s", helper.apiServerAddress, path)
+	return fmt.Sprintf("http://%s/api/ambient/v1%s", helper.apiServerAddress, path)
 }
 
 func (helper *Helper) NewApiClient() *openapi.APIClient {

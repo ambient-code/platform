@@ -175,64 +175,82 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
     git_user_email = ""
 
     # Google credentials
-    google_creds = await fetch_google_credentials(context)
-    if google_creds.get("accessToken"):
-        creds_dir = Path("/workspace/.google_workspace_mcp/credentials")
-        creds_dir.mkdir(parents=True, exist_ok=True)
-        creds_file = creds_dir / "credentials.json"
+    try:
+        google_creds = await fetch_google_credentials(context)
+        if google_creds.get("accessToken"):
+            creds_dir = Path("/workspace/.google_workspace_mcp/credentials")
+            creds_dir.mkdir(parents=True, exist_ok=True)
+            creds_file = creds_dir / "credentials.json"
 
-        client_id = os.getenv("GOOGLE_OAUTH_CLIENT_ID", "")
-        client_secret = os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", "")
+            client_id = os.getenv("GOOGLE_OAUTH_CLIENT_ID", "")
+            client_secret = os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", "")
 
-        creds_data = {
-            "token": google_creds.get("accessToken"),
-            "refresh_token": "",
-            "token_uri": "https://oauth2.googleapis.com/token",
-            "client_id": client_id,
-            "client_secret": client_secret,
-            "scopes": google_creds.get("scopes", []),
-            "expiry": google_creds.get("expiresAt", ""),
-        }
+            # The refresh token is written to disk because workspace-mcp
+            # runs as a child process and cannot call back to the platform
+            # backend to obtain fresh access tokens on its own.  Without it,
+            # Google API access silently breaks after the ~1h access-token
+            # lifetime.  The file is owner-only (0o600) and lives inside a
+            # short-lived Job pod with no shared volume mounts.
+            creds_data = {
+                "token": google_creds.get("accessToken"),
+                "refresh_token": google_creds.get("refreshToken", ""),
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "scopes": google_creds.get("scopes", []),
+                "expiry": google_creds.get("expiresAt", ""),
+            }
 
-        with open(creds_file, "w") as f:
-            _json.dump(creds_data, f, indent=2)
-        creds_file.chmod(0o644)
-        logger.info("Updated Google credentials file for workspace-mcp")
+            with open(creds_file, "w") as f:
+                _json.dump(creds_data, f, indent=2)
+            creds_file.chmod(0o600)
+            logger.info("Updated Google credentials file for workspace-mcp")
 
-        user_email = google_creds.get("email", "")
-        if user_email and user_email != _PLACEHOLDER_EMAIL:
-            os.environ["USER_GOOGLE_EMAIL"] = user_email
-            logger.info(f"Set USER_GOOGLE_EMAIL to {user_email} for workspace-mcp")
+            user_email = google_creds.get("email", "")
+            if user_email and user_email != _PLACEHOLDER_EMAIL:
+                os.environ["USER_GOOGLE_EMAIL"] = user_email
+                logger.info(f"Set USER_GOOGLE_EMAIL to {user_email} for workspace-mcp")
+    except Exception as e:
+        logger.warning(f"Failed to refresh Google credentials: {e}")
 
     # Jira credentials
-    jira_creds = await fetch_jira_credentials(context)
-    if jira_creds.get("apiToken"):
-        os.environ["JIRA_URL"] = jira_creds.get("url", "")
-        os.environ["JIRA_API_TOKEN"] = jira_creds.get("apiToken", "")
-        os.environ["JIRA_EMAIL"] = jira_creds.get("email", "")
-        logger.info("Updated Jira credentials in environment")
+    try:
+        jira_creds = await fetch_jira_credentials(context)
+        if jira_creds.get("apiToken"):
+            os.environ["JIRA_URL"] = jira_creds.get("url", "")
+            os.environ["JIRA_API_TOKEN"] = jira_creds.get("apiToken", "")
+            os.environ["JIRA_EMAIL"] = jira_creds.get("email", "")
+            logger.info("Updated Jira credentials in environment")
+    except Exception as e:
+        logger.warning(f"Failed to refresh Jira credentials: {e}")
 
     # GitLab credentials (with user identity)
-    gitlab_creds = await fetch_gitlab_credentials(context)
-    if gitlab_creds.get("token"):
-        os.environ["GITLAB_TOKEN"] = gitlab_creds["token"]
-        logger.info("Updated GitLab token in environment")
-        # Use GitLab identity if available (can be overridden by GitHub below)
-        if gitlab_creds.get("userName"):
-            git_user_name = gitlab_creds["userName"]
-        if gitlab_creds.get("email"):
-            git_user_email = gitlab_creds["email"]
+    try:
+        gitlab_creds = await fetch_gitlab_credentials(context)
+        if gitlab_creds.get("token"):
+            os.environ["GITLAB_TOKEN"] = gitlab_creds["token"]
+            logger.info("Updated GitLab token in environment")
+            # Use GitLab identity if available (can be overridden by GitHub below)
+            if gitlab_creds.get("userName"):
+                git_user_name = gitlab_creds["userName"]
+            if gitlab_creds.get("email"):
+                git_user_email = gitlab_creds["email"]
+    except Exception as e:
+        logger.warning(f"Failed to refresh GitLab credentials: {e}")
 
     # GitHub credentials (with user identity — takes precedence)
-    github_creds = await fetch_github_credentials(context)
-    if github_creds.get("token"):
-        os.environ["GITHUB_TOKEN"] = github_creds["token"]
-        logger.info("Updated GitHub token in environment")
-        # GitHub identity takes precedence over GitLab
-        if github_creds.get("userName"):
-            git_user_name = github_creds["userName"]
-        if github_creds.get("email"):
-            git_user_email = github_creds["email"]
+    try:
+        github_creds = await fetch_github_credentials(context)
+        if github_creds.get("token"):
+            os.environ["GITHUB_TOKEN"] = github_creds["token"]
+            logger.info("Updated GitHub token in environment")
+            # GitHub identity takes precedence over GitLab
+            if github_creds.get("userName"):
+                git_user_name = github_creds["userName"]
+            if github_creds.get("email"):
+                git_user_email = github_creds["email"]
+    except Exception as e:
+        logger.warning(f"Failed to refresh GitHub credentials: {e}")
 
     # Configure git identity from provider credentials
     await configure_git_identity(git_user_name, git_user_email)

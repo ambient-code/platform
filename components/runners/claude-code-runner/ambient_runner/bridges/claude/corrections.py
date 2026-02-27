@@ -11,6 +11,7 @@ improvement sessions to update workflow instructions and repo context.
 import json
 import logging
 import os
+import subprocess
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -244,6 +245,16 @@ def create_correction_mcp_tool(
     context = _get_session_context()
     _target_map = build_target_map(context)
 
+    if _target_map:
+        labels = {k: v["target_type"] for k, v in _target_map.items()}
+        logger.info(f"Correction tool targets: {labels}")
+    else:
+        logger.warning(
+            "Correction tool: no targets discovered "
+            f"(REPOS_JSON={os.getenv('REPOS_JSON', '')!r}, "
+            f"ACTIVE_WORKFLOW_GIT_URL={os.getenv('ACTIVE_WORKFLOW_GIT_URL', '')!r})"
+        )
+
     description = _build_tool_description(_target_map, has_rubric=has_rubric)
     schema = build_correction_schema(list(_target_map.keys()))
 
@@ -333,20 +344,80 @@ def _parse_repos_json() -> list:
         return []
 
 
+def _discover_repos_from_workspace() -> list:
+    """Fallback: discover repos by scanning the workspace filesystem.
+
+    Scans ``/workspace/repos/`` for git repositories and extracts remote
+    URLs via ``git config``.  Used when ``REPOS_JSON`` is not set (e.g.
+    repos added at runtime before the env var is propagated).
+
+    Returns:
+        List of dicts with 'url' and 'branch' keys, or empty list.
+    """
+    workspace = os.getenv("WORKSPACE_PATH", "/workspace")
+    repos_dir = os.path.join(workspace, "repos")
+    if not os.path.isdir(repos_dir):
+        return []
+
+    result = []
+    try:
+        for entry in os.listdir(repos_dir):
+            repo_path = os.path.join(repos_dir, entry)
+            git_dir = os.path.join(repo_path, ".git")
+            if not (os.path.isdir(repo_path) and (os.path.isdir(git_dir) or os.path.isfile(git_dir))):
+                continue
+            try:
+                url = subprocess.check_output(
+                    ["git", "-C", repo_path, "config", "--get", "remote.origin.url"],
+                    stderr=subprocess.DEVNULL,
+                    timeout=5,
+                ).decode().strip()
+                # Strip embedded credentials from URL
+                if "@" in url and "://" in url:
+                    # https://token@github.com/... → https://github.com/...
+                    proto_end = url.index("://") + 3
+                    at_pos = url.index("@", proto_end)
+                    url = url[:proto_end] + url[at_pos + 1:]
+                branch = subprocess.check_output(
+                    ["git", "-C", repo_path, "rev-parse", "--abbrev-ref", "HEAD"],
+                    stderr=subprocess.DEVNULL,
+                    timeout=5,
+                ).decode().strip()
+                if url:
+                    result.append({"url": url, "branch": branch or ""})
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return result
+
+
 def _get_session_context() -> dict:
     """Auto-capture session context from environment variables.
+
+    Falls back to workspace filesystem scanning when ``REPOS_JSON`` is
+    empty, ensuring repo targets are discovered even when repos were
+    added at runtime or the env var was not propagated.
 
     Returns:
         Dict with workflow (repo_url, branch, path), repos list,
         session_name, and project.
     """
+    repos = _parse_repos_json()
+    if not repos:
+        repos = _discover_repos_from_workspace()
+        if repos:
+            logger.info(
+                f"REPOS_JSON empty, discovered {len(repos)} repo(s) "
+                f"from workspace: {[r['url'] for r in repos]}"
+            )
     return {
         "workflow": {
             "repo_url": os.getenv("ACTIVE_WORKFLOW_GIT_URL", "").strip(),
             "branch": os.getenv("ACTIVE_WORKFLOW_BRANCH", "").strip(),
             "path": os.getenv("ACTIVE_WORKFLOW_PATH", "").strip(),
         },
-        "repos": _parse_repos_json(),
+        "repos": repos,
         "session_name": os.getenv("AGENTIC_SESSION_NAME", "").strip(),
         "project": os.getenv("AGENTIC_SESSION_NAMESPACE", "").strip(),
     }

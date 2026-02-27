@@ -9,8 +9,10 @@ Owns the entire Claude session lifecycle:
 - Interrupt and graceful shutdown
 """
 
+import asyncio
 import logging
 import os
+import time
 from typing import Any, AsyncIterator, Optional
 
 from ag_ui.core import BaseEvent, RunAgentInput
@@ -27,6 +29,9 @@ logger = logging.getLogger(__name__)
 
 # Maximum stderr lines kept in ring buffer for error reporting
 _MAX_STDERR_LINES = 50
+
+# Minimum seconds between credential refreshes to avoid hammering the backend
+_CREDS_REFRESH_INTERVAL_SEC = 60
 
 
 class ClaudeBridge(PlatformBridge):
@@ -54,6 +59,7 @@ class ClaudeBridge(PlatformBridge):
         self._allowed_tools: list[str] = []
         self._system_prompt: dict = {}
         self._stderr_lines: list[str] = []
+        self._last_creds_refresh: float = 0.0
 
     # ------------------------------------------------------------------
     # PlatformBridge interface
@@ -84,6 +90,14 @@ class ClaudeBridge(PlatformBridge):
         """Full run lifecycle: lazy setup → adapter → session worker → tracing."""
         # 1. Lazy platform setup
         await self._ensure_ready()
+
+        # Refresh credentials if stale (tokens may have expired)
+        now = time.monotonic()
+        if now - self._last_creds_refresh > _CREDS_REFRESH_INTERVAL_SEC:
+            from ambient_runner.platform.auth import populate_runtime_credentials
+
+            await populate_runtime_credentials(self._context)
+            self._last_creds_refresh = now
 
         # 2. Ensure adapter exists
         self._ensure_adapter()
@@ -153,10 +167,35 @@ class ClaudeBridge(PlatformBridge):
         logger.info("ClaudeBridge: shutdown complete")
 
     def mark_dirty(self) -> None:
-        """Signal adapter rebuild on next run (repo/workflow change)."""
+        """Signal adapter rebuild on next run (repo/workflow change).
+
+        Destroys existing session workers so the new MCP server
+        configuration (e.g. updated correction tool targets) is applied
+        to the CLI process on the next run.  Conversation state is
+        preserved via the CLI's ``--resume`` mechanism.
+        """
         self._ready = False
         self._first_run = True
         self._adapter = None
+        if self._session_manager:
+            manager = self._session_manager
+            self._session_manager = None
+            try:
+                loop = asyncio.get_running_loop()
+                future = asyncio.ensure_future(manager.shutdown())
+                future.add_done_callback(
+                    lambda f: logger.warning(
+                        "mark_dirty: session_manager shutdown error: %s", f.exception()
+                    )
+                    if f.exception()
+                    else None
+                )
+            except RuntimeError:
+                # No running loop — safe to block
+                try:
+                    asyncio.run(manager.shutdown())
+                except Exception as e:
+                    logger.warning("mark_dirty: session_manager shutdown error: %s", e)
         logger.info("ClaudeBridge: marked dirty — will reinitialise on next run")
 
     def get_error_context(self) -> str:
@@ -297,7 +336,10 @@ class ClaudeBridge(PlatformBridge):
         _api_key, _use_vertex, configured_model = await setup_sdk_authentication(
             self._context
         )
+
+        # Populate credentials before building system prompt (prompt checks env vars)
         await populate_runtime_credentials(self._context)
+        self._last_creds_refresh = time.monotonic()
 
         # Workspace paths
         cwd_path, add_dirs = resolve_workspace_paths(self._context)

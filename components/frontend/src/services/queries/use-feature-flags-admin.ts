@@ -23,7 +23,7 @@ export function useFeatureFlags(projectName: string) {
     queryKey: featureFlagKeys.list(projectName),
     queryFn: () => featureFlagsApi.getFeatureFlags(projectName),
     enabled: !!projectName,
-    refetchInterval: 30000, // Refresh every 30s to stay in sync
+    refetchInterval: (query) => (query.state.status === 'error' ? false : 30000),
     staleTime: 10000, // Consider data stale after 10s
   });
 }
@@ -38,7 +38,7 @@ export function useWorkspaceFlag(projectName: string, flagName: string) {
     queryFn: () => featureFlagsApi.evaluateFeatureFlag(projectName, flagName),
     enabled: !!projectName && !!flagName,
     staleTime: 15000, // 15s cache
-    refetchInterval: 30000, // Refresh every 30s
+    refetchInterval: (query) => (query.state.status === 'error' ? false : 30000),
   });
 
   return {

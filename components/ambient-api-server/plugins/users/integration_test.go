@@ -19,23 +19,23 @@ func TestUserGet(t *testing.T) {
 	account := h.NewRandAccount()
 	ctx := h.NewAuthenticatedContext(account)
 
-	_, _, err := client.DefaultAPI.ApiAmbientApiServerV1UsersIdGet(context.Background(), "foo").Execute()
+	_, _, err := client.DefaultAPI.ApiAmbientV1UsersIdGet(context.Background(), "foo").Execute()
 	Expect(err).To(HaveOccurred(), "Expected 401 but got nil error")
 
-	_, resp, err := client.DefaultAPI.ApiAmbientApiServerV1UsersIdGet(ctx, "foo").Execute()
+	_, resp, err := client.DefaultAPI.ApiAmbientV1UsersIdGet(ctx, "foo").Execute()
 	Expect(err).To(HaveOccurred(), "Expected 404")
 	Expect(resp.StatusCode).To(Equal(http.StatusNotFound))
 
 	userModel, err := newUser(h.NewID())
 	Expect(err).NotTo(HaveOccurred())
 
-	userOutput, resp, err := client.DefaultAPI.ApiAmbientApiServerV1UsersIdGet(ctx, userModel.ID).Execute()
+	userOutput, resp, err := client.DefaultAPI.ApiAmbientV1UsersIdGet(ctx, userModel.ID).Execute()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
 
 	Expect(*userOutput.Id).To(Equal(userModel.ID), "found object does not match test object")
 	Expect(*userOutput.Kind).To(Equal("User"))
-	Expect(*userOutput.Href).To(Equal(fmt.Sprintf("/api/ambient-api-server/v1/users/%s", userModel.ID)))
+	Expect(*userOutput.Href).To(Equal(fmt.Sprintf("/api/ambient/v1/users/%s", userModel.ID)))
 	Expect(*userOutput.CreatedAt).To(BeTemporally("~", userModel.CreatedAt))
 	Expect(*userOutput.UpdatedAt).To(BeTemporally("~", userModel.UpdatedAt))
 }
@@ -52,12 +52,12 @@ func TestUserPost(t *testing.T) {
 		Email:    openapi.PtrString("test-email"),
 	}
 
-	userOutput, resp, err := client.DefaultAPI.ApiAmbientApiServerV1UsersPost(ctx).User(userInput).Execute()
+	userOutput, resp, err := client.DefaultAPI.ApiAmbientV1UsersPost(ctx).User(userInput).Execute()
 	Expect(err).NotTo(HaveOccurred(), "Error posting object:  %v", err)
 	Expect(resp.StatusCode).To(Equal(http.StatusCreated))
 	Expect(*userOutput.Id).NotTo(BeEmpty(), "Expected ID assigned on creation")
 	Expect(*userOutput.Kind).To(Equal("User"))
-	Expect(*userOutput.Href).To(Equal(fmt.Sprintf("/api/ambient-api-server/v1/users/%s", *userOutput.Id)))
+	Expect(*userOutput.Href).To(Equal(fmt.Sprintf("/api/ambient/v1/users/%s", *userOutput.Id)))
 
 	jwtToken := ctx.Value(openapi.ContextAccessToken)
 	restyResp, _ := resty.R().
@@ -78,13 +78,13 @@ func TestUserPatch(t *testing.T) {
 	userModel, err := newUser(h.NewID())
 	Expect(err).NotTo(HaveOccurred())
 
-	userOutput, resp, err := client.DefaultAPI.ApiAmbientApiServerV1UsersIdPatch(ctx, userModel.ID).UserPatchRequest(openapi.UserPatchRequest{}).Execute()
+	userOutput, resp, err := client.DefaultAPI.ApiAmbientV1UsersIdPatch(ctx, userModel.ID).UserPatchRequest(openapi.UserPatchRequest{}).Execute()
 	Expect(err).NotTo(HaveOccurred(), "Error posting object:  %v", err)
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
 	Expect(*userOutput.Id).To(Equal(userModel.ID))
 	Expect(*userOutput.CreatedAt).To(BeTemporally("~", userModel.CreatedAt))
 	Expect(*userOutput.Kind).To(Equal("User"))
-	Expect(*userOutput.Href).To(Equal(fmt.Sprintf("/api/ambient-api-server/v1/users/%s", *userOutput.Id)))
+	Expect(*userOutput.Href).To(Equal(fmt.Sprintf("/api/ambient/v1/users/%s", *userOutput.Id)))
 
 	jwtToken := ctx.Value(openapi.ContextAccessToken)
 	restyResp, _ := resty.R().
@@ -105,14 +105,14 @@ func TestUserPaging(t *testing.T) {
 	_, err := newUserList("Bronto", 20)
 	Expect(err).NotTo(HaveOccurred())
 
-	list, _, err := client.DefaultAPI.ApiAmbientApiServerV1UsersGet(ctx).Execute()
+	list, _, err := client.DefaultAPI.ApiAmbientV1UsersGet(ctx).Execute()
 	Expect(err).NotTo(HaveOccurred(), "Error getting user list: %v", err)
 	Expect(len(list.Items)).To(Equal(20))
 	Expect(list.Size).To(Equal(int32(20)))
 	Expect(list.Total).To(Equal(int32(20)))
 	Expect(list.Page).To(Equal(int32(1)))
 
-	list, _, err = client.DefaultAPI.ApiAmbientApiServerV1UsersGet(ctx).Page(2).Size(5).Execute()
+	list, _, err = client.DefaultAPI.ApiAmbientV1UsersGet(ctx).Page(2).Size(5).Execute()
 	Expect(err).NotTo(HaveOccurred(), "Error getting user list: %v", err)
 	Expect(len(list.Items)).To(Equal(5))
 	Expect(list.Size).To(Equal(int32(5)))
@@ -130,7 +130,7 @@ func TestUserListSearch(t *testing.T) {
 	Expect(err).NotTo(HaveOccurred())
 
 	search := fmt.Sprintf("id in ('%s')", users[0].ID)
-	list, _, err := client.DefaultAPI.ApiAmbientApiServerV1UsersGet(ctx).Search(search).Execute()
+	list, _, err := client.DefaultAPI.ApiAmbientV1UsersGet(ctx).Search(search).Execute()
 	Expect(err).NotTo(HaveOccurred(), "Error getting user list: %v", err)
 	Expect(len(list.Items)).To(Equal(1))
 	Expect(list.Total).To(Equal(int32(1)))

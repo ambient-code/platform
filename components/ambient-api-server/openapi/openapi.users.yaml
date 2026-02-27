@@ -1,6 +1,6 @@
 paths:
   # NEW ENDPOINT START
-  /api/ambient-api-server/v1/users:
+  /api/ambient/v1/users:
   # NEW ENDPOINT END
     get:
       summary: Returns a list of users
@@ -86,7 +86,7 @@ paths:
               schema:
                 $ref: 'openapi.yaml#/components/schemas/Error'
   # NEW ENDPOINT START
-  /api/ambient-api-server/v1/users/{id}:
+  /api/ambient/v1/users/{id}:
   # NEW ENDPOINT END
     get:
       summary: Get an user by id
@@ -307,7 +307,7 @@ components:
           Example: For each Subscription to get id, href, plan(id and kind) and labels (all fields)
 
           ```
-          curl "/api/ambient-api-server/v1/sessions?fields=id,href,name,project_id"
+          curl "/api/ambient/v1/sessions?fields=id,href,name,project_id"
           ```
         schema:
           type: string

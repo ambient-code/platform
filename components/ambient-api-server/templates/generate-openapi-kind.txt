@@ -320,7 +320,7 @@ components:
           Example: For each Subscription to get id, href, plan(id and kind) and labels (all fields)
 
           ```
-          curl "/api/ambient-api-server/v1/sessions?fields=id,href,name,project_id"
+          curl "/api/ambient/v1/sessions?fields=id,href,name,project_id"
           ```
         schema:
           type: string

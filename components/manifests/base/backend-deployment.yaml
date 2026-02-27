@@ -100,7 +100,7 @@ spec:
               optional: true
         # OOTB Workflows Configuration
         - name: OOTB_WORKFLOWS_REPO
-          value: "https://github.com/ambient-code/ootb-ambient-workflows.git"
+          value: "https://github.com/ambient-code/workflows.git"
         - name: OOTB_WORKFLOWS_BRANCH
           value: "main"
         - name: OOTB_WORKFLOWS_PATH
@@ -129,6 +129,43 @@ spec:
             configMapKeyRef:
               name: operator-config
               key: GOOGLE_APPLICATION_CREDENTIALS
+        # Unleash feature flags (optional - all flags disabled when not set)
+        - name: UNLEASH_URL
+          valueFrom:
+            secretKeyRef:
+              name: unleash-credentials
+              key: unleash-url
+              optional: true
+        - name: UNLEASH_CLIENT_KEY
+          valueFrom:
+            secretKeyRef:
+              name: unleash-credentials
+              key: client-api-token
+              optional: true
+        - name: UNLEASH_ADMIN_URL
+          valueFrom:
+            secretKeyRef:
+              name: unleash-credentials
+              key: unleash-admin-url
+              optional: true
+        - name: UNLEASH_ADMIN_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: unleash-credentials
+              key: admin-api-token
+              optional: true
+        - name: UNLEASH_PROJECT
+          valueFrom:
+            secretKeyRef:
+              name: unleash-credentials
+              key: unleash-project
+              optional: true
+        - name: UNLEASH_ENVIRONMENT
+          valueFrom:
+            secretKeyRef:
+              name: unleash-credentials
+              key: unleash-environment
+              optional: true
         resources:
           requests:
             cpu: 100m
@@ -166,7 +203,7 @@ spec:
         secret:
           secretName: ambient-vertex
           optional: true  # Don't fail if Vertex not configured
-      
+
 ---
 apiVersion: v1
 kind: Service
@@ -183,4 +220,3 @@ spec:
     protocol: TCP
     name: http
   type: ClusterIP
-

@@ -21,23 +21,23 @@ func TestProjectGet(t *testing.T) {
 	account := h.NewRandAccount()
 	ctx := h.NewAuthenticatedContext(account)
 
-	_, _, err := client.DefaultAPI.ApiAmbientApiServerV1ProjectsIdGet(context.Background(), "foo").Execute()
+	_, _, err := client.DefaultAPI.ApiAmbientV1ProjectsIdGet(context.Background(), "foo").Execute()
 	Expect(err).To(HaveOccurred(), "Expected 401 but got nil error")
 
-	_, resp, err := client.DefaultAPI.ApiAmbientApiServerV1ProjectsIdGet(ctx, "foo").Execute()
+	_, resp, err := client.DefaultAPI.ApiAmbientV1ProjectsIdGet(ctx, "foo").Execute()
 	Expect(err).To(HaveOccurred(), "Expected 404")
 	Expect(resp.StatusCode).To(Equal(http.StatusNotFound))
 
 	projectModel, err := newProject("get")
 	Expect(err).NotTo(HaveOccurred())
 
-	projectOutput, resp, err := client.DefaultAPI.ApiAmbientApiServerV1ProjectsIdGet(ctx, projectModel.ID).Execute()
+	projectOutput, resp, err := client.DefaultAPI.ApiAmbientV1ProjectsIdGet(ctx, projectModel.ID).Execute()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
 
 	Expect(*projectOutput.Id).To(Equal(projectModel.ID), "found object does not match test object")
 	Expect(*projectOutput.Kind).To(Equal("Project"))
-	Expect(*projectOutput.Href).To(Equal(fmt.Sprintf("/api/ambient-api-server/v1/projects/%s", projectModel.ID)))
+	Expect(*projectOutput.Href).To(Equal(fmt.Sprintf("/api/ambient/v1/projects/%s", projectModel.ID)))
 	Expect(*projectOutput.CreatedAt).To(BeTemporally("~", projectModel.CreatedAt))
 	Expect(*projectOutput.UpdatedAt).To(BeTemporally("~", projectModel.UpdatedAt))
 }
@@ -55,12 +55,12 @@ func TestProjectPost(t *testing.T) {
 		Status:      openapi.PtrString("active"),
 	}
 
-	projectOutput, resp, err := client.DefaultAPI.ApiAmbientApiServerV1ProjectsPost(ctx).Project(projectInput).Execute()
+	projectOutput, resp, err := client.DefaultAPI.ApiAmbientV1ProjectsPost(ctx).Project(projectInput).Execute()
 	Expect(err).NotTo(HaveOccurred(), "Error posting object:  %v", err)
 	Expect(resp.StatusCode).To(Equal(http.StatusCreated))
 	Expect(*projectOutput.Id).NotTo(BeEmpty(), "Expected ID assigned on creation")
 	Expect(*projectOutput.Kind).To(Equal("Project"))
-	Expect(*projectOutput.Href).To(Equal(fmt.Sprintf("/api/ambient-api-server/v1/projects/%s", *projectOutput.Id)))
+	Expect(*projectOutput.Href).To(Equal(fmt.Sprintf("/api/ambient/v1/projects/%s", *projectOutput.Id)))
 
 	jwtToken := ctx.Value(openapi.ContextAccessToken)
 	restyResp, _ := resty.R().
@@ -81,13 +81,13 @@ func TestProjectPatch(t *testing.T) {
 	projectModel, err := newProject("patch")
 	Expect(err).NotTo(HaveOccurred())
 
-	projectOutput, resp, err := client.DefaultAPI.ApiAmbientApiServerV1ProjectsIdPatch(ctx, projectModel.ID).ProjectPatchRequest(openapi.ProjectPatchRequest{}).Execute()
+	projectOutput, resp, err := client.DefaultAPI.ApiAmbientV1ProjectsIdPatch(ctx, projectModel.ID).ProjectPatchRequest(openapi.ProjectPatchRequest{}).Execute()
 	Expect(err).NotTo(HaveOccurred(), "Error posting object:  %v", err)
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
 	Expect(*projectOutput.Id).To(Equal(projectModel.ID))
 	Expect(*projectOutput.CreatedAt).To(BeTemporally("~", projectModel.CreatedAt))
 	Expect(*projectOutput.Kind).To(Equal("Project"))
-	Expect(*projectOutput.Href).To(Equal(fmt.Sprintf("/api/ambient-api-server/v1/projects/%s", *projectOutput.Id)))
+	Expect(*projectOutput.Href).To(Equal(fmt.Sprintf("/api/ambient/v1/projects/%s", *projectOutput.Id)))
 
 	jwtToken := ctx.Value(openapi.ContextAccessToken)
 	restyResp, _ := resty.R().
@@ -108,14 +108,14 @@ func TestProjectPaging(t *testing.T) {
 	_, err := newProjectList("paging", 20)
 	Expect(err).NotTo(HaveOccurred())
 
-	list, _, err := client.DefaultAPI.ApiAmbientApiServerV1ProjectsGet(ctx).Execute()
+	list, _, err := client.DefaultAPI.ApiAmbientV1ProjectsGet(ctx).Execute()
 	Expect(err).NotTo(HaveOccurred(), "Error getting project list: %v", err)
 	Expect(len(list.Items)).To(Equal(20))
 	Expect(list.Size).To(Equal(int32(20)))
 	Expect(list.Total).To(Equal(int32(20)))
 	Expect(list.Page).To(Equal(int32(1)))
 
-	list, _, err = client.DefaultAPI.ApiAmbientApiServerV1ProjectsGet(ctx).Page(2).Size(5).Execute()
+	list, _, err = client.DefaultAPI.ApiAmbientV1ProjectsGet(ctx).Page(2).Size(5).Execute()
 	Expect(err).NotTo(HaveOccurred(), "Error getting project list: %v", err)
 	Expect(len(list.Items)).To(Equal(5))
 	Expect(list.Size).To(Equal(int32(5)))
@@ -164,7 +164,7 @@ func TestProjectListSearch(t *testing.T) {
 	Expect(err).NotTo(HaveOccurred())
 
 	search := fmt.Sprintf("id in ('%s')", projects[0].ID)
-	list, _, err := client.DefaultAPI.ApiAmbientApiServerV1ProjectsGet(ctx).Search(search).Execute()
+	list, _, err := client.DefaultAPI.ApiAmbientV1ProjectsGet(ctx).Search(search).Execute()
 	Expect(err).NotTo(HaveOccurred(), "Error getting project list: %v", err)
 	Expect(len(list.Items)).To(Equal(1))
 	Expect(list.Total).To(Equal(int32(1)))

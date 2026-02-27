@@ -10,6 +10,7 @@ Kubernetes-native AI automation platform that orchestrates agentic sessions thro
 - `components/frontend/` - NextJS web UI for session management and monitoring
 - `components/operator/` - Go Kubernetes controller, watches CRDs and creates Jobs
 - `components/runners/claude-code-runner/` - Python runner executing Claude Code CLI in Job pods
+- `components/ambient-cli/` - Go CLI (`acpctl`), manages agentic sessions from the command line
 - `components/public-api/` - Stateless HTTP gateway, proxies to backend (no direct K8s access)
 - `components/manifests/` - Kustomize-based deployment manifests and overlays
 - `e2e/` - Cypress end-to-end tests
@@ -67,6 +68,55 @@ mkdocs serve  # http://127.0.0.1:8000
 - **No `panic()` in production**: Return explicit `fmt.Errorf` with context
 - **No `any` types in frontend**: Use proper types, `unknown`, or generic constraints
 - **Conventional commits**: Squashed on merge to `main`
+
+## Pre-commit Hooks
+
+The project uses the [pre-commit](https://pre-commit.com/) framework to run linters locally before every commit. Configuration lives in `.pre-commit-config.yaml`.
+
+### Install
+
+```bash
+make setup-hooks
+```
+
+### What Runs
+
+**On every `git commit`:**
+
+| Hook | Scope |
+|------|-------|
+| trailing-whitespace, end-of-file-fixer, check-yaml, check-added-large-files, check-merge-conflict, detect-private-key | All files |
+| ruff-format, ruff (check + fix) | Python (runners, scripts) |
+| gofmt, go vet, golangci-lint | Go (backend, operator, public-api — per-module) |
+| eslint | Frontend TypeScript/JavaScript |
+| branch-protection | Blocks commits to main/master/production |
+
+**On every `git push`:**
+
+| Hook | Scope |
+|------|-------|
+| push-protection | Blocks pushes to main/master/production |
+
+### Run Manually
+
+```bash
+make lint                                    # All hooks, all files
+pre-commit run gofmt-check --all-files       # Single hook
+pre-commit run --files path/to/file.go       # Single file
+```
+
+### Skip Hooks
+
+```bash
+git commit --no-verify    # Skip pre-commit hooks
+git push --no-verify      # Skip pre-push hooks
+```
+
+### Notes
+
+- Go and ESLint wrappers (`scripts/pre-commit/`) skip gracefully if the toolchain is not installed
+- `tsc --noEmit` and `npm run build` are **not** included (slow; CI gates on them)
+- Branch/push protection scripts remain in `scripts/git-hooks/` and are invoked by pre-commit
 
 ## More Info
 

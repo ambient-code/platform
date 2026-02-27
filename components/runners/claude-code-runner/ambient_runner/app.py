@@ -26,13 +26,17 @@ import logging
 import os
 import uuid
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse
 
 import aiohttp
 from fastapi import FastAPI
 
 from ambient_runner.bridge import PlatformBridge
+from ambient_runner.platform.config import load_ambient_config
 from ambient_runner.platform.context import RunnerContext
+from ambient_runner.platform.utils import parse_owner_repo
 
 logger = logging.getLogger(__name__)
 
@@ -110,21 +114,28 @@ def create_ambient_app(
         # where the conversation is continued rather than re-started).
         initial_prompt = os.getenv("INITIAL_PROMPT", "").strip()
 
-        if initial_prompt:
-            if not is_resume:
+        if initial_prompt and not is_resume:
+            startup_prompt = _get_workflow_startup_prompt()
+            if startup_prompt:
                 logger.info(
-                    f"INITIAL_PROMPT detected ({len(initial_prompt)} chars) "
-                    f"— auto-executing"
+                    f"Workflow startupPrompt ({len(startup_prompt)} chars) "
+                    f"will be prepended to INITIAL_PROMPT"
                 )
-                task = asyncio.create_task(
-                    _auto_execute_initial_prompt(initial_prompt, session_id)
-                )
-                task.add_done_callback(_log_auto_exec_failure)
-            else:
-                logger.info(
-                    f"INITIAL_PROMPT detected ({len(initial_prompt)} chars) "
-                    f"but not auto-executing (resumed session)"
-                )
+                initial_prompt = f"{startup_prompt}\n\n{initial_prompt}"
+
+            logger.info(
+                f"INITIAL_PROMPT detected ({len(initial_prompt)} chars) "
+                f"— auto-executing"
+            )
+            task = asyncio.create_task(
+                _auto_execute_initial_prompt(initial_prompt, session_id)
+            )
+            task.add_done_callback(_log_auto_exec_failure)
+        elif initial_prompt and is_resume:
+            logger.info(
+                f"INITIAL_PROMPT detected ({len(initial_prompt)} chars) "
+                f"but not auto-executing (resumed session)"
+            )
 
         logger.info(f"AG-UI server ready for session {session_id}")
 
@@ -223,6 +234,49 @@ def add_ambient_endpoints(
         f"Ambient endpoints registered: framework={caps.framework}, "
         f"features={caps.agent_features}"
     )
+
+
+# ------------------------------------------------------------------
+# Platform: resolve workflow startup prompt
+# ------------------------------------------------------------------
+
+
+def _get_workflow_startup_prompt() -> str:
+    """Load startupPrompt from the active workflow's ambient.json.
+
+    Returns the startupPrompt string, or empty string if no workflow
+    is active or the config has no startupPrompt.
+    """
+    active_url = os.getenv("ACTIVE_WORKFLOW_GIT_URL", "").strip()
+    if not active_url:
+        return ""
+
+    workspace_path = os.getenv("WORKSPACE_PATH", "/workspace")
+
+    try:
+        _owner, repo, _ = parse_owner_repo(active_url)
+        derived_name = repo or ""
+        if not derived_name:
+            p = urlparse(active_url)
+            parts = [pt for pt in (p.path or "").split("/") if pt]
+            if parts:
+                derived_name = parts[-1]
+        derived_name = (derived_name or "").removesuffix(".git").strip()
+    except Exception:
+        derived_name = ""
+
+    if not derived_name:
+        return ""
+
+    workflow_dir = str(Path(workspace_path) / "workflows" / derived_name)
+    if not Path(workflow_dir).exists():
+        return ""
+
+    config = load_ambient_config(workflow_dir)
+    startup = (config.get("startupPrompt") or "").strip()
+    if startup:
+        logger.info(f"Found startupPrompt in {derived_name}/ambient.json")
+    return startup
 
 
 # ------------------------------------------------------------------

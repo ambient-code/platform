@@ -6,12 +6,15 @@ namespace: vteam-dev
 # Resources (base + local-dev-specific)
 resources:
 - ../../base
+- ambient-api-server-route.yaml
 - build-configs.yaml
 - dev-users.yaml
 - frontend-auth.yaml
 - backend-route.yaml
 - frontend-route.yaml
 - operator-config-crc.yaml
+- unleash-credentials.yaml
+- unleash-route.yaml
 
 # Patches for local dev environment
 patches:
@@ -22,6 +25,8 @@ patches:
 - path: pvc-patch.yaml
 - path: backend-clusterrole-patch.yaml
 - path: operator-clusterrole-patch.yaml
+# Unleash: init container to create database (RHEL doesn't support init scripts)
+- path: unleash-init-db-patch.yaml
 # PostgreSQL: use RHEL image with proper env vars and mount paths (JSON patch)
 - path: postgresql-json-patch.yaml
   target:

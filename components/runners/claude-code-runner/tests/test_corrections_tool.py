@@ -28,6 +28,7 @@ from ambient_runner.bridges.claude.corrections import (
     CORRECTION_TOOL_DESCRIPTION_BASE,
     CORRECTION_TYPES,
     RUBRIC_CORRECTION_ADDENDUM,
+    _discover_repos_from_workspace,
     _get_session_context,
     _log_correction_to_langfuse,
     _repo_name,
@@ -299,6 +300,121 @@ def test_handles_missing_env_vars():
     assert ctx["workflow"]["path"] == ""
     assert ctx["session_name"] == ""
     assert ctx["project"] == ""
+
+
+# ------------------------------------------------------------------
+# Workspace fallback
+# ------------------------------------------------------------------
+
+
+@patch.dict(os.environ, {}, clear=True)
+def test_workspace_fallback_discovers_repos(tmp_path):
+    """When REPOS_JSON is empty, repos are discovered from workspace."""
+    import subprocess as _sp
+
+    repos_dir = tmp_path / "repos"
+    repo_path = repos_dir / "my-app"
+    repo_path.mkdir(parents=True)
+
+    # Create a minimal git repo with a remote
+    _sp.run(["git", "init", str(repo_path)], capture_output=True)
+    _sp.run(
+        ["git", "-C", str(repo_path), "remote", "add", "origin",
+         "https://github.com/org/my-app.git"],
+        capture_output=True,
+    )
+    # Need at least one commit for rev-parse to work
+    _sp.run(
+        ["git", "-C", str(repo_path), "commit", "--allow-empty", "-m", "init"],
+        capture_output=True,
+        env={**os.environ, "GIT_AUTHOR_NAME": "test", "GIT_AUTHOR_EMAIL": "t@t",
+             "GIT_COMMITTER_NAME": "test", "GIT_COMMITTER_EMAIL": "t@t"},
+    )
+
+    with patch.dict(os.environ, {"WORKSPACE_PATH": str(tmp_path)}, clear=True):
+        repos = _discover_repos_from_workspace()
+
+    assert len(repos) == 1
+    assert repos[0]["url"] == "https://github.com/org/my-app.git"
+
+
+@patch.dict(os.environ, {}, clear=True)
+def test_workspace_fallback_strips_credentials(tmp_path):
+    """Workspace fallback strips embedded credentials from remote URLs."""
+    import subprocess as _sp
+
+    repos_dir = tmp_path / "repos"
+    repo_path = repos_dir / "private-repo"
+    repo_path.mkdir(parents=True)
+
+    _sp.run(["git", "init", str(repo_path)], capture_output=True)
+    _sp.run(
+        ["git", "-C", str(repo_path), "remote", "add", "origin",
+         "https://x-access-token:ghp_SECRET@github.com/org/private-repo.git"],
+        capture_output=True,
+    )
+    _sp.run(
+        ["git", "-C", str(repo_path), "commit", "--allow-empty", "-m", "init"],
+        capture_output=True,
+        env={**os.environ, "GIT_AUTHOR_NAME": "test", "GIT_AUTHOR_EMAIL": "t@t",
+             "GIT_COMMITTER_NAME": "test", "GIT_COMMITTER_EMAIL": "t@t"},
+    )
+
+    with patch.dict(os.environ, {"WORKSPACE_PATH": str(tmp_path)}, clear=True):
+        repos = _discover_repos_from_workspace()
+
+    assert len(repos) == 1
+    assert "ghp_SECRET" not in repos[0]["url"]
+    assert repos[0]["url"] == "https://github.com/org/private-repo.git"
+
+
+@patch.dict(os.environ, {}, clear=True)
+def test_workspace_fallback_not_used_when_repos_json_set():
+    """REPOS_JSON takes precedence over workspace scan."""
+    repos_json = json.dumps([
+        {"url": "https://github.com/org/from-env.git", "branch": "main"},
+    ])
+    with patch.dict(os.environ, {"REPOS_JSON": repos_json}, clear=True):
+        ctx = _get_session_context()
+
+    assert len(ctx["repos"]) == 1
+    assert ctx["repos"][0]["url"] == "https://github.com/org/from-env.git"
+
+
+@patch.dict(os.environ, {}, clear=True)
+def test_context_uses_workspace_fallback_when_repos_json_empty(tmp_path):
+    """_get_session_context falls back to workspace discovery."""
+    import subprocess as _sp
+
+    repos_dir = tmp_path / "repos"
+    repo_path = repos_dir / "fallback-repo"
+    repo_path.mkdir(parents=True)
+
+    _sp.run(["git", "init", str(repo_path)], capture_output=True)
+    _sp.run(
+        ["git", "-C", str(repo_path), "remote", "add", "origin",
+         "https://github.com/org/fallback-repo.git"],
+        capture_output=True,
+    )
+    _sp.run(
+        ["git", "-C", str(repo_path), "commit", "--allow-empty", "-m", "init"],
+        capture_output=True,
+        env={**os.environ, "GIT_AUTHOR_NAME": "test", "GIT_AUTHOR_EMAIL": "t@t",
+             "GIT_COMMITTER_NAME": "test", "GIT_COMMITTER_EMAIL": "t@t"},
+    )
+
+    with patch.dict(os.environ, {"WORKSPACE_PATH": str(tmp_path)}, clear=True):
+        ctx = _get_session_context()
+
+    assert len(ctx["repos"]) == 1
+    assert ctx["repos"][0]["url"] == "https://github.com/org/fallback-repo.git"
+
+
+def test_workspace_fallback_returns_empty_when_no_repos():
+    """Workspace fallback returns empty list when no repos exist."""
+    with patch.dict(os.environ, {"WORKSPACE_PATH": "/nonexistent"}, clear=True):
+        repos = _discover_repos_from_workspace()
+    assert repos == []
 
 
 # ------------------------------------------------------------------
@@ -685,6 +801,8 @@ if __name__ == "__main__":
         ("Resolve: empty map", test_resolve_target_empty_map),
         ("Context: captures from env", test_captures_context_from_env),
         ("Context: handles missing env", test_handles_missing_env_vars),
+        ("Fallback: returns empty when no repos", test_workspace_fallback_returns_empty_when_no_repos),
+        ("Fallback: not used when REPOS_JSON set", test_workspace_fallback_not_used_when_repos_json_set),
         ("Logging: successful", test_successful_logging),
         ("Logging: rubric source", test_rubric_source_logging),
         ("Logging: no trace_id", test_logging_without_trace_id),

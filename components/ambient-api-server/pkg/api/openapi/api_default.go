@@ -23,7 +23,7 @@ import (
 // DefaultAPIService DefaultAPI service
 type DefaultAPIService service
 
-type ApiApiAmbientApiServerV1ProjectSettingsGetRequest struct {
+type ApiApiAmbientV1ProjectSettingsGetRequest struct {
 	ctx        context.Context
 	ApiService *DefaultAPIService
 	page       *int32
@@ -34,47 +34,47 @@ type ApiApiAmbientApiServerV1ProjectSettingsGetRequest struct {
 }
 
 // Page number of record list when record list exceeds specified page size
-func (r ApiApiAmbientApiServerV1ProjectSettingsGetRequest) Page(page int32) ApiApiAmbientApiServerV1ProjectSettingsGetRequest {
+func (r ApiApiAmbientV1ProjectSettingsGetRequest) Page(page int32) ApiApiAmbientV1ProjectSettingsGetRequest {
 	r.page = &page
 	return r
 }
 
 // Maximum number of records to return
-func (r ApiApiAmbientApiServerV1ProjectSettingsGetRequest) Size(size int32) ApiApiAmbientApiServerV1ProjectSettingsGetRequest {
+func (r ApiApiAmbientV1ProjectSettingsGetRequest) Size(size int32) ApiApiAmbientV1ProjectSettingsGetRequest {
 	r.size = &size
 	return r
 }
 
 // Specifies the search criteria
-func (r ApiApiAmbientApiServerV1ProjectSettingsGetRequest) Search(search string) ApiApiAmbientApiServerV1ProjectSettingsGetRequest {
+func (r ApiApiAmbientV1ProjectSettingsGetRequest) Search(search string) ApiApiAmbientV1ProjectSettingsGetRequest {
 	r.search = &search
 	return r
 }
 
 // Specifies the order by criteria
-func (r ApiApiAmbientApiServerV1ProjectSettingsGetRequest) OrderBy(orderBy string) ApiApiAmbientApiServerV1ProjectSettingsGetRequest {
+func (r ApiApiAmbientV1ProjectSettingsGetRequest) OrderBy(orderBy string) ApiApiAmbientV1ProjectSettingsGetRequest {
 	r.orderBy = &orderBy
 	return r
 }
 
 // Supplies a comma-separated list of fields to be returned
-func (r ApiApiAmbientApiServerV1ProjectSettingsGetRequest) Fields(fields string) ApiApiAmbientApiServerV1ProjectSettingsGetRequest {
+func (r ApiApiAmbientV1ProjectSettingsGetRequest) Fields(fields string) ApiApiAmbientV1ProjectSettingsGetRequest {
 	r.fields = &fields
 	return r
 }
 
-func (r ApiApiAmbientApiServerV1ProjectSettingsGetRequest) Execute() (*ProjectSettingsList, *http.Response, error) {
-	return r.ApiService.ApiAmbientApiServerV1ProjectSettingsGetExecute(r)
+func (r ApiApiAmbientV1ProjectSettingsGetRequest) Execute() (*ProjectSettingsList, *http.Response, error) {
+	return r.ApiService.ApiAmbientV1ProjectSettingsGetExecute(r)
 }
 
 /*
-ApiAmbientApiServerV1ProjectSettingsGet Returns a list of project settings
+ApiAmbientV1ProjectSettingsGet Returns a list of project settings
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
-	@return ApiApiAmbientApiServerV1ProjectSettingsGetRequest
+	@return ApiApiAmbientV1ProjectSettingsGetRequest
 */
-func (a *DefaultAPIService) ApiAmbientApiServerV1ProjectSettingsGet(ctx context.Context) ApiApiAmbientApiServerV1ProjectSettingsGetRequest {
-	return ApiApiAmbientApiServerV1ProjectSettingsGetRequest{
+func (a *DefaultAPIService) ApiAmbientV1ProjectSettingsGet(ctx context.Context) ApiApiAmbientV1ProjectSettingsGetRequest {
+	return ApiApiAmbientV1ProjectSettingsGetRequest{
 		ApiService: a,
 		ctx:        ctx,
 	}
@@ -83,7 +83,7 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1ProjectSettingsGet(ctx context.
 // Execute executes the request
 //
 //	@return ProjectSettingsList
-func (a *DefaultAPIService) ApiAmbientApiServerV1ProjectSettingsGetExecute(r ApiApiAmbientApiServerV1ProjectSettingsGetRequest) (*ProjectSettingsList, *http.Response, error) {
+func (a *DefaultAPIService) ApiAmbientV1ProjectSettingsGetExecute(r ApiApiAmbientV1ProjectSettingsGetRequest) (*ProjectSettingsList, *http.Response, error) {
 	var (
 		localVarHTTPMethod  = http.MethodGet
 		localVarPostBody    interface{}
@@ -91,12 +91,12 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1ProjectSettingsGetExecute(r Api
 		localVarReturnValue *ProjectSettingsList
 	)
 
-	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "DefaultAPIService.ApiAmbientApiServerV1ProjectSettingsGet")
+	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "DefaultAPIService.ApiAmbientV1ProjectSettingsGet")
 	if err != nil {
 		return localVarReturnValue, nil, &GenericOpenAPIError{error: err.Error()}
 	}
 
-	localVarPath := localBasePath + "/api/ambient-api-server/v1/project_settings"
+	localVarPath := localBasePath + "/api/ambient/v1/project_settings"
 
 	localVarHeaderParams := make(map[string]string)
 	localVarQueryParams := url.Values{}
@@ -209,25 +209,25 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1ProjectSettingsGetExecute(r Api
 	return localVarReturnValue, localVarHTTPResponse, nil
 }
 
-type ApiApiAmbientApiServerV1ProjectSettingsIdDeleteRequest struct {
+type ApiApiAmbientV1ProjectSettingsIdDeleteRequest struct {
 	ctx        context.Context
 	ApiService *DefaultAPIService
 	id         string
 }
 
-func (r ApiApiAmbientApiServerV1ProjectSettingsIdDeleteRequest) Execute() (*http.Response, error) {
-	return r.ApiService.ApiAmbientApiServerV1ProjectSettingsIdDeleteExecute(r)
+func (r ApiApiAmbientV1ProjectSettingsIdDeleteRequest) Execute() (*http.Response, error) {
+	return r.ApiService.ApiAmbientV1ProjectSettingsIdDeleteExecute(r)
 }
 
 /*
-ApiAmbientApiServerV1ProjectSettingsIdDelete Delete a project settings by id
+ApiAmbientV1ProjectSettingsIdDelete Delete a project settings by id
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 	@param id The id of record
-	@return ApiApiAmbientApiServerV1ProjectSettingsIdDeleteRequest
+	@return ApiApiAmbientV1ProjectSettingsIdDeleteRequest
 */
-func (a *DefaultAPIService) ApiAmbientApiServerV1ProjectSettingsIdDelete(ctx context.Context, id string) ApiApiAmbientApiServerV1ProjectSettingsIdDeleteRequest {
-	return ApiApiAmbientApiServerV1ProjectSettingsIdDeleteRequest{
+func (a *DefaultAPIService) ApiAmbientV1ProjectSettingsIdDelete(ctx context.Context, id string) ApiApiAmbientV1ProjectSettingsIdDeleteRequest {
+	return ApiApiAmbientV1ProjectSettingsIdDeleteRequest{
 		ApiService: a,
 		ctx:        ctx,
 		id:         id,
@@ -235,19 +235,19 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1ProjectSettingsIdDelete(ctx con
 }
 
 // Execute executes the request
-func (a *DefaultAPIService) ApiAmbientApiServerV1ProjectSettingsIdDeleteExecute(r ApiApiAmbientApiServerV1ProjectSettingsIdDeleteRequest) (*http.Response, error) {
+func (a *DefaultAPIService) ApiAmbientV1ProjectSettingsIdDeleteExecute(r ApiApiAmbientV1ProjectSettingsIdDeleteRequest) (*http.Response, error) {
 	var (
 		localVarHTTPMethod = http.MethodDelete
 		localVarPostBody   interface{}
 		formFiles          []formFile
 	)
 
-	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "DefaultAPIService.ApiAmbientApiServerV1ProjectSettingsIdDelete")
+	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "DefaultAPIService.ApiAmbientV1ProjectSettingsIdDelete")
 	if err != nil {
 		return nil, &GenericOpenAPIError{error: err.Error()}
 	}
 
-	localVarPath := localBasePath + "/api/ambient-api-server/v1/project_settings/{id}"
+	localVarPath := localBasePath + "/api/ambient/v1/project_settings/{id}"
 	localVarPath = strings.Replace(localVarPath, "{"+"id"+"}", url.PathEscape(parameterValueToString(r.id, "id")), -1)
 
 	localVarHeaderParams := make(map[string]string)
@@ -342,25 +342,25 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1ProjectSettingsIdDeleteExecute(
 	return localVarHTTPResponse, nil
 }
 
-type ApiApiAmbientApiServerV1ProjectSettingsIdGetRequest struct {
+type ApiApiAmbientV1ProjectSettingsIdGetRequest struct {
 	ctx        context.Context
 	ApiService *DefaultAPIService
 	id         string
 }
 
-func (r ApiApiAmbientApiServerV1ProjectSettingsIdGetRequest) Execute() (*ProjectSettings, *http.Response, error) {
-	return r.ApiService.ApiAmbientApiServerV1ProjectSettingsIdGetExecute(r)
+func (r ApiApiAmbientV1ProjectSettingsIdGetRequest) Execute() (*ProjectSettings, *http.Response, error) {
+	return r.ApiService.ApiAmbientV1ProjectSettingsIdGetExecute(r)
 }
 
 /*
-ApiAmbientApiServerV1ProjectSettingsIdGet Get a project settings by id
+ApiAmbientV1ProjectSettingsIdGet Get a project settings by id
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 	@param id The id of record
-	@return ApiApiAmbientApiServerV1ProjectSettingsIdGetRequest
+	@return ApiApiAmbientV1ProjectSettingsIdGetRequest
 */
-func (a *DefaultAPIService) ApiAmbientApiServerV1ProjectSettingsIdGet(ctx context.Context, id string) ApiApiAmbientApiServerV1ProjectSettingsIdGetRequest {
-	return ApiApiAmbientApiServerV1ProjectSettingsIdGetRequest{
+func (a *DefaultAPIService) ApiAmbientV1ProjectSettingsIdGet(ctx context.Context, id string) ApiApiAmbientV1ProjectSettingsIdGetRequest {
+	return ApiApiAmbientV1ProjectSettingsIdGetRequest{
 		ApiService: a,
 		ctx:        ctx,
 		id:         id,
@@ -370,7 +370,7 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1ProjectSettingsIdGet(ctx contex
 // Execute executes the request
 //
 //	@return ProjectSettings
-func (a *DefaultAPIService) ApiAmbientApiServerV1ProjectSettingsIdGetExecute(r ApiApiAmbientApiServerV1ProjectSettingsIdGetRequest) (*ProjectSettings, *http.Response, error) {
+func (a *DefaultAPIService) ApiAmbientV1ProjectSettingsIdGetExecute(r ApiApiAmbientV1ProjectSettingsIdGetRequest) (*ProjectSettings, *http.Response, error) {
 	var (
 		localVarHTTPMethod  = http.MethodGet
 		localVarPostBody    interface{}
@@ -378,12 +378,12 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1ProjectSettingsIdGetExecute(r A
 		localVarReturnValue *ProjectSettings
 	)
 
-	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "DefaultAPIService.ApiAmbientApiServerV1ProjectSettingsIdGet")
+	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "DefaultAPIService.ApiAmbientV1ProjectSettingsIdGet")
 	if err != nil {
 		return localVarReturnValue, nil, &GenericOpenAPIError{error: err.Error()}
 	}
 
-	localVarPath := localBasePath + "/api/ambient-api-server/v1/project_settings/{id}"
+	localVarPath := localBasePath + "/api/ambient/v1/project_settings/{id}"
 	localVarPath = strings.Replace(localVarPath, "{"+"id"+"}", url.PathEscape(parameterValueToString(r.id, "id")), -1)
 
 	localVarHeaderParams := make(map[string]string)
@@ -487,7 +487,7 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1ProjectSettingsIdGetExecute(r A
 	return localVarReturnValue, localVarHTTPResponse, nil
 }
 
-type ApiApiAmbientApiServerV1ProjectSettingsIdPatchRequest struct {
+type ApiApiAmbientV1ProjectSettingsIdPatchRequest struct {
 	ctx                         context.Context
 	ApiService                  *DefaultAPIService
 	id                          string
@@ -495,24 +495,24 @@ type ApiApiAmbientApiServerV1ProjectSettingsIdPatchRequest struct {
 }
 
 // Updated project settings data
-func (r ApiApiAmbientApiServerV1ProjectSettingsIdPatchRequest) ProjectSettingsPatchRequest(projectSettingsPatchRequest ProjectSettingsPatchRequest) ApiApiAmbientApiServerV1ProjectSettingsIdPatchRequest {
+func (r ApiApiAmbientV1ProjectSettingsIdPatchRequest) ProjectSettingsPatchRequest(projectSettingsPatchRequest ProjectSettingsPatchRequest) ApiApiAmbientV1ProjectSettingsIdPatchRequest {
 	r.projectSettingsPatchRequest = &projectSettingsPatchRequest
 	return r
 }
 
-func (r ApiApiAmbientApiServerV1ProjectSettingsIdPatchRequest) Execute() (*ProjectSettings, *http.Response, error) {
-	return r.ApiService.ApiAmbientApiServerV1ProjectSettingsIdPatchExecute(r)
+func (r ApiApiAmbientV1ProjectSettingsIdPatchRequest) Execute() (*ProjectSettings, *http.Response, error) {
+	return r.ApiService.ApiAmbientV1ProjectSettingsIdPatchExecute(r)
 }
 
 /*
-ApiAmbientApiServerV1ProjectSettingsIdPatch Update a project settings
+ApiAmbientV1ProjectSettingsIdPatch Update a project settings
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 	@param id The id of record
-	@return ApiApiAmbientApiServerV1ProjectSettingsIdPatchRequest
+	@return ApiApiAmbientV1ProjectSettingsIdPatchRequest
 */
-func (a *DefaultAPIService) ApiAmbientApiServerV1ProjectSettingsIdPatch(ctx context.Context, id string) ApiApiAmbientApiServerV1ProjectSettingsIdPatchRequest {
-	return ApiApiAmbientApiServerV1ProjectSettingsIdPatchRequest{
+func (a *DefaultAPIService) ApiAmbientV1ProjectSettingsIdPatch(ctx context.Context, id string) ApiApiAmbientV1ProjectSettingsIdPatchRequest {
+	return ApiApiAmbientV1ProjectSettingsIdPatchRequest{
 		ApiService: a,
 		ctx:        ctx,
 		id:         id,
@@ -522,7 +522,7 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1ProjectSettingsIdPatch(ctx cont
 // Execute executes the request
 //
 //	@return ProjectSettings
-func (a *DefaultAPIService) ApiAmbientApiServerV1ProjectSettingsIdPatchExecute(r ApiApiAmbientApiServerV1ProjectSettingsIdPatchRequest) (*ProjectSettings, *http.Response, error) {
+func (a *DefaultAPIService) ApiAmbientV1ProjectSettingsIdPatchExecute(r ApiApiAmbientV1ProjectSettingsIdPatchRequest) (*ProjectSettings, *http.Response, error) {
 	var (
 		localVarHTTPMethod  = http.MethodPatch
 		localVarPostBody    interface{}
@@ -530,12 +530,12 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1ProjectSettingsIdPatchExecute(r
 		localVarReturnValue *ProjectSettings
 	)
 
-	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "DefaultAPIService.ApiAmbientApiServerV1ProjectSettingsIdPatch")
+	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "DefaultAPIService.ApiAmbientV1ProjectSettingsIdPatch")
 	if err != nil {
 		return localVarReturnValue, nil, &GenericOpenAPIError{error: err.Error()}
 	}
 
-	localVarPath := localBasePath + "/api/ambient-api-server/v1/project_settings/{id}"
+	localVarPath := localBasePath + "/api/ambient/v1/project_settings/{id}"
 	localVarPath = strings.Replace(localVarPath, "{"+"id"+"}", url.PathEscape(parameterValueToString(r.id, "id")), -1)
 
 	localVarHeaderParams := make(map[string]string)
@@ -666,30 +666,30 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1ProjectSettingsIdPatchExecute(r
 	return localVarReturnValue, localVarHTTPResponse, nil
 }
 
-type ApiApiAmbientApiServerV1ProjectSettingsPostRequest struct {
+type ApiApiAmbientV1ProjectSettingsPostRequest struct {
 	ctx             context.Context
 	ApiService      *DefaultAPIService
 	projectSettings *ProjectSettings
 }
 
 // Project settings data
-func (r ApiApiAmbientApiServerV1ProjectSettingsPostRequest) ProjectSettings(projectSettings ProjectSettings) ApiApiAmbientApiServerV1ProjectSettingsPostRequest {
+func (r ApiApiAmbientV1ProjectSettingsPostRequest) ProjectSettings(projectSettings ProjectSettings) ApiApiAmbientV1ProjectSettingsPostRequest {
 	r.projectSettings = &projectSettings
 	return r
 }
 
-func (r ApiApiAmbientApiServerV1ProjectSettingsPostRequest) Execute() (*ProjectSettings, *http.Response, error) {
-	return r.ApiService.ApiAmbientApiServerV1ProjectSettingsPostExecute(r)
+func (r ApiApiAmbientV1ProjectSettingsPostRequest) Execute() (*ProjectSettings, *http.Response, error) {
+	return r.ApiService.ApiAmbientV1ProjectSettingsPostExecute(r)
 }
 
 /*
-ApiAmbientApiServerV1ProjectSettingsPost Create a new project settings
+ApiAmbientV1ProjectSettingsPost Create a new project settings
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
-	@return ApiApiAmbientApiServerV1ProjectSettingsPostRequest
+	@return ApiApiAmbientV1ProjectSettingsPostRequest
 */
-func (a *DefaultAPIService) ApiAmbientApiServerV1ProjectSettingsPost(ctx context.Context) ApiApiAmbientApiServerV1ProjectSettingsPostRequest {
-	return ApiApiAmbientApiServerV1ProjectSettingsPostRequest{
+func (a *DefaultAPIService) ApiAmbientV1ProjectSettingsPost(ctx context.Context) ApiApiAmbientV1ProjectSettingsPostRequest {
+	return ApiApiAmbientV1ProjectSettingsPostRequest{
 		ApiService: a,
 		ctx:        ctx,
 	}
@@ -698,7 +698,7 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1ProjectSettingsPost(ctx context
 // Execute executes the request
 //
 //	@return ProjectSettings
-func (a *DefaultAPIService) ApiAmbientApiServerV1ProjectSettingsPostExecute(r ApiApiAmbientApiServerV1ProjectSettingsPostRequest) (*ProjectSettings, *http.Response, error) {
+func (a *DefaultAPIService) ApiAmbientV1ProjectSettingsPostExecute(r ApiApiAmbientV1ProjectSettingsPostRequest) (*ProjectSettings, *http.Response, error) {
 	var (
 		localVarHTTPMethod  = http.MethodPost
 		localVarPostBody    interface{}
@@ -706,12 +706,12 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1ProjectSettingsPostExecute(r Ap
 		localVarReturnValue *ProjectSettings
 	)
 
-	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "DefaultAPIService.ApiAmbientApiServerV1ProjectSettingsPost")
+	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "DefaultAPIService.ApiAmbientV1ProjectSettingsPost")
 	if err != nil {
 		return localVarReturnValue, nil, &GenericOpenAPIError{error: err.Error()}
 	}
 
-	localVarPath := localBasePath + "/api/ambient-api-server/v1/project_settings"
+	localVarPath := localBasePath + "/api/ambient/v1/project_settings"
 
 	localVarHeaderParams := make(map[string]string)
 	localVarQueryParams := url.Values{}
@@ -830,7 +830,7 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1ProjectSettingsPostExecute(r Ap
 	return localVarReturnValue, localVarHTTPResponse, nil
 }
 
-type ApiApiAmbientApiServerV1ProjectsGetRequest struct {
+type ApiApiAmbientV1ProjectsGetRequest struct {
 	ctx        context.Context
 	ApiService *DefaultAPIService
 	page       *int32
@@ -841,47 +841,47 @@ type ApiApiAmbientApiServerV1ProjectsGetRequest struct {
 }
 
 // Page number of record list when record list exceeds specified page size
-func (r ApiApiAmbientApiServerV1ProjectsGetRequest) Page(page int32) ApiApiAmbientApiServerV1ProjectsGetRequest {
+func (r ApiApiAmbientV1ProjectsGetRequest) Page(page int32) ApiApiAmbientV1ProjectsGetRequest {
 	r.page = &page
 	return r
 }
 
 // Maximum number of records to return
-func (r ApiApiAmbientApiServerV1ProjectsGetRequest) Size(size int32) ApiApiAmbientApiServerV1ProjectsGetRequest {
+func (r ApiApiAmbientV1ProjectsGetRequest) Size(size int32) ApiApiAmbientV1ProjectsGetRequest {
 	r.size = &size
 	return r
 }
 
 // Specifies the search criteria
-func (r ApiApiAmbientApiServerV1ProjectsGetRequest) Search(search string) ApiApiAmbientApiServerV1ProjectsGetRequest {
+func (r ApiApiAmbientV1ProjectsGetRequest) Search(search string) ApiApiAmbientV1ProjectsGetRequest {
 	r.search = &search
 	return r
 }
 
 // Specifies the order by criteria
-func (r ApiApiAmbientApiServerV1ProjectsGetRequest) OrderBy(orderBy string) ApiApiAmbientApiServerV1ProjectsGetRequest {
+func (r ApiApiAmbientV1ProjectsGetRequest) OrderBy(orderBy string) ApiApiAmbientV1ProjectsGetRequest {
 	r.orderBy = &orderBy
 	return r
 }
 
 // Supplies a comma-separated list of fields to be returned
-func (r ApiApiAmbientApiServerV1ProjectsGetRequest) Fields(fields string) ApiApiAmbientApiServerV1ProjectsGetRequest {
+func (r ApiApiAmbientV1ProjectsGetRequest) Fields(fields string) ApiApiAmbientV1ProjectsGetRequest {
 	r.fields = &fields
 	return r
 }
 
-func (r ApiApiAmbientApiServerV1ProjectsGetRequest) Execute() (*ProjectList, *http.Response, error) {
-	return r.ApiService.ApiAmbientApiServerV1ProjectsGetExecute(r)
+func (r ApiApiAmbientV1ProjectsGetRequest) Execute() (*ProjectList, *http.Response, error) {
+	return r.ApiService.ApiAmbientV1ProjectsGetExecute(r)
 }
 
 /*
-ApiAmbientApiServerV1ProjectsGet Returns a list of projects
+ApiAmbientV1ProjectsGet Returns a list of projects
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
-	@return ApiApiAmbientApiServerV1ProjectsGetRequest
+	@return ApiApiAmbientV1ProjectsGetRequest
 */
-func (a *DefaultAPIService) ApiAmbientApiServerV1ProjectsGet(ctx context.Context) ApiApiAmbientApiServerV1ProjectsGetRequest {
-	return ApiApiAmbientApiServerV1ProjectsGetRequest{
+func (a *DefaultAPIService) ApiAmbientV1ProjectsGet(ctx context.Context) ApiApiAmbientV1ProjectsGetRequest {
+	return ApiApiAmbientV1ProjectsGetRequest{
 		ApiService: a,
 		ctx:        ctx,
 	}
@@ -890,7 +890,7 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1ProjectsGet(ctx context.Context
 // Execute executes the request
 //
 //	@return ProjectList
-func (a *DefaultAPIService) ApiAmbientApiServerV1ProjectsGetExecute(r ApiApiAmbientApiServerV1ProjectsGetRequest) (*ProjectList, *http.Response, error) {
+func (a *DefaultAPIService) ApiAmbientV1ProjectsGetExecute(r ApiApiAmbientV1ProjectsGetRequest) (*ProjectList, *http.Response, error) {
 	var (
 		localVarHTTPMethod  = http.MethodGet
 		localVarPostBody    interface{}
@@ -898,12 +898,12 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1ProjectsGetExecute(r ApiApiAmbi
 		localVarReturnValue *ProjectList
 	)
 
-	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "DefaultAPIService.ApiAmbientApiServerV1ProjectsGet")
+	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "DefaultAPIService.ApiAmbientV1ProjectsGet")
 	if err != nil {
 		return localVarReturnValue, nil, &GenericOpenAPIError{error: err.Error()}
 	}
 
-	localVarPath := localBasePath + "/api/ambient-api-server/v1/projects"
+	localVarPath := localBasePath + "/api/ambient/v1/projects"
 
 	localVarHeaderParams := make(map[string]string)
 	localVarQueryParams := url.Values{}
@@ -1016,25 +1016,25 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1ProjectsGetExecute(r ApiApiAmbi
 	return localVarReturnValue, localVarHTTPResponse, nil
 }
 
-type ApiApiAmbientApiServerV1ProjectsIdDeleteRequest struct {
+type ApiApiAmbientV1ProjectsIdDeleteRequest struct {
 	ctx        context.Context
 	ApiService *DefaultAPIService
 	id         string
 }
 
-func (r ApiApiAmbientApiServerV1ProjectsIdDeleteRequest) Execute() (*http.Response, error) {
-	return r.ApiService.ApiAmbientApiServerV1ProjectsIdDeleteExecute(r)
+func (r ApiApiAmbientV1ProjectsIdDeleteRequest) Execute() (*http.Response, error) {
+	return r.ApiService.ApiAmbientV1ProjectsIdDeleteExecute(r)
 }
 
 /*
-ApiAmbientApiServerV1ProjectsIdDelete Delete a project by id
+ApiAmbientV1ProjectsIdDelete Delete a project by id
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 	@param id The id of record
-	@return ApiApiAmbientApiServerV1ProjectsIdDeleteRequest
+	@return ApiApiAmbientV1ProjectsIdDeleteRequest
 */
-func (a *DefaultAPIService) ApiAmbientApiServerV1ProjectsIdDelete(ctx context.Context, id string) ApiApiAmbientApiServerV1ProjectsIdDeleteRequest {
-	return ApiApiAmbientApiServerV1ProjectsIdDeleteRequest{
+func (a *DefaultAPIService) ApiAmbientV1ProjectsIdDelete(ctx context.Context, id string) ApiApiAmbientV1ProjectsIdDeleteRequest {
+	return ApiApiAmbientV1ProjectsIdDeleteRequest{
 		ApiService: a,
 		ctx:        ctx,
 		id:         id,
@@ -1042,19 +1042,19 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1ProjectsIdDelete(ctx context.Co
 }
 
 // Execute executes the request
-func (a *DefaultAPIService) ApiAmbientApiServerV1ProjectsIdDeleteExecute(r ApiApiAmbientApiServerV1ProjectsIdDeleteRequest) (*http.Response, error) {
+func (a *DefaultAPIService) ApiAmbientV1ProjectsIdDeleteExecute(r ApiApiAmbientV1ProjectsIdDeleteRequest) (*http.Response, error) {
 	var (
 		localVarHTTPMethod = http.MethodDelete
 		localVarPostBody   interface{}
 		formFiles          []formFile
 	)
 
-	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "DefaultAPIService.ApiAmbientApiServerV1ProjectsIdDelete")
+	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "DefaultAPIService.ApiAmbientV1ProjectsIdDelete")
 	if err != nil {
 		return nil, &GenericOpenAPIError{error: err.Error()}
 	}
 
-	localVarPath := localBasePath + "/api/ambient-api-server/v1/projects/{id}"
+	localVarPath := localBasePath + "/api/ambient/v1/projects/{id}"
 	localVarPath = strings.Replace(localVarPath, "{"+"id"+"}", url.PathEscape(parameterValueToString(r.id, "id")), -1)
 
 	localVarHeaderParams := make(map[string]string)
@@ -1149,25 +1149,25 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1ProjectsIdDeleteExecute(r ApiAp
 	return localVarHTTPResponse, nil
 }
 
-type ApiApiAmbientApiServerV1ProjectsIdGetRequest struct {
+type ApiApiAmbientV1ProjectsIdGetRequest struct {
 	ctx        context.Context
 	ApiService *DefaultAPIService
 	id         string
 }
 
-func (r ApiApiAmbientApiServerV1ProjectsIdGetRequest) Execute() (*Project, *http.Response, error) {
-	return r.ApiService.ApiAmbientApiServerV1ProjectsIdGetExecute(r)
+func (r ApiApiAmbientV1ProjectsIdGetRequest) Execute() (*Project, *http.Response, error) {
+	return r.ApiService.ApiAmbientV1ProjectsIdGetExecute(r)
 }
 
 /*
-ApiAmbientApiServerV1ProjectsIdGet Get a project by id
+ApiAmbientV1ProjectsIdGet Get a project by id
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 	@param id The id of record
-	@return ApiApiAmbientApiServerV1ProjectsIdGetRequest
+	@return ApiApiAmbientV1ProjectsIdGetRequest
 */
-func (a *DefaultAPIService) ApiAmbientApiServerV1ProjectsIdGet(ctx context.Context, id string) ApiApiAmbientApiServerV1ProjectsIdGetRequest {
-	return ApiApiAmbientApiServerV1ProjectsIdGetRequest{
+func (a *DefaultAPIService) ApiAmbientV1ProjectsIdGet(ctx context.Context, id string) ApiApiAmbientV1ProjectsIdGetRequest {
+	return ApiApiAmbientV1ProjectsIdGetRequest{
 		ApiService: a,
 		ctx:        ctx,
 		id:         id,
@@ -1177,7 +1177,7 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1ProjectsIdGet(ctx context.Conte
 // Execute executes the request
 //
 //	@return Project
-func (a *DefaultAPIService) ApiAmbientApiServerV1ProjectsIdGetExecute(r ApiApiAmbientApiServerV1ProjectsIdGetRequest) (*Project, *http.Response, error) {
+func (a *DefaultAPIService) ApiAmbientV1ProjectsIdGetExecute(r ApiApiAmbientV1ProjectsIdGetRequest) (*Project, *http.Response, error) {
 	var (
 		localVarHTTPMethod  = http.MethodGet
 		localVarPostBody    interface{}
@@ -1185,12 +1185,12 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1ProjectsIdGetExecute(r ApiApiAm
 		localVarReturnValue *Project
 	)
 
-	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "DefaultAPIService.ApiAmbientApiServerV1ProjectsIdGet")
+	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "DefaultAPIService.ApiAmbientV1ProjectsIdGet")
 	if err != nil {
 		return localVarReturnValue, nil, &GenericOpenAPIError{error: err.Error()}
 	}
 
-	localVarPath := localBasePath + "/api/ambient-api-server/v1/projects/{id}"
+	localVarPath := localBasePath + "/api/ambient/v1/projects/{id}"
 	localVarPath = strings.Replace(localVarPath, "{"+"id"+"}", url.PathEscape(parameterValueToString(r.id, "id")), -1)
 
 	localVarHeaderParams := make(map[string]string)
@@ -1294,7 +1294,7 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1ProjectsIdGetExecute(r ApiApiAm
 	return localVarReturnValue, localVarHTTPResponse, nil
 }
 
-type ApiApiAmbientApiServerV1ProjectsIdPatchRequest struct {
+type ApiApiAmbientV1ProjectsIdPatchRequest struct {
 	ctx                 context.Context
 	ApiService          *DefaultAPIService
 	id                  string
@@ -1302,24 +1302,24 @@ type ApiApiAmbientApiServerV1ProjectsIdPatchRequest struct {
 }
 
 // Updated project data
-func (r ApiApiAmbientApiServerV1ProjectsIdPatchRequest) ProjectPatchRequest(projectPatchRequest ProjectPatchRequest) ApiApiAmbientApiServerV1ProjectsIdPatchRequest {
+func (r ApiApiAmbientV1ProjectsIdPatchRequest) ProjectPatchRequest(projectPatchRequest ProjectPatchRequest) ApiApiAmbientV1ProjectsIdPatchRequest {
 	r.projectPatchRequest = &projectPatchRequest
 	return r
 }
 
-func (r ApiApiAmbientApiServerV1ProjectsIdPatchRequest) Execute() (*Project, *http.Response, error) {
-	return r.ApiService.ApiAmbientApiServerV1ProjectsIdPatchExecute(r)
+func (r ApiApiAmbientV1ProjectsIdPatchRequest) Execute() (*Project, *http.Response, error) {
+	return r.ApiService.ApiAmbientV1ProjectsIdPatchExecute(r)
 }
 
 /*
-ApiAmbientApiServerV1ProjectsIdPatch Update a project
+ApiAmbientV1ProjectsIdPatch Update a project
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 	@param id The id of record
-	@return ApiApiAmbientApiServerV1ProjectsIdPatchRequest
+	@return ApiApiAmbientV1ProjectsIdPatchRequest
 */
-func (a *DefaultAPIService) ApiAmbientApiServerV1ProjectsIdPatch(ctx context.Context, id string) ApiApiAmbientApiServerV1ProjectsIdPatchRequest {
-	return ApiApiAmbientApiServerV1ProjectsIdPatchRequest{
+func (a *DefaultAPIService) ApiAmbientV1ProjectsIdPatch(ctx context.Context, id string) ApiApiAmbientV1ProjectsIdPatchRequest {
+	return ApiApiAmbientV1ProjectsIdPatchRequest{
 		ApiService: a,
 		ctx:        ctx,
 		id:         id,
@@ -1329,7 +1329,7 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1ProjectsIdPatch(ctx context.Con
 // Execute executes the request
 //
 //	@return Project
-func (a *DefaultAPIService) ApiAmbientApiServerV1ProjectsIdPatchExecute(r ApiApiAmbientApiServerV1ProjectsIdPatchRequest) (*Project, *http.Response, error) {
+func (a *DefaultAPIService) ApiAmbientV1ProjectsIdPatchExecute(r ApiApiAmbientV1ProjectsIdPatchRequest) (*Project, *http.Response, error) {
 	var (
 		localVarHTTPMethod  = http.MethodPatch
 		localVarPostBody    interface{}
@@ -1337,12 +1337,12 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1ProjectsIdPatchExecute(r ApiApi
 		localVarReturnValue *Project
 	)
 
-	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "DefaultAPIService.ApiAmbientApiServerV1ProjectsIdPatch")
+	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "DefaultAPIService.ApiAmbientV1ProjectsIdPatch")
 	if err != nil {
 		return localVarReturnValue, nil, &GenericOpenAPIError{error: err.Error()}
 	}
 
-	localVarPath := localBasePath + "/api/ambient-api-server/v1/projects/{id}"
+	localVarPath := localBasePath + "/api/ambient/v1/projects/{id}"
 	localVarPath = strings.Replace(localVarPath, "{"+"id"+"}", url.PathEscape(parameterValueToString(r.id, "id")), -1)
 
 	localVarHeaderParams := make(map[string]string)
@@ -1473,30 +1473,30 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1ProjectsIdPatchExecute(r ApiApi
 	return localVarReturnValue, localVarHTTPResponse, nil
 }
 
-type ApiApiAmbientApiServerV1ProjectsPostRequest struct {
+type ApiApiAmbientV1ProjectsPostRequest struct {
 	ctx        context.Context
 	ApiService *DefaultAPIService
 	project    *Project
 }
 
 // Project data
-func (r ApiApiAmbientApiServerV1ProjectsPostRequest) Project(project Project) ApiApiAmbientApiServerV1ProjectsPostRequest {
+func (r ApiApiAmbientV1ProjectsPostRequest) Project(project Project) ApiApiAmbientV1ProjectsPostRequest {
 	r.project = &project
 	return r
 }
 
-func (r ApiApiAmbientApiServerV1ProjectsPostRequest) Execute() (*Project, *http.Response, error) {
-	return r.ApiService.ApiAmbientApiServerV1ProjectsPostExecute(r)
+func (r ApiApiAmbientV1ProjectsPostRequest) Execute() (*Project, *http.Response, error) {
+	return r.ApiService.ApiAmbientV1ProjectsPostExecute(r)
 }
 
 /*
-ApiAmbientApiServerV1ProjectsPost Create a new project
+ApiAmbientV1ProjectsPost Create a new project
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
-	@return ApiApiAmbientApiServerV1ProjectsPostRequest
+	@return ApiApiAmbientV1ProjectsPostRequest
 */
-func (a *DefaultAPIService) ApiAmbientApiServerV1ProjectsPost(ctx context.Context) ApiApiAmbientApiServerV1ProjectsPostRequest {
-	return ApiApiAmbientApiServerV1ProjectsPostRequest{
+func (a *DefaultAPIService) ApiAmbientV1ProjectsPost(ctx context.Context) ApiApiAmbientV1ProjectsPostRequest {
+	return ApiApiAmbientV1ProjectsPostRequest{
 		ApiService: a,
 		ctx:        ctx,
 	}
@@ -1505,7 +1505,7 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1ProjectsPost(ctx context.Contex
 // Execute executes the request
 //
 //	@return Project
-func (a *DefaultAPIService) ApiAmbientApiServerV1ProjectsPostExecute(r ApiApiAmbientApiServerV1ProjectsPostRequest) (*Project, *http.Response, error) {
+func (a *DefaultAPIService) ApiAmbientV1ProjectsPostExecute(r ApiApiAmbientV1ProjectsPostRequest) (*Project, *http.Response, error) {
 	var (
 		localVarHTTPMethod  = http.MethodPost
 		localVarPostBody    interface{}
@@ -1513,12 +1513,12 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1ProjectsPostExecute(r ApiApiAmb
 		localVarReturnValue *Project
 	)
 
-	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "DefaultAPIService.ApiAmbientApiServerV1ProjectsPost")
+	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "DefaultAPIService.ApiAmbientV1ProjectsPost")
 	if err != nil {
 		return localVarReturnValue, nil, &GenericOpenAPIError{error: err.Error()}
 	}
 
-	localVarPath := localBasePath + "/api/ambient-api-server/v1/projects"
+	localVarPath := localBasePath + "/api/ambient/v1/projects"
 
 	localVarHeaderParams := make(map[string]string)
 	localVarQueryParams := url.Values{}
@@ -1637,7 +1637,7 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1ProjectsPostExecute(r ApiApiAmb
 	return localVarReturnValue, localVarHTTPResponse, nil
 }
 
-type ApiApiAmbientApiServerV1SessionsGetRequest struct {
+type ApiApiAmbientV1SessionsGetRequest struct {
 	ctx        context.Context
 	ApiService *DefaultAPIService
 	page       *int32
@@ -1648,47 +1648,47 @@ type ApiApiAmbientApiServerV1SessionsGetRequest struct {
 }
 
 // Page number of record list when record list exceeds specified page size
-func (r ApiApiAmbientApiServerV1SessionsGetRequest) Page(page int32) ApiApiAmbientApiServerV1SessionsGetRequest {
+func (r ApiApiAmbientV1SessionsGetRequest) Page(page int32) ApiApiAmbientV1SessionsGetRequest {
 	r.page = &page
 	return r
 }
 
 // Maximum number of records to return
-func (r ApiApiAmbientApiServerV1SessionsGetRequest) Size(size int32) ApiApiAmbientApiServerV1SessionsGetRequest {
+func (r ApiApiAmbientV1SessionsGetRequest) Size(size int32) ApiApiAmbientV1SessionsGetRequest {
 	r.size = &size
 	return r
 }
 
 // Specifies the search criteria
-func (r ApiApiAmbientApiServerV1SessionsGetRequest) Search(search string) ApiApiAmbientApiServerV1SessionsGetRequest {
+func (r ApiApiAmbientV1SessionsGetRequest) Search(search string) ApiApiAmbientV1SessionsGetRequest {
 	r.search = &search
 	return r
 }
 
 // Specifies the order by criteria
-func (r ApiApiAmbientApiServerV1SessionsGetRequest) OrderBy(orderBy string) ApiApiAmbientApiServerV1SessionsGetRequest {
+func (r ApiApiAmbientV1SessionsGetRequest) OrderBy(orderBy string) ApiApiAmbientV1SessionsGetRequest {
 	r.orderBy = &orderBy
 	return r
 }
 
 // Supplies a comma-separated list of fields to be returned
-func (r ApiApiAmbientApiServerV1SessionsGetRequest) Fields(fields string) ApiApiAmbientApiServerV1SessionsGetRequest {
+func (r ApiApiAmbientV1SessionsGetRequest) Fields(fields string) ApiApiAmbientV1SessionsGetRequest {
 	r.fields = &fields
 	return r
 }
 
-func (r ApiApiAmbientApiServerV1SessionsGetRequest) Execute() (*SessionList, *http.Response, error) {
-	return r.ApiService.ApiAmbientApiServerV1SessionsGetExecute(r)
+func (r ApiApiAmbientV1SessionsGetRequest) Execute() (*SessionList, *http.Response, error) {
+	return r.ApiService.ApiAmbientV1SessionsGetExecute(r)
 }
 
 /*
-ApiAmbientApiServerV1SessionsGet Returns a list of sessions
+ApiAmbientV1SessionsGet Returns a list of sessions
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
-	@return ApiApiAmbientApiServerV1SessionsGetRequest
+	@return ApiApiAmbientV1SessionsGetRequest
 */
-func (a *DefaultAPIService) ApiAmbientApiServerV1SessionsGet(ctx context.Context) ApiApiAmbientApiServerV1SessionsGetRequest {
-	return ApiApiAmbientApiServerV1SessionsGetRequest{
+func (a *DefaultAPIService) ApiAmbientV1SessionsGet(ctx context.Context) ApiApiAmbientV1SessionsGetRequest {
+	return ApiApiAmbientV1SessionsGetRequest{
 		ApiService: a,
 		ctx:        ctx,
 	}
@@ -1697,7 +1697,7 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1SessionsGet(ctx context.Context
 // Execute executes the request
 //
 //	@return SessionList
-func (a *DefaultAPIService) ApiAmbientApiServerV1SessionsGetExecute(r ApiApiAmbientApiServerV1SessionsGetRequest) (*SessionList, *http.Response, error) {
+func (a *DefaultAPIService) ApiAmbientV1SessionsGetExecute(r ApiApiAmbientV1SessionsGetRequest) (*SessionList, *http.Response, error) {
 	var (
 		localVarHTTPMethod  = http.MethodGet
 		localVarPostBody    interface{}
@@ -1705,12 +1705,12 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1SessionsGetExecute(r ApiApiAmbi
 		localVarReturnValue *SessionList
 	)
 
-	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "DefaultAPIService.ApiAmbientApiServerV1SessionsGet")
+	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "DefaultAPIService.ApiAmbientV1SessionsGet")
 	if err != nil {
 		return localVarReturnValue, nil, &GenericOpenAPIError{error: err.Error()}
 	}
 
-	localVarPath := localBasePath + "/api/ambient-api-server/v1/sessions"
+	localVarPath := localBasePath + "/api/ambient/v1/sessions"
 
 	localVarHeaderParams := make(map[string]string)
 	localVarQueryParams := url.Values{}
@@ -1823,25 +1823,25 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1SessionsGetExecute(r ApiApiAmbi
 	return localVarReturnValue, localVarHTTPResponse, nil
 }
 
-type ApiApiAmbientApiServerV1SessionsIdGetRequest struct {
+type ApiApiAmbientV1SessionsIdGetRequest struct {
 	ctx        context.Context
 	ApiService *DefaultAPIService
 	id         string
 }
 
-func (r ApiApiAmbientApiServerV1SessionsIdGetRequest) Execute() (*Session, *http.Response, error) {
-	return r.ApiService.ApiAmbientApiServerV1SessionsIdGetExecute(r)
+func (r ApiApiAmbientV1SessionsIdGetRequest) Execute() (*Session, *http.Response, error) {
+	return r.ApiService.ApiAmbientV1SessionsIdGetExecute(r)
 }
 
 /*
-ApiAmbientApiServerV1SessionsIdGet Get an session by id
+ApiAmbientV1SessionsIdGet Get an session by id
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 	@param id The id of record
-	@return ApiApiAmbientApiServerV1SessionsIdGetRequest
+	@return ApiApiAmbientV1SessionsIdGetRequest
 */
-func (a *DefaultAPIService) ApiAmbientApiServerV1SessionsIdGet(ctx context.Context, id string) ApiApiAmbientApiServerV1SessionsIdGetRequest {
-	return ApiApiAmbientApiServerV1SessionsIdGetRequest{
+func (a *DefaultAPIService) ApiAmbientV1SessionsIdGet(ctx context.Context, id string) ApiApiAmbientV1SessionsIdGetRequest {
+	return ApiApiAmbientV1SessionsIdGetRequest{
 		ApiService: a,
 		ctx:        ctx,
 		id:         id,
@@ -1851,7 +1851,7 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1SessionsIdGet(ctx context.Conte
 // Execute executes the request
 //
 //	@return Session
-func (a *DefaultAPIService) ApiAmbientApiServerV1SessionsIdGetExecute(r ApiApiAmbientApiServerV1SessionsIdGetRequest) (*Session, *http.Response, error) {
+func (a *DefaultAPIService) ApiAmbientV1SessionsIdGetExecute(r ApiApiAmbientV1SessionsIdGetRequest) (*Session, *http.Response, error) {
 	var (
 		localVarHTTPMethod  = http.MethodGet
 		localVarPostBody    interface{}
@@ -1859,12 +1859,12 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1SessionsIdGetExecute(r ApiApiAm
 		localVarReturnValue *Session
 	)
 
-	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "DefaultAPIService.ApiAmbientApiServerV1SessionsIdGet")
+	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "DefaultAPIService.ApiAmbientV1SessionsIdGet")
 	if err != nil {
 		return localVarReturnValue, nil, &GenericOpenAPIError{error: err.Error()}
 	}
 
-	localVarPath := localBasePath + "/api/ambient-api-server/v1/sessions/{id}"
+	localVarPath := localBasePath + "/api/ambient/v1/sessions/{id}"
 	localVarPath = strings.Replace(localVarPath, "{"+"id"+"}", url.PathEscape(parameterValueToString(r.id, "id")), -1)
 
 	localVarHeaderParams := make(map[string]string)
@@ -1968,7 +1968,7 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1SessionsIdGetExecute(r ApiApiAm
 	return localVarReturnValue, localVarHTTPResponse, nil
 }
 
-type ApiApiAmbientApiServerV1SessionsIdPatchRequest struct {
+type ApiApiAmbientV1SessionsIdPatchRequest struct {
 	ctx                 context.Context
 	ApiService          *DefaultAPIService
 	id                  string
@@ -1976,24 +1976,24 @@ type ApiApiAmbientApiServerV1SessionsIdPatchRequest struct {
 }
 
 // Updated session data
-func (r ApiApiAmbientApiServerV1SessionsIdPatchRequest) SessionPatchRequest(sessionPatchRequest SessionPatchRequest) ApiApiAmbientApiServerV1SessionsIdPatchRequest {
+func (r ApiApiAmbientV1SessionsIdPatchRequest) SessionPatchRequest(sessionPatchRequest SessionPatchRequest) ApiApiAmbientV1SessionsIdPatchRequest {
 	r.sessionPatchRequest = &sessionPatchRequest
 	return r
 }
 
-func (r ApiApiAmbientApiServerV1SessionsIdPatchRequest) Execute() (*Session, *http.Response, error) {
-	return r.ApiService.ApiAmbientApiServerV1SessionsIdPatchExecute(r)
+func (r ApiApiAmbientV1SessionsIdPatchRequest) Execute() (*Session, *http.Response, error) {
+	return r.ApiService.ApiAmbientV1SessionsIdPatchExecute(r)
 }
 
 /*
-ApiAmbientApiServerV1SessionsIdPatch Update an session
+ApiAmbientV1SessionsIdPatch Update an session
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 	@param id The id of record
-	@return ApiApiAmbientApiServerV1SessionsIdPatchRequest
+	@return ApiApiAmbientV1SessionsIdPatchRequest
 */
-func (a *DefaultAPIService) ApiAmbientApiServerV1SessionsIdPatch(ctx context.Context, id string) ApiApiAmbientApiServerV1SessionsIdPatchRequest {
-	return ApiApiAmbientApiServerV1SessionsIdPatchRequest{
+func (a *DefaultAPIService) ApiAmbientV1SessionsIdPatch(ctx context.Context, id string) ApiApiAmbientV1SessionsIdPatchRequest {
+	return ApiApiAmbientV1SessionsIdPatchRequest{
 		ApiService: a,
 		ctx:        ctx,
 		id:         id,
@@ -2003,7 +2003,7 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1SessionsIdPatch(ctx context.Con
 // Execute executes the request
 //
 //	@return Session
-func (a *DefaultAPIService) ApiAmbientApiServerV1SessionsIdPatchExecute(r ApiApiAmbientApiServerV1SessionsIdPatchRequest) (*Session, *http.Response, error) {
+func (a *DefaultAPIService) ApiAmbientV1SessionsIdPatchExecute(r ApiApiAmbientV1SessionsIdPatchRequest) (*Session, *http.Response, error) {
 	var (
 		localVarHTTPMethod  = http.MethodPatch
 		localVarPostBody    interface{}
@@ -2011,12 +2011,12 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1SessionsIdPatchExecute(r ApiApi
 		localVarReturnValue *Session
 	)
 
-	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "DefaultAPIService.ApiAmbientApiServerV1SessionsIdPatch")
+	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "DefaultAPIService.ApiAmbientV1SessionsIdPatch")
 	if err != nil {
 		return localVarReturnValue, nil, &GenericOpenAPIError{error: err.Error()}
 	}
 
-	localVarPath := localBasePath + "/api/ambient-api-server/v1/sessions/{id}"
+	localVarPath := localBasePath + "/api/ambient/v1/sessions/{id}"
 	localVarPath = strings.Replace(localVarPath, "{"+"id"+"}", url.PathEscape(parameterValueToString(r.id, "id")), -1)
 
 	localVarHeaderParams := make(map[string]string)
@@ -2147,27 +2147,27 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1SessionsIdPatchExecute(r ApiApi
 	return localVarReturnValue, localVarHTTPResponse, nil
 }
 
-type ApiApiAmbientApiServerV1SessionsIdStartPostRequest struct {
+type ApiApiAmbientV1SessionsIdStartPostRequest struct {
 	ctx        context.Context
 	ApiService *DefaultAPIService
 	id         string
 }
 
-func (r ApiApiAmbientApiServerV1SessionsIdStartPostRequest) Execute() (*Session, *http.Response, error) {
-	return r.ApiService.ApiAmbientApiServerV1SessionsIdStartPostExecute(r)
+func (r ApiApiAmbientV1SessionsIdStartPostRequest) Execute() (*Session, *http.Response, error) {
+	return r.ApiService.ApiAmbientV1SessionsIdStartPostExecute(r)
 }
 
 /*
-ApiAmbientApiServerV1SessionsIdStartPost Start a session
+ApiAmbientV1SessionsIdStartPost Start a session
 
 Transitions session phase to Pending. Valid from empty/nil, Stopped, Failed, or Completed phase.
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 	@param id The id of record
-	@return ApiApiAmbientApiServerV1SessionsIdStartPostRequest
+	@return ApiApiAmbientV1SessionsIdStartPostRequest
 */
-func (a *DefaultAPIService) ApiAmbientApiServerV1SessionsIdStartPost(ctx context.Context, id string) ApiApiAmbientApiServerV1SessionsIdStartPostRequest {
-	return ApiApiAmbientApiServerV1SessionsIdStartPostRequest{
+func (a *DefaultAPIService) ApiAmbientV1SessionsIdStartPost(ctx context.Context, id string) ApiApiAmbientV1SessionsIdStartPostRequest {
+	return ApiApiAmbientV1SessionsIdStartPostRequest{
 		ApiService: a,
 		ctx:        ctx,
 		id:         id,
@@ -2177,7 +2177,7 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1SessionsIdStartPost(ctx context
 // Execute executes the request
 //
 //	@return Session
-func (a *DefaultAPIService) ApiAmbientApiServerV1SessionsIdStartPostExecute(r ApiApiAmbientApiServerV1SessionsIdStartPostRequest) (*Session, *http.Response, error) {
+func (a *DefaultAPIService) ApiAmbientV1SessionsIdStartPostExecute(r ApiApiAmbientV1SessionsIdStartPostRequest) (*Session, *http.Response, error) {
 	var (
 		localVarHTTPMethod  = http.MethodPost
 		localVarPostBody    interface{}
@@ -2185,12 +2185,12 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1SessionsIdStartPostExecute(r Ap
 		localVarReturnValue *Session
 	)
 
-	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "DefaultAPIService.ApiAmbientApiServerV1SessionsIdStartPost")
+	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "DefaultAPIService.ApiAmbientV1SessionsIdStartPost")
 	if err != nil {
 		return localVarReturnValue, nil, &GenericOpenAPIError{error: err.Error()}
 	}
 
-	localVarPath := localBasePath + "/api/ambient-api-server/v1/sessions/{id}/start"
+	localVarPath := localBasePath + "/api/ambient/v1/sessions/{id}/start"
 	localVarPath = strings.Replace(localVarPath, "{"+"id"+"}", url.PathEscape(parameterValueToString(r.id, "id")), -1)
 
 	localVarHeaderParams := make(map[string]string)
@@ -2305,7 +2305,7 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1SessionsIdStartPostExecute(r Ap
 	return localVarReturnValue, localVarHTTPResponse, nil
 }
 
-type ApiApiAmbientApiServerV1SessionsIdStatusPatchRequest struct {
+type ApiApiAmbientV1SessionsIdStatusPatchRequest struct {
 	ctx                       context.Context
 	ApiService                *DefaultAPIService
 	id                        string
@@ -2313,26 +2313,26 @@ type ApiApiAmbientApiServerV1SessionsIdStatusPatchRequest struct {
 }
 
 // Session status fields to update
-func (r ApiApiAmbientApiServerV1SessionsIdStatusPatchRequest) SessionStatusPatchRequest(sessionStatusPatchRequest SessionStatusPatchRequest) ApiApiAmbientApiServerV1SessionsIdStatusPatchRequest {
+func (r ApiApiAmbientV1SessionsIdStatusPatchRequest) SessionStatusPatchRequest(sessionStatusPatchRequest SessionStatusPatchRequest) ApiApiAmbientV1SessionsIdStatusPatchRequest {
 	r.sessionStatusPatchRequest = &sessionStatusPatchRequest
 	return r
 }
 
-func (r ApiApiAmbientApiServerV1SessionsIdStatusPatchRequest) Execute() (*Session, *http.Response, error) {
-	return r.ApiService.ApiAmbientApiServerV1SessionsIdStatusPatchExecute(r)
+func (r ApiApiAmbientV1SessionsIdStatusPatchRequest) Execute() (*Session, *http.Response, error) {
+	return r.ApiService.ApiAmbientV1SessionsIdStatusPatchExecute(r)
 }
 
 /*
-ApiAmbientApiServerV1SessionsIdStatusPatch Update session status fields
+ApiAmbientV1SessionsIdStatusPatch Update session status fields
 
 Write-back endpoint for control plane to sync runtime status from Kubernetes CR
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 	@param id The id of record
-	@return ApiApiAmbientApiServerV1SessionsIdStatusPatchRequest
+	@return ApiApiAmbientV1SessionsIdStatusPatchRequest
 */
-func (a *DefaultAPIService) ApiAmbientApiServerV1SessionsIdStatusPatch(ctx context.Context, id string) ApiApiAmbientApiServerV1SessionsIdStatusPatchRequest {
-	return ApiApiAmbientApiServerV1SessionsIdStatusPatchRequest{
+func (a *DefaultAPIService) ApiAmbientV1SessionsIdStatusPatch(ctx context.Context, id string) ApiApiAmbientV1SessionsIdStatusPatchRequest {
+	return ApiApiAmbientV1SessionsIdStatusPatchRequest{
 		ApiService: a,
 		ctx:        ctx,
 		id:         id,
@@ -2342,7 +2342,7 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1SessionsIdStatusPatch(ctx conte
 // Execute executes the request
 //
 //	@return Session
-func (a *DefaultAPIService) ApiAmbientApiServerV1SessionsIdStatusPatchExecute(r ApiApiAmbientApiServerV1SessionsIdStatusPatchRequest) (*Session, *http.Response, error) {
+func (a *DefaultAPIService) ApiAmbientV1SessionsIdStatusPatchExecute(r ApiApiAmbientV1SessionsIdStatusPatchRequest) (*Session, *http.Response, error) {
 	var (
 		localVarHTTPMethod  = http.MethodPatch
 		localVarPostBody    interface{}
@@ -2350,12 +2350,12 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1SessionsIdStatusPatchExecute(r 
 		localVarReturnValue *Session
 	)
 
-	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "DefaultAPIService.ApiAmbientApiServerV1SessionsIdStatusPatch")
+	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "DefaultAPIService.ApiAmbientV1SessionsIdStatusPatch")
 	if err != nil {
 		return localVarReturnValue, nil, &GenericOpenAPIError{error: err.Error()}
 	}
 
-	localVarPath := localBasePath + "/api/ambient-api-server/v1/sessions/{id}/status"
+	localVarPath := localBasePath + "/api/ambient/v1/sessions/{id}/status"
 	localVarPath = strings.Replace(localVarPath, "{"+"id"+"}", url.PathEscape(parameterValueToString(r.id, "id")), -1)
 
 	localVarHeaderParams := make(map[string]string)
@@ -2475,27 +2475,27 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1SessionsIdStatusPatchExecute(r 
 	return localVarReturnValue, localVarHTTPResponse, nil
 }
 
-type ApiApiAmbientApiServerV1SessionsIdStopPostRequest struct {
+type ApiApiAmbientV1SessionsIdStopPostRequest struct {
 	ctx        context.Context
 	ApiService *DefaultAPIService
 	id         string
 }
 
-func (r ApiApiAmbientApiServerV1SessionsIdStopPostRequest) Execute() (*Session, *http.Response, error) {
-	return r.ApiService.ApiAmbientApiServerV1SessionsIdStopPostExecute(r)
+func (r ApiApiAmbientV1SessionsIdStopPostRequest) Execute() (*Session, *http.Response, error) {
+	return r.ApiService.ApiAmbientV1SessionsIdStopPostExecute(r)
 }
 
 /*
-ApiAmbientApiServerV1SessionsIdStopPost Stop a session
+ApiAmbientV1SessionsIdStopPost Stop a session
 
 Transitions session phase to Stopping. Valid from Running, Creating, or Pending phase.
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 	@param id The id of record
-	@return ApiApiAmbientApiServerV1SessionsIdStopPostRequest
+	@return ApiApiAmbientV1SessionsIdStopPostRequest
 */
-func (a *DefaultAPIService) ApiAmbientApiServerV1SessionsIdStopPost(ctx context.Context, id string) ApiApiAmbientApiServerV1SessionsIdStopPostRequest {
-	return ApiApiAmbientApiServerV1SessionsIdStopPostRequest{
+func (a *DefaultAPIService) ApiAmbientV1SessionsIdStopPost(ctx context.Context, id string) ApiApiAmbientV1SessionsIdStopPostRequest {
+	return ApiApiAmbientV1SessionsIdStopPostRequest{
 		ApiService: a,
 		ctx:        ctx,
 		id:         id,
@@ -2505,7 +2505,7 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1SessionsIdStopPost(ctx context.
 // Execute executes the request
 //
 //	@return Session
-func (a *DefaultAPIService) ApiAmbientApiServerV1SessionsIdStopPostExecute(r ApiApiAmbientApiServerV1SessionsIdStopPostRequest) (*Session, *http.Response, error) {
+func (a *DefaultAPIService) ApiAmbientV1SessionsIdStopPostExecute(r ApiApiAmbientV1SessionsIdStopPostRequest) (*Session, *http.Response, error) {
 	var (
 		localVarHTTPMethod  = http.MethodPost
 		localVarPostBody    interface{}
@@ -2513,12 +2513,12 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1SessionsIdStopPostExecute(r Api
 		localVarReturnValue *Session
 	)
 
-	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "DefaultAPIService.ApiAmbientApiServerV1SessionsIdStopPost")
+	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "DefaultAPIService.ApiAmbientV1SessionsIdStopPost")
 	if err != nil {
 		return localVarReturnValue, nil, &GenericOpenAPIError{error: err.Error()}
 	}
 
-	localVarPath := localBasePath + "/api/ambient-api-server/v1/sessions/{id}/stop"
+	localVarPath := localBasePath + "/api/ambient/v1/sessions/{id}/stop"
 	localVarPath = strings.Replace(localVarPath, "{"+"id"+"}", url.PathEscape(parameterValueToString(r.id, "id")), -1)
 
 	localVarHeaderParams := make(map[string]string)
@@ -2633,30 +2633,30 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1SessionsIdStopPostExecute(r Api
 	return localVarReturnValue, localVarHTTPResponse, nil
 }
 
-type ApiApiAmbientApiServerV1SessionsPostRequest struct {
+type ApiApiAmbientV1SessionsPostRequest struct {
 	ctx        context.Context
 	ApiService *DefaultAPIService
 	session    *Session
 }
 
 // Session data
-func (r ApiApiAmbientApiServerV1SessionsPostRequest) Session(session Session) ApiApiAmbientApiServerV1SessionsPostRequest {
+func (r ApiApiAmbientV1SessionsPostRequest) Session(session Session) ApiApiAmbientV1SessionsPostRequest {
 	r.session = &session
 	return r
 }
 
-func (r ApiApiAmbientApiServerV1SessionsPostRequest) Execute() (*Session, *http.Response, error) {
-	return r.ApiService.ApiAmbientApiServerV1SessionsPostExecute(r)
+func (r ApiApiAmbientV1SessionsPostRequest) Execute() (*Session, *http.Response, error) {
+	return r.ApiService.ApiAmbientV1SessionsPostExecute(r)
 }
 
 /*
-ApiAmbientApiServerV1SessionsPost Create a new session
+ApiAmbientV1SessionsPost Create a new session
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
-	@return ApiApiAmbientApiServerV1SessionsPostRequest
+	@return ApiApiAmbientV1SessionsPostRequest
 */
-func (a *DefaultAPIService) ApiAmbientApiServerV1SessionsPost(ctx context.Context) ApiApiAmbientApiServerV1SessionsPostRequest {
-	return ApiApiAmbientApiServerV1SessionsPostRequest{
+func (a *DefaultAPIService) ApiAmbientV1SessionsPost(ctx context.Context) ApiApiAmbientV1SessionsPostRequest {
+	return ApiApiAmbientV1SessionsPostRequest{
 		ApiService: a,
 		ctx:        ctx,
 	}
@@ -2665,7 +2665,7 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1SessionsPost(ctx context.Contex
 // Execute executes the request
 //
 //	@return Session
-func (a *DefaultAPIService) ApiAmbientApiServerV1SessionsPostExecute(r ApiApiAmbientApiServerV1SessionsPostRequest) (*Session, *http.Response, error) {
+func (a *DefaultAPIService) ApiAmbientV1SessionsPostExecute(r ApiApiAmbientV1SessionsPostRequest) (*Session, *http.Response, error) {
 	var (
 		localVarHTTPMethod  = http.MethodPost
 		localVarPostBody    interface{}
@@ -2673,12 +2673,12 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1SessionsPostExecute(r ApiApiAmb
 		localVarReturnValue *Session
 	)
 
-	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "DefaultAPIService.ApiAmbientApiServerV1SessionsPost")
+	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "DefaultAPIService.ApiAmbientV1SessionsPost")
 	if err != nil {
 		return localVarReturnValue, nil, &GenericOpenAPIError{error: err.Error()}
 	}
 
-	localVarPath := localBasePath + "/api/ambient-api-server/v1/sessions"
+	localVarPath := localBasePath + "/api/ambient/v1/sessions"
 
 	localVarHeaderParams := make(map[string]string)
 	localVarQueryParams := url.Values{}
@@ -2797,7 +2797,7 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1SessionsPostExecute(r ApiApiAmb
 	return localVarReturnValue, localVarHTTPResponse, nil
 }
 
-type ApiApiAmbientApiServerV1UsersGetRequest struct {
+type ApiApiAmbientV1UsersGetRequest struct {
 	ctx        context.Context
 	ApiService *DefaultAPIService
 	page       *int32
@@ -2808,47 +2808,47 @@ type ApiApiAmbientApiServerV1UsersGetRequest struct {
 }
 
 // Page number of record list when record list exceeds specified page size
-func (r ApiApiAmbientApiServerV1UsersGetRequest) Page(page int32) ApiApiAmbientApiServerV1UsersGetRequest {
+func (r ApiApiAmbientV1UsersGetRequest) Page(page int32) ApiApiAmbientV1UsersGetRequest {
 	r.page = &page
 	return r
 }
 
 // Maximum number of records to return
-func (r ApiApiAmbientApiServerV1UsersGetRequest) Size(size int32) ApiApiAmbientApiServerV1UsersGetRequest {
+func (r ApiApiAmbientV1UsersGetRequest) Size(size int32) ApiApiAmbientV1UsersGetRequest {
 	r.size = &size
 	return r
 }
 
 // Specifies the search criteria
-func (r ApiApiAmbientApiServerV1UsersGetRequest) Search(search string) ApiApiAmbientApiServerV1UsersGetRequest {
+func (r ApiApiAmbientV1UsersGetRequest) Search(search string) ApiApiAmbientV1UsersGetRequest {
 	r.search = &search
 	return r
 }
 
 // Specifies the order by criteria
-func (r ApiApiAmbientApiServerV1UsersGetRequest) OrderBy(orderBy string) ApiApiAmbientApiServerV1UsersGetRequest {
+func (r ApiApiAmbientV1UsersGetRequest) OrderBy(orderBy string) ApiApiAmbientV1UsersGetRequest {
 	r.orderBy = &orderBy
 	return r
 }
 
 // Supplies a comma-separated list of fields to be returned
-func (r ApiApiAmbientApiServerV1UsersGetRequest) Fields(fields string) ApiApiAmbientApiServerV1UsersGetRequest {
+func (r ApiApiAmbientV1UsersGetRequest) Fields(fields string) ApiApiAmbientV1UsersGetRequest {
 	r.fields = &fields
 	return r
 }
 
-func (r ApiApiAmbientApiServerV1UsersGetRequest) Execute() (*UserList, *http.Response, error) {
-	return r.ApiService.ApiAmbientApiServerV1UsersGetExecute(r)
+func (r ApiApiAmbientV1UsersGetRequest) Execute() (*UserList, *http.Response, error) {
+	return r.ApiService.ApiAmbientV1UsersGetExecute(r)
 }
 
 /*
-ApiAmbientApiServerV1UsersGet Returns a list of users
+ApiAmbientV1UsersGet Returns a list of users
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
-	@return ApiApiAmbientApiServerV1UsersGetRequest
+	@return ApiApiAmbientV1UsersGetRequest
 */
-func (a *DefaultAPIService) ApiAmbientApiServerV1UsersGet(ctx context.Context) ApiApiAmbientApiServerV1UsersGetRequest {
-	return ApiApiAmbientApiServerV1UsersGetRequest{
+func (a *DefaultAPIService) ApiAmbientV1UsersGet(ctx context.Context) ApiApiAmbientV1UsersGetRequest {
+	return ApiApiAmbientV1UsersGetRequest{
 		ApiService: a,
 		ctx:        ctx,
 	}
@@ -2857,7 +2857,7 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1UsersGet(ctx context.Context) A
 // Execute executes the request
 //
 //	@return UserList
-func (a *DefaultAPIService) ApiAmbientApiServerV1UsersGetExecute(r ApiApiAmbientApiServerV1UsersGetRequest) (*UserList, *http.Response, error) {
+func (a *DefaultAPIService) ApiAmbientV1UsersGetExecute(r ApiApiAmbientV1UsersGetRequest) (*UserList, *http.Response, error) {
 	var (
 		localVarHTTPMethod  = http.MethodGet
 		localVarPostBody    interface{}
@@ -2865,12 +2865,12 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1UsersGetExecute(r ApiApiAmbient
 		localVarReturnValue *UserList
 	)
 
-	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "DefaultAPIService.ApiAmbientApiServerV1UsersGet")
+	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "DefaultAPIService.ApiAmbientV1UsersGet")
 	if err != nil {
 		return localVarReturnValue, nil, &GenericOpenAPIError{error: err.Error()}
 	}
 
-	localVarPath := localBasePath + "/api/ambient-api-server/v1/users"
+	localVarPath := localBasePath + "/api/ambient/v1/users"
 
 	localVarHeaderParams := make(map[string]string)
 	localVarQueryParams := url.Values{}
@@ -2983,25 +2983,25 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1UsersGetExecute(r ApiApiAmbient
 	return localVarReturnValue, localVarHTTPResponse, nil
 }
 
-type ApiApiAmbientApiServerV1UsersIdGetRequest struct {
+type ApiApiAmbientV1UsersIdGetRequest struct {
 	ctx        context.Context
 	ApiService *DefaultAPIService
 	id         string
 }
 
-func (r ApiApiAmbientApiServerV1UsersIdGetRequest) Execute() (*User, *http.Response, error) {
-	return r.ApiService.ApiAmbientApiServerV1UsersIdGetExecute(r)
+func (r ApiApiAmbientV1UsersIdGetRequest) Execute() (*User, *http.Response, error) {
+	return r.ApiService.ApiAmbientV1UsersIdGetExecute(r)
 }
 
 /*
-ApiAmbientApiServerV1UsersIdGet Get an user by id
+ApiAmbientV1UsersIdGet Get an user by id
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 	@param id The id of record
-	@return ApiApiAmbientApiServerV1UsersIdGetRequest
+	@return ApiApiAmbientV1UsersIdGetRequest
 */
-func (a *DefaultAPIService) ApiAmbientApiServerV1UsersIdGet(ctx context.Context, id string) ApiApiAmbientApiServerV1UsersIdGetRequest {
-	return ApiApiAmbientApiServerV1UsersIdGetRequest{
+func (a *DefaultAPIService) ApiAmbientV1UsersIdGet(ctx context.Context, id string) ApiApiAmbientV1UsersIdGetRequest {
+	return ApiApiAmbientV1UsersIdGetRequest{
 		ApiService: a,
 		ctx:        ctx,
 		id:         id,
@@ -3011,7 +3011,7 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1UsersIdGet(ctx context.Context,
 // Execute executes the request
 //
 //	@return User
-func (a *DefaultAPIService) ApiAmbientApiServerV1UsersIdGetExecute(r ApiApiAmbientApiServerV1UsersIdGetRequest) (*User, *http.Response, error) {
+func (a *DefaultAPIService) ApiAmbientV1UsersIdGetExecute(r ApiApiAmbientV1UsersIdGetRequest) (*User, *http.Response, error) {
 	var (
 		localVarHTTPMethod  = http.MethodGet
 		localVarPostBody    interface{}
@@ -3019,12 +3019,12 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1UsersIdGetExecute(r ApiApiAmbie
 		localVarReturnValue *User
 	)
 
-	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "DefaultAPIService.ApiAmbientApiServerV1UsersIdGet")
+	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "DefaultAPIService.ApiAmbientV1UsersIdGet")
 	if err != nil {
 		return localVarReturnValue, nil, &GenericOpenAPIError{error: err.Error()}
 	}
 
-	localVarPath := localBasePath + "/api/ambient-api-server/v1/users/{id}"
+	localVarPath := localBasePath + "/api/ambient/v1/users/{id}"
 	localVarPath = strings.Replace(localVarPath, "{"+"id"+"}", url.PathEscape(parameterValueToString(r.id, "id")), -1)
 
 	localVarHeaderParams := make(map[string]string)
@@ -3128,7 +3128,7 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1UsersIdGetExecute(r ApiApiAmbie
 	return localVarReturnValue, localVarHTTPResponse, nil
 }
 
-type ApiApiAmbientApiServerV1UsersIdPatchRequest struct {
+type ApiApiAmbientV1UsersIdPatchRequest struct {
 	ctx              context.Context
 	ApiService       *DefaultAPIService
 	id               string
@@ -3136,24 +3136,24 @@ type ApiApiAmbientApiServerV1UsersIdPatchRequest struct {
 }
 
 // Updated user data
-func (r ApiApiAmbientApiServerV1UsersIdPatchRequest) UserPatchRequest(userPatchRequest UserPatchRequest) ApiApiAmbientApiServerV1UsersIdPatchRequest {
+func (r ApiApiAmbientV1UsersIdPatchRequest) UserPatchRequest(userPatchRequest UserPatchRequest) ApiApiAmbientV1UsersIdPatchRequest {
 	r.userPatchRequest = &userPatchRequest
 	return r
 }
 
-func (r ApiApiAmbientApiServerV1UsersIdPatchRequest) Execute() (*User, *http.Response, error) {
-	return r.ApiService.ApiAmbientApiServerV1UsersIdPatchExecute(r)
+func (r ApiApiAmbientV1UsersIdPatchRequest) Execute() (*User, *http.Response, error) {
+	return r.ApiService.ApiAmbientV1UsersIdPatchExecute(r)
 }
 
 /*
-ApiAmbientApiServerV1UsersIdPatch Update an user
+ApiAmbientV1UsersIdPatch Update an user
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 	@param id The id of record
-	@return ApiApiAmbientApiServerV1UsersIdPatchRequest
+	@return ApiApiAmbientV1UsersIdPatchRequest
 */
-func (a *DefaultAPIService) ApiAmbientApiServerV1UsersIdPatch(ctx context.Context, id string) ApiApiAmbientApiServerV1UsersIdPatchRequest {
-	return ApiApiAmbientApiServerV1UsersIdPatchRequest{
+func (a *DefaultAPIService) ApiAmbientV1UsersIdPatch(ctx context.Context, id string) ApiApiAmbientV1UsersIdPatchRequest {
+	return ApiApiAmbientV1UsersIdPatchRequest{
 		ApiService: a,
 		ctx:        ctx,
 		id:         id,
@@ -3163,7 +3163,7 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1UsersIdPatch(ctx context.Contex
 // Execute executes the request
 //
 //	@return User
-func (a *DefaultAPIService) ApiAmbientApiServerV1UsersIdPatchExecute(r ApiApiAmbientApiServerV1UsersIdPatchRequest) (*User, *http.Response, error) {
+func (a *DefaultAPIService) ApiAmbientV1UsersIdPatchExecute(r ApiApiAmbientV1UsersIdPatchRequest) (*User, *http.Response, error) {
 	var (
 		localVarHTTPMethod  = http.MethodPatch
 		localVarPostBody    interface{}
@@ -3171,12 +3171,12 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1UsersIdPatchExecute(r ApiApiAmb
 		localVarReturnValue *User
 	)
 
-	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "DefaultAPIService.ApiAmbientApiServerV1UsersIdPatch")
+	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "DefaultAPIService.ApiAmbientV1UsersIdPatch")
 	if err != nil {
 		return localVarReturnValue, nil, &GenericOpenAPIError{error: err.Error()}
 	}
 
-	localVarPath := localBasePath + "/api/ambient-api-server/v1/users/{id}"
+	localVarPath := localBasePath + "/api/ambient/v1/users/{id}"
 	localVarPath = strings.Replace(localVarPath, "{"+"id"+"}", url.PathEscape(parameterValueToString(r.id, "id")), -1)
 
 	localVarHeaderParams := make(map[string]string)
@@ -3307,30 +3307,30 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1UsersIdPatchExecute(r ApiApiAmb
 	return localVarReturnValue, localVarHTTPResponse, nil
 }
 
-type ApiApiAmbientApiServerV1UsersPostRequest struct {
+type ApiApiAmbientV1UsersPostRequest struct {
 	ctx        context.Context
 	ApiService *DefaultAPIService
 	user       *User
 }
 
 // User data
-func (r ApiApiAmbientApiServerV1UsersPostRequest) User(user User) ApiApiAmbientApiServerV1UsersPostRequest {
+func (r ApiApiAmbientV1UsersPostRequest) User(user User) ApiApiAmbientV1UsersPostRequest {
 	r.user = &user
 	return r
 }
 
-func (r ApiApiAmbientApiServerV1UsersPostRequest) Execute() (*User, *http.Response, error) {
-	return r.ApiService.ApiAmbientApiServerV1UsersPostExecute(r)
+func (r ApiApiAmbientV1UsersPostRequest) Execute() (*User, *http.Response, error) {
+	return r.ApiService.ApiAmbientV1UsersPostExecute(r)
 }
 
 /*
-ApiAmbientApiServerV1UsersPost Create a new user
+ApiAmbientV1UsersPost Create a new user
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
-	@return ApiApiAmbientApiServerV1UsersPostRequest
+	@return ApiApiAmbientV1UsersPostRequest
 */
-func (a *DefaultAPIService) ApiAmbientApiServerV1UsersPost(ctx context.Context) ApiApiAmbientApiServerV1UsersPostRequest {
-	return ApiApiAmbientApiServerV1UsersPostRequest{
+func (a *DefaultAPIService) ApiAmbientV1UsersPost(ctx context.Context) ApiApiAmbientV1UsersPostRequest {
+	return ApiApiAmbientV1UsersPostRequest{
 		ApiService: a,
 		ctx:        ctx,
 	}
@@ -3339,7 +3339,7 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1UsersPost(ctx context.Context) 
 // Execute executes the request
 //
 //	@return User
-func (a *DefaultAPIService) ApiAmbientApiServerV1UsersPostExecute(r ApiApiAmbientApiServerV1UsersPostRequest) (*User, *http.Response, error) {
+func (a *DefaultAPIService) ApiAmbientV1UsersPostExecute(r ApiApiAmbientV1UsersPostRequest) (*User, *http.Response, error) {
 	var (
 		localVarHTTPMethod  = http.MethodPost
 		localVarPostBody    interface{}
@@ -3347,12 +3347,12 @@ func (a *DefaultAPIService) ApiAmbientApiServerV1UsersPostExecute(r ApiApiAmbien
 		localVarReturnValue *User
 	)
 
-	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "DefaultAPIService.ApiAmbientApiServerV1UsersPost")
+	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "DefaultAPIService.ApiAmbientV1UsersPost")
 	if err != nil {
 		return localVarReturnValue, nil, &GenericOpenAPIError{error: err.Error()}
 	}
 
-	localVarPath := localBasePath + "/api/ambient-api-server/v1/users"
+	localVarPath := localBasePath + "/api/ambient/v1/users"
 
 	localVarHeaderParams := make(map[string]string)
 	localVarQueryParams := url.Values{}

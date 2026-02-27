@@ -12,6 +12,7 @@ resources:
 - operator-config.yaml
 - minio-credentials.yaml
 - postgresql-credentials.yaml
+- unleash-credentials.yaml
 # PostgreSQL init scripts for database creation (kind only)
 - postgresql-init-scripts.yaml
 
@@ -94,4 +95,3 @@ images:
   newTag: latest
 - name: quay.io/ambient_code/vteam_public_api
   newTag: latest
-

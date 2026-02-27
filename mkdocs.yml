@@ -49,6 +49,9 @@ nav:
   - Developer Guide:
     - Observability & Instrumentation: observability-langfuse.md
     - Model Pricing: model-pricing.md
+    - Feature Flags:
+      - Overview: feature-flags/README.md
+      - Unleash Integration: feature-flags/feature-flags-unleash.md
   - Architecture:
     - Overview: architecture/README.md
     - Diagrams:

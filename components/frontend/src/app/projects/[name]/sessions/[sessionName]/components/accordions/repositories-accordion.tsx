@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { GitBranch, X, Link, Loader2, CloudUpload, ChevronDown, ChevronRight } from "lucide-react";
+import { GitBranch, X, Link, Loader2, CloudUpload, ChevronDown, ChevronRight, AlertTriangle } from "lucide-react";
 import { AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ type Repository = {
   branches?: string[]; // All local branches available
   currentActiveBranch?: string; // Currently checked out branch
   defaultBranch?: string; // Default branch of remote
+  status?: "Cloning" | "Ready" | "Failed" | "Removing";
 };
 
 type UploadedFile = {
@@ -157,11 +158,26 @@ export function RepositoriesAccordion({
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <div className="text-sm font-medium truncate">{repoName}</div>
-                          {currentBranch && (
+                          {repo.status === "Cloning" ? (
+                            <Badge variant="outline" className="text-xs px-1.5 py-0.5 bg-yellow-50 dark:bg-yellow-950 border-yellow-300 dark:border-yellow-800 text-yellow-700 dark:text-yellow-400">
+                              <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                              Cloning...
+                            </Badge>
+                          ) : repo.status === "Removing" ? (
+                            <Badge variant="outline" className="text-xs px-1.5 py-0.5 bg-orange-50 dark:bg-orange-950 border-orange-300 dark:border-orange-800 text-orange-700 dark:text-orange-400">
+                              <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                              Removing...
+                            </Badge>
+                          ) : repo.status === "Failed" ? (
+                            <Badge variant="outline" className="text-xs px-1.5 py-0.5 bg-red-50 dark:bg-red-950 border-red-300 dark:border-red-800 text-red-700 dark:text-red-400">
+                              <AlertTriangle className="h-3 w-3 mr-1" />
+                              Clone failed
+                            </Badge>
+                          ) : currentBranch ? (
                             <Badge variant="outline" className="text-xs px-1.5 py-0.5 max-w-full !whitespace-normal !overflow-visible break-words bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
                               {currentBranch}
                             </Badge>
-                          )}
+                          ) : null}
                         </div>
                         <div className="text-xs text-muted-foreground truncate">{repo.url}</div>
                       </div>
@@ -170,7 +186,7 @@ export function RepositoriesAccordion({
                         size="sm"
                         className="h-7 w-7 p-0 flex-shrink-0"
                         onClick={() => handleRemoveRepo(repoName)}
-                        disabled={isRemoving}
+                        disabled={isRemoving || repo.status === "Cloning" || repo.status === "Removing"}
                       >
                         {isRemoving ? (
                           <Loader2 className="h-3 w-3 animate-spin" />

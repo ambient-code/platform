@@ -1,10 +1,11 @@
-.PHONY: help setup build-all build-frontend build-backend build-operator build-runner build-state-sync build-public-api deploy clean check-architecture
+.PHONY: help setup build-all build-frontend build-backend build-operator build-runner build-state-sync build-public-api build-cli deploy clean check-architecture
 .PHONY: local-up local-down local-clean local-status local-rebuild local-reload-backend local-reload-frontend local-reload-operator local-sync-version
 .PHONY: local-dev-token
 .PHONY: local-logs local-logs-backend local-logs-frontend local-logs-operator local-shell local-shell-frontend
 .PHONY: local-test local-test-dev local-test-quick test-all local-url local-troubleshoot local-port-forward local-stop-port-forward
-.PHONY: push-all registry-login setup-hooks remove-hooks check-minikube check-kind check-kubectl dev-bootstrap
+.PHONY: push-all registry-login setup-hooks remove-hooks lint check-minikube check-kind check-kubectl dev-bootstrap
 .PHONY: e2e-test e2e-setup e2e-clean deploy-langfuse-openshift
+.PHONY: unleash-port-forward unleash-status
 .PHONY: setup-minio minio-console minio-logs minio-status
 .PHONY: validate-makefile lint-makefile check-shell makefile-health
 .PHONY: _create-operator-config _auto-port-forward _show-access-info _build-and-load
@@ -160,16 +161,41 @@ build-api-server: ## Build ambient API server image
 		-t $(API_SERVER_IMAGE) .
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) API server built: $(API_SERVER_IMAGE)"
 
-##@ Git Hooks
+build-cli: ## Build acpctl CLI binary
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building acpctl CLI..."
+	@cd components/ambient-cli && make build
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) CLI built: components/ambient-cli/acpctl"
 
-setup-hooks: ## Install git hooks for branch protection
+lint-cli: ## Lint acpctl CLI
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Linting acpctl CLI..."
+	@cd components/ambient-cli && make lint
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) CLI lint passed"
+
+test-cli: ## Test acpctl CLI
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Testing acpctl CLI..."
+	@cd components/ambient-cli && make test
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) CLI tests passed"
+
+##@ Git Hooks & Linting
+
+setup-hooks: ## Install pre-commit hooks (linters + branch protection)
 	@./scripts/install-git-hooks.sh
 
-remove-hooks: ## Remove git hooks
+remove-hooks: ## Remove pre-commit hooks
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Removing git hooks..."
-	@rm -f .git/hooks/pre-commit
-	@rm -f .git/hooks/pre-push
+	@if command -v pre-commit >/dev/null 2>&1; then \
+		pre-commit uninstall && pre-commit uninstall --hook-type pre-push; \
+	else \
+		rm -f .git/hooks/pre-commit .git/hooks/pre-push; \
+	fi
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Git hooks removed"
+
+lint: ## Run all pre-commit linters on the entire repo
+	@if ! command -v pre-commit >/dev/null 2>&1; then \
+		echo "$(COLOR_RED)✗$(COLOR_RESET) pre-commit not installed. Run: make setup-hooks"; \
+		exit 1; \
+	fi
+	pre-commit run --all-files
 
 ##@ Registry Operations
 
@@ -387,7 +413,7 @@ local-reload-operator: ## Rebuild and reload operator only
 
 ##@ Testing
 
-test-all: local-test-quick local-test-dev ## Run all tests (quick + comprehensive)
+test-all: test-cli local-test-quick local-test-dev ## Run all tests (quick + comprehensive)
 
 ##@ Quality Assurance
 
@@ -674,6 +700,27 @@ e2e-clean: kind-down ## Alias for kind-down (backward compatibility)
 deploy-langfuse-openshift: ## Deploy Langfuse to OpenShift/ROSA cluster
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Deploying Langfuse to OpenShift cluster..."
 	@cd e2e && ./scripts/deploy-langfuse.sh --openshift
+
+##@ Unleash Feature Flags
+# Note: Unleash is deployed automatically via 'make deploy' as part of the platform manifests.
+# Before deploying, create the unleash-credentials secret from the example:
+#   cp components/manifests/base/unleash-credentials-secret.yaml.example unleash-credentials-secret.yaml
+#   # Edit the file to set your credentials
+#   kubectl apply -f unleash-credentials-secret.yaml -n ambient-code
+
+unleash-port-forward: check-kubectl ## Port-forward Unleash (localhost:4242)
+	@echo "$(COLOR_BOLD)🔌 Port forwarding Unleash$(COLOR_RESET)"
+	@echo ""
+	@echo "  Unleash UI: http://localhost:4242"
+	@echo "  Login: admin / unleash4all"
+	@echo ""
+	@echo "$(COLOR_YELLOW)Press Ctrl+C to stop$(COLOR_RESET)"
+	@kubectl port-forward svc/unleash 4242:4242 -n $${NAMESPACE:-ambient-code}
+
+unleash-status: check-kubectl ## Show Unleash deployment status
+	@echo "$(COLOR_BOLD)Unleash Status$(COLOR_RESET)"
+	@kubectl get deployment,pod,svc -l 'app.kubernetes.io/name in (unleash,postgresql)' -n $${NAMESPACE:-ambient-code} 2>/dev/null || \
+		echo "$(COLOR_RED)✗$(COLOR_RESET) Unleash not found. Run 'make deploy' first."
 
 ##@ Internal Helpers (do not call directly)
 

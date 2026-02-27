@@ -535,6 +535,30 @@ func CreateSession(c *gin.Context) {
 		return
 	}
 
+	// Validate API keys are configured before creating session
+	vertexEnabled := os.Getenv("CLAUDE_CODE_USE_VERTEX") == "1"
+	if !vertexEnabled {
+		// Check if ambient-runner-secrets exists (contains ANTHROPIC_API_KEY)
+		const runnerSecretsName = "ambient-runner-secrets"
+		_, err := reqK8s.CoreV1().Secrets(project).Get(c.Request.Context(), runnerSecretsName, v1.GetOptions{})
+		if err != nil {
+			if errors.IsNotFound(err) {
+				log.Printf("Session creation blocked: %s secret missing in project %s", runnerSecretsName, project)
+				c.JSON(http.StatusBadRequest, gin.H{
+					"error": fmt.Sprintf("ANTHROPIC_API_KEY not configured. Please configure runner secrets for project '%s' before creating sessions.", project),
+				})
+				return
+			}
+			// Other errors (permissions, etc.)
+			log.Printf("Failed to check runner secret in project %s: %v", project, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to validate API key configuration"})
+			return
+		}
+		log.Printf("Validated runner secret %s exists in project %s", runnerSecretsName, project)
+	} else {
+		log.Printf("Vertex AI enabled, skipping runner secret validation for project %s", project)
+	}
+
 	// Validation for multi-repo can be added here if needed
 
 	// Set defaults for LLM settings if not provided
@@ -1761,7 +1785,7 @@ func ListOOTBWorkflows(c *gin.Context) {
 	// Read OOTB repo configuration from environment
 	ootbRepo := strings.TrimSpace(os.Getenv("OOTB_WORKFLOWS_REPO"))
 	if ootbRepo == "" {
-		ootbRepo = "https://github.com/ambient-code/ootb-ambient-workflows.git"
+		ootbRepo = "https://github.com/ambient-code/workflows.git"
 	}
 
 	ootbBranch := strings.TrimSpace(os.Getenv("OOTB_WORKFLOWS_BRANCH"))
