@@ -343,6 +343,8 @@ class ClaudeBridge(PlatformBridge):
 
         # Workspace paths
         cwd_path, add_dirs = resolve_workspace_paths(self._context)
+        if add_dirs:
+            os.environ["CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD"] = "1"
 
         # Observability (before MCP so rubric tool can access it)
         await self._setup_observability(configured_model)
