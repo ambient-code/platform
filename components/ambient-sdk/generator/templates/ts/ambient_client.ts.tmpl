@@ -20,11 +20,11 @@ export class AmbientClient {
     if (!config.token) {
       throw new Error('token is required');
     }
-    if (config.token.length < 20) {
-      throw new Error('token is too short (minimum 20 characters)');
-    }
     if (config.token === 'YOUR_TOKEN_HERE' || config.token === 'PLACEHOLDER_TOKEN') {
       throw new Error('placeholder token is not allowed');
+    }
+    if (config.token.length < 20) {
+      throw new Error('token is too short (minimum 20 characters)');
     }
     if (!config.project) {
       throw new Error('project is required');

@@ -85,11 +85,11 @@ class AmbientClient:
         if not self._token:
             raise ValueError("token cannot be empty")
         
-        if len(self._token) < 20:
-            raise ValueError("token is too short (minimum 20 characters)")
-        
         if self._token in ("YOUR_TOKEN_HERE", "PLACEHOLDER_TOKEN"):
             raise ValueError("placeholder token is not allowed")
+        
+        if len(self._token) < 20:
+            raise ValueError("token is too short (minimum 20 characters)")
         
         if not self._project:
             raise ValueError("project cannot be empty")

@@ -313,7 +313,7 @@ func extractPatchFields(schemaMap map[string]interface{}) ([]Field, []string, er
 }
 
 func checkHasPatch(paths map[string]interface{}, pathSegment string) bool {
-	idPath := fmt.Sprintf("/api/ambient-api-server/v1/%s/{id}", pathSegment)
+	idPath := fmt.Sprintf("/api/ambient/v1/%s/{id}", pathSegment)
 	pathVal, ok := paths[idPath]
 	if !ok {
 		return false
@@ -329,7 +329,7 @@ func checkHasPatch(paths map[string]interface{}, pathSegment string) bool {
 }
 
 func checkHasDelete(paths map[string]interface{}, pathSegment string) bool {
-	idPath := fmt.Sprintf("/api/ambient-api-server/v1/%s/{id}", pathSegment)
+	idPath := fmt.Sprintf("/api/ambient/v1/%s/{id}", pathSegment)
 	pathVal, ok := paths[idPath]
 	if !ok {
 		return false
