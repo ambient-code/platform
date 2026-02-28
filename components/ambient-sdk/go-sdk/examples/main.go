@@ -335,7 +335,7 @@ func deriveAGUIBaseURL(apiURL, projectName, kubeCRName, sessionID string) string
 
 	baseURL := strings.TrimRight(apiURL, "/")
 	if strings.Contains(baseURL, "ambient-api-server") {
-		baseURL = strings.TrimSuffix(baseURL, "/api/ambient-api-server/v1")
+		baseURL = strings.TrimSuffix(baseURL, "/api/ambient/v1")
 	}
 
 	return fmt.Sprintf("%s/api/projects/%s/agentic-sessions/%s/agui", baseURL, projectName, sessionName)

@@ -348,7 +348,7 @@ func detectActions(paths map[string]interface{}, pathSegment string) []string {
 	knownActions := []string{"start", "stop"}
 	var found []string
 	for _, action := range knownActions {
-		actionPath := fmt.Sprintf("/api/ambient-api-server/v1/%s/{id}/%s", pathSegment, action)
+		actionPath := fmt.Sprintf("/api/ambient/v1/%s/{id}/%s", pathSegment, action)
 		pathVal, ok := paths[actionPath]
 		if !ok {
 			continue

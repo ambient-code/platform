@@ -81,7 +81,7 @@ export async function ambientFetch<T>(
   body?: unknown,
   requestOpts?: RequestOptions,
 ): Promise<T> {
-  const url = `${config.baseUrl}/api/ambient-api-server/v1${path}`;
+  const url = `${config.baseUrl}/api/ambient/v1${path}`;
   const headers: Record<string, string> = {
     'Authorization': `Bearer ${config.token}`,
     'X-Ambient-Project': config.project,
