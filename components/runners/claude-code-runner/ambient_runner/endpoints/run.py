@@ -1,11 +1,11 @@
 """POST / — AG-UI run endpoint (delegates to bridge)."""
 
 import logging
-import time
 import uuid
 from typing import Any, Dict, List, Optional, Union
 
 from ag_ui.core import EventType, RunAgentInput, RunErrorEvent, ToolCallResultEvent
+from ag_ui_claude_sdk.utils import now_ms
 from ag_ui.encoder import EventEncoder
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
@@ -103,7 +103,7 @@ async def run_agent(input_data: RunnerInput, request: Request):
                                 thread_id=getattr(event, "thread_id", "") or run_agent_input.thread_id or "",
                                 run_id=getattr(event, "run_id", "") or run_agent_input.run_id or "unknown",
                                 message=f"An event was too large to send ({type(event).__name__}: {encode_err})",
-                                timestamp=int(time.time() * 1000),
+                                timestamp=now_ms(),
                             )
                         )
         except Exception as e:
@@ -120,7 +120,7 @@ async def run_agent(input_data: RunnerInput, request: Request):
                     thread_id=run_agent_input.thread_id or "",
                     run_id=run_agent_input.run_id or "unknown",
                     message=error_msg,
-                    timestamp=int(time.time() * 1000),
+                    timestamp=now_ms(),
                 )
             )
 
