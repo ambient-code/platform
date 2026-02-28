@@ -1,6 +1,7 @@
 """POST / — AG-UI run endpoint (delegates to bridge)."""
 
 import logging
+import time
 import uuid
 from typing import Any, Dict, List, Optional, Union
 
@@ -107,6 +108,7 @@ async def run_agent(input_data: RunnerInput, request: Request):
                     thread_id=run_agent_input.thread_id or "",
                     run_id=run_agent_input.run_id or "unknown",
                     message=error_msg,
+                    timestamp=int(time.time() * 1000),
                 )
             )
 

@@ -234,14 +234,15 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
       }
 
       // Add user message to state immediately for instant UI feedback.
+      const userMsgWithTimestamp = {
+        ...userMessage,
+        timestamp: new Date().toISOString(),
+      } as PlatformMessage
       setState((prev) => ({
         ...prev,
         status: 'connected',
         error: null,
-        messages: [...prev.messages, {
-          ...userMessage,
-          timestamp: new Date().toISOString(),
-        } as PlatformMessage],
+        messages: [...prev.messages, userMsgWithTimestamp],
       }))
 
       try {

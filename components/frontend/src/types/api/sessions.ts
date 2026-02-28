@@ -184,7 +184,7 @@ export type TextBlock = {
 };
 
 export type ThinkingBlock = {
-  type: 'thinking_block';
+  type: 'reasoning_block';
   thinking: string;
   signature: string;
 };

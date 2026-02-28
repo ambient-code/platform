@@ -242,7 +242,6 @@ export default function ProjectSessionDetailPage({
     autoConnect: false, // Manual connection after hydration
     onError: (err) => {
       console.error("AG-UI stream error:", err)
-      errorToast(err)
     },
     onTraceId: (traceId) => setLangfuseTraceId(traceId),  // Capture Langfuse trace ID for feedback
   });
@@ -908,23 +907,32 @@ export default function ProjectSessionDetailPage({
           timestamp,
         });
       } else if (msg.role === "assistant") {
-        // Check if this is a thinking block (from RAW event)
+        // Check if content is a structured reasoning block
+        const contentObj = typeof msg.content === 'object' && msg.content !== null ? msg.content as Record<string, unknown> : null;
         const metadata = msg.metadata as Record<string, unknown> | undefined;
-        if (metadata?.type === "thinking_block") {
-          const thinkingText = (metadata.thinking as string) || (typeof msg.content === 'string' ? msg.content : '') || "";
+        if (
+          contentObj?.type === "reasoning_block" ||
+          metadata?.type === "reasoning_block" ||
+          metadata?.type === "thinking_block"
+        ) {
+          const thinkingText =
+            (contentObj?.thinking as string) ||
+            (metadata?.thinking as string) ||
+            (typeof msg.content === 'string' ? msg.content : '') ||
+            "";
           result.push({
             type: "agent_message",
             id: msg.id,
             content: {
-              type: "thinking_block",
+              type: "reasoning_block",
               thinking: thinkingText,
-              signature: (metadata.signature as string) || "",
+              signature: (contentObj?.signature as string) || (metadata?.signature as string) || "",
             },
             model: "claude",
             timestamp,
           });
-        } else if (msg.content) {
-          // Only push text message if there's actual content
+        } else if (msg.content && typeof msg.content === 'string') {
+          // Only push text message if there's actual string content
           result.push({
             type: "agent_message",
             id: msg.id,  // Preserve message ID for feedback association
@@ -1014,17 +1022,18 @@ export default function ProjectSessionDetailPage({
       }
     }
 
-    // Add streaming thinking if currently thinking
-    if (aguiState.currentThinking?.content) {
+    // Add streaming reasoning if currently reasoning
+    const activeReasoning = aguiState.currentReasoning || aguiState.currentThinking;
+    if (activeReasoning?.content) {
       result.push({
         type: "agent_message",
         content: {
-          type: "thinking_block",
-          thinking: aguiState.currentThinking.content,
+          type: "reasoning_block",
+          thinking: activeReasoning.content,
           signature: "",
         },
         model: "claude",
-        timestamp: aguiState.currentThinking.timestamp || "",
+        timestamp: activeReasoning.timestamp || "",
         streaming: true,
       } as MessageObject & { streaming?: boolean });
     }
@@ -1132,6 +1141,7 @@ export default function ProjectSessionDetailPage({
   }, [
     aguiState.messages,
     aguiState.currentMessage,
+    aguiState.currentReasoning,
     aguiState.currentThinking,
     aguiState.currentToolCall,
     aguiState.pendingToolCalls,  // CRITICAL: Include so UI updates when new tools start
