@@ -183,7 +183,7 @@ export type TextBlock = {
   text: string;
 };
 
-export type ThinkingBlock = {
+export type ReasoningBlock = {
   type: 'reasoning_block';
   thinking: string;
   signature: string;
@@ -203,7 +203,7 @@ export type ToolResultBlock = {
   is_error?: boolean | null;
 };
 
-export type ContentBlock = TextBlock | ThinkingBlock | ToolUseBlock | ToolResultBlock;
+export type ContentBlock = TextBlock | ReasoningBlock | ToolUseBlock | ToolResultBlock;
 
 // Message types
 export type UserMessage = {

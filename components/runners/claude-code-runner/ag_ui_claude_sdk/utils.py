@@ -6,12 +6,18 @@ Helper functions for message processing, tool conversion, and prompt building.
 
 import json
 import logging
+import time
 from typing import Any, Dict, List, Optional, Tuple
 from ag_ui.core import RunAgentInput, AssistantMessage, ToolCall, FunctionCall, ToolMessage
 
 from .config import STATE_MANAGEMENT_TOOL_NAME, STATE_MANAGEMENT_TOOL_FULL_NAME
 
 logger = logging.getLogger(__name__)
+
+
+def now_ms() -> int:
+    """Current time as epoch milliseconds for AG-UI event timestamps."""
+    return int(time.time() * 1000)
 
 
 def extract_tool_names(tools: List[Any]) -> List[str]:

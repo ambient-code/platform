@@ -6,7 +6,6 @@ Breaks down stream processing into focused handler functions.
 
 import json
 import logging
-import time
 import uuid
 from typing import AsyncIterator, Any, Optional
 
@@ -32,14 +31,9 @@ from .reasoning_events import (
     ReasoningMessageContentEvent,
     ReasoningMessageEndEvent,
 )
-from .utils import strip_mcp_prefix
+from .utils import now_ms, strip_mcp_prefix
 
 logger = logging.getLogger(__name__)
-
-
-def _now_ms() -> int:
-    """Current time as epoch milliseconds for AG-UI event timestamps."""
-    return int(time.time() * 1000)
 
 
 async def handle_tool_use_block(
@@ -120,7 +114,7 @@ async def handle_tool_use_block(
             tool_call_id=tool_id,
             tool_call_name=tool_display_name,  # Use unprefixed name
             parent_message_id=parent_tool_use_id,
-            timestamp=_now_ms(),
+            timestamp=now_ms(),
         )
 
         if tool_input:
@@ -197,7 +191,7 @@ async def handle_tool_result_block(
             thread_id=thread_id,
             run_id=run_id,
             tool_call_id=tool_use_id,
-            timestamp=_now_ms(),
+            timestamp=now_ms(),
         )
 
         # Emit ToolCallResult with the actual result content
@@ -210,7 +204,7 @@ async def handle_tool_result_block(
             tool_call_id=tool_use_id,
             content=result_str,
             role="tool",
-            timestamp=_now_ms(),
+            timestamp=now_ms(),
         )
 
 
@@ -237,7 +231,7 @@ async def handle_thinking_block(
 
     # Emit standard AG-UI reasoning events
     if thinking_text:
-        ts = _now_ms()
+        ts = now_ms()
         yield ReasoningStartEvent(timestamp=ts)
         yield ReasoningMessageStartEvent(timestamp=ts)
         yield ReasoningMessageContentEvent(delta=thinking_text)
@@ -270,7 +264,7 @@ def emit_system_message_events(
         List of events to yield
     """
     msg_id = str(uuid.uuid4())
-    ts = _now_ms()
+    ts = now_ms()
     return [
         TextMessageStartEvent(
             type=EventType.TEXT_MESSAGE_START,

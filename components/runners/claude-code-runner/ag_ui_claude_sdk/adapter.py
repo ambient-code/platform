@@ -8,8 +8,8 @@ enabling Claude-powered agents to work with any AG-UI compatible frontend.
 import os
 import logging
 import json
-import time
 import uuid
+from datetime import datetime, timezone
 from typing import AsyncIterator, Optional, List, Dict, Any, Union, TYPE_CHECKING
 
 # AG-UI Protocol Events
@@ -47,6 +47,7 @@ if TYPE_CHECKING:
 
 # Import helper functions and constants
 from .utils import (
+    now_ms,
     process_messages,
     build_state_context_addendum,
     convert_agui_tool_to_claude_sdk,
@@ -70,11 +71,6 @@ from .handlers import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-def _now_ms() -> int:
-    """Current time as epoch milliseconds for AG-UI event timestamps."""
-    return int(time.time() * 1000)
 
 
 # Configure logger if not already configured
@@ -272,7 +268,7 @@ class ClaudeAgentAdapter:
                 type=EventType.RUN_STARTED,
                 thread_id=thread_id,
                 run_id=run_id,
-                timestamp=_now_ms(),
+                timestamp=now_ms(),
                 parent_run_id=input_data.parent_run_id,  # Pass through for lineage tracking
                 input={
                     "thread_id": thread_id,
@@ -350,7 +346,7 @@ class ClaudeAgentAdapter:
                 type=EventType.RUN_FINISHED,
                 thread_id=thread_id,
                 run_id=run_id,
-                timestamp=_now_ms(),
+                timestamp=now_ms(),
                 result=self._last_result_data,
             )
             
@@ -360,7 +356,7 @@ class ClaudeAgentAdapter:
                 type=EventType.RUN_ERROR,
                 thread_id=thread_id,
                 run_id=run_id,
-                timestamp=_now_ms(),
+                timestamp=now_ms(),
                 message=str(e),
             )
 
@@ -531,7 +527,7 @@ class ClaudeAgentAdapter:
             message_stream: Async iterator of SDK Messages from the caller.
         """
         # Per-run state (local to this invocation)
-        run_start_ts = _now_ms()
+        run_start_ts = now_ms()
         current_message_id: Optional[str] = None
         in_thinking_block: bool = False  # Track if we're inside a thinking content block
         has_streamed_text: bool = False  # Track if we've streamed any text content
@@ -648,7 +644,7 @@ class ClaudeAgentAdapter:
                                         run_id=run_id,
                                         message_id=current_message_id,
                                         role="assistant",
-                                        timestamp=_now_ms(),
+                                        timestamp=now_ms(),
                                     )
                                 has_streamed_text = True
                                 if pending_msg is not None:
@@ -690,8 +686,8 @@ class ClaudeAgentAdapter:
                         
                         if block_type == 'thinking':
                             in_thinking_block = True
-                            yield ReasoningStartEvent(timestamp=_now_ms())
-                            yield ReasoningMessageStartEvent(timestamp=_now_ms())
+                            yield ReasoningStartEvent(timestamp=now_ms())
+                            yield ReasoningMessageStartEvent(timestamp=now_ms())
                         elif block_type == 'tool_use':
                             # Tool call starting - emit TOOL_CALL_START
                             current_tool_call_id = block_data.get('id')
@@ -710,14 +706,14 @@ class ClaudeAgentAdapter:
                                     tool_call_id=current_tool_call_id,
                                     tool_call_name=current_tool_display_name,  # Use unprefixed name for frontend matching!
                                     parent_message_id=current_message_id,  # Link to parent message
-                                    timestamp=_now_ms(),
+                                    timestamp=now_ms(),
                                 )
                     
                     elif event_type == 'content_block_stop':
                         if in_thinking_block:
                             in_thinking_block = False
-                            yield ReasoningMessageEndEvent(timestamp=_now_ms())
-                            yield ReasoningEndEvent(timestamp=_now_ms())
+                            yield ReasoningMessageEndEvent(timestamp=now_ms())
+                            yield ReasoningEndEvent(timestamp=now_ms())
 
                             # Persist thinking content
                             if accumulated_thinking_text:
@@ -790,7 +786,7 @@ class ClaudeAgentAdapter:
                                     thread_id=thread_id,
                                     run_id=run_id,
                                     tool_call_id=current_tool_call_id,
-                                    timestamp=_now_ms(),
+                                    timestamp=now_ms(),
                                 )
 
                                 if current_message_id and has_streamed_text:
@@ -799,7 +795,7 @@ class ClaudeAgentAdapter:
                                         thread_id=thread_id,
                                         run_id=run_id,
                                         message_id=current_message_id,
-                                        timestamp=_now_ms(),
+                                        timestamp=now_ms(),
                                     )
                                     current_message_id = None
 
@@ -830,7 +826,7 @@ class ClaudeAgentAdapter:
                                 thread_id=thread_id,
                                 run_id=run_id,
                                 message_id=current_message_id,
-                                timestamp=_now_ms(),
+                                timestamp=now_ms(),
                             )
                         current_message_id = None
                     
@@ -917,9 +913,9 @@ class ClaudeAgentAdapter:
                     
                     if not has_streamed_text and result_text:
                         result_msg_id = str(uuid.uuid4())
-                        yield TextMessageStartEvent(type=EventType.TEXT_MESSAGE_START, thread_id=thread_id, run_id=run_id, message_id=result_msg_id, role="assistant", timestamp=_now_ms())
+                        yield TextMessageStartEvent(type=EventType.TEXT_MESSAGE_START, thread_id=thread_id, run_id=run_id, message_id=result_msg_id, role="assistant", timestamp=now_ms())
                         yield TextMessageContentEvent(type=EventType.TEXT_MESSAGE_CONTENT, thread_id=thread_id, run_id=run_id, message_id=result_msg_id, delta=result_text)
-                        yield TextMessageEndEvent(type=EventType.TEXT_MESSAGE_END, thread_id=thread_id, run_id=run_id, message_id=result_msg_id, timestamp=_now_ms())
+                        yield TextMessageEndEvent(type=EventType.TEXT_MESSAGE_END, thread_id=thread_id, run_id=run_id, message_id=result_msg_id, timestamp=now_ms())
 
                         upsert_message(AguiAssistantMessage(
                             id=result_msg_id,
@@ -945,14 +941,14 @@ class ClaudeAgentAdapter:
                     thread_id=thread_id,
                     run_id=run_id,
                     tool_call_id=current_tool_call_id,
-                    timestamp=_now_ms(),
+                    timestamp=now_ms(),
                 )
                 current_tool_call_id = None
 
             if in_thinking_block:
                 logger.debug("Cleanup: closing hanging thinking block")
-                yield ReasoningMessageEndEvent(timestamp=_now_ms())
-                yield ReasoningEndEvent(timestamp=_now_ms())
+                yield ReasoningMessageEndEvent(timestamp=now_ms())
+                yield ReasoningEndEvent(timestamp=now_ms())
                 in_thinking_block = False
 
             if has_streamed_text and current_message_id:
@@ -962,7 +958,7 @@ class ClaudeAgentAdapter:
                     thread_id=thread_id,
                     run_id=run_id,
                     message_id=current_message_id,
-                    timestamp=_now_ms(),
+                    timestamp=now_ms(),
                 )
 
             # Flush any pending message so MESSAGES_SNAPSHOT includes it
@@ -995,7 +991,6 @@ class ClaudeAgentAdapter:
             # Stamp input messages with the run-start timestamp so they
             # survive a page refresh (the frontend's local timestamp is
             # lost when reconnecting to the SSE stream).
-            from datetime import datetime, timezone
             run_start_iso = (
                 datetime.fromtimestamp(run_start_ts / 1000, tz=timezone.utc).isoformat()
                 if run_start_ts else None

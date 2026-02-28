@@ -247,7 +247,7 @@ function handleRunFinished(
         signature: '',
       },
       timestamp: event.timestamp ? new Date(event.timestamp).toISOString() : (state.currentReasoning.timestamp),
-    } as unknown as PlatformMessage
+    } as PlatformMessage
     state.messages = insertByTimestamp(state.messages, msg)
     callbacks.onMessage?.(msg)
   }
@@ -265,7 +265,7 @@ function handleRunFinished(
         signature: '',
       },
       timestamp: event.timestamp ? new Date(event.timestamp).toISOString() : (state.currentThinking.timestamp),
-    } as unknown as PlatformMessage
+    } as PlatformMessage
     state.messages = insertByTimestamp(state.messages, msg)
     callbacks.onMessage?.(msg)
   }
@@ -936,7 +936,7 @@ function handleReasoningMessageEnd(
         signature: '',
       },
       timestamp: event.timestamp ? new Date(event.timestamp).toISOString() : (state.currentReasoning.timestamp),
-    } as unknown as PlatformMessage
+    } as PlatformMessage
     state.messages = insertByTimestamp(state.messages, msg)
     callbacks.onMessage?.(msg)
   }
@@ -981,7 +981,7 @@ function handleRawEvent(
         signature: String(rawData.signature ?? ''),
       },
       timestamp: event.timestamp ? new Date(event.timestamp).toISOString() : undefined,
-    } as unknown as PlatformMessage
+    } as PlatformMessage
     state.messages = insertByTimestamp(state.messages, msg)
     callbacks.onMessage?.(msg)
     return state
