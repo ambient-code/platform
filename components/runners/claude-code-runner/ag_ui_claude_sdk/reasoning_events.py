@@ -11,18 +11,9 @@ Once ``ag-ui-protocol`` adds native support, these can be replaced with
 direct imports.
 """
 
-from enum import Enum
 from typing import Literal, Optional
 
 from pydantic import BaseModel
-
-
-class ReasoningEventType(str, Enum):
-    REASONING_START = "REASONING_START"
-    REASONING_END = "REASONING_END"
-    REASONING_MESSAGE_START = "REASONING_MESSAGE_START"
-    REASONING_MESSAGE_CONTENT = "REASONING_MESSAGE_CONTENT"
-    REASONING_MESSAGE_END = "REASONING_MESSAGE_END"
 
 
 class ReasoningStartEvent(BaseModel):

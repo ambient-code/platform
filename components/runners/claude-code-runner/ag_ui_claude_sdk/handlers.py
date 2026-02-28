@@ -8,7 +8,7 @@ import json
 import logging
 import time
 import uuid
-from typing import AsyncIterator, Any, Dict, Optional
+from typing import AsyncIterator, Any, Optional
 
 from ag_ui.core import (
     EventType,
@@ -109,7 +109,7 @@ async def handle_tool_use_block(
                 type=EventType.STATE_SNAPSHOT, snapshot=current_state
             )
 
-            logger.debug(f"Emitted STATE_SNAPSHOT with updated state")
+            logger.debug("Emitted STATE_SNAPSHOT with updated state")
             return  # Skip normal tool call events
 
         # Regular tool handling for non-state tools
@@ -160,7 +160,6 @@ async def handle_tool_result_block(
     """
     tool_use_id = getattr(block, "tool_use_id", None)
     content = getattr(block, "content", None)
-    is_error = getattr(block, "is_error", None)
 
     # Parse tool result content for frontend rendering
     # Claude SDK tools return: [{"type": "text", "text": "{json_data}"}]

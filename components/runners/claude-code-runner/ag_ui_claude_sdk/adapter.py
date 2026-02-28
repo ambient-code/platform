@@ -602,8 +602,6 @@ class ClaudeAgentAdapter:
             UserMessage,
             SystemMessage,
             ResultMessage,
-            TextBlock,
-            ThinkingBlock,
             ToolUseBlock,
             ToolResultBlock,
         )
@@ -886,7 +884,6 @@ class ClaudeAgentAdapter:
                                 yield event
                 
                 elif isinstance(message, SystemMessage):
-                    subtype = getattr(message, 'subtype', '')
                     data = getattr(message, 'data', {}) or {}
                     
                     msg_text = (data.get('message') or data.get('text') or '') if data else ''

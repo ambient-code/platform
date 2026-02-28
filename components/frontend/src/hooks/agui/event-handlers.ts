@@ -253,20 +253,19 @@ function handleRunFinished(
   }
   state.currentReasoning = null
 
-  // Flush any pending thinking
+  // Flush any pending thinking (legacy, runner now emits REASONING_* events)
   if (state.currentThinking?.content) {
     const thinkingText = state.currentThinking.content
     const msg = {
       id: state.currentThinking.id || crypto.randomUUID(),
       role: 'assistant' as const,
-      content: thinkingText,
-      metadata: {
-        type: 'reasoning_block',
+      content: {
+        type: 'reasoning_block' as const,
         thinking: thinkingText,
         signature: '',
       },
       timestamp: event.timestamp ? new Date(event.timestamp).toISOString() : (state.currentThinking.timestamp),
-    } as PlatformMessage
+    } as unknown as PlatformMessage
     state.messages = insertByTimestamp(state.messages, msg)
     callbacks.onMessage?.(msg)
   }
@@ -309,7 +308,7 @@ function handleRunError(
     timestamp: event.timestamp ? new Date(event.timestamp).toISOString() : undefined,
     metadata: { type: 'run_error' },
   } as PlatformMessage
-  state.messages = [...state.messages, errorMsg]
+  state.messages = insertByTimestamp(state.messages, errorMsg)
   callbacks.onMessage?.(errorMsg)
 
   callbacks.onError?.(event.message)
@@ -971,19 +970,18 @@ function handleRawEvent(
     return state
   }
 
-  // Handle thinking blocks from Claude SDK
+  // Handle reasoning blocks from Claude SDK (RAW event path)
   if (rawData?.type === 'reasoning_block') {
     const msg = {
       id: crypto.randomUUID(),
       role: 'assistant' as const,
-      content: String(rawData.thinking ?? ''),
-      metadata: {
-        type: 'reasoning_block',
+      content: {
+        type: 'reasoning_block' as const,
         thinking: String(rawData.thinking ?? ''),
         signature: String(rawData.signature ?? ''),
       },
       timestamp: event.timestamp ? new Date(event.timestamp).toISOString() : undefined,
-    } as PlatformMessage
+    } as unknown as PlatformMessage
     state.messages = insertByTimestamp(state.messages, msg)
     callbacks.onMessage?.(msg)
     return state

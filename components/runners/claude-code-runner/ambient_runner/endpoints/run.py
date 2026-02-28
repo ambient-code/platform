@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from ag_ui.core import EventType, RunAgentInput, RunErrorEvent, ToolCallResultEvent
 from ag_ui.encoder import EventEncoder
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
