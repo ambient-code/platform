@@ -80,6 +80,11 @@ class SessionWorker:
 
     # ── lifecycle ──
 
+    @property
+    def is_alive(self) -> bool:
+        """True if the background task is still running."""
+        return self._task is not None and not self._task.done()
+
     async def start(self) -> None:
         """Spawn the background task that owns the SDK client."""
         if self._task is not None:
@@ -129,10 +134,19 @@ class SessionWorker:
 
                 except Exception as exc:
                     logger.error(
-                        f"[SessionWorker] Error during query for "
-                        f"thread={self.thread_id}: {exc}"
+                        "[SessionWorker] Error during query for "
+                        "thread=%s, stopping worker: %s",
+                        self.thread_id,
+                        exc,
                     )
                     await output_queue.put(WorkerError(exc))
+
+                    # The SDK client may be in an unknown state after
+                    # any error (dead message reader, broken pipe, …).
+                    # Break unconditionally so SessionManager can
+                    # spin up a fresh worker for the next message.
+                    # The session ID is preserved for --resume.
+                    break
                 finally:
                     # Sentinel: this turn is done (success or error).
                     await output_queue.put(None)
@@ -243,14 +257,28 @@ class SessionManager:
         options: Any,
         api_key: str,
     ) -> SessionWorker:
-        """Return the worker for *thread_id*, creating one if needed."""
-        if thread_id not in self._workers:
-            worker = SessionWorker(thread_id, options, api_key)
-            await worker.start()
-            self._workers[thread_id] = worker
-            self._locks[thread_id] = asyncio.Lock()
-            logger.debug(f"[SessionManager] Created worker for thread={thread_id}")
-        return self._workers[thread_id]
+        """Return the worker for *thread_id*, creating one if needed.
+
+        If an existing worker's background task has exited (e.g. after a
+        fatal SDK error), it is destroyed and a fresh worker is created so
+        that the session can recover.
+        """
+        if thread_id in self._workers:
+            existing = self._workers[thread_id]
+            if existing.is_alive:
+                return existing
+            logger.warning(
+                "[SessionManager] Worker for thread=%s is dead, recreating",
+                thread_id,
+            )
+            await self.destroy(thread_id)
+
+        worker = SessionWorker(thread_id, options, api_key)
+        await worker.start()
+        self._workers[thread_id] = worker
+        self._locks[thread_id] = asyncio.Lock()
+        logger.debug(f"[SessionManager] Created worker for thread={thread_id}")
+        return worker
 
     def get_existing(self, thread_id: str) -> Optional[SessionWorker]:
         """Return the worker for *thread_id* if it exists, else ``None``."""

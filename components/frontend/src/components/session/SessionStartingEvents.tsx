@@ -5,6 +5,7 @@ import { Loader2, CheckCircle2, AlertTriangle, Info, Clock, ChevronDown, Chevron
 import { useSessionPodEvents } from "@/services/queries/use-sessions";
 import type { PodEvent } from "@/services/api/sessions";
 import { cn } from "@/lib/utils";
+import { formatTimestamp } from "@/lib/format-timestamp";
 
 type SessionStartingEventsProps = {
   projectName: string;
@@ -22,19 +23,6 @@ function EventIcon({ type, reason }: { type: string; reason: string }) {
     return <Loader2 className="h-3.5 w-3.5 text-blue-500 animate-spin shrink-0" />;
   }
   return <Info className="h-3.5 w-3.5 text-muted-foreground shrink-0" />;
-}
-
-function formatTimestamp(ts: string): string {
-  try {
-    const date = new Date(ts);
-    return date.toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    });
-  } catch {
-    return ts;
-  }
 }
 
 function EventRow({ event }: { event: PodEvent }) {

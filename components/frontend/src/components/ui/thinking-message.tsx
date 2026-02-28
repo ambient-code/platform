@@ -3,10 +3,10 @@
 import React, { useState } from "react";
 import { cn } from "@/lib/utils";
 import { ChevronRight } from "lucide-react";
-import type { ThinkingBlock } from "@/types/agentic-session";
+import type { ReasoningBlock } from "@/types/agentic-session";
 
 export type ThinkingMessageProps = {
-  block: ThinkingBlock;
+  block: ReasoningBlock;
   streaming?: boolean;
   className?: string;
 };

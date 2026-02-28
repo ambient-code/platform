@@ -76,9 +76,17 @@ export type PlatformToolCall = ToolCall & {
 // Extends core Message union with platform-specific fields.
 // Because Message is a discriminated union (A | B | C), the intersection
 // distributes: (A & Ext) | (B & Ext) | (C & Ext), preserving discrimination.
+/** Structured content block for reasoning messages */
+export type ReasoningContent = {
+  type: 'reasoning_block'
+  thinking: string
+  signature: string
+}
+
 export type PlatformMessage = Message & {
   timestamp?: string
   metadata?: unknown
+  content?: string | ReasoningContent  // Widened to support structured reasoning blocks
   name?: string  // Tool name (not on core ToolMessage, but platform sends it)
   toolCalls?: PlatformToolCall[]
   toolCallId?: string  // Present on tool-role messages

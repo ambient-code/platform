@@ -47,6 +47,27 @@ import type {
 } from '@/types/agui'
 import { normalizeSnapshotMessages } from './normalize-snapshot'
 
+/**
+ * Insert a message into the list in timestamp order.
+ * Messages without timestamps are appended to the end.
+ */
+function insertByTimestamp(messages: PlatformMessage[], msg: PlatformMessage): PlatformMessage[] {
+  const msgTime = msg.timestamp ? new Date(msg.timestamp).getTime() : null
+  if (msgTime == null) return [...messages, msg]
+
+  // Find the first message with a later timestamp and insert before it.
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const t = messages[i].timestamp ? new Date(messages[i].timestamp!).getTime() : null
+    if (t != null && t <= msgTime) {
+      const copy = [...messages]
+      copy.splice(i + 1, 0, msg)
+      return copy
+    }
+  }
+  // All existing messages are later (or have no timestamp) — prepend.
+  return [msg, ...messages]
+}
+
 /** Callbacks that event handlers may invoke for side effects */
 export type EventHandlerCallbacks = {
   onMessage?: (message: PlatformMessage) => void
@@ -170,27 +191,6 @@ export function processAGUIEvent(
     return handleMetaEvent(newState, event as AGUIMetaEvent)
   }
 
-  // ── Thinking events (custom, not in AG-UI EventType enum) ──
-  if (event.type === 'THINKING_START') {
-    return newState
-  }
-
-  if (event.type === 'THINKING_TEXT_MESSAGE_START') {
-    return handleThinkingMessageStart(newState)
-  }
-
-  if (event.type === 'THINKING_TEXT_MESSAGE_CONTENT') {
-    return handleThinkingMessageContent(newState, event as { type: string; delta: string })
-  }
-
-  if (event.type === 'THINKING_TEXT_MESSAGE_END') {
-    return handleThinkingMessageEnd(newState, event, callbacks)
-  }
-
-  if (event.type === 'THINKING_END') {
-    return newState
-  }
-
   return newState
 }
 
@@ -228,42 +228,45 @@ function handleRunFinished(
       id: state.currentMessage.id || crypto.randomUUID(),
       role: 'assistant' as const,
       content: state.currentMessage.content,
-      timestamp: event.timestamp ? new Date(event.timestamp).toISOString() : (state.currentMessage.timestamp || new Date().toISOString()),
+      timestamp: event.timestamp ? new Date(event.timestamp).toISOString() : (state.currentMessage.timestamp),
     } as PlatformMessage
-    state.messages = [...state.messages, msg]
+    state.messages = insertByTimestamp(state.messages, msg)
     callbacks.onMessage?.(msg)
   }
   state.currentMessage = null
 
   // Flush any pending reasoning
   if (state.currentReasoning?.content) {
+    const reasoningText = state.currentReasoning.content
     const msg = {
       id: state.currentReasoning.id || crypto.randomUUID(),
       role: 'assistant' as const,
-      content: state.currentReasoning.content,
-      metadata: { type: 'reasoning_block' },
-      timestamp: event.timestamp ? new Date(event.timestamp).toISOString() : (state.currentReasoning.timestamp || new Date().toISOString()),
+      content: {
+        type: 'reasoning_block' as const,
+        thinking: reasoningText,
+        signature: '',
+      },
+      timestamp: event.timestamp ? new Date(event.timestamp).toISOString() : (state.currentReasoning.timestamp),
     } as PlatformMessage
-    state.messages = [...state.messages, msg]
+    state.messages = insertByTimestamp(state.messages, msg)
     callbacks.onMessage?.(msg)
   }
   state.currentReasoning = null
 
-  // Flush any pending thinking
+  // Flush any pending thinking (legacy, runner now emits REASONING_* events)
   if (state.currentThinking?.content) {
     const thinkingText = state.currentThinking.content
     const msg = {
       id: state.currentThinking.id || crypto.randomUUID(),
       role: 'assistant' as const,
-      content: thinkingText,
-      metadata: {
-        type: 'thinking_block',
+      content: {
+        type: 'reasoning_block' as const,
         thinking: thinkingText,
         signature: '',
       },
-      timestamp: event.timestamp ? new Date(event.timestamp).toISOString() : (state.currentThinking.timestamp || new Date().toISOString()),
+      timestamp: event.timestamp ? new Date(event.timestamp).toISOString() : (state.currentThinking.timestamp),
     } as PlatformMessage
-    state.messages = [...state.messages, msg]
+    state.messages = insertByTimestamp(state.messages, msg)
     callbacks.onMessage?.(msg)
   }
   state.currentThinking = null
@@ -297,6 +300,46 @@ function handleRunError(
   }
   state.currentToolCall = null
 
+  // Flush partially-streamed content so it isn't silently lost.
+  if (state.currentMessage?.content) {
+    const msg = {
+      id: state.currentMessage.id || crypto.randomUUID(),
+      role: 'assistant' as const,
+      content: state.currentMessage.content,
+      timestamp: event.timestamp ? new Date(event.timestamp).toISOString() : (state.currentMessage.timestamp),
+    } as PlatformMessage
+    state.messages = insertByTimestamp(state.messages, msg)
+  }
+  state.currentMessage = null
+
+  if (state.currentReasoning?.content) {
+    const reasoningText = state.currentReasoning.content
+    const msg = {
+      id: state.currentReasoning.id || crypto.randomUUID(),
+      role: 'assistant' as const,
+      content: {
+        type: 'reasoning_block' as const,
+        thinking: reasoningText,
+        signature: '',
+      },
+      timestamp: event.timestamp ? new Date(event.timestamp).toISOString() : (state.currentReasoning.timestamp),
+    } as PlatformMessage
+    state.messages = insertByTimestamp(state.messages, msg)
+  }
+  state.currentReasoning = null
+  state.currentThinking = null
+
+  // Surface the error as a chat message so the user sees it inline
+  const errorMsg = {
+    id: crypto.randomUUID(),
+    role: 'assistant' as const,
+    content: `**Error:** ${event.message}`,
+    timestamp: event.timestamp ? new Date(event.timestamp).toISOString() : undefined,
+    metadata: { type: 'run_error' },
+  } as PlatformMessage
+  state.messages = insertByTimestamp(state.messages, errorMsg)
+  callbacks.onMessage?.(errorMsg)
+
   callbacks.onError?.(event.message)
   callbacks.setIsRunActive(false)
   callbacks.currentRunIdRef.current = null
@@ -311,7 +354,7 @@ function handleTextMessageStart(
     id: event.messageId || null,
     role: event.role,
     content: '',
-    timestamp: new Date(event.timestamp ?? Date.now()).toISOString(),
+    timestamp: event.timestamp ? new Date(event.timestamp).toISOString() : undefined,
   }
   return state
 }
@@ -363,9 +406,9 @@ function handleTextMessageEnd(
         content: state.currentMessage.content,
         // Prefer server end-event timestamp; fall back to the start-event timestamp
         // already captured in state to avoid replacing it with a new Date.now().
-        timestamp: event.timestamp ? new Date(event.timestamp).toISOString() : (state.currentMessage.timestamp || new Date().toISOString()),
+        timestamp: event.timestamp ? new Date(event.timestamp).toISOString() : (state.currentMessage.timestamp),
       } as PlatformMessage
-      state.messages = [...state.messages, msg]
+      state.messages = insertByTimestamp(state.messages, msg)
       callbacks.onMessage?.(msg)
     }
   }
@@ -403,7 +446,7 @@ function handleToolCallStart(
     args: '',
     parentToolUseId: effectiveParentToolId,
     parentMessageId: parentMessageId,
-    timestamp: new Date(event.timestamp ?? Date.now()).toISOString(),
+    timestamp: event.timestamp ? new Date(event.timestamp).toISOString() : undefined,
   })
   state.pendingToolCalls = updatedPending
 
@@ -585,7 +628,7 @@ function handleToolCallEnd(
       content: '',
       toolCallId: toolCallId,
       toolCalls: [completedToolCall],
-      timestamp: event.timestamp ? new Date(event.timestamp).toISOString() : (pendingTool?.timestamp || new Date().toISOString()),
+      timestamp: event.timestamp ? new Date(event.timestamp).toISOString() : (pendingTool?.timestamp),
     } as PlatformMessage
     messages.push(toolMessage)
     callbacks.onMessage?.(toolMessage)
@@ -795,12 +838,25 @@ function handleMessagesSnapshot(
       }
     }
   }
-  state.messages = merged.filter(msg => {
+  const filtered = merged.filter(msg => {
     if (msg.role !== 'tool') return true
     if ('toolCallId' in msg && msg.toolCallId && nestedToolCallIds.has(msg.toolCallId)) return false
     if (msg.toolCalls?.some(tc => nestedToolCallIds.has(tc.id))) return false
     return true
   })
+
+  // Sort by timestamp so messages from interleaved runs appear in
+  // chronological order.  Messages without timestamps keep their
+  // relative position (stable sort).
+  filtered.sort((a, b) => {
+    const ta = a.timestamp ? new Date(a.timestamp).getTime() : null
+    const tb = b.timestamp ? new Date(b.timestamp).getTime() : null
+    if (ta == null && tb == null) return 0
+    if (ta == null) return 0  // keep relative position
+    if (tb == null) return 0
+    return ta - tb
+  })
+  state.messages = filtered
 
   // Clear pendingChildren -- the normalized snapshot subsumes any
   // pending child data from streaming
@@ -875,7 +931,7 @@ function handleReasoningMessageStart(
   state.currentReasoning = {
     id: event.messageId || null,
     content: '',
-    timestamp: new Date(event.timestamp ?? Date.now()).toISOString(),
+    timestamp: event.timestamp ? new Date(event.timestamp).toISOString() : undefined,
   }
   return state
 }
@@ -899,14 +955,18 @@ function handleReasoningMessageEnd(
   callbacks: EventHandlerCallbacks,
 ): AGUIClientState {
   if (state.currentReasoning?.content) {
+    const reasoningText = state.currentReasoning.content
     const msg = {
       id: state.currentReasoning.id || crypto.randomUUID(),
       role: 'assistant' as const,
-      content: state.currentReasoning.content,
-      metadata: { type: 'reasoning_block' },
-      timestamp: event.timestamp ? new Date(event.timestamp).toISOString() : (state.currentReasoning.timestamp || new Date().toISOString()),
+      content: {
+        type: 'reasoning_block' as const,
+        thinking: reasoningText,
+        signature: '',
+      },
+      timestamp: event.timestamp ? new Date(event.timestamp).toISOString() : (state.currentReasoning.timestamp),
     } as PlatformMessage
-    state.messages = [...state.messages, msg]
+    state.messages = insertByTimestamp(state.messages, msg)
     callbacks.onMessage?.(msg)
   }
   state.currentReasoning = null
@@ -939,20 +999,19 @@ function handleRawEvent(
     return state
   }
 
-  // Handle thinking blocks from Claude SDK
-  if (rawData?.type === 'thinking_block') {
+  // Handle reasoning blocks from Claude SDK (RAW event path)
+  if (rawData?.type === 'reasoning_block') {
     const msg = {
       id: crypto.randomUUID(),
       role: 'assistant' as const,
-      content: String(rawData.thinking ?? ''),
-      metadata: {
-        type: 'thinking_block',
+      content: {
+        type: 'reasoning_block' as const,
         thinking: String(rawData.thinking ?? ''),
         signature: String(rawData.signature ?? ''),
       },
-      timestamp: new Date(event.timestamp ?? Date.now()).toISOString(),
+      timestamp: event.timestamp ? new Date(event.timestamp).toISOString() : undefined,
     } as PlatformMessage
-    state.messages = [...state.messages, msg]
+    state.messages = insertByTimestamp(state.messages, msg)
     callbacks.onMessage?.(msg)
     return state
   }
@@ -967,9 +1026,9 @@ function handleRawEvent(
         id: messageId,
         role: 'user' as const,
         content: String(rawData.content),
-        timestamp: new Date(event.timestamp ?? Date.now()).toISOString(),
+        timestamp: event.timestamp ? new Date(event.timestamp).toISOString() : undefined,
       } as PlatformMessage
-      state.messages = [...state.messages, msg]
+      state.messages = insertByTimestamp(state.messages, msg)
       callbacks.onMessage?.(msg)
     }
     return state
@@ -981,9 +1040,9 @@ function handleRawEvent(
       id: String(rawData.id ?? '') || crypto.randomUUID(),
       role: String(rawData.role),
       content: String(rawData.content),
-      timestamp: new Date(event.timestamp ?? Date.now()).toISOString(),
+      timestamp: event.timestamp ? new Date(event.timestamp).toISOString() : undefined,
     } as PlatformMessage
-    state.messages = [...state.messages, msg]
+    state.messages = insertByTimestamp(state.messages, msg)
     callbacks.onMessage?.(msg)
   }
   return state
@@ -1004,54 +1063,4 @@ function handleMetaEvent(
   return state
 }
 
-// ── Thinking event handlers (custom streaming thinking blocks) ──
-
-function handleThinkingMessageStart(
-  state: AGUIClientState,
-): AGUIClientState {
-  state.currentThinking = {
-    id: crypto.randomUUID(),
-    content: '',
-    timestamp: new Date().toISOString(),
-  }
-  return state
-}
-
-function handleThinkingMessageContent(
-  state: AGUIClientState,
-  event: { type: string; delta: string },
-): AGUIClientState {
-  if (state.currentThinking) {
-    state.currentThinking = {
-      ...state.currentThinking,
-      content: (state.currentThinking.content || '') + event.delta,
-    }
-  }
-  return state
-}
-
-function handleThinkingMessageEnd(
-  state: AGUIClientState,
-  event: { type: string; timestamp?: number },
-  callbacks: EventHandlerCallbacks,
-): AGUIClientState {
-  if (state.currentThinking?.content) {
-    const thinkingText = state.currentThinking.content
-    const msg = {
-      id: state.currentThinking.id || crypto.randomUUID(),
-      role: 'assistant' as const,
-      content: thinkingText,
-      metadata: {
-        type: 'thinking_block',
-        thinking: thinkingText,
-        signature: '',
-      },
-      // Prefer server end-event timestamp; fall back to the start-event timestamp.
-      timestamp: event.timestamp ? new Date(event.timestamp).toISOString() : (state.currentThinking.timestamp || new Date().toISOString()),
-    } as PlatformMessage
-    state.messages = [...state.messages, msg]
-    callbacks.onMessage?.(msg)
-  }
-  state.currentThinking = null
-  return state
-}
+// (Thinking event handlers removed — runner now emits standard REASONING_* events)
