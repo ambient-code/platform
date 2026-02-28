@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 
+	"ambient-code-backend/cmd"
 	"ambient-code-backend/featureflags"
 	"ambient-code-backend/git"
 	"ambient-code-backend/github"
@@ -50,6 +51,15 @@ func main() {
 	_ = godotenv.Overload(".env.local")
 	_ = godotenv.Overload(".env")
 
+	// Handle subcommands before full server initialization
+	if len(os.Args) > 1 && os.Args[1] == "sync-model-flags" {
+		manifestPath := cmd.ParseManifestPath(os.Args[2:])
+		if err := cmd.SyncModelFlagsFromFile(manifestPath); err != nil {
+			log.Fatalf("sync-model-flags: %v", err)
+		}
+		return
+	}
+
 	// Log build information
 	logBuildInfo()
 
@@ -67,6 +77,14 @@ func main() {
 
 	// Optional: Unleash feature flags (when UNLEASH_URL and UNLEASH_CLIENT_KEY are set)
 	featureflags.Init()
+
+	// Sync model flags to Unleash in the background (best-effort, non-blocking).
+	// Uses handlers.LoadManifest which reads the mounted models.json file.
+	if manifest, err := handlers.LoadManifest(handlers.ManifestPath()); err != nil {
+		log.Printf("WARNING: cannot sync model flags: %v", err)
+	} else {
+		cmd.SyncModelFlagsAsync(context.Background(), manifest)
+	}
 
 	// Initialize git package
 	git.GetProjectSettingsResource = k8s.GetProjectSettingsResource

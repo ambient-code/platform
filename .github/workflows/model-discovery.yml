@@ -1,0 +1,66 @@
+name: Model Discovery
+
+on:
+  schedule:
+    - cron: "0 6 * * *" # Daily at 06:00 UTC
+  workflow_dispatch: {}
+
+concurrency:
+  group: model-discovery
+  cancel-in-progress: false
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      pull-requests: write
+      id-token: write # For Workload Identity Federation
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud CLI
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Run model discovery
+        env:
+          CLOUD_ML_REGION: ${{ secrets.CLOUD_ML_REGION }}
+          ANTHROPIC_VERTEX_PROJECT_ID: ${{ secrets.ANTHROPIC_VERTEX_PROJECT_ID }}
+        run: python scripts/model-discovery.py
+
+      - name: Check for changes
+        id: diff
+        run: git diff --quiet && echo "changed=false" >> "$GITHUB_OUTPUT" || echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Create or update PR
+        if: steps.diff.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v8
+        with:
+          branch: automated/model-discovery
+          commit-message: "chore: update model manifest from Vertex AI discovery"
+          title: "chore: update model manifest"
+          body: |
+            Automated model discovery run.
+
+            This PR updates `components/manifests/base/models.json` based on
+            probing Vertex AI endpoints. New models are added with `available: true`.
+
+            Unleash flags are synced automatically on deploy by the
+            `sync-model-flags` Job. After merge, enable new models via the
+            Feature Flags admin UI.
+          labels: automated,models
+          delete-branch: true

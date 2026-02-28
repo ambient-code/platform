@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { Flag, RefreshCw, Loader2, Info, AlertTriangle, Save, RotateCcw } from "lucide-react";
+import { Flag, RefreshCw, Loader2, Info, AlertTriangle, Save } from "lucide-react";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,15 +15,9 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { EmptyState } from "@/components/empty-state";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 import { useFeatureFlags } from "@/services/queries/use-feature-flags-admin";
 import * as featureFlagsApi from "@/services/api/feature-flags-admin";
@@ -34,10 +28,12 @@ type FeatureFlagsSectionProps = {
   projectName: string;
 };
 
+// "default" = no override (use platform value), "on" = force enable, "off" = force disable
+type OverrideValue = "default" | "on" | "off";
+
 type LocalFlagState = {
-  enabled: boolean;
-  changed: boolean; // true if user toggled this flag
-  markedForReset: boolean; // true if user wants to remove the workspace override
+  override: OverrideValue;
+  serverOverride: OverrideValue; // what the server currently has
 };
 
 export function FeatureFlagsSection({ projectName }: FeatureFlagsSectionProps) {
@@ -61,13 +57,12 @@ export function FeatureFlagsSection({ projectName }: FeatureFlagsSectionProps) {
 
   // Reset local state when flags data changes
   useEffect(() => {
-    // Initialize local state from server state
     const initial: Record<string, LocalFlagState> = {};
     for (const flag of flags) {
+      const serverOverride = deriveServerOverride(flag.overrideEnabled);
       initial[flag.name] = {
-        enabled: flag.enabled,
-        changed: false,
-        markedForReset: false,
+        override: serverOverride,
+        serverOverride,
       };
     }
     setLocalState(initial);
@@ -76,118 +71,57 @@ export function FeatureFlagsSection({ projectName }: FeatureFlagsSectionProps) {
 
   // Check if there are unsaved changes
   const hasChanges = useMemo(() => {
-    return Object.values(localState).some((s) => s.changed || s.markedForReset);
+    return Object.values(localState).some((s) => s.override !== s.serverOverride);
   }, [localState]);
 
   // Get the count of changed flags
   const changedCount = useMemo(() => {
-    return Object.values(localState).filter((s) => s.changed || s.markedForReset).length;
+    return Object.values(localState).filter((s) => s.override !== s.serverOverride).length;
   }, [localState]);
 
-  const handleToggle = (flagName: string) => {
+  const handleOverrideChange = (flagName: string, value: OverrideValue) => {
     setLocalState((prev) => {
       const current = prev[flagName];
       if (!current) return prev;
-
-      // If marked for reset, clear that first
-      if (current.markedForReset) {
-        return {
-          ...prev,
-          [flagName]: {
-            ...current,
-            markedForReset: false,
-          },
-        };
-      }
-
-      // Find the original server state
-      const serverFlag = flags.find((f) => f.name === flagName);
-      const serverEnabled = serverFlag?.enabled ?? false;
-
-      const newEnabled = !current.enabled;
-      // Mark as changed only if different from server state
-      const isChanged = newEnabled !== serverEnabled;
-
       return {
         ...prev,
-        [flagName]: {
-          enabled: newEnabled,
-          changed: isChanged,
-          markedForReset: false,
-        },
-      };
-    });
-  };
-
-  const handleMarkForReset = (flagName: string) => {
-    setLocalState((prev) => {
-      const current = prev[flagName];
-      if (!current) return prev;
-
-      return {
-        ...prev,
-        [flagName]: {
-          ...current,
-          markedForReset: true,
-          changed: false, // Clear toggle change since we're resetting
-        },
-      };
-    });
-  };
-
-  const handleUndoReset = (flagName: string) => {
-    setLocalState((prev) => {
-      const current = prev[flagName];
-      if (!current) return prev;
-
-      // Restore to server state
-      const serverFlag = flags.find((f) => f.name === flagName);
-
-      return {
-        ...prev,
-        [flagName]: {
-          enabled: serverFlag?.enabled ?? false,
-          changed: false,
-          markedForReset: false,
-        },
+        [flagName]: { ...current, override: value },
       };
     });
   };
 
   const handleSave = async () => {
-    const changedFlags = Object.entries(localState).filter(([, s]) => s.changed);
-    const resetFlags = Object.entries(localState).filter(([, s]) => s.markedForReset);
+    const changed = Object.entries(localState).filter(
+      ([, s]) => s.override !== s.serverOverride
+    );
 
-    if (changedFlags.length === 0 && resetFlags.length === 0) {
-      return;
-    }
+    if (changed.length === 0) return;
 
     setIsSaving(true);
 
     try {
       const promises: Promise<unknown>[] = [];
 
-      // Save all changed flags (set overrides)
-      for (const [flagName, state] of changedFlags) {
-        if (state.enabled) {
-          promises.push(featureFlagsApi.enableFeatureFlag(projectName, flagName));
-        } else {
-          promises.push(featureFlagsApi.disableFeatureFlag(projectName, flagName));
+      for (const [flagName, state] of changed) {
+        switch (state.override) {
+          case "on":
+            promises.push(featureFlagsApi.enableFeatureFlag(projectName, flagName));
+            break;
+          case "off":
+            promises.push(featureFlagsApi.disableFeatureFlag(projectName, flagName));
+            break;
+          case "default":
+            promises.push(featureFlagsApi.removeFeatureFlagOverride(projectName, flagName));
+            break;
         }
-      }
-
-      // Reset flags (remove overrides)
-      for (const [flagName] of resetFlags) {
-        promises.push(featureFlagsApi.removeFeatureFlagOverride(projectName, flagName));
       }
 
       await Promise.all(promises);
 
-      const totalChanges = changedFlags.length + resetFlags.length;
-      successToast(`${totalChanges} feature flag${totalChanges > 1 ? "s" : ""} updated`);
+      successToast(`${changed.length} feature flag${changed.length > 1 ? "s" : ""} updated`);
 
-      // Invalidate queries to refetch fresh data
       queryClient.invalidateQueries({ queryKey: ["feature-flags", "list", projectName] });
+      queryClient.invalidateQueries({ queryKey: ["models", projectName] });
     } catch (err) {
       errorToast(err instanceof Error ? err.message : "Failed to save feature flags");
     } finally {
@@ -196,13 +130,12 @@ export function FeatureFlagsSection({ projectName }: FeatureFlagsSectionProps) {
   };
 
   const handleDiscard = () => {
-    // Reset to server state
     const initial: Record<string, LocalFlagState> = {};
     for (const flag of flags) {
+      const serverOverride = deriveServerOverride(flag.overrideEnabled);
       initial[flag.name] = {
-        enabled: flag.enabled,
-        changed: false,
-        markedForReset: false,
+        override: serverOverride,
+        serverOverride,
       };
     }
     setLocalState(initial);
@@ -223,28 +156,6 @@ export function FeatureFlagsSection({ projectName }: FeatureFlagsSectionProps) {
     }
   };
 
-  const getSourceBadge = (source?: string, hasOverride?: boolean, markedForReset?: boolean) => {
-    if (markedForReset) {
-      return (
-        <Badge variant="outline" className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200">
-          Will Reset
-        </Badge>
-      );
-    }
-    if (source === "workspace-override" || hasOverride) {
-      return (
-        <Badge variant="default" className="text-xs">
-          Workspace Override
-        </Badge>
-      );
-    }
-    return (
-      <Badge variant="secondary" className="text-xs">
-        Platform Default
-      </Badge>
-    );
-  };
-
   // Check if Unleash is not configured (service unavailable error)
   const isNotConfigured =
     isError &&
@@ -261,7 +172,7 @@ export function FeatureFlagsSection({ projectName }: FeatureFlagsSectionProps) {
               Feature Flags
             </CardTitle>
             <CardDescription>
-              Enable or disable features for this workspace. Changes are saved when you click Save.
+              Override platform feature flags for this workspace. Changes are saved when you click Save.
             </CardDescription>
           </div>
           <Button
@@ -290,10 +201,10 @@ export function FeatureFlagsSection({ projectName }: FeatureFlagsSectionProps) {
           <>
             <Alert>
               <Info className="h-4 w-4" />
-              <AlertTitle>Workspace-Scoped Feature Flags</AlertTitle>
+              <AlertTitle>Workspace-Scoped Overrides</AlertTitle>
               <AlertDescription>
-                Toggle switches to enable or disable features for this workspace only.
-                Use the reset button to revert to the platform default.
+                Use the override control to force-enable or force-disable features for this workspace.
+                Set to &quot;Default&quot; to inherit the platform setting.
               </AlertDescription>
             </Alert>
 
@@ -322,46 +233,28 @@ export function FeatureFlagsSection({ projectName }: FeatureFlagsSectionProps) {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-[80px]">Enabled</TableHead>
                       <TableHead>Feature</TableHead>
                       <TableHead className="hidden lg:table-cell">Description</TableHead>
-                      <TableHead className="hidden md:table-cell">Source</TableHead>
+                      <TableHead className="w-[100px]">Default</TableHead>
+                      <TableHead className="w-[200px]">Override</TableHead>
                       <TableHead className="hidden xl:table-cell">Type</TableHead>
-                      <TableHead className="w-[80px]">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {flags.map((flag) => {
                       const state = localState[flag.name];
-                      const isEnabled = state?.enabled ?? flag.enabled;
-                      const isChanged = state?.changed ?? false;
-                      const isMarkedForReset = state?.markedForReset ?? false;
-                      const hasOverride = flag.overrideEnabled !== undefined && flag.overrideEnabled !== null;
-                      const hasUnsavedChange = isChanged || isMarkedForReset;
-
+                      const currentOverride = state?.override ?? "default";
+                      const isChanged = state ? state.override !== state.serverOverride : false;
                       return (
-                        <TableRow key={flag.name} className={hasUnsavedChange ? "bg-muted/50" : ""}>
-                          <TableCell>
-                            <Switch
-                              checked={isMarkedForReset ? false : isEnabled}
-                              onCheckedChange={() => handleToggle(flag.name)}
-                              disabled={isMarkedForReset}
-                              aria-label={`Toggle ${flag.name}`}
-                            />
-                          </TableCell>
+                        <TableRow key={flag.name} className={isChanged ? "bg-muted/50" : ""}>
                           <TableCell>
                             <div className="flex items-center gap-2">
-                              <span className={`font-medium font-mono text-sm ${isMarkedForReset ? "line-through text-muted-foreground" : ""}`}>
+                              <span className="font-medium font-mono text-sm">
                                 {flag.name}
                               </span>
                               {isChanged && (
                                 <Badge variant="outline" className="text-xs bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200">
                                   Unsaved
-                                </Badge>
-                              )}
-                              {isMarkedForReset && (
-                                <Badge variant="outline" className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200">
-                                  Will Reset
                                 </Badge>
                               )}
                             </div>
@@ -376,50 +269,19 @@ export function FeatureFlagsSection({ projectName }: FeatureFlagsSectionProps) {
                               {flag.description || "\u2014"}
                             </div>
                           </TableCell>
-                          <TableCell className="hidden md:table-cell">
-                            {getSourceBadge(flag.source, hasOverride, isMarkedForReset)}
+                          <TableCell>
+                            <Badge variant={flag.enabled ? "secondary" : "outline"} className="text-xs w-fit">
+                              {flag.enabled ? "On" : "Off"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <OverrideControl
+                              value={currentOverride}
+                              onChange={(v) => handleOverrideChange(flag.name, v)}
+                            />
                           </TableCell>
                           <TableCell className="hidden xl:table-cell">
                             {getTypeBadge(flag.type)}
-                          </TableCell>
-                          <TableCell>
-                            {isMarkedForReset ? (
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      onClick={() => handleUndoReset(flag.name)}
-                                      aria-label={`Undo reset for ${flag.name}`}
-                                    >
-                                      <RotateCcw className="h-4 w-4 text-blue-600" />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    Undo reset
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                            ) : hasOverride ? (
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      onClick={() => handleMarkForReset(flag.name)}
-                                      aria-label={`Reset ${flag.name} to platform default`}
-                                    >
-                                      <RotateCcw className="h-4 w-4" />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    Reset to platform default
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                            ) : null}
                           </TableCell>
                         </TableRow>
                       );
@@ -472,5 +334,51 @@ export function FeatureFlagsSection({ projectName }: FeatureFlagsSectionProps) {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+/** Derive the server override state from the API's overrideEnabled field */
+function deriveServerOverride(overrideEnabled?: boolean | null): OverrideValue {
+  if (overrideEnabled === undefined || overrideEnabled === null) return "default";
+  return overrideEnabled ? "on" : "off";
+}
+
+/** Segmented control with three states: Default | On | Off */
+function OverrideControl({
+  value,
+  onChange,
+}: {
+  value: OverrideValue;
+  onChange: (value: OverrideValue) => void;
+}) {
+  const options: { label: string; val: OverrideValue }[] = [
+    { label: "Default", val: "default" },
+    { label: "On", val: "on" },
+    { label: "Off", val: "off" },
+  ];
+
+  return (
+    <div className="inline-flex items-center rounded-md border border-input bg-background p-0.5 gap-0.5">
+      {options.map((opt) => (
+        <Button
+          key={opt.val}
+          variant="ghost"
+          size="sm"
+          onClick={() => onChange(opt.val)}
+          className={cn(
+            "h-auto px-2.5 py-1 text-xs font-medium rounded-sm transition-colors",
+            value === opt.val
+              ? opt.val === "on"
+                ? "bg-green-600 text-white shadow-sm hover:bg-green-700 hover:text-white"
+                : opt.val === "off"
+                  ? "bg-red-600 text-white shadow-sm hover:bg-red-700 hover:text-white"
+                  : "bg-muted text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+          )}
+        >
+          {opt.label}
+        </Button>
+      ))}
+    </div>
   );
 }
