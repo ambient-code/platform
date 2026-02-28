@@ -1,4 +1,3 @@
-// Package start implements the start subcommand for launching agentic sessions.
 package start
 
 import (
