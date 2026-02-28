@@ -93,10 +93,22 @@ async def run_agent(input_data: RunnerInput, request: Request):
                             ),
                         )
                         yield encoder.encode(fallback)
+                    else:
+                        # Non-tool event too large (e.g. MessagesSnapshot).
+                        # Emit a RunError so the frontend knows something
+                        # was dropped rather than silently losing data.
+                        yield encoder.encode(
+                            RunErrorEvent(
+                                type=EventType.RUN_ERROR,
+                                thread_id=getattr(event, "thread_id", "") or run_agent_input.thread_id or "",
+                                run_id=getattr(event, "run_id", "") or run_agent_input.run_id or "unknown",
+                                message=f"An event was too large to send ({type(event).__name__}: {encode_err})",
+                                timestamp=int(time.time() * 1000),
+                            )
+                        )
         except Exception as e:
             logger.error(f"Error in event stream: {e}", exc_info=True)
 
-            # Build descriptive error message, enriched by bridge-specific context
             error_msg = str(e)
             extra = bridge.get_error_context()
             if extra:

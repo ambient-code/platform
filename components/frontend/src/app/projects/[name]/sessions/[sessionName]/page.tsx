@@ -913,7 +913,7 @@ export default function ProjectSessionDetailPage({
         if (
           contentObj?.type === "reasoning_block" ||
           metadata?.type === "reasoning_block" ||
-          metadata?.type === "thinking_block"
+          metadata?.type === "thinking_block"  // TODO: remove after all sessions use REASONING_* events
         ) {
           const thinkingText =
             (contentObj?.thinking as string) ||

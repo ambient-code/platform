@@ -300,6 +300,35 @@ function handleRunError(
   }
   state.currentToolCall = null
 
+  // Flush partially-streamed content so it isn't silently lost.
+  if (state.currentMessage?.content) {
+    const msg = {
+      id: state.currentMessage.id || crypto.randomUUID(),
+      role: 'assistant' as const,
+      content: state.currentMessage.content,
+      timestamp: event.timestamp ? new Date(event.timestamp).toISOString() : (state.currentMessage.timestamp),
+    } as PlatformMessage
+    state.messages = insertByTimestamp(state.messages, msg)
+  }
+  state.currentMessage = null
+
+  if (state.currentReasoning?.content) {
+    const reasoningText = state.currentReasoning.content
+    const msg = {
+      id: state.currentReasoning.id || crypto.randomUUID(),
+      role: 'assistant' as const,
+      content: {
+        type: 'reasoning_block' as const,
+        thinking: reasoningText,
+        signature: '',
+      },
+      timestamp: event.timestamp ? new Date(event.timestamp).toISOString() : (state.currentReasoning.timestamp),
+    } as PlatformMessage
+    state.messages = insertByTimestamp(state.messages, msg)
+  }
+  state.currentReasoning = null
+  state.currentThinking = null
+
   // Surface the error as a chat message so the user sees it inline
   const errorMsg = {
     id: crypto.randomUUID(),

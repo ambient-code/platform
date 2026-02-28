@@ -18,18 +18,24 @@ from pydantic import BaseModel
 
 class ReasoningStartEvent(BaseModel):
     type: Literal["REASONING_START"] = "REASONING_START"
+    thread_id: Optional[str] = None
+    run_id: Optional[str] = None
     message_id: Optional[str] = None
     timestamp: Optional[int] = None
 
 
 class ReasoningEndEvent(BaseModel):
     type: Literal["REASONING_END"] = "REASONING_END"
+    thread_id: Optional[str] = None
+    run_id: Optional[str] = None
     message_id: Optional[str] = None
     timestamp: Optional[int] = None
 
 
 class ReasoningMessageStartEvent(BaseModel):
     type: Literal["REASONING_MESSAGE_START"] = "REASONING_MESSAGE_START"
+    thread_id: Optional[str] = None
+    run_id: Optional[str] = None
     message_id: Optional[str] = None
     role: str = "assistant"
     timestamp: Optional[int] = None
@@ -37,6 +43,8 @@ class ReasoningMessageStartEvent(BaseModel):
 
 class ReasoningMessageContentEvent(BaseModel):
     type: Literal["REASONING_MESSAGE_CONTENT"] = "REASONING_MESSAGE_CONTENT"
+    thread_id: Optional[str] = None
+    run_id: Optional[str] = None
     message_id: Optional[str] = None
     delta: str = ""
     timestamp: Optional[int] = None
@@ -44,5 +52,7 @@ class ReasoningMessageContentEvent(BaseModel):
 
 class ReasoningMessageEndEvent(BaseModel):
     type: Literal["REASONING_MESSAGE_END"] = "REASONING_MESSAGE_END"
+    thread_id: Optional[str] = None
+    run_id: Optional[str] = None
     message_id: Optional[str] = None
     timestamp: Optional[int] = None
