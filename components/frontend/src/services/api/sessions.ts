@@ -48,12 +48,14 @@ export type McpStatusResponse = {
  */
 export async function listSessionsPaginated(
   projectName: string,
-  params: PaginationParams = {}
+  params: PaginationParams = {},
+  labelSelector?: string
 ): Promise<ListAgenticSessionsPaginatedResponse> {
   const searchParams = new URLSearchParams();
   if (params.limit) searchParams.set('limit', params.limit.toString());
   if (params.offset) searchParams.set('offset', params.offset.toString());
   if (params.search) searchParams.set('search', params.search);
+  if (labelSelector) searchParams.set('labelSelector', labelSelector);
 
   const queryString = searchParams.toString();
   const url = queryString
@@ -101,7 +103,7 @@ export async function createSession(
     CreateAgenticSessionResponse,
     CreateAgenticSessionRequest
   >(`/projects/${projectName}/agentic-sessions`, data);
-  
+
   // Backend returns simplified response, fetch the full session object
   return await getSession(projectName, response.name);
 }

@@ -26,6 +26,33 @@ func SanitizeForLog(input string) string {
 	return logSanitizeRegex.ReplaceAllString(input, "")
 }
 
+// k8sLabelNameRegex matches valid K8s label name segments (max 63 chars, alphanumeric start/end,
+// dashes, dots, and underscores allowed in the middle).
+var k8sLabelNameRegex = regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9._-]{0,61}[a-zA-Z0-9])?$`)
+
+// validateLabels checks that all label keys and values conform to Kubernetes label constraints:
+// - Key name: max 63 chars, alphanumeric start/end, dashes/dots/underscores allowed
+// - Key may have an optional DNS prefix (prefix/name)
+// - Value: max 63 chars, alphanumeric start/end (or empty)
+func validateLabels(labels map[string]string) error {
+	for k, v := range labels {
+		sanitizedKey := SanitizeForLog(k)
+		// Validate key
+		name := k
+		if idx := strings.LastIndex(k, "/"); idx != -1 {
+			name = k[idx+1:]
+		}
+		if name == "" || len(name) > 63 || !k8sLabelNameRegex.MatchString(name) {
+			return fmt.Errorf("label key %q is not valid (must be 1-63 alphanumeric chars with dashes, dots, or underscores)", sanitizedKey)
+		}
+		// Validate value (empty is allowed)
+		if v != "" && (len(v) > 63 || !k8sLabelNameRegex.MatchString(v)) {
+			return fmt.Errorf("label value for key %q is not valid (must be 0-63 alphanumeric chars with dashes, dots, or underscores)", sanitizedKey)
+		}
+	}
+	return nil
+}
+
 // GetProjectSettingsResource returns the GroupVersionResource for ProjectSettings
 func GetProjectSettingsResource() schema.GroupVersionResource {
 	return schema.GroupVersionResource{

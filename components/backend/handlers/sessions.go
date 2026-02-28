@@ -386,8 +386,17 @@ func ListSessions(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	list, err := k8sDyn.Resource(gvr).Namespace(project).List(ctx, v1.ListOptions{})
+	listOpts := v1.ListOptions{}
+	if labelSelector := c.Query("labelSelector"); labelSelector != "" {
+		listOpts.LabelSelector = labelSelector
+	}
+
+	list, err := k8sDyn.Resource(gvr).Namespace(project).List(ctx, listOpts)
 	if err != nil {
+		if errors.IsInvalid(err) || errors.IsBadRequest(err) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid label selector format"})
+			return
+		}
 		log.Printf("Failed to list agentic sessions in project %s: %v", project, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list agentic sessions"})
 		return
@@ -498,6 +507,8 @@ func getSessionCreationTimestamp(session types.AgenticSession) string {
 	return ""
 }
 
+// isInternalLabel returns true for Kubernetes/Helm system labels that should
+// be excluded from user-facing label aggregation.
 // paginateSessions applies offset/limit pagination to the session list
 func paginateSessions(sessions []types.AgenticSession, offset, limit int) ([]types.AgenticSession, bool, int) {
 	total := len(sessions)
@@ -596,6 +607,10 @@ func CreateSession(c *gin.Context) {
 		"namespace": project,
 	}
 	if len(req.Labels) > 0 {
+		if err := validateLabels(req.Labels); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Invalid labels: %v", err)})
+			return
+		}
 		labels := map[string]interface{}{}
 		for k, v := range req.Labels {
 			labels[k] = v
@@ -994,6 +1009,21 @@ func PatchSession(c *gin.Context) {
 			_ = unstructured.SetNestedMap(metadata, anns, "annotations")
 			_ = unstructured.SetNestedMap(item.Object, metadata, "metadata")
 		}
+
+		if labelsPatch, ok := metaPatch["labels"].(map[string]interface{}); ok {
+			labels := item.GetLabels()
+			if labels == nil {
+				labels = map[string]string{}
+			}
+			for k, v := range labelsPatch {
+				if v == nil {
+					delete(labels, k) // null value = delete the label
+				} else if strVal, ok := v.(string); ok {
+					labels[k] = strVal
+				}
+			}
+			item.SetLabels(labels)
+		}
 	}
 
 	// Update the resource
@@ -1004,7 +1034,7 @@ func PatchSession(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Session patched successfully", "annotations": updated.GetAnnotations()})
+	c.JSON(http.StatusOK, gin.H{"message": "Session patched successfully", "annotations": updated.GetAnnotations(), "labels": updated.GetLabels()})
 }
 
 func UpdateSession(c *gin.Context) {

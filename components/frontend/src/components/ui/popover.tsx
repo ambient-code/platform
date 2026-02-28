@@ -29,7 +29,7 @@ interface PopoverProps {
 export function Popover({ children, open: controlledOpen, onOpenChange }: PopoverProps) {
   const [uncontrolledOpen, setUncontrolledOpen] = React.useState(false)
   const triggerRef = React.useRef<HTMLElement>(null)
-  
+
   const open = controlledOpen !== undefined ? controlledOpen : uncontrolledOpen
   const setOpen = onOpenChange || setUncontrolledOpen
 
@@ -79,9 +79,9 @@ interface PopoverContentProps {
   sideOffset?: number
 }
 
-export function PopoverContent({ 
-  children, 
-  className, 
+export function PopoverContent({
+  children,
+  className,
   align = "center",
   side = "bottom",
   sideOffset = 0
@@ -189,7 +189,7 @@ export function PopoverContent({
         ...(side === "left" && contentRef.current && { transform: `translateX(-${contentRef.current.offsetWidth}px)` }),
       }}
       className={cn(
-        "z-50 min-w-[200px] rounded-md border bg-popover p-3 text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95",
+        "z-[70] min-w-[200px] rounded-md border bg-popover p-3 text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95",
         className
       )}
     >
@@ -199,4 +199,3 @@ export function PopoverContent({
 
   return createPortal(content, document.body)
 }
-

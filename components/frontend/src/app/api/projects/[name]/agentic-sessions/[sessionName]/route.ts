@@ -36,6 +36,25 @@ export async function PUT(request: Request, { params }: Ctx) {
   }
 }
 
+// PATCH /api/projects/[name]/agentic-sessions/[sessionName]
+export async function PATCH(request: Request, { params }: Ctx) {
+  try {
+    const { name, sessionName } = await params;
+    const body = await request.text();
+    const headers = await buildForwardHeadersAsync(request);
+    const response = await fetch(`${BACKEND_URL}/projects/${encodeURIComponent(name)}/agentic-sessions/${encodeURIComponent(sessionName)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', ...headers },
+      body,
+    });
+    const text = await response.text();
+    return new Response(text, { status: response.status, headers: { 'Content-Type': 'application/json' } });
+  } catch (error) {
+    console.error('Error patching agentic session:', error);
+    return Response.json({ error: 'Failed to patch agentic session' }, { status: 500 });
+  }
+}
+
 // DELETE /api/projects/[name]/agentic-sessions/[sessionName]
 export async function DELETE(request: Request, { params }: Ctx) {
   try {
@@ -53,5 +72,3 @@ export async function DELETE(request: Request, { params }: Ctx) {
     return Response.json({ error: 'Failed to delete agentic session' }, { status: 500 });
   }
 }
-
-
