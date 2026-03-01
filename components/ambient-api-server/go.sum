@@ -482,6 +482,9 @@ github.com/openshift-online/ocm-sdk-go v0.1.334 h1:45WSkXEsmpGekMa9kO6NpEG8PW5/g
 github.com/openshift-online/ocm-sdk-go v0.1.334/go.mod h1:KYOw8kAKAHyPrJcQoVR82CneQ4ofC02Na4cXXaTq4Nw=
 github.com/openshift-online/rh-trex-ai v0.0.6 h1:Z/JdZnDIOoEoZehAEhjyajJTZ4b2vPLmIvD0PSdAn/M=
 github.com/openshift-online/rh-trex-ai v0.0.6/go.mod h1:aI2oixlzVNHjyBmDgBtSIhdFAt6RpotOHDCmInGEYWI=
+=======
+github.com/openshift-online/rh-trex-ai v0.0.14 h1:uwWs1adDGJw24xyOKDX3PUTV9x7KBBx52ZPlkFWfkJc=
+github.com/openshift-online/rh-trex-ai v0.0.14/go.mod h1:uAKlJizd9Lu7uLckgyxhMMAA9Zr2LuH1XjtwJLc5uKU=
 github.com/openzipkin/zipkin-go v0.1.6/go.mod h1:QgAqvLzwWbR/WpD4A3cGpPtJrZXNIiJc5AZX7/PBEpw=
 github.com/pierrec/lz4 v2.0.5+incompatible/go.mod h1:pdkljMzZIN41W+lC3N2tnIh5sFi+IEE17M5jbnwPHcY=
 github.com/pingcap/errors v0.11.4 h1:lFuQV/oaUMGcD2tqt+01ROSmJs75VG1ToEOkZIZ4nE4=
