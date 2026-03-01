@@ -15,5 +15,7 @@ spec:
           value: "docker.io/library/vteam_state_sync:latest"
         - name: IMAGE_PULL_POLICY
           value: "IfNotPresent"
+        # kind runs containers as root; fsGroup=0 avoids permission errors
+        # on PVC mounts. Do NOT use in production overlays.
         - name: POD_FSGROUP
           value: "0"

@@ -17,33 +17,31 @@ patches:
   target:
     kind: Deployment
     name: backend-api
-
 # JSON patches to override imagePullPolicy to IfNotPresent
-patchesJson6902:
-- target:
+- path: image-pull-policy-patch.yaml
+  target:
     group: apps
     version: v1
     kind: Deployment
     name: backend-api
-  path: image-pull-policy-patch.yaml
-- target:
+- path: image-pull-policy-patch.yaml
+  target:
     group: apps
     version: v1
     kind: Deployment
     name: frontend
-  path: image-pull-policy-patch.yaml
-- target:
+- path: image-pull-policy-patch.yaml
+  target:
     group: apps
     version: v1
     kind: Deployment
     name: agentic-operator
-  path: image-pull-policy-patch.yaml
-- target:
+- path: image-pull-policy-patch.yaml
+  target:
     group: apps
     version: v1
     kind: Deployment
     name: public-api
-  path: image-pull-policy-patch.yaml
 
 # Kind-local overlay: Use locally built images loaded via `kind load`
 # Images are imported with docker.io/library/ prefix by ctr

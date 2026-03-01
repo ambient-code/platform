@@ -11,5 +11,3 @@ spec:
         env:
         - name: IMAGE_PULL_POLICY
           value: "IfNotPresent"
-        - name: CONTENT_SERVICE_IMAGE
-          value: "docker.io/library/vteam_backend:latest"
