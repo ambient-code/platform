@@ -51,6 +51,7 @@ from urllib.parse import urlparse
 from ambient_runner.platform.security_utils import (
     sanitize_exception_message,
     sanitize_model_name,
+    validate_and_sanitize_for_logging,
     with_sync_timeout,
 )
 
@@ -151,13 +152,24 @@ class ObservabilityManager:
         self._pending_initial_prompt = None  # Store initial prompt for turn 1
         self._last_trace_id: str | None = None  # Persists after end_turn() for feedback
 
-    async def initialize(self, prompt: str, namespace: str, model: str = None) -> bool:
+    async def initialize(
+        self,
+        prompt: str,
+        namespace: str,
+        model: str = None,
+        workflow_url: str = "",
+        workflow_branch: str = "",
+        workflow_path: str = "",
+    ) -> bool:
         """Initialize Langfuse observability.
 
         Args:
             prompt: Initial prompt for the session
             namespace: Kubernetes namespace
             model: Model name to track in metadata (e.g., 'claude-3-5-sonnet-20241022')
+            workflow_url: Active workflow git URL (from ACTIVE_WORKFLOW_GIT_URL)
+            workflow_branch: Active workflow branch (from ACTIVE_WORKFLOW_BRANCH)
+            workflow_path: Active workflow subpath (from ACTIVE_WORKFLOW_PATH)
 
         Returns:
             True if Langfuse initialized successfully
@@ -250,7 +262,6 @@ class ObservabilityManager:
                 sanitized_model = sanitize_model_name(model)
                 if sanitized_model:
                     metadata["model"] = sanitized_model
-                    # Add model as a tag for easy filtering in Langfuse UI
                     tags.append(f"model:{sanitized_model}")
                     logging.info(
                         f"Langfuse: Model '{sanitized_model}' added to session metadata and tags"
@@ -258,6 +269,33 @@ class ObservabilityManager:
                 else:
                     logging.warning(
                         f"Langfuse: Model name '{model}' failed sanitization - omitting from metadata"
+                    )
+
+            # Add workflow context to metadata and tags when a workflow is active.
+            # The operator sets ACTIVE_WORKFLOW_* env vars on runner pods; callers
+            # read those and pass the values here so traces can be filtered by workflow.
+            workflow_url = (workflow_url or "").strip()
+            if workflow_url:
+                raw_name = workflow_url.rstrip("/").split("/")[-1].removesuffix(".git").strip()
+                derived_name = sanitize_model_name(raw_name) or ""
+                metadata["workflow_name"] = derived_name or "unknown"
+                metadata["workflow_url"] = validate_and_sanitize_for_logging(workflow_url)
+                if workflow_branch:
+                    metadata["workflow_branch"] = validate_and_sanitize_for_logging(
+                        workflow_branch.strip()
+                    )
+                if workflow_path:
+                    metadata["workflow_path"] = validate_and_sanitize_for_logging(
+                        workflow_path.strip()
+                    )
+                if derived_name:
+                    tags.append(f"workflow:{derived_name}")
+                    logging.info(
+                        f"Langfuse: Workflow '{derived_name}' added to session metadata and tags"
+                    )
+                else:
+                    logging.info(
+                        "Langfuse: Workflow added to session metadata (name could not be derived)"
                     )
 
             # Enter propagate_attributes context - all traces share session_id/user_id/tags/metadata

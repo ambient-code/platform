@@ -573,3 +573,291 @@ class TestEnvironmentVariableCombinations:
 
         assert result is False
         assert manager.langfuse_client is None
+
+
+class TestWorkflowContextTracking:
+    """Tests for workflow context in Langfuse metadata and tags."""
+
+    @pytest.mark.asyncio
+    @patch("langfuse.propagate_attributes")
+    @patch("langfuse.Langfuse")
+    async def test_workflow_metadata_and_tag(
+        self, mock_langfuse_class, mock_propagate, manager, caplog
+    ):
+        """Test that workflow URL, branch, path, and derived name appear in metadata/tags."""
+        mock_langfuse_class.return_value = Mock()
+        mock_ctx = Mock()
+        mock_ctx.__enter__ = Mock()
+        mock_ctx.__exit__ = Mock()
+        mock_propagate.return_value = mock_ctx
+
+        env_vars = {
+            "LANGFUSE_ENABLED": "true",
+            "LANGFUSE_PUBLIC_KEY": "pk-lf-public",
+            "LANGFUSE_SECRET_KEY": "sk-lf-secret",
+            "LANGFUSE_HOST": "http://localhost:3000",
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            with caplog.at_level(logging.INFO):
+                result = await manager.initialize(
+                    "test prompt",
+                    "test-namespace",
+                    model="claude-sonnet-4-5",
+                    workflow_url="https://github.com/org/bug-fix-workflow.git",
+                    workflow_branch="main",
+                    workflow_path="workflows/fix",
+                )
+
+        assert result is True
+
+        call_kwargs = mock_propagate.call_args[1]
+        metadata = call_kwargs["metadata"]
+        tags = call_kwargs["tags"]
+
+        assert metadata["workflow_name"] == "bug-fix-workflow"
+        assert metadata["workflow_url"] == "https://github.com/org/bug-fix-workflow.git"
+        assert metadata["workflow_branch"] == "main"
+        assert metadata["workflow_path"] == "workflows/fix"
+        assert "workflow:bug-fix-workflow" in tags
+        assert "Workflow 'bug-fix-workflow' added to session metadata" in caplog.text
+
+    @pytest.mark.asyncio
+    @patch("langfuse.propagate_attributes")
+    @patch("langfuse.Langfuse")
+    async def test_no_workflow_omits_metadata(
+        self, mock_langfuse_class, mock_propagate, manager
+    ):
+        """Test that metadata has no workflow fields when no workflow URL is provided."""
+        mock_langfuse_class.return_value = Mock()
+        mock_ctx = Mock()
+        mock_ctx.__enter__ = Mock()
+        mock_ctx.__exit__ = Mock()
+        mock_propagate.return_value = mock_ctx
+
+        env_vars = {
+            "LANGFUSE_ENABLED": "true",
+            "LANGFUSE_PUBLIC_KEY": "pk-lf-public",
+            "LANGFUSE_SECRET_KEY": "sk-lf-secret",
+            "LANGFUSE_HOST": "http://localhost:3000",
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            result = await manager.initialize("test prompt", "test-namespace")
+
+        assert result is True
+
+        call_kwargs = mock_propagate.call_args[1]
+        metadata = call_kwargs["metadata"]
+        tags = call_kwargs["tags"]
+
+        assert "workflow_name" not in metadata
+        assert "workflow_url" not in metadata
+        assert "workflow_branch" not in metadata
+        assert "workflow_path" not in metadata
+        assert not any(t.startswith("workflow:") for t in tags)
+
+    @pytest.mark.asyncio
+    @patch("langfuse.propagate_attributes")
+    @patch("langfuse.Langfuse")
+    async def test_empty_workflow_url_omits_metadata(
+        self, mock_langfuse_class, mock_propagate, manager
+    ):
+        """Test that empty/whitespace workflow_url is treated as no workflow."""
+        mock_langfuse_class.return_value = Mock()
+        mock_ctx = Mock()
+        mock_ctx.__enter__ = Mock()
+        mock_ctx.__exit__ = Mock()
+        mock_propagate.return_value = mock_ctx
+
+        env_vars = {
+            "LANGFUSE_ENABLED": "true",
+            "LANGFUSE_PUBLIC_KEY": "pk-lf-public",
+            "LANGFUSE_SECRET_KEY": "sk-lf-secret",
+            "LANGFUSE_HOST": "http://localhost:3000",
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            result = await manager.initialize(
+                "test prompt",
+                "test-namespace",
+                workflow_url="   ",
+            )
+
+        assert result is True
+
+        call_kwargs = mock_propagate.call_args[1]
+        metadata = call_kwargs["metadata"]
+        assert "workflow_name" not in metadata
+
+    @pytest.mark.asyncio
+    @patch("langfuse.propagate_attributes")
+    @patch("langfuse.Langfuse")
+    async def test_workflow_url_without_git_suffix(
+        self, mock_langfuse_class, mock_propagate, manager
+    ):
+        """Test deriving workflow name from URL without .git suffix."""
+        mock_langfuse_class.return_value = Mock()
+        mock_ctx = Mock()
+        mock_ctx.__enter__ = Mock()
+        mock_ctx.__exit__ = Mock()
+        mock_propagate.return_value = mock_ctx
+
+        env_vars = {
+            "LANGFUSE_ENABLED": "true",
+            "LANGFUSE_PUBLIC_KEY": "pk-lf-public",
+            "LANGFUSE_SECRET_KEY": "sk-lf-secret",
+            "LANGFUSE_HOST": "http://localhost:3000",
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            await manager.initialize(
+                "test prompt",
+                "test-namespace",
+                workflow_url="https://github.com/org/my-workflow",
+            )
+
+        call_kwargs = mock_propagate.call_args[1]
+        assert call_kwargs["metadata"]["workflow_name"] == "my-workflow"
+        assert "workflow:my-workflow" in call_kwargs["tags"]
+
+    @pytest.mark.asyncio
+    @patch("langfuse.propagate_attributes")
+    @patch("langfuse.Langfuse")
+    async def test_workflow_url_with_trailing_slash(
+        self, mock_langfuse_class, mock_propagate, manager
+    ):
+        """Test deriving workflow name from URL with trailing slash."""
+        mock_langfuse_class.return_value = Mock()
+        mock_ctx = Mock()
+        mock_ctx.__enter__ = Mock()
+        mock_ctx.__exit__ = Mock()
+        mock_propagate.return_value = mock_ctx
+
+        env_vars = {
+            "LANGFUSE_ENABLED": "true",
+            "LANGFUSE_PUBLIC_KEY": "pk-lf-public",
+            "LANGFUSE_SECRET_KEY": "sk-lf-secret",
+            "LANGFUSE_HOST": "http://localhost:3000",
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            await manager.initialize(
+                "test prompt",
+                "test-namespace",
+                workflow_url="https://github.com/org/my-workflow.git/",
+            )
+
+        call_kwargs = mock_propagate.call_args[1]
+        assert call_kwargs["metadata"]["workflow_name"] == "my-workflow"
+
+    @pytest.mark.asyncio
+    @patch("langfuse.propagate_attributes")
+    @patch("langfuse.Langfuse")
+    async def test_workflow_without_optional_fields(
+        self, mock_langfuse_class, mock_propagate, manager
+    ):
+        """Test that branch and path are omitted from metadata when empty."""
+        mock_langfuse_class.return_value = Mock()
+        mock_ctx = Mock()
+        mock_ctx.__enter__ = Mock()
+        mock_ctx.__exit__ = Mock()
+        mock_propagate.return_value = mock_ctx
+
+        env_vars = {
+            "LANGFUSE_ENABLED": "true",
+            "LANGFUSE_PUBLIC_KEY": "pk-lf-public",
+            "LANGFUSE_SECRET_KEY": "sk-lf-secret",
+            "LANGFUSE_HOST": "http://localhost:3000",
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            await manager.initialize(
+                "test prompt",
+                "test-namespace",
+                workflow_url="https://github.com/org/wf.git",
+                workflow_branch="",
+                workflow_path="",
+            )
+
+        call_kwargs = mock_propagate.call_args[1]
+        metadata = call_kwargs["metadata"]
+
+        assert metadata["workflow_name"] == "wf"
+        assert metadata["workflow_url"] == "https://github.com/org/wf.git"
+        assert "workflow_branch" not in metadata
+        assert "workflow_path" not in metadata
+
+    @pytest.mark.asyncio
+    @patch("langfuse.propagate_attributes")
+    @patch("langfuse.Langfuse")
+    async def test_empty_derived_name_uses_unknown_and_omits_tag(
+        self, mock_langfuse_class, mock_propagate, manager, caplog
+    ):
+        """Test that a URL whose last segment is empty produces workflow_name='unknown' and no tag."""
+        mock_langfuse_class.return_value = Mock()
+        mock_ctx = Mock()
+        mock_ctx.__enter__ = Mock()
+        mock_ctx.__exit__ = Mock()
+        mock_propagate.return_value = mock_ctx
+
+        env_vars = {
+            "LANGFUSE_ENABLED": "true",
+            "LANGFUSE_PUBLIC_KEY": "pk-lf-public",
+            "LANGFUSE_SECRET_KEY": "sk-lf-secret",
+            "LANGFUSE_HOST": "http://localhost:3000",
+        }
+
+        # .git-only last segment strips to "" after removesuffix, producing an empty derived name
+        with patch.dict(os.environ, env_vars, clear=True):
+            with caplog.at_level(logging.INFO):
+                await manager.initialize(
+                    "test prompt",
+                    "test-namespace",
+                    workflow_url="https://github.com/org/.git",
+                )
+
+        call_kwargs = mock_propagate.call_args[1]
+        metadata = call_kwargs["metadata"]
+        tags = call_kwargs["tags"]
+
+        assert metadata["workflow_name"] == "unknown"
+        assert not any(t.startswith("workflow:") for t in tags)
+        assert "name could not be derived" in caplog.text
+
+    @pytest.mark.asyncio
+    @patch("langfuse.propagate_attributes")
+    @patch("langfuse.Langfuse")
+    async def test_workflow_values_are_sanitized(
+        self, mock_langfuse_class, mock_propagate, manager
+    ):
+        """Test that workflow metadata values have control characters stripped."""
+        mock_langfuse_class.return_value = Mock()
+        mock_ctx = Mock()
+        mock_ctx.__enter__ = Mock()
+        mock_ctx.__exit__ = Mock()
+        mock_propagate.return_value = mock_ctx
+
+        env_vars = {
+            "LANGFUSE_ENABLED": "true",
+            "LANGFUSE_PUBLIC_KEY": "pk-lf-public",
+            "LANGFUSE_SECRET_KEY": "sk-lf-secret",
+            "LANGFUSE_HOST": "http://localhost:3000",
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            await manager.initialize(
+                "test prompt",
+                "test-namespace",
+                workflow_url="https://github.com/org/wf.git",
+                workflow_branch="main\nX-Injected: header",
+                workflow_path="workflows/fix\x00evil",
+            )
+
+        call_kwargs = mock_propagate.call_args[1]
+        metadata = call_kwargs["metadata"]
+
+        assert "\n" not in metadata["workflow_branch"]
+        assert "\x00" not in metadata["workflow_path"]
+        assert metadata["workflow_branch"] == "mainX-Injected: header"
+        assert metadata["workflow_path"] == "workflows/fixevil"
