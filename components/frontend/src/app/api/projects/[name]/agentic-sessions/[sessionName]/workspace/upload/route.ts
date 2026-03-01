@@ -4,12 +4,12 @@ import { NextRequest } from 'next/server';
 import { fileTypeFromBuffer } from 'file-type';
 
 // Maximum file sizes based on type
-// SDK has 1MB JSON limit, base64 adds ~33% overhead, plus JSON structure overhead
-// Conservative compression target: 350KB raw → ~467KB base64 → ~490KB total (safe margin)
-// Text files don't get base64 encoded, so they can be larger (700KB safe limit)
+// Documents are stored in the workspace filesystem (not base64-encoded for the SDK),
+// so they can be much larger than the SDK JSON limit.
+// Images are compressed before use to keep them within a reasonable size.
 // These limits are configurable via environment variables to allow different values per environment
-const MAX_DOCUMENT_SIZE = parseInt(process.env.MAX_UPLOAD_SIZE_DOCUMENTS || '716800'); // Default 700KB for documents
-const MAX_IMAGE_SIZE = parseInt(process.env.MAX_UPLOAD_SIZE_IMAGES || '3145728'); // Default 3MB upload limit
+const MAX_DOCUMENT_SIZE = parseInt(process.env.MAX_UPLOAD_SIZE_DOCUMENTS || '10485760'); // Default 10MB for documents
+const MAX_IMAGE_SIZE = parseInt(process.env.MAX_UPLOAD_SIZE_IMAGES || '10485760'); // Default 10MB upload limit
 const IMAGE_COMPRESSION_TARGET = parseInt(process.env.IMAGE_COMPRESSION_TARGET || '358400'); // Default 350KB target
 
 // Determine if a file is an image based on content type
