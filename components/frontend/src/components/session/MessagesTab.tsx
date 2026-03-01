@@ -16,6 +16,7 @@ export type MessagesTabProps = {
   chatInput: string;
   setChatInput: (v: string) => void;
   onSendChat: () => Promise<void>;
+  onSendToolAnswer?: (formattedAnswer: string) => Promise<void>;
   onInterrupt: () => Promise<void>;
   onGoToResults?: () => void;
   onContinue: () => void;
@@ -35,7 +36,7 @@ export type MessagesTabProps = {
 };
 
 
-const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chatInput, setChatInput, onSendChat, onInterrupt, onGoToResults, onContinue, workflowMetadata, onCommandClick, isRunActive = false, showWelcomeExperience, welcomeExperienceComponent, activeWorkflow, userHasInteracted = false, queuedMessages = [], hasRealMessages = false, onCancelQueuedMessage, onUpdateQueuedMessage, onPasteImage, onClearQueue }) => {
+const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chatInput, setChatInput, onSendChat, onSendToolAnswer, onInterrupt, onGoToResults, onContinue, workflowMetadata, onCommandClick, isRunActive = false, showWelcomeExperience, welcomeExperienceComponent, activeWorkflow, userHasInteracted = false, queuedMessages = [], hasRealMessages = false, onCancelQueuedMessage, onUpdateQueuedMessage, onPasteImage, onClearQueue }) => {
   const [sendingChat, setSendingChat] = useState(false);
   const [showSystemMessages, setShowSystemMessages] = useState(false);
   const [waitingDotCount, setWaitingDotCount] = useState(0);
@@ -82,6 +83,8 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
   useEffect(() => {
     scrollToBottom();
   }, []);
+
+
 
   useEffect(() => {
     const unsentCount = queuedMessages.filter(m => !m.sentAt).length;
@@ -137,7 +140,13 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
         {showWelcomeExperience && welcomeExperienceComponent}
 
         {shouldShowMessages && filteredMessages.map((m, idx) => (
-          <StreamMessage key={`sm-${idx}`} message={m} isNewest={idx === filteredMessages.length - 1} onGoToResults={onGoToResults} />
+          <StreamMessage
+            key={`sm-${idx}`}
+            message={m}
+            isNewest={idx === filteredMessages.length - 1}
+            onGoToResults={onGoToResults}
+            onSubmitAnswer={onSendToolAnswer}
+          />
         ))}
 
         {/* Queued messages with cancel buttons */}

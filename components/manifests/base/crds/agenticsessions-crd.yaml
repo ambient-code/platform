@@ -176,6 +176,13 @@ spec:
                 type: string
                 format: date-time
                 description: "Timestamp of last recorded AG-UI activity in this session."
+              agentStatus:
+                type: string
+                enum:
+                - "working"
+                - "idle"
+                - "waiting_input"
+                description: "Current agent run state derived from AG-UI events."
               stoppedReason:
                 type: string
                 enum:

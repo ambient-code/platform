@@ -245,6 +245,10 @@ func parseStatus(status map[string]interface{}) *types.AgenticSessionStatus {
 		result.LastActivityTime = types.StringPtr(lastActivityTime)
 	}
 
+	if agentStatus, ok := status["agentStatus"].(string); ok && agentStatus != "" {
+		result.AgentStatus = types.StringPtr(agentStatus)
+	}
+
 	if stoppedReason, ok := status["stoppedReason"].(string); ok && stoppedReason != "" {
 		result.StoppedReason = types.StringPtr(stoppedReason)
 	}
@@ -584,9 +588,9 @@ func CreateSession(c *gin.Context) {
 		timeout = *req.Timeout
 	}
 
-	// Generate unique name (timestamp-based)
+	// Generate unique name (millisecond timestamp for burst-creation safety)
 	// Note: Runner will create branch as "ambient/{session-name}"
-	timestamp := time.Now().Unix()
+	timestamp := time.Now().UnixMilli()
 	name := fmt.Sprintf("session-%d", timestamp)
 
 	// Create the custom resource

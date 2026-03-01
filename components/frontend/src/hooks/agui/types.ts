@@ -25,7 +25,7 @@ export type UseAGUIStreamReturn = {
   state: AGUIClientState
   connect: (runId?: string) => void
   disconnect: () => void
-  sendMessage: (content: string) => Promise<void>
+  sendMessage: (content: string, metadata?: Record<string, unknown>) => Promise<void>
   interrupt: () => Promise<void>
   isConnected: boolean
   isStreaming: boolean

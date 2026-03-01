@@ -1748,6 +1748,7 @@ func monitorPod(podName, sessionName, sessionNamespace string) {
 		if pod.Status.Phase == corev1.PodSucceeded {
 			statusPatch.SetField("phase", "Completed")
 			statusPatch.SetField("completionTime", time.Now().UTC().Format(time.RFC3339))
+			statusPatch.SetField("agentStatus", "idle")
 			statusPatch.AddCondition(conditionUpdate{Type: conditionReady, Status: "False", Reason: "Completed", Message: "Session finished"})
 			_ = statusPatch.Apply()
 			_ = deletePodAndPerPodService(sessionNamespace, podName, sessionName)
@@ -1811,6 +1812,7 @@ func monitorPod(podName, sessionName, sessionNamespace string) {
 			log.Printf("Pod %s failed: %s", podName, errorMsg)
 			statusPatch.SetField("phase", "Failed")
 			statusPatch.SetField("completionTime", time.Now().UTC().Format(time.RFC3339))
+			statusPatch.SetField("agentStatus", "idle")
 			statusPatch.AddCondition(conditionUpdate{Type: conditionReady, Status: "False", Reason: "PodFailed", Message: errorMsg})
 			_ = statusPatch.Apply()
 			_ = deletePodAndPerPodService(sessionNamespace, podName, sessionName)
@@ -1851,6 +1853,7 @@ func monitorPod(podName, sessionName, sessionNamespace string) {
 			now := time.Now().UTC().Format(time.RFC3339)
 
 			statusPatch.SetField("completionTime", now)
+			statusPatch.SetField("agentStatus", "idle")
 			switch term.ExitCode {
 			case 0:
 				statusPatch.SetField("phase", "Completed")

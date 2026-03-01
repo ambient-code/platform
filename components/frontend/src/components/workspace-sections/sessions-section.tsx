@@ -11,7 +11,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { EmptyState } from '@/components/empty-state';
-import { SessionPhaseBadge } from '@/components/status-badge';
+import { SessionStatusDot } from '@/components/session-status-dot';
+import { AgentStatusIndicator } from '@/components/agent-status-indicator';
+import { deriveAgentStatusFromPhase } from '@/hooks/use-agent-status';
 import { CreateSessionDialog } from '@/components/create-session-dialog';
 import { EditSessionNameDialog } from '@/components/edit-session-name-dialog';
 
@@ -237,6 +239,7 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-[20px] px-0"></TableHead>
                     <TableHead className="min-w-[180px]">Name</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="hidden md:table-cell">Model</TableHead>
@@ -255,6 +258,9 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
 
                     return (
                       <TableRow key={session.metadata?.uid || session.metadata?.name}>
+                        <TableCell className="w-[20px] px-0 pr-1">
+                          <SessionStatusDot phase={phase} />
+                        </TableCell>
                         <TableCell className="font-medium min-w-[180px]">
                           <Link
                             href={`/projects/${projectName}/sessions/${session.metadata.name}`}
@@ -269,7 +275,11 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
                           </Link>
                         </TableCell>
                         <TableCell>
-                          <SessionPhaseBadge phase={phase} stoppedReason={session.status?.stoppedReason} />
+                          <AgentStatusIndicator status={
+                            (phase === 'Completed' || phase === 'Failed' || phase === 'Stopped')
+                              ? deriveAgentStatusFromPhase(phase)
+                              : (session.status?.agentStatus ?? deriveAgentStatusFromPhase(phase))
+                          } />
                         </TableCell>
                         <TableCell className="hidden md:table-cell">
                           <span className="text-sm text-muted-foreground truncate max-w-[120px] block">

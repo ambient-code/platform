@@ -132,6 +132,16 @@ class ClaudeBridge(PlatformBridge):
             async for event in wrapped_stream:
                 yield event
 
+            # If the adapter halted (frontend tool or built-in HITL tool like
+            # AskUserQuestion), interrupt the worker to prevent the SDK from
+            # auto-approving the tool call with a placeholder result.
+            if self._adapter.halted:
+                logger.info(
+                    f"Adapter halted for thread={thread_id}, "
+                    "interrupting worker to await user input"
+                )
+                await worker.interrupt()
+
         self._first_run = False
 
     async def interrupt(self, thread_id: Optional[str] = None) -> None:
