@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { UserBubble } from "@/components/user-bubble";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { ApiSourceToggle } from "@/components/api-source-toggle";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Plug, LogOut } from "lucide-react";
 import { useVersion } from "@/services/queries/use-version";
@@ -55,6 +56,7 @@ export function Navigation({ feedbackUrl }: NavigationProps) {
                 Share feedback
               </a>
             )}
+            <ApiSourceToggle />
             <ThemeToggle />
             <DropdownMenu>
               <DropdownMenuTrigger className="outline-none">

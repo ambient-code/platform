@@ -4,10 +4,11 @@ import * as integrationsApi from '../api/integrations'
 /**
  * Hook to fetch unified integrations status
  */
-export function useIntegrationsStatus() {
+export function useIntegrationsStatus(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ['integrations', 'status'],
     queryFn: () => integrationsApi.getIntegrationsStatus(),
-    staleTime: 30 * 1000, // 30 seconds
+    staleTime: 30 * 1000,
+    enabled: options?.enabled,
   })
 }
