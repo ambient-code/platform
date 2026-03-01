@@ -185,6 +185,68 @@
   --role-admin-foreground: oklch(0.985 0 0);
 }
 
+/* LibreChat theme - Clean, minimal, monochromatic design */
+.librechat {
+  --radius: 0.5rem;
+  --background: oklch(1 0 0);                 /* Pure white */
+  --foreground: oklch(0.1 0 0);               /* Near black */
+  --card: oklch(1 0 0);                       /* White */
+  --card-foreground: oklch(0.1 0 0);          /* Near black */
+  --popover: oklch(1 0 0);                    /* White */
+  --popover-foreground: oklch(0.1 0 0);       /* Near black */
+  --primary: oklch(0.15 0 0);                 /* Dark gray - monochromatic accent */
+  --primary-foreground: oklch(1 0 0);         /* White */
+  --secondary: oklch(0.97 0 0);               /* Very light gray */
+  --secondary-foreground: oklch(0.15 0 0);    /* Dark gray */
+  --muted: oklch(0.96 0 0);                   /* Light gray */
+  --muted-foreground: oklch(0.45 0 0);        /* Medium gray */
+  --accent: oklch(0.95 0 0);                  /* Light gray accent */
+  --accent-foreground: oklch(0.15 0 0);       /* Dark gray */
+  --destructive: oklch(0.55 0.2 25);          /* Muted red */
+  --border: oklch(0.92 0 0);                  /* Subtle light gray border */
+  --input: oklch(0.92 0 0);                   /* Light gray input border */
+  --ring: oklch(0.7 0 0);                     /* Gray focus ring */
+  --chart-1: oklch(0.3 0 0);                  /* Monochrome chart colors */
+  --chart-2: oklch(0.45 0 0);
+  --chart-3: oklch(0.6 0 0);
+  --chart-4: oklch(0.75 0 0);
+  --chart-5: oklch(0.85 0 0);
+  --sidebar: oklch(0.98 0 0);                 /* Very light gray sidebar */
+  --sidebar-foreground: oklch(0.1 0 0);       /* Near black */
+  --sidebar-primary: oklch(0.15 0 0);         /* Dark gray */
+  --sidebar-primary-foreground: oklch(1 0 0); /* White */
+  --sidebar-accent: oklch(0.94 0 0);          /* Light gray */
+  --sidebar-accent-foreground: oklch(0.15 0 0);
+  --sidebar-border: oklch(0.92 0 0);          /* Subtle border */
+  --sidebar-ring: oklch(0.7 0 0);
+
+  /* Status badge semantic colors - LibreChat (subtle, monochromatic-leaning) */
+  --status-success: oklch(0.95 0.03 145);
+  --status-success-foreground: oklch(0.3 0.1 145);
+  --status-success-border: oklch(0.88 0.05 145);
+  --status-error: oklch(0.95 0.03 25);
+  --status-error-foreground: oklch(0.4 0.15 25);
+  --status-error-border: oklch(0.88 0.05 25);
+  --status-warning: oklch(0.95 0.05 85);
+  --status-warning-foreground: oklch(0.35 0.1 85);
+  --status-warning-border: oklch(0.88 0.08 85);
+  --status-info: oklch(0.95 0.02 240);
+  --status-info-foreground: oklch(0.4 0.1 240);
+  --status-info-border: oklch(0.88 0.04 240);
+
+  /* Semantic link colors - LibreChat (subtle, dark) */
+  --link: oklch(0.35 0 0);                    /* Dark gray links */
+  --link-hover: oklch(0.2 0 0);               /* Darker on hover */
+
+  /* Role badge colors - LibreChat (muted, professional) */
+  --role-view: oklch(0.94 0.03 240);
+  --role-view-foreground: oklch(0.4 0.1 240);
+  --role-edit: oklch(0.94 0.03 145);
+  --role-edit-foreground: oklch(0.3 0.1 145);
+  --role-admin: oklch(0.94 0.05 290);
+  --role-admin-foreground: oklch(0.35 0.1 290);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -219,12 +281,13 @@
 .scrollbar-thin {
   /* Firefox */
   scrollbar-width: thin;
-  scrollbar-color: hsl(var(--muted-foreground)) hsl(var(--muted));
+  scrollbar-color: var(--muted-foreground) var(--muted);
 }
 
-.dark .scrollbar-thin {
-  /* Firefox dark mode */
-  scrollbar-color: hsl(var(--muted-foreground)) hsl(var(--background));
+.dark .scrollbar-thin,
+.librechat .scrollbar-thin {
+  /* Firefox dark/custom mode */
+  scrollbar-color: var(--muted-foreground) var(--background);
 }
 
 /* WebKit browsers (Chrome, Safari, Edge) */
@@ -234,30 +297,33 @@
 }
 
 .scrollbar-thin::-webkit-scrollbar-track {
-  background: hsl(var(--muted));
+  background: var(--muted);
   border-radius: 4px;
 }
 
 .scrollbar-thin::-webkit-scrollbar-thumb {
-  background: hsl(var(--muted-foreground));
+  background: var(--muted-foreground);
   border-radius: 4px;
 }
 
 .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--foreground));
+  background: var(--foreground);
 }
 
-/* WebKit dark mode */
-.dark .scrollbar-thin::-webkit-scrollbar-track {
-  background: hsl(var(--background));
+/* WebKit dark/custom mode */
+.dark .scrollbar-thin::-webkit-scrollbar-track,
+.librechat .scrollbar-thin::-webkit-scrollbar-track {
+  background: var(--background);
 }
 
-.dark .scrollbar-thin::-webkit-scrollbar-thumb {
-  background: hsl(var(--muted-foreground));
+.dark .scrollbar-thin::-webkit-scrollbar-thumb,
+.librechat .scrollbar-thin::-webkit-scrollbar-thumb {
+  background: var(--muted-foreground);
 }
 
-.dark .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--foreground));
+.dark .scrollbar-thin::-webkit-scrollbar-thumb:hover,
+.librechat .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: var(--foreground);
 }
 
 /* Hide scrollbar while maintaining scroll functionality */

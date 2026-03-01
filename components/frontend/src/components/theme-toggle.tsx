@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Moon, Sun, Monitor } from "lucide-react"
+import { Moon, Sun, Monitor, MessageSquare } from "lucide-react"
 import { useTheme } from "next-themes"
 
 import { Button } from "@/components/ui/button"
@@ -73,8 +73,9 @@ export function ThemeToggle() {
             className="h-9 w-9"
             aria-label="Toggle theme"
           >
-            <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-            <Moon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+            {theme === "dark" && <Moon className="h-[1.2rem] w-[1.2rem]" />}
+            {theme === "librechat" && <MessageSquare className="h-[1.2rem] w-[1.2rem]" />}
+            {(theme === "light" || theme === "system" || !theme) && <Sun className="h-[1.2rem] w-[1.2rem]" />}
             <span className="sr-only">Toggle theme</span>
           </Button>
         </DropdownMenuTrigger>
@@ -96,6 +97,15 @@ export function ThemeToggle() {
             <Moon className="mr-2 h-4 w-4" aria-hidden="true" />
             <span>Dark</span>
             {theme === "dark" && <span className="ml-auto" aria-label="Currently selected">✓</span>}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => handleThemeChange("librechat")}
+            className="cursor-pointer"
+            aria-label="Switch to LibreChat theme"
+          >
+            <MessageSquare className="mr-2 h-4 w-4" aria-hidden="true" />
+            <span>LibreChat</span>
+            {theme === "librechat" && <span className="ml-auto" aria-label="Currently selected">✓</span>}
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => handleThemeChange("system")}
