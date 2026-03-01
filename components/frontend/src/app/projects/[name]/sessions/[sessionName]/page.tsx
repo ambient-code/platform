@@ -316,7 +316,11 @@ export default function ProjectSessionDetailPage({
   });
 
   // NOTE: No separate polling needed for queued workflows - useSession already polls
-  // at 500-1000ms during transitional states (Pending, Creating, Stopping).
+  // at 500-1000ms during transitional states (Pending, Creating, Stopping), and at
+  // 500ms when a desired-phase annotation is present. Terminal states (Stopped, Failed,
+  // Completed) disable polling, but that's safe: workflow activation sets the
+  // desired-phase annotation first, which re-enables 500ms polling before the queue
+  // is checked. See use-sessions.ts:69-95 for refetchInterval config.
   // The previous setInterval(refetchSession, 2000) was redundant and slower.
 
   // Process queued workflow when session becomes Running
@@ -339,7 +343,11 @@ export default function ProjectSessionDetailPage({
   }, [session?.status?.phase, workflowManagement.queuedWorkflow]);
 
   // NOTE: No separate polling needed for queued messages - useSession already polls
-  // at 500-1000ms during transitional states (Pending, Creating, Stopping).
+  // at 500-1000ms during transitional states (Pending, Creating, Stopping), and at
+  // 500ms when a desired-phase annotation is present. Terminal states (Stopped, Failed,
+  // Completed) disable polling, but that's safe: continuing a session sets the
+  // desired-phase annotation first, which re-enables 500ms polling before queued
+  // messages are processed. See use-sessions.ts:69-95 for refetchInterval config.
   // The previous setInterval(refetchSession, 2000) was redundant and slower.
 
   // Process queued messages when session becomes Running

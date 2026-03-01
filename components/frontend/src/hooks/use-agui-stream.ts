@@ -57,7 +57,6 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
     status: AGUIClientState['status']
   }>({ threadId: null, runId: null, status: 'idle' })
 
-
   // Exponential backoff config for reconnection
   const MAX_RECONNECT_DELAY = 30000 // 30 seconds max
   const BASE_RECONNECT_DELAY = 1000 // 1 second base
@@ -75,7 +74,10 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
     }
   }, [])
 
-  // Keep sendMessage snapshot in sync with state
+  // Keep sendMessage snapshot in sync with state.
+  // Note: This lags by one render frame (useEffect fires after render). This is
+  // acceptable because sendMessage is only called via user interaction (click/submit),
+  // never synchronously after a state update that changes threadId/runId/status.
   useEffect(() => {
     stateSnapshotRef.current = {
       threadId: state.threadId,
@@ -112,6 +114,7 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
   // Flush all buffered events in a single synchronous pass.
   // React 18+ batches all setState calls within the same synchronous callback,
   // so N events → N setState calls → 1 re-render (instead of N re-renders).
+  // Empty dep array is intentional: all mutable state is accessed via refs.
   const flushEventBuffer = useCallback(() => {
     rafIdRef.current = null
     if (!mountedRef.current) return
@@ -308,7 +311,6 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
           timestamp: new Date().toISOString(),
         } as PlatformMessage],
       }))
-
 
       try {
         const response = await fetch(runUrl, {
