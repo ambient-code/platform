@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -20,20 +19,14 @@ func main() {
 	fmt.Println("==========================================")
 	fmt.Println()
 
-	c, err := client.NewClientFromEnv(client.WithTimeout(120 * time.Second))
+	projectName := "sdk-demo"
+
+	c, err := client.NewClientFromEnv(projectName, client.WithTimeout(120 * time.Second))
 	if err != nil {
 		log.Fatalf("Failed to create client: %v", err)
 	}
 
 	ctx := context.Background()
-
-	projectName := os.Getenv("AMBIENT_PROJECT")
-	if projectName == "" {
-		projectName = os.Getenv("ANTHROPIC_VERTEX_PROJECT_ID")
-	}
-	if projectName == "" {
-		projectName = "sdk-demo"
-	}
 
 	runFullLifecycle(ctx, c, projectName)
 }
@@ -335,7 +328,7 @@ func deriveAGUIBaseURL(apiURL, projectName, kubeCRName, sessionID string) string
 
 	baseURL := strings.TrimRight(apiURL, "/")
 	if strings.Contains(baseURL, "ambient-api-server") {
-		baseURL = strings.TrimSuffix(baseURL, "/api/ambient-api-server/v1")
+		baseURL = strings.TrimSuffix(baseURL, "/api/ambient/v1")
 	}
 
 	return fmt.Sprintf("%s/api/projects/%s/agentic-sessions/%s/agui", baseURL, projectName, sessionName)

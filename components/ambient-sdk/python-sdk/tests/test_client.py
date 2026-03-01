@@ -78,7 +78,7 @@ class TestClientValidation:
         )
         assert client._base_url == "https://api.real-platform.com"
         assert client._project == "my-project"
-        assert client._base_path == "/api/ambient-api-server/v1"
+        assert client._base_path == "/api/ambient/v1"
         client.close()
 
     def test_trailing_slash_stripped(self):

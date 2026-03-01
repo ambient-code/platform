@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 class AmbientClient:
     """HTTP client for the Ambient Platform API."""
     
-    _base_path = "/api/ambient-api-server/v1"
+    _base_path = "/api/ambient/v1"
 
     def __init__(
         self,
@@ -85,11 +85,11 @@ class AmbientClient:
         if not self._token:
             raise ValueError("token cannot be empty")
         
-        if len(self._token) < 20:
-            raise ValueError("token is too short (minimum 20 characters)")
-        
         if self._token in ("YOUR_TOKEN_HERE", "PLACEHOLDER_TOKEN"):
             raise ValueError("placeholder token is not allowed")
+        
+        if len(self._token) < 20:
+            raise ValueError("token is too short (minimum 20 characters)")
         
         if not self._project:
             raise ValueError("project cannot be empty")
@@ -110,7 +110,7 @@ class AmbientClient:
         expect_json: bool = True,
     ) -> Any:
         """Make HTTP request to the API."""
-        url = self._base_url + "/api/ambient-api-server/v1" + path
+        url = self._base_url + "/api/ambient/v1" + path
         
         headers = {
             "Authorization": f"Bearer {self._token}",

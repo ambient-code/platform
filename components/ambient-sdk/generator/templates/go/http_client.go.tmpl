@@ -116,7 +116,7 @@ func NewClientFromEnv(opts ...ClientOption) (*Client, error) {
 }
 
 func (c *Client) do(ctx context.Context, method, path string, body []byte, expectedStatus int, result interface{}) error {
-	url := c.baseURL + "/api/ambient-api-server/v1" + path
+	url := c.baseURL + "/api/ambient/v1" + path
 	
 	req, err := http.NewRequestWithContext(ctx, method, url, nil)
 	if err != nil {
