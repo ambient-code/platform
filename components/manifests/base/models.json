@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "defaultModel": "claude-sonnet-4-5",
+  "models": [
+    {
+      "id": "claude-sonnet-4-5",
+      "label": "Claude Sonnet 4.5",
+      "vertexId": "claude-sonnet-4-5@20250929",
+      "provider": "anthropic",
+      "tier": "standard",
+      "available": true
+    },
+    {
+      "id": "claude-opus-4-6",
+      "label": "Claude Opus 4.6",
+      "vertexId": "claude-opus-4-6@default",
+      "provider": "anthropic",
+      "tier": "premium",
+      "available": true
+    },
+    {
+      "id": "claude-opus-4-5",
+      "label": "Claude Opus 4.5",
+      "vertexId": "claude-opus-4-5@20251101",
+      "provider": "anthropic",
+      "tier": "premium",
+      "available": true
+    },
+    {
+      "id": "claude-haiku-4-5",
+      "label": "Claude Haiku 4.5",
+      "vertexId": "claude-haiku-4-5@20251001",
+      "provider": "anthropic",
+      "tier": "standard",
+      "available": true
+    },
+    {
+      "id": "claude-opus-4-1",
+      "label": "Claude Opus 4.1",
+      "vertexId": "claude-opus-4-1@20250805",
+      "provider": "anthropic",
+      "tier": "premium",
+      "available": false
+    },
+    {
+      "id": "claude-sonnet-4-6",
+      "label": "Claude Sonnet 4.6",
+      "vertexId": "claude-sonnet-4-6@default",
+      "provider": "anthropic",
+      "tier": "standard",
+      "available": true
+    }
+  ]
+}

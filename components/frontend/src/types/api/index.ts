@@ -7,3 +7,4 @@ export * from './projects';
 export * from './sessions';
 export * from './auth';
 export * from './github';
+export * from './models';

@@ -160,3 +160,57 @@ class TestSetupSdkAuthentication:
         _, _, model = await setup_sdk_authentication(ctx)
         assert model == "claude-sonnet-4-5"
         assert "@" not in model  # no Vertex date suffix for API key auth
+
+    @pytest.mark.asyncio
+    async def test_vertex_uses_llm_model_vertex_id_when_set(self, monkeypatch):
+        """When LLM_MODEL_VERTEX_ID is set in Vertex mode, use it directly (skip VERTEX_MODEL_MAP)."""
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+            cred_path = f.name
+        try:
+            ctx = _make_context(
+                CLAUDE_CODE_USE_VERTEX="1",
+                GOOGLE_APPLICATION_CREDENTIALS=cred_path,
+                ANTHROPIC_VERTEX_PROJECT_ID="proj",
+                CLOUD_ML_REGION="us-central1",
+                LLM_MODEL="claude-sonnet-4-5",
+                LLM_MODEL_VERTEX_ID="claude-sonnet-4-5@20260101",
+            )
+            _, use_vertex, model = await setup_sdk_authentication(ctx)
+            assert use_vertex is True
+            assert model == "claude-sonnet-4-5@20260101"
+        finally:
+            os.unlink(cred_path)
+
+    @pytest.mark.asyncio
+    async def test_vertex_falls_back_to_map_when_no_vertex_id(self, monkeypatch):
+        """When LLM_MODEL_VERTEX_ID is not set, fall back to map_to_vertex_model()."""
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+            cred_path = f.name
+        try:
+            ctx = _make_context(
+                CLAUDE_CODE_USE_VERTEX="1",
+                GOOGLE_APPLICATION_CREDENTIALS=cred_path,
+                ANTHROPIC_VERTEX_PROJECT_ID="proj",
+                CLOUD_ML_REGION="us-central1",
+                LLM_MODEL="claude-sonnet-4-5",
+            )
+            _, use_vertex, model = await setup_sdk_authentication(ctx)
+            assert use_vertex is True
+            assert model == "claude-sonnet-4-5@20250929"  # from VERTEX_MODEL_MAP
+        finally:
+            os.unlink(cred_path)
+
+    @pytest.mark.asyncio
+    async def test_api_key_mode_ignores_llm_model_vertex_id(self, monkeypatch):
+        """When LLM_MODEL_VERTEX_ID is set in API key mode, ignore it."""
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        ctx = _make_context(
+            ANTHROPIC_API_KEY="sk-key",
+            LLM_MODEL="claude-sonnet-4-5",
+            LLM_MODEL_VERTEX_ID="claude-sonnet-4-5@20260101",
+        )
+        _, use_vertex, model = await setup_sdk_authentication(ctx)
+        assert use_vertex is False
+        assert model == "claude-sonnet-4-5"  # plain model name, not Vertex ID
