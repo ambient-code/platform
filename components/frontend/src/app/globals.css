@@ -185,66 +185,66 @@
   --role-admin-foreground: oklch(0.985 0 0);
 }
 
-/* LibreChat theme - Clean, minimal, monochromatic design */
-.librechat {
+/* Jeremy's Theme - Claude Code CLI inspired dark theme */
+.jeremy {
   --radius: 0.5rem;
-  --background: oklch(1 0 0);                 /* Pure white */
-  --foreground: oklch(0.1 0 0);               /* Near black */
-  --card: oklch(1 0 0);                       /* White */
-  --card-foreground: oklch(0.1 0 0);          /* Near black */
-  --popover: oklch(1 0 0);                    /* White */
-  --popover-foreground: oklch(0.1 0 0);       /* Near black */
-  --primary: oklch(0.15 0 0);                 /* Dark gray - monochromatic accent */
-  --primary-foreground: oklch(1 0 0);         /* White */
-  --secondary: oklch(0.97 0 0);               /* Very light gray */
-  --secondary-foreground: oklch(0.15 0 0);    /* Dark gray */
-  --muted: oklch(0.96 0 0);                   /* Light gray */
-  --muted-foreground: oklch(0.45 0 0);        /* Medium gray */
-  --accent: oklch(0.95 0 0);                  /* Light gray accent */
-  --accent-foreground: oklch(0.15 0 0);       /* Dark gray */
-  --destructive: oklch(0.55 0.2 25);          /* Muted red */
-  --border: oklch(0.92 0 0);                  /* Subtle light gray border */
-  --input: oklch(0.92 0 0);                   /* Light gray input border */
-  --ring: oklch(0.7 0 0);                     /* Gray focus ring */
-  --chart-1: oklch(0.3 0 0);                  /* Monochrome chart colors */
-  --chart-2: oklch(0.45 0 0);
-  --chart-3: oklch(0.6 0 0);
-  --chart-4: oklch(0.75 0 0);
-  --chart-5: oklch(0.85 0 0);
-  --sidebar: oklch(0.98 0 0);                 /* Very light gray sidebar */
-  --sidebar-foreground: oklch(0.1 0 0);       /* Near black */
-  --sidebar-primary: oklch(0.15 0 0);         /* Dark gray */
-  --sidebar-primary-foreground: oklch(1 0 0); /* White */
-  --sidebar-accent: oklch(0.94 0 0);          /* Light gray */
-  --sidebar-accent-foreground: oklch(0.15 0 0);
-  --sidebar-border: oklch(0.92 0 0);          /* Subtle border */
-  --sidebar-ring: oklch(0.7 0 0);
+  --background: oklch(0.14 0 0);              /* Dark charcoal terminal bg */
+  --foreground: oklch(0.85 0 0);              /* Light gray text */
+  --card: oklch(0.18 0 0);                    /* Slightly lighter card */
+  --card-foreground: oklch(0.85 0 0);         /* Light gray */
+  --popover: oklch(0.18 0 0);                 /* Dark popover */
+  --popover-foreground: oklch(0.85 0 0);      /* Light gray */
+  --primary: oklch(0.7 0.15 195);             /* Cyan/teal - CLI accent */
+  --primary-foreground: oklch(0.14 0 0);      /* Dark bg for contrast */
+  --secondary: oklch(0.22 0 0);               /* Darker gray */
+  --secondary-foreground: oklch(0.85 0 0);    /* Light gray */
+  --muted: oklch(0.22 0 0);                   /* Dark muted */
+  --muted-foreground: oklch(0.55 0 0);        /* Medium gray */
+  --accent: oklch(0.75 0.14 55);              /* Orange/peach - like Opus 4.6 text */
+  --accent-foreground: oklch(0.14 0 0);       /* Dark for contrast */
+  --destructive: oklch(0.6 0.22 25);          /* CLI red */
+  --border: oklch(0.25 0 0);                  /* Subtle dark border */
+  --input: oklch(0.25 0 0);                   /* Dark input border */
+  --ring: oklch(0.7 0.15 195);                /* Cyan focus ring */
+  --chart-1: oklch(0.7 0.15 195);             /* Cyan */
+  --chart-2: oklch(0.75 0.14 55);             /* Orange */
+  --chart-3: oklch(0.7 0.18 145);             /* Green */
+  --chart-4: oklch(0.65 0.2 290);             /* Purple */
+  --chart-5: oklch(0.7 0.2 85);               /* Yellow */
+  --sidebar: oklch(0.12 0 0);                 /* Darker sidebar */
+  --sidebar-foreground: oklch(0.85 0 0);      /* Light gray */
+  --sidebar-primary: oklch(0.7 0.15 195);     /* Cyan */
+  --sidebar-primary-foreground: oklch(0.14 0 0);
+  --sidebar-accent: oklch(0.2 0 0);           /* Dark accent */
+  --sidebar-accent-foreground: oklch(0.85 0 0);
+  --sidebar-border: oklch(0.25 0 0);          /* Subtle border */
+  --sidebar-ring: oklch(0.7 0.15 195);        /* Cyan ring */
 
-  /* Status badge semantic colors - LibreChat (subtle, monochromatic-leaning) */
-  --status-success: oklch(0.95 0.03 145);
-  --status-success-foreground: oklch(0.3 0.1 145);
-  --status-success-border: oklch(0.88 0.05 145);
-  --status-error: oklch(0.95 0.03 25);
-  --status-error-foreground: oklch(0.4 0.15 25);
-  --status-error-border: oklch(0.88 0.05 25);
-  --status-warning: oklch(0.95 0.05 85);
-  --status-warning-foreground: oklch(0.35 0.1 85);
-  --status-warning-border: oklch(0.88 0.08 85);
-  --status-info: oklch(0.95 0.02 240);
-  --status-info-foreground: oklch(0.4 0.1 240);
-  --status-info-border: oklch(0.88 0.04 240);
+  /* Status badge semantic colors - CLI style (solid, vibrant) */
+  --status-success: oklch(0.25 0.08 145);     /* Dark green bg */
+  --status-success-foreground: oklch(0.8 0.18 145); /* Bright green text */
+  --status-success-border: oklch(0.4 0.12 145);
+  --status-error: oklch(0.25 0.08 25);        /* Dark red bg */
+  --status-error-foreground: oklch(0.75 0.2 25); /* Bright red text */
+  --status-error-border: oklch(0.4 0.12 25);
+  --status-warning: oklch(0.25 0.08 85);      /* Dark yellow bg */
+  --status-warning-foreground: oklch(0.8 0.18 85); /* Bright yellow text */
+  --status-warning-border: oklch(0.4 0.12 85);
+  --status-info: oklch(0.2 0.06 195);         /* Dark cyan bg */
+  --status-info-foreground: oklch(0.75 0.15 195); /* Bright cyan text */
+  --status-info-border: oklch(0.35 0.1 195);
 
-  /* Semantic link colors - LibreChat (subtle, dark) */
-  --link: oklch(0.35 0 0);                    /* Dark gray links */
-  --link-hover: oklch(0.2 0 0);               /* Darker on hover */
+  /* Semantic link colors - CLI cyan */
+  --link: oklch(0.7 0.15 195);                /* Cyan links */
+  --link-hover: oklch(0.8 0.12 195);          /* Brighter on hover */
 
-  /* Role badge colors - LibreChat (muted, professional) */
-  --role-view: oklch(0.94 0.03 240);
-  --role-view-foreground: oklch(0.4 0.1 240);
-  --role-edit: oklch(0.94 0.03 145);
-  --role-edit-foreground: oklch(0.3 0.1 145);
-  --role-admin: oklch(0.94 0.05 290);
-  --role-admin-foreground: oklch(0.35 0.1 290);
+  /* Role badge colors - CLI style */
+  --role-view: oklch(0.2 0.06 195);           /* Dark cyan bg */
+  --role-view-foreground: oklch(0.75 0.15 195);
+  --role-edit: oklch(0.25 0.08 145);          /* Dark green bg */
+  --role-edit-foreground: oklch(0.8 0.18 145);
+  --role-admin: oklch(0.25 0.08 55);          /* Dark orange bg */
+  --role-admin-foreground: oklch(0.8 0.14 55);
 }
 
 @layer base {
@@ -285,7 +285,7 @@
 }
 
 .dark .scrollbar-thin,
-.librechat .scrollbar-thin {
+.jeremy .scrollbar-thin {
   /* Firefox dark/custom mode */
   scrollbar-color: var(--muted-foreground) var(--background);
 }
@@ -312,17 +312,17 @@
 
 /* WebKit dark/custom mode */
 .dark .scrollbar-thin::-webkit-scrollbar-track,
-.librechat .scrollbar-thin::-webkit-scrollbar-track {
+.jeremy .scrollbar-thin::-webkit-scrollbar-track {
   background: var(--background);
 }
 
 .dark .scrollbar-thin::-webkit-scrollbar-thumb,
-.librechat .scrollbar-thin::-webkit-scrollbar-thumb {
+.jeremy .scrollbar-thin::-webkit-scrollbar-thumb {
   background: var(--muted-foreground);
 }
 
 .dark .scrollbar-thin::-webkit-scrollbar-thumb:hover,
-.librechat .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+.jeremy .scrollbar-thin::-webkit-scrollbar-thumb:hover {
   background: var(--foreground);
 }
 
