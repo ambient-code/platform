@@ -291,7 +291,7 @@ export default function ProjectSessionDetailPage({
   const lastProcessedPromptRef = useRef<string>("");
 
   useEffect(() => {
-    if (!session || !aguiSendMessage) return;
+    if (!session) return;
 
     const initialPrompt = session?.spec?.initialPrompt;
 
@@ -303,8 +303,11 @@ export default function ProjectSessionDetailPage({
     if (initialPrompt && lastProcessedPromptRef.current !== initialPrompt) {
       lastProcessedPromptRef.current = initialPrompt;
     }
+    // Only re-run when the initialPrompt value actually changes.
+    // Previous deps (phase, messages.length, status) caused this to re-evaluate
+    // on every streamed message, even though it only tracks a ref.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.spec?.initialPrompt, session?.status?.phase, aguiState.messages.length, aguiState.status]);
+  }, [session?.spec?.initialPrompt]);
 
   // Workflow management hook
   const workflowManagement = useWorkflowManagement({
@@ -314,22 +317,13 @@ export default function ProjectSessionDetailPage({
     onWorkflowActivated: refetchSession,
   });
 
-  // Poll session status when workflow is queued
-  useEffect(() => {
-    if (!workflowManagement.queuedWorkflow) return;
-
-    const phase = session?.status?.phase;
-
-    // If already running, we'll process workflow in the next effect
-    if (phase === "Running") return;
-
-    // Poll every 2 seconds to check if session is ready
-    const pollInterval = setInterval(() => {
-      refetchSession();
-    }, 2000);
-
-    return () => clearInterval(pollInterval);
-  }, [workflowManagement.queuedWorkflow, session?.status?.phase, refetchSession]);
+  // NOTE: No separate polling needed for queued workflows - useSession already polls
+  // at 500-1000ms during transitional states (Pending, Creating, Stopping), and at
+  // 500ms when a desired-phase annotation is present. Terminal states (Stopped, Failed,
+  // Completed) disable polling, but that's safe: workflow activation sets the
+  // desired-phase annotation first, which re-enables 500ms polling before the queue
+  // is checked. See use-sessions.ts:69-95 for refetchInterval config.
+  // The previous setInterval(refetchSession, 2000) was redundant and slower.
 
   // Process queued workflow when session becomes Running
   useEffect(() => {
@@ -350,23 +344,13 @@ export default function ProjectSessionDetailPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.status?.phase, workflowManagement.queuedWorkflow]);
 
-  // Poll session status when messages are queued
-  useEffect(() => {
-    const queuedMessages = sessionQueue.messages.filter(m => !m.sentAt);
-    if (queuedMessages.length === 0) return;
-
-    const phase = session?.status?.phase;
-
-    // If already running, we'll process messages in the next effect
-    if (phase === "Running") return;
-
-    // Poll every 2 seconds to check if session is ready
-    const pollInterval = setInterval(() => {
-      refetchSession();
-    }, 2000);
-
-    return () => clearInterval(pollInterval);
-  }, [sessionQueue.messages, session?.status?.phase, refetchSession]);
+  // NOTE: No separate polling needed for queued messages - useSession already polls
+  // at 500-1000ms during transitional states (Pending, Creating, Stopping), and at
+  // 500ms when a desired-phase annotation is present. Terminal states (Stopped, Failed,
+  // Completed) disable polling, but that's safe: continuing a session sets the
+  // desired-phase annotation first, which re-enables 500ms polling before queued
+  // messages are processed. See use-sessions.ts:69-95 for refetchInterval config.
+  // The previous setInterval(refetchSession, 2000) was redundant and slower.
 
   // Process queued messages when session becomes Running
   useEffect(() => {
