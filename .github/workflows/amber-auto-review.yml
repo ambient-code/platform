@@ -11,6 +11,12 @@ name: Amber Automatic Code Review
 on:
   pull_request_target:
     types: [opened, synchronize]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to review (required for manual trigger)'
+        required: true
+        type: number
 
 jobs:
   amber-review:
@@ -23,11 +29,31 @@ jobs:
       actions: read
 
     steps:
+      - name: Resolve PR number
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "number=${{ github.event.inputs.pr_number }}" >> "$GITHUB_OUTPUT"
+            # Fetch PR head ref and repo for checkout
+            PR_JSON=$(gh pr view "${{ github.event.inputs.pr_number }}" --repo "${{ github.repository }}" --json headRefName,headRepository,headRepositoryOwner)
+            HEAD_REF=$(echo "$PR_JSON" | jq -r '.headRefName')
+            HEAD_OWNER=$(echo "$PR_JSON" | jq -r '.headRepositoryOwner.login')
+            HEAD_REPO=$(echo "$PR_JSON" | jq -r '.headRepository.name')
+            echo "head_ref=$HEAD_REF" >> "$GITHUB_OUTPUT"
+            echo "head_repo=$HEAD_OWNER/$HEAD_REPO" >> "$GITHUB_OUTPUT"
+          else
+            echo "number=${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+            echo "head_ref=${{ github.event.pull_request.head.ref }}" >> "$GITHUB_OUTPUT"
+            echo "head_repo=${{ github.event.pull_request.head.repo.full_name }}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Checkout PR head
         uses: actions/checkout@v6
         with:
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-          ref: ${{ github.event.pull_request.head.ref }}
+          repository: ${{ steps.pr.outputs.head_repo }}
+          ref: ${{ steps.pr.outputs.head_ref }}
           fetch-depth: 0
 
       - name: Minimize old Claude review comments
@@ -36,7 +62,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           REPO="${{ github.repository }}"
-          PR_NUMBER="${{ github.event.pull_request.number }}"
+          PR_NUMBER="${{ steps.pr.outputs.number }}"
 
           echo "Finding previous Claude Code Review comments to minimize..."
 
@@ -79,7 +105,7 @@ jobs:
             --allowedTools "Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh issue list:*)"
           prompt: |
             REPO: ${{ github.repository }}
-            PR NUMBER: ${{ github.event.pull_request.number }}
+            PR NUMBER: ${{ steps.pr.outputs.number }}
 
             Load the following memory system files to understand repository standards:
 
@@ -135,9 +161,10 @@ jobs:
           RUN_ID: ${{ github.run_id }}
           GITHUB_SERVER_URL: ${{ github.server_url }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
         with:
           script: |
-            const prNumber = context.payload.pull_request.number;
+            const prNumber = parseInt(process.env.PR_NUMBER, 10);
             const runId = process.env.RUN_ID;
             const serverUrl = process.env.GITHUB_SERVER_URL;
             const repository = process.env.GITHUB_REPOSITORY;
