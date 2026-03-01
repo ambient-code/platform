@@ -1367,7 +1367,7 @@ export default function ProjectSessionDetailPage({
   // Loading state
   if (isLoading || !projectName || !sessionName) {
     return (
-      <div className="absolute inset-0 top-16 overflow-hidden bg-background flex items-center justify-center">
+      <div className="absolute inset-0 top-10 overflow-hidden bg-background flex items-center justify-center">
         <div className="flex items-center">
           <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
           <span className="ml-2">Loading session...</span>
@@ -1379,7 +1379,7 @@ export default function ProjectSessionDetailPage({
   // Error state
   if (error || !session) {
     return (
-      <div className="absolute inset-0 top-16 overflow-hidden bg-background flex flex-col">
+      <div className="absolute inset-0 top-10 overflow-hidden bg-background flex flex-col">
         <div className="flex-shrink-0 bg-card border-b">
           <div className="container mx-auto px-6 py-4">
             <Breadcrumbs
@@ -1414,7 +1414,7 @@ export default function ProjectSessionDetailPage({
 
   return (
     <>
-      <div className="absolute inset-0 top-16 overflow-hidden bg-background flex flex-col">
+      <div className="absolute inset-0 top-10 overflow-hidden bg-background flex flex-col">
         {/* Fixed header */}
         <div className="flex-shrink-0 bg-card border-b">
           <div className="px-6 py-4">
@@ -1531,8 +1531,8 @@ export default function ProjectSessionDetailPage({
             {/* Mobile Left Column (overlay) */}
             {session && mobileMenuOpen && (
                 <div className={cn(
-                "fixed left-0 top-16 z-50 shadow-lg flex flex-col md:hidden",
-                "w-[400px] h-[calc(100vh-4rem)] pt-6 pl-6 pr-6 bg-card relative",
+                "fixed left-0 top-10 z-50 shadow-lg flex flex-col md:hidden",
+                "w-[400px] h-[calc(100vh-2.5rem)] pt-6 pl-6 pr-6 bg-card relative",
                   phase !== "Running" && "pointer-events-none"
                 )}>
                   {/* Backdrop blur layer for entire sidebar */}
