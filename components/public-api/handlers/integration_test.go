@@ -27,6 +27,7 @@ func setupTestRouter() *gin.Engine {
 		v1.POST("/sessions", CreateSession)
 		v1.GET("/sessions/:id", GetSession)
 		v1.DELETE("/sessions/:id", DeleteSession)
+		v1.POST("/sessions/:id/runs", CreateSessionRun)
 	}
 
 	return r
@@ -235,6 +236,156 @@ func TestE2E_ProjectMismatchAttack(t *testing.T) {
 	// Should reject due to project mismatch
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("Expected status 400 for project mismatch, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestE2E_CreateSessionRun(t *testing.T) {
+	tests := []struct {
+		name           string
+		sessionID      string
+		requestBody    string
+		backendStatus  int
+		backendResp    string
+		expectedStatus int
+		expectRunID    bool
+	}{
+		{
+			name:           "Successful run creation",
+			sessionID:      "test-session",
+			requestBody:    `{"prompt": "Fix the authentication bug"}`,
+			backendStatus:  http.StatusOK,
+			backendResp:    `{"runId": "run-abc123", "threadId": "test-session"}`,
+			expectedStatus: http.StatusOK,
+			expectRunID:    true,
+		},
+		{
+			name:           "Missing prompt returns 400",
+			sessionID:      "test-session",
+			requestBody:    `{}`,
+			backendStatus:  http.StatusOK,
+			backendResp:    `{}`,
+			expectedStatus: http.StatusBadRequest,
+			expectRunID:    false,
+		},
+		{
+			name:           "Backend error forwarded",
+			sessionID:      "test-session",
+			requestBody:    `{"prompt": "Do something"}`,
+			backendStatus:  http.StatusBadRequest,
+			backendResp:    `{"error": "Session not running"}`,
+			expectedStatus: http.StatusBadRequest,
+			expectRunID:    false,
+		},
+		{
+			name:           "Invalid session ID returns 400",
+			sessionID:      "INVALID-SESSION",
+			requestBody:    `{"prompt": "Do something"}`,
+			backendStatus:  http.StatusOK,
+			backendResp:    `{}`,
+			expectedStatus: http.StatusBadRequest,
+			expectRunID:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				// Verify path contains agui/run for valid requests
+				if tt.expectedStatus != http.StatusBadRequest || tt.backendStatus != http.StatusOK {
+					if !strings.Contains(r.URL.Path, "agui/run") {
+						t.Errorf("Expected path to contain agui/run, got %s", r.URL.Path)
+					}
+				}
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(tt.backendStatus)
+				w.Write([]byte(tt.backendResp))
+			}))
+			defer backend.Close()
+
+			originalURL := BackendURL
+			BackendURL = backend.URL
+			defer func() { BackendURL = originalURL }()
+
+			router := setupTestRouter()
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, "/v1/sessions/"+tt.sessionID+"/runs",
+				strings.NewReader(tt.requestBody))
+			req.Header.Set("Authorization", "Bearer test-token")
+			req.Header.Set("X-Ambient-Project", "test-project")
+			req.Header.Set("Content-Type", "application/json")
+			router.ServeHTTP(w, req)
+
+			if w.Code != tt.expectedStatus {
+				t.Errorf("Expected status %d, got %d: %s", tt.expectedStatus, w.Code, w.Body.String())
+			}
+
+			if tt.expectRunID {
+				var resp map[string]string
+				if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+					t.Fatalf("Failed to parse response: %v", err)
+				}
+				if resp["runId"] == "" {
+					t.Errorf("Expected runId in response, got %v", resp)
+				}
+				if resp["threadId"] == "" {
+					t.Errorf("Expected threadId in response, got %v", resp)
+				}
+			}
+		})
+	}
+}
+
+func TestE2E_CreateSessionRun_MessageFormat(t *testing.T) {
+	// Verify the AG-UI message format sent to the backend
+	var capturedBody map[string]interface{}
+
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&capturedBody); err != nil {
+			t.Errorf("Failed to decode request body: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"runId": "run-xyz", "threadId": "my-session"}`))
+	}))
+	defer backend.Close()
+
+	originalURL := BackendURL
+	BackendURL = backend.URL
+	defer func() { BackendURL = originalURL }()
+
+	router := setupTestRouter()
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/sessions/my-session/runs",
+		strings.NewReader(`{"prompt": "Add unit tests"}`))
+	req.Header.Set("Authorization", "Bearer test-token")
+	req.Header.Set("X-Ambient-Project", "test-project")
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Verify AG-UI format: threadId and messages array
+	if capturedBody["threadId"] != "my-session" {
+		t.Errorf("Expected threadId=my-session, got %v", capturedBody["threadId"])
+	}
+	messages, ok := capturedBody["messages"].([]interface{})
+	if !ok || len(messages) != 1 {
+		t.Fatalf("Expected 1 message in AG-UI format, got %v", capturedBody["messages"])
+	}
+	msg, ok := messages[0].(map[string]interface{})
+	if !ok {
+		t.Fatalf("Expected message to be an object, got %T", messages[0])
+	}
+	if msg["role"] != "user" {
+		t.Errorf("Expected role=user, got %v", msg["role"])
+	}
+	if msg["content"] != "Add unit tests" {
+		t.Errorf("Expected content='Add unit tests', got %v", msg["content"])
+	}
+	if msg["id"] == "" {
+		t.Error("Expected non-empty message id")
 	}
 }
 

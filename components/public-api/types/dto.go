@@ -36,3 +36,14 @@ type ErrorResponse struct {
 	Error   string `json:"error"`
 	Message string `json:"message,omitempty"`
 }
+
+// CreateRunRequest is the request body for delivering a prompt to an active session
+type CreateRunRequest struct {
+	Prompt string `json:"prompt" binding:"required"`
+}
+
+// RunResponse is the response after starting a run
+type RunResponse struct {
+	RunID    string `json:"runId"`
+	ThreadID string `json:"threadId"`
+}

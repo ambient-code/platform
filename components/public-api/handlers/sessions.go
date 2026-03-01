@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"time"
 
 	"ambient-code-public-api/types"
 
@@ -219,6 +220,79 @@ func DeleteSession(c *gin.Context) {
 		return
 	}
 	forwardErrorResponse(c, resp.StatusCode, body)
+}
+
+// CreateSessionRun handles POST /v1/sessions/:id/runs
+// Delivers a prompt to an active session via the AG-UI run endpoint.
+func CreateSessionRun(c *gin.Context) {
+	project := GetProject(c)
+	if !ValidateProjectName(project) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid project name"})
+		return
+	}
+	sessionID := c.Param("id")
+	if !ValidateSessionID(sessionID) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid session ID"})
+		return
+	}
+
+	var req types.CreateRunRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Build AG-UI RunAgentInput from the simple prompt.
+	// The message ID uses the session ID and current timestamp for uniqueness.
+	msgID := fmt.Sprintf("msg-%s-%d", sessionID, time.Now().UnixNano())
+	backendReq := map[string]interface{}{
+		"threadId": sessionID,
+		"messages": []map[string]interface{}{
+			{
+				"id":      msgID,
+				"role":    "user",
+				"content": req.Prompt,
+			},
+		},
+	}
+
+	reqBody, err := json.Marshal(backendReq)
+	if err != nil {
+		log.Printf("Failed to marshal run request for session %s: %v", sessionID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		return
+	}
+
+	path := fmt.Sprintf("/api/projects/%s/agentic-sessions/%s/agui/run", project, sessionID)
+
+	resp, err := ProxyRequest(c, http.MethodPost, path, reqBody)
+	if err != nil {
+		log.Printf("Backend request failed for session run %s: %v", sessionID, err)
+		c.JSON(http.StatusBadGateway, gin.H{"error": "Backend unavailable"})
+		return
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("Failed to read backend response for session run %s: %v", sessionID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		return
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		forwardErrorResponse(c, resp.StatusCode, body)
+		return
+	}
+
+	var runResp types.RunResponse
+	if err := json.Unmarshal(body, &runResp); err != nil {
+		log.Printf("Failed to parse backend run response for session %s: %v", sessionID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, runResp)
 }
 
 // forwardErrorResponse forwards backend error with consistent JSON format
