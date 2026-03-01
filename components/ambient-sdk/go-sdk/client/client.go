@@ -96,7 +96,7 @@ func NewClient(baseURL, token, project string, opts ...ClientOption) (*Client, e
 	return c, nil
 }
 
-func NewClientFromEnv(opts ...ClientOption) (*Client, error) {
+func NewClientFromEnv(project string, opts ...ClientOption) (*Client, error) {
 	baseURL := os.Getenv("AMBIENT_API_URL")
 	if baseURL == "" {
 		baseURL = "http://localhost:8080"
@@ -105,11 +105,6 @@ func NewClientFromEnv(opts ...ClientOption) (*Client, error) {
 	token := os.Getenv("AMBIENT_TOKEN")
 	if token == "" {
 		return nil, fmt.Errorf("AMBIENT_TOKEN environment variable is required")
-	}
-
-	project := os.Getenv("AMBIENT_PROJECT")
-	if project == "" {
-		return nil, fmt.Errorf("AMBIENT_PROJECT environment variable is required")
 	}
 
 	return NewClient(baseURL, token, project, opts...)
