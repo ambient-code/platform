@@ -3,11 +3,48 @@ name: Test Local Development Environment
 on:
   pull_request:
 
+env:
+  # Pin versions for reliable caching
+  KUBECTL_VERSION: "v1.31.4"
+  MINIKUBE_VERSION: "v1.34.0"
+
 jobs:
+  # Fast job that doesn't need the cluster - runs in parallel
+  validate-manifests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v6
+
+    - name: Validate production manifest safety
+      run: |
+        echo "Validating production manifests do NOT contain dev mode variables..."
+
+        # Recursively check base and production manifests for DISABLE_AUTH
+        while IFS= read -r manifest; do
+          if grep -q "DISABLE_AUTH" "$manifest"; then
+            echo "CRITICAL: Production manifest contains DISABLE_AUTH: $manifest"
+            exit 1
+          fi
+
+          if grep -qE "ENVIRONMENT.*[\"']?(local|development)[\"']?" "$manifest"; then
+            echo "CRITICAL: Production manifest sets ENVIRONMENT=local/development: $manifest"
+            exit 1
+          fi
+        done < <(find components/manifests/base components/manifests/overlays/production -name "*.yaml" -o -name "*.yml" 2>/dev/null)
+
+        echo "All production manifests are safe"
+
+    - name: Validate Makefile
+      run: |
+        echo "Validating Makefile quality..."
+        make validate-makefile
+
   test-local-dev-simulation:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v6
@@ -22,57 +59,105 @@ jobs:
       with:
         go-version-file: 'components/backend/go.mod'
         cache-dependency-path: 'components/backend/go.sum'
-      
+
+    - name: Cache kubectl and minikube
+      uses: actions/cache@v4
+      id: k8s-tools-cache
+      with:
+        path: |
+          ~/k8s-tools/kubectl
+          ~/k8s-tools/minikube
+        key: k8s-tools-${{ runner.os }}-kubectl-${{ env.KUBECTL_VERSION }}-minikube-${{ env.MINIKUBE_VERSION }}
+
     - name: Install minikube and kubectl
       run: |
-        # Install kubectl
-        curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-        chmod +x kubectl
-        sudo mv kubectl /usr/local/bin/
-        
-        # Install minikube
-        curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
-        sudo install minikube-linux-amd64 /usr/local/bin/minikube
-        
+        mkdir -p ~/k8s-tools
+
+        # Install kubectl if not cached
+        if [[ ! -f ~/k8s-tools/kubectl ]]; then
+          echo "Downloading kubectl $KUBECTL_VERSION..."
+          curl -sLO "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          mv kubectl ~/k8s-tools/
+        else
+          echo "Using cached kubectl"
+        fi
+        sudo cp ~/k8s-tools/kubectl /usr/local/bin/kubectl
+
+        # Install minikube if not cached
+        if [[ ! -f ~/k8s-tools/minikube ]]; then
+          echo "Downloading minikube $MINIKUBE_VERSION..."
+          curl -sLO "https://storage.googleapis.com/minikube/releases/${MINIKUBE_VERSION}/minikube-linux-amd64"
+          chmod +x minikube-linux-amd64
+          mv minikube-linux-amd64 ~/k8s-tools/minikube
+        else
+          echo "Using cached minikube"
+        fi
+        sudo cp ~/k8s-tools/minikube /usr/local/bin/minikube
+
         # Verify installations
         kubectl version --client
         minikube version
-    
-    - name: Validate Makefile
-      run: |
-        echo "Validating Makefile quality..."
-        make validate-makefile
-        
+
+    - name: Cache minikube preload images
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.minikube/cache
+        key: minikube-cache-${{ runner.os }}-${{ env.MINIKUBE_VERSION }}-${{ hashFiles('components/manifests/base/**/*.yaml') }}
+        restore-keys: |
+          minikube-cache-${{ runner.os }}-${{ env.MINIKUBE_VERSION }}-
+          minikube-cache-${{ runner.os }}-
+
     - name: Deploy using Makefile
       run: |
         echo "Using Makefile to deploy complete stack..."
         make local-up CONTAINER_ENGINE=docker CI_MODE=true
-        
+
     - name: Wait for deployments
       run: |
-        echo "Waiting for deployments to be ready..."
-        kubectl wait --for=condition=available --timeout=180s deployment/backend-api -n ambient-code || {
-          echo "⚠️  Backend deployment timeout - showing status"
+        echo "Waiting for all deployments in parallel..."
+
+        # Wait for all deployments concurrently using background jobs
+        kubectl wait --for=condition=available --timeout=180s deployment/backend-api -n ambient-code &
+        PID_BACKEND=$!
+
+        kubectl wait --for=condition=available --timeout=180s deployment/frontend -n ambient-code &
+        PID_FRONTEND=$!
+
+        kubectl wait --for=condition=available --timeout=180s deployment/agentic-operator -n ambient-code &
+        PID_OPERATOR=$!
+
+        # Wait for all and collect exit codes
+        FAILED=0
+
+        wait $PID_BACKEND || {
+          echo "Backend deployment timeout - showing status"
           kubectl get pods -n ambient-code -o wide
           kubectl describe deployment backend-api -n ambient-code | tail -50
-          echo "⚠️  Backend pod events:"
-          kubectl get events -n ambient-code --field-selector involvedObject.kind=Pod,involvedObject.name!='' --sort-by='.lastTimestamp' | grep backend-api || echo "(No backend-api pod events found)"
-          echo "⚠️  Backend pod details:"
-          kubectl get pods -n ambient-code -l app=backend-api -o yaml | grep -A 20 -B 5 "conditions:\|events:\|status:" || true
-          exit 1
+          kubectl get events -n ambient-code --field-selector involvedObject.kind=Pod --sort-by='.lastTimestamp' | grep backend-api || true
+          FAILED=1
         }
-        kubectl wait --for=condition=available --timeout=180s deployment/frontend -n ambient-code || {
-          echo "⚠️  Frontend deployment timeout - showing status"
+
+        wait $PID_FRONTEND || {
+          echo "Frontend deployment timeout - showing status"
           kubectl get pods -n ambient-code -o wide
           kubectl describe deployment frontend -n ambient-code | tail -50
-          exit 1
+          FAILED=1
         }
-        kubectl wait --for=condition=available --timeout=180s deployment/agentic-operator -n ambient-code || {
-          echo "⚠️  Operator deployment timeout - showing status"
+
+        wait $PID_OPERATOR || {
+          echo "Operator deployment timeout - showing status"
           kubectl get pods -n ambient-code -o wide
           kubectl describe deployment agentic-operator -n ambient-code | tail -50
-          exit 1
+          FAILED=1
         }
+
+        if [[ $FAILED -eq 1 ]]; then
+          exit 1
+        fi
+
+        echo "All deployments ready"
 
     - name: Run backend integration tests (real k8s auth path)
       run: |
@@ -96,7 +181,7 @@ jobs:
         K8S_TEST_TOKEN="$TEST_TOKEN" \
         K8S_TEST_NAMESPACE="ambient-code" \
         go test ./tests/integration/... -count=1 -timeout=10m
-    
+
     - name: Run Makefile smoke tests
       run: |
         echo "Running Makefile smoke tests..."
@@ -105,73 +190,53 @@ jobs:
           make local-troubleshoot
           exit 1
         }
-    
+
     - name: Run comprehensive test suite
       run: |
         echo "Running local development test suite..."
         chmod +x tests/local-dev-test.sh
-        
+
         # Run tests in CI mode (known failures tracked separately)
         ./tests/local-dev-test.sh --skip-setup --ci || {
           echo "Test suite failed - showing debugging information..."
           make local-troubleshoot
           exit 1
         }
-    
-    - name: Validate production manifest safety
-      if: always()
-      run: |
-        echo "Validating production manifests do NOT contain dev mode variables..."
-        
-        # Recursively check base and production manifests for DISABLE_AUTH
-        while IFS= read -r manifest; do
-          if grep -q "DISABLE_AUTH" "$manifest"; then
-            echo "❌ CRITICAL: Production manifest contains DISABLE_AUTH: $manifest"
-            exit 1
-          fi
-          
-          if grep -qE "ENVIRONMENT.*[\"']?(local|development)[\"']?" "$manifest"; then
-            echo "❌ CRITICAL: Production manifest sets ENVIRONMENT=local/development: $manifest"
-            exit 1
-          fi
-        done < <(find components/manifests/base components/manifests/overlays/production -name "*.yaml" -o -name "*.yml" 2>/dev/null)
-        
-        echo "✅ All production manifests are safe"
-        
+
     - name: Show deployment status
       if: always()
       run: |
         echo "=== Namespace ==="
         kubectl get namespace ambient-code 2>&1 || echo "(Namespace not found - may not have been created)"
-        
+
         echo ""
         echo "=== Deployments ==="
         kubectl get deployments -n ambient-code -o wide 2>&1 || echo "(No deployments found or namespace does not exist)"
-        
+
         echo ""
         echo "=== ReplicaSets ==="
         kubectl get replicasets -n ambient-code -o wide 2>&1 || echo "(No replicasets found or namespace does not exist)"
-        
+
         echo ""
         echo "=== Pods ==="
         kubectl get pods -n ambient-code -o wide 2>&1 || echo "(No pods found or namespace does not exist)"
-        
+
         echo ""
         echo "=== Services ==="
         kubectl get svc -n ambient-code 2>&1 || echo "(No services found or namespace does not exist)"
-        
+
         echo ""
         echo "=== Ingress ==="
         kubectl get ingress -n ambient-code 2>&1 || echo "(No ingress found or namespace does not exist)"
-        
+
         echo ""
         echo "=== CRDs ==="
         kubectl get crd 2>&1 | grep vteam || echo "(No vteam CRDs found)"
-        
+
         echo ""
         echo "=== Events (last 30) ==="
         kubectl get events -n ambient-code --sort-by='.lastTimestamp' 2>&1 | tail -30 || echo "(No events found or namespace does not exist)"
-        
+
         echo ""
         echo "=== Deployment describe (if no pods) ==="
         if ! kubectl get pods -n ambient-code 2>/dev/null | grep -q "backend-api\|frontend\|agentic-operator"; then
@@ -180,7 +245,7 @@ jobs:
           kubectl describe deployment frontend -n ambient-code 2>&1 | tail -50 || echo "(frontend deployment not found)"
           kubectl describe deployment agentic-operator -n ambient-code 2>&1 | tail -50 || echo "(agentic-operator deployment not found)"
         fi
-    
+
     - name: Cleanup
       if: always()
       run: |
