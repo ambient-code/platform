@@ -47,6 +47,7 @@ IMAGES=(
   "vteam_operator:latest"
   "vteam_claude_runner:latest"
   "vteam_state_sync:latest"
+  "vteam_public_api:latest"
 )
 
 echo ""
@@ -67,19 +68,20 @@ for IMAGE in "${IMAGES[@]}"; do
     echo "      ⚠️  Image is $IMAGE_ARCH, host is $EXPECTED_ARCH (may be slow)"
   fi
 
-  # Save as OCI archive
-  $CONTAINER_ENGINE save --format oci-archive -o "/tmp/${IMAGE//://}.oci.tar" "$IMAGE"
-  
+  # Save as OCI archive (replace : with - for flat filename)
+  ARCHIVE="/tmp/${IMAGE//:/-}.oci.tar"
+  $CONTAINER_ENGINE save --format oci-archive -o "$ARCHIVE" "$IMAGE"
+
   # Import into kind node with docker.io/library prefix so kubelet can find it
-  cat "/tmp/${IMAGE//://}.oci.tar" | \
+  cat "$ARCHIVE" | \
     $CONTAINER_ENGINE exec -i ambient-local-control-plane \
     ctr --namespace=k8s.io images import --no-unpack \
     --index-name "docker.io/library/$IMAGE" - 2>&1 | grep -q "saved" && \
     echo "      ✓ $IMAGE loaded" || \
     echo "      ⚠️  $IMAGE may have failed"
-  
+
   # Cleanup temp file
-  rm -f "/tmp/${IMAGE//://}.oci.tar"
+  rm -f "$ARCHIVE"
 done
 
 echo ""

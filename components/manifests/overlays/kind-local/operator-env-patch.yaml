@@ -1,0 +1,21 @@
+# Patch operator to use locally built runner/state-sync images
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agentic-operator
+spec:
+  template:
+    spec:
+      containers:
+      - name: agentic-operator
+        env:
+        - name: AMBIENT_CODE_RUNNER_IMAGE
+          value: "docker.io/library/vteam_claude_runner:latest"
+        - name: STATE_SYNC_IMAGE
+          value: "docker.io/library/vteam_state_sync:latest"
+        - name: IMAGE_PULL_POLICY
+          value: "IfNotPresent"
+        # kind runs containers as root; fsGroup=0 avoids permission errors
+        # on PVC mounts. Do NOT use in production overlays.
+        - name: POD_FSGROUP
+          value: "0"

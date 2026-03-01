@@ -1,0 +1,60 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Build on top of the kind overlay (inherits base, secrets, test-user, etc.)
+resources:
+- ../kind
+
+# Override patches for kind-local environment
+patches:
+# Use locally built runner/state-sync images with IfNotPresent
+- path: operator-env-patch.yaml
+  target:
+    kind: Deployment
+    name: agentic-operator
+# Override backend env vars to use local images and IfNotPresent
+- path: backend-env-patch.yaml
+  target:
+    kind: Deployment
+    name: backend-api
+# JSON patches to override imagePullPolicy to IfNotPresent
+- path: image-pull-policy-patch.yaml
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: backend-api
+- path: image-pull-policy-patch.yaml
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: frontend
+- path: image-pull-policy-patch.yaml
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: agentic-operator
+- path: image-pull-policy-patch.yaml
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: public-api
+
+# Kind-local overlay: Use locally built images loaded via `kind load`
+# Images are imported with docker.io/library/ prefix by ctr
+images:
+- name: quay.io/ambient_code/vteam_backend
+  newName: docker.io/library/vteam_backend
+  newTag: latest
+- name: quay.io/ambient_code/vteam_frontend
+  newName: docker.io/library/vteam_frontend
+  newTag: latest
+- name: quay.io/ambient_code/vteam_operator
+  newName: docker.io/library/vteam_operator
+  newTag: latest
+- name: quay.io/ambient_code/vteam_public_api
+  newName: docker.io/library/vteam_public_api
+  newTag: latest

@@ -4,7 +4,7 @@
 .PHONY: local-logs local-logs-backend local-logs-frontend local-logs-operator local-shell local-shell-frontend
 .PHONY: local-test local-test-dev local-test-quick test-all local-url local-troubleshoot local-port-forward local-stop-port-forward
 .PHONY: push-all registry-login setup-hooks remove-hooks lint check-minikube check-kind check-kubectl dev-bootstrap
-.PHONY: e2e-test e2e-setup e2e-clean deploy-langfuse-openshift
+.PHONY: e2e-test e2e-setup e2e-clean deploy-langfuse-openshift kind-up-local
 .PHONY: unleash-port-forward unleash-status
 .PHONY: setup-minio minio-console minio-logs minio-status
 .PHONY: validate-makefile lint-makefile check-shell makefile-health
@@ -644,6 +644,47 @@ kind-up: check-kind check-kubectl ## Start kind cluster with Quay.io images (pro
 	@echo "Run tests:"
 	@echo "  make test-e2e"
 
+kind-up-local: check-kind check-kubectl ## Start kind cluster with locally built images
+	@echo "$(COLOR_BOLD)Starting kind cluster with locally built images$(COLOR_RESET)"
+	@echo ""
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 1/6: Creating kind cluster..."
+	@cd e2e && CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/setup-kind.sh
+	@for i in 1 2 3 4 5 6 7 8 9 10; do \
+		if kubectl cluster-info >/dev/null 2>&1; then \
+			echo "$(COLOR_GREEN)✓$(COLOR_RESET) API server ready"; \
+			break; \
+		fi; \
+		if [ $$i -eq 10 ]; then \
+			echo "$(COLOR_RED)✗$(COLOR_RESET) Timeout waiting for API server"; \
+			exit 1; \
+		fi; \
+		sleep 3; \
+	done
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 2/6: Building all images locally..."
+	@$(MAKE) --no-print-directory build-all
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 3/6: Loading images into kind cluster..."
+	@cd e2e && CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/load-images.sh
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 4/6: Deploying with local images..."
+	@kubectl apply --validate=false -k components/manifests/overlays/kind-local/
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 5/6: Waiting for pods..."
+	@cd e2e && ./scripts/wait-for-ready.sh
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 6/6: Initializing MinIO and extracting test token..."
+	@cd e2e && ./scripts/init-minio.sh
+	@cd e2e && CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/extract-token.sh
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Kind cluster ready with local images!"
+	@echo ""
+	@echo "$(COLOR_BOLD)Access the platform:$(COLOR_RESET)"
+	@echo "  Run in another terminal: $(COLOR_BLUE)make kind-port-forward$(COLOR_RESET)"
+	@echo ""
+	@echo "  Then access:"
+	@echo "  Frontend: http://localhost:8080"
+	@echo "  Backend:  http://localhost:8081"
+	@echo ""
+	@echo "  Get test token: kubectl get secret test-user-token -n ambient-code -o jsonpath='{.data.token}' | base64 -d"
+	@echo ""
+	@echo "Run tests:"
+	@echo "  make test-e2e"
+
 kind-down: ## Stop and delete kind cluster
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Cleaning up kind cluster..."
 	@cd e2e && CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/cleanup.sh
@@ -762,6 +803,8 @@ _build-and-load: ## Internal: Build and load images
 	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) -t $(OPERATOR_IMAGE) components/operator $(QUIET_REDIRECT)
 	@echo "  Building runner ($(PLATFORM))..."
 	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) -t $(RUNNER_IMAGE) -f components/runners/claude-code-runner/Dockerfile components/runners $(QUIET_REDIRECT)
+	@echo "  Building public-api ($(PLATFORM))..."
+	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) -t $(PUBLIC_API_IMAGE) components/public-api $(QUIET_REDIRECT)
 	@echo "  Building api-server ($(PLATFORM))..."
 	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) -t $(API_SERVER_IMAGE) components/ambient-api-server $(QUIET_REDIRECT)
 	@echo "  Tagging images with localhost prefix..."
@@ -769,6 +812,7 @@ _build-and-load: ## Internal: Build and load images
 	@$(CONTAINER_ENGINE) tag $(FRONTEND_IMAGE) localhost/$(FRONTEND_IMAGE) 2>/dev/null || true
 	@$(CONTAINER_ENGINE) tag $(OPERATOR_IMAGE) localhost/$(OPERATOR_IMAGE) 2>/dev/null || true
 	@$(CONTAINER_ENGINE) tag $(RUNNER_IMAGE) localhost/$(RUNNER_IMAGE) 2>/dev/null || true
+	@$(CONTAINER_ENGINE) tag $(PUBLIC_API_IMAGE) localhost/$(PUBLIC_API_IMAGE) 2>/dev/null || true
 	@$(CONTAINER_ENGINE) tag $(API_SERVER_IMAGE) localhost/$(API_SERVER_IMAGE) 2>/dev/null || true
 	@echo "  Loading images into minikube..."
 	@mkdir -p /tmp/minikube-images
@@ -776,11 +820,13 @@ _build-and-load: ## Internal: Build and load images
 	@$(CONTAINER_ENGINE) save -o /tmp/minikube-images/frontend.tar localhost/$(FRONTEND_IMAGE)
 	@$(CONTAINER_ENGINE) save -o /tmp/minikube-images/operator.tar localhost/$(OPERATOR_IMAGE)
 	@$(CONTAINER_ENGINE) save -o /tmp/minikube-images/runner.tar localhost/$(RUNNER_IMAGE)
+	@$(CONTAINER_ENGINE) save -o /tmp/minikube-images/public-api.tar localhost/$(PUBLIC_API_IMAGE)
 	@$(CONTAINER_ENGINE) save -o /tmp/minikube-images/api-server.tar localhost/$(API_SERVER_IMAGE)
 	@minikube image load /tmp/minikube-images/backend.tar $(QUIET_REDIRECT)
 	@minikube image load /tmp/minikube-images/frontend.tar $(QUIET_REDIRECT)
 	@minikube image load /tmp/minikube-images/operator.tar $(QUIET_REDIRECT)
 	@minikube image load /tmp/minikube-images/runner.tar $(QUIET_REDIRECT)
+	@minikube image load /tmp/minikube-images/public-api.tar $(QUIET_REDIRECT)
 	@minikube image load /tmp/minikube-images/api-server.tar $(QUIET_REDIRECT)
 	@rm -rf /tmp/minikube-images
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Images built and loaded"
