@@ -57,6 +57,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
 import { Breadcrumbs } from "@/components/breadcrumbs";
+import { SessionTabs } from "@/components/session-tabs";
 import { SessionHeader } from "./session-header";
 import { getPhaseColor } from "@/utils/session-helpers";
 
@@ -1488,6 +1489,14 @@ export default function ProjectSessionDetailPage({
                   onContinue={handleContinue}
                   onDelete={handleDelete}
                   renderMode="kebab-only"
+                />
+              </div>
+
+              {/* Session tabs - desktop only */}
+              <div className="hidden md:block mt-3">
+                <SessionTabs
+                  projectName={projectName}
+                  currentSessionName={sessionName}
                 />
               </div>
             </div>
