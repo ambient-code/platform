@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { formatDistanceToNow } from 'date-fns';
-import { Plus, RefreshCw, MoreVertical, Square, Trash2, ArrowRight, Brain, Search, ChevronLeft, ChevronRight, Pencil } from 'lucide-react';
+import { Plus, RefreshCw, MoreVertical, Square, Trash2, ArrowRight, Brain, Search, ChevronLeft, ChevronRight, Pencil, NotepadText } from 'lucide-react';
 import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
@@ -16,9 +16,36 @@ import { CreateSessionDialog } from '@/components/create-session-dialog';
 import { EditSessionNameDialog } from '@/components/edit-session-name-dialog';
 
 import { useSessionsPaginated, useStopSession, useDeleteSession, useContinueSession, useUpdateSessionDisplayName } from '@/services/queries';
+import { useWorkspaceList } from '@/services/queries/use-workspace';
 import { successToast, errorToast } from '@/hooks/use-toast';
 import { useDebounce } from '@/hooks/use-debounce';
 import { DEFAULT_PAGE_SIZE } from '@/types/api';
+
+type ArtifactCountCellProps = {
+  projectName: string;
+  sessionName: string;
+};
+
+function ArtifactCountCell({ projectName, sessionName }: ArtifactCountCellProps) {
+  const { data: files, isLoading } = useWorkspaceList(projectName, sessionName, 'artifacts');
+
+  if (isLoading) {
+    return <span className="text-sm text-muted-foreground/60">—</span>;
+  }
+
+  const fileCount = files ? files.filter((f) => !f.isDir).length : 0;
+
+  if (fileCount === 0) {
+    return <span className="text-sm text-muted-foreground/60">—</span>;
+  }
+
+  return (
+    <div className="flex items-center gap-1 text-sm">
+      <NotepadText className="h-3 w-3 text-muted-foreground" />
+      <span>{fileCount}</span>
+    </div>
+  );
+}
 
 type SessionsSectionProps = {
   projectName: string;
@@ -214,7 +241,7 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
                     <TableHead>Status</TableHead>
                     <TableHead className="hidden md:table-cell">Model</TableHead>
                     <TableHead className="hidden lg:table-cell">Created</TableHead>
-                    <TableHead className="hidden xl:table-cell">Cost</TableHead>
+                    <TableHead className="hidden xl:table-cell">Artifacts</TableHead>
                     <TableHead className="w-[50px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -254,8 +281,7 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
                             formatDistanceToNow(new Date(session.metadata.creationTimestamp), { addSuffix: true })}
                         </TableCell>
                         <TableCell className="hidden xl:table-cell">
-                          {/* total_cost_usd removed from simplified status */}
-                          <span className="text-sm text-muted-foreground/60">—</span>
+                          <ArtifactCountCell projectName={projectName} sessionName={sessionName} />
                         </TableCell>
                         <TableCell>
                           {isActionPending ? (
