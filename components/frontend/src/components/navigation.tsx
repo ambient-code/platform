@@ -26,10 +26,10 @@ export function Navigation({ feedbackUrl }: NavigationProps) {
 
   return (
     <nav className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="px-6">
-        <div className="flex h-16 items-center justify-between gap-4">
-          <div className="flex items-end gap-2">
-            <Link href="/" className="text-xl font-bold">
+      <div className="px-4">
+        <div className="flex h-10 items-center justify-between gap-3">
+          <div className="flex items-end gap-1.5">
+            <Link href="/" className="text-base font-bold">
               <span className="hidden md:inline">Ambient Code Platform</span>
               <span className="md:hidden">ACP</span>
             </Link>
@@ -38,21 +38,21 @@ export function Navigation({ feedbackUrl }: NavigationProps) {
                 href="https://github.com/ambient-code/platform/releases"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-[0.65rem] text-muted-foreground/60 pb-0.75 hover:text-muted-foreground transition-colors"
+                className="text-[0.6rem] text-muted-foreground/60 pb-0.5 hover:text-muted-foreground transition-colors"
               >
                 <span>{version}</span>
               </a>
             )}
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {feedbackUrl && (
               <a
                 href={feedbackUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
               >
-                Share feedback
+                Feedback
               </a>
             )}
             <ThemeToggle />

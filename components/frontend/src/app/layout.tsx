@@ -40,6 +40,7 @@ export default function RootLayout({
           defaultTheme="system"
           enableSystem
           disableTransitionOnChange
+          themes={["light", "dark", "jeremy", "system"]}
         >
           <SyntaxThemeProvider />
           <FeatureFlagProvider>
