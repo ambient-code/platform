@@ -145,6 +145,7 @@ export function WorkflowPicker({
   if (isLoading) {
     return (
       <Button
+        type="button"
         variant="outline"
         className={cn("w-full h-auto py-3 justify-between", className)}
         disabled
@@ -186,6 +187,7 @@ export function WorkflowPicker({
     }}>
       <PopoverTrigger asChild>
         <Button
+          type="button"
           variant="outline"
           role="combobox"
           aria-expanded={popoverOpen}
