@@ -6,6 +6,7 @@ Middleware wraps the adapter's event stream to add platform concerns
 """
 
 from ambient_runner.middleware.developer_events import emit_developer_message
+from ambient_runner.middleware.proxy_auth import ProxyAuthMiddleware
 from ambient_runner.middleware.tracing import tracing_middleware
 
-__all__ = ["tracing_middleware", "emit_developer_message"]
+__all__ = ["tracing_middleware", "emit_developer_message", "ProxyAuthMiddleware"]
