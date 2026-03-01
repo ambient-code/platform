@@ -27,7 +27,6 @@ import os
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Optional
 from urllib.parse import urlparse
 
 import aiohttp
@@ -145,6 +144,12 @@ def create_ambient_app(
         logger.info("AG-UI server shut down")
 
     app = FastAPI(title=title, version=version, lifespan=lifespan)
+
+    # Reject direct AG-UI connections that bypass the backend proxy.
+    # The middleware is a no-op when RUNNER_PROXY_SECRET is not set (dev/test).
+    from ambient_runner.middleware.proxy_auth import ProxyAuthMiddleware
+
+    app.add_middleware(ProxyAuthMiddleware)
 
     add_ambient_endpoints(
         app,

@@ -34,6 +34,39 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
+// runnerProxySecretCache caches proxy secrets per session to avoid repeated K8s API calls.
+// Key: "namespace/sessionName", Value: proxy secret string.
+var runnerProxySecretCache sync.Map
+
+// getRunnerProxySecret reads the proxy-secret key from the runner token secret.
+// Returns empty string if the secret does not exist or the key is absent (graceful degradation
+// for sessions created before proxy authentication was introduced).
+func getRunnerProxySecret(projectName, sessionName string) string {
+	cacheKey := projectName + "/" + sessionName
+	if cached, ok := runnerProxySecretCache.Load(cacheKey); ok {
+		return cached.(string)
+	}
+
+	if handlers.K8sClientMw == nil {
+		return ""
+	}
+
+	secretName := fmt.Sprintf("ambient-runner-token-%s", sessionName)
+	secret, err := handlers.K8sClientMw.CoreV1().Secrets(projectName).Get(
+		context.Background(), secretName, metav1.GetOptions{},
+	)
+	if err != nil {
+		log.Printf("AGUI Proxy: could not read runner proxy secret for %s/%s: %v", projectName, sessionName, err)
+		return ""
+	}
+
+	proxySecret := strings.TrimSpace(string(secret.Data["proxy-secret"]))
+	if proxySecret != "" {
+		runnerProxySecretCache.Store(cacheKey, proxySecret)
+	}
+	return proxySecret
+}
+
 const (
 	// activityDebounceInterval is the minimum interval between CR status updates for lastActivityTime.
 	// Inactivity timeout is measured in hours, so minute-level granularity is sufficient.
@@ -238,9 +271,10 @@ func HandleAGUIRunProxy(c *gin.Context) {
 	}
 
 	runnerURL := getRunnerEndpoint(projectName, sessionName)
+	proxySecret := getRunnerProxySecret(projectName, sessionName)
 
 	// Start background goroutine to proxy runner SSE → persist + broadcast
-	go proxyRunnerStream(runnerURL, bodyBytes, sessionName, runID, threadID)
+	go proxyRunnerStream(runnerURL, bodyBytes, sessionName, runID, threadID, proxySecret)
 
 	// Return metadata immediately — events arrive via GET /agui/events
 	c.JSON(http.StatusOK, gin.H{
@@ -252,9 +286,9 @@ func HandleAGUIRunProxy(c *gin.Context) {
 // proxyRunnerStream connects to the runner's SSE endpoint, reads events,
 // persists them, and publishes them to the live broadcast pipe.  Runs in
 // a background goroutine so the POST /agui/run handler can return immediately.
-func proxyRunnerStream(runnerURL string, bodyBytes []byte, sessionName, runID, threadID string) {
+func proxyRunnerStream(runnerURL string, bodyBytes []byte, sessionName, runID, threadID, proxySecret string) {
 	log.Printf("AGUI Proxy: connecting to runner at %s", runnerURL)
-	resp, err := connectToRunner(runnerURL, bodyBytes)
+	resp, err := connectToRunner(runnerURL, bodyBytes, proxySecret)
 	if err != nil {
 		log.Printf("AGUI Proxy: runner unavailable for %s: %v", sessionName, err)
 		// Publish error events so GET /agui/events subscribers see the failure
@@ -418,6 +452,9 @@ func HandleAGUIInterrupt(c *gin.Context) {
 		return
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if ps := getRunnerProxySecret(projectName, sessionName); ps != "" {
+		req.Header.Set("Authorization", "Bearer "+ps)
+	}
 
 	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
 	if err != nil {
@@ -483,6 +520,9 @@ func HandleAGUIFeedback(c *gin.Context) {
 		return
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if ps := getRunnerProxySecret(projectName, sessionName); ps != "" {
+		req.Header.Set("Authorization", "Bearer "+ps)
+	}
 
 	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
 	if err != nil {
@@ -542,6 +582,9 @@ func HandleCapabilities(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"framework": "unknown"})
 		return
 	}
+	if ps := getRunnerProxySecret(projectName, sessionName); ps != "" {
+		req.Header.Set("Authorization", "Bearer "+ps)
+	}
 	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
@@ -590,6 +633,9 @@ func HandleMCPStatus(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"servers": []interface{}{}, "totalCount": 0})
 		return
 	}
+	if ps := getRunnerProxySecret(projectName, sessionName); ps != "" {
+		req.Header.Set("Authorization", "Bearer "+ps)
+	}
 	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"servers": []interface{}{}, "totalCount": 0})
@@ -629,7 +675,11 @@ var runnerHTTPClient = &http.Client{
 // container startup time and K8s Service DNS propagation. Retries on
 // "connection refused", "no such host", and "dial tcp" errors with
 // exponential backoff (500ms initial, 1.5x, capped at 5s, 15 attempts).
-func connectToRunner(runnerURL string, bodyBytes []byte) (*http.Response, error) {
+//
+// proxySecret is the RUNNER_PROXY_SECRET shared between the backend and the runner.
+// When non-empty it is sent as "Authorization: Bearer {proxySecret}" so the runner
+// can reject direct connections that bypass the backend proxy.
+func connectToRunner(runnerURL string, bodyBytes []byte, proxySecret string) (*http.Response, error) {
 	maxAttempts := 15
 	retryDelay := 500 * time.Millisecond
 	maxDelay := 5 * time.Second
@@ -641,6 +691,9 @@ func connectToRunner(runnerURL string, bodyBytes []byte) (*http.Response, error)
 		}
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Accept", "text/event-stream")
+		if proxySecret != "" {
+			req.Header.Set("Authorization", "Bearer "+proxySecret)
+		}
 
 		resp, err := runnerHTTPClient.Do(req)
 		if err == nil {

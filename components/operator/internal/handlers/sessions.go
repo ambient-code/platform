@@ -17,6 +17,7 @@ import (
 	"ambient-code-operator/internal/config"
 	"ambient-code-operator/internal/types"
 
+	"github.com/google/uuid"
 	authnv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -1023,6 +1024,16 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 						ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{
 							LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
 							Key:                  "k8s-token",
+						}},
+					})
+					// RUNNER_PROXY_SECRET: static shared secret for backend→runner proxy authentication.
+					// Optional so that sessions created before this field was added continue to work.
+					base = append(base, corev1.EnvVar{
+						Name: "RUNNER_PROXY_SECRET",
+						ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
+							Key:                  "proxy-secret",
+							Optional:             boolPtr(true),
 						}},
 					})
 					// Add CR-provided envs last (override base when same key)
@@ -2348,6 +2359,11 @@ func regenerateRunnerToken(sessionNamespace, sessionName string, session *unstru
 	// Store token in Secret
 	secretName := fmt.Sprintf("ambient-runner-token-%s", sessionName)
 	refreshedAt := time.Now().UTC().Format(time.RFC3339)
+	// proxySecret is a static random token shared between the backend proxy and the runner.
+	// It is generated once at session creation and never rotated, unlike the k8s-token.
+	// The backend sends it as Authorization: Bearer {proxySecret} when proxying to the runner,
+	// and the runner validates it to reject direct connections that bypass the proxy.
+	proxySecret := uuid.New().String()
 	sec := &corev1.Secret{
 		ObjectMeta: v1.ObjectMeta{
 			Name:            secretName,
@@ -2360,7 +2376,8 @@ func regenerateRunnerToken(sessionNamespace, sessionName string, session *unstru
 		},
 		Type: corev1.SecretTypeOpaque,
 		Data: map[string][]byte{
-			"k8s-token": []byte(k8sToken),
+			"k8s-token":    []byte(k8sToken),
+			"proxy-secret": []byte(proxySecret),
 		},
 	}
 
@@ -2376,6 +2393,10 @@ func regenerateRunnerToken(sessionNamespace, sessionName string, session *unstru
 				secretCopy.Data = map[string][]byte{}
 			}
 			secretCopy.Data["k8s-token"] = []byte(k8sToken)
+			// Preserve existing proxy-secret on rotation — only set it if absent (first-time backfill).
+			if _, hasProxySecret := secretCopy.Data["proxy-secret"]; !hasProxySecret {
+				secretCopy.Data["proxy-secret"] = []byte(proxySecret)
+			}
 			if secretCopy.Annotations == nil {
 				secretCopy.Annotations = map[string]string{}
 			}
