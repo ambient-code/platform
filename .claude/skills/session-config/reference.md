@@ -369,3 +369,122 @@ JSON files under `.ambient/workflows/`. Each defines a reusable workflow.
 ```
 
 Standalone workflow repos use `.ambient/ambient.json` at the repo root and can include `CLAUDE.md`, `.claude/`, and a `rubric.md` file for evaluation criteria.
+
+## 9. Plugin Marketplaces & Enablement
+
+Configured in `.claude/settings.json`. Controls which plugin marketplaces are available and which plugins are enabled by default.
+
+### Marketplace Sources
+
+```jsonc
+{
+  // Extra marketplaces (additive to defaults)
+  "extraKnownMarketplaces": {
+    "odh-ai-helpers": {                  // Marketplace display name
+      "source": {
+        "source": "github",             // Source type
+        "repo": "opendatahub-io/ai-helpers"  // GitHub {owner}/{repo}
+      }
+    },
+    "acme-tools": {
+      "source": {
+        "source": "github",
+        "repo": "acme-corp/claude-plugins"
+      }
+    }
+  },
+
+  // Strict marketplaces (managed settings — replaces defaults)
+  "strictKnownMarketplaces": [
+    {
+      "source": "github",               // GitHub repository
+      "repo": "opendatahub-io/ai-helpers",
+      "ref": "main",                     // Optional: pin to branch/tag
+      "path": ""                          // Optional: subdirectory
+    },
+    {
+      "source": "git",                   // Any git URL
+      "url": "https://gitlab.example.com/tools/plugins.git",
+      "ref": "production"
+    },
+    {
+      "source": "url",                   // HTTP endpoint
+      "url": "https://plugins.example.com/marketplace.json",
+      "headers": {
+        "Authorization": "Bearer ${TOKEN}"
+      }
+    },
+    {
+      "source": "npm",                   // npm package
+      "package": "@acme-corp/claude-plugins"
+    },
+    {
+      "source": "file",                  // Local file path
+      "path": "/usr/local/share/claude/marketplace.json"
+    },
+    {
+      "source": "directory",             // Local directory
+      "path": "/usr/local/share/claude/plugins/"
+    },
+    {
+      "source": "hostPattern",           // Allow any repo matching pattern
+      "hostPattern": "^github\\.example\\.com$"
+    }
+  ],
+
+  // Block specific marketplaces
+  "blockedMarketplaces": [
+    { "source": "github", "repo": "untrusted/plugins" }
+  ],
+
+  // Only allow managed marketplace sources (enterprise lockdown)
+  "allowManagedMcpServersOnly": false
+}
+```
+
+### Plugin Enablement
+
+```jsonc
+{
+  // Enable/disable specific plugins from declared marketplaces
+  "enabledPlugins": {
+    "odh-ai-helpers@odh-ai-helpers": true,       // plugin@marketplace
+    "fips-compliance-checker@odh-ai-helpers": true,
+    "formatter@acme-tools": true,
+    "untrusted-plugin@acme-tools": false          // Explicitly disabled
+  }
+}
+```
+
+### Marketplace Source Types
+
+| Source | Required Fields | Description |
+|--------|----------------|-------------|
+| `github` | `repo` | GitHub `{owner}/{repo}` with `.claude-plugin/marketplace.json` |
+| `git` | `url` | Any git repo URL (HTTPS/SSH) |
+| `url` | `url` | HTTP endpoint returning marketplace JSON |
+| `npm` | `package` | npm package containing marketplace |
+| `file` | `path` | Local JSON file |
+| `directory` | `path` | Local directory containing plugins |
+| `hostPattern` | `hostPattern` | Regex allowing repos from matching hosts |
+
+### Default Marketplace to Include
+
+When generating session-config repos, include `opendatahub-io/ai-helpers` by default:
+
+```jsonc
+{
+  "extraKnownMarketplaces": {
+    "odh-ai-helpers": {
+      "source": {
+        "source": "github",
+        "repo": "opendatahub-io/ai-helpers"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "odh-ai-helpers@odh-ai-helpers": true,
+    "fips-compliance-checker@odh-ai-helpers": true
+  }
+}
+```

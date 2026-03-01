@@ -1,6 +1,6 @@
 ---
 name: session-config
-description: Generates ACP session-config repositories interactively. Use when creating or refreshing a session-config repo with CLAUDE.md, .claude/rules, skills, agents, settings.json, .mcp.json, hooks, or .ambient/workflows. Presents all configuration surfaces and scaffolds self-documented files.
+description: Generates ACP session-config repositories interactively. Use when creating or refreshing a session-config repo with CLAUDE.md, .claude/rules, skills, agents, settings.json, .mcp.json, hooks, .ambient/workflows, or plugin marketplaces. Presents all configuration surfaces and scaffolds self-documented files.
 ---
 
 # Session Config Generator
@@ -30,6 +30,7 @@ Present ALL surfaces. Use AskUserQuestion multiSelect to let the user pick.
 | 6 | **MCP Servers** | `.mcp.json` | MCP server configuration (stdio, http, oauth) |
 | 7 | **Hooks** | `.claude/settings.json` hooks key | Lifecycle automation (PreToolUse, PostToolUse, etc.) |
 | 8 | **Workflows** | `.ambient/workflows/` | ACP workflow definitions with optional rubrics |
+| 9 | **Plugin Marketplaces** | `.claude/settings.json` | Plugin sources, enablement, and marketplace declarations |
 
 For full schemas, frontmatter fields, and examples for each surface, see [reference.md](reference.md).
 
@@ -102,6 +103,14 @@ For full schemas, frontmatter fields, and examples for each surface, see [refere
 - Documentation — generate project docs
 - Onboarding — guided project walkthrough
 - Custom
+
+## Plugin Marketplace Options to Offer
+
+- **odh-ai-helpers** — `opendatahub-io/ai-helpers` (FIPS compliance, Python packaging, Jira, GitLab, vLLM tools) — **enable by default**
+- **Custom GitHub marketplace** — user provides `{owner}/{repo}` with marketplace.json
+- **Custom git URL** — any git repo containing a marketplace
+- **Custom npm package** — npm-distributed marketplace
+- **Plugin enablement presets** — pre-enable/disable specific plugins from declared marketplaces
 
 ## File Generation Rules
 
