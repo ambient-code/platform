@@ -3,6 +3,9 @@
 // AG-UI Protocol types
 export * from './agui'
 
+// Workflow types
+export * from './workflow'
+
 export interface Project {
   name: string;
   displayName: string;

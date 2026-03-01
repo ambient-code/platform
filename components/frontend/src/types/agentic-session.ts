@@ -193,6 +193,12 @@ export type CreateAgenticSessionRequest = {
 	repos?: SessionRepo[];
 	labels?: Record<string, string>;
 	annotations?: Record<string, string>;
+	// Initial workflow to activate on session creation
+	activeWorkflow?: {
+		gitUrl: string;
+		branch: string;
+		path?: string;
+	};
 };
 
 export type AgentPersona = {

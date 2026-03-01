@@ -35,7 +35,9 @@ import {
 import type { CreateAgenticSessionRequest } from "@/types/agentic-session";
 import { useCreateSession } from "@/services/queries/use-sessions";
 import { useIntegrationsStatus } from "@/services/queries/use-integrations";
+import { useOOTBWorkflows } from "@/services/queries/use-workflows";
 import { errorToast } from "@/hooks/use-toast";
+import { WorkflowPicker } from "@/components/workflow-picker";
 
 const models = [
   { value: "claude-sonnet-4-5", label: "Claude Sonnet 4.5" },
@@ -50,6 +52,7 @@ const formSchema = z.object({
   temperature: z.number().min(0).max(2),
   maxTokens: z.number().min(100).max(8000),
   timeout: z.number().min(60).max(1800),
+  workflow: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -70,6 +73,7 @@ export function CreateSessionDialog({
   const createSessionMutation = useCreateSession();
 
   const { data: integrationsStatus } = useIntegrationsStatus();
+  const { data: ootbWorkflows = [], isLoading: workflowsLoading } = useOOTBWorkflows(projectName);
 
   const githubConfigured = integrationsStatus?.github?.active != null;
   const gitlabConfigured = integrationsStatus?.gitlab?.connected ?? false;
@@ -84,6 +88,7 @@ export function CreateSessionDialog({
       temperature: 0.7,
       maxTokens: 4000,
       timeout: 300,
+      workflow: "none",
     },
   });
 
@@ -101,6 +106,20 @@ export function CreateSessionDialog({
     const trimmedName = values.displayName?.trim();
     if (trimmedName) {
       request.displayName = trimmedName;
+    }
+
+    // Add initial workflow if selected and not "none" or "custom"
+    // Only include workflow if it's a valid OOTB workflow that's enabled
+    if (values.workflow && values.workflow !== "none" && values.workflow !== "custom") {
+      const selectedWorkflow = ootbWorkflows.find(w => w.id === values.workflow);
+      // Double-check the workflow exists and is enabled before sending to backend
+      if (selectedWorkflow?.enabled) {
+        request.activeWorkflow = {
+          gitUrl: selectedWorkflow.gitUrl,
+          branch: selectedWorkflow.branch,
+          ...(selectedWorkflow.path && { path: selectedWorkflow.path }),
+        };
+      }
     }
 
     createSessionMutation.mutate(
@@ -186,6 +205,32 @@ export function CreateSessionDialog({
                         ))}
                       </SelectContent>
                     </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Workflow Selection */}
+              <FormField
+                control={form.control}
+                name="workflow"
+                render={({ field }) => (
+                  <FormItem className="w-full">
+                    <FormLabel>Workflow (optional)</FormLabel>
+                    <FormControl>
+                      <WorkflowPicker
+                        selectedWorkflow={field.value || "none"}
+                        ootbWorkflows={ootbWorkflows}
+                        onWorkflowChange={field.onChange}
+                        disabled={createSessionMutation.isPending}
+                        isLoading={workflowsLoading}
+                        loadingMessage="Loading workflows..."
+                        showCustomWorkflow={false}
+                      />
+                    </FormControl>
+                    <p className="text-xs text-muted-foreground">
+                      Workflows provide agents with pre-defined context and structured steps to follow.
+                    </p>
                     <FormMessage />
                   </FormItem>
                 )}
