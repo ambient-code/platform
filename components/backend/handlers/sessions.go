@@ -579,6 +579,12 @@ func CreateSession(c *gin.Context) {
 		}
 	}
 
+	// Validate that the requested model is available
+	if llmSettings.Model != "" && !isModelAvailable(c.Request.Context(), reqK8s, llmSettings.Model, project) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Model is not available"})
+		return
+	}
+
 	timeout := 300
 	if req.Timeout != nil {
 		timeout = *req.Timeout

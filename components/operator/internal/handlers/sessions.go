@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"ambient-code-operator/internal/config"
+	"ambient-code-operator/internal/models"
 	"ambient-code-operator/internal/types"
 
 	authnv1 "k8s.io/api/authentication/v1"
@@ -921,6 +922,20 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 						// Backend proxies to runner's HTTP endpoint instead of WebSocket
 					)
 
+					// Resolve Vertex AI model ID from the model manifest ConfigMap.
+					// If found, inject LLM_MODEL_VERTEX_ID so the runner uses it
+					// instead of the static VERTEX_MODEL_MAP.
+					if model != "" {
+						if manifest, err := models.LoadManifest(models.ManifestPath()); err == nil {
+							if vertexID := models.ResolveVertexID(manifest, model); vertexID != "" {
+								base = append(base, corev1.EnvVar{Name: "LLM_MODEL_VERTEX_ID", Value: vertexID})
+								log.Printf("Resolved Vertex ID for model %q: %s", model, vertexID)
+							}
+						} else {
+							log.Printf("WARNING: failed to load model manifest for Vertex ID resolution: %v", err)
+						}
+					}
+
 					// Platform-wide Langfuse observability configuration
 					// Uses secretKeyRef to prevent credential exposure in pod specs
 					// Secret is copied to session namespace from operator namespace
@@ -978,11 +993,10 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 							corev1.EnvVar{Name: "CLOUD_ML_REGION", Value: os.Getenv("CLOUD_ML_REGION")},
 							corev1.EnvVar{Name: "ANTHROPIC_VERTEX_PROJECT_ID", Value: os.Getenv("ANTHROPIC_VERTEX_PROJECT_ID")},
 							corev1.EnvVar{Name: "GOOGLE_APPLICATION_CREDENTIALS", Value: os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")},
-							// Prevent the Claude Code CLI from trying to reach the GCE metadata
-							// server (169.254.169.254) in non-GCP environments. This must be a
-							// non-functional domain instead of just a random string like "disabled".
-							corev1.EnvVar{Name: "GCE_METADATA_HOST", Value: "metadata.invalid"},
-							corev1.EnvVar{Name: "GCE_METADATA_TIMEOUT", Value: "1"},
+							// Prevent the Claude Code CLI from hanging on the GCE metadata server
+							// in non-GCE environments (e.g., kind, on-prem). The CLI tries to reach
+							// 169.254.169.254 for auth and blocks indefinitely if unreachable.
+							corev1.EnvVar{Name: "GCE_METADATA_HOST", Value: "disabled"},
 						)
 					} else {
 						// Explicitly set to 0 when Vertex is disabled

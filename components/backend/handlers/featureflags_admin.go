@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -74,7 +75,7 @@ type unleashFeature struct {
 	Environments []unleashEnvironment `json:"environments"`
 }
 
-// unleashEnvironment represents an environment in Unleash
+// unleashEnvironment represents an environment in the Unleash list response
 type unleashEnvironment struct {
 	Name    string `json:"name"`
 	Enabled bool   `json:"enabled"`
@@ -83,6 +84,12 @@ type unleashEnvironment struct {
 // OverrideRequest represents a request to set a feature flag override
 type OverrideRequest struct {
 	Enabled bool `json:"enabled"`
+}
+
+// sanitizeParam strips newlines and carriage returns from user-controlled URL
+// params to prevent log injection attacks.
+func sanitizeParam(s string) string {
+	return strings.ReplaceAll(strings.ReplaceAll(s, "\n", ""), "\r", "")
 }
 
 // getWorkspaceOverrides reads the feature-flag-overrides ConfigMap for a namespace
@@ -156,7 +163,7 @@ func getWorkspaceTagValue() string {
 // Lists all feature flags from Unleash with workspace override status
 func ListFeatureFlags(c *gin.Context) {
 	ctx := context.Background()
-	namespace := c.Param("projectName")
+	namespace := sanitizeParam(c.Param("projectName"))
 
 	// Verify user has project access first (uses user token)
 	reqK8s, _ := GetK8sClientsForRequest(c)
@@ -199,7 +206,7 @@ func ListFeatureFlags(c *gin.Context) {
 
 	url := fmt.Sprintf("%s/api/admin/projects/%s/features",
 		strings.TrimSuffix(getUnleashAdminURL(), "/"),
-		getUnleashProject())
+		url.PathEscape(getUnleashProject()))
 
 	resp, err := unleashAdminRequest("GET", url, nil)
 	if err != nil {
@@ -230,18 +237,16 @@ func ListFeatureFlags(c *gin.Context) {
 		return
 	}
 
-	// Transform to our format with workspace override status
-	// Only include flags that are workspace-configurable (have the required tag)
+	// Transform to our format with workspace override status.
+	// Only include flags that are workspace-configurable (have the required tag).
 	targetEnv := getUnleashEnv()
-	features := make([]FeatureToggle, 0, len(unleashResp.Features))
+
+	var features []FeatureToggle
 	for _, f := range unleashResp.Features {
-		// Filter: Only show flags with workspace-configurable tag
-		// Platform-only flags (without tag) are hidden from workspace admin UI
 		if !isWorkspaceConfigurable(f.Tags) {
 			continue
 		}
 
-		// Determine Unleash enabled state in target environment
 		unleashEnabled := false
 		envStates := make([]EnvState, 0, len(f.Environments))
 		for _, env := range f.Environments {
@@ -287,8 +292,8 @@ func ListFeatureFlags(c *gin.Context) {
 // 2. Fall back to Unleash default
 func EvaluateFeatureFlag(c *gin.Context) {
 	ctx := context.Background()
-	namespace := c.Param("projectName")
-	flagName := c.Param("flagName")
+	namespace := sanitizeParam(c.Param("projectName"))
+	flagName := sanitizeParam(c.Param("flagName"))
 
 	// Verify user has project access first
 	reqK8s, _ := GetK8sClientsForRequest(c)
@@ -344,7 +349,7 @@ func GetFeatureFlag(c *gin.Context) {
 		return
 	}
 
-	flagName := c.Param("flagName")
+	flagName := sanitizeParam(c.Param("flagName"))
 	if flagName == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Flag name is required"})
 		return
@@ -361,8 +366,8 @@ func GetFeatureFlag(c *gin.Context) {
 
 	url := fmt.Sprintf("%s/api/admin/projects/%s/features/%s",
 		strings.TrimSuffix(getUnleashAdminURL(), "/"),
-		getUnleashProject(),
-		flagName)
+		url.PathEscape(getUnleashProject()),
+		url.PathEscape(flagName))
 
 	resp, err := unleashAdminRequest("GET", url, nil)
 	if err != nil {
@@ -392,14 +397,14 @@ func GetFeatureFlag(c *gin.Context) {
 	c.Data(resp.StatusCode, "application/json", body)
 }
 
-// SetFeatureFlagOverride handles PUT /api/projects/:projectName/feature-flags/:flagName/override
-// Sets a workspace-scoped override for a feature flag
-func SetFeatureFlagOverride(c *gin.Context) {
+// setFlagOverride is the shared implementation for setting a feature flag override value.
+// It handles auth, RBAC check, ConfigMap creation if needed, and the write.
+// responseMsg is the message returned in the JSON response (e.g. "Override set", "Feature enabled").
+func setFlagOverride(c *gin.Context, value string, responseMsg string) {
 	ctx := context.Background()
-	namespace := c.Param("projectName")
-	flagName := c.Param("flagName")
+	namespace := sanitizeParam(c.Param("projectName"))
+	flagName := sanitizeParam(c.Param("flagName"))
 
-	// Step 1: Get user-scoped clients for validation
 	reqK8s, _ := GetK8sClientsForRequest(c)
 	if reqK8s == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User token required"})
@@ -412,22 +417,16 @@ func SetFeatureFlagOverride(c *gin.Context) {
 		return
 	}
 
-	var req OverrideRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
-		return
-	}
-
-	// Step 2: Check if ConfigMap exists to determine required verb
+	// Check if ConfigMap exists to determine required verb
 	cm, err := reqK8s.CoreV1().ConfigMaps(namespace).Get(ctx, FeatureFlagOverridesConfigMap, metav1.GetOptions{})
 	configMapExists := !errors.IsNotFound(err)
 	if err != nil && !errors.IsNotFound(err) {
 		log.Printf("Failed to get feature flag overrides ConfigMap in %s: %v", namespace, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get overrides"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to set feature flag override"})
 		return
 	}
 
-	// Step 3: Check user has permission to create/update ConfigMaps in namespace
+	// Check user has permission to create/update ConfigMaps in namespace
 	verb := "update"
 	if !configMapExists {
 		verb = "create"
@@ -443,10 +442,9 @@ func SetFeatureFlagOverride(c *gin.Context) {
 		return
 	}
 
-	// Step 4: NOW use service account for the write (after validation)
+	// Use service account for the write (after validation)
 	if !configMapExists {
-		// Create new ConfigMap
-		cm = &corev1.ConfigMap{
+		newCM := &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      FeatureFlagOverridesConfigMap,
 				Namespace: namespace,
@@ -457,44 +455,58 @@ func SetFeatureFlagOverride(c *gin.Context) {
 			},
 			Data: map[string]string{},
 		}
-		cm, err = K8sClient.CoreV1().ConfigMaps(namespace).Create(ctx, cm, metav1.CreateOptions{})
+		cm, err = K8sClient.CoreV1().ConfigMaps(namespace).Create(ctx, newCM, metav1.CreateOptions{})
+		if errors.IsAlreadyExists(err) {
+			// Another concurrent request created the ConfigMap; fetch it and proceed to update.
+			cm, err = K8sClient.CoreV1().ConfigMaps(namespace).Get(ctx, FeatureFlagOverridesConfigMap, metav1.GetOptions{})
+		}
 		if err != nil {
 			log.Printf("Failed to create feature flag overrides ConfigMap in %s: %v", namespace, err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create override"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to set feature flag override"})
 			return
 		}
 	}
 
-	// Set override
 	if cm.Data == nil {
 		cm.Data = map[string]string{}
 	}
-	cm.Data[flagName] = strconv.FormatBool(req.Enabled)
+	cm.Data[flagName] = value
 
 	_, err = K8sClient.CoreV1().ConfigMaps(namespace).Update(ctx, cm, metav1.UpdateOptions{})
 	if err != nil {
 		log.Printf("Failed to update feature flag overrides ConfigMap in %s: %v", namespace, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to set override"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to set feature flag override"})
 		return
 	}
 
-	log.Printf("Feature flag override set: %s=%v in workspace %s", flagName, req.Enabled, namespace)
+	enabled := value == "true"
+	log.Printf("Feature flag override: %s=%s in workspace %s", flagName, value, namespace)
 	c.JSON(http.StatusOK, gin.H{
-		"message": "Override set",
+		"message": responseMsg,
 		"flag":    flagName,
-		"enabled": req.Enabled,
+		"enabled": enabled,
 		"source":  "workspace-override",
 	})
+}
+
+// SetFeatureFlagOverride handles PUT /api/projects/:projectName/feature-flags/:flagName/override
+// Sets a workspace-scoped override for a feature flag
+func SetFeatureFlagOverride(c *gin.Context) {
+	var req OverrideRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+	setFlagOverride(c, strconv.FormatBool(req.Enabled), "Override set")
 }
 
 // DeleteFeatureFlagOverride handles DELETE /api/projects/:projectName/feature-flags/:flagName/override
 // Removes a workspace-scoped override, reverting to Unleash default
 func DeleteFeatureFlagOverride(c *gin.Context) {
 	ctx := context.Background()
-	namespace := c.Param("projectName")
-	flagName := c.Param("flagName")
+	namespace := sanitizeParam(c.Param("projectName"))
+	flagName := sanitizeParam(c.Param("flagName"))
 
-	// Step 1: Get user-scoped clients for validation
 	reqK8s, _ := GetK8sClientsForRequest(c)
 	if reqK8s == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User token required"})
@@ -507,10 +519,8 @@ func DeleteFeatureFlagOverride(c *gin.Context) {
 		return
 	}
 
-	// Step 2: Get ConfigMap using user-scoped client
 	cm, err := reqK8s.CoreV1().ConfigMaps(namespace).Get(ctx, FeatureFlagOverridesConfigMap, metav1.GetOptions{})
 	if errors.IsNotFound(err) {
-		// No overrides exist, nothing to delete
 		c.JSON(http.StatusOK, gin.H{
 			"message": "No override to remove",
 			"flag":    flagName,
@@ -523,7 +533,6 @@ func DeleteFeatureFlagOverride(c *gin.Context) {
 		return
 	}
 
-	// Step 3: Check user has permission to update ConfigMaps in namespace
 	allowed, err := checkConfigMapPermission(ctx, reqK8s, namespace, "update")
 	if err != nil {
 		log.Printf("Failed to check ConfigMap permissions in %s: %v", namespace, err)
@@ -535,7 +544,6 @@ func DeleteFeatureFlagOverride(c *gin.Context) {
 		return
 	}
 
-	// Step 4: Remove override using service account (after validation)
 	if cm.Data != nil {
 		delete(cm.Data, flagName)
 	}
@@ -558,179 +566,13 @@ func DeleteFeatureFlagOverride(c *gin.Context) {
 // EnableFeatureFlag handles POST /api/projects/:projectName/feature-flags/:flagName/enable
 // Sets a workspace override to enable the feature flag
 func EnableFeatureFlag(c *gin.Context) {
-	ctx := context.Background()
-	namespace := c.Param("projectName")
-	flagName := c.Param("flagName")
-
-	// Step 1: Get user-scoped clients for validation
-	reqK8s, _ := GetK8sClientsForRequest(c)
-	if reqK8s == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "User token required"})
-		c.Abort()
-		return
-	}
-
-	if flagName == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Flag name is required"})
-		return
-	}
-
-	// Step 2: Check if ConfigMap exists to determine required verb
-	cm, err := reqK8s.CoreV1().ConfigMaps(namespace).Get(ctx, FeatureFlagOverridesConfigMap, metav1.GetOptions{})
-	configMapExists := !errors.IsNotFound(err)
-	if err != nil && !errors.IsNotFound(err) {
-		log.Printf("Failed to get feature flag overrides ConfigMap in %s: %v", namespace, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to enable feature"})
-		return
-	}
-
-	// Step 3: Check user has permission to create/update ConfigMaps in namespace
-	verb := "update"
-	if !configMapExists {
-		verb = "create"
-	}
-	allowed, err := checkConfigMapPermission(ctx, reqK8s, namespace, verb)
-	if err != nil {
-		log.Printf("Failed to check ConfigMap permissions in %s: %v", namespace, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check permissions"})
-		return
-	}
-	if !allowed {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Unauthorized to modify feature flags"})
-		return
-	}
-
-	// Step 4: NOW use service account for the write (after validation)
-	if !configMapExists {
-		// Create new ConfigMap
-		cm = &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      FeatureFlagOverridesConfigMap,
-				Namespace: namespace,
-				Labels: map[string]string{
-					"app.kubernetes.io/managed-by": "ambient-code",
-					"app.kubernetes.io/component":  "feature-flags",
-				},
-			},
-			Data: map[string]string{},
-		}
-		cm, err = K8sClient.CoreV1().ConfigMaps(namespace).Create(ctx, cm, metav1.CreateOptions{})
-		if err != nil {
-			log.Printf("Failed to create feature flag overrides ConfigMap in %s: %v", namespace, err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to enable feature"})
-			return
-		}
-	}
-
-	// Set override to true
-	if cm.Data == nil {
-		cm.Data = map[string]string{}
-	}
-	cm.Data[flagName] = "true"
-
-	_, err = K8sClient.CoreV1().ConfigMaps(namespace).Update(ctx, cm, metav1.UpdateOptions{})
-	if err != nil {
-		log.Printf("Failed to update feature flag overrides ConfigMap in %s: %v", namespace, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to enable feature"})
-		return
-	}
-
-	log.Printf("Feature flag enabled: %s in workspace %s", flagName, namespace)
-	c.JSON(http.StatusOK, gin.H{
-		"message": "Feature enabled",
-		"flag":    flagName,
-		"enabled": true,
-		"source":  "workspace-override",
-	})
+	setFlagOverride(c, "true", "Feature enabled")
 }
 
 // DisableFeatureFlag handles POST /api/projects/:projectName/feature-flags/:flagName/disable
 // Sets a workspace override to disable the feature flag
 func DisableFeatureFlag(c *gin.Context) {
-	ctx := context.Background()
-	namespace := c.Param("projectName")
-	flagName := c.Param("flagName")
-
-	// Step 1: Get user-scoped clients for validation
-	reqK8s, _ := GetK8sClientsForRequest(c)
-	if reqK8s == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "User token required"})
-		c.Abort()
-		return
-	}
-
-	if flagName == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Flag name is required"})
-		return
-	}
-
-	// Step 2: Check if ConfigMap exists to determine required verb
-	cm, err := reqK8s.CoreV1().ConfigMaps(namespace).Get(ctx, FeatureFlagOverridesConfigMap, metav1.GetOptions{})
-	configMapExists := !errors.IsNotFound(err)
-	if err != nil && !errors.IsNotFound(err) {
-		log.Printf("Failed to get feature flag overrides ConfigMap in %s: %v", namespace, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to disable feature"})
-		return
-	}
-
-	// Step 3: Check user has permission to create/update ConfigMaps in namespace
-	verb := "update"
-	if !configMapExists {
-		verb = "create"
-	}
-	allowed, err := checkConfigMapPermission(ctx, reqK8s, namespace, verb)
-	if err != nil {
-		log.Printf("Failed to check ConfigMap permissions in %s: %v", namespace, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check permissions"})
-		return
-	}
-	if !allowed {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Unauthorized to modify feature flags"})
-		return
-	}
-
-	// Step 4: NOW use service account for the write (after validation)
-	if !configMapExists {
-		// Create new ConfigMap
-		cm = &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      FeatureFlagOverridesConfigMap,
-				Namespace: namespace,
-				Labels: map[string]string{
-					"app.kubernetes.io/managed-by": "ambient-code",
-					"app.kubernetes.io/component":  "feature-flags",
-				},
-			},
-			Data: map[string]string{},
-		}
-		cm, err = K8sClient.CoreV1().ConfigMaps(namespace).Create(ctx, cm, metav1.CreateOptions{})
-		if err != nil {
-			log.Printf("Failed to create feature flag overrides ConfigMap in %s: %v", namespace, err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to disable feature"})
-			return
-		}
-	}
-
-	// Set override to false
-	if cm.Data == nil {
-		cm.Data = map[string]string{}
-	}
-	cm.Data[flagName] = "false"
-
-	_, err = K8sClient.CoreV1().ConfigMaps(namespace).Update(ctx, cm, metav1.UpdateOptions{})
-	if err != nil {
-		log.Printf("Failed to update feature flag overrides ConfigMap in %s: %v", namespace, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to disable feature"})
-		return
-	}
-
-	log.Printf("Feature flag disabled: %s in workspace %s", flagName, namespace)
-	c.JSON(http.StatusOK, gin.H{
-		"message": "Feature disabled",
-		"flag":    flagName,
-		"enabled": false,
-		"source":  "workspace-override",
-	})
+	setFlagOverride(c, "false", "Feature disabled")
 }
 
 // unleashAdminRequest makes an authenticated request to the Unleash Admin API
