@@ -8,9 +8,9 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/ambient/platform/components/ambient-api-server/pkg/api"
-	localgrpc "github.com/ambient/platform/components/ambient-api-server/pkg/api/grpc"
-	pb "github.com/ambient/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1"
+	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api"
+	localgrpc "github.com/ambient-code/platform/components/ambient-api-server/pkg/api/grpc"
+	pb "github.com/ambient-code/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1"
 	"github.com/openshift-online/rh-trex-ai/pkg/server"
 	"github.com/openshift-online/rh-trex-ai/pkg/server/grpcutil"
 	"github.com/openshift-online/rh-trex-ai/pkg/services"

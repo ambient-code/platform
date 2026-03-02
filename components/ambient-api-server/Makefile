@@ -6,7 +6,7 @@ git_sha:=$(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 git_dirty:=$(shell git diff --quiet 2>/dev/null || echo "-modified")
 build_version:=$(git_sha)$(git_dirty)
 build_time:=$(shell date -u '+%Y-%m-%d %H:%M:%S UTC')
-ldflags=-X github.com/ambient/platform/components/ambient-api-server/pkg/api.Version=$(build_version) -X 'github.com/ambient/platform/components/ambient-api-server/pkg/api.BuildTime=$(build_time)'
+ldflags=-X github.com/ambient-code/platform/components/ambient-api-server/pkg/api.Version=$(build_version) -X 'github.com/ambient-code/platform/components/ambient-api-server/pkg/api.BuildTime=$(build_time)'
 
 .PHONY: binary
 binary:

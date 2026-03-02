@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	pb "github.com/ambient/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1"
-	openapi "github.com/ambient/platform/components/ambient-api-server/pkg/api/openapi"
+	pb "github.com/ambient-code/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1"
+	openapi "github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )

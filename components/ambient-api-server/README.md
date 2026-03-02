@@ -35,7 +35,7 @@ To create your first Kind:
 
 ```bash
 # Generate a HelloWorld Kind with a Message attribute
-go run ./scripts/generator.go --kind HelloWorld --fields "message:string:required" --project "ambient-api-server" --repo "github.com/ambient/platform/components"
+go run ./scripts/generator.go --kind HelloWorld --fields "message:string:required" --project "ambient-api-server" --repo "github.com/ambient-code/platform/components"
 
 ```
 
