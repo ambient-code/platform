@@ -1,0 +1,2 @@
+Placeholder for notification icon (192x192px)
+In production, replace this with an actual PNG image.

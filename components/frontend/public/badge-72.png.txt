@@ -1,0 +1,2 @@
+Placeholder for notification badge (72x72px)
+In production, replace this with an actual PNG image.
