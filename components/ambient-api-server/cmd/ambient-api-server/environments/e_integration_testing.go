@@ -54,7 +54,6 @@ func (e *IntegrationTestingEnvImpl) Flags() map[string]string {
 		"enable-authz":                    "true",
 		"debug":                           "false",
 		"enable-mock":                     "true",
-		"enable-sentry":                   "false",
 		"api-server-bindaddress":          "localhost:0",
 		"metrics-server-bindaddress":      "localhost:0",
 		"health-check-server-bindaddress": "localhost:0",

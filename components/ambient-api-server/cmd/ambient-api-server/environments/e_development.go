@@ -46,7 +46,6 @@ func (e *DevEnvImpl) Flags() map[string]string {
 		"enable-metrics-https":   "false",
 		"api-server-hostname":    "localhost",
 		"api-server-bindaddress": "localhost:8000",
-		"enable-sentry":          "false",
 		"cors-allowed-origins":   "http://localhost:3000,http://localhost:8080",
 	}
 }
