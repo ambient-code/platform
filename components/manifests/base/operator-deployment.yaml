@@ -122,6 +122,11 @@ spec:
           value: "production"
         - name: VERSION
           value: "latest"  # Override with actual version in production
+        volumeMounts:
+        # Model manifest (mounted ConfigMap — kubelet auto-syncs changes)
+        - name: model-manifest
+          mountPath: /config
+          readOnly: true
         resources:
           requests:
             cpu: 50m
@@ -141,4 +146,10 @@ spec:
             port: health
           initialDelaySeconds: 5
           periodSeconds: 10
+      volumes:
+      # Model manifest ConfigMap (single source of truth for available models)
+      - name: model-manifest
+        configMap:
+          name: ambient-models
+          optional: true  # Don't fail if ConfigMap not yet created
       restartPolicy: Always

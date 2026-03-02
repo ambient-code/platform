@@ -21,6 +21,14 @@ resources:
 - ambient-api-server-service.yml
 - unleash-deployment.yaml
 
+# Model manifest ConfigMap (single source of truth for available models)
+configMapGenerator:
+- name: ambient-models
+  files:
+  - models.json
+  options:
+    disableNameSuffixHash: true
+
 # Default images (can be overridden by overlays)
 images:
 - name: quay.io/ambient_code/vteam_backend

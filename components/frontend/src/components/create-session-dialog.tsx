@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -35,10 +35,13 @@ import {
 import type { CreateAgenticSessionRequest } from "@/types/agentic-session";
 import { useCreateSession } from "@/services/queries/use-sessions";
 import { useIntegrationsStatus } from "@/services/queries/use-integrations";
+import { useModels } from "@/services/queries/use-models";
 import { errorToast } from "@/hooks/use-toast";
 
-const models = [
+// Keep in sync with components/manifests/base/models.json (available: true entries).
+const fallbackModels = [
   { value: "claude-sonnet-4-5", label: "Claude Sonnet 4.5" },
+  { value: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
   { value: "claude-opus-4-6", label: "Claude Opus 4.6" },
   { value: "claude-opus-4-5", label: "Claude Opus 4.5" },
   { value: "claude-haiku-4-5", label: "Claude Haiku 4.5" },
@@ -69,7 +72,13 @@ export function CreateSessionDialog({
   const router = useRouter();
   const createSessionMutation = useCreateSession();
 
+  const { data: modelsData, isLoading: modelsLoading } = useModels(projectName, open);
   const { data: integrationsStatus } = useIntegrationsStatus();
+
+  const models = modelsData
+    ? modelsData.models.map((m) => ({ value: m.id, label: m.label }))
+    : fallbackModels;
+  const defaultModel = modelsData?.defaultModel ?? "claude-sonnet-4-5";
 
   const githubConfigured = integrationsStatus?.github?.active != null;
   const gitlabConfigured = integrationsStatus?.gitlab?.connected ?? false;
@@ -80,12 +89,18 @@ export function CreateSessionDialog({
     resolver: zodResolver(formSchema),
     defaultValues: {
       displayName: "",
-      model: "claude-sonnet-4-5",
+      model: defaultModel,
       temperature: 0.7,
       maxTokens: 4000,
       timeout: 300,
     },
   });
+
+  useEffect(() => {
+    if (modelsData?.defaultModel && !form.formState.dirtyFields.model) {
+      form.setValue("model", modelsData.defaultModel, { shouldDirty: false });
+    }
+  }, [modelsData?.defaultModel, form]);
 
   const onSubmit = async (values: FormValues) => {
     if (!projectName) return;
@@ -172,10 +187,16 @@ export function CreateSessionDialog({
                 render={({ field }) => (
                   <FormItem className="w-full">
                     <FormLabel>Model</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select
+                      onValueChange={field.onChange}
+                      value={field.value}
+                      disabled={modelsLoading}
+                    >
                       <FormControl>
                         <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Select a model" />
+                          <SelectValue
+                            placeholder={modelsLoading ? "Loading models..." : "Select a model"}
+                          />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
