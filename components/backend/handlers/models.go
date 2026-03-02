@@ -53,7 +53,7 @@ func ListModelsForProject(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	namespace := c.Param("projectName")
+	namespace := sanitizeParam(c.Param("projectName"))
 
 	manifest, err := LoadManifest(ManifestPath())
 	if err != nil {
