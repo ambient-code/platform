@@ -725,12 +725,42 @@ unleash-status: check-kubectl ## Show Unleash deployment status
 ##@ Internal Helpers (do not call directly)
 
 check-minikube: ## Check if minikube is installed
-	@command -v minikube >/dev/null 2>&1 || \
-		(echo "$(COLOR_RED)✗$(COLOR_RESET) minikube not found. Install: https://minikube.sigs.k8s.io/docs/start/" && exit 1)
+	@if ! command -v minikube >/dev/null 2>&1; then \
+		echo "$(COLOR_RED)✗$(COLOR_RESET) minikube not found"; \
+		echo ""; \
+		echo "$(COLOR_BOLD)Options:$(COLOR_RESET)"; \
+		echo "  1. $(COLOR_GREEN)Install minikube$(COLOR_RESET) (full-featured local development)"; \
+		echo "     Install: https://minikube.sigs.k8s.io/docs/start/"; \
+		echo ""; \
+		echo "  2. $(COLOR_GREEN)Use kind instead$(COLOR_RESET) (lightweight, faster startup)"; \
+		if command -v kind >/dev/null 2>&1; then \
+			echo "     Run: $(COLOR_BLUE)make kind-up$(COLOR_RESET) (kind detected)"; \
+		else \
+			echo "     Install kind: https://kind.sigs.k8s.io/docs/user/quick-start/"; \
+			echo "     Then run: $(COLOR_BLUE)make kind-up$(COLOR_RESET)"; \
+		fi; \
+		echo ""; \
+		exit 1; \
+	fi
 
 check-kind: ## Check if kind is installed
-	@command -v kind >/dev/null 2>&1 || \
-		(echo "$(COLOR_RED)✗$(COLOR_RESET) kind not found. Install: https://kind.sigs.k8s.io/docs/user/quick-start/" && exit 1)
+	@if ! command -v kind >/dev/null 2>&1; then \
+		echo "$(COLOR_RED)✗$(COLOR_RESET) kind not found"; \
+		echo ""; \
+		echo "$(COLOR_BOLD)Options:$(COLOR_RESET)"; \
+		echo "  1. $(COLOR_GREEN)Install kind$(COLOR_RESET) (lightweight, recommended for CI/testing)"; \
+		echo "     Install: https://kind.sigs.k8s.io/docs/user/quick-start/"; \
+		echo ""; \
+		echo "  2. $(COLOR_GREEN)Use minikube instead$(COLOR_RESET) (full-featured local development)"; \
+		if command -v minikube >/dev/null 2>&1; then \
+			echo "     Run: $(COLOR_BLUE)make local-up$(COLOR_RESET) (minikube detected)"; \
+		else \
+			echo "     Install minikube: https://minikube.sigs.k8s.io/docs/start/"; \
+			echo "     Then run: $(COLOR_BLUE)make local-up$(COLOR_RESET)"; \
+		fi; \
+		echo ""; \
+		exit 1; \
+	fi
 
 check-kubectl: ## Check if kubectl is installed
 	@command -v kubectl >/dev/null 2>&1 || \
