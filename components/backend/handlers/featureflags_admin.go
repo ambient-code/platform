@@ -162,7 +162,7 @@ func getWorkspaceTagValue() string {
 // ListFeatureFlags handles GET /api/projects/:projectName/feature-flags
 // Lists all feature flags from Unleash with workspace override status
 func ListFeatureFlags(c *gin.Context) {
-	ctx := context.Background()
+	ctx := c.Request.Context()
 	namespace := sanitizeParam(c.Param("projectName"))
 
 	// Verify user has project access first (uses user token)
@@ -291,7 +291,7 @@ func ListFeatureFlags(c *gin.Context) {
 // 1. Check ConfigMap override - if set, return that value
 // 2. Fall back to Unleash default
 func EvaluateFeatureFlag(c *gin.Context) {
-	ctx := context.Background()
+	ctx := c.Request.Context()
 	namespace := sanitizeParam(c.Param("projectName"))
 	flagName := sanitizeParam(c.Param("flagName"))
 
@@ -401,7 +401,7 @@ func GetFeatureFlag(c *gin.Context) {
 // It handles auth, RBAC check, ConfigMap creation if needed, and the write.
 // responseMsg is the message returned in the JSON response (e.g. "Override set", "Feature enabled").
 func setFlagOverride(c *gin.Context, value string, responseMsg string) {
-	ctx := context.Background()
+	ctx := c.Request.Context()
 	namespace := sanitizeParam(c.Param("projectName"))
 	flagName := sanitizeParam(c.Param("flagName"))
 
@@ -503,7 +503,7 @@ func SetFeatureFlagOverride(c *gin.Context) {
 // DeleteFeatureFlagOverride handles DELETE /api/projects/:projectName/feature-flags/:flagName/override
 // Removes a workspace-scoped override, reverting to Unleash default
 func DeleteFeatureFlagOverride(c *gin.Context) {
-	ctx := context.Background()
+	ctx := c.Request.Context()
 	namespace := sanitizeParam(c.Param("projectName"))
 	flagName := sanitizeParam(c.Param("flagName"))
 
