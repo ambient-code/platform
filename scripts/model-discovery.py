@@ -60,7 +60,10 @@ def get_access_token() -> str:
             capture_output=True,
             text=True,
             check=True,
+            timeout=30,
         )
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("Timed out getting GCP access token via gcloud")
     except subprocess.CalledProcessError:
         raise RuntimeError("Failed to get GCP access token via gcloud")
     return result.stdout.strip()
