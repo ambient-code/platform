@@ -9,11 +9,12 @@
 name: Amber Automatic Code Review
 
 on:
-  pull_request_target:
+  pull_request:
     types: [opened, synchronize]
 
 jobs:
   amber-review:
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -30,11 +31,9 @@ jobs:
           fetch-depth: 1
           path: base-ref
 
-      - name: Checkout PR head
+      - name: Checkout PR code
         uses: actions/checkout@v6
         with:
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-          ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 0
 
       - name: Determine command file path (security)
