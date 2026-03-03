@@ -10,7 +10,7 @@ import (
 
 const (
 	// DefaultManifestPath is where the ambient-models ConfigMap is mounted.
-	DefaultManifestPath = "/config/models.json"
+	DefaultManifestPath = "/config/models/models.json"
 )
 
 // ManifestPath returns the filesystem path to the models manifest.

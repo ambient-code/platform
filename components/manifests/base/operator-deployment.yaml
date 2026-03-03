@@ -125,7 +125,7 @@ spec:
         volumeMounts:
         # Model manifest (mounted ConfigMap — kubelet auto-syncs changes)
         - name: model-manifest
-          mountPath: /config
+          mountPath: /config/models
           readOnly: true
         resources:
           requests:

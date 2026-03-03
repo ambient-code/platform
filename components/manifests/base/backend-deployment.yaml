@@ -194,7 +194,11 @@ spec:
           readOnly: true
         # Model manifest (mounted ConfigMap — kubelet auto-syncs changes)
         - name: model-manifest
-          mountPath: /config
+          mountPath: /config/models
+          readOnly: true
+        # Feature flags config (optional — kubelet auto-syncs changes)
+        - name: flags-config
+          mountPath: /config/flags
           readOnly: true
       volumes:
       - name: backend-state
@@ -212,6 +216,11 @@ spec:
         configMap:
           name: ambient-models
           optional: true  # Don't fail if ConfigMap not yet created
+      # Feature flags config (generic flags synced to Unleash on startup)
+      - name: flags-config
+        configMap:
+          name: ambient-flags
+          optional: true  # Don't fail if no generic flags defined
 
 ---
 apiVersion: v1

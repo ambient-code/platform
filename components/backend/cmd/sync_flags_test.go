@@ -61,97 +61,9 @@ func TestParseManifestPath(t *testing.T) {
 	}
 }
 
-func TestSyncModelFlags_SkipsWhenEnvNotSet(t *testing.T) {
-	// Ensure env vars are not set
-	t.Setenv("UNLEASH_ADMIN_URL", "")
-	t.Setenv("UNLEASH_ADMIN_TOKEN", "")
+// --- FlagsFromManifest ---
 
-	manifest := &types.ModelManifest{
-		DefaultModel: "claude-sonnet-4-5",
-		Models: []types.ModelEntry{
-			{ID: "claude-sonnet-4-5", Label: "Sonnet 4.5", Available: true},
-			{ID: "claude-opus-4-6", Label: "Opus 4.6", Available: true},
-		},
-	}
-
-	err := SyncModelFlags(context.Background(), manifest)
-	if err != nil {
-		t.Errorf("expected nil error when env not set, got: %v", err)
-	}
-}
-
-func TestSyncModelFlags_ExcludesDefaultModel(t *testing.T) {
-	var flagChecks []string
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Tag type check
-		if strings.Contains(r.URL.Path, "/tag-types/") {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-		// Feature existence check
-		if r.Method == "GET" && strings.Contains(r.URL.Path, "/features/") {
-			parts := strings.Split(r.URL.Path, "/features/")
-			if len(parts) > 1 {
-				flagChecks = append(flagChecks, parts[1])
-			}
-			w.WriteHeader(http.StatusOK) // flag already exists
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer server.Close()
-
-	t.Setenv("UNLEASH_ADMIN_URL", server.URL)
-	t.Setenv("UNLEASH_ADMIN_TOKEN", "test-token")
-	t.Setenv("UNLEASH_PROJECT", "default")
-
-	manifest := &types.ModelManifest{
-		DefaultModel: "claude-sonnet-4-5",
-		Models: []types.ModelEntry{
-			{ID: "claude-sonnet-4-5", Label: "Sonnet 4.5", Available: true},
-			{ID: "claude-opus-4-6", Label: "Opus 4.6", Available: true},
-		},
-	}
-
-	err := SyncModelFlags(context.Background(), manifest)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	// Only opus should have been checked — sonnet is the default
-	if len(flagChecks) != 1 {
-		t.Fatalf("expected 1 flag check, got %d: %v", len(flagChecks), flagChecks)
-	}
-	if flagChecks[0] != "model.claude-opus-4-6.enabled" {
-		t.Errorf("expected flag check for model.claude-opus-4-6.enabled, got %s", flagChecks[0])
-	}
-}
-
-func TestSyncModelFlags_ExcludesUnavailableModels(t *testing.T) {
-	var flagChecks []string
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.Contains(r.URL.Path, "/tag-types/") {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-		if r.Method == "GET" && strings.Contains(r.URL.Path, "/features/") {
-			parts := strings.Split(r.URL.Path, "/features/")
-			if len(parts) > 1 {
-				flagChecks = append(flagChecks, parts[1])
-			}
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer server.Close()
-
-	t.Setenv("UNLEASH_ADMIN_URL", server.URL)
-	t.Setenv("UNLEASH_ADMIN_TOKEN", "test-token")
-	t.Setenv("UNLEASH_PROJECT", "default")
-
+func TestFlagsFromManifest_SkipsDefaultAndUnavailable(t *testing.T) {
 	manifest := &types.ModelManifest{
 		DefaultModel: "claude-sonnet-4-5",
 		Models: []types.ModelEntry{
@@ -161,21 +73,93 @@ func TestSyncModelFlags_ExcludesUnavailableModels(t *testing.T) {
 		},
 	}
 
-	err := SyncModelFlags(context.Background(), manifest)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	flags := FlagsFromManifest(manifest)
+	if len(flags) != 1 {
+		t.Fatalf("expected 1 flag, got %d: %v", len(flags), flags)
 	}
-
-	// Only opus-4-6 should be checked (sonnet is default, opus-4-1 is unavailable)
-	if len(flagChecks) != 1 {
-		t.Fatalf("expected 1 flag check, got %d: %v", len(flagChecks), flagChecks)
+	if flags[0].Name != "model.claude-opus-4-6.enabled" {
+		t.Errorf("expected model.claude-opus-4-6.enabled, got %s", flags[0].Name)
 	}
-	if flagChecks[0] != "model.claude-opus-4-6.enabled" {
-		t.Errorf("expected flag check for model.claude-opus-4-6.enabled, got %s", flagChecks[0])
+	if len(flags[0].Tags) != 1 || flags[0].Tags[0].Type != "scope" || flags[0].Tags[0].Value != "workspace" {
+		t.Errorf("expected scope:workspace tag, got %v", flags[0].Tags)
 	}
 }
 
-func TestSyncModelFlags_CreatesNewFlag(t *testing.T) {
+func TestFlagsFromManifest_EmptyManifest(t *testing.T) {
+	manifest := &types.ModelManifest{DefaultModel: "x", Models: nil}
+	flags := FlagsFromManifest(manifest)
+	if len(flags) != 0 {
+		t.Errorf("expected 0 flags, got %d", len(flags))
+	}
+}
+
+// --- FlagsFromConfig ---
+
+func TestFlagsFromConfig_LoadsValidFile(t *testing.T) {
+	config := FlagsConfig{
+		Flags: []FlagSpec{
+			{Name: "framework.langgraph.enabled", Description: "Enable LangGraph"},
+			{Name: "feature.dark-mode", Description: "Dark mode", Tags: []FlagTag{{Type: "scope", Value: "workspace"}}},
+		},
+	}
+	data, _ := json.Marshal(config)
+
+	path := filepath.Join(t.TempDir(), "flags.json")
+	os.WriteFile(path, data, 0644)
+
+	flags, err := FlagsFromConfig(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(flags) != 2 {
+		t.Fatalf("expected 2 flags, got %d", len(flags))
+	}
+	if flags[0].Name != "framework.langgraph.enabled" {
+		t.Errorf("expected framework.langgraph.enabled, got %s", flags[0].Name)
+	}
+}
+
+func TestFlagsFromConfig_MissingFileReturnsNil(t *testing.T) {
+	flags, err := FlagsFromConfig("/nonexistent/flags.json")
+	if err != nil {
+		t.Fatalf("missing file should not error, got: %v", err)
+	}
+	if flags != nil {
+		t.Errorf("expected nil, got %v", flags)
+	}
+}
+
+func TestFlagsFromConfig_InvalidJSON(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "flags.json")
+	os.WriteFile(path, []byte("{bad"), 0644)
+
+	_, err := FlagsFromConfig(path)
+	if err == nil {
+		t.Error("expected error for invalid JSON")
+	}
+}
+
+// --- SyncFlags ---
+
+func TestSyncFlags_SkipsWhenEnvNotSet(t *testing.T) {
+	t.Setenv("UNLEASH_ADMIN_URL", "")
+	t.Setenv("UNLEASH_ADMIN_TOKEN", "")
+
+	flags := FlagsFromManifest(&types.ModelManifest{
+		DefaultModel: "claude-sonnet-4-5",
+		Models: []types.ModelEntry{
+			{ID: "claude-sonnet-4-5", Label: "Sonnet 4.5", Available: true},
+			{ID: "claude-opus-4-6", Label: "Opus 4.6", Available: true},
+		},
+	})
+
+	err := SyncFlags(context.Background(), flags)
+	if err != nil {
+		t.Errorf("expected nil error when env not set, got: %v", err)
+	}
+}
+
+func TestSyncFlags_CreatesNewFlag(t *testing.T) {
 	var (
 		createCalled   bool
 		tagCalled      bool
@@ -188,25 +172,21 @@ func TestSyncModelFlags_CreatesNewFlag(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
-		// Feature existence check — return 404 so it gets created
 		if r.Method == "GET" && strings.Contains(r.URL.Path, "/features/") {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		// Feature creation
 		if r.Method == "POST" && strings.HasSuffix(r.URL.Path, "/features") {
 			createCalled = true
 			json.NewDecoder(r.Body).Decode(&createBody)
 			w.WriteHeader(http.StatusCreated)
 			return
 		}
-		// Tag addition
 		if r.Method == "POST" && strings.Contains(r.URL.Path, "/tags") {
 			tagCalled = true
 			w.WriteHeader(http.StatusCreated)
 			return
 		}
-		// Strategy addition
 		if r.Method == "POST" && strings.Contains(r.URL.Path, "/strategies") {
 			strategyCalled = true
 			w.WriteHeader(http.StatusCreated)
@@ -221,15 +201,15 @@ func TestSyncModelFlags_CreatesNewFlag(t *testing.T) {
 	t.Setenv("UNLEASH_PROJECT", "default")
 	t.Setenv("UNLEASH_ENVIRONMENT", "development")
 
-	manifest := &types.ModelManifest{
-		DefaultModel: "claude-sonnet-4-5",
-		Models: []types.ModelEntry{
-			{ID: "claude-sonnet-4-5", Label: "Sonnet 4.5", Available: true},
-			{ID: "claude-opus-4-6", Label: "Opus 4.6", Available: true},
+	flags := []FlagSpec{
+		{
+			Name:        "model.claude-opus-4-6.enabled",
+			Description: "Enable Opus 4.6",
+			Tags:        []FlagTag{{Type: "scope", Value: "workspace"}},
 		},
 	}
 
-	err := SyncModelFlags(context.Background(), manifest)
+	err := SyncFlags(context.Background(), flags)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -244,7 +224,6 @@ func TestSyncModelFlags_CreatesNewFlag(t *testing.T) {
 		t.Error("expected strategy API call")
 	}
 
-	// Verify the flag was created with correct properties
 	if createBody["name"] != "model.claude-opus-4-6.enabled" {
 		t.Errorf("expected flag name model.claude-opus-4-6.enabled, got %v", createBody["name"])
 	}
@@ -256,7 +235,49 @@ func TestSyncModelFlags_CreatesNewFlag(t *testing.T) {
 	}
 }
 
-func TestSyncModelFlags_HandlesConflict(t *testing.T) {
+func TestSyncFlags_NoTagsSkipsTagCall(t *testing.T) {
+	tagCalled := false
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" && strings.Contains(r.URL.Path, "/features/") {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		if r.Method == "POST" && strings.HasSuffix(r.URL.Path, "/features") {
+			w.WriteHeader(http.StatusCreated)
+			return
+		}
+		if r.Method == "POST" && strings.Contains(r.URL.Path, "/tags") {
+			tagCalled = true
+			w.WriteHeader(http.StatusCreated)
+			return
+		}
+		if r.Method == "POST" && strings.Contains(r.URL.Path, "/strategies") {
+			w.WriteHeader(http.StatusCreated)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	t.Setenv("UNLEASH_ADMIN_URL", server.URL)
+	t.Setenv("UNLEASH_ADMIN_TOKEN", "test-token")
+
+	flags := []FlagSpec{
+		{Name: "framework.xyz.enabled", Description: "XYZ framework"},
+	}
+
+	err := SyncFlags(context.Background(), flags)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if tagCalled {
+		t.Error("tag API should not be called for flags with no tags")
+	}
+}
+
+func TestSyncFlags_HandlesConflict(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(r.URL.Path, "/tag-types/") {
 			w.WriteHeader(http.StatusOK)
@@ -267,7 +288,7 @@ func TestSyncModelFlags_HandlesConflict(t *testing.T) {
 			return
 		}
 		if r.Method == "POST" && strings.HasSuffix(r.URL.Path, "/features") {
-			w.WriteHeader(http.StatusConflict) // another instance created it
+			w.WriteHeader(http.StatusConflict)
 			return
 		}
 		w.WriteHeader(http.StatusOK)
@@ -277,21 +298,17 @@ func TestSyncModelFlags_HandlesConflict(t *testing.T) {
 	t.Setenv("UNLEASH_ADMIN_URL", server.URL)
 	t.Setenv("UNLEASH_ADMIN_TOKEN", "test-token")
 
-	manifest := &types.ModelManifest{
-		DefaultModel: "claude-sonnet-4-5",
-		Models: []types.ModelEntry{
-			{ID: "claude-sonnet-4-5", Label: "Sonnet 4.5", Available: true},
-			{ID: "claude-opus-4-6", Label: "Opus 4.6", Available: true},
-		},
+	flags := []FlagSpec{
+		{Name: "test.flag", Description: "test", Tags: []FlagTag{{Type: "scope", Value: "workspace"}}},
 	}
 
-	err := SyncModelFlags(context.Background(), manifest)
+	err := SyncFlags(context.Background(), flags)
 	if err != nil {
 		t.Errorf("conflict should not cause error, got: %v", err)
 	}
 }
 
-func TestSyncModelFlags_ReturnsErrorOnCreateFailure(t *testing.T) {
+func TestSyncFlags_ReturnsErrorOnCreateFailure(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(r.URL.Path, "/tag-types/") {
 			w.WriteHeader(http.StatusOK)
@@ -313,15 +330,11 @@ func TestSyncModelFlags_ReturnsErrorOnCreateFailure(t *testing.T) {
 	t.Setenv("UNLEASH_ADMIN_URL", server.URL)
 	t.Setenv("UNLEASH_ADMIN_TOKEN", "test-token")
 
-	manifest := &types.ModelManifest{
-		DefaultModel: "claude-sonnet-4-5",
-		Models: []types.ModelEntry{
-			{ID: "claude-sonnet-4-5", Label: "Sonnet 4.5", Available: true},
-			{ID: "claude-opus-4-6", Label: "Opus 4.6", Available: true},
-		},
+	flags := []FlagSpec{
+		{Name: "test.flag", Description: "test", Tags: []FlagTag{{Type: "scope", Value: "workspace"}}},
 	}
 
-	err := SyncModelFlags(context.Background(), manifest)
+	err := SyncFlags(context.Background(), flags)
 	if err == nil {
 		t.Error("expected error on create failure")
 	}
@@ -331,7 +344,6 @@ func TestSyncModelFlags_ReturnsErrorOnCreateFailure(t *testing.T) {
 }
 
 func TestSyncModelFlagsFromFile(t *testing.T) {
-	// Ensure Unleash env vars are not set so sync is a no-op
 	t.Setenv("UNLEASH_ADMIN_URL", "")
 	t.Setenv("UNLEASH_ADMIN_TOKEN", "")
 
@@ -380,5 +392,20 @@ func TestSyncModelFlagsFromFile_InvalidJSON(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "parsing manifest") {
 		t.Errorf("expected parsing error, got: %v", err)
+	}
+}
+
+// --- collectTagTypes ---
+
+func TestCollectTagTypes(t *testing.T) {
+	flags := []FlagSpec{
+		{Name: "a", Tags: []FlagTag{{Type: "scope", Value: "workspace"}}},
+		{Name: "b", Tags: []FlagTag{{Type: "scope", Value: "global"}, {Type: "env", Value: "prod"}}},
+		{Name: "c"},
+	}
+
+	types := collectTagTypes(flags)
+	if len(types) != 2 {
+		t.Fatalf("expected 2 unique tag types, got %d: %v", len(types), types)
 	}
 }
