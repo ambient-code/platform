@@ -192,6 +192,10 @@ spec:
         - name: vertex-credentials
           mountPath: /app/vertex
           readOnly: true
+        # Model manifest (mounted ConfigMap — kubelet auto-syncs changes)
+        - name: model-manifest
+          mountPath: /config
+          readOnly: true
       volumes:
       - name: backend-state
         persistentVolumeClaim:
@@ -203,6 +207,11 @@ spec:
         secret:
           secretName: ambient-vertex
           optional: true  # Don't fail if Vertex not configured
+      # Model manifest ConfigMap (single source of truth for available models)
+      - name: model-manifest
+        configMap:
+          name: ambient-models
+          optional: true  # Don't fail if ConfigMap not yet created
 
 ---
 apiVersion: v1

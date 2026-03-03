@@ -54,14 +54,17 @@ else
 QUIET_REDIRECT := >/dev/null 2>&1
 endif
 
-# Image tags
-FRONTEND_IMAGE ?= vteam_frontend:latest
-BACKEND_IMAGE ?= vteam_backend:latest
-OPERATOR_IMAGE ?= vteam_operator:latest
-RUNNER_IMAGE ?= vteam_claude_runner:latest
-STATE_SYNC_IMAGE ?= vteam_state_sync:latest
-PUBLIC_API_IMAGE ?= vteam_public_api:latest
-API_SERVER_IMAGE ?= vteam_api_server:latest
+# Image tag (override with: make build-all IMAGE_TAG=v1.2.3)
+IMAGE_TAG ?= latest
+
+# Image names
+FRONTEND_IMAGE ?= vteam_frontend:$(IMAGE_TAG)
+BACKEND_IMAGE ?= vteam_backend:$(IMAGE_TAG)
+OPERATOR_IMAGE ?= vteam_operator:$(IMAGE_TAG)
+RUNNER_IMAGE ?= vteam_claude_runner:$(IMAGE_TAG)
+STATE_SYNC_IMAGE ?= vteam_state_sync:$(IMAGE_TAG)
+PUBLIC_API_IMAGE ?= vteam_public_api:$(IMAGE_TAG)
+API_SERVER_IMAGE ?= vteam_api_server:$(IMAGE_TAG)
 
 # Podman prefixes image names with localhost/ — kind load needs to use the same
 # name so containerd can match the image reference used in the deployment spec
@@ -153,8 +156,8 @@ build-runner: ## Build Claude Code runner image
 build-state-sync: ## Build state-sync image for S3 persistence
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building state-sync with $(CONTAINER_ENGINE)..."
 	@cd components/runners/state-sync && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
-		-t vteam_state_sync:latest .
-	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) State-sync built: vteam_state_sync:latest"
+		-t $(STATE_SYNC_IMAGE) .
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) State-sync built: $(STATE_SYNC_IMAGE)"
 
 build-public-api: ## Build public API gateway image
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building public-api with $(CONTAINER_ENGINE)..."

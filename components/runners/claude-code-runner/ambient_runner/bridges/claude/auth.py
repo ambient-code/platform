@@ -24,6 +24,7 @@ VERTEX_MODEL_MAP: dict[str, str] = {
     "claude-opus-4-6": "claude-opus-4-6@default",
     "claude-opus-4-5": "claude-opus-4-5@20251101",
     "claude-opus-4-1": "claude-opus-4-1@20250805",
+    "claude-sonnet-4-6": "claude-sonnet-4-6@default",
     "claude-sonnet-4-5": "claude-sonnet-4-5@20250929",
     "claude-haiku-4-5": "claude-haiku-4-5@20251001",
 }
@@ -84,8 +85,17 @@ async def setup_sdk_authentication(context: RunnerContext) -> tuple[str, bool, s
         os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = vertex_credentials.get("credentials_path", "")
         os.environ["ANTHROPIC_VERTEX_PROJECT_ID"] = vertex_credentials.get("project_id", "")
         os.environ["CLOUD_ML_REGION"] = vertex_credentials.get("region", "")
-        configured_model = map_to_vertex_model(model) if model else DEFAULT_VERTEX_MODEL
-        logger.info(f"Using Vertex AI authentication (model={configured_model})")
+        # Prefer operator-resolved Vertex ID from manifest; fall back to static map
+        vertex_id_from_manifest = (context.get_env("LLM_MODEL_VERTEX_ID") or "").strip()
+        if vertex_id_from_manifest:
+            configured_model = vertex_id_from_manifest
+            logger.info(f"Using Vertex AI authentication with manifest vertex ID (model={configured_model})")
+        elif model:
+            configured_model = map_to_vertex_model(model)
+            logger.info(f"Using Vertex AI authentication (model={configured_model})")
+        else:
+            configured_model = DEFAULT_VERTEX_MODEL
+            logger.info(f"Using Vertex AI authentication with default (model={configured_model})")
 
     else:
         configured_model = model or DEFAULT_MODEL
