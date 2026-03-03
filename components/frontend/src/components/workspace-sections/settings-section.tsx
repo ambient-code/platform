@@ -62,7 +62,7 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
       map.set(k.key, k.label);
     }
     return map;
-  }, [runnerTypes]);
+  }, [RUNNER_API_KEYS]);
 
   // React Query hooks
   const { data: project, isLoading: projectLoading } = useProject(projectName);
