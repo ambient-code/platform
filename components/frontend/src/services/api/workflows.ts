@@ -8,6 +8,7 @@ export type OOTBWorkflow = {
   branch: string;
   path?: string;
   enabled: boolean;
+  startupPrompt?: string;
 };
 
 export type ListOOTBWorkflowsResponse = {

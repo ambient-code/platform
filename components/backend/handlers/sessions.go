@@ -1768,13 +1768,14 @@ func fetchGitHubDirectoryListing(ctx context.Context, owner, repo, ref, path, to
 
 // OOTBWorkflow represents an out-of-the-box workflow
 type OOTBWorkflow struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	GitURL      string `json:"gitUrl"`
-	Branch      string `json:"branch"`
-	Path        string `json:"path,omitempty"`
-	Enabled     bool   `json:"enabled"`
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	Description   string `json:"description"`
+	GitURL        string `json:"gitUrl"`
+	Branch        string `json:"branch"`
+	Path          string `json:"path,omitempty"`
+	Enabled       bool   `json:"enabled"`
+	StartupPrompt string `json:"startupPrompt,omitempty"`
 }
 
 // ListOOTBWorkflows returns the list of out-of-the-box workflows dynamically discovered from GitHub
@@ -1883,8 +1884,9 @@ func ListOOTBWorkflows(c *gin.Context) {
 		ambientData, err := fetchGitHubFileContent(c.Request.Context(), owner, repoName, ootbBranch, ambientPath, token)
 
 		var ambientConfig struct {
-			Name        string `json:"name"`
-			Description string `json:"description"`
+			Name          string `json:"name"`
+			Description   string `json:"description"`
+			StartupPrompt string `json:"startupPrompt"`
 		}
 		if err == nil {
 			// Parse ambient.json if found
@@ -1901,13 +1903,14 @@ func ListOOTBWorkflows(c *gin.Context) {
 		}
 
 		workflows = append(workflows, OOTBWorkflow{
-			ID:          entryName,
-			Name:        workflowName,
-			Description: ambientConfig.Description,
-			GitURL:      ootbRepo,
-			Branch:      ootbBranch,
-			Path:        fmt.Sprintf("%s/%s", ootbWorkflowsPath, entryName),
-			Enabled:     true,
+			ID:            entryName,
+			Name:          workflowName,
+			Description:   ambientConfig.Description,
+			GitURL:        ootbRepo,
+			Branch:        ootbBranch,
+			Path:          fmt.Sprintf("%s/%s", ootbWorkflowsPath, entryName),
+			Enabled:       true,
+			StartupPrompt: ambientConfig.StartupPrompt,
 		})
 	}
 

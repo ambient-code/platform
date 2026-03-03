@@ -22,6 +22,7 @@ export function useWorkflowManagement({
   const [pendingWorkflow, setPendingWorkflow] = useState<WorkflowConfig | null>(null);
   const [activeWorkflow, setActiveWorkflow] = useState<string | null>(null);
   const [workflowActivating, setWorkflowActivating] = useState(false);
+  const [workflowGreeting, setWorkflowGreeting] = useState<string | null>(null);
 
   // Use session queue for workflow persistence
   const sessionQueue = useSessionQueue(projectName, sessionName);
@@ -85,12 +86,15 @@ export function useWorkflowManagement({
       }
       
       setActiveWorkflow(workflow.id);
+      if (workflow.startupPrompt) {
+        setWorkflowGreeting(workflow.startupPrompt);
+      }
       setPendingWorkflow(null);
       sessionQueue.clearWorkflow();
-      
+
       // Wait for restart to complete (give runner time to clone and restart)
       await new Promise(resolve => setTimeout(resolve, 3000));
-      
+
       onWorkflowActivated?.();
       
       setWorkflowActivating(false);
@@ -158,6 +162,7 @@ export function useWorkflowManagement({
     activeWorkflow,
     setActiveWorkflow,
     workflowActivating,
+    workflowGreeting,
     activateWorkflow,
     handleWorkflowChange,
     setCustomWorkflow,

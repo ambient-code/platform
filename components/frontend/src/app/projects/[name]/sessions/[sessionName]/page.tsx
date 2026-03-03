@@ -337,14 +337,17 @@ export default function ProjectSessionDetailPage({
     const queuedWorkflow = workflowManagement.queuedWorkflow;
     if (phase === "Running" && queuedWorkflow && !queuedWorkflow.activatedAt) {
       // Session is now running, activate the queued workflow
+      // Look up the full workflow config (including startupPrompt) from the OOTB list
+      const fullWorkflow = ootbWorkflows.find(w => w.id === queuedWorkflow.id);
       workflowManagement.activateWorkflow({
         id: queuedWorkflow.id,
-        name: "Queued workflow",
-        description: "",
+        name: fullWorkflow?.name || "Queued workflow",
+        description: fullWorkflow?.description || "",
         gitUrl: queuedWorkflow.gitUrl,
         branch: queuedWorkflow.branch,
         path: queuedWorkflow.path,
         enabled: true,
+        startupPrompt: fullWorkflow?.startupPrompt,
       }, phase);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2589,6 +2592,7 @@ export default function ProjectSessionDetailPage({
                             hasRealMessages={hasRealMessages}
                             onLoadWorkflow={() => setCustomWorkflowDialogOpen(true)}
                             selectedWorkflow={workflowManagement.selectedWorkflow}
+                            workflowGreeting={workflowManagement.workflowGreeting}
                           />
                         }
                       />
@@ -2666,6 +2670,7 @@ export default function ProjectSessionDetailPage({
                               hasRealMessages={hasRealMessages}
                               onLoadWorkflow={() => setCustomWorkflowDialogOpen(true)}
                               selectedWorkflow={workflowManagement.selectedWorkflow}
+                              workflowGreeting={workflowManagement.workflowGreeting}
                             />
                           }
                         />

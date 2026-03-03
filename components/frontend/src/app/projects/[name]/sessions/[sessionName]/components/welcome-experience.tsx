@@ -24,6 +24,7 @@ type WelcomeExperienceProps = {
   hasRealMessages: boolean;
   onLoadWorkflow?: () => void;
   selectedWorkflow?: string;
+  workflowGreeting?: string | null;
 };
 
 const WELCOME_MESSAGE = `Welcome to Ambient AI! Please select a workflow or type a message to get started.`;
@@ -37,6 +38,7 @@ export function WelcomeExperience({
   hasRealMessages,
   onLoadWorkflow,
   selectedWorkflow = "none",
+  workflowGreeting,
 }: WelcomeExperienceProps) {
   const [displayedText, setDisplayedText] = useState("");
   const [isTypingComplete, setIsTypingComplete] = useState(false);
@@ -180,6 +182,26 @@ export function WelcomeExperience({
               </div>
             </div>
           </div>
+
+          {/* Workflow greeting - rendered client-side after workflow activation */}
+          {workflowGreeting && (
+            <div className="mb-4">
+              <div className="flex space-x-3 items-start">
+                <div className="flex-shrink-0">
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center bg-blue-600">
+                    <span className="text-white text-xs font-semibold">AI</span>
+                  </div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="rounded-lg bg-card">
+                    <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap mb-[0.2rem]">
+                      {workflowGreeting}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Workflow cards - show after typing completes (only for initial phases) */}
           {shouldShowWorkflowCards && isTypingComplete && enabledWorkflows.length > 0 && (
