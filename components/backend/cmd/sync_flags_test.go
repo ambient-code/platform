@@ -134,6 +134,43 @@ func TestFlagsFromConfig_MissingFileReturnsNil(t *testing.T) {
 	}
 }
 
+func TestFlagsFromConfig_SanitizesNewlines(t *testing.T) {
+	raw := `{
+		"flags": [{
+			"name": "flag.with\nnewline",
+			"description": "desc\rwith\r\nCRLF",
+			"tags": [{"type": "scope\n", "value": "work\rspace"}]
+		}]
+	}`
+
+	path := filepath.Join(t.TempDir(), "flags.json")
+	if err := os.WriteFile(path, []byte(raw), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	flags, err := FlagsFromConfig(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(flags) != 1 {
+		t.Fatalf("expected 1 flag, got %d", len(flags))
+	}
+
+	f := flags[0]
+	if strings.ContainsAny(f.Name, "\n\r") {
+		t.Errorf("name should not contain newlines, got %q", f.Name)
+	}
+	if strings.ContainsAny(f.Description, "\n\r") {
+		t.Errorf("description should not contain newlines, got %q", f.Description)
+	}
+	if strings.ContainsAny(f.Tags[0].Type, "\n\r") {
+		t.Errorf("tag type should not contain newlines, got %q", f.Tags[0].Type)
+	}
+	if strings.ContainsAny(f.Tags[0].Value, "\n\r") {
+		t.Errorf("tag value should not contain newlines, got %q", f.Tags[0].Value)
+	}
+}
+
 func TestFlagsFromConfig_InvalidJSON(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "flags.json")
 	if err := os.WriteFile(path, []byte("{bad"), 0644); err != nil {

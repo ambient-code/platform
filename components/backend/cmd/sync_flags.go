@@ -59,8 +59,8 @@ func FlagsFromManifest(manifest *types.ModelManifest) []FlagSpec {
 			continue
 		}
 		specs = append(specs, FlagSpec{
-			Name:        fmt.Sprintf("model.%s.enabled", model.ID),
-			Description: fmt.Sprintf("Enable %s (%s) for users", model.Label, model.ID),
+			Name:        sanitizeLogString(fmt.Sprintf("model.%s.enabled", model.ID)),
+			Description: sanitizeLogString(fmt.Sprintf("Enable %s (%s) for users", model.Label, model.ID)),
 			Tags:        []FlagTag{{Type: "scope", Value: "workspace"}},
 		})
 	}
