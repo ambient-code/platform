@@ -127,7 +127,7 @@ parameters:
 - name: ENABLE_AUTHZ_MOCK
   displayName: Enable Authz Mock
   description: Enable mock authz client
-  value: "false"
+  value: "true"
 
 - name: HTTP_READ_TIMEOUT
   displayName: HTTP Read Timeout
