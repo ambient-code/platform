@@ -301,7 +301,7 @@ def main() -> int:
     print(f"  Operator (Go): {len(go_operator)} dependencies")
 
     python_runner = parse_pyproject_toml(
-        repo_root / "components" / "runners" / "claude-code-runner" / "pyproject.toml"
+        repo_root / "components" / "runners" / "ambient-runner" / "pyproject.toml"
     )
     print(f"  Runner (Python): {len(python_runner)} dependencies")
 

@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ambient-agent-registry
+data:
+  agent-registry.json: |
+    [
+      {
+        "id": "claude-agent-sdk",
+        "displayName": "Claude Code",
+        "description": "Anthropic Claude with full coding capabilities",
+        "defaultModel": "claude-sonnet-4-5",
+        "models": [
+          {"value": "claude-sonnet-4-5", "label": "Claude Sonnet 4.5"},
+          {"value": "claude-opus-4-6", "label": "Claude Opus 4.6"},
+          {"value": "claude-opus-4-5", "label": "Claude Opus 4.5"},
+          {"value": "claude-haiku-4-5", "label": "Claude Haiku 4.5"}
+        ]
+      },
+      {
+        "id": "gemini-cli",
+        "displayName": "Gemini CLI",
+        "description": "Google Gemini coding agent with built-in file, bash, and search tools",
+        "defaultModel": "gemini-2.5-flash",
+        "models": [
+          {"value": "gemini-2.5-flash", "label": "Gemini 2.5 Flash"},
+          {"value": "gemini-2.5-pro", "label": "Gemini 2.5 Pro"},
+          {"value": "gemini-2.0-flash", "label": "Gemini 2.0 Flash"}
+        ]
+      }
+    ]

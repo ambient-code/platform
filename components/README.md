@@ -20,7 +20,7 @@ components/
 ├── backend/                    # Go API service for Kubernetes CRD management
 ├── operator/                   # Kubernetes operator (Go)
 ├── runners/                    # AI runner services
-│   └── claude-code-runner/     # Python service running Claude Code CLI with MCP
+│   └── ambient-runner/     # Python service running Claude Code CLI with MCP
 ├── manifests/                  # Kubernetes deployment manifests
 └── README.md                   # This documentation
 ```

@@ -535,28 +535,47 @@ func CreateSession(c *gin.Context) {
 		return
 	}
 
-	// Validate API keys are configured before creating session
+	// Resolve runner type from agent registry (default to claude-agent-sdk for backward compat)
+	runnerTypeID := req.RunnerType
+	if runnerTypeID == "" {
+		runnerTypeID = DefaultRunnerType
+	}
+
+	// Check feature flag for non-default runners
+	if !isRunnerEnabled(runnerTypeID) {
+		log.Printf("Session creation blocked: runner type %q is disabled by feature flag", runnerTypeID)
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": fmt.Sprintf("Runner type '%s' is not enabled. Contact your platform administrator.", runnerTypeID),
+		})
+		return
+	}
+
+	// Derive internal env vars from runner ID (not from ConfigMap)
+	registryEnvVars := getRunnerInternalEnvVars(runnerTypeID)
+
+	// Validate API keys are configured before creating session.
+	// For Claude with Vertex AI, skip secret validation (uses service account).
+	// For all runners, check that ambient-runner-secrets exists.
 	vertexEnabled := os.Getenv("CLAUDE_CODE_USE_VERTEX") == "1"
-	if !vertexEnabled {
-		// Check if ambient-runner-secrets exists (contains ANTHROPIC_API_KEY)
+	skipSecretValidation := vertexEnabled && runnerTypeID == DefaultRunnerType
+	if !skipSecretValidation {
 		const runnerSecretsName = "ambient-runner-secrets"
 		_, err := reqK8s.CoreV1().Secrets(project).Get(c.Request.Context(), runnerSecretsName, v1.GetOptions{})
 		if err != nil {
 			if errors.IsNotFound(err) {
 				log.Printf("Session creation blocked: %s secret missing in project %s", runnerSecretsName, project)
 				c.JSON(http.StatusBadRequest, gin.H{
-					"error": fmt.Sprintf("ANTHROPIC_API_KEY not configured. Please configure runner secrets for project '%s' before creating sessions.", project),
+					"error": fmt.Sprintf("API keys not configured. Please configure runner secrets for project '%s' before creating sessions.", project),
 				})
 				return
 			}
-			// Other errors (permissions, etc.)
 			log.Printf("Failed to check runner secret in project %s: %v", project, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to validate API key configuration"})
 			return
 		}
 		log.Printf("Validated runner secret %s exists in project %s", runnerSecretsName, project)
 	} else {
-		log.Printf("Vertex AI enabled, skipping runner secret validation for project %s", project)
+		log.Printf("Vertex AI enabled for Claude, skipping runner secret validation for project %s", project)
 	}
 
 	// Validation for multi-repo can be added here if needed
@@ -642,6 +661,10 @@ func CreateSession(c *gin.Context) {
 
 	// Optional environment variables passthrough (always, independent of git config presence)
 	envVars := make(map[string]string)
+	// Merge registry internalEnvVars first (user-provided vars take precedence)
+	for k, v := range registryEnvVars {
+		envVars[k] = v
+	}
 	for k, v := range req.EnvironmentVariables {
 		envVars[k] = v
 	}
@@ -3859,4 +3882,4 @@ func GitListBranchesSession(c *gin.Context) {
 
 // NOTE: autoTriggerInitialPrompt removed - runner handles INITIAL_PROMPT auto-execution
 // Runner POSTs to backend's /agui/run when ready, events flow through middleware
-// See: components/runners/claude-code-runner/main.py auto_execute_initial_prompt()
+// See: components/runners/ambient-runner/main.py auto_execute_initial_prompt()

@@ -70,7 +70,7 @@ jobs:
             operator:
               - 'components/operator/**'
             claude-runner:
-              - 'components/runners/claude-code-runner/**'
+              - 'components/runners/ambient-runner/**'
             state-sync:
               - 'components/runners/state-sync/**'
             public-api:
@@ -104,10 +104,10 @@ jobs:
             image: quay.io/ambient_code/vteam_operator
             dockerfile: ./components/operator/Dockerfile
             changed: ${{ needs.detect-changes.outputs.operator }}
-          - name: claude-code-runner
+          - name: ambient-runner
             context: ./components/runners
             image: quay.io/ambient_code/vteam_claude_runner
-            dockerfile: ./components/runners/claude-code-runner/Dockerfile
+            dockerfile: ./components/runners/ambient-runner/Dockerfile
             changed: ${{ needs.detect-changes.outputs.claude-runner }}
           - name: state-sync
             context: ./components/runners/state-sync

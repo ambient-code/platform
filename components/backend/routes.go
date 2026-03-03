@@ -13,6 +13,7 @@ func registerRoutes(r *gin.Engine) {
 	{
 		// Public endpoints (no auth required)
 		api.GET("/workflows/ootb", handlers.ListOOTBWorkflows)
+		api.GET("/runner-types", handlers.GetRunnerTypes)
 
 		api.POST("/projects/:projectName/agentic-sessions/:sessionName/github/token", handlers.MintSessionGitHubToken)
 

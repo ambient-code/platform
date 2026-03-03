@@ -150,7 +150,7 @@ build-operator: ## Build operator image
 build-runner: ## Build Claude Code runner image
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building runner with $(CONTAINER_ENGINE)..."
 	@cd components/runners && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
-		-t $(RUNNER_IMAGE) -f claude-code-runner/Dockerfile .
+		-t $(RUNNER_IMAGE) -f ambient-runner/Dockerfile .
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Runner built: $(RUNNER_IMAGE)"
 
 build-state-sync: ## Build state-sync image for S3 persistence
@@ -816,7 +816,7 @@ _build-and-load: ## Internal: Build and load images
 	@echo "  Building operator ($(PLATFORM))..."
 	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) -t $(OPERATOR_IMAGE) components/operator $(QUIET_REDIRECT)
 	@echo "  Building runner ($(PLATFORM))..."
-	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) -t $(RUNNER_IMAGE) -f components/runners/claude-code-runner/Dockerfile components/runners $(QUIET_REDIRECT)
+	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) -t $(RUNNER_IMAGE) -f components/runners/ambient-runner/Dockerfile components/runners $(QUIET_REDIRECT)
 	@echo "  Building api-server ($(PLATFORM))..."
 	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) -t $(API_SERVER_IMAGE) components/ambient-api-server $(QUIET_REDIRECT)
 	@echo "  Tagging images with localhost prefix..."

@@ -128,6 +128,7 @@ export type CreateAgenticSessionRequest = {
   userContext?: UserContext;
   labels?: Record<string, string>;
   annotations?: Record<string, string>;
+  runnerType?: string;
 };
 
 export type CreateAgenticSessionResponse = {

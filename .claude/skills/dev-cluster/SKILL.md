@@ -24,7 +24,7 @@ The Ambient Code Platform consists of these containerized components:
 | **Backend** | `components/backend` | `vteam_backend:latest` | Go API for K8s CRD management |
 | **Frontend** | `components/frontend` | `vteam_frontend:latest` | NextJS web interface |
 | **Operator** | `components/operator` | `vteam_operator:latest` | Kubernetes operator (Go) |
-| **Runner** | `components/runners/claude-code-runner` | `vteam_claude_runner:latest` | Python Claude Code runner |
+| **Runner** | `components/runners/ambient-runner` | `vteam_claude_runner:latest` | Python Claude Code runner |
 | **State Sync** | `components/runners/state-sync` | `vteam_state_sync:latest` | S3 persistence service |
 | **Public API** | `components/public-api` | `vteam_public_api:latest` | External API gateway |
 
@@ -146,7 +146,7 @@ Determine which components are affected:
 - Changes in `components/backend/` → backend
 - Changes in `components/frontend/` → frontend
 - Changes in `components/operator/` → operator
-- Changes in `components/runners/claude-code-runner/` → runner
+- Changes in `components/runners/ambient-runner/` → runner
 - Changes in `components/runners/state-sync/` → state-sync
 - Changes in `components/public-api/` → public-api
 

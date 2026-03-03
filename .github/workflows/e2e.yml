@@ -147,11 +147,11 @@ jobs:
           docker tag quay.io/ambient_code/vteam_operator:latest quay.io/ambient_code/vteam_operator:e2e-test
         fi
 
-        # Build claude-code-runner image (if changed or use latest)
+        # Build ambient-runner image (if changed or use latest)
         if [ "${{ needs.detect-changes.outputs.claude-runner }}" == "true" ]; then
-          echo "Building claude-code-runner (changed)..."
+          echo "Building ambient-runner (changed)..."
           docker build -t quay.io/ambient_code/vteam_claude_runner:e2e-test \
-            -f components/runners/claude-code-runner/Dockerfile \
+            -f components/runners/ambient-runner/Dockerfile \
             components/runners
         else
           echo "Claude-runner unchanged, pulling latest..."

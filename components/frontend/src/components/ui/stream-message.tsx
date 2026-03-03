@@ -14,6 +14,7 @@ export type StreamMessageProps = {
   onGoToResults?: () => void;
   plainCard?: boolean;
   isNewest?: boolean;
+  agentName?: string;
 };
 
 const getRandomAgentMessage = () => {
@@ -32,7 +33,7 @@ const getRandomAgentMessage = () => {
   return messages[Math.floor(Math.random() * messages.length)];
 };
 
-export const StreamMessage: React.FC<StreamMessageProps> = ({ message, onGoToResults, plainCard=false, isNewest=false }) => {
+export const StreamMessage: React.FC<StreamMessageProps> = ({ message, onGoToResults, plainCard=false, isNewest=false, agentName }) => {
   const isToolUsePair = (m: MessageObject | ToolUseMessages | HierarchicalToolMessage): m is ToolUseMessages | HierarchicalToolMessage =>
     m != null && typeof m === "object" && "toolUseBlock" in m && "resultBlock" in m;
 
@@ -88,7 +89,7 @@ export const StreamMessage: React.FC<StreamMessageProps> = ({ message, onGoToRes
           <Message 
             role={isAgent ? "bot" : "user"} 
             content={m.content} 
-            name="Claude AI" 
+            name={agentName ?? "AI Agent"} 
             borderless={plainCard} 
             timestamp={m.timestamp} 
             streaming={isStreaming}
@@ -104,7 +105,7 @@ export const StreamMessage: React.FC<StreamMessageProps> = ({ message, onGoToRes
             <Message 
               role={isAgent ? "bot" : "user"} 
               content={m.content.text} 
-              name="Claude AI" 
+              name={agentName ?? "AI Agent"} 
               borderless={plainCard} 
               timestamp={m.timestamp} 
               streaming={isStreaming}
@@ -127,7 +128,7 @@ export const StreamMessage: React.FC<StreamMessageProps> = ({ message, onGoToRes
           borderless={plainCard}
           role="bot"
           content={m.is_error ? "Agent completed with errors." : "Agent completed successfully."}
-          name="Claude AI"
+          name={agentName ?? "AI Agent"}
           timestamp={m.timestamp}
           actions={
             <div className="flex items-center justify-between">

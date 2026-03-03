@@ -26,8 +26,9 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
   const [formData, setFormData] = useState({ displayName: "", description: "" });
   const [secrets, setSecrets] = useState<Array<{ key: string; value: string }>>([]);
   const [showValues, setShowValues] = useState<Record<number, boolean>>({});
-  const [anthropicApiKey, setAnthropicApiKey] = useState<string>("");
-  const [showAnthropicKey, setShowAnthropicKey] = useState<boolean>(false);
+  const [runnerSecretValues, setRunnerSecretValues] = useState<Record<string, string>>({});
+  const [showRunnerSecrets, setShowRunnerSecrets] = useState<Record<string, boolean>>({});
+  const [runnerSecretsExpanded, setRunnerSecretsExpanded] = useState<boolean>(false);
   const [storageMode, setStorageMode] = useState<"shared" | "custom">("shared");
   const [s3Endpoint, setS3Endpoint] = useState<string>("");
   const [s3Bucket, setS3Bucket] = useState<string>("");
@@ -35,9 +36,33 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
   const [s3AccessKey, setS3AccessKey] = useState<string>("");
   const [s3SecretKey, setS3SecretKey] = useState<string>("");
   const [showS3SecretKey, setShowS3SecretKey] = useState<boolean>(false);
-  const [anthropicExpanded, setAnthropicExpanded] = useState<boolean>(false);
   const [s3Expanded, setS3Expanded] = useState<boolean>(false);
-  const FIXED_KEYS = useMemo(() => ["ANTHROPIC_API_KEY","STORAGE_MODE","S3_ENDPOINT","S3_BUCKET","S3_REGION","S3_ACCESS_KEY","S3_SECRET_KEY"] as const, []);
+
+  // Runner API key definitions — static list of supported secrets
+  // with descriptions. Not derived from ConfigMap since secrets
+  // depend on auth mode (API key vs Vertex), not just runner type.
+  const RUNNER_API_KEYS = useMemo(() => [
+    { key: "ANTHROPIC_API_KEY", label: "Claude Code" },
+    { key: "GOOGLE_API_KEY", label: "Gemini CLI" },
+  ] as const, []);
+
+  const allRequiredSecrets = useMemo(
+    () => RUNNER_API_KEYS.map(k => k.key),
+    [RUNNER_API_KEYS]
+  );
+
+  const FIXED_KEYS = useMemo(
+    () => [...allRequiredSecrets, "STORAGE_MODE", "S3_ENDPOINT", "S3_BUCKET", "S3_REGION", "S3_ACCESS_KEY", "S3_SECRET_KEY"],
+    [allRequiredSecrets]
+  );
+
+  const secretOwnerMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const k of RUNNER_API_KEYS) {
+      map.set(k.key, k.label);
+    }
+    return map;
+  }, [runnerTypes]);
 
   // React Query hooks
   const { data: project, isLoading: projectLoading } = useProject(projectName);
@@ -57,10 +82,15 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
 
   // Sync secrets values to state (merge both secrets)
   useEffect(() => {
-    const allSecrets = [...(runnerSecrets || []), ...(integrationSecrets || [])];
-    if (allSecrets.length > 0) {
-      const byKey: Record<string, string> = Object.fromEntries(allSecrets.map(s => [s.key, s.value]));
-      setAnthropicApiKey(byKey["ANTHROPIC_API_KEY"] || "");
+    const allSecretsArr = [...(runnerSecrets || []), ...(integrationSecrets || [])];
+    if (allSecretsArr.length > 0) {
+      const byKey: Record<string, string> = Object.fromEntries(allSecretsArr.map(s => [s.key, s.value]));
+      // Populate dynamic runner secret values
+      const rsv: Record<string, string> = {};
+      for (const key of allRequiredSecrets) {
+        rsv[key] = byKey[key] || "";
+      }
+      setRunnerSecretValues(rsv);
       // Determine storage mode: "custom" if S3_ENDPOINT is set, otherwise "shared" (default)
       const hasCustomS3 = byKey["STORAGE_MODE"] === "custom" || (byKey["S3_ENDPOINT"] && byKey["S3_ENDPOINT"] !== "");
       setStorageMode(hasCustomS3 ? "custom" : "shared");
@@ -69,9 +99,9 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
       setS3Region(byKey["S3_REGION"] || "us-east-1");
       setS3AccessKey(byKey["S3_ACCESS_KEY"] || "");
       setS3SecretKey(byKey["S3_SECRET_KEY"] || "");
-      setSecrets(allSecrets.filter(s => !FIXED_KEYS.includes(s.key as typeof FIXED_KEYS[number])));
+      setSecrets(allSecretsArr.filter(s => !FIXED_KEYS.includes(s.key)));
     }
-  }, [runnerSecrets, integrationSecrets, FIXED_KEYS]);
+  }, [runnerSecrets, integrationSecrets, FIXED_KEYS, allRequiredSecrets]);
 
   const handleSave = () => {
     if (!project) return;
@@ -96,15 +126,17 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
     );
   };
 
-  // Save Anthropic API key separately (ambient-runner-secrets)
-  const handleSaveAnthropicKey = () => {
+  // Save runner API keys (ambient-runner-secrets)
+  const handleSaveRunnerSecrets = () => {
     if (!projectName) return;
 
     const runnerData: Record<string, string> = {};
-    if (anthropicApiKey) runnerData["ANTHROPIC_API_KEY"] = anthropicApiKey;
+    for (const [key, value] of Object.entries(runnerSecretValues)) {
+      if (value) runnerData[key] = value;
+    }
 
     if (Object.keys(runnerData).length === 0) {
-      errorToast("No Anthropic API key to save");
+      errorToast("No API keys to save");
       return;
     }
 
@@ -118,7 +150,7 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
           successToast("Saved to ambient-runner-secrets");
         },
         onError: (error) => {
-          const message = error instanceof Error ? error.message : "Failed to save Anthropic API key";
+          const message = error instanceof Error ? error.message : "Failed to save runner secrets";
           errorToast(message);
         },
       }
@@ -268,22 +300,22 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
             </AlertDescription>
           </Alert>
 
-          {/* Anthropic Section */}
+          {/* Runner API Keys Section */}
           <div className="border rounded-lg">
             <button
               type="button"
-              onClick={() => setAnthropicExpanded(!anthropicExpanded)}
+              onClick={() => setRunnerSecretsExpanded(!runnerSecretsExpanded)}
               className="w-full flex items-center justify-between p-3 hover:bg-muted/50 transition-colors rounded-lg"
             >
               <div className="flex items-center gap-2">
-                {anthropicExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                <span className="font-semibold">Anthropic</span>
-                {anthropicApiKey && <span className="text-xs text-muted-foreground">(configured)</span>}
+                {runnerSecretsExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                <span className="font-semibold">Runner API Keys</span>
+                {Object.values(runnerSecretValues).some(Boolean) && <span className="text-xs text-muted-foreground">(configured)</span>}
               </div>
             </button>
-            {anthropicExpanded && (
+            {runnerSecretsExpanded && (
               <div className="px-3 pb-3 space-y-3 border-t pt-3">
-                {vertexEnabled && anthropicApiKey && (
+                {vertexEnabled && runnerSecretValues["ANTHROPIC_API_KEY"] && (
                   <Alert variant="warning">
                     <AlertTriangle />
                     <AlertDescription>
@@ -291,25 +323,38 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
                     </AlertDescription>
                   </Alert>
                 )}
-                <div className="space-y-2">
-                  <Label htmlFor="anthropicApiKey">ANTHROPIC_API_KEY</Label>
-                  <div className="text-xs text-muted-foreground">Your Anthropic API key for Claude Code runner (saved to ambient-runner-secrets)</div>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      id="anthropicApiKey"
-                      type={showAnthropicKey ? "text" : "password"}
-                      placeholder="sk-ant-..."
-                      value={anthropicApiKey}
-                      onChange={(e) => setAnthropicApiKey(e.target.value)}
-                      className="flex-1"
-                    />
-                    <Button type="button" variant="ghost" size="sm" onClick={() => setShowAnthropicKey((v) => !v)} aria-label={showAnthropicKey ? "Hide key" : "Show key"}>
-                      {showAnthropicKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </Button>
-                  </div>
-                </div>
+                {allRequiredSecrets.map((secretKey) => {
+                  const ownerName = secretOwnerMap.get(secretKey);
+                  return (
+                    <div key={secretKey} className="space-y-2">
+                      <Label htmlFor={`runner-secret-${secretKey}`}>{secretKey}</Label>
+                      <div className="text-xs text-muted-foreground">
+                        {ownerName ? `Required by ${ownerName}` : "Runner API key"} (saved to ambient-runner-secrets)
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          id={`runner-secret-${secretKey}`}
+                          type={showRunnerSecrets[secretKey] ? "text" : "password"}
+                          placeholder={secretKey === "ANTHROPIC_API_KEY" ? "sk-ant-..." : `Enter ${secretKey}...`}
+                          value={runnerSecretValues[secretKey] || ""}
+                          onChange={(e) => setRunnerSecretValues((prev) => ({ ...prev, [secretKey]: e.target.value }))}
+                          className="flex-1"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setShowRunnerSecrets((prev) => ({ ...prev, [secretKey]: !prev[secretKey] }))}
+                          aria-label={showRunnerSecrets[secretKey] ? "Hide key" : "Show key"}
+                        >
+                          {showRunnerSecrets[secretKey] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
                 <div className="pt-2">
-                  <Button onClick={handleSaveAnthropicKey} disabled={updateSecretsMutation.isPending} size="sm">
+                  <Button onClick={handleSaveRunnerSecrets} disabled={updateSecretsMutation.isPending} size="sm">
                     {updateSecretsMutation.isPending ? (
                       <>
                         <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -318,7 +363,7 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
                     ) : (
                       <>
                         <Save className="w-4 h-4 mr-2" />
-                        Save Anthropic Key
+                        Save Runner API Keys
                       </>
                     )}
                   </Button>
