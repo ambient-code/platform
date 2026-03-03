@@ -4,34 +4,34 @@ on:
   push:
     branches: [main]
     paths:
-      - 'components/backend/**'
-      - 'components/ambient-api-server/**'
-      - 'components/runners/claude-code-runner/**'
-      - 'components/ambient-cli/**'
-      - 'components/ambient-sdk/go-sdk/**'
-      - '.github/workflows/unit-tests.yml'
-      - '!**/*.md'
+      - "components/backend/**"
+      - "components/ambient-api-server/**"
+      - "components/runners/claude-code-runner/**"
+      - "components/ambient-cli/**"
+      - "components/ambient-sdk/go-sdk/**"
+      - ".github/workflows/unit-tests.yml"
+      - "!**/*.md"
 
   pull_request:
     paths:
-      - 'components/backend/**'
-      - 'components/ambient-api-server/**'
-      - 'components/runners/claude-code-runner/**'
-      - 'components/ambient-cli/**'
-      - 'components/ambient-sdk/go-sdk/**'
-      - '.github/workflows/unit-tests.yml'
-      - '!**/*.md'
+      - "components/backend/**"
+      - "components/ambient-api-server/**"
+      - "components/runners/claude-code-runner/**"
+      - "components/ambient-cli/**"
+      - "components/ambient-sdk/go-sdk/**"
+      - ".github/workflows/unit-tests.yml"
+      - "!**/*.md"
 
   workflow_dispatch:
     inputs:
       test_label:
         description: "Backend test label filter"
-        default: 'unit'
+        default: "unit"
         required: true
         type: string
       default_namespace:
         description: "Default namespace for backend testing"
-        default: 'test-namespace'
+        default: "test-namespace"
         required: false
         type: string
 
@@ -83,8 +83,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version-file: 'components/backend/go.mod'
-          cache-dependency-path: 'components/backend/go.sum'
+          go-version-file: "components/backend/go.mod"
+          cache-dependency-path: "components/backend/go.sum"
 
       - name: Create reports directory
         shell: bash
@@ -146,8 +146,8 @@ jobs:
         uses: kubeflow/pipelines/.github/actions/junit-summary@master
         if: (!cancelled()) && steps.upload.outcome != 'failure'
         with:
-          xml_files: '${{ env.TESTS_DIR }}/reports'
-          custom_data: '{"HTML Report": "${{ steps.upload.outputs.artifact-url }}"}'
+          xml_files: "${{ env.TESTS_DIR }}/reports"
+          custom_data: '{\"HTML Report\": \"${{ steps.upload.outputs.artifact-url }}\"}'
         continue-on-error: true
 
       - name: Publish Test Summary
@@ -155,7 +155,7 @@ jobs:
         uses: kubeflow/pipelines/.github/actions/junit-summary@master
         if: (!cancelled()) && steps.upload.outcome == 'failure'
         with:
-          xml_files: '${{ env.TESTS_DIR }}/reports'
+          xml_files: "${{ env.TESTS_DIR }}/reports"
         continue-on-error: true
 
       - name: Mark Workflow failure if test step failed
@@ -184,8 +184,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version-file: 'components/ambient-api-server/go.mod'
-          cache-dependency-path: 'components/ambient-api-server/go.sum'
+          go-version-file: "components/ambient-api-server/go.mod"
+          cache-dependency-path: "components/ambient-api-server/go.sum"
 
       - name: Create secrets directory
         run: |
@@ -215,8 +215,8 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: '3.11'
-          cache: 'pip'
+          python-version: "3.11"
+          cache: "pip"
 
       - name: Install dependencies
         run: |
@@ -253,8 +253,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version-file: 'components/ambient-cli/go.mod'
-          cache-dependency-path: 'components/ambient-cli/go.sum'
+          go-version-file: "components/ambient-cli/go.mod"
+          cache-dependency-path: "components/ambient-cli/go.sum"
 
       - name: Build binary
         run: |
