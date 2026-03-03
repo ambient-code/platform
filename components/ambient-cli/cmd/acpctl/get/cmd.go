@@ -4,6 +4,8 @@ package get
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/signal"
 	"strings"
 	"time"
 
@@ -17,6 +19,8 @@ import (
 var args struct {
 	outputFormat string
 	limit        int
+	watch        bool
+	watchTimeout time.Duration
 }
 
 var Cmd = &cobra.Command{
@@ -30,12 +34,14 @@ Valid resource types:
   project-settings (aliases: projectsettings, ps)`,
 	Args:    cobra.RangeArgs(1, 2),
 	RunE:    run,
-	Example: "  acpctl get sessions\n  acpctl get session my-session-id\n  acpctl get projects -o json",
+	Example: "  acpctl get sessions\n  acpctl get session my-session-id\n  acpctl get projects -o json\n  acpctl get sessions -w  # Watch for real-time session changes",
 }
 
 func init() {
 	Cmd.Flags().StringVarP(&args.outputFormat, "output", "o", "", "Output format: json|wide")
 	Cmd.Flags().IntVar(&args.limit, "limit", 100, "Maximum number of items to return")
+	Cmd.Flags().BoolVarP(&args.watch, "watch", "w", false, "Watch for real-time changes (sessions only)")
+	Cmd.Flags().DurationVar(&args.watchTimeout, "watch-timeout", 30*time.Minute, "Timeout for watch mode (e.g. 1h, 10m)")
 }
 
 func run(cmd *cobra.Command, cmdArgs []string) error {
@@ -46,19 +52,38 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 		name = cmdArgs[1]
 	}
 
+	if args.watch {
+		if resource != "sessions" {
+			return fmt.Errorf("watch is only supported for sessions, not %s", resource)
+		}
+		if name != "" {
+			return fmt.Errorf("watch cannot be used with a specific resource name")
+		}
+		if args.outputFormat == "json" {
+			return fmt.Errorf("watch is not supported with JSON output format")
+		}
+		if cmd.Flags().Changed("limit") {
+			fmt.Fprintln(cmd.ErrOrStderr(), "Warning: --limit is ignored in watch mode")
+		}
+	}
+
 	client, err := connection.NewClientFromConfig()
 	if err != nil {
 		return err
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
 
 	format, err := output.ParseFormat(args.outputFormat)
 	if err != nil {
 		return err
 	}
 	printer := output.NewPrinter(format)
+
+	if args.watch {
+		return watchSessions(cmd.Context(), client, printer)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
 	switch resource {
 	case "sessions":
@@ -229,5 +254,66 @@ func formatAge(d time.Duration) string {
 		return fmt.Sprintf("%dh", int(d.Hours()))
 	default:
 		return fmt.Sprintf("%dd", int(d.Hours()/24))
+	}
+}
+
+func watchSessions(ctx context.Context, client *sdkclient.Client, printer *output.Printer) error {
+	ctx, cancel := signal.NotifyContext(ctx, os.Interrupt)
+	defer cancel()
+
+	opts := &sdkclient.WatchOptions{
+		Timeout: args.watchTimeout,
+	}
+
+	watcher, err := client.Sessions().Watch(ctx, opts)
+	if err != nil {
+		return fmt.Errorf("start session watch: %w", err)
+	}
+	defer watcher.Stop()
+
+	columns := []output.Column{
+		{Name: "EVENT", Width: 10},
+		{Name: "ID", Width: 27},
+		{Name: "NAME", Width: 30},
+		{Name: "PHASE", Width: 12},
+		{Name: "MODEL", Width: 16},
+		{Name: "AGE", Width: 10},
+	}
+
+	table := output.NewTable(printer.Writer(), columns)
+	table.WriteHeaders()
+
+	for {
+		select {
+		case event := <-watcher.Events():
+			if event == nil {
+				continue
+			}
+
+			eventType := event.Type
+			if event.Session != nil {
+				age := ""
+				if event.Session.CreatedAt != nil {
+					age = formatAge(time.Since(*event.Session.CreatedAt))
+				}
+				table.WriteRow(eventType, event.Session.ID, event.Session.Name, event.Session.Phase, event.Session.LlmModel, age)
+			} else {
+				table.WriteRow(eventType, event.ResourceID, "", "", "", "")
+			}
+
+		case err := <-watcher.Errors():
+			if err != nil {
+				return fmt.Errorf("watch error: %w", err)
+			}
+
+		case <-watcher.Done():
+			return nil
+
+		case <-ctx.Done():
+			if ctx.Err() == context.Canceled {
+				return nil
+			}
+			return nil
+		}
 	}
 }

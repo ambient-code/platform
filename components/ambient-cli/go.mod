@@ -1,6 +1,8 @@
 module github.com/ambient-code/platform/components/ambient-cli
 
-go 1.24
+go 1.24.0
+
+toolchain go1.24.9
 
 require (
 	github.com/ambient-code/platform/components/ambient-sdk/go-sdk v0.0.0
@@ -12,7 +14,7 @@ require (
 require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.6 // indirect
-	golang.org/x/sys v0.29.0 // indirect
+	golang.org/x/sys v0.40.0 // indirect
 )
 
 replace github.com/ambient-code/platform/components/ambient-sdk/go-sdk => ../ambient-sdk/go-sdk
