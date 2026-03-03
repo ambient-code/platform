@@ -176,8 +176,8 @@ func ParseManifestPath(args []string) string {
 
 func ensureTagType(ctx context.Context, client *http.Client, adminURL, name, description, token string) error {
 	// Check if tag type exists
-	url := fmt.Sprintf("%s/api/admin/tag-types/%s", adminURL, url.PathEscape(name))
-	resp, err := doRequest(ctx, client, "GET", url, token, nil)
+	reqURL := fmt.Sprintf("%s/api/admin/tag-types/%s", adminURL, url.PathEscape(name))
+	resp, err := doRequest(ctx, client, "GET", reqURL, token, nil)
 	if err != nil {
 		return err
 	}
@@ -218,8 +218,8 @@ func ensureTagType(ctx context.Context, client *http.Client, adminURL, name, des
 }
 
 func flagExists(ctx context.Context, client *http.Client, adminURL, project, flagName, token string) (bool, error) {
-	url := fmt.Sprintf("%s/api/admin/projects/%s/features/%s", adminURL, url.PathEscape(project), url.PathEscape(flagName))
-	resp, err := doRequest(ctx, client, "GET", url, token, nil)
+	reqURL := fmt.Sprintf("%s/api/admin/projects/%s/features/%s", adminURL, url.PathEscape(project), url.PathEscape(flagName))
+	resp, err := doRequest(ctx, client, "GET", reqURL, token, nil)
 	if err != nil {
 		return false, err
 	}
@@ -236,7 +236,7 @@ func flagExists(ctx context.Context, client *http.Client, adminURL, project, fla
 }
 
 func createFlag(ctx context.Context, client *http.Client, adminURL, project, flagName, description, token string) error {
-	url := fmt.Sprintf("%s/api/admin/projects/%s/features", adminURL, url.PathEscape(project))
+	reqURL := fmt.Sprintf("%s/api/admin/projects/%s/features", adminURL, url.PathEscape(project))
 	body, err := json.Marshal(map[string]any{
 		"name":           flagName,
 		"description":    description,
@@ -248,7 +248,7 @@ func createFlag(ctx context.Context, client *http.Client, adminURL, project, fla
 		return fmt.Errorf("marshaling flag request: %w", err)
 	}
 
-	resp, err := doRequest(ctx, client, "POST", url, token, bytes.NewReader(body))
+	resp, err := doRequest(ctx, client, "POST", reqURL, token, bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -266,7 +266,7 @@ func createFlag(ctx context.Context, client *http.Client, adminURL, project, fla
 }
 
 func addTag(ctx context.Context, client *http.Client, adminURL, flagName, token string) error {
-	url := fmt.Sprintf("%s/api/admin/features/%s/tags", adminURL, url.PathEscape(flagName))
+	reqURL := fmt.Sprintf("%s/api/admin/features/%s/tags", adminURL, url.PathEscape(flagName))
 	body, err := json.Marshal(map[string]string{
 		"type":  "scope",
 		"value": "workspace",
@@ -275,7 +275,7 @@ func addTag(ctx context.Context, client *http.Client, adminURL, flagName, token 
 		return fmt.Errorf("marshaling tag request: %w", err)
 	}
 
-	resp, err := doRequest(ctx, client, "POST", url, token, bytes.NewReader(body))
+	resp, err := doRequest(ctx, client, "POST", reqURL, token, bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -289,7 +289,7 @@ func addTag(ctx context.Context, client *http.Client, adminURL, flagName, token 
 }
 
 func addRolloutStrategy(ctx context.Context, client *http.Client, adminURL, project, environment, flagName, token string) error {
-	url := fmt.Sprintf("%s/api/admin/projects/%s/features/%s/environments/%s/strategies",
+	reqURL := fmt.Sprintf("%s/api/admin/projects/%s/features/%s/environments/%s/strategies",
 		adminURL, url.PathEscape(project), url.PathEscape(flagName), url.PathEscape(environment))
 	body, err := json.Marshal(map[string]any{
 		"name": "flexibleRollout",
@@ -303,7 +303,7 @@ func addRolloutStrategy(ctx context.Context, client *http.Client, adminURL, proj
 		return fmt.Errorf("marshaling strategy request: %w", err)
 	}
 
-	resp, err := doRequest(ctx, client, "POST", url, token, bytes.NewReader(body))
+	resp, err := doRequest(ctx, client, "POST", reqURL, token, bytes.NewReader(body))
 	if err != nil {
 		return err
 	}

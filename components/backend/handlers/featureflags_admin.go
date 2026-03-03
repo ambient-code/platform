@@ -204,11 +204,11 @@ func ListFeatureFlags(c *gin.Context) {
 		return
 	}
 
-	url := fmt.Sprintf("%s/api/admin/projects/%s/features",
+	reqURL := fmt.Sprintf("%s/api/admin/projects/%s/features",
 		strings.TrimSuffix(getUnleashAdminURL(), "/"),
 		url.PathEscape(getUnleashProject()))
 
-	resp, err := unleashAdminRequest("GET", url, nil)
+	resp, err := unleashAdminRequest("GET", reqURL, nil)
 	if err != nil {
 		log.Printf("Failed to connect to Unleash Admin API: %v", err)
 		c.JSON(http.StatusBadGateway, gin.H{"error": "Failed to connect to Unleash"})
@@ -364,12 +364,12 @@ func GetFeatureFlag(c *gin.Context) {
 		return
 	}
 
-	url := fmt.Sprintf("%s/api/admin/projects/%s/features/%s",
+	reqURL := fmt.Sprintf("%s/api/admin/projects/%s/features/%s",
 		strings.TrimSuffix(getUnleashAdminURL(), "/"),
 		url.PathEscape(getUnleashProject()),
 		url.PathEscape(flagName))
 
-	resp, err := unleashAdminRequest("GET", url, nil)
+	resp, err := unleashAdminRequest("GET", reqURL, nil)
 	if err != nil {
 		log.Printf("Failed to connect to Unleash Admin API: %v", err)
 		c.JSON(http.StatusBadGateway, gin.H{"error": "Failed to connect to Unleash"})
@@ -405,15 +405,15 @@ func setFlagOverride(c *gin.Context, value string, responseMsg string) {
 	namespace := sanitizeParam(c.Param("projectName"))
 	flagName := sanitizeParam(c.Param("flagName"))
 
-	if flagName == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Flag name is required"})
-		return
-	}
-
 	reqK8s, _ := GetK8sClientsForRequest(c)
 	if reqK8s == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User token required"})
 		c.Abort()
+		return
+	}
+
+	if flagName == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Flag name is required"})
 		return
 	}
 
