@@ -98,6 +98,10 @@ func FlagsFromConfig(path string) ([]FlagSpec, error) {
 	for i := range cfg.Flags {
 		cfg.Flags[i].Name = sanitizeLogString(cfg.Flags[i].Name)
 		cfg.Flags[i].Description = sanitizeLogString(cfg.Flags[i].Description)
+		for j := range cfg.Flags[i].Tags {
+			cfg.Flags[i].Tags[j].Type = sanitizeLogString(cfg.Flags[i].Tags[j].Type)
+			cfg.Flags[i].Tags[j].Value = sanitizeLogString(cfg.Flags[i].Tags[j].Value)
+		}
 	}
 
 	return cfg.Flags, nil
