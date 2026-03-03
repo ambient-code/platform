@@ -38,8 +38,8 @@ jobs:
 
       - name: Run model discovery
         env:
-          CLOUD_ML_REGION: ${{ secrets.CLOUD_ML_REGION }}
-          ANTHROPIC_VERTEX_PROJECT_ID: ${{ secrets.ANTHROPIC_VERTEX_PROJECT_ID }}
+          GCP_REGION: ${{ secrets.GCP_REGION }}
+          GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
         run: python scripts/model-discovery.py
 
       - name: Check for changes

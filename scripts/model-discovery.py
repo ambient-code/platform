@@ -7,8 +7,8 @@ availability, and updates the model manifest. Never removes models — only
 adds new ones or updates the ``available`` / ``vertexId`` fields.
 
 Required env vars:
-    CLOUD_ML_REGION            - GCP region (e.g. us-east5)
-    ANTHROPIC_VERTEX_PROJECT_ID - GCP project ID
+    GCP_REGION                 - GCP region (e.g. us-east5)
+    GCP_PROJECT                - GCP project ID
 
 Optional env vars:
     GOOGLE_APPLICATION_CREDENTIALS - Path to SA key (uses ADC otherwise)
@@ -217,12 +217,12 @@ def save_manifest(path: Path, manifest: dict) -> None:
 
 
 def main() -> int:
-    region = os.environ.get("CLOUD_ML_REGION", "").strip()
-    project_id = os.environ.get("ANTHROPIC_VERTEX_PROJECT_ID", "").strip()
+    region = os.environ.get("GCP_REGION", "").strip()
+    project_id = os.environ.get("GCP_PROJECT", "").strip()
 
     if not region or not project_id:
         print(
-            "ERROR: CLOUD_ML_REGION and ANTHROPIC_VERTEX_PROJECT_ID must be set",
+            "ERROR: GCP_REGION and GCP_PROJECT must be set",
             file=sys.stderr,
         )
         return 1
