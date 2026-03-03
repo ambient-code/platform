@@ -12,8 +12,8 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
-	pb "github.com/ambient/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1"
-	"github.com/ambient/platform/components/ambient-api-server/test"
+	pb "github.com/ambient-code/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1"
+	"github.com/ambient-code/platform/components/ambient-api-server/test"
 )
 
 func TestProjectGRPCCrud(t *testing.T) {

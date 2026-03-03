@@ -9,8 +9,8 @@ import (
 	. "github.com/onsi/gomega"
 	"gopkg.in/resty.v1"
 
-	"github.com/ambient/platform/components/ambient-api-server/pkg/api/openapi"
-	"github.com/ambient/platform/components/ambient-api-server/test"
+	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
+	"github.com/ambient-code/platform/components/ambient-api-server/test"
 )
 
 func TestUserGet(t *testing.T) {

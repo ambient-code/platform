@@ -5,7 +5,7 @@ name: E2E Tests
 # Maintainers: Review PR code before adding label!
 
 on:
-  pull_request_target:
+  pull_request:
     types: [labeled]
     branches: [ main, master ]
 
@@ -16,6 +16,7 @@ concurrency:
 jobs:
   # Security check - only proceed if safe-to-test label was added
   check-label:
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     outputs:
       should-run: ${{ steps.check.outputs.should-run }}

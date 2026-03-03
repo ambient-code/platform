@@ -8,7 +8,7 @@ import (
 
 	"github.com/golang/glog"
 
-	"github.com/ambient/platform/components/ambient-api-server/test"
+	"github.com/ambient-code/platform/components/ambient-api-server/test"
 )
 
 func TestMain(m *testing.M) {

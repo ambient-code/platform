@@ -22,10 +22,15 @@ kubectl wait --for=condition=available --timeout=300s \
   deployment/frontend \
   -n ambient-code
 
+# Wait for MinIO (required for session state persistence)
+echo "⏳ Waiting for minio..."
+kubectl wait --for=condition=available --timeout=300s \
+  deployment/minio \
+  -n ambient-code 2>/dev/null || echo "⚠️  MinIO not deployed (S3 persistence disabled)"
+
 echo ""
 echo "✅ All pods are ready!"
 echo ""
 
 # Show pod status
 kubectl get pods -n ambient-code
-

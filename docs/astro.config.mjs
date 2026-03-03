@@ -20,7 +20,7 @@ export default defineConfig({
       ],
       editLink: {
         baseUrl:
-          'https://github.com/ambient-code/platform/edit/main/docs/src/content/docs/',
+          'https://github.com/ambient-code/platform/edit/main/docs/',
       },
       sidebar: [
         {

@@ -206,3 +206,73 @@ class TestClaudeBridgeShutdown:
         bridge._obs = mock_obs
         await bridge.shutdown()
         mock_obs.finalize.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+class TestClaudeBridgeSetupObservability:
+    """Test _setup_observability wiring."""
+
+    async def test_forwards_workflow_env_vars_to_initialize(self):
+        """Verify the three ACTIVE_WORKFLOW_* env vars are read from context and forwarded."""
+        bridge = ClaudeBridge()
+        ctx = RunnerContext(
+            session_id="sess-1",
+            workspace_path="/workspace",
+            environment={
+                "AGENTIC_SESSION_NAMESPACE": "my-project",
+                "ACTIVE_WORKFLOW_GIT_URL": "https://github.com/org/my-wf.git",
+                "ACTIVE_WORKFLOW_BRANCH": "develop",
+                "ACTIVE_WORKFLOW_PATH": "workflows/analysis",
+                "USER_ID": "u1",
+                "USER_NAME": "Test",
+            },
+        )
+        bridge.set_context(ctx)
+
+        mock_obs_instance = AsyncMock()
+        mock_obs_instance.initialize = AsyncMock(return_value=False)
+
+        with patch(
+            "ambient_runner.observability.ObservabilityManager",
+            return_value=mock_obs_instance,
+        ) as mock_obs_cls:
+            await bridge._setup_observability("claude-sonnet-4-5")
+
+        mock_obs_cls.assert_called_once()
+        mock_obs_instance.initialize.assert_awaited_once()
+        call_kwargs = mock_obs_instance.initialize.call_args[1]
+
+        assert call_kwargs["namespace"] == "my-project"
+        assert call_kwargs["model"] == "claude-sonnet-4-5"
+        assert call_kwargs["workflow_url"] == "https://github.com/org/my-wf.git"
+        assert call_kwargs["workflow_branch"] == "develop"
+        assert call_kwargs["workflow_path"] == "workflows/analysis"
+
+    async def test_forwards_empty_defaults_when_workflow_vars_unset(self):
+        """Verify empty-string defaults are forwarded when workflow env vars are absent."""
+        bridge = ClaudeBridge()
+        ctx = RunnerContext(
+            session_id="sess-2",
+            workspace_path="/workspace",
+            environment={
+                "AGENTIC_SESSION_NAMESPACE": "ns",
+                "USER_ID": "u1",
+                "USER_NAME": "Test",
+            },
+        )
+        bridge.set_context(ctx)
+
+        mock_obs_instance = AsyncMock()
+        mock_obs_instance.initialize = AsyncMock(return_value=False)
+
+        with patch(
+            "ambient_runner.observability.ObservabilityManager",
+            return_value=mock_obs_instance,
+        ):
+            await bridge._setup_observability("claude-sonnet-4-5")
+
+        call_kwargs = mock_obs_instance.initialize.call_args[1]
+
+        assert call_kwargs["workflow_url"] == ""
+        assert call_kwargs["workflow_branch"] == ""
+        assert call_kwargs["workflow_path"] == ""

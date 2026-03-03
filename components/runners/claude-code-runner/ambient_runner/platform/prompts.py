@@ -20,6 +20,13 @@ logger = logging.getLogger(__name__)
 
 WORKSPACE_STRUCTURE_HEADER = "# Workspace Structure\n\n"
 
+WORKSPACE_FIXED_PATHS_PROMPT = (
+    "**ACP Session Workspace Paths** (use directly, never search):\n"
+    "- `/workspace/file-uploads/` user uploads\n"
+    "- `/workspace/repos/<name>/` git repositories added to context by user\n"
+    "- `/workspace/artifacts/` AI writes all output here\n\n"
+)
+
 MCP_INTEGRATIONS_PROMPT = (
     "## MCP Integrations\n"
     "If you need Google Drive access: Ask user to go to Integrations page "
@@ -124,6 +131,7 @@ def build_workspace_context_prompt(
         Formatted prompt string.
     """
     prompt = WORKSPACE_STRUCTURE_HEADER
+    prompt += WORKSPACE_FIXED_PATHS_PROMPT
 
     # Workflow directory
     if workflow_name:

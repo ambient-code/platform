@@ -1,0 +1,21 @@
+# Use locally-built runner and state-sync images loaded into kind cluster
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agentic-operator
+spec:
+  template:
+    spec:
+      containers:
+      - name: agentic-operator
+        env:
+        - name: AMBIENT_CODE_RUNNER_IMAGE
+          value: "localhost/vteam_claude_runner:latest"
+        - name: STATE_SYNC_IMAGE
+          value: "localhost/vteam_state_sync:latest"
+        - name: CONTENT_SERVICE_IMAGE
+          value: "localhost/vteam_backend:latest"
+        - name: IMAGE_PULL_POLICY
+          value: "IfNotPresent"
+        - name: POD_FSGROUP
+          value: "0"
