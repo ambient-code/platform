@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import Link from "next/link";
-import { AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
+import { AlertCircle, AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,8 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Select,
   SelectContent,
@@ -74,7 +76,7 @@ export function CreateSessionDialog({
   const [open, setOpen] = useState(false);
   const router = useRouter();
   const createSessionMutation = useCreateSession();
-  const { data: runnerTypes } = useRunnerTypes();
+  const { data: runnerTypes, isLoading: runnerTypesLoading, isError: runnerTypesError, refetch: refetchRunnerTypes } = useRunnerTypes();
 
   const { data: modelsData, isLoading: modelsLoading } = useModels(projectName, open);
   const { data: integrationsStatus } = useIntegrationsStatus();
@@ -211,25 +213,39 @@ export function CreateSessionDialog({
                 render={({ field }) => (
                   <FormItem className="w-full">
                     <FormLabel>Runner Type</FormLabel>
-                    <Select
-                      onValueChange={(v) => handleRunnerTypeChange(v, field.onChange)}
-                      defaultValue={field.value}
-                    >
-                      <FormControl>
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Select a runner type" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {runnerTypes?.map((rt) => (
-                          <SelectItem key={rt.id} value={rt.id}>
-                            {rt.displayName}
-                          </SelectItem>
-                        )) ?? (
-                          <SelectItem value={DEFAULT_RUNNER_TYPE_ID}>Claude Agent SDK</SelectItem>
-                        )}
-                      </SelectContent>
-                    </Select>
+                    {runnerTypesLoading ? (
+                      <Skeleton className="h-10 w-full" />
+                    ) : runnerTypesError ? (
+                      <Alert variant="destructive">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertDescription className="flex items-center justify-between">
+                          <span>Failed to load runner types.</span>
+                          <Button type="button" variant="outline" size="sm" onClick={() => refetchRunnerTypes()}>
+                            Retry
+                          </Button>
+                        </AlertDescription>
+                      </Alert>
+                    ) : (
+                      <Select
+                        onValueChange={(v) => handleRunnerTypeChange(v, field.onChange)}
+                        defaultValue={field.value}
+                      >
+                        <FormControl>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Select a runner type" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {runnerTypes?.map((rt) => (
+                            <SelectItem key={rt.id} value={rt.id}>
+                              {rt.displayName}
+                            </SelectItem>
+                          )) ?? (
+                            <SelectItem value={DEFAULT_RUNNER_TYPE_ID}>Claude Agent SDK</SelectItem>
+                          )}
+                        </SelectContent>
+                      </Select>
+                    )}
                     {selectedRunner && (
                       <p className="text-xs text-muted-foreground">
                         {selectedRunner.description}
@@ -417,7 +433,7 @@ export function CreateSessionDialog({
                 >
                   Cancel
                 </Button>
-                <Button type="submit" disabled={createSessionMutation.isPending}>
+                <Button type="submit" disabled={createSessionMutation.isPending || runnerTypesLoading || runnerTypesError}>
                   {createSessionMutation.isPending && (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   )}

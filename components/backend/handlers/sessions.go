@@ -550,32 +550,50 @@ func CreateSession(c *gin.Context) {
 		return
 	}
 
-	// Derive internal env vars from runner ID (not from ConfigMap)
-	registryEnvVars := getRunnerInternalEnvVars(runnerTypeID)
+	// Read env vars from registry (RUNNER_TYPE, RUNNER_STATE_DIR, etc.)
+	registryEnvVars := getContainerEnvVars(runnerTypeID)
 
 	// Validate API keys are configured before creating session.
-	// For Claude with Vertex AI, skip secret validation (uses service account).
-	// For all runners, check that ambient-runner-secrets exists.
-	vertexEnabled := os.Getenv("CLAUDE_CODE_USE_VERTEX") == "1"
-	skipSecretValidation := vertexEnabled && runnerTypeID == DefaultRunnerType
-	if !skipSecretValidation {
-		const runnerSecretsName = "ambient-runner-secrets"
-		_, err := reqK8s.CoreV1().Secrets(project).Get(c.Request.Context(), runnerSecretsName, v1.GetOptions{})
-		if err != nil {
-			if errors.IsNotFound(err) {
-				log.Printf("Session creation blocked: %s secret missing in project %s", runnerSecretsName, project)
+	// If Vertex AI is enabled, skip the check (uses service account auth).
+	// Otherwise, check that at least one of the runner's requiredSecretKeys
+	// is present and non-empty in ambient-runner-secrets.
+	vertexEnabled := isVertexEnabled()
+	if vertexEnabled {
+		log.Printf("Vertex AI enabled, skipping runner secret validation for project %s", project)
+	} else {
+		requiredKeys := getRequiredSecretKeys(runnerTypeID)
+		if len(requiredKeys) > 0 {
+			const runnerSecretsName = "ambient-runner-secrets"
+			sec, err := reqK8s.CoreV1().Secrets(project).Get(c.Request.Context(), runnerSecretsName, v1.GetOptions{})
+			if err != nil {
+				if errors.IsNotFound(err) {
+					log.Printf("Session creation blocked: %s secret missing in project %s", runnerSecretsName, project)
+					c.JSON(http.StatusBadRequest, gin.H{
+						"error": fmt.Sprintf("Runner '%s' requires at least one of [%s] in ambient-runner-secrets. Configure keys in Project Settings or enable Vertex AI.", runnerTypeID, strings.Join(requiredKeys, ", ")),
+					})
+					return
+				}
+				log.Printf("Failed to check runner secret in project %s: %v", project, err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to validate API key configuration"})
+				return
+			}
+			// Check that at least one required key is present and non-empty (OR logic)
+			found := false
+			for _, key := range requiredKeys {
+				if val, ok := sec.Data[key]; ok && len(val) > 0 {
+					found = true
+					break
+				}
+			}
+			if !found {
+				log.Printf("Session creation blocked: none of %v found in %s for project %s", requiredKeys, runnerSecretsName, project)
 				c.JSON(http.StatusBadRequest, gin.H{
-					"error": fmt.Sprintf("API keys not configured. Please configure runner secrets for project '%s' before creating sessions.", project),
+					"error": fmt.Sprintf("Runner '%s' requires at least one of [%s] in ambient-runner-secrets. Configure keys in Project Settings or enable Vertex AI.", runnerTypeID, strings.Join(requiredKeys, ", ")),
 				})
 				return
 			}
-			log.Printf("Failed to check runner secret in project %s: %v", project, err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to validate API key configuration"})
-			return
+			log.Printf("Validated runner secret for %s in project %s", runnerTypeID, project)
 		}
-		log.Printf("Validated runner secret %s exists in project %s", runnerSecretsName, project)
-	} else {
-		log.Printf("Vertex AI enabled for Claude, skipping runner secret validation for project %s", project)
 	}
 
 	// Validation for multi-repo can be added here if needed

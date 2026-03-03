@@ -23,7 +23,10 @@ from ambient_runner.bridge import (
     PlatformBridge,
     setup_bridge_observability,
 )
-from ambient_runner.bridges.gemini_cli.session import GeminiSessionManager
+from ambient_runner.bridges.gemini_cli.session import (
+    SHUTDOWN_TIMEOUT_SEC,
+    GeminiSessionManager,
+)
 from ambient_runner.platform.context import RunnerContext
 
 logger = logging.getLogger(__name__)
@@ -49,6 +52,8 @@ class GeminiCLIBridge(PlatformBridge):
         self._api_key: str = ""
         self._use_vertex: bool = False
         self._cwd_path: str = ""
+        self._mcp_settings_path: str | None = None
+        self._mcp_status_cache: dict | None = None
         self._last_creds_refresh: float = 0.0
 
     # ------------------------------------------------------------------
@@ -156,7 +161,16 @@ class GeminiCLIBridge(PlatformBridge):
     async def shutdown(self) -> None:
         """Graceful shutdown: stop workers, finalise tracing."""
         if self._session_manager:
-            await self._session_manager.shutdown()
+            try:
+                await asyncio.wait_for(
+                    self._session_manager.shutdown(),
+                    timeout=SHUTDOWN_TIMEOUT_SEC * 3,
+                )
+            except asyncio.TimeoutError:
+                logger.warning(
+                    "GeminiCLIBridge: manager shutdown timed out after %ds",
+                    SHUTDOWN_TIMEOUT_SEC * 3,
+                )
         if self._obs:
             await self._obs.finalize()
         logger.info("GeminiCLIBridge: shutdown complete")
@@ -187,8 +201,60 @@ class GeminiCLIBridge(PlatformBridge):
         logger.info("GeminiCLIBridge: marked dirty -- will reinitialise on next run")
 
     def get_error_context(self) -> str:
-        """No extra error context for Gemini CLI (stderr is logged directly)."""
+        """Return recent Gemini CLI stderr lines for error reporting."""
+        if not self._session_manager:
+            return ""
+        all_lines = self._session_manager.get_all_stderr(max_per_worker=10)
+        if all_lines:
+            return "Gemini CLI stderr:\n" + "\n".join(all_lines[-20:])
         return ""
+
+    async def get_mcp_status(self) -> dict:
+        """Return MCP server status from the written settings file (cached)."""
+        if self._mcp_status_cache is not None:
+            return self._mcp_status_cache
+
+        import json
+
+        empty = {"servers": [], "totalCount": 0}
+        if not self._mcp_settings_path:
+            self._mcp_status_cache = empty
+            return empty
+
+        try:
+            from pathlib import Path
+
+            settings_path = Path(self._mcp_settings_path)
+            if not settings_path.exists():
+                return empty  # don't cache — file may appear later
+
+            with open(settings_path) as f:
+                settings = json.load(f)
+
+            mcp_servers = settings.get("mcpServers", {})
+            servers_list = []
+            for name, config in mcp_servers.items():
+                transport = "stdio"
+                if config.get("httpUrl"):
+                    transport = "http"
+                elif config.get("url"):
+                    transport = "sse"
+                servers_list.append(
+                    {
+                        "name": name,
+                        "displayName": name,
+                        "status": "configured",
+                        "transport": transport,
+                        "tools": [],
+                    }
+                )
+
+            result = {"servers": servers_list, "totalCount": len(servers_list)}
+            self._mcp_status_cache = result
+            return result
+        except Exception as e:
+            logger.error("Failed to get MCP status: %s", e, exc_info=True)
+            return {"servers": [], "totalCount": 0, "error": str(e)}
 
     # ------------------------------------------------------------------
     # Properties
@@ -247,8 +313,14 @@ class GeminiCLIBridge(PlatformBridge):
         # Observability
         self._obs = await setup_bridge_observability(self._context, model)
 
+        # MCP servers — write .gemini/settings.json so the CLI discovers them
+        from ambient_runner.bridges.gemini_cli.mcp import setup_gemini_mcp
+
+        mcp_settings_path = setup_gemini_mcp(self._context, cwd_path)
+
         # Store results
         self._configured_model = model
         self._api_key = api_key
         self._use_vertex = use_vertex
         self._cwd_path = cwd_path
+        self._mcp_settings_path = mcp_settings_path

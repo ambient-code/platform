@@ -440,9 +440,9 @@ var _ = Describe("Sessions Handler", Label(test_constants.LabelUnit, test_consta
 		Context("When API keys are not configured", func() {
 			It("Should block session creation when ambient-runner-secrets is missing (Vertex disabled)", func() {
 				// Arrange - ensure Vertex is disabled
-				originalVertexValue := os.Getenv("CLAUDE_CODE_USE_VERTEX")
-				os.Setenv("CLAUDE_CODE_USE_VERTEX", "0")
-				defer os.Setenv("CLAUDE_CODE_USE_VERTEX", originalVertexValue)
+				originalVertexValue := os.Getenv("USE_VERTEX")
+				os.Setenv("USE_VERTEX", "0")
+				defer os.Setenv("USE_VERTEX", originalVertexValue)
 
 				// Ensure ambient-runner-secrets does NOT exist in test namespace
 				_ = k8sUtils.K8sClient.CoreV1().Secrets(testNamespace).Delete(ctx, "ambient-runner-secrets", v1.DeleteOptions{})
@@ -480,9 +480,9 @@ var _ = Describe("Sessions Handler", Label(test_constants.LabelUnit, test_consta
 
 			It("Should allow session creation when ambient-runner-secrets exists (Vertex disabled)", func() {
 				// Arrange - ensure Vertex is disabled
-				originalVertexValue := os.Getenv("CLAUDE_CODE_USE_VERTEX")
-				os.Setenv("CLAUDE_CODE_USE_VERTEX", "0")
-				defer os.Setenv("CLAUDE_CODE_USE_VERTEX", originalVertexValue)
+				originalVertexValue := os.Getenv("USE_VERTEX")
+				os.Setenv("USE_VERTEX", "0")
+				defer os.Setenv("USE_VERTEX", originalVertexValue)
 
 				// Create ambient-runner-secrets
 				secret := &corev1.Secret{
@@ -528,9 +528,9 @@ var _ = Describe("Sessions Handler", Label(test_constants.LabelUnit, test_consta
 
 			It("Should skip validation when Vertex AI is enabled", func() {
 				// Arrange - enable Vertex AI
-				originalVertexValue := os.Getenv("CLAUDE_CODE_USE_VERTEX")
-				os.Setenv("CLAUDE_CODE_USE_VERTEX", "1")
-				defer os.Setenv("CLAUDE_CODE_USE_VERTEX", originalVertexValue)
+				originalVertexValue := os.Getenv("USE_VERTEX")
+				os.Setenv("USE_VERTEX", "1")
+				defer os.Setenv("USE_VERTEX", originalVertexValue)
 
 				// Ensure ambient-runner-secrets does NOT exist (should not matter with Vertex)
 				_ = k8sUtils.K8sClient.CoreV1().Secrets(testNamespace).Delete(ctx, "ambient-runner-secrets", v1.DeleteOptions{})

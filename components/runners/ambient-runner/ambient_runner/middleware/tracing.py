@@ -77,6 +77,14 @@ async def tracing_middleware(
                     trace_id_emitted = True
                     logger.info(f"Tracing middleware: emitted trace ID {trace_id}")
 
-    finally:
-        # Safety-net: close any open turn that wasn't ended by RUN_FINISHED
+    except Exception as exc:
+        # Mark the current Langfuse trace as ERROR so failures are visible
+        # in the observability dashboard.  The run endpoint appends stderr
+        # context from bridge.get_error_context() to the RunErrorEvent.
+        logger.debug("Tracing middleware: recording error in Langfuse trace")
+        await obs.cleanup_on_error(exc)
+        raise
+
+    else:
+        # Normal completion — close any open turn that wasn't ended by RUN_FINISHED
         obs.finalize_event_tracking()

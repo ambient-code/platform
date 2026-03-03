@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 	"time"
 
@@ -321,4 +322,24 @@ func ensureFreshRunnerToken(ctx context.Context, session *unstructured.Unstructu
 
 	log.Printf("Refreshed runner token for session %s/%s", namespace, session.GetName())
 	return nil
+}
+
+// IsVertexEnabled checks whether Vertex AI is enabled via environment variables.
+// It checks USE_VERTEX first (unified name), then falls back to the legacy
+// CLAUDE_CODE_USE_VERTEX for backward compatibility.
+func IsVertexEnabled() bool {
+	if isTruthy(os.Getenv("USE_VERTEX")) {
+		return true
+	}
+	if isTruthy(os.Getenv("CLAUDE_CODE_USE_VERTEX")) {
+		log.Println("WARNING: CLAUDE_CODE_USE_VERTEX is deprecated, use USE_VERTEX instead")
+		return true
+	}
+	return false
+}
+
+// isTruthy returns true for "1", "true", or "yes" (case-insensitive).
+func isTruthy(val string) bool {
+	v := strings.TrimSpace(strings.ToLower(val))
+	return v == "1" || v == "true" || v == "yes"
 }

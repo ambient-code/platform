@@ -16,7 +16,14 @@ import { useProject, useUpdateProject } from "@/services/queries/use-projects";
 import { useSecretsValues, useUpdateSecrets, useIntegrationSecrets, useUpdateIntegrationSecrets } from "@/services/queries/use-secrets";
 import { useClusterInfo } from "@/hooks/use-cluster-info";
 import { FeatureFlagsSection } from "./feature-flags-section";
+import { useRunnerTypes } from "@/services/queries/use-runner-types";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useMemo } from "react";
+
+const FALLBACK_RUNNER_API_KEYS: ReadonlyArray<{ key: string; label: string }> = [
+  { key: "ANTHROPIC_API_KEY", label: "Claude Agent SDK" },
+  { key: "GOOGLE_API_KEY", label: "Gemini CLI" },
+];
 
 type SettingsSectionProps = {
   projectName: string;
@@ -38,13 +45,28 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
   const [showS3SecretKey, setShowS3SecretKey] = useState<boolean>(false);
   const [s3Expanded, setS3Expanded] = useState<boolean>(false);
 
-  // Runner API key definitions — static list of supported secrets
-  // with descriptions. Not derived from ConfigMap since secrets
-  // depend on auth mode (API key vs Vertex), not just runner type.
-  const RUNNER_API_KEYS = useMemo(() => [
-    { key: "ANTHROPIC_API_KEY", label: "Claude Code" },
-    { key: "GOOGLE_API_KEY", label: "Gemini CLI" },
-  ] as const, []);
+  // Derive runner API key definitions from the runner-types registry.
+  // Falls back to a hardcoded list if the fetch fails.
+  const { data: runnerTypesData, isLoading: runnerTypesLoading, isError: runnerTypesError } = useRunnerTypes();
+
+  const RUNNER_API_KEYS = useMemo(() => {
+    if (!runnerTypesData) return FALLBACK_RUNNER_API_KEYS;
+    const keyMap = new Map<string, Set<string>>();
+    for (const rt of runnerTypesData) {
+      const keys = rt.auth?.requiredSecretKeys ?? rt.requiredSecretKeys ?? [];
+      for (const secretKey of keys) {
+        if (!keyMap.has(secretKey)) {
+          keyMap.set(secretKey, new Set<string>());
+        }
+        keyMap.get(secretKey)!.add(rt.displayName);
+      }
+    }
+    if (keyMap.size === 0) return FALLBACK_RUNNER_API_KEYS;
+    return Array.from(keyMap.entries()).map(([key, runners]) => ({
+      key,
+      label: Array.from(runners).join(", "),
+    }));
+  }, [runnerTypesData]);
 
   const allRequiredSecrets = useMemo(
     () => RUNNER_API_KEYS.map(k => k.key),
@@ -313,7 +335,20 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
                 {Object.values(runnerSecretValues).some(Boolean) && <span className="text-xs text-muted-foreground">(configured)</span>}
               </div>
             </button>
-            {runnerSecretsExpanded && (
+            {runnerSecretsExpanded && runnerTypesLoading && (
+              <div className="px-3 pb-3 space-y-3 border-t pt-3">
+                <div className="space-y-4">
+                  {Array.from({ length: 2 }).map((_, i) => (
+                    <div key={i} className="space-y-2">
+                      <Skeleton className="h-4 w-[140px]" />
+                      <Skeleton className="h-3 w-[200px]" />
+                      <Skeleton className="h-10 w-full" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {runnerSecretsExpanded && !runnerTypesLoading && (
               <div className="px-3 pb-3 space-y-3 border-t pt-3">
                 {vertexEnabled && runnerSecretValues["ANTHROPIC_API_KEY"] && (
                   <Alert variant="warning">

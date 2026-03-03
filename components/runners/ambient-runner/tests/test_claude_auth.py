@@ -142,7 +142,7 @@ class TestSetupSdkAuthentication:
 
     @pytest.mark.asyncio
     async def test_no_auth_raises(self):
-        ctx = _make_context(ANTHROPIC_API_KEY="", CLAUDE_CODE_USE_VERTEX="")
+        ctx = _make_context(ANTHROPIC_API_KEY="", USE_VERTEX="")
         with pytest.raises(RuntimeError, match="ANTHROPIC_API_KEY"):
             await setup_sdk_authentication(ctx)
 
@@ -169,7 +169,7 @@ class TestSetupSdkAuthentication:
             cred_path = f.name
         try:
             ctx = _make_context(
-                CLAUDE_CODE_USE_VERTEX="1",
+                USE_VERTEX="1",
                 GOOGLE_APPLICATION_CREDENTIALS=cred_path,
                 ANTHROPIC_VERTEX_PROJECT_ID="proj",
                 CLOUD_ML_REGION="us-central1",
@@ -190,7 +190,7 @@ class TestSetupSdkAuthentication:
             cred_path = f.name
         try:
             ctx = _make_context(
-                CLAUDE_CODE_USE_VERTEX="1",
+                USE_VERTEX="1",
                 GOOGLE_APPLICATION_CREDENTIALS=cred_path,
                 ANTHROPIC_VERTEX_PROJECT_ID="proj",
                 CLOUD_ML_REGION="us-central1",
@@ -199,6 +199,24 @@ class TestSetupSdkAuthentication:
             _, use_vertex, model = await setup_sdk_authentication(ctx)
             assert use_vertex is True
             assert model == "claude-sonnet-4-5@20250929"  # from VERTEX_MODEL_MAP
+        finally:
+            os.unlink(cred_path)
+
+    @pytest.mark.asyncio
+    async def test_legacy_claude_code_use_vertex_still_works(self, monkeypatch):
+        """Legacy CLAUDE_CODE_USE_VERTEX should still activate Vertex mode."""
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+            cred_path = f.name
+        try:
+            ctx = _make_context(
+                CLAUDE_CODE_USE_VERTEX="1",
+                GOOGLE_APPLICATION_CREDENTIALS=cred_path,
+                ANTHROPIC_VERTEX_PROJECT_ID="proj",
+                CLOUD_ML_REGION="us-central1",
+            )
+            _, use_vertex, _ = await setup_sdk_authentication(ctx)
+            assert use_vertex is True
         finally:
             os.unlink(cred_path)
 

@@ -924,7 +924,7 @@ _create-operator-config: ## Internal: Create operator config from environment va
 		echo "    Using direct Anthropic API (provide ANTHROPIC_API_KEY in workspace settings)"; \
 	fi; \
 	kubectl create configmap operator-config -n $(NAMESPACE) \
-		--from-literal=CLAUDE_CODE_USE_VERTEX="$$USE_VERTEX" \
+		--from-literal=USE_VERTEX="$$USE_VERTEX" \
 		--from-literal=CLOUD_ML_REGION="$$CLOUD_REGION" \
 		--from-literal=ANTHROPIC_VERTEX_PROJECT_ID="$$VERTEX_PROJECT_ID" \
 		--from-literal=GOOGLE_APPLICATION_CREDENTIALS="/app/vertex/ambient-code-key.json" \

@@ -22,7 +22,7 @@ data:
   # Then run: make local-up
   #
   # These values below are placeholders and will be overwritten.
-  CLAUDE_CODE_USE_VERTEX: "0"
+  USE_VERTEX: "0"
   CLOUD_ML_REGION: "global"
   ANTHROPIC_VERTEX_PROJECT_ID: ""
   GOOGLE_APPLICATION_CREDENTIALS: "/app/vertex/ambient-code-key.json"

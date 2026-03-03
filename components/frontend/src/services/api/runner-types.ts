@@ -5,12 +5,22 @@ export interface RunnerModel {
   label: string;
 }
 
+export interface RunnerTypeAuth {
+  requiredSecretKeys: string[];
+  secretKeyLogic: "any" | "all";
+  vertexSupported: boolean;
+}
+
 export interface RunnerType {
   id: string;
   displayName: string;
   description: string;
   defaultModel: string;
   models: RunnerModel[];
+  /** @deprecated Use auth.requiredSecretKeys instead */
+  requiredSecretKeys?: string[];
+  auth: RunnerTypeAuth;
+  featureGate: string;
 }
 
 export const DEFAULT_RUNNER_TYPE_ID = "claude-agent-sdk" as const;

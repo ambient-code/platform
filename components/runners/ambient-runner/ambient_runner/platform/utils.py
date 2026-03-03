@@ -9,11 +9,50 @@ import asyncio
 import logging
 import os
 import re
+import warnings
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Optional
 from urllib.parse import urlparse, urlunparse
 
 logger = logging.getLogger(__name__)
+
+_TRUTHY_VALUES = frozenset({"1", "true", "yes"})
+
+
+def is_env_truthy(value: str) -> bool:
+    """Return True for "1", "true", or "yes" (case-insensitive)."""
+    return value.strip().lower() in _TRUTHY_VALUES
+
+
+def is_vertex_enabled(
+    legacy_var: str = "CLAUDE_CODE_USE_VERTEX",
+    context: Optional[Any] = None,
+) -> bool:
+    """Check whether Vertex AI is enabled via environment.
+
+    Checks ``USE_VERTEX`` first (unified name). Falls back to *legacy_var*
+    with a deprecation warning. Reads from *context* if provided (via
+    ``context.get_env``), otherwise from ``os.getenv``.
+    """
+    def _get(key: str) -> str:
+        if context is not None and hasattr(context, "get_env"):
+            return context.get_env(key, "")
+        return os.getenv(key, "")
+
+    if is_env_truthy(_get("USE_VERTEX")):
+        return True
+
+    legacy = _get(legacy_var)
+    if is_env_truthy(legacy):
+        warnings.warn(
+            f"{legacy_var} is deprecated, use USE_VERTEX instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        logger.warning("%s is deprecated, use USE_VERTEX instead", legacy_var)
+        return True
+
+    return False
 
 
 def timestamp() -> str:

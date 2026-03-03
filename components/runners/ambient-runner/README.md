@@ -88,7 +88,7 @@ The workspace context prompt is built by `build_sdk_system_prompt()` in `prompts
 ### Authentication
 
 - `ANTHROPIC_API_KEY` - Anthropic API key for Claude access
-- `CLAUDE_CODE_USE_VERTEX` - Set to `1` to use Vertex AI instead of Anthropic API
+- `USE_VERTEX` - Set to `1` to use Vertex AI instead of direct API keys (unified flag for all runners; legacy `CLAUDE_CODE_USE_VERTEX` and `GEMINI_USE_VERTEX` still accepted)
 - `GOOGLE_APPLICATION_CREDENTIALS` - Path to GCP service account key (for Vertex AI)
 - `ANTHROPIC_VERTEX_PROJECT_ID` - GCP project ID (for Vertex AI)
 - `CLOUD_ML_REGION` - GCP region (for Vertex AI)

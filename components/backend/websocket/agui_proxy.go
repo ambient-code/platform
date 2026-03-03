@@ -58,6 +58,11 @@ var lastActivityUpdateTimes sync.Map
 // Populated by HandleAGUIRunProxy on each run request.
 var sessionProjectMap sync.Map
 
+// sessionPortMap maps sessionName → runner port (int) so that getRunnerEndpoint
+// can use the registry-defined port instead of a hardcoded value.
+// Populated by HandleAGUIRunProxy from the session's runner type.
+var sessionPortMap sync.Map
+
 // HandleAGUIEvents serves the AG-UI event stream over SSE.  Clients
 // (typically EventSource) connect here to receive all events for a
 // session — both persisted history and live events from active runs.
@@ -207,6 +212,9 @@ func HandleAGUIRunProxy(c *gin.Context) {
 
 	// Store project→session mapping for activity tracking in persistStreamedEvent
 	sessionProjectMap.Store(sessionName, projectName)
+
+	// Resolve and cache the runner port for this session from the registry.
+	cacheSessionPort(projectName, sessionName)
 
 	// Parse messages for display name generation and hidden metadata
 	var minimalMsgs []types.Message
@@ -671,9 +679,50 @@ func connectToRunner(runnerURL string, bodyBytes []byte) (*http.Response, error)
 
 // getRunnerEndpoint returns the AG-UI server endpoint for a session.
 // The operator creates a Service named "session-{sessionName}" in the
-// project namespace.
+// project namespace. The port is resolved from the sessionPortMap cache
+// (populated by HandleAGUIRunProxy), falling back to the default port.
 func getRunnerEndpoint(projectName, sessionName string) string {
-	return fmt.Sprintf("http://session-%s.%s.svc.cluster.local:8001/", sessionName, projectName)
+	port := handlers.DefaultRunnerPort
+	if cached, ok := sessionPortMap.Load(sessionName); ok {
+		port = cached.(int)
+	}
+	return fmt.Sprintf("http://session-%s.%s.svc.cluster.local:%d/", sessionName, projectName, port)
+}
+
+// cacheSessionPort reads the session CRD to extract RUNNER_TYPE from
+// environmentVariables, then looks up the port from the agent registry.
+// The result is cached in sessionPortMap so subsequent calls to
+// getRunnerEndpoint use the correct port without CRD reads.
+func cacheSessionPort(projectName, sessionName string) {
+	// Skip if already cached
+	if _, ok := sessionPortMap.Load(sessionName); ok {
+		return
+	}
+
+	if handlers.DynamicClient == nil {
+		return
+	}
+
+	gvr := handlers.GetAgenticSessionV1Alpha1Resource()
+	obj, err := handlers.DynamicClient.Resource(gvr).Namespace(projectName).Get(
+		context.Background(), sessionName, metav1.GetOptions{},
+	)
+	if err != nil {
+		return
+	}
+
+	envVars, found, _ := unstructured.NestedStringMap(obj.Object, "spec", "environmentVariables")
+	if !found {
+		return
+	}
+
+	runnerType, ok := envVars["RUNNER_TYPE"]
+	if !ok || runnerType == "" {
+		return
+	}
+
+	port := handlers.GetRuntimePort(runnerType)
+	sessionPortMap.Store(sessionName, port)
 }
 
 // drainLiveChannel discards any buffered lines already in the channel.

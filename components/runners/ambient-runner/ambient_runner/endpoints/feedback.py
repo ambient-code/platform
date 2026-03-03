@@ -14,6 +14,7 @@ router = APIRouter()
 
 class FeedbackEvent(BaseModel):
     """AG-UI META event for user feedback (thumbs up/down)."""
+
     type: str
     metaType: str
     payload: Dict[str, Any]
@@ -40,7 +41,9 @@ def _resolve_trace_id(request: Request, payload: Dict[str, Any]) -> str:
         if obs is not None:
             tid = getattr(obs, "last_trace_id", None)
             if tid:
-                logger.info(f"Feedback: resolved traceId from ObservabilityManager: {tid[:8]}...")
+                logger.info(
+                    f"Feedback: resolved traceId from ObservabilityManager: {tid[:8]}..."
+                )
                 return tid
     except Exception as e:
         logger.debug(f"Feedback: could not resolve traceId from bridge: {e}")
@@ -58,7 +61,9 @@ async def handle_feedback(event: FeedbackEvent, request: Request):
     if event.type != "META":
         raise HTTPException(status_code=400, detail="Expected META event type")
     if event.metaType not in ("thumbs_up", "thumbs_down"):
-        raise HTTPException(status_code=400, detail="metaType must be 'thumbs_up' or 'thumbs_down'")
+        raise HTTPException(
+            status_code=400, detail="metaType must be 'thumbs_up' or 'thumbs_down'"
+        )
 
     try:
         payload = event.payload
@@ -96,7 +101,8 @@ async def handle_feedback(event: FeedbackEvent, request: Request):
 
         from ambient_runner.observability import is_langfuse_enabled
 
-        if is_langfuse_enabled():
+        langfuse_enabled = is_langfuse_enabled()
+        if langfuse_enabled:
             try:
                 from langfuse import Langfuse
 
@@ -105,7 +111,9 @@ async def handle_feedback(event: FeedbackEvent, request: Request):
                 host = os.getenv("LANGFUSE_HOST", "").strip()
 
                 if public_key and secret_key and host:
-                    langfuse = Langfuse(public_key=public_key, secret_key=secret_key, host=host)
+                    langfuse = Langfuse(
+                        public_key=public_key, secret_key=secret_key, host=host
+                    )
 
                     metadata = {
                         "project": project_name,
@@ -133,8 +141,14 @@ async def handle_feedback(event: FeedbackEvent, request: Request):
                     langfuse.create_score(**score_kwargs)
                     langfuse.flush()
 
-                    target = f"trace_id={trace_id}" if trace_id else f"session={session_name}"
-                    logger.info(f"Langfuse: Feedback score sent ({target}, value={value})")
+                    target = (
+                        f"trace_id={trace_id}"
+                        if trace_id
+                        else f"session={session_name}"
+                    )
+                    logger.info(
+                        f"Langfuse: Feedback score sent ({target}, value={value})"
+                    )
                 else:
                     logger.warning("Langfuse enabled but missing credentials")
             except ImportError:

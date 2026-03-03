@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 
 from ambient_runner.platform.context import RunnerContext
+from ambient_runner.platform.utils import is_vertex_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -42,11 +43,11 @@ async def setup_vertex_credentials(context: RunnerContext) -> dict:
     region = context.get_env("CLOUD_ML_REGION", "").strip()
 
     if not service_account_path:
-        raise RuntimeError("GOOGLE_APPLICATION_CREDENTIALS must be set when CLAUDE_CODE_USE_VERTEX=1")
+        raise RuntimeError("GOOGLE_APPLICATION_CREDENTIALS must be set when USE_VERTEX is enabled")
     if not project_id:
-        raise RuntimeError("ANTHROPIC_VERTEX_PROJECT_ID must be set when CLAUDE_CODE_USE_VERTEX=1")
+        raise RuntimeError("ANTHROPIC_VERTEX_PROJECT_ID must be set when USE_VERTEX is enabled")
     if not region:
-        raise RuntimeError("CLOUD_ML_REGION must be set when CLAUDE_CODE_USE_VERTEX=1")
+        raise RuntimeError("CLOUD_ML_REGION must be set when USE_VERTEX is enabled")
 
     if not Path(service_account_path).exists():
         raise RuntimeError(f"Service account key file not found at {service_account_path}")
@@ -62,10 +63,10 @@ async def setup_sdk_authentication(context: RunnerContext) -> tuple[str, bool, s
         (api_key, use_vertex, configured_model)
     """
     api_key = context.get_env("ANTHROPIC_API_KEY", "")
-    use_vertex = context.get_env("CLAUDE_CODE_USE_VERTEX", "").strip() == "1"
+    use_vertex = is_vertex_enabled(legacy_var="CLAUDE_CODE_USE_VERTEX", context=context)
 
     if not api_key and not use_vertex:
-        raise RuntimeError("Either ANTHROPIC_API_KEY or CLAUDE_CODE_USE_VERTEX=1 must be set")
+        raise RuntimeError("Either ANTHROPIC_API_KEY or USE_VERTEX=1 must be set")
 
     model = context.get_env("LLM_MODEL")
 
@@ -81,7 +82,8 @@ async def setup_sdk_authentication(context: RunnerContext) -> tuple[str, bool, s
     elif use_vertex:
         vertex_credentials = await setup_vertex_credentials(context)
         os.environ["ANTHROPIC_API_KEY"] = "vertex-auth-mode"
-        os.environ["CLAUDE_CODE_USE_VERTEX"] = "1"
+        os.environ["USE_VERTEX"] = "1"
+        os.environ["CLAUDE_CODE_USE_VERTEX"] = "1"  # kept for Claude Code CLI compat
         os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = vertex_credentials.get("credentials_path", "")
         os.environ["ANTHROPIC_VERTEX_PROJECT_ID"] = vertex_credentials.get("project_id", "")
         os.environ["CLOUD_ML_REGION"] = vertex_credentials.get("region", "")
