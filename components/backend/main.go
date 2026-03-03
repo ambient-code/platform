@@ -4,6 +4,8 @@ import (
 	"context"
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"ambient-code-backend/cmd"
 	"ambient-code-backend/featureflags"
@@ -80,10 +82,14 @@ func main() {
 
 	// Sync model flags to Unleash in the background (best-effort, non-blocking).
 	// Uses handlers.LoadManifest which reads the mounted models.json file.
+	// The context is cancelled on SIGTERM/SIGINT so in-flight retries abort
+	// during graceful shutdown rather than delaying termination.
+	syncCtx, syncCancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer syncCancel()
 	if manifest, err := handlers.LoadManifest(handlers.ManifestPath()); err != nil {
 		log.Printf("WARNING: cannot sync model flags: %v", err)
 	} else {
-		cmd.SyncModelFlagsAsync(context.Background(), manifest)
+		cmd.SyncModelFlagsAsync(syncCtx, manifest)
 	}
 
 	// Initialize git package

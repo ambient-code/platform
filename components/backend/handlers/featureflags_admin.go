@@ -405,15 +405,15 @@ func setFlagOverride(c *gin.Context, value string, responseMsg string) {
 	namespace := sanitizeParam(c.Param("projectName"))
 	flagName := sanitizeParam(c.Param("flagName"))
 
+	if flagName == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Flag name is required"})
+		return
+	}
+
 	reqK8s, _ := GetK8sClientsForRequest(c)
 	if reqK8s == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User token required"})
 		c.Abort()
-		return
-	}
-
-	if flagName == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Flag name is required"})
 		return
 	}
 
