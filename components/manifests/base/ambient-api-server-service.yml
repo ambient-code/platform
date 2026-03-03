@@ -77,15 +77,16 @@ spec:
             - --db-max-open-connections=50
             - --enable-db-debug=false
             - --enable-metrics-https=false
-            - --enable-sentry=false
             - --http-read-timeout=5s
             - --http-write-timeout=30s
             - --cors-allowed-origins=*
             - --cors-allowed-headers=X-Ambient-Project
+            - --enable-grpc=true
+            - --grpc-server-bindaddress=:9000
             - --alsologtostderr
             - -v=10
           env:
-            - name: OCM_ENV
+            - name: AMBIENT_ENV
               value: development
           ports:
             - name: api
@@ -96,6 +97,9 @@ spec:
               protocol: TCP
             - name: health
               containerPort: 4434
+              protocol: TCP
+            - name: grpc
+              containerPort: 9000
               protocol: TCP
           volumeMounts:
             - name: db-secrets
@@ -113,7 +117,7 @@ spec:
               memory: 1Gi
           livenessProbe:
             httpGet:
-              path: /api/ambient-api-server
+              path: /api/ambient
               port: 8000
               scheme: HTTP
             initialDelaySeconds: 15
@@ -163,6 +167,10 @@ spec:
     - name: api
       port: 8000
       targetPort: 8000
+      protocol: TCP
+    - name: grpc
+      port: 9000
+      targetPort: 9000
       protocol: TCP
     - name: metrics
       port: 4433
