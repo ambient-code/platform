@@ -76,10 +76,10 @@ jobs:
             if [ -n "$id" ]; then
               if gh api graphql -f query='mutation($id: ID!) { minimizeComment(input: {subjectId: $id, classifier: OUTDATED}) { minimizedComment { isMinimized } } }' -f id="$id" 2>&1; then
                 echo "✓ Minimized $id"
-                ((COUNT++))
+                COUNT=$((COUNT + 1))
               else
                 echo "✗ Failed to minimize $id" >&2
-                ((ERRORS++))
+                ERRORS=$((ERRORS + 1))
               fi
             fi
           done <<< "$COMMENT_IDS"
