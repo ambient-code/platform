@@ -19,10 +19,10 @@ import (
 )
 
 const (
-	defaultManifestPath  = "/config/models/models.json"
-	defaultFlagsConfig   = "/config/flags/flags.json"
-	maxRetries           = 3
-	retryDelay           = 10 * time.Second
+	defaultManifestPath = "/config/models/models.json"
+	defaultFlagsConfig  = "/config/flags/flags.json"
+	maxRetries          = 3
+	retryDelay          = 10 * time.Second
 )
 
 var errConflict = errors.New("flag already exists (conflict)")
@@ -77,7 +77,7 @@ func FlagsConfigPath() string {
 }
 
 // FlagsFromConfig loads generic flag definitions from a JSON file.
-// Returns an empty slice if the file does not exist (flags config is optional).
+// Returns nil if the file does not exist (flags config is optional).
 func FlagsFromConfig(path string) ([]FlagSpec, error) {
 	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
@@ -87,11 +87,20 @@ func FlagsFromConfig(path string) ([]FlagSpec, error) {
 		return nil, fmt.Errorf("reading flags config %s: %w", path, err)
 	}
 
-	var config FlagsConfig
-	if err := json.Unmarshal(data, &config); err != nil {
+	var cfg FlagsConfig
+	if err := json.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("parsing flags config: %w", err)
 	}
-	return config.Flags, nil
+
+	// Sanitize flag names and descriptions to prevent log injection.
+	// Model-derived names are constrained (model.<id>.enabled) but
+	// config-file names are user-defined and unconstrained.
+	for i := range cfg.Flags {
+		cfg.Flags[i].Name = sanitizeLogString(cfg.Flags[i].Name)
+		cfg.Flags[i].Description = sanitizeLogString(cfg.Flags[i].Description)
+	}
+
+	return cfg.Flags, nil
 }
 
 // SyncModelFlagsFromFile reads a model manifest from disk and syncs flags.
@@ -215,6 +224,12 @@ func SyncFlags(ctx context.Context, flags []FlagSpec) error {
 		return fmt.Errorf("%d errors occurred during sync", errCount)
 	}
 	return nil
+}
+
+// sanitizeLogString strips newlines and carriage returns from strings
+// that will be interpolated into log messages, preventing log injection.
+func sanitizeLogString(s string) string {
+	return strings.ReplaceAll(strings.ReplaceAll(s, "\n", ""), "\r", "")
 }
 
 // collectTagTypes returns the unique set of tag types across all flags.

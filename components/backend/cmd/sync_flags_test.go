@@ -102,10 +102,15 @@ func TestFlagsFromConfig_LoadsValidFile(t *testing.T) {
 			{Name: "feature.dark-mode", Description: "Dark mode", Tags: []FlagTag{{Type: "scope", Value: "workspace"}}},
 		},
 	}
-	data, _ := json.Marshal(config)
+	data, err := json.Marshal(config)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	path := filepath.Join(t.TempDir(), "flags.json")
-	os.WriteFile(path, data, 0644)
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	flags, err := FlagsFromConfig(path)
 	if err != nil {
@@ -131,7 +136,9 @@ func TestFlagsFromConfig_MissingFileReturnsNil(t *testing.T) {
 
 func TestFlagsFromConfig_InvalidJSON(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "flags.json")
-	os.WriteFile(path, []byte("{bad"), 0644)
+	if err := os.WriteFile(path, []byte("{bad"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	_, err := FlagsFromConfig(path)
 	if err == nil {
@@ -404,8 +411,19 @@ func TestCollectTagTypes(t *testing.T) {
 		{Name: "c"},
 	}
 
-	types := collectTagTypes(flags)
-	if len(types) != 2 {
-		t.Fatalf("expected 2 unique tag types, got %d: %v", len(types), types)
+	tagTypes := collectTagTypes(flags)
+	if len(tagTypes) != 2 {
+		t.Fatalf("expected 2 unique tag types, got %d: %v", len(tagTypes), tagTypes)
+	}
+
+	found := map[string]bool{}
+	for _, tt := range tagTypes {
+		found[tt] = true
+	}
+	if !found["scope"] {
+		t.Error("expected 'scope' in tag types")
+	}
+	if !found["env"] {
+		t.Error("expected 'env' in tag types")
 	}
 }
