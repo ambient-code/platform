@@ -38,16 +38,16 @@ func parseSpec(specPath string) (*Spec, error) {
 	specDir := filepath.Dir(specPath)
 
 	resourceFiles := map[string]string{
-		"Session":        "openapi.sessions.yaml",
-		"User":           "openapi.users.yaml",
-		"Project":        "openapi.projects.yaml",
+		"Session":         "openapi.sessions.yaml",
+		"User":            "openapi.users.yaml",
+		"Project":         "openapi.projects.yaml",
 		"ProjectSettings": "openapi.projectSettings.yaml",
 	}
 
 	pathSegments := map[string]string{
-		"Session":        "sessions",
-		"User":           "users",
-		"Project":        "projects",
+		"Session":         "sessions",
+		"User":            "users",
+		"Project":         "projects",
 		"ProjectSettings": "project_settings",
 	}
 

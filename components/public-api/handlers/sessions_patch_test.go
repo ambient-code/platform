@@ -164,7 +164,7 @@ func TestE2E_PatchSession_Labels(t *testing.T) {
 				"metadata": map[string]interface{}{
 					"name":              "session-123",
 					"creationTimestamp": "2026-03-04T10:00:00Z",
-					"annotations":      map[string]interface{}{"env": "prod"},
+					"annotations":       map[string]interface{}{"env": "prod"},
 				},
 				"spec":   map[string]interface{}{"initialPrompt": "test"},
 				"status": map[string]interface{}{"phase": "Running"},

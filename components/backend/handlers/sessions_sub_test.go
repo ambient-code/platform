@@ -86,7 +86,7 @@ var _ = Describe("Session Sub-Resource Handlers", Label(test_constants.LabelUnit
 				session := &unstructured.Unstructured{}
 				session.SetAPIVersion("vteam.ambient-code/v1alpha1")
 				session.SetKind("AgenticSession")
-				session.SetName("metrics-session-"+randomName)
+				session.SetName("metrics-session-" + randomName)
 				session.SetNamespace(testNamespace)
 				session.SetAnnotations(map[string]string{
 					"ambient-code.io/input-tokens":  "1500",
@@ -149,7 +149,7 @@ var _ = Describe("Session Sub-Resource Handlers", Label(test_constants.LabelUnit
 				session := &unstructured.Unstructured{}
 				session.SetAPIVersion("vteam.ambient-code/v1alpha1")
 				session.SetKind("AgenticSession")
-				session.SetName("completed-session-"+randomName)
+				session.SetName("completed-session-" + randomName)
 				session.SetNamespace(testNamespace)
 
 				_ = unstructured.SetNestedField(session.Object, "Completed", "status", "phase")
@@ -210,7 +210,7 @@ var _ = Describe("Session Sub-Resource Handlers", Label(test_constants.LabelUnit
 				session := &unstructured.Unstructured{}
 				session.SetAPIVersion("vteam.ambient-code/v1alpha1")
 				session.SetKind("AgenticSession")
-				session.SetName("no-usage-session-"+randomName)
+				session.SetName("no-usage-session-" + randomName)
 				session.SetNamespace(testNamespace)
 
 				_ = unstructured.SetNestedField(session.Object, "Pending", "status", "phase")

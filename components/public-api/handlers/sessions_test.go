@@ -22,7 +22,7 @@ func TestTransformSession(t *testing.T) {
 					"name":              "session-123",
 					"creationTimestamp": "2026-01-29T10:00:00Z",
 					"annotations": map[string]interface{}{
-						"env":                  "staging",
+						"env":                   "staging",
 						"app.kubernetes.io/foo": "bar", // should be filtered
 					},
 				},
