@@ -1,7 +1,7 @@
 name: Jira ↔ GitHub Sync
 
 # Keeps GitHub PRs, GitHub Issues, and Jira in two-way sync.
-# Runs on a schedule and on key PR lifecycle events.
+# Always runs all phases (full sweep).
 #
 # PHASES:
 #   1. Open PR Health Check  - ensure every active PR has a Jira, is In Progress
@@ -16,8 +16,6 @@ on:
   schedule:
     - cron: '0 8 * * 1-5'   # Weekdays at 8 AM UTC
   workflow_dispatch:          # Manual trigger
-  pull_request:
-    types: [opened, ready_for_review, closed]
 
 permissions:
   contents: read
@@ -41,9 +39,6 @@ jobs:
         uses: anthropics/claude-code-action@v1
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TRIGGER_EVENT: ${{ github.event_name }}
-          TRIGGER_PR_NUMBER: ${{ github.event.pull_request.number }}
-          TRIGGER_PR_ACTION: ${{ github.event.action }}
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
@@ -59,7 +54,6 @@ jobs:
             - Jira project: RHOAIENG
             - Jira board ID: 23005
             - Stale threshold: 14 days
-            - Trigger: $TRIGGER_EVENT (PR: #$TRIGGER_PR_NUMBER action=$TRIGGER_PR_ACTION)
 
             ## Contributor allowlist
 
@@ -189,7 +183,9 @@ jobs:
                 summary="<PR title>",
                 issue_type="Task" or "Bug",
                 assignee="<jira username or null>",
-                description="GitHub PR: https://github.com/ambient-code/platform/pull/$PR_NUM\n\n<PR title>"
+                components="Agentic",
+                description="GitHub PR: https://github.com/ambient-code/platform/pull/$PR_NUM\n\n<PR title>",
+                additional_fields={"customfield_12313240": {"value": "Ambient team"}}
               )
               ```
             - Add PR as remote link in the new Jira issue (same call as above)
@@ -232,8 +228,6 @@ jobs:
 
             ## PHASE 2 — Merged PR Audit (last 7 days)
 
-            **Skip if** trigger is `pull_request` with action `opened` or `ready_for_review`.
-
             Fetch recently merged PRs:
             ```bash
             gh pr list --repo ambient-code/platform --state merged --limit 50 \
@@ -265,8 +259,6 @@ jobs:
             ---
 
             ## PHASE 3 — GitHub Issue Sync
-
-            **Skip if** trigger is `pull_request`.
 
             Fetch all open GitHub issues:
             ```bash
@@ -305,7 +297,9 @@ jobs:
                   project_key="RHOAIENG",
                   summary="<issue title>",
                   issue_type="Task",
-                  description="GitHub Issue: https://github.com/ambient-code/platform/issues/$ISSUE_NUM"
+                  components="Agentic",
+                  description="GitHub Issue: https://github.com/ambient-code/platform/issues/$ISSUE_NUM",
+                  additional_fields={"customfield_12313240": {"value": "Ambient team"}}
                 )
                 ```
               - Add GH issue as remote link in new Jira issue
@@ -316,8 +310,6 @@ jobs:
             ---
 
             ## PHASE 4 — Sprint Epic Alignment
-
-            **Skip if** trigger is `pull_request`.
 
             Fetch all issues in the active sprint:
             ```
@@ -356,7 +348,6 @@ jobs:
               --label "jira-sync" \
               --body "## Jira ↔ GitHub Sync — $(date -u +%Y-%m-%d)
 
-            **Trigger:** $TRIGGER_EVENT
 
             ### Phase 1 — Open PRs
             - ✅ Already in sync: N
