@@ -211,7 +211,11 @@ func getContainerEnvVars(runnerTypeID string) map[string]string {
 func isRunnerEnabled(runnerID string) bool {
 	rt, err := GetRuntime(runnerID)
 	if err != nil {
-		// Unknown runtime — default to checking convention-based flag
+		// Registry unavailable — fail-open for the default runner to prevent
+		// blocking all session creation during cold start or transient outages.
+		if runnerID == DefaultRunnerType {
+			return true
+		}
 		flag := "runner." + runnerID + ".enabled"
 		return FeatureEnabled(flag)
 	}

@@ -1,17 +1,17 @@
 import { apiClient } from "./client";
 
-export interface RunnerModel {
+export type RunnerModel = {
   value: string;
   label: string;
-}
+};
 
-export interface RunnerTypeAuth {
+export type RunnerTypeAuth = {
   requiredSecretKeys: string[];
   secretKeyLogic: "any" | "all";
   vertexSupported: boolean;
-}
+};
 
-export interface RunnerType {
+export type RunnerType = {
   id: string;
   displayName: string;
   description: string;
@@ -21,7 +21,7 @@ export interface RunnerType {
   /** @deprecated Use auth.requiredSecretKeys instead */
   requiredSecretKeys?: string[];
   auth: RunnerTypeAuth;
-}
+};
 
 export const DEFAULT_RUNNER_TYPE_ID = "claude-agent-sdk" as const;
 
