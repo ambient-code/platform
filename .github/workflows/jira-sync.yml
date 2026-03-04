@@ -48,12 +48,30 @@ jobs:
             Use the Jira MCP tools for all Jira operations and `gh` CLI for GitHub operations.
             Execute each phase carefully and collect results for the final summary.
 
+            ## ⚠️ ABSOLUTE RULE — Jira scope
+
+            You MUST NEVER read, modify, transition, comment on, or link to any Jira issue
+            that does not have Team = "Ambient team" (customfield_12313240).
+
+            This is a shared project with hundreds of other teams. Touching the wrong issue
+            is not recoverable. Enforce this two ways:
+
+            1. Every JQL query you write MUST include:
+               `AND "customfield_12313240" = "Ambient team"`
+            2. If you ever fetch an individual issue (e.g. from a PR body Jira key), check
+               the Team field before doing anything:
+               ```
+               mcp__jira__jira_get_issue(issue_key="RHOAIENG-XXXXX", fields="customfield_12313240")
+               ```
+               If the value is not "Ambient team" → log it as out-of-scope and skip. No exceptions.
+
             ## Constants
 
             - GitHub repo: ambient-code/platform
             - Jira project: RHOAIENG
             - Jira board ID: 23005
             - Stale threshold: 14 days
+            - Required Team field: `customfield_12313240 = "Ambient team"`
 
             ## Contributor allowlist
 
@@ -155,7 +173,7 @@ jobs:
             First, search Jira for an existing match:
             ```
             mcp__jira__jira_search(
-              jql="project=RHOAIENG AND summary ~ \"<keywords from PR title>\" AND resolution=Unresolved",
+              jql="project=RHOAIENG AND \"customfield_12313240\" = \"Ambient team\" AND summary ~ \"<keywords from PR title>\" AND resolution=Unresolved",
               limit=3,
               fields="summary,status,key"
             )
@@ -274,7 +292,7 @@ jobs:
             **Step 3.2** Search Jira for a match:
             ```
             mcp__jira__jira_search(
-              jql="project=RHOAIENG AND summary ~ \"<issue title keywords>\" AND resolution=Unresolved",
+              jql="project=RHOAIENG AND \"customfield_12313240\" = \"Ambient team\" AND summary ~ \"<issue title keywords>\" AND resolution=Unresolved",
               limit=3
             )
             ```
@@ -321,7 +339,7 @@ jobs:
             Fetch the team's open epics:
             ```
             mcp__jira__jira_search(
-              jql="project=RHOAIENG AND issuetype=Epic AND resolution=Unresolved AND (labels=ambient-capability OR labels=ambient OR summary ~ \"Ambient\" OR summary ~ \"Epic:\")",
+              jql="project=RHOAIENG AND \"customfield_12313240\" = \"Ambient team\" AND issuetype=Epic AND resolution=Unresolved",
               limit=50,
               fields="summary,key,labels"
             )
