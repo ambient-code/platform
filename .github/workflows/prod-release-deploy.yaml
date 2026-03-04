@@ -273,3 +273,12 @@ jobs:
           oc set env deployment/agentic-operator -n ambient-code -c agentic-operator \
             AMBIENT_CODE_RUNNER_IMAGE="quay.io/ambient_code/vteam_claude_runner:${{ needs.release.outputs.new_tag }}" \
             STATE_SYNC_IMAGE="quay.io/ambient_code/vteam_state_sync:${{ needs.release.outputs.new_tag }}"
+
+      - name: Update agent registry ConfigMap with release image tags
+        run: |
+          RELEASE_TAG="${{ needs.release.outputs.new_tag }}"
+          sed \
+            -e "s|quay.io/ambient_code/vteam_claude_runner:latest|quay.io/ambient_code/vteam_claude_runner:${RELEASE_TAG}|g" \
+            -e "s|quay.io/ambient_code/vteam_state_sync:latest|quay.io/ambient_code/vteam_state_sync:${RELEASE_TAG}|g" \
+            components/manifests/base/agent-registry-configmap.yaml \
+            | oc apply -f - -n ambient-code
