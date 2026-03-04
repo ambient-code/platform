@@ -232,11 +232,6 @@ test_operator_workspace_pvc_created() {
   oc get pvc ambient-workspace -n "$PROJECT_NAME" >/dev/null 2>&1
 }
 
-test_operator_content_service_deployed() {
-  oc get service ambient-content -n "$PROJECT_NAME" >/dev/null 2>&1 &&
-  oc get deployment ambient-content -n "$PROJECT_NAME" >/dev/null 2>&1
-}
-
 test_operator_projectsettings_created() {
   oc get projectsettings projectsettings -n "$PROJECT_NAME" >/dev/null 2>&1
 }
@@ -252,7 +247,6 @@ metadata:
 spec:
   prompt: "echo 'test session'"
   timeout: 300
-  interactive: false
   llmSettings:
     model: "claude-sonnet-4-20250514"
     temperature: 0.7
@@ -281,7 +275,6 @@ metadata:
 spec:
   prompt: "echo 'test'"
   timeout: 300
-  interactive: false
   llmSettings:
     model: "claude-sonnet-4-20250514"
     temperature: 0.7
@@ -367,7 +360,6 @@ echo ""
 log "Running Operator Functionality Tests..."
 run_test "Operator watching AgenticSessions" test_operator_watching_sessions
 run_test "Operator created workspace PVC" test_operator_workspace_pvc_created
-run_test "Operator deployed content service" test_operator_content_service_deployed
 run_test "Operator created ProjectSettings" test_operator_projectsettings_created
 run_test "Operator logs show no critical errors" test_operator_logs_no_errors
 

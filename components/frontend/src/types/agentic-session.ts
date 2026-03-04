@@ -23,9 +23,9 @@ export type AgenticSessionSpec = {
 	initialPrompt?: string;
 	llmSettings: LLMSettings;
 	timeout: number;
+	inactivityTimeout?: number;
 	displayName?: string;
 	project?: string;
-	interactive?: boolean;
 	// Multi-repo support
 	repos?: SessionRepo[];
 	// Active workflow for dynamic workflow switching
@@ -71,8 +71,8 @@ export type TextBlock = {
 	type: "text_block";
 	text: string;
 }
-export type ThinkingBlock = {
-	type: "thinking_block";
+export type ReasoningBlock = {
+	type: "reasoning_block";
 	thinking: string;
 	signature: string;
 }
@@ -89,7 +89,7 @@ export type ToolResultBlock = {
 	is_error?: boolean | null;
 };
 
-export type ContentBlock = TextBlock | ThinkingBlock | ToolUseBlock | ToolResultBlock;
+export type ContentBlock = TextBlock | ReasoningBlock | ToolUseBlock | ToolResultBlock;
 
 export type ToolUseMessages = {
 	type: "tool_use_messages";
@@ -159,6 +159,8 @@ export type AgenticSessionStatus = {
 	phase: AgenticSessionPhase;
 	startTime?: string;
 	completionTime?: string;
+	lastActivityTime?: string;
+	stoppedReason?: "user" | "inactivity";
 	reconciledRepos?: ReconciledRepo[];
 	reconciledWorkflow?: ReconciledWorkflow;
 	sdkSessionId?: string;
@@ -187,7 +189,6 @@ export type CreateAgenticSessionRequest = {
 	project?: string;
 	parent_session_id?: string;
   	environmentVariables?: Record<string, string>;
-	interactive?: boolean;
 	// Multi-repo support
 	repos?: SessionRepo[];
 	labels?: Record<string, string>;

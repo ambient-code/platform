@@ -45,9 +45,9 @@ export type AgenticSessionSpec = {
   initialPrompt?: string;
   llmSettings: LLMSettings;
   timeout: number;
+  inactivityTimeout?: number;
   displayName?: string;
   project?: string;
-  interactive?: boolean;
   repos?: SessionRepo[];
   mainRepoIndex?: number;
   activeWorkflow?: {
@@ -89,6 +89,8 @@ export type AgenticSessionStatus = {
   phase: AgenticSessionPhase;
   startTime?: string;
   completionTime?: string;
+  lastActivityTime?: string;
+  stoppedReason?: "user" | "inactivity";
   jobName?: string;
   runnerPodName?: string;
   reconciledRepos?: ReconciledRepo[];
@@ -122,7 +124,6 @@ export type CreateAgenticSessionRequest = {
   project?: string;
   parent_session_id?: string;
   environmentVariables?: Record<string, string>;
-  interactive?: boolean;
   repos?: SessionRepo[];
   userContext?: UserContext;
   labels?: Record<string, string>;
@@ -182,8 +183,8 @@ export type TextBlock = {
   text: string;
 };
 
-export type ThinkingBlock = {
-  type: 'thinking_block';
+export type ReasoningBlock = {
+  type: 'reasoning_block';
   thinking: string;
   signature: string;
 };
@@ -202,7 +203,7 @@ export type ToolResultBlock = {
   is_error?: boolean | null;
 };
 
-export type ContentBlock = TextBlock | ThinkingBlock | ToolUseBlock | ToolResultBlock;
+export type ContentBlock = TextBlock | ReasoningBlock | ToolUseBlock | ToolResultBlock;
 
 // Message types
 export type UserMessage = {

@@ -139,8 +139,18 @@ func extractRequestToken(c *gin.Context) (token string, tokenSource string, hasA
 	hasAuthHeader = strings.TrimSpace(rawAuth) != ""
 	hasFwdToken = strings.TrimSpace(rawFwd) != ""
 
-	// Prefer Authorization header (Bearer <token> or raw token)
-	if strings.TrimSpace(rawAuth) != "" {
+	// Prefer X-Forwarded-Access-Token (set by trusted OAuth proxy infrastructure).
+	// This takes priority because the OAuth proxy explicitly passes the validated
+	// access token here, while the Authorization header may come from untrusted
+	// sources (e.g., CopilotKit runtime forwarding browser headers that contain
+	// OAuth session tokens rather than valid K8s API tokens).
+	if strings.TrimSpace(rawFwd) != "" {
+		tokenSource = "x-forwarded-access-token"
+		token = strings.TrimSpace(rawFwd)
+	}
+
+	// Fallback to Authorization header (Bearer <token> or raw token)
+	if strings.TrimSpace(token) == "" && strings.TrimSpace(rawAuth) != "" {
 		tokenSource = "authorization"
 		parts := strings.SplitN(rawAuth, " ", 2)
 		if len(parts) == 2 && strings.ToLower(parts[0]) == "bearer" {
@@ -150,19 +160,13 @@ func extractRequestToken(c *gin.Context) (token string, tokenSource string, hasA
 		}
 	}
 
-	// Fallback to X-Forwarded-Access-Token
-	if strings.TrimSpace(token) == "" && strings.TrimSpace(rawFwd) != "" {
-		tokenSource = "x-forwarded-access-token"
-		token = strings.TrimSpace(rawFwd)
-	}
-
 	if strings.TrimSpace(token) == "" {
 		// Preserve the source if the header existed but was malformed/empty after parsing.
-		if hasAuthHeader {
-			return "", "authorization", hasAuthHeader, hasFwdToken
-		}
 		if hasFwdToken {
 			return "", "x-forwarded-access-token", hasAuthHeader, hasFwdToken
+		}
+		if hasAuthHeader {
+			return "", "authorization", hasAuthHeader, hasFwdToken
 		}
 		return "", "none", hasAuthHeader, hasFwdToken
 	}
@@ -369,7 +373,11 @@ func ValidateProjectContext() gin.HandlerFunc {
 		res, err := reqK8s.AuthorizationV1().SelfSubjectAccessReviews().Create(c.Request.Context(), ssar, v1.CreateOptions{})
 		if err != nil {
 			log.Printf("validateProjectContext: SSAR failed for %s: %v", projectHeader, err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to perform access review"})
+			if errors.IsUnauthorized(err) {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "Token expired or invalid"})
+			} else {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to perform access review"})
+			}
 			c.Abort()
 			return
 		}

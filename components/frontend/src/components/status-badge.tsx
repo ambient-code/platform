@@ -120,9 +120,10 @@ export function StatusBadge({
 }
 
 /**
- * Session phase badge with appropriate styling
+ * Session phase badge with appropriate styling.
+ * When stoppedReason is "inactivity", the label changes to "Stopped (idle)".
  */
-export function SessionPhaseBadge({ phase }: { phase: string }) {
+export function SessionPhaseBadge({ phase, stoppedReason }: { phase: string; stoppedReason?: string }) {
   const statusMap: Record<string, StatusVariant> = {
     pending: 'pending',
     creating: 'pending',
@@ -137,7 +138,11 @@ export function SessionPhaseBadge({ phase }: { phase: string }) {
   const status = statusMap[phase.toLowerCase()] || 'default';
   const shouldAnimate = status === 'running' || status === 'stopping';
 
-  return <StatusBadge status={status} label={phase} pulse={shouldAnimate} />;
+  const label = phase === 'Stopped' && stoppedReason === 'inactivity'
+    ? 'Stopped (idle)'
+    : phase;
+
+  return <StatusBadge status={status} label={label} pulse={shouldAnimate} />;
 }
 
 /**

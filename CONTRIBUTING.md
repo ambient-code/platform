@@ -29,7 +29,7 @@ By participating in this project, you agree to maintain a respectful and inclusi
 
 There are many ways to contribute to Ambient Code Platform:
 
-### 🐛 Report Bugs
+### Report Bugs
 
 If you find a bug, please create an issue with:
 
@@ -39,7 +39,7 @@ If you find a bug, please create an issue with:
 - Environment details (OS, cluster version, etc.)
 - Relevant logs or screenshots
 
-### 💡 Suggest Features
+### Suggest Features
 
 We welcome feature suggestions! Please:
 
@@ -48,7 +48,7 @@ We welcome feature suggestions! Please:
 - Consider implementation approaches
 - Be open to discussion and feedback
 
-### 📝 Improve Documentation
+### Improve Documentation
 
 Documentation improvements are always appreciated:
 
@@ -57,7 +57,7 @@ Documentation improvements are always appreciated:
 - Document undocumented features
 - Improve error messages
 
-### 💻 Submit Code Changes
+### Submit Code Changes
 
 Code contributions should:
 
@@ -76,7 +76,7 @@ Before contributing, ensure you have:
 - Node.js 20+ and npm (for frontend development)
 - Python 3.11+ (for runner development)
 - Podman or Docker (for building containers)
-- Minikube and kubectl (for local development)
+- Kind and kubectl (for local development)
 - Git for version control
 
 ### Fork and Clone
@@ -94,7 +94,7 @@ Before contributing, ensure you have:
 
 ### Install Git Hooks (Recommended)
 
-To prevent accidental commits to protected branches (`main`, `master`, `production`), install our git hooks:
+We use the [pre-commit](https://pre-commit.com/) framework to run linters and branch protection checks automatically on every commit. Install with:
 
 ```bash
 make setup-hooks
@@ -106,12 +106,24 @@ Or run the installation script directly:
 ./scripts/install-git-hooks.sh
 ```
 
-**What the hooks do:**
+**What runs on every commit:**
 
-- **pre-commit** - Blocks commits to `main`/`master`/`production` branches
-- **pre-push** - Blocks pushes to `main`/`master`/`production` branches
+- **File hygiene** - trailing whitespace, EOF fixer, YAML validation, large file check, merge conflict markers, private key detection
+- **Python** - `ruff format` + `ruff check --fix` (runners and scripts)
+- **Go** - `gofmt`, `go vet`, `golangci-lint` (backend, operator, public-api)
+- **Frontend** - ESLint (TypeScript/JavaScript)
+- **Branch protection** - blocks commits to `main`/`master`/`production`
 
-**Hooks are automatically installed** when you run `make dev-start`.
+**What runs on push:**
+
+- **Push protection** - blocks pushes to `main`/`master`/`production`
+
+**Run all hooks manually:**
+
+```bash
+make lint
+# or: pre-commit run --all-files
+```
 
 If you need to override the hooks (e.g., for hotfixes):
 
@@ -255,17 +267,16 @@ See [components/frontend/DESIGN_GUIDELINES.md](components/frontend/DESIGN_GUIDEL
 cd components/runners/claude-code-runner
 
 # Format code
-black .
-isort .
+ruff format .
 
-# Lint
-flake8
+# Lint (with auto-fix)
+ruff check --fix .
 ```
 
 **Standards:**
 
-- Use `black` formatting (88 char line length)
-- Use `isort` for import sorting
+- Use `ruff format` for formatting
+- Use `ruff check` for linting
 - Follow PEP 8 conventions
 - Add type hints where appropriate
 
@@ -312,7 +323,7 @@ npm test
 2. **Run tests** and ensure they pass
 3. **Update documentation** if you changed functionality
 4. **Rebase on latest main** to avoid merge conflicts
-5. **Test locally** with Minikube if possible
+5. **Test locally** with Kind if possible
 
 ### PR Description
 
@@ -346,7 +357,7 @@ Your PR should include:
 
 The recommended way to develop and test Ambient Code Platform locally is using **Kind (Kubernetes in Docker)**. This provides a lightweight Kubernetes environment that matches our CI/CD setup.
 
-> **Migrating from Minikube?** Kind is faster, lighter, and matches CI. See [Local Development Guide](docs/developer/local-development/) for comparison.
+> **Migrating from Minikube?** Kind is faster, lighter, and matches CI. See [Local Development Guide](docs/internal/developer/local-development/) for comparison.
 
 ### Installing Kind and Prerequisites
 
@@ -415,7 +426,7 @@ make kind-up
 
 #### Alternative: Minikube (Older Approach)
 
-If Kind doesn't work for you, see [QUICK_START.md](QUICK_START.md) for Minikube instructions.
+If Kind doesn't work for you, see the [Minikube setup guide](docs/internal/developer/local-development/minikube.md).
 
 ### Additional Development Commands
 
@@ -541,7 +552,8 @@ If you're stuck or have questions:
 1. **Check existing documentation:**
    - [CLAUDE.md](CLAUDE.md) - Comprehensive development standards
    - [README.md](README.md) - Project overview and quick start
-   - [docs/](docs/) - Additional documentation
+   - [BOOKMARKS.md](BOOKMARKS.md) - Developer bookmarks and reference index
+   - [docs/internal/](docs/internal/) - Architecture, design, and developer docs
 
 2. **Search existing issues:**
    - Check if your issue has already been reported

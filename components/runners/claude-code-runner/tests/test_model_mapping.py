@@ -13,7 +13,7 @@ runner_dir = Path(__file__).parent.parent
 if str(runner_dir) not in sys.path:
     sys.path.insert(0, str(runner_dir))
 
-from auth import map_to_vertex_model  # type: ignore[import]
+from ambient_runner.bridges.claude.auth import map_to_vertex_model
 
 
 class TestMapToVertexModel:
@@ -130,12 +130,14 @@ class TestMapToVertexModel:
         assert result == "claude-opus-4-6@default"
 
     def test_none_input_handling(self):
-        """Test that None input passes through unchanged (dict.get handles it)"""
+        """Test that None returns None (passthrough for unknown models)."""
+        # dict.get(None, None) returns None — function passes through unknown keys
         result = map_to_vertex_model(None)  # type: ignore[arg-type]
         assert result is None
 
     def test_numeric_input_handling(self):
-        """Test that numeric input passes through unchanged (dict.get handles it)"""
+        """Test that numeric input returns itself (passthrough for unknown models)."""
+        # dict.get(123, 123) returns 123 — function passes through unknown keys
         result = map_to_vertex_model(123)  # type: ignore[arg-type]
         assert result == 123
 

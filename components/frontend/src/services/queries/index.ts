@@ -12,3 +12,6 @@ export * from './use-secrets';
 export * from './use-repo';
 export * from './use-workspace';
 export * from './use-auth';
+export * from './use-google';
+export * from './use-feature-flags-admin';
+export * from './use-capabilities';

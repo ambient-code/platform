@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"log"
 	"os"
-	"time"
 )
 
 // MigrateLegacySessionToAGUI converts old message format to AG-UI events
@@ -86,12 +85,12 @@ func MigrateLegacySessionToAGUI(sessionID string) error {
 		"type":      types.EventTypeMessagesSnapshot,
 		"threadId":  sessionID,
 		"runId":     "legacy-migration",
-		"timestamp": time.Now().UTC().Format(types.AGUITimestampFormat),
+		"timestamp": types.AGUITimestampNow(),
 		"messages":  messages,
 	}
 
 	// Persist to agui-events.jsonl
-	persistAGUIEventMap(sessionID, "legacy-migration", snapshot)
+	persistEvent(sessionID, snapshot)
 
 	log.Printf("LegacyMigration: Persisted MESSAGES_SNAPSHOT with %d messages", len(messages))
 

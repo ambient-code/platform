@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from 'react';
+import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,7 @@ import type { AgenticSession } from '@/types/agentic-session';
 import { getPhaseColor } from '@/utils/session-helpers';
 import { successToast } from '@/hooks/use-toast';
 import { useSessionExport } from '@/services/queries/use-sessions';
+import { triggerDownload } from '@/utils/export-chat';
 
 type SessionDetailsModalProps = {
   session: AgenticSession;
@@ -35,37 +36,27 @@ export function SessionDetailsModal({
     open // Only fetch when modal is open
   );
 
-  const downloadFile = useCallback((data: unknown, filename: string) => {
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    link.click();
-    URL.revokeObjectURL(url);
-  }, []);
-
-  const handleExportAgui = useCallback(() => {
+  const handleExportAgui = () => {
     if (!exportData) return;
     setExportingAgui(true);
     try {
-      downloadFile(exportData.aguiEvents, `${sessionName}-chat.json`);
+      triggerDownload(JSON.stringify(exportData.aguiEvents, null, 2), `${sessionName}-chat.json`, 'application/json');
       successToast('Chat exported successfully');
     } finally {
       setExportingAgui(false);
     }
-  }, [exportData, sessionName, downloadFile]);
+  };
 
-  const handleExportLegacy = useCallback(() => {
+  const handleExportLegacy = () => {
     if (!exportData?.legacyMessages) return;
     setExportingLegacy(true);
     try {
-      downloadFile(exportData.legacyMessages, `${sessionName}-legacy-messages.json`);
+      triggerDownload(JSON.stringify(exportData.legacyMessages, null, 2), `${sessionName}-legacy-messages.json`, 'application/json');
       successToast('Legacy messages exported successfully');
     } finally {
       setExportingLegacy(false);
     }
-  }, [exportData, sessionName, downloadFile]);
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

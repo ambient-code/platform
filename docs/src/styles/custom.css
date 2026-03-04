@@ -1,0 +1,19 @@
+/* Red Hat brand theming for Starlight */
+
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+:root {
+  --sl-font: 'IBM Plex Sans', sans-serif;
+  --sl-font-mono: 'IBM Plex Mono', monospace;
+
+  /* Red Hat red accent */
+  --sl-color-accent-low: #330a0a;
+  --sl-color-accent: #cc0000;
+  --sl-color-accent-high: #ffcccc;
+}
+
+:root[data-theme='light'] {
+  --sl-color-accent-low: #ffcccc;
+  --sl-color-accent: #cc0000;
+  --sl-color-accent-high: #330a0a;
+}

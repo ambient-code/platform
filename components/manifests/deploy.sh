@@ -136,6 +136,7 @@ DEFAULT_RUNNER_IMAGE="${DEFAULT_RUNNER_IMAGE:-${CONTAINER_REGISTRY}/vteam_claude
 DEFAULT_STATE_SYNC_IMAGE="${DEFAULT_STATE_SYNC_IMAGE:-${CONTAINER_REGISTRY}/vteam_state_sync:${IMAGE_TAG}}"
 # Content service image (defaults to same as backend, but can be overridden)
 CONTENT_SERVICE_IMAGE="${CONTENT_SERVICE_IMAGE:-${DEFAULT_BACKEND_IMAGE}}"
+DEFAULT_API_SERVER_IMAGE="${DEFAULT_API_SERVER_IMAGE:-${CONTAINER_REGISTRY}/vteam_api_server:${IMAGE_TAG}}"
 
 # Handle uninstall/clean command early
 if [ "${1:-}" = "uninstall" ] || [ "${1:-}" = "clean" ]; then
@@ -236,6 +237,7 @@ echo -e "Operator Image: ${GREEN}${DEFAULT_OPERATOR_IMAGE}${NC}"
 echo -e "Runner Image: ${GREEN}${DEFAULT_RUNNER_IMAGE}${NC}"
 echo -e "State Sync Image: ${GREEN}${DEFAULT_STATE_SYNC_IMAGE}${NC}"
 echo -e "Content Service Image: ${GREEN}${CONTENT_SERVICE_IMAGE}${NC}"
+echo -e "API Server Image: ${GREEN}${DEFAULT_API_SERVER_IMAGE}${NC}"
 echo ""
 
 # Check prerequisites
@@ -308,6 +310,7 @@ kustomize edit set image quay.io/ambient_code/vteam_frontend:latest=${DEFAULT_FR
 kustomize edit set image quay.io/ambient_code/vteam_operator:latest=${DEFAULT_OPERATOR_IMAGE}
 kustomize edit set image quay.io/ambient_code/vteam_claude_runner:latest=${DEFAULT_RUNNER_IMAGE}
 kustomize edit set image quay.io/ambient_code/vteam_state_sync:latest=${DEFAULT_STATE_SYNC_IMAGE}
+kustomize edit set image quay.io/ambient_code/vteam_api_server:latest=${DEFAULT_API_SERVER_IMAGE}
 
 # Build and apply manifests
 echo -e "${BLUE}Building and applying manifests...${NC}"
@@ -353,10 +356,6 @@ fi
 echo -e "${BLUE}Updating operator with custom runner image...${NC}"
 oc patch deployment agentic-operator -n ${NAMESPACE} -p "{\"spec\":{\"template\":{\"spec\":{\"containers\":[{\"name\":\"agentic-operator\",\"env\":[{\"name\":\"AMBIENT_CODE_RUNNER_IMAGE\",\"value\":\"${DEFAULT_RUNNER_IMAGE}\"}]}]}}}}" --type=strategic
 
-# Update backend deployment with content service image
-echo -e "${BLUE}Updating backend with content service image...${NC}"
-oc patch deployment backend-api -n ${NAMESPACE} -p "{\"spec\":{\"template\":{\"spec\":{\"containers\":[{\"name\":\"backend-api\",\"env\":[{\"name\":\"CONTENT_SERVICE_IMAGE\",\"value\":\"${CONTENT_SERVICE_IMAGE}\"},{\"name\":\"IMAGE_PULL_POLICY\",\"value\":\"Always\"}]}]}}}}" --type=strategic
-
 echo ""
 echo -e "${GREEN}✅ Deployment completed!${NC}"
 echo ""
@@ -366,6 +365,7 @@ echo -e "${YELLOW}Waiting for deployments to be ready...${NC}"
 oc rollout status deployment/backend-api --namespace=${NAMESPACE} --timeout=300s
 oc rollout status deployment/agentic-operator --namespace=${NAMESPACE} --timeout=300s
 oc rollout status deployment/frontend --namespace=${NAMESPACE} --timeout=300s
+oc rollout status deployment/unleash --namespace=${NAMESPACE} --timeout=300s
 
 # Get service and route information
 echo -e "${BLUE}Getting service and route information...${NC}"
@@ -432,6 +432,7 @@ kustomize edit set image quay.io/ambient_code/vteam_frontend:latest=quay.io/ambi
 kustomize edit set image quay.io/ambient_code/vteam_operator:latest=quay.io/ambient_code/vteam_operator:latest
 kustomize edit set image quay.io/ambient_code/vteam_claude_runner:latest=quay.io/ambient_code/vteam_claude_runner:latest
 kustomize edit set image quay.io/ambient_code/vteam_state_sync:latest=quay.io/ambient_code/vteam_state_sync:latest
+kustomize edit set image quay.io/ambient_code/vteam_api_server:latest=quay.io/ambient_code/vteam_api_server:latest
 cd ../..
 
 echo -e "${GREEN}🎯 Ready to create RFE workflows with multi-agent collaboration!${NC}"

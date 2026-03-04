@@ -163,29 +163,29 @@ export async function deleteSession(
 // sendChatMessage and sendControlMessage removed - use AG-UI protocol
 
 /**
- * Get K8s resource information (job, pods, PVC) for a session
+ * Pod event from the runner pod's Kubernetes events
  */
-export async function getSessionK8sResources(
+export type PodEvent = {
+  type: string;      // "Normal" | "Warning"
+  reason: string;    // "Scheduled", "Pulling", "Pulled", "Created", "Started", "FailedScheduling", etc.
+  message: string;
+  timestamp: string; // RFC3339
+  count: number;
+};
+
+export type PodEventsResponse = {
+  events: PodEvent[];
+};
+
+/**
+ * Get Kubernetes events for the session's runner pod.
+ * Lightweight alternative to the old k8s-resources endpoint.
+ */
+export async function getSessionPodEvents(
   projectName: string,
   sessionName: string
-): Promise<{
-  jobName: string;
-  jobStatus?: string;
-  pods?: Array<{
-    name: string;
-    phase: string;
-    containers: Array<{
-      name: string;
-      state: string;
-      exitCode?: number;
-      reason?: string;
-    }>;
-  }>;
-  pvcName: string;
-  pvcExists: boolean;
-  pvcSize?: string;
-}> {
-  return apiClient.get(`/projects/${projectName}/agentic-sessions/${sessionName}/k8s-resources`);
+): Promise<PodEventsResponse> {
+  return apiClient.get(`/projects/${projectName}/agentic-sessions/${sessionName}/pod-events`);
 }
 
 /**
@@ -255,5 +255,57 @@ export async function getReposStatus(
 ): Promise<ReposStatusResponse> {
   return apiClient.get<ReposStatusResponse>(
     `/projects/${projectName}/agentic-sessions/${sessionName}/repos/status`
+  );
+}
+
+/**
+ * Response from Google Drive file creation
+ */
+export type GoogleDriveFileResponse = {
+  content?: string;
+  error?: string;
+};
+
+/**
+ * Save content to Google Drive via the session's MCP server
+ */
+export async function saveToGoogleDrive(
+  projectName: string,
+  sessionName: string,
+  content: string,
+  filename: string,
+  userEmail: string,
+  serverName: string = 'google-workspace',
+): Promise<GoogleDriveFileResponse> {
+  return apiClient.post<GoogleDriveFileResponse>(
+    `/projects/${projectName}/agentic-sessions/${sessionName}/mcp/invoke`,
+    {
+      server: serverName,
+      tool: 'create_drive_file',
+      args: { user_google_email: userEmail, file_name: filename, content, mime_type: 'text/markdown' },
+    },
+  );
+}
+
+// --- Capabilities ---
+
+export type CapabilitiesResponse = {
+  framework: string;
+  agent_features: string[];
+  platform_features: string[];
+  file_system: boolean;
+  mcp: boolean;
+  tracing: string | null;
+  session_persistence: boolean;
+  model: string | null;
+  session_id: string | null;
+};
+
+export async function getCapabilities(
+  projectName: string,
+  sessionName: string
+): Promise<CapabilitiesResponse> {
+  return apiClient.get<CapabilitiesResponse>(
+    `/projects/${projectName}/agentic-sessions/${sessionName}/agui/capabilities`
   );
 }

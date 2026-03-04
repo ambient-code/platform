@@ -48,7 +48,16 @@ export function buildForwardHeaders(request: Request, extra?: Record<string, str
   if (xfUsername) headers['X-Forwarded-Preferred-Username'] = xfUsername;
   if (xfGroups) headers['X-Forwarded-Groups'] = xfGroups;
   if (project) headers['X-OpenShift-Project'] = project;
-  if (token) headers['X-Forwarded-Access-Token'] = token;
+  // Set both headers so the backend can use whichever it needs:
+  // - X-Forwarded-Access-Token is the primary token the backend trusts
+  // - Authorization is needed by ExtractServiceAccountFromAuth / updateAccessKeyLastUsedAnnotation
+  // In production behind the OAuth proxy, Authorization may already carry an OAuth
+  // session token; overwriting it with the K8s token is intentional — it ensures
+  // the backend sees a consistent K8s-compatible token in both headers.
+  if (token) {
+    headers['X-Forwarded-Access-Token'] = token;
+    headers['Authorization'] = `Bearer ${token}`;
+  }
 
   // If still missing identity info, use environment (helpful for local oc login)
   if (!headers['X-Forwarded-User'] && process.env.OC_USER) {
@@ -60,10 +69,11 @@ export function buildForwardHeaders(request: Request, extra?: Record<string, str
   if (!headers['X-Forwarded-Email'] && process.env.OC_EMAIL) {
     headers['X-Forwarded-Email'] = process.env.OC_EMAIL;
   }
-  
+
   // Add token fallback for local development
   if (!headers['X-Forwarded-Access-Token'] && process.env.OC_TOKEN) {
     headers['X-Forwarded-Access-Token'] = process.env.OC_TOKEN;
+    headers['Authorization'] = `Bearer ${process.env.OC_TOKEN}`;
   }
 
   // Optional dev-only automatic discovery via oc CLI
@@ -73,11 +83,11 @@ export function buildForwardHeaders(request: Request, extra?: Record<string, str
   const needsIdentity = !headers['X-Forwarded-User'] && !headers['X-Forwarded-Preferred-Username'];
   const needsToken = !headers['X-Forwarded-Access-Token'];
 
-  // We cannot await top-level in this sync function, so expose best-effort sync
-  // pattern by stashing promises on the object and resolving outside if needed.
-  // For simplicity, perform a lazy, best-effort fetch and only if in server runtime.
+  // Best-effort async discovery — the IIFE resolves *after* this function
+  // returns, so these mutations only help callers that hold a reference to
+  // `headers` long enough (e.g. long-lived SSE connections). For reliable
+  // oc CLI discovery, use buildForwardHeadersAsync instead.
   if (enableOc && runningInNode && (needsIdentity || needsToken)) {
-    // Fire-and-forget: we won't block the request if oc isn't present
     (async () => {
       try {
         if (needsIdentity) {
@@ -87,7 +97,10 @@ export function buildForwardHeaders(request: Request, extra?: Record<string, str
         }
         if (needsToken) {
           const t = await tryExec('oc whoami -t');
-          if (t) headers['X-Forwarded-Access-Token'] = t;
+          if (t) {
+            headers['X-Forwarded-Access-Token'] = t;
+            headers['Authorization'] = `Bearer ${t}`;
+          }
         }
       } catch {
         // ignore
@@ -116,7 +129,10 @@ export async function buildForwardHeadersAsync(request: Request, extra?: Record<
     if (!headers['X-Forwarded-User']) headers['X-Forwarded-User'] = mockUser;
     if (!headers['X-Forwarded-Preferred-Username']) headers['X-Forwarded-Preferred-Username'] = mockUser;
     if (!headers['X-Forwarded-Email']) headers['X-Forwarded-Email'] = `${mockUser}@local.dev`;
-    if (!headers['X-Forwarded-Access-Token']) headers['X-Forwarded-Access-Token'] = 'mock-token-for-local-dev';
+    if (!headers['X-Forwarded-Access-Token']) {
+      headers['X-Forwarded-Access-Token'] = 'mock-token-for-local-dev';
+      headers['Authorization'] = 'Bearer mock-token-for-local-dev';
+    }
     return headers;
   }
 
@@ -133,7 +149,10 @@ export async function buildForwardHeadersAsync(request: Request, extra?: Record<
     }
     if (needsToken) {
       const t = await tryExec('oc whoami -t');
-      if (t) headers['X-Forwarded-Access-Token'] = t;
+      if (t) {
+        headers['X-Forwarded-Access-Token'] = t;
+        headers['Authorization'] = `Bearer ${t}`;
+      }
     }
   }
 

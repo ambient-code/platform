@@ -14,8 +14,6 @@ spec:
           value: "vteam-dev"
         - name: BACKEND_API_URL
           value: "http://vteam-backend:8080/api"
-        - name: CONTENT_SERVICE_IMAGE
-          value: "image-registry.openshift-image-registry.svc:5000/vteam-dev/vteam-backend:latest"
         - name: IMAGE_PULL_POLICY
           value: "IfNotPresent"
 

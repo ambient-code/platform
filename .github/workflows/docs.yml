@@ -18,25 +18,24 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    container:
-      image: registry.access.redhat.com/ubi9/ubi-minimal:latest
     steps:
-      - name: Install git and tar
-        run: |
-          microdnf install -y git tar
-
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Install Python and dependencies
-        run: |
-          microdnf install -y python3.11 python3.11-pip
-          python3.11 -m pip install --upgrade pip
-          python3.11 -m pip install -r requirements-docs.txt
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: docs/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./docs
+        run: npm ci
 
       - name: Build documentation
-        run: |
-          python3.11 -m mkdocs build
+        working-directory: ./docs
+        run: npm run build
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
@@ -44,7 +43,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v4
         with:
-          path: ./site
+          path: ./docs/dist
 
   deploy:
     environment:

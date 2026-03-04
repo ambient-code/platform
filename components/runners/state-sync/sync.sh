@@ -134,18 +134,120 @@ sync_to_s3() {
     echo "[$(date -Iseconds)] Sync complete (${synced} paths synced)"
 }
 
+# Backup git repo state (bundles, patches, metadata) to a temp directory for S3 upload.
+# Only called during final_sync() to avoid overhead during periodic syncs.
+backup_git_repos() {
+    local repo_state_dir="/tmp/repo-state"
+    local s3_path="s3:${S3_BUCKET}/${NAMESPACE}/${SESSION_NAME}"
+
+    # Clean up any previous state
+    rm -rf "${repo_state_dir}"
+    mkdir -p "${repo_state_dir}"
+
+    if [ ! -d "/workspace/repos" ]; then
+        echo "  No /workspace/repos directory, skipping git backup"
+        return 0
+    fi
+
+    local backed_up=0
+
+    for repo_dir in /workspace/repos/*/; do
+        # Skip if not a directory
+        [ -d "${repo_dir}" ] || continue
+
+        # Strip trailing slash for consistent git safe.directory matching
+        repo_dir="${repo_dir%/}"
+
+        # Skip if not a git repo (.git can be a directory or a file for worktrees/submodules)
+        if [ ! -d "${repo_dir}/.git" ] && [ ! -f "${repo_dir}/.git" ]; then
+            echo "  Skipping ${repo_dir}: not a git repo"
+            continue
+        fi
+
+        local repo_name
+        repo_name=$(basename "${repo_dir}")
+        local dest="${repo_state_dir}/${repo_name}"
+        mkdir -p "${dest}"
+
+        echo "  Backing up git state for ${repo_name}..."
+
+        # Mark directory as safe for git operations
+        if ! git config --global --add safe.directory "${repo_dir}" 2>&1; then
+            echo "  WARNING: Failed to mark ${repo_dir} as safe directory"
+        fi
+
+        # Create git bundle with all refs
+        local bundle_err
+        if bundle_err=$(git -C "${repo_dir}" bundle create "${dest}/repo.bundle" --all 2>&1); then
+            echo "  Bundle created for ${repo_name} ($(stat -c%s "${dest}/repo.bundle" 2>/dev/null || echo "?") bytes)"
+        else
+            echo "  WARNING: Failed to create bundle for ${repo_name}: ${bundle_err}"
+            # Still save metadata for empty repos
+        fi
+
+        # Capture uncommitted changes (tracked files)
+        git -C "${repo_dir}" diff HEAD > "${dest}/uncommitted.patch" 2>/dev/null || true
+
+        # Capture staged changes
+        git -C "${repo_dir}" diff --cached > "${dest}/staged.patch" 2>/dev/null || true
+
+        # Write metadata
+        local remote_url branch head_sha local_branches
+        remote_url=$(git -C "${repo_dir}" remote get-url origin 2>&1 || echo "")
+        # Strip embedded credentials (e.g., x-access-token:TOKEN@) from URL
+        remote_url=$(echo "${remote_url}" | sed 's|://[^@]*@|://|')
+        branch=$(git -C "${repo_dir}" rev-parse --abbrev-ref HEAD 2>&1 || echo "unknown")
+        head_sha=$(git -C "${repo_dir}" rev-parse HEAD 2>&1 || echo "")
+        local_branches=$(git -C "${repo_dir}" branch --format='%(refname:short)' 2>&1 | jq -R -s 'split("\n") | map(select(length > 0))' || echo "[]")
+
+        jq -n \
+            --arg url "${remote_url}" \
+            --arg branch "${branch}" \
+            --arg sha "${head_sha}" \
+            --argjson branches "${local_branches}" \
+            --arg ts "$(date -Iseconds)" \
+            '{remoteUrl: $url, currentBranch: $branch, headSha: $sha, localBranches: $branches, backedUpAt: $ts}' \
+            > "${dest}/metadata.json"
+
+        backed_up=$((backed_up + 1))
+        echo "  Backed up ${repo_name} (branch: ${branch}, HEAD: ${head_sha:0:8})"
+    done
+
+    if [ "${backed_up}" -gt 0 ]; then
+        echo "  Syncing ${backed_up} repo state(s) to S3..."
+        if rclone --config /tmp/.config/rclone/rclone.conf sync "${repo_state_dir}/" "${s3_path}/repo-state/" \
+            --transfers 4 \
+            --fast-list \
+            --stats-one-line \
+            2>&1; then
+            echo "  Git repo state backup complete (${backed_up} repos)"
+        else
+            echo "  WARNING: Failed to sync git repo state to S3"
+        fi
+    else
+        echo "  No git repos to back up"
+    fi
+
+    # Clean up temp directory
+    rm -rf "${repo_state_dir}"
+}
+
 # Final sync on shutdown
 final_sync() {
     echo ""
     echo "========================================="
     echo "[$(date -Iseconds)] SIGTERM received, performing final sync..."
     echo "========================================="
+    backup_git_repos
     sync_to_s3
     echo "========================================="
     echo "[$(date -Iseconds)] Final sync complete, exiting"
     echo "========================================="
     exit 0
 }
+
+# Set HOME for git config (alpine doesn't set it by default)
+export HOME=/tmp
 
 # Main
 echo "========================================="

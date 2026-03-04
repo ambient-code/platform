@@ -65,7 +65,7 @@ const defaultComponents: Components = {
     );
   },
   p: ({ children }) => (
-    <p className="text-muted-foreground leading-relaxed mb-[0.2rem] text-sm">{children}</p>
+    <div className="text-muted-foreground leading-relaxed mb-[0.2rem] text-sm">{children}</div>
   ),
   h1: ({ children }) => (
     <h1 className="text-lg font-bold text-foreground mb-2">{children}</h1>

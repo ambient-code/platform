@@ -91,7 +91,6 @@ export function CreateSessionDialog({
     if (!projectName) return;
 
     const request: CreateAgenticSessionRequest = {
-      interactive: true,
       llmSettings: {
         model: values.model,
         temperature: values.temperature,

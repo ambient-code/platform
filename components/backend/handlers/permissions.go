@@ -353,9 +353,10 @@ func CreateProjectKey(c *gin.Context) {
 	}
 
 	var req struct {
-		Name        string `json:"name" binding:"required"`
-		Description string `json:"description"`
-		Role        string `json:"role"`
+		Name              string `json:"name" binding:"required"`
+		Description       string `json:"description"`
+		Role              string `json:"role"`
+		ExpirationSeconds *int64 `json:"expirationSeconds"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -425,7 +426,11 @@ func CreateProjectKey(c *gin.Context) {
 	}
 
 	// Issue a one-time JWT token for this ServiceAccount (no audience; used as API key)
-	tr := &authnv1.TokenRequest{Spec: authnv1.TokenRequestSpec{}}
+	tokenSpec := authnv1.TokenRequestSpec{}
+	if req.ExpirationSeconds != nil && *req.ExpirationSeconds > 0 {
+		tokenSpec.ExpirationSeconds = req.ExpirationSeconds
+	}
+	tr := &authnv1.TokenRequest{Spec: tokenSpec}
 	tok, err := k8sClient.CoreV1().ServiceAccounts(projectName).CreateToken(context.TODO(), saName, tr, v1.CreateOptions{})
 	if err != nil {
 		log.Printf("Failed to create token for SA %s/%s: %v", projectName, saName, err)

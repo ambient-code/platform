@@ -1,0 +1,17 @@
+# Unleash UI Route for local-dev (OpenShift)
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: unleash
+  labels:
+    app: unleash
+    app.kubernetes.io/name: unleash
+spec:
+  to:
+    kind: Service
+    name: unleash
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

@@ -15,6 +15,7 @@ import { successToast, errorToast } from "@/hooks/use-toast";
 import { useProject, useUpdateProject } from "@/services/queries/use-projects";
 import { useSecretsValues, useUpdateSecrets, useIntegrationSecrets, useUpdateIntegrationSecrets } from "@/services/queries/use-secrets";
 import { useClusterInfo } from "@/hooks/use-cluster-info";
+import { FeatureFlagsSection } from "./feature-flags-section";
 import { useMemo } from "react";
 
 type SettingsSectionProps = {
@@ -131,7 +132,7 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
     const integrationData: Record<string, string> = {};
 
     // NOTE: GIT_USER_* removed - git identity now auto-derived from GitHub/GitLab credentials
-    
+
     // S3 Storage configuration
     integrationData["STORAGE_MODE"] = storageMode;
     if (storageMode === "custom") {
@@ -542,7 +543,8 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
           </div>
         </CardContent>
       </Card>
+
+      <FeatureFlagsSection projectName={projectName} />
     </div>
   );
 }
-

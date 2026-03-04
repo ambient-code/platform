@@ -45,12 +45,15 @@ var (
 	podRestarts        metric.Int64Counter
 )
 
-// InitMetrics initializes OpenTelemetry metrics
+// InitMetrics initializes OpenTelemetry metrics.
+// Set OTEL_EXPORTER_OTLP_ENDPOINT to configure the collector address.
+// Leave unset or empty to disable metrics export (no-op).
 func InitMetrics(ctx context.Context) (func(), error) {
-	// Get OTLP endpoint from environment
+	// Get OTLP endpoint from environment; skip if not configured
 	endpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
 	if endpoint == "" {
-		endpoint = "localhost:4317" // Default OTLP gRPC endpoint
+		log.Println("OTEL_EXPORTER_OTLP_ENDPOINT not set, metrics export disabled")
+		return func() {}, nil
 	}
 
 	// Create resource with service information

@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 
+	"ambient-code-backend/featureflags"
 	"ambient-code-backend/git"
 	"ambient-code-backend/github"
 	"ambient-code-backend/handlers"
@@ -52,33 +53,6 @@ func main() {
 	// Log build information
 	logBuildInfo()
 
-	// Content service mode - minimal initialization, no K8s access needed
-	if os.Getenv("CONTENT_SERVICE_MODE") == "true" {
-		log.Println("Starting in CONTENT_SERVICE_MODE (no K8s client initialization)")
-
-		// Initialize config to set StateBaseDir from environment
-		server.InitConfig()
-
-		// Only initialize what content service needs
-		handlers.StateBaseDir = server.StateBaseDir
-		handlers.GitPushRepo = git.PushRepo
-		handlers.GitAbandonRepo = git.AbandonRepo
-		handlers.GitDiffRepo = git.DiffRepo
-		handlers.GitCheckMergeStatus = git.CheckMergeStatus
-		handlers.GitPullRepo = git.PullRepo
-		handlers.GitPushToRepo = git.PushToRepo
-		handlers.GitSyncRepo = git.SyncRepo
-		handlers.GitCreateBranch = git.CreateBranch
-		handlers.GitListRemoteBranches = git.ListRemoteBranches
-
-		log.Printf("Content service using StateBaseDir: %s", server.StateBaseDir)
-
-		if err := server.RunContentService(registerContentRoutes); err != nil {
-			log.Fatalf("Content service error: %v", err)
-		}
-		return
-	}
-
 	// Normal server mode - full initialization
 	log.Println("Starting in normal server mode with K8s client initialization")
 
@@ -90,6 +64,9 @@ func main() {
 	}
 
 	server.InitConfig()
+
+	// Optional: Unleash feature flags (when UNLEASH_URL and UNLEASH_CLIENT_KEY are set)
+	featureflags.Init()
 
 	// Initialize git package
 	git.GetProjectSettingsResource = k8s.GetProjectSettingsResource
@@ -118,18 +95,6 @@ func main() {
 	git.GetBackendNamespace = func() string {
 		return server.Namespace
 	}
-
-	// Initialize content handlers
-	handlers.StateBaseDir = server.StateBaseDir
-	handlers.GitPushRepo = git.PushRepo
-	handlers.GitAbandonRepo = git.AbandonRepo
-	handlers.GitDiffRepo = git.DiffRepo
-	handlers.GitCheckMergeStatus = git.CheckMergeStatus
-	handlers.GitPullRepo = git.PullRepo
-	handlers.GitPushToRepo = git.PushToRepo
-	handlers.GitSyncRepo = git.SyncRepo
-	handlers.GitCreateBranch = git.CreateBranch
-	handlers.GitListRemoteBranches = git.ListRemoteBranches
 
 	// Initialize GitHub auth handlers
 	handlers.K8sClient = server.K8sClient

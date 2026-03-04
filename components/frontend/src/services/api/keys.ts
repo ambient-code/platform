@@ -18,6 +18,7 @@ export type CreateKeyRequest = {
   name: string;
   description?: string;
   role?: 'view' | 'edit' | 'admin';
+  expirationSeconds?: number;
 };
 
 export type CreateKeyResponse = {

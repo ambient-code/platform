@@ -72,7 +72,12 @@ chown -R 1001:0 "${CLAUDE_DATA_PATH}" /workspace/artifacts /workspace/file-uploa
 chmod -R 777 "${CLAUDE_DATA_PATH}" 2>/dev/null || echo "Warning: failed to chmod ${CLAUDE_DATA_PATH} (continuing)"
 
 # Other directories - standard permissions since chown sets ownership to runner user
-chmod 755 /workspace/artifacts /workspace/file-uploads 2>/dev/null || true
+chmod 755 /workspace/artifacts 2>/dev/null || true
+# SECURITY: 777 required for /workspace/file-uploads because:
+# - Init container runs as root but content sidecar runs as user 1001
+# - Content sidecar needs write access to store user-uploaded files
+# - Directory contains user-uploaded files (no secrets), so world-writable is acceptable
+chmod 777 /workspace/file-uploads 2>/dev/null || true
 # SECURITY: 777 required for /workspace/repos because:
 # - Init container runs as root but runner container runs as user 1001
 # - Group-based permissions (775) don't work as containers may not share groups
@@ -104,7 +109,7 @@ echo "S3 connection successful"
 echo "Checking for existing session state in S3..."
 if rclone --config /tmp/.config/rclone/rclone.conf lsf "${S3_PATH}/" 2>/dev/null | grep -q .; then
     echo "Found existing session state, downloading from S3..."
-    
+
     # Download .claude data to /app/.claude (SubPath mount matches runner container)
     if rclone --config /tmp/.config/rclone/rclone.conf lsf "${S3_PATH}/.claude/" 2>/dev/null | grep -q .; then
         echo "  Downloading .claude/..."
@@ -116,7 +121,7 @@ if rclone --config /tmp/.config/rclone/rclone.conf lsf "${S3_PATH}/" 2>/dev/null
     else
         echo "  No data for .claude/"
     fi
-    
+
     # Download other sync paths to /workspace
     for path in "${SYNC_PATHS[@]}"; do
         if rclone --config /tmp/.config/rclone/rclone.conf lsf "${S3_PATH}/${path}/" 2>/dev/null | grep -q .; then
@@ -130,7 +135,7 @@ if rclone --config /tmp/.config/rclone/rclone.conf lsf "${S3_PATH}/" 2>/dev/null
             echo "  No data for ${path}/"
         fi
     done
-    
+
     echo "State hydration complete!"
 else
     echo "No existing state found, starting fresh session"
@@ -144,7 +149,8 @@ chown -R 1001:0 "${CLAUDE_DATA_PATH}" /workspace/artifacts /workspace/file-uploa
 chmod -R 777 "${CLAUDE_DATA_PATH}" 2>/dev/null || true
 # repos also needs write access for runtime repo additions (clone_repo_at_runtime)
 # See security rationale above for why 777 is used
-chmod -R 755 /workspace/artifacts /workspace/file-uploads 2>/dev/null || true
+chmod -R 755 /workspace/artifacts 2>/dev/null || true
+chmod -R 777 /workspace/file-uploads 2>/dev/null || true
 chmod -R 777 /workspace/repos 2>/dev/null || true
 
 # ========================================
@@ -178,23 +184,41 @@ if [ -n "$REPOS_JSON" ] && [ "$REPOS_JSON" != "null" ] && [ "$REPOS_JSON" != "" 
         i=0
         while [ $i -lt $REPO_COUNT ]; do
             REPO_URL=$(echo "$REPOS_JSON" | jq -r ".[$i].url // empty" 2>/dev/null || echo "")
-            REPO_BRANCH=$(echo "$REPOS_JSON" | jq -r ".[$i].branch // \"main\"" 2>/dev/null || echo "main")
-            
+            REPO_BRANCH=$(echo "$REPOS_JSON" | jq -r ".[$i].branch // empty" 2>/dev/null || echo "")
+
             # Derive repo name from URL
             REPO_NAME=$(basename "$REPO_URL" .git 2>/dev/null || echo "")
-            
+
             if [ -n "$REPO_NAME" ] && [ -n "$REPO_URL" ] && [ "$REPO_URL" != "null" ]; then
                 REPO_DIR="/workspace/repos/$REPO_NAME"
-                echo "  Cloning $REPO_NAME (branch: $REPO_BRANCH)..."
-                
+
                 # Mark repo directory as safe
                 git config --global --add safe.directory "$REPO_DIR" 2>/dev/null || true
-                
-                # Clone repository (for private repos, runner will handle token injection)
-                if git clone --branch "$REPO_BRANCH" --single-branch "$REPO_URL" "$REPO_DIR" 2>&1; then
-                    echo "  ✓ Cloned $REPO_NAME"
+
+                # Clone repository. When branch is specified, clone that branch.
+                # When empty, clone the repo's default branch (main/master/etc).
+                if [ -n "$REPO_BRANCH" ]; then
+                    echo "  Cloning $REPO_NAME (branch: $REPO_BRANCH)..."
+                    if git clone --branch "$REPO_BRANCH" --single-branch "$REPO_URL" "$REPO_DIR" 2>&1; then
+                        echo "  ✓ Cloned $REPO_NAME (branch: $REPO_BRANCH)"
+                        # Install pre-commit hooks if the repo has a config
+                        if [ -f "$REPO_DIR/.pre-commit-config.yaml" ] && command -v pre-commit &>/dev/null; then
+                            (cd "$REPO_DIR" && pre-commit install 2>/dev/null) || true
+                        fi
+                    else
+                        echo "  ⚠ Failed to clone $REPO_NAME (may require authentication)"
+                    fi
                 else
-                    echo "  ⚠ Failed to clone $REPO_NAME (may require authentication)"
+                    echo "  Cloning $REPO_NAME (default branch)..."
+                    if git clone --single-branch "$REPO_URL" "$REPO_DIR" 2>&1; then
+                        echo "  ✓ Cloned $REPO_NAME (default branch)"
+                        # Install pre-commit hooks if the repo has a config
+                        if [ -f "$REPO_DIR/.pre-commit-config.yaml" ] && command -v pre-commit &>/dev/null; then
+                            (cd "$REPO_DIR" && pre-commit install 2>/dev/null) || true
+                        fi
+                    else
+                        echo "  ⚠ Failed to clone $REPO_NAME (may require authentication)"
+                    fi
                 fi
             fi
             i=$((i + 1))
@@ -208,31 +232,31 @@ fi
 if [ -n "$ACTIVE_WORKFLOW_GIT_URL" ] && [ "$ACTIVE_WORKFLOW_GIT_URL" != "null" ]; then
     WORKFLOW_BRANCH="${ACTIVE_WORKFLOW_BRANCH:-main}"
     WORKFLOW_PATH="${ACTIVE_WORKFLOW_PATH:-}"
-    
+
     echo "Cloning workflow repository..."
     echo "  URL: $ACTIVE_WORKFLOW_GIT_URL"
     echo "  Branch: $WORKFLOW_BRANCH"
     if [ -n "$WORKFLOW_PATH" ]; then
         echo "  Subpath: $WORKFLOW_PATH"
     fi
-    
+
     # Derive workflow name from URL
     WORKFLOW_NAME=$(basename "$ACTIVE_WORKFLOW_GIT_URL" .git)
     WORKFLOW_FINAL="/workspace/workflows/${WORKFLOW_NAME}"
     WORKFLOW_TEMP="/tmp/workflow-clone-$$"
-    
+
     git config --global --add safe.directory "$WORKFLOW_FINAL" 2>/dev/null || true
-    
+
     # Clone to temp location
     if git clone --branch "$WORKFLOW_BRANCH" --single-branch "$ACTIVE_WORKFLOW_GIT_URL" "$WORKFLOW_TEMP" 2>&1; then
         echo "  Clone successful, processing..."
-        
+
         # Extract subpath if specified
         if [ -n "$WORKFLOW_PATH" ]; then
             SUBPATH_FULL="$WORKFLOW_TEMP/$WORKFLOW_PATH"
             echo "  Checking for subpath: $SUBPATH_FULL"
             ls -la "$SUBPATH_FULL" 2>&1 || echo "  Subpath does not exist"
-            
+
             if [ -d "$SUBPATH_FULL" ]; then
                 echo "  Extracting subpath: $WORKFLOW_PATH"
                 mkdir -p "$(dirname "$WORKFLOW_FINAL")"
@@ -258,8 +282,124 @@ if [ -n "$ACTIVE_WORKFLOW_GIT_URL" ] && [ "$ACTIVE_WORKFLOW_GIT_URL" != "null" ]
     fi
 fi
 
+# ========================================
+# Restore git repo state from S3 backup
+# ========================================
+echo "========================================="
+echo "Checking for git repo state backup..."
+echo "========================================="
+
+S3_REPO_STATE="${S3_PATH}/repo-state/"
+
+if rclone --config /tmp/.config/rclone/rclone.conf lsf "${S3_REPO_STATE}" 2>/dev/null | grep -q .; then
+    echo "Found git repo state backup, restoring..."
+
+    REPO_STATE_DIR="/tmp/repo-state"
+    rm -rf "${REPO_STATE_DIR}"
+    mkdir -p "${REPO_STATE_DIR}"
+
+    # Download repo state from S3
+    rclone --config /tmp/.config/rclone/rclone.conf copy "${S3_REPO_STATE}" "${REPO_STATE_DIR}/" \
+        --transfers 8 \
+        --fast-list \
+        --progress 2>&1 || echo "  Warning: failed to download repo state"
+
+    for repo_state_dir in "${REPO_STATE_DIR}"/*/; do
+        [ -d "${repo_state_dir}" ] || continue
+
+        REPO_NAME=$(basename "${repo_state_dir}")
+        REPO_DIR="/workspace/repos/${REPO_NAME}"
+        METADATA_FILE="${repo_state_dir}/metadata.json"
+
+        echo "  Restoring git state for ${REPO_NAME}..."
+
+        if [ ! -f "${METADATA_FILE}" ]; then
+            echo "  WARNING: No metadata.json for ${REPO_NAME}, skipping"
+            continue
+        fi
+
+        # Read metadata
+        REMOTE_URL=$(jq -r '.remoteUrl // empty' "${METADATA_FILE}" 2>/dev/null || echo "")
+        SAVED_BRANCH=$(jq -r '.currentBranch // "main"' "${METADATA_FILE}" 2>/dev/null || echo "main")
+        SAVED_HEAD=$(jq -r '.headSha // empty' "${METADATA_FILE}" 2>/dev/null || echo "")
+
+        # If repo was not already cloned (e.g., runtime-added repo), clone it
+        if [ ! -d "${REPO_DIR}" ] && [ -n "${REMOTE_URL}" ]; then
+            # Redact credentials from URL for logging
+            SAFE_URL=$(echo "${REMOTE_URL}" | sed 's|://[^@]*@|://|')
+            echo "  Cloning missing repo ${REPO_NAME} from ${SAFE_URL}..."
+            git config --global --add safe.directory "${REPO_DIR}" 2>/dev/null || true
+            git clone "${REMOTE_URL}" "${REPO_DIR}" 2>&1 || {
+                echo "  WARNING: Failed to clone ${REPO_NAME}, skipping restore"
+                continue
+            }
+        fi
+
+        if [ ! -d "${REPO_DIR}/.git" ] && [ ! -f "${REPO_DIR}/.git" ]; then
+            echo "  WARNING: ${REPO_DIR} is not a git repo, skipping restore"
+            continue
+        fi
+
+        git config --global --add safe.directory "${REPO_DIR}" 2>/dev/null || true
+
+        # Import local branches from bundle using fetch (creates local branch refs)
+        if [ -f "${repo_state_dir}/repo.bundle" ]; then
+            echo "  Fetching refs from bundle for ${REPO_NAME}..."
+            # Detach HEAD so fetch can update all branches (including the checked-out one)
+            git -C "${REPO_DIR}" checkout --detach 2>/dev/null || true
+            git -C "${REPO_DIR}" fetch "${repo_state_dir}/repo.bundle" "+refs/heads/*:refs/heads/*" 2>&1 || {
+                echo "  WARNING: Failed to fetch refs from bundle for ${REPO_NAME}"
+            }
+        fi
+
+        # Fetch all remotes to ensure refs are up to date
+        git -C "${REPO_DIR}" fetch --all 2>/dev/null || true
+
+        # Checkout the saved branch
+        if [ "${SAVED_BRANCH}" != "unknown" ] && [ -n "${SAVED_BRANCH}" ]; then
+            echo "  Checking out branch: ${SAVED_BRANCH}"
+            git -C "${REPO_DIR}" checkout "${SAVED_BRANCH}" 2>&1 || {
+                echo "  WARNING: Failed to checkout ${SAVED_BRANCH}, staying on current branch"
+            }
+        fi
+
+        # Apply uncommitted changes (best-effort)
+        if [ -f "${repo_state_dir}/uncommitted.patch" ] && [ -s "${repo_state_dir}/uncommitted.patch" ]; then
+            echo "  Applying uncommitted changes..."
+            git -C "${REPO_DIR}" apply --allow-empty "${repo_state_dir}/uncommitted.patch" 2>&1 || {
+                echo "  WARNING: Failed to apply uncommitted changes for ${REPO_NAME} (conflicts likely)"
+            }
+        fi
+
+        # Apply staged changes (best-effort)
+        if [ -f "${repo_state_dir}/staged.patch" ] && [ -s "${repo_state_dir}/staged.patch" ]; then
+            echo "  Applying staged changes..."
+            git -C "${REPO_DIR}" apply --cached --allow-empty "${repo_state_dir}/staged.patch" 2>&1 || {
+                echo "  WARNING: Failed to apply staged changes for ${REPO_NAME} (conflicts likely)"
+            }
+        fi
+
+        # Verify HEAD SHA matches expectation
+        CURRENT_HEAD=$(git -C "${REPO_DIR}" rev-parse HEAD 2>/dev/null || echo "")
+        if [ -n "${SAVED_HEAD}" ] && [ -n "${CURRENT_HEAD}" ] && [ "${SAVED_HEAD}" != "${CURRENT_HEAD}" ]; then
+            echo "  WARNING: HEAD diverged for ${REPO_NAME}: expected ${SAVED_HEAD:0:8}, got ${CURRENT_HEAD:0:8}"
+        fi
+
+        echo "  Restored ${REPO_NAME} (branch: ${SAVED_BRANCH})"
+    done
+
+    # Clean up
+    rm -rf "${REPO_STATE_DIR}"
+    echo "Git repo state restore complete"
+else
+    echo "No git repo state backup found"
+fi
+
+# Set permissions on repos after restore (repos may have been cloned or restored)
+chown -R 1001:0 /workspace/repos 2>/dev/null || true
+chmod -R 777 /workspace/repos 2>/dev/null || true
+
 echo "========================================="
 echo "Workspace initialized successfully"
 echo "========================================="
 exit 0
-

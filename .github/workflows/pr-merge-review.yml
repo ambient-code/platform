@@ -1,0 +1,53 @@
+name: PR Merge Review
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 13 * * 1-5'  # weekdays 1pm UTC
+
+permissions:
+  contents: read
+
+jobs:
+  create-session:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Create PR review session
+        id: session
+        uses: ambient-code/ambient-action@v0.0.2
+        with:
+          api-url: ${{ secrets.AMBIENT_API_URL }}
+          api-token: ${{ secrets.AMBIENT_BOT_TOKEN }}
+          project: ${{ secrets.AMBIENT_PROJECT }}
+          prompt: >-
+            Review all open PRs in https://github.com/${{ github.repository }}
+            for merge readiness. After generating the merge meeting report,
+            manage the "Merge Queue" milestone: add clean PRs (0 blockers),
+            remove PRs that are no longer clean or have been merged/closed,
+            and update the milestone description with the full report.
+          repos: >-
+            [{"url": "https://github.com/${{ github.repository }}", "branch": "main"}]
+          workflow: >-
+            {"gitUrl": "https://github.com/ambient-code/workflows", "branch": "main", "path": "internal-workflows/pr-overview"}
+          wait: 'true'
+          timeout: '10'
+
+      - name: Session summary
+        if: always()
+        env:
+          SESSION_NAME: ${{ steps.session.outputs.session-name }}
+          SESSION_UID: ${{ steps.session.outputs.session-uid }}
+          SESSION_PHASE: ${{ steps.session.outputs.session-phase }}
+          SESSION_RESULT: ${{ steps.session.outputs.session-result }}
+        run: |
+          echo "### PR Merge Review" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -n "$SESSION_NAME" ]; then
+            echo "- **Session**: \`$SESSION_NAME\`" >> $GITHUB_STEP_SUMMARY
+            echo "- **UID**: \`$SESSION_UID\`" >> $GITHUB_STEP_SUMMARY
+            echo "- **Phase**: \`$SESSION_PHASE\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Status**: Failed to create session" >> $GITHUB_STEP_SUMMARY
+          fi

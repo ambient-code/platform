@@ -9,6 +9,8 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
+import { InputWithHistory } from "@/components/input-with-history";
+import { useInputHistory } from "@/hooks/use-input-history";
 
 type AddContextModalProps = {
   open: boolean;
@@ -30,12 +32,16 @@ export function AddContextModal({
   const [contextUrl, setContextUrl] = useState("");
   const [contextBranch, setContextBranch] = useState("");  // Empty = use auto-generated branch
   const [autoPush, setAutoPush] = useState(false);
+  const { addToHistory: addUrlToHistory } = useInputHistory("add-context:url");
 
   const handleSubmit = async () => {
     if (!contextUrl.trim()) return;
 
     // Trim URL and remove trailing slash
     const sanitizedUrl = contextUrl.trim().replace(/\/+$/, '');
+
+    // Save URL to history before API call
+    addUrlToHistory(sanitizedUrl);
 
     // Use autoBranch from backend (single source of truth), or empty to let runner auto-generate
     const defaultBranch = autoBranch || '';
@@ -74,7 +80,8 @@ export function AddContextModal({
 
           <div className="space-y-2">
             <Label htmlFor="context-url">Repository URL</Label>
-            <Input
+            <InputWithHistory
+              historyKey="add-context:url"
               id="context-url"
               placeholder="https://github.com/org/repo"
               value={contextUrl}

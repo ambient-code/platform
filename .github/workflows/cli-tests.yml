@@ -1,0 +1,61 @@
+name: CLI Build and Tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'components/ambient-cli/**'
+      - 'components/ambient-sdk/go-sdk/**'
+      - '!**/*.md'
+      - '.github/workflows/cli-tests.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'components/ambient-cli/**'
+      - 'components/ambient-sdk/go-sdk/**'
+      - '!**/*.md'
+      - '.github/workflows/cli-tests.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: cli-tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cli-build-and-test:
+    runs-on: ubuntu-latest
+    name: CLI Build and Unit Tests
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'components/ambient-cli/go.mod'
+          cache-dependency-path: 'components/ambient-cli/go.sum'
+
+      - name: Build binary
+        run: |
+          cd components/ambient-cli
+          go build -ldflags "-X github.com/ambient-code/platform/components/ambient-cli/pkg/info.Version=ci-${{ github.sha }}" -o acpctl ./cmd/acpctl/
+
+      - name: Verify binary runs
+        run: |
+          cd components/ambient-cli
+          ./acpctl version
+          ./acpctl --help
+
+      - name: Run unit tests
+        run: |
+          cd components/ambient-cli
+          go test -v -race -coverprofile=coverage.out ./...
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: cli-coverage-${{ github.run_id }}
+          path: components/ambient-cli/coverage.out
+          retention-days: 7

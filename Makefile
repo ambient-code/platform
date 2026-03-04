@@ -1,10 +1,11 @@
-.PHONY: help setup build-all build-frontend build-backend build-operator build-runner build-state-sync build-public-api deploy clean check-architecture
+.PHONY: help setup build-all build-frontend build-backend build-operator build-runner build-state-sync build-public-api build-cli deploy clean check-architecture
 .PHONY: local-up local-down local-clean local-status local-rebuild local-reload-backend local-reload-frontend local-reload-operator local-sync-version
 .PHONY: local-dev-token
 .PHONY: local-logs local-logs-backend local-logs-frontend local-logs-operator local-shell local-shell-frontend
 .PHONY: local-test local-test-dev local-test-quick test-all local-url local-troubleshoot local-port-forward local-stop-port-forward
-.PHONY: push-all registry-login setup-hooks remove-hooks check-minikube check-kind check-kubectl
+.PHONY: push-all registry-login setup-hooks remove-hooks lint check-minikube check-kind check-kubectl dev-bootstrap kind-rebuild
 .PHONY: e2e-test e2e-setup e2e-clean deploy-langfuse-openshift
+.PHONY: unleash-port-forward unleash-status
 .PHONY: setup-minio minio-console minio-logs minio-status
 .PHONY: validate-makefile lint-makefile check-shell makefile-health
 .PHONY: _create-operator-config _auto-port-forward _show-access-info _build-and-load
@@ -60,9 +61,15 @@ OPERATOR_IMAGE ?= vteam_operator:latest
 RUNNER_IMAGE ?= vteam_claude_runner:latest
 STATE_SYNC_IMAGE ?= vteam_state_sync:latest
 PUBLIC_API_IMAGE ?= vteam_public_api:latest
+API_SERVER_IMAGE ?= vteam_api_server:latest
+
+# Podman prefixes image names with localhost/ — kind load needs to use the same
+# name so containerd can match the image reference used in the deployment spec
+KIND_IMAGE_PREFIX := $(if $(filter podman,$(CONTAINER_ENGINE)),localhost/,)
 
 # Vertex AI Configuration (for LOCAL_VERTEX=true)
 # These inherit from environment if set, or can be overridden on command line
+LOCAL_IMAGES ?= false
 LOCAL_VERTEX ?= false
 ANTHROPIC_VERTEX_PROJECT_ID ?= $(shell echo $$ANTHROPIC_VERTEX_PROJECT_ID)
 CLOUD_ML_REGION ?= $(shell echo $$CLOUD_ML_REGION)
@@ -109,13 +116,15 @@ help: ## Display this help message
 	@echo '  PLATFORM=$(PLATFORM) (detected: $(DETECTED_PLATFORM) from $(HOST_OS)/$(HOST_ARCH))'
 	@echo ''
 	@echo '$(COLOR_BOLD)Examples:$(COLOR_RESET)'
+	@echo '  make kind-up LOCAL_IMAGES=true    Build from source and deploy to kind (requires podman)'
+	@echo '  make kind-rebuild                 Rebuild and reload all components in kind'
 	@echo '  make local-up CONTAINER_ENGINE=docker'
 	@echo '  make local-reload-backend'
 	@echo '  make build-all PLATFORM=linux/arm64'
 
 ##@ Building
 
-build-all: build-frontend build-backend build-operator build-runner build-state-sync build-public-api ## Build all container images
+build-all: build-frontend build-backend build-operator build-runner build-state-sync build-public-api build-api-server ## Build all container images
 
 build-frontend: ## Build frontend image
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building frontend with $(CONTAINER_ENGINE)..."
@@ -153,16 +162,47 @@ build-public-api: ## Build public API gateway image
 		-t $(PUBLIC_API_IMAGE) .
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Public API built: $(PUBLIC_API_IMAGE)"
 
-##@ Git Hooks
+build-api-server: ## Build ambient API server image
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building ambient-api-server with $(CONTAINER_ENGINE)..."
+	@cd components/ambient-api-server && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
+		-t $(API_SERVER_IMAGE) .
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) API server built: $(API_SERVER_IMAGE)"
 
-setup-hooks: ## Install git hooks for branch protection
+build-cli: ## Build acpctl CLI binary
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building acpctl CLI..."
+	@cd components/ambient-cli && make build
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) CLI built: components/ambient-cli/acpctl"
+
+lint-cli: ## Lint acpctl CLI
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Linting acpctl CLI..."
+	@cd components/ambient-cli && make lint
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) CLI lint passed"
+
+test-cli: ## Test acpctl CLI
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Testing acpctl CLI..."
+	@cd components/ambient-cli && make test
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) CLI tests passed"
+
+##@ Git Hooks & Linting
+
+setup-hooks: ## Install pre-commit hooks (linters + branch protection)
 	@./scripts/install-git-hooks.sh
 
-remove-hooks: ## Remove git hooks
+remove-hooks: ## Remove pre-commit hooks
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Removing git hooks..."
-	@rm -f .git/hooks/pre-commit
-	@rm -f .git/hooks/pre-push
+	@if command -v pre-commit >/dev/null 2>&1; then \
+		pre-commit uninstall && pre-commit uninstall --hook-type pre-push; \
+	else \
+		rm -f .git/hooks/pre-commit .git/hooks/pre-push; \
+	fi
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Git hooks removed"
+
+lint: ## Run all pre-commit linters on the entire repo
+	@if ! command -v pre-commit >/dev/null 2>&1; then \
+		echo "$(COLOR_RED)✗$(COLOR_RESET) pre-commit not installed. Run: make setup-hooks"; \
+		exit 1; \
+	fi
+	pre-commit run --all-files
 
 ##@ Registry Operations
 
@@ -172,7 +212,7 @@ registry-login: ## Login to container registry
 
 push-all: registry-login ## Push all images to registry
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Pushing images to $(REGISTRY)..."
-	@for image in $(FRONTEND_IMAGE) $(BACKEND_IMAGE) $(OPERATOR_IMAGE) $(RUNNER_IMAGE) $(STATE_SYNC_IMAGE) $(PUBLIC_API_IMAGE); do \
+	@for image in $(FRONTEND_IMAGE) $(BACKEND_IMAGE) $(OPERATOR_IMAGE) $(RUNNER_IMAGE) $(STATE_SYNC_IMAGE) $(PUBLIC_API_IMAGE) $(API_SERVER_IMAGE); do \
 		echo "  Tagging and pushing $$image..."; \
 		$(CONTAINER_ENGINE) tag $$image $(REGISTRY)/$$image && \
 		$(CONTAINER_ENGINE) push $(REGISTRY)/$$image; \
@@ -293,8 +333,15 @@ local-clean: check-minikube ## Delete minikube cluster completely
 local-status: check-kubectl ## Show status of local deployment
 	@echo "$(COLOR_BOLD)📊 Ambient Code Platform Status$(COLOR_RESET)"
 	@echo ""
-	@echo "$(COLOR_BOLD)Minikube:$(COLOR_RESET)"
-	@minikube status 2>/dev/null || echo "$(COLOR_RED)✗$(COLOR_RESET) Minikube not running"
+	@if kind get clusters 2>/dev/null | grep -q '^ambient-local$$'; then \
+		echo "$(COLOR_BOLD)Kind:$(COLOR_RESET)"; \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Cluster 'ambient-local' running"; \
+	elif command -v minikube >/dev/null 2>&1; then \
+		echo "$(COLOR_BOLD)Minikube:$(COLOR_RESET)"; \
+		minikube status 2>/dev/null || echo "$(COLOR_RED)✗$(COLOR_RESET) Minikube not running"; \
+	else \
+		echo "$(COLOR_RED)✗$(COLOR_RESET) No local cluster found (kind or minikube)"; \
+	fi
 	@echo ""
 	@echo "$(COLOR_BOLD)Pods:$(COLOR_RESET)"
 	@kubectl get pods -n $(NAMESPACE) -o wide 2>/dev/null || echo "$(COLOR_RED)✗$(COLOR_RESET) Namespace not found"
@@ -302,7 +349,14 @@ local-status: check-kubectl ## Show status of local deployment
 	@echo "$(COLOR_BOLD)Services:$(COLOR_RESET)"
 	@kubectl get svc -n $(NAMESPACE) 2>/dev/null | grep -E "NAME|NodePort" || echo "No services found"
 	@echo ""
-	@$(MAKE) --no-print-directory _show-access-info
+	@if kind get clusters 2>/dev/null | grep -q '^ambient-local$$'; then \
+		echo "$(COLOR_BOLD)Access URLs:$(COLOR_RESET)"; \
+		echo "  Run in another terminal: $(COLOR_BLUE)make kind-port-forward$(COLOR_RESET)"; \
+		echo "  Frontend: $(COLOR_BLUE)http://localhost:8080$(COLOR_RESET)"; \
+		echo "  Backend:  $(COLOR_BLUE)http://localhost:8081$(COLOR_RESET)"; \
+	else \
+		$(MAKE) --no-print-directory _show-access-info; \
+	fi
 
 local-sync-version: ## Sync version from git to local deployment manifests
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Syncing version from git..."
@@ -380,7 +434,7 @@ local-reload-operator: ## Rebuild and reload operator only
 
 ##@ Testing
 
-test-all: local-test-quick local-test-dev ## Run all tests (quick + comprehensive)
+test-all: test-cli local-test-quick local-test-dev ## Run all tests (quick + comprehensive)
 
 ##@ Quality Assurance
 
@@ -560,7 +614,7 @@ clean: ## Clean up Kubernetes resources
 
 ##@ Kind Local Development
 
-kind-up: check-kind check-kubectl ## Start kind cluster with Quay.io images (production-like)
+kind-up: check-kind check-kubectl ## Start kind cluster (LOCAL_IMAGES=true to build from source, requires podman)
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Starting kind cluster..."
 	@cd e2e && CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/setup-kind.sh
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for API server to be accessible..."
@@ -576,8 +630,22 @@ kind-up: check-kind check-kubectl ## Start kind cluster with Quay.io images (pro
 		fi; \
 		sleep 3; \
 	done
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Deploying with Quay.io images..."
-	@kubectl apply --validate=false -k components/manifests/overlays/kind/
+	@if [ "$(LOCAL_IMAGES)" = "true" ]; then \
+		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building images from source..."; \
+		$(MAKE) --no-print-directory build-all; \
+		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Loading images into kind..."; \
+		for img in $(BACKEND_IMAGE) $(FRONTEND_IMAGE) $(OPERATOR_IMAGE) $(RUNNER_IMAGE) $(STATE_SYNC_IMAGE) $(PUBLIC_API_IMAGE); do \
+			echo "  Loading $(KIND_IMAGE_PREFIX)$$img..."; \
+			$(if $(filter podman,$(CONTAINER_ENGINE)),KIND_EXPERIMENTAL_PROVIDER=podman) \
+			kind load docker-image $(KIND_IMAGE_PREFIX)$$img --name ambient-local; \
+		done; \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Images loaded"; \
+		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Deploying with locally-built images..."; \
+		kubectl apply --validate=false -k components/manifests/overlays/kind-local/; \
+	else \
+		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Deploying with Quay.io images..."; \
+		kubectl apply --validate=false -k components/manifests/overlays/kind/; \
+	fi
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for pods..."
 	@cd e2e && ./scripts/wait-for-ready.sh
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Initializing MinIO..."
@@ -592,6 +660,11 @@ kind-up: check-kind check-kubectl ## Start kind cluster with Quay.io images (pro
 		CLOUD_ML_REGION="$(CLOUD_ML_REGION)" \
 		GOOGLE_APPLICATION_CREDENTIALS="$(GOOGLE_APPLICATION_CREDENTIALS)" \
 		./scripts/setup-vertex-kind.sh; \
+	fi
+	@if [ -f .dev-bootstrap.env ]; then \
+		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Bootstrapping developer workspace..."; \
+		./scripts/bootstrap-workspace.sh || \
+		echo "$(COLOR_YELLOW)⚠$(COLOR_RESET)  Bootstrap failed (non-fatal). Run 'make dev-bootstrap' manually."; \
 	fi
 	@echo ""
 	@echo "$(COLOR_BOLD)Access the platform:$(COLOR_RESET)"
@@ -624,6 +697,9 @@ kind-port-forward: check-kubectl ## Port-forward kind services (for remote Podma
 	(kubectl port-forward -n ambient-code svc/backend-service 8081:8080 >/dev/null 2>&1 &); \
 	wait
 
+dev-bootstrap: check-kubectl ## Bootstrap developer workspace with API key and integrations
+	@./scripts/bootstrap-workspace.sh
+
 ##@ E2E Testing (Portable)
 
 test-e2e: ## Run e2e tests against current CYPRESS_BASE_URL
@@ -652,6 +728,23 @@ test-e2e-setup: ## Install e2e test dependencies
 
 e2e-setup: test-e2e-setup ## Alias for test-e2e-setup (backward compatibility)
 
+kind-rebuild: check-kind check-kubectl build-all ## Rebuild, reload, and restart all components in kind
+	@kind get clusters 2>/dev/null | grep -q '^ambient-local$$' || \
+		(echo "$(COLOR_RED)✗$(COLOR_RESET) Kind cluster 'ambient-local' not found. Run 'make kind-up LOCAL_IMAGES=true' first." && exit 1)
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Loading images into kind..."
+	@for img in $(BACKEND_IMAGE) $(FRONTEND_IMAGE) $(OPERATOR_IMAGE) $(RUNNER_IMAGE) $(STATE_SYNC_IMAGE) $(PUBLIC_API_IMAGE); do \
+		echo "  Loading $(KIND_IMAGE_PREFIX)$$img..."; \
+		$(if $(filter podman,$(CONTAINER_ENGINE)),KIND_EXPERIMENTAL_PROVIDER=podman) \
+		kind load docker-image $(KIND_IMAGE_PREFIX)$$img --name ambient-local; \
+	done
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Images loaded"
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Applying kind-local manifests..."
+	@kubectl apply --validate=false -k components/manifests/overlays/kind-local/ $(QUIET_REDIRECT)
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Restarting deployments..."
+	@kubectl rollout restart deployment -n $(NAMESPACE) $(QUIET_REDIRECT)
+	@kubectl rollout status deployment -n $(NAMESPACE) --timeout=120s $(QUIET_REDIRECT)
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) All components rebuilt and restarted"
+
 kind-clean: kind-down ## Alias for kind-down
 
 e2e-clean: kind-down ## Alias for kind-down (backward compatibility)
@@ -659,6 +752,27 @@ e2e-clean: kind-down ## Alias for kind-down (backward compatibility)
 deploy-langfuse-openshift: ## Deploy Langfuse to OpenShift/ROSA cluster
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Deploying Langfuse to OpenShift cluster..."
 	@cd e2e && ./scripts/deploy-langfuse.sh --openshift
+
+##@ Unleash Feature Flags
+# Note: Unleash is deployed automatically via 'make deploy' as part of the platform manifests.
+# Before deploying, create the unleash-credentials secret from the example:
+#   cp components/manifests/base/unleash-credentials-secret.yaml.example unleash-credentials-secret.yaml
+#   # Edit the file to set your credentials
+#   kubectl apply -f unleash-credentials-secret.yaml -n ambient-code
+
+unleash-port-forward: check-kubectl ## Port-forward Unleash (localhost:4242)
+	@echo "$(COLOR_BOLD)🔌 Port forwarding Unleash$(COLOR_RESET)"
+	@echo ""
+	@echo "  Unleash UI: http://localhost:4242"
+	@echo "  Login: admin / unleash4all"
+	@echo ""
+	@echo "$(COLOR_YELLOW)Press Ctrl+C to stop$(COLOR_RESET)"
+	@kubectl port-forward svc/unleash 4242:4242 -n $${NAMESPACE:-ambient-code}
+
+unleash-status: check-kubectl ## Show Unleash deployment status
+	@echo "$(COLOR_BOLD)Unleash Status$(COLOR_RESET)"
+	@kubectl get deployment,pod,svc -l 'app.kubernetes.io/name in (unleash,postgresql)' -n $${NAMESPACE:-ambient-code} 2>/dev/null || \
+		echo "$(COLOR_RED)✗$(COLOR_RESET) Unleash not found. Run 'make deploy' first."
 
 ##@ Internal Helpers (do not call directly)
 
@@ -700,21 +814,26 @@ _build-and-load: ## Internal: Build and load images
 	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) -t $(OPERATOR_IMAGE) components/operator $(QUIET_REDIRECT)
 	@echo "  Building runner ($(PLATFORM))..."
 	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) -t $(RUNNER_IMAGE) -f components/runners/claude-code-runner/Dockerfile components/runners $(QUIET_REDIRECT)
+	@echo "  Building api-server ($(PLATFORM))..."
+	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) -t $(API_SERVER_IMAGE) components/ambient-api-server $(QUIET_REDIRECT)
 	@echo "  Tagging images with localhost prefix..."
 	@$(CONTAINER_ENGINE) tag $(BACKEND_IMAGE) localhost/$(BACKEND_IMAGE) 2>/dev/null || true
 	@$(CONTAINER_ENGINE) tag $(FRONTEND_IMAGE) localhost/$(FRONTEND_IMAGE) 2>/dev/null || true
 	@$(CONTAINER_ENGINE) tag $(OPERATOR_IMAGE) localhost/$(OPERATOR_IMAGE) 2>/dev/null || true
 	@$(CONTAINER_ENGINE) tag $(RUNNER_IMAGE) localhost/$(RUNNER_IMAGE) 2>/dev/null || true
+	@$(CONTAINER_ENGINE) tag $(API_SERVER_IMAGE) localhost/$(API_SERVER_IMAGE) 2>/dev/null || true
 	@echo "  Loading images into minikube..."
 	@mkdir -p /tmp/minikube-images
 	@$(CONTAINER_ENGINE) save -o /tmp/minikube-images/backend.tar localhost/$(BACKEND_IMAGE)
 	@$(CONTAINER_ENGINE) save -o /tmp/minikube-images/frontend.tar localhost/$(FRONTEND_IMAGE)
 	@$(CONTAINER_ENGINE) save -o /tmp/minikube-images/operator.tar localhost/$(OPERATOR_IMAGE)
 	@$(CONTAINER_ENGINE) save -o /tmp/minikube-images/runner.tar localhost/$(RUNNER_IMAGE)
+	@$(CONTAINER_ENGINE) save -o /tmp/minikube-images/api-server.tar localhost/$(API_SERVER_IMAGE)
 	@minikube image load /tmp/minikube-images/backend.tar $(QUIET_REDIRECT)
 	@minikube image load /tmp/minikube-images/frontend.tar $(QUIET_REDIRECT)
 	@minikube image load /tmp/minikube-images/operator.tar $(QUIET_REDIRECT)
 	@minikube image load /tmp/minikube-images/runner.tar $(QUIET_REDIRECT)
+	@minikube image load /tmp/minikube-images/api-server.tar $(QUIET_REDIRECT)
 	@rm -rf /tmp/minikube-images
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Images built and loaded"
 

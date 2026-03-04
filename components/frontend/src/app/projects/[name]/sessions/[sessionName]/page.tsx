@@ -29,6 +29,7 @@ import { cn } from "@/lib/utils";
 
 // Custom components
 import MessagesTab from "@/components/session/MessagesTab";
+import { SessionStartingEvents } from "@/components/session/SessionStartingEvents";
 import { FileTree, type FileTreeNode } from "@/components/file-tree";
 
 import { Button } from "@/components/ui/button";
@@ -74,10 +75,11 @@ import { useGitOperations } from "./hooks/use-git-operations";
 import { useWorkflowManagement } from "./hooks/use-workflow-management";
 import { useFileOperations } from "./hooks/use-file-operations";
 import { useSessionQueue } from "@/hooks/use-session-queue";
+import { useDraftInput } from "@/hooks/use-draft-input";
 import type { DirectoryOption, DirectoryRemote } from "./lib/types";
 
 import type { MessageObject, ToolUseMessages, HierarchicalToolMessage, ReconciledRepo, SessionRepo } from "@/types/agentic-session";
-import type { AGUIToolCall } from "@/types/agui";
+import type { PlatformToolCall } from "@/types/agui";
 
 // AG-UI streaming
 import { useAGUIStream } from "@/hooks/use-agui-stream";
@@ -90,6 +92,7 @@ import {
   useContinueSession,
   useReposStatus,
   useCurrentUser,
+  sessionKeys,
 } from "@/services/queries";
 import {
   useWorkspaceList,
@@ -100,7 +103,7 @@ import {
   useWorkflowMetadata,
 } from "@/services/queries/use-workflows";
 import { useIntegrationsStatus } from "@/services/queries/use-integrations";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { FeedbackProvider } from "@/contexts/FeedbackContext";
 
 // Constants for artifact auto-refresh timing
@@ -125,10 +128,10 @@ function isCompletedToolUseMessage(msg: MessageObject | ToolUseMessages): msg is
   if (msg.type !== "tool_use_messages") {
     return false;
   }
-  
+
   // Cast to ToolUseMessages for proper type checking
   const toolMsg = msg as ToolUseMessages;
-  
+
   return (
     toolMsg.resultBlock !== undefined &&
     toolMsg.resultBlock !== null &&
@@ -143,14 +146,15 @@ export default function ProjectSessionDetailPage({
   params: Promise<{ name: string; sessionName: string }>;
 }) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [projectName, setProjectName] = useState<string>("");
   const [sessionName, setSessionName] = useState<string>("");
-  const [chatInput, setChatInput] = useState("");
   const [backHref, setBackHref] = useState<string | null>(null);
   const [openAccordionItems, setOpenAccordionItems] = useState<string[]>([]);
   const [contextModalOpen, setContextModalOpen] = useState(false);
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [repoChanging, setRepoChanging] = useState(false);
+  const [pendingRepo, setPendingRepo] = useState<{ url: string; branch: string; status: "Cloning" } | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userHasInteracted, setUserHasInteracted] = useState(false);
 
@@ -160,7 +164,7 @@ export default function ProjectSessionDetailPage({
     const saved = localStorage.getItem('session-left-panel-visible');
     return saved === null ? true : saved === 'true';
   });
-  
+
 
   // Directory browser state (unified for artifacts, repos, and workflow)
   const [selectedDirectory, setSelectedDirectory] = useState<DirectoryOption>({
@@ -195,6 +199,9 @@ export default function ProjectSessionDetailPage({
   // Session queue hook (localStorage-backed)
   const sessionQueue = useSessionQueue(projectName, sessionName);
 
+  // Draft input hook (localStorage-backed)
+  const { draft: chatInput, setDraft: setChatInput, clearDraft } = useDraftInput(projectName, sessionName);
+
   // React Query hooks
   const {
     data: session,
@@ -205,11 +212,11 @@ export default function ProjectSessionDetailPage({
   const stopMutation = useStopSession();
   const deleteMutation = useDeleteSession();
   const continueMutation = useContinueSession();
-  
+
   // Check integration status
   const { data: integrationsStatus } = useIntegrationsStatus();
   const githubConfigured = integrationsStatus?.github?.active != null;
-  
+
   // Get current user for feedback context
   const { data: currentUser } = useCurrentUser();
 
@@ -225,7 +232,7 @@ export default function ProjectSessionDetailPage({
 
   // Track the current Langfuse trace ID for feedback association
   const [langfuseTraceId, setLangfuseTraceId] = useState<string | null>(null);
-  
+
   // AG-UI streaming hook - replaces useSessionMessages and useSendChatMessage
   // Note: autoConnect is intentionally false to avoid SSR hydration mismatch
   // Connection is triggered manually in useEffect after client hydration
@@ -233,7 +240,9 @@ export default function ProjectSessionDetailPage({
     projectName: projectName || "",
     sessionName: sessionName || "",
     autoConnect: false, // Manual connection after hydration
-    onError: (err) => console.error("AG-UI stream error:", err),
+    onError: (err) => {
+      console.error("AG-UI stream error:", err)
+    },
     onTraceId: (traceId) => setLangfuseTraceId(traceId),  // Capture Langfuse trace ID for feedback
   });
   const aguiState = aguiStream.state;
@@ -241,7 +250,7 @@ export default function ProjectSessionDetailPage({
   const aguiInterrupt = aguiStream.interrupt;
   const isRunActive = aguiStream.isRunActive;
   const aguiConnectRef = useRef(aguiStream.connect);
-  
+
   // Keep connect ref up to date
   useEffect(() => {
     aguiConnectRef.current = aguiStream.connect;
@@ -252,21 +261,21 @@ export default function ProjectSessionDetailPage({
   // POST /agui/run creates runs, events broadcast to GET subscribers
   const hasConnectedRef = useRef(false);
   const disconnectRef = useRef(aguiStream.disconnect);
-  
+
   // Keep disconnect ref up to date without triggering re-renders
   useEffect(() => {
     disconnectRef.current = aguiStream.disconnect;
   }, [aguiStream.disconnect]);
-  
+
   useEffect(() => {
     if (!projectName || !sessionName) return;
-    
+
     // Connect once on mount and keep connection open
     if (!hasConnectedRef.current) {
       hasConnectedRef.current = true;
       aguiConnectRef.current();
     }
-    
+
     // CRITICAL: Disconnect when navigating away to prevent hung connections
     return () => {
       console.log('[Session Detail] Unmounting, disconnecting AG-UI stream');
@@ -280,16 +289,16 @@ export default function ProjectSessionDetailPage({
   // Auto-send initial prompt (handles session start, workflow activation, restarts)
   // AG-UI pattern: Client (or backend) initiates runs via POST /agui/run
   const lastProcessedPromptRef = useRef<string>("");
-  
+
   useEffect(() => {
     if (!session || !aguiSendMessage) return;
-    
+
     const initialPrompt = session?.spec?.initialPrompt;
-    
+
     // NOTE: Initial prompt execution handled by backend auto-trigger (StartSession handler)
     // Backend waits for subscriber before executing, ensuring events are received
     // This works for both UI and headless/API usage
-    
+
     // Track that we've seen this prompt (for workflow changes)
     if (initialPrompt && lastProcessedPromptRef.current !== initialPrompt) {
       lastProcessedPromptRef.current = initialPrompt;
@@ -308,17 +317,17 @@ export default function ProjectSessionDetailPage({
   // Poll session status when workflow is queued
   useEffect(() => {
     if (!workflowManagement.queuedWorkflow) return;
-    
+
     const phase = session?.status?.phase;
-    
+
     // If already running, we'll process workflow in the next effect
     if (phase === "Running") return;
-    
+
     // Poll every 2 seconds to check if session is ready
     const pollInterval = setInterval(() => {
       refetchSession();
     }, 2000);
-    
+
     return () => clearInterval(pollInterval);
   }, [workflowManagement.queuedWorkflow, session?.status?.phase, refetchSession]);
 
@@ -345,17 +354,17 @@ export default function ProjectSessionDetailPage({
   useEffect(() => {
     const queuedMessages = sessionQueue.messages.filter(m => !m.sentAt);
     if (queuedMessages.length === 0) return;
-    
+
     const phase = session?.status?.phase;
-    
+
     // If already running, we'll process messages in the next effect
     if (phase === "Running") return;
-    
+
     // Poll every 2 seconds to check if session is ready
     const pollInterval = setInterval(() => {
       refetchSession();
     }, 2000);
-    
+
     return () => clearInterval(pollInterval);
   }, [sessionQueue.messages, session?.status?.phase, refetchSession]);
 
@@ -363,7 +372,7 @@ export default function ProjectSessionDetailPage({
   useEffect(() => {
     const phase = session?.status?.phase;
     const unsentMessages = sessionQueue.messages.filter(m => !m.sentAt);
-    
+
     if (phase === "Running" && unsentMessages.length > 0) {
       // Session is now running, send all queued messages
       const processMessages = async () => {
@@ -378,7 +387,7 @@ export default function ProjectSessionDetailPage({
           }
         }
       };
-      
+
       processMessages();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -388,6 +397,7 @@ export default function ProjectSessionDetailPage({
   const addRepoMutation = useMutation({
     mutationFn: async (repo: { url: string; branch: string; autoPush?: boolean }) => {
       setRepoChanging(true);
+      setPendingRepo({ url: repo.url, branch: repo.branch, status: "Cloning" });
       const response = await fetch(
         `/api/projects/${projectName}/agentic-sessions/${sessionName}/repos`,
         {
@@ -401,9 +411,12 @@ export default function ProjectSessionDetailPage({
       return { ...result, inputRepo: repo };
     },
     onSuccess: async (data) => {
-      successToast("Repository cloning...");
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+      // Refresh both data sources so the real repo entry replaces the optimistic one
       await refetchSession();
+      await queryClient.invalidateQueries({
+        queryKey: sessionKeys.reposStatus(projectName, sessionName),
+      });
+      setPendingRepo(null);
 
       if (data.name && data.inputRepo) {
         try {
@@ -437,6 +450,7 @@ export default function ProjectSessionDetailPage({
       successToast("Repository added successfully");
     },
     onError: (error: Error) => {
+      setPendingRepo(null);
       setRepoChanging(false);
       errorToast(error.message || "Failed to add repository");
     },
@@ -453,9 +467,11 @@ export default function ProjectSessionDetailPage({
       return response.json();
     },
     onSuccess: async () => {
-      successToast("Repository removing...");
-      await new Promise((resolve) => setTimeout(resolve, 2000));
       await refetchSession();
+      // Invalidate runner repos cache so the removed repo disappears immediately
+      queryClient.invalidateQueries({
+        queryKey: sessionKeys.reposStatus(projectName, sessionName),
+      });
       setRepoChanging(false);
       successToast("Repository removed successfully");
     },
@@ -464,6 +480,12 @@ export default function ProjectSessionDetailPage({
       errorToast(error.message || "Failed to remove repository");
     },
   });
+
+  // Name of the repo currently being removed (if any).
+  // Used to mark it with status "Removing" in the repos list.
+  const removingRepoName = removeRepoMutation.isPending
+    ? removeRepoMutation.variables
+    : null;
 
   // File upload mutation
   const uploadFileMutation = useMutation({
@@ -734,7 +756,7 @@ export default function ProjectSessionDetailPage({
 
   // Convert AG-UI messages to display format with hierarchical tool call rendering
   const streamMessages: Array<MessageObject | ToolUseMessages | HierarchicalToolMessage> = useMemo(() => {
-    
+
     // Helper function to parse tool arguments
     const parseToolArgs = (args: string | undefined): Record<string, unknown> => {
       if (!args) return {};
@@ -751,17 +773,17 @@ export default function ProjectSessionDetailPage({
 
     // Helper function to create a tool message from a tool call
     const createToolMessage = (
-      tc: AGUIToolCall,
+      tc: PlatformToolCall,
       timestamp: string
     ): ToolUseMessages => {
-      const toolInput = parseToolArgs(tc.args);
+      const toolInput = parseToolArgs(tc.function.arguments);
       return {
         type: "tool_use_messages",
         timestamp,
         toolUseBlock: {
           type: "tool_use_block",
           id: tc.id,
-          name: tc.name,
+          name: tc.function.name,
           input: toolInput,
         },
         resultBlock: {
@@ -774,24 +796,22 @@ export default function ProjectSessionDetailPage({
     };
 
     const result: Array<MessageObject | ToolUseMessages | HierarchicalToolMessage> = [];
-    
+
     // Phase A: Collect all tool calls from all messages for hierarchy building
-    const allToolCalls = new Map<string, { tc: AGUIToolCall; timestamp: string }>();
-    
+    const allToolCalls = new Map<string, { tc: PlatformToolCall; timestamp: string }>();
+
     for (const msg of aguiState.messages) {
-      // Use msg.timestamp from backend, fallback to current time for legacy messages
-      // Note: After backend fix, new messages will have proper timestamps
-      const timestamp = msg.timestamp || new Date().toISOString();
-      
+      const timestamp = msg.timestamp || "";
+
       if (msg.toolCalls && Array.isArray(msg.toolCalls)) {
         for (const tc of msg.toolCalls) {
-          if (tc && tc.id && tc.name) {
+          if (tc && tc.id && tc.function?.name) {
             allToolCalls.set(tc.id, { tc, timestamp });
           }
         }
       }
     }
-    
+
     // Add currently streaming tool call to the map if present
     // This ensures streaming tools (both parents and children) are included in hierarchy
     // CRITICAL: Don't require name - add even if name is null to prevent orphaned children
@@ -799,26 +819,27 @@ export default function ProjectSessionDetailPage({
       const streamingToolId = aguiState.currentToolCall.id;
       const streamingParentId = aguiState.currentToolCall.parentToolUseId;
       const toolName = aguiState.currentToolCall.name || "unknown_tool";  // Default if null
-      
+
       // Create a pseudo-tool-call for the streaming tool
-      const streamingTC: AGUIToolCall = {
+      const streamingTC: PlatformToolCall = {
         id: streamingToolId,
-        name: toolName,
-        args: aguiState.currentToolCall.args || "",
         type: "function",
+        function: {
+          name: toolName,
+          arguments: aguiState.currentToolCall.args || "",
+        },
         parentToolUseId: streamingParentId,
         status: "running",
       };
-      
+
       if (!allToolCalls.has(streamingToolId)) {
-        allToolCalls.set(streamingToolId, { 
-          tc: streamingTC, 
-          // Use timestamp from currentToolCall if available, fallback to current time for legacy
-          timestamp: aguiState.pendingToolCalls?.get(streamingToolId)?.timestamp || new Date().toISOString() 
+        allToolCalls.set(streamingToolId, {
+          tc: streamingTC,
+          timestamp: aguiState.pendingToolCalls?.get(streamingToolId)?.timestamp || ""
         });
       }
     }
-    
+
     // Add pending children to render map so they show during streaming!
     // These are children that finished before their parent tool finished
     if (aguiState.pendingChildren && aguiState.pendingChildren.size > 0) {
@@ -830,8 +851,7 @@ export default function ProjectSessionDetailPage({
               if (!allToolCalls.has(tc.id)) {
                 allToolCalls.set(tc.id, {
                   tc: tc,
-                  // Use timestamp from child message if available, fallback to current time
-                  timestamp: childMsg.timestamp || new Date().toISOString(),
+                  timestamp: childMsg.timestamp || "",
                 });
               }
             }
@@ -839,11 +859,11 @@ export default function ProjectSessionDetailPage({
         }
       }
     }
-    
+
     // Phase B: Build parent-child relationships
     const topLevelTools = new Set<string>();
     const childrenByParent = new Map<string, string[]>();
-    
+
     for (const [toolId, { tc }] of allToolCalls) {
       if (tc.parentToolUseId) {
         // This is a child tool call
@@ -856,7 +876,7 @@ export default function ProjectSessionDetailPage({
         topLevelTools.add(toolId);
       }
     }
-    
+
     // Handle orphaned children - but DON'T promote to top-level if parent is streaming
     for (const [toolId, { tc }] of allToolCalls) {
       if (tc.parentToolUseId && !allToolCalls.has(tc.parentToolUseId)) {
@@ -865,45 +885,54 @@ export default function ProjectSessionDetailPage({
           // Don't promote to top-level - parent is streaming and will appear
         } else {
           // Parent truly not found, render as top-level (fallback)
-          console.warn(`  ⚠️ Orphaned child: ${tc.name} (${toolId.substring(0, 8)}) - parent ${tc.parentToolUseId.substring(0, 8)} not found`);
+          console.warn(`  ⚠️ Orphaned child: ${tc.function.name} (${toolId.substring(0, 8)}) - parent ${tc.parentToolUseId.substring(0, 8)} not found`);
           topLevelTools.add(toolId);
         }
       }
     }
-    
+
     // Track which tool calls we've already rendered
     const renderedToolCalls = new Set<string>();
-    
+
     // Phase C: Process messages and build hierarchical structure
     for (const msg of aguiState.messages) {
-      // Use msg.timestamp from backend, fallback to current time for legacy messages
-      const timestamp = msg.timestamp || new Date().toISOString();
-      
+      const timestamp = msg.timestamp || "";
+
       // Handle text content by role
       if (msg.role === "user") {
         result.push({
           type: "user_message",
           id: msg.id,  // Preserve message ID for feedback association
-          content: { type: "text_block", text: msg.content || "" },
+          content: { type: "text_block", text: (typeof msg.content === 'string' ? msg.content : '') || "" },
           timestamp,
         });
       } else if (msg.role === "assistant") {
-        // Check if this is a thinking block (from RAW event)
+        // Check if content is a structured reasoning block
+        const contentObj = typeof msg.content === 'object' && msg.content !== null ? msg.content as Record<string, unknown> : null;
         const metadata = msg.metadata as Record<string, unknown> | undefined;
-        if (metadata?.type === "thinking_block") {
+        if (
+          contentObj?.type === "reasoning_block" ||
+          metadata?.type === "reasoning_block" ||
+          metadata?.type === "thinking_block"  // TODO: remove after all sessions use REASONING_* events
+        ) {
+          const thinkingText =
+            (contentObj?.thinking as string) ||
+            (metadata?.thinking as string) ||
+            (typeof msg.content === 'string' ? msg.content : '') ||
+            "";
           result.push({
             type: "agent_message",
-            id: msg.id,  // Preserve message ID for feedback association
+            id: msg.id,
             content: {
-              type: "thinking_block",
-              thinking: metadata.thinking as string || "",
-              signature: metadata.signature as string || "",
+              type: "reasoning_block",
+              thinking: thinkingText,
+              signature: (contentObj?.signature as string) || (metadata?.signature as string) || "",
             },
             model: "claude",
             timestamp,
           });
-        } else if (msg.content) {
-          // Only push text message if there's actual content
+        } else if (msg.content && typeof msg.content === 'string') {
+          // Only push text message if there's actual string content
           result.push({
             type: "agent_message",
             id: msg.id,  // Preserve message ID for feedback association
@@ -940,12 +969,12 @@ export default function ProjectSessionDetailPage({
           timestamp,
         });
       }
-      
+
       // Handle tool calls embedded in this message
       if (msg.toolCalls && Array.isArray(msg.toolCalls)) {
         for (const tc of msg.toolCalls) {
-          if (!tc || !tc.id || !tc.name) continue;
-          
+          if (!tc || !tc.id || !tc.function?.name) continue;
+
           // Skip if already rendered or if it's a child (will be rendered inside parent)
           if (renderedToolCalls.has(tc.id)) {
             continue;
@@ -953,10 +982,10 @@ export default function ProjectSessionDetailPage({
           if (!topLevelTools.has(tc.id)) {
             continue;
           }
-          
+
           // Build children array for this tool call
           const childIds = childrenByParent.get(tc.id) || [];
-          
+
           const children: ToolUseMessages[] = childIds
             .map(childId => {
               const childData = allToolCalls.get(childId);
@@ -965,17 +994,17 @@ export default function ProjectSessionDetailPage({
               return createToolMessage(childData.tc, childData.timestamp);
             })
             .filter((c): c is ToolUseMessages => c !== null);
-          
+
           // Create the hierarchical tool message
-          const toolInput = parseToolArgs(tc.args);
-          
+          const toolInput = parseToolArgs(tc.function.arguments);
+
           const toolMessage: HierarchicalToolMessage = {
             type: "tool_use_messages",
             timestamp,
             toolUseBlock: {
               type: "tool_use_block",
               id: tc.id,
-              name: tc.name,
+              name: tc.function.name,
               input: toolInput,
             },
             resultBlock: {
@@ -986,63 +1015,77 @@ export default function ProjectSessionDetailPage({
             },
             children: children.length > 0 ? children : undefined,
           };
-          
+
           result.push(toolMessage);
           renderedToolCalls.add(tc.id);
         }
       }
     }
-    
+
+    // Add streaming reasoning if currently reasoning
+    const activeReasoning = aguiState.currentReasoning || aguiState.currentThinking;
+    if (activeReasoning?.content) {
+      result.push({
+        type: "agent_message",
+        content: {
+          type: "reasoning_block",
+          thinking: activeReasoning.content,
+          signature: "",
+        },
+        model: "claude",
+        timestamp: activeReasoning.timestamp || "",
+        streaming: true,
+      } as MessageObject & { streaming?: boolean });
+    }
+
     // Add streaming message if currently streaming
     if (aguiState.currentMessage?.content) {
       result.push({
         type: "agent_message",
         content: { type: "text_block", text: aguiState.currentMessage.content },
         model: "claude",
-        // Use timestamp from currentMessage (captured from TEXT_MESSAGE_START), fallback to current time
-        timestamp: aguiState.currentMessage.timestamp || new Date().toISOString(),
+        timestamp: aguiState.currentMessage.timestamp || "",
         streaming: true,
       } as MessageObject & { streaming?: boolean });
     }
-    
+
     // Render ALL currently streaming tool calls (supports parallel tool execution)
     // CRITICAL: This renders tools immediately when TOOL_CALL_START arrives,
     // not waiting until TOOL_CALL_END like the allToolCalls map approach does
     const pendingToolCalls = aguiState.pendingToolCalls || new Map();
-    
+
     for (const [toolId, pendingTool] of pendingToolCalls) {
       if (renderedToolCalls.has(toolId)) continue;
-      
+
       const toolName = pendingTool.name || "unknown_tool";
       const toolArgs = pendingTool.args || "";
       const streamingParentId = pendingTool.parentToolUseId;
-      
+
       // Only render if this is a top-level tool (not a child waiting for parent)
       // Children will be rendered nested inside their parent
       const isTopLevel = !streamingParentId || !pendingToolCalls.has(streamingParentId);
-      
+
       if (isTopLevel) {
         const toolInput = parseToolArgs(toolArgs);
-        
+
         // Get any pending children for this tool (children that finished before parent)
         const pendingForThis = aguiState.pendingChildren?.get(toolId) || [];
         const children: ToolUseMessages[] = pendingForThis
           .map(childMsg => {
             const childTC = childMsg.toolCalls?.[0];
             if (!childTC) return null;
-            // Use timestamp from child message if available
-            return createToolMessage(childTC, childMsg.timestamp || new Date().toISOString());
+            renderedToolCalls.add(childTC.id);  // Track to prevent duplicates below
+            return createToolMessage(childTC, childMsg.timestamp || "");
           })
           .filter((c): c is ToolUseMessages => c !== null);
-        
+
         // Also include any streaming children from pendingToolCalls
         for (const [childId, childTool] of pendingToolCalls) {
           if (childTool.parentToolUseId === toolId && !renderedToolCalls.has(childId)) {
             const childInput = parseToolArgs(childTool.args || "");
             children.push({
               type: "tool_use_messages",
-              // Use timestamp from pending tool call (captured from TOOL_CALL_START)
-              timestamp: childTool.timestamp || new Date().toISOString(),
+              timestamp: childTool.timestamp || "",
               toolUseBlock: {
                 type: "tool_use_block",
                 id: childId,
@@ -1059,7 +1102,7 @@ export default function ProjectSessionDetailPage({
             renderedToolCalls.add(childId);
           }
         }
-        
+
         // Also include any children from the childrenByParent map
         const childIds = childrenByParent.get(toolId) || [];
         for (const childId of childIds) {
@@ -1070,11 +1113,10 @@ export default function ProjectSessionDetailPage({
             renderedToolCalls.add(childId);
           }
         }
-        
+
         const streamingToolMessage: HierarchicalToolMessage = {
           type: "tool_use_messages",
-          // Use timestamp from pending tool call (captured from TOOL_CALL_START)
-          timestamp: pendingTool.timestamp || new Date().toISOString(),
+          timestamp: pendingTool.timestamp || "",
           toolUseBlock: {
             type: "tool_use_block",
             id: toolId,
@@ -1089,16 +1131,18 @@ export default function ProjectSessionDetailPage({
           },
           children: children.length > 0 ? children : undefined,
         };
-        
+
         result.push(streamingToolMessage);
         renderedToolCalls.add(toolId);
       }
     }
-    
+
     return result;
   }, [
     aguiState.messages,
     aguiState.currentMessage,
+    aguiState.currentReasoning,
+    aguiState.currentThinking,
     aguiState.currentToolCall,
     aguiState.pendingToolCalls,  // CRITICAL: Include so UI updates when new tools start
     aguiState.pendingChildren,   // CRITICAL: Include so UI updates when children finish
@@ -1119,7 +1163,7 @@ export default function ProjectSessionDetailPage({
       const hasAgentResponse = streamMessages.some(
         msg => msg.type === "agent_message" || msg.type === "tool_use_messages"
       );
-      
+
       if (hasAgentResponse) {
         sessionQueue.clearMessages();
       }
@@ -1286,13 +1330,13 @@ export default function ProjectSessionDetailPage({
     if (!chatInput.trim()) return;
 
     const finalMessage = chatInput.trim();
-    setChatInput("");
+    clearDraft();
 
     // Mark user interaction when they send first message
     setUserHasInteracted(true);
 
     const phase = session?.status?.phase;
-    
+
     // If session is not yet running, queue the message for later
     // This includes: undefined (loading), "Pending", "Creating", or any other non-Running state
     if (!phase || phase !== "Running") {
@@ -1469,7 +1513,7 @@ export default function ProjectSessionDetailPage({
           <div className="h-full relative">
               {/* Mobile sidebar overlay */}
               {mobileMenuOpen && (
-                <div 
+                <div
                   className="fixed inset-0 bg-background/80 backdrop-blur-sm z-40 md:hidden"
                   onClick={() => setMobileMenuOpen(false)}
                 />
@@ -1505,7 +1549,7 @@ export default function ProjectSessionDetailPage({
                             </p>
                           </>
                         )}
-                        
+
                         {/* Stopping state */}
                         {phase === "Stopping" && (
                           <>
@@ -1516,12 +1560,17 @@ export default function ProjectSessionDetailPage({
                             </p>
                           </>
                         )}
-                        
+
                         {/* Hibernated states */}
                         {["Stopped", "Completed", "Failed"].includes(phase) && (
                           <div className="max-w-sm">
                             <h3 className="font-semibold text-lg mb-4">Session Hibernated</h3>
-                            
+                            {phase === "Stopped" && session?.status?.stoppedReason === "inactivity" && (
+                              <p className="text-sm text-muted-foreground mb-4">
+                                This session was automatically stopped after being idle. You can resume it to continue working.
+                              </p>
+                            )}
+
                             {/* Session details */}
                             <div className="space-y-3 mb-6 text-left">
                               {workflowManagement.activeWorkflow && (
@@ -1532,7 +1581,7 @@ export default function ProjectSessionDetailPage({
                                   </Badge>
                                 </div>
                               )}
-                              
+
                               {session?.spec?.repos && session.spec.repos.length > 0 && (
                                 <div>
                                   <p className="text-xs font-medium text-muted-foreground mb-1.5">
@@ -1552,7 +1601,7 @@ export default function ProjectSessionDetailPage({
                                   </div>
                                 </div>
                               )}
-                              
+
                               {(!workflowManagement.activeWorkflow && (!session?.spec?.repos || session.spec.repos.length === 0)) && (
                                 <div className="text-center py-2">
                                   <p className="text-xs text-muted-foreground">
@@ -1561,7 +1610,7 @@ export default function ProjectSessionDetailPage({
                                 </div>
                               )}
                             </div>
-                            
+
                             <Button onClick={handleContinue} size="lg" className="w-full" disabled={continueMutation.isPending}>
                               {continueMutation.isPending ? (
                                 <>
@@ -1611,7 +1660,15 @@ export default function ProjectSessionDetailPage({
                     />
 
                     <RepositoriesAccordion
-                      repositories={reposStatus?.repos || session?.status?.reconciledRepos || session?.spec?.repos || []}
+                      repositories={[
+                        ...(pendingRepo ? [pendingRepo] : []),
+                        ...(reposStatus?.repos || session?.status?.reconciledRepos || session?.spec?.repos || []).map(
+                          (r) => {
+                            const name = ('name' in r ? r.name : undefined) || r.url?.split('/').pop()?.replace('.git', '');
+                            return name === removingRepoName ? { ...r, status: "Removing" as const } : r;
+                          },
+                        ),
+                      ]}
                       uploadedFiles={fileUploadsList.map((f) => ({
                         name: f.name,
                         path: f.path,
@@ -1915,7 +1972,7 @@ export default function ProjectSessionDetailPage({
                                 <AlertTitle className="text-amber-900 dark:text-amber-100">GitHub Not Configured</AlertTitle>
                                 <AlertDescription className="text-amber-800 dark:text-amber-200">
                                   Configure GitHub integration in{" "}
-                                  <a 
+                                  <a
                                     href={`/projects/${projectName}?section=settings`}
                                     className="underline font-medium hover:text-amber-900 dark:hover:text-amber-100"
                                     onClick={(e) => e.stopPropagation()}
@@ -2044,6 +2101,11 @@ export default function ProjectSessionDetailPage({
                             {["Stopped", "Completed", "Failed"].includes(phase) && (
                               <div className="max-w-sm">
                                 <h3 className="font-semibold text-lg mb-4">Session Hibernated</h3>
+                                {phase === "Stopped" && session?.status?.stoppedReason === "inactivity" && (
+                                  <p className="text-sm text-muted-foreground mb-4">
+                                    This session was automatically stopped after being idle. You can resume it to continue working.
+                                  </p>
+                                )}
                                 <Button onClick={handleContinue} size="lg" className="w-full" disabled={continueMutation.isPending}>
                                   {continueMutation.isPending ? (
                                     <>
@@ -2081,7 +2143,15 @@ export default function ProjectSessionDetailPage({
                             onResume={handleContinue}
                           />
                           <RepositoriesAccordion
-                            repositories={reposStatus?.repos || session?.status?.reconciledRepos || session?.spec?.repos || []}
+                            repositories={[
+                              ...(pendingRepo ? [pendingRepo] : []),
+                              ...(reposStatus?.repos || session?.status?.reconciledRepos || session?.spec?.repos || []).map(
+                                (r) => {
+                                  const name = ('name' in r ? r.name : undefined) || r.url?.split('/').pop()?.replace('.git', '');
+                                  return name === removingRepoName ? { ...r, status: "Removing" as const } : r;
+                                },
+                              ),
+                            ]}
                             uploadedFiles={fileUploadsList.map((f) => ({ name: f.name, path: f.path, size: f.size }))}
                             onAddRepository={() => setContextModalOpen(true)}
                             onRemoveRepository={(repoName) => removeRepoMutation.mutate(repoName)}
@@ -2470,7 +2540,15 @@ export default function ProjectSessionDetailPage({
                       </div>
                     )}
 
-                    <div className="flex flex-col flex-1 overflow-hidden">
+                    <div className="relative flex flex-col flex-1 overflow-hidden">
+                      {(phase === "Creating" || phase === "Pending") && (
+                        <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-10">
+                          <SessionStartingEvents
+                            projectName={projectName}
+                            sessionName={sessionName}
+                          />
+                        </div>
+                      )}
                       <FeedbackProvider
                         projectName={projectName}
                         sessionName={sessionName}
@@ -2493,11 +2571,14 @@ export default function ProjectSessionDetailPage({
                         workflowMetadata={workflowMetadata}
                         onCommandClick={handleCommandClick}
                         isRunActive={isRunActive}
-                        showWelcomeExperience={!["Completed", "Failed", "Stopped", "Stopping"].includes(session?.status?.phase || "")}
+                        showWelcomeExperience={session?.status?.phase === "Running"}
                         activeWorkflow={workflowManagement.activeWorkflow}
                         userHasInteracted={userHasInteracted}
                         queuedMessages={sessionQueue.messages}
                         hasRealMessages={hasRealMessages}
+                        onCancelQueuedMessage={sessionQueue.cancelMessage}
+                        onUpdateQueuedMessage={sessionQueue.updateMessage}
+                        onClearQueue={sessionQueue.clearMessages}
                         welcomeExperienceComponent={
                           <WelcomeExperience
                             ootbWorkflows={ootbWorkflows}
@@ -2536,7 +2617,15 @@ export default function ProjectSessionDetailPage({
                         </Alert>
                       </div>
                     )}
-                    <div className="flex flex-col flex-1 overflow-hidden">
+                    <div className="relative flex flex-col flex-1 overflow-hidden">
+                      {(phase === "Creating" || phase === "Pending") && (
+                        <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-10">
+                          <SessionStartingEvents
+                            projectName={projectName}
+                            sessionName={sessionName}
+                          />
+                        </div>
+                      )}
                       <FeedbackProvider
                         projectName={projectName}
                         sessionName={sessionName}
@@ -2559,11 +2648,14 @@ export default function ProjectSessionDetailPage({
                           workflowMetadata={workflowMetadata}
                           onCommandClick={handleCommandClick}
                           isRunActive={isRunActive}
-                          showWelcomeExperience={!["Completed", "Failed", "Stopped", "Stopping"].includes(session?.status?.phase || "")}
+                          showWelcomeExperience={session?.status?.phase === "Running"}
                           activeWorkflow={workflowManagement.activeWorkflow}
                           userHasInteracted={userHasInteracted}
                           queuedMessages={sessionQueue.messages}
                           hasRealMessages={hasRealMessages}
+                          onCancelQueuedMessage={sessionQueue.cancelMessage}
+                          onUpdateQueuedMessage={sessionQueue.updateMessage}
+                          onClearQueue={sessionQueue.clearMessages}
                           welcomeExperienceComponent={
                             <WelcomeExperience
                               ootbWorkflows={ootbWorkflows}

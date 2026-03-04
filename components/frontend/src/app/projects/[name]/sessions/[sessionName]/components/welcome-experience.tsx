@@ -27,7 +27,6 @@ type WelcomeExperienceProps = {
 };
 
 const WELCOME_MESSAGE = `Welcome to Ambient AI! Please select a workflow or type a message to get started.`;
-const SETUP_MESSAGE = `Great! Give me a moment to get set up`;
 
 export function WelcomeExperience({
   ootbWorkflows,
@@ -41,9 +40,6 @@ export function WelcomeExperience({
 }: WelcomeExperienceProps) {
   const [displayedText, setDisplayedText] = useState("");
   const [isTypingComplete, setIsTypingComplete] = useState(false);
-  const [setupDisplayedText, setSetupDisplayedText] = useState("");
-  const [isSetupTypingComplete, setIsSetupTypingComplete] = useState(false);
-  const [dotCount, setDotCount] = useState(0);
   const [workflowSearch, setWorkflowSearch] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
   
@@ -98,52 +94,6 @@ export function WelcomeExperience({
     };
   }, [shouldShowAnimation]);
 
-  // Setup message typing effect (after workflow selected)
-  useEffect(() => {
-    if (!selectedWorkflowId) return;
-
-    let currentIndex = 0;
-    let intervalId: ReturnType<typeof setInterval> | null = null;
-    
-    intervalId = setInterval(() => {
-      if (currentIndex < SETUP_MESSAGE.length) {
-        setSetupDisplayedText(SETUP_MESSAGE.slice(0, currentIndex + 1));
-        currentIndex++;
-      } else {
-        setIsSetupTypingComplete(true);
-        if (intervalId !== null) {
-          clearInterval(intervalId);
-          intervalId = null;
-        }
-      }
-    }, 25); // 25ms per character
-
-    return () => {
-      if (intervalId !== null) {
-        clearInterval(intervalId);
-        intervalId = null;
-      }
-    };
-  }, [selectedWorkflowId]);
-
-  // Animate dots after setup message completes (stop when real messages appear)
-  useEffect(() => {
-    if (!isSetupTypingComplete || hasRealMessages) return;
-
-    let intervalId: ReturnType<typeof setInterval> | null = null;
-    
-    intervalId = setInterval(() => {
-      setDotCount((prev) => (prev + 1) % 4); // Cycles 0, 1, 2, 3
-    }, 500); // Change dot every 500ms
-
-    return () => {
-      if (intervalId !== null) {
-        clearInterval(intervalId);
-        intervalId = null;
-      }
-    };
-  }, [isSetupTypingComplete, hasRealMessages]);
-
   const handleWorkflowSelect = (workflowId: string) => {
     onWorkflowSelect(workflowId);
     onUserInteraction();
@@ -189,6 +139,9 @@ export function WelcomeExperience({
   const showCustomWorkflow = !workflowSearch ||
     "custom workflow".toLowerCase().includes(workflowSearch.toLowerCase()) ||
     "load a workflow from a custom git repository".toLowerCase().includes(workflowSearch.toLowerCase());
+
+  // No workflows available — skip welcome entirely
+  if (ootbWorkflows.length === 0) return null;
 
   return (
     <>
@@ -387,43 +340,6 @@ export function WelcomeExperience({
             </div>
           )}
 
-          {/* Setup message after workflow selection - only show if no real messages yet */}
-          {selectedWorkflowId && !hasRealMessages && (
-            <div className="mb-4 mt-2">
-              <div className="flex space-x-3 items-start">
-                {/* Avatar */}
-                <div className="flex-shrink-0">
-                  <div className="w-8 h-8 rounded-full flex items-center justify-center bg-blue-600">
-                    <span className="text-white text-xs font-semibold">AI</span>
-                  </div>
-                </div>
-
-              {/* Message Content */}
-              <div className="flex-1 min-w-0">
-                <div className="rounded-lg bg-card">
-                  {/* Content */}
-                  <p className="text-sm text-muted-foreground leading-relaxed mb-[0.2rem]">
-                      {!isSetupTypingComplete ? (
-                        <>
-                          {setupDisplayedText.slice(0, -3)}
-                          {setupDisplayedText.slice(-3).split('').map((char, idx) => (
-                            <span key={setupDisplayedText.length - 3 + idx} className="animate-fade-in-char">
-                              {char}
-                            </span>
-                          ))}
-                        </>
-                      ) : (
-                        <>
-                          {setupDisplayedText}
-                          {".".repeat(dotCount)}
-                        </>
-                      )}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       )}
     </>

@@ -4,13 +4,42 @@ The Claude Code Runner is a Python-based component that wraps the Claude Code SD
 
 ## Architecture
 
-The runner consists of several key components:
+The runner follows the [Ambient Runner SDK architecture (ADR-0006)](../../docs/adr/0006-ambient-runner-sdk-architecture.md) with a layered design:
 
-- **`adapter.py`** - Core adapter that wraps the Claude Code SDK and produces AG-UI protocol events
-- **`main.py`** - FastAPI server that handles run requests via SSE (Server-Sent Events)
+### Core Modules
+
+- **`main.py`** - FastAPI entry point with AG-UI run/interrupt/health endpoints
+- **`adapter.py`** - Platform adapter that configures and creates the `ClaudeAgentAdapter`
+- **`prompts.py`** - System prompt builder (workspace context, workflows, MCP instructions)
+- **`auth.py`** - SDK authentication (API key, Vertex AI) and runtime credentials
+- **`workspace.py`** - Workspace validation and path resolution
+- **`mcp.py`** - MCP server configuration and tool allowlisting
 - **`observability.py`** - Langfuse integration for tracking usage and performance
-- **`security_utils.py`** - Security utilities for sanitizing secrets and timeouts
 - **`context.py`** - Runner context for session and workspace management
+- **`security_utils.py`** - Security utilities for sanitizing secrets and timeouts
+
+### Endpoint Routers (`endpoints/`)
+
+- **`repos.py`** - `/repos/add`, `/repos/remove`, `/repos/status`
+- **`workflow.py`** - `/workflow` (runtime workflow switching)
+- **`feedback.py`** - `/feedback` (Langfuse thumbs-up/down)
+- **`capabilities.py`** - `/capabilities` (framework + platform features)
+- **`mcp_status.py`** - `/mcp/status` (MCP server diagnostics)
+- **`state.py`** - Shared mutable state for all endpoint routers
+
+### Middleware (`middleware/`)
+
+- **`tracing.py`** - Langfuse tracing middleware (wraps AG-UI event stream)
+- **`developer_events.py`** - Platform setup lifecycle events (role="developer")
+
+### Ambient Runner SDK (`ambient_runner/`)
+
+Extracted package with the bridge pattern for framework-agnostic support:
+
+- **`bridge.py`** - `PlatformBridge` ABC, `PlatformContext`, `FrameworkCapabilities`
+- **`app.py`** - `add_ambient_endpoints(app, bridge)` public API
+- **`bridges/claude.py`** - `ClaudeBridge` (Claude Agent SDK)
+- **`bridges/langgraph.py`** - `LangGraphBridge` (validates abstraction)
 
 ## System Prompt Configuration
 
@@ -21,7 +50,7 @@ The Claude Code Runner uses a hybrid system prompt approach that combines:
 
 ### Implementation
 
-In `adapter.py` (lines 557-561), the system prompt uses `SystemPromptPreset` format:
+In `prompts.py`, the system prompt uses `SystemPromptPreset` format via `build_sdk_system_prompt()`:
 
 ```python
 system_prompt_config = {
@@ -43,7 +72,7 @@ This configuration ensures that:
 
 ### Workspace Context
 
-The workspace context prompt is built by `_build_workspace_context_prompt()` (lines 1500-1575) and includes:
+The workspace context prompt is built by `build_sdk_system_prompt()` in `prompts.py` and includes:
 
 - **Working Directory**: Current workflow or repository location
 - **Artifacts Path**: Where to create output files

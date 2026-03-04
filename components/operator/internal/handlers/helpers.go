@@ -160,44 +160,6 @@ func mutateAgenticSessionStatus(sessionNamespace, name string, mutator func(stat
 	return nil
 }
 
-// ensureSessionIsInteractive forces spec.interactive=true so sessions can be restarted.
-func ensureSessionIsInteractive(sessionNamespace, name string) error {
-	gvr := types.GetAgenticSessionResource()
-
-	obj, err := config.DynamicClient.Resource(gvr).Namespace(sessionNamespace).Get(context.TODO(), name, v1.GetOptions{})
-	if err != nil {
-		if errors.IsNotFound(err) {
-			log.Printf("AgenticSession %s no longer exists, skipping interactive update", name)
-			return nil
-		}
-		return fmt.Errorf("failed to get AgenticSession %s: %w", name, err)
-	}
-
-	spec, found, err := unstructured.NestedMap(obj.Object, "spec")
-	if err != nil {
-		return fmt.Errorf("failed to read spec for AgenticSession %s: %w", name, err)
-	}
-	if !found {
-		log.Printf("AgenticSession %s has no spec; cannot update interactive flag", name)
-		return nil
-	}
-
-	if interactive, _, _ := unstructured.NestedBool(spec, "interactive"); interactive {
-		return nil
-	}
-
-	if err := unstructured.SetNestedField(obj.Object, true, "spec", "interactive"); err != nil {
-		return fmt.Errorf("failed to set interactive flag for %s: %w", name, err)
-	}
-
-	_, err = config.DynamicClient.Resource(gvr).Namespace(sessionNamespace).Update(context.TODO(), obj, v1.UpdateOptions{})
-	if err != nil && !errors.IsNotFound(err) {
-		return fmt.Errorf("failed to persist interactive flag for %s: %w", name, err)
-	}
-
-	return nil
-}
-
 // updateAnnotations updates annotations on the AgenticSession CR.
 func updateAnnotations(sessionNamespace, name string, annotations map[string]string) error {
 	gvr := types.GetAgenticSessionResource()

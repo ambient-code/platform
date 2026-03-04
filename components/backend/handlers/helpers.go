@@ -6,8 +6,10 @@ import (
 	"log"
 	"math"
 	"regexp"
+	"strings"
 	"time"
 
+	authenticationv1 "k8s.io/api/authentication/v1"
 	authv1 "k8s.io/api/authorization/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -92,4 +94,22 @@ func ValidateSecretAccess(ctx context.Context, k8sClient kubernetes.Interface, n
 	}
 
 	return nil
+}
+
+// resolveTokenIdentity uses SelfSubjectReview to determine the authenticated
+// user's identity from their bearer token. Returns (username, nil) on success.
+// This is used when no forwarded identity headers are present (headless/API callers).
+func resolveTokenIdentity(ctx context.Context, k8sClient kubernetes.Interface) (string, error) {
+	ssr := &authenticationv1.SelfSubjectReview{}
+	result, err := k8sClient.AuthenticationV1().SelfSubjectReviews().Create(ctx, ssr, v1.CreateOptions{})
+	if err != nil {
+		return "", fmt.Errorf("SelfSubjectReview failed: %w", err)
+	}
+
+	username := result.Status.UserInfo.Username
+	if strings.TrimSpace(username) == "" {
+		return "", fmt.Errorf("SelfSubjectReview returned empty username")
+	}
+
+	return username, nil
 }

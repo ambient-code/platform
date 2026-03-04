@@ -15,22 +15,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { InputWithHistory } from "@/components/input-with-history";
+import { useInputHistory } from "@/hooks/use-input-history";
 
-// Maximum file sizes based on type
-// Documents (text files): 700KB limit - no base64 encoding overhead
-// Images: 3MB upload limit - realistic compression to 350KB target
-const MAX_DOCUMENT_SIZE = 700 * 1024; // 700KB for documents
-const MAX_IMAGE_SIZE = 3 * 1024 * 1024; // 3MB for images (server will compress to 350KB)
-
-// Determine if a file is an image based on MIME type
-const isImageFile = (fileType: string): boolean => {
-  return fileType.startsWith('image/');
-};
-
-// Get the appropriate max file size based on file type
-const getMaxFileSize = (fileType: string): number => {
-  return isImageFile(fileType) ? MAX_IMAGE_SIZE : MAX_DOCUMENT_SIZE;
-};
+// Maximum file size: 10MB for all file types
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB unified limit
 
 const formatFileSize = (bytes: number): string => {
   if (bytes < 1024) return `${bytes} B`;
@@ -64,6 +53,7 @@ export function UploadFileModal({
   const [fileSizeError, setFileSizeError] = useState<string | null>(null);
   const [isValidating, setIsValidating] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { addToHistory: addUrlToHistory } = useInputHistory("upload-file:url");
 
   const handleSubmit = async () => {
     setIsStartingService(false);
@@ -81,6 +71,9 @@ export function UploadFileModal({
       }
     } else {
       if (!fileUrl.trim()) return;
+
+      // Save URL to history before uploading
+      addUrlToHistory(fileUrl.trim());
 
       // Extract filename from URL
       const urlParts = fileUrl.split("/");
@@ -131,14 +124,10 @@ export function UploadFileModal({
 
     // Use setTimeout to allow UI to update with loading state
     setTimeout(() => {
-      const fileType = file.type || 'application/octet-stream';
-      const maxSize = getMaxFileSize(fileType);
-      const fileTypeLabel = isImageFile(fileType) ? 'images' : 'documents';
-
-      // Check file size based on type
-      if (file.size > maxSize) {
+      // Check file size against unified 10MB limit
+      if (file.size > MAX_FILE_SIZE) {
         setFileSizeError(
-          `File size (${formatFileSize(file.size)}) exceeds maximum allowed size of ${formatFileSize(maxSize)} for ${fileTypeLabel}`
+          `File size (${formatFileSize(file.size)}) exceeds maximum allowed size of ${formatFileSize(MAX_FILE_SIZE)}`
         );
         setSelectedFile(null);
         if (fileInputRef.current) {
@@ -166,7 +155,7 @@ export function UploadFileModal({
           <DialogTitle>Upload File</DialogTitle>
           <DialogDescription>
             Upload files to your workspace from your local machine or a URL. Files will be available in
-            the file-uploads folder. Maximum file size: {formatFileSize(MAX_IMAGE_SIZE)} for images, {formatFileSize(MAX_DOCUMENT_SIZE)} for documents.
+            the file-uploads folder. Maximum file size: {formatFileSize(MAX_FILE_SIZE)}.
           </DialogDescription>
         </DialogHeader>
 
@@ -234,7 +223,8 @@ export function UploadFileModal({
           <TabsContent value="url" className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="file-url">File URL</Label>
-              <Input
+              <InputWithHistory
+                historyKey="upload-file:url"
                 id="file-url"
                 type="url"
                 placeholder="https://example.com/file.pdf"

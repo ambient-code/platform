@@ -49,8 +49,6 @@ spec:
           value: "main"
         - name: SPEC_KIT_TEMPLATE
           value: "spec-kit-template-claude-sh"
-        - name: CONTENT_SERVICE_IMAGE
-          value: "localhost/vteam_backend:latest"
         - name: IMAGE_PULL_POLICY
           value: "Never"
         - name: DISABLE_AUTH

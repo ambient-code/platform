@@ -15,6 +15,11 @@ resources:
 - public-api-deployment.yaml
 - workspace-pvc.yaml
 - minio-deployment.yaml
+- postgresql-deployment.yaml
+- ambient-api-server-secrets.yml
+- ambient-api-server-db.yml
+- ambient-api-server-service.yml
+- unleash-deployment.yaml
 
 # Default images (can be overridden by overlays)
 images:
@@ -30,4 +35,5 @@ images:
   newTag: latest
 - name: quay.io/ambient_code/vteam_public_api
   newTag: latest
-
+- name: quay.io/ambient_code/vteam_api_server
+  newTag: latest
