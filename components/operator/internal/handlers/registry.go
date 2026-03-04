@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"sync"
 	"time"
 
@@ -92,8 +93,19 @@ var (
 	runtimeRegistryCacheTime time.Time
 )
 
-// loadRuntimeRegistry reads and parses the agent registry ConfigMap using the operator's
-// service account. Results are cached in-memory with a 60s TTL.
+// defaultRegistryPath is where the agent-registry ConfigMap is mounted.
+const defaultRegistryPath = "/config/registry/agent-registry.json"
+
+// registryFilePath returns the filesystem path to the agent registry JSON.
+func registryFilePath() string {
+	if p := os.Getenv("AGENT_REGISTRY_PATH"); p != "" {
+		return p
+	}
+	return defaultRegistryPath
+}
+
+// loadRuntimeRegistry reads and parses the agent registry from the mounted ConfigMap file.
+// Results are cached in-memory with a 60s TTL.
 func loadRuntimeRegistry() ([]AgentRuntimeSpec, error) {
 	runtimeRegistryCacheMu.RLock()
 	if time.Since(runtimeRegistryCacheTime) < agentRegistryCacheTTL && runtimeRegistryCache != nil {
@@ -102,13 +114,9 @@ func loadRuntimeRegistry() ([]AgentRuntimeSpec, error) {
 	}
 	runtimeRegistryCacheMu.RUnlock()
 
-	appConfig := config.LoadConfig()
-
-	cm, err := config.K8sClient.CoreV1().ConfigMaps(appConfig.Namespace).Get(
-		context.Background(), agentRegistryConfigMapName, v1.GetOptions{},
-	)
+	data, err := os.ReadFile(registryFilePath())
 	if err != nil {
-		// On refresh failure, return stale cache if available
+		// On read failure, return stale cache if available
 		runtimeRegistryCacheMu.RLock()
 		if runtimeRegistryCache != nil {
 			defer runtimeRegistryCacheMu.RUnlock()
@@ -116,16 +124,11 @@ func loadRuntimeRegistry() ([]AgentRuntimeSpec, error) {
 			return runtimeRegistryCache, nil
 		}
 		runtimeRegistryCacheMu.RUnlock()
-		return nil, fmt.Errorf("failed to read ConfigMap %s: %w", agentRegistryConfigMapName, err)
-	}
-
-	rawJSON, ok := cm.Data[agentRegistryDataKey]
-	if !ok {
-		return nil, fmt.Errorf("ConfigMap %s missing key %q", agentRegistryConfigMapName, agentRegistryDataKey)
+		return nil, fmt.Errorf("failed to read agent registry from %s: %w", registryFilePath(), err)
 	}
 
 	var entries []AgentRuntimeSpec
-	if err := json.Unmarshal([]byte(rawJSON), &entries); err != nil {
+	if err := json.Unmarshal(data, &entries); err != nil {
 		return nil, fmt.Errorf("failed to parse agent registry JSON: %w", err)
 	}
 

@@ -127,6 +127,10 @@ spec:
         - name: model-manifest
           mountPath: /config/models
           readOnly: true
+        # Agent registry (runner type definitions — kubelet auto-syncs changes)
+        - name: agent-registry
+          mountPath: /config/registry
+          readOnly: true
         resources:
           requests:
             cpu: 50m
@@ -151,5 +155,10 @@ spec:
       - name: model-manifest
         configMap:
           name: ambient-models
+          optional: true  # Don't fail if ConfigMap not yet created
+      # Agent registry ConfigMap (runner type definitions)
+      - name: agent-registry
+        configMap:
+          name: ambient-agent-registry
           optional: true  # Don't fail if ConfigMap not yet created
       restartPolicy: Always

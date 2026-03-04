@@ -200,6 +200,10 @@ spec:
         - name: flags-config
           mountPath: /config/flags
           readOnly: true
+        # Agent registry (runner type definitions — kubelet auto-syncs changes)
+        - name: agent-registry
+          mountPath: /config/registry
+          readOnly: true
       volumes:
       - name: backend-state
         persistentVolumeClaim:
@@ -221,6 +225,11 @@ spec:
         configMap:
           name: ambient-flags
           optional: true  # Don't fail if no generic flags defined
+      # Agent registry ConfigMap (runner type definitions)
+      - name: agent-registry
+        configMap:
+          name: ambient-agent-registry
+          optional: true  # Don't fail if ConfigMap not yet created
 
 ---
 apiVersion: v1

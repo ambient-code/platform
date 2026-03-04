@@ -1,16 +1,15 @@
 package handlers
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const agentRegistryConfigMapName = "ambient-agent-registry"
@@ -104,8 +103,19 @@ var (
 
 const registryCacheTTL = 60 * time.Second
 
-// loadAgentRegistry reads and parses the agent registry ConfigMap using the backend service account.
-// Results are cached in-memory with a TTL since the ConfigMap content rarely changes.
+// defaultRegistryPath is where the agent-registry ConfigMap is mounted.
+const defaultRegistryPath = "/config/registry/agent-registry.json"
+
+// registryPath returns the filesystem path to the agent registry JSON.
+func registryPath() string {
+	if p := os.Getenv("AGENT_REGISTRY_PATH"); p != "" {
+		return p
+	}
+	return defaultRegistryPath
+}
+
+// loadAgentRegistry reads and parses the agent registry from the mounted ConfigMap file.
+// Results are cached in-memory with a TTL since the file content rarely changes.
 func loadAgentRegistry() ([]AgentRuntimeSpec, error) {
 	registryCacheMu.RLock()
 	if time.Since(registryCacheTime) < registryCacheTTL && registryCache != nil {
@@ -114,15 +124,9 @@ func loadAgentRegistry() ([]AgentRuntimeSpec, error) {
 	}
 	registryCacheMu.RUnlock()
 
-	if K8sClientMw == nil {
-		return nil, fmt.Errorf("backend K8s client not initialized")
-	}
-
-	cm, err := K8sClientMw.CoreV1().ConfigMaps(Namespace).Get(
-		context.Background(), agentRegistryConfigMapName, v1.GetOptions{},
-	)
+	data, err := os.ReadFile(registryPath())
 	if err != nil {
-		// On refresh failure, return stale cache if available
+		// On read failure, return stale cache if available
 		registryCacheMu.RLock()
 		if registryCache != nil {
 			defer registryCacheMu.RUnlock()
@@ -130,16 +134,11 @@ func loadAgentRegistry() ([]AgentRuntimeSpec, error) {
 			return registryCache, nil
 		}
 		registryCacheMu.RUnlock()
-		return nil, fmt.Errorf("failed to read ConfigMap %s: %w", agentRegistryConfigMapName, err)
-	}
-
-	rawJSON, ok := cm.Data[agentRegistryDataKey]
-	if !ok {
-		return nil, fmt.Errorf("ConfigMap %s missing key %q", agentRegistryConfigMapName, agentRegistryDataKey)
+		return nil, fmt.Errorf("failed to read agent registry from %s: %w", registryPath(), err)
 	}
 
 	var entries []AgentRuntimeSpec
-	if err := json.Unmarshal([]byte(rawJSON), &entries); err != nil {
+	if err := json.Unmarshal(data, &entries); err != nil {
 		return nil, fmt.Errorf("failed to parse agent registry JSON: %w", err)
 	}
 
