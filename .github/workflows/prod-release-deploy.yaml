@@ -22,6 +22,10 @@ on:
         required: false
         type: string
         default: ''
+concurrency:
+  group: prod-release-deploy
+  cancel-in-progress: false
+
 jobs:
    release:
     runs-on: ubuntu-latest
@@ -280,7 +284,7 @@ jobs:
           REGISTRY=$(oc get configmap ambient-agent-registry -n ambient-code \
             -o jsonpath='{.data.agent-registry\.json}')
           REGISTRY=$(echo "$REGISTRY" | sed \
-            -e "s|quay.io/ambient_code/vteam_claude_runner:[^\"]*|quay.io/ambient_code/vteam_claude_runner:${RELEASE_TAG}|g" \
-            -e "s|quay.io/ambient_code/vteam_state_sync:[^\"]*|quay.io/ambient_code/vteam_state_sync:${RELEASE_TAG}|g")
+            -e "s|quay.io/ambient_code/vteam_claude_runner[@:][^\"]*|quay.io/ambient_code/vteam_claude_runner:${RELEASE_TAG}|g" \
+            -e "s|quay.io/ambient_code/vteam_state_sync[@:][^\"]*|quay.io/ambient_code/vteam_state_sync:${RELEASE_TAG}|g")
           oc patch configmap ambient-agent-registry -n ambient-code --type=merge \
-            -p "{\"data\":{\"agent-registry.json\":$(echo "$REGISTRY" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))') }}"
+            -p "{\"data\":{\"agent-registry.json\":$(echo "$REGISTRY" | jq -Rs .)}}"

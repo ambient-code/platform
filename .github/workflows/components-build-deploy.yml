@@ -310,18 +310,19 @@ jobs:
           REGISTRY=$(oc get configmap ambient-agent-registry -n ambient-code \
             -o jsonpath='{.data.agent-registry\.json}')
 
-          # Only replace images that were actually rebuilt this run
+          # Only replace images that were actually rebuilt this run.
+          # Pattern [@:][^"]* matches both :tag and @sha256:digest refs.
           if [ "${{ needs.detect-changes.outputs.claude-runner }}" == "true" ]; then
             REGISTRY=$(echo "$REGISTRY" | sed \
-              "s|quay.io/ambient_code/vteam_claude_runner:[^\"]*|quay.io/ambient_code/vteam_claude_runner:${{ github.sha }}|g")
+              "s|quay.io/ambient_code/vteam_claude_runner[@:][^\"]*|quay.io/ambient_code/vteam_claude_runner:${{ github.sha }}|g")
           fi
           if [ "${{ needs.detect-changes.outputs.state-sync }}" == "true" ]; then
             REGISTRY=$(echo "$REGISTRY" | sed \
-              "s|quay.io/ambient_code/vteam_state_sync:[^\"]*|quay.io/ambient_code/vteam_state_sync:${{ github.sha }}|g")
+              "s|quay.io/ambient_code/vteam_state_sync[@:][^\"]*|quay.io/ambient_code/vteam_state_sync:${{ github.sha }}|g")
           fi
 
           oc patch configmap ambient-agent-registry -n ambient-code --type=merge \
-            -p "{\"data\":{\"agent-registry.json\":$(echo "$REGISTRY" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')}}"
+            -p "{\"data\":{\"agent-registry.json\":$(echo "$REGISTRY" | jq -Rs .)}}"
 
   deploy-with-disptach:
     runs-on: ubuntu-latest
@@ -377,15 +378,15 @@ jobs:
       - name: Update operator environment variables
         run: |
           oc set env deployment/agentic-operator -n ambient-code -c agentic-operator \
-            AMBIENT_CODE_RUNNER_IMAGE="quay.io/ambient_code/vteam_claude_runner:stage" \
-            STATE_SYNC_IMAGE="quay.io/ambient_code/vteam_state_sync:stage"
+            AMBIENT_CODE_RUNNER_IMAGE="quay.io/ambient_code/vteam_claude_runner:${{ github.sha }}" \
+            STATE_SYNC_IMAGE="quay.io/ambient_code/vteam_state_sync:${{ github.sha }}"
 
       - name: Update agent registry ConfigMap with pinned image tags
         run: |
           REGISTRY=$(oc get configmap ambient-agent-registry -n ambient-code \
             -o jsonpath='{.data.agent-registry\.json}')
           REGISTRY=$(echo "$REGISTRY" | sed \
-            -e "s|quay.io/ambient_code/vteam_claude_runner:[^\"]*|quay.io/ambient_code/vteam_claude_runner:${{ github.sha }}|g" \
-            -e "s|quay.io/ambient_code/vteam_state_sync:[^\"]*|quay.io/ambient_code/vteam_state_sync:${{ github.sha }}|g")
+            -e "s|quay.io/ambient_code/vteam_claude_runner[@:][^\"]*|quay.io/ambient_code/vteam_claude_runner:${{ github.sha }}|g" \
+            -e "s|quay.io/ambient_code/vteam_state_sync[@:][^\"]*|quay.io/ambient_code/vteam_state_sync:${{ github.sha }}|g")
           oc patch configmap ambient-agent-registry -n ambient-code --type=merge \
-            -p "{\"data\":{\"agent-registry.json\":$(echo "$REGISTRY" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))') }}"
+            -p "{\"data\":{\"agent-registry.json\":$(echo "$REGISTRY" | jq -Rs .)}}"
