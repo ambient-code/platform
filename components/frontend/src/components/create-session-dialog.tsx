@@ -106,7 +106,6 @@ export function CreateSessionDialog({
   const models = modelsData
     ? modelsData.models.map((m) => ({ value: m.id, label: m.label }))
     : [];
-  const defaultModel = modelsData?.defaultModel ?? DEFAULT_MODEL;
 
   // Update form model when API response arrives or provider changes
   useEffect(() => {

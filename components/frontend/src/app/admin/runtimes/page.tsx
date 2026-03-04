@@ -40,7 +40,7 @@ function RuntimeDetailPanel({ runtime }: { runtime: RunnerType }) {
             <div className="flex gap-2">
               <span className="text-muted-foreground">Required keys:</span>
               <span className="font-mono">
-                {(runtime.auth?.requiredSecretKeys ?? runtime.requiredSecretKeys ?? []).join(", ") || "None"}
+                {(runtime.auth?.requiredSecretKeys ?? []).join(", ") || "None"}
               </span>
             </div>
             <div className="flex gap-2">

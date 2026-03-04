@@ -54,7 +54,7 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
     if (!runnerTypesData) return FALLBACK_RUNNER_API_KEYS;
     const keyMap = new Map<string, Set<string>>();
     for (const rt of runnerTypesData) {
-      const keys = rt.auth?.requiredSecretKeys ?? rt.requiredSecretKeys ?? [];
+      const keys = rt.auth?.requiredSecretKeys ?? [];
       for (const secretKey of keys) {
         if (!keyMap.has(secretKey)) {
           keyMap.set(secretKey, new Set<string>());

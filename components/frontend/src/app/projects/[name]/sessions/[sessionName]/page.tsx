@@ -234,7 +234,7 @@ export default function ProjectSessionDetailPage({
 
   // Fetch runner capabilities and derive agent display name
   const { data: capabilities } = useCapabilities(projectName, sessionName, phase === "Running");
-  const { data: runnerTypes } = useRunnerTypes();
+  const { data: runnerTypes } = useRunnerTypes(projectName);
   const agentName = useMemo(() => {
     if (capabilities?.framework && runnerTypes) {
       const matched = runnerTypes.find((rt) => rt.id === capabilities.framework);

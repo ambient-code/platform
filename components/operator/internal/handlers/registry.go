@@ -79,7 +79,6 @@ type AuthSpec struct {
 	VertexSupported    bool     `json:"vertexSupported"`
 }
 
-
 // In-memory cache for the agent runtime registry.
 var (
 	runtimeRegistryCache     []AgentRuntimeSpec
