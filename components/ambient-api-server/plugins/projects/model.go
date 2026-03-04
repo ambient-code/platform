@@ -27,7 +27,7 @@ func (l ProjectList) Index() ProjectIndex {
 }
 
 func (d *Project) BeforeCreate(tx *gorm.DB) error {
-	d.ID = api.NewID()
+	d.ID = d.Name
 	return nil
 }
 
