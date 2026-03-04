@@ -22,4 +22,3 @@ export { SessionAPI } from './session_api';
 export type { User, UserList, UserCreateRequest, UserPatchRequest } from './user';
 export { UserBuilder, UserPatchBuilder } from './user';
 export { UserAPI } from './user_api';
-

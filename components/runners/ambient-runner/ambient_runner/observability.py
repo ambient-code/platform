@@ -276,10 +276,14 @@ class ObservabilityManager:
             # read those and pass the values here so traces can be filtered by workflow.
             workflow_url = (workflow_url or "").strip()
             if workflow_url:
-                raw_name = workflow_url.rstrip("/").split("/")[-1].removesuffix(".git").strip()
+                raw_name = (
+                    workflow_url.rstrip("/").split("/")[-1].removesuffix(".git").strip()
+                )
                 derived_name = sanitize_model_name(raw_name) or ""
                 metadata["workflow_name"] = derived_name or "unknown"
-                metadata["workflow_url"] = validate_and_sanitize_for_logging(workflow_url)
+                metadata["workflow_url"] = validate_and_sanitize_for_logging(
+                    workflow_url
+                )
                 if workflow_branch:
                     metadata["workflow_branch"] = validate_and_sanitize_for_logging(
                         workflow_branch.strip()
@@ -793,9 +797,7 @@ class ObservabilityManager:
                 if cache_read > 0:
                     usage_details_dict["cache_read_input_tokens"] = cache_read
                 if cache_creation > 0:
-                    usage_details_dict["cache_creation_input_tokens"] = (
-                        cache_creation
-                    )
+                    usage_details_dict["cache_creation_input_tokens"] = cache_creation
 
             update_params: dict[str, Any] = {
                 "output": output_text,
@@ -829,9 +831,7 @@ class ObservabilityManager:
                     f"total: {total})"
                 )
             else:
-                logging.info(
-                    f"Langfuse: Completed turn {turn_count} (no usage data)"
-                )
+                logging.info(f"Langfuse: Completed turn {turn_count} (no usage data)")
 
         except Exception as e:
             logging.error(f"Langfuse: Failed to close turn: {e}", exc_info=True)

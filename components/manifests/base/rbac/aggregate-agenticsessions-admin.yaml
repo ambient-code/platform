@@ -11,5 +11,3 @@ rules:
 - apiGroups: ["vteam.ambient-code"]
   resources: ["agenticsessions/status"]
   verbs: ["get", "update", "patch"]
-
-

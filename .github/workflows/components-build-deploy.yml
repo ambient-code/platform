@@ -236,25 +236,25 @@ jobs:
           else
             echo "frontend_tag=stage" >> $GITHUB_OUTPUT
           fi
-          
+
           if [ "${{ needs.detect-changes.outputs.backend }}" == "true" ]; then
             echo "backend_tag=${{ github.sha }}" >> $GITHUB_OUTPUT
           else
             echo "backend_tag=stage" >> $GITHUB_OUTPUT
           fi
-          
+
           if [ "${{ needs.detect-changes.outputs.operator }}" == "true" ]; then
             echo "operator_tag=${{ github.sha }}" >> $GITHUB_OUTPUT
           else
             echo "operator_tag=stage" >> $GITHUB_OUTPUT
           fi
-          
+
           if [ "${{ needs.detect-changes.outputs.claude-runner }}" == "true" ]; then
             echo "runner_tag=${{ github.sha }}" >> $GITHUB_OUTPUT
           else
             echo "runner_tag=stage" >> $GITHUB_OUTPUT
           fi
-          
+
           if [ "${{ needs.detect-changes.outputs.state-sync }}" == "true" ]; then
             echo "state_sync_tag=${{ github.sha }}" >> $GITHUB_OUTPUT
           else

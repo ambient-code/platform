@@ -148,5 +148,3 @@ Visit the printed URL. You should be redirected to OpenShift login and returned 
 ### Reference
 - ODH Dashboard uses a similar oauth-proxy sidecar pattern (with more bells and whistles):
   [opendatahub-io/odh-dashboard](https://github.com/opendatahub-io/odh-dashboard)
-
-

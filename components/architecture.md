@@ -28,7 +28,7 @@ graph TB
     Backend -- "AG-UI proxy" --> Runner
     Runner --> Claude["Anthropic Claude API"]
 
-    
+
     class Frontend,PublicAPI,Backend,Operator,Runner,K8s,Claude current
     class User,ExtClient external
 ```
@@ -47,7 +47,7 @@ graph TB
 
     subgraph "SDK Layer (OpenAPI-generated)"
         GoSDK["Go SDK"]
-        PySDK["Python SDK"] 
+        PySDK["Python SDK"]
         TsSDK["TypeScript SDK"]
     end
 
@@ -83,7 +83,7 @@ graph TB
     %% Runner callbacks to API Server
     Runner --> Claude["Anthropic Claude API"]
     Runner -- "status callbacks" --> APIServer
-    
+
     class APIServer,ControlPlane,Postgres new
     class GoSDK,PySDK,TsSDK sdk
     class Frontend,Runner,K8s,Operator,Claude unchanged
@@ -111,7 +111,7 @@ graph TB
 
 **Trusted REST Example (TRex)** underpins production services behind `api.openshift.com` — a battle-tested API platform with:
 - **OIDC built-in** → eliminates need for separate auth gateway
-- **PostgreSQL-native** → proven scalability for relational workloads  
+- **PostgreSQL-native** → proven scalability for relational workloads
 - **OpenAPI-first** → consistent schema-driven development
 - **RBAC-extensible** → authorization as needed
 
@@ -154,9 +154,9 @@ graph TB
 
 ## Migration Benefits
 
-✅ **Zero Breaking Changes** — V1 and V2 APIs run in parallel  
-✅ **Proven Foundation** — TRex powers production OpenShift APIs  
-✅ **Eliminated Drift** — Single OpenAPI spec generates all types  
-✅ **Better Scalability** — PostgreSQL for relations, etcd for K8s resources  
-✅ **Simplified Auth** — OIDC built-in, no gateway complexity  
+✅ **Zero Breaking Changes** — V1 and V2 APIs run in parallel
+✅ **Proven Foundation** — TRex powers production OpenShift APIs
+✅ **Eliminated Drift** — Single OpenAPI spec generates all types
+✅ **Better Scalability** — PostgreSQL for relations, etcd for K8s resources
+✅ **Simplified Auth** — OIDC built-in, no gateway complexity
 ✅ **Developer Velocity** — SDK-first integration, consistent patterns

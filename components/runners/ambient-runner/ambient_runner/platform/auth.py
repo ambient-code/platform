@@ -26,6 +26,7 @@ _PLACEHOLDER_EMAIL = "user@example.com"
 # User context sanitization
 # ---------------------------------------------------------------------------
 
+
 def sanitize_user_context(user_id: str, user_name: str) -> tuple[str, str]:
     """Validate and sanitize user context fields to prevent injection attacks."""
     if user_id:
@@ -46,6 +47,7 @@ def sanitize_user_context(user_id: str, user_name: str) -> tuple[str, str]:
 # ---------------------------------------------------------------------------
 # Backend credential fetching
 # ---------------------------------------------------------------------------
+
 
 async def _fetch_credential(context: RunnerContext, credential_type: str) -> dict:
     """Fetch credentials from backend API at runtime."""
@@ -116,7 +118,9 @@ async def fetch_google_credentials(context: RunnerContext) -> dict:
     """Fetch Google OAuth credentials from backend API."""
     data = await _fetch_credential(context, "google")
     if data.get("accessToken"):
-        logger.info(f"Using fresh Google credentials (email: {data.get('email', 'unknown')})")
+        logger.info(
+            f"Using fresh Google credentials (email: {data.get('email', 'unknown')})"
+        )
     return data
 
 
@@ -285,7 +289,11 @@ async def configure_git_identity(user_name: str, user_email: str) -> None:
             timeout=5,
         )
         logger.info(f"Configured git identity: {final_name} <{final_email}>")
-    except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError) as e:
+    except (
+        subprocess.TimeoutExpired,
+        subprocess.CalledProcessError,
+        FileNotFoundError,
+    ) as e:
         logger.warning(f"Failed to configure git identity: {e}")
     except Exception as e:
         logger.error(f"Unexpected error configuring git identity: {e}", exc_info=True)

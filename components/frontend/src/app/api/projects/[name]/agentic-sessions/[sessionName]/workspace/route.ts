@@ -19,5 +19,3 @@ export async function GET(
   const body = await resp.text()
   return new Response(body, { status: resp.status, headers: { 'Content-Type': contentType } })
 }
-
-

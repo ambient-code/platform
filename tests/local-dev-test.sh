@@ -37,7 +37,7 @@ KNOWN_FAILURES=0
 get_test_url() {
     local port=$1
     local minikube_ip
-    
+
     # Check if we're on macOS with Podman (VM networking doesn't expose minikube IP)
     if [[ "$(uname -s)" == "Darwin" ]]; then
         # On macOS, prefer localhost with port-forwarding
@@ -50,7 +50,7 @@ get_test_url() {
             fi
             return 0
         fi
-        
+
         # Try minikube ip anyway (might work with Docker driver)
         minikube_ip=$(minikube ip 2>/dev/null)
         if [[ -n "$minikube_ip" ]]; then
@@ -60,7 +60,7 @@ get_test_url() {
                 return 0
             fi
         fi
-        
+
         # Fallback to localhost (requires port-forwarding)
         if [[ "$port" == "30080" ]]; then
             echo "http://localhost:8080"
@@ -150,7 +150,7 @@ assert_equals() {
     local expected=$1
     local actual=$2
     local description=$3
-    
+
     if [ "$expected" = "$actual" ]; then
         log_success "$description"
         ((PASSED_TESTS++))
@@ -168,7 +168,7 @@ assert_contains() {
     local haystack=$1
     local needle=$2
     local description=$3
-    
+
     if echo "$haystack" | grep -q "$needle"; then
         log_success "$description"
         ((PASSED_TESTS++))
@@ -187,7 +187,7 @@ assert_http_ok() {
     local description=$2
     local max_retries=${3:-5}
     local retry=0
-    
+
     while [ $retry -lt $max_retries ]; do
         if curl -sf "$url" >/dev/null 2>&1; then
             log_success "$description"
@@ -197,7 +197,7 @@ assert_http_ok() {
         ((retry++))
         [ $retry -lt $max_retries ] && sleep 2
     done
-    
+
     log_error "$description (after $max_retries retries)"
     ((FAILED_TESTS++))
     return 1
@@ -206,7 +206,7 @@ assert_http_ok() {
 assert_pod_running() {
     local label=$1
     local description=$2
-    
+
     if kubectl get pods -n "$NAMESPACE" -l "$label" 2>/dev/null | grep -q "Running"; then
         log_success "$description"
         ((PASSED_TESTS++))
@@ -221,12 +221,12 @@ assert_pod_running() {
 # Test: Prerequisites
 test_prerequisites() {
     log_section "Test 1: Prerequisites"
-    
+
     assert_command_exists "make"
     assert_command_exists "kubectl"
     assert_command_exists "minikube"
     assert_command_exists "podman" || assert_command_exists "docker"
-    
+
     # Check if running on macOS or Linux
     if [[ "$OSTYPE" == "darwin"* ]]; then
         log_info "Running on macOS"
@@ -240,10 +240,10 @@ test_prerequisites() {
 # Test: Makefile Help
 test_makefile_help() {
     log_section "Test 2: Makefile Help Command"
-    
+
     local help_output
     help_output=$(make help 2>&1)
-    
+
     assert_contains "$help_output" "Ambient Code Platform" "Help shows correct branding"
     assert_contains "$help_output" "local-up" "Help lists local-up command"
     assert_contains "$help_output" "local-status" "Help lists local-status command"
@@ -254,11 +254,11 @@ test_makefile_help() {
 # Test: Minikube Status Check
 test_minikube_status() {
     log_section "Test 3: Minikube Status"
-    
+
     if minikube status >/dev/null 2>&1; then
         log_success "Minikube is running"
         ((PASSED_TESTS++))
-        
+
         # Check minikube version
         local version
         version=$(minikube version --short 2>/dev/null || echo "unknown")
@@ -273,12 +273,12 @@ test_minikube_status() {
 # Test: Kubernetes Context
 test_kubernetes_context() {
     log_section "Test 4: Kubernetes Context"
-    
+
     local context
     context=$(kubectl config current-context 2>/dev/null || echo "none")
-    
+
     assert_contains "$context" "minikube" "kubectl context is set to minikube"
-    
+
     # Test kubectl connectivity
     if kubectl cluster-info >/dev/null 2>&1; then
         log_success "kubectl can connect to cluster"
@@ -292,7 +292,7 @@ test_kubernetes_context() {
 # Test: Namespace Exists
 test_namespace_exists() {
     log_section "Test 5: Namespace Existence"
-    
+
     if kubectl get namespace "$NAMESPACE" >/dev/null 2>&1; then
         log_success "Namespace '$NAMESPACE' exists"
         ((PASSED_TESTS++))
@@ -306,9 +306,9 @@ test_namespace_exists() {
 # Test: CRDs Installed
 test_crds_installed() {
     log_section "Test 6: Custom Resource Definitions"
-    
+
     local crds=("agenticsessions.vteam.ambient-code" "projectsettings.vteam.ambient-code")
-    
+
     for crd in "${crds[@]}"; do
         if kubectl get crd "$crd" >/dev/null 2>&1; then
             log_success "CRD '$crd' is installed"
@@ -323,15 +323,15 @@ test_crds_installed() {
 # Test: Pods Running
 test_pods_running() {
     log_section "Test 7: Pod Status"
-    
+
     assert_pod_running "app=backend-api" "Backend pod is running"
     assert_pod_running "app=frontend" "Frontend pod is running"
     assert_pod_running "app=agentic-operator" "Operator pod is running"
-    
+
     # Check pod readiness
     local not_ready
     not_ready=$(kubectl get pods -n "$NAMESPACE" --field-selector=status.phase!=Running 2>/dev/null | grep -v "NAME" | wc -l)
-    
+
     if [ "$not_ready" -eq 0 ]; then
         log_success "All pods are in Running state"
         ((PASSED_TESTS++))
@@ -343,9 +343,9 @@ test_pods_running() {
 # Test: Services Exist
 test_services_exist() {
     log_section "Test 8: Services"
-    
+
     local services=("backend-service" "frontend-service")
-    
+
     for svc in "${services[@]}"; do
         if kubectl get svc "$svc" -n "$NAMESPACE" >/dev/null 2>&1; then
             log_success "Service '$svc' exists"
@@ -360,16 +360,16 @@ test_services_exist() {
 # Test: Ingress Configuration
 test_ingress() {
     log_section "Test 9: Ingress Configuration"
-    
+
     if kubectl get ingress ambient-code-ingress -n "$NAMESPACE" >/dev/null 2>&1; then
         log_success "Ingress 'ambient-code-ingress' exists"
         ((PASSED_TESTS++))
-        
+
         # Check ingress host
         local host
         host=$(kubectl get ingress ambient-code-ingress -n "$NAMESPACE" -o jsonpath='{.spec.rules[0].host}' 2>/dev/null)
         assert_equals "ambient.code.platform.local" "$host" "Ingress host is correct"
-        
+
         # Check ingress paths
         local paths
         paths=$(kubectl get ingress ambient-code-ingress -n "$NAMESPACE" -o jsonpath='{.spec.rules[0].http.paths[*].path}' 2>/dev/null)
@@ -383,10 +383,10 @@ test_ingress() {
 # Test: Backend Health Endpoint
 test_backend_health() {
     log_section "Test 10: Backend Health Endpoint"
-    
+
     local backend_url
     backend_url=$(get_test_url 30080)
-    
+
     if [ -n "$backend_url" ]; then
         log_info "Backend URL: $backend_url"
         assert_http_ok "${backend_url}/health" "Backend health endpoint responds" 10
@@ -399,10 +399,10 @@ test_backend_health() {
 # Test: Frontend Accessibility
 test_frontend_accessibility() {
     log_section "Test 11: Frontend Accessibility"
-    
+
     local frontend_url
     frontend_url=$(get_test_url 30030)
-    
+
     if [ -n "$frontend_url" ]; then
         log_info "Frontend URL: $frontend_url"
         assert_http_ok "$frontend_url" "Frontend is accessible" 10
@@ -415,9 +415,9 @@ test_frontend_accessibility() {
 # Test: RBAC Configuration
 test_rbac() {
     log_section "Test 12: RBAC Configuration"
-    
+
     local roles=("ambient-project-admin" "ambient-project-edit" "ambient-project-view")
-    
+
     for role in "${roles[@]}"; do
         if kubectl get clusterrole "$role" >/dev/null 2>&1; then
             log_success "ClusterRole '$role' exists"
@@ -432,7 +432,7 @@ test_rbac() {
 # Test: Development Workflow - Build Command
 test_build_command() {
     log_section "Test 13: Build Commands (Dry Run)"
-    
+
     if make -n build-backend >/dev/null 2>&1; then
         log_success "make build-backend syntax is valid"
         ((PASSED_TESTS++))
@@ -440,7 +440,7 @@ test_build_command() {
         log_error "make build-backend has syntax errors"
         ((FAILED_TESTS++))
     fi
-    
+
     if make -n build-frontend >/dev/null 2>&1; then
         log_success "make build-frontend syntax is valid"
         ((PASSED_TESTS++))
@@ -453,9 +453,9 @@ test_build_command() {
 # Test: Development Workflow - Reload Commands
 test_reload_commands() {
     log_section "Test 14: Reload Commands (Dry Run)"
-    
+
     local reload_cmds=("local-reload-backend" "local-reload-frontend" "local-reload-operator")
-    
+
     for cmd in "${reload_cmds[@]}"; do
         if make -n "$cmd" >/dev/null 2>&1; then
             log_success "make $cmd syntax is valid"
@@ -470,10 +470,10 @@ test_reload_commands() {
 # Test: Logging Commands
 test_logging_commands() {
     log_section "Test 15: Logging Commands"
-    
+
     # Test that we can get logs from each component
     local components=("backend-api" "frontend" "agentic-operator")
-    
+
     for component in "${components[@]}"; do
         if kubectl logs -n "$NAMESPACE" -l "app=$component" --tail=1 >/dev/null 2>&1; then
             log_success "Can retrieve logs from $component"
@@ -487,12 +487,12 @@ test_logging_commands() {
 # Test: Storage Configuration
 test_storage() {
     log_section "Test 16: Storage Configuration"
-    
+
     # Check if workspace PVC exists
     if kubectl get pvc workspace-pvc -n "$NAMESPACE" >/dev/null 2>&1; then
         log_success "Workspace PVC exists"
         ((PASSED_TESTS++))
-        
+
         # Check PVC status
         local status
         status=$(kubectl get pvc workspace-pvc -n "$NAMESPACE" -o jsonpath='{.status.phase}' 2>/dev/null)
@@ -510,32 +510,32 @@ test_storage() {
 # Test: Environment Variables
 test_environment_variables() {
     log_section "Test 17: Environment Variables"
-    
+
     # Check backend deployment env vars
     local backend_env
     backend_env=$(kubectl get deployment backend-api -n "$NAMESPACE" -o jsonpath='{.spec.template.spec.containers[0].env[*].name}' 2>/dev/null || echo "")
-    
+
     assert_contains "$backend_env" "DISABLE_AUTH" "Backend has DISABLE_AUTH env var"
     assert_contains "$backend_env" "ENVIRONMENT" "Backend has ENVIRONMENT env var"
-    
+
     # Check frontend deployment env vars
     local frontend_env
     frontend_env=$(kubectl get deployment frontend -n "$NAMESPACE" -o jsonpath='{.spec.template.spec.containers[0].env[*].name}' 2>/dev/null || echo "")
-    
+
     assert_contains "$frontend_env" "DISABLE_AUTH" "Frontend has DISABLE_AUTH env var"
 }
 
 # Test: Resource Limits
 test_resource_limits() {
     log_section "Test 18: Resource Configuration"
-    
+
     # Check if deployments have resource requests/limits
     local deployments=("backend-api" "frontend" "agentic-operator")
-    
+
     for deployment in "${deployments[@]}"; do
         local resources
         resources=$(kubectl get deployment "$deployment" -n "$NAMESPACE" -o jsonpath='{.spec.template.spec.containers[0].resources}' 2>/dev/null || echo "{}")
-        
+
         if [ "$resources" != "{}" ]; then
             log_success "Deployment '$deployment' has resource configuration"
             ((PASSED_TESTS++))
@@ -548,10 +548,10 @@ test_resource_limits() {
 # Test: Make local-status
 test_make_status() {
     log_section "Test 19: make local-status Command"
-    
+
     local status_output
     status_output=$(make local-status 2>&1 || echo "")
-    
+
     assert_contains "$status_output" "Ambient Code Platform Status" "Status shows correct branding"
     assert_contains "$status_output" "Minikube" "Status shows Minikube section"
     assert_contains "$status_output" "Pods" "Status shows Pods section"
@@ -560,12 +560,12 @@ test_make_status() {
 # Test: Ingress Controller
 test_ingress_controller() {
     log_section "Test 20: Ingress Controller"
-    
+
     # Check if ingress-nginx is installed
     if kubectl get namespace ingress-nginx >/dev/null 2>&1; then
         log_success "ingress-nginx namespace exists"
         ((PASSED_TESTS++))
-        
+
         # Check if controller is running
         if kubectl get pods -n ingress-nginx -l app.kubernetes.io/component=controller 2>/dev/null | grep -q "Running"; then
             log_success "Ingress controller is running"
@@ -583,9 +583,9 @@ test_ingress_controller() {
 # Test: Security - Local Dev User Permissions
 test_security_local_dev_user() {
     log_section "Test 21: Security - Local Dev User Permissions"
-    
+
     log_info "Verifying local-dev-user service account implementation status..."
-    
+
     # CRITICAL TEST: Check if local-dev-user service account exists
     if kubectl get serviceaccount local-dev-user -n "$NAMESPACE" >/dev/null 2>&1; then
         log_success "local-dev-user service account exists"
@@ -598,14 +598,14 @@ test_security_local_dev_user() {
         ((FAILED_TESTS++))
         return
     fi
-    
+
     # Test 1: Should NOT be able to create cluster-wide resources
     # NOTE: This test validates the FUTURE state after token minting is implemented
-    # Currently, local-dev-user permissions don't matter because getLocalDevK8sClients() 
+    # Currently, local-dev-user permissions don't matter because getLocalDevK8sClients()
     # returns backend SA instead of minting a token for local-dev-user
     local can_create_clusterroles
     can_create_clusterroles=$(kubectl auth can-i create clusterroles --as=system:serviceaccount:ambient-code:local-dev-user 2>/dev/null || echo "no")
-    
+
     if [ "$can_create_clusterroles" = "no" ]; then
         log_success "local-dev-user CANNOT create clusterroles (correct - no cluster-admin)"
         ((PASSED_TESTS++))
@@ -618,12 +618,12 @@ test_security_local_dev_user() {
             ((FAILED_TESTS++))
         fi
     fi
-    
+
     # Test 2: Should NOT be able to list all namespaces
     # NOTE: Same as above - only matters after token minting
     local can_list_namespaces
     can_list_namespaces=$(kubectl auth can-i list namespaces --as=system:serviceaccount:ambient-code:local-dev-user 2>/dev/null || echo "no")
-    
+
     if [ "$can_list_namespaces" = "no" ]; then
         log_success "local-dev-user CANNOT list all namespaces (correct - namespace-scoped)"
         ((PASSED_TESTS++))
@@ -636,11 +636,11 @@ test_security_local_dev_user() {
             ((FAILED_TESTS++))
         fi
     fi
-    
+
     # Test 3: Should be able to access resources in ambient-code namespace
     local can_list_pods
     can_list_pods=$(kubectl auth can-i list pods --namespace=ambient-code --as=system:serviceaccount:ambient-code:local-dev-user 2>/dev/null || echo "no")
-    
+
     if [ "$can_list_pods" = "yes" ]; then
         log_success "local-dev-user CAN list pods in ambient-code namespace (correct - needs namespace access)"
         ((PASSED_TESTS++))
@@ -648,11 +648,11 @@ test_security_local_dev_user() {
         log_error "local-dev-user CANNOT list pods in ambient-code namespace (too restricted)"
         ((FAILED_TESTS++))
     fi
-    
+
     # Test 4: Should be able to manage CRDs in ambient-code namespace
     local can_list_sessions
     can_list_sessions=$(kubectl auth can-i list agenticsessions.vteam.ambient-code --namespace=ambient-code --as=system:serviceaccount:ambient-code:local-dev-user 2>/dev/null || echo "no")
-    
+
     if [ "$can_list_sessions" = "yes" ]; then
         log_success "local-dev-user CAN list agenticsessions (correct - needs CR access)"
         ((PASSED_TESTS++))
@@ -665,22 +665,22 @@ test_security_local_dev_user() {
 # Test: Security - Production Namespace Rejection
 test_security_prod_namespace_rejection() {
     log_section "Test 22: Security - Production Namespace Rejection"
-    
+
     log_info "Testing that dev mode rejects production-like namespaces..."
-    
+
     # Test 1: Check backend middleware has protection
     local backend_pod
     backend_pod=$(kubectl get pods -n "$NAMESPACE" -l app=backend-api -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
-    
+
     if [ -z "$backend_pod" ]; then
         log_warning "Backend pod not found, skipping namespace rejection test"
         return
     fi
-    
+
     # Check if ENVIRONMENT and DISABLE_AUTH are set correctly for dev mode
     local env_var
     env_var=$(kubectl get deployment backend-api -n "$NAMESPACE" -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="ENVIRONMENT")].value}' 2>/dev/null)
-    
+
     if [ "$env_var" = "local" ] || [ "$env_var" = "development" ]; then
         log_success "Backend ENVIRONMENT is set to '$env_var' (dev mode enabled)"
         ((PASSED_TESTS++))
@@ -688,7 +688,7 @@ test_security_prod_namespace_rejection() {
         log_error "Backend ENVIRONMENT is '$env_var' (should be 'local' or 'development' for dev mode)"
         ((FAILED_TESTS++))
     fi
-    
+
     # Test 2: Verify namespace does not contain 'prod'
     if echo "$NAMESPACE" | grep -qi "prod"; then
         log_error "Namespace contains 'prod' - this would be REJECTED by middleware (GOOD)"
@@ -699,7 +699,7 @@ test_security_prod_namespace_rejection() {
         log_success "Namespace does not contain 'prod' (safe for dev mode)"
         ((PASSED_TESTS++))
     fi
-    
+
     # Test 3: Document the protection mechanism
     log_info "Middleware protection (components/backend/handlers/middleware.go:314-317):"
     log_info "  • Checks if namespace contains 'prod'"
@@ -711,26 +711,26 @@ test_security_prod_namespace_rejection() {
 # Test: Security - Mock Token Detection in Logs
 test_security_mock_token_logging() {
     log_section "Test 23: Security - Mock Token Detection"
-    
+
     log_info "Verifying backend logs show dev mode activation..."
-    
+
     local backend_pod
     backend_pod=$(kubectl get pods -n "$NAMESPACE" -l app=backend-api -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
-    
+
     if [ -z "$backend_pod" ]; then
         log_warning "Backend pod not found, skipping log test"
         return
     fi
-    
+
     # Get recent backend logs
     local logs
     logs=$(kubectl logs -n "$NAMESPACE" "$backend_pod" --tail=100 2>/dev/null || echo "")
-    
+
     if [ -z "$logs" ]; then
         log_warning "Could not retrieve backend logs"
         return
     fi
-    
+
     # Test 1: Check for dev mode detection logs
     if echo "$logs" | grep -q "Local dev mode detected\|Dev mode detected\|local dev environment"; then
         log_success "Backend logs show dev mode activation"
@@ -738,7 +738,7 @@ test_security_mock_token_logging() {
     else
         log_info "Backend logs do not show dev mode activation yet (may need API call to trigger)"
     fi
-    
+
     # Test 2: Verify logs do NOT contain the actual mock token value
     if echo "$logs" | grep -q "mock-token-for-local-dev"; then
         log_error "Backend logs contain mock token value (SECURITY ISSUE - tokens should be redacted)"
@@ -747,7 +747,7 @@ test_security_mock_token_logging() {
         log_success "Backend logs do NOT contain mock token value (correct - tokens are redacted)"
         ((PASSED_TESTS++))
     fi
-    
+
     # Test 3: Check for service account usage logging
     if echo "$logs" | grep -q "using.*service account\|K8sClient\|DynamicClient"; then
         log_success "Backend logs reference service account usage"
@@ -755,7 +755,7 @@ test_security_mock_token_logging() {
     else
         log_info "Backend logs do not show service account usage (may need API call to trigger)"
     fi
-    
+
     # Test 4: Verify environment validation logs
     if echo "$logs" | grep -q "Local dev environment validated\|env=local\|env=development"; then
         log_success "Backend logs show environment validation"
@@ -768,26 +768,26 @@ test_security_mock_token_logging() {
 # Test: Security - Token Redaction
 test_security_token_redaction() {
     log_section "Test 24: Security - Token Redaction in Logs"
-    
+
     log_info "Verifying tokens are properly redacted in logs..."
-    
+
     local backend_pod
     backend_pod=$(kubectl get pods -n "$NAMESPACE" -l app=backend-api -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
-    
+
     if [ -z "$backend_pod" ]; then
         log_warning "Backend pod not found, skipping token redaction test"
         return
     fi
-    
+
     # Get all backend logs
     local logs
     logs=$(kubectl logs -n "$NAMESPACE" "$backend_pod" --tail=500 2>/dev/null || echo "")
-    
+
     if [ -z "$logs" ]; then
         log_warning "Could not retrieve backend logs"
         return
     fi
-    
+
     # Test 1: Logs should use tokenLen= instead of showing token
     if echo "$logs" | grep -q "tokenLen=\|token (len="; then
         log_success "Logs use token length instead of token value (correct redaction)"
@@ -795,7 +795,7 @@ test_security_token_redaction() {
     else
         log_info "Token length logging not found (may need authenticated requests)"
     fi
-    
+
     # Test 2: Should NOT contain Bearer tokens
     if echo "$logs" | grep -qE "Bearer [A-Za-z0-9._-]{20,}"; then
         log_error "Logs contain Bearer tokens (SECURITY ISSUE)"
@@ -804,7 +804,7 @@ test_security_token_redaction() {
         log_success "Logs do NOT contain Bearer tokens (correct)"
         ((PASSED_TESTS++))
     fi
-    
+
     # Test 3: Should NOT contain base64-encoded credentials
     if echo "$logs" | grep -qE "[A-Za-z0-9+/]{40,}={0,2}"; then
         log_warning "Logs may contain base64-encoded data (verify not credentials)"
@@ -817,9 +817,9 @@ test_security_token_redaction() {
 # Test: Security - Service Account Configuration
 test_security_service_account_config() {
     log_section "Test 25: Security - Service Account Configuration"
-    
+
     log_info "Verifying service account RBAC configuration..."
-    
+
     # Test 1: Check backend-api service account exists
     if kubectl get serviceaccount backend-api -n "$NAMESPACE" >/dev/null 2>&1; then
         log_success "backend-api service account exists"
@@ -829,11 +829,11 @@ test_security_service_account_config() {
         ((FAILED_TESTS++))
         return
     fi
-    
+
     # Test 2: Check if backend has cluster-admin (expected in dev, dangerous in prod)
     local clusterrolebindings
     clusterrolebindings=$(kubectl get clusterrolebinding -o json 2>/dev/null | grep -c "backend-api\|system:serviceaccount:$NAMESPACE:backend-api" || echo "0")
-    
+
     if [ "$clusterrolebindings" -gt 0 ]; then
         log_warning "backend-api has cluster-level role bindings (OK for dev, DANGEROUS in production)"
         log_warning "  ⚠️  This service account has elevated permissions"
@@ -841,7 +841,7 @@ test_security_service_account_config() {
     else
         log_info "backend-api has no cluster-level role bindings (namespace-scoped only)"
     fi
-    
+
     # Test 3: Verify dev mode safety checks are in place
     # NOTE: Auth bypass is intentionally NOT supported in backend code.
     log_info "Dev mode safety mechanisms:"
@@ -927,24 +927,24 @@ test_critical_token_minting() {
 # Test: Production Manifest Safety - No Dev Mode Variables
 test_production_manifest_safety() {
     log_section "Test 27: Production Manifest Safety"
-    
+
     log_info "Verifying production manifests do NOT contain dev mode variables..."
-    
+
     # Check base/production manifests for DISABLE_AUTH
     local prod_manifests=(
         "components/manifests/base/backend-deployment.yaml"
         "components/manifests/base/frontend-deployment.yaml"
         "components/manifests/overlays/production/frontend-oauth-deployment-patch.yaml"
     )
-    
+
     local found_issues=false
-    
+
     for manifest in "${prod_manifests[@]}"; do
         if [ ! -f "$manifest" ]; then
             log_warning "Manifest not found: $manifest (may be in subdirectory)"
             continue
         fi
-        
+
         # Check for DISABLE_AUTH
         if grep -q "DISABLE_AUTH" "$manifest" 2>/dev/null; then
             log_error "Production manifest contains DISABLE_AUTH: $manifest"
@@ -955,7 +955,7 @@ test_production_manifest_safety() {
             log_success "Production manifest clean (no DISABLE_AUTH): $manifest"
             ((PASSED_TESTS++))
         fi
-        
+
         # Check for ENVIRONMENT=local or development
         if grep -qE "ENVIRONMENT.*[\"']?(local|development)[\"']?" "$manifest" 2>/dev/null; then
             log_error "Production manifest sets ENVIRONMENT=local/development: $manifest"
@@ -967,7 +967,7 @@ test_production_manifest_safety() {
             ((PASSED_TESTS++))
         fi
     done
-    
+
     # Verify minikube manifests DO have dev mode (sanity check)
     if [ -f "components/manifests/minikube/backend-deployment.yaml" ]; then
         if grep -q "DISABLE_AUTH" "components/manifests/minikube/backend-deployment.yaml" 2>/dev/null; then
@@ -978,7 +978,7 @@ test_production_manifest_safety() {
             ((FAILED_TESTS++))
         fi
     fi
-    
+
     if [ "$found_issues" = false ]; then
         log_info ""
         log_info "✅ Production manifests are safe"
@@ -990,34 +990,34 @@ test_production_manifest_safety() {
 # Test: Backend Using Wrong Service Account
 test_critical_backend_sa_usage() {
     log_section "Test 28: CRITICAL - Backend Using Wrong Service Account"
-    
+
     log_info "Verifying which service account backend uses in dev mode..."
-    
+
     # Get backend pod
     local backend_pod
     backend_pod=$(kubectl get pods -n "$NAMESPACE" -l app=backend-api -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
-    
+
     if [ -z "$backend_pod" ]; then
         log_warning "Backend pod not found, skipping SA usage test"
         return
     fi
-    
+
     # Check which service account the backend pod is using
     local backend_sa
     backend_sa=$(kubectl get pod "$backend_pod" -n "$NAMESPACE" -o jsonpath='{.spec.serviceAccountName}' 2>/dev/null)
-    
+
     log_info "Backend pod service account: $backend_sa"
-    
+
     # Check if backend has cluster-admin via clusterrolebinding
     local has_cluster_admin=false
     if kubectl get clusterrolebinding -o json 2>/dev/null | grep -q "serviceaccount:$NAMESPACE:$backend_sa"; then
         has_cluster_admin=true
         log_warning "Backend SA '$backend_sa' has cluster-level role bindings (expected in current minikube local-dev manifests)"
-        
+
         # List the actual bindings (best effort)
         log_warning "Cluster role bindings for backend SA:"
         kubectl get clusterrolebinding -o json 2>/dev/null | jq -r ".items[] | select(.subjects[]?.name == \"$backend_sa\") | \"  - \(.metadata.name): \(.roleRef.name)\"" 2>/dev/null || echo "  (could not enumerate)"
-        
+
         # CI mode: treat this as a known local-dev tradeoff (cluster-admin is for dev convenience).
         # Production safety is validated separately (production manifests must not include dev-mode vars).
         if [ "$CI_MODE" = true ]; then
@@ -1029,7 +1029,7 @@ test_critical_backend_sa_usage() {
         log_success "Backend SA '$backend_sa' has NO cluster-level bindings (good for prod model)"
         ((PASSED_TESTS++))
     fi
-    
+
     # Validate current security posture: no env-var auth bypass code should exist in backend middleware.
     log_info "Checking backend middleware has no local-dev auth bypass implementation..."
     if [ -f "components/backend/handlers/middleware.go" ]; then
@@ -1056,7 +1056,7 @@ main() {
     log_info "  Cleanup: $CLEANUP"
     log_info "  Verbose: $VERBOSE"
     echo ""
-    
+
     # Run tests
     test_prerequisites
     test_makefile_help
@@ -1078,21 +1078,21 @@ main() {
     test_resource_limits
     test_make_status
     test_ingress_controller
-    
+
     # Security tests
     test_security_local_dev_user
     test_security_prod_namespace_rejection
     test_security_mock_token_logging
     test_security_token_redaction
     test_security_service_account_config
-    
+
     # Production safety tests
     test_production_manifest_safety
-    
+
     # CRITICAL failing tests for unimplemented features
     test_critical_token_minting
     test_critical_backend_sa_usage
-    
+
     # Summary
     log_section "Test Summary"
     echo ""
@@ -1104,7 +1104,7 @@ main() {
     fi
     echo -e "  ${BOLD}Total:${NC}  $((PASSED_TESTS + FAILED_TESTS + KNOWN_FAILURES))"
     echo ""
-    
+
     if [ "$CI_MODE" = true ]; then
         # In CI mode, known failures are acceptable
         local unexpected_failures=$FAILED_TESTS
@@ -1149,5 +1149,3 @@ main() {
 
 # Run main function
 main
-
-

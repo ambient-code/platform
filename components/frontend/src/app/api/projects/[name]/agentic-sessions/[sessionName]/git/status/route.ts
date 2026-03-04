@@ -8,18 +8,17 @@ export async function GET(
   const { name, sessionName } = await params;
   const { searchParams } = new URL(request.url);
   const path = searchParams.get('path') || '';
-  
+
   const headers = await buildForwardHeadersAsync(request);
-  
+
   const resp = await fetch(
     `${BACKEND_URL}/projects/${encodeURIComponent(name)}/agentic-sessions/${encodeURIComponent(sessionName)}/git/status?path=${encodeURIComponent(path)}`,
     { method: 'GET', headers }
   );
-  
+
   const data = await resp.text();
-  return new Response(data, { 
-    status: resp.status, 
-    headers: { 'Content-Type': 'application/json' } 
+  return new Response(data, {
+    status: resp.status,
+    headers: { 'Content-Type': 'application/json' }
   });
 }
-

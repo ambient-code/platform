@@ -41,14 +41,25 @@ async def change_workflow(request: Request):
         current_branch = os.getenv("ACTIVE_WORKFLOW_BRANCH", "main").strip() or "main"
         current_path = os.getenv("ACTIVE_WORKFLOW_PATH", "").strip()
 
-        if current_git_url == git_url and current_branch == branch and current_path == path:
+        if (
+            current_git_url == git_url
+            and current_branch == branch
+            and current_path == path
+        ):
             logger.info("Workflow unchanged; skipping reinit and greeting")
-            return {"message": "Workflow already active", "gitUrl": git_url, "branch": branch, "path": path}
+            return {
+                "message": "Workflow already active",
+                "gitUrl": git_url,
+                "branch": branch,
+                "path": path,
+            }
 
         if git_url:
             success, _wf_path = await clone_workflow_at_runtime(git_url, branch, path)
             if not success:
-                logger.warning("Failed to clone workflow, will use default workflow directory")
+                logger.warning(
+                    "Failed to clone workflow, will use default workflow directory"
+                )
 
         os.environ["ACTIVE_WORKFLOW_GIT_URL"] = git_url
         os.environ["ACTIVE_WORKFLOW_BRANCH"] = branch
@@ -59,7 +70,12 @@ async def change_workflow(request: Request):
         logger.info("Workflow updated, adapter will reinitialize on next run")
         asyncio.create_task(_trigger_workflow_greeting(git_url, branch, path, context))
 
-        return {"message": "Workflow updated", "gitUrl": git_url, "branch": branch, "path": path}
+        return {
+            "message": "Workflow updated",
+            "gitUrl": git_url,
+            "branch": branch,
+            "path": path,
+        }
 
 
 # ------------------------------------------------------------------
@@ -67,7 +83,9 @@ async def change_workflow(request: Request):
 # ------------------------------------------------------------------
 
 
-async def clone_workflow_at_runtime(git_url: str, branch: str, subpath: str) -> tuple[bool, str]:
+async def clone_workflow_at_runtime(
+    git_url: str, branch: str, subpath: str
+) -> tuple[bool, str]:
     """Clone a workflow repository at runtime."""
     if not git_url:
         return False, ""
@@ -88,14 +106,24 @@ async def clone_workflow_at_runtime(git_url: str, branch: str, subpath: str) -> 
 
         clone_url = git_url
         if github_token and "github" in git_url.lower():
-            clone_url = git_url.replace("https://", f"https://x-access-token:{github_token}@")
+            clone_url = git_url.replace(
+                "https://", f"https://x-access-token:{github_token}@"
+            )
         elif gitlab_token and "gitlab" in git_url.lower():
             clone_url = git_url.replace("https://", f"https://oauth2:{gitlab_token}@")
 
         process = await asyncio.create_subprocess_exec(
-            "git", "clone", "--branch", branch, "--single-branch", "--depth", "1",
-            clone_url, str(temp_dir),
-            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            "git",
+            "clone",
+            "--branch",
+            branch,
+            "--single-branch",
+            "--depth",
+            "1",
+            clone_url,
+            str(temp_dir),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )
         stdout, stderr = await process.communicate()
 
@@ -147,7 +175,9 @@ async def _trigger_workflow_greeting(git_url: str, branch: str, path: str, conte
             workflow_name = path.split("/")[-1]
 
         workflow_dir = str(Path(workspace_path) / "workflows" / workflow_name)
-        config = load_ambient_config(workflow_dir) if Path(workflow_dir).exists() else {}
+        config = (
+            load_ambient_config(workflow_dir) if Path(workflow_dir).exists() else {}
+        )
         startup_prompt = (config.get("startupPrompt") or "").strip()
 
         if not startup_prompt:
@@ -162,7 +192,9 @@ async def _trigger_workflow_greeting(git_url: str, branch: str, path: str, conte
         session_id = context.session_id if context else "unknown"
 
         if not backend_url or not project_name:
-            logger.error("Cannot trigger workflow greeting: BACKEND_API_URL or PROJECT_NAME not set")
+            logger.error(
+                "Cannot trigger workflow greeting: BACKEND_API_URL or PROJECT_NAME not set"
+            )
             return
 
         url = f"{backend_url}/projects/{project_name}/agentic-sessions/{session_id}/agui/run"
@@ -170,12 +202,18 @@ async def _trigger_workflow_greeting(git_url: str, branch: str, path: str, conte
         payload = {
             "threadId": session_id,
             "runId": str(uuid.uuid4()),
-            "messages": [{
-                "id": str(uuid.uuid4()),
-                "role": "user",
-                "content": startup_prompt,
-                "metadata": {"hidden": True, "autoSent": True, "source": "workflow_startup_prompt"},
-            }],
+            "messages": [
+                {
+                    "id": str(uuid.uuid4()),
+                    "role": "user",
+                    "content": startup_prompt,
+                    "metadata": {
+                        "hidden": True,
+                        "autoSent": True,
+                        "source": "workflow_startup_prompt",
+                    },
+                }
+            ],
         }
 
         bot_token = os.getenv("BOT_TOKEN", "").strip()
@@ -188,6 +226,8 @@ async def _trigger_workflow_greeting(git_url: str, branch: str, path: str, conte
                 if resp.status == 200:
                     logger.info(f"Workflow startupPrompt sent for '{workflow_name}'")
                 else:
-                    logger.error(f"Workflow startupPrompt failed: {resp.status} - {await resp.text()}")
+                    logger.error(
+                        f"Workflow startupPrompt failed: {resp.status} - {await resp.text()}"
+                    )
     except Exception as e:
         logger.error(f"Failed to send workflow startupPrompt: {e}")

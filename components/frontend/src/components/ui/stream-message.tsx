@@ -41,9 +41,9 @@ export const StreamMessage: React.FC<StreamMessageProps> = ({ message, onGoToRes
     // Check if this is a hierarchical message with children
     const hierarchical = message as HierarchicalToolMessage;
     return (
-      <ToolMessage 
-        toolUseBlock={message.toolUseBlock} 
-        resultBlock={message.resultBlock} 
+      <ToolMessage
+        toolUseBlock={message.toolUseBlock}
+        resultBlock={message.resultBlock}
         timestamp={message.timestamp}
         childToolCalls={hierarchical.children}
       />
@@ -66,7 +66,7 @@ export const StreamMessage: React.FC<StreamMessageProps> = ({ message, onGoToRes
     case "agent_message": {
       const isStreaming = 'streaming' in message && message.streaming;
       const isAgent = m.type === "agent_message";
-      
+
       // Get content text for feedback context
       const getContentText = () => {
         if (typeof m.content === "string") return m.content;
@@ -74,24 +74,24 @@ export const StreamMessage: React.FC<StreamMessageProps> = ({ message, onGoToRes
         if ("thinking" in m.content) return m.content.thinking;
         return "";
       };
-      
+
       // Feedback buttons for agent text messages (not tool use/result, not streaming)
       const feedbackElement = isAgent && !isStreaming ? (
-        <FeedbackButtons 
+        <FeedbackButtons
           messageId={m.id}  // Pass message ID for feedback association
-          messageContent={getContentText()} 
+          messageContent={getContentText()}
           messageTimestamp={m.timestamp}
         />
       ) : undefined;
-      
+
       if (typeof m.content === "string") {
         return (
-          <Message 
-            role={isAgent ? "bot" : "user"} 
-            content={m.content} 
-            name={agentName ?? "AI Agent"} 
-            borderless={plainCard} 
-            timestamp={m.timestamp} 
+          <Message
+            role={isAgent ? "bot" : "user"}
+            content={m.content}
+            name={agentName ?? "AI Agent"}
+            borderless={plainCard}
+            timestamp={m.timestamp}
             streaming={isStreaming}
             feedbackButtons={feedbackElement}
           />
@@ -102,12 +102,12 @@ export const StreamMessage: React.FC<StreamMessageProps> = ({ message, onGoToRes
           return <ThinkingMessage block={m.content} streaming={isStreaming} />
         case "text_block":
           return (
-            <Message 
-              role={isAgent ? "bot" : "user"} 
-              content={m.content.text} 
-              name={agentName ?? "AI Agent"} 
-              borderless={plainCard} 
-              timestamp={m.timestamp} 
+            <Message
+              role={isAgent ? "bot" : "user"}
+              content={m.content.text}
+              name={agentName ?? "AI Agent"}
+              borderless={plainCard}
+              timestamp={m.timestamp}
               streaming={isStreaming}
               feedbackButtons={feedbackElement}
             />
@@ -147,5 +147,3 @@ export const StreamMessage: React.FC<StreamMessageProps> = ({ message, onGoToRes
 };
 
 export default StreamMessage;
-
-

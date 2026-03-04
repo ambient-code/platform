@@ -24,9 +24,9 @@ Welcome to the Ambient Code Platform developer guide! This section covers everyt
    make kind-up
    # Access at http://localhost:8080
    ```
-   
+
    **Full guide:** [Kind Development](local-development/kind.md)
-   
+
    **Alternatives:** [Minikube](local-development/minikube.md) (older) • [CRC](local-development/crc.md) (OpenShift-specific) • [Comparison](local-development/)
 
 3. **Make your changes and test:**

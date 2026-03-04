@@ -114,7 +114,11 @@ class GeminiCLIAdapter:
                     logger.debug("Gemini CLI: unparseable line: %s", line[:200])
                     continue
 
-                logger.info("Gemini CLI event: type=%s %s", type(event).__name__, _summarize_event(event))
+                logger.info(
+                    "Gemini CLI event: type=%s %s",
+                    type(event).__name__,
+                    _summarize_event(event),
+                )
 
                 # ── init ──
                 if isinstance(event, InitEvent):

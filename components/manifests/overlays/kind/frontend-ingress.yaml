@@ -20,4 +20,3 @@ spec:
             name: frontend-service
             port:
               name: http
-

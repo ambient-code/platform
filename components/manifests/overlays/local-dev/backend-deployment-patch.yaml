@@ -24,4 +24,3 @@ spec:
         env:
         - name: AGENTS_DIR
           value: "/app/agents"
-

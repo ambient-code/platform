@@ -36,22 +36,22 @@ export default function IntegrationsClient({ appSlug }: Props) {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <GitHubConnectionCard 
-                appSlug={appSlug} 
+              <GitHubConnectionCard
+                appSlug={appSlug}
                 showManageButton={true}
                 status={integrations?.github}
                 onRefresh={refetch}
               />
-              <GoogleDriveConnectionCard 
+              <GoogleDriveConnectionCard
                 showManageButton={true}
                 status={integrations?.google}
                 onRefresh={refetch}
               />
-              <GitLabConnectionCard 
+              <GitLabConnectionCard
                 status={integrations?.gitlab}
                 onRefresh={refetch}
               />
-              <JiraConnectionCard 
+              <JiraConnectionCard
                 status={integrations?.jira}
                 onRefresh={refetch}
               />
@@ -62,5 +62,3 @@ export default function IntegrationsClient({ appSlug }: Props) {
     </div>
   )
 }
-
-

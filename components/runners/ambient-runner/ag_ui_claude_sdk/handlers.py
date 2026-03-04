@@ -233,8 +233,12 @@ async def handle_thinking_block(
     if thinking_text:
         ts = now_ms()
         yield ReasoningStartEvent(thread_id=thread_id, run_id=run_id, timestamp=ts)
-        yield ReasoningMessageStartEvent(thread_id=thread_id, run_id=run_id, timestamp=ts)
-        yield ReasoningMessageContentEvent(thread_id=thread_id, run_id=run_id, delta=thinking_text)
+        yield ReasoningMessageStartEvent(
+            thread_id=thread_id, run_id=run_id, timestamp=ts
+        )
+        yield ReasoningMessageContentEvent(
+            thread_id=thread_id, run_id=run_id, delta=thinking_text
+        )
         yield ReasoningMessageEndEvent(thread_id=thread_id, run_id=run_id, timestamp=ts)
         yield ReasoningEndEvent(thread_id=thread_id, run_id=run_id, timestamp=ts)
 

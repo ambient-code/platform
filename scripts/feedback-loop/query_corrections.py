@@ -103,9 +103,7 @@ def fetch_correction_scores(
             created = score.get("createdAt") or score.get("timestamp", "")
             if created:
                 try:
-                    ts = datetime.fromisoformat(
-                        created.replace("Z", "+00:00")
-                    )
+                    ts = datetime.fromisoformat(created.replace("Z", "+00:00"))
                     if ts < since:
                         continue
                 except (ValueError, TypeError):
@@ -157,12 +155,15 @@ def group_corrections(scores: list[dict]) -> list[dict]:
         )
         # Repo corrections apply regardless of branch; workflows keep branch
         group_branch = target_branch if target_type == "workflow" else ""
-        groups[
-            (target_type, target_repo_url, group_branch, target_path)
-        ].append(score)
+        groups[(target_type, target_repo_url, group_branch, target_path)].append(score)
 
     result = []
-    for (target_type, target_repo_url, target_branch, target_path), group_scores in groups.items():
+    for (
+        target_type,
+        target_repo_url,
+        target_branch,
+        target_path,
+    ), group_scores in groups.items():
         type_counts: dict[str, int] = defaultdict(int)
         source_counts: dict[str, int] = defaultdict(int)
 
@@ -655,7 +656,10 @@ def _write_matrix_outputs(
             "session_count": len(session_configs),
             "dry_run": dry_run,
             "sessions": [
-                {"display_name": c.get("display_name", ""), "target_type": c.get("labels", {}).get("target-type", "")}
+                {
+                    "display_name": c.get("display_name", ""),
+                    "target_type": c.get("labels", {}).get("target-type", ""),
+                }
                 for c in session_configs
             ],
         }
@@ -708,8 +712,12 @@ def main():
         description="Query Langfuse corrections and create improvement sessions."
     )
     parser.add_argument("--langfuse-host", required=True, help="Langfuse host URL")
-    parser.add_argument("--langfuse-public-key", required=True, help="Langfuse public key")
-    parser.add_argument("--langfuse-secret-key", required=True, help="Langfuse secret key")
+    parser.add_argument(
+        "--langfuse-public-key", required=True, help="Langfuse public key"
+    )
+    parser.add_argument(
+        "--langfuse-secret-key", required=True, help="Langfuse secret key"
+    )
     parser.add_argument("--api-url", required=True, help="Ambient backend API URL")
     parser.add_argument("--api-token", required=True, help="Bot user token")
     parser.add_argument("--project", required=True, help="Ambient project name")
@@ -795,7 +803,9 @@ def main():
         save_last_run(datetime.now(timezone.utc))
         _write_output(args.output_file, 0, 0, [])
         if is_matrix:
-            _write_matrix_outputs(args.output_file, [], corrections_found=0, dry_run=args.dry_run)
+            _write_matrix_outputs(
+                args.output_file, [], corrections_found=0, dry_run=args.dry_run
+            )
         return
 
     # Group corrections
@@ -823,20 +833,20 @@ def main():
         save_last_run(datetime.now(timezone.utc))
         _write_output(args.output_file, corrections_found, 0, [])
         if is_matrix:
-            _write_matrix_outputs(args.output_file, [], corrections_found=corrections_found, dry_run=args.dry_run)
+            _write_matrix_outputs(
+                args.output_file,
+                [],
+                corrections_found=corrections_found,
+                dry_run=args.dry_run,
+            )
         return
 
     # Filter by repo allowlist
     if args.repos_filter:
-        allowed = {
-            _normalise_url(u)
-            for u in args.repos_filter.split(",")
-            if u.strip()
-        }
+        allowed = {_normalise_url(u) for u in args.repos_filter.split(",") if u.strip()}
         before = len(qualifying)
         qualifying = [
-            g for g in qualifying
-            if _normalise_url(g["target_repo_url"]) in allowed
+            g for g in qualifying if _normalise_url(g["target_repo_url"]) in allowed
         ]
         filtered = before - len(qualifying)
         if filtered:
@@ -846,7 +856,12 @@ def main():
             save_last_run(datetime.now(timezone.utc))
             _write_output(args.output_file, corrections_found, 0, [])
             if is_matrix:
-                _write_matrix_outputs(args.output_file, [], corrections_found=corrections_found, dry_run=args.dry_run)
+                _write_matrix_outputs(
+                    args.output_file,
+                    [],
+                    corrections_found=corrections_found,
+                    dry_run=args.dry_run,
+                )
             return
 
     # ------------------------------------------------------------------
@@ -874,9 +889,7 @@ def main():
         )
 
         save_last_run(datetime.now(timezone.utc))
-        logger.info(
-            f"Matrix mode: {len(session_configs)} session configs written"
-        )
+        logger.info(f"Matrix mode: {len(session_configs)} session configs written")
         return
 
     # ------------------------------------------------------------------
@@ -907,12 +920,18 @@ def main():
         )
         if result:
             sessions_created += 1
-            repo_short = _repo_short_name(group["target_repo_url"]) if group["target_repo_url"] else "unknown"
-            sessions_info.append({
-                "name": result.get("name", ""),
-                "url": result.get("session_url", ""),
-                "target": f"{group['target_type']}:{repo_short}",
-            })
+            repo_short = (
+                _repo_short_name(group["target_repo_url"])
+                if group["target_repo_url"]
+                else "unknown"
+            )
+            sessions_info.append(
+                {
+                    "name": result.get("name", ""),
+                    "url": result.get("session_url", ""),
+                    "target": f"{group['target_type']}:{repo_short}",
+                }
+            )
         groups_summary.append(_group_summary(group, session_result=result))
 
     # Save last run timestamp
@@ -921,11 +940,16 @@ def main():
     if args.dry_run:
         logger.info(f"[DRY RUN] Would have created {len(qualifying)} sessions")
     else:
-        logger.info(f"Created {sessions_created}/{len(qualifying)} improvement sessions")
+        logger.info(
+            f"Created {sessions_created}/{len(qualifying)} improvement sessions"
+        )
 
     _write_output(
-        args.output_file, corrections_found, sessions_created,
-        groups_summary, sessions=sessions_info,
+        args.output_file,
+        corrections_found,
+        sessions_created,
+        groups_summary,
+        sessions=sessions_info,
     )
 
 

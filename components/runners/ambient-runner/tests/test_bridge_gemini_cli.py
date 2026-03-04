@@ -9,7 +9,6 @@ import pytest
 
 from ag_ui.core import RunAgentInput
 
-from ambient_runner.bridge import FrameworkCapabilities
 from ambient_runner.bridges.gemini_cli.bridge import GeminiCLIBridge
 from ambient_runner.platform.context import RunnerContext
 
@@ -28,7 +27,9 @@ def _make_context(**env_overrides) -> RunnerContext:
         "LLM_MODEL": "",
     }
     clean.update(env_overrides)
-    return RunnerContext(session_id="s1", workspace_path="/workspace", environment=clean)
+    return RunnerContext(
+        session_id="s1", workspace_path="/workspace", environment=clean
+    )
 
 
 # ------------------------------------------------------------------

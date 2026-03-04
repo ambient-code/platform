@@ -22,7 +22,7 @@ export function useGoogleStatus() {
  */
 export function useDisconnectGoogle() {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
     mutationFn: googleAuthApi.disconnectGoogle,
     onSuccess: () => {
@@ -31,4 +31,3 @@ export function useDisconnectGoogle() {
     },
   });
 }
-

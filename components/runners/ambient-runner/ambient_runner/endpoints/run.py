@@ -100,8 +100,12 @@ async def run_agent(input_data: RunnerInput, request: Request):
                         yield encoder.encode(
                             RunErrorEvent(
                                 type=EventType.RUN_ERROR,
-                                thread_id=getattr(event, "thread_id", "") or run_agent_input.thread_id or "",
-                                run_id=getattr(event, "run_id", "") or run_agent_input.run_id or "unknown",
+                                thread_id=getattr(event, "thread_id", "")
+                                or run_agent_input.thread_id
+                                or "",
+                                run_id=getattr(event, "run_id", "")
+                                or run_agent_input.run_id
+                                or "unknown",
                                 message=f"An event was too large to send ({type(event).__name__}: {encode_err})",
                                 timestamp=now_ms(),
                             )

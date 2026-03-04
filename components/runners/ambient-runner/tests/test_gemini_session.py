@@ -7,8 +7,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from ambient_runner.bridges.gemini_cli.session import (
-    GEMINI_CLI_TIMEOUT_SEC,
-    SHUTDOWN_TIMEOUT_SEC,
     WORKER_TTL_SEC,
     GeminiSessionManager,
     GeminiSessionWorker,

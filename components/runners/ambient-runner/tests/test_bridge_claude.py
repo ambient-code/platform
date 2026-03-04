@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from ag_ui.core import EventType, RunAgentInput
+from ag_ui.core import RunAgentInput
 
 from ambient_runner.bridge import FrameworkCapabilities, PlatformBridge
 from ambient_runner.bridges.claude import ClaudeBridge
@@ -162,8 +162,13 @@ class TestClaudeBridgeRunGuards:
     async def test_run_raises_without_context(self):
         bridge = ClaudeBridge()
         input_data = RunAgentInput(
-            thread_id="t1", run_id="r1", messages=[], state={},
-            tools=[], context=[], forwarded_props={},
+            thread_id="t1",
+            run_id="r1",
+            messages=[],
+            state={},
+            tools=[],
+            context=[],
+            forwarded_props={},
         )
         with pytest.raises(RuntimeError, match="Context not set"):
             async for _ in bridge.run(input_data):

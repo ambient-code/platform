@@ -1,13 +1,10 @@
 """Unit tests for MCP authentication checks in claude_mcp."""
 
 import json
-import os
-import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
 
 from ambient_runner.bridges.claude.mcp import check_mcp_authentication
 
@@ -27,11 +24,15 @@ class TestGoogleWorkspaceAuth:
         creds_file = creds_dir / "credentials.json"
 
         future = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
-        creds_file.write_text(json.dumps({
-            "token": "ya29.valid",
-            "refresh_token": "1//refresh",
-            "expiry": future,
-        }))
+        creds_file.write_text(
+            json.dumps(
+                {
+                    "token": "ya29.valid",
+                    "refresh_token": "1//refresh",
+                    "expiry": future,
+                }
+            )
+        )
 
         monkeypatch.setenv("USER_GOOGLE_EMAIL", "user@example.org")
 

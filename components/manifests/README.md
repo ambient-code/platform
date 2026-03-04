@@ -191,11 +191,11 @@ NAMESPACE=my-namespace IMAGE_TAG=v1.0 ./deploy.sh
 
 ## Benefits of This Structure
 
-✅ **Single Source of Truth**: Base manifests define common configuration  
-✅ **No Duplication**: Environment-specific configs only define differences  
-✅ **Easy to Maintain**: Changes to base apply to all environments  
-✅ **Clear Differences**: Overlays show exactly what's unique per environment  
-✅ **Type-Safe**: Kustomize validates patches against base resources  
+✅ **Single Source of Truth**: Base manifests define common configuration
+✅ **No Duplication**: Environment-specific configs only define differences
+✅ **Easy to Maintain**: Changes to base apply to all environments
+✅ **Clear Differences**: Overlays show exactly what's unique per environment
+✅ **Type-Safe**: Kustomize validates patches against base resources
 
 ## Migration Notes
 
@@ -238,4 +238,3 @@ kustomize build overlays/production/ | grep "namespace:"
 - [Kustomize Documentation](https://kustomize.io/)
 - [OpenShift Kustomize Guide](https://docs.openshift.com/container-platform/latest/applications/working_with_quotas.html)
 - [Kubernetes Kustomize Tutorial](https://kubernetes.io/docs/tasks/manage-kubernetes-objects/kustomization/)
-

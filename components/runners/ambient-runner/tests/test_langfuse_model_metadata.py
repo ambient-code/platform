@@ -44,7 +44,7 @@ async def test_model_metadata_tracking():
     ]
 
     for test_model in test_models:
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"Testing with model: {test_model}")
         print("=" * 60)
 
@@ -88,11 +88,11 @@ async def test_model_metadata_tracking():
 
             # Finalize
             await obs.finalize()
-            print(f"✓ Finalized observability session")
+            print("✓ Finalized observability session")
 
         else:
             print(
-                f"✗ Failed to initialize observability (expected if Langfuse not configured)"
+                "✗ Failed to initialize observability (expected if Langfuse not configured)"
             )
 
     print("\n" + "=" * 60)

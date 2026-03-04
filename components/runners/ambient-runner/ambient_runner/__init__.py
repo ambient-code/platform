@@ -19,7 +19,11 @@ To build your own bridge, subclass ``PlatformBridge``::
         async def interrupt(self, thread_id=None): ...
 """
 
-from ambient_runner.app import add_ambient_endpoints, create_ambient_app, run_ambient_app
+from ambient_runner.app import (
+    add_ambient_endpoints,
+    create_ambient_app,
+    run_ambient_app,
+)
 from ambient_runner.bridge import FrameworkCapabilities, PlatformBridge
 
 __all__ = [

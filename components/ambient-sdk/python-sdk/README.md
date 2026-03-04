@@ -54,7 +54,7 @@ The SDK uses Bearer token authentication with project-scoped authorization:
 
 ### Token Requirements
 
-- **Bearer Token**: Must be a valid authentication token (OpenShift, JWT, or GitHub format)  
+- **Bearer Token**: Must be a valid authentication token (OpenShift, JWT, or GitHub format)
 - **Project Header**: `X-Ambient-Project` specifies the target Kubernetes namespace
 - **RBAC**: User must have appropriate permissions in the target namespace
 
@@ -71,7 +71,7 @@ Your user account must have these Kubernetes RBAC permissions in the target proj
 ```yaml
 # Minimum required permissions
 - apiGroups: ["vteam.ambient-code"]
-  resources: ["agenticsessions"] 
+  resources: ["agenticsessions"]
   verbs: ["get", "list", "create"]
 
 - apiGroups: [""]
@@ -85,7 +85,7 @@ Your user account must have these Kubernetes RBAC permissions in the target proj
 ```bash
 # Check your permissions
 oc auth can-i create agenticsessions.vteam.ambient-code -n your-project
-oc auth can-i list agenticsessions.vteam.ambient-code -n your-project  
+oc auth can-i list agenticsessions.vteam.ambient-code -n your-project
 ```
 
 **401 Unauthorized**:
@@ -97,13 +97,13 @@ oc whoami -t  # Should return a token starting with sha256~
 
 **400 Bad Request - Project required**:
 - Ensure `AMBIENT_PROJECT` environment variable is set
-- Project must be a valid Kubernetes namespace name  
+- Project must be a valid Kubernetes namespace name
 - User must have access to the specified project
 
 ```bash
 # Set environment variables
 export AMBIENT_TOKEN="your-bearer-token"      # Required
-export AMBIENT_PROJECT="your-project-name"    # Required  
+export AMBIENT_PROJECT="your-project-name"    # Required
 export AMBIENT_API_URL="https://your-api.com" # Optional
 ```
 
@@ -163,12 +163,12 @@ try:
         poll_interval=5.0,  # Check every 5 seconds
         timeout=300.0       # 5 minute timeout
     )
-    
+
     if completed.status == StatusCompleted:
         print(f"Success: {completed.result}")
     else:
         print(f"Failed: {completed.error}")
-        
+
 except TimeoutError:
     print("Session monitoring timed out")
 ```
@@ -261,15 +261,15 @@ python main.py
 ```python
 class AmbientClient:
     def __init__(self, base_url: str, token: str, project: str, timeout: float = 30.0)
-    
+
     def create_session(self, request: CreateSessionRequest) -> CreateSessionResponse
     def get_session(self, session_id: str) -> SessionResponse
     def list_sessions(self) -> SessionListResponse
     def wait_for_completion(self, session_id: str, poll_interval: float = 5.0, timeout: Optional[float] = None) -> SessionResponse
-    
+
     @classmethod
     def from_env(cls, **kwargs) -> "AmbientClient"
-    
+
     def close(self)  # Close HTTP client
 ```
 
@@ -345,7 +345,7 @@ This SDK provides a **simplified HTTP interface** to the Ambient Platform:
 ```
 **Solution**: Set your Bearer token: `export AMBIENT_TOKEN="your-token"`
 
-### Project Header Missing  
+### Project Header Missing
 ```
 API error (400): Project required. Set X-Ambient-Project header
 ```

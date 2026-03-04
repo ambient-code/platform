@@ -208,7 +208,10 @@ def create_rubric_mcp_tool(
 
     properties: dict = {
         "score": {"type": "number", "description": "Overall evaluation score."},
-        "comment": {"type": "string", "description": "Evaluation reasoning and commentary."},
+        "comment": {
+            "type": "string",
+            "description": "Evaluation reasoning and commentary.",
+        },
     }
     if user_schema:
         properties["metadata"] = user_schema
@@ -260,9 +263,7 @@ def create_rubric_mcp_tool(
             }
         else:
             return {
-                "content": [
-                    {"type": "text", "text": f"Failed to log score: {error}"}
-                ],
+                "content": [{"type": "text", "text": f"Failed to log score: {error}"}],
                 "isError": True,
             }
 
@@ -320,8 +321,7 @@ def _log_to_langfuse(
         langfuse_client.flush()
 
         logger.info(
-            f"Rubric score logged to Langfuse: "
-            f"value={score}, trace_id={trace_id}"
+            f"Rubric score logged to Langfuse: value={score}, trace_id={trace_id}"
         )
         return True, None
 

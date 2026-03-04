@@ -3,5 +3,3 @@ kind: ServiceAccount
 metadata:
   name: agentic-operator
   namespace: ambient-code
-
-

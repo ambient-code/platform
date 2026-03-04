@@ -26,5 +26,3 @@ export async function DELETE(
     return Response.json({ error: 'Failed to remove project permission' }, { status: 500 });
   }
 }
-
-

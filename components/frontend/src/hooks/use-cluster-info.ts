@@ -28,4 +28,3 @@ export function useClusterInfo(): ClusterInfo {
     isError,
   };
 }
-

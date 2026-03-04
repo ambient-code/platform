@@ -1,10 +1,7 @@
 """Unit tests for ambient_runner.bridges.claude.auth — Vertex AI and API key setup."""
 
-import asyncio
 import os
 import tempfile
-from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 

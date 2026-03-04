@@ -58,11 +58,11 @@ if [ -n "${IMAGE_RUNNER:-}" ] || [ -n "${IMAGE_STATE_SYNC:-}" ]; then
   echo ""
   [ -n "${IMAGE_RUNNER:-}" ] && echo "Updating runner image to: ${IMAGE_RUNNER}"
   [ -n "${IMAGE_STATE_SYNC:-}" ] && echo "Updating state-sync image to: ${IMAGE_STATE_SYNC}"
-  
+
   ENV_PATCH=""
   [ -n "${IMAGE_RUNNER:-}" ] && ENV_PATCH="${ENV_PATCH} AMBIENT_CODE_RUNNER_IMAGE=${IMAGE_RUNNER}"
   [ -n "${IMAGE_STATE_SYNC:-}" ] && ENV_PATCH="${ENV_PATCH} STATE_SYNC_IMAGE=${IMAGE_STATE_SYNC}"
-  
+
   kubectl set env -n ambient-code deployment/agentic-operator $ENV_PATCH
   UPDATED_DEPLOYMENTS+=("agentic-operator")
 fi

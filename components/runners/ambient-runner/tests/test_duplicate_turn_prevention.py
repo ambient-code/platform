@@ -1,6 +1,6 @@
 """Unit tests for duplicate turn prevention in observability module."""
 
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, Mock
 
 import pytest
 

@@ -2,16 +2,11 @@
 Shared fixtures for runner unit tests.
 """
 
-import asyncio
-from dataclasses import dataclass, field
-from typing import Any, AsyncIterator, Optional
-from unittest.mock import AsyncMock, MagicMock, Mock
+from typing import AsyncIterator
 
-import pytest
 
 from ag_ui.core import (
     BaseEvent,
-    CustomEvent,
     EventType,
     RunFinishedEvent,
     RunStartedEvent,
@@ -37,7 +32,9 @@ def make_run_started(thread_id: str = "t-1", run_id: str = "r-1") -> RunStartedE
     )
 
 
-def make_text_start(msg_id: str = "m-1", role: str = "assistant") -> TextMessageStartEvent:
+def make_text_start(
+    msg_id: str = "m-1", role: str = "assistant"
+) -> TextMessageStartEvent:
     return TextMessageStartEvent(
         type=EventType.TEXT_MESSAGE_START,
         message_id=msg_id,
@@ -45,7 +42,9 @@ def make_text_start(msg_id: str = "m-1", role: str = "assistant") -> TextMessage
     )
 
 
-def make_text_content(msg_id: str = "m-1", delta: str = "Hello") -> TextMessageContentEvent:
+def make_text_content(
+    msg_id: str = "m-1", delta: str = "Hello"
+) -> TextMessageContentEvent:
     return TextMessageContentEvent(
         type=EventType.TEXT_MESSAGE_CONTENT,
         message_id=msg_id,
@@ -68,7 +67,9 @@ def make_tool_start(tool_id: str = "tc-1", name: str = "Read") -> ToolCallStartE
     )
 
 
-def make_tool_args(tool_id: str = "tc-1", delta: str = '{"file":"x"}') -> ToolCallArgsEvent:
+def make_tool_args(
+    tool_id: str = "tc-1", delta: str = '{"file":"x"}'
+) -> ToolCallArgsEvent:
     return ToolCallArgsEvent(
         type=EventType.TOOL_CALL_ARGS,
         tool_call_id=tool_id,

@@ -7,4 +7,3 @@ metadata:
     openshift.io/description: "vTeam Ambient Agentic Runner - AI-powered automation system"
     openshift.io/display-name: "vTeam Ambient Runner"
     openshift.io/cluster-monitoring: "true"
-

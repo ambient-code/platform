@@ -80,4 +80,3 @@ export class UserPatchBuilder {
     return this.data as UserPatchRequest;
   }
 }
-

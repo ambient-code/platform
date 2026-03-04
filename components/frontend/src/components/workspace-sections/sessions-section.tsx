@@ -97,7 +97,7 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
   const deleteSessionMutation = useDeleteSession();
   const continueSessionMutation = useContinueSession();
   const updateDisplayNameMutation = useUpdateSessionDisplayName();
-  
+
   // State for edit name dialog
   const [editingSession, setEditingSession] = useState<{ name: string; displayName: string } | null>(null);
 
@@ -363,7 +363,7 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
           </>
         )}
       </CardContent>
-      
+
       {/* Edit Session Name Dialog */}
       <EditSessionNameDialog
         open={!!editingSession}

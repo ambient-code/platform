@@ -2,11 +2,8 @@
 
 import json
 import os
-import sys
-from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import patch
 
-import pytest
 
 from ambient_runner.platform.config import get_repos_config
 from ambient_runner.platform.prompts import build_workspace_context_prompt

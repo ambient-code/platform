@@ -20,4 +20,3 @@ spec:
           value: "vteam_state_sync:latest"
         - name: IMAGE_PULL_POLICY
           value: "IfNotPresent"
-

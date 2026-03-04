@@ -10,14 +10,14 @@ Example:
     from ag_ui.core import RunAgentInput
     from ag_ui.encoder import EventEncoder
     from ag_ui_claude_sdk import ClaudeAgentAdapter
-    
+
     app = FastAPI()
     adapter = ClaudeAgentAdapter(
         name="my_agent",
         model="claude-sonnet-4-20250514",
         permission_mode="acceptEdits",
     )
-    
+
     @app.post("/")
     async def run(input_data: RunAgentInput, request: Request):
         encoder = EventEncoder(accept=request.headers.get("accept"))
@@ -45,4 +45,3 @@ __all__ = [
     "STATE_MANAGEMENT_TOOL_NAME",
     "AG_UI_MCP_SERVER_NAME",
 ]
-

@@ -77,4 +77,3 @@ export class ProjectSettingsPatchBuilder {
     return this.data as ProjectSettingsPatchRequest;
   }
 }
-

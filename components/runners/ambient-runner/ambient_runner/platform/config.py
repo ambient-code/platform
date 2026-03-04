@@ -27,9 +27,7 @@ def load_ambient_config(cwd_path: str) -> dict:
         config_path = Path(cwd_path) / ".ambient" / "ambient.json"
 
         if not config_path.exists():
-            logger.info(
-                f"No ambient.json found at {config_path}, using defaults"
-            )
+            logger.info(f"No ambient.json found at {config_path}, using defaults")
             return {}
 
         with open(config_path, "r") as f:
@@ -63,9 +61,7 @@ def load_mcp_config(context: RunnerContext, cwd_path: str) -> Optional[dict]:
                 config = _json.load(f)
                 mcp_servers = config.get("mcpServers", {})
                 expanded = expand_env_vars(mcp_servers)
-                logger.info(
-                    f"Expanded MCP config env vars for {len(expanded)} servers"
-                )
+                logger.info(f"Expanded MCP config env vars for {len(expanded)} servers")
                 return expanded
         else:
             logger.info(f"No MCP config file found at: {runner_mcp_file}")
@@ -106,13 +102,9 @@ def get_repos_config() -> list[dict]:
                     branch = str(branch_from_json).strip()
                 else:
                     session_id = os.getenv("AGENTIC_SESSION_NAME", "").strip()
-                    branch = (
-                        f"ambient/{session_id}" if session_id else "main"
-                    )
+                    branch = f"ambient/{session_id}" if session_id else "main"
                 auto_push_raw = it.get("autoPush", False)
-                auto_push = (
-                    auto_push_raw if isinstance(auto_push_raw, bool) else False
-                )
+                auto_push = auto_push_raw if isinstance(auto_push_raw, bool) else False
 
                 if not url:
                     continue
@@ -126,9 +118,7 @@ def get_repos_config() -> list[dict]:
                             from urllib.parse import urlparse
 
                             p = urlparse(url)
-                            parts = [
-                                pt for pt in (p.path or "").split("/") if pt
-                            ]
+                            parts = [pt for pt in (p.path or "").split("/") if pt]
                             if parts:
                                 derived = parts[-1]
                         name = (derived or "").removesuffix(".git").strip()

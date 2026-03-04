@@ -76,7 +76,13 @@ _TYPE_MAP = {
 }
 
 
-def parse_event(line: str) -> Optional[Union[InitEvent, MessageEvent, ToolUseEvent, ToolResultEvent, ErrorEvent, ResultEvent]]:
+def parse_event(
+    line: str,
+) -> Optional[
+    Union[
+        InitEvent, MessageEvent, ToolUseEvent, ToolResultEvent, ErrorEvent, ResultEvent
+    ]
+]:
     """Parse a JSON line into the appropriate event dataclass.
 
     Returns ``None`` when the line cannot be parsed or has an unknown type.

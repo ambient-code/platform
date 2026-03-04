@@ -27,7 +27,9 @@ def _make_context(**env_overrides) -> RunnerContext:
         "GOOGLE_CLOUD_LOCATION": "",
     }
     clean.update(env_overrides)
-    return RunnerContext(session_id="s1", workspace_path="/workspace", environment=clean)
+    return RunnerContext(
+        session_id="s1", workspace_path="/workspace", environment=clean
+    )
 
 
 # ------------------------------------------------------------------
@@ -207,7 +209,9 @@ class TestSetupGeminiCliAuth:
 
         import logging
 
-        with caplog.at_level(logging.INFO, logger="ambient_runner.bridges.gemini_cli.auth"):
+        with caplog.at_level(
+            logging.INFO, logger="ambient_runner.bridges.gemini_cli.auth"
+        ):
             model, api_key, use_vertex = await setup_gemini_cli_auth(ctx)
 
         assert use_vertex is True

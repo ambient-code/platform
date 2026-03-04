@@ -199,7 +199,7 @@ Steps:
 Expected: Session disappears from list
 Actual: Session remains until page refresh
 
-Repo: vTeam  
+Repo: vTeam
 Files: components/frontend/src/components/session-list/
 Browser: Chrome 120, Firefox 121
 
@@ -215,7 +215,7 @@ Current queries use deprecated `onSuccess` callbacks.
 Need to migrate to the new `select` and mutation patterns.
 
 Repo: vTeam
-Files: 
+Files:
 - components/frontend/src/services/queries/sessions.ts
 - components/frontend/src/hooks/
 
@@ -259,7 +259,7 @@ For a Jira to be immediately actionable by an agent, ensure:
 
 **✅ Good (agent can start immediately):**
 > "Fix login redirect loop on Safari"
-> 
+>
 > **Steps**: 1. Open Safari 2. Click Login 3. Observe infinite redirect
 > **Expected**: Redirect to dashboard
 > **Actual**: Loops back to login

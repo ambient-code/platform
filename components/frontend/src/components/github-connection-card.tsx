@@ -31,11 +31,11 @@ export function GitHubConnectionCard({ appSlug, showManageButton = true, status,
   const disconnectMutation = useDisconnectGitHub()
   const savePATMutation = useSaveGitHubPAT()
   const deletePATMutation = useDeleteGitHubPAT()
-  
+
   const [showPATSection, setShowPATSection] = useState(false)
   const [patToken, setPATToken] = useState('')
   const [showToken, setShowToken] = useState(false)
-  
+
   const isLoading = !status
   const patStatus = status?.pat as { configured: boolean; updatedAt?: string; valid?: boolean } | undefined
 
@@ -149,19 +149,19 @@ export function GitHubConnectionCard({ appSlug, showManageButton = true, status,
             </p>
             <div className="flex gap-2">
               {showManageButton && (
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   size="sm"
-                  onClick={handleManage} 
+                  onClick={handleManage}
                   disabled={isLoading || disconnectMutation.isPending}
                 >
                   Manage in GitHub
                 </Button>
               )}
-              <Button 
-                variant="destructive" 
+              <Button
+                variant="destructive"
                 size="sm"
-                onClick={handleDisconnect} 
+                onClick={handleDisconnect}
                 disabled={isLoading || disconnectMutation.isPending}
               >
                 Disconnect App
@@ -179,15 +179,15 @@ export function GitHubConnectionCard({ appSlug, showManageButton = true, status,
             {showPATSection ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
             Personal Access Token {patStatus?.configured && '(Active)'}
           </button>
-          
+
           {showPATSection && (
             <div className="space-y-3 pl-6 border-l-2 border-blue-500/20">
               <p className="text-xs text-muted-foreground">
-                {patStatus?.configured 
+                {patStatus?.configured
                   ? 'PAT is configured and will be used instead of GitHub App for all operations'
                   : 'Alternative to GitHub App. If set, PAT takes precedence over GitHub App.'}
               </p>
-              
+
               {patStatus?.configured ? (
                 <div className="space-y-2">
                   {patStatus?.valid === false ? (
@@ -274,8 +274,8 @@ export function GitHubConnectionCard({ appSlug, showManageButton = true, status,
         {/* Action buttons */}
         <div className="flex gap-3 mt-auto">
           {!status?.installed && !patStatus?.configured && (
-            <Button 
-              onClick={handleConnect} 
+            <Button
+              onClick={handleConnect}
               disabled={isLoading || !appSlug}
               className="bg-blue-600 hover:bg-blue-700 text-white"
             >
@@ -287,4 +287,3 @@ export function GitHubConnectionCard({ appSlug, showManageButton = true, status,
     </Card>
   )
 }
-

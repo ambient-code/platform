@@ -12,4 +12,3 @@ resources:
 
 patchesStrategicMerge:
   - grafana-datasource-patch.yaml
-

@@ -159,7 +159,9 @@ async def handle_feedback(event: FeedbackEvent, request: Request):
             except ImportError:
                 logger.warning("Langfuse not available - feedback will not be recorded")
             except Exception as e:
-                logger.error("Failed to send feedback to Langfuse: %s", e, exc_info=True)
+                logger.error(
+                    "Failed to send feedback to Langfuse: %s", e, exc_info=True
+                )
         else:
             logger.info("Langfuse not enabled - feedback logged but not sent")
 

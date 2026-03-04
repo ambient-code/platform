@@ -294,4 +294,3 @@ If you prefer AWS S3 or another provider:
 - [S3 Storage Configuration](s3-storage-configuration.md) - Detailed S3 setup
 - [Create your first session](../getting-started.md) - Test S3 persistence
 - [MinIO Documentation](https://min.io/docs/minio/kubernetes/upstream/) - Official MinIO docs
-

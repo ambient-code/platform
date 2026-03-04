@@ -22,12 +22,16 @@ class TestTracingMiddlewarePassthrough:
 
     async def test_yields_all_events(self):
         events_in = [make_run_started(), make_text_start(), make_run_finished()]
-        events_out = [e async for e in tracing_middleware(async_event_stream(events_in))]
+        events_out = [
+            e async for e in tracing_middleware(async_event_stream(events_in))
+        ]
         assert len(events_out) == 3
 
     async def test_events_unchanged(self):
         events_in = [make_run_started(), make_text_content(delta="Hello")]
-        events_out = [e async for e in tracing_middleware(async_event_stream(events_in))]
+        events_out = [
+            e async for e in tracing_middleware(async_event_stream(events_in))
+        ]
         assert events_out[0] is events_in[0]
         assert events_out[1] is events_in[1]
 
@@ -43,14 +47,22 @@ class TestTracingMiddlewareObservability:
     async def test_calls_init_event_tracking(self):
         obs = MockObservabilityManager()
         events = [make_run_started()]
-        _ = [e async for e in tracing_middleware(
-            async_event_stream(events), obs=obs, model="claude-4", prompt="Hello"
-        )]
+        _ = [
+            e
+            async for e in tracing_middleware(
+                async_event_stream(events), obs=obs, model="claude-4", prompt="Hello"
+            )
+        ]
         assert obs.init_event_tracking_calls == [("claude-4", "Hello")]
 
     async def test_tracks_all_events(self):
         obs = MockObservabilityManager()
-        events = [make_run_started(), make_text_start(), make_text_content(), make_run_finished()]
+        events = [
+            make_run_started(),
+            make_text_start(),
+            make_text_content(),
+            make_run_finished(),
+        ]
         _ = [e async for e in tracing_middleware(async_event_stream(events), obs=obs)]
         assert len(obs.tracked_events) == 4
 
@@ -64,7 +76,9 @@ class TestTracingMiddlewareObservability:
             make_text_end(),
             make_run_finished(),
         ]
-        events_out = [e async for e in tracing_middleware(async_event_stream(events), obs=obs)]
+        events_out = [
+            e async for e in tracing_middleware(async_event_stream(events), obs=obs)
+        ]
 
         # Original 5 events + 1 CustomEvent = 6
         assert len(events_out) == 6
@@ -85,15 +99,23 @@ class TestTracingMiddlewareObservability:
             make_text_end(msg_id="m2"),
             make_run_finished(),
         ]
-        events_out = [e async for e in tracing_middleware(async_event_stream(events), obs=obs)]
+        events_out = [
+            e async for e in tracing_middleware(async_event_stream(events), obs=obs)
+        ]
         custom_events = [e for e in events_out if isinstance(e, CustomEvent)]
         assert len(custom_events) == 1
 
     async def test_no_trace_id_when_none(self):
         """If obs has no trace ID, no CustomEvent should be emitted."""
         obs = MockObservabilityManager(trace_id=None)
-        events = [make_run_started(), make_text_start(role="assistant"), make_run_finished()]
-        events_out = [e async for e in tracing_middleware(async_event_stream(events), obs=obs)]
+        events = [
+            make_run_started(),
+            make_text_start(role="assistant"),
+            make_run_finished(),
+        ]
+        events_out = [
+            e async for e in tracing_middleware(async_event_stream(events), obs=obs)
+        ]
         custom_events = [e for e in events_out if isinstance(e, CustomEvent)]
         assert len(custom_events) == 0
 
@@ -101,7 +123,9 @@ class TestTracingMiddlewareObservability:
         """Trace ID should not appear before an assistant message."""
         obs = MockObservabilityManager(trace_id="trace-abc")
         events = [make_run_started(), make_run_finished()]
-        events_out = [e async for e in tracing_middleware(async_event_stream(events), obs=obs)]
+        events_out = [
+            e async for e in tracing_middleware(async_event_stream(events), obs=obs)
+        ]
         custom_events = [e for e in events_out if isinstance(e, CustomEvent)]
         assert len(custom_events) == 0
 
@@ -121,7 +145,9 @@ class TestTracingMiddlewareObservability:
             make_text_end(),
             make_run_finished(),
         ]
-        events_out = [e async for e in tracing_middleware(async_event_stream(events), obs=obs)]
+        events_out = [
+            e async for e in tracing_middleware(async_event_stream(events), obs=obs)
+        ]
 
         # Filter out the custom event
         non_custom = [e for e in events_out if not isinstance(e, CustomEvent)]

@@ -55,18 +55,12 @@ def setup_workflow_paths(
                 logger.warning(
                     f"Workflow directory not found: {workflow_path}, using default"
                 )
-                cwd_path = str(
-                    Path(context.workspace_path) / "workflows" / "default"
-                )
+                cwd_path = str(Path(context.workspace_path) / "workflows" / "default")
         else:
-            cwd_path = str(
-                Path(context.workspace_path) / "workflows" / "default"
-            )
+            cwd_path = str(Path(context.workspace_path) / "workflows" / "default")
     except Exception as e:
         logger.warning(f"Failed to derive workflow name: {e}, using default")
-        cwd_path = str(
-            Path(context.workspace_path) / "workflows" / "default"
-        )
+        cwd_path = str(Path(context.workspace_path) / "workflows" / "default")
 
     # Add all repos as additional directories
     repos_base = Path(context.workspace_path) / "repos"
@@ -89,9 +83,7 @@ def setup_workflow_paths(
     return cwd_path, add_dirs, derived_name
 
 
-def setup_multi_repo_paths(
-    context: RunnerContext, repos_cfg: list
-) -> tuple[str, list]:
+def setup_multi_repo_paths(context: RunnerContext, repos_cfg: list) -> tuple[str, list]:
     """Setup CWD and additional directories for multi-repo mode.
 
     Repos are cloned to /workspace/repos/{name} by both
@@ -114,9 +106,7 @@ def setup_multi_repo_paths(
             idx_val = 0
         main_name = (repos_cfg[idx_val].get("name") or "").strip()
 
-    cwd_path = (
-        str(repos_base / main_name) if main_name else context.workspace_path
-    )
+    cwd_path = str(repos_base / main_name) if main_name else context.workspace_path
 
     for r in repos_cfg:
         name = (r.get("name") or "").strip()
@@ -279,9 +269,7 @@ async def initialize_workflow_if_set(context: RunnerContext) -> None:
                 f"at {workflow_temp_dir.name}"
             )
         elif workflow_dir.exists():
-            logger.info(
-                f"Workflow {derived_name} available at {workflow_dir.name}"
-            )
+            logger.info(f"Workflow {derived_name} available at {workflow_dir.name}")
         else:
             logger.warning(
                 f"Workflow {derived_name} not found "

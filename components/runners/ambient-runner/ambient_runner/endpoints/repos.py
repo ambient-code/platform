@@ -56,7 +56,9 @@ async def add_repo(request: Request):
         url, branch, name, github_token, gitlab_token
     )
     if not success:
-        raise HTTPException(status_code=500, detail=f"Failed to clone repository: {url}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to clone repository: {url}"
+        )
 
     if was_newly_cloned:
         repos_json = os.getenv("REPOS_JSON", "[]")
@@ -68,12 +70,21 @@ async def add_repo(request: Request):
         os.environ["REPOS_JSON"] = json.dumps(repos)
 
         bridge.mark_dirty()
-        logger.info(f"Repo '{name}' added and cloned, adapter will reinitialize on next run")
+        logger.info(
+            f"Repo '{name}' added and cloned, adapter will reinitialize on next run"
+        )
         asyncio.create_task(_trigger_repo_added_notification(name, url, context))
     else:
-        logger.info(f"Repo '{name}' already existed, skipping notification (idempotent call)")
+        logger.info(
+            f"Repo '{name}' already existed, skipping notification (idempotent call)"
+        )
 
-    return {"message": "Repository added", "name": name, "path": repo_path, "newly_cloned": was_newly_cloned}
+    return {
+        "message": "Repository added",
+        "name": name,
+        "path": repo_path,
+        "newly_cloned": was_newly_cloned,
+    }
 
 
 @router.post("/repos/remove")
@@ -97,7 +108,9 @@ async def remove_repo(request: Request):
             logger.info(f"Deleted repository directory: {repo_path}")
         except Exception as e:
             logger.error(f"Failed to delete repository directory {repo_path}: {e}")
-            raise HTTPException(status_code=500, detail=f"Failed to delete repository: {e}")
+            raise HTTPException(
+                status_code=500, detail=f"Failed to delete repository: {e}"
+            )
     else:
         logger.warning(f"Repository directory not found: {repo_path}")
 
@@ -133,39 +146,61 @@ async def get_repos_status():
             repo_name = repo_path.name
 
             process = await asyncio.create_subprocess_exec(
-                "git", "-C", str(repo_path), "config", "--get", "remote.origin.url",
-                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+                "git",
+                "-C",
+                str(repo_path),
+                "config",
+                "--get",
+                "remote.origin.url",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
             )
             stdout, stderr = await process.communicate()
             repo_url = stdout.decode().strip() if process.returncode == 0 else ""
             repo_url = re.sub(r"https://[^:]+:[^@]+@", "https://", repo_url)
 
             process = await asyncio.create_subprocess_exec(
-                "git", "-C", str(repo_path), "rev-parse", "--abbrev-ref", "HEAD",
-                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+                "git",
+                "-C",
+                str(repo_path),
+                "rev-parse",
+                "--abbrev-ref",
+                "HEAD",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
             )
             stdout, stderr = await process.communicate()
-            current_branch = stdout.decode().strip() if process.returncode == 0 else "unknown"
+            current_branch = (
+                stdout.decode().strip() if process.returncode == 0 else "unknown"
+            )
 
             process = await asyncio.create_subprocess_exec(
-                "git", "-C", str(repo_path), "branch", "--format=%(refname:short)",
-                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+                "git",
+                "-C",
+                str(repo_path),
+                "branch",
+                "--format=%(refname:short)",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
             )
             stdout, stderr = await process.communicate()
             branches = (
                 [b.strip() for b in stdout.decode().split("\n") if b.strip()]
-                if process.returncode == 0 else []
+                if process.returncode == 0
+                else []
             )
 
             default_branch = await get_default_branch(str(repo_path))
 
-            repos_status.append({
-                "url": repo_url,
-                "name": repo_name,
-                "branches": branches,
-                "currentActiveBranch": current_branch,
-                "defaultBranch": default_branch,
-            })
+            repos_status.append(
+                {
+                    "url": repo_url,
+                    "name": repo_name,
+                    "branches": branches,
+                    "currentActiveBranch": current_branch,
+                    "defaultBranch": default_branch,
+                }
+            )
         except Exception as e:
             logger.error(f"Error getting status for repo {repo_path}: {e}")
             continue
@@ -181,8 +216,13 @@ async def get_repos_status():
 async def get_default_branch(repo_path: str) -> str:
     """Get the default branch with robust fallback."""
     process = await asyncio.create_subprocess_exec(
-        "git", "-C", str(repo_path), "symbolic-ref", "refs/remotes/origin/HEAD",
-        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        "git",
+        "-C",
+        str(repo_path),
+        "symbolic-ref",
+        "refs/remotes/origin/HEAD",
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
     )
     stdout, _ = await process.communicate()
     if process.returncode == 0:
@@ -191,8 +231,14 @@ async def get_default_branch(repo_path: str) -> str:
             return branch
 
     process = await asyncio.create_subprocess_exec(
-        "git", "-C", str(repo_path), "remote", "show", "origin",
-        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        "git",
+        "-C",
+        str(repo_path),
+        "remote",
+        "show",
+        "origin",
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
     )
     stdout, _ = await process.communicate()
     if process.returncode == 0:
@@ -204,8 +250,14 @@ async def get_default_branch(repo_path: str) -> str:
 
     for candidate in ["main", "master", "develop"]:
         process = await asyncio.create_subprocess_exec(
-            "git", "-C", str(repo_path), "rev-parse", "--verify", f"origin/{candidate}",
-            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            "git",
+            "-C",
+            str(repo_path),
+            "rev-parse",
+            "--verify",
+            f"origin/{candidate}",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )
         await process.communicate()
         if process.returncode == 0:
@@ -215,7 +267,9 @@ async def get_default_branch(repo_path: str) -> str:
 
 
 async def clone_repo_at_runtime(
-    git_url: str, branch: str, name: str,
+    git_url: str,
+    branch: str,
+    name: str,
     github_token_override: str | None = None,
     gitlab_token_override: str | None = None,
 ) -> tuple[bool, str, bool]:
@@ -227,7 +281,9 @@ async def clone_repo_at_runtime(
         name = git_url.split("/")[-1].removesuffix(".git")
 
     if not branch or branch.strip() == "":
-        session_id = os.getenv("AGENTIC_SESSION_NAME", "").strip() or os.getenv("SESSION_ID", "unknown")
+        session_id = os.getenv("AGENTIC_SESSION_NAME", "").strip() or os.getenv(
+            "SESSION_ID", "unknown"
+        )
         branch = f"ambient/{session_id}"
         logger.info(f"No branch specified, auto-generated: {branch}")
 
@@ -240,7 +296,9 @@ async def clone_repo_at_runtime(
     gitlab_token = gitlab_token_override or os.getenv("GITLAB_TOKEN", "").strip()
     clone_url = git_url
     if github_token and "github" in git_url.lower():
-        clone_url = git_url.replace("https://", f"https://x-access-token:{github_token}@")
+        clone_url = git_url.replace(
+            "https://", f"https://x-access-token:{github_token}@"
+        )
     elif gitlab_token and "gitlab" in git_url.lower():
         clone_url = git_url.replace("https://", f"https://oauth2:{gitlab_token}@")
 
@@ -249,16 +307,31 @@ async def clone_repo_at_runtime(
         logger.info(f"Repo '{name}' already exists, adding branch '{branch}'")
         try:
             await asyncio.create_subprocess_exec(
-                "git", "-C", str(repo_final), "fetch", "origin",
-                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+                "git",
+                "-C",
+                str(repo_final),
+                "fetch",
+                "origin",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
             )
 
             for checkout_args in (
                 ["git", "-C", str(repo_final), "checkout", branch],
-                ["git", "-C", str(repo_final), "checkout", "-b", branch, f"origin/{branch}"],
+                [
+                    "git",
+                    "-C",
+                    str(repo_final),
+                    "checkout",
+                    "-b",
+                    branch,
+                    f"origin/{branch}",
+                ],
             ):
                 p = await asyncio.create_subprocess_exec(
-                    *checkout_args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+                    *checkout_args,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
                 )
                 await p.communicate()
                 if p.returncode == 0:
@@ -266,12 +339,23 @@ async def clone_repo_at_runtime(
 
             default_branch = await get_default_branch(str(repo_final))
             await asyncio.create_subprocess_exec(
-                "git", "-C", str(repo_final), "checkout", default_branch,
-                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+                "git",
+                "-C",
+                str(repo_final),
+                "checkout",
+                default_branch,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
             )
             p = await asyncio.create_subprocess_exec(
-                "git", "-C", str(repo_final), "checkout", "-b", branch,
-                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+                "git",
+                "-C",
+                str(repo_final),
+                "checkout",
+                "-b",
+                branch,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
             )
             await p.communicate()
             if p.returncode == 0:
@@ -287,8 +371,12 @@ async def clone_repo_at_runtime(
 
     try:
         process = await asyncio.create_subprocess_exec(
-            "git", "clone", clone_url, str(temp_dir),
-            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            "git",
+            "clone",
+            clone_url,
+            str(temp_dir),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )
         stdout, stderr = await process.communicate()
         if process.returncode != 0:
@@ -300,14 +388,25 @@ async def clone_repo_at_runtime(
             return False, "", False
 
         p = await asyncio.create_subprocess_exec(
-            "git", "-C", str(temp_dir), "checkout", branch,
-            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            "git",
+            "-C",
+            str(temp_dir),
+            "checkout",
+            branch,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )
         await p.communicate()
         if p.returncode != 0:
             await asyncio.create_subprocess_exec(
-                "git", "-C", str(temp_dir), "checkout", "-b", branch,
-                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+                "git",
+                "-C",
+                str(temp_dir),
+                "checkout",
+                "-b",
+                branch,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
             )
 
         repo_final.parent.mkdir(parents=True, exist_ok=True)
@@ -339,12 +438,18 @@ async def _trigger_repo_added_notification(repo_name: str, repo_url: str, contex
         payload = {
             "threadId": session_id,
             "runId": str(uuid.uuid4()),
-            "messages": [{
-                "id": str(uuid.uuid4()),
-                "role": "user",
-                "content": f"The repository '{repo_name}' has been added to your workspace. You can now access it at the path 'repos/{repo_name}/'. Please acknowledge this to the user.",
-                "metadata": {"hidden": True, "autoSent": True, "source": "repo_added"},
-            }],
+            "messages": [
+                {
+                    "id": str(uuid.uuid4()),
+                    "role": "user",
+                    "content": f"The repository '{repo_name}' has been added to your workspace. You can now access it at the path 'repos/{repo_name}/'. Please acknowledge this to the user.",
+                    "metadata": {
+                        "hidden": True,
+                        "autoSent": True,
+                        "source": "repo_added",
+                    },
+                }
+            ],
         }
 
         bot_token = os.getenv("BOT_TOKEN", "").strip()
@@ -357,6 +462,8 @@ async def _trigger_repo_added_notification(repo_name: str, repo_url: str, contex
                 if resp.status == 200:
                     logger.info(f"Repo notification sent: {await resp.json()}")
                 else:
-                    logger.error(f"Repo notification failed: {resp.status} - {await resp.text()}")
+                    logger.error(
+                        f"Repo notification failed: {resp.status} - {await resp.text()}"
+                    )
     except Exception as e:
         logger.error(f"Failed to trigger repo notification: {e}")

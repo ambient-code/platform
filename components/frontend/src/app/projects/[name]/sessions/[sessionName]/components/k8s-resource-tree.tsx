@@ -206,4 +206,3 @@ export function K8sResourceTree({
     </Card>
   );
 }
-

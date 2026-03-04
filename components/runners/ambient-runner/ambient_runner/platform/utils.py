@@ -34,6 +34,7 @@ def is_vertex_enabled(
     with a deprecation warning. Reads from *context* if provided (via
     ``context.get_env``), otherwise from ``os.getenv``.
     """
+
     def _get(key: str) -> str:
         if context is not None and hasattr(context, "get_env"):
             return context.get_env(key, "")
@@ -69,9 +70,7 @@ def redact_secrets(text: str) -> str:
     text = re.sub(r"sk-ant-[a-zA-Z0-9\-_]{30,200}", "sk-ant-***REDACTED***", text)
     text = re.sub(r"pk-lf-[a-zA-Z0-9\-_]{10,100}", "pk-lf-***REDACTED***", text)
     text = re.sub(r"sk-lf-[a-zA-Z0-9\-_]{10,100}", "sk-lf-***REDACTED***", text)
-    text = re.sub(
-        r"x-access-token:[^@\s]+@", "x-access-token:***REDACTED***@", text
-    )
+    text = re.sub(r"x-access-token:[^@\s]+@", "x-access-token:***REDACTED***@", text)
     text = re.sub(r"oauth2:[^@\s]+@", "oauth2:***REDACTED***@", text)
     text = re.sub(r"://[^:@\s]+:[^@\s]+@", "://***REDACTED***@", text)
     text = re.sub(r"AIza[a-zA-Z0-9\-_]{30,}", "AIza***REDACTED***", text)

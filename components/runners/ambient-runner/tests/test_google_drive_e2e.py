@@ -50,7 +50,9 @@ async def test_google_drive_authentication_flow():
 
     from ag_ui_claude_sdk import ClaudeAgentAdapter as ClaudeCodeAdapter
     from ambient_runner.platform.context import RunnerContext
-    from ambient_runner.bridges.claude.mcp import check_mcp_authentication as _check_mcp_authentication
+    from ambient_runner.bridges.claude.mcp import (
+        check_mcp_authentication as _check_mcp_authentication,
+    )
 
     # Setup test credentials
     test_creds_path = Path("/tmp/test_credentials.json")
@@ -112,9 +114,9 @@ async def test_google_drive_authentication_flow():
     user_google_email = os.getenv("USER_GOOGLE_EMAIL")
     assert user_google_email is not None, "USER_GOOGLE_EMAIL should be set"
     assert user_google_email != "user@example.com", "Should not be placeholder email"
-    assert (
-        user_google_email == user_email
-    ), f"Expected {user_email}, got {user_google_email}"
+    assert user_google_email == user_email, (
+        f"Expected {user_email}, got {user_google_email}"
+    )
 
     print(f"✓ USER_GOOGLE_EMAIL correctly set to: {user_google_email}")
 
@@ -140,9 +142,9 @@ async def test_google_drive_authentication_flow():
     assert user_email in msg, f"Expected user email in message, got: {msg}"
 
     if is_auth is True:
-        print(f"✓ Authentication status: Valid")
+        print("✓ Authentication status: Valid")
     elif is_auth is None:
-        print(f"⚠ Authentication status: Needs refresh (token may be expired)")
+        print("⚠ Authentication status: Needs refresh (token may be expired)")
 
     print(f"  Message: {msg}")
 

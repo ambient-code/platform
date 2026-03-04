@@ -22,10 +22,10 @@ logger = logging.getLogger(__name__)
 # ------------------------------------------------------------------
 
 CORRECTION_TYPES = [
-    "incomplete",    # missed something that should have been done
-    "incorrect",     # did the wrong thing
+    "incomplete",  # missed something that should have been done
+    "incorrect",  # did the wrong thing
     "out_of_scope",  # worked on wrong files / area
-    "style",         # right result, wrong approach or pattern
+    "style",  # right result, wrong approach or pattern
 ]
 
 CORRECTION_SOURCES = ["human", "rubric"]
@@ -364,25 +364,43 @@ def _discover_repos_from_workspace() -> list:
         for entry in os.listdir(repos_dir):
             repo_path = os.path.join(repos_dir, entry)
             git_dir = os.path.join(repo_path, ".git")
-            if not (os.path.isdir(repo_path) and (os.path.isdir(git_dir) or os.path.isfile(git_dir))):
+            if not (
+                os.path.isdir(repo_path)
+                and (os.path.isdir(git_dir) or os.path.isfile(git_dir))
+            ):
                 continue
             try:
-                url = subprocess.check_output(
-                    ["git", "-C", repo_path, "config", "--get", "remote.origin.url"],
-                    stderr=subprocess.DEVNULL,
-                    timeout=5,
-                ).decode().strip()
+                url = (
+                    subprocess.check_output(
+                        [
+                            "git",
+                            "-C",
+                            repo_path,
+                            "config",
+                            "--get",
+                            "remote.origin.url",
+                        ],
+                        stderr=subprocess.DEVNULL,
+                        timeout=5,
+                    )
+                    .decode()
+                    .strip()
+                )
                 # Strip embedded credentials from URL
                 if "@" in url and "://" in url:
                     # https://token@github.com/... → https://github.com/...
                     proto_end = url.index("://") + 3
                     at_pos = url.index("@", proto_end)
-                    url = url[:proto_end] + url[at_pos + 1:]
-                branch = subprocess.check_output(
-                    ["git", "-C", repo_path, "rev-parse", "--abbrev-ref", "HEAD"],
-                    stderr=subprocess.DEVNULL,
-                    timeout=5,
-                ).decode().strip()
+                    url = url[:proto_end] + url[at_pos + 1 :]
+                branch = (
+                    subprocess.check_output(
+                        ["git", "-C", repo_path, "rev-parse", "--abbrev-ref", "HEAD"],
+                        stderr=subprocess.DEVNULL,
+                        timeout=5,
+                    )
+                    .decode()
+                    .strip()
+                )
                 if url:
                     result.append({"url": url, "branch": branch or ""})
             except Exception:
@@ -472,9 +490,11 @@ def _log_correction_to_langfuse(
         using_obs_client = langfuse_client is not None
 
         if not langfuse_client:
-            langfuse_enabled = os.getenv(
-                "LANGFUSE_ENABLED", ""
-            ).strip().lower() in ("1", "true", "yes")
+            langfuse_enabled = os.getenv("LANGFUSE_ENABLED", "").strip().lower() in (
+                "1",
+                "true",
+                "yes",
+            )
             if not langfuse_enabled:
                 return False, "Langfuse not enabled."
 

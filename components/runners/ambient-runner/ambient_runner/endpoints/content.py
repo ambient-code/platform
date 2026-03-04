@@ -220,7 +220,9 @@ async def content_git_status(path: str = ""):
 
     # Also check for untracked and staged files
     rc2, status_out, _ = await _git("status", "--porcelain", cwd=cwd)
-    status_lines = [l for l in status_out.split("\n") if l.strip()] if status_out else []
+    status_lines = (
+        [l for l in status_out.split("\n") if l.strip()] if status_out else []
+    )
 
     files_added = 0
     files_removed = 0
@@ -229,9 +231,7 @@ async def content_git_status(path: str = ""):
 
     if status_lines:
         # Use numstat for accurate line counts
-        rc3, numstat_out, _ = await _git(
-            "diff", "--numstat", "HEAD", cwd=cwd
-        )
+        rc3, numstat_out, _ = await _git("diff", "--numstat", "HEAD", cwd=cwd)
         if rc3 == 0 and numstat_out:
             for line in numstat_out.split("\n"):
                 parts = line.split("\t")
@@ -249,7 +249,9 @@ async def content_git_status(path: str = ""):
         if files_added == 0 and files_removed == 0:
             files_added = len(status_lines)
 
-    has_changes = files_added > 0 or files_removed > 0 or total_added > 0 or total_removed > 0
+    has_changes = (
+        files_added > 0 or files_removed > 0 or total_added > 0 or total_removed > 0
+    )
 
     return {
         "initialized": True,
@@ -312,9 +314,7 @@ async def content_git_configure_remote(request: Request):
             "https://", f"https://x-access-token:{github_token}@"
         )
     elif gitlab_token and "gitlab" in remote_url.lower():
-        auth_url = remote_url.replace(
-            "https://", f"https://oauth2:{gitlab_token}@"
-        )
+        auth_url = remote_url.replace("https://", f"https://oauth2:{gitlab_token}@")
 
     # Check if remote exists
     rc, _, _ = await _git("remote", "get-url", "origin", cwd=cwd)
@@ -348,16 +348,16 @@ async def content_git_list_branches(path: str = ""):
     abs_path = _safe_resolve(path)
     cwd = str(abs_path)
 
-    rc, stdout, stderr = await _git("branch", "-r", "--format=%(refname:short)", cwd=cwd)
+    rc, stdout, stderr = await _git(
+        "branch", "-r", "--format=%(refname:short)", cwd=cwd
+    )
     if rc != 0:
         logger.error("git list branches failed: %s", stderr)
         raise HTTPException(status_code=500, detail="Internal server error")
 
     branches = [b.strip() for b in stdout.split("\n") if b.strip()]
     # Strip 'origin/' prefix
-    branches = [
-        b.removeprefix("origin/") for b in branches if not b.endswith("/HEAD")
-    ]
+    branches = [b.removeprefix("origin/") for b in branches if not b.endswith("/HEAD")]
 
     return {"branches": branches}
 

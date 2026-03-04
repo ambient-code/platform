@@ -152,7 +152,9 @@ class SessionWorker:
                     await output_queue.put(None)
 
         except Exception as exc:
-            logger.error(f"[SessionWorker] Fatal error for thread={self.thread_id}: {exc}")
+            logger.error(
+                f"[SessionWorker] Fatal error for thread={self.thread_id}: {exc}"
+            )
         finally:
             self._client = None
             # Graceful shutdown: close stdin so the CLI saves the session
@@ -174,9 +176,7 @@ class SessionWorker:
                 p = getattr(t, "_process", None)
                 if p and p.returncode is None:
                     try:
-                        await asyncio.wait_for(
-                            asyncio.shield(p.wait()), timeout=5.0
-                        )
+                        await asyncio.wait_for(asyncio.shield(p.wait()), timeout=5.0)
                     except asyncio.TimeoutError:
                         pass
         except Exception:

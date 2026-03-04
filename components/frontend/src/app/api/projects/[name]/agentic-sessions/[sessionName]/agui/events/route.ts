@@ -1,10 +1,10 @@
 /**
  * AG-UI SSE Events Proxy
  * Proxies the backend AG-UI SSE stream through Next.js for Bearer auth compatibility.
- * 
+ *
  * Browser EventSource cannot set Authorization headers, so we proxy through
  * the Next.js same-origin API to inject auth headers server-side.
- * 
+ *
  * See: https://docs.ag-ui.com/quickstart/introduction
  */
 
@@ -57,7 +57,7 @@ export async function GET(
 
     // Pipe the SSE stream through
     const { readable, writable } = new TransformStream()
-    
+
     // Forward the body in a non-blocking way
     if (response.body) {
       response.body.pipeTo(writable).catch((err) => {
@@ -91,4 +91,3 @@ export async function GET(
     )
   }
 }
-

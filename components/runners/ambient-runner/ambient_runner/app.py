@@ -27,7 +27,6 @@ import os
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Optional
 from urllib.parse import urlparse
 
 import aiohttp
@@ -320,7 +319,9 @@ async def _auto_execute_initial_prompt(prompt: str, session_id: str) -> None:
         )
         return
 
-    url = f"{backend_url}/projects/{project_name}/agentic-sessions/{session_id}/agui/run"
+    url = (
+        f"{backend_url}/projects/{project_name}/agentic-sessions/{session_id}/agui/run"
+    )
 
     payload = {
         "threadId": session_id,

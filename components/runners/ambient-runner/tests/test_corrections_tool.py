@@ -93,7 +93,9 @@ def test_build_target_map_workflow_only():
     assert len(targets) == 1
     assert "bug-fix" in targets
     assert targets["bug-fix"]["target_type"] == "workflow"
-    assert targets["bug-fix"]["target_repo_url"] == "https://github.com/org/workflows.git"
+    assert (
+        targets["bug-fix"]["target_repo_url"] == "https://github.com/org/workflows.git"
+    )
     assert targets["bug-fix"]["target_branch"] == "main"
     assert targets["bug-fix"]["target_path"] == "workflows/bug-fix"
 
@@ -319,16 +321,28 @@ def test_workspace_fallback_discovers_repos(tmp_path):
     # Create a minimal git repo with a remote
     _sp.run(["git", "init", str(repo_path)], capture_output=True)
     _sp.run(
-        ["git", "-C", str(repo_path), "remote", "add", "origin",
-         "https://github.com/org/my-app.git"],
+        [
+            "git",
+            "-C",
+            str(repo_path),
+            "remote",
+            "add",
+            "origin",
+            "https://github.com/org/my-app.git",
+        ],
         capture_output=True,
     )
     # Need at least one commit for rev-parse to work
     _sp.run(
         ["git", "-C", str(repo_path), "commit", "--allow-empty", "-m", "init"],
         capture_output=True,
-        env={**os.environ, "GIT_AUTHOR_NAME": "test", "GIT_AUTHOR_EMAIL": "t@t",
-             "GIT_COMMITTER_NAME": "test", "GIT_COMMITTER_EMAIL": "t@t"},
+        env={
+            **os.environ,
+            "GIT_AUTHOR_NAME": "test",
+            "GIT_AUTHOR_EMAIL": "t@t",
+            "GIT_COMMITTER_NAME": "test",
+            "GIT_COMMITTER_EMAIL": "t@t",
+        },
     )
 
     with patch.dict(os.environ, {"WORKSPACE_PATH": str(tmp_path)}, clear=True):
@@ -349,15 +363,27 @@ def test_workspace_fallback_strips_credentials(tmp_path):
 
     _sp.run(["git", "init", str(repo_path)], capture_output=True)
     _sp.run(
-        ["git", "-C", str(repo_path), "remote", "add", "origin",
-         "https://x-access-token:ghp_SECRET@github.com/org/private-repo.git"],
+        [
+            "git",
+            "-C",
+            str(repo_path),
+            "remote",
+            "add",
+            "origin",
+            "https://x-access-token:ghp_SECRET@github.com/org/private-repo.git",
+        ],
         capture_output=True,
     )
     _sp.run(
         ["git", "-C", str(repo_path), "commit", "--allow-empty", "-m", "init"],
         capture_output=True,
-        env={**os.environ, "GIT_AUTHOR_NAME": "test", "GIT_AUTHOR_EMAIL": "t@t",
-             "GIT_COMMITTER_NAME": "test", "GIT_COMMITTER_EMAIL": "t@t"},
+        env={
+            **os.environ,
+            "GIT_AUTHOR_NAME": "test",
+            "GIT_AUTHOR_EMAIL": "t@t",
+            "GIT_COMMITTER_NAME": "test",
+            "GIT_COMMITTER_EMAIL": "t@t",
+        },
     )
 
     with patch.dict(os.environ, {"WORKSPACE_PATH": str(tmp_path)}, clear=True):
@@ -371,9 +397,11 @@ def test_workspace_fallback_strips_credentials(tmp_path):
 @patch.dict(os.environ, {}, clear=True)
 def test_workspace_fallback_not_used_when_repos_json_set():
     """REPOS_JSON takes precedence over workspace scan."""
-    repos_json = json.dumps([
-        {"url": "https://github.com/org/from-env.git", "branch": "main"},
-    ])
+    repos_json = json.dumps(
+        [
+            {"url": "https://github.com/org/from-env.git", "branch": "main"},
+        ]
+    )
     with patch.dict(os.environ, {"REPOS_JSON": repos_json}, clear=True):
         ctx = _get_session_context()
 
@@ -392,15 +420,27 @@ def test_context_uses_workspace_fallback_when_repos_json_empty(tmp_path):
 
     _sp.run(["git", "init", str(repo_path)], capture_output=True)
     _sp.run(
-        ["git", "-C", str(repo_path), "remote", "add", "origin",
-         "https://github.com/org/fallback-repo.git"],
+        [
+            "git",
+            "-C",
+            str(repo_path),
+            "remote",
+            "add",
+            "origin",
+            "https://github.com/org/fallback-repo.git",
+        ],
         capture_output=True,
     )
     _sp.run(
         ["git", "-C", str(repo_path), "commit", "--allow-empty", "-m", "init"],
         capture_output=True,
-        env={**os.environ, "GIT_AUTHOR_NAME": "test", "GIT_AUTHOR_EMAIL": "t@t",
-             "GIT_COMMITTER_NAME": "test", "GIT_COMMITTER_EMAIL": "t@t"},
+        env={
+            **os.environ,
+            "GIT_AUTHOR_NAME": "test",
+            "GIT_AUTHOR_EMAIL": "t@t",
+            "GIT_COMMITTER_NAME": "test",
+            "GIT_COMMITTER_EMAIL": "t@t",
+        },
     )
 
     with patch.dict(os.environ, {"WORKSPACE_PATH": str(tmp_path)}, clear=True):
@@ -720,9 +760,11 @@ def test_tool_schema_includes_targets_from_env():
     mock_decorator = MagicMock()
     mock_decorator.return_value = lambda fn: fn
 
-    repos_json = json.dumps([
-        {"url": "https://github.com/org/app.git", "branch": "main"},
-    ])
+    repos_json = json.dumps(
+        [
+            {"url": "https://github.com/org/app.git", "branch": "main"},
+        ]
+    )
 
     with patch.dict(
         os.environ,
@@ -792,7 +834,10 @@ if __name__ == "__main__":
         ("Target map: label collision", test_build_target_map_label_collision),
         ("Target map: empty", test_build_target_map_empty),
         ("Target map: label from path", test_build_target_map_workflow_label_from_path),
-        ("Target map: label from repo when no path", test_build_target_map_workflow_label_from_repo_when_no_path),
+        (
+            "Target map: label from repo when no path",
+            test_build_target_map_workflow_label_from_repo_when_no_path,
+        ),
         ("Schema: multiple targets", test_schema_with_multiple_targets),
         ("Schema: single target", test_schema_with_single_target),
         ("Schema: no targets", test_schema_with_no_targets),
@@ -801,8 +846,14 @@ if __name__ == "__main__":
         ("Resolve: empty map", test_resolve_target_empty_map),
         ("Context: captures from env", test_captures_context_from_env),
         ("Context: handles missing env", test_handles_missing_env_vars),
-        ("Fallback: returns empty when no repos", test_workspace_fallback_returns_empty_when_no_repos),
-        ("Fallback: not used when REPOS_JSON set", test_workspace_fallback_not_used_when_repos_json_set),
+        (
+            "Fallback: returns empty when no repos",
+            test_workspace_fallback_returns_empty_when_no_repos,
+        ),
+        (
+            "Fallback: not used when REPOS_JSON set",
+            test_workspace_fallback_not_used_when_repos_json_set,
+        ),
         ("Logging: successful", test_successful_logging),
         ("Logging: rubric source", test_rubric_source_logging),
         ("Logging: no trace_id", test_logging_without_trace_id),
@@ -815,8 +866,14 @@ if __name__ == "__main__":
         ("Tool: creation", test_tool_creation),
         ("Tool: description without rubric", test_tool_description_without_rubric),
         ("Tool: description with rubric", test_tool_description_with_rubric),
-        ("Tool: schema includes targets from env", test_tool_schema_includes_targets_from_env),
-        ("Tool: description lists available targets", test_tool_description_lists_available_targets),
+        (
+            "Tool: schema includes targets from env",
+            test_tool_schema_includes_targets_from_env,
+        ),
+        (
+            "Tool: description lists available targets",
+            test_tool_description_lists_available_targets,
+        ),
     ]
 
     passed = 0

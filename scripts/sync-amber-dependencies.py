@@ -173,14 +173,18 @@ def generate_dependency_markdown(
     websocket_version = go_deps.get("github.com/gorilla/websocket", "unknown")
     jwt_version = go_deps.get("github.com/golang-jwt/jwt/v5", "unknown")
 
-    anthropic_version = python_runner.get("anthropic[vertex]", python_runner.get("anthropic", "unknown"))
+    anthropic_version = python_runner.get(
+        "anthropic[vertex]", python_runner.get("anthropic", "unknown")
+    )
     sdk_version = python_runner.get("claude-agent-sdk", "unknown")
 
     next_version = js_frontend.get("next", "unknown")
     react_version = js_frontend.get("react", "unknown")
     react_query_version = js_frontend.get("@tanstack/react-query", "unknown")
 
-    langfuse_version = python_runner.get("langfuse", js_frontend.get("langfuse", "unknown"))
+    langfuse_version = python_runner.get(
+        "langfuse", js_frontend.get("langfuse", "unknown")
+    )
 
     markdown = f"""**Kubernetes Ecosystem:**
 - `k8s.io/{{api,apimachinery,client-go}}@{k8s_version}` - Watch for breaking changes in 1.31+

@@ -34,4 +34,3 @@ subjects:
 - kind: ServiceAccount
   name: test-user
   namespace: ambient-code
-

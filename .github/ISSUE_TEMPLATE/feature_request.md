@@ -8,7 +8,7 @@ assignees: []
 
 ## 🚀 Feature Description
 
-**Is your feature request related to a problem?** 
+**Is your feature request related to a problem?**
 A clear and concise description of what the problem is. Ex. I'm always frustrated when [...]
 
 **Describe the solution you'd like**

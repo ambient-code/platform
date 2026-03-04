@@ -28,9 +28,9 @@ export function FeedbackButtons({
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
   const [selectedFeedback, setSelectedFeedback] = useState<FeedbackType | null>(null);
   const [localSubmittedFeedback, setLocalSubmittedFeedback] = useState<FeedbackType | null>(null);
-  
+
   const feedbackContext = useFeedbackContextOptional();
-  
+
   // Check if this message already has feedback from context (e.g., from replayed META events)
   const existingFeedback = useMemo(() => {
     if (!messageId || !feedbackContext?.messageFeedback) return null;
@@ -39,10 +39,10 @@ export function FeedbackButtons({
     if (feedback === 'thumbs_down') return 'negative' as FeedbackType;
     return null;
   }, [messageId, feedbackContext?.messageFeedback]);
-  
+
   // Use existing feedback from context OR local submission state
   const submittedFeedback = existingFeedback ?? localSubmittedFeedback;
-  
+
   // Don't render if no context available
   if (!feedbackContext) {
     return null;
@@ -53,7 +53,7 @@ export function FeedbackButtons({
     if (submittedFeedback === type) {
       return;
     }
-    
+
     setSelectedFeedback(type);
     setFeedbackModalOpen(true);
   };

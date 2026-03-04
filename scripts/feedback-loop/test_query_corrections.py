@@ -12,7 +12,6 @@ Validates:
 
 import json
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -150,7 +149,11 @@ def test_groups_by_target():
     scores = [
         _make_score(target_type="workflow", target_path="workflows/wf-1"),
         _make_score(target_type="workflow", target_path="workflows/wf-1"),
-        _make_score(target_type="repo", target_repo_url="https://github.com/org/app", target_path=""),
+        _make_score(
+            target_type="repo",
+            target_repo_url="https://github.com/org/app",
+            target_path="",
+        ),
     ]
     groups = group_corrections(scores)
     assert len(groups) == 2
@@ -434,7 +437,9 @@ def test_sends_correct_api_request(mock_post):
     mock_post.assert_called_once()
     _, call_kwargs = mock_post.call_args
 
-    url = call_kwargs.get("url", mock_post.call_args[0][0] if mock_post.call_args[0] else "")
+    url = call_kwargs.get(
+        "url", mock_post.call_args[0][0] if mock_post.call_args[0] else ""
+    )
     assert "test-project" in url
 
     headers = call_kwargs.get("headers", {})
@@ -484,6 +489,7 @@ def test_repo_target_session(mock_post):
 def test_handles_api_errors(mock_post):
     """API errors are logged and do not crash."""
     import requests as _requests
+
     mock_post.side_effect = _requests.RequestException("Connection refused")
 
     group = {
@@ -563,7 +569,10 @@ def test_session_config_workflow_target():
     assert config["repos"][0]["url"] == "https://github.com/org/workflows"
     assert config["repos"][0]["branch"] == "main"
     assert config["repos"][0]["autoPush"] is True
-    assert config["environment_variables"]["AMBIENT_UI_URL"] == "https://ambient.example.com"
+    assert (
+        config["environment_variables"]["AMBIENT_UI_URL"]
+        == "https://ambient.example.com"
+    )
     assert "prompt" in config
     assert len(config["prompt"]) > 0
 
@@ -642,14 +651,20 @@ if __name__ == "__main__":
         ("Extract: old schema no workflow", test_extract_old_schema_no_workflow),
         ("Extract: empty metadata", test_extract_empty_metadata),
         ("Grouping: by target", test_groups_by_target),
-        ("Grouping: separate workflow vs repo", test_separate_groups_for_workflow_and_repo),
+        (
+            "Grouping: separate workflow vs repo",
+            test_separate_groups_for_workflow_and_repo,
+        ),
         ("Grouping: correction type counts", test_counts_correction_types),
         ("Grouping: repo branches grouped", test_repo_branches_grouped_together),
         ("Grouping: workflow branches separate", test_workflow_branches_stay_separate),
         ("Grouping: missing metadata", test_handles_missing_metadata),
         ("Grouping: sorted descending", test_sorted_by_count_descending),
         ("Grouping: backward compat old scores", test_backward_compat_old_scores),
-        ("Grouping: agent_action and user_correction", test_extracts_agent_action_and_user_correction),
+        (
+            "Grouping: agent_action and user_correction",
+            test_extracts_agent_action_and_user_correction,
+        ),
         ("Prompt: workflow target", test_prompt_workflow_target),
         ("Prompt: repo target", test_prompt_repo_target),
         ("Prompt: includes all corrections", test_prompt_includes_all_corrections),
@@ -662,7 +677,10 @@ if __name__ == "__main__":
         ("Config: workflow target", test_session_config_workflow_target),
         ("Config: repo target", test_session_config_repo_target),
         ("Config: no repos for empty URL", test_session_config_no_repos_for_empty_url),
-        ("Config: no UI URL without api_url", test_session_config_no_ui_url_without_api_url),
+        (
+            "Config: no UI URL without api_url",
+            test_session_config_no_ui_url_without_api_url,
+        ),
     ]
 
     passed = 0

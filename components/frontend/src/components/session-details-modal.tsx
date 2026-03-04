@@ -64,7 +64,7 @@ export function SessionDetailsModal({
         <DialogHeader className="space-y-3">
           <DialogTitle>Session Details</DialogTitle>
         </DialogHeader>
-        
+
         <div className="space-y-4">
           <div className="space-y-3">
             <div className="flex items-start gap-3">
@@ -73,12 +73,12 @@ export function SessionDetailsModal({
                 {session.status?.phase || "Pending"}
               </Badge>
             </div>
-            
+
             <div className="flex items-start gap-3">
               <span className="font-semibold text-foreground/80 min-w-[100px]">Model:</span>
               <span className="text-foreground">{session.spec.llmSettings.model}</span>
             </div>
-            
+
             {/* Export buttons */}
             <div className="pt-2 space-y-2">
               {loadingExport ? (
@@ -88,9 +88,9 @@ export function SessionDetailsModal({
                 </Button>
               ) : (
                 <>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={handleExportAgui}
                     disabled={exportingAgui || !exportData}
                     className="w-full"
@@ -102,11 +102,11 @@ export function SessionDetailsModal({
                     )}
                     {exportingAgui ? 'Exporting...' : 'Export Chat'}
                   </Button>
-                  
+
                   {exportData?.hasLegacy && (
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onClick={handleExportLegacy}
                       disabled={exportingLegacy}
                       className="w-full"
@@ -123,7 +123,7 @@ export function SessionDetailsModal({
               )}
             </div>
           </div>
-          
+
           {session.spec.initialPrompt && (
             <div className="pt-2">
               <div className="mb-2">
@@ -144,7 +144,7 @@ export function SessionDetailsModal({
                     <AccordionTrigger className="py-3 px-3 hover:no-underline hover:bg-muted/50 rounded-t">
                       <div className="flex items-center justify-between flex-1 mr-2">
                         <span className="font-medium text-sm">{condition.type}</span>
-                        <Badge 
+                        <Badge
                           variant={condition.status === "True" ? "default" : condition.status === "False" ? "destructive" : "secondary"}
                           className="ml-2"
                         >

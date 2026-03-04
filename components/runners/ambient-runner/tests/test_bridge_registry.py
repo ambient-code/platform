@@ -107,13 +107,14 @@ class TestLoadBridgeFunction:
 
     def test_unknown_runner_type_raises_value_error(self):
         """Unknown RUNNER_TYPE raises ValueError with helpful message listing available types."""
-        from main import BRIDGE_REGISTRY
 
         # Patch the module-level RUNNER_TYPE to an unknown value
         with patch("main.RUNNER_TYPE", "nonexistent-runner"):
             from main import _load_bridge
 
-            with pytest.raises(ValueError, match="Unknown RUNNER_TYPE='nonexistent-runner'"):
+            with pytest.raises(
+                ValueError, match="Unknown RUNNER_TYPE='nonexistent-runner'"
+            ):
                 _load_bridge()
 
     def test_unknown_runner_type_lists_available(self):

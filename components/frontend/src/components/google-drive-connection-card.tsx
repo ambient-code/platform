@@ -148,7 +148,7 @@ export function GoogleDriveConnectionCard({ showManageButton = true, status, onR
             </span>
           </div>
           <p className="text-muted-foreground">
-            {error 
+            {error
               ? 'Failed to check connection status. Please try again.'
               : 'Connect to Google Drive to access files in all your sessions via MCP'
             }
@@ -160,17 +160,17 @@ export function GoogleDriveConnectionCard({ showManageButton = true, status, onR
           {status?.connected ? (
             <>
               {showManageButton && (
-                <Button 
-                  variant="outline" 
-                  onClick={handleManage} 
+                <Button
+                  variant="outline"
+                  onClick={handleManage}
                   disabled={isLoading || disconnectMutation.isPending}
                 >
                   Manage Permissions
                 </Button>
               )}
-              <Button 
-                variant="destructive" 
-                onClick={handleDisconnect} 
+              <Button
+                variant="destructive"
+                onClick={handleDisconnect}
                 disabled={isLoading || disconnectMutation.isPending}
               >
                 {disconnectMutation.isPending ? (
@@ -184,8 +184,8 @@ export function GoogleDriveConnectionCard({ showManageButton = true, status, onR
               </Button>
             </>
           ) : (
-            <Button 
-              onClick={handleConnect} 
+            <Button
+              onClick={handleConnect}
               disabled={isLoading || connecting}
               className="bg-blue-600 hover:bg-blue-700 text-white"
             >
@@ -204,4 +204,3 @@ export function GoogleDriveConnectionCard({ showManageButton = true, status, onR
     </Card>
   )
 }
-

@@ -178,17 +178,55 @@ class TestGeminiCLIAdapter:
         from ag_ui.core import RunAgentInput
 
         lines = [
-            json.dumps({"type": "init", "timestamp": "T", "session_id": "s1", "model": "gemini-2.5-flash"}),
-            json.dumps({"type": "message", "timestamp": "T", "role": "user", "content": "hi"}),
-            json.dumps({"type": "message", "timestamp": "T", "role": "assistant", "content": "Hello!", "delta": True}),
-            json.dumps({"type": "result", "timestamp": "T", "status": "success", "stats": {"total_tokens": 10, "input_tokens": 5, "output_tokens": 5, "duration_ms": 100, "tool_calls": 0}}),
+            json.dumps(
+                {
+                    "type": "init",
+                    "timestamp": "T",
+                    "session_id": "s1",
+                    "model": "gemini-2.5-flash",
+                }
+            ),
+            json.dumps(
+                {"type": "message", "timestamp": "T", "role": "user", "content": "hi"}
+            ),
+            json.dumps(
+                {
+                    "type": "message",
+                    "timestamp": "T",
+                    "role": "assistant",
+                    "content": "Hello!",
+                    "delta": True,
+                }
+            ),
+            json.dumps(
+                {
+                    "type": "result",
+                    "timestamp": "T",
+                    "status": "success",
+                    "stats": {
+                        "total_tokens": 10,
+                        "input_tokens": 5,
+                        "output_tokens": 5,
+                        "duration_ms": 100,
+                        "tool_calls": 0,
+                    },
+                }
+            ),
         ]
 
         async def line_stream():
             for line in lines:
                 yield line
 
-        input_data = RunAgentInput(thread_id="t1", run_id="r1", state={}, messages=[], tools=[], context=[], forwardedProps={})
+        input_data = RunAgentInput(
+            thread_id="t1",
+            run_id="r1",
+            state={},
+            messages=[],
+            tools=[],
+            context=[],
+            forwardedProps={},
+        )
         adapter = GeminiCLIAdapter()
         events = []
         async for event in adapter.run(input_data, line_stream=line_stream()):
@@ -208,10 +246,36 @@ class TestGeminiCLIAdapter:
         from ag_ui.core import RunAgentInput
 
         lines = [
-            json.dumps({"type": "init", "timestamp": "T", "session_id": "s1", "model": "m"}),
-            json.dumps({"type": "tool_use", "timestamp": "T", "tool_name": "read_file", "tool_id": "t1", "parameters": {"path": "a.py"}}),
-            json.dumps({"type": "tool_result", "timestamp": "T", "tool_id": "t1", "status": "success", "output": "data"}),
-            json.dumps({"type": "message", "timestamp": "T", "role": "assistant", "content": "Done", "delta": True}),
+            json.dumps(
+                {"type": "init", "timestamp": "T", "session_id": "s1", "model": "m"}
+            ),
+            json.dumps(
+                {
+                    "type": "tool_use",
+                    "timestamp": "T",
+                    "tool_name": "read_file",
+                    "tool_id": "t1",
+                    "parameters": {"path": "a.py"},
+                }
+            ),
+            json.dumps(
+                {
+                    "type": "tool_result",
+                    "timestamp": "T",
+                    "tool_id": "t1",
+                    "status": "success",
+                    "output": "data",
+                }
+            ),
+            json.dumps(
+                {
+                    "type": "message",
+                    "timestamp": "T",
+                    "role": "assistant",
+                    "content": "Done",
+                    "delta": True,
+                }
+            ),
             json.dumps({"type": "result", "timestamp": "T", "status": "success"}),
         ]
 
@@ -219,7 +283,15 @@ class TestGeminiCLIAdapter:
             for line in lines:
                 yield line
 
-        input_data = RunAgentInput(thread_id="t1", run_id="r1", state={}, messages=[], tools=[], context=[], forwardedProps={})
+        input_data = RunAgentInput(
+            thread_id="t1",
+            run_id="r1",
+            state={},
+            messages=[],
+            tools=[],
+            context=[],
+            forwardedProps={},
+        )
         adapter = GeminiCLIAdapter()
         events = []
         async for event in adapter.run(input_data, line_stream=line_stream()):

@@ -53,11 +53,11 @@ export function FeedbackModal({
     try {
       // Build context string from what the user was working on
       const contextParts: string[] = [];
-      
+
       if (feedbackContext.initialPrompt) {
         contextParts.push(`Initial prompt: ${feedbackContext.initialPrompt}`);
       }
-      
+
       if (messageContent) {
         contextParts.push(messageContent);
       }
@@ -69,7 +69,7 @@ export function FeedbackModal({
         projectName: feedbackContext.projectName,
         sessionName: feedbackContext.sessionName,
       };
-      
+
       // Include messageId so frontend can match feedback to specific messages
       if (messageId) {
         payload.messageId = messageId;
@@ -86,7 +86,7 @@ export function FeedbackModal({
       if (contextParts.length > 0) {
         payload.context = contextParts.join("; ");
       }
-      
+
       const metaEvent = {
         type: "META",
         metaType: feedbackType === "positive" ? "thumbs_up" : "thumbs_down",
@@ -94,10 +94,10 @@ export function FeedbackModal({
         threadId: feedbackContext.sessionName,
         ts: Date.now(),
       };
-      
+
       // Send to backend (which forwards to runner and broadcasts on event stream)
       const feedbackUrl = `/api/projects/${encodeURIComponent(feedbackContext.projectName)}/agentic-sessions/${encodeURIComponent(feedbackContext.sessionName)}/agui/feedback`;
-      
+
       const response = await fetch(feedbackUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

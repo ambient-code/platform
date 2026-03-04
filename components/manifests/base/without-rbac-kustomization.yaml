@@ -23,4 +23,3 @@ images:
   newTag: latest
 - name: quay.io/ambient_code/vteam_claude_runner
   newTag: latest
-

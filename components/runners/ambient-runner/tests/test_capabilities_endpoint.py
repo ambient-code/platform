@@ -44,11 +44,13 @@ def _make_mock_bridge(
 @pytest.fixture
 def make_client():
     """Factory to create a test client with a mock bridge."""
+
     def _factory(**kwargs):
         app = FastAPI()
         app.state.bridge = _make_mock_bridge(**kwargs)
         app.include_router(router)
         return TestClient(app)
+
     return _factory
 
 
@@ -56,7 +58,9 @@ class TestCapabilitiesEndpoint:
     """Test GET /capabilities response shape and values."""
 
     def test_returns_expected_fields(self, make_client):
-        client = make_client(configured_model="claude-sonnet-4-5", session_id="test-session")
+        client = make_client(
+            configured_model="claude-sonnet-4-5", session_id="test-session"
+        )
         resp = client.get("/capabilities")
         assert resp.status_code == 200
         data = resp.json()

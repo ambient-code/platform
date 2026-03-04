@@ -226,9 +226,13 @@ class GeminiCLIBridge(PlatformBridge):
             return empty
 
         try:
-            env = {k: v for k, v in os.environ.items() if k not in _GEMINI_ENV_BLOCKLIST}
+            env = {
+                k: v for k, v in os.environ.items() if k not in _GEMINI_ENV_BLOCKLIST
+            }
             proc = await asyncio.create_subprocess_exec(
-                "gemini", "mcp", "list",
+                "gemini",
+                "mcp",
+                "list",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=self._cwd_path,
@@ -266,14 +270,20 @@ class GeminiCLIBridge(PlatformBridge):
                         transport = "http"
                     elif config.get("url"):
                         transport = "sse"
-                    status = "connected" if "enabled" in line.lower() or "✓" in line else "configured"
-                    servers_list.append({
-                        "name": name,
-                        "displayName": name,
-                        "status": status,
-                        "transport": transport,
-                        "tools": [],
-                    })
+                    status = (
+                        "connected"
+                        if "enabled" in line.lower() or "✓" in line
+                        else "configured"
+                    )
+                    servers_list.append(
+                        {
+                            "name": name,
+                            "displayName": name,
+                            "status": status,
+                            "transport": transport,
+                            "tools": [],
+                        }
+                    )
             elif settings_servers:
                 # Fallback: CLI didn't list them but settings.json has them
                 for name, config in settings_servers.items():
@@ -282,13 +292,15 @@ class GeminiCLIBridge(PlatformBridge):
                         transport = "http"
                     elif config.get("url"):
                         transport = "sse"
-                    servers_list.append({
-                        "name": name,
-                        "displayName": name,
-                        "status": "configured",
-                        "transport": transport,
-                        "tools": [],
-                    })
+                    servers_list.append(
+                        {
+                            "name": name,
+                            "displayName": name,
+                            "status": "configured",
+                            "transport": transport,
+                            "tools": [],
+                        }
+                    )
 
             result = {"servers": servers_list, "totalCount": len(servers_list)}
             self._mcp_status_cache = result

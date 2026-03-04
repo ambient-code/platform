@@ -329,7 +329,7 @@ func TestGetRunnerTypes_ReturnsFullFields(t *testing.T) {
 	if len(claude.Auth.RequiredSecretKeys) != 1 || claude.Auth.RequiredSecretKeys[0] != "ANTHROPIC_API_KEY" {
 		t.Errorf("Auth.RequiredSecretKeys: expected [ANTHROPIC_API_KEY], got %v", claude.Auth.RequiredSecretKeys)
 	}
-if claude.DefaultModel != "claude-sonnet-4-5" {
+	if claude.DefaultModel != "claude-sonnet-4-5" {
 		t.Errorf("DefaultModel: expected 'claude-sonnet-4-5', got %q", claude.DefaultModel)
 	}
 	if len(claude.Models) != 2 {

@@ -333,4 +333,3 @@ export function SharingSection({ projectName }: SharingSectionProps) {
     </>
   );
 }
-

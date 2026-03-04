@@ -28,4 +28,3 @@ spec:
         resources:
           limits:
             memory: "1Gi"
-

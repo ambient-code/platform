@@ -23,4 +23,3 @@ export function useCurrentUser() {
     staleTime: 5 * 60 * 1000, // 5 minutes - user info doesn't change often
   });
 }
-

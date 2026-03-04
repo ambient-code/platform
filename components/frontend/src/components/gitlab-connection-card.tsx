@@ -23,7 +23,7 @@ export function GitLabConnectionCard({ status, onRefresh }: Props) {
   const connectMutation = useConnectGitLab()
   const disconnectMutation = useDisconnectGitLab()
   const isLoading = !status
-  
+
   const [showForm, setShowForm] = useState(false)
   const [instanceUrl, setInstanceUrl] = useState('https://gitlab.com')
   const [token, setToken] = useState('')

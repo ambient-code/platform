@@ -10,5 +10,3 @@ subjects:
 - kind: ServiceAccount
   name: agentic-operator
   namespace: ambient-code
-
-

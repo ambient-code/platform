@@ -1,6 +1,6 @@
 """Unit tests for LangGraphBridge."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -66,8 +66,13 @@ class TestLangGraphBridgeRun:
         ctx = RunnerContext(session_id="s1", workspace_path="/w")
         bridge.set_context(ctx)
         input_data = RunAgentInput(
-            thread_id="t1", run_id="r1", messages=[], state={},
-            tools=[], context=[], forwarded_props={},
+            thread_id="t1",
+            run_id="r1",
+            messages=[],
+            state={},
+            tools=[],
+            context=[],
+            forwarded_props={},
         )
         with pytest.raises(RuntimeError):
             async for _ in bridge.run(input_data):

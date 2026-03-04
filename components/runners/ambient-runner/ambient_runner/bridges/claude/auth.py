@@ -43,17 +43,27 @@ async def setup_vertex_credentials(context: RunnerContext) -> dict:
     region = context.get_env("CLOUD_ML_REGION", "").strip()
 
     if not service_account_path:
-        raise RuntimeError("GOOGLE_APPLICATION_CREDENTIALS must be set when USE_VERTEX is enabled")
+        raise RuntimeError(
+            "GOOGLE_APPLICATION_CREDENTIALS must be set when USE_VERTEX is enabled"
+        )
     if not project_id:
-        raise RuntimeError("ANTHROPIC_VERTEX_PROJECT_ID must be set when USE_VERTEX is enabled")
+        raise RuntimeError(
+            "ANTHROPIC_VERTEX_PROJECT_ID must be set when USE_VERTEX is enabled"
+        )
     if not region:
         raise RuntimeError("CLOUD_ML_REGION must be set when USE_VERTEX is enabled")
 
     if not Path(service_account_path).exists():
-        raise RuntimeError(f"Service account key file not found at {service_account_path}")
+        raise RuntimeError(
+            f"Service account key file not found at {service_account_path}"
+        )
 
     logger.info(f"Vertex AI configured: project={project_id}, region={region}")
-    return {"credentials_path": service_account_path, "project_id": project_id, "region": region}
+    return {
+        "credentials_path": service_account_path,
+        "project_id": project_id,
+        "region": region,
+    }
 
 
 async def setup_sdk_authentication(context: RunnerContext) -> tuple[str, bool, str]:
@@ -77,27 +87,37 @@ async def setup_sdk_authentication(context: RunnerContext) -> tuple[str, bool, s
     if api_key and not use_vertex:
         os.environ["ANTHROPIC_API_KEY"] = api_key
         configured_model = model or DEFAULT_MODEL
-        logger.info(f"Using Anthropic API key authentication (model={configured_model})")
+        logger.info(
+            f"Using Anthropic API key authentication (model={configured_model})"
+        )
 
     elif use_vertex:
         vertex_credentials = await setup_vertex_credentials(context)
         os.environ["ANTHROPIC_API_KEY"] = "vertex-auth-mode"
         os.environ["USE_VERTEX"] = "1"
         os.environ["CLAUDE_CODE_USE_VERTEX"] = "1"  # kept for Claude Code CLI compat
-        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = vertex_credentials.get("credentials_path", "")
-        os.environ["ANTHROPIC_VERTEX_PROJECT_ID"] = vertex_credentials.get("project_id", "")
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = vertex_credentials.get(
+            "credentials_path", ""
+        )
+        os.environ["ANTHROPIC_VERTEX_PROJECT_ID"] = vertex_credentials.get(
+            "project_id", ""
+        )
         os.environ["CLOUD_ML_REGION"] = vertex_credentials.get("region", "")
         # Prefer operator-resolved Vertex ID from manifest; fall back to static map
         vertex_id_from_manifest = (context.get_env("LLM_MODEL_VERTEX_ID") or "").strip()
         if vertex_id_from_manifest:
             configured_model = vertex_id_from_manifest
-            logger.info(f"Using Vertex AI authentication with manifest vertex ID (model={configured_model})")
+            logger.info(
+                f"Using Vertex AI authentication with manifest vertex ID (model={configured_model})"
+            )
         elif model:
             configured_model = map_to_vertex_model(model)
             logger.info(f"Using Vertex AI authentication (model={configured_model})")
         else:
             configured_model = DEFAULT_VERTEX_MODEL
-            logger.info(f"Using Vertex AI authentication with default (model={configured_model})")
+            logger.info(
+                f"Using Vertex AI authentication with default (model={configured_model})"
+            )
 
     else:
         configured_model = model or DEFAULT_MODEL

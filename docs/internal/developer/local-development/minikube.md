@@ -1,7 +1,7 @@
 # Minikube Local Development
 
 > ⚠️ **Note:** Minikube is an older approach. We recommend using [Kind](kind.md) for faster iteration and CI/CD compatibility.
-> 
+>
 > Minikube is still supported but considered deprecated for new development.
 
 ## When to Use Minikube

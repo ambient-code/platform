@@ -71,12 +71,12 @@ check_oc_available() {
     warn "OpenShift CLI (oc) not available. CRC might not be running or configured."
     return 1
   fi
-  
+
   if ! oc whoami >/dev/null 2>&1; then
     warn "Not logged into OpenShift. CRC might not be running or you're not authenticated."
     return 1
   fi
-  
+
   return 0
 }
 
@@ -88,33 +88,33 @@ cleanup_deployments() {
     log "Skipping deployment cleanup - OpenShift not accessible"
     return 0
   fi
-  
+
   if ! oc get project "$PROJECT_NAME" >/dev/null 2>&1; then
     log "Project '$PROJECT_NAME' not found, skipping deployment cleanup"
     return 0
   fi
-  
+
   log "Cleaning up vTeam deployments from project '$PROJECT_NAME'..."
-  
+
   # Switch to the project
   oc project "$PROJECT_NAME" >/dev/null 2>&1 || true
-  
+
   # Delete vTeam resources
   log "Removing routes..."
   oc delete route vteam-backend vteam-frontend --ignore-not-found=true
-  
+
   log "Removing services..."
   oc delete service vteam-backend vteam-frontend --ignore-not-found=true
-  
+
   log "Removing deployments..."
   oc delete deployment vteam-backend vteam-frontend --ignore-not-found=true
-  
+
   log "Removing imagestreams..."
   oc delete imagestream vteam-backend vteam-frontend --ignore-not-found=true
-  
+
   # Clean up service accounts (but keep them for faster restart)
   log "Service accounts preserved for faster restart"
-  
+
   success "Deployments cleaned up from project '$PROJECT_NAME'"
 }
 
@@ -123,20 +123,20 @@ delete_project() {
     log "Skipping project deletion - OpenShift not accessible"
     return 0
   fi
-  
+
   if ! oc get project "$PROJECT_NAME" >/dev/null 2>&1; then
     log "Project '$PROJECT_NAME' not found, nothing to delete"
     return 0
   fi
-  
+
   log "Deleting OpenShift project '$PROJECT_NAME'..."
   oc delete project "$PROJECT_NAME"
-  
+
   # Wait for project to be fully deleted
   local timeout=60
   local delay=2
   local start=$(date +%s)
-  
+
   while oc get project "$PROJECT_NAME" >/dev/null 2>&1; do
     local now=$(date +%s)
     if (( now - start > timeout )); then
@@ -146,7 +146,7 @@ delete_project() {
     log "Waiting for project deletion..."
     sleep "$delay"
   done
-  
+
   success "Project '$PROJECT_NAME' deleted"
 }
 
@@ -155,10 +155,10 @@ stop_crc_cluster() {
     warn "CRC not available, skipping cluster stop"
     return 0
   fi
-  
+
   local crc_status
   crc_status=$(crc status -o json 2>/dev/null | jq -r '.crcStatus // "Stopped"' 2>/dev/null || echo "Unknown")
-  
+
   case "$crc_status" in
     "Running")
       log "Stopping CRC cluster..."

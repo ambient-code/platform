@@ -28,19 +28,21 @@ _MAX_STDERR_LINES = 100
 
 # Env vars that should NOT be passed to the Gemini CLI subprocess.
 # These are runner-internal secrets that the CLI doesn't need.
-_GEMINI_ENV_BLOCKLIST = frozenset({
-    "ANTHROPIC_API_KEY",
-    "BOT_TOKEN",
-    "LANGFUSE_SECRET_KEY",
-    "LANGFUSE_PUBLIC_KEY",
-    "LANGFUSE_HOST",
-    "AWS_ACCESS_KEY_ID",
-    "AWS_SECRET_ACCESS_KEY",
-    "S3_ENDPOINT",
-    "S3_BUCKET",
-    "GOOGLE_OAUTH_CLIENT_ID",
-    "GOOGLE_OAUTH_CLIENT_SECRET",
-})
+_GEMINI_ENV_BLOCKLIST = frozenset(
+    {
+        "ANTHROPIC_API_KEY",
+        "BOT_TOKEN",
+        "LANGFUSE_SECRET_KEY",
+        "LANGFUSE_PUBLIC_KEY",
+        "LANGFUSE_HOST",
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "S3_ENDPOINT",
+        "S3_BUCKET",
+        "GOOGLE_OAUTH_CLIENT_ID",
+        "GOOGLE_OAUTH_CLIENT_SECRET",
+    }
+)
 
 
 class GeminiSessionWorker:
@@ -143,7 +145,6 @@ class GeminiSessionWorker:
         # Start concurrent stderr streaming
         self._stderr_task = asyncio.create_task(self._stream_stderr())
 
-        timed_out = False
         try:
             assert self._process.stdout is not None  # noqa: S101
 
@@ -297,7 +298,10 @@ class GeminiSessionManager:
 
         if thread_id not in self._workers:
             self._workers[thread_id] = GeminiSessionWorker(
-                model=model, api_key=api_key, use_vertex=use_vertex, cwd=cwd,
+                model=model,
+                api_key=api_key,
+                use_vertex=use_vertex,
+                cwd=cwd,
                 include_directories=include_directories,
             )
             logger.debug("Created GeminiSessionWorker for thread=%s", thread_id)

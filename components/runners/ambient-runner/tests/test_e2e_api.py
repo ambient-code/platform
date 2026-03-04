@@ -39,6 +39,7 @@ def _msg(content: str, role: str = "user") -> dict[str, Any]:
     """Build a properly-formed AG-UI message dict with all required fields."""
     return {"id": str(uuid.uuid4()), "role": role, "content": content}
 
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -140,36 +141,48 @@ class TestFeedbackEndpoint:
     """POST /feedback — Langfuse feedback scoring."""
 
     def test_accepts_thumbs_up(self, client):
-        resp = client.post("/feedback", json={
-            "type": "META",
-            "metaType": "thumbs_up",
-            "payload": {"userId": "test-user"},
-        })
+        resp = client.post(
+            "/feedback",
+            json={
+                "type": "META",
+                "metaType": "thumbs_up",
+                "payload": {"userId": "test-user"},
+            },
+        )
         assert resp.status_code == 200
         assert resp.json()["metaType"] == "thumbs_up"
 
     def test_accepts_thumbs_down(self, client):
-        resp = client.post("/feedback", json={
-            "type": "META",
-            "metaType": "thumbs_down",
-            "payload": {"userId": "test-user", "comment": "Not helpful"},
-        })
+        resp = client.post(
+            "/feedback",
+            json={
+                "type": "META",
+                "metaType": "thumbs_down",
+                "payload": {"userId": "test-user", "comment": "Not helpful"},
+            },
+        )
         assert resp.status_code == 200
 
     def test_rejects_invalid_type(self, client):
-        resp = client.post("/feedback", json={
-            "type": "INVALID",
-            "metaType": "thumbs_up",
-            "payload": {},
-        })
+        resp = client.post(
+            "/feedback",
+            json={
+                "type": "INVALID",
+                "metaType": "thumbs_up",
+                "payload": {},
+            },
+        )
         assert resp.status_code == 400
 
     def test_rejects_invalid_meta_type(self, client):
-        resp = client.post("/feedback", json={
-            "type": "META",
-            "metaType": "invalid",
-            "payload": {},
-        })
+        resp = client.post(
+            "/feedback",
+            json={
+                "type": "META",
+                "metaType": "invalid",
+                "payload": {},
+            },
+        )
         assert resp.status_code == 400
 
 
@@ -194,11 +207,14 @@ class TestWorkflowEndpoint:
     """POST /workflow — workflow switching."""
 
     def test_empty_workflow_returns_200(self, client):
-        resp = client.post("/workflow", json={
-            "gitUrl": "",
-            "branch": "main",
-            "path": "",
-        })
+        resp = client.post(
+            "/workflow",
+            json={
+                "gitUrl": "",
+                "branch": "main",
+                "path": "",
+            },
+        )
         assert resp.status_code == 200
 
     def test_same_workflow_is_idempotent(self, client):
@@ -224,11 +240,14 @@ class TestRunEndpointStructural:
 
     def test_run_endpoint_accepts_post(self, client):
         """The run endpoint exists and accepts POST requests."""
-        resp = client.post("/", json={
-            "threadId": "t-1",
-            "runId": "r-1",
-            "messages": [_msg("Hello")],
-        })
+        resp = client.post(
+            "/",
+            json={
+                "threadId": "t-1",
+                "runId": "r-1",
+                "messages": [_msg("Hello")],
+            },
+        )
         # 200 with SSE stream (if API key set) or 500 (if auth fails in generator setup)
         assert resp.status_code in (200, 500)
 
@@ -263,8 +282,7 @@ def _assert_run_ok(resp, *, label: str = "run"):
     if resp.status_code != 200:
         body = resp.text[:1000] if resp.text else "(empty)"
         pytest.fail(
-            f"[{label}] Expected 200, got {resp.status_code}\n"
-            f"Response body:\n{body}"
+            f"[{label}] Expected 200, got {resp.status_code}\nResponse body:\n{body}"
         )
 
 
@@ -278,13 +296,13 @@ def _dump_events(events: list[dict], *, label: str = "run") -> None:
             delta = ev.get("delta", "")
             extra = f' delta="{delta[:60]}{"…" if len(delta) > 60 else ""}"'
         elif etype == "TEXT_MESSAGE_START":
-            extra = f' role={ev.get("role", "?")} msg_id={ev.get("messageId", "?")[:8]}'
+            extra = f" role={ev.get('role', '?')} msg_id={ev.get('messageId', '?')[:8]}"
         elif etype == "TOOL_CALL_START":
-            extra = f' tool={ev.get("toolCallName", "?")}'
+            extra = f" tool={ev.get('toolCallName', '?')}"
         elif etype == "RUN_ERROR":
             extra = f' message="{ev.get("message", "")[:80]}"'
         elif etype == "CUSTOM":
-            extra = f' name={ev.get("name", "?")}'
+            extra = f" name={ev.get('name', '?')}"
         print(f"    {i:3d}. {etype}{extra}")
     print()
 
@@ -311,11 +329,14 @@ class TestPlatformLifecycle:
         bridge = app.state.bridge
 
         # Set a workflow (different from default empty)
-        resp = client.post("/workflow", json={
-            "gitUrl": "https://github.com/example/test-workflow.git",
-            "branch": "main",
-            "path": "",
-        })
+        resp = client.post(
+            "/workflow",
+            json={
+                "gitUrl": "https://github.com/example/test-workflow.git",
+                "branch": "main",
+                "path": "",
+            },
+        )
         assert resp.status_code == 200
 
         # Bridge should be marked dirty (not ready)
@@ -345,26 +366,29 @@ class TestPlatformLifecycle:
 
     def test_feedback_full_payload(self, client):
         """Feedback with all optional fields."""
-        resp = client.post("/feedback", json={
-            "type": "META",
-            "metaType": "thumbs_up",
-            "payload": {
-                "userId": "test-user",
-                "projectName": "test-project",
-                "sessionName": "e2e-test",
-                "messageId": "msg-123",
-                "traceId": "trace-456",
-                "comment": "Great response!",
-                "reason": "accurate",
-                "workflow": "general",
-                "context": "The agent said hello",
-                "includeTranscript": True,
-                "transcript": [
-                    {"role": "user", "content": "Hi"},
-                    {"role": "assistant", "content": "Hello!"},
-                ],
+        resp = client.post(
+            "/feedback",
+            json={
+                "type": "META",
+                "metaType": "thumbs_up",
+                "payload": {
+                    "userId": "test-user",
+                    "projectName": "test-project",
+                    "sessionName": "e2e-test",
+                    "messageId": "msg-123",
+                    "traceId": "trace-456",
+                    "comment": "Great response!",
+                    "reason": "accurate",
+                    "workflow": "general",
+                    "context": "The agent said hello",
+                    "includeTranscript": True,
+                    "transcript": [
+                        {"role": "user", "content": "Hi"},
+                        {"role": "assistant", "content": "Hello!"},
+                    ],
+                },
             },
-        })
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert data["metaType"] == "thumbs_up"
@@ -385,11 +409,14 @@ class TestPlatformLifecycle:
         assert resp.status_code == 422
 
         # Empty messages list is valid (endpoint accepts it)
-        resp = client.post("/", json={
-            "threadId": "t-1",
-            "runId": "r-1",
-            "messages": [],
-        })
+        resp = client.post(
+            "/",
+            json={
+                "threadId": "t-1",
+                "runId": "r-1",
+                "messages": [],
+            },
+        )
         # Will fail during bridge.run() but endpoint accepts the shape
         assert resp.status_code in (200, 500)
 
@@ -404,11 +431,14 @@ class TestPlatformLifecycle:
     def test_workflow_different_params_triggers_update(self, client):
         """Changing workflow params returns 'updated' not 'already active'."""
         client.post("/workflow", json={"gitUrl": "", "branch": "main", "path": ""})
-        resp = client.post("/workflow", json={
-            "gitUrl": "https://github.com/example/new-workflow.git",
-            "branch": "main",
-            "path": "",
-        })
+        resp = client.post(
+            "/workflow",
+            json={
+                "gitUrl": "https://github.com/example/new-workflow.git",
+                "branch": "main",
+                "path": "",
+            },
+        )
         assert resp.status_code == 200
         assert "updated" in resp.json()["message"].lower()
 
@@ -426,11 +456,15 @@ class TestLiveAgentRun:
 
     def test_simple_prompt_returns_valid_event_stream(self, client):
         """Send a trivial prompt and verify we get a complete AG-UI event stream."""
-        resp = client.post("/", json={
-            "threadId": f"e2e-{uuid.uuid4().hex[:8]}",
-            "runId": str(uuid.uuid4()),
-            "messages": [_msg("Reply with exactly: PONG")],
-        }, headers={"accept": "text/event-stream"})
+        resp = client.post(
+            "/",
+            json={
+                "threadId": f"e2e-{uuid.uuid4().hex[:8]}",
+                "runId": str(uuid.uuid4()),
+                "messages": [_msg("Reply with exactly: PONG")],
+            },
+            headers={"accept": "text/event-stream"},
+        )
 
         _assert_run_ok(resp, label="simple_prompt")
         events = _parse_sse_events(resp.text)
@@ -452,11 +486,14 @@ class TestLiveAgentRun:
 
     def test_response_contains_expected_content(self, client):
         """Verify the agent's text response contains something sensible."""
-        resp = client.post("/", json={
-            "threadId": f"e2e-{uuid.uuid4().hex[:8]}",
-            "runId": str(uuid.uuid4()),
-            "messages": [_msg("What is 2 + 2? Reply with just the number.")],
-        })
+        resp = client.post(
+            "/",
+            json={
+                "threadId": f"e2e-{uuid.uuid4().hex[:8]}",
+                "runId": str(uuid.uuid4()),
+                "messages": [_msg("What is 2 + 2? Reply with just the number.")],
+            },
+        )
 
         _assert_run_ok(resp, label="math_prompt")
         events = _parse_sse_events(resp.text)
@@ -477,12 +514,15 @@ class TestLiveAgentRun:
 
     def test_shared_state_in_forwarded_props(self, client):
         """Verify forwarded props are passed through to the adapter."""
-        resp = client.post("/", json={
-            "threadId": f"e2e-{uuid.uuid4().hex[:8]}",
-            "runId": str(uuid.uuid4()),
-            "messages": [_msg("Reply with exactly: OK")],
-            "forwardedProps": {"customSetting": "test-value"},
-        })
+        resp = client.post(
+            "/",
+            json={
+                "threadId": f"e2e-{uuid.uuid4().hex[:8]}",
+                "runId": str(uuid.uuid4()),
+                "messages": [_msg("Reply with exactly: OK")],
+                "forwardedProps": {"customSetting": "test-value"},
+            },
+        )
 
         _assert_run_ok(resp, label="forwarded_props")
         events = _parse_sse_events(resp.text)
@@ -492,16 +532,21 @@ class TestLiveAgentRun:
 
     def test_tools_can_be_passed(self, client):
         """Verify frontend tools can be registered via the run payload."""
-        resp = client.post("/", json={
-            "threadId": f"e2e-{uuid.uuid4().hex[:8]}",
-            "runId": str(uuid.uuid4()),
-            "messages": [_msg("Reply with exactly: TOOLS_OK")],
-            "tools": [{
-                "name": "test_tool",
-                "description": "A test tool",
-                "parameters": {"type": "object", "properties": {}},
-            }],
-        })
+        resp = client.post(
+            "/",
+            json={
+                "threadId": f"e2e-{uuid.uuid4().hex[:8]}",
+                "runId": str(uuid.uuid4()),
+                "messages": [_msg("Reply with exactly: TOOLS_OK")],
+                "tools": [
+                    {
+                        "name": "test_tool",
+                        "description": "A test tool",
+                        "parameters": {"type": "object", "properties": {}},
+                    }
+                ],
+            },
+        )
 
         _assert_run_ok(resp, label="tools")
         events = _parse_sse_events(resp.text)
@@ -510,25 +555,33 @@ class TestLiveAgentRun:
 
     def test_event_stream_has_messages_snapshot(self, client):
         """Verify MESSAGES_SNAPSHOT is emitted in the event stream."""
-        resp = client.post("/", json={
-            "threadId": f"e2e-{uuid.uuid4().hex[:8]}",
-            "runId": str(uuid.uuid4()),
-            "messages": [_msg("Say hi")],
-        })
+        resp = client.post(
+            "/",
+            json={
+                "threadId": f"e2e-{uuid.uuid4().hex[:8]}",
+                "runId": str(uuid.uuid4()),
+                "messages": [_msg("Say hi")],
+            },
+        )
         _assert_run_ok(resp, label="snapshot")
         events = _parse_sse_events(resp.text)
         _dump_events(events, label="snapshot")
         event_types = [e.get("type") for e in events]
-        assert "MESSAGES_SNAPSHOT" in event_types, f"Missing MESSAGES_SNAPSHOT, got: {event_types}"
+        assert "MESSAGES_SNAPSHOT" in event_types, (
+            f"Missing MESSAGES_SNAPSHOT, got: {event_types}"
+        )
 
     def test_capabilities_model_populated_after_run(self, client):
         """After a successful run, capabilities should reflect the configured model."""
         # Run a prompt first to trigger platform init
-        resp = client.post("/", json={
-            "threadId": f"e2e-{uuid.uuid4().hex[:8]}",
-            "runId": str(uuid.uuid4()),
-            "messages": [_msg("Reply OK")],
-        })
+        resp = client.post(
+            "/",
+            json={
+                "threadId": f"e2e-{uuid.uuid4().hex[:8]}",
+                "runId": str(uuid.uuid4()),
+                "messages": [_msg("Reply OK")],
+            },
+        )
         _assert_run_ok(resp, label="pre_caps")
 
         # Now check capabilities
@@ -542,28 +595,39 @@ class TestLiveAgentRun:
         thread_id = f"e2e-multi-{uuid.uuid4().hex[:8]}"
 
         # Turn 1
-        resp1 = client.post("/", json={
-            "threadId": thread_id,
-            "runId": str(uuid.uuid4()),
-            "messages": [_msg("Remember the word: BANANA")],
-        })
+        resp1 = client.post(
+            "/",
+            json={
+                "threadId": thread_id,
+                "runId": str(uuid.uuid4()),
+                "messages": [_msg("Remember the word: BANANA")],
+            },
+        )
         _assert_run_ok(resp1, label="multi_turn1")
         events1 = _parse_sse_events(resp1.text)
         _dump_events(events1, label="multi_turn1")
         assert any(e.get("type") == "RUN_FINISHED" for e in events1)
 
         # Turn 2 — same thread
-        resp2 = client.post("/", json={
-            "threadId": thread_id,
-            "runId": str(uuid.uuid4()),
-            "messages": [_msg("What word did I ask you to remember? Reply with just the word.")],
-        })
+        resp2 = client.post(
+            "/",
+            json={
+                "threadId": thread_id,
+                "runId": str(uuid.uuid4()),
+                "messages": [
+                    _msg(
+                        "What word did I ask you to remember? Reply with just the word."
+                    )
+                ],
+            },
+        )
         _assert_run_ok(resp2, label="multi_turn2")
         events2 = _parse_sse_events(resp2.text)
         _dump_events(events2, label="multi_turn2")
 
         content = "".join(
-            e.get("delta", "") for e in events2
+            e.get("delta", "")
+            for e in events2
             if e.get("type") == "TEXT_MESSAGE_CONTENT"
         )
         print(f"  [multi_turn2] Response: {content!r}")
@@ -575,27 +639,38 @@ class TestLiveAgentRun:
         thread_b = f"e2e-iso-b-{uuid.uuid4().hex[:8]}"
 
         # Thread A: set a secret word
-        resp_a = client.post("/", json={
-            "threadId": thread_a,
-            "runId": str(uuid.uuid4()),
-            "messages": [_msg("Remember: CHERRY")],
-        })
+        resp_a = client.post(
+            "/",
+            json={
+                "threadId": thread_a,
+                "runId": str(uuid.uuid4()),
+                "messages": [_msg("Remember: CHERRY")],
+            },
+        )
         _assert_run_ok(resp_a, label="iso_a")
 
         # Thread B: ask for the secret (should NOT know it)
-        resp_b = client.post("/", json={
-            "threadId": thread_b,
-            "runId": str(uuid.uuid4()),
-            "messages": [_msg("What secret word was I told? If none, reply with: NO_SECRET")],
-        })
+        resp_b = client.post(
+            "/",
+            json={
+                "threadId": thread_b,
+                "runId": str(uuid.uuid4()),
+                "messages": [
+                    _msg("What secret word was I told? If none, reply with: NO_SECRET")
+                ],
+            },
+        )
         _assert_run_ok(resp_b, label="iso_b")
         events_b = _parse_sse_events(resp_b.text)
         _dump_events(events_b, label="iso_b")
 
         content_b = "".join(
-            e.get("delta", "") for e in events_b
+            e.get("delta", "")
+            for e in events_b
             if e.get("type") == "TEXT_MESSAGE_CONTENT"
         )
         print(f"  [iso_b] Response: {content_b!r}")
         # Thread B should NOT know about CHERRY
-        assert "CHERRY" not in content_b.upper(), f"Thread leak! B saw CHERRY: {content_b!r}"
+        assert "CHERRY" not in content_b.upper(), (
+            f"Thread leak! B saw CHERRY: {content_b!r}"
+        )

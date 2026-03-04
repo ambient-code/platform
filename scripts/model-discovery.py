@@ -103,16 +103,22 @@ def resolve_version(region: str, model_id: str, token: str) -> str | None:
         except urllib.error.HTTPError as e:
             if e.code in (403, 404):
                 # Permission denied or not found — retrying won't help
-                print(f"  {model_id}: version resolution unavailable (HTTP {e.code})", file=sys.stderr)
+                print(
+                    f"  {model_id}: version resolution unavailable (HTTP {e.code})",
+                    file=sys.stderr,
+                )
                 return None
             last_err = e
         except Exception as e:
             last_err = e
 
         if attempt < 2:
-            time.sleep(2 ** attempt)  # 1s, 2s backoff
+            time.sleep(2**attempt)  # 1s, 2s backoff
 
-    print(f"  {model_id}: version resolution failed after 3 attempts ({last_err})", file=sys.stderr)
+    print(
+        f"  {model_id}: version resolution failed after 3 attempts ({last_err})",
+        file=sys.stderr,
+    )
     return None
 
 
@@ -176,15 +182,21 @@ def probe_model(region: str, project_id: str, vertex_id: str, token: str) -> str
             if e.code in (429, 500, 502, 503, 504):
                 last_err = e
             else:
-                print(f"  WARNING: unexpected HTTP {e.code} for {vertex_id}", file=sys.stderr)
+                print(
+                    f"  WARNING: unexpected HTTP {e.code} for {vertex_id}",
+                    file=sys.stderr,
+                )
                 return "unknown"
         except Exception as e:
             last_err = e
 
         if attempt < 2:
-            time.sleep(2 ** attempt)
+            time.sleep(2**attempt)
 
-    print(f"  WARNING: probe failed after 3 attempts for {vertex_id} ({last_err})", file=sys.stderr)
+    print(
+        f"  WARNING: probe failed after 3 attempts for {vertex_id} ({last_err})",
+        file=sys.stderr,
+    )
     return "unknown"
 
 
@@ -200,7 +212,10 @@ def load_manifest(path: Path) -> dict:
             return blank
         return data
     except (json.JSONDecodeError, ValueError) as e:
-        print(f"WARNING: malformed manifest at {path}, starting fresh ({e})", file=sys.stderr)
+        print(
+            f"WARNING: malformed manifest at {path}, starting fresh ({e})",
+            file=sys.stderr,
+        )
         return blank
 
 

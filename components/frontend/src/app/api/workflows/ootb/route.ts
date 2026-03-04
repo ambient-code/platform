@@ -37,11 +37,10 @@ export async function GET(request: NextRequest) {
     console.error("Failed to fetch OOTB workflows:", error);
     return new Response(
       JSON.stringify({ error: "Failed to fetch OOTB workflows" }),
-      { 
+      {
         status: 500,
         headers: { "Content-Type": "application/json" }
       }
     );
   }
 }
-

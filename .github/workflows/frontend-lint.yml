@@ -13,7 +13,7 @@ on:
       - 'components/frontend/tsconfig.json'
       - 'components/frontend/eslint.config.mjs'
       - '.github/workflows/frontend-lint.yml'
-      
+
   pull_request:
     branches: [main]
     paths:
@@ -26,7 +26,7 @@ on:
       - 'components/frontend/tsconfig.json'
       - 'components/frontend/eslint.config.mjs'
       - '.github/workflows/frontend-lint.yml'
-      
+
   workflow_dispatch:
 
 concurrency:
@@ -79,4 +79,3 @@ jobs:
             exit 1
           fi
           echo "All frontend linting checks passed!"
-
