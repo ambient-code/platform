@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Automated Vertex AI model discovery.
 
-Maintains a curated list of Anthropic model base names, resolves their
-latest Vertex AI version via the Model Garden API, probes each to confirm
-availability, and updates the model manifest. Never removes models — only
-adds new ones or updates the ``available`` / ``vertexId`` fields.
+Maintains curated lists of Anthropic and Google model base names, resolves
+their latest Vertex AI version via the Model Garden API, probes each to
+confirm availability, and updates the model manifest. Never removes models
+— only adds new ones or updates the ``available`` / ``vertexId`` fields.
 
 Required env vars:
     GCP_REGION                 - GCP region (e.g. us-east5)
@@ -36,14 +36,19 @@ DEFAULT_MANIFEST = (
     / "models.json"
 )
 
-# Known Anthropic model base names. Add new models here as they are released.
-# Version resolution and availability probing are automatic.
-KNOWN_MODELS = [
-    "claude-sonnet-4-6",
-    "claude-sonnet-4-5",
-    "claude-opus-4-6",
-    "claude-opus-4-5",
-    "claude-haiku-4-5",
+# Each entry: (model_id, publisher, provider)
+# publisher = Vertex AI publisher path segment (anthropic | google)
+# provider  = manifest provider field (anthropic | google)
+KNOWN_MODELS: list[tuple[str, str, str]] = [
+    # Anthropic models
+    ("claude-sonnet-4-6", "anthropic", "anthropic"),
+    ("claude-sonnet-4-5", "anthropic", "anthropic"),
+    ("claude-opus-4-6", "anthropic", "anthropic"),
+    ("claude-opus-4-5", "anthropic", "anthropic"),
+    ("claude-haiku-4-5", "anthropic", "anthropic"),
+    # Google models
+    ("gemini-2.5-flash", "google", "google"),
+    ("gemini-2.5-pro", "google", "google"),
 ]
 
 
@@ -69,7 +74,9 @@ def get_access_token() -> str:
     return result.stdout.strip()
 
 
-def resolve_version(region: str, model_id: str, token: str) -> str | None:
+def resolve_version(
+    region: str, model_id: str, publisher: str, token: str
+) -> str | None:
     """Resolve the latest version for a model via the Model Garden API.
 
     Returns the version string (e.g. "20250929") or None if the API call
@@ -81,7 +88,7 @@ def resolve_version(region: str, model_id: str, token: str) -> str | None:
     """
     url = (
         f"https://{region}-aiplatform.googleapis.com/v1/"
-        f"publishers/anthropic/models/{model_id}"
+        f"publishers/{publisher}/models/{model_id}"
     )
 
     last_err = None
@@ -137,7 +144,50 @@ def model_id_to_label(model_id: str) -> str:
     return " ".join(result)
 
 
-def probe_model(region: str, project_id: str, vertex_id: str, token: str) -> str:
+def _build_probe_request(
+    region: str, project_id: str, vertex_id: str, publisher: str, token: str
+) -> urllib.request.Request:
+    """Build the probe HTTP request for a given publisher."""
+    if publisher == "google":
+        url = (
+            f"https://{region}-aiplatform.googleapis.com/v1/"
+            f"projects/{project_id}/locations/{region}/"
+            f"publishers/google/models/{vertex_id}:generateContent"
+        )
+        body = json.dumps(
+            {
+                "contents": [{"parts": [{"text": "hi"}]}],
+                "generationConfig": {"maxOutputTokens": 1},
+            }
+        ).encode()
+    else:
+        url = (
+            f"https://{region}-aiplatform.googleapis.com/v1/"
+            f"projects/{project_id}/locations/{region}/"
+            f"publishers/anthropic/models/{vertex_id}:rawPredict"
+        )
+        body = json.dumps(
+            {
+                "anthropic_version": "vertex-2023-10-16",
+                "max_tokens": 1,
+                "messages": [{"role": "user", "content": "hi"}],
+            }
+        ).encode()
+
+    return urllib.request.Request(
+        url,
+        data=body,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+
+
+def probe_model(
+    region: str, project_id: str, vertex_id: str, publisher: str, token: str
+) -> str:
     """Probe a Vertex AI model endpoint.
 
     Returns:
@@ -145,31 +195,9 @@ def probe_model(region: str, project_id: str, vertex_id: str, token: str) -> str
         "unavailable" - 404 (model not found)
         "unknown"     - any other status (transient error, leave unchanged)
     """
-    url = (
-        f"https://{region}-aiplatform.googleapis.com/v1/"
-        f"projects/{project_id}/locations/{region}/"
-        f"publishers/anthropic/models/{vertex_id}:rawPredict"
-    )
-
-    body = json.dumps(
-        {
-            "anthropic_version": "vertex-2023-10-16",
-            "max_tokens": 1,
-            "messages": [{"role": "user", "content": "hi"}],
-        }
-    ).encode()
-
     last_err = None
     for attempt in range(3):
-        req = urllib.request.Request(
-            url,
-            data=body,
-            headers={
-                "Authorization": f"Bearer {token}",
-                "Content-Type": "application/json",
-            },
-            method="POST",
-        )
+        req = _build_probe_request(region, project_id, vertex_id, publisher, token)
 
         try:
             with urllib.request.urlopen(req, timeout=30):
@@ -250,9 +278,9 @@ def main() -> int:
 
     changes = []
 
-    for model_id in KNOWN_MODELS:
+    for model_id, publisher, provider in KNOWN_MODELS:
         # Try to resolve the latest version via Model Garden API
-        resolved_version = resolve_version(region, model_id, token)
+        resolved_version = resolve_version(region, model_id, publisher, token)
 
         # Find existing entry in manifest
         existing = next((m for m in manifest["models"] if m["id"] == model_id), None)
@@ -266,7 +294,7 @@ def main() -> int:
             vertex_id = f"{model_id}@default"
 
         # Probe availability
-        status = probe_model(region, project_id, vertex_id, token)
+        status = probe_model(region, project_id, vertex_id, publisher, token)
         is_available = status == "available"
 
         if existing:
@@ -299,7 +327,7 @@ def main() -> int:
                 "id": model_id,
                 "label": model_id_to_label(model_id),
                 "vertexId": vertex_id,
-                "provider": "anthropic",
+                "provider": provider,
                 "available": is_available,
             }
             manifest["models"].append(new_entry)
