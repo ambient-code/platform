@@ -28,11 +28,12 @@ export const projectKeys = {
 /**
  * Hook to fetch projects with pagination support
  */
-export function useProjectsPaginated(params: PaginationParams = {}) {
+export function useProjectsPaginated(params: PaginationParams = {}, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: projectKeys.list(params),
     queryFn: () => projectsApi.listProjectsPaginated(params),
-    placeholderData: keepPreviousData, // Keep previous data while fetching new page
+    placeholderData: keepPreviousData,
+    enabled: options?.enabled,
   });
 }
 
@@ -50,11 +51,11 @@ export function useProjects() {
 /**
  * Hook to fetch a single project
  */
-export function useProject(name: string) {
+export function useProject(name: string, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: projectKeys.detail(name),
     queryFn: () => projectsApi.getProject(name),
-    enabled: !!name,
+    enabled: (options?.enabled ?? true) && !!name,
   });
 }
 

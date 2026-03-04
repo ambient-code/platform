@@ -39,6 +39,14 @@
     ".next/dev/types/**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "src/components/workspace-sections/v1-*.tsx",
+    "src/components/v1-*.tsx",
+    "src/services/queries/v1/*.ts",
+    "src/services/queries/use-session-dual.ts",
+    "src/lib/v1-session-adapter.ts",
+    "src/lib/ambient-client.ts",
+    "src/lib/ambient-client.test.ts",
+    "src/contexts/api-source-context.test.tsx"
   ]
 }

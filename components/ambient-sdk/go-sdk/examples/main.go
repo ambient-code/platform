@@ -20,20 +20,14 @@ func main() {
 	fmt.Println("==========================================")
 	fmt.Println()
 
-	c, err := client.NewClientFromEnv(client.WithTimeout(120 * time.Second))
+	projectName := "myproject"
+
+	c, err := client.NewClientFromEnv(projectName, client.WithTimeout(120*time.Second))
 	if err != nil {
 		log.Fatalf("Failed to create client: %v", err)
 	}
 
 	ctx := context.Background()
-
-	projectName := os.Getenv("AMBIENT_PROJECT")
-	if projectName == "" {
-		projectName = os.Getenv("ANTHROPIC_VERTEX_PROJECT_ID")
-	}
-	if projectName == "" {
-		projectName = "sdk-demo"
-	}
 
 	runFullLifecycle(ctx, c, projectName)
 }
@@ -56,9 +50,9 @@ func runFullLifecycle(ctx context.Context, c *client.Client, projectName string)
 		var apiErr *types.APIError
 		if ok := asAPIError(err, &apiErr); ok && apiErr.StatusCode == http.StatusConflict {
 			fmt.Printf("  Project %q already exists, reusing it\n", projectName)
-			createdProject, err = c.Projects().Get(ctx, projectName)
+			createdProject, err = findProjectByName(ctx, c, projectName)
 			if err != nil {
-				log.Fatalf("Failed to get existing project: %v", err)
+				log.Fatalf("Failed to find existing project: %v", err)
 			}
 		} else {
 			log.Fatalf("Failed to create project: %v", err)
@@ -335,7 +329,7 @@ func deriveAGUIBaseURL(apiURL, projectName, kubeCRName, sessionID string) string
 
 	baseURL := strings.TrimRight(apiURL, "/")
 	if strings.Contains(baseURL, "ambient-api-server") {
-		baseURL = strings.TrimSuffix(baseURL, "/api/ambient-api-server/v1")
+		baseURL = strings.TrimSuffix(baseURL, "/api/ambient/v1")
 	}
 
 	return fmt.Sprintf("%s/api/projects/%s/agentic-sessions/%s/agui", baseURL, projectName, sessionName)
@@ -353,6 +347,18 @@ func truncate(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen] + "..."
+}
+
+func findProjectByName(ctx context.Context, c *client.Client, name string) (*types.Project, error) {
+	opts := types.NewListOptions().Search(fmt.Sprintf("name='%s'", name)).Size(1).Build()
+	list, err := c.Projects().List(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
+	if len(list.Items) == 0 {
+		return nil, fmt.Errorf("project %q not found", name)
+	}
+	return &list.Items[0], nil
 }
 
 func asAPIError(err error, target **types.APIError) bool {

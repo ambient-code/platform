@@ -6,6 +6,7 @@ import { QueryProvider } from "@/components/providers/query-provider";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import { SyntaxThemeProvider } from "@/components/providers/syntax-theme-provider";
 import { FeatureFlagProvider } from "@/components/providers/feature-flag-provider";
+import { ApiSourceProvider } from "@/contexts/api-source-context";
 import { Toaster } from "@/components/ui/toaster";
 import { env } from "@/lib/env";
 
@@ -43,11 +44,13 @@ export default function RootLayout({
         >
           <SyntaxThemeProvider />
           <FeatureFlagProvider>
-            <QueryProvider>
-              <Navigation feedbackUrl={feedbackUrl} />
-              <main className="flex-1 bg-background overflow-auto">{children}</main>
-              <Toaster />
-            </QueryProvider>
+            <ApiSourceProvider>
+              <QueryProvider>
+                <Navigation feedbackUrl={feedbackUrl} />
+                <main className="flex-1 bg-background overflow-auto">{children}</main>
+                <Toaster />
+              </QueryProvider>
+            </ApiSourceProvider>
           </FeatureFlagProvider>
         </ThemeProvider>
       </body>
