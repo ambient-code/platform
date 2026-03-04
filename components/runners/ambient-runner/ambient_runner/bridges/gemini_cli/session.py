@@ -124,6 +124,18 @@ class GeminiSessionWorker:
             # take precedence and bypass Vertex).
             # See: https://geminicli.com/docs/get-started/authentication/
             env["GOOGLE_GENAI_USE_VERTEXAI"] = "true"
+            # Map platform Vertex env vars to Gemini CLI's expected names if not
+            # already set. The platform uses ANTHROPIC_VERTEX_PROJECT_ID and
+            # CLOUD_ML_REGION for Claude; Gemini CLI needs GOOGLE_CLOUD_PROJECT
+            # and GOOGLE_CLOUD_LOCATION.
+            if not env.get("GOOGLE_CLOUD_PROJECT"):
+                project = env.get("ANTHROPIC_VERTEX_PROJECT_ID", "")
+                if project:
+                    env["GOOGLE_CLOUD_PROJECT"] = project
+            if not env.get("GOOGLE_CLOUD_LOCATION"):
+                location = env.get("CLOUD_ML_REGION", "")
+                if location:
+                    env["GOOGLE_CLOUD_LOCATION"] = location
             env.pop("GEMINI_API_KEY", None)
             env.pop("GOOGLE_API_KEY", None)
         elif self._api_key:

@@ -19,9 +19,9 @@ from ag_ui_gemini_cli import GeminiCLIAdapter
 from ag_ui_gemini_cli.utils import extract_user_message
 
 from ambient_runner.bridge import (
-    CREDS_REFRESH_INTERVAL_SEC,
     FrameworkCapabilities,
     PlatformBridge,
+    _async_safe_manager_shutdown,
     setup_bridge_observability,
 )
 from ambient_runner.bridges.gemini_cli.session import (
@@ -80,14 +80,7 @@ class GeminiCLIBridge(PlatformBridge):
         """Full run lifecycle: lazy setup -> session worker -> tracing."""
         # 1. Lazy platform setup
         await self._ensure_ready()
-
-        # Refresh credentials if stale
-        now = time.monotonic()
-        if now - self._last_creds_refresh > CREDS_REFRESH_INTERVAL_SEC:
-            from ambient_runner.platform.auth import populate_runtime_credentials
-
-            await populate_runtime_credentials(self._context)
-            self._last_creds_refresh = now
+        await self._refresh_credentials_if_stale()
 
         # 2. Extract user message
         user_msg = extract_user_message(input_data)
@@ -157,10 +150,6 @@ class GeminiCLIBridge(PlatformBridge):
     # Lifecycle methods
     # ------------------------------------------------------------------
 
-    def set_context(self, context: RunnerContext) -> None:
-        """Store the runner context (called from lifespan)."""
-        self._context = context
-
     async def shutdown(self) -> None:
         """Graceful shutdown: stop workers, finalise tracing."""
         if self._session_manager:
@@ -186,22 +175,7 @@ class GeminiCLIBridge(PlatformBridge):
         if self._session_manager:
             manager = self._session_manager
             self._session_manager = None
-            try:
-                asyncio.get_running_loop()
-                future = asyncio.ensure_future(manager.shutdown())
-                future.add_done_callback(
-                    lambda f: logger.warning(
-                        "mark_dirty: session_manager shutdown error: %s",
-                        f.exception(),
-                    )
-                    if f.exception()
-                    else None
-                )
-            except RuntimeError:
-                try:
-                    asyncio.run(manager.shutdown())
-                except Exception as e:
-                    logger.warning("mark_dirty: session_manager shutdown error: %s", e)
+            _async_safe_manager_shutdown(manager)
         logger.info("GeminiCLIBridge: marked dirty -- will reinitialise on next run")
 
     def get_error_context(self) -> str:
@@ -286,20 +260,6 @@ class GeminiCLIBridge(PlatformBridge):
     # Private: platform setup (lazy, called on first run)
     # ------------------------------------------------------------------
 
-    async def _ensure_ready(self) -> None:
-        """Run one-time platform setup if not already done."""
-        if self._ready:
-            return
-        if not self._context:
-            raise RuntimeError("Context not set -- call set_context() first")
-        await self._setup_platform()
-        self._ready = True
-        logger.info(
-            "Platform ready -- model: %s, cwd: %s",
-            self._configured_model,
-            self._cwd_path,
-        )
-
     async def _setup_platform(self) -> None:
         """Full platform setup: auth, workspace, observability."""
         # Session manager with state dir for session_id persistence across restarts
@@ -322,22 +282,29 @@ class GeminiCLIBridge(PlatformBridge):
         self._last_creds_refresh = time.monotonic()
 
         # Workspace paths
-        cwd_path, _add_dirs = resolve_workspace_paths(self._context)
+        cwd_path, add_dirs = resolve_workspace_paths(self._context)
 
         # Observability
         self._obs = await setup_bridge_observability(self._context, model)
 
         # MCP servers — write .gemini/settings.json so the CLI discovers them
         from ambient_runner.bridges.gemini_cli.mcp import setup_gemini_mcp
+        from ambient_runner.bridges.gemini_cli.system_prompt import write_gemini_system_prompt
 
         mcp_settings_path = setup_gemini_mcp(self._context, cwd_path)
 
-        # Build include directories (repos, uploads, artifacts, file-uploads)
+        # System prompt — write .gemini/system.md and set GEMINI_SYSTEM_MD=true.
+        # Uses ${AgentSkills} / ${AvailableTools} substitution to preserve
+        # Gemini's built-in instructions, then appends platform context.
+        write_gemini_system_prompt(cwd_path)
+
+        # Build include directories: platform-provided dirs (repos, workflows,
+        # file-uploads) plus well-known workspace subdirs, excluding cwd itself.
         workspace = os.getenv("WORKSPACE_PATH", "/workspace")
-        include_dirs = []
+        include_dirs = list(add_dirs) if add_dirs else []
         for subdir in ["repos", "artifacts", "file-uploads"]:
             d = os.path.join(workspace, subdir)
-            if os.path.isdir(d) and d != cwd_path:
+            if os.path.isdir(d) and d != cwd_path and d not in include_dirs:
                 include_dirs.append(d)
 
         # Store results

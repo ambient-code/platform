@@ -23,6 +23,36 @@ _PLACEHOLDER_EMAIL = "user@example.com"
 
 
 # ---------------------------------------------------------------------------
+# Vertex AI credential validation (shared across all bridges)
+# ---------------------------------------------------------------------------
+
+
+def validate_vertex_credentials_file(context: RunnerContext) -> str:
+    """Validate that GOOGLE_APPLICATION_CREDENTIALS is set and the file exists.
+
+    Shared by all bridge auth modules so the check and error messages are
+    consistent regardless of which runner is in use.
+
+    Args:
+        context: Runner context used to resolve the env var.
+
+    Returns:
+        The resolved credentials file path.
+
+    Raises:
+        RuntimeError: If the env var is unset or the file does not exist.
+    """
+    path = context.get_env("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
+    if not path:
+        raise RuntimeError(
+            "GOOGLE_APPLICATION_CREDENTIALS must be set when USE_VERTEX is enabled"
+        )
+    if not Path(path).exists():
+        raise RuntimeError(f"Service account key file not found at {path}")
+    return path
+
+
+# ---------------------------------------------------------------------------
 # User context sanitization
 # ---------------------------------------------------------------------------
 

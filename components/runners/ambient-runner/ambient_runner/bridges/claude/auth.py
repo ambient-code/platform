@@ -9,8 +9,8 @@ This module adds Claude Agent SDK-specific concerns:
 
 import logging
 import os
-from pathlib import Path
 
+from ambient_runner.platform.auth import validate_vertex_credentials_file
 from ambient_runner.platform.context import RunnerContext
 from ambient_runner.platform.utils import is_vertex_enabled
 
@@ -38,25 +38,16 @@ def map_to_vertex_model(model: str) -> str:
 
 async def setup_vertex_credentials(context: RunnerContext) -> dict:
     """Set up Google Cloud Vertex AI credentials from service account."""
-    service_account_path = context.get_env("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
+    service_account_path = validate_vertex_credentials_file(context)
     project_id = context.get_env("ANTHROPIC_VERTEX_PROJECT_ID", "").strip()
     region = context.get_env("CLOUD_ML_REGION", "").strip()
 
-    if not service_account_path:
-        raise RuntimeError(
-            "GOOGLE_APPLICATION_CREDENTIALS must be set when USE_VERTEX is enabled"
-        )
     if not project_id:
         raise RuntimeError(
             "ANTHROPIC_VERTEX_PROJECT_ID must be set when USE_VERTEX is enabled"
         )
     if not region:
         raise RuntimeError("CLOUD_ML_REGION must be set when USE_VERTEX is enabled")
-
-    if not Path(service_account_path).exists():
-        raise RuntimeError(
-            f"Service account key file not found at {service_account_path}"
-        )
 
     logger.info(f"Vertex AI configured: project={project_id}, region={region}")
     return {

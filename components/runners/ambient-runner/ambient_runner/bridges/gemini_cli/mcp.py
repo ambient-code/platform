@@ -13,6 +13,7 @@ map directly to the Gemini CLI settings format.
 
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -102,11 +103,46 @@ def write_gemini_settings(
     return abs_path
 
 
+def _build_feedback_server_entry() -> dict:
+    """Build the ambient-feedback MCP server entry with Langfuse credentials injected.
+
+    The Gemini CLI strips LANGFUSE_* vars from the subprocess environment via
+    the blocklist in session.py (they're runner-internal secrets the AI model
+    shouldn't see). MCP server entries can declare their own ``env`` block which
+    the CLI passes directly to the server subprocess, bypassing the blocklist.
+    We use this to give the feedback_server the Langfuse credentials it needs.
+    """
+    env: dict[str, str] = {}
+    for key in (
+        "LANGFUSE_ENABLED",
+        "LANGFUSE_PUBLIC_KEY",
+        "LANGFUSE_SECRET_KEY",
+        "LANGFUSE_HOST",
+        "AGENTIC_SESSION_NAME",
+        "AGENTIC_SESSION_NAMESPACE",
+        "REPOS_JSON",
+        "ACTIVE_WORKFLOW_GIT_URL",
+        "ACTIVE_WORKFLOW_BRANCH",
+        "ACTIVE_WORKFLOW_PATH",
+    ):
+        val = os.environ.get(key, "")
+        if val:
+            env[key] = val
+
+    entry: dict = {
+        "command": "python",
+        "args": ["-m", "ambient_runner.bridges.gemini_cli.feedback_server"],
+    }
+    if env:
+        entry["env"] = env
+    return entry
+
+
 def setup_gemini_mcp(
     context: RunnerContext,
     cwd_path: str,
 ) -> Optional[str]:
-    """End-to-end MCP setup: load config, write settings file.
+    """End-to-end MCP setup: load config, write settings file, write commands.
 
     Args:
         context: Runner context.
@@ -115,7 +151,17 @@ def setup_gemini_mcp(
     Returns:
         Path to the written settings file, or None if no MCP servers.
     """
-    settings = build_gemini_mcp_settings(context, cwd_path)
-    if settings is None:
-        return None
-    return write_gemini_settings(cwd_path, settings)
+    settings = build_gemini_mcp_settings(context, cwd_path) or {"mcpServers": {}}
+
+    # Always register the ambient-feedback server so evaluate_rubric and
+    # log_correction tools are available to custom commands.
+    settings["mcpServers"]["ambient-feedback"] = _build_feedback_server_entry()
+
+    settings_path = write_gemini_settings(cwd_path, settings)
+
+    # Write /ambient:evaluate-rubric and /ambient:log-correction custom commands.
+    from ambient_runner.bridges.gemini_cli.commands import write_gemini_commands
+
+    write_gemini_commands(cwd_path)
+
+    return settings_path

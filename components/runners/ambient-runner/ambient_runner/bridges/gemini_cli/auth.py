@@ -2,6 +2,7 @@
 
 import logging
 
+from ambient_runner.platform.auth import validate_vertex_credentials_file
 from ambient_runner.platform.context import RunnerContext
 from ambient_runner.platform.utils import is_vertex_enabled
 
@@ -26,8 +27,19 @@ async def setup_gemini_cli_auth(context: RunnerContext) -> tuple[str, str, bool]
     use_vertex = is_vertex_enabled(legacy_var="GEMINI_USE_VERTEX", context=context)
 
     if use_vertex:
-        project = context.get_env("GOOGLE_CLOUD_PROJECT", "").strip()
-        location = context.get_env("GOOGLE_CLOUD_LOCATION", "").strip()
+        validate_vertex_credentials_file(context)
+
+        # Resolve project/location — may be set directly or via platform aliases
+        # (ANTHROPIC_VERTEX_PROJECT_ID / CLOUD_ML_REGION). The subprocess mapping
+        # in session.py handles the latter; here we just log what we found.
+        project = (
+            context.get_env("GOOGLE_CLOUD_PROJECT", "").strip()
+            or context.get_env("ANTHROPIC_VERTEX_PROJECT_ID", "").strip()
+        )
+        location = (
+            context.get_env("GOOGLE_CLOUD_LOCATION", "").strip()
+            or context.get_env("CLOUD_ML_REGION", "").strip()
+        )
 
         logger.info(
             "Gemini CLI: Vertex AI mode (project=%s, location=%s, model=%s)",
