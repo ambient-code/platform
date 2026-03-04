@@ -99,8 +99,9 @@ export function CreateSessionDialog({
 
   // Fetch models filtered by the selected runner's provider.
   // models.json is the single source of truth — no hardcoded fallback lists.
+  // Wait for runner types to load so we know the provider before fetching.
   const { data: modelsData, isLoading: modelsLoading } = useModels(
-    projectName, open, selectedRunner?.provider
+    projectName, open && !runnerTypesLoading, selectedRunner?.provider
   );
 
   const models = modelsData
@@ -117,8 +118,9 @@ export function CreateSessionDialog({
   const handleRunnerTypeChange = (value: string, onChange: (v: string) => void) => {
     onChange(value);
     // Model list will refetch via useModels when provider changes.
-    // Reset model so the useEffect above sets it from the new API response.
-    form.setValue("model", "", { shouldDirty: false });
+    // resetField clears both value AND dirty state so the useEffect
+    // above will set the new provider's default model.
+    form.resetField("model", { defaultValue: "" });
   };
 
   const onSubmit = async (values: FormValues) => {
