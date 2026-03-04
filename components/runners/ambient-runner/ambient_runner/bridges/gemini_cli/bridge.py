@@ -27,7 +27,6 @@ from ambient_runner.bridge import (
 from ambient_runner.bridges.gemini_cli.session import (
     SHUTDOWN_TIMEOUT_SEC,
     GeminiSessionManager,
-    _GEMINI_ENV_BLOCKLIST,
 )
 from ambient_runner.platform.context import RunnerContext
 
@@ -215,99 +214,54 @@ class GeminiCLIBridge(PlatformBridge):
         return ""
 
     async def get_mcp_status(self) -> dict:
-        """Get MCP server status by running `gemini mcp list` in the workspace."""
+        """Get MCP server status from the written .gemini/settings.json.
+
+        Unlike the Claude bridge (which uses an ephemeral SDK client to probe
+        MCP servers), the Gemini CLI requires full auth just to run
+        ``gemini mcp list``, so we read the settings file directly instead.
+        The servers listed here are what the CLI will discover on its next run.
+        """
         if self._mcp_status_cache is not None:
             return self._mcp_status_cache
 
         import json
 
-        empty = {"servers": [], "totalCount": 0}
-        if not self._cwd_path:
+        empty: dict = {"servers": [], "totalCount": 0}
+        if not self._mcp_settings_path:
+            # Don't cache if platform isn't ready yet — path will be set later
             return empty
 
         try:
-            env = {
-                k: v for k, v in os.environ.items() if k not in _GEMINI_ENV_BLOCKLIST
-            }
-            proc = await asyncio.create_subprocess_exec(
-                "gemini",
-                "mcp",
-                "list",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=self._cwd_path,
-                env=env,
-            )
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
-            output = stdout.decode().strip()
+            from pathlib import Path
 
-            # Parse gemini mcp list output — each configured server is listed
-            # Also read from settings.json for transport/config details
+            settings_path = Path(self._mcp_settings_path)
+            if not settings_path.exists():
+                return empty
+
+            with open(settings_path) as f:
+                settings = json.load(f)
+
+            mcp_servers = settings.get("mcpServers", {})
             servers_list = []
-
-            # Read settings.json for config details
-            settings_servers = {}
-            if self._mcp_settings_path:
-                from pathlib import Path
-
-                settings_path = Path(self._mcp_settings_path)
-                if settings_path.exists():
-                    with open(settings_path) as f:
-                        settings = json.load(f)
-                    settings_servers = settings.get("mcpServers", {})
-
-            # Parse output lines — gemini mcp list shows server names/status
-            if output and "No MCP servers configured" not in output:
-                for line in output.splitlines():
-                    line = line.strip()
-                    if not line or line.startswith("Loaded"):
-                        continue
-                    # Extract server name (first word or the whole line)
-                    name = line.split()[0] if line.split() else line
-                    config = settings_servers.get(name, {})
-                    transport = "stdio"
-                    if config.get("httpUrl"):
-                        transport = "http"
-                    elif config.get("url"):
-                        transport = "sse"
-                    status = (
-                        "connected"
-                        if "enabled" in line.lower() or "✓" in line
-                        else "configured"
-                    )
-                    servers_list.append(
-                        {
-                            "name": name,
-                            "displayName": name,
-                            "status": status,
-                            "transport": transport,
-                            "tools": [],
-                        }
-                    )
-            elif settings_servers:
-                # Fallback: CLI didn't list them but settings.json has them
-                for name, config in settings_servers.items():
-                    transport = "stdio"
-                    if config.get("httpUrl"):
-                        transport = "http"
-                    elif config.get("url"):
-                        transport = "sse"
-                    servers_list.append(
-                        {
-                            "name": name,
-                            "displayName": name,
-                            "status": "configured",
-                            "transport": transport,
-                            "tools": [],
-                        }
-                    )
+            for name, config in mcp_servers.items():
+                transport = "stdio"
+                if config.get("httpUrl"):
+                    transport = "http"
+                elif config.get("url"):
+                    transport = "sse"
+                servers_list.append(
+                    {
+                        "name": name,
+                        "displayName": name,
+                        "status": "configured",
+                        "transport": transport,
+                        "tools": [],
+                    }
+                )
 
             result = {"servers": servers_list, "totalCount": len(servers_list)}
             self._mcp_status_cache = result
             return result
-        except asyncio.TimeoutError:
-            logger.warning("gemini mcp list timed out")
-            return {"servers": [], "totalCount": 0, "error": "timeout"}
         except Exception as e:
             logger.error("Failed to get MCP status: %s", e, exc_info=True)
             return {"servers": [], "totalCount": 0, "error": str(e)}
