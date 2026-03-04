@@ -20,9 +20,10 @@ type ModelEntry struct {
 
 // ModelManifest represents the top-level model manifest structure.
 type ModelManifest struct {
-	Version      int          `json:"version"`
-	DefaultModel string       `json:"defaultModel"`
-	Models       []ModelEntry `json:"models"`
+	Version          int               `json:"version"`
+	DefaultModel     string            `json:"defaultModel"`
+	ProviderDefaults map[string]string `json:"providerDefaults,omitempty"`
+	Models           []ModelEntry      `json:"models"`
 }
 
 // ListModelsResponse is the API response for the models endpoint.

@@ -77,6 +77,15 @@ func ListModelsForProject(c *gin.Context) {
 		// Continue without overrides
 	}
 
+	// Resolve which model ID is the "default" for this request.
+	// When filtering by provider, use the provider-specific default.
+	effectiveDefault := manifest.DefaultModel
+	if providerFilter != "" {
+		if pd, ok := manifest.ProviderDefaults[providerFilter]; ok {
+			effectiveDefault = pd
+		}
+	}
+
 	var models []types.Model
 	for _, entry := range manifest.Models {
 		if !entry.Available {
@@ -88,7 +97,7 @@ func ListModelsForProject(c *gin.Context) {
 			continue
 		}
 
-		isDefault := entry.ID == manifest.DefaultModel
+		isDefault := entry.ID == effectiveDefault
 		flagName := fmt.Sprintf("model.%s.enabled", entry.ID)
 
 		// Default model is always included
@@ -117,7 +126,7 @@ func ListModelsForProject(c *gin.Context) {
 
 	c.JSON(http.StatusOK, types.ListModelsResponse{
 		Models:       models,
-		DefaultModel: manifest.DefaultModel,
+		DefaultModel: effectiveDefault,
 	})
 }
 
@@ -172,9 +181,14 @@ func isModelAvailable(ctx context.Context, k8sClient kubernetes.Interface, model
 		cachedManifest.Store(manifest)
 	}
 
-	// Default model is always available
+	// Default models (global and per-provider) are always available
 	if modelID == manifest.DefaultModel {
 		return true
+	}
+	for _, pd := range manifest.ProviderDefaults {
+		if modelID == pd {
+			return true
+		}
 	}
 
 	for _, entry := range manifest.Models {

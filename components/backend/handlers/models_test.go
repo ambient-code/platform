@@ -36,13 +36,19 @@ var _ = Describe("Models Handler", Label(test_constants.LabelUnit, test_constant
 	)
 
 	validManifestObj := types.ModelManifest{
-		Version:      1,
+		Version:      2,
 		DefaultModel: "claude-sonnet-4-5",
+		ProviderDefaults: map[string]string{
+			"anthropic": "claude-sonnet-4-5",
+			"google":    "gemini-2.5-flash",
+		},
 		Models: []types.ModelEntry{
 			{ID: "claude-sonnet-4-5", Label: "Claude Sonnet 4.5", VertexID: "claude-sonnet-4-5@20250929", Provider: "anthropic", Available: true},
 			{ID: "claude-opus-4-6", Label: "Claude Opus 4.6", VertexID: "claude-opus-4-6@default", Provider: "anthropic", Available: true},
 			{ID: "claude-opus-4-5", Label: "Claude Opus 4.5", VertexID: "claude-opus-4-5@20251101", Provider: "anthropic", Available: true},
 			{ID: "claude-haiku-4-5", Label: "Claude Haiku 4.5", VertexID: "claude-haiku-4-5@20251001", Provider: "anthropic", Available: true},
+			{ID: "gemini-2.5-flash", Label: "Gemini 2.5 Flash", VertexID: "gemini-2.5-flash", Provider: "google", Available: true},
+			{ID: "gemini-2.5-pro", Label: "Gemini 2.5 Pro", VertexID: "gemini-2.5-pro", Provider: "google", Available: true},
 		},
 	}
 
@@ -130,8 +136,8 @@ var _ = Describe("Models Handler", Label(test_constants.LabelUnit, test_constant
 			var resp types.ListModelsResponse
 			err := json.Unmarshal(httpTestUtils.GetResponseRecorder().Body.Bytes(), &resp)
 			Expect(err).NotTo(HaveOccurred())
-			// With no Unleash configured, IsModelEnabled returns true, so all 4 models pass
-			Expect(resp.Models).To(HaveLen(4))
+			// With no Unleash configured, IsModelEnabled returns true, so all 6 models pass
+			Expect(resp.Models).To(HaveLen(6))
 			Expect(resp.DefaultModel).To(Equal("claude-sonnet-4-5"))
 		})
 
@@ -224,9 +230,9 @@ var _ = Describe("Models Handler", Label(test_constants.LabelUnit, test_constant
 			err := json.Unmarshal(httpTestUtils.GetResponseRecorder().Body.Bytes(), &resp)
 			Expect(err).NotTo(HaveOccurred())
 
-			// opus-4-6 excluded by override; the other 3 should still be present
-			// (default model + 2 non-default models via Unleash fallback which returns true when not configured)
-			Expect(resp.Models).To(HaveLen(3))
+			// opus-4-6 excluded by override; the other 5 should still be present
+			// (default model + 4 non-default models via Unleash fallback which returns true when not configured)
+			Expect(resp.Models).To(HaveLen(5))
 			ids := make([]string, len(resp.Models))
 			for i, m := range resp.Models {
 				ids[i] = m.ID
@@ -234,6 +240,8 @@ var _ = Describe("Models Handler", Label(test_constants.LabelUnit, test_constant
 			Expect(ids).To(ContainElement("claude-sonnet-4-5"))
 			Expect(ids).To(ContainElement("claude-opus-4-5"))
 			Expect(ids).To(ContainElement("claude-haiku-4-5"))
+			Expect(ids).To(ContainElement("gemini-2.5-flash"))
+			Expect(ids).To(ContainElement("gemini-2.5-pro"))
 			Expect(ids).NotTo(ContainElement("claude-opus-4-6"))
 		})
 
@@ -284,7 +292,7 @@ var _ = Describe("Models Handler", Label(test_constants.LabelUnit, test_constant
 			var resp types.ListModelsResponse
 			err = json.Unmarshal(httpTestUtils.GetResponseRecorder().Body.Bytes(), &resp)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(resp.Models).To(HaveLen(3))
+			Expect(resp.Models).To(HaveLen(5))
 
 			for _, m := range resp.Models {
 				Expect(m.ID).NotTo(Equal("claude-opus-4-6"))
@@ -333,9 +341,9 @@ var _ = Describe("Models Handler", Label(test_constants.LabelUnit, test_constant
 			var resp types.ListModelsResponse
 			err := json.Unmarshal(httpTestUtils.GetResponseRecorder().Body.Bytes(), &resp)
 			Expect(err).NotTo(HaveOccurred())
-			// Cached manifest has 4 models (not 5 hardcoded defaults),
+			// Cached manifest has 6 models (not 7 hardcoded defaults),
 			// and they go through flag filtering
-			Expect(resp.Models).To(HaveLen(4))
+			Expect(resp.Models).To(HaveLen(6))
 			Expect(resp.DefaultModel).To(Equal("claude-sonnet-4-5"))
 		})
 
@@ -392,9 +400,11 @@ var _ = Describe("Models Handler", Label(test_constants.LabelUnit, test_constant
 
 			manifest, err := LoadManifest(path)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(manifest.Version).To(Equal(1))
+			Expect(manifest.Version).To(Equal(2))
 			Expect(manifest.DefaultModel).To(Equal("claude-sonnet-4-5"))
-			Expect(manifest.Models).To(HaveLen(4))
+			Expect(manifest.ProviderDefaults).To(HaveLen(2))
+			Expect(manifest.ProviderDefaults["google"]).To(Equal("gemini-2.5-flash"))
+			Expect(manifest.Models).To(HaveLen(6))
 		})
 
 		It("should return error when file is missing", func() {
