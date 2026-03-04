@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
 """Automated Vertex AI model discovery.
 
-Maintains curated lists of Anthropic and Google model base names, resolves
-their latest Vertex AI version via the Model Garden API, probes each to
+Discovers models from Vertex AI publishers via the Model Garden list API,
+filters by configured prefix patterns, resolves versions, probes each to
 confirm availability, and updates the model manifest. Never removes models
 — only adds new ones or updates the ``available`` / ``vertexId`` fields.
+
+New models matching a prefix are auto-discovered without code changes.
+For example, if Anthropic releases ``claude-opus-4-7``, it will be picked
+up automatically because it matches the ``claude-`` prefix under the
+``anthropic`` publisher.
 
 Required env vars:
     GCP_REGION                 - GCP region (e.g. us-east5)
@@ -17,10 +22,12 @@ Optional env vars:
 
 import json
 import os
+import re
 import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -36,17 +43,50 @@ DEFAULT_MANIFEST = (
     / "models.json"
 )
 
-# Each entry: (model_id, publisher, provider)
-# publisher = Vertex AI publisher path segment (anthropic | google)
-# provider  = manifest provider field (anthropic | google)
-KNOWN_MODELS: list[tuple[str, str, str]] = [
-    # Anthropic models
+# Keep only the N most recent versions per model family.
+# e.g. claude-opus-4-6 and claude-opus-4-5 are kept, claude-opus-4-1 is dropped.
+MAX_VERSIONS_PER_FAMILY = 2
+
+# Publisher discovery configuration.
+# prefixes:  only models whose ID starts with one of these are included.
+# exclude:   model IDs matching these regex patterns are skipped (embeddings,
+#            image models, legacy versions, etc.).
+PUBLISHERS: list[dict] = [
+    {
+        "publisher": "anthropic",
+        "provider": "anthropic",
+        "prefixes": ["claude-"],
+        "exclude": [
+            r"^claude-[a-z]+-\d+$",  # base aliases without minor version (claude-opus-4)
+        ],
+    },
+    {
+        "publisher": "google",
+        "provider": "google",
+        "prefixes": ["gemini-"],
+        "exclude": [
+            r"-\d{3}$",  # pinned versions like gemini-2.5-flash-001
+            r"preview",  # preview models
+            r"exp",  # experimental models
+            r"image",  # image generation models
+            r"embedding",
+            r"imagen",
+            r"veo",
+            r"chirp",
+            r"codey",
+            r"medlm",
+        ],
+    },
+]
+
+# Fallback seed list used when the list API is unavailable.
+# Once the list API works, this is only used for models it might miss.
+SEED_MODELS: list[tuple[str, str, str]] = [
     ("claude-sonnet-4-6", "anthropic", "anthropic"),
     ("claude-sonnet-4-5", "anthropic", "anthropic"),
     ("claude-opus-4-6", "anthropic", "anthropic"),
     ("claude-opus-4-5", "anthropic", "anthropic"),
     ("claude-haiku-4-5", "anthropic", "anthropic"),
-    # Google models
     ("gemini-2.5-flash", "google", "google"),
     ("gemini-2.5-pro", "google", "google"),
 ]
@@ -72,6 +112,130 @@ def get_access_token() -> str:
     except subprocess.CalledProcessError:
         raise RuntimeError("Failed to get GCP access token via gcloud")
     return result.stdout.strip()
+
+
+def list_publisher_models(publisher: str, token: str) -> list[str]:
+    """List model IDs from the Model Garden for a publisher.
+
+    Uses the v1beta1 API: GET /publishers/{publisher}/models
+    Returns a list of model base names (e.g. ["claude-sonnet-4-5", ...]).
+    Returns an empty list on failure (caller falls back to seed list).
+    """
+    base_url = "https://aiplatform.googleapis.com/v1beta1"
+    all_models: list[str] = []
+    page_token = ""
+
+    for _ in range(20):  # page limit safety
+        params = {"pageSize": "100"}
+        if page_token:
+            params["pageToken"] = page_token
+
+        url = (
+            f"{base_url}/publishers/{urllib.parse.quote(publisher, safe='')}"
+            f"/models?{urllib.parse.urlencode(params)}"
+        )
+
+        req = urllib.request.Request(
+            url,
+            headers={"Authorization": f"Bearer {token}"},
+            method="GET",
+        )
+
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data = json.loads(resp.read().decode())
+        except urllib.error.HTTPError as e:
+            print(
+                f"  WARNING: list models for {publisher} failed (HTTP {e.code})",
+                file=sys.stderr,
+            )
+            return []
+        except Exception as e:
+            print(
+                f"  WARNING: list models for {publisher} failed ({e})",
+                file=sys.stderr,
+            )
+            return []
+
+        for model in data.get("publisherModels", []):
+            # name is like "publishers/google/models/gemini-2.5-flash"
+            name = model.get("name", "")
+            model_id = name.rsplit("/", 1)[-1] if "/" in name else name
+            if model_id:
+                all_models.append(model_id)
+
+        page_token = data.get("nextPageToken", "")
+        if not page_token:
+            break
+
+    return all_models
+
+
+def discover_models(token: str) -> list[tuple[str, str, str]]:
+    """Discover models from all configured publishers.
+
+    Queries the Model Garden list API for each publisher, filters by
+    prefix patterns, and excludes unwanted model types. Falls back to
+    the SEED_MODELS list for any publisher where the API fails.
+
+    Returns a deduplicated list of (model_id, publisher, provider) tuples.
+    """
+    seen: set[str] = set()
+    result: list[tuple[str, str, str]] = []
+
+    # Collect per-publisher: (model_id, reason) for the summary table
+    publisher_log: list[tuple[str, list[tuple[str, str]]]] = []
+
+    for pub in PUBLISHERS:
+        publisher = pub["publisher"]
+        provider = pub["provider"]
+        prefixes = pub["prefixes"]
+        excludes = [re.compile(p) for p in pub["exclude"]]
+
+        api_models = list_publisher_models(publisher, token)
+        log_entries: list[tuple[str, str]] = []
+
+        if api_models:
+            for model_id in sorted(api_models):
+                if not any(model_id.startswith(p) for p in prefixes):
+                    log_entries.append((model_id, "SKIP (prefix)"))
+                    continue
+                if any(pat.search(model_id) for pat in excludes):
+                    log_entries.append((model_id, "EXCLUDE"))
+                    continue
+                log_entries.append((model_id, "KEEP"))
+                if model_id not in seen:
+                    seen.add(model_id)
+                    result.append((model_id, publisher, provider))
+        else:
+            print(
+                f"  {publisher}: API unavailable, using seed list",
+                file=sys.stderr,
+            )
+
+        publisher_log.append((publisher, log_entries))
+
+    # Merge in seed models that weren't discovered by the API
+    for model_id, publisher, provider in SEED_MODELS:
+        if model_id not in seen:
+            seen.add(model_id)
+            result.append((model_id, publisher, provider))
+
+    # Keep only the N most recent versions per model family
+    result = keep_latest_versions(result, MAX_VERSIONS_PER_FAMILY)
+    kept_ids = {entry[0] for entry in result}
+
+    # Print the summary table with accurate final disposition
+    for publisher, log_entries in publisher_log:
+        if not log_entries:
+            continue
+        print(f"  {publisher}: {len(log_entries)} model(s) from API")
+        for model_id, reason in log_entries:
+            if reason == "KEEP" and model_id not in kept_ids:
+                reason = "DROP (version limit)"
+            print(f"    {model_id:<50s} {reason}")
+
+    return sorted(result, key=lambda x: x[0])
 
 
 def resolve_version(
@@ -109,7 +273,6 @@ def resolve_version(
 
         except urllib.error.HTTPError as e:
             if e.code in (403, 404):
-                # Permission denied or not found — retrying won't help
                 print(
                     f"  {model_id}: version resolution unavailable (HTTP {e.code})",
                     file=sys.stderr,
@@ -142,6 +305,61 @@ def model_id_to_label(model_id: str) -> str:
         elif part:
             result.append(part.capitalize())
     return " ".join(result)
+
+
+def parse_model_family(model_id: str) -> tuple[str, tuple[int, ...]]:
+    """Split a model ID into (family, version_tuple).
+
+    Trailing numeric segments form the version; everything before is the family.
+    Examples:
+        "claude-opus-4-6"       -> ("claude-opus", (4, 6))
+        "claude-haiku-4-5"      -> ("claude-haiku", (4, 5))
+        "gemini-2.5-flash"      -> ("gemini-2.5-flash", ())
+        "gemini-2.5-flash-lite" -> ("gemini-2.5-flash-lite", ())
+    """
+    parts = model_id.split("-")
+    version_parts: list[int] = []
+    # Walk backwards, collecting trailing numeric segments
+    while parts and parts[-1].isdigit():
+        version_parts.insert(0, int(parts.pop()))
+    family = "-".join(parts) if parts else model_id
+    return family, tuple(version_parts)
+
+
+def keep_latest_versions(
+    models: list[tuple[str, str, str]], max_versions: int
+) -> list[tuple[str, str, str]]:
+    """Keep only the N most recent versions per model family.
+
+    Models without a parseable version (e.g. gemini-2.5-flash) are always kept.
+    """
+    from collections import defaultdict
+
+    # Group by family
+    families: dict[str, list[tuple[tuple[int, ...], tuple[str, str, str]]]] = (
+        defaultdict(list)
+    )
+    no_version: list[tuple[str, str, str]] = []
+
+    for entry in models:
+        model_id = entry[0]
+        family, version = parse_model_family(model_id)
+        if version:
+            families[family].append((version, entry))
+        else:
+            no_version.append(entry)
+
+    result: list[tuple[str, str, str]] = list(no_version)
+    for family, versioned in sorted(families.items()):
+        # Sort by version descending, keep top N
+        versioned.sort(key=lambda x: x[0], reverse=True)
+        kept = [entry for _, entry in versioned[:max_versions]]
+        dropped = [entry[0] for _, entry in versioned[max_versions:]]
+        if dropped:
+            print(f"  {family}: keeping {max_versions} latest, dropping {dropped}")
+        result.extend(kept)
+
+    return sorted(result, key=lambda x: x[0])
 
 
 def _build_probe_request(
@@ -274,11 +492,14 @@ def main() -> int:
     manifest = load_manifest(manifest_path)
     token = get_access_token()
 
-    print(f"Processing {len(KNOWN_MODELS)} known model(s) in {region}/{project_id}...")
+    # Discover models from the Model Garden API + seed list fallback
+    print("Discovering models from Vertex AI Model Garden...")
+    models_to_process = discover_models(token)
+    print(f"Processing {len(models_to_process)} model(s) in {region}/{project_id}...")
 
     changes = []
 
-    for model_id, publisher, provider in KNOWN_MODELS:
+    for model_id, publisher, provider in models_to_process:
         # Try to resolve the latest version via Model Garden API
         resolved_version = resolve_version(region, model_id, publisher, token)
 
