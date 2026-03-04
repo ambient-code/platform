@@ -46,7 +46,6 @@ jobs:
           TRIGGER_PR_ACTION: ${{ github.event.action }}
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          allowed_tools: 'Bash,mcp__jira__jira_search,mcp__jira__jira_get_issue,mcp__jira__jira_create_issue,mcp__jira__jira_update_issue,mcp__jira__jira_transition_issue,mcp__jira__jira_get_transitions,mcp__jira__jira_create_remote_issue_link,mcp__jira__jira_add_comment,mcp__jira__jira_get_sprints_from_board,mcp__jira__jira_get_board_issues,mcp__jira__jira_get_sprint_issues,mcp__jira__jira_link_to_epic'
           prompt: |
             You are the Jira ↔ GitHub sync agent for the Ambient Code Platform team.
 
@@ -70,11 +69,27 @@ jobs:
             Amber PRs: authored by the `github-actions` bot with the `amber-generated` label.
             Treat them as normal PRs — same sync rules, no assignee.
 
-            ## GitHub login → Jira username map
+            ## Resolving a GitHub author to a Jira assignee
 
-            mprpic → mprpic | ktdreyer → kdreyer | kahowell → khowell
-            jeremyeder → jeder | markturansky → markturansky | Gkrumbach07 → gkrumbac
-            maskarb → maskarb | adalton → adalton | jwm4 → jwm4
+            Never hardcode a username map. For each PR author, resolve their Jira account dynamically:
+
+            1. Fetch the author's email from GitHub:
+               ```bash
+               GH_EMAIL=$(gh api users/<github_login> --jq '.email // empty')
+               ```
+               If the email is empty (private profile), try the commits on the PR:
+               ```bash
+               GH_EMAIL=$(gh api repos/ambient-code/platform/pulls/<pr_num>/commits \
+                 --jq '.[0].commit.author.email // empty')
+               ```
+
+            2. If an email was found, look up the Jira user:
+               ```
+               mcp__jira__jira_get_user_profile(user_identifier="<email>")
+               ```
+               Use the returned account ID or username as the assignee.
+
+            3. If no email found or Jira lookup fails → leave assignee empty, move on.
 
             ---
 
