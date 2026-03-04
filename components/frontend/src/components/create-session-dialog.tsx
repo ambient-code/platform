@@ -42,14 +42,8 @@ import { useIntegrationsStatus } from "@/services/queries/use-integrations";
 import { useModels } from "@/services/queries/use-models";
 import { errorToast } from "@/hooks/use-toast";
 
-// Keep in sync with components/manifests/base/models.json (available: true entries).
-const fallbackModels = [
-  { value: "claude-sonnet-4-5", label: "Claude Sonnet 4.5" },
-  { value: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
-  { value: "claude-opus-4-6", label: "Claude Opus 4.6" },
-  { value: "claude-opus-4-5", label: "Claude Opus 4.5" },
-  { value: "claude-haiku-4-5", label: "Claude Haiku 4.5" },
-];
+// Static default used for form initialization before the API responds.
+const DEFAULT_MODEL = "claude-sonnet-4-5";
 
 const formSchema = z.object({
   displayName: z.string().max(50).optional(),
@@ -89,18 +83,12 @@ export function CreateSessionDialog({
     defaultValues: {
       displayName: "",
       runnerType: DEFAULT_RUNNER_TYPE_ID,
-      model: defaultModel,
+      model: DEFAULT_MODEL,
       temperature: 0.7,
       maxTokens: 4000,
       timeout: 300,
     },
   });
-
-  useEffect(() => {
-    if (modelsData?.defaultModel && !form.formState.dirtyFields.model) {
-      form.setValue("model", modelsData.defaultModel, { shouldDirty: false });
-    }
-  }, [modelsData?.defaultModel, form]);
 
   const selectedRunnerType = form.watch("runnerType");
 
@@ -109,20 +97,28 @@ export function CreateSessionDialog({
     [runnerTypes, selectedRunnerType]
   );
 
-  // Fetch models filtered by the selected runner's provider
+  // Fetch models filtered by the selected runner's provider.
+  // models.json is the single source of truth — no hardcoded fallback lists.
   const { data: modelsData, isLoading: modelsLoading } = useModels(
     projectName, open, selectedRunner?.provider
   );
 
   const models = modelsData
     ? modelsData.models.map((m) => ({ value: m.id, label: m.label }))
-    : fallbackModels;
-  const defaultModel = modelsData?.defaultModel ?? "claude-sonnet-4-5";
+    : [];
+  const defaultModel = modelsData?.defaultModel ?? DEFAULT_MODEL;
+
+  // Update form model when API response arrives or provider changes
+  useEffect(() => {
+    if (modelsData?.defaultModel && !form.formState.dirtyFields.model) {
+      form.setValue("model", modelsData.defaultModel, { shouldDirty: false });
+    }
+  }, [modelsData?.defaultModel, form]);
 
   const handleRunnerTypeChange = (value: string, onChange: (v: string) => void) => {
     onChange(value);
-    // Model list will update automatically via useModels when provider changes.
-    // Reset model to default — the useEffect below will set it from the API response.
+    // Model list will refetch via useModels when provider changes.
+    // Reset model so the useEffect above sets it from the new API response.
     form.setValue("model", "", { shouldDirty: false });
   };
 

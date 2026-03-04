@@ -54,15 +54,15 @@ func ListModelsForProject(c *gin.Context) {
 
 	ctx := c.Request.Context()
 	namespace := sanitizeParam(c.Param("projectName"))
-	providerFilter := c.Query("provider")
+	providerFilter := sanitizeParam(c.Query("provider"))
 
 	manifest, err := LoadManifest(ManifestPath())
 	if err != nil {
 		log.Printf("WARNING: failed to load model manifest: %v", err)
 		manifest = cachedManifest.Load()
 		if manifest == nil {
-			log.Printf("WARNING: no cached manifest available, using hardcoded defaults")
-			c.JSON(http.StatusOK, defaultModelsResponse())
+			log.Printf("ERROR: no model manifest available (file unreadable, no cache)")
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Model manifest unavailable"})
 			return
 		}
 	} else {
@@ -119,9 +119,7 @@ func ListModelsForProject(c *gin.Context) {
 	}
 
 	if len(models) == 0 {
-		log.Printf("WARNING: no models passed filtering, using defaults")
-		c.JSON(http.StatusOK, defaultModelsResponse())
-		return
+		log.Printf("WARNING: no models passed filtering for provider=%q in namespace %s", providerFilter, namespace)
 	}
 
 	c.JSON(http.StatusOK, types.ListModelsResponse{
@@ -207,22 +205,4 @@ func isModelAvailable(ctx context.Context, k8sClient kubernetes.Interface, model
 
 	log.Printf("WARNING: model %q not found in manifest, rejecting", modelID)
 	return false
-}
-
-// defaultModelsResponse returns a hardcoded ListModelsResponse as a fallback
-// when the model manifest file is unavailable or malformed.
-// Keep in sync with components/manifests/base/models.json (available: true entries).
-func defaultModelsResponse() types.ListModelsResponse {
-	return types.ListModelsResponse{
-		DefaultModel: "claude-sonnet-4-5",
-		Models: []types.Model{
-			{ID: "claude-sonnet-4-5", Label: "Claude Sonnet 4.5", Provider: "anthropic", IsDefault: true},
-			{ID: "claude-sonnet-4-6", Label: "Claude Sonnet 4.6", Provider: "anthropic", IsDefault: false},
-			{ID: "claude-opus-4-6", Label: "Claude Opus 4.6", Provider: "anthropic", IsDefault: false},
-			{ID: "claude-opus-4-5", Label: "Claude Opus 4.5", Provider: "anthropic", IsDefault: false},
-			{ID: "claude-haiku-4-5", Label: "Claude Haiku 4.5", Provider: "anthropic", IsDefault: false},
-			{ID: "gemini-2.5-flash", Label: "Gemini 2.5 Flash", Provider: "google", IsDefault: false},
-			{ID: "gemini-2.5-pro", Label: "Gemini 2.5 Pro", Provider: "google", IsDefault: false},
-		},
-	}
 }

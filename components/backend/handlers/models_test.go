@@ -299,8 +299,8 @@ var _ = Describe("Models Handler", Label(test_constants.LabelUnit, test_constant
 			}
 		})
 
-		It("should return hardcoded defaults when manifest file is missing and no cache", func() {
-			logger.Log("Testing ListModelsForProject fallback when manifest file missing and no cache")
+		It("should return 503 when manifest file is missing and no cache", func() {
+			logger.Log("Testing ListModelsForProject returns 503 when manifest unavailable")
 			os.Setenv("MODELS_MANIFEST_PATH", filepath.Join(GinkgoT().TempDir(), "nonexistent.json"))
 			fakeClient := setupK8sWithOverrides()
 			setupAuth(fakeClient)
@@ -308,13 +308,7 @@ var _ = Describe("Models Handler", Label(test_constants.LabelUnit, test_constant
 			ginCtx := createAuthenticatedContext("test-project")
 			ListModelsForProject(ginCtx)
 
-			httpTestUtils.AssertHTTPStatus(http.StatusOK)
-
-			var resp types.ListModelsResponse
-			err := json.Unmarshal(httpTestUtils.GetResponseRecorder().Body.Bytes(), &resp)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(resp.Models).To(HaveLen(7))
-			Expect(resp.DefaultModel).To(Equal("claude-sonnet-4-5"))
+			httpTestUtils.AssertHTTPStatus(http.StatusServiceUnavailable)
 		})
 
 		It("should use cached manifest when file becomes unavailable", func() {
@@ -341,14 +335,13 @@ var _ = Describe("Models Handler", Label(test_constants.LabelUnit, test_constant
 			var resp types.ListModelsResponse
 			err := json.Unmarshal(httpTestUtils.GetResponseRecorder().Body.Bytes(), &resp)
 			Expect(err).NotTo(HaveOccurred())
-			// Cached manifest has 6 models (not 7 hardcoded defaults),
-			// and they go through flag filtering
+			// Cached manifest has 6 models and they go through flag filtering
 			Expect(resp.Models).To(HaveLen(6))
 			Expect(resp.DefaultModel).To(Equal("claude-sonnet-4-5"))
 		})
 
-		It("should return hardcoded defaults when JSON is malformed and no cache", func() {
-			logger.Log("Testing ListModelsForProject fallback with malformed JSON and no cache")
+		It("should return 503 when JSON is malformed and no cache", func() {
+			logger.Log("Testing ListModelsForProject returns 503 with malformed JSON and no cache")
 			writeManifestFile("{invalid json")
 			fakeClient := setupK8sWithOverrides()
 			setupAuth(fakeClient)
@@ -356,13 +349,7 @@ var _ = Describe("Models Handler", Label(test_constants.LabelUnit, test_constant
 			ginCtx := createAuthenticatedContext("test-project")
 			ListModelsForProject(ginCtx)
 
-			httpTestUtils.AssertHTTPStatus(http.StatusOK)
-
-			var resp types.ListModelsResponse
-			err := json.Unmarshal(httpTestUtils.GetResponseRecorder().Body.Bytes(), &resp)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(resp.Models).To(HaveLen(7))
-			Expect(resp.DefaultModel).To(Equal("claude-sonnet-4-5"))
+			httpTestUtils.AssertHTTPStatus(http.StatusServiceUnavailable)
 		})
 	})
 

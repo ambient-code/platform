@@ -31,16 +31,15 @@ const (
 // NOTE: These types are duplicated in components/backend/handlers/runner_types.go.
 // Keep both in sync when modifying the schema.
 type AgentRuntimeSpec struct {
-	ID           string        `json:"id"`
-	DisplayName  string        `json:"displayName"`
-	Description  string        `json:"description"`
-	Framework    string        `json:"framework"`
-	Container    ContainerSpec `json:"container"`
-	Sandbox      SandboxSpec   `json:"sandbox"`
-	Auth         AuthSpec      `json:"auth"`
-	DefaultModel string        `json:"defaultModel"`
-	Models       []ModelEntry  `json:"models"`
-	FeatureGate  string        `json:"featureGate"`
+	ID          string        `json:"id"`
+	DisplayName string        `json:"displayName"`
+	Description string        `json:"description"`
+	Framework   string        `json:"framework"`
+	Provider    string        `json:"provider"`
+	Container   ContainerSpec `json:"container"`
+	Sandbox     SandboxSpec   `json:"sandbox"`
+	Auth        AuthSpec      `json:"auth"`
+	FeatureGate string        `json:"featureGate"`
 }
 
 // ContainerSpec defines the runner container configuration.
@@ -80,11 +79,6 @@ type AuthSpec struct {
 	VertexSupported    bool     `json:"vertexSupported"`
 }
 
-// ModelEntry represents a model choice within a runner type.
-type ModelEntry struct {
-	Value string `json:"value"`
-	Label string `json:"label"`
-}
 
 // In-memory cache for the agent runtime registry.
 var (

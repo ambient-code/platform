@@ -45,10 +45,7 @@ func testRegistryJSON() string {
 				SecretKeyLogic:     "any",
 				VertexSupported:    true,
 			},
-			DefaultModel: "claude-sonnet-4-5",
-			Models: []ModelEntry{
-				{Value: "claude-sonnet-4-5", Label: "Claude Sonnet 4.5"},
-			},
+			Provider:    "anthropic",
 			FeatureGate: "",
 		},
 		{
@@ -74,10 +71,7 @@ func testRegistryJSON() string {
 				SecretKeyLogic:     "any",
 				VertexSupported:    true,
 			},
-			DefaultModel: "gemini-2.5-flash",
-			Models: []ModelEntry{
-				{Value: "gemini-2.5-flash", Label: "Gemini 2.5 Flash"},
-			},
+			Provider:    "google",
 			FeatureGate: "runner.gemini-cli.enabled",
 		},
 		{
