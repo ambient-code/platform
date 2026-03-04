@@ -48,6 +48,8 @@ func registerRoutes(r *gin.Engine) {
 			// Removed: git/pull, git/push, git/synchronize, git/create-branch, git/list-branches - agent handles all git operations
 			projectGroup.GET("/agentic-sessions/:sessionName/git/list-branches", handlers.GitListBranchesSession)
 			projectGroup.GET("/agentic-sessions/:sessionName/pod-events", handlers.GetSessionPodEvents)
+			projectGroup.GET("/agentic-sessions/:sessionName/logs", handlers.GetSessionLogs)
+			projectGroup.GET("/agentic-sessions/:sessionName/metrics", handlers.GetSessionMetrics)
 			projectGroup.POST("/agentic-sessions/:sessionName/workflow", handlers.SelectWorkflow)
 			projectGroup.GET("/agentic-sessions/:sessionName/workflow/metadata", handlers.GetWorkflowMetadata)
 			projectGroup.POST("/agentic-sessions/:sessionName/repos", handlers.AddRepo)

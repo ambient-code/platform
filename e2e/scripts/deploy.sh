@@ -49,13 +49,14 @@ if [ -f ".env" ]; then
   source .env
   
   # Log image overrides
-  if [ -n "${IMAGE_BACKEND:-}${IMAGE_FRONTEND:-}${IMAGE_OPERATOR:-}${IMAGE_RUNNER:-}${IMAGE_STATE_SYNC:-}" ]; then
+  if [ -n "${IMAGE_BACKEND:-}${IMAGE_FRONTEND:-}${IMAGE_OPERATOR:-}${IMAGE_RUNNER:-}${IMAGE_STATE_SYNC:-}${IMAGE_PUBLIC_API:-}" ]; then
     echo "   ℹ️  Image overrides from .env:"
     [ -n "${IMAGE_BACKEND:-}" ] && echo "      Backend: ${IMAGE_BACKEND}"
     [ -n "${IMAGE_FRONTEND:-}" ] && echo "      Frontend: ${IMAGE_FRONTEND}"
     [ -n "${IMAGE_OPERATOR:-}" ] && echo "      Operator: ${IMAGE_OPERATOR}"
     [ -n "${IMAGE_RUNNER:-}" ] && echo "      Runner: ${IMAGE_RUNNER}"
     [ -n "${IMAGE_STATE_SYNC:-}" ] && echo "      State-sync: ${IMAGE_STATE_SYNC}"
+    [ -n "${IMAGE_PUBLIC_API:-}" ] && echo "      Public-API: ${IMAGE_PUBLIC_API}"
   fi
 fi
 
@@ -67,6 +68,7 @@ kubectl kustomize ../components/manifests/overlays/kind/ | \
   sed "s|quay.io/ambient_code/vteam_operator:latest|${IMAGE_OPERATOR:-quay.io/ambient_code/vteam_operator:latest}|g" | \
   sed "s|quay.io/ambient_code/vteam_claude_runner:latest|${IMAGE_RUNNER:-quay.io/ambient_code/vteam_claude_runner:latest}|g" | \
   sed "s|quay.io/ambient_code/vteam_state_sync:latest|${IMAGE_STATE_SYNC:-quay.io/ambient_code/vteam_state_sync:latest}|g" | \
+  sed "s|quay.io/ambient_code/vteam_public_api:latest|${IMAGE_PUBLIC_API:-quay.io/ambient_code/vteam_public_api:latest}|g" | \
   kubectl apply --validate=false -f -
 
 # Inject ANTHROPIC_API_KEY if set (for agent testing)
