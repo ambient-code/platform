@@ -623,7 +623,7 @@ The following files are **never generated** and contain security-critical, SDK-s
 ```go
 type Client struct {
     baseURL    string
-    basePath   string   // default: "/api/ambient-api-server/v1"
+    basePath   string   // default: "/api/ambient/v1"
     token      SecureToken
     project    string
     httpClient *http.Client
@@ -646,7 +646,7 @@ func WithHTTPClient(c *http.Client) ClientOption { ... }
 
 ```python
 class AmbientClient:
-    def __init__(self, base_url, token, project, *, base_path="/api/ambient-api-server/v1", timeout=30.0): ...
+    def __init__(self, base_url, token, project, *, base_path="/api/ambient/v1", timeout=30.0): ...
     def _request(self, method, path, **kwargs) -> dict: ...  # ALL generated APIs call this
 
     @property
@@ -1200,7 +1200,7 @@ This prevents SDK drift and ensures developers regenerate SDKs when the API chan
 When modifying templates:
 
 1. **Test against current spec** to ensure valid output
-2. **Run golden file tests** to verify format consistency
+2. **Run golden file tests** to verify format consistency  
 3. **Update documentation** if template behavior changes
 
 The generator's modular design ensures that updates to templates automatically apply to all current and future resources.

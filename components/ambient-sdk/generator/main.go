@@ -299,8 +299,8 @@ func generatePython(spec *Spec, outDir string, header GeneratedHeader) error {
 
 func loadTemplate(path string) (*template.Template, error) {
 	funcMap := template.FuncMap{
-		"snakeCase":     toSnakeCase,
-		"lower":         strings.ToLower,
+		"snakeCase": toSnakeCase,
+		"lower":     strings.ToLower,
 		"title": func(s string) string {
 			if s == "" {
 				return s

@@ -23,8 +23,8 @@ if TYPE_CHECKING:
 
 class AmbientClient:
     """HTTP client for the Ambient Platform API."""
-
-    _base_path = "/api/ambient-api-server/v1"
+    
+    _base_path = "/api/ambient/v1"
 
     def __init__(
         self,
@@ -40,9 +40,9 @@ class AmbientClient:
         self._project = project
         self._timeout = timeout
         self._user_agent = user_agent
-
+        
         self._validate_config()
-
+        
         self._client = httpx.Client(
             timeout=timeout,
             headers={
@@ -50,7 +50,7 @@ class AmbientClient:
                 "Accept": "application/json",
             },
         )
-
+        
         # Initialize API interfaces
 {{- range .Spec.Resources}}
         self._{{.Name | snakeCase}}_api: Optional[{{.Name}}API] = None
@@ -59,44 +59,44 @@ class AmbientClient:
     @classmethod
     def from_env(cls, **kwargs: Any) -> AmbientClient:
         """Create client from environment variables."""
-        base_url = os.environ.get("AMBIENT_API_URL", "http://localhost:8080")
+        base_url = os.environ.get("AMBIENT_API_URL", "http://localhost:8000")
         token = os.environ.get("AMBIENT_TOKEN")
         project = os.environ.get("AMBIENT_PROJECT")
-
+        
         if not token:
             raise ValueError("AMBIENT_TOKEN environment variable is required")
         if not project:
             raise ValueError("AMBIENT_PROJECT environment variable is required")
-
+        
         return cls(base_url=base_url, token=token, project=project, **kwargs)
 
     def _validate_config(self) -> None:
         """Validate client configuration."""
         if not self._base_url:
             raise ValueError("base URL cannot be empty")
-
+        
         if "example.com" in self._base_url or "placeholder" in self._base_url:
             raise ValueError("placeholder domain is not allowed")
-
+        
         parsed = urlparse(self._base_url)
         if parsed.scheme not in ("http", "https"):
             raise ValueError("URL scheme must be http or https")
-
+        
         if not self._token:
             raise ValueError("token cannot be empty")
-
-        if len(self._token) < 20:
-            raise ValueError("token is too short (minimum 20 characters)")
-
+        
         if self._token in ("YOUR_TOKEN_HERE", "PLACEHOLDER_TOKEN"):
             raise ValueError("placeholder token is not allowed")
-
+        
+        if len(self._token) < 20:
+            raise ValueError("token is too short (minimum 20 characters)")
+        
         if not self._project:
             raise ValueError("project cannot be empty")
-
+        
         if len(self._project) > 63:
             raise ValueError("project name cannot exceed 63 characters")
-
+        
         if not re.match(r'^[a-z0-9_-]+$', self._project):
             raise ValueError("project name must contain only lowercase alphanumeric characters, hyphens, and underscores")
 
@@ -110,16 +110,16 @@ class AmbientClient:
         expect_json: bool = True,
     ) -> Any:
         """Make HTTP request to the API."""
-        url = self._base_url + "/api/ambient-api-server/v1" + path
-
+        url = self._base_url + "/api/ambient/v1" + path
+        
         headers = {
             "Authorization": f"Bearer {self._token}",
             "X-Ambient-Project": self._project,
         }
-
+        
         if json is not None:
             headers["Content-Type"] = "application/json"
-
+        
         try:
             response = self._client.request(
                 method=method,
@@ -128,14 +128,14 @@ class AmbientClient:
                 json=json,
                 params=params,
             )
-
+            
             self._handle_response(response, expect_json)
-
+            
             if expect_json and response.content:
                 return response.json()
-
+            
             return None
-
+            
         except httpx.RequestError as e:
             raise APIError(f"Request failed: {e}") from e
 
@@ -143,7 +143,7 @@ class AmbientClient:
         """Handle HTTP response, raising appropriate errors."""
         if response.is_success:
             return
-
+        
         try:
             if response.content and expect_json:
                 error_data = response.json()
@@ -151,8 +151,8 @@ class AmbientClient:
                     raise APIError.from_dict(error_data, response.status_code)
         except (json.JSONDecodeError, ValueError):
             pass
-
-        # Fall back to generic error
+        
+        # Fall back to generic error  
         raise APIError.from_dict(
             {"reason": f"HTTP {response.status_code}: {response.reason_phrase}"},
             response.status_code

@@ -35,7 +35,7 @@ The Ambient Platform SDK is an **HTTP-first, zero-Kubernetes** client library. I
 
 1. **SDK** sends `POST /v1/sessions` with task, model, and repos to the API server.
 2. **API Server** creates an `AgenticSession` Custom Resource in the target namespace.
-3. **Control Plane** detects the new CR via polling (`GET /api/ambient-api-server/v1/sessions`).
+3. **Control Plane** detects the new CR via polling (`GET /api/ambient/v1/sessions`).
 4. **Operator** watches CRs and spawns a Kubernetes Job.
 5. **Runner** pod executes Claude Code CLI, writes results back to the CR status.
 6. **SDK** polls `GET /v1/sessions/{id}` until status is `completed` or `failed`.

@@ -8,16 +8,16 @@ from ambient_platform.client import AmbientClient
 class TestClientValidation:
     def test_empty_token_raises(self):
         with pytest.raises(ValueError, match="token cannot be empty"):
-            AmbientClient(base_url="http://localhost:8080", token="", project="test")
+            AmbientClient(base_url="http://localhost:8000", token="", project="test")
 
     def test_short_token_raises(self):
         with pytest.raises(ValueError, match="too short"):
-            AmbientClient(base_url="http://localhost:8080", token="abc", project="test")
+            AmbientClient(base_url="http://localhost:8000", token="abc", project="test")
 
     def test_placeholder_token_raises(self):
         with pytest.raises(ValueError, match="placeholder"):
             AmbientClient(
-                base_url="http://localhost:8080",
+                base_url="http://localhost:8000",
                 token="YOUR_TOKEN_HERE",
                 project="test",
             )
@@ -25,7 +25,7 @@ class TestClientValidation:
     def test_empty_project_raises(self):
         with pytest.raises(ValueError, match="project cannot be empty"):
             AmbientClient(
-                base_url="http://localhost:8080",
+                base_url="http://localhost:8000",
                 token="sha256~abcdefghijklmnopqrstuvwxyz1234567890",
                 project="",
             )
@@ -33,7 +33,7 @@ class TestClientValidation:
     def test_invalid_project_chars_raises(self):
         with pytest.raises(ValueError, match="alphanumeric"):
             AmbientClient(
-                base_url="http://localhost:8080",
+                base_url="http://localhost:8000",
                 token="sha256~abcdefghijklmnopqrstuvwxyz1234567890",
                 project="bad project!",
             )
@@ -41,7 +41,7 @@ class TestClientValidation:
     def test_long_project_raises(self):
         with pytest.raises(ValueError, match="63 characters"):
             AmbientClient(
-                base_url="http://localhost:8080",
+                base_url="http://localhost:8000",
                 token="sha256~abcdefghijklmnopqrstuvwxyz1234567890",
                 project="a" * 64,
             )
@@ -78,7 +78,7 @@ class TestClientValidation:
         )
         assert client._base_url == "https://api.real-platform.com"
         assert client._project == "my-project"
-        assert client._base_path == "/api/ambient-api-server/v1"
+        assert client._base_path == "/api/ambient/v1"
         client.close()
 
     def test_trailing_slash_stripped(self):
@@ -117,7 +117,7 @@ class TestClientFromEnv:
         monkeypatch.setenv("AMBIENT_PROJECT", "test-project")
         monkeypatch.delenv("AMBIENT_API_URL", raising=False)
         client = AmbientClient.from_env()
-        assert client._base_url == "http://localhost:8080"
+        assert client._base_url == "http://localhost:8000"
         client.close()
 
     def test_custom_url(self, monkeypatch):

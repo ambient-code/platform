@@ -61,7 +61,7 @@ describe('AmbientClient.fromEnv', () => {
 
   it('creates client from environment variables', () => {
     process.env.AMBIENT_API_URL = 'https://api.test.com';
-    process.env.AMBIENT_TOKEN = 'sha256~testtoken123';
+    process.env.AMBIENT_TOKEN = 'sha256~testtoken1234567890';
     process.env.AMBIENT_PROJECT = 'my-project';
     const client = AmbientClient.fromEnv();
     expect(client).toBeDefined();

@@ -11,7 +11,7 @@ The Ambient Platform SDK provides a simple HTTP client for creating and managing
 ### Prerequisites
 
 1. **Ambient Platform**: Deployed and accessible via HTTP
-2. **Bearer Token**: Valid authentication token for API access
+2. **Bearer Token**: Valid authentication token for API access  
 3. **Go 1.21+**: For running the examples
 
 ### Environment Setup
@@ -44,7 +44,7 @@ go run kubernetes_main.go
 
 The HTTP example demonstrates:
 - ✅ Creating a new agentic session
-- ✅ Retrieving session details by ID
+- ✅ Retrieving session details by ID  
 - ✅ Listing all accessible sessions
 - ✅ Optional session completion monitoring
 
@@ -69,7 +69,7 @@ The HTTP example demonstrates:
 📋 Listing all sessions...
 ✓ Found 2 sessions (total: 2)
   1. session-1771013589 (pending) - Analyze the repository structure and...
-  2. example-session (pending) -
+  2. example-session (pending) - 
 
 ✅ HTTP Client demonstration complete!
 ```
@@ -85,7 +85,7 @@ The HTTP example demonstrates:
 ### Session Management
 - **Create**: Submit new tasks to AI agents
 - **Retrieve**: Get session details and status
-- **List**: Browse all accessible sessions
+- **List**: Browse all accessible sessions  
 - **Monitor**: Poll for session completion
 
 ### Type Safety
@@ -121,7 +121,7 @@ resp, err := client.CreateSession(ctx, createReq)
 // Get session
 session, err := client.GetSession(ctx, sessionID)
 
-// List sessions
+// List sessions  
 list, err := client.ListSessions(ctx)
 
 // Wait for completion
@@ -248,7 +248,7 @@ The SDK supports three approaches to session completion monitoring:
 ## Next Steps
 
 1. **Explore Advanced Features**: Session monitoring, batch operations
-2. **Integration Testing**: Test with your actual platform deployment
+2. **Integration Testing**: Test with your actual platform deployment  
 3. **Error Handling**: Implement retry logic and circuit breakers
 4. **Observability**: Add logging and metrics for production usage
 
