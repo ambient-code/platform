@@ -22,7 +22,9 @@ func ListSessions(c *gin.Context) {
 	}
 	path := fmt.Sprintf("/api/projects/%s/agentic-sessions", project)
 
-	// Forward query parameters (e.g., labelSelector)
+	// Forward query parameters (e.g., labelSelector) to the backend as-is.
+	// Safe: the backend ignores unknown params and enforces RBAC via the
+	// user's own token, so no privilege escalation is possible.
 	if rawQuery := c.Request.URL.RawQuery; rawQuery != "" {
 		path = path + "?" + rawQuery
 	}

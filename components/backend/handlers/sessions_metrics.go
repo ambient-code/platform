@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 // GetSessionMetrics returns usage metrics extracted from the session CR status.
@@ -47,40 +48,36 @@ func GetSessionMetrics(c *gin.Context) {
 		"sessionId": sessionName,
 	}
 
-	// Extract timing info from status
-	if status, ok := item.Object["status"].(map[string]interface{}); ok {
-		if phase, ok := status["phase"].(string); ok {
-			metrics["phase"] = phase
-		}
-		if startTime, ok := status["startTime"].(string); ok {
-			metrics["startTime"] = startTime
+	// Extract timing info from status using unstructured helpers
+	if phase, ok, _ := unstructured.NestedString(item.Object, "status", "phase"); ok {
+		metrics["phase"] = phase
+	}
+	if startTime, ok, _ := unstructured.NestedString(item.Object, "status", "startTime"); ok {
+		metrics["startTime"] = startTime
 
-			// Calculate duration if possible
-			start, err := time.Parse(time.RFC3339, startTime)
-			if err == nil {
-				var end time.Time
-				if completionTime, ok := status["completionTime"].(string); ok && completionTime != "" {
-					end, err = time.Parse(time.RFC3339, completionTime)
-					if err != nil {
-						end = time.Now()
-					}
-					metrics["completionTime"] = completionTime
-				} else {
+		// Calculate duration if possible
+		start, err := time.Parse(time.RFC3339, startTime)
+		if err == nil {
+			var end time.Time
+			if completionTime, ok, _ := unstructured.NestedString(item.Object, "status", "completionTime"); ok && completionTime != "" {
+				end, err = time.Parse(time.RFC3339, completionTime)
+				if err != nil {
 					end = time.Now()
 				}
-				metrics["durationSeconds"] = int(end.Sub(start).Seconds())
+				metrics["completionTime"] = completionTime
+			} else {
+				end = time.Now()
 			}
+			metrics["durationSeconds"] = int(end.Sub(start).Seconds())
 		}
-		if sdkRestartCount, ok := status["sdkRestartCount"].(float64); ok {
-			metrics["restartCount"] = int(sdkRestartCount)
-		}
+	}
+	if sdkRestartCount, ok, _ := unstructured.NestedFloat64(item.Object, "status", "sdkRestartCount"); ok {
+		metrics["restartCount"] = int(sdkRestartCount)
 	}
 
 	// Extract timeout from spec
-	if spec, ok := item.Object["spec"].(map[string]interface{}); ok {
-		if timeout, ok := spec["timeout"].(float64); ok {
-			metrics["timeoutSeconds"] = int(timeout)
-		}
+	if timeout, ok, _ := unstructured.NestedFloat64(item.Object, "spec", "timeout"); ok {
+		metrics["timeoutSeconds"] = int(timeout)
 	}
 
 	// Extract any usage annotations (token counts, tool calls, etc.)
