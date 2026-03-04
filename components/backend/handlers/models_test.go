@@ -575,6 +575,16 @@ var _ = Describe("Models Handler", Label(test_constants.LabelUnit, test_constant
 			Expect(result).To(BeTrue())
 		})
 
+		It("should reject provider-default model when provider does not match requiredProvider", func() {
+			logger.Log("Testing isModelAvailable rejects provider-default with wrong provider")
+			writeManifestFile(validManifest)
+			setupK8sWithOverrides()
+
+			// gemini-2.5-flash is the google provider default — should be rejected for anthropic runner
+			result := isModelAvailable(context.Background(), K8sClient, "gemini-2.5-flash", "anthropic", "test-ns")
+			Expect(result).To(BeFalse())
+		})
+
 		It("should reject model when provider does not match requiredProvider", func() {
 			logger.Log("Testing isModelAvailable rejects provider mismatch")
 			writeManifestFile(validManifest)

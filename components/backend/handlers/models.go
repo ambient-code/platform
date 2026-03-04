@@ -183,24 +183,25 @@ func isModelAvailable(ctx context.Context, k8sClient kubernetes.Interface, model
 		cachedManifest.Store(manifest)
 	}
 
-	// Default models (global and per-provider) are always available
-	if modelID == manifest.DefaultModel {
-		return true
-	}
-	for _, pd := range manifest.ProviderDefaults {
-		if modelID == pd {
-			return true
-		}
-	}
-
 	for _, entry := range manifest.Models {
 		if entry.ID == modelID {
 			if !entry.Available {
 				return false
 			}
+			// Provider mismatch check applies to ALL models, including defaults
 			if requiredProvider != "" && entry.Provider != requiredProvider {
 				log.Printf("Model %q has provider %q but runner requires %q", modelID, entry.Provider, requiredProvider)
 				return false
+			}
+			// Default models (global and per-provider) are always enabled
+			// (skip feature flag check) but must still pass provider matching above
+			if modelID == manifest.DefaultModel {
+				return true
+			}
+			for _, pd := range manifest.ProviderDefaults {
+				if modelID == pd {
+					return true
+				}
 			}
 			flagName := fmt.Sprintf("model.%s.enabled", entry.ID)
 			overrides, oErr := getWorkspaceOverrides(ctx, k8sClient, namespace)
