@@ -2571,7 +2571,4 @@ func regenerateRunnerToken(sessionNamespace, sessionName string, session *unstru
 // This supersedes PR #562's volume mounting approach with just-in-time credential fetching
 
 // Helper functions
-var (
-	boolPtr  = func(b bool) *bool { return &b }
-	int64Ptr = func(i int64) *int64 { return &i }
-)
+var boolPtr = func(b bool) *bool { return &b }
