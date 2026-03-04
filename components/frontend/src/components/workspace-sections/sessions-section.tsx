@@ -67,7 +67,7 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
   }, [debouncedSearch]);
 
   // Runner type lookup for display names
-  const { data: runnerTypes } = useRunnerTypes();
+  const { data: runnerTypes } = useRunnerTypes(projectName);
   const runnerTypeMap = useMemo(() => {
     const map = new Map<string, string>();
     for (const rt of runnerTypes ?? []) {

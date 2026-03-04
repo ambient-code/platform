@@ -2,13 +2,13 @@ import { useQuery } from '@tanstack/react-query';
 import * as modelsApi from '@/services/api/models';
 
 export const modelKeys = {
-  forProject: (projectName: string) => ['models', projectName] as const,
+  forProject: (projectName: string, provider?: string) => ['models', projectName, provider] as const,
 };
 
-export function useModels(projectName: string, enabled = true) {
+export function useModels(projectName: string, enabled = true, provider?: string) {
   return useQuery({
-    queryKey: modelKeys.forProject(projectName),
-    queryFn: () => modelsApi.getModelsForProject(projectName),
+    queryKey: modelKeys.forProject(projectName, provider),
+    queryFn: () => modelsApi.getModelsForProject(projectName, provider),
     enabled: !!projectName && enabled,
     staleTime: 60_000,
   });

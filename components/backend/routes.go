@@ -13,13 +13,15 @@ func registerRoutes(r *gin.Engine) {
 	{
 		// Public endpoints (no auth required)
 		api.GET("/workflows/ootb", handlers.ListOOTBWorkflows)
-		api.GET("/runner-types", handlers.GetRunnerTypes)
+		// Global runner-types endpoint (no workspace overrides — for admin pages)
+		api.GET("/runner-types", handlers.GetRunnerTypesGlobal)
 
 		api.POST("/projects/:projectName/agentic-sessions/:sessionName/github/token", handlers.MintSessionGitHubToken)
 
 		projectGroup := api.Group("/projects/:projectName", handlers.ValidateProjectContext())
 		{
 			projectGroup.GET("/models", handlers.ListModelsForProject)
+			projectGroup.GET("/runner-types", handlers.GetRunnerTypes)
 			projectGroup.GET("/access", handlers.AccessCheck)
 			projectGroup.GET("/integration-status", handlers.GetProjectIntegrationStatus)
 			projectGroup.GET("/users/forks", handlers.ListUserForks)

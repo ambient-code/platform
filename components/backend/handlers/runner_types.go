@@ -23,16 +23,15 @@ const DefaultRunnerPort = 8001
 // Keep both in sync when modifying the schema.
 // It is the single source of truth for runtime configuration.
 type AgentRuntimeSpec struct {
-	ID           string        `json:"id"`
-	DisplayName  string        `json:"displayName"`
-	Description  string        `json:"description"`
-	Framework    string        `json:"framework"`
-	Container    ContainerSpec `json:"container"`
-	Sandbox      SandboxSpec   `json:"sandbox"`
-	Auth         AuthSpec      `json:"auth"`
-	DefaultModel string        `json:"defaultModel"`
-	Models       []ModelOption `json:"models"`
-	FeatureGate  string        `json:"featureGate"`
+	ID          string        `json:"id"`
+	DisplayName string        `json:"displayName"`
+	Description string        `json:"description"`
+	Framework   string        `json:"framework"`
+	Container   ContainerSpec `json:"container"`
+	Sandbox     SandboxSpec   `json:"sandbox"`
+	Auth        AuthSpec      `json:"auth"`
+	Provider    string        `json:"provider"`
+	FeatureGate string        `json:"featureGate"`
 }
 
 // ContainerSpec defines the runner container configuration.
@@ -72,23 +71,16 @@ type AuthSpec struct {
 	VertexSupported    bool     `json:"vertexSupported"`
 }
 
-// ModelOption represents a model choice within a runner type.
-type ModelOption struct {
-	Value string `json:"value"`
-	Label string `json:"label"`
-}
-
 // RunnerTypeResponse is the public API shape returned to the frontend.
 // FeatureGate is intentionally excluded — gated runners are already filtered
 // out by the handler, so the frontend never needs to see the gate name.
 type RunnerTypeResponse struct {
-	ID           string        `json:"id"`
-	DisplayName  string        `json:"displayName"`
-	Description  string        `json:"description"`
-	Framework    string        `json:"framework"`
-	DefaultModel string        `json:"defaultModel"`
-	Models       []ModelOption `json:"models"`
-	Auth         AuthSpec      `json:"auth"`
+	ID          string   `json:"id"`
+	DisplayName string   `json:"displayName"`
+	Description string   `json:"description"`
+	Framework   string   `json:"framework"`
+	Provider    string   `json:"provider"`
+	Auth        AuthSpec `json:"auth"`
 }
 
 // In-memory cache for the agent registry (ConfigMap content changes rarely).
@@ -221,9 +213,20 @@ func isRunnerEnabled(runnerID string) bool {
 	return FeatureEnabled(rt.FeatureGate)
 }
 
-// GetRunnerTypes handles GET /api/runner-types and returns the list of available runner types.
-// Runners gated by feature flags are filtered out.
-func GetRunnerTypes(c *gin.Context) {
+// isRunnerEnabledWithOverrides checks workspace ConfigMap overrides first,
+// then falls back to the Unleash SDK for global state.
+func isRunnerEnabledWithOverrides(flagName string, overrides map[string]string) bool {
+	if overrides != nil {
+		if val, exists := overrides[flagName]; exists {
+			return val == "true"
+		}
+	}
+	return FeatureEnabled(flagName)
+}
+
+// GetRunnerTypesGlobal handles GET /api/runner-types (no auth, no workspace overrides).
+// Used by admin pages that need to list all runner types regardless of workspace.
+func GetRunnerTypesGlobal(c *gin.Context) {
 	entries, err := loadAgentRegistry()
 	if err != nil {
 		log.Printf("Failed to load agent registry: %v", err)
@@ -233,19 +236,61 @@ func GetRunnerTypes(c *gin.Context) {
 
 	resp := make([]RunnerTypeResponse, 0, len(entries))
 	for _, e := range entries {
-		// Check feature gate directly instead of calling isRunnerEnabled (which
-		// re-loads the registry per entry — N+1 pattern).
 		if e.FeatureGate != "" && !FeatureEnabled(e.FeatureGate) {
 			continue
 		}
 		resp = append(resp, RunnerTypeResponse{
-			ID:           e.ID,
-			DisplayName:  e.DisplayName,
-			Description:  e.Description,
-			Framework:    e.Framework,
-			DefaultModel: e.DefaultModel,
-			Models:       e.Models,
-			Auth:         e.Auth,
+			ID:          e.ID,
+			DisplayName: e.DisplayName,
+			Description: e.Description,
+			Framework:   e.Framework,
+			Provider:    e.Provider,
+			Auth:        e.Auth,
+		})
+	}
+
+	c.JSON(http.StatusOK, resp)
+}
+
+// GetRunnerTypes handles GET /api/projects/:projectName/runner-types and returns
+// the list of available runner types. Runners gated by feature flags are filtered
+// out, respecting workspace-scoped overrides in the feature-flag-overrides ConfigMap.
+func GetRunnerTypes(c *gin.Context) {
+	reqK8s, _ := GetK8sClientsForRequest(c)
+	if reqK8s == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User token required"})
+		c.Abort()
+		return
+	}
+
+	ctx := c.Request.Context()
+	namespace := sanitizeParam(c.Param("projectName"))
+
+	entries, err := loadAgentRegistry()
+	if err != nil {
+		log.Printf("Failed to load agent registry: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to load runner types"})
+		return
+	}
+
+	// Load workspace overrides for feature gate evaluation
+	overrides, err := getWorkspaceOverrides(ctx, reqK8s, namespace)
+	if err != nil {
+		log.Printf("WARNING: failed to read workspace overrides for runner types in %s: %v", namespace, err)
+	}
+
+	resp := make([]RunnerTypeResponse, 0, len(entries))
+	for _, e := range entries {
+		if e.FeatureGate != "" && !isRunnerEnabledWithOverrides(e.FeatureGate, overrides) {
+			continue
+		}
+		resp = append(resp, RunnerTypeResponse{
+			ID:          e.ID,
+			DisplayName: e.DisplayName,
+			Description: e.Description,
+			Framework:   e.Framework,
+			Provider:    e.Provider,
+			Auth:        e.Auth,
 		})
 	}
 

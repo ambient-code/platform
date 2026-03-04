@@ -48,7 +48,7 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
 
   // Derive runner API key definitions from the runner-types registry.
   // Falls back to a hardcoded list if the fetch fails.
-  const { data: runnerTypesData, isLoading: runnerTypesLoading } = useRunnerTypes();
+  const { data: runnerTypesData, isLoading: runnerTypesLoading } = useRunnerTypes(projectName);
 
   const RUNNER_API_KEYS = useMemo(() => {
     if (!runnerTypesData) return FALLBACK_RUNNER_API_KEYS;

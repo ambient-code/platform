@@ -305,7 +305,7 @@ var _ = Describe("Models Handler", Label(test_constants.LabelUnit, test_constant
 			var resp types.ListModelsResponse
 			err := json.Unmarshal(httpTestUtils.GetResponseRecorder().Body.Bytes(), &resp)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(resp.Models).To(HaveLen(5))
+			Expect(resp.Models).To(HaveLen(7))
 			Expect(resp.DefaultModel).To(Equal("claude-sonnet-4-5"))
 		})
 
@@ -353,7 +353,7 @@ var _ = Describe("Models Handler", Label(test_constants.LabelUnit, test_constant
 			var resp types.ListModelsResponse
 			err := json.Unmarshal(httpTestUtils.GetResponseRecorder().Body.Bytes(), &resp)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(resp.Models).To(HaveLen(5))
+			Expect(resp.Models).To(HaveLen(7))
 			Expect(resp.DefaultModel).To(Equal("claude-sonnet-4-5"))
 		})
 	})
@@ -415,7 +415,7 @@ var _ = Describe("Models Handler", Label(test_constants.LabelUnit, test_constant
 	Context("isModelAvailable", func() {
 		It("should return true for empty model ID", func() {
 			logger.Log("Testing isModelAvailable with empty model ID")
-			result := isModelAvailable(context.Background(), K8sClient, "", "claude-agent-sdk", "test-ns")
+			result := isModelAvailable(context.Background(), K8sClient, "", "test-ns")
 			Expect(result).To(BeTrue())
 		})
 
@@ -424,7 +424,7 @@ var _ = Describe("Models Handler", Label(test_constants.LabelUnit, test_constant
 			writeManifestFile(validManifest)
 			setupK8sWithOverrides()
 
-			result := isModelAvailable(context.Background(), K8sClient, "claude-sonnet-4-5", "claude-agent-sdk", "test-ns")
+			result := isModelAvailable(context.Background(), K8sClient, "claude-sonnet-4-5", "test-ns")
 			Expect(result).To(BeTrue())
 		})
 
@@ -433,7 +433,7 @@ var _ = Describe("Models Handler", Label(test_constants.LabelUnit, test_constant
 			writeManifestFile(validManifest)
 			setupK8sWithOverrides()
 
-			result := isModelAvailable(context.Background(), K8sClient, "claude-opus-4-6", "claude-agent-sdk", "test-ns")
+			result := isModelAvailable(context.Background(), K8sClient, "claude-opus-4-6", "test-ns")
 			Expect(result).To(BeTrue())
 		})
 
@@ -450,7 +450,7 @@ var _ = Describe("Models Handler", Label(test_constants.LabelUnit, test_constant
 			writeManifestFile(string(manifestBytes))
 			setupK8sWithOverrides()
 
-			result := isModelAvailable(context.Background(), K8sClient, "claude-opus-4-6", "claude-agent-sdk", "test-ns")
+			result := isModelAvailable(context.Background(), K8sClient, "claude-opus-4-6", "test-ns")
 			Expect(result).To(BeFalse())
 		})
 
@@ -459,7 +459,7 @@ var _ = Describe("Models Handler", Label(test_constants.LabelUnit, test_constant
 			writeManifestFile(validManifest)
 			setupK8sWithOverrides()
 
-			result := isModelAvailable(context.Background(), K8sClient, "nonexistent-model", "claude-agent-sdk", "test-ns")
+			result := isModelAvailable(context.Background(), K8sClient, "nonexistent-model", "test-ns")
 			Expect(result).To(BeFalse())
 		})
 
@@ -467,7 +467,7 @@ var _ = Describe("Models Handler", Label(test_constants.LabelUnit, test_constant
 			logger.Log("Testing isModelAvailable fail-open when manifest file missing")
 			os.Setenv("MODELS_MANIFEST_PATH", filepath.Join(GinkgoT().TempDir(), "nonexistent.json"))
 
-			result := isModelAvailable(context.Background(), K8sClient, "claude-opus-4-6", "claude-agent-sdk", "test-ns")
+			result := isModelAvailable(context.Background(), K8sClient, "claude-opus-4-6", "test-ns")
 			Expect(result).To(BeTrue())
 		})
 
@@ -485,7 +485,7 @@ var _ = Describe("Models Handler", Label(test_constants.LabelUnit, test_constant
 			}
 			setupK8sWithOverrides(overrideCM)
 
-			result := isModelAvailable(context.Background(), K8sClient, "claude-opus-4-6", "claude-agent-sdk", "test-project")
+			result := isModelAvailable(context.Background(), K8sClient, "claude-opus-4-6", "test-project")
 			Expect(result).To(BeFalse())
 		})
 
@@ -503,7 +503,7 @@ var _ = Describe("Models Handler", Label(test_constants.LabelUnit, test_constant
 			}
 			setupK8sWithOverrides(overrideCM)
 
-			result := isModelAvailable(context.Background(), K8sClient, "claude-opus-4-6", "claude-agent-sdk", "test-project")
+			result := isModelAvailable(context.Background(), K8sClient, "claude-opus-4-6", "test-project")
 			Expect(result).To(BeTrue())
 		})
 	})

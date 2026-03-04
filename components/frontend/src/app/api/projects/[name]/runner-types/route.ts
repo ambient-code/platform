@@ -2,9 +2,8 @@ import { BACKEND_URL } from "@/lib/config";
 import { buildForwardHeadersAsync } from "@/lib/auth";
 
 /**
- * GET /api/projects/:projectName/models?provider=...
- * Proxies to backend to list available models with workspace overrides.
- * Optional provider query param filters by model provider.
+ * GET /api/projects/:projectName/runner-types
+ * Proxies to backend to list available runner types with workspace overrides.
  */
 export async function GET(
   request: Request,
@@ -14,12 +13,8 @@ export async function GET(
     const { name: projectName } = await params;
     const headers = await buildForwardHeadersAsync(request);
 
-    const url = new URL(request.url);
-    const provider = url.searchParams.get("provider");
-    const backendParams = provider ? `?provider=${encodeURIComponent(provider)}` : "";
-
     const response = await fetch(
-      `${BACKEND_URL}/projects/${encodeURIComponent(projectName)}/models${backendParams}`,
+      `${BACKEND_URL}/projects/${encodeURIComponent(projectName)}/runner-types`,
       { headers }
     );
 
@@ -30,9 +25,9 @@ export async function GET(
       headers: { "Content-Type": "application/json" },
     });
   } catch (error) {
-    console.error("Failed to fetch models:", error);
+    console.error("Failed to fetch runner types:", error);
     return Response.json(
-      { error: "Failed to fetch models" },
+      { error: "Failed to fetch runner types" },
       { status: 500 }
     );
   }

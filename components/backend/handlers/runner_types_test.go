@@ -10,6 +10,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"k8s.io/apimachinery/pkg/runtime"
+	dynamicfake "k8s.io/client-go/dynamic/fake"
+	"k8s.io/client-go/kubernetes/fake"
 )
 
 // sampleRegistryJSON returns a test agent registry JSON with 2 runtimes.
@@ -20,6 +23,7 @@ func sampleRegistryJSON() string {
 			DisplayName: "Claude Code",
 			Description: "Anthropic Claude with full coding capabilities",
 			Framework:   "claude-agent-sdk",
+			Provider:    "anthropic",
 			Container: ContainerSpec{
 				Image: "quay.io/ambient_code/ambient_runner:latest",
 				Port:  8001,
@@ -42,11 +46,6 @@ func sampleRegistryJSON() string {
 				SecretKeyLogic:     "any",
 				VertexSupported:    true,
 			},
-			DefaultModel: "claude-sonnet-4-5",
-			Models: []ModelOption{
-				{Value: "claude-sonnet-4-5", Label: "Claude Sonnet 4.5"},
-				{Value: "claude-opus-4-6", Label: "Claude Opus 4.6"},
-			},
 			FeatureGate: "",
 		},
 		{
@@ -54,6 +53,7 @@ func sampleRegistryJSON() string {
 			DisplayName: "Gemini CLI",
 			Description: "Google Gemini coding agent",
 			Framework:   "gemini-cli",
+			Provider:    "google",
 			Container: ContainerSpec{
 				Image: "quay.io/ambient_code/ambient_runner:latest",
 				Port:  9090,
@@ -72,10 +72,6 @@ func sampleRegistryJSON() string {
 				SecretKeyLogic:     "any",
 				VertexSupported:    true,
 			},
-			DefaultModel: "gemini-2.5-flash",
-			Models: []ModelOption{
-				{Value: "gemini-2.5-flash", Label: "Gemini 2.5 Flash"},
-			},
 			FeatureGate: "runner.gemini-cli.enabled",
 		},
 	}
@@ -88,13 +84,21 @@ func sampleRegistryJSON() string {
 func setupRegistryForTest(t *testing.T) {
 	t.Helper()
 
-	// Write test registry JSON to a temp file and point AGENT_REGISTRY_PATH at it
-	tmpDir := t.TempDir()
-	tmpFile := filepath.Join(tmpDir, "agent-registry.json")
-	if err := os.WriteFile(tmpFile, []byte(sampleRegistryJSON()), 0644); err != nil {
+	// Write registry JSON to a temp file and point env var to it
+	dir := t.TempDir()
+	path := filepath.Join(dir, "agent-registry.json")
+	if err := os.WriteFile(path, []byte(sampleRegistryJSON()), 0644); err != nil {
 		t.Fatalf("Failed to write test registry: %v", err)
 	}
-	t.Setenv("AGENT_REGISTRY_PATH", tmpFile)
+	t.Setenv("AGENT_REGISTRY_PATH", path)
+
+	// Set up fake K8s clients for auth and workspace overrides
+	K8sClientMw = fake.NewSimpleClientset()
+	DynamicClient = dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
+
+	if Namespace == "" {
+		Namespace = "test-ns"
+	}
 
 	// Clear the in-memory cache
 	registryCacheMu.Lock()
@@ -146,12 +150,12 @@ func TestGetRuntime_FullFields(t *testing.T) {
 		t.Fatalf("GetRuntime failed: %v", err)
 	}
 
-	// Framework
 	if rt.Framework != "claude-agent-sdk" {
 		t.Errorf("Framework: expected 'claude-agent-sdk', got %q", rt.Framework)
 	}
-
-	// Auth
+	if rt.Provider != "anthropic" {
+		t.Errorf("Provider: expected 'anthropic', got %q", rt.Provider)
+	}
 	if len(rt.Auth.RequiredSecretKeys) != 1 || rt.Auth.RequiredSecretKeys[0] != "ANTHROPIC_API_KEY" {
 		t.Errorf("Auth.RequiredSecretKeys: expected [ANTHROPIC_API_KEY], got %v", rt.Auth.RequiredSecretKeys)
 	}
@@ -161,18 +165,8 @@ func TestGetRuntime_FullFields(t *testing.T) {
 	if !rt.Auth.VertexSupported {
 		t.Error("Auth.VertexSupported: expected true")
 	}
-
-	// FeatureGate
 	if rt.FeatureGate != "" {
 		t.Errorf("FeatureGate: expected empty string, got %q", rt.FeatureGate)
-	}
-
-	// Models
-	if len(rt.Models) != 2 {
-		t.Errorf("Expected 2 models, got %d", len(rt.Models))
-	}
-	if rt.DefaultModel != "claude-sonnet-4-5" {
-		t.Errorf("DefaultModel: expected 'claude-sonnet-4-5', got %q", rt.DefaultModel)
 	}
 }
 
@@ -186,6 +180,9 @@ func TestGetRuntime_GeminiFields(t *testing.T) {
 
 	if rt.Framework != "gemini-cli" {
 		t.Errorf("Framework: expected 'gemini-cli', got %q", rt.Framework)
+	}
+	if rt.Provider != "google" {
+		t.Errorf("Provider: expected 'google', got %q", rt.Provider)
 	}
 	if rt.FeatureGate != "runner.gemini-cli.enabled" {
 		t.Errorf("FeatureGate: expected 'runner.gemini-cli.enabled', got %q", rt.FeatureGate)
@@ -272,18 +269,16 @@ func TestGetContainerEnvVars_UnknownFallback(t *testing.T) {
 
 // --- GetRunnerTypes handler test ---
 
-func TestGetRunnerTypes_ReturnsFullFields(t *testing.T) {
+func TestGetRunnerTypes_ReturnsProvider(t *testing.T) {
 	setupRegistryForTest(t)
-
-	// Without Unleash initialized, FeatureEnabled returns false.
-	// isRunnerEnabled returns true for runtimes with empty featureGate,
-	// and false for runtimes with a non-empty featureGate.
-	// In our test data: claude (featureGate="") -> enabled, gemini (featureGate="runner.gemini-cli.enabled") -> disabled.
 
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest(http.MethodGet, "/api/runner-types", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/projects/test-project/runner-types", nil)
+	req.Header.Set("Authorization", "Bearer test-token")
+	c.Request = req
+	c.Params = gin.Params{{Key: "projectName", Value: "test-project"}}
 
 	GetRunnerTypes(c)
 
@@ -297,7 +292,6 @@ func TestGetRunnerTypes_ReturnsFullFields(t *testing.T) {
 	}
 
 	// Only claude-agent-sdk should be returned (empty featureGate = always enabled)
-	// gemini-cli has featureGate="runner.gemini-cli.enabled" which is disabled without Unleash
 	if len(resp) != 1 {
 		t.Fatalf("Expected 1 runner type (only ungated), got %d", len(resp))
 	}
@@ -306,36 +300,27 @@ func TestGetRunnerTypes_ReturnsFullFields(t *testing.T) {
 	if claude.ID != "claude-agent-sdk" {
 		t.Fatalf("Expected claude-agent-sdk, got %q", claude.ID)
 	}
-
-	// Verify full AgentRuntimeSpec fields are in the response
+	if claude.Provider != "anthropic" {
+		t.Errorf("Provider: expected 'anthropic', got %q", claude.Provider)
+	}
 	if claude.Framework != "claude-agent-sdk" {
 		t.Errorf("Framework: expected 'claude-agent-sdk', got %q", claude.Framework)
 	}
 	if claude.Auth.SecretKeyLogic != "any" {
 		t.Errorf("Auth.SecretKeyLogic: expected 'any', got %q", claude.Auth.SecretKeyLogic)
 	}
-	if claude.Auth.VertexSupported != true {
-		t.Error("Auth.VertexSupported: expected true")
-	}
-	if len(claude.Auth.RequiredSecretKeys) != 1 || claude.Auth.RequiredSecretKeys[0] != "ANTHROPIC_API_KEY" {
-		t.Errorf("Auth.RequiredSecretKeys: expected [ANTHROPIC_API_KEY], got %v", claude.Auth.RequiredSecretKeys)
-	}
-	if claude.DefaultModel != "claude-sonnet-4-5" {
-		t.Errorf("DefaultModel: expected 'claude-sonnet-4-5', got %q", claude.DefaultModel)
-	}
-	if len(claude.Models) != 2 {
-		t.Errorf("Expected 2 models, got %d", len(claude.Models))
-	}
 }
 
 func TestGetRunnerTypes_GatedRunnersFiltered(t *testing.T) {
 	setupRegistryForTest(t)
 
-	// Without Unleash, gated runners should be filtered out
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest(http.MethodGet, "/api/runner-types", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/projects/test-project/runner-types", nil)
+	req.Header.Set("Authorization", "Bearer test-token")
+	c.Request = req
+	c.Params = gin.Params{{Key: "projectName", Value: "test-project"}}
 
 	GetRunnerTypes(c)
 
@@ -352,7 +337,6 @@ func TestGetRunnerTypes_GatedRunnersFiltered(t *testing.T) {
 func TestIsRunnerEnabled_EmptyGate(t *testing.T) {
 	setupRegistryForTest(t)
 
-	// Runtimes with empty featureGate should always be enabled
 	if !isRunnerEnabled("claude-agent-sdk") {
 		t.Error("claude-agent-sdk with empty featureGate should be enabled")
 	}
@@ -361,7 +345,6 @@ func TestIsRunnerEnabled_EmptyGate(t *testing.T) {
 func TestIsRunnerEnabled_NonEmptyGate_Disabled(t *testing.T) {
 	setupRegistryForTest(t)
 
-	// Without Unleash, non-empty featureGate should be disabled
 	if isRunnerEnabled("gemini-cli") {
 		t.Error("gemini-cli should be disabled when Unleash is not configured")
 	}

@@ -76,15 +76,8 @@ export function CreateSessionDialog({
   const [open, setOpen] = useState(false);
   const router = useRouter();
   const createSessionMutation = useCreateSession();
-  const { data: runnerTypes, isLoading: runnerTypesLoading, isError: runnerTypesError, refetch: refetchRunnerTypes } = useRunnerTypes();
-
-  const { data: modelsData, isLoading: modelsLoading } = useModels(projectName, open);
+  const { data: runnerTypes, isLoading: runnerTypesLoading, isError: runnerTypesError, refetch: refetchRunnerTypes } = useRunnerTypes(projectName);
   const { data: integrationsStatus } = useIntegrationsStatus();
-
-  const models = modelsData
-    ? modelsData.models.map((m) => ({ value: m.id, label: m.label }))
-    : fallbackModels;
-  const defaultModel = modelsData?.defaultModel ?? "claude-sonnet-4-5";
 
   const githubConfigured = integrationsStatus?.github?.active != null;
   const gitlabConfigured = integrationsStatus?.gitlab?.connected ?? false;
@@ -111,20 +104,26 @@ export function CreateSessionDialog({
 
   const selectedRunnerType = form.watch("runnerType");
 
-  // Derive the available models from the selected runner type
   const selectedRunner = useMemo(
     () => runnerTypes?.find((rt) => rt.id === selectedRunnerType),
     [runnerTypes, selectedRunnerType]
   );
-  const availableModels = selectedRunner?.models ?? models;
+
+  // Fetch models filtered by the selected runner's provider
+  const { data: modelsData, isLoading: modelsLoading } = useModels(
+    projectName, open, selectedRunner?.provider
+  );
+
+  const models = modelsData
+    ? modelsData.models.map((m) => ({ value: m.id, label: m.label }))
+    : fallbackModels;
+  const defaultModel = modelsData?.defaultModel ?? "claude-sonnet-4-5";
 
   const handleRunnerTypeChange = (value: string, onChange: (v: string) => void) => {
     onChange(value);
-    const runner = runnerTypes?.find((rt) => rt.id === value);
-    if (runner) {
-      // Reset model to the runner's default
-      form.setValue("model", runner.defaultModel);
-    }
+    // Model list will update automatically via useModels when provider changes.
+    // Reset model to default — the useEffect below will set it from the API response.
+    form.setValue("model", "", { shouldDirty: false });
   };
 
   const onSubmit = async (values: FormValues) => {
@@ -276,7 +275,7 @@ export function CreateSessionDialog({
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {availableModels.map((m) => (
+                        {models.map((m) => (
                           <SelectItem key={m.value} value={m.value}>
                             {m.label}
                           </SelectItem>
