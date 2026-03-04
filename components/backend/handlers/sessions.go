@@ -710,7 +710,13 @@ func CreateSession(c *gin.Context) {
 
 	if len(envVars) > 0 {
 		spec := session["spec"].(map[string]interface{})
-		spec["environmentVariables"] = envVars
+		// Convert map[string]string to map[string]interface{} for unstructured
+		// compatibility (K8s fake client's DeepCopy panics on map[string]string).
+		envInterface := make(map[string]interface{}, len(envVars))
+		for k, v := range envVars {
+			envInterface[k] = v
+		}
+		spec["environmentVariables"] = envInterface
 	}
 
 	// Set multi-repo configuration on spec.

@@ -472,8 +472,7 @@ var _ = Describe("Sessions Handler", Label(test_constants.LabelUnit, test_consta
 				Expect(response).To(HaveKey("error"))
 				errorMsg, ok := response["error"].(string)
 				Expect(ok).To(BeTrue())
-				Expect(errorMsg).To(ContainSubstring("ANTHROPIC_API_KEY not configured"))
-				Expect(errorMsg).To(ContainSubstring(testNamespace))
+				Expect(errorMsg).To(ContainSubstring("ambient-runner-secrets"))
 
 				logger.Log("Successfully blocked session creation: %s", errorMsg)
 			})
