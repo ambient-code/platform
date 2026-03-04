@@ -303,6 +303,15 @@ jobs:
             AMBIENT_CODE_RUNNER_IMAGE="quay.io/ambient_code/vteam_claude_runner:${{ steps.image-tags.outputs.runner_tag }}" \
             STATE_SYNC_IMAGE="quay.io/ambient_code/vteam_state_sync:${{ steps.image-tags.outputs.state_sync_tag }}"
 
+      - name: Update agent registry ConfigMap with pinned image tags
+        if: needs.detect-changes.outputs.claude-runner == 'true' || needs.detect-changes.outputs.state-sync == 'true'
+        run: |
+          sed \
+            -e "s|quay.io/ambient_code/vteam_claude_runner:latest|quay.io/ambient_code/vteam_claude_runner:${{ steps.image-tags.outputs.runner_tag }}|g" \
+            -e "s|quay.io/ambient_code/vteam_state_sync:latest|quay.io/ambient_code/vteam_state_sync:${{ steps.image-tags.outputs.state_sync_tag }}|g" \
+            components/manifests/base/agent-registry-configmap.yaml \
+            | oc apply -f - -n ambient-code
+
   deploy-with-disptach:
     runs-on: ubuntu-latest
     needs: [detect-changes, build-and-push, update-rbac-and-crd]
@@ -359,3 +368,11 @@ jobs:
           oc set env deployment/agentic-operator -n ambient-code -c agentic-operator \
             AMBIENT_CODE_RUNNER_IMAGE="quay.io/ambient_code/vteam_claude_runner:stage" \
             STATE_SYNC_IMAGE="quay.io/ambient_code/vteam_state_sync:stage"
+
+      - name: Update agent registry ConfigMap with pinned image tags
+        run: |
+          sed \
+            -e "s|quay.io/ambient_code/vteam_claude_runner:latest|quay.io/ambient_code/vteam_claude_runner:stage|g" \
+            -e "s|quay.io/ambient_code/vteam_state_sync:latest|quay.io/ambient_code/vteam_state_sync:stage|g" \
+            components/manifests/base/agent-registry-configmap.yaml \
+            | oc apply -f - -n ambient-code
