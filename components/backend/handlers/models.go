@@ -86,7 +86,7 @@ func ListModelsForProject(c *gin.Context) {
 		}
 	}
 
-	var models []types.Model
+	models := make([]types.Model, 0)
 	for _, entry := range manifest.Models {
 		if !entry.Available {
 			continue
@@ -176,7 +176,11 @@ func isModelAvailable(ctx context.Context, k8sClient kubernetes.Interface, model
 		log.Printf("WARNING: failed to load model manifest for validation: %v", err)
 		manifest = cachedManifest.Load()
 		if manifest == nil {
-			log.Printf("WARNING: no manifest available, allowing model %q", modelID)
+			// Fail-open on cold start to avoid blocking session creation before
+			// the ConfigMap volume is mounted. Note: provider validation is also
+			// skipped in this path — the runner will reject incompatible models
+			// at runtime.
+			log.Printf("WARNING: no manifest available, allowing model %q (provider validation skipped)", modelID)
 			return true
 		}
 	} else {

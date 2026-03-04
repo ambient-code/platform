@@ -101,7 +101,7 @@ export function CreateSessionDialog({
   // models.json is the single source of truth — no hardcoded fallback lists.
   // Wait for runner types to load so we know the provider before fetching.
   const { data: modelsData, isLoading: modelsLoading } = useModels(
-    projectName, open && !runnerTypesLoading, selectedRunner?.provider
+    projectName, open && !runnerTypesLoading && !runnerTypesError, selectedRunner?.provider
   );
 
   const models = modelsData

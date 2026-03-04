@@ -122,6 +122,7 @@ export function FeatureFlagsSection({ projectName }: FeatureFlagsSectionProps) {
 
       queryClient.invalidateQueries({ queryKey: ["feature-flags", "list", projectName] });
       queryClient.invalidateQueries({ queryKey: ["models", projectName] });
+      queryClient.invalidateQueries({ queryKey: ["runner-types", projectName] });
     } catch (err) {
       errorToast(err instanceof Error ? err.message : "Failed to save feature flags");
     } finally {
