@@ -108,6 +108,14 @@ func loadRuntimeRegistry() ([]AgentRuntimeSpec, error) {
 		context.Background(), agentRegistryConfigMapName, v1.GetOptions{},
 	)
 	if err != nil {
+		// On refresh failure, return stale cache if available
+		runtimeRegistryCacheMu.RLock()
+		if runtimeRegistryCache != nil {
+			defer runtimeRegistryCacheMu.RUnlock()
+			log.Printf("Warning: failed to refresh agent registry, using stale cache: %v", err)
+			return runtimeRegistryCache, nil
+		}
+		runtimeRegistryCacheMu.RUnlock()
 		return nil, fmt.Errorf("failed to read ConfigMap %s: %w", agentRegistryConfigMapName, err)
 	}
 
@@ -158,7 +166,8 @@ func getRuntimeSpec(runnerTypeID string) *AgentRuntimeSpec {
 	}
 	for i := range entries {
 		if entries[i].ID == runnerTypeID {
-			return &entries[i]
+			spec := entries[i]
+			return &spec
 		}
 	}
 	log.Printf("Warning: runner type %q not found in registry (using fallback defaults)", runnerTypeID)

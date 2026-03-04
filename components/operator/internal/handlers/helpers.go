@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"ambient-code-operator/internal/config"
@@ -324,6 +325,8 @@ func ensureFreshRunnerToken(ctx context.Context, session *unstructured.Unstructu
 	return nil
 }
 
+var vertexDeprecationOnce sync.Once
+
 // IsVertexEnabled checks whether Vertex AI is enabled via environment variables.
 // It checks USE_VERTEX first (unified name), then falls back to the legacy
 // CLAUDE_CODE_USE_VERTEX for backward compatibility.
@@ -332,7 +335,9 @@ func IsVertexEnabled() bool {
 		return true
 	}
 	if isTruthy(os.Getenv("CLAUDE_CODE_USE_VERTEX")) {
-		log.Println("WARNING: CLAUDE_CODE_USE_VERTEX is deprecated, use USE_VERTEX instead")
+		vertexDeprecationOnce.Do(func() {
+			log.Println("WARNING: CLAUDE_CODE_USE_VERTEX is deprecated, use USE_VERTEX instead")
+		})
 		return true
 	}
 	return false

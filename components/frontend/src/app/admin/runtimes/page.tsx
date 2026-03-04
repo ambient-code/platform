@@ -19,26 +19,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
-import { useFlag } from "@/lib/feature-flags";
-
 import { useRunnerTypes } from "@/services/queries/use-runner-types";
 import type { RunnerType } from "@/services/api/runner-types";
 
-function RuntimeStatusBadge({ featureGate }: { featureGate: string }) {
-  const flagEnabled = useFlag(featureGate);
-
-  if (!featureGate) {
-    return <Badge variant="secondary">Enabled</Badge>;
-  }
-
-  return (
-    <div className="flex items-center gap-2">
-      <Badge variant={flagEnabled ? "secondary" : "outline"}>
-        {flagEnabled ? "Enabled" : "Gated"}
-      </Badge>
-      <span className="text-xs text-muted-foreground font-mono">{featureGate}</span>
-    </div>
-  );
+function RuntimeStatusBadge() {
+  // All runners returned by the API are already enabled (gated runners
+  // are filtered out server-side by the backend's feature flag check).
+  return <Badge variant="secondary">Enabled</Badge>;
 }
 
 function RuntimeDetailPanel({ runtime }: { runtime: RunnerType }) {
@@ -228,6 +215,10 @@ function RuntimeRow({
       <TableRow
         className="cursor-pointer hover:bg-muted/50 transition-colors"
         onClick={onToggle}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(); } }}
+        tabIndex={0}
+        role="button"
+        aria-expanded={isExpanded}
       >
         <TableCell className="w-8">
           {isExpanded ? (
@@ -247,7 +238,7 @@ function RuntimeRow({
           <Badge variant="outline">{runtime.models.length}</Badge>
         </TableCell>
         <TableCell>
-          <RuntimeStatusBadge featureGate={runtime.featureGate} />
+          <RuntimeStatusBadge />
         </TableCell>
       </TableRow>
       {isExpanded && (

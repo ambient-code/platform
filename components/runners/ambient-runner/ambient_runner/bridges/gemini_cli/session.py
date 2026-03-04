@@ -7,11 +7,13 @@ stdout as NDJSON, and tears down the process when the stream ends.
 """
 
 import asyncio
+import json
 import logging
 import os
 import signal
 import time
 from collections import deque
+from pathlib import Path
 from typing import AsyncIterator, Optional
 
 logger = logging.getLogger(__name__)
@@ -23,6 +25,15 @@ WORKER_TTL_SEC = int(os.getenv("WORKER_TTL_SEC", "3600"))
 
 # Maximum stderr lines kept in ring buffer per worker
 _MAX_STDERR_LINES = 100
+
+_GEMINI_ENV_PASSTHROUGH = frozenset({
+    "PATH", "HOME", "USER", "SHELL", "TERM", "LANG", "LC_ALL", "TZ",
+    "GOOGLE_CLOUD_PROJECT", "GOOGLE_CLOUD_LOCATION",
+    "GOOGLE_APPLICATION_CREDENTIALS", "CLOUDSDK_CONFIG",
+    "GEMINI_API_KEY", "GOOGLE_API_KEY",
+    "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY",
+    "http_proxy", "https_proxy", "no_proxy",
+})
 
 
 class GeminiSessionWorker:
@@ -59,8 +70,10 @@ class GeminiSessionWorker:
                 if line:
                     self._stderr_lines.append(line)
                     logger.debug("[Gemini stderr] %s", line)
+        except asyncio.CancelledError:
+            raise
         except Exception:
-            pass
+            logger.debug("stderr stream ended with error", exc_info=True)
 
     async def query(
         self,
@@ -90,7 +103,7 @@ class GeminiSessionWorker:
         if session_id:
             cmd.extend(["--resume", session_id])
 
-        env = dict(os.environ)
+        env = {k: v for k, v in os.environ.items() if k in _GEMINI_ENV_PASSTHROUGH}
         if self._use_vertex:
             # Vertex AI mode: ensure API keys are NOT set (they take precedence
             # and bypass Vertex). GOOGLE_CLOUD_PROJECT, GOOGLE_CLOUD_LOCATION,
@@ -126,31 +139,34 @@ class GeminiSessionWorker:
                     if stripped:
                         yield stripped
 
-            try:
-                deadline = asyncio.get_event_loop().time() + GEMINI_CLI_TIMEOUT_SEC
-                async for line in _read_lines():
-                    yield line
-                    if asyncio.get_event_loop().time() > deadline:
-                        raise asyncio.TimeoutError()
-            except asyncio.TimeoutError:
-                timed_out = True
-                logger.warning(
-                    "Gemini CLI timed out after %d seconds, killing process",
-                    GEMINI_CLI_TIMEOUT_SEC,
-                )
-                await self._kill_process()
-
-            if not timed_out:
-                # Wait for process to finish
-                await self._process.wait()
-
-                # Log stderr if the process failed
-                if self._process.returncode and self._process.returncode != 0:
+            deadline = asyncio.get_event_loop().time() + GEMINI_CLI_TIMEOUT_SEC
+            async for line in _read_lines():
+                yield line
+                if asyncio.get_event_loop().time() > deadline:
                     logger.warning(
-                        "Gemini CLI exited with code %d; recent stderr: %s",
-                        self._process.returncode,
-                        " | ".join(self._stderr_lines[-5:]),
+                        "Gemini CLI timed out after %d seconds, killing process",
+                        GEMINI_CLI_TIMEOUT_SEC,
                     )
+                    await self._kill_process()
+                    raise TimeoutError(
+                        f"Gemini CLI timed out after {GEMINI_CLI_TIMEOUT_SEC}s"
+                    )
+
+            # Wait for process to finish
+            await self._process.wait()
+
+            # If the process failed, raise so adapter emits RUN_ERROR
+            if self._process.returncode and self._process.returncode != 0:
+                stderr_tail = " | ".join(list(self._stderr_lines)[-5:])
+                logger.warning(
+                    "Gemini CLI exited with code %d; recent stderr: %s",
+                    self._process.returncode,
+                    stderr_tail,
+                )
+                raise RuntimeError(
+                    f"Gemini CLI exited with code {self._process.returncode}"
+                    + (f": {stderr_tail}" if stderr_tail else "")
+                )
         finally:
             # Ensure stderr task is cleaned up
             if self._stderr_task and not self._stderr_task.done():
@@ -216,13 +232,17 @@ class GeminiSessionManager:
     """
 
     _EVICTION_INTERVAL = 60.0  # seconds between eviction scans
+    _SESSION_IDS_FILE = "gemini_session_ids.json"
 
-    def __init__(self) -> None:
+    def __init__(self, state_dir: str = "") -> None:
         self._workers: dict[str, GeminiSessionWorker] = {}
         self._session_ids: dict[str, str] = {}
         self._locks: dict[str, asyncio.Lock] = {}
         self._last_access: dict[str, float] = {}
         self._last_eviction: float = 0.0
+        self._state_dir = state_dir
+        # Restore session IDs from disk (persisted by state-sync for --resume across restarts)
+        self._restore_session_ids()
 
     def _evict_stale(self) -> None:
         """Remove workers idle longer than WORKER_TTL_SEC (runs at most every 60s)."""
@@ -278,9 +298,44 @@ class GeminiSessionManager:
         return self._session_ids.get(thread_id)
 
     def set_session_id(self, thread_id: str, session_id: str) -> None:
-        """Record the session_id from an init event."""
+        """Record the session_id from an init event and persist to disk."""
         self._session_ids[thread_id] = session_id
+        self._persist_session_ids()
         logger.debug("Recorded session_id=%s for thread=%s", session_id, thread_id)
+
+    def _session_ids_path(self) -> Path | None:
+        """Return the path to the session IDs file, or None if no state dir."""
+        if not self._state_dir:
+            return None
+        return Path(self._state_dir) / self._SESSION_IDS_FILE
+
+    def _persist_session_ids(self) -> None:
+        """Save session IDs to disk for --resume across pod restarts."""
+        path = self._session_ids_path()
+        if not path or not self._session_ids:
+            return
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with open(path, "w") as f:
+                json.dump(self._session_ids, f)
+        except OSError:
+            logger.debug("Could not persist session IDs to %s", path, exc_info=True)
+
+    def _restore_session_ids(self) -> None:
+        """Restore session IDs from disk (written by a previous pod)."""
+        path = self._session_ids_path()
+        if not path or not path.exists():
+            return
+        try:
+            with open(path) as f:
+                restored = json.load(f)
+            if isinstance(restored, dict):
+                self._session_ids.update(restored)
+                logger.info(
+                    "Restored %d Gemini session ID(s) from %s", len(restored), path
+                )
+        except (OSError, json.JSONDecodeError):
+            logger.debug("Could not restore session IDs from %s", path, exc_info=True)
 
     async def interrupt(self, thread_id: str) -> None:
         """Interrupt the active worker for a thread."""

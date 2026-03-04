@@ -17,6 +17,7 @@ import { useSecretsValues, useUpdateSecrets, useIntegrationSecrets, useUpdateInt
 import { useClusterInfo } from "@/hooks/use-cluster-info";
 import { FeatureFlagsSection } from "./feature-flags-section";
 import { useRunnerTypes } from "@/services/queries/use-runner-types";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMemo } from "react";
 
@@ -328,6 +329,8 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
               type="button"
               onClick={() => setRunnerSecretsExpanded(!runnerSecretsExpanded)}
               className="w-full flex items-center justify-between p-3 hover:bg-muted/50 transition-colors rounded-lg"
+              aria-expanded={runnerSecretsExpanded}
+              aria-controls="runner-secrets-panel"
             >
               <div className="flex items-center gap-2">
                 {runnerSecretsExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
@@ -336,7 +339,7 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
               </div>
             </button>
             {runnerSecretsExpanded && runnerTypesLoading && (
-              <div className="px-3 pb-3 space-y-3 border-t pt-3">
+              <div id="runner-secrets-panel" className="px-3 pb-3 space-y-3 border-t pt-3">
                 <div className="space-y-4">
                   {Array.from({ length: 2 }).map((_, i) => (
                     <div key={i} className="space-y-2">
@@ -349,7 +352,7 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
               </div>
             )}
             {runnerSecretsExpanded && !runnerTypesLoading && (
-              <div className="px-3 pb-3 space-y-3 border-t pt-3">
+              <div id="runner-secrets-panel" className="px-3 pb-3 space-y-3 border-t pt-3">
                 {vertexEnabled && runnerSecretValues["ANTHROPIC_API_KEY"] && (
                   <Alert variant="warning">
                     <AlertTriangle />
@@ -423,18 +426,21 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
 
           {/* S3 Storage Configuration Section */}
           <div className="space-y-3 pt-4 border-t">
-            <div
-              className="flex items-center justify-between cursor-pointer hover:opacity-80"
+            <button
+              type="button"
+              className="w-full flex items-center justify-between cursor-pointer hover:opacity-80 text-left"
               onClick={() => setS3Expanded((v) => !v)}
+              aria-expanded={s3Expanded}
+              aria-controls="s3-storage-panel"
             >
               <div>
                 <Label className="text-base font-semibold cursor-pointer">S3 Storage Configuration</Label>
                 <div className="text-xs text-muted-foreground mt-1">Configure S3-compatible storage for session artifacts and state</div>
               </div>
               {s3Expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-            </div>
+            </button>
             {s3Expanded && (
-              <div className="space-y-4 pl-1">
+              <div id="s3-storage-panel" className="space-y-4 pl-1">
                 <Alert>
                   <Info className="h-4 w-4" />
                   <AlertTitle>Session State Storage</AlertTitle>
@@ -444,44 +450,30 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
                 </Alert>
                 <div className="space-y-3">
                   <Label className="text-sm font-medium">Storage Configuration</Label>
-                  <div className="space-y-2">
-                    <div className="flex items-center space-x-2">
-                      <input
-                        id="storage-shared"
-                        type="radio"
-                        name="storageMode"
-                        value="shared"
-                        checked={storageMode === "shared"}
-                        onChange={() => setStorageMode("shared")}
-                        className="h-4 w-4"
-                      />
-                      <Label htmlFor="storage-shared" className="cursor-pointer font-normal">
-                        Use shared cluster storage (default)
-                      </Label>
+                  <RadioGroup value={storageMode} onValueChange={(v) => setStorageMode(v as "shared" | "custom")}>
+                    <div className="space-y-2">
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="shared" id="storage-shared" />
+                        <Label htmlFor="storage-shared" className="cursor-pointer font-normal">
+                          Use shared cluster storage (default)
+                        </Label>
+                      </div>
+                      <div className="text-xs text-muted-foreground ml-6">
+                        Automatically uses in-cluster MinIO. No configuration needed.
+                      </div>
                     </div>
-                    <div className="text-xs text-muted-foreground ml-6">
-                      Automatically uses in-cluster MinIO. No configuration needed.
+                    <div className="space-y-2">
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="custom" id="storage-custom" />
+                        <Label htmlFor="storage-custom" className="cursor-pointer font-normal">
+                          Use custom S3-compatible storage
+                        </Label>
+                      </div>
+                      <div className="text-xs text-muted-foreground ml-6">
+                        Configure AWS S3, external MinIO, or other S3-compatible endpoint.
+                      </div>
                     </div>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex items-center space-x-2">
-                      <input
-                        id="storage-custom"
-                        type="radio"
-                        name="storageMode"
-                        value="custom"
-                        checked={storageMode === "custom"}
-                        onChange={() => setStorageMode("custom")}
-                        className="h-4 w-4"
-                      />
-                      <Label htmlFor="storage-custom" className="cursor-pointer font-normal">
-                        Use custom S3-compatible storage
-                      </Label>
-                    </div>
-                    <div className="text-xs text-muted-foreground ml-6">
-                      Configure AWS S3, external MinIO, or other S3-compatible endpoint.
-                    </div>
-                  </div>
+                  </RadioGroup>
                 </div>
                 {storageMode === "custom" && (
                   <>

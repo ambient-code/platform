@@ -90,6 +90,9 @@ def write_gemini_settings(
     with open(settings_path, "w") as f:
         json.dump(existing, f, indent=2)
 
+    # Restrict permissions — settings may contain expanded credentials
+    settings_path.chmod(0o600)
+
     abs_path = str(settings_path.resolve())
     logger.info(
         "Wrote Gemini CLI settings with %d MCP server(s) to %s",

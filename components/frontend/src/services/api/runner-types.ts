@@ -15,12 +15,12 @@ export interface RunnerType {
   id: string;
   displayName: string;
   description: string;
+  framework: string;
   defaultModel: string;
   models: RunnerModel[];
   /** @deprecated Use auth.requiredSecretKeys instead */
   requiredSecretKeys?: string[];
   auth: RunnerTypeAuth;
-  featureGate: string;
 }
 
 export const DEFAULT_RUNNER_TYPE_ID = "claude-agent-sdk" as const;

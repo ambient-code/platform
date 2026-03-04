@@ -561,23 +561,31 @@ func CreateSession(c *gin.Context) {
 	if vertexEnabled {
 		log.Printf("Vertex AI enabled, skipping runner secret validation for project %s", project)
 	} else {
+		const runnerSecretsName = "ambient-runner-secrets"
 		requiredKeys := getRequiredSecretKeys(runnerTypeID)
-		if len(requiredKeys) > 0 {
-			const runnerSecretsName = "ambient-runner-secrets"
-			sec, err := reqK8s.CoreV1().Secrets(project).Get(c.Request.Context(), runnerSecretsName, v1.GetOptions{})
-			if err != nil {
-				if errors.IsNotFound(err) {
-					log.Printf("Session creation blocked: %s secret missing in project %s", runnerSecretsName, project)
-					c.JSON(http.StatusBadRequest, gin.H{
-						"error": fmt.Sprintf("Runner '%s' requires at least one of [%s] in ambient-runner-secrets. Configure keys in Project Settings or enable Vertex AI.", runnerTypeID, strings.Join(requiredKeys, ", ")),
-					})
-					return
+
+		// Always verify the runner secrets exist (even if registry is unavailable
+		// and requiredKeys is nil — prevents sessions without any API keys).
+		sec, err := reqK8s.CoreV1().Secrets(project).Get(c.Request.Context(), runnerSecretsName, v1.GetOptions{})
+		if err != nil {
+			if errors.IsNotFound(err) {
+				log.Printf("Session creation blocked: %s secret missing in project %s", runnerSecretsName, project)
+				keyList := "API keys"
+				if len(requiredKeys) > 0 {
+					keyList = strings.Join(requiredKeys, ", ")
 				}
-				log.Printf("Failed to check runner secret in project %s: %v", project, err)
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to validate API key configuration"})
+				c.JSON(http.StatusBadRequest, gin.H{
+					"error": fmt.Sprintf("Runner '%s' requires at least one of [%s] in ambient-runner-secrets. Configure keys in Project Settings or enable Vertex AI.", runnerTypeID, keyList),
+				})
 				return
 			}
-			// Check that at least one required key is present and non-empty (OR logic)
+			log.Printf("Failed to check runner secret in project %s: %v", project, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to validate API key configuration"})
+			return
+		}
+
+		// If registry provided required keys, verify at least one is present (OR logic)
+		if len(requiredKeys) > 0 {
 			found := false
 			for _, key := range requiredKeys {
 				if val, ok := sec.Data[key]; ok && len(val) > 0 {
@@ -592,8 +600,8 @@ func CreateSession(c *gin.Context) {
 				})
 				return
 			}
-			log.Printf("Validated runner secret for %s in project %s", runnerTypeID, project)
 		}
+		log.Printf("Validated runner secret for %s in project %s", runnerTypeID, project)
 	}
 
 	// Validation for multi-repo can be added here if needed

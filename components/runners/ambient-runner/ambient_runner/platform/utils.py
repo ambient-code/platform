@@ -74,8 +74,9 @@ def redact_secrets(text: str) -> str:
     )
     text = re.sub(r"oauth2:[^@\s]+@", "oauth2:***REDACTED***@", text)
     text = re.sub(r"://[^:@\s]+:[^@\s]+@", "://***REDACTED***@", text)
+    text = re.sub(r"AIza[a-zA-Z0-9\-_]{30,}", "AIza***REDACTED***", text)
     text = re.sub(
-        r'(ANTHROPIC_API_KEY|LANGFUSE_SECRET_KEY|LANGFUSE_PUBLIC_KEY|BOT_TOKEN|GIT_TOKEN)\s*=\s*[^\s\'"]+',
+        r'(ANTHROPIC_API_KEY|LANGFUSE_SECRET_KEY|LANGFUSE_PUBLIC_KEY|BOT_TOKEN|GIT_TOKEN|GEMINI_API_KEY|GOOGLE_API_KEY)\s*=\s*[^\s\'"]+',
         r"\1=***REDACTED***",
         text,
     )

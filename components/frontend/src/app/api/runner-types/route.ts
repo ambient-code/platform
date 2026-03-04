@@ -1,15 +1,9 @@
 import { BACKEND_URL } from "@/lib/config";
-import { NextRequest } from "next/server";
+import { buildForwardHeadersAsync } from "@/lib/auth";
 
-export async function GET(request: NextRequest) {
+export async function GET(request: Request) {
   try {
-    const headers: HeadersInit = {
-      "Content-Type": "application/json",
-    };
-    const authHeader = request.headers.get("Authorization");
-    if (authHeader) {
-      headers["Authorization"] = authHeader;
-    }
+    const headers = await buildForwardHeadersAsync(request);
 
     const response = await fetch(`${BACKEND_URL}/runner-types`, {
       method: "GET",

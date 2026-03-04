@@ -8,6 +8,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	authenticationv1 "k8s.io/api/authentication/v1"
@@ -115,6 +116,10 @@ func resolveTokenIdentity(ctx context.Context, k8sClient kubernetes.Interface) (
 	return username, nil
 }
 
+// vertexDeprecationOnce ensures the CLAUDE_CODE_USE_VERTEX deprecation
+// warning is logged at most once per process lifetime.
+var vertexDeprecationOnce sync.Once
+
 // isVertexEnabled checks whether Vertex AI is enabled via environment variables.
 // It checks USE_VERTEX first (unified name), then falls back to the legacy
 // CLAUDE_CODE_USE_VERTEX for backward compatibility. Accepts "1" or "true"
@@ -124,7 +129,9 @@ func isVertexEnabled() bool {
 		return true
 	}
 	if isTruthy(os.Getenv("CLAUDE_CODE_USE_VERTEX")) {
-		log.Println("WARNING: CLAUDE_CODE_USE_VERTEX is deprecated, use USE_VERTEX instead")
+		vertexDeprecationOnce.Do(func() {
+			log.Println("WARNING: CLAUDE_CODE_USE_VERTEX is deprecated, use USE_VERTEX instead")
+		})
 		return true
 	}
 	return false

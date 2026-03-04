@@ -42,11 +42,12 @@ def _resolve_trace_id(request: Request, payload: Dict[str, Any]) -> str:
             tid = getattr(obs, "last_trace_id", None)
             if tid:
                 logger.info(
-                    f"Feedback: resolved traceId from ObservabilityManager: {tid[:8]}..."
+                    "Feedback: resolved traceId from ObservabilityManager: %s...",
+                    tid[:8],
                 )
                 return tid
     except Exception as e:
-        logger.debug(f"Feedback: could not resolve traceId from bridge: {e}")
+        logger.debug("Feedback: could not resolve traceId from bridge: %s", e)
 
     return ""
 
@@ -55,7 +56,9 @@ def _resolve_trace_id(request: Request, payload: Dict[str, Any]) -> str:
 async def handle_feedback(event: FeedbackEvent, request: Request):
     """Handle user feedback META events and send to Langfuse."""
     logger.info(
-        f"Feedback received: {event.metaType} from {event.payload.get('userId', 'unknown')}"
+        "Feedback received: %s from %s",
+        event.metaType,
+        event.payload.get("userId", "unknown"),
     )
 
     if event.type != "META":
@@ -147,14 +150,16 @@ async def handle_feedback(event: FeedbackEvent, request: Request):
                         else f"session={session_name}"
                     )
                     logger.info(
-                        f"Langfuse: Feedback score sent ({target}, value={value})"
+                        "Langfuse: Feedback score sent (%s, value=%s)",
+                        target,
+                        value,
                     )
                 else:
                     logger.warning("Langfuse enabled but missing credentials")
             except ImportError:
                 logger.warning("Langfuse not available - feedback will not be recorded")
             except Exception as e:
-                logger.error(f"Failed to send feedback to Langfuse: {e}", exc_info=True)
+                logger.error("Failed to send feedback to Langfuse: %s", e, exc_info=True)
         else:
             logger.info("Langfuse not enabled - feedback logged but not sent")
 
@@ -173,5 +178,5 @@ async def handle_feedback(event: FeedbackEvent, request: Request):
         }
 
     except Exception as e:
-        logger.error(f"Error processing feedback: {e}")
+        logger.error("Error processing feedback: %s", e)
         raise HTTPException(status_code=500, detail=str(e))

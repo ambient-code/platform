@@ -83,15 +83,16 @@ type ModelOption struct {
 }
 
 // RunnerTypeResponse is the public API shape returned to the frontend.
+// FeatureGate is intentionally excluded — gated runners are already filtered
+// out by the handler, so the frontend never needs to see the gate name.
 type RunnerTypeResponse struct {
-	ID          string        `json:"id"`
-	DisplayName string        `json:"displayName"`
-	Description string        `json:"description"`
-	Framework   string        `json:"framework"`
-	DefaultModel string       `json:"defaultModel"`
-	Models      []ModelOption `json:"models"`
-	Auth        AuthSpec      `json:"auth"`
-	FeatureGate string        `json:"featureGate"`
+	ID           string        `json:"id"`
+	DisplayName  string        `json:"displayName"`
+	Description  string        `json:"description"`
+	Framework    string        `json:"framework"`
+	DefaultModel string        `json:"defaultModel"`
+	Models       []ModelOption `json:"models"`
+	Auth         AuthSpec      `json:"auth"`
 }
 
 // In-memory cache for the agent registry (ConfigMap content changes rarely).
@@ -121,6 +122,14 @@ func loadAgentRegistry() ([]AgentRuntimeSpec, error) {
 		context.Background(), agentRegistryConfigMapName, v1.GetOptions{},
 	)
 	if err != nil {
+		// On refresh failure, return stale cache if available
+		registryCacheMu.RLock()
+		if registryCache != nil {
+			defer registryCacheMu.RUnlock()
+			log.Printf("Warning: failed to refresh agent registry, using stale cache: %v", err)
+			return registryCache, nil
+		}
+		registryCacheMu.RUnlock()
 		return nil, fmt.Errorf("failed to read ConfigMap %s: %w", agentRegistryConfigMapName, err)
 	}
 
@@ -151,7 +160,8 @@ func GetRuntime(runnerTypeID string) (*AgentRuntimeSpec, error) {
 	}
 	for i := range entries {
 		if entries[i].ID == runnerTypeID {
-			return &entries[i], nil
+			copy := entries[i]
+			return &copy, nil
 		}
 	}
 	return nil, fmt.Errorf("unknown runner type %q", runnerTypeID)
@@ -236,7 +246,6 @@ func GetRunnerTypes(c *gin.Context) {
 			DefaultModel: e.DefaultModel,
 			Models:       e.Models,
 			Auth:         e.Auth,
-			FeatureGate:  e.FeatureGate,
 		})
 	}
 

@@ -824,16 +824,32 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 	}
 	if runtime != nil && runtime.Container.Resources != nil {
 		if v, ok := runtime.Container.Resources.Requests["cpu"]; ok {
-			runnerResources.Requests[corev1.ResourceCPU] = resource.MustParse(v)
+			if q, err := resource.ParseQuantity(v); err == nil {
+				runnerResources.Requests[corev1.ResourceCPU] = q
+			} else {
+				log.Printf("Warning: invalid cpu request %q in registry, using default: %v", v, err)
+			}
 		}
 		if v, ok := runtime.Container.Resources.Requests["memory"]; ok {
-			runnerResources.Requests[corev1.ResourceMemory] = resource.MustParse(v)
+			if q, err := resource.ParseQuantity(v); err == nil {
+				runnerResources.Requests[corev1.ResourceMemory] = q
+			} else {
+				log.Printf("Warning: invalid memory request %q in registry, using default: %v", v, err)
+			}
 		}
 		if v, ok := runtime.Container.Resources.Limits["cpu"]; ok {
-			runnerResources.Limits[corev1.ResourceCPU] = resource.MustParse(v)
+			if q, err := resource.ParseQuantity(v); err == nil {
+				runnerResources.Limits[corev1.ResourceCPU] = q
+			} else {
+				log.Printf("Warning: invalid cpu limit %q in registry, using default: %v", v, err)
+			}
 		}
 		if v, ok := runtime.Container.Resources.Limits["memory"]; ok {
-			runnerResources.Limits[corev1.ResourceMemory] = resource.MustParse(v)
+			if q, err := resource.ParseQuantity(v); err == nil {
+				runnerResources.Limits[corev1.ResourceMemory] = q
+			} else {
+				log.Printf("Warning: invalid memory limit %q in registry, using default: %v", v, err)
+			}
 		}
 	}
 
@@ -855,7 +871,11 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 
 	// Workspace volume: only if persistence != persistenceNone OR repos are seeded
 	if needsWorkspace {
-		wsQuantity := resource.MustParse(workspaceSize)
+		wsQuantity, err := resource.ParseQuantity(workspaceSize)
+		if err != nil {
+			log.Printf("Warning: invalid workspaceSize %q in registry, falling back to 10Gi: %v", workspaceSize, err)
+			wsQuantity = resource.MustParse("10Gi")
+		}
 		podSpec.Volumes = []corev1.Volume{
 			{
 				Name: "workspace",

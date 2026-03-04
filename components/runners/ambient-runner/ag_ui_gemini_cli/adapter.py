@@ -97,7 +97,7 @@ class GeminiCLIAdapter:
         model: Optional[str] = None
 
         # Accumulated messages for MESSAGES_SNAPSHOT
-        run_messages: list = []
+        run_messages: list[AguiAssistantMessage] = []
 
         try:
             # 1. Emit RUN_STARTED
@@ -340,6 +340,7 @@ class GeminiCLIAdapter:
                     )
                 except Exception:
                     pass
+                text_message_open = False  # Prevent duplicate in finally
 
             yield RunErrorEvent(
                 type=EventType.RUN_ERROR,

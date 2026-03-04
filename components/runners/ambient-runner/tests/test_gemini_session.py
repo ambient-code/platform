@@ -406,8 +406,9 @@ class TestSessionManagerTTLEviction:
         mgr.get_or_create_worker("stale-thread", model="m")
         mgr.set_session_id("stale-thread", "sess-1")
 
-        # Fake the last access time to be old
+        # Fake the last access time to be old and reset eviction throttle
         mgr._last_access["stale-thread"] = time.monotonic() - WORKER_TTL_SEC - 1
+        mgr._last_eviction = 0.0  # force eviction scan on next call
 
         # Accessing a different thread triggers eviction
         mgr.get_or_create_worker("new-thread", model="m")

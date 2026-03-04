@@ -4,11 +4,9 @@ import warnings
 
 import pytest
 
-from ambient_runner.bridges.gemini_cli.auth import (
-    _is_vertex_enabled,
-    setup_gemini_cli_auth,
-)
+from ambient_runner.bridges.gemini_cli.auth import setup_gemini_cli_auth
 from ambient_runner.platform.context import RunnerContext
+from ambient_runner.platform.utils import is_vertex_enabled
 
 
 # ------------------------------------------------------------------
@@ -43,25 +41,25 @@ class TestIsVertexEnabled:
     def test_returns_false_when_unset(self, monkeypatch):
         monkeypatch.delenv("USE_VERTEX", raising=False)
         monkeypatch.delenv("GEMINI_USE_VERTEX", raising=False)
-        assert _is_vertex_enabled() is False
+        assert is_vertex_enabled(legacy_var="GEMINI_USE_VERTEX") is False
 
     @pytest.mark.parametrize("value", ["1", "true", "True", "yes", "YES"])
     def test_use_vertex_truthy_values(self, monkeypatch, value):
         monkeypatch.setenv("USE_VERTEX", value)
         monkeypatch.delenv("GEMINI_USE_VERTEX", raising=False)
-        assert _is_vertex_enabled() is True
+        assert is_vertex_enabled(legacy_var="GEMINI_USE_VERTEX") is True
 
     def test_use_vertex_false_for_non_truthy(self, monkeypatch):
         monkeypatch.setenv("USE_VERTEX", "0")
         monkeypatch.delenv("GEMINI_USE_VERTEX", raising=False)
-        assert _is_vertex_enabled() is False
+        assert is_vertex_enabled(legacy_var="GEMINI_USE_VERTEX") is False
 
     def test_legacy_gemini_use_vertex_fallback(self, monkeypatch):
         monkeypatch.delenv("USE_VERTEX", raising=False)
         monkeypatch.setenv("GEMINI_USE_VERTEX", "1")
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            assert _is_vertex_enabled() is True
+            assert is_vertex_enabled(legacy_var="GEMINI_USE_VERTEX") is True
         assert any(issubclass(x.category, DeprecationWarning) for x in w)
 
     def test_use_vertex_takes_precedence_over_legacy(self, monkeypatch):
@@ -70,7 +68,7 @@ class TestIsVertexEnabled:
         # Should return True from USE_VERTEX without a deprecation warning
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            result = _is_vertex_enabled()
+            result = is_vertex_enabled(legacy_var="GEMINI_USE_VERTEX")
         assert result is True
         # No deprecation warning because USE_VERTEX matched first
         assert not any(issubclass(x.category, DeprecationWarning) for x in w)

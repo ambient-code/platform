@@ -179,6 +179,7 @@ class GeminiCLIBridge(PlatformBridge):
         """Signal reinitialisation on next run."""
         self._ready = False
         self._adapter = None
+        self._mcp_status_cache = None
         if self._session_manager:
             manager = self._session_manager
             self._session_manager = None
@@ -292,9 +293,13 @@ class GeminiCLIBridge(PlatformBridge):
 
     async def _setup_platform(self) -> None:
         """Full platform setup: auth, workspace, observability."""
-        # Session manager
+        # Session manager with state dir for session_id persistence across restarts
         if self._session_manager is None:
-            self._session_manager = GeminiSessionManager()
+            state_dir = os.path.join(
+                os.getenv("WORKSPACE_PATH", "/workspace"),
+                os.getenv("RUNNER_STATE_DIR", ".gemini"),
+            )
+            self._session_manager = GeminiSessionManager(state_dir=state_dir)
 
         # Gemini-specific auth
         from ambient_runner.bridges.gemini_cli.auth import setup_gemini_cli_auth

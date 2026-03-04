@@ -3,7 +3,7 @@
 import json
 import logging
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Optional, Union
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +76,7 @@ _TYPE_MAP = {
 }
 
 
-def parse_event(line: str):
+def parse_event(line: str) -> Optional[Union[InitEvent, MessageEvent, ToolUseEvent, ToolResultEvent, ErrorEvent, ResultEvent]]:
     """Parse a JSON line into the appropriate event dataclass.
 
     Returns ``None`` when the line cannot be parsed or has an unknown type.

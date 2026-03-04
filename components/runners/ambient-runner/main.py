@@ -1,8 +1,14 @@
 """Ambient Runner — polymorphic AG-UI server."""
 
+from __future__ import annotations
+
 import importlib
 import logging
 import os
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ambient_runner.bridge import PlatformBridge
 
 os.umask(0o022)
 
@@ -17,7 +23,7 @@ BRIDGE_REGISTRY: dict[str, tuple[str, str]] = {
 }
 
 
-def _load_bridge():
+def _load_bridge() -> "PlatformBridge":
     if RUNNER_TYPE not in BRIDGE_REGISTRY:
         raise ValueError(
             f"Unknown RUNNER_TYPE={RUNNER_TYPE!r}. Available: {sorted(BRIDGE_REGISTRY)}"
@@ -25,7 +31,7 @@ def _load_bridge():
     module_path, class_name = BRIDGE_REGISTRY[RUNNER_TYPE]
     module = importlib.import_module(module_path)
     bridge_cls = getattr(module, class_name)
-    logger.info(f"Loading bridge: {class_name} from {module_path}")
+    logger.info("Loading bridge: %s from %s", class_name, module_path)
     return bridge_cls()
 
 

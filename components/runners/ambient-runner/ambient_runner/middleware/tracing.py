@@ -75,7 +75,7 @@ async def tracing_middleware(
                         value={"traceId": trace_id},
                     )
                     trace_id_emitted = True
-                    logger.info(f"Tracing middleware: emitted trace ID {trace_id}")
+                    logger.info("Tracing middleware: emitted trace ID %s", trace_id)
 
     except Exception as exc:
         # Mark the current Langfuse trace as ERROR so failures are visible

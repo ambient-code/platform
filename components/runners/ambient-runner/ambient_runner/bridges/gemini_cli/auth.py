@@ -1,7 +1,6 @@
 """Gemini CLI authentication — API key and Vertex AI setup."""
 
 import logging
-import os
 
 from ambient_runner.platform.context import RunnerContext
 from ambient_runner.platform.utils import is_vertex_enabled
@@ -27,8 +26,8 @@ async def setup_gemini_cli_auth(context: RunnerContext) -> tuple[str, str, bool]
     use_vertex = is_vertex_enabled(legacy_var="GEMINI_USE_VERTEX", context=context)
 
     if use_vertex:
-        project = os.getenv("GOOGLE_CLOUD_PROJECT", "").strip()
-        location = os.getenv("GOOGLE_CLOUD_LOCATION", "").strip()
+        project = context.get_env("GOOGLE_CLOUD_PROJECT", "").strip()
+        location = context.get_env("GOOGLE_CLOUD_LOCATION", "").strip()
 
         logger.info(
             "Gemini CLI: Vertex AI mode (project=%s, location=%s, model=%s)",
@@ -39,8 +38,8 @@ async def setup_gemini_cli_auth(context: RunnerContext) -> tuple[str, str, bool]
         return model, "", True
 
     api_key = (
-        os.getenv("GEMINI_API_KEY", "").strip()
-        or os.getenv("GOOGLE_API_KEY", "").strip()
+        context.get_env("GEMINI_API_KEY", "").strip()
+        or context.get_env("GOOGLE_API_KEY", "").strip()
     )
 
     if api_key:
