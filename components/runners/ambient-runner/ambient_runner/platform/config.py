@@ -53,7 +53,7 @@ def load_mcp_config(context: RunnerContext, cwd_path: str) -> Optional[dict]:
     """
     try:
         mcp_config_file = context.get_env(
-            "MCP_CONFIG_FILE", "/app/claude-runner/.mcp.json"
+            "MCP_CONFIG_FILE", "/app/ambient-runner/.mcp.json"
         )
         runner_mcp_file = Path(mcp_config_file)
 

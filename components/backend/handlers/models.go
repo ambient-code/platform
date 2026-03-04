@@ -143,53 +143,79 @@ func LoadManifest(path string) (*types.ModelManifest, error) {
 	return &manifest, nil
 }
 
-// isModelAvailable checks if a model is available for session creation in the
-// given workspace namespace. Returns true if the model exists, is available,
-// and is enabled (checking workspace overrides first, then Unleash).
-// The default model always returns true. Returns true only when no manifest
-// has ever been loaded (fail-open on cold start).
-func isModelAvailable(ctx context.Context, k8sClient kubernetes.Interface, modelID, namespace string) bool {
+// isModelAvailable checks if a model is available for session creation.
+//
+// Validation strategy:
+//  1. Check the agent registry — if the model is declared in the selected
+//     runner's model list, it's valid. This is the primary check for all runners.
+//  2. For models also in the models.json manifest (Claude models), additionally
+//     check feature-flag gating and workspace overrides.
+//  3. If the model is not found in either source, reject it.
+func isModelAvailable(ctx context.Context, k8sClient kubernetes.Interface, modelID, runnerTypeID, namespace string) bool {
 	if modelID == "" {
 		return true // Empty model will use default
 	}
 
+	// 1. Check agent registry — runner-specific model validation
+	rt, err := GetRuntime(runnerTypeID)
+	if err == nil && len(rt.Models) > 0 {
+		found := false
+		for _, m := range rt.Models {
+			if m.Value == modelID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			log.Printf("Model %q not in runner %q model list, rejecting", modelID, runnerTypeID)
+			return false
+		}
+		// Model is in the runner's list — now check if it also needs
+		// feature-flag gating via the manifest (applies to Claude models).
+	}
+
+	// 2. Check models.json manifest for feature-flag gating (if applicable)
 	manifest, err := LoadManifest(ManifestPath())
 	if err != nil {
-		log.Printf("WARNING: failed to load model manifest for validation: %v", err)
+		log.Printf("WARNING: failed to load model manifest: %v", err)
 		manifest = cachedManifest.Load()
-		if manifest == nil {
-			// No manifest has ever been loaded — fail-open to avoid
-			// blocking session creation on first startup.
-			log.Printf("WARNING: no cached manifest available, allowing model %q", modelID)
-			return true
-		}
 	} else {
 		cachedManifest.Store(manifest)
 	}
 
-	// Default model is always available
-	if modelID == manifest.DefaultModel {
-		return true
-	}
-
-	for _, entry := range manifest.Models {
-		if entry.ID == modelID {
-			if !entry.Available {
-				return false
+	if manifest != nil {
+		// Default model is always available
+		if modelID == manifest.DefaultModel {
+			return true
+		}
+		for _, entry := range manifest.Models {
+			if entry.ID == modelID {
+				if !entry.Available {
+					return false
+				}
+				flagName := fmt.Sprintf("model.%s.enabled", entry.ID)
+				overrides, oErr := getWorkspaceOverrides(ctx, k8sClient, namespace)
+				if oErr != nil {
+					log.Printf("WARNING: failed to read workspace overrides for %s: %v", namespace, oErr)
+				}
+				return isModelEnabledWithOverrides(flagName, overrides)
 			}
-			flagName := fmt.Sprintf("model.%s.enabled", entry.ID)
-			// Check workspace overrides first, then fall back to Unleash
-			overrides, err := getWorkspaceOverrides(ctx, k8sClient, namespace)
-			if err != nil {
-				log.Printf("WARNING: failed to read workspace overrides for %s: %v", namespace, err)
-			}
-			return isModelEnabledWithOverrides(flagName, overrides)
 		}
 	}
 
-	// Model not found in manifest — reject it. The manifest is authoritative;
-	// unknown model IDs should not be accepted.
-	log.Printf("WARNING: model %q not found in manifest, rejecting", modelID)
+	// 3. If we validated via registry in step 1 (found=true), allow it.
+	//    Models not in the manifest skip feature-flag gating (e.g., Gemini models).
+	if rt != nil && len(rt.Models) > 0 {
+		return true // Already validated in step 1
+	}
+
+	// No manifest loaded and no registry available — fail-open on cold start
+	if manifest == nil {
+		log.Printf("WARNING: no manifest or registry available, allowing model %q", modelID)
+		return true
+	}
+
+	log.Printf("WARNING: model %q not found in manifest or agent registry, rejecting", modelID)
 	return false
 }
 

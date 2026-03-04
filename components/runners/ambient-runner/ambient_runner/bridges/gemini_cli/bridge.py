@@ -10,6 +10,7 @@ Owns the Gemini CLI session lifecycle:
 
 import asyncio
 import logging
+import os
 import time
 from typing import Any, AsyncIterator, Optional
 
@@ -26,6 +27,7 @@ from ambient_runner.bridge import (
 from ambient_runner.bridges.gemini_cli.session import (
     SHUTDOWN_TIMEOUT_SEC,
     GeminiSessionManager,
+    _GEMINI_ENV_BLOCKLIST,
 )
 from ambient_runner.platform.context import RunnerContext
 
@@ -52,6 +54,7 @@ class GeminiCLIBridge(PlatformBridge):
         self._api_key: str = ""
         self._use_vertex: bool = False
         self._cwd_path: str = ""
+        self._include_directories: list[str] = []
         self._mcp_settings_path: str | None = None
         self._mcp_status_cache: dict | None = None
         self._last_creds_refresh: float = 0.0
@@ -98,6 +101,7 @@ class GeminiCLIBridge(PlatformBridge):
             api_key=self._api_key,
             use_vertex=self._use_vertex,
             cwd=self._cwd_path,
+            include_directories=self._include_directories,
         )
 
         # 4. Get last session_id for --resume
@@ -211,48 +215,87 @@ class GeminiCLIBridge(PlatformBridge):
         return ""
 
     async def get_mcp_status(self) -> dict:
-        """Return MCP server status from the written settings file (cached)."""
+        """Get MCP server status by running `gemini mcp list` in the workspace."""
         if self._mcp_status_cache is not None:
             return self._mcp_status_cache
 
         import json
 
         empty = {"servers": [], "totalCount": 0}
-        if not self._mcp_settings_path:
-            self._mcp_status_cache = empty
+        if not self._cwd_path:
             return empty
 
         try:
-            from pathlib import Path
+            env = {k: v for k, v in os.environ.items() if k not in _GEMINI_ENV_BLOCKLIST}
+            proc = await asyncio.create_subprocess_exec(
+                "gemini", "mcp", "list",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=self._cwd_path,
+                env=env,
+            )
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
+            output = stdout.decode().strip()
 
-            settings_path = Path(self._mcp_settings_path)
-            if not settings_path.exists():
-                return empty  # don't cache — file may appear later
-
-            with open(settings_path) as f:
-                settings = json.load(f)
-
-            mcp_servers = settings.get("mcpServers", {})
+            # Parse gemini mcp list output — each configured server is listed
+            # Also read from settings.json for transport/config details
             servers_list = []
-            for name, config in mcp_servers.items():
-                transport = "stdio"
-                if config.get("httpUrl"):
-                    transport = "http"
-                elif config.get("url"):
-                    transport = "sse"
-                servers_list.append(
-                    {
+
+            # Read settings.json for config details
+            settings_servers = {}
+            if self._mcp_settings_path:
+                from pathlib import Path
+
+                settings_path = Path(self._mcp_settings_path)
+                if settings_path.exists():
+                    with open(settings_path) as f:
+                        settings = json.load(f)
+                    settings_servers = settings.get("mcpServers", {})
+
+            # Parse output lines — gemini mcp list shows server names/status
+            if output and "No MCP servers configured" not in output:
+                for line in output.splitlines():
+                    line = line.strip()
+                    if not line or line.startswith("Loaded"):
+                        continue
+                    # Extract server name (first word or the whole line)
+                    name = line.split()[0] if line.split() else line
+                    config = settings_servers.get(name, {})
+                    transport = "stdio"
+                    if config.get("httpUrl"):
+                        transport = "http"
+                    elif config.get("url"):
+                        transport = "sse"
+                    status = "connected" if "enabled" in line.lower() or "✓" in line else "configured"
+                    servers_list.append({
+                        "name": name,
+                        "displayName": name,
+                        "status": status,
+                        "transport": transport,
+                        "tools": [],
+                    })
+            elif settings_servers:
+                # Fallback: CLI didn't list them but settings.json has them
+                for name, config in settings_servers.items():
+                    transport = "stdio"
+                    if config.get("httpUrl"):
+                        transport = "http"
+                    elif config.get("url"):
+                        transport = "sse"
+                    servers_list.append({
                         "name": name,
                         "displayName": name,
                         "status": "configured",
                         "transport": transport,
                         "tools": [],
-                    }
-                )
+                    })
 
             result = {"servers": servers_list, "totalCount": len(servers_list)}
             self._mcp_status_cache = result
             return result
+        except asyncio.TimeoutError:
+            logger.warning("gemini mcp list timed out")
+            return {"servers": [], "totalCount": 0, "error": "timeout"}
         except Exception as e:
             logger.error("Failed to get MCP status: %s", e, exc_info=True)
             return {"servers": [], "totalCount": 0, "error": str(e)}
@@ -323,9 +366,18 @@ class GeminiCLIBridge(PlatformBridge):
 
         mcp_settings_path = setup_gemini_mcp(self._context, cwd_path)
 
+        # Build include directories (repos, uploads, artifacts, file-uploads)
+        workspace = os.getenv("WORKSPACE_PATH", "/workspace")
+        include_dirs = []
+        for subdir in ["repos", "artifacts", "file-uploads"]:
+            d = os.path.join(workspace, subdir)
+            if os.path.isdir(d) and d != cwd_path:
+                include_dirs.append(d)
+
         # Store results
         self._configured_model = model
         self._api_key = api_key
         self._use_vertex = use_vertex
         self._cwd_path = cwd_path
+        self._include_directories = include_dirs
         self._mcp_settings_path = mcp_settings_path

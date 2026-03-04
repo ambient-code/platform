@@ -26,13 +26,20 @@ WORKER_TTL_SEC = int(os.getenv("WORKER_TTL_SEC", "3600"))
 # Maximum stderr lines kept in ring buffer per worker
 _MAX_STDERR_LINES = 100
 
-_GEMINI_ENV_PASSTHROUGH = frozenset({
-    "PATH", "HOME", "USER", "SHELL", "TERM", "LANG", "LC_ALL", "TZ",
-    "GOOGLE_CLOUD_PROJECT", "GOOGLE_CLOUD_LOCATION",
-    "GOOGLE_APPLICATION_CREDENTIALS", "CLOUDSDK_CONFIG",
-    "GEMINI_API_KEY", "GOOGLE_API_KEY",
-    "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY",
-    "http_proxy", "https_proxy", "no_proxy",
+# Env vars that should NOT be passed to the Gemini CLI subprocess.
+# These are runner-internal secrets that the CLI doesn't need.
+_GEMINI_ENV_BLOCKLIST = frozenset({
+    "ANTHROPIC_API_KEY",
+    "BOT_TOKEN",
+    "LANGFUSE_SECRET_KEY",
+    "LANGFUSE_PUBLIC_KEY",
+    "LANGFUSE_HOST",
+    "AWS_ACCESS_KEY_ID",
+    "AWS_SECRET_ACCESS_KEY",
+    "S3_ENDPOINT",
+    "S3_BUCKET",
+    "GOOGLE_OAUTH_CLIENT_ID",
+    "GOOGLE_OAUTH_CLIENT_SECRET",
 })
 
 
@@ -46,11 +53,13 @@ class GeminiSessionWorker:
         api_key: str = "",
         use_vertex: bool = False,
         cwd: str = "",
+        include_directories: list[str] | None = None,
     ) -> None:
         self._model = model
         self._api_key = api_key
         self._use_vertex = use_vertex
         self._cwd = cwd or os.getenv("WORKSPACE_PATH", "/workspace")
+        self._include_directories = include_directories or []
         self._process: Optional[asyncio.subprocess.Process] = None
         self._stderr_lines: deque[str] = deque(maxlen=_MAX_STDERR_LINES)
         self._stderr_task: Optional[asyncio.Task] = None
@@ -102,8 +111,11 @@ class GeminiSessionWorker:
         ]
         if session_id:
             cmd.extend(["--resume", session_id])
+        for d in self._include_directories:
+            if os.path.isdir(d):
+                cmd.extend(["--include-directories", d])
 
-        env = {k: v for k, v in os.environ.items() if k in _GEMINI_ENV_PASSTHROUGH}
+        env = {k: v for k, v in os.environ.items() if k not in _GEMINI_ENV_BLOCKLIST}
         if self._use_vertex:
             # Vertex AI mode: ensure API keys are NOT set (they take precedence
             # and bypass Vertex). GOOGLE_CLOUD_PROJECT, GOOGLE_CLOUD_LOCATION,
@@ -275,6 +287,7 @@ class GeminiSessionManager:
         api_key: str = "",
         use_vertex: bool = False,
         cwd: str = "",
+        include_directories: list[str] | None = None,
     ) -> GeminiSessionWorker:
         """Return a worker for *thread_id*, creating one if needed."""
         self._evict_stale()
@@ -282,7 +295,8 @@ class GeminiSessionManager:
 
         if thread_id not in self._workers:
             self._workers[thread_id] = GeminiSessionWorker(
-                model=model, api_key=api_key, use_vertex=use_vertex, cwd=cwd
+                model=model, api_key=api_key, use_vertex=use_vertex, cwd=cwd,
+                include_directories=include_directories,
             )
             logger.debug("Created GeminiSessionWorker for thread=%s", thread_id)
         return self._workers[thread_id]
