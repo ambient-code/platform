@@ -46,5 +46,3 @@ ambient-code-backend
 
 .env
 private-key.pem
-# Copied from manifests/base/models.json at build time for go:embed
-models.json

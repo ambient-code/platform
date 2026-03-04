@@ -16,11 +16,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-// EmbeddedManifest is set from main.go via go:embed. It holds the model
-// manifest compiled into the binary as a fallback when the ConfigMap
-// volume is not yet mounted (cold start).
-var EmbeddedManifest []byte
-
 // cachedManifest stores the last successfully loaded manifest so that
 // transient file-read errors fall back to the previous good version
 // instead of the hardcoded default (which bypasses feature flags).
@@ -65,15 +60,8 @@ func ListModelsForProject(c *gin.Context) {
 	if err != nil {
 		log.Printf("WARNING: failed to load model manifest from disk: %v", err)
 		manifest = cachedManifest.Load()
-		if manifest == nil && len(EmbeddedManifest) > 0 {
-			log.Printf("Using embedded model manifest (compiled into binary)")
-			var m types.ModelManifest
-			if e := json.Unmarshal(EmbeddedManifest, &m); e == nil {
-				manifest = &m
-			}
-		}
 		if manifest == nil {
-			log.Printf("ERROR: no model manifest available")
+			log.Printf("ERROR: no model manifest available (file unreadable, no cache)")
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Model manifest unavailable"})
 			return
 		}
@@ -187,12 +175,6 @@ func isModelAvailable(ctx context.Context, k8sClient kubernetes.Interface, model
 	if err != nil {
 		log.Printf("WARNING: failed to load model manifest for validation: %v", err)
 		manifest = cachedManifest.Load()
-		if manifest == nil && len(EmbeddedManifest) > 0 {
-			var m types.ModelManifest
-			if e := json.Unmarshal(EmbeddedManifest, &m); e == nil {
-				manifest = &m
-			}
-		}
 		if manifest == nil {
 			log.Printf("WARNING: no manifest available, allowing model %q", modelID)
 			return true
