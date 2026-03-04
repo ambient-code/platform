@@ -17,3 +17,4 @@ export * from './use-feature-flags-admin';
 export * from './use-capabilities';
 export * from './use-runner-types';
 export * from './use-scheduled-sessions';
+export * from './use-ldap';
