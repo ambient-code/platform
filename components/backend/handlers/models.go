@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sort"
 	"sync/atomic"
 
 	"ambient-code-backend/featureflags"
@@ -126,6 +127,10 @@ func ListModelsForProject(c *gin.Context) {
 			})
 		}
 	}
+
+	sort.Slice(models, func(i, j int) bool {
+		return models[i].Label < models[j].Label
+	})
 
 	responseDefault := effectiveDefault
 	if len(models) == 0 {

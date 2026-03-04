@@ -77,6 +77,75 @@ func FlagsFromManifest(manifest *types.ModelManifest) []FlagSpec {
 	return specs
 }
 
+// StaleFlagsFromManifest returns Unleash flag names that should be archived
+// because the corresponding model is no longer feature-gated.
+func StaleFlagsFromManifest(manifest *types.ModelManifest) []string {
+	var stale []string
+	for _, model := range manifest.Models {
+		if model.FeatureGated {
+			continue
+		}
+		stale = append(stale, sanitizeLogString(fmt.Sprintf("model.%s.enabled", model.ID)))
+	}
+	return stale
+}
+
+// CleanupStaleFlags archives Unleash flags that are no longer needed.
+// Flags that don't exist are silently skipped (already archived or never created).
+//
+// Required env vars: UNLEASH_ADMIN_URL, UNLEASH_ADMIN_TOKEN
+// Optional env var:  UNLEASH_PROJECT (default: "default")
+func CleanupStaleFlags(ctx context.Context, flagNames []string) error {
+	if len(flagNames) == 0 {
+		return nil
+	}
+
+	adminURL := strings.TrimSuffix(strings.TrimSpace(os.Getenv("UNLEASH_ADMIN_URL")), "/")
+	adminToken := strings.TrimSpace(os.Getenv("UNLEASH_ADMIN_TOKEN"))
+	project := strings.TrimSpace(os.Getenv("UNLEASH_PROJECT"))
+	if project == "" {
+		project = "default"
+	}
+
+	if adminURL == "" || adminToken == "" {
+		log.Printf("cleanup-flags: UNLEASH_ADMIN_URL or UNLEASH_ADMIN_TOKEN not set, skipping")
+		return nil
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+
+	var archived, skipped, errCount int
+	log.Printf("Cleaning up %d stale Unleash flag(s)...", len(flagNames))
+
+	for _, name := range flagNames {
+		exists, err := flagExists(ctx, client, adminURL, project, name, adminToken)
+		if err != nil {
+			log.Printf("  ERROR checking %s: %v", name, err)
+			errCount++
+			continue
+		}
+		if !exists {
+			skipped++
+			continue
+		}
+
+		if err := archiveFlag(ctx, client, adminURL, project, name, adminToken); err != nil {
+			log.Printf("  ERROR archiving %s: %v", name, err)
+			errCount++
+			continue
+		}
+		log.Printf("  %s: archived", name)
+		archived++
+	}
+
+	log.Printf("Cleanup summary: %d archived, %d not found, %d errors", archived, skipped, errCount)
+
+	if errCount > 0 {
+		return fmt.Errorf("%d errors occurred during cleanup", errCount)
+	}
+	return nil
+}
+
 // FlagsConfigPath returns the filesystem path to the generic flags config.
 // Defaults to defaultFlagsConfig; override via FLAGS_CONFIG_PATH env var.
 func FlagsConfigPath() string {
@@ -130,17 +199,31 @@ func SyncModelFlagsFromFile(manifestPath string) error {
 		return fmt.Errorf("parsing manifest: %w", err)
 	}
 
-	return SyncFlags(context.Background(), FlagsFromManifest(&manifest))
+	ctx := context.Background()
+	if err := SyncFlags(ctx, FlagsFromManifest(&manifest)); err != nil {
+		return err
+	}
+	return CleanupStaleFlags(ctx, StaleFlagsFromManifest(&manifest))
 }
 
 // SyncFlagsAsync runs SyncFlags in a background goroutine with retries.
 // Intended for use at server startup — does not block the caller.
 // Cancel the context to abort retries (e.g. on SIGTERM).
 func SyncFlagsAsync(ctx context.Context, flags []FlagSpec) {
+	SyncAndCleanupAsync(ctx, flags, nil)
+}
+
+// SyncAndCleanupAsync runs SyncFlags and CleanupStaleFlags in a background
+// goroutine with retries. After a successful sync, stale flags are archived.
+// Cancel the context to abort retries (e.g. on SIGTERM).
+func SyncAndCleanupAsync(ctx context.Context, flags []FlagSpec, staleFlags []string) {
 	go func() {
 		for attempt := 1; attempt <= maxRetries; attempt++ {
 			err := SyncFlags(ctx, flags)
 			if err == nil {
+				if cErr := CleanupStaleFlags(ctx, staleFlags); cErr != nil {
+					log.Printf("sync-flags: cleanup failed (non-fatal): %v", cErr)
+				}
 				return
 			}
 			log.Printf("sync-flags: attempt %d/%d failed: %v", attempt, maxRetries, err)
@@ -359,6 +442,25 @@ func createFlag(ctx context.Context, client *http.Client, adminURL, project, fla
 		return nil
 	case http.StatusConflict:
 		return errConflict
+	default:
+		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(respBody))
+	}
+}
+
+func archiveFlag(ctx context.Context, client *http.Client, adminURL, project, flagName, token string) error {
+	reqURL := fmt.Sprintf("%s/api/admin/projects/%s/features/%s", adminURL, url.PathEscape(project), url.PathEscape(flagName))
+	resp, err := doRequest(ctx, client, "DELETE", reqURL, token, nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(resp.Body)
+
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusAccepted:
+		return nil
+	case http.StatusNotFound:
+		return nil // already gone
 	default:
 		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(respBody))
 	}

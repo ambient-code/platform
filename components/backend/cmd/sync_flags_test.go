@@ -120,6 +120,137 @@ func TestFlagsFromManifest_EmptyManifest(t *testing.T) {
 	}
 }
 
+// --- StaleFlagsFromManifest ---
+
+func TestStaleFlagsFromManifest_ReturnsNonGatedModels(t *testing.T) {
+	manifest := &types.ModelManifest{
+		DefaultModel: "claude-sonnet-4-5",
+		Models: []types.ModelEntry{
+			{ID: "claude-sonnet-4-5", Provider: "anthropic", Available: true, FeatureGated: false},
+			{ID: "claude-opus-4-6", Provider: "anthropic", Available: true, FeatureGated: true},
+			{ID: "claude-haiku-4-5", Provider: "anthropic", Available: true, FeatureGated: false},
+			{ID: "gemini-2.5-pro", Provider: "google", Available: true, FeatureGated: true},
+		},
+	}
+
+	stale := StaleFlagsFromManifest(manifest)
+
+	// Non-gated models: claude-sonnet-4-5, claude-haiku-4-5
+	if len(stale) != 2 {
+		t.Fatalf("expected 2 stale flags, got %d: %v", len(stale), stale)
+	}
+	names := map[string]bool{}
+	for _, s := range stale {
+		names[s] = true
+	}
+	if !names["model.claude-sonnet-4-5.enabled"] {
+		t.Error("expected model.claude-sonnet-4-5.enabled in stale list")
+	}
+	if !names["model.claude-haiku-4-5.enabled"] {
+		t.Error("expected model.claude-haiku-4-5.enabled in stale list")
+	}
+	if names["model.claude-opus-4-6.enabled"] {
+		t.Error("gated model should not be in stale list")
+	}
+}
+
+func TestStaleFlagsFromManifest_EmptyWhenAllGated(t *testing.T) {
+	manifest := &types.ModelManifest{
+		DefaultModel: "claude-sonnet-4-5",
+		Models: []types.ModelEntry{
+			{ID: "claude-sonnet-4-5", Provider: "anthropic", Available: true, FeatureGated: true},
+		},
+	}
+
+	stale := StaleFlagsFromManifest(manifest)
+	if len(stale) != 0 {
+		t.Errorf("expected 0 stale flags, got %d", len(stale))
+	}
+}
+
+// --- CleanupStaleFlags ---
+
+func TestCleanupStaleFlags_ArchivesExistingFlags(t *testing.T) {
+	var deleteCalled bool
+	var deletePath string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" && strings.Contains(r.URL.Path, "/features/") {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"name":"model.claude-haiku-4-5.enabled"}`))
+			return
+		}
+		if r.Method == "DELETE" && strings.Contains(r.URL.Path, "/features/") {
+			deleteCalled = true
+			deletePath = r.URL.Path
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	t.Setenv("UNLEASH_ADMIN_URL", server.URL)
+	t.Setenv("UNLEASH_ADMIN_TOKEN", "test-token")
+	t.Setenv("UNLEASH_PROJECT", "default")
+
+	err := CleanupStaleFlags(context.Background(), []string{"model.claude-haiku-4-5.enabled"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !deleteCalled {
+		t.Error("expected DELETE to be called")
+	}
+	if !strings.Contains(deletePath, "model.claude-haiku-4-5.enabled") {
+		t.Errorf("expected delete path to contain flag name, got %s", deletePath)
+	}
+}
+
+func TestCleanupStaleFlags_SkipsNonExistentFlags(t *testing.T) {
+	var deleteCalled bool
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" && strings.Contains(r.URL.Path, "/features/") {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		if r.Method == "DELETE" {
+			deleteCalled = true
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	t.Setenv("UNLEASH_ADMIN_URL", server.URL)
+	t.Setenv("UNLEASH_ADMIN_TOKEN", "test-token")
+
+	err := CleanupStaleFlags(context.Background(), []string{"model.nonexistent.enabled"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if deleteCalled {
+		t.Error("DELETE should not be called for non-existent flags")
+	}
+}
+
+func TestCleanupStaleFlags_SkipsWhenEnvNotSet(t *testing.T) {
+	t.Setenv("UNLEASH_ADMIN_URL", "")
+	t.Setenv("UNLEASH_ADMIN_TOKEN", "")
+
+	err := CleanupStaleFlags(context.Background(), []string{"model.test.enabled"})
+	if err != nil {
+		t.Errorf("expected nil error when env not set, got: %v", err)
+	}
+}
+
+func TestCleanupStaleFlags_EmptyList(t *testing.T) {
+	err := CleanupStaleFlags(context.Background(), nil)
+	if err != nil {
+		t.Errorf("expected nil error for empty list, got: %v", err)
+	}
+}
+
 // --- FlagsFromConfig ---
 
 func TestFlagsFromConfig_LoadsValidFile(t *testing.T) {
