@@ -29,6 +29,8 @@ import time
 import urllib.error
 import urllib.parse
 from collections import defaultdict
+from typing import TypedDict
+
 import urllib.request
 from pathlib import Path
 
@@ -48,11 +50,19 @@ DEFAULT_MANIFEST = (
 # e.g. claude-opus-4-6 and claude-opus-4-5 are kept, claude-opus-4-1 is dropped.
 MAX_VERSIONS_PER_FAMILY = 2
 
+
 # Publisher discovery configuration.
 # prefixes:  only models whose ID starts with one of these are included.
 # exclude:   model IDs matching these regex patterns are skipped (embeddings,
 #            image models, legacy versions, etc.).
-PUBLISHERS: list[dict] = [
+class PublisherConfig(TypedDict):
+    publisher: str
+    provider: str
+    prefixes: list[str]
+    exclude: list[str]
+
+
+PUBLISHERS: list[PublisherConfig] = [
     {
         "publisher": "anthropic",
         "provider": "anthropic",
@@ -172,7 +182,9 @@ def list_publisher_models(publisher: str, token: str) -> list[str]:
     return all_models
 
 
-def discover_models(token: str, manifest: dict) -> list[tuple[str, str, str]]:
+def discover_models(
+    token: str, manifest: dict[str, object]
+) -> list[tuple[str, str, str]]:
     """Discover models from all configured publishers.
 
     Queries the Model Garden list API for each publisher, filters by
@@ -265,9 +277,10 @@ def resolve_version(
     project. Works in CI via the Workload Identity service account; may
     return None locally if the user lacks this role.
     """
+    safe_id = urllib.parse.quote(model_id, safe="")
     url = (
         f"https://{region}-aiplatform.googleapis.com/v1/"
-        f"publishers/{publisher}/models/{model_id}"
+        f"publishers/{publisher}/models/{safe_id}"
     )
 
     last_err = None
@@ -288,6 +301,7 @@ def resolve_version(
 
         except urllib.error.HTTPError as e:
             if e.code in (403, 404):
+                # Permission denied or not found — retrying won't help
                 print(
                     f"  {model_id}: version resolution unavailable (HTTP {e.code})",
                     file=sys.stderr,
@@ -388,11 +402,12 @@ def _build_probe_request(
     region: str, project_id: str, vertex_id: str, publisher: str, token: str
 ) -> urllib.request.Request:
     """Build the probe HTTP request for a given publisher."""
+    safe_vid = urllib.parse.quote(vertex_id, safe="@")
     if publisher == "google":
         url = (
             f"https://{region}-aiplatform.googleapis.com/v1/"
             f"projects/{project_id}/locations/{region}/"
-            f"publishers/google/models/{vertex_id}:generateContent"
+            f"publishers/google/models/{safe_vid}:generateContent"
         )
         body = json.dumps(
             {
@@ -404,7 +419,7 @@ def _build_probe_request(
         url = (
             f"https://{region}-aiplatform.googleapis.com/v1/"
             f"projects/{project_id}/locations/{region}/"
-            f"publishers/anthropic/models/{vertex_id}:rawPredict"
+            f"publishers/anthropic/models/{safe_vid}:rawPredict"
         )
         body = json.dumps(
             {
