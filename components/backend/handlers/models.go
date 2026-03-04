@@ -198,8 +198,8 @@ func isModelAvailable(ctx context.Context, k8sClient kubernetes.Interface, model
 			if modelID == manifest.DefaultModel {
 				return true
 			}
-			for _, pd := range manifest.ProviderDefaults {
-				if modelID == pd {
+			for provider, pd := range manifest.ProviderDefaults {
+				if modelID == pd && (requiredProvider == "" || provider == requiredProvider) {
 					return true
 				}
 			}

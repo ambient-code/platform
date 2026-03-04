@@ -270,11 +270,17 @@ export function CreateSessionDialog({
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {models.map((m) => (
-                          <SelectItem key={m.value} value={m.value}>
-                            {m.label}
-                          </SelectItem>
-                        ))}
+                        {models.length === 0 && !modelsLoading ? (
+                          <div className="p-2 text-sm text-muted-foreground">
+                            No models available for this runner
+                          </div>
+                        ) : (
+                          models.map((m) => (
+                            <SelectItem key={m.value} value={m.value}>
+                              {m.label}
+                            </SelectItem>
+                          ))
+                        )}
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -427,7 +433,7 @@ export function CreateSessionDialog({
                 >
                   Cancel
                 </Button>
-                <Button type="submit" disabled={createSessionMutation.isPending || runnerTypesLoading || runnerTypesError}>
+                <Button type="submit" disabled={createSessionMutation.isPending || runnerTypesLoading || runnerTypesError || modelsLoading}>
                   {createSessionMutation.isPending && (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   )}
