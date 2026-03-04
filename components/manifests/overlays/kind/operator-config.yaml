@@ -9,7 +9,7 @@ data:
   # Use local runner image loaded into kind cluster (not quay.io)
   AMBIENT_CODE_RUNNER_IMAGE: "vteam_claude_runner:latest"
   # Vertex AI Configuration - Disabled for e2e testing
-  CLAUDE_CODE_USE_VERTEX: "0"
+  USE_VERTEX: "0"
   CLOUD_ML_REGION: ""
   ANTHROPIC_VERTEX_PROJECT_ID: ""
   GOOGLE_APPLICATION_CREDENTIALS: ""

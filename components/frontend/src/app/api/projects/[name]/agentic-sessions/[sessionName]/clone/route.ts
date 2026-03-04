@@ -21,5 +21,3 @@ export async function POST(
     return Response.json({ error: 'Failed to clone agentic session' }, { status: 500 });
   }
 }
-
-

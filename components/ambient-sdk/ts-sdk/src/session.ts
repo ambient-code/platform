@@ -337,4 +337,3 @@ export class SessionStatusPatchBuilder {
     return this.data as SessionStatusPatchRequest;
   }
 }
-

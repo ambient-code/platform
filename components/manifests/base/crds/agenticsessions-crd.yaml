@@ -79,6 +79,18 @@ spec:
                 type: integer
                 minimum: 0
                 description: "Seconds of inactivity before auto-stopping a session. 0 disables auto-shutdown. If omitted, falls back to project-level inactivityTimeoutSeconds, then 24h default."
+              environmentVariables:
+                type: object
+                additionalProperties:
+                  type: string
+                description: >-
+                  Key-value pairs injected as environment variables into all pod containers
+                  (init-hydrate, runner, state-sync). Reserved variables (SESSION_NAME,
+                  S3_ENDPOINT, S3_BUCKET, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, NAMESPACE,
+                  SYNC_INTERVAL) cannot be overridden in init-hydrate and state-sync containers.
+                  Common conventions: RUNNER_TYPE identifies the runner framework (e.g.
+                  "claude-agent-sdk", "gemini-cli"), RUNNER_STATE_DIR sets the framework state
+                  directory relative to /workspace (defaults to ".claude").
               activeWorkflow:
                 type: object
                 description: "Active workflow configuration for dynamic workflow switching"

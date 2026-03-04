@@ -454,7 +454,7 @@ export class ApiClient {
     options: RequestInit = {}
   ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
-    
+
     const response = await fetch(url, {
       headers: {
         'Content-Type': 'application/json',
@@ -513,14 +513,14 @@ import type { Project, CreateProjectRequest, CreateProjectResponse } from '@/typ
 
 export const projectsApi = {
   list: () => apiClient.get<{ projects: Project[] }>('/projects'),
-  
-  get: (name: string) => 
+
+  get: (name: string) =>
     apiClient.get<{ project: Project }>(`/projects/${name}`),
-  
-  create: (data: CreateProjectRequest) => 
+
+  create: (data: CreateProjectRequest) =>
     apiClient.post<CreateProjectResponse>('/projects', data),
-  
-  delete: (name: string) => 
+
+  delete: (name: string) =>
     apiClient.delete(`/projects/${name}`),
 };
 
@@ -556,7 +556,7 @@ export const useProject = (name: string) => {
 
 export const useCreateProject = () => {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
     mutationFn: (data: CreateProjectRequest) => projectsApi.create(data),
     onSuccess: () => {
@@ -567,7 +567,7 @@ export const useCreateProject = () => {
 
 export const useDeleteProject = () => {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
     mutationFn: (name: string) => projectsApi.delete(name),
     onSuccess: () => {
@@ -759,7 +759,7 @@ src/
 // ❌ BAD: Repeated logic in multiple components
 const ComponentA = () => {
   const [isLoading, setIsLoading] = useState(false);
-  
+
   const handleSubmit = async () => {
     setIsLoading(true);
     try {
@@ -768,7 +768,7 @@ const ComponentA = () => {
       setIsLoading(false);
     }
   };
-  
+
   return <Button disabled={isLoading}>Submit</Button>;
 };
 
@@ -847,7 +847,7 @@ export const LoadingButton = ({
 // Usage
 const MyForm = () => {
   const mutation = useCreateProject();
-  
+
   return (
     <LoadingButton
       isLoading={mutation.isPending}
@@ -1078,7 +1078,7 @@ import { useProject } from '@/services/queries/use-projects';
 export const ProjectPage = ({ params }: { params: { name: string } }) => {
   // Server state - managed by React Query
   const { data: project, isLoading } = useProject(params.name);
-  
+
   // Client state - managed by React state
   const [selectedTab, setSelectedTab] = useState('overview');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -1129,4 +1129,3 @@ export const ProjectPage = ({ params }: { params: { name: string } }) => {
 - [ ] Proper loading skeletons
 - [ ] User-friendly error messages
 - [ ] Success feedback (toasts/alerts)
-

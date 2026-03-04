@@ -150,15 +150,15 @@ const getColorClassesForName = (name: string) => {
 const pythonLiteralToJson = (pythonStr: string): string => {
   // This handles Python dict/list notation like [{'type': 'text', 'text': '...'}]
   // Use a state machine to properly handle quotes and escape sequences
-  
+
   let result = '';
   let inString = false;
   let stringChar = '';
   let escaped = false;
-  
+
   for (let i = 0; i < pythonStr.length; i++) {
     const char = pythonStr[i];
-    
+
     if (escaped) {
       // Handle escape sequences
       if (inString) {
@@ -180,12 +180,12 @@ const pythonLiteralToJson = (pythonStr: string): string => {
       escaped = false;
       continue;
     }
-    
+
     if (char === '\\') {
       escaped = true;
       continue;
     }
-    
+
     // Handle quotes
     if (char === "'" || char === '"') {
       if (!inString) {
@@ -210,13 +210,13 @@ const pythonLiteralToJson = (pythonStr: string): string => {
       }
       continue;
     }
-    
+
     // If we're in a string, just copy characters
     if (inString) {
       result += char;
       continue;
     }
-    
+
     // Handle Python keywords outside strings
     if (!inString) {
       if (pythonStr.substr(i, 4) === 'True') {
@@ -235,10 +235,10 @@ const pythonLiteralToJson = (pythonStr: string): string => {
         continue;
       }
     }
-    
+
     result += char;
   }
-  
+
   return result;
 };
 
@@ -268,7 +268,7 @@ const extractTextFromResultContent = (content: unknown): string => {
       }
       return content;
     }
-    
+
     // Handle arrays of text blocks
     if (Array.isArray(content)) {
       const texts = content
@@ -281,7 +281,7 @@ const extractTextFromResultContent = (content: unknown): string => {
         .filter(Boolean);
       if (texts.length) return texts.join("\n\n");
     }
-    
+
     // Handle nested content arrays
     if (content && typeof content === "object") {
       const maybe = (content as Record<string, unknown>).content;
@@ -297,7 +297,7 @@ const extractTextFromResultContent = (content: unknown): string => {
         if (texts.length) return texts.join("\n\n");
       }
     }
-    
+
     return JSON.stringify(content ?? "");
   } catch {
     return String(content ?? "");
@@ -307,25 +307,25 @@ const extractTextFromResultContent = (content: unknown): string => {
 // Generate smart summary for tool calls based on tool name and input
 const generateToolSummary = (toolName: string, input?: Record<string, unknown>): string => {
   if (!input || Object.keys(input).length === 0) return formatToolName(toolName);
-  
+
   // WebSearch - show query
   if (toolName.toLowerCase().includes("websearch") || toolName.toLowerCase().includes("web_search")) {
     const query = input.query as string | undefined;
     if (query) return `Searching the web for "${query}"`;
   }
-  
+
   // FileRead - show file path
   if (toolName.toLowerCase().includes("read") && (input.file || input.path || input.target_file)) {
     const file = (input.file || input.path || input.target_file) as string;
     return `Reading ${file}`;
   }
-  
+
   // FileWrite - show file path
   if (toolName.toLowerCase().includes("write") && (input.file || input.path || input.target_file)) {
     const file = (input.file || input.path || input.target_file) as string;
     return `Writing to ${file}`;
   }
-  
+
   // Grep - show pattern and path
   if (toolName.toLowerCase().includes("grep") || toolName.toLowerCase().includes("search")) {
     const pattern = input.pattern as string | undefined;
@@ -333,7 +333,7 @@ const generateToolSummary = (toolName: string, input?: Record<string, unknown>):
     if (pattern && path) return `Searching for "${pattern}" in ${path}`;
     if (pattern) return `Searching for "${pattern}"`;
   }
-  
+
   // Command execution
   if (toolName.toLowerCase().includes("command") || toolName.toLowerCase().includes("terminal")) {
     const command = input.command as string | undefined;
@@ -342,14 +342,14 @@ const generateToolSummary = (toolName: string, input?: Record<string, unknown>):
       return `Running: ${truncated}`;
     }
   }
-  
+
   // Fallback: show first string value from input (often contains the main parameter)
   const firstStringValue = Object.values(input).find(v => typeof v === 'string' && v.length > 0) as string | undefined;
   if (firstStringValue) {
     const truncated = firstStringValue.length > 60 ? firstStringValue.substring(0, 60) + "..." : firstStringValue;
     return truncated;
   }
-  
+
   // Last resort: show formatted tool name
   return formatToolName(toolName);
 };
@@ -362,11 +362,11 @@ type ChildToolCallProps = {
 
 const ChildToolCall: React.FC<ChildToolCallProps> = ({ toolUseBlock, resultBlock }) => {
   const [expanded, setExpanded] = useState(false);
-  
+
   // Check if result has actual content (same logic as parent tool)
   const hasActualResult = Boolean(
-    resultBlock && 
-    resultBlock.content !== undefined && 
+    resultBlock &&
+    resultBlock.content !== undefined &&
     resultBlock.content !== null &&
     (() => {
       const content = resultBlock.content;
@@ -383,13 +383,13 @@ const ChildToolCall: React.FC<ChildToolCallProps> = ({ toolUseBlock, resultBlock
       return true;
     })()
   );
-  
+
   const isError = resultBlock?.is_error === true;
   const isSuccess = hasActualResult && !isError;
   const isPending = !hasActualResult && !isError;
-  
+
   const toolName = toolUseBlock?.name || "unknown_tool";
-  
+
   // Parse input - it might be a string that needs JSON parsing or already an object
   let toolInput: Record<string, unknown> | undefined;
   if (toolUseBlock?.input) {
@@ -404,38 +404,38 @@ const ChildToolCall: React.FC<ChildToolCallProps> = ({ toolUseBlock, resultBlock
       toolInput = toolUseBlock.input as Record<string, unknown>;
     }
   }
-  
+
   // Generate smart collapsed summary - ALWAYS show the query/input, not the result
   // Result should only be visible when expanded
   const collapsedSummary = generateToolSummary(toolName, toolInput);
-  
+
   return (
     <div className="py-1">
-      <div 
+      <div
         className="flex items-center gap-2 cursor-pointer hover:bg-muted/30 rounded px-2 py-1"
         onClick={() => setExpanded(!expanded)}
       >
         {isError && <X className="w-3 h-3 text-red-500 flex-shrink-0" />}
         {isSuccess && <Check className="w-3 h-3 text-green-500 flex-shrink-0" />}
         {isPending && <Loader2 className="w-3 h-3 animate-spin text-blue-500 flex-shrink-0" />}
-        
+
         <Badge variant="secondary" className="text-[10px] px-1.5 py-0.5 flex-shrink-0">
           {formatToolName(toolName)}
         </Badge>
-        
+
         {/* Collapsed summary */}
         {!expanded && (
           <span className="text-[11px] text-muted-foreground truncate flex-1">
             {collapsedSummary}
           </span>
         )}
-        
+
         <ChevronRight className={cn(
           "w-3 h-3 text-muted-foreground transition-transform flex-shrink-0",
           expanded && "rotate-90"
         )} />
       </div>
-      
+
       {expanded && (
         <div className="mt-1 ml-5 text-xs space-y-2 bg-muted/20 rounded p-2 border border-border">
           {toolInput && Object.keys(toolInput).length > 0 && (
@@ -452,8 +452,8 @@ const ChildToolCall: React.FC<ChildToolCallProps> = ({ toolUseBlock, resultBlock
                 Result {isError && <span className="text-red-600">(Error)</span>}
               </div>
               {/* Render result as markdown for better formatting */}
-              <ExpandableMarkdown 
-                className="prose-sm" 
+              <ExpandableMarkdown
+                className="prose-sm"
                 content={extractTextFromResultContent(resultBlock.content as unknown)}
                 maxLength={500}
               />
@@ -470,11 +470,11 @@ export const ToolMessage = React.forwardRef<HTMLDivElement, ToolMessageProps>(
     const [isExpanded, setIsExpanded] = useState(false);
 
     const toolResultBlock = resultBlock;
-    
+
     // Check if result has actual content (not just empty object/array/string)
     const hasActualResult = Boolean(
-      toolResultBlock && 
-      toolResultBlock.content !== undefined && 
+      toolResultBlock &&
+      toolResultBlock.content !== undefined &&
       toolResultBlock.content !== null &&
       (() => {
         const content = toolResultBlock.content;
@@ -491,7 +491,7 @@ export const ToolMessage = React.forwardRef<HTMLDivElement, ToolMessageProps>(
         return true;
       })()
     );
-    
+
     const isToolCall = Boolean(toolUseBlock && !hasActualResult);
     const isToolResult = hasActualResult;
 
@@ -633,7 +633,7 @@ export const ToolMessage = React.forwardRef<HTMLDivElement, ToolMessageProps>(
                       </div>
                     </div>
                   )}
-                  
+
                   {/* 2. ACTIVITY - Agent child tool calls */}
                   {childToolCalls && childToolCalls.length > 0 && (
                     <div className="space-y-2">
@@ -651,14 +651,14 @@ export const ToolMessage = React.forwardRef<HTMLDivElement, ToolMessageProps>(
                       </div>
                     </div>
                   )}
-                  
+
                   {/* Loading indicator when waiting for result */}
                   {isLoading && (
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <Loader2 className="w-3 h-3 animate-spin" />
                       <span>
-                        {childToolCalls && childToolCalls.length > 0 
-                          ? "Processing..." 
+                        {childToolCalls && childToolCalls.length > 0
+                          ? "Processing..."
                           : "Waiting for result…"}
                       </span>
                     </div>
@@ -672,13 +672,13 @@ export const ToolMessage = React.forwardRef<HTMLDivElement, ToolMessageProps>(
                       </h4>
                       <div className={cn(
                         "rounded p-2 mt-1 overflow-x-auto border text-xs",
-                        isError 
+                        isError
                           ? "bg-red-50 dark:bg-red-950/50 border-red-200 dark:border-red-800"
                           : "bg-muted/30 border-border"
                       )}>
                         {/* CRITICAL: Render result as markdown for better formatting */}
-                        <ExpandableMarkdown 
-                          className="prose-sm" 
+                        <ExpandableMarkdown
+                          className="prose-sm"
                           content={extractTextFromResultContent(toolResultBlock?.content as unknown)}
                           maxLength={1000}
                         />

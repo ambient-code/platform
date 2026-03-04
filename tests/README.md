@@ -226,7 +226,7 @@ make local-reload-backend
 ```bash
 test_my_feature() {
     log_section "Test X: My Feature"
-    
+
     # Test logic here
     if condition; then
         log_success "Feature works"
@@ -374,4 +374,3 @@ If tests are failing and you need help:
 - [Makefile](../Makefile) - Developer commands
 - [Local Development Guide](../docs/LOCAL_DEVELOPMENT.md) - Setup instructions
 - [CONTRIBUTING.md](../CONTRIBUTING.md) - Contribution guidelines
-

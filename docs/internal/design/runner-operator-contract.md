@@ -133,8 +133,8 @@ func (r *SessionReconciler) checkJobTimeout(ctx context.Context, session *unstru
     if job.Status.Failed > 0 {
         for _, cond := range job.Status.Conditions {
             if cond.Type == batchv1.JobFailed && cond.Reason == "DeadlineExceeded" {
-                r.updateCondition(ctx, session, ConditionTypeFailed, metav1.ConditionTrue, 
-                    "Timeout", 
+                r.updateCondition(ctx, session, ConditionTypeFailed, metav1.ConditionTrue,
+                    "Timeout",
                     fmt.Sprintf("Job exceeded timeout of %d seconds", *job.Spec.ActiveDeadlineSeconds))
                 r.updateStatus(ctx, session, map[string]interface{}{
                     "completionTime": metav1.Now(),
@@ -156,48 +156,48 @@ func (r *SessionReconciler) checkJobTimeout(ctx context.Context, session *unstru
 ```go
 func (r *SessionReconciler) handleRunnerTermination(ctx context.Context, session *unstructured.Unstructured, cs *corev1.ContainerStatus) error {
     term := cs.State.Terminated
-    
+
     switch term.ExitCode {
     case 0:
         // Success
-        r.updateCondition(ctx, session, ConditionTypeCompleted, metav1.ConditionTrue, 
+        r.updateCondition(ctx, session, ConditionTypeCompleted, metav1.ConditionTrue,
             "Success", "Runner completed successfully")
-        r.updateCondition(ctx, session, ConditionTypeReady, metav1.ConditionFalse, 
+        r.updateCondition(ctx, session, ConditionTypeReady, metav1.ConditionFalse,
             "SessionCompleted", "Session finished successfully")
-        
+
     case 1:
         // SDK error
-        r.updateCondition(ctx, session, ConditionTypeFailed, metav1.ConditionTrue, 
+        r.updateCondition(ctx, session, ConditionTypeFailed, metav1.ConditionTrue,
             "SDKError", fmt.Sprintf("Runner exited with error: %s", term.Message))
-        r.updateCondition(ctx, session, ConditionTypeReady, metav1.ConditionFalse, 
+        r.updateCondition(ctx, session, ConditionTypeReady, metav1.ConditionFalse,
             "SessionFailed", term.Message)
-        
+
     case 2:
         // Prerequisite validation failed
-        r.updateCondition(ctx, session, ConditionTypeFailed, metav1.ConditionTrue, 
+        r.updateCondition(ctx, session, ConditionTypeFailed, metav1.ConditionTrue,
             "PrerequisiteFailed", "Required prerequisite files missing")
-        
+
     case 143:
         // SIGTERM - user requested stop (already handled by StopSession)
         log.Printf("Runner received SIGTERM (user stop)")
-        
+
     default:
         // Unknown error
-        r.updateCondition(ctx, session, ConditionTypeFailed, metav1.ConditionTrue, 
+        r.updateCondition(ctx, session, ConditionTypeFailed, metav1.ConditionTrue,
             "UnknownError", fmt.Sprintf("Runner exited with code %d: %s", term.ExitCode, term.Message))
     }
-    
+
     // Always set completion time
     r.updateStatus(ctx, session, map[string]interface{}{
         "completionTime": metav1.Now(),
     })
-    
+
     // Set interactive for restart
     r.setSpecField(ctx, session, "interactive", true)
-    
+
     // Cleanup Job
     r.deleteJob(ctx, session, job)
-    
+
     return nil
 }
 ```
@@ -210,7 +210,7 @@ func (r *SessionReconciler) handleRunnerTermination(ctx context.Context, session
 func (r *SessionReconciler) ensureFreshToken(ctx context.Context, session *unstructured.Unstructured) error {
     name := session.GetName()
     namespace := session.GetNamespace()
-    
+
     // Get token secret
     secretName := fmt.Sprintf("ambient-runner-token-%s", name)
     secret, err := r.K8sClient.CoreV1().Secrets(namespace).Get(ctx, secretName, metav1.GetOptions{})
@@ -222,25 +222,25 @@ func (r *SessionReconciler) ensureFreshToken(ctx context.Context, session *unstr
     if err != nil {
         return fmt.Errorf("failed to check token secret: %w", err)
     }
-    
+
     // Check token age (ServiceAccount tokens expire after 1 hour by default)
     creationTime := secret.CreationTimestamp.Time
     age := time.Since(creationTime)
-    
+
     // Refresh token if older than 45 minutes (15 min buffer)
     if age > 45*time.Minute {
         log.Printf("Token for session %s is %v old, refreshing", name, age)
-        
+
         // Delete old secret
         err := r.K8sClient.CoreV1().Secrets(namespace).Delete(ctx, secretName, metav1.DeleteOptions{})
         if err != nil && !errors.IsNotFound(err) {
             return fmt.Errorf("failed to delete old token: %w", err)
         }
-        
+
         // Create fresh token
         return r.provisionRunnerToken(ctx, session)
     }
-    
+
     return nil
 }
 
@@ -248,7 +248,7 @@ func (r *SessionReconciler) provisionRunnerToken(ctx context.Context, session *u
     name := session.GetName()
     namespace := session.GetNamespace()
     saName := fmt.Sprintf("ambient-session-%s", name)
-    
+
     // Mint fresh token
     tr := &authnv1.TokenRequest{
         Spec: authnv1.TokenRequestSpec{
@@ -260,7 +260,7 @@ func (r *SessionReconciler) provisionRunnerToken(ctx context.Context, session *u
     if err != nil {
         return fmt.Errorf("failed to mint token: %w", err)
     }
-    
+
     // Store in secret
     secretName := fmt.Sprintf("ambient-runner-token-%s", name)
     secret := &corev1.Secret{
@@ -281,13 +281,13 @@ func (r *SessionReconciler) provisionRunnerToken(ctx context.Context, session *u
             "k8s-token": tok.Status.Token,
         },
     }
-    
+
     _, err = r.K8sClient.CoreV1().Secrets(namespace).Create(ctx, secret, metav1.CreateOptions{})
     if errors.IsAlreadyExists(err) {
         // Update existing secret
         _, err = r.K8sClient.CoreV1().Secrets(namespace).Update(ctx, secret, metav1.UpdateOptions{})
     }
-    
+
     log.Printf("Provisioned fresh token for session %s (expires in 1h)", name)
     return err
 }
@@ -299,44 +299,44 @@ func (r *SessionReconciler) provisionRunnerToken(ctx context.Context, session *u
 func (r *SessionReconciler) reconcileSession(ctx context.Context, session *unstructured.Unstructured) (ctrl.Result, error) {
     name := session.GetName()
     namespace := session.GetNamespace()
-    
+
     // Step 1: Ensure token is fresh (refresh if > 45min old)
     if err := r.ensureFreshToken(ctx, session); err != nil {
-        r.updateCondition(ctx, session, ConditionTypeReady, metav1.ConditionFalse, 
+        r.updateCondition(ctx, session, ConditionTypeReady, metav1.ConditionFalse,
             "TokenRefreshFailed", fmt.Sprintf("Failed to refresh SA token: %v", err))
         return ctrl.Result{RequeueAfter: 30 * time.Second}, nil // Retry
     }
-    
+
     // Step 2: Ensure PVC exists and is bound
     pvcReady, err := r.ensurePVC(ctx, session)
     if err != nil {
-        r.updateCondition(ctx, session, ConditionTypePVCReady, metav1.ConditionFalse, 
+        r.updateCondition(ctx, session, ConditionTypePVCReady, metav1.ConditionFalse,
             "ProvisionFailed", err.Error())
         return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
     }
     if !pvcReady {
-        r.updateCondition(ctx, session, ConditionTypePVCReady, metav1.ConditionFalse, 
+        r.updateCondition(ctx, session, ConditionTypePVCReady, metav1.ConditionFalse,
             "Provisioning", "PVC is being provisioned")
         return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
     }
-    r.updateCondition(ctx, session, ConditionTypePVCReady, metav1.ConditionTrue, 
+    r.updateCondition(ctx, session, ConditionTypePVCReady, metav1.ConditionTrue,
         "Bound", "PVC is bound and ready")
-    
+
     // Step 3: Verify secrets exist
     secretsReady, missingSecret, err := r.verifySecrets(ctx, session)
     if err != nil {
-        r.updateCondition(ctx, session, ConditionTypeSecretsReady, metav1.ConditionFalse, 
+        r.updateCondition(ctx, session, ConditionTypeSecretsReady, metav1.ConditionFalse,
             "VerificationFailed", err.Error())
         return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
     }
     if !secretsReady {
-        r.updateCondition(ctx, session, ConditionTypeSecretsReady, metav1.ConditionFalse, 
+        r.updateCondition(ctx, session, ConditionTypeSecretsReady, metav1.ConditionFalse,
             "SecretNotFound", fmt.Sprintf("Secret '%s' not found", missingSecret))
         return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
     }
-    r.updateCondition(ctx, session, ConditionTypeSecretsReady, metav1.ConditionTrue, 
+    r.updateCondition(ctx, session, ConditionTypeSecretsReady, metav1.ConditionTrue,
         "AllSecretsFound", "All required secrets are present")
-    
+
     // Step 4: Ensure Job exists
     jobName := fmt.Sprintf("%s-job", name)
     job, err := r.K8sClient.BatchV1().Jobs(namespace).Get(ctx, jobName, metav1.GetOptions{})
@@ -344,27 +344,27 @@ func (r *SessionReconciler) reconcileSession(ctx context.Context, session *unstr
         // Create Job
         job, err = r.createJob(ctx, session)
         if err != nil {
-            r.updateCondition(ctx, session, ConditionTypeJobCreated, metav1.ConditionFalse, 
+            r.updateCondition(ctx, session, ConditionTypeJobCreated, metav1.ConditionFalse,
                 "CreationFailed", err.Error())
             return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
         }
-        r.updateCondition(ctx, session, ConditionTypeJobCreated, metav1.ConditionTrue, 
+        r.updateCondition(ctx, session, ConditionTypeJobCreated, metav1.ConditionTrue,
             "Created", "Job created successfully")
         return ctrl.Result{RequeueAfter: 2 * time.Second}, nil // Let pod schedule
     }
     if err != nil {
         return ctrl.Result{RequeueAfter: 5 * time.Second}, fmt.Errorf("failed to get job: %w", err)
     }
-    
+
     // Step 5: Check for Job timeout
     if err := r.checkJobTimeout(ctx, session, job); err != nil {
         return ctrl.Result{}, err
     }
-    
+
     // Step 6: Check Job failure (backoff limit exceeded)
     if job.Spec.BackoffLimit != nil && job.Status.Failed >= *job.Spec.BackoffLimit {
-        r.updateCondition(ctx, session, ConditionTypeFailed, metav1.ConditionTrue, 
-            "BackoffLimitExceeded", 
+        r.updateCondition(ctx, session, ConditionTypeFailed, metav1.ConditionTrue,
+            "BackoffLimitExceeded",
             fmt.Sprintf("Job failed after %d attempts", job.Status.Failed))
         r.updateStatus(ctx, session, map[string]interface{}{
             "completionTime": metav1.Now(),
@@ -372,7 +372,7 @@ func (r *SessionReconciler) reconcileSession(ctx context.Context, session *unstr
         r.deleteJob(ctx, session, job)
         return ctrl.Result{}, nil // Terminal
     }
-    
+
     // Step 7: Monitor pod status
     pods, err := r.K8sClient.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
         LabelSelector: fmt.Sprintf("job-name=%s", jobName),
@@ -380,20 +380,20 @@ func (r *SessionReconciler) reconcileSession(ctx context.Context, session *unstr
     if err != nil {
         return ctrl.Result{RequeueAfter: 5 * time.Second}, err
     }
-    
+
     if len(pods.Items) == 0 {
         // No pods yet - waiting for scheduler
-        r.updateCondition(ctx, session, ConditionTypePodScheduled, metav1.ConditionFalse, 
+        r.updateCondition(ctx, session, ConditionTypePodScheduled, metav1.ConditionFalse,
             "PodPending", "Waiting for pod to be scheduled")
         return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
     }
-    
+
     pod := pods.Items[0]
-    
+
     // Check pod phase-level failures
     if pod.Status.Phase == corev1.PodFailed {
         failureMsg := fmt.Sprintf("Pod failed: %s - %s", pod.Status.Reason, pod.Status.Message)
-        r.updateCondition(ctx, session, ConditionTypeFailed, metav1.ConditionTrue, 
+        r.updateCondition(ctx, session, ConditionTypeFailed, metav1.ConditionTrue,
             "PodFailed", failureMsg)
         r.updateStatus(ctx, session, map[string]interface{}{
             "completionTime": metav1.Now(),
@@ -401,50 +401,50 @@ func (r *SessionReconciler) reconcileSession(ctx context.Context, session *unstr
         r.deleteJob(ctx, session, job)
         return ctrl.Result{}, nil // Terminal
     }
-    
+
     // Check pod scheduling
     if pod.Spec.NodeName != "" {
-        r.updateCondition(ctx, session, ConditionTypePodScheduled, metav1.ConditionTrue, 
+        r.updateCondition(ctx, session, ConditionTypePodScheduled, metav1.ConditionTrue,
             "Scheduled", fmt.Sprintf("Pod scheduled on node %s", pod.Spec.NodeName))
     } else {
         // Check for scheduling issues
         for _, cond := range pod.Status.Conditions {
             if cond.Type == corev1.PodScheduled && cond.Status == corev1.ConditionFalse {
-                r.updateCondition(ctx, session, ConditionTypePodScheduled, metav1.ConditionFalse, 
+                r.updateCondition(ctx, session, ConditionTypePodScheduled, metav1.ConditionFalse,
                     cond.Reason, cond.Message)
                 return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
             }
         }
     }
-    
+
     // Step 8: Check runner container status
     runnerCS := getContainerStatus(&pod, "ambient-code-runner")
     if runnerCS == nil {
         return ctrl.Result{RequeueAfter: 2 * time.Second}, nil // Container not ready
     }
-    
+
     // Container running
     if runnerCS.State.Running != nil {
-        r.updateCondition(ctx, session, ConditionTypeRunnerStarted, metav1.ConditionTrue, 
+        r.updateCondition(ctx, session, ConditionTypeRunnerStarted, metav1.ConditionTrue,
             "ContainerRunning", "Runner container is active")
-        r.updateCondition(ctx, session, ConditionTypeReady, metav1.ConditionTrue, 
+        r.updateCondition(ctx, session, ConditionTypeReady, metav1.ConditionTrue,
             "SessionRunning", "Session is running normally")
-        
+
         // Set start time if not set
         if getStartTime(session) == nil {
             r.updateStatus(ctx, session, map[string]interface{}{
                 "startTime": metav1.Now(),
             })
         }
-        
+
         return ctrl.Result{RequeueAfter: 5 * time.Second}, nil // Keep monitoring
     }
-    
+
     // Container waiting (check for errors)
     if runnerCS.State.Waiting != nil {
         waiting := runnerCS.State.Waiting
         isPermanentError := false
-        
+
         switch waiting.Reason {
         case "ImagePullBackOff", "ErrImagePull", "InvalidImageName":
             isPermanentError = true
@@ -453,13 +453,13 @@ func (r *SessionReconciler) reconcileSession(ctx context.Context, session *unstr
         case "CreateContainerConfigError":
             isPermanentError = true
         }
-        
+
         if isPermanentError {
-            r.updateCondition(ctx, session, ConditionTypeRunnerStarted, metav1.ConditionFalse, 
+            r.updateCondition(ctx, session, ConditionTypeRunnerStarted, metav1.ConditionFalse,
                 waiting.Reason, waiting.Message)
-            r.updateCondition(ctx, session, ConditionTypeFailed, metav1.ConditionTrue, 
+            r.updateCondition(ctx, session, ConditionTypeFailed, metav1.ConditionTrue,
                 waiting.Reason, fmt.Sprintf("Runner container failed: %s", waiting.Message))
-            r.updateCondition(ctx, session, ConditionTypeReady, metav1.ConditionFalse, 
+            r.updateCondition(ctx, session, ConditionTypeReady, metav1.ConditionFalse,
                 "SessionFailed", waiting.Message)
             r.updateStatus(ctx, session, map[string]interface{}{
                 "completionTime": metav1.Now(),
@@ -468,17 +468,17 @@ func (r *SessionReconciler) reconcileSession(ctx context.Context, session *unstr
             return ctrl.Result{}, nil // Terminal
         } else {
             // Transient error - keep retrying
-            r.updateCondition(ctx, session, ConditionTypeRunnerStarted, metav1.ConditionFalse, 
+            r.updateCondition(ctx, session, ConditionTypeRunnerStarted, metav1.ConditionFalse,
                 waiting.Reason, waiting.Message)
             return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
         }
     }
-    
+
     // Container terminated
     if runnerCS.State.Terminated != nil {
         return r.handleRunnerTermination(ctx, session, runnerCS)
     }
-    
+
     return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 }
 ```
@@ -526,4 +526,3 @@ func (r *SessionReconciler) reconcileSession(ctx context.Context, session *unstr
 6. **Pod eviction**: Node pressure → Condition: PodEvicted, Job retries
 7. **Runner crash**: SDK error → exit code 1 → Condition: SDKError
 8. **User stop**: DELETE job → exit code 143 → Condition: Stopped
-

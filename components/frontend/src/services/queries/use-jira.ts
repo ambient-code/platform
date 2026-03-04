@@ -10,7 +10,7 @@ export function useJiraStatus() {
 
 export function useConnectJira() {
   const queryClient = useQueryClient()
-  
+
   return useMutation({
     mutationFn: jiraAuthApi.connectJira,
     onSuccess: () => {
@@ -21,7 +21,7 @@ export function useConnectJira() {
 
 export function useDisconnectJira() {
   const queryClient = useQueryClient()
-  
+
   return useMutation({
     mutationFn: jiraAuthApi.disconnectJira,
     onSuccess: () => {

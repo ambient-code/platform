@@ -25,7 +25,7 @@ func ValidateVertexConfig(operatorNamespace string) error {
 
 	for name, value := range requiredEnvVars {
 		if value == "" {
-			return fmt.Errorf("CLAUDE_CODE_USE_VERTEX=1 but %s is not set", name)
+			return fmt.Errorf("USE_VERTEX is enabled but %s is not set", name)
 		}
 		log.Printf("  %s: %s", name, value)
 	}

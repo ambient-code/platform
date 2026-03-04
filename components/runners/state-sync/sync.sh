@@ -15,13 +15,16 @@ MAX_SYNC_SIZE="${MAX_SYNC_SIZE:-1073741824}"  # 1GB default
 NAMESPACE="${NAMESPACE//[^a-zA-Z0-9-]/}"
 SESSION_NAME="${SESSION_NAME//[^a-zA-Z0-9-]/}"
 
+# Runner framework state directory (relative path under /workspace)
+# Defaults to ".claude" for backward compat with claude-code-runner
+RUNNER_STATE_DIR="${RUNNER_STATE_DIR:-.claude}"
+FRAMEWORK_DATA_PATH="/workspace/${RUNNER_STATE_DIR}"
+
 # Paths to sync (non-git content)
-# Note: .claude uses /app/.claude (SubPath mount), others use /workspace
 SYNC_PATHS=(
     "artifacts"
     "file-uploads"
 )
-CLAUDE_DATA_PATH="/app/.claude"
 
 # Patterns to exclude from sync
 EXCLUDE_PATTERNS=(
@@ -35,7 +38,7 @@ EXCLUDE_PATTERNS=(
     "dist/**"
     "build/**"
     ".git/**"
-    ".claude/debug/**"   # Debug logs with symlinks that break rclone
+    "debug/**"           # Debug logs with symlinks that break rclone
 )
 
 # Configure rclone for S3
@@ -58,13 +61,13 @@ EOF
 # Check total size before sync
 check_size() {
     local total=0
-    
-    # Check .claude directory size (at /app/.claude via SubPath)
-    if [ -d "${CLAUDE_DATA_PATH}" ]; then
-        size=$(du -sb "${CLAUDE_DATA_PATH}" 2>/dev/null | cut -f1 || echo 0)
+
+    # Check framework data directory size
+    if [ -d "${FRAMEWORK_DATA_PATH}" ]; then
+        size=$(du -sb "${FRAMEWORK_DATA_PATH}" 2>/dev/null | cut -f1 || echo 0)
         total=$((total + size))
     fi
-    
+
     # Check other paths in /workspace
     for path in "${SYNC_PATHS[@]}"; do
         if [ -d "/workspace/${path}" ]; then
@@ -72,7 +75,7 @@ check_size() {
             total=$((total + size))
         fi
     done
-    
+
     if [ $total -gt $MAX_SYNC_SIZE ]; then
         echo "WARNING: Sync size (${total} bytes) exceeds limit (${MAX_SYNC_SIZE} bytes)"
         echo "Some files may be skipped"
@@ -84,15 +87,16 @@ check_size() {
 # Sync workspace state to S3
 sync_to_s3() {
     local s3_path="s3:${S3_BUCKET}/${NAMESPACE}/${SESSION_NAME}"
-    
+
     echo "[$(date -Iseconds)] Starting sync to S3..."
-    
+
     local synced=0
-    
-    # Sync .claude data from /app/.claude (SubPath mount matches runner container)
-    if [ -d "${CLAUDE_DATA_PATH}" ]; then
-        echo "  Syncing .claude/..."
-        if rclone --config /tmp/.config/rclone/rclone.conf sync "${CLAUDE_DATA_PATH}" "${s3_path}/.claude/" \
+
+    # Sync framework state data (with SQLite WAL checkpoint for consistency)
+    if [ -d "${FRAMEWORK_DATA_PATH}" ]; then
+        find "${FRAMEWORK_DATA_PATH}" -name "*.db" -exec sqlite3 {} "PRAGMA wal_checkpoint(TRUNCATE);" \; 2>/dev/null || true
+        echo "  Syncing ${RUNNER_STATE_DIR}/..."
+        if rclone --config /tmp/.config/rclone/rclone.conf sync "${FRAMEWORK_DATA_PATH}" "${s3_path}/${RUNNER_STATE_DIR}/" \
             --checksum \
             --copy-links \
             --transfers 4 \
@@ -103,10 +107,10 @@ sync_to_s3() {
             2>&1; then
             synced=$((synced + 1))
         else
-            echo "  Warning: sync of .claude had errors"
+            echo "  Warning: sync of ${RUNNER_STATE_DIR} had errors"
         fi
     fi
-    
+
     # Sync other paths from /workspace
     for path in "${SYNC_PATHS[@]}"; do
         if [ -d "/workspace/${path}" ]; then
@@ -126,11 +130,11 @@ sync_to_s3() {
             fi
         fi
     done
-    
+
     # Save metadata
     echo "{\"lastSync\": \"$(date -Iseconds)\", \"session\": \"${SESSION_NAME}\", \"namespace\": \"${NAMESPACE}\", \"pathsSynced\": ${synced}}" > /tmp/metadata.json
     rclone --config /tmp/.config/rclone/rclone.conf copy /tmp/metadata.json "${s3_path}/" 2>&1 || true
-    
+
     echo "[$(date -Iseconds)] Sync complete (${synced} paths synced)"
 }
 
@@ -284,4 +288,3 @@ while true; do
     sync_to_s3 || echo "Sync failed, will retry in ${SYNC_INTERVAL}s..."
     sleep ${SYNC_INTERVAL}
 done
-

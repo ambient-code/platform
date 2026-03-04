@@ -110,7 +110,7 @@ The skill understands all platform components:
 | Backend | `components/backend` | `vteam_backend:latest` | API server |
 | Frontend | `components/frontend` | `vteam_frontend:latest` | Web UI |
 | Operator | `components/operator` | `vteam_operator:latest` | K8s operator |
-| Runner | `components/runners/claude-code-runner` | `vteam_claude_runner:latest` | Claude Code runner |
+| Runner | `components/runners/ambient-runner` | `vteam_claude_runner:latest` | Claude Code runner |
 | State Sync | `components/runners/state-sync` | `vteam_state_sync:latest` | S3 persistence |
 | Public API | `components/public-api` | `vteam_public_api:latest` | External API |
 

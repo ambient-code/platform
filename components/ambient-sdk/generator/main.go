@@ -37,9 +37,9 @@ func main() {
 		log.Fatalf("compute spec hash: %v", err)
 	}
 
-	// Use relative path for spec source 
+	// Use relative path for spec source
 	relativeSpecPath := "../../ambient-api-server/openapi/openapi.yaml"
-	
+
 	header := GeneratedHeader{
 		SpecPath:  relativeSpecPath,
 		SpecHash:  specHash,

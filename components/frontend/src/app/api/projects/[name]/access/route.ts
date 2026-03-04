@@ -17,5 +17,3 @@ export async function GET(
     return Response.json({ error: 'Failed to perform access check' }, { status: 500 });
   }
 }
-
-

@@ -1,8 +1,8 @@
 # ADR-0006: Ambient Runner SDK Architecture
 
-**Status:** Accepted  
-**Date:** 2026-02-10  
-**Authors:** Gavin Krumbacher  
+**Status:** Accepted
+**Date:** 2026-02-10
+**Authors:** Gavin Krumbacher
 **Deciders:** Platform Team
 
 ## Context

@@ -24,12 +24,16 @@ func (c *Client) ProjectSettings() *ProjectSettingsAPI {
 }
 
 func (a *ProjectSettingsAPI) Create(ctx context.Context, resource *types.ProjectSettings) (*types.ProjectSettings, error) {
+	return a.CreateForProject(ctx, resource, "")
+}
+
+func (a *ProjectSettingsAPI) CreateForProject(ctx context.Context, resource *types.ProjectSettings, project string) (*types.ProjectSettings, error) {
 	body, err := json.Marshal(resource)
 	if err != nil {
 		return nil, fmt.Errorf("marshal project_settings: %w", err)
 	}
 	var result types.ProjectSettings
-	if err := a.client.do(ctx, http.MethodPost, "/project_settings", body, http.StatusCreated, &result); err != nil {
+	if err := a.client.doForProject(ctx, http.MethodPost, "/project_settings", body, http.StatusCreated, &result, project); err != nil {
 		return nil, err
 	}
 	return &result, nil
@@ -44,8 +48,12 @@ func (a *ProjectSettingsAPI) Get(ctx context.Context, id string) (*types.Project
 }
 
 func (a *ProjectSettingsAPI) List(ctx context.Context, opts *types.ListOptions) (*types.ProjectSettingsList, error) {
+	return a.ListForProject(ctx, opts, "")
+}
+
+func (a *ProjectSettingsAPI) ListForProject(ctx context.Context, opts *types.ListOptions, project string) (*types.ProjectSettingsList, error) {
 	var result types.ProjectSettingsList
-	if err := a.client.doWithQuery(ctx, http.MethodGet, "/project_settings", nil, http.StatusOK, &result, opts); err != nil {
+	if err := a.client.doWithQueryForProject(ctx, http.MethodGet, "/project_settings", nil, http.StatusOK, &result, opts, project); err != nil {
 		return nil, err
 	}
 	return &result, nil

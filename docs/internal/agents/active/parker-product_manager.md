@@ -54,4 +54,3 @@ Description: Continuously monitor and evaluate product performance and proactive
 Key Questions to Answer: Did we hit our adoption and deployment success rate targets? What data requires a revisit of the RICE scores?
 Methods: KPIs and metrics tracking, Customer analytics platforms, Revisiting scores (e.g., quarterly) as new information emerges, Increasing adoption and consumption of product capabilities.
 Outputs: Post-Mortem/Success Report (Data-driven), Updated Business Case for next phase of investment, New set of prioritized customer pain points.
-

@@ -4,7 +4,10 @@ import (
 	"context"
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
 
+	"ambient-code-backend/cmd"
 	"ambient-code-backend/featureflags"
 	"ambient-code-backend/git"
 	"ambient-code-backend/github"
@@ -50,6 +53,15 @@ func main() {
 	_ = godotenv.Overload(".env.local")
 	_ = godotenv.Overload(".env")
 
+	// Handle subcommands before full server initialization
+	if len(os.Args) > 1 && os.Args[1] == "sync-model-flags" {
+		manifestPath := cmd.ParseManifestPath(os.Args[2:])
+		if err := cmd.SyncModelFlagsFromFile(manifestPath); err != nil {
+			log.Fatalf("sync-model-flags: %v", err)
+		}
+		return
+	}
+
 	// Log build information
 	logBuildInfo()
 
@@ -67,6 +79,30 @@ func main() {
 
 	// Optional: Unleash feature flags (when UNLEASH_URL and UNLEASH_CLIENT_KEY are set)
 	featureflags.Init()
+
+	// Sync feature flags to Unleash in the background (best-effort, non-blocking).
+	// Collects flags from two sources:
+	//   1. Model manifest (models.json) — model-specific flags with scope:workspace tag
+	//   2. Generic flags config (flags.json) — arbitrary flags with custom tags
+	// The context is cancelled on SIGTERM/SIGINT so in-flight retries abort
+	// during graceful shutdown rather than delaying termination.
+	syncCtx, syncCancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer syncCancel()
+
+	var allFlags []cmd.FlagSpec
+	if manifest, err := handlers.LoadManifest(handlers.ManifestPath()); err != nil {
+		log.Printf("WARNING: cannot load model manifest for flag sync: %v", err)
+	} else {
+		allFlags = append(allFlags, cmd.FlagsFromManifest(manifest)...)
+	}
+	if extraFlags, err := cmd.FlagsFromConfig(cmd.FlagsConfigPath()); err != nil {
+		log.Printf("WARNING: cannot load flags config: %v", err)
+	} else {
+		allFlags = append(allFlags, extraFlags...)
+	}
+	if len(allFlags) > 0 {
+		cmd.SyncFlagsAsync(syncCtx, allFlags)
+	}
 
 	// Initialize git package
 	git.GetProjectSettingsResource = k8s.GetProjectSettingsResource

@@ -51,5 +51,3 @@ export function ProjectSelector() {
     </div>
   );
 }
-
-

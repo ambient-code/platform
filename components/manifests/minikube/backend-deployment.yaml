@@ -111,4 +111,3 @@ spec:
       - name: backend-state
         persistentVolumeClaim:
           claimName: backend-state-pvc
-

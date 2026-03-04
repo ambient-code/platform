@@ -15,10 +15,11 @@ import { SessionPhaseBadge } from '@/components/status-badge';
 import { CreateSessionDialog } from '@/components/create-session-dialog';
 import { EditSessionNameDialog } from '@/components/edit-session-name-dialog';
 
-import { useSessionsPaginated, useStopSession, useDeleteSession, useContinueSession, useUpdateSessionDisplayName } from '@/services/queries';
+import { useSessionsPaginated, useStopSession, useDeleteSession, useContinueSession, useUpdateSessionDisplayName, useRunnerTypes } from '@/services/queries';
 import { useWorkspaceList } from '@/services/queries/use-workspace';
 import { successToast, errorToast } from '@/hooks/use-toast';
 import { useDebounce } from '@/hooks/use-debounce';
+import { useMemo } from 'react';
 import { DEFAULT_PAGE_SIZE } from '@/types/api';
 
 type ArtifactCountCellProps = {
@@ -65,6 +66,16 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
     setOffset(0);
   }, [debouncedSearch]);
 
+  // Runner type lookup for display names
+  const { data: runnerTypes } = useRunnerTypes(projectName);
+  const runnerTypeMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const rt of runnerTypes ?? []) {
+      map.set(rt.id, rt.displayName);
+    }
+    return map;
+  }, [runnerTypes]);
+
   // React Query hooks with pagination
   const {
     data: paginatedData,
@@ -86,7 +97,7 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
   const deleteSessionMutation = useDeleteSession();
   const continueSessionMutation = useContinueSession();
   const updateDisplayNameMutation = useUpdateSessionDisplayName();
-  
+
   // State for edit name dialog
   const [editingSession, setEditingSession] = useState<{ name: string; displayName: string } | null>(null);
 
@@ -272,9 +283,20 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
                           <SessionPhaseBadge phase={phase} stoppedReason={session.status?.stoppedReason} />
                         </TableCell>
                         <TableCell className="hidden md:table-cell">
-                          <span className="text-sm text-muted-foreground truncate max-w-[120px] block">
-                            {session.spec.llmSettings.model}
-                          </span>
+                          <div className="text-sm truncate max-w-[160px]">
+                            {(() => {
+                              const runnerType = session.spec.environmentVariables?.RUNNER_TYPE;
+                              const runnerLabel = runnerType ? runnerTypeMap.get(runnerType) : undefined;
+                              return (
+                                <>
+                                  {runnerLabel && (
+                                    <div className="text-xs font-medium text-foreground">{runnerLabel}</div>
+                                  )}
+                                  <div className="text-muted-foreground">{session.spec.llmSettings.model}</div>
+                                </>
+                              );
+                            })()}
+                          </div>
                         </TableCell>
                         <TableCell className="hidden lg:table-cell">
                           {session.metadata?.creationTimestamp &&
@@ -341,7 +363,7 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
           </>
         )}
       </CardContent>
-      
+
       {/* Edit Session Name Dialog */}
       <EditSessionNameDialog
         open={!!editingSession}

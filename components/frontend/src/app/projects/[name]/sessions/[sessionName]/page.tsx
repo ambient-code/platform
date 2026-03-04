@@ -93,7 +93,9 @@ import {
   useReposStatus,
   useCurrentUser,
   sessionKeys,
+  useRunnerTypes,
 } from "@/services/queries";
+import { useCapabilities } from "@/services/queries/use-capabilities";
 import {
   useWorkspaceList,
 } from "@/services/queries/use-workspace";
@@ -229,6 +231,17 @@ export default function ProjectSessionDetailPage({
     sessionName,
     phase === "Running" // Only poll when session is running
   );
+
+  // Fetch runner capabilities and derive agent display name
+  const { data: capabilities } = useCapabilities(projectName, sessionName, phase === "Running");
+  const { data: runnerTypes } = useRunnerTypes(projectName);
+  const agentName = useMemo(() => {
+    if (capabilities?.framework && runnerTypes) {
+      const matched = runnerTypes.find((rt) => rt.id === capabilities.framework);
+      if (matched) return matched.displayName;
+    }
+    return undefined;
+  }, [capabilities?.framework, runnerTypes]);
 
   // Track the current Langfuse trace ID for feedback association
   const [langfuseTraceId, setLangfuseTraceId] = useState<string | null>(null);
@@ -1441,6 +1454,11 @@ export default function ProjectSessionDetailPage({
                     >
                       {session.status?.phase || "Pending"}
                     </Badge>
+                    {agentName && (
+                      <Badge variant="outline" className="text-xs font-normal">
+                        {agentName} / {session.spec.llmSettings.model}
+                      </Badge>
+                    )}
                   </div>
                 </div>
 
@@ -1457,13 +1475,20 @@ export default function ProjectSessionDetailPage({
                       {
                         label: session.spec.displayName || session.metadata.name,
                         rightIcon: (
-                          <Badge
-                            className={getPhaseColor(
-                              session.status?.phase || "Pending",
+                          <span className="flex items-center gap-1.5">
+                            <Badge
+                              className={getPhaseColor(
+                                session.status?.phase || "Pending",
+                              )}
+                            >
+                              {session.status?.phase || "Pending"}
+                            </Badge>
+                            {agentName && (
+                              <Badge variant="outline" className="text-xs font-normal">
+                                {agentName} / {session.spec.llmSettings.model}
+                              </Badge>
                             )}
-                          >
-                            {session.status?.phase || "Pending"}
-                          </Badge>
+                          </span>
                         ),
                       },
                     ]}
@@ -2579,6 +2604,7 @@ export default function ProjectSessionDetailPage({
                         onCancelQueuedMessage={sessionQueue.cancelMessage}
                         onUpdateQueuedMessage={sessionQueue.updateMessage}
                         onClearQueue={sessionQueue.clearMessages}
+                        agentName={agentName}
                         welcomeExperienceComponent={
                           <WelcomeExperience
                             ootbWorkflows={ootbWorkflows}
@@ -2647,6 +2673,7 @@ export default function ProjectSessionDetailPage({
                           onContinue={handleContinue}
                           workflowMetadata={workflowMetadata}
                           onCommandClick={handleCommandClick}
+                          agentName={agentName}
                           isRunActive={isRunActive}
                           showWelcomeExperience={session?.status?.phase === "Running"}
                           activeWorkflow={workflowManagement.activeWorkflow}

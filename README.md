@@ -65,7 +65,7 @@ Each component has its own detailed README:
 - [Frontend](components/frontend/) -- Next.js web application
 - [Backend](components/backend/) -- Go REST API
 - [Operator](components/operator/) -- Kubernetes controller
-- [Runner](components/runners/claude-code-runner/) -- AI execution pods
+- [Runner](components/runners/ambient-runner/) -- AI execution pods
 - [Public API](components/public-api/) -- Stateless HTTP gateway
 - [Manifests](components/manifests/) -- Kubernetes deployment resources
 

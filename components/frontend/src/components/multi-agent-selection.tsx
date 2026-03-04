@@ -90,5 +90,3 @@ export function MultiAgentSelection({ agents, selectedAgents, onChange, maxAgent
 }
 
 export default MultiAgentSelection;
-
-

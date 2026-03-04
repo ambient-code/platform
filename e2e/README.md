@@ -68,7 +68,7 @@ Complete session user journey (reuses one workspace across all tests):
 
 **Runtime:** ~10 seconds (test 7 skipped without API key configuration)
 
-**Note on Agent Testing:**  
+**Note on Agent Testing:**
 Test 7 requires `ANTHROPIC_API_KEY` to be configured in the project via the UI (**Project Settings → API Keys**). Simply having the key in `e2e/.env` isn't sufficient — the backend must create `ambient-runner-secrets` in the project namespace via the proper API flow.
 
 ---

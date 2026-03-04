@@ -79,7 +79,7 @@ export function CreateWorkspaceDialog({
       // Auto-generate name only if it hasn't been manually edited
       name: manuallyEditedName ? prev.name : generateWorkspaceName(displayName),
     }));
-    
+
     // Validate the auto-generated name
     if (!manuallyEditedName) {
       const generatedName = generateWorkspaceName(displayName);
@@ -280,4 +280,3 @@ export function CreateWorkspaceDialog({
     </Dialog>
   );
 }
-

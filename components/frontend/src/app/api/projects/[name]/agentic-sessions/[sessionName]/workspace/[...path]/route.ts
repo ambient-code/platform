@@ -47,5 +47,3 @@ export async function DELETE(
   const respBody = await resp.text()
   return new Response(respBody, { status: resp.status, headers: { 'Content-Type': 'application/json' } })
 }
-
-

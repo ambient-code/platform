@@ -103,7 +103,7 @@ export function RepositoriesAccordion({
           <p className="text-sm text-muted-foreground">
             Add additional context to improve AI responses.
           </p>
-          
+
           {/* Context Items List (Repos + Uploaded Files) */}
           {totalContextItems === 0 ? (
             <div className="text-center py-6">
@@ -264,4 +264,3 @@ export function RepositoriesAccordion({
     </AccordionItem>
   );
 }
-

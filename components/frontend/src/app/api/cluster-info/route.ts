@@ -26,5 +26,3 @@ export async function GET() {
     return Response.json({ error: 'Failed to fetch cluster info' }, { status: 500 });
   }
 }
-
-

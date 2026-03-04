@@ -240,7 +240,7 @@ components:
       description: |-
         Specifies the search criteria. The syntax of this parameter is
         similar to the syntax of the _where_ clause of an SQL statement,
-        using the names of the json attributes / column names of the account. 
+        using the names of the json attributes / column names of the account.
         For example, in order to retrieve all the accounts with a username
         starting with `my`:
 

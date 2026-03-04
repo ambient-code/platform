@@ -174,7 +174,7 @@ Session stuck in "Running" forever because:
 if job.Status.Failed > 0 {
     for _, cond := range job.Status.Conditions {
         if cond.Type == batchv1.JobFailed && cond.Reason == "DeadlineExceeded" {
-            r.updateCondition(ctx, session, ConditionTypeFailed, metav1.ConditionTrue, 
+            r.updateCondition(ctx, session, ConditionTypeFailed, metav1.ConditionTrue,
                 "Timeout", "Job exceeded 1 hour timeout")
             // Status automatically becomes "Failed"
         }
@@ -210,7 +210,7 @@ status:
 // Operator checks token age every reconciliation loop
 func (r *SessionReconciler) ensureFreshToken(ctx context.Context, session *unstructured.Unstructured) error {
     age := time.Since(secret.CreationTimestamp.Time)
-    
+
     if age > 45*time.Minute {
         log.Printf("Token is %v old, refreshing", age)
         // Delete old secret, mint new token
@@ -242,12 +242,12 @@ func (r *SessionReconciler) ensureFreshToken(ctx context.Context, session *unstr
 // Operator detects ImagePullBackOff as permanent error
 if runnerCS.State.Waiting != nil {
     waiting := runnerCS.State.Waiting
-    
+
     switch waiting.Reason {
     case "ImagePullBackOff", "ErrImagePull":
         // Permanent error - mark as Failed immediately
-        r.updateCondition(ctx, session, ConditionTypeFailed, metav1.ConditionTrue, 
-            "ImagePullBackOff", 
+        r.updateCondition(ctx, session, ConditionTypeFailed, metav1.ConditionTrue,
+            "ImagePullBackOff",
             fmt.Sprintf("Cannot pull image: %s", waiting.Message))
         // Delete job (no point retrying)
         r.deleteJob(ctx, session, job)
@@ -292,8 +292,8 @@ sys.exit(1)  # SDK error
 
 # Operator detects exit code and sets specific condition
 if term.ExitCode == 1 {
-    r.updateCondition(ctx, session, ConditionTypeFailed, metav1.ConditionTrue, 
-        "SDKError", 
+    r.updateCondition(ctx, session, ConditionTypeFailed, metav1.ConditionTrue,
+        "SDKError",
         fmt.Sprintf("Runner exited with error: %s", term.Message))
 }
 ```
@@ -327,7 +327,7 @@ status:
 func StopSession(c *gin.Context) {
     // Delete Job (uses user token - enforces RBAC)
     reqK8s.BatchV1().Jobs(project).Delete(...)
-    
+
     // Update status to Stopped (backend SA - one-time write)
     DynamicClient.Resource(gvr).Namespace(project).UpdateStatus(...)
 }
@@ -335,7 +335,7 @@ func StopSession(c *gin.Context) {
 // Operator: Detects Stopped phase and handles cleanup
 if currentPhase == "Stopped" {
     r.deleteJobIfExists(ctx, session)
-    r.updateCondition(ctx, session, ConditionTypeReady, metav1.ConditionFalse, 
+    r.updateCondition(ctx, session, ConditionTypeReady, metav1.ConditionFalse,
         "SessionStopped", "User stopped the session")
     return ctrl.Result{}, nil  // No more reconciliation
 }
@@ -395,4 +395,3 @@ If issues are discovered:
 4. **Phase 4 Issues** - Rollback RBAC changes
 
 All phases are designed to be backward compatible until Phase 3 (runner changes).
-

@@ -15,7 +15,7 @@
 go.work
 go.work.sum
 
-# Dependency directories  
+# Dependency directories
 vendor/
 
 

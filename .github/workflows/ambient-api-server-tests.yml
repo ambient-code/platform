@@ -1,0 +1,50 @@
+name: Ambient API Server Tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'components/ambient-api-server/**'
+      - '.github/workflows/ambient-api-server-tests.yml'
+
+  pull_request:
+    paths:
+      - 'components/ambient-api-server/**'
+      - '.github/workflows/ambient-api-server-tests.yml'
+      - '!**/*.md'
+
+  workflow_dispatch:
+
+concurrency:
+  group: ambient-api-server-tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    name: Ambient API Server Integration Tests
+    defaults:
+      run:
+        working-directory: components/ambient-api-server
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'components/ambient-api-server/go.mod'
+          cache-dependency-path: 'components/ambient-api-server/go.sum'
+
+      - name: Create secrets directory
+        run: |
+          mkdir -p secrets
+          printf '%s' 'localhost' > secrets/db.host
+          printf '%s' '5432' > secrets/db.port
+          printf '%s' 'ambient_api_server' > secrets/db.name
+          printf '%s' 'postgres' > secrets/db.user
+          printf '%s' 'postgres' > secrets/db.password
+
+      - name: Run tests
+        run: make test

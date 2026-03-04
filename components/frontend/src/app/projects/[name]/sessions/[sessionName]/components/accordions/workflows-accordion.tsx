@@ -49,7 +49,7 @@ export function WorkflowsAccordion({
     .sort((a, b) => a.name.localeCompare(b.name)); // Sort alphabetically by display name
 
   // Filter for general chat based on search
-  const showGeneralChat = !workflowSearch || 
+  const showGeneralChat = !workflowSearch ||
     "general chat".includes(workflowSearch.toLowerCase()) ||
     "A general chat session with no structured workflow.".toLowerCase().includes(workflowSearch.toLowerCase());
 
@@ -73,7 +73,7 @@ export function WorkflowsAccordion({
       };
     }
     const workflow = ootbWorkflows.find(w => w.id === selectedWorkflow);
-    return workflow 
+    return workflow
       ? { name: workflow.name, description: workflow.description }
       : { name: "Select workflow...", description: "" };
   };
@@ -124,7 +124,7 @@ export function WorkflowsAccordion({
             <p className="text-sm text-muted-foreground">
               Workflows provide agents with pre-defined context and structured steps to follow.
             </p>
-            
+
             <div>
               <Popover open={popoverOpen} onOpenChange={(open) => {
                 setPopoverOpen(open);
@@ -253,7 +253,7 @@ export function WorkflowsAccordion({
                 </PopoverContent>
               </Popover>
             </div>
-            
+
             {/* Show active workflow info */}
             {activeWorkflow && !workflowActivating && (
               <></>

@@ -1200,7 +1200,7 @@ This prevents SDK drift and ensures developers regenerate SDKs when the API chan
 When modifying templates:
 
 1. **Test against current spec** to ensure valid output
-2. **Run golden file tests** to verify format consistency  
+2. **Run golden file tests** to verify format consistency
 3. **Update documentation** if template behavior changes
 
 The generator's modular design ensures that updates to templates automatically apply to all current and future resources.

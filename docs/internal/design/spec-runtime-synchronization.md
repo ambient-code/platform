@@ -28,7 +28,7 @@ metadata:
     ambient-code.io/sdk-session-id: "abc-def-123"
     ambient-code.io/runner-progress: '{"message": "Processing..."}'
     ambient-code.io/repos-added-at-runtime: '["new-repo"]'
-    
+
 spec:
   # Desired state - what we WANT the session to do
   prompt: "Initial prompt"
@@ -76,31 +76,31 @@ func (r *SessionReconciler) reconcileSession(ctx context.Context, session *unstr
     // Check if spec changed during execution
     observedGen := getObservedGeneration(session)
     currentGen := session.GetGeneration()
-    
+
     if observedGen > 0 && currentGen > observedGen {
         currentPhase := getPhase(session)
-        
+
         // If running, spec changes should stop the session and require restart
         if currentPhase == "Running" || currentPhase == "Creating" {
-            r.updateCondition(ctx, session, ConditionTypeReady, metav1.ConditionFalse, 
-                "SpecChanged", 
+            r.updateCondition(ctx, session, ConditionTypeReady, metav1.ConditionFalse,
+                "SpecChanged",
                 "Spec was modified during execution - session must be restarted manually")
-            r.updateCondition(ctx, session, ConditionTypeFailed, metav1.ConditionTrue, 
-                "SpecModified", 
+            r.updateCondition(ctx, session, ConditionTypeFailed, metav1.ConditionTrue,
+                "SpecModified",
                 "Cannot apply spec changes to running session")
-            
+
             // Stop the job
             r.deleteJob(ctx, session)
-            
+
             return ctrl.Result{}, nil // User must restart
         }
     }
-    
+
     // Update observedGeneration after processing
     r.updateStatus(ctx, session, map[string]interface{}{
         "observedGeneration": currentGen,
     })
-    
+
     // ... continue with normal reconciliation
 }
 ```
@@ -177,7 +177,7 @@ curl -X POST /api/projects/myproject/agentic-sessions/session-123/start
 func AddRepoToSession(c *gin.Context) {
     project := c.GetString("project")
     sessionName := c.Param("sessionName")
-    
+
     var req struct {
         URL    string `json:"url" binding:"required"`
         Branch string `json:"branch"`
@@ -187,17 +187,17 @@ func AddRepoToSession(c *gin.Context) {
         c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
         return
     }
-    
+
     reqK8s, reqDyn := GetK8sClientsForRequest(c)
     gvr := GetAgenticSessionV1Alpha1Resource()
-    
+
     // Get current session
     session, err := reqDyn.Resource(gvr).Namespace(project).Get(context.TODO(), sessionName, v1.GetOptions{})
     if err != nil {
         c.JSON(http.StatusNotFound, gin.H{"error": "Session not found"})
         return
     }
-    
+
     // Ensure session is interactive and running
     spec, _ := session.Object["spec"].(map[string]interface{})
     interactive, _ := spec["interactive"].(bool)
@@ -205,45 +205,45 @@ func AddRepoToSession(c *gin.Context) {
         c.JSON(http.StatusConflict, gin.H{"error": "Can only add repos to interactive sessions"})
         return
     }
-    
+
     status, _ := session.Object["status"].(map[string]interface{})
     phase, _ := status["phase"].(string)
     if phase != "Running" {
         c.JSON(http.StatusConflict, gin.H{"error": "Session must be running to add repos"})
         return
     }
-    
+
     // Read current runtime repos from annotation
     annotations := session.GetAnnotations()
     if annotations == nil {
         annotations = make(map[string]string)
     }
-    
+
     runtimeReposJSON := annotations["ambient-code.io/repos-added-at-runtime"]
     var runtimeRepos []map[string]string
     if runtimeReposJSON != "" {
         json.Unmarshal([]byte(runtimeReposJSON), &runtimeRepos)
     }
-    
+
     // Add new repo
     runtimeRepos = append(runtimeRepos, map[string]string{
         "url":    req.URL,
         "branch": req.Branch,
         "name":   req.Name,
     })
-    
+
     // Update annotation
     newJSON, _ := json.Marshal(runtimeRepos)
     annotations["ambient-code.io/repos-added-at-runtime"] = string(newJSON)
     session.SetAnnotations(annotations)
-    
+
     // Patch the session (uses user token)
     _, err = reqDyn.Resource(gvr).Namespace(project).Update(context.TODO(), session, v1.UpdateOptions{})
     if err != nil {
         c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update session"})
         return
     }
-    
+
     // Forward to runner via WebSocket
     SendMessageToSession(project, sessionName, map[string]interface{}{
         "type": "repo_added",
@@ -253,7 +253,7 @@ func AddRepoToSession(c *gin.Context) {
             "name":   req.Name,
         },
     })
-    
+
     c.JSON(http.StatusOK, gin.H{"message": "Repo added successfully"})
 }
 ```
@@ -263,16 +263,16 @@ func AddRepoToSession(c *gin.Context) {
 ```python
 async def _prepare_workspace(self):
     """Clone input repos, including any added at runtime."""
-    
+
     # Get base repos from spec
     repos_cfg = self._get_repos_config()
-    
+
     # Get additional repos from annotation (added at runtime)
     runtime_repos = await self._get_runtime_repos_from_annotation()
-    
+
     # Merge them
     all_repos = repos_cfg + runtime_repos
-    
+
     # Clone all repos
     for repo in all_repos:
         # ... clone logic
@@ -287,14 +287,14 @@ func (r *SessionReconciler) reconcileSession(ctx context.Context, session *unstr
     if runtimeReposJSON, ok := annotations["ambient-code.io/repos-added-at-runtime"]; ok && runtimeReposJSON != "" {
         var runtimeRepos []map[string]string
         json.Unmarshal([]byte(runtimeReposJSON), &runtimeRepos)
-        
+
         if len(runtimeRepos) > 0 {
-            r.updateCondition(ctx, session, "RuntimeReposAdded", metav1.ConditionTrue, 
-                "ReposModified", 
+            r.updateCondition(ctx, session, "RuntimeReposAdded", metav1.ConditionTrue,
+                "ReposModified",
                 fmt.Sprintf("%d repos added at runtime", len(runtimeRepos)))
         }
     }
-    
+
     // ... rest of reconciliation
 }
 ```
@@ -377,10 +377,10 @@ router.PUT("/api/projects/:project/agentic-sessions/:sessionName", UpdateSession
 ```go
 func UpdateSessionSpec(c *gin.Context) {
     // ... get session ...
-    
+
     status, _ := session.Object["status"].(map[string]interface{})
     phase, _ := status["phase"].(string)
-    
+
     // Only allow spec changes for stopped sessions
     if phase == "Running" || phase == "Creating" {
         c.JSON(http.StatusConflict, gin.H{
@@ -389,7 +389,7 @@ func UpdateSessionSpec(c *gin.Context) {
         })
         return
     }
-    
+
     // Proceed with spec update
     // ...
 }
@@ -403,10 +403,10 @@ func (r *SessionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
     if err := r.Get(ctx, req.NamespacedName, session); err != nil {
         return ctrl.Result{}, client.IgnoreNotFound(err)
     }
-    
+
     currentGen := session.GetGeneration()
     observedGen := getObservedGeneration(session)
-    
+
     // First time reconciling this session
     if observedGen == 0 {
         r.updateStatus(ctx, session, map[string]interface{}{
@@ -414,39 +414,39 @@ func (r *SessionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
         })
         return r.reconcileSession(ctx, session)
     }
-    
+
     // Spec changed since last reconciliation
     if currentGen > observedGen {
         phase := getPhase(session)
-        
+
         // If running, stop and require manual restart
         if phase == "Running" || phase == "Creating" {
-            log.Printf("Spec changed during execution (gen %d→%d), stopping session %s", 
+            log.Printf("Spec changed during execution (gen %d→%d), stopping session %s",
                 observedGen, currentGen, session.GetName())
-            
-            r.updateCondition(ctx, session, ConditionTypeFailed, metav1.ConditionTrue, 
-                "SpecModified", 
+
+            r.updateCondition(ctx, session, ConditionTypeFailed, metav1.ConditionTrue,
+                "SpecModified",
                 "Spec was modified during execution - session stopped")
-            
+
             r.deleteJob(ctx, session)
-            
+
             r.updateStatus(ctx, session, map[string]interface{}{
                 "observedGeneration": currentGen,
                 "completionTime": metav1.Now(),
             })
-            
+
             return ctrl.Result{}, nil
         }
-        
+
         // If pending/stopped, apply new spec
-        log.Printf("Applying spec changes for session %s (gen %d→%d)", 
+        log.Printf("Applying spec changes for session %s (gen %d→%d)",
             session.GetName(), observedGen, currentGen)
-        
+
         r.updateStatus(ctx, session, map[string]interface{}{
             "observedGeneration": currentGen,
         })
     }
-    
+
     return r.reconcileSession(ctx, session)
 }
 ```
@@ -456,20 +456,20 @@ func (r *SessionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 ```python
 async def _prepare_workspace(self):
     """Prepare workspace with all repos (initial + runtime additions)."""
-    
+
     # 1. Get initial repos from spec (REPOS_JSON env var)
     initial_repos = self._get_repos_config()
-    
+
     # 2. Get runtime-added repos from annotation
     runtime_repos = await self._fetch_runtime_repos_annotation()
-    
+
     # 3. Merge them (deduplicate by name)
     all_repos = self._merge_repos(initial_repos, runtime_repos)
-    
+
     # 4. Clone all repos
     for repo in all_repos:
         await self._clone_or_update_repo(repo)
-    
+
     logging.info(f"Workspace prepared with {len(all_repos)} repos")
 
 async def _fetch_runtime_repos_annotation(self) -> list[dict]:
@@ -478,13 +478,13 @@ async def _fetch_runtime_repos_annotation(self) -> list[dict]:
         # Build annotation URL from status URL
         status_url = self._compute_status_url()
         # ... transform to GET session URL ...
-        
+
         resp = await self._http_get(url, headers={'Authorization': f'Bearer {bot_token}'})
         data = json.loads(resp)
-        
+
         annotations = data.get('metadata', {}).get('annotations', {})
         repos_json = annotations.get('ambient-code.io/repos-added-at-runtime', '[]')
-        
+
         runtime_repos = json.loads(repos_json)
         logging.info(f"Found {len(runtime_repos)} runtime-added repos")
         return runtime_repos
@@ -499,8 +499,8 @@ async def _fetch_runtime_repos_annotation(self) -> list[dict]:
 
 ```typescript
 // All spec fields editable
-<SessionForm 
-  editable={session.status?.phase !== 'Running'} 
+<SessionForm
+  editable={session.status?.phase !== 'Running'}
   onSave={async (updates) => {
     // PUT /api/projects/:project/agentic-sessions/:sessionName
     await updateSessionSpec(projectName, sessionName, updates)
@@ -516,11 +516,11 @@ async def _fetch_runtime_repos_annotation(self) -> list[dict]:
   <Button onClick={() => addRepo(repoConfig)}>
     Add Repository
   </Button>
-  
+
   <Button onClick={() => switchWorkflow(workflowConfig)}>
     Switch Workflow
   </Button>
-  
+
   <ChatInput onSend={(msg) => sendChatMessage(msg)} />
 </InteractiveSession>
 
@@ -602,4 +602,3 @@ async function handleEditSpec() {
 | "What if pod restarts?" | **Annotations persist** - runner reads them on startup |
 | "Can user edit prompt mid-session?" | **No** - must stop session or create new one |
 | "Can user add repos mid-session?" | **Yes** - via annotation + WebSocket to runner |
-

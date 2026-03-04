@@ -134,7 +134,7 @@ func generateAndUpdateDisplayName(projectName, sessionName, userMessage string, 
 // Returns the client and a boolean indicating if Vertex AI is being used
 func getAnthropicClient(ctx context.Context, projectName string) (anthropic.Client, bool, error) {
 	// Check if Vertex AI is enabled (cluster-wide setting)
-	if os.Getenv("CLAUDE_CODE_USE_VERTEX") == "1" {
+	if isVertexEnabled() {
 		// For Vertex AI, use the vertex package with Google Application Default Credentials
 		// Required env vars: GOOGLE_APPLICATION_CREDENTIALS, ANTHROPIC_VERTEX_PROJECT_ID, CLOUD_ML_REGION
 		region := os.Getenv("CLOUD_ML_REGION")
@@ -146,7 +146,7 @@ func getAnthropicClient(ctx context.Context, projectName string) (anthropic.Clie
 			region = "us-east5"
 		}
 		if gcpProjectID == "" {
-			return anthropic.Client{}, false, fmt.Errorf("ANTHROPIC_VERTEX_PROJECT_ID is required when CLAUDE_CODE_USE_VERTEX=1 (check backend deployment env vars)")
+			return anthropic.Client{}, false, fmt.Errorf("ANTHROPIC_VERTEX_PROJECT_ID is required when USE_VERTEX is enabled (check backend deployment env vars)")
 		}
 
 		log.Printf("DisplayNameGen: Using Vertex AI for %s (region: %s, project: %s)", projectName, region, gcpProjectID)

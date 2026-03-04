@@ -22,6 +22,10 @@ on:
         required: false
         type: string
         default: ''
+concurrency:
+  group: prod-release-deploy
+  cancel-in-progress: false
+
 jobs:
    release:
     runs-on: ubuntu-latest
@@ -164,10 +168,10 @@ jobs:
             context: ./components/operator
             image: quay.io/ambient_code/vteam_operator
             dockerfile: ./components/operator/Dockerfile
-          - name: claude-code-runner
+          - name: ambient-runner
             context: ./components/runners
             image: quay.io/ambient_code/vteam_claude_runner
-            dockerfile: ./components/runners/claude-code-runner/Dockerfile
+            dockerfile: ./components/runners/ambient-runner/Dockerfile
           - name: state-sync
             context: ./components/runners/state-sync
             image: quay.io/ambient_code/vteam_state_sync
@@ -273,3 +277,14 @@ jobs:
           oc set env deployment/agentic-operator -n ambient-code -c agentic-operator \
             AMBIENT_CODE_RUNNER_IMAGE="quay.io/ambient_code/vteam_claude_runner:${{ needs.release.outputs.new_tag }}" \
             STATE_SYNC_IMAGE="quay.io/ambient_code/vteam_state_sync:${{ needs.release.outputs.new_tag }}"
+
+      - name: Update agent registry ConfigMap with release image tags
+        run: |
+          RELEASE_TAG="${{ needs.release.outputs.new_tag }}"
+          REGISTRY=$(oc get configmap ambient-agent-registry -n ambient-code \
+            -o jsonpath='{.data.agent-registry\.json}')
+          REGISTRY=$(echo "$REGISTRY" | sed \
+            -e "s|quay.io/ambient_code/vteam_claude_runner[@:][^\"]*|quay.io/ambient_code/vteam_claude_runner:${RELEASE_TAG}|g" \
+            -e "s|quay.io/ambient_code/vteam_state_sync[@:][^\"]*|quay.io/ambient_code/vteam_state_sync:${RELEASE_TAG}|g")
+          oc patch configmap ambient-agent-registry -n ambient-code --type=merge \
+            -p "{\"data\":{\"agent-registry.json\":$(echo "$REGISTRY" | jq -Rs .)}}"

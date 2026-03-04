@@ -70,7 +70,7 @@ jobs:
             operator:
               - 'components/operator/**'
             claude-runner:
-              - 'components/runners/claude-code-runner/**'
+              - 'components/runners/ambient-runner/**'
             state-sync:
               - 'components/runners/state-sync/**'
             public-api:
@@ -104,10 +104,10 @@ jobs:
             image: quay.io/ambient_code/vteam_operator
             dockerfile: ./components/operator/Dockerfile
             changed: ${{ needs.detect-changes.outputs.operator }}
-          - name: claude-code-runner
+          - name: ambient-runner
             context: ./components/runners
             image: quay.io/ambient_code/vteam_claude_runner
-            dockerfile: ./components/runners/claude-code-runner/Dockerfile
+            dockerfile: ./components/runners/ambient-runner/Dockerfile
             changed: ${{ needs.detect-changes.outputs.claude-runner }}
           - name: state-sync
             context: ./components/runners/state-sync
@@ -236,29 +236,29 @@ jobs:
           else
             echo "frontend_tag=stage" >> $GITHUB_OUTPUT
           fi
-          
+
           if [ "${{ needs.detect-changes.outputs.backend }}" == "true" ]; then
             echo "backend_tag=${{ github.sha }}" >> $GITHUB_OUTPUT
           else
             echo "backend_tag=stage" >> $GITHUB_OUTPUT
           fi
-          
+
           if [ "${{ needs.detect-changes.outputs.operator }}" == "true" ]; then
             echo "operator_tag=${{ github.sha }}" >> $GITHUB_OUTPUT
           else
             echo "operator_tag=stage" >> $GITHUB_OUTPUT
           fi
-          
+
           if [ "${{ needs.detect-changes.outputs.claude-runner }}" == "true" ]; then
             echo "runner_tag=${{ github.sha }}" >> $GITHUB_OUTPUT
           else
-            echo "runner_tag=stage" >> $GITHUB_OUTPUT
+            echo "runner_tag=latest" >> $GITHUB_OUTPUT
           fi
-          
+
           if [ "${{ needs.detect-changes.outputs.state-sync }}" == "true" ]; then
             echo "state_sync_tag=${{ github.sha }}" >> $GITHUB_OUTPUT
           else
-            echo "state_sync_tag=stage" >> $GITHUB_OUTPUT
+            echo "state_sync_tag=latest" >> $GITHUB_OUTPUT
           fi
 
           if [ "${{ needs.detect-changes.outputs.public-api }}" == "true" ]; then
@@ -302,6 +302,27 @@ jobs:
           oc set env deployment/agentic-operator -n ambient-code -c agentic-operator \
             AMBIENT_CODE_RUNNER_IMAGE="quay.io/ambient_code/vteam_claude_runner:${{ steps.image-tags.outputs.runner_tag }}" \
             STATE_SYNC_IMAGE="quay.io/ambient_code/vteam_state_sync:${{ steps.image-tags.outputs.state_sync_tag }}"
+
+      - name: Update agent registry ConfigMap with pinned image tags
+        if: needs.detect-changes.outputs.claude-runner == 'true' || needs.detect-changes.outputs.state-sync == 'true'
+        run: |
+          # Fetch live JSON from cluster so unchanged images keep their current tag
+          REGISTRY=$(oc get configmap ambient-agent-registry -n ambient-code \
+            -o jsonpath='{.data.agent-registry\.json}')
+
+          # Only replace images that were actually rebuilt this run.
+          # Pattern [@:][^"]* matches both :tag and @sha256:digest refs.
+          if [ "${{ needs.detect-changes.outputs.claude-runner }}" == "true" ]; then
+            REGISTRY=$(echo "$REGISTRY" | sed \
+              "s|quay.io/ambient_code/vteam_claude_runner[@:][^\"]*|quay.io/ambient_code/vteam_claude_runner:${{ github.sha }}|g")
+          fi
+          if [ "${{ needs.detect-changes.outputs.state-sync }}" == "true" ]; then
+            REGISTRY=$(echo "$REGISTRY" | sed \
+              "s|quay.io/ambient_code/vteam_state_sync[@:][^\"]*|quay.io/ambient_code/vteam_state_sync:${{ github.sha }}|g")
+          fi
+
+          oc patch configmap ambient-agent-registry -n ambient-code --type=merge \
+            -p "{\"data\":{\"agent-registry.json\":$(echo "$REGISTRY" | jq -Rs .)}}"
 
   deploy-with-disptach:
     runs-on: ubuntu-latest
@@ -357,5 +378,15 @@ jobs:
       - name: Update operator environment variables
         run: |
           oc set env deployment/agentic-operator -n ambient-code -c agentic-operator \
-            AMBIENT_CODE_RUNNER_IMAGE="quay.io/ambient_code/vteam_claude_runner:stage" \
-            STATE_SYNC_IMAGE="quay.io/ambient_code/vteam_state_sync:stage"
+            AMBIENT_CODE_RUNNER_IMAGE="quay.io/ambient_code/vteam_claude_runner:${{ github.sha }}" \
+            STATE_SYNC_IMAGE="quay.io/ambient_code/vteam_state_sync:${{ github.sha }}"
+
+      - name: Update agent registry ConfigMap with pinned image tags
+        run: |
+          REGISTRY=$(oc get configmap ambient-agent-registry -n ambient-code \
+            -o jsonpath='{.data.agent-registry\.json}')
+          REGISTRY=$(echo "$REGISTRY" | sed \
+            -e "s|quay.io/ambient_code/vteam_claude_runner[@:][^\"]*|quay.io/ambient_code/vteam_claude_runner:${{ github.sha }}|g" \
+            -e "s|quay.io/ambient_code/vteam_state_sync[@:][^\"]*|quay.io/ambient_code/vteam_state_sync:${{ github.sha }}|g")
+          oc patch configmap ambient-agent-registry -n ambient-code --type=merge \
+            -p "{\"data\":{\"agent-registry.json\":$(echo "$REGISTRY" | jq -Rs .)}}"

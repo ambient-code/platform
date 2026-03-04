@@ -12,4 +12,3 @@ namespace: ambient-code
 resources:
   - otel-collector.yaml
   - servicemonitor.yaml
-

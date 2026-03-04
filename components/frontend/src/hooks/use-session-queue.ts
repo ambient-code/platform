@@ -1,9 +1,9 @@
 /**
  * useSessionQueue hook
- * 
+ *
  * Manages a localStorage-backed queue for messages and workflows that need to be
  * processed when a session transitions from Pending/Creating to Running state.
- * 
+ *
  * This allows users to:
  * 1. Queue messages while a session is starting up
  * 2. Queue workflow selections before session is ready
@@ -177,9 +177,9 @@ export function useSessionQueue(
   }, []);
 
   const markMessageSent = useCallback((messageId: string) => {
-    setMessages(prev => 
-      prev.map(msg => 
-        msg.id === messageId 
+    setMessages(prev =>
+      prev.map(msg =>
+        msg.id === messageId
           ? { ...msg, sentAt: Date.now() }
           : msg
       )
@@ -216,7 +216,7 @@ export function useSessionQueue(
   }, []);
 
   const markWorkflowActivated = useCallback((workflowId: string) => {
-    setWorkflowState(prev => 
+    setWorkflowState(prev =>
       prev && prev.id === workflowId
         ? { ...prev, activatedAt: Date.now() }
         : prev
@@ -248,4 +248,3 @@ export function useSessionQueue(
     updateMetadata,
   };
 }
-

@@ -178,7 +178,7 @@ npm run dev
 ### Fast Iteration
 
 - Edit operator code → restart (~10 seconds)
-- Edit backend code → restart (~5 seconds)  
+- Edit backend code → restart (~5 seconds)
 - Edit frontend code → instant hot reload
 - See all logs in separate terminals
 - Full debugging across entire stack

@@ -20,7 +20,7 @@ This guide covers using OpenShift Local (CRC) for local development of the Ambie
 brew install crc
 
 # Get Red Hat pull secret (free account):
-# 1. Visit: https://console.redhat.com/openshift/create/local  
+# 1. Visit: https://console.redhat.com/openshift/create/local
 # 2. Download to ~/.crc/pull-secret.json
 # That's it! The script handles crc setup and configuration automatically.
 ```
@@ -33,7 +33,7 @@ make dev-start
 
 ### 3. Access Your Environment
 - **Frontend**: https://vteam-frontend-vteam-dev.apps-crc.testing
-- **Backend**: https://vteam-backend-vteam-dev.apps-crc.testing/health  
+- **Backend**: https://vteam-backend-vteam-dev.apps-crc.testing/health
 - **Console**: https://console-openshift-console.apps-crc.testing
 
 ### 4. Verify Everything Works
@@ -47,7 +47,7 @@ make dev-test  # Should show 11/12 tests passing
 # Terminal 1: Start with development mode
 DEV_MODE=true make dev-start
 
-# Terminal 2: Enable file sync  
+# Terminal 2: Enable file sync
 make dev-sync
 ```
 

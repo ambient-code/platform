@@ -28,5 +28,3 @@ export const SystemMessage: React.FC<SystemMessageProps> = ({ data, className })
 };
 
 export default SystemMessage;
-
-

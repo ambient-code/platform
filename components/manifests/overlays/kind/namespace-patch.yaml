@@ -5,4 +5,3 @@ metadata:
   name: ambient-code
   labels:
     ambient-code.io/managed: "true"
-

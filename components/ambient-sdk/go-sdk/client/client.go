@@ -64,9 +64,6 @@ func NewClient(baseURL, token, project string, opts ...ClientOption) (*Client, e
 		return nil, fmt.Errorf("placeholder token is not allowed")
 	}
 
-	if project == "" {
-		return nil, fmt.Errorf("project is required")
-	}
 
 	if len(project) > 63 {
 		return nil, fmt.Errorf("project name cannot exceed 63 characters")
@@ -108,14 +105,15 @@ func NewClientFromEnv(opts ...ClientOption) (*Client, error) {
 	}
 
 	project := os.Getenv("AMBIENT_PROJECT")
-	if project == "" {
-		return nil, fmt.Errorf("AMBIENT_PROJECT environment variable is required")
-	}
 
 	return NewClient(baseURL, token, project, opts...)
 }
 
 func (c *Client) do(ctx context.Context, method, path string, body []byte, expectedStatus int, result interface{}) error {
+	return c.doForProject(ctx, method, path, body, expectedStatus, result, c.project)
+}
+
+func (c *Client) doForProject(ctx context.Context, method, path string, body []byte, expectedStatus int, result interface{}, project string) error {
 	url := c.baseURL + "/api/ambient-api-server/v1" + path
 
 	req, err := http.NewRequestWithContext(ctx, method, url, nil)
@@ -130,7 +128,9 @@ func (c *Client) do(ctx context.Context, method, path string, body []byte, expec
 	}
 
 	req.Header.Set("Authorization", "Bearer "+c.token)
-	req.Header.Set("X-Ambient-Project", c.project)
+	if project != "" {
+		req.Header.Set("X-Ambient-Project", project)
+	}
 	req.Header.Set("User-Agent", c.userAgent)
 	req.Header.Set("Accept", "application/json")
 
@@ -179,6 +179,10 @@ func (c *Client) do(ctx context.Context, method, path string, body []byte, expec
 }
 
 func (c *Client) doWithQuery(ctx context.Context, method, path string, body []byte, expectedStatus int, result interface{}, opts *types.ListOptions) error {
+	return c.doWithQueryForProject(ctx, method, path, body, expectedStatus, result, opts, c.project)
+}
+
+func (c *Client) doWithQueryForProject(ctx context.Context, method, path string, body []byte, expectedStatus int, result interface{}, opts *types.ListOptions, project string) error {
 	queryPath := path
 	if opts != nil {
 		params := url.Values{}
@@ -202,7 +206,7 @@ func (c *Client) doWithQuery(ctx context.Context, method, path string, body []by
 		}
 	}
 
-	return c.do(ctx, method, queryPath, body, expectedStatus, result)
+	return c.doForProject(ctx, method, queryPath, body, expectedStatus, result, project)
 }
 
 func validateURL(rawURL string) error {

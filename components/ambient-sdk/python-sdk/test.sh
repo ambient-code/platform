@@ -37,19 +37,19 @@ print_header() {
 # Check required environment variables
 check_environment() {
     local missing_vars=()
-    
+
     if [[ -z "${AMBIENT_TOKEN:-}" ]]; then
         missing_vars+=("AMBIENT_TOKEN")
     fi
-    
+
     if [[ -z "${AMBIENT_PROJECT:-}" ]]; then
         missing_vars+=("AMBIENT_PROJECT")
     fi
-    
+
     if [[ -z "${AMBIENT_API_URL:-}" ]]; then
         missing_vars+=("AMBIENT_API_URL")
     fi
-    
+
     if [[ ${#missing_vars[@]} -gt 0 ]]; then
         print_error "Missing required environment variables:"
         echo
@@ -60,7 +60,7 @@ check_environment() {
         print_info "Please set all required environment variables:"
         echo
         echo "  export AMBIENT_TOKEN=\"your-bearer-token\""
-        echo "  export AMBIENT_PROJECT=\"your-project-name\""  
+        echo "  export AMBIENT_PROJECT=\"your-project-name\""
         echo "  export AMBIENT_API_URL=\"https://your-api-endpoint.com\""
         echo
         print_info "Examples:"
@@ -78,14 +78,14 @@ check_environment() {
         print_warning "Then run this script again: ./test.sh"
         exit 1
     fi
-    
+
     print_success "All required environment variables are set"
 }
 
 # Validate environment variables
 validate_environment() {
     print_info "Validating environment variables..."
-    
+
     # Check token format (should not contain AMBIENT_TOKEN= prefix)
     if [[ "${AMBIENT_TOKEN}" == *"AMBIENT_TOKEN="* ]]; then
         print_error "Invalid token format detected"
@@ -97,21 +97,21 @@ validate_environment() {
         echo "export AMBIENT_TOKEN=\"${AMBIENT_TOKEN#*AMBIENT_TOKEN=}\""
         exit 1
     fi
-    
+
     # Check if URL is valid format
     if [[ ! "${AMBIENT_API_URL}" =~ ^https?:// ]]; then
         print_warning "API URL should start with http:// or https://"
         print_info "Current URL: ${AMBIENT_API_URL}"
     fi
-    
+
     # Check project name format (basic validation)
     if [[ ! "${AMBIENT_PROJECT}" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$ ]]; then
         print_warning "Project name should follow Kubernetes naming conventions (lowercase alphanumeric with hyphens)"
         print_info "Current project: ${AMBIENT_PROJECT}"
     fi
-    
+
     print_success "Environment variables validated"
-    
+
     # Display configuration
     echo
     print_info "Configuration:"
@@ -137,14 +137,14 @@ check_directory() {
         echo "  ./test.sh"
         exit 1
     fi
-    
+
     print_success "Running from correct directory: $(pwd)"
 }
 
 # Setup Python virtual environment
 setup_venv() {
     print_info "Setting up Python virtual environment..."
-    
+
     if [[ ! -d "venv" ]]; then
         print_info "Creating virtual environment..."
         python -m venv venv
@@ -157,38 +157,38 @@ setup_venv() {
 # Install dependencies
 install_dependencies() {
     print_info "Installing dependencies..."
-    
+
     # Activate virtual environment
     source venv/bin/activate
-    
+
     # Install SDK in development mode
     pip install -e . > /dev/null 2>&1
-    
+
     print_success "Dependencies installed successfully"
 }
 
 # Test SDK import
 test_import() {
     print_info "Testing SDK import..."
-    
+
     # Activate virtual environment
     source venv/bin/activate
-    
+
     # Test basic import
     python -c "import ambient_platform; print('Import successful')" > /dev/null
-    
+
     # Test specific imports
     python -c "
 from ambient_platform import (
-    AmbientClient, 
-    CreateSessionRequest, 
+    AmbientClient,
+    CreateSessionRequest,
     RepoHTTP,
     StatusPending,
     StatusCompleted
 )
 print('All imports successful')
 " > /dev/null
-    
+
     print_success "SDK imports working correctly"
 }
 
@@ -196,7 +196,7 @@ print('All imports successful')
 run_example() {
     print_info "Running Python SDK example..."
     echo
-    
+
     # Activate virtual environment and run example
     source venv/bin/activate
     python examples/main.py
@@ -206,23 +206,23 @@ run_example() {
 main() {
     print_header
     echo
-    
+
     # Run all checks and setup
     check_directory
     check_environment
     validate_environment
     echo
-    
+
     setup_venv
     install_dependencies
     test_import
     echo
-    
+
     print_success "Setup complete! Running example..."
     echo
-    
+
     run_example
-    
+
     echo
     print_success "Python SDK test completed successfully!"
 }

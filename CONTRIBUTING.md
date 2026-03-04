@@ -264,7 +264,7 @@ See [components/frontend/DESIGN_GUIDELINES.md](components/frontend/DESIGN_GUIDEL
 ### Python Code (Runners)
 
 ```bash
-cd components/runners/claude-code-runner
+cd components/runners/ambient-runner
 
 # Format code
 ruff format .

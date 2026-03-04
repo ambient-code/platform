@@ -18,4 +18,3 @@ RUN chmod +x /usr/local/bin/hydrate.sh /usr/local/bin/sync.sh
 
 # Default to sync.sh (used by sidecar)
 ENTRYPOINT ["/usr/local/bin/sync.sh"]
-

@@ -100,7 +100,7 @@ func main() {
 	}
 
 	// Validate Vertex AI configuration at startup if enabled
-	if os.Getenv("CLAUDE_CODE_USE_VERTEX") == "1" {
+	if handlers.IsVertexEnabled() {
 		if err := preflight.ValidateVertexConfig(appConfig.Namespace); err != nil {
 			logger.Error(err, "Vertex AI validation failed")
 			os.Exit(1)

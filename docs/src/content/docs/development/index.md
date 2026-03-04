@@ -37,7 +37,7 @@ Each component has its own README with build instructions, test commands, and de
 | Backend | Go + Gin | [components/backend/](https://github.com/ambient-code/platform/tree/main/components/backend) |
 | Frontend | NextJS + Shadcn | [components/frontend/](https://github.com/ambient-code/platform/tree/main/components/frontend) |
 | Operator | Go + controller-runtime | [components/operator/](https://github.com/ambient-code/platform/tree/main/components/operator) |
-| Runner | Python | [components/runners/claude-code-runner/](https://github.com/ambient-code/platform/tree/main/components/runners/claude-code-runner) |
+| Runner | Python | [components/runners/ambient-runner/](https://github.com/ambient-code/platform/tree/main/components/runners/ambient-runner) |
 | Public API | Go + Gin | [components/public-api/](https://github.com/ambient-code/platform/tree/main/components/public-api) |
 
 ---

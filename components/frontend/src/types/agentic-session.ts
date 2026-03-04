@@ -26,6 +26,8 @@ export type AgenticSessionSpec = {
 	inactivityTimeout?: number;
 	displayName?: string;
 	project?: string;
+	// Runner type (e.g. "claude-agent-sdk", "gemini-cli")
+	environmentVariables?: Record<string, string>;
 	// Multi-repo support
 	repos?: SessionRepo[];
 	// Active workflow for dynamic workflow switching
@@ -102,7 +104,7 @@ export type ToolUseMessages = {
 export type HierarchicalToolMessage = ToolUseMessages & {
 	children?: ToolUseMessages[];
 }
-	
+
 // -----------------------------
 // Message Types
 // -----------------------------
@@ -193,6 +195,7 @@ export type CreateAgenticSessionRequest = {
 	repos?: SessionRepo[];
 	labels?: Record<string, string>;
 	annotations?: Record<string, string>;
+	runnerType?: string;
 };
 
 export type AgentPersona = {

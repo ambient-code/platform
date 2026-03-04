@@ -32,10 +32,11 @@ export type MessagesTabProps = {
   onUpdateQueuedMessage?: (messageId: string, newContent: string) => void;
   onPasteImage?: (file: File) => Promise<void>;
   onClearQueue?: () => void;
+  agentName?: string;
 };
 
 
-const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chatInput, setChatInput, onSendChat, onInterrupt, onGoToResults, onContinue, workflowMetadata, onCommandClick, isRunActive = false, showWelcomeExperience, welcomeExperienceComponent, activeWorkflow, userHasInteracted = false, queuedMessages = [], hasRealMessages = false, onCancelQueuedMessage, onUpdateQueuedMessage, onPasteImage, onClearQueue }) => {
+const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chatInput, setChatInput, onSendChat, onInterrupt, onGoToResults, onContinue, workflowMetadata, onCommandClick, isRunActive = false, showWelcomeExperience, welcomeExperienceComponent, activeWorkflow, userHasInteracted = false, queuedMessages = [], hasRealMessages = false, onCancelQueuedMessage, onUpdateQueuedMessage, onPasteImage, onClearQueue, agentName }) => {
   const [sendingChat, setSendingChat] = useState(false);
   const [showSystemMessages, setShowSystemMessages] = useState(false);
   const [waitingDotCount, setWaitingDotCount] = useState(0);
@@ -137,7 +138,7 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
         {showWelcomeExperience && welcomeExperienceComponent}
 
         {shouldShowMessages && filteredMessages.map((m, idx) => (
-          <StreamMessage key={`sm-${idx}`} message={m} isNewest={idx === filteredMessages.length - 1} onGoToResults={onGoToResults} />
+          <StreamMessage key={`sm-${idx}`} message={m} isNewest={idx === filteredMessages.length - 1} onGoToResults={onGoToResults} agentName={agentName} />
         ))}
 
         {/* Queued messages with cancel buttons */}

@@ -19,9 +19,9 @@ export function Navigation({ feedbackUrl }: NavigationProps) {
   const { data: version } = useVersion();
 
   const handleLogout = () => {
-    // Redirect to oauth-proxy logout endpoint  
-    // This clears the OpenShift OAuth session and redirects back to login  
-    window.location.href = '/oauth/sign_out';  
+    // Redirect to oauth-proxy logout endpoint
+    // This clears the OpenShift OAuth session and redirects back to login
+    window.location.href = '/oauth/sign_out';
   };
 
   return (

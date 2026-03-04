@@ -311,4 +311,3 @@ class SessionStatusPatch:
 
     def to_dict(self) -> dict:
         return dict(self._data)
-

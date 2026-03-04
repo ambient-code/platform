@@ -37,14 +37,14 @@ CRDS_DIR="${REPO_ROOT}/components/manifests/crds"
 load_custom_env() {
   local default_env_file="${REPO_ROOT}/components/manifests/env.example"
   local custom_env_file=""
-  
+
   # Check if there's a .env file in the current directory
   if [[ -f ".env" ]]; then
     custom_env_file=".env"
   elif [[ -f "${REPO_ROOT}/.env" ]]; then
     custom_env_file="${REPO_ROOT}/.env"
   fi
-  
+
   # Prompt user for custom .env file
   echo ""
   log "Environment configuration setup"
@@ -55,12 +55,12 @@ load_custom_env() {
       custom_env_file=""
     fi
   fi
-  
+
   if [[ -z "$custom_env_file" ]]; then
     echo "You can provide a custom .env file to override default configurations."
     echo "Available variables to customize:"
     echo "  - CRC_CPUS (default: $CRC_CPUS)"
-    echo "  - CRC_MEMORY (default: $CRC_MEMORY)"  
+    echo "  - CRC_MEMORY (default: $CRC_MEMORY)"
     echo "  - CRC_DISK (default: $CRC_DISK)"
     echo "  - PROJECT_NAME (default: $PROJECT_NAME)"
     echo "  - DEV_MODE (default: $DEV_MODE)"
@@ -69,7 +69,7 @@ load_custom_env() {
     echo ""
     read -p "Enter path to custom .env file (or press Enter to use defaults): " -r custom_env_file
   fi
-  
+
   # Load the custom .env file if provided and exists
   if [[ -n "$custom_env_file" ]] && [[ -f "$custom_env_file" ]]; then
     log "Loading custom environment from: $custom_env_file"
@@ -77,7 +77,7 @@ load_custom_env() {
     # shellcheck source=/dev/null
     source "$custom_env_file"
     set +a
-    
+
     # Show what was loaded
     echo "Loaded configuration:"
     echo "  CRC_CPUS: $CRC_CPUS"
@@ -125,7 +125,7 @@ need_cmd() {
 
 check_system_resources() {
   log "Checking system resources..."
-  
+
   # Check OS compatibility
   local os_name="$(uname -s)"
   case "$os_name" in
@@ -138,7 +138,7 @@ check_system_resources() {
       exit 1
       ;;
   esac
-  
+
   # Check available memory (basic check)
   if [[ -f /proc/meminfo ]]; then
     local available_mem_kb
@@ -149,7 +149,7 @@ check_system_resources() {
       warn "Consider reducing: CRC_MEMORY=6144 make dev-start"
     fi
   fi
-  
+
   # Check disk space in home directory
   local available_space_gb
   if command -v df >/dev/null 2>&1; then
@@ -159,13 +159,13 @@ check_system_resources() {
       warn "Consider reducing: CRC_DISK=30 make dev-start"
     fi
   fi
-  
+
   # Check virtualization (basic check for Linux)
   if [[ -f /proc/cpuinfo ]] && ! grep -q -E '(vmx|svm)' /proc/cpuinfo; then
     warn "Virtualization may not be enabled. CRC requires VT-x/AMD-V."
     warn "Enable virtualization in BIOS/UEFI settings."
   fi
-  
+
   # Check if ports might be in use (basic check)
   if command -v lsof >/dev/null 2>&1; then
     for port in 6443 443 80; do
@@ -185,7 +185,7 @@ check_crc_setup() {
     err "CRC not properly installed or not in PATH"
     exit 1
   fi
-  
+
   # Check if pull secret is configured
   local pull_secret_path="$HOME/.crc/pull-secret.json"
   if [[ ! -f "$pull_secret_path" ]]; then
@@ -194,13 +194,13 @@ check_crc_setup() {
     err "2. Save it to $pull_secret_path"
     exit 1
   fi
-  
+
   # Configure CRC if not already done
   if ! crc config get enable-cluster-monitoring >/dev/null 2>&1; then
     log "Running initial CRC setup..."
     crc setup
   fi
-  
+
   # Apply resource configuration
   log "Configuring CRC resources (${CRC_CPUS} CPUs, ${CRC_MEMORY}MB RAM, ${CRC_DISK}GB disk)..."
   crc config set cpus "$CRC_CPUS" >/dev/null
@@ -213,7 +213,7 @@ check_crc_setup() {
 ensure_crc_cluster() {
   local crc_status
   crc_status=$(crc status -o json 2>/dev/null | jq -r '.crcStatus // "Stopped"' 2>/dev/null || echo "Stopped")
-  
+
   case "$crc_status" in
     "Running")
       log "CRC cluster is already running"
@@ -231,15 +231,15 @@ ensure_crc_cluster() {
 configure_oc_context() {
   log "Configuring OpenShift CLI context..."
   eval "$(crc oc-env)"
-  
+
   local admin_pass
   admin_pass=$(crc console --credentials 2>/dev/null | grep kubeadmin | sed -n 's/.*-p \([^ ]*\).*/\1/p')
-  
+
   if [[ -z "$admin_pass" ]]; then
     err "Failed to get admin credentials"
     exit 1
   fi
-  
+
   oc login -u kubeadmin -p "$admin_pass" "https://api.crc.testing:6443" --insecure-skip-tls-verify=true
 }
 
@@ -248,13 +248,13 @@ configure_oc_context() {
 #########################
 ensure_project() {
   log "Ensuring OpenShift project '$PROJECT_NAME'..."
-  
+
   if ! oc get project "$PROJECT_NAME" >/dev/null 2>&1; then
     oc new-project "$PROJECT_NAME" --display-name="vTeam Development"
   else
     oc project "$PROJECT_NAME"
   fi
-  
+
   # Apply ambient-code labels for operator to recognize managed namespace
   oc label namespace "$PROJECT_NAME" ambient-code.io/managed=true --overwrite
   log "Namespace labeled as managed for operator"
@@ -270,10 +270,10 @@ apply_rbac() {
   log "Applying RBAC (backend service account and permissions)..."
   oc apply -f "${MANIFESTS_DIR}/backend-rbac.yaml" -n "$PROJECT_NAME"
   oc apply -f "${MANIFESTS_DIR}/dev-users.yaml" -n "$PROJECT_NAME"
-  
+
   log "Creating frontend authentication..."
   oc apply -f "${MANIFESTS_DIR}/frontend-auth.yaml" -n "$PROJECT_NAME"
-  
+
   # Wait for token secret to be populated
   log "Waiting for frontend auth token to be created..."
   oc wait --for=condition=complete secret/frontend-auth-token --timeout=60s -n "$PROJECT_NAME" || true
@@ -291,27 +291,27 @@ build_and_deploy() {
   log "Creating BuildConfigs..."
   oc apply -f "${MANIFESTS_DIR}/build-configs.yaml" -n "$PROJECT_NAME"
   oc apply -f "${MANIFESTS_DIR}/operator-build-config.yaml" -n "$PROJECT_NAME"
-  
+
   # Start builds
   log "Building backend image..."
   oc start-build vteam-backend --from-dir="$BACKEND_DIR" --wait -n "$PROJECT_NAME"
-  
-  log "Building frontend image..."  
+
+  log "Building frontend image..."
   oc start-build vteam-frontend --from-dir="$FRONTEND_DIR" --wait -n "$PROJECT_NAME"
-  
+
   log "Building operator image..."
   oc start-build vteam-operator --from-dir="$OPERATOR_DIR" --wait -n "$PROJECT_NAME"
-  
+
   # Deploy services
   log "Creating backend PVC..."
   oc apply -f "${MANIFESTS_DIR}/backend-pvc.yaml" -n "$PROJECT_NAME"
 
   log "Deploying backend..."
   oc apply -f "${MANIFESTS_DIR}/backend-deployment.yaml" -n "$PROJECT_NAME"
-  
+
   log "Deploying frontend..."
   oc apply -f "${MANIFESTS_DIR}/frontend-deployment.yaml" -n "$PROJECT_NAME"
-  
+
   log "Creating backend service alias for operator..."
   oc apply -f "${MANIFESTS_DIR}/backend-service-alias.yaml" -n "$PROJECT_NAME"
 
@@ -332,7 +332,7 @@ wait_for_ready() {
 show_results() {
   BACKEND_URL="https://$(oc get route vteam-backend -o jsonpath='{.spec.host}' -n "$PROJECT_NAME")"
   FRONTEND_URL="https://$(oc get route vteam-frontend -o jsonpath='{.spec.host}' -n "$PROJECT_NAME")"
-  
+
   echo ""
   success "OpenShift Local development environment ready!"
   echo "  Backend:   $BACKEND_URL/health"
@@ -340,7 +340,7 @@ show_results() {
   echo "  Project:   $PROJECT_NAME"
   echo "  Console:   $(crc console --url 2>/dev/null)"
   echo ""
-  
+
   # Store URLs for testing
   cat > "${STATE_DIR}/urls.env" << EOF
 BACKEND_URL=$BACKEND_URL
@@ -356,7 +356,7 @@ log "Checking prerequisites..."
 need_cmd crc
 need_cmd jq
 
-# Optional tools with warnings  
+# Optional tools with warnings
 if ! command -v git >/dev/null 2>&1; then
   warn "Git not found - needed if you haven't cloned the repo yet"
 fi

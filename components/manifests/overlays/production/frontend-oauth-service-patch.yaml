@@ -11,4 +11,3 @@ spec:
     targetPort: dashboard-ui
     protocol: TCP
     name: dashboard-ui
-

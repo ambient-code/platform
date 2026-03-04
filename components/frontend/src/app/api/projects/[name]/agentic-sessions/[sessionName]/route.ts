@@ -53,5 +53,3 @@ export async function DELETE(request: Request, { params }: Ctx) {
     return Response.json({ error: 'Failed to delete agentic session' }, { status: 500 });
   }
 }
-
-

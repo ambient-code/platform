@@ -14,5 +14,3 @@ resources:
 - frontend-rbac.yaml
 - aggregate-agenticsessions-admin.yaml
 - aggregate-projectsettings-admin.yaml
-
-

@@ -1,40 +1,40 @@
 flowchart TD
     Start([Start]) --> CreateRFE["1. 📊 Parker (PM)<br/>Create RFE from customer,<br/>field/SSA, UX research, or<br/>product roadmap feedback"]
-    
+
     CreateRFE --> GetApproval["2. 🏢 Dan (Senior Director)<br/>Initial feedback & approval<br/>on strategic alignment<br/>and impact"]
-    
+
     GetApproval -.->|if needed| UXDiscovery["3A. 📊 Parker (PM) +<br/>🎨 Uma (UX)<br/>Open RHOAIUX ticket<br/>for UX discovery"]
     UXDiscovery -.->|if needed| UXResearch["3B. 📊 Parker (PM) +<br/>🔍 Ryan (UX Research)<br/>Open UXDR ticket<br/>for UX research"]
-    
+
     GetApproval --> SubmitRFE["4. 📊 Parker (PM)<br/>Submit RFE for<br/>RFE Council review"]
-    
+
     SubmitRFE --> ArchieReview["5. RFE Council<br/>🏛️ Archie (Architect)<br/>Review RFE"]
-    
+
     ArchieReview --> MeetsAcceptance{"6. RFE Council<br/>🏛️ Archie (Architect)<br/>RFE meets acceptance<br/>criteria?"}
-    
+
     MeetsAcceptance -->|No| PendingReject["Feedback/assessment +<br/>'Pending Rejection'"]
     PendingReject --> CanRemedy{"Can RFE be changed<br/>to remedy concerns?"}
     CanRemedy -->|Yes| CreateRFE
     CanRemedy -->|No| CloseRFE["Change status to 'Closed'<br/>(another feature can address this)"]
-    
+
     MeetsAcceptance -->|Yes| NeedsTechReview{"7. RFE needs deeper<br/>technical feasibility<br/>review?"}
-    
+
     NeedsTechReview -->|Yes| TechReview["7A. 🏛️ Archie (Architect) +<br/>👥 Lee (Team Lead) +<br/>⭐ Stella (Staff Engineer)<br/>Technical Review"]
     TechReview --> PendingApproval
-    
+
     NeedsTechReview -->|No| PendingApproval["8. 🏛️ Archie (Architect)<br/>Change status to<br/>'Pending Approval'"]
-    
+
     PendingApproval --> Approved["9. 📊 Parker (PM)<br/>Change to 'Approved' &<br/>clone RFE to RHOAISTRAT"]
-    
+
     Approved --> PrioritizeSTRAT["10. 📊 Parker (PM) +<br/>🏢 Dan (Senior Director)<br/>Prioritize STRAT"]
-    
+
     PrioritizeSTRAT --> AssignLee["11. 👥 Lee (Team Lead)<br/>Assigned to STRAT"]
-    
+
     AssignLee --> FeatureRefinement["12. 📊 Parker (PM) +<br/>👥 Lee (Team Lead)<br/>Feature Refinement"]
-    
+
     FeatureRefinement --> End([End])
     CloseRFE --> End
-    
+
     %% Agent role-based styling
     classDef startEnd fill:#28a745,stroke:#1e7e34,color:#fff
     classDef productManager fill:#6f42c1,stroke:#5a32a3,color:#fff
@@ -45,7 +45,7 @@ flowchart TD
     classDef staffEngineer fill:#28a745,stroke:#1e7e34,color:#fff
     classDef teamLead fill:#20c997,stroke:#1aa179,color:#fff
     classDef productOwner fill:#17a2b8,stroke:#138496,color:#fff
-    
+
     class Start,End startEnd
     class CreateRFE,SubmitRFE,Approved,PrioritizeSTRAT,FeatureRefinement productManager
     class GetApproval seniorDirector

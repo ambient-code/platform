@@ -16,7 +16,7 @@ The process of creating Requirements for Enhancement using natural language chat
 ### **Kubernetes Operator**
 Custom controller that extends Kubernetes functionality by watching Custom Resources and reconciling them to desired state. The Ambient Code Platform uses an operator to manage agentic sessions.
 
-### **Multi-Agent Workflow**  
+### **Multi-Agent Workflow**
 The coordinated process where multiple AI agents sequentially analyze an RFE, each contributing specialized expertise to create comprehensive requirements.
 
 ### **RAG (Retrieval-Augmented Generation)**
@@ -39,7 +39,7 @@ RESTful web service interface for programmatic access to platform functionality.
 ### **FAISS**
 Facebook AI Similarity Search - vector database used for efficient document retrieval in RAG systems.
 
-### **LlamaIndex** 
+### **LlamaIndex**
 Framework for building RAG applications with document indexing and retrieval capabilities.
 
 ### **Pydantic**
@@ -59,7 +59,7 @@ Communication protocol enabling real-time bidirectional data exchange between cl
 ### **Archie (Architect)**
 Principal-level AI agent responsible for technical feasibility assessment, architecture review, and design validation.
 
-### **Derek (Delivery Owner)**  
+### **Derek (Delivery Owner)**
 Delivery Manager-level agent focused on implementation planning, ticket creation, and timeline estimation.
 
 ### **Lee (Team Lead)**
@@ -185,7 +185,7 @@ Isolated Python environment for managing project dependencies without system con
 ## Acronyms
 
 ### **AI** - Artificial Intelligence
-### **API** - Application Programming Interface  
+### **API** - Application Programming Interface
 ### **CD** - Continuous Deployment
 ### **CI** - Continuous Integration
 ### **CPU** - Central Processing Unit
@@ -195,7 +195,7 @@ Isolated Python environment for managing project dependencies without system con
 ### **LLM** - Large Language Model
 ### **MVP** - Minimum Viable Product
 ### **PM** - Product Manager / Product Management
-### **PO** - Product Owner  
+### **PO** - Product Owner
 ### **QA** - Quality Assurance
 ### **RAM** - Random Access Memory
 ### **REST** - Representational State Transfer
@@ -210,7 +210,7 @@ Isolated Python environment for managing project dependencies without system con
 ### **Story Points**
 Relative estimation unit for development effort, typically using Fibonacci sequence (1, 2, 3, 5, 8, 13).
 
-### **Sprint**  
+### **Sprint**
 Time-boxed development iteration, typically 1-2 weeks for RFE implementation.
 
 ### **Velocity**
@@ -220,10 +220,10 @@ Team's average story point completion rate per sprint, used for capacity plannin
 
 ## Contributing to the Glossary
 
-Found a missing term or unclear definition? 
+Found a missing term or unclear definition?
 
 - **Submit a pull request** with new definitions
-- **Create an issue** to suggest improvements  
+- **Create an issue** to suggest improvements
 - **Follow the format**: **Term** followed by clear, concise definition
 - **Include context** where the term is commonly used
 - **Cross-reference** related terms when helpful

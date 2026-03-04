@@ -76,4 +76,3 @@ spec:
       - name: proxy-tls
         secret:
           secretName: dashboard-proxy-tls
-

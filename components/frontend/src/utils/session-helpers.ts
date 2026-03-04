@@ -8,4 +8,3 @@ import { getSessionPhaseColor } from "@/lib/status-colors";
 export const getPhaseColor = (phase: AgenticSessionPhase): string => {
   return getSessionPhaseColor(phase);
 };
-

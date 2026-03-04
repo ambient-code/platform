@@ -9,7 +9,7 @@ export async function GET(
   const { searchParams } = new URL(request.url);
   const path = searchParams.get('path') || 'artifacts';
   const branch = searchParams.get('branch') || 'main';
-  
+
   const headers = await buildForwardHeadersAsync(request);
   const resp = await fetch(
     `${BACKEND_URL}/projects/${encodeURIComponent(name)}/agentic-sessions/${encodeURIComponent(sessionName)}/git/merge-status?path=${encodeURIComponent(path)}&branch=${encodeURIComponent(branch)}`,
@@ -18,4 +18,3 @@ export async function GET(
   const data = await resp.text();
   return new Response(data, { status: resp.status, headers: { 'Content-Type': 'application/json' } });
 }
-
