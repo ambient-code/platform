@@ -43,6 +43,7 @@ graph TB
     subgraph "External Users"
         User["👤 User (Browser)"]
         ExtClient["🔧 External SDK Client"]
+        CLIUser["💻 acpctl CLI"]
     end
 
     subgraph "SDK Layer (OpenAPI-generated)"
@@ -53,6 +54,7 @@ graph TB
 
     User --> Frontend
     ExtClient --> TsSDK & PySDK & GoSDK
+    CLIUser --> GoSDK
 
     %% All SDKs connect to API Server
     GoSDK --> APIServer
@@ -89,6 +91,40 @@ graph TB
     class Frontend,Runner,K8s,Operator,Claude unchanged
     class User,ExtClient external
 ```
+
+## Code Generation Pipeline
+
+How a data model change propagates from definition to every consumer:
+
+```mermaid
+flowchart LR
+    subgraph "rh-trex-ai"
+        GEN["generator.go\n--kind Foo --fields ..."]
+    end
+
+    subgraph "ambient-api-server"
+        PLUGIN["Kind Plugin\nplugins/foo/"]
+        OAS["openapi.yaml\n(source of truth)"]
+        GEN -->|generates| PLUGIN
+        PLUGIN -->|"make generate"| OAS
+    end
+
+    subgraph "ambient-sdk"
+        GOSDK["Go SDK"]
+        PYSDK["Python SDK"]
+        TSSDK["TypeScript SDK"]
+        OAS --> GOSDK
+        OAS --> PYSDK
+        OAS --> TSSDK
+    end
+
+    GOSDK --> CLI["acpctl CLI"]
+    GOSDK --> CP["Control Plane"]
+    TSSDK --> FE["Frontend"]
+    PYSDK --> AUTO["Automation / CI"]
+```
+
+Each SDK is generated from the same `openapi.yaml` — type drift between components is structurally impossible.
 
 ## Why This Architecture? The Foundation Story
 

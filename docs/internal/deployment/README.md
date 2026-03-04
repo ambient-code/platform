@@ -2,177 +2,140 @@
 
 Guides for deploying the Ambient Code Platform to various environments.
 
-## 🚀 Deployment Guides
+## Components
 
-### Production Deployment
-- **[OpenShift Deployment](../OPENSHIFT_DEPLOY.md)** - Deploy to production OpenShift cluster
-- **[OAuth Configuration](../OPENSHIFT_OAUTH.md)** - Set up OpenShift OAuth authentication
+Two generations of components deploy side by side. V1 remains fully operational while V2 is additive.
 
-### Configuration
-- **[Git Authentication](git-authentication.md)** - Configure Git credentials for runners
-- **[GitHub App Setup](../GITHUB_APP_SETUP.md)** - GitHub App integration
-- **[GitLab Integration](../gitlab-integration.md)** - GitLab configuration
+### V1 Components (legacy, still active)
 
-### Observability
-- **[Langfuse Deployment](langfuse.md)** - LLM observability and tracing
-- **[Operator Metrics](../operator-metrics-visualization.md)** - Operator monitoring (if exists)
+| Component | Image | Port |
+|-----------|-------|------|
+| frontend | `quay.io/ambient_code/vteam_frontend` | 3000 |
+| backend-api | `quay.io/ambient_code/vteam_backend` | 8080 |
+| agentic-operator | `quay.io/ambient_code/vteam_operator` | — |
+| public-api | `quay.io/ambient_code/vteam_public_api` | 8081 |
+| claude-runner | `quay.io/ambient_code/vteam_claude_runner` | — |
 
-### Storage
-- **[S3 Storage Configuration](../s3-storage-configuration.md)** - S3-compatible storage setup (if exists)
-- **[MinIO Quickstart](../minio-quickstart.md)** - MinIO deployment (if exists)
+### V2 Components
 
-## 📋 Deployment Checklist
+| Component | Image | Ports | Notes |
+|-----------|-------|-------|-------|
+| ambient-api-server | `quay.io/ambient_code/vteam_api_server` | 8000 (API) / 4433 (metrics) / 4434 (health) | REST + gRPC API, PostgreSQL-backed |
+| ambient-api-server-db | `postgres:16.2` | 5432 | Dedicated PostgreSQL for API server |
+| ambient-control-plane | `quay.io/ambient_code/ambient_control_plane` | — | Pending merge to main |
+
+## Deployment Guides
+
+- **[OpenShift Deployment](OPENSHIFT_DEPLOY.md)** — Production OpenShift cluster
+- **[OAuth Configuration](OPENSHIFT_OAUTH.md)** — OpenShift OAuth setup
+- **[Git Authentication](git-authentication.md)** — Git credentials for runners
+- **[Langfuse](langfuse.md)** — LLM observability
+- **[MinIO](minio-quickstart.md)** — S3-compatible storage
+- **[S3 Storage](s3-storage-configuration.md)** — S3 configuration
+
+## Deployment
 
 ### Prerequisites
-- [ ] OpenShift or Kubernetes cluster with admin access
-- [ ] Container registry access (or use default `quay.io/ambient_code`)
-- [ ] `oc` or `kubectl` CLI configured
-- [ ] Anthropic API key or Vertex AI credentials
+
+- OpenShift or Kubernetes cluster with admin access
+- Container registry access (`quay.io/ambient_code` or your own)
+- `oc` or `kubectl` configured
+- Anthropic API key
 
 ### Basic Deployment
 
 ```bash
-# 1. Prepare environment
 cp components/manifests/env.example components/manifests/.env
-# Edit .env and set ANTHROPIC_API_KEY
+# Edit .env: set ANTHROPIC_API_KEY
 
-# 2. Deploy
 make deploy
+```
 
-# 3. Verify
+Verify:
+```bash
 oc get pods -n ambient-code
 oc get routes -n ambient-code
 ```
 
-### Post-Deployment Configuration
-
-1. **Configure Runner Secrets**:
-   - Access web UI
-   - Navigate to Settings → Runner Secrets
-   - Add Anthropic API key
-
-2. **Set Up Git Authentication** (optional):
-   - See [Git Authentication Guide](git-authentication.md)
-   - Configure per-project or use GitHub App
-
-3. **Enable Observability** (optional):
-   - Deploy Langfuse: [Langfuse Guide](langfuse.md)
-   - Configure runner to send traces
-
-## 🔧 Deployment Options
-
-### Using Default Images
-
-Fastest deployment using pre-built images from `quay.io/ambient_code`:
+### Custom Images
 
 ```bash
-make deploy
-```
-
-### Building Custom Images
-
-Build and deploy your own images:
-
-```bash
-# Build all images
 make build-all CONTAINER_ENGINE=podman
-
-# Push to registry
 make push-all REGISTRY=quay.io/your-username
-
-# Deploy with custom images
 make deploy CONTAINER_REGISTRY=quay.io/your-username
 ```
 
 ### Custom Namespace
 
-Deploy to a different namespace:
-
 ```bash
 make deploy NAMESPACE=my-namespace
 ```
 
-## 🔐 Security Configuration
+## Post-Deployment Configuration
 
-### Authentication
+1. **Runner Secrets** — Web UI → Settings → Runner Secrets → add Anthropic API key
+2. **Git Authentication** (optional) — see [Git Authentication Guide](git-authentication.md)
+3. **Observability** (optional) — see [Langfuse Guide](langfuse.md)
 
-**Production (Required):**
-- OpenShift OAuth with user tokens
-- Namespace-scoped RBAC
-- No shared credentials
+## Secrets
 
-**Local Development (Insecure):**
-- Authentication disabled
-- Mock tokens accepted
-- See [Local Development](../developer/local-development/)
+### ambient-api-server
 
-### RBAC
+The API server reads database credentials from `Secret/ambient-api-server-db` and auth config from `ConfigMap/ambient-api-server-auth`. These are defined in `components/manifests/base/ambient-api-server-secrets.yml`.
 
-The platform uses namespace-scoped RBAC:
-- Each project maps to a Kubernetes namespace
-- Users need appropriate permissions in namespace
-- Backend uses user tokens (not service account)
-
-See [ADR-0002: User Token Authentication](../adr/0002-user-token-authentication.md)
-
-### Secrets Management
-
-- **API Keys**: Stored in Kubernetes Secrets
-- **Git Credentials**: Per-project secrets
-- **OAuth Tokens**: Managed by OpenShift OAuth
-
-## 📊 Monitoring & Observability
-
-### Health Checks
+For production, patch `db.password` and populate `jwks.json` with your OIDC provider's JWKS endpoint response.
 
 ```bash
-# Backend health
-curl https://backend-route/health
-
-# Frontend accessibility
-curl https://frontend-route/
-
-# Operator status
-oc get pods -n ambient-code -l app=agentic-operator
+# Override DB password
+oc create secret generic ambient-api-server-db \
+  --from-literal=db.host=ambient-api-server-db \
+  --from-literal=db.port=5432 \
+  --from-literal=db.name=ambient_api_server \
+  --from-literal=db.user=ambient \
+  --from-literal=db.password=<your-password> \
+  -n ambient-code --dry-run=client -o yaml | oc apply -f -
 ```
 
-### Logs
+## Health Checks
 
 ```bash
-# Backend logs
+# V1
+curl https://$(oc get route backend-route -n ambient-code -o jsonpath='{.spec.host}')/health
+curl https://$(oc get route frontend-route -n ambient-code -o jsonpath='{.spec.host}')
+
+# V2 — ambient-api-server
+oc port-forward svc/ambient-api-server 4434:4434 -n ambient-code
+curl http://localhost:4434/health
+
+# All pods
+oc get pods -n ambient-code
+```
+
+## Logs
+
+```bash
+# V1
 oc logs -n ambient-code deployment/backend-api -f
-
-# Frontend logs
 oc logs -n ambient-code deployment/frontend -f
-
-# Operator logs
 oc logs -n ambient-code deployment/agentic-operator -f
+oc logs -n <project-namespace> job/<job-name>   # runner jobs
 
-# Runner job logs (in project namespaces)
-oc logs -n <project-namespace> job/<job-name>
+# V2
+oc logs -n ambient-code deployment/ambient-api-server -f
+oc logs -n ambient-code deployment/ambient-api-server-db -f
 ```
 
-### Metrics
-
-- Prometheus-compatible metrics (if configured)
-- Langfuse for LLM observability
-- OpenShift monitoring integration
-
-## 🧹 Cleanup
-
-### Uninstall Platform
+## Metrics
 
 ```bash
-make clean
+# V2 — ambient-api-server Prometheus metrics
+oc port-forward svc/ambient-api-server 4433:4433 -n ambient-code
+curl http://localhost:4433/metrics
 ```
 
-### Remove Namespace
+See [observability/](../../components/manifests/observability/) for Grafana dashboards and ServiceMonitor configuration.
 
-```bash
-oc delete namespace ambient-code
-```
-
-### Full Cleanup
+## Cleanup
 
 ```bash
 # Uninstall platform
@@ -181,77 +144,24 @@ make clean
 # Remove CRDs
 oc delete crd agenticsessions.vteam.ambient-code
 oc delete crd projectsettings.vteam.ambient-code
-oc delete crd rfeworkflows.vteam.ambient-code
 
-# Remove cluster-level RBAC
-oc delete clusterrole ambient-code-operator
-oc delete clusterrolebinding ambient-code-operator
+# Remove namespace (destructive)
+oc delete namespace ambient-code
 ```
 
-## 🆘 Troubleshooting
+## Troubleshooting
 
-### Pods Not Starting
+| Symptom | Command |
+|---------|---------|
+| Pod not starting | `oc describe pod <name> -n ambient-code` |
+| Image pull error | `oc get deployment <name> -n ambient-code -o jsonpath='{.spec.template.spec.imagePullSecrets}'` |
+| Route not accessible | `oc get route <name> -n ambient-code` |
+| Operator not creating jobs | `oc logs -n ambient-code deployment/agentic-operator -f` |
+| API server DB connection failed | Check `Secret/ambient-api-server-db` credentials match `Deployment/ambient-api-server-db` env vars |
+| API server migration failed | Check init container logs: `oc logs -n ambient-code deployment/ambient-api-server -c migrate` |
 
-```bash
-# Check pod status
-oc get pods -n ambient-code
+## Related Documentation
 
-# Describe pod for events
-oc describe pod <pod-name> -n ambient-code
-
-# View logs
-oc logs <pod-name> -n ambient-code
-```
-
-### Image Pull Errors
-
-```bash
-# Check image pull secrets
-oc get deployment backend-api -n ambient-code -o jsonpath='{.spec.template.spec.imagePullSecrets}'
-
-# Verify image exists
-podman pull quay.io/ambient_code/vteam_backend:latest
-```
-
-### Route Not Accessible
-
-```bash
-# Check route
-oc get route frontend-route -n ambient-code
-
-# Check service
-oc get svc frontend-service -n ambient-code
-
-# Test service directly
-oc port-forward svc/frontend-service 3000:3000 -n ambient-code
-```
-
-### Operator Not Creating Jobs
-
-```bash
-# Check operator logs
-oc logs -n ambient-code deployment/agentic-operator -f
-
-# Check CRDs are installed
-oc get crd agenticsessions.vteam.ambient-code
-
-# Verify operator has permissions
-oc get clusterrolebinding ambient-code-operator
-```
-
-## 📚 Related Documentation
-
-- [Architecture Overview](../architecture/) - System design
-- [Component Documentation](../../components/) - Component-specific guides
-- [Local Development](../developer/local-development/) - Development environments
-- [Testing](../testing/) - Test suite documentation
-
-## 🤝 Contributing
-
-When adding deployment features:
-- Update relevant deployment guide
-- Test on both OpenShift and Kubernetes
-- Document any new configuration options
-- Update this index
-
-See [CONTRIBUTING.md](../../CONTRIBUTING.md) for full guidelines.
+- [Architecture Overview](../architecture/) — System design and V1 vs V2 diagrams
+- [Local Development](../developer/local-development/) — Run V2 stack locally without a cluster
+- [Manifests README](../../components/manifests/README.md) — Kustomize overlay structure

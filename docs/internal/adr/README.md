@@ -61,6 +61,7 @@ Create an ADR for decisions that:
 | [0003](0003-multi-repo-support.md) | Multi-Repository Support in AgenticSessions | Accepted | 2024-11-21 |
 | [0004](0004-go-backend-python-runner.md) | Go Backend with Python Claude Runner | Accepted | 2024-11-21 |
 | [0005](0005-nextjs-shadcn-react-query.md) | Next.js with Shadcn UI and React Query | Accepted | 2024-11-21 |
+| [0007](0007-rest-api-postgresql-trex-foundation.md) | REST API + PostgreSQL Foundation via rh-trex-ai | Accepted | 2026-02-16 |
 
 ## References
 
