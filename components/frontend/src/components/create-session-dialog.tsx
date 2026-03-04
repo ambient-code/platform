@@ -100,7 +100,7 @@ export function CreateSessionDialog({
   // Fetch models filtered by the selected runner's provider.
   // models.json is the single source of truth — no hardcoded fallback lists.
   // Wait for runner types to load so we know the provider before fetching.
-  const { data: modelsData, isLoading: modelsLoading } = useModels(
+  const { data: modelsData, isLoading: modelsLoading, isError: modelsError } = useModels(
     projectName, open && !runnerTypesLoading && !runnerTypesError, selectedRunner?.provider
   );
 
@@ -435,7 +435,7 @@ export function CreateSessionDialog({
                 >
                   Cancel
                 </Button>
-                <Button type="submit" disabled={createSessionMutation.isPending || runnerTypesLoading || runnerTypesError || modelsLoading}>
+                <Button type="submit" disabled={createSessionMutation.isPending || runnerTypesLoading || runnerTypesError || modelsLoading || (modelsError && models.length === 0)}>
                   {createSessionMutation.isPending && (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   )}

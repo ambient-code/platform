@@ -531,12 +531,20 @@ var _ = Describe("Models Handler", Label(test_constants.LabelUnit, test_constant
 			Expect(result).To(BeFalse())
 		})
 
-		It("should fail-open when manifest file is missing", func() {
-			logger.Log("Testing isModelAvailable fail-open when manifest file missing")
+		It("should fail-open when manifest is missing and no provider required", func() {
+			logger.Log("Testing isModelAvailable fail-open when manifest missing and requiredProvider empty")
 			os.Setenv("MODELS_MANIFEST_PATH", filepath.Join(GinkgoT().TempDir(), "nonexistent.json"))
 
 			result := isModelAvailable(context.Background(), K8sClient, "claude-opus-4-6", "", "test-ns")
 			Expect(result).To(BeTrue())
+		})
+
+		It("should reject when manifest is missing but provider is required", func() {
+			logger.Log("Testing isModelAvailable rejects when manifest missing and requiredProvider set")
+			os.Setenv("MODELS_MANIFEST_PATH", filepath.Join(GinkgoT().TempDir(), "nonexistent.json"))
+
+			result := isModelAvailable(context.Background(), K8sClient, "claude-opus-4-6", "anthropic", "test-ns")
+			Expect(result).To(BeFalse())
 		})
 
 		It("should return false when workspace override disables the model", func() {

@@ -176,11 +176,15 @@ func isModelAvailable(ctx context.Context, k8sClient kubernetes.Interface, model
 		log.Printf("WARNING: failed to load model manifest for validation: %v", err)
 		manifest = cachedManifest.Load()
 		if manifest == nil {
-			// Fail-open on cold start to avoid blocking session creation before
-			// the ConfigMap volume is mounted. Note: provider validation is also
-			// skipped in this path — the runner will reject incompatible models
-			// at runtime.
-			log.Printf("WARNING: no manifest available, allowing model %q (provider validation skipped)", modelID)
+			// When we know the runner's provider, reject unknown models rather
+			// than allowing a cross-provider mismatch through to the runner.
+			// Fail-open only when both manifest and registry are unavailable
+			// (requiredProvider == "") to avoid blocking cold starts.
+			if requiredProvider != "" {
+				log.Printf("WARNING: no manifest available, rejecting model %q (provider=%q)", modelID, requiredProvider)
+				return false
+			}
+			log.Printf("WARNING: no manifest or registry available, allowing model %q", modelID)
 			return true
 		}
 	} else {
