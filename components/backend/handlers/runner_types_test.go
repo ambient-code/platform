@@ -349,3 +349,84 @@ func TestIsRunnerEnabled_NonEmptyGate_Disabled(t *testing.T) {
 		t.Error("gemini-cli should be disabled when Unleash is not configured")
 	}
 }
+
+// --- isRunnerEnabledWithOverrides tests ---
+
+func TestIsRunnerEnabledWithOverrides_OverrideTrue(t *testing.T) {
+	overrides := map[string]string{"runner.gemini-cli.enabled": "true"}
+	if !isRunnerEnabledWithOverrides("runner.gemini-cli.enabled", overrides) {
+		t.Error("expected enabled when override is true")
+	}
+}
+
+func TestIsRunnerEnabledWithOverrides_OverrideFalse(t *testing.T) {
+	overrides := map[string]string{"runner.gemini-cli.enabled": "false"}
+	if isRunnerEnabledWithOverrides("runner.gemini-cli.enabled", overrides) {
+		t.Error("expected disabled when override is false")
+	}
+}
+
+func TestIsRunnerEnabledWithOverrides_NoOverrideFallsThrough(t *testing.T) {
+	overrides := map[string]string{"other.flag": "true"}
+	// Without Unleash configured, FeatureEnabled returns false
+	if isRunnerEnabledWithOverrides("runner.gemini-cli.enabled", overrides) {
+		t.Error("expected disabled when no override and Unleash not configured")
+	}
+}
+
+func TestIsRunnerEnabledWithOverrides_NilOverrides(t *testing.T) {
+	// Without Unleash configured, FeatureEnabled returns false
+	if isRunnerEnabledWithOverrides("runner.gemini-cli.enabled", nil) {
+		t.Error("expected disabled with nil overrides and Unleash not configured")
+	}
+}
+
+// --- GetRunnerTypesGlobal tests ---
+
+func TestGetRunnerTypesGlobal_ReturnsUngatedRunners(t *testing.T) {
+	setupRegistryForTest(t)
+
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/runner-types", nil)
+
+	GetRunnerTypesGlobal(c)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp []RunnerTypeResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
+	}
+
+	// Only ungated runners returned (gemini-cli gated, disabled without Unleash)
+	if len(resp) != 1 {
+		t.Fatalf("Expected 1 runner type, got %d", len(resp))
+	}
+	if resp[0].ID != "claude-agent-sdk" {
+		t.Errorf("Expected claude-agent-sdk, got %q", resp[0].ID)
+	}
+	if resp[0].Provider != "anthropic" {
+		t.Errorf("Expected provider anthropic, got %q", resp[0].Provider)
+	}
+}
+
+func TestGetRunnerTypesGlobal_NoAuthRequired(t *testing.T) {
+	setupRegistryForTest(t)
+
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	// No auth header
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/runner-types", nil)
+
+	GetRunnerTypesGlobal(c)
+
+	// Should succeed without auth
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200 without auth, got %d", w.Code)
+	}
+}

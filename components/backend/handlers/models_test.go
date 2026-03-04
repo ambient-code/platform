@@ -353,6 +353,77 @@ var _ = Describe("Models Handler", Label(test_constants.LabelUnit, test_constant
 		})
 	})
 
+	Context("ListModelsForProject with provider filter", func() {
+		It("should return only anthropic models when provider=anthropic", func() {
+			logger.Log("Testing provider filter for anthropic")
+			writeManifestFile(validManifest)
+			fakeClient := setupK8sWithOverrides()
+			setupAuth(fakeClient)
+
+			ginCtx := httpTestUtils.CreateTestGinContext("GET", "/api/projects/test-project/models?provider=anthropic", nil)
+			httpTestUtils.SetAuthHeader("test-token")
+			ginCtx.Params = gin.Params{{Key: "projectName", Value: "test-project"}}
+			ginCtx.Request.URL.RawQuery = "provider=anthropic"
+
+			ListModelsForProject(ginCtx)
+
+			httpTestUtils.AssertHTTPStatus(http.StatusOK)
+
+			var resp types.ListModelsResponse
+			err := json.Unmarshal(httpTestUtils.GetResponseRecorder().Body.Bytes(), &resp)
+			Expect(err).NotTo(HaveOccurred())
+
+			for _, m := range resp.Models {
+				Expect(m.Provider).To(Equal("anthropic"), "All models should be anthropic")
+			}
+			Expect(resp.Models).To(HaveLen(4))
+			Expect(resp.DefaultModel).To(Equal("claude-sonnet-4-5"))
+		})
+
+		It("should return only google models when provider=google", func() {
+			logger.Log("Testing provider filter for google")
+			writeManifestFile(validManifest)
+			fakeClient := setupK8sWithOverrides()
+			setupAuth(fakeClient)
+
+			ginCtx := httpTestUtils.CreateTestGinContext("GET", "/api/projects/test-project/models?provider=google", nil)
+			httpTestUtils.SetAuthHeader("test-token")
+			ginCtx.Params = gin.Params{{Key: "projectName", Value: "test-project"}}
+			ginCtx.Request.URL.RawQuery = "provider=google"
+
+			ListModelsForProject(ginCtx)
+
+			httpTestUtils.AssertHTTPStatus(http.StatusOK)
+
+			var resp types.ListModelsResponse
+			err := json.Unmarshal(httpTestUtils.GetResponseRecorder().Body.Bytes(), &resp)
+			Expect(err).NotTo(HaveOccurred())
+
+			for _, m := range resp.Models {
+				Expect(m.Provider).To(Equal("google"), "All models should be google")
+			}
+			Expect(resp.Models).To(HaveLen(2))
+			Expect(resp.DefaultModel).To(Equal("gemini-2.5-flash"))
+		})
+
+		It("should return all models when no provider filter", func() {
+			logger.Log("Testing no provider filter returns all models")
+			writeManifestFile(validManifest)
+			fakeClient := setupK8sWithOverrides()
+			setupAuth(fakeClient)
+
+			ginCtx := createAuthenticatedContext("test-project")
+			ListModelsForProject(ginCtx)
+
+			httpTestUtils.AssertHTTPStatus(http.StatusOK)
+
+			var resp types.ListModelsResponse
+			err := json.Unmarshal(httpTestUtils.GetResponseRecorder().Body.Bytes(), &resp)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.Models).To(HaveLen(6))
+		})
+	})
+
 	Context("isModelEnabledWithOverrides", func() {
 		It("should return true when override is true", func() {
 			overrides := map[string]string{"model.test.enabled": "true"}
