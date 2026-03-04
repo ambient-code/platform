@@ -197,8 +197,8 @@ def _build_system_prompt(cwd_path: str) -> str:
                         f"**Uploaded Files** ({len(files)} total): "
                         f"{', '.join(files[:10])}, and {len(files) - 10} more\n"
                     )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Could not list uploaded files in %s: %s", uploads, exc)
 
     # ---- MCP integration hints ----
     sections.append(MCP_INTEGRATIONS_PROMPT)

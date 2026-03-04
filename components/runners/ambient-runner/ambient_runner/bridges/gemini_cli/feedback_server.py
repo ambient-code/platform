@@ -1,9 +1,9 @@
 """Minimal stdio MCP server exposing evaluate_rubric and log_correction tools.
 
 Runs as a subprocess spawned by the Gemini CLI. Communicates via JSON-RPC 2.0
-over stdin/stdout (MCP stdio transport). Reuses the existing Langfuse logging
-from the Claude bridge so rubric scores and corrections land in the same
-Langfuse project regardless of which runner is in use.
+over stdin/stdout (MCP stdio transport). Uses the platform feedback layer so
+rubric scores and corrections land in Langfuse regardless of which runner is
+in use — without depending on Claude-bridge internals.
 
 Usage (registered in .gemini/settings.json):
     "command": "python",
@@ -15,8 +15,7 @@ import logging
 import os
 import sys
 
-# Reuse canonical type/source constants rather than redeclaring them.
-from ambient_runner.bridges.claude.corrections import CORRECTION_SOURCES, CORRECTION_TYPES
+from ambient_runner.platform.feedback import CORRECTION_SOURCES, CORRECTION_TYPES
 
 # Keep this server quiet — all output goes to stdout which is the MCP channel.
 logging.basicConfig(level=logging.WARNING, stream=sys.stderr)
@@ -108,34 +107,14 @@ def _error(msg_id, code: int, message: str) -> None:
 # Tool handlers
 # ---------------------------------------------------------------------------
 
-# Session context is resolved once per process and cached — _get_session_context()
-# runs subprocess git commands and os.environ lookups that don't change mid-session.
-_session_context_cache: dict | None = None
-
-
-def _get_cached_session_context() -> dict:
-    global _session_context_cache
-    if _session_context_cache is None:
-        from ambient_runner.bridges.claude.corrections import _get_session_context
-
-        _session_context_cache = _get_session_context()
-    return _session_context_cache
-
-
 def _handle_evaluate_rubric(args: dict) -> dict:
-    from ambient_runner.bridges.claude.tools import _log_to_langfuse
+    from ambient_runner.platform.feedback import log_rubric_score
 
     session_id = os.getenv("AGENTIC_SESSION_NAME", "unknown")
     score = args.get("score")
     comment = args.get("comment", "")
 
-    success, err = _log_to_langfuse(
-        score=score,
-        comment=comment,
-        metadata=None,
-        obs=None,
-        session_id=session_id,
-    )
+    success, err = log_rubric_score(score=score, comment=comment, session_id=session_id)
     if success:
         return {"content": [{"type": "text", "text": f"Score {score} logged to Langfuse."}]}
     return {
@@ -145,22 +124,15 @@ def _handle_evaluate_rubric(args: dict) -> dict:
 
 
 def _handle_log_correction(args: dict) -> dict:
-    from ambient_runner.bridges.claude.corrections import (
-        _log_correction_to_langfuse,
-        build_target_map,
-    )
+    from ambient_runner.platform.feedback import log_correction
 
     session_id = os.getenv("AGENTIC_SESSION_NAME", "unknown")
-    context = _get_cached_session_context()
-    target_map = build_target_map(context)
 
-    success, err = _log_correction_to_langfuse(
+    success, err = log_correction(
         correction_type=args.get("correction_type", ""),
         agent_action=args.get("agent_action", ""),
         user_correction=args.get("user_correction", ""),
         target_label=args.get("target", ""),
-        target_map=target_map,
-        obs=None,
         session_id=session_id,
         source=args.get("source", "human"),
     )
