@@ -146,7 +146,10 @@ class GeminiSessionWorker:
         self._stderr_task = asyncio.create_task(self._stream_stderr())
 
         try:
-            assert self._process.stdout is not None  # noqa: S101
+            if self._process.stdout is None:
+                raise RuntimeError(
+                    "Gemini CLI process has no stdout - cannot read NDJSON stream"
+                )
 
             async def _read_lines() -> AsyncIterator[str]:
                 async for raw_line in self._process.stdout:
