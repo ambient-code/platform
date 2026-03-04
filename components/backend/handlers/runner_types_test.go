@@ -4,13 +4,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes/fake"
 )
 
 // sampleRegistryJSON returns a test agent registry JSON with 2 runtimes.
@@ -89,21 +88,13 @@ func sampleRegistryJSON() string {
 func setupRegistryForTest(t *testing.T) {
 	t.Helper()
 
-	// Ensure Namespace is set for the test
-	if Namespace == "" {
-		Namespace = "test-ns"
+	// Write test registry JSON to a temp file and point AGENT_REGISTRY_PATH at it
+	tmpDir := t.TempDir()
+	tmpFile := filepath.Join(tmpDir, "agent-registry.json")
+	if err := os.WriteFile(tmpFile, []byte(sampleRegistryJSON()), 0644); err != nil {
+		t.Fatalf("Failed to write test registry: %v", err)
 	}
-
-	cm := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      agentRegistryConfigMapName,
-			Namespace: Namespace,
-		},
-		Data: map[string]string{
-			agentRegistryDataKey: sampleRegistryJSON(),
-		},
-	}
-	K8sClientMw = fake.NewSimpleClientset(cm)
+	t.Setenv("AGENT_REGISTRY_PATH", tmpFile)
 
 	// Clear the in-memory cache
 	registryCacheMu.Lock()
