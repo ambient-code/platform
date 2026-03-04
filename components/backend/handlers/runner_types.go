@@ -12,9 +12,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-const agentRegistryConfigMapName = "ambient-agent-registry"
-const agentRegistryDataKey = "agent-registry.json"
-
 // DefaultRunnerType is the default runner type when none is specified.
 const DefaultRunnerType = "claude-agent-sdk"
 
