@@ -33,6 +33,7 @@ func main() {
 	}
 	if projectName == "" {
 		projectName = "sdk-demo"
+		fmt.Println("Note: No AMBIENT_PROJECT set, using flexible project handling with project:", projectName)
 	}
 
 	runFullLifecycle(ctx, c, projectName)
