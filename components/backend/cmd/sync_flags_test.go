@@ -63,7 +63,7 @@ func TestParseManifestPath(t *testing.T) {
 
 // --- FlagsFromManifest ---
 
-func TestFlagsFromManifest_SkipsDefaultAndUnavailable(t *testing.T) {
+func TestFlagsFromManifest_SkipsDefaultUnavailableAndNonGated(t *testing.T) {
 	manifest := &types.ModelManifest{
 		DefaultModel: "claude-sonnet-4-5",
 		ProviderDefaults: map[string]string{
@@ -71,19 +71,21 @@ func TestFlagsFromManifest_SkipsDefaultAndUnavailable(t *testing.T) {
 			"google":    "gemini-2.5-flash",
 		},
 		Models: []types.ModelEntry{
-			{ID: "claude-sonnet-4-5", Label: "Sonnet 4.5", Provider: "anthropic", Available: true},
-			{ID: "claude-opus-4-6", Label: "Opus 4.6", Provider: "anthropic", Available: true},
-			{ID: "claude-opus-4-1", Label: "Opus 4.1", Provider: "anthropic", Available: false},
-			{ID: "gemini-2.5-flash", Label: "Gemini 2.5 Flash", Provider: "google", Available: true},
-			{ID: "gemini-2.5-pro", Label: "Gemini 2.5 Pro", Provider: "google", Available: true},
+			{ID: "claude-sonnet-4-5", Label: "Sonnet 4.5", Provider: "anthropic", Available: true, FeatureGated: false},
+			{ID: "claude-opus-4-6", Label: "Opus 4.6", Provider: "anthropic", Available: true, FeatureGated: true},
+			{ID: "claude-opus-4-1", Label: "Opus 4.1", Provider: "anthropic", Available: false, FeatureGated: true},
+			{ID: "claude-haiku-4-5", Label: "Haiku 4.5", Provider: "anthropic", Available: true, FeatureGated: false},
+			{ID: "gemini-2.5-flash", Label: "Gemini 2.5 Flash", Provider: "google", Available: true, FeatureGated: false},
+			{ID: "gemini-2.5-pro", Label: "Gemini 2.5 Pro", Provider: "google", Available: true, FeatureGated: true},
 		},
 	}
 
 	flags := FlagsFromManifest(manifest)
 
-	// Should skip: claude-sonnet-4-5 (global default + anthropic default),
-	//              gemini-2.5-flash (google default),
-	//              claude-opus-4-1 (unavailable)
+	// Should skip: claude-sonnet-4-5 (default + not gated),
+	//              claude-opus-4-1 (unavailable),
+	//              claude-haiku-4-5 (not gated),
+	//              gemini-2.5-flash (default + not gated)
 	// Should include: claude-opus-4-6, gemini-2.5-pro
 	if len(flags) != 2 {
 		t.Fatalf("expected 2 flags, got %d: %v", len(flags), flags)
@@ -101,6 +103,9 @@ func TestFlagsFromManifest_SkipsDefaultAndUnavailable(t *testing.T) {
 	}
 	if names["model.claude-sonnet-4-5.enabled"] {
 		t.Error("global default should be skipped")
+	}
+	if names["model.claude-haiku-4-5.enabled"] {
+		t.Error("non-gated model should be skipped")
 	}
 	if names["model.gemini-2.5-flash.enabled"] {
 		t.Error("provider default should be skipped")

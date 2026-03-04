@@ -48,7 +48,8 @@ type FlagsConfig struct {
 }
 
 // FlagsFromManifest converts a model manifest into FlagSpecs.
-// Skips default models (global and per-provider) and unavailable models.
+// Only creates flags for models that are available and feature-gated.
+// Skips default models (global and per-provider) as defense-in-depth.
 func FlagsFromManifest(manifest *types.ModelManifest) []FlagSpec {
 	// Build set of all default model IDs (global + per-provider)
 	defaults := map[string]bool{manifest.DefaultModel: true}
@@ -58,6 +59,9 @@ func FlagsFromManifest(manifest *types.ModelManifest) []FlagSpec {
 
 	var specs []FlagSpec
 	for _, model := range manifest.Models {
+		if !model.FeatureGated {
+			continue
+		}
 		if defaults[model.ID] {
 			continue
 		}

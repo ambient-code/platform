@@ -301,6 +301,7 @@ def main() -> int:
                 "vertexId": vertex_id,
                 "provider": "anthropic",
                 "available": is_available,
+                "featureGated": True,
             }
             manifest["models"].append(new_entry)
             changes.append(f"  {model_id}: added (available={is_available})")
