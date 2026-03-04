@@ -252,13 +252,13 @@ jobs:
           if [ "${{ needs.detect-changes.outputs.claude-runner }}" == "true" ]; then
             echo "runner_tag=${{ github.sha }}" >> $GITHUB_OUTPUT
           else
-            echo "runner_tag=stage" >> $GITHUB_OUTPUT
+            echo "runner_tag=latest" >> $GITHUB_OUTPUT
           fi
 
           if [ "${{ needs.detect-changes.outputs.state-sync }}" == "true" ]; then
             echo "state_sync_tag=${{ github.sha }}" >> $GITHUB_OUTPUT
           else
-            echo "state_sync_tag=stage" >> $GITHUB_OUTPUT
+            echo "state_sync_tag=latest" >> $GITHUB_OUTPUT
           fi
 
           if [ "${{ needs.detect-changes.outputs.public-api }}" == "true" ]; then
@@ -372,7 +372,7 @@ jobs:
       - name: Update agent registry ConfigMap with pinned image tags
         run: |
           sed \
-            -e "s|quay.io/ambient_code/vteam_claude_runner:latest|quay.io/ambient_code/vteam_claude_runner:stage|g" \
-            -e "s|quay.io/ambient_code/vteam_state_sync:latest|quay.io/ambient_code/vteam_state_sync:stage|g" \
+            -e "s|quay.io/ambient_code/vteam_claude_runner:latest|quay.io/ambient_code/vteam_claude_runner:${{ github.sha }}|g" \
+            -e "s|quay.io/ambient_code/vteam_state_sync:latest|quay.io/ambient_code/vteam_state_sync:${{ github.sha }}|g" \
             components/manifests/base/agent-registry-configmap.yaml \
             | oc apply -f - -n ambient-code
