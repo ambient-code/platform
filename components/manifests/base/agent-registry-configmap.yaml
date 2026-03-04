@@ -11,7 +11,7 @@ data:
         "description": "Anthropic Claude with full coding capabilities",
         "framework": "claude-agent-sdk",
         "container": {
-          "image": "quay.io/ambient_code/vteam_claude_runner:latest",
+          "image": "quay.io/ambient_code/vteam_claude_runner@sha256:5363f4bb69f85ed7ff43a9530ae3076f045a9ed09ba1c11d5e30e726dcccc7e4",
           "port": 8001,
           "env": {
             "RUNNER_TYPE": "claude-agent-sdk",
@@ -24,7 +24,7 @@ data:
         },
         "sandbox": {
           "stateDir": ".claude",
-          "stateSyncImage": "quay.io/ambient_code/vteam_state_sync:latest",
+          "stateSyncImage": "quay.io/ambient_code/vteam_state_sync@sha256:4541a831b4d863d26e1dcf02e477ac98b1014e9f4a790ad7cc1495db0117cbff",
           "persistence": "s3",
           "workspaceSize": "10Gi",
           "terminationGracePeriod": 60,
@@ -50,7 +50,7 @@ data:
         "description": "Google Gemini coding agent with built-in file, bash, and search tools",
         "framework": "gemini-cli",
         "container": {
-          "image": "quay.io/ambient_code/vteam_claude_runner:latest",
+          "image": "quay.io/ambient_code/vteam_claude_runner@sha256:5363f4bb69f85ed7ff43a9530ae3076f045a9ed09ba1c11d5e30e726dcccc7e4",
           "port": 8001,
           "env": {
             "RUNNER_TYPE": "gemini-cli",
@@ -59,7 +59,7 @@ data:
         },
         "sandbox": {
           "stateDir": ".gemini",
-          "stateSyncImage": "quay.io/ambient_code/vteam_state_sync:latest",
+          "stateSyncImage": "quay.io/ambient_code/vteam_state_sync@sha256:4541a831b4d863d26e1dcf02e477ac98b1014e9f4a790ad7cc1495db0117cbff",
           "persistence": "s3",
           "workspaceSize": "10Gi",
           "terminationGracePeriod": 60,
