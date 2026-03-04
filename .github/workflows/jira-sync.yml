@@ -357,15 +357,9 @@ jobs:
 
             ## FINAL — Summary Report
 
-            Create a single GitHub issue summarizing the run. Only create it if at least one action was taken or there are outliers. If everything was already in sync, print a one-line log to stdout and exit.
+            Print a summary report to the conversation. Use this format:
 
-            ```bash
-            gh issue create \
-              --repo ambient-code/platform \
-              --title "[Jira Sync] $(date -u +%Y-%m-%d)" \
-              --label "jira-sync" \
-              --body "## Jira ↔ GitHub Sync — $(date -u +%Y-%m-%d)
-
+            ## Jira ↔ GitHub Sync — <date>
 
             ### Phase 1 — Open PRs
             - ✅ Already in sync: N
@@ -391,8 +385,6 @@ jobs:
             | Key | Summary | Status |
             |-----|---------|--------|
             | RHOAIENG-XXXXX | ... | In Progress |
-            "
-            ```
 
             ## Error handling
 
