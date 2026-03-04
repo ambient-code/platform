@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"log"
 	"os"
 	"os/signal"
@@ -18,6 +19,14 @@ import (
 
 	"github.com/joho/godotenv"
 )
+
+// Embed the model manifest at compile time as a fallback for cold start
+// before the ConfigMap volume is mounted. Source of truth is
+// components/manifests/base/models.json — copied into the build context
+// by the Makefile build-backend target.
+//
+//go:embed models.json
+var embeddedManifest []byte
 
 // Build-time metadata (set via -ldflags -X during build)
 // These are embedded directly in the binary, so they're always accurate
@@ -64,6 +73,9 @@ func main() {
 
 	// Log build information
 	logBuildInfo()
+
+	// Set embedded manifest as fallback for cold start
+	handlers.EmbeddedManifest = embeddedManifest
 
 	// Normal server mode - full initialization
 	log.Println("Starting in normal server mode with K8s client initialization")

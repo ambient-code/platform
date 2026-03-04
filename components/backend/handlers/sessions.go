@@ -624,9 +624,13 @@ func CreateSession(c *gin.Context) {
 		}
 	}
 
-	// Validate that the requested model is available
-	if llmSettings.Model != "" && !isModelAvailable(c.Request.Context(), reqK8s, llmSettings.Model, project) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Model is not available"})
+	// Validate that the requested model is available and matches the runner's provider
+	runnerProvider := ""
+	if rt, rtErr := GetRuntime(runnerTypeID); rtErr == nil {
+		runnerProvider = rt.Provider
+	}
+	if llmSettings.Model != "" && !isModelAvailable(c.Request.Context(), reqK8s, llmSettings.Model, runnerProvider, project) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Model is not available for this runner type"})
 		return
 	}
 

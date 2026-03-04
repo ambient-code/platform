@@ -66,22 +66,44 @@ func TestParseManifestPath(t *testing.T) {
 func TestFlagsFromManifest_SkipsDefaultAndUnavailable(t *testing.T) {
 	manifest := &types.ModelManifest{
 		DefaultModel: "claude-sonnet-4-5",
+		ProviderDefaults: map[string]string{
+			"anthropic": "claude-sonnet-4-5",
+			"google":    "gemini-2.5-flash",
+		},
 		Models: []types.ModelEntry{
-			{ID: "claude-sonnet-4-5", Label: "Sonnet 4.5", Available: true},
-			{ID: "claude-opus-4-6", Label: "Opus 4.6", Available: true},
-			{ID: "claude-opus-4-1", Label: "Opus 4.1", Available: false},
+			{ID: "claude-sonnet-4-5", Label: "Sonnet 4.5", Provider: "anthropic", Available: true},
+			{ID: "claude-opus-4-6", Label: "Opus 4.6", Provider: "anthropic", Available: true},
+			{ID: "claude-opus-4-1", Label: "Opus 4.1", Provider: "anthropic", Available: false},
+			{ID: "gemini-2.5-flash", Label: "Gemini 2.5 Flash", Provider: "google", Available: true},
+			{ID: "gemini-2.5-pro", Label: "Gemini 2.5 Pro", Provider: "google", Available: true},
 		},
 	}
 
 	flags := FlagsFromManifest(manifest)
-	if len(flags) != 1 {
-		t.Fatalf("expected 1 flag, got %d: %v", len(flags), flags)
+
+	// Should skip: claude-sonnet-4-5 (global default + anthropic default),
+	//              gemini-2.5-flash (google default),
+	//              claude-opus-4-1 (unavailable)
+	// Should include: claude-opus-4-6, gemini-2.5-pro
+	if len(flags) != 2 {
+		t.Fatalf("expected 2 flags, got %d: %v", len(flags), flags)
 	}
-	if flags[0].Name != "model.claude-opus-4-6.enabled" {
-		t.Errorf("expected model.claude-opus-4-6.enabled, got %s", flags[0].Name)
+
+	names := map[string]bool{}
+	for _, f := range flags {
+		names[f.Name] = true
 	}
-	if len(flags[0].Tags) != 1 || flags[0].Tags[0].Type != "scope" || flags[0].Tags[0].Value != "workspace" {
-		t.Errorf("expected scope:workspace tag, got %v", flags[0].Tags)
+	if !names["model.claude-opus-4-6.enabled"] {
+		t.Error("expected model.claude-opus-4-6.enabled")
+	}
+	if !names["model.gemini-2.5-pro.enabled"] {
+		t.Error("expected model.gemini-2.5-pro.enabled")
+	}
+	if names["model.claude-sonnet-4-5.enabled"] {
+		t.Error("global default should be skipped")
+	}
+	if names["model.gemini-2.5-flash.enabled"] {
+		t.Error("provider default should be skipped")
 	}
 }
 

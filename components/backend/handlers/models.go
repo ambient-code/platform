@@ -16,6 +16,11 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
+// EmbeddedManifest is set from main.go via go:embed. It holds the model
+// manifest compiled into the binary as a fallback when the ConfigMap
+// volume is not yet mounted (cold start).
+var EmbeddedManifest []byte
+
 // cachedManifest stores the last successfully loaded manifest so that
 // transient file-read errors fall back to the previous good version
 // instead of the hardcoded default (which bypasses feature flags).
@@ -58,10 +63,17 @@ func ListModelsForProject(c *gin.Context) {
 
 	manifest, err := LoadManifest(ManifestPath())
 	if err != nil {
-		log.Printf("WARNING: failed to load model manifest: %v", err)
+		log.Printf("WARNING: failed to load model manifest from disk: %v", err)
 		manifest = cachedManifest.Load()
+		if manifest == nil && len(EmbeddedManifest) > 0 {
+			log.Printf("Using embedded model manifest (compiled into binary)")
+			var m types.ModelManifest
+			if e := json.Unmarshal(EmbeddedManifest, &m); e == nil {
+				manifest = &m
+			}
+		}
 		if manifest == nil {
-			log.Printf("ERROR: no model manifest available (file unreadable, no cache)")
+			log.Printf("ERROR: no model manifest available")
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Model manifest unavailable"})
 			return
 		}
@@ -118,13 +130,15 @@ func ListModelsForProject(c *gin.Context) {
 		}
 	}
 
+	responseDefault := effectiveDefault
 	if len(models) == 0 {
 		log.Printf("WARNING: no models passed filtering for provider=%q in namespace %s", providerFilter, namespace)
+		responseDefault = ""
 	}
 
 	c.JSON(http.StatusOK, types.ListModelsResponse{
 		Models:       models,
-		DefaultModel: effectiveDefault,
+		DefaultModel: responseDefault,
 	})
 }
 
@@ -160,9 +174,11 @@ func LoadManifest(path string) (*types.ModelManifest, error) {
 // given workspace namespace. All models (Claude and Gemini) are validated
 // against models.json. Returns true if the model exists, is available, and
 // is enabled (checking workspace overrides first, then Unleash).
+// When requiredProvider is non-empty, the model's provider must match
+// (prevents using a Gemini model with a Claude runner, for example).
 // The default model always returns true. Fails open when no manifest has
 // ever been loaded (cold start).
-func isModelAvailable(ctx context.Context, k8sClient kubernetes.Interface, modelID, namespace string) bool {
+func isModelAvailable(ctx context.Context, k8sClient kubernetes.Interface, modelID, requiredProvider, namespace string) bool {
 	if modelID == "" {
 		return true // Empty model will use default
 	}
@@ -171,8 +187,14 @@ func isModelAvailable(ctx context.Context, k8sClient kubernetes.Interface, model
 	if err != nil {
 		log.Printf("WARNING: failed to load model manifest for validation: %v", err)
 		manifest = cachedManifest.Load()
+		if manifest == nil && len(EmbeddedManifest) > 0 {
+			var m types.ModelManifest
+			if e := json.Unmarshal(EmbeddedManifest, &m); e == nil {
+				manifest = &m
+			}
+		}
 		if manifest == nil {
-			log.Printf("WARNING: no cached manifest available, allowing model %q", modelID)
+			log.Printf("WARNING: no manifest available, allowing model %q", modelID)
 			return true
 		}
 	} else {
@@ -192,6 +214,10 @@ func isModelAvailable(ctx context.Context, k8sClient kubernetes.Interface, model
 	for _, entry := range manifest.Models {
 		if entry.ID == modelID {
 			if !entry.Available {
+				return false
+			}
+			if requiredProvider != "" && entry.Provider != requiredProvider {
+				log.Printf("Model %q has provider %q but runner requires %q", modelID, entry.Provider, requiredProvider)
 				return false
 			}
 			flagName := fmt.Sprintf("model.%s.enabled", entry.ID)
