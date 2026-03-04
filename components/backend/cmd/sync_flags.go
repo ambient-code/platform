@@ -69,7 +69,7 @@ func FlagsFromManifest(manifest *types.ModelManifest) []FlagSpec {
 			continue
 		}
 		specs = append(specs, FlagSpec{
-			Name:        sanitizeLogString(fmt.Sprintf("model.%s.enabled", model.ID)),
+			Name:        fmt.Sprintf("model.%s.enabled", model.ID),
 			Description: sanitizeLogString(fmt.Sprintf("Enable %s (%s) for users", model.Label, model.ID)),
 			Tags:        []FlagTag{{Type: "scope", Value: "workspace"}},
 		})
@@ -85,7 +85,7 @@ func StaleFlagsFromManifest(manifest *types.ModelManifest) []string {
 		if model.FeatureGated {
 			continue
 		}
-		stale = append(stale, sanitizeLogString(fmt.Sprintf("model.%s.enabled", model.ID)))
+		stale = append(stale, fmt.Sprintf("model.%s.enabled", model.ID))
 	}
 	return stale
 }
