@@ -2,7 +2,7 @@
  * AG-UI Run Endpoint Proxy
  * Creates a new agent run and returns metadata immediately.
  * Events are broadcast to GET /agui/events subscribers (middleware pattern).
- * 
+ *
  * See: https://docs.ag-ui.com/concepts/architecture
  */
 
@@ -25,8 +25,8 @@ export async function POST(
 
     const resp = await fetch(backendUrl, {
       method: 'POST',
-      headers: { 
-        ...headers, 
+      headers: {
+        ...headers,
         'Content-Type': 'application/json',
       },
       body,

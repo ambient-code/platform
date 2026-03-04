@@ -5,8 +5,8 @@ Comprehensive testing documentation for the Ambient Code Platform.
 ## 🧪 Test Types
 
 ### End-to-End (E2E) Tests
-**Location:** `e2e/`  
-**Framework:** Cypress  
+**Location:** `e2e/`
+**Framework:** Cypress
 **Environment:** Kind cluster (Kubernetes in Docker)
 
 **Purpose:** Test complete user journeys against a deployed platform instance.

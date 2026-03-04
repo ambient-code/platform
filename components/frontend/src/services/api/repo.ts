@@ -52,7 +52,7 @@ export async function getRepoTree(
   params: RepoParams
 ): Promise<TreeResponse> {
   const url = `/projects/${encodeURIComponent(projectName)}/repo/tree`;
-  
+
   return apiClient.get<TreeResponse>(url, {
     params: {
       repo: params.repo,
@@ -92,4 +92,3 @@ export async function listRepoBranches(
     },
   });
 }
-

@@ -1,0 +1,80 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ambient-agent-registry
+data:
+  agent-registry.json: |
+    [
+      {
+        "id": "claude-agent-sdk",
+        "displayName": "Claude Code",
+        "description": "Anthropic Claude with full coding capabilities",
+        "framework": "claude-agent-sdk",
+        "container": {
+          "image": "quay.io/ambient_code/ambient_runner:latest",
+          "port": 8001,
+          "env": {
+            "RUNNER_TYPE": "claude-agent-sdk",
+            "RUNNER_STATE_DIR": ".claude"
+          },
+          "resources": {
+            "requests": {"cpu": "500m", "memory": "512Mi"},
+            "limits": {"cpu": "2", "memory": "4Gi"}
+          }
+        },
+        "sandbox": {
+          "stateDir": ".claude",
+          "stateSyncImage": "quay.io/ambient_code/state_sync:latest",
+          "persistence": "s3",
+          "workspaceSize": "10Gi",
+          "terminationGracePeriod": 60,
+          "seed": {"cloneRepos": true, "hydrateState": true}
+        },
+        "auth": {
+          "requiredSecretKeys": ["ANTHROPIC_API_KEY"],
+          "secretKeyLogic": "any",
+          "vertexSupported": true
+        },
+        "defaultModel": "claude-sonnet-4-5",
+        "models": [
+          {"value": "claude-sonnet-4-5", "label": "Claude Sonnet 4.5"},
+          {"value": "claude-opus-4-6", "label": "Claude Opus 4.6"},
+          {"value": "claude-opus-4-5", "label": "Claude Opus 4.5"},
+          {"value": "claude-haiku-4-5", "label": "Claude Haiku 4.5"}
+        ],
+        "featureGate": ""
+      },
+      {
+        "id": "gemini-cli",
+        "displayName": "Gemini CLI",
+        "description": "Google Gemini coding agent with built-in file, bash, and search tools",
+        "framework": "gemini-cli",
+        "container": {
+          "image": "quay.io/ambient_code/ambient_runner:latest",
+          "port": 8001,
+          "env": {
+            "RUNNER_TYPE": "gemini-cli",
+            "RUNNER_STATE_DIR": ".gemini"
+          }
+        },
+        "sandbox": {
+          "stateDir": ".gemini",
+          "stateSyncImage": "quay.io/ambient_code/state_sync:latest",
+          "persistence": "s3",
+          "workspaceSize": "10Gi",
+          "terminationGracePeriod": 60,
+          "seed": {"cloneRepos": true, "hydrateState": true}
+        },
+        "auth": {
+          "requiredSecretKeys": ["GEMINI_API_KEY", "GOOGLE_API_KEY"],
+          "secretKeyLogic": "any",
+          "vertexSupported": true
+        },
+        "defaultModel": "gemini-2.5-flash",
+        "models": [
+          {"value": "gemini-2.5-flash", "label": "Gemini 2.5 Flash"},
+          {"value": "gemini-2.5-pro", "label": "Gemini 2.5 Pro"}
+        ],
+        "featureGate": "runner.gemini-cli.enabled"
+      }
+    ]

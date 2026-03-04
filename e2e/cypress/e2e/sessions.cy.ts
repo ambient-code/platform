@@ -1,6 +1,6 @@
 /**
  * E2E Tests for Ambient Session Management
- * 
+ *
  * Tests the complete session user journey with one workspace and session
  * reused across multiple test scenarios.
  */
@@ -88,17 +88,17 @@ describe('Ambient Session Management Tests', () => {
 
   it('should display complete session page UI (pending state)', () => {
     cy.visit(`/projects/${workspaceName}/sessions/${pendingSessionId}`)
-    
+
     // Status badge
     cy.contains(/Pending|Running|Starting/i, { timeout: 10000 }).should('exist')
-    
+
     // All accordions visible
     cy.contains('Workflows', { timeout: 10000 }).should('be.visible')
     cy.contains('Context').should('be.visible')
     cy.contains('Artifacts').should('be.visible')
     cy.contains('MCP Servers').should('be.visible')
     cy.contains('File Explorer').should('be.visible')
-    
+
     // Breadcrumbs
     cy.contains('Workspaces').should('be.visible')
     cy.contains('Sessions').should('be.visible')
@@ -106,13 +106,13 @@ describe('Ambient Session Management Tests', () => {
 
   it('should display workflow cards and selection UI', () => {
     cy.visit(`/projects/${workspaceName}/sessions/${pendingSessionId}`)
-    
+
     // Wait for page to load
     cy.contains('Workflows', { timeout: 20000 }).should('be.visible')
-    
+
     // Workflow cards should be visible
     cy.contains(/Create PRDs and RFEs|Fix a bug|Start spec-kit/i, { timeout: 10000 }).should('exist')
-    
+
     // Workflow links
     cy.contains('View all workflows', { timeout: 5000 }).should('be.visible')
     cy.contains('Load workflow', { timeout: 5000 }).should('be.visible')
@@ -120,16 +120,16 @@ describe('Ambient Session Management Tests', () => {
 
   it('should interact with workflow cards', () => {
     cy.visit(`/projects/${workspaceName}/sessions/${pendingSessionId}`)
-    
+
     // Click workflow card
     cy.contains('Fix a bug', { timeout: 10000 }).should('be.visible').click({ force: true })
     cy.contains(/Fix a bug|workflow/i, { timeout: 5000 }).should('exist')
-    
+
     // Click View all workflows
     cy.contains('View all workflows').click({ force: true })
     cy.contains(/All Workflows|workflow/i, { timeout: 5000 }).should('exist')
     cy.get('body').type('{esc}') // Close modal
-    
+
     // Click Load workflow
     cy.contains('Load workflow').click({ force: true })
     cy.contains(/Load|Workflow/i, { timeout: 5000 }).should('exist')
@@ -138,30 +138,30 @@ describe('Ambient Session Management Tests', () => {
 
   it('should display chat interface', () => {
     cy.visit(`/projects/${workspaceName}/sessions/${pendingSessionId}`)
-    
+
     // Welcome message or chat availability
     cy.contains(/Welcome to Ambient|Chat will be available|Type a message/i, { timeout: 20000 }).should('exist')
   })
 
   it('should navigate using breadcrumbs', () => {
     cy.visit(`/projects/${workspaceName}/sessions/${pendingSessionId}`)
-    
+
     // Click workspace name in breadcrumb
     cy.contains('a', workspaceName.replace('e2e-sessions-', ''), { timeout: 10000 })
       .first()
       .click({ force: true })
-    
+
     // Should navigate back to workspace
     cy.url({ timeout: 10000 }).should('include', `/projects/${workspaceName}`)
     cy.url().should('not.include', '/sessions/')
-    
+
     // Should show sessions list
     cy.contains('Sessions').should('be.visible')
   })
 
   /**
    * Complete Session Workflow - Requires ANTHROPIC_API_KEY
-   * 
+   *
    * Tests the full user journey with a running agent session:
    * 1. Create session and wait for Running state
    * 2. Send "Hello!" and wait for REAL agent response (not hardcoded message)
@@ -173,12 +173,12 @@ describe('Ambient Session Management Tests', () => {
       cy.log('📋 Step 0: Configure API key in project via backend API')
       const token = Cypress.env('TEST_TOKEN')
       const apiKey = Cypress.env('ANTHROPIC_API_KEY')
-      
+
       // Fail with clear message if API key not provided
       if (!apiKey) {
         throw new Error('ANTHROPIC_API_KEY not set. This workflow only runs with secrets.')
       }
-      
+
       cy.request({
         method: 'PUT',
         url: `/api/projects/${workspaceName}/runner-secrets`,
@@ -223,7 +223,7 @@ describe('Ambient Session Management Tests', () => {
       // Wait for Send button to disappear (agent is processing)
       cy.contains('button', 'Send', { timeout: 10000 }).should('not.exist')
       cy.log('   Send button gone - agent is processing')
-      
+
       // Verify Stop button appears (confirms agent is actively working)
       cy.contains('button', 'Stop', { timeout: 5000 }).should('be.visible')
       cy.log('✅ Claude is actively responding (Stop button visible)!')
@@ -241,7 +241,7 @@ describe('Ambient Session Management Tests', () => {
       cy.get('body', { timeout: 60000 }).should(($body) => {
         const text = $body.text()
         const hasWorkflowAck = (
-          text.includes('workflow') || 
+          text.includes('workflow') ||
           text.includes('Fix a bug') ||
           text.includes('analyzing') ||
           text.includes('ready')

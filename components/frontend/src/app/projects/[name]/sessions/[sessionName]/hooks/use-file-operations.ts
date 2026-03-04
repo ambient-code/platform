@@ -36,10 +36,10 @@ export function useFileOperations({
       // Load file content inline
       setLoadingFile(true);
       try {
-        const fullPath = currentSubPath 
+        const fullPath = currentSubPath
           ? `${basePath}/${currentSubPath}/${node.name}`
           : `${basePath}/${node.name}`;
-        
+
         const content = await readWorkspaceFile(projectName, sessionName, fullPath);
         setViewingFile({ path: node.name, content });
       } catch (error) {
@@ -107,4 +107,3 @@ export function useFileOperations({
     setViewingFile,
   };
 }
-

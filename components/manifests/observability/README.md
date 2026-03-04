@@ -188,4 +188,3 @@ EOF
 kubectl delete -k components/manifests/observability/overlays/with-grafana/  # If Grafana deployed
 kubectl delete -k components/manifests/observability/
 ```
-

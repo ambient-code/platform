@@ -535,28 +535,73 @@ func CreateSession(c *gin.Context) {
 		return
 	}
 
-	// Validate API keys are configured before creating session
-	vertexEnabled := os.Getenv("CLAUDE_CODE_USE_VERTEX") == "1"
-	if !vertexEnabled {
-		// Check if ambient-runner-secrets exists (contains ANTHROPIC_API_KEY)
+	// Resolve runner type from agent registry (default to claude-agent-sdk for backward compat)
+	runnerTypeID := req.RunnerType
+	if runnerTypeID == "" {
+		runnerTypeID = DefaultRunnerType
+	}
+
+	// Check feature flag for non-default runners
+	if !isRunnerEnabled(runnerTypeID) {
+		log.Printf("Session creation blocked: runner type %q is disabled by feature flag", runnerTypeID)
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": fmt.Sprintf("Runner type '%s' is not enabled. Contact your platform administrator.", runnerTypeID),
+		})
+		return
+	}
+
+	// Read env vars from registry (RUNNER_TYPE, RUNNER_STATE_DIR, etc.)
+	registryEnvVars := getContainerEnvVars(runnerTypeID)
+
+	// Validate API keys are configured before creating session.
+	// If Vertex AI is enabled, skip the check (uses service account auth).
+	// Otherwise, check that at least one of the runner's requiredSecretKeys
+	// is present and non-empty in ambient-runner-secrets.
+	vertexEnabled := isVertexEnabled()
+	if vertexEnabled {
+		log.Printf("Vertex AI enabled, skipping runner secret validation for project %s", project)
+	} else {
 		const runnerSecretsName = "ambient-runner-secrets"
-		_, err := reqK8s.CoreV1().Secrets(project).Get(c.Request.Context(), runnerSecretsName, v1.GetOptions{})
+		requiredKeys := getRequiredSecretKeys(runnerTypeID)
+
+		// Always verify the runner secrets exist (even if registry is unavailable
+		// and requiredKeys is nil — prevents sessions without any API keys).
+		sec, err := reqK8s.CoreV1().Secrets(project).Get(c.Request.Context(), runnerSecretsName, v1.GetOptions{})
 		if err != nil {
 			if errors.IsNotFound(err) {
 				log.Printf("Session creation blocked: %s secret missing in project %s", runnerSecretsName, project)
+				keyList := "API keys"
+				if len(requiredKeys) > 0 {
+					keyList = strings.Join(requiredKeys, ", ")
+				}
 				c.JSON(http.StatusBadRequest, gin.H{
-					"error": fmt.Sprintf("ANTHROPIC_API_KEY not configured. Please configure runner secrets for project '%s' before creating sessions.", project),
+					"error": fmt.Sprintf("Runner '%s' requires at least one of [%s] in ambient-runner-secrets. Configure keys in Project Settings or enable Vertex AI.", runnerTypeID, keyList),
 				})
 				return
 			}
-			// Other errors (permissions, etc.)
 			log.Printf("Failed to check runner secret in project %s: %v", project, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to validate API key configuration"})
 			return
 		}
-		log.Printf("Validated runner secret %s exists in project %s", runnerSecretsName, project)
-	} else {
-		log.Printf("Vertex AI enabled, skipping runner secret validation for project %s", project)
+
+		// If registry provided required keys, verify at least one is present (OR logic)
+		if len(requiredKeys) > 0 {
+			found := false
+			for _, key := range requiredKeys {
+				if val, ok := sec.Data[key]; ok && len(val) > 0 {
+					found = true
+					break
+				}
+			}
+			if !found {
+				log.Printf("Session creation blocked: none of %v found in %s for project %s", requiredKeys, runnerSecretsName, project)
+				c.JSON(http.StatusBadRequest, gin.H{
+					"error": fmt.Sprintf("Runner '%s' requires at least one of [%s] in ambient-runner-secrets. Configure keys in Project Settings or enable Vertex AI.", runnerTypeID, strings.Join(requiredKeys, ", ")),
+				})
+				return
+			}
+		}
+		log.Printf("Validated runner secret for %s in project %s", runnerTypeID, project)
 	}
 
 	// Validation for multi-repo can be added here if needed
@@ -579,9 +624,9 @@ func CreateSession(c *gin.Context) {
 		}
 	}
 
-	// Validate that the requested model is available
-	if llmSettings.Model != "" && !isModelAvailable(c.Request.Context(), reqK8s, llmSettings.Model, project) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Model is not available"})
+	// Validate that the requested model is available for this runner type
+	if llmSettings.Model != "" && !isModelAvailable(c.Request.Context(), reqK8s, llmSettings.Model, runnerTypeID, project) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Model is not available for this runner type"})
 		return
 	}
 
@@ -642,6 +687,10 @@ func CreateSession(c *gin.Context) {
 
 	// Optional environment variables passthrough (always, independent of git config presence)
 	envVars := make(map[string]string)
+	// Merge registry internalEnvVars first (user-provided vars take precedence)
+	for k, v := range registryEnvVars {
+		envVars[k] = v
+	}
 	for k, v := range req.EnvironmentVariables {
 		envVars[k] = v
 	}
@@ -661,7 +710,13 @@ func CreateSession(c *gin.Context) {
 
 	if len(envVars) > 0 {
 		spec := session["spec"].(map[string]interface{})
-		spec["environmentVariables"] = envVars
+		// Convert map[string]string to map[string]interface{} for unstructured
+		// compatibility (K8s fake client's DeepCopy panics on map[string]string).
+		envInterface := make(map[string]interface{}, len(envVars))
+		for k, v := range envVars {
+			envInterface[k] = v
+		}
+		spec["environmentVariables"] = envInterface
 	}
 
 	// Set multi-repo configuration on spec.
@@ -3859,4 +3914,4 @@ func GitListBranchesSession(c *gin.Context) {
 
 // NOTE: autoTriggerInitialPrompt removed - runner handles INITIAL_PROMPT auto-execution
 // Runner POSTs to backend's /agui/run when ready, events flow through middleware
-// See: components/runners/claude-code-runner/main.py auto_execute_initial_prompt()
+// See: components/runners/ambient-runner/main.py auto_execute_initial_prompt()

@@ -7,7 +7,7 @@ metadata:
     deployment-type: openshift
 data:
   # Vertex AI Configuration - Enabled for standard OpenShift deployments
-  CLAUDE_CODE_USE_VERTEX: "1"
+  USE_VERTEX: "1"
   CLOUD_ML_REGION: "global"
   ANTHROPIC_VERTEX_PROJECT_ID: "ambient-code-platform"
   GOOGLE_APPLICATION_CREDENTIALS: "/app/vertex/ambient-code-key.json"

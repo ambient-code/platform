@@ -31,25 +31,25 @@ spec:
 ```python
 async def run(self):
     """Run the Claude Code CLI session."""
-    
+
     # 1. Determine if this is a continuation
     parent_session_id = self.context.get_env('PARENT_SESSION_ID', '').strip()
     is_continuation = bool(parent_session_id)
-    
+
     # 2. Prepare workspace
     await self._prepare_workspace()  # Clone repos from spec
-    
+
     # 3. Initialize workflow if set
     await self._initialize_workflow_if_set()  # Clone workflow from spec
-    
+
     # 4. Determine what prompt to use
     prompt_to_use = self._determine_initial_prompt(is_continuation)
-    
+
     # 5. Run SDK
     async with ClaudeSDKClient(options=options) as client:
         if prompt_to_use:
             await client.query(prompt_to_use)
-        
+
         if interactive:
             # Enter chat loop
             while True:
@@ -58,12 +58,12 @@ async def run(self):
 
 def _determine_initial_prompt(self, is_continuation: bool) -> str | None:
     """Determine what prompt to send on SDK startup."""
-    
+
     # CASE 1: Continuation session
     if is_continuation:
         logging.info("Continuation session - SDK will resume, no initial prompt needed")
         return None  # SDK resume handles context
-    
+
     # CASE 2: Workflow with startupPrompt
     active_workflow_url = os.getenv('ACTIVE_WORKFLOW_GIT_URL', '').strip()
     if active_workflow_url:
@@ -71,13 +71,13 @@ def _determine_initial_prompt(self, is_continuation: bool) -> str | None:
         if ambient_config.get('startupPrompt'):
             logging.info("Using workflow's startupPrompt")
             return ambient_config['startupPrompt']  # e.g., "Hi! I'm SpecKit. What would you like to build?"
-    
+
     # CASE 3: New session with initialPrompt
     initial_prompt = self.context.get_env('INITIAL_PROMPT', '').strip()
     if initial_prompt:
         logging.info("Using spec.initialPrompt for first invocation")
         return initial_prompt  # e.g., "Build a web app"
-    
+
     # CASE 4: No prompt - Claude greets based on system prompt
     logging.info("No initial prompt - Claude will greet based on system prompt")
     return None
@@ -93,17 +93,17 @@ def _determine_initial_prompt(self, is_continuation: bool) -> str | None:
 async def _prepare_workspace(self):
     parent_session_id = self.context.get_env('PARENT_SESSION_ID', '').strip()
     workspace = Path(self.context.workspace_path)
-    
+
     if parent_session_id:
         # CONTINUATION - skip, handled below
         return
-    
+
     # Brand new session - clone everything fresh
     repos_from_spec = self._get_repos_from_spec()
-    
+
     for repo in repos_from_spec:
         repo_dir = workspace / repo['name']
-        
+
         if repo_dir.exists():
             # Workspace was reused (PVC from deleted session) - reset to clean state
             await self._run_cmd(["git", "fetch", "origin", repo['branch']], cwd=repo_dir)
@@ -111,7 +111,7 @@ async def _prepare_workspace(self):
             logging.info(f"Reset {repo['name']} to clean state")
         else:
             # Fresh clone
-            await self._run_cmd(["git", "clone", "--branch", repo['branch'], 
+            await self._run_cmd(["git", "clone", "--branch", repo['branch'],
                                repo['url'], str(repo_dir)])
             logging.info(f"Cloned {repo['name']}")
 
@@ -128,32 +128,32 @@ def _get_repos_from_spec(self) -> list[dict]:
 ```python
 async def _prepare_workspace(self):
     parent_session_id = self.context.get_env('PARENT_SESSION_ID', '').strip()
-    
+
     if not parent_session_id:
         # Brand new - handled above
         return
-    
+
     # CONTINUATION - preserve everything, only sync spec changes
     logging.info(f"Continuation from {parent_session_id} - preserving workspace state")
-    
+
     repos_from_spec = self._get_repos_from_spec()
     workspace = Path(self.context.workspace_path)
-    
+
     for repo in repos_from_spec:
         repo_dir = workspace / repo['name']
-        
+
         if repo_dir.exists():
             # Repo exists from parent session
             # PRESERVE all local changes (commits, branches, uncommitted work)
             logging.info(f"Preserving {repo['name']} from parent session")
-            
+
             # Only update remote URL in case credentials changed
-            await self._run_cmd(["git", "remote", "set-url", "origin", repo['url']], 
+            await self._run_cmd(["git", "remote", "set-url", "origin", repo['url']],
                                cwd=repo_dir, ignore_errors=True)
         else:
             # Repo was added to spec since parent session - clone it
             logging.info(f"Repo {repo['name']} added to spec, cloning")
-            await self._run_cmd(["git", "clone", "--branch", repo['branch'], 
+            await self._run_cmd(["git", "clone", "--branch", repo['branch'],
                                repo['url'], str(repo_dir)])
 ```
 
@@ -165,13 +165,13 @@ async def _prepare_workspace(self):
 async def clone_repo(req: CloneRepoRequest):
     workspace = Path(os.getenv("WORKSPACE_PATH"))
     repo_dir = workspace / req.name
-    
+
     if repo_dir.exists():
         return {"status": "already_exists"}
-    
+
     # Clone the repo
     await git_clone(req.url, req.branch, repo_dir)
-    
+
     # Signal runner that repo was added (write to signal file)
     signal_file = Path("/workspace/.signals/repo_added.json")
     signal_file.write_text(json.dumps({
@@ -179,7 +179,7 @@ async def clone_repo(req: CloneRepoRequest):
         "url": req.url,
         "timestamp": datetime.utcnow().isoformat()
     }))
-    
+
     return {"status": "cloned", "path": str(repo_dir)}
 
 # Runner checks for signals periodically
@@ -188,19 +188,19 @@ async def _check_for_operator_signals(self):
     signals_dir = Path("/workspace/.signals")
     if not signals_dir.exists():
         return None
-    
+
     for signal_file in signals_dir.glob("*.json"):
         try:
             signal = json.loads(signal_file.read_text())
             signal_type = signal_file.stem.split('_')[0]  # "repo", "workflow", etc.
-            
+
             # Delete signal file
             signal_file.unlink()
-            
+
             return (signal_type, signal)
         except Exception as e:
             logging.error(f"Failed to process signal: {e}")
-    
+
     return None
 
 # In interactive loop
@@ -209,7 +209,7 @@ while True:
     signal = await self._check_for_operator_signals()
     if signal:
         signal_type, payload = signal
-        
+
         if signal_type == "repo":
             # Operator cloned a new repo - restart SDK to add it to add_dirs
             logging.info(f"Operator added repo {payload['name']}, restarting SDK")
@@ -220,7 +220,7 @@ while True:
             logging.info(f"Operator switched workflow, restarting SDK")
             self._restart_requested = True
             break
-    
+
     # ... rest of interactive loop
 ```
 
@@ -329,16 +329,16 @@ T=2.5s: User sees confirmation
 type AgenticSessionSpec struct {
     // Used ONCE on first SDK invocation for brand new session
     InitialPrompt string `json:"initialPrompt,omitempty"`
-    
+
     // Repos to clone into workspace
     Repos []SimpleRepo `json:"repos,omitempty"`
-    
+
     // Workflow to activate
     ActiveWorkflow *WorkflowSelection `json:"activeWorkflow,omitempty"`
-    
+
     // LLM configuration
     LLMSettings LLMSettings `json:"llmSettings"`
-    
+
     // Session behavior
     Interactive bool   `json:"interactive,omitempty"`
     Timeout     int    `json:"timeout"`
@@ -521,18 +521,18 @@ func (r *SessionReconciler) reconcileSession(ctx, session) (ctrl.Result, error) 
     // ================================================
     currentGen := session.GetGeneration()
     observedGen := getObservedGeneration(session)
-    
+
     if currentGen > observedGen {
         log.Printf("Spec changed: gen %d→%d", observedGen, currentGen)
         // Proceed with reconciliation of new desired state
     }
-    
+
     // ================================================
     // 2. Reconcile repos (spec vs status)
     // ================================================
     desiredRepos := getReposFromSpec(session)      // From spec.repos
     reconciledRepos := getReposFromStatus(session) // From status.reconciledRepos
-    
+
     // Clone missing repos
     for _, repo := range desiredRepos {
         if !containsRepo(reconciledRepos, repo) {
@@ -540,7 +540,7 @@ func (r *SessionReconciler) reconcileSession(ctx, session) (ctrl.Result, error) 
             r.addRepoToStatus(session, repo)
         }
     }
-    
+
     // Remove extra repos
     for _, repo := range reconciledRepos {
         if !containsRepo(desiredRepos, repo) {
@@ -548,27 +548,27 @@ func (r *SessionReconciler) reconcileSession(ctx, session) (ctrl.Result, error) 
             r.removeRepoFromStatus(session, repo)
         }
     }
-    
+
     // ================================================
     // 3. Reconcile workflow (spec vs status)
     // ================================================
     desiredWorkflow := getWorkflowFromSpec(session)      // From spec.activeWorkflow
     reconciledWorkflow := getWorkflowFromStatus(session) // From status.reconciledWorkflow
-    
+
     if desiredWorkflow != reconciledWorkflow {
         r.callContentService(session, "/workflows/clone", desiredWorkflow)
         r.updateWorkflowInStatus(session, desiredWorkflow)
         r.callContentService(session, "/sdk/restart", nil)
         r.incrementSDKRestartCount(session)
     }
-    
+
     // ================================================
     // 4. Reconcile infrastructure (PVC, secrets, token)
     // ================================================
     r.ensurePVC() → update PVCReady condition
     r.ensureSecrets() → update SecretsReady condition
     r.ensureFreshToken() → refresh if > 45min
-    
+
     // ================================================
     // 5. Reconcile Job (create if missing, monitor if exists)
     // ================================================
@@ -579,14 +579,14 @@ func (r *SessionReconciler) reconcileSession(ctx, session) (ctrl.Result, error) 
         r.monitorJob(job) → update PodScheduled, RunnerStarted conditions
         r.checkTimeout(job) → update Failed condition if timeout
     }
-    
+
     // ================================================
     // 6. Update observedGeneration
     // ================================================
     r.updateStatus(session, map[string]interface{}{
         "observedGeneration": currentGen,
     })
-    
+
     return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 }
 ```
@@ -599,19 +599,19 @@ func (r *SessionReconciler) reconcileSession(ctx, session) (ctrl.Result, error) 
 status:
   # High-level summary (derived from conditions)
   phase: Running
-  
+
   # Reconciliation tracking
   observedGeneration: 5
-  
+
   # Timestamps
   startTime: "2025-11-15T12:00:00Z"
   completionTime: null
-  
+
   # Infrastructure references
   jobName: session-123-job
   runnerPodName: session-123-job-abc123
   pvcName: ambient-workspace-session-123
-  
+
   # What repos are actually cloned
   reconciledRepos:
     - url: "https://github.com/org/repo1"
@@ -624,18 +624,18 @@ status:
       name: "repo2"
       clonedAt: "2025-11-15T12:30:00Z"
       status: Ready
-  
+
   # What workflow is actually active
   reconciledWorkflow:
     gitUrl: "https://github.com/org/workflow-speckit"
     branch: "main"
     appliedAt: "2025-11-15T12:00:10Z"
     status: Active
-  
+
   # SDK details
   sdkSessionId: "abc-def-123-456"  # UUID from SDK
   sdkRestartCount: 2  # How many times SDK was restarted
-  
+
   # Detailed status (Kubernetes standard)
   conditions:
     - type: PVCReady
@@ -644,49 +644,49 @@ status:
       message: "PVC ambient-workspace-session-123 is bound"
       lastTransitionTime: "2025-11-15T12:00:01Z"
       observedGeneration: 5
-    
+
     - type: SecretsReady
       status: "True"
       reason: AllSecretsFound
       message: "All required secrets are present"
       lastTransitionTime: "2025-11-15T12:00:02Z"
       observedGeneration: 5
-    
+
     - type: JobCreated
       status: "True"
       reason: Created
       message: "Job session-123-job created"
       lastTransitionTime: "2025-11-15T12:00:03Z"
       observedGeneration: 5
-    
+
     - type: PodScheduled
       status: "True"
       reason: Scheduled
       message: "Pod scheduled on node worker-1"
       lastTransitionTime: "2025-11-15T12:00:05Z"
       observedGeneration: 5
-    
+
     - type: RunnerStarted
       status: "True"
       reason: ContainerRunning
       message: "Runner container is active"
       lastTransitionTime: "2025-11-15T12:00:15Z"
       observedGeneration: 5
-    
+
     - type: ReposReconciled
       status: "True"
       reason: AllReposReady
       message: "All 2 repos cloned successfully"
       lastTransitionTime: "2025-11-15T12:30:05Z"
       observedGeneration: 5
-    
+
     - type: WorkflowReconciled
       status: "True"
       reason: WorkflowActive
       message: "Workflow workflow-speckit is active"
       lastTransitionTime: "2025-11-15T12:00:10Z"
       observedGeneration: 5
-    
+
     - type: Ready
       status: "True"
       reason: SessionRunning
@@ -704,4 +704,3 @@ This gives you **complete observability** - you can see:
 - ✅ Complete timeline of session lifecycle
 
 Ready to implement! Which phase should we start with?
-

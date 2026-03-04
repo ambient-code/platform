@@ -124,7 +124,7 @@ export async function buildForwardHeadersAsync(request: Request, extra?: Record<
   // Local development mode: inject mock user when DISABLE_AUTH is true
   const disableAuth = process.env.DISABLE_AUTH === 'true';
   const mockUser = process.env.MOCK_USER || 'developer';
-  
+
   if (disableAuth) {
     if (!headers['X-Forwarded-User']) headers['X-Forwarded-User'] = mockUser;
     if (!headers['X-Forwarded-Preferred-Username']) headers['X-Forwarded-Preferred-Username'] = mockUser;
@@ -158,5 +158,3 @@ export async function buildForwardHeadersAsync(request: Request, extra?: Record<
 
   return headers;
 }
-
-

@@ -86,4 +86,3 @@ rules:
 - apiGroups: ["authorization.k8s.io"]
   resources: ["subjectaccessreviews", "selfsubjectaccessreviews"]
   verbs: ["create"]
-

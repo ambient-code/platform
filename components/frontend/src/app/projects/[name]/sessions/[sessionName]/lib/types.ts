@@ -70,4 +70,3 @@ export type WorkflowMetadata = {
   commands: Array<WorkflowCommand>;
   agents: Array<WorkflowAgent>;
 };
-

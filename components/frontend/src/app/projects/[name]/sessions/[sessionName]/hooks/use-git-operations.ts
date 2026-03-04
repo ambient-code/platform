@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback } from "react";
-import { 
+import {
   useGitStatus,
   useConfigureGitRemote,
 } from "@/services/queries/use-workspace";
@@ -20,7 +20,7 @@ export function useGitOperations({
   directoryPath,
 }: UseGitOperationsProps) {
   const configureRemoteMutation = useConfigureGitRemote();
-  
+
   // Use React Query for git status
   const { data: gitStatus, refetch: fetchGitStatus } = useGitStatus(
     projectName,
@@ -39,10 +39,10 @@ export function useGitOperations({
         remoteUrl: remoteUrl.trim(),
         branch: branch.trim(),
       });
-      
+
       successToast("Remote configured successfully");
       await fetchGitStatus();
-      
+
       return true;
     } catch (error) {
       console.error("Failed to configure remote:", error);
@@ -61,4 +61,3 @@ export function useGitOperations({
     isConfiguringRemote: configureRemoteMutation.isPending,
   };
 }
-

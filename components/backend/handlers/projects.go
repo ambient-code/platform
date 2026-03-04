@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 	"regexp"
 	"sort"
 	"strings"
@@ -135,7 +134,7 @@ func isOpenShiftCluster() bool {
 // This endpoint does not require authentication as it's public cluster information
 func GetClusterInfo(c *gin.Context) {
 	isOpenShift := isOpenShiftCluster()
-	vertexEnabled := os.Getenv("CLAUDE_CODE_USE_VERTEX") == "1"
+	vertexEnabled := isVertexEnabled()
 
 	c.JSON(http.StatusOK, gin.H{
 		"isOpenShift":   isOpenShift,

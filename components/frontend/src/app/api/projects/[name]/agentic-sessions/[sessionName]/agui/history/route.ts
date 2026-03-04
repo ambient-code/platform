@@ -1,7 +1,7 @@
 /**
  * AG-UI History Endpoint Proxy
  * Returns compacted message history for a session.
- * 
+ *
  * See: https://docs.ag-ui.com/concepts/serialization
  */
 
@@ -33,4 +33,3 @@ export async function GET(
     headers: { 'Content-Type': 'application/json' },
   })
 }
-

@@ -2,7 +2,7 @@
 
 Run the Ambient Code Platform locally using kind (Kubernetes in Podman/Docker) for development and testing.
 
-> **Cluster Name**: `ambient-local`  
+> **Cluster Name**: `ambient-local`
 > **Default Engine**: Podman (use `CONTAINER_ENGINE=docker` for more stable networking on macOS)
 
 ## Quick Start
@@ -333,7 +333,7 @@ kubectl logs -n ambient-code deployment/backend-api
 
 ### Port 8080 stops working (Podman on macOS)
 
-**Symptom:** Ingress works initially, then hangs after 10-30 minutes.  
+**Symptom:** Ingress works initially, then hangs after 10-30 minutes.
 **Cause:** Podman's gvproxy port forwarding can become flaky on macOS.
 
 **Workaround - Use port-forward:**

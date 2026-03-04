@@ -13,13 +13,16 @@ SESSION_NAME="${SESSION_NAME:-unknown}"
 NAMESPACE="${NAMESPACE//[^a-zA-Z0-9-]/}"
 SESSION_NAME="${SESSION_NAME//[^a-zA-Z0-9-]/}"
 
+# Runner framework state directory (relative path under /workspace)
+# Defaults to ".claude" for backward compat with claude-code-runner
+RUNNER_STATE_DIR="${RUNNER_STATE_DIR:-.claude}"
+FRAMEWORK_DATA_PATH="/workspace/${RUNNER_STATE_DIR}"
+
 # Paths to sync (must match sync.sh)
-# Note: .claude uses /app/.claude (SubPath mount), others use /workspace
 SYNC_PATHS=(
     "artifacts"
     "file-uploads"
 )
-CLAUDE_DATA_PATH="/app/.claude"
 
 # Error handler
 error_exit() {
@@ -57,19 +60,22 @@ echo "========================================="
 
 # Create workspace structure
 echo "Creating workspace structure..."
-# .claude is mounted at /app/.claude via SubPath (same location as runner container)
-mkdir -p "${CLAUDE_DATA_PATH}" || error_exit "Failed to create .claude directory"
-mkdir -p "${CLAUDE_DATA_PATH}/debug" || error_exit "Failed to create .claude/debug directory"
+# Create the framework data directory (e.g. /workspace/.claude or /workspace/.adk)
+mkdir -p "${FRAMEWORK_DATA_PATH}" || error_exit "Failed to create ${RUNNER_STATE_DIR} directory"
+# Only create .claude-specific subdirectories for claude-code-runner
+if [ "${RUNNER_STATE_DIR}" = ".claude" ]; then
+    mkdir -p "${FRAMEWORK_DATA_PATH}/debug" || error_exit "Failed to create .claude/debug directory"
+fi
 mkdir -p /workspace/artifacts || error_exit "Failed to create artifacts directory"
 mkdir -p /workspace/file-uploads || error_exit "Failed to create file-uploads directory"
 mkdir -p /workspace/repos || error_exit "Failed to create repos directory"
 
 # Set ownership to runner user (works on standard K8s, may fail on SELinux/SCC)
-chown -R 1001:0 "${CLAUDE_DATA_PATH}" /workspace/artifacts /workspace/file-uploads /workspace/repos 2>/dev/null || true
+chown -R 1001:0 "${FRAMEWORK_DATA_PATH}" /workspace/artifacts /workspace/file-uploads /workspace/repos 2>/dev/null || true
 
-# Set permissions for .claude (best-effort; may be restricted by SCC)
+# Set permissions for framework data dir (best-effort; may be restricted by SCC)
 # If the SCC assigns an fsGroup, the directory should already be writable.
-chmod -R 777 "${CLAUDE_DATA_PATH}" 2>/dev/null || echo "Warning: failed to chmod ${CLAUDE_DATA_PATH} (continuing)"
+chmod -R 777 "${FRAMEWORK_DATA_PATH}" 2>/dev/null || echo "Warning: failed to chmod ${FRAMEWORK_DATA_PATH} (continuing)"
 
 # Other directories - standard permissions since chown sets ownership to runner user
 chmod 755 /workspace/artifacts 2>/dev/null || true
@@ -110,16 +116,16 @@ echo "Checking for existing session state in S3..."
 if rclone --config /tmp/.config/rclone/rclone.conf lsf "${S3_PATH}/" 2>/dev/null | grep -q .; then
     echo "Found existing session state, downloading from S3..."
 
-    # Download .claude data to /app/.claude (SubPath mount matches runner container)
-    if rclone --config /tmp/.config/rclone/rclone.conf lsf "${S3_PATH}/.claude/" 2>/dev/null | grep -q .; then
-        echo "  Downloading .claude/..."
-        rclone --config /tmp/.config/rclone/rclone.conf copy "${S3_PATH}/.claude/" "${CLAUDE_DATA_PATH}/" \
+    # Download framework state data to the framework data path
+    if rclone --config /tmp/.config/rclone/rclone.conf lsf "${S3_PATH}/${RUNNER_STATE_DIR}/" 2>/dev/null | grep -q .; then
+        echo "  Downloading ${RUNNER_STATE_DIR}/..."
+        rclone --config /tmp/.config/rclone/rclone.conf copy "${S3_PATH}/${RUNNER_STATE_DIR}/" "${FRAMEWORK_DATA_PATH}/" \
             --copy-links \
             --transfers 8 \
             --fast-list \
-            --progress 2>&1 || echo "  Warning: failed to download .claude"
+            --progress 2>&1 || echo "  Warning: failed to download ${RUNNER_STATE_DIR}"
     else
-        echo "  No data for .claude/"
+        echo "  No data for ${RUNNER_STATE_DIR}/"
     fi
 
     # Download other sync paths to /workspace
@@ -144,9 +150,9 @@ fi
 # Set ownership and permissions on subdirectories after S3 download
 echo "Setting ownership and permissions on subdirectories..."
 # Try chown first (works on standard K8s), fall back to 777 if blocked by SELinux/SCC
-chown -R 1001:0 "${CLAUDE_DATA_PATH}" /workspace/artifacts /workspace/file-uploads /workspace/repos 2>/dev/null || true
-# .claude needs 777 for SDK internals
-chmod -R 777 "${CLAUDE_DATA_PATH}" 2>/dev/null || true
+chown -R 1001:0 "${FRAMEWORK_DATA_PATH}" /workspace/artifacts /workspace/file-uploads /workspace/repos 2>/dev/null || true
+# Framework data dir needs 777 for SDK internals
+chmod -R 777 "${FRAMEWORK_DATA_PATH}" 2>/dev/null || true
 # repos also needs write access for runtime repo additions (clone_repo_at_runtime)
 # See security rationale above for why 777 is used
 chmod -R 755 /workspace/artifacts 2>/dev/null || true

@@ -50,7 +50,7 @@ var _ = Describe("Display Name Handler", Label(test_constants.LabelUnit, test_co
 		K8sClientMw = fakeClients.GetK8sClient()
 
 		// Clear environment variables for clean test state
-		os.Unsetenv("CLAUDE_CODE_USE_VERTEX")
+		os.Unsetenv("USE_VERTEX")
 		os.Unsetenv("ANTHROPIC_VERTEX_PROJECT_ID")
 		os.Unsetenv("CLOUD_ML_REGION")
 	})
@@ -345,31 +345,31 @@ var _ = Describe("Display Name Handler", Label(test_constants.LabelUnit, test_co
 	Context("Environment Configuration", func() {
 		Describe("Vertex AI Configuration", func() {
 			It("Should detect Vertex AI enabled configuration", func() {
-				os.Setenv("CLAUDE_CODE_USE_VERTEX", "1")
+				os.Setenv("USE_VERTEX", "1")
 				os.Setenv("ANTHROPIC_VERTEX_PROJECT_ID", "test-gcp-project")
 				os.Setenv("CLOUD_ML_REGION", "us-east5")
 
 				// This tests the environment detection logic
 				// We can't easily test the full getAnthropicClient without real credentials
 				// but we can verify the environment variables are read correctly
-				Expect(os.Getenv("CLAUDE_CODE_USE_VERTEX")).To(Equal("1"))
+				Expect(os.Getenv("USE_VERTEX")).To(Equal("1"))
 				Expect(os.Getenv("ANTHROPIC_VERTEX_PROJECT_ID")).To(Equal("test-gcp-project"))
 				Expect(os.Getenv("CLOUD_ML_REGION")).To(Equal("us-east5"))
 			})
 
 			It("Should handle missing Vertex configuration gracefully", func() {
-				os.Setenv("CLAUDE_CODE_USE_VERTEX", "1")
+				os.Setenv("USE_VERTEX", "1")
 				// Missing ANTHROPIC_VERTEX_PROJECT_ID
 
 				// The actual function would return an error in this case
 				// This test verifies the environment setup for that scenario
-				Expect(os.Getenv("CLAUDE_CODE_USE_VERTEX")).To(Equal("1"))
+				Expect(os.Getenv("USE_VERTEX")).To(Equal("1"))
 				Expect(os.Getenv("ANTHROPIC_VERTEX_PROJECT_ID")).To(Equal(""))
 			})
 
 			It("Should default to API key mode when Vertex disabled", func() {
 				// Default environment - Vertex not enabled
-				Expect(os.Getenv("CLAUDE_CODE_USE_VERTEX")).NotTo(Equal("1"))
+				Expect(os.Getenv("USE_VERTEX")).NotTo(Equal("1"))
 			})
 		})
 	})

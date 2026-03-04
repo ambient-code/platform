@@ -390,4 +390,3 @@ For issues or questions:
 - Check operator logs: `oc logs -f deployment/agentic-operator -n ambient-code`
 - Check pod logs: `oc logs {pod-name} -c state-sync -n {namespace}`
 - File an issue: [GitHub Issues](https://github.com/gkrumbac/vTeam/issues)
-

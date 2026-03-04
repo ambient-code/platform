@@ -51,5 +51,3 @@ export async function POST(
     return Response.json({ error: 'Failed to create project key' }, { status: 500 });
   }
 }
-
-

@@ -179,7 +179,7 @@ jobs:
           Updated Amber's dependency knowledge with current versions from:
           - components/backend/go.mod
           - components/operator/go.mod
-          - components/runners/claude-code-runner/pyproject.toml
+          - components/runners/ambient-runner/pyproject.toml
           - components/frontend/package.json
 
           This ensures Amber has accurate knowledge of our dependency stack

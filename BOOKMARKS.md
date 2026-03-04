@@ -102,7 +102,7 @@ Architecture patterns for React components.
 
 Operator development, watch patterns, reconciliation loop.
 
-### [Runner README](components/runners/claude-code-runner/README.md)
+### [Runner README](components/runners/ambient-runner/README.md)
 
 Python runner development, Claude Code SDK integration.
 

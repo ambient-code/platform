@@ -7,7 +7,7 @@ set -euo pipefail
 # - Tests OpenShift authentication
 # - Validates project and resource existence
 # - Tests service deployments and health
-# - Tests OpenShift Routes accessibility  
+# - Tests OpenShift Routes accessibility
 # - Tests backend API endpoints with real OpenShift tokens
 # - Validates role-based access controls
 
@@ -41,7 +41,7 @@ run_test() {
   local test_name="$1"
   shift
   TESTS_RUN=$((TESTS_RUN + 1))
-  
+
   log "Running test: $test_name"
   if "$@"; then
     pass "$test_name"
@@ -57,7 +57,7 @@ wait_http_ok() {
   local timeout="${2:-$TIMEOUT}"
   local delay=2
   local start=$(date +%s)
-  
+
   while true; do
     if curl -fsS --max-time 10 -k "$url" >/dev/null 2>&1; then
       return 0
@@ -75,10 +75,10 @@ wait_http_ok() {
 #########################
 test_crc_status() {
   command -v crc >/dev/null 2>&1 || return 1
-  
+
   local crc_status
   crc_status=$(crc status -o json 2>/dev/null | jq -r '.crcStatus // "Unknown"' 2>/dev/null || echo "Unknown")
-  
+
   [[ "$crc_status" == "Running" ]]
 }
 
@@ -111,10 +111,10 @@ test_deployments_ready() {
   # Check if deployments exist and are ready
   local backend_ready
   backend_ready=$(oc get deployment vteam-backend -n "$PROJECT_NAME" -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
-  
+
   local frontend_ready
   frontend_ready=$(oc get deployment vteam-frontend -n "$PROJECT_NAME" -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
-  
+
   [[ "$backend_ready" -gt 0 ]] && [[ "$frontend_ready" -gt 0 ]]
 }
 
@@ -131,9 +131,9 @@ test_routes_exist() {
 test_backend_health() {
   local backend_host
   backend_host=$(oc get route vteam-backend -n "$PROJECT_NAME" -o jsonpath='{.spec.host}' 2>/dev/null || echo "")
-  
+
   [[ -n "$backend_host" ]] || return 1
-  
+
   local backend_url="https://$backend_host/health"
   wait_http_ok "$backend_url" "$TIMEOUT"
 }
@@ -141,9 +141,9 @@ test_backend_health() {
 test_frontend_reachable() {
   local frontend_host
   frontend_host=$(oc get route vteam-frontend -n "$PROJECT_NAME" -o jsonpath='{.spec.host}' 2>/dev/null || echo "")
-  
+
   [[ -n "$frontend_host" ]] || return 1
-  
+
   local frontend_url="https://$frontend_host"
   wait_http_ok "$frontend_url" "$TIMEOUT"
 }
@@ -151,15 +151,15 @@ test_frontend_reachable() {
 test_backend_api_with_token() {
   local backend_host
   backend_host=$(oc get route vteam-backend -n "$PROJECT_NAME" -o jsonpath='{.spec.host}' 2>/dev/null || echo "")
-  
+
   [[ -n "$backend_host" ]] || return 1
-  
+
   # Get admin token
   local admin_token
   admin_token=$(oc create token dev-user-admin -n "$PROJECT_NAME" --duration=10m 2>/dev/null || echo "")
-  
+
   [[ -n "$admin_token" ]] || return 1
-  
+
   # Test projects API with admin token
   local api_url="https://$backend_host/api/projects"
   local status
@@ -167,31 +167,31 @@ test_backend_api_with_token() {
     "$api_url" \
     -H "Authorization: Bearer $admin_token" \
     -k 2>/dev/null || echo "000")
-  
+
   # Accept 200 (success) or 204 (no content) as valid responses
   echo "$status" | grep -Eq '^(200|204)$'
 }
 
 test_rbac_permissions() {
   # Test different service account permissions
-  
+
   # Admin should be able to create resources
   local admin_can_create
   admin_can_create=$(oc auth can-i create projects --as=system:serviceaccount:"$PROJECT_NAME":dev-user-admin 2>/dev/null || echo "no")
-  
+
   # View should not be able to create resources
   local view_cannot_create
   view_cannot_create=$(oc auth can-i create deployments --as=system:serviceaccount:"$PROJECT_NAME":dev-user-view -n "$PROJECT_NAME" 2>/dev/null || echo "no")
-  
+
   [[ "$admin_can_create" == "yes" ]] && [[ "$view_cannot_create" == "no" ]]
 }
 
 test_openshift_console_access() {
   local console_url
   console_url=$(crc console --url 2>/dev/null || echo "")
-  
+
   [[ -n "$console_url" ]] || return 1
-  
+
   # Just check if the console URL is reachable (might be slow)
   curl -fsS --max-time 5 --connect-timeout 5 "$console_url" >/dev/null 2>&1
 }
@@ -333,7 +333,7 @@ load_environment
 
 # Infrastructure tests
 run_test "CRC cluster is running" test_crc_status
-run_test "OpenShift CLI authentication" test_oc_authentication  
+run_test "OpenShift CLI authentication" test_oc_authentication
 run_test "OpenShift API accessible" test_openshift_api
 run_test "Project '$PROJECT_NAME' exists" test_project_exists
 
@@ -369,7 +369,7 @@ log "Running Operator End-to-End Tests..."
 run_test "Operator creates Job from AgenticSession" test_operator_can_create_session_job
 run_test "Operator updates AgenticSession status" test_operator_updates_session_status
 
-# Health tests  
+# Health tests
 run_test "Backend health endpoint" test_backend_health
 run_test "Frontend is reachable" test_frontend_reachable
 

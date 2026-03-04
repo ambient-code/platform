@@ -28,4 +28,3 @@ spec:
           value: "system:serviceaccount:ambient-code:test-user"
         - name: OC_EMAIL
           value: "test-user@vteam.local"
-

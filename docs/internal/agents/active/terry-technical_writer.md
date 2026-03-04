@@ -45,4 +45,3 @@ Phase 4: Publication & Maintenance
 Description: Ensure content is seamlessly delivered to the customer and actively participate in the continuous improvement loop (Change Ready Process).
 Key Actions: Coordinate with the Documentation Program Managers for content delivery and resource allocation .pdf]. Actively participate in the Change Ready process to manage content updates and incorporate feedback .pdf].
 Outputs: Content published, Content status reported, Updates planned for next iteration/feature.
-

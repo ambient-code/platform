@@ -22,28 +22,28 @@ erDiagram
         string repo_url
         text prompt
     }
-    
+
     Agent {
         uuid id PK
         string name
         string repo_url
         text prompt
     }
-    
+
     Skill {
         uuid id PK
         string name
         string repo_url
         text prompt
     }
-    
+
     Task {
         uuid id PK
         string name
         string repo_url
         text prompt
     }
-    
+
     Workflow {
         uuid id PK
         string name
@@ -51,7 +51,7 @@ erDiagram
         text prompt
         uuid agent_id FK
     }
-    
+
     Session {
         uuid id PK
         string name
@@ -61,37 +61,37 @@ erDiagram
         uuid assigned_user_id FK
         uuid workflow_id FK
     }
-    
+
     WorkflowSkill {
         uuid id PK
         uuid workflow_id FK
         uuid skill_id FK
         integer position
     }
-    
+
     WorkflowTask {
         uuid id PK
         uuid workflow_id FK
         uuid task_id FK
         integer position
     }
-    
+
     %% Relationships
     User ||--o{ Session : creates
     User ||--o{ Session : assigned_to
-    
+
     Agent ||--o{ Workflow : executes_as
-    
+
     Workflow ||--o{ Session : instantiated_in
     Workflow ||--o{ WorkflowSkill : uses
     Workflow ||--o{ WorkflowTask : contains
-    
+
     Skill ||--o{ WorkflowSkill : included_in
     Task ||--o{ WorkflowTask : included_in
-    
+
     WorkflowSkill }o--|| Workflow : belongs_to
     WorkflowSkill }o--|| Skill : references
-    
+
     WorkflowTask }o--|| Workflow : belongs_to
     WorkflowTask }o--|| Task : references
 ```
@@ -106,7 +106,7 @@ All entities follow the same structure:
 - `prompt`: Optional additional prose description
 
 ### User
-**What it is**: A person who interacts with the platform  
+**What it is**: A person who interacts with the platform
 **Purpose**: Authentication, authorization, and ownership tracking
 
 **Verbs (Actions)**:
@@ -117,7 +117,7 @@ All entities follow the same structure:
 - `participates` in workflow execution
 
 ### Agent
-**What it is**: An AI entity that executes workflows with skills  
+**What it is**: An AI entity that executes workflows with skills
 **Purpose**: Autonomous workflow execution with specified capabilities
 
 **Verbs (Actions)**:
@@ -128,7 +128,7 @@ All entities follow the same structure:
 - `adapts` behavior based on context
 
 ### Skill
-**What it is**: A reusable capability or tool  
+**What it is**: A reusable capability or tool
 **Purpose**: Modular functionality that enhances agent capabilities
 
 **Verbs (Actions)**:
@@ -138,7 +138,7 @@ All entities follow the same structure:
 - `gets_combined` with other skills
 
 ### Task
-**What it is**: An individual unit of work  
+**What it is**: An individual unit of work
 **Purpose**: Atomic work definitions that can be composed into workflows
 
 **Verbs (Actions)**:
@@ -148,7 +148,7 @@ All entities follow the same structure:
 - `can_be_reused` across workflows
 
 ### Workflow
-**What it is**: A composition pattern "AS agent WITH skill1 skill2 DO task1 task2"  
+**What it is**: A composition pattern "AS agent WITH skill1 skill2 DO task1 task2"
 **Purpose**: Defines WHO (agent) with WHAT capabilities (skills) does WHICH work (tasks)
 
 **Structure**: `AS {agent} WITH {skills...} DO {tasks...}`
@@ -161,7 +161,7 @@ All entities follow the same structure:
 - `gets_instantiated` in sessions
 
 ### Session
-**What it is**: A concrete execution instance of a workflow  
+**What it is**: A concrete execution instance of a workflow
 **Purpose**: Active workspace where workflows are executed and humans can collaborate
 
 **Verbs (Actions)**:
@@ -173,11 +173,11 @@ All entities follow the same structure:
 - `notifies` assigned users
 
 ### WorkflowSkill (Junction)
-**What it is**: Links skills to workflows with ordering  
+**What it is**: Links skills to workflows with ordering
 **Purpose**: Defines WHICH skills WITH what priority
 
 ### WorkflowTask (Junction)
-**What it is**: Links tasks to workflows with ordering  
+**What it is**: Links tasks to workflows with ordering
 **Purpose**: Defines WHICH tasks in WHAT sequence
 
 ## Business Rules & State Machines

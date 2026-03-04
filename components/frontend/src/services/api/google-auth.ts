@@ -36,4 +36,3 @@ export async function getGoogleStatus(): Promise<GoogleOAuthStatus> {
 export async function disconnectGoogle(): Promise<void> {
   await apiClient.post('/auth/google/disconnect');
 }
-

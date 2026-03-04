@@ -378,9 +378,11 @@ var _ = Describe("Secrets Handler", Label(test_constants.LabelUnit, test_constan
 
 				// Assert
 				httpUtils.AssertHTTPStatus(http.StatusBadRequest)
-				httpUtils.AssertJSONContains(map[string]interface{}{
-					"error": "Invalid key 'INVALID_KEY' for ambient-runner-secrets. Only ANTHROPIC_API_KEY is allowed.",
-				})
+				var response map[string]interface{}
+				httpUtils.GetResponseJSON(&response)
+				errorMsg := response["error"].(string)
+				Expect(errorMsg).To(ContainSubstring("Invalid key 'INVALID_KEY'"))
+				Expect(errorMsg).To(ContainSubstring("ambient-runner-secrets"))
 
 				logger.Log("Successfully validated allowed keys for runner secrets")
 			})

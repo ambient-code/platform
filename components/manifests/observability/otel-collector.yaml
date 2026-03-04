@@ -16,13 +16,13 @@ data:
       batch:
         timeout: 10s
         send_batch_size: 1024
-      
+
       resource:
         attributes:
           - key: service.namespace
             value: ambient-code
             action: insert
-      
+
       memory_limiter:
         check_interval: 1s
         limit_mib: 512
@@ -32,7 +32,7 @@ data:
         endpoint: "0.0.0.0:8889"
         const_labels:
           platform: ambient_code
-      
+
       logging:
         loglevel: info
         sampling_initial: 5

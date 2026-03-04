@@ -8,20 +8,19 @@ export async function POST(
   const { name, sessionName } = await params;
   const headers = await buildForwardHeadersAsync(request);
   const body = await request.text();
-  
+
   const resp = await fetch(
     `${BACKEND_URL}/projects/${encodeURIComponent(name)}/agentic-sessions/${encodeURIComponent(sessionName)}/repos`,
-    { 
-      method: 'POST', 
+    {
+      method: 'POST',
       headers,
       body,
     }
   );
-  
+
   const data = await resp.text();
-  return new Response(data, { 
-    status: resp.status, 
-    headers: { 'Content-Type': 'application/json' } 
+  return new Response(data, {
+    status: resp.status,
+    headers: { 'Content-Type': 'application/json' }
   });
 }
-

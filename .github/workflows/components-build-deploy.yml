@@ -70,7 +70,7 @@ jobs:
             operator:
               - 'components/operator/**'
             claude-runner:
-              - 'components/runners/claude-code-runner/**'
+              - 'components/runners/ambient-runner/**'
             state-sync:
               - 'components/runners/state-sync/**'
             public-api:
@@ -104,10 +104,10 @@ jobs:
             image: quay.io/ambient_code/vteam_operator
             dockerfile: ./components/operator/Dockerfile
             changed: ${{ needs.detect-changes.outputs.operator }}
-          - name: claude-code-runner
+          - name: ambient-runner
             context: ./components/runners
             image: quay.io/ambient_code/vteam_claude_runner
-            dockerfile: ./components/runners/claude-code-runner/Dockerfile
+            dockerfile: ./components/runners/ambient-runner/Dockerfile
             changed: ${{ needs.detect-changes.outputs.claude-runner }}
           - name: state-sync
             context: ./components/runners/state-sync
@@ -236,25 +236,25 @@ jobs:
           else
             echo "frontend_tag=stage" >> $GITHUB_OUTPUT
           fi
-          
+
           if [ "${{ needs.detect-changes.outputs.backend }}" == "true" ]; then
             echo "backend_tag=${{ github.sha }}" >> $GITHUB_OUTPUT
           else
             echo "backend_tag=stage" >> $GITHUB_OUTPUT
           fi
-          
+
           if [ "${{ needs.detect-changes.outputs.operator }}" == "true" ]; then
             echo "operator_tag=${{ github.sha }}" >> $GITHUB_OUTPUT
           else
             echo "operator_tag=stage" >> $GITHUB_OUTPUT
           fi
-          
+
           if [ "${{ needs.detect-changes.outputs.claude-runner }}" == "true" ]; then
             echo "runner_tag=${{ github.sha }}" >> $GITHUB_OUTPUT
           else
             echo "runner_tag=stage" >> $GITHUB_OUTPUT
           fi
-          
+
           if [ "${{ needs.detect-changes.outputs.state-sync }}" == "true" ]; then
             echo "state_sync_tag=${{ github.sha }}" >> $GITHUB_OUTPUT
           else

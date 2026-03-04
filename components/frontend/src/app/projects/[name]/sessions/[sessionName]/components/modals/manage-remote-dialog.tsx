@@ -34,7 +34,7 @@ export function ManageRemoteDialog({
 
   const handleSave = async () => {
     if (!remoteUrl.trim()) return;
-    
+
     // Always use main branch
     await onSave(remoteUrl.trim(), "main");
   };
@@ -52,7 +52,7 @@ export function ManageRemoteDialog({
             Provide the GitHub repository URL. Branch will default to <code className="bg-muted px-1 rounded">main</code>.
           </DialogDescription>
         </DialogHeader>
-        
+
         <div className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="remote-repo-url">Repository URL *</Label>
@@ -99,4 +99,3 @@ export function ManageRemoteDialog({
     </Dialog>
   );
 }
-

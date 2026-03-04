@@ -44,4 +44,3 @@ Phase 4: Handoff & Quality Assurance (Delivery)
 Description: Prepare production requirements and collaborate closely with developers to implement the design, ensuring technical constraints are considered and design quality is maintained post-handoff.
 Key Actions: Collaborate closely with developers during implementation. Update and refine design systems, documentation, and production guides. Validate engineering work (QA steps) for definition of done from a design perspective.
 Outputs: Final production requirements, Updated design system components, Post-implementation QA check and documentation.
-

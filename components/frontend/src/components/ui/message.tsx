@@ -39,7 +39,7 @@ const defaultComponents: Components = {
     // Convert children to string to check length
     const codeContent = String(children || '');
     const isShortCode = codeContent.length <= 50 && !codeContent.includes('\n');
-    
+
     // Treat short code blocks as inline
     if (inline || isShortCode) {
       return (
@@ -51,7 +51,7 @@ const defaultComponents: Components = {
         </code>
       );
     }
-    
+
     // Full code blocks for longer content
     return (
       <pre className="bg-muted text-foreground py-3 rounded text-xs overflow-x-auto border my-2">

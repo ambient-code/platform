@@ -54,7 +54,7 @@ export function CustomWorkflowDialog({
             Enter the Git repository URL and optional path for your custom workflow.
           </DialogDescription>
         </DialogHeader>
-        
+
         <div className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="workflow-url">Git Repository URL *</Label>
@@ -120,4 +120,3 @@ export function CustomWorkflowDialog({
     </Dialog>
   );
 }
-

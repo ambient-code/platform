@@ -28,19 +28,19 @@ type AgenticSessionStatus struct {
 type AgenticSessionStatus struct {
     // ObservedGeneration - which version of spec we've processed
     ObservedGeneration int64 `json:"observedGeneration,omitempty"`
-    
+
     // Conditions - detailed, timestamped status checks (K8s standard)
     Conditions []metav1.Condition `json:"conditions,omitempty"`
-    
+
     // Phase - high-level summary (derived from conditions)
     Phase string `json:"phase,omitempty"`
-    
+
     // StartTime - when job started
     StartTime *metav1.Time `json:"startTime,omitempty"`
-    
+
     // CompletionTime - when job finished
     CompletionTime *metav1.Time `json:"completionTime,omitempty"`
-    
+
     // Additional fields for UI/metrics
     RunnerPodName string `json:"runnerPodName,omitempty"`
     JobName       string `json:"jobName,omitempty"`
@@ -53,25 +53,25 @@ type AgenticSessionStatus struct {
 const (
     // ConditionTypeReady - Overall readiness (rolling up all conditions)
     ConditionTypeReady = "Ready"
-    
+
     // ConditionTypePVCReady - Workspace PVC is provisioned and bound
     ConditionTypePVCReady = "PVCReady"
-    
+
     // ConditionTypeSecretsReady - Required secrets exist and are accessible
     ConditionTypeSecretsReady = "SecretsReady"
-    
+
     // ConditionTypeJobCreated - Kubernetes Job has been created
     ConditionTypeJobCreated = "JobCreated"
-    
+
     // ConditionTypePodScheduled - Pod has been scheduled to a node
     ConditionTypePodScheduled = "PodScheduled"
-    
+
     // ConditionTypeRunnerStarted - Runner container is running
     ConditionTypeRunnerStarted = "RunnerStarted"
-    
+
     // ConditionTypeCompleted - Session has completed successfully
     ConditionTypeCompleted = "Completed"
-    
+
     // ConditionTypeFailed - Session has failed (permanent failure)
     ConditionTypeFailed = "Failed"
 )
@@ -283,19 +283,19 @@ func determinePhase(conditions []metav1.Condition) string {
     if getCondition(conditions, ConditionTypeCompleted).Status == metav1.ConditionTrue {
         return PhaseCompleted
     }
-    
+
     // Check running state
     runnerStarted := getCondition(conditions, ConditionTypeRunnerStarted)
     if runnerStarted.Status == metav1.ConditionTrue {
         return PhaseRunning
     }
-    
+
     // Check creating state
     jobCreated := getCondition(conditions, ConditionTypeJobCreated)
     if jobCreated.Status == metav1.ConditionTrue {
         return PhaseCreating
     }
-    
+
     // Default to Pending if nothing else matches
     return PhasePending
 }
@@ -313,7 +313,7 @@ func (r *SessionReconciler) updateCondition(
     message string,
 ) error {
     conditions, _ := getConditions(session)
-    
+
     // Find existing condition
     found := false
     for i := range conditions {
@@ -329,7 +329,7 @@ func (r *SessionReconciler) updateCondition(
             break
         }
     }
-    
+
     // Add new condition if not found
     if !found {
         conditions = append(conditions, metav1.Condition{
@@ -341,7 +341,7 @@ func (r *SessionReconciler) updateCondition(
             ObservedGeneration: session.GetGeneration(),
         })
     }
-    
+
     // Update status
     return r.updateStatus(ctx, session, map[string]interface{}{
         "conditions":          conditions,
@@ -372,25 +372,25 @@ func (r *SessionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
     if err := r.Get(ctx, req.NamespacedName, session); err != nil {
         return ctrl.Result{}, client.IgnoreNotFound(err)
     }
-    
+
     // 2. Check if deletion is in progress
     if !session.GetDeletionTimestamp().IsZero() {
         return r.handleDeletion(ctx, session)
     }
-    
+
     // 3. Get current phase from status
     currentPhase := getPhase(session)
-    
+
     // 4. Handle terminal phases (no-op)
     if isTerminalPhase(currentPhase) {
         return ctrl.Result{}, nil
     }
-    
+
     // 5. Handle Stopped phase (cleanup)
     if currentPhase == PhaseStopped {
         return r.handleStopped(ctx, session)
     }
-    
+
     // 6. Main reconciliation logic
     return r.reconcileSession(ctx, session)
 }
@@ -407,7 +407,7 @@ func (r *SessionReconciler) reconcileSession(ctx context.Context, session *unstr
         return ctrl.Result{RequeueAfter: 5 * time.Second}, nil // Wait for PVC
     }
     r.updateCondition(ctx, session, ConditionTypePVCReady, metav1.ConditionTrue, "Bound", "PVC is bound and ready")
-    
+
     // Step 2: Verify secrets exist
     secretsReady, missingSecret, err := r.verifySecrets(ctx, session)
     if err != nil {
@@ -419,7 +419,7 @@ func (r *SessionReconciler) reconcileSession(ctx context.Context, session *unstr
         return ctrl.Result{RequeueAfter: 30 * time.Second}, nil // Retry less frequently for secrets
     }
     r.updateCondition(ctx, session, ConditionTypeSecretsReady, metav1.ConditionTrue, "AllSecretsFound", "All required secrets are present")
-    
+
     // Step 3: Ensure Job exists
     jobExists, job, err := r.ensureJob(ctx, session)
     if err != nil {
@@ -431,13 +431,13 @@ func (r *SessionReconciler) reconcileSession(ctx context.Context, session *unstr
         r.updateCondition(ctx, session, ConditionTypeJobCreated, metav1.ConditionTrue, "Created", "Job created successfully")
         return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
     }
-    
+
     // Step 4: Monitor pod status
     pod, err := r.getPodForJob(ctx, job)
     if err != nil {
         return ctrl.Result{RequeueAfter: 5 * time.Second}, nil // Retry
     }
-    
+
     // Check pod scheduling
     if pod.Spec.NodeName != "" {
         r.updateCondition(ctx, session, ConditionTypePodScheduled, metav1.ConditionTrue, "Scheduled", fmt.Sprintf("Pod scheduled on node %s", pod.Spec.NodeName))
@@ -450,13 +450,13 @@ func (r *SessionReconciler) reconcileSession(ctx context.Context, session *unstr
             }
         }
     }
-    
+
     // Step 5: Check runner container status
     for _, cs := range pod.Status.ContainerStatuses {
         if cs.Name != "ambient-code-runner" {
             continue
         }
-        
+
         // Container running
         if cs.State.Running != nil {
             r.updateCondition(ctx, session, ConditionTypeRunnerStarted, metav1.ConditionTrue, "ContainerRunning", "Runner container is active")
@@ -470,7 +470,7 @@ func (r *SessionReconciler) reconcileSession(ctx context.Context, session *unstr
             }
             return ctrl.Result{RequeueAfter: 5 * time.Second}, nil // Keep monitoring
         }
-        
+
         // Container waiting (potential errors)
         if cs.State.Waiting != nil {
             waiting := cs.State.Waiting
@@ -481,7 +481,7 @@ func (r *SessionReconciler) reconcileSession(ctx context.Context, session *unstr
             case "CrashLoopBackOff":
                 isPermanentError = cs.RestartCount > 3 // Permanent after 3 retries
             }
-            
+
             if isPermanentError {
                 r.updateCondition(ctx, session, ConditionTypeRunnerStarted, metav1.ConditionFalse, waiting.Reason, waiting.Message)
                 r.updateCondition(ctx, session, ConditionTypeFailed, metav1.ConditionTrue, waiting.Reason, fmt.Sprintf("Runner container failed: %s", waiting.Message))
@@ -498,7 +498,7 @@ func (r *SessionReconciler) reconcileSession(ctx context.Context, session *unstr
                 return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
             }
         }
-        
+
         // Container terminated
         if cs.State.Terminated != nil {
             term := cs.State.Terminated
@@ -519,7 +519,7 @@ func (r *SessionReconciler) reconcileSession(ctx context.Context, session *unstr
             return ctrl.Result{}, nil // Terminal state
         }
     }
-    
+
     return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 }
 ```
@@ -596,7 +596,7 @@ status:
       type: integer
       format: int64
       description: "Generation of spec that was last processed"
-    
+
     conditions:
       type: array
       items:
@@ -621,30 +621,30 @@ status:
           observedGeneration:
             type: integer
             format: int64
-    
+
     startTime:
       type: string
       format: date-time
-    
+
     completionTime:
       type: string
       format: date-time
-    
+
     jobName:
       type: string
-    
+
     runnerPodName:
       type: string
-    
+
     # Legacy fields (keep for backward compatibility)
     phase:
       type: string
       enum: [Pending, Creating, Running, Completed, Failed, Stopped]
-    
+
     message:
       type: string
       description: "DEPRECATED: Use conditions instead"
-    
+
     is_error:
       type: boolean
       description: "DEPRECATED: Check Failed condition instead"
@@ -659,4 +659,3 @@ status:
 5. **Update operator** - Implement condition-based reconciliation
 
 Would you like me to start implementing Phase 1 (CRD update + condition helpers)?
-

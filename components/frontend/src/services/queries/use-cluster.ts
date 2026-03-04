@@ -17,4 +17,3 @@ export function useClusterInfo() {
     retry: 3, // Retry a few times on failure
   });
 }
-

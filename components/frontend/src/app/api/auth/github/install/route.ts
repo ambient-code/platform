@@ -14,5 +14,3 @@ export async function POST(request: Request) {
   const data = await resp.text()
   return new Response(data, { status: resp.status, headers: { 'Content-Type': 'application/json' } })
 }
-
-

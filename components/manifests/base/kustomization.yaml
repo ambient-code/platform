@@ -20,6 +20,7 @@ resources:
 - ambient-api-server-db.yml
 - ambient-api-server-service.yml
 - unleash-deployment.yaml
+- agent-registry-configmap.yaml
 
 # Model manifest ConfigMap (single source of truth for available models)
 # Feature flags ConfigMap (generic flags synced to Unleash on startup)

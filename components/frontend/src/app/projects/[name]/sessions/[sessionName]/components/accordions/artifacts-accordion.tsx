@@ -45,8 +45,8 @@ export function ArtifactsAccordion({
           <NotepadText className="h-4 w-4" />
           <span>Artifacts</span>
           {fileCount > 0 && (
-            <Badge 
-              variant="secondary" 
+            <Badge
+              variant="secondary"
               className="ml-auto mr-2"
               aria-live="polite"
               aria-atomic="true"
@@ -62,7 +62,7 @@ export function ArtifactsAccordion({
           <p className="text-sm text-muted-foreground">
             Artifacts created by the AI will be added here.
           </p>
-          
+
           {/* File Browser for Artifacts */}
           <div className="overflow-hidden">
             {/* Header with breadcrumbs and actions */}
@@ -70,16 +70,16 @@ export function ArtifactsAccordion({
               <div className="flex items-center gap-1 text-xs text-muted-foreground min-w-0 flex-1">
                 {/* Back button when in subfolder or viewing file */}
                 {(currentSubPath || viewingFile) && (
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={onNavigateBack}
                     className="h-6 px-1.5 mr-1"
                   >
                     ← Back
                   </Button>
                 )}
-                
+
                 {/* Breadcrumb path */}
                 <Folder className="inline h-3 w-3 mr-1 flex-shrink-0" />
                 <code className="bg-muted px-1 py-0.5 rounded text-xs truncate">
@@ -103,17 +103,17 @@ export function ArtifactsAccordion({
                 </Button>
               ) : (
                 /* Refresh button when not viewing file */
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={onRefresh} 
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onRefresh}
                   className="h-6 px-2 flex-shrink-0"
                 >
                   <FolderSync className="h-3 w-3" />
                 </Button>
               )}
             </div>
-            
+
             {/* Content area */}
             <div className="p-2 max-h-64 overflow-y-auto">
               {isLoadingFile ? (
@@ -136,7 +136,7 @@ export function ArtifactsAccordion({
                 </div>
               ) : (
                 /* File tree */
-                <FileTree 
+                <FileTree
                   nodes={files.map((item): FileTreeNode => ({
                     name: item.name,
                     path: item.path,
@@ -153,4 +153,3 @@ export function ArtifactsAccordion({
     </AccordionItem>
   );
 }
-

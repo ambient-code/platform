@@ -1,3 +1,14 @@
 {
-  "flags": []
+  "flags": [
+    {
+      "name": "runner.gemini-cli.enabled",
+      "description": "Enable Gemini CLI runner type for session creation",
+      "tags": [
+        {
+          "type": "scope",
+          "value": "workspace"
+        }
+      ]
+    }
+  ]
 }

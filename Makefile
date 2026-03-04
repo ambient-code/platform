@@ -150,7 +150,7 @@ build-operator: ## Build operator image
 build-runner: ## Build Claude Code runner image
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building runner with $(CONTAINER_ENGINE)..."
 	@cd components/runners && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
-		-t $(RUNNER_IMAGE) -f claude-code-runner/Dockerfile .
+		-t $(RUNNER_IMAGE) -f ambient-runner/Dockerfile .
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Runner built: $(RUNNER_IMAGE)"
 
 build-state-sync: ## Build state-sync image for S3 persistence
@@ -816,7 +816,7 @@ _build-and-load: ## Internal: Build and load images
 	@echo "  Building operator ($(PLATFORM))..."
 	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) -t $(OPERATOR_IMAGE) components/operator $(QUIET_REDIRECT)
 	@echo "  Building runner ($(PLATFORM))..."
-	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) -t $(RUNNER_IMAGE) -f components/runners/claude-code-runner/Dockerfile components/runners $(QUIET_REDIRECT)
+	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) -t $(RUNNER_IMAGE) -f components/runners/ambient-runner/Dockerfile components/runners $(QUIET_REDIRECT)
 	@echo "  Building api-server ($(PLATFORM))..."
 	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) -t $(API_SERVER_IMAGE) components/ambient-api-server $(QUIET_REDIRECT)
 	@echo "  Tagging images with localhost prefix..."
@@ -924,7 +924,7 @@ _create-operator-config: ## Internal: Create operator config from environment va
 		echo "    Using direct Anthropic API (provide ANTHROPIC_API_KEY in workspace settings)"; \
 	fi; \
 	kubectl create configmap operator-config -n $(NAMESPACE) \
-		--from-literal=CLAUDE_CODE_USE_VERTEX="$$USE_VERTEX" \
+		--from-literal=USE_VERTEX="$$USE_VERTEX" \
 		--from-literal=CLOUD_ML_REGION="$$CLOUD_REGION" \
 		--from-literal=ANTHROPIC_VERTEX_PROJECT_ID="$$VERTEX_PROJECT_ID" \
 		--from-literal=GOOGLE_APPLICATION_CREDENTIALS="/app/vertex/ambient-code-key.json" \

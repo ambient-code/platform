@@ -11,5 +11,3 @@ rules:
 - apiGroups: ["vteam.ambient-code"]
   resources: ["projectsettings/status"]
   verbs: ["get", "update", "patch"]
-
-

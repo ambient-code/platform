@@ -231,4 +231,3 @@ export async function configureGitRemote(
 }
 
 // Removed: synchronizeGit - agent handles all git operations
-
