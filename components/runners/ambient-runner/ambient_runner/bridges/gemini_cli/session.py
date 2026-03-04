@@ -117,9 +117,11 @@ class GeminiSessionWorker:
 
         env = {k: v for k, v in os.environ.items() if k not in _GEMINI_ENV_BLOCKLIST}
         if self._use_vertex:
-            # Vertex AI mode: ensure API keys are NOT set (they take precedence
-            # and bypass Vertex). GOOGLE_CLOUD_PROJECT, GOOGLE_CLOUD_LOCATION,
-            # and GOOGLE_APPLICATION_CREDENTIALS should already be in os.environ.
+            # Vertex AI mode: Gemini CLI requires GOOGLE_GENAI_USE_VERTEXAI=true
+            # to use Vertex instead of AI Studio. API keys must be unset (they
+            # take precedence and bypass Vertex).
+            # See: https://geminicli.com/docs/get-started/authentication/
+            env["GOOGLE_GENAI_USE_VERTEXAI"] = "true"
             env.pop("GEMINI_API_KEY", None)
             env.pop("GOOGLE_API_KEY", None)
         elif self._api_key:
