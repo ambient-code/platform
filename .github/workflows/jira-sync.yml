@@ -1,0 +1,536 @@
+name: Jira ↔ GitHub Sync
+
+# Keeps GitHub PRs, GitHub Issues, and Jira in two-way sync.
+# Runs on a schedule and on key PR lifecycle events.
+#
+# PHASES:
+#   1. Open PR Health Check  - ensure every active PR has a Jira, is In Progress
+#   2. Merged PR Audit       - resolve Jira tickets for PRs merged in the last 7 days
+#   3. GitHub Issue Sync     - ensure every open GH issue has a Jira ticket
+#   4. Sprint Epic Alignment - flag sprint items missing an epic link
+#
+# REQUIRED SECRETS:
+#   CLAUDE_CODE_OAUTH_TOKEN  - Claude Code OAuth token
+#   JIRA_BASE_URL            - e.g. https://issues.redhat.com
+#   JIRA_USERNAME            - Jira account email / username
+#   JIRA_API_TOKEN           - Jira API token or password
+#   JIRA_BOARD_ID            - Jira board ID (23005)
+
+on:
+  schedule:
+    - cron: '0 8 * * 1-5'   # Weekdays at 8 AM UTC
+  workflow_dispatch:          # Manual trigger
+  pull_request:
+    types: [opened, ready_for_review, closed]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  id-token: write
+
+jobs:
+  sync:
+    name: Jira ↔ GitHub Sync
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Sync Agent
+        uses: anthropics/claude-code-action@v1
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          JIRA_USERNAME: ${{ secrets.JIRA_USERNAME }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          JIRA_BOARD_ID: ${{ secrets.JIRA_BOARD_ID || '23005' }}
+          JIRA_PROJECT: RHOAIENG
+          TRIGGER_EVENT: ${{ github.event_name }}
+          TRIGGER_PR_NUMBER: ${{ github.event.pull_request.number }}
+          TRIGGER_PR_ACTION: ${{ github.event.action }}
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          allowed_tools: 'Bash'
+          prompt: |
+            You are the Jira ↔ GitHub sync agent for the Ambient Code Platform team.
+
+            Your job is to keep GitHub PRs, GitHub Issues, and Jira in two-way sync.
+            Execute each phase carefully and collect results for the final summary.
+
+            ## Environment
+
+            - GitHub repo: ambient-code/platform
+            - Jira project: $JIRA_PROJECT
+            - Jira board ID: $JIRA_BOARD_ID
+            - Jira base URL: $JIRA_BASE_URL
+            - Trigger: $TRIGGER_EVENT (PR: #$TRIGGER_PR_NUMBER action=$TRIGGER_PR_ACTION)
+            - Today's date: $(date -u +%Y-%m-%d)
+            - Stale threshold: 14 days
+
+            ## Contributor allowlist
+
+            Only process PRs authored by these GitHub users (plus Amber bot PRs — see below):
+            mprpic, ktdreyer, adalton, kahowell, jeremyeder, markturansky, jwm4, Gkrumbach07, maskarb
+
+            ## Jira API helpers
+
+            Use these bash functions throughout. Set them up first:
+
+            ```bash
+            JIRA_AUTH=$(echo -n "$JIRA_USERNAME:$JIRA_API_TOKEN" | base64)
+
+            jira_get() {
+              curl -sf -H "Authorization: Basic $JIRA_AUTH" \
+                   -H "Content-Type: application/json" \
+                   "$JIRA_BASE_URL/rest/api/2/$1"
+            }
+
+            jira_post() {
+              curl -sf -X POST \
+                   -H "Authorization: Basic $JIRA_AUTH" \
+                   -H "Content-Type: application/json" \
+                   -d "$2" \
+                   "$JIRA_BASE_URL/rest/api/2/$1"
+            }
+
+            jira_put() {
+              curl -sf -X PUT \
+                   -H "Authorization: Basic $JIRA_AUTH" \
+                   -H "Content-Type: application/json" \
+                   -d "$2" \
+                   "$JIRA_BASE_URL/rest/api/2/$1"
+            }
+            ```
+
+            ---
+
+            ## PHASE 0 — Setup
+
+            1. Fetch the active sprint ID:
+               ```bash
+               ACTIVE_SPRINT=$(jira_get "agile/1.0/board/$JIRA_BOARD_ID/sprint?state=active" \
+                 | python3 -c "import sys,json; s=json.load(sys.stdin)['values']; print(s[0]['id'] if s else '')")
+               echo "Active sprint: $ACTIVE_SPRINT"
+               ```
+
+            2. Fetch all open PRs (non-draft, not dependabot):
+               ```bash
+               gh pr list --repo ambient-code/platform --state open --limit 100 \
+                 --json number,title,author,body,labels,headRefName,updatedAt,isDraft \
+                 | python3 -c "
+               import sys, json
+               prs = json.load(sys.stdin)
+               contributors = {'mprpic','ktdreyer','adalton','kahowell','jeremyeder','markturansky','jwm4','Gkrumbach07','maskarb'}
+               amber_bot = 'github-actions'  # amber-generated PRs use this login
+               valid = []
+               for pr in prs:
+                   if pr['isDraft']: continue
+                   login = pr['author']['login']
+                   if login == 'dependabot[bot]': continue
+                   # Allow amber-generated PRs (bot) and contributor PRs
+                   is_amber = login == amber_bot and any(l['name'] == 'amber-generated' for l in pr['labels'])
+                   is_contributor = login in contributors
+                   if not is_amber and not is_contributor: continue
+                   pr['is_amber'] = is_amber
+                   valid.append(pr)
+               json.dump(valid, sys.stdout, indent=2)
+               " > /tmp/valid_prs.json
+               echo "Valid open PRs: $(cat /tmp/valid_prs.json | python3 -c 'import sys,json; print(len(json.load(sys.stdin)))')"
+               ```
+
+            3. Helper — extract Jira key from text:
+               ```bash
+               extract_jira_key() {
+                 echo "$1" | grep -oE 'RHOAIENG-[0-9]+' | head -1
+               }
+               ```
+
+            4. Helper — check if PR is stale (no activity in 14 days):
+               ```bash
+               is_stale() {
+                 local updated_at="$1"
+                 local days_ago=$(( ( $(date -u +%s) - $(date -u -d "$updated_at" +%s) ) / 86400 ))
+                 [ "$days_ago" -gt 14 ]
+               }
+               ```
+
+            5. Helper — prepend Jira key to PR body (first line):
+               ```bash
+               prepend_jira_to_pr() {
+                 local pr_number="$1"
+                 local jira_key="$2"
+                 local current_body=$(gh pr view "$pr_number" --repo ambient-code/platform --json body -q '.body')
+                 local new_body="**Jira:** [$jira_key]($JIRA_BASE_URL/browse/$jira_key)
+
+               $current_body"
+                 gh pr edit "$pr_number" --repo ambient-code/platform --body "$new_body"
+               }
+               ```
+
+            6. Helper — prepend Jira key to GH issue description:
+               ```bash
+               prepend_jira_to_issue() {
+                 local issue_number="$1"
+                 local jira_key="$2"
+                 local current_body=$(gh issue view "$issue_number" --repo ambient-code/platform --json body -q '.body')
+                 local new_body="**Jira:** [$jira_key]($JIRA_BASE_URL/browse/$jira_key)
+
+               $current_body"
+                 gh issue edit "$issue_number" --repo ambient-code/platform --body "$new_body"
+               }
+               ```
+
+            7. Helper — add Jira remote link to a PR or GH issue URL:
+               ```bash
+               add_jira_remote_link() {
+                 local jira_key="$1"
+                 local url="$2"
+                 local title="$3"
+                 jira_post "issue/$jira_key/remotelink" "{
+                   \"object\": {
+                     \"url\": \"$url\",
+                     \"title\": \"$title\"
+                   }
+                 }" > /dev/null
+               }
+               ```
+
+            8. Helper — get Jira issue status:
+               ```bash
+               get_jira_status() {
+                 jira_get "issue/$1?fields=status" \
+                   | python3 -c "import sys,json; print(json.load(sys.stdin)['fields']['status']['name'])"
+               }
+               ```
+
+            9. Helper — get available transitions for a Jira issue:
+               ```bash
+               get_transition_id() {
+                 local issue_key="$1"
+                 local target_status="$2"  # e.g. "In Progress" or "Resolved"
+                 jira_get "issue/$issue_key/transitions" \
+                   | python3 -c "
+               import sys, json
+               data = json.load(sys.stdin)
+               target = '$target_status'.lower()
+               for t in data['transitions']:
+                   if t['to']['name'].lower() == target:
+                       print(t['id'])
+                       break
+               "
+               }
+
+               transition_jira() {
+                 local issue_key="$1"
+                 local target_status="$2"
+                 local tid=$(get_transition_id "$issue_key" "$target_status")
+                 if [ -n "$tid" ]; then
+                   jira_post "issue/$issue_key/transitions" "{\"transition\":{\"id\":\"$tid\"}}" > /dev/null
+                   echo "  → Transitioned $issue_key to $target_status"
+                 else
+                   echo "  ⚠ No transition found for $issue_key → $target_status"
+                 fi
+               }
+               ```
+
+            10. Helper — search Jira for a matching issue by keywords:
+                ```bash
+                search_jira() {
+                  local query="$1"
+                  # URL-encode query
+                  local encoded=$(python3 -c "import urllib.parse; print(urllib.parse.quote('$query'))")
+                  jira_get "search?jql=project=$JIRA_PROJECT+AND+summary+~+\"$query\"+AND+resolution=Unresolved&maxResults=3&fields=summary,status,key" \
+                    | python3 -c "
+                import sys, json
+                data = json.load(sys.stdin)
+                issues = data.get('issues', [])
+                if issues:
+                    print(issues[0]['key'])
+                "
+                }
+                ```
+
+            11. Helper — create a Jira issue:
+                ```bash
+                create_jira_issue() {
+                  local summary="$1"
+                  local issue_type="$2"  # Task or Bug
+                  local pr_url="$3"
+                  local assignee_jira="$4"  # optional, can be empty
+                  local description="$5"
+
+                  local assignee_block=""
+                  if [ -n "$assignee_jira" ]; then
+                    assignee_block=", \"assignee\": {\"name\": \"$assignee_jira\"}"
+                  fi
+
+                  local body="{
+                    \"fields\": {
+                      \"project\": {\"key\": \"$JIRA_PROJECT\"},
+                      \"summary\": $(echo "$summary" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read().strip()))'),
+                      \"description\": $(echo "$description" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read().strip()))'),
+                      \"issuetype\": {\"name\": \"$issue_type\"}
+                      $assignee_block
+                    }
+                  }"
+
+                  local result=$(jira_post "issue" "$body")
+                  echo "$result" | python3 -c "import sys,json; print(json.load(sys.stdin)['key'])"
+                }
+                ```
+
+            12. Helper — add issue to active sprint:
+                ```bash
+                add_to_sprint() {
+                  local jira_key="$1"
+                  if [ -n "$ACTIVE_SPRINT" ]; then
+                    jira_post "agile/1.0/sprint/$ACTIVE_SPRINT/issue" \
+                      "{\"issues\":[\"$jira_key\"]}" > /dev/null
+                    echo "  → Added $jira_key to sprint $ACTIVE_SPRINT"
+                  fi
+                }
+                ```
+
+            13. GitHub login → Jira username map (best-effort):
+                ```bash
+                gh_to_jira_user() {
+                  case "$1" in
+                    mprpic)       echo "mprpic" ;;
+                    ktdreyer)     echo "kdreyer" ;;
+                    kahowell)     echo "khowell" ;;
+                    jeremyeder)   echo "jeder" ;;
+                    markturansky) echo "markturansky" ;;
+                    Gkrumbach07)  echo "gkrumbac" ;;
+                    maskarb)      echo "maskarb" ;;
+                    adalton)      echo "adalton" ;;
+                    jwm4)         echo "jwm4" ;;
+                    *)            echo "" ;;
+                  esac
+                }
+                ```
+
+            ---
+
+            ## PHASE 1 — Open PR Health Check
+
+            Work through each PR in /tmp/valid_prs.json. Use python3 to iterate:
+
+            ```bash
+            python3 << 'PYEOF'
+            import json, subprocess, os, sys
+
+            prs = json.load(open('/tmp/valid_prs.json'))
+            results = {'synced': [], 'stale': [], 'created': [], 'errors': []}
+
+            for pr in prs:
+                pr_num = pr['number']
+                title = pr['title']
+                body = pr['body'] or ''
+                updated_at = pr['updatedAt']
+                author = pr['author']['login']
+                is_amber = pr.get('is_amber', False)
+                labels = [l['name'] for l in pr['labels']]
+                pr_url = f"https://github.com/ambient-code/platform/pull/{pr_num}"
+
+                print(f"\n--- PR #{pr_num}: {title[:60]} ---")
+
+                # Write per-PR state for bash to pick up
+                with open('/tmp/current_pr.json', 'w') as f:
+                    json.dump(pr, f)
+
+                # Signal to bash script which PR we're on
+                with open('/tmp/pr_num.txt', 'w') as f:
+                    f.write(str(pr_num))
+
+            json.dump(results, open('/tmp/phase1_results.json', 'w'), indent=2)
+            PYEOF
+            ```
+
+            For each PR, perform these steps using bash (loop over the list with jq/python):
+
+            **Step 1.1 — Stale check**
+            - Calculate days since `updatedAt`
+            - If > 14 days AND no `stale` label already → run:
+              ```bash
+              gh pr edit $PR_NUM --repo ambient-code/platform --add-label "stale"
+              ```
+            - Record as stale, **skip remaining steps** for this PR
+
+            **Step 1.2 — Jira link check**
+            - Search title and body for `RHOAIENG-[0-9]+`
+            - If found → record `JIRA_KEY`, go to Step 1.4
+            - If not found → go to Step 1.3
+
+            **Step 1.3 — Jira discovery / creation** (non-stale PRs only)
+            - Search Jira using keywords from PR title
+            - If confident match found (key returned):
+              - Use that key
+              - Prepend to PR body: `**Jira:** [RHOAIENG-XXXXX](url)`
+            - If no match:
+              - Determine issue type: `Bug` if labels contain `bug` or `fix`, else `Task`
+              - For Amber PRs: no assignee
+              - For human PRs: look up Jira username via `gh_to_jira_user`
+              - Create Jira issue with PR title as summary, PR URL in description
+              - Add new issue to active sprint
+              - Prepend Jira key to PR body (first line)
+            - Use `add_jira_remote_link` to link PR URL in the Jira issue (use Jira remote link API, not body text)
+
+            **Step 1.4 — Status sync**
+            - Get current Jira status
+            - If status is `New` or `Backlog` → transition to `In Progress`
+            - Check if Jira already has a remote link to this PR URL; if not, add one via `add_jira_remote_link`
+
+            Record each PR outcome (synced / created / error) for the summary.
+
+            ---
+
+            ## PHASE 2 — Merged PR Audit (last 7 days)
+
+            **Skip this phase if the trigger is a `pull_request` event where action is `opened` or `ready_for_review`.**
+
+            ```bash
+            SINCE=$(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || \
+                    date -u -v-7d +%Y-%m-%dT%H:%M:%SZ)  # macOS fallback
+
+            gh pr list --repo ambient-code/platform --state merged --limit 50 \
+              --json number,title,author,body,mergedAt,mergeCommit \
+              | python3 -c "
+            import sys, json
+            from datetime import datetime, timezone
+            prs = json.load(sys.stdin)
+            since_str = '$SINCE'
+            # Parse since date
+            since_dt = datetime.fromisoformat(since_str.replace('Z','+00:00'))
+            contributors = {'mprpic','ktdreyer','adalton','kahowell','jeremyeder','markturansky','jwm4','Gkrumbach07','maskarb','github-actions'}
+            recent = []
+            for pr in prs:
+                if not pr.get('mergedAt'): continue
+                merged_dt = datetime.fromisoformat(pr['mergedAt'].replace('Z','+00:00'))
+                if merged_dt < since_dt: continue
+                if pr['author']['login'] not in contributors: continue
+                recent.append(pr)
+            json.dump(recent, sys.stdout, indent=2)
+            " > /tmp/merged_prs.json
+            ```
+
+            For each merged PR:
+            - Extract Jira key from title or body
+            - **Has Jira key:**
+              - Get current status
+              - If not already `Resolved` or `Done` or `Closed` → transition to `Resolved`
+              - Add a Jira comment: `PR #NUMBER merged: MERGE_COMMIT_URL`
+              - Record as resolved
+            - **No Jira key:**
+              - Record as missed (no action — note in summary only)
+
+            ---
+
+            ## PHASE 3 — GitHub Issue Sync (all open issues, all authors)
+
+            **Skip this phase if trigger is a `pull_request` event.**
+
+            ```bash
+            gh issue list --repo ambient-code/platform --state open --limit 100 \
+              --json number,title,body,author,labels,createdAt \
+              > /tmp/gh_issues.json
+            ```
+
+            For each open GH issue:
+
+            **Step 3.1 — Already has Jira?**
+            - Scan body for `RHOAIENG-[0-9]+`
+            - If found → skip (already tracked)
+
+            **Step 3.2 — Search Jira for match**
+            - Search by issue title keywords
+            - Match found:
+              - Prepend Jira key to GH issue description (first line): `**Jira:** [RHOAIENG-XXXXX](url)`
+              - Use `add_jira_remote_link` to add the GH issue URL to the Jira issue
+            - No match:
+              - Create Jira issue (type: `Task`, no assignee)
+              - Prepend Jira key to GH issue description
+              - Use `add_jira_remote_link` to link GH issue URL in Jira
+
+            Record outcomes for summary.
+
+            ---
+
+            ## PHASE 4 — Sprint Epic Alignment
+
+            **Skip this phase if trigger is a `pull_request` event.**
+
+            Fetch all issues in the active sprint that have no epic link:
+
+            ```bash
+            SPRINT_ISSUES=$(jira_get "search?jql=project=$JIRA_PROJECT+AND+sprint=$ACTIVE_SPRINT+AND+\"Epic+Link\"+is+EMPTY&fields=summary,status,key,issuetype&maxResults=100")
+            ```
+
+            For each sprint issue without an epic:
+            - Fetch the list of open Ambient team epics (search Jira for `project=RHOAIENG AND issuetype=Epic AND resolution=Unresolved AND (labels=ambient-capability OR labels=ambient OR summary~"Ambient" OR summary~"Epic:")`
+            - Attempt keyword match between issue summary and epic summaries
+            - **Confident match** (>60% keyword overlap or obvious theme match):
+              - Link the issue to the epic using the `customfield_10014` (epic link) field:
+                ```bash
+                jira_put "issue/$ISSUE_KEY" "{\"fields\":{\"customfield_10014\":\"$EPIC_KEY\"}}"
+                ```
+            - **No confident match** → add to outliers list
+
+            ---
+
+            ## FINAL — Summary Report
+
+            Create a GitHub issue titled `[Jira Sync] Summary — $(date -u +%Y-%m-%d)` with:
+
+            ```bash
+            gh issue create \
+              --repo ambient-code/platform \
+              --title "[Jira Sync] Summary — $(date -u +%Y-%m-%d)" \
+              --label "jira-sync" \
+              --body "$(cat <<'SUMMARY'
+            ## Jira ↔ GitHub Sync Report
+
+            **Run date:** $(date -u)
+            **Trigger:** $TRIGGER_EVENT
+
+            ### Phase 1 — Open PRs
+            - ✅ Synced (had or found Jira): N
+            - 🆕 Jira created: N
+            - 🟡 Marked stale: N
+            - ❌ Errors: N
+
+            ### Phase 2 — Merged PRs (last 7 days)
+            - ✅ Resolved in Jira: N
+            - ⚠️ Merged with no Jira (missed): N — [list PR numbers]
+
+            ### Phase 3 — GitHub Issues
+            - ✅ Already tracked: N
+            - 🔗 Linked to existing Jira: N
+            - 🆕 Jira created: N
+
+            ### Phase 4 — Sprint Epic Alignment
+            - ✅ Linked to epic: N
+            - 🚩 **Outliers (need human triage):** N
+
+            #### Outlier sprint items (no epic match):
+            | Jira Key | Summary | Status |
+            |----------|---------|--------|
+            | RHOAIENG-XXXXX | ... | In Progress |
+
+            SUMMARY
+            )"
+            ```
+
+            Only create the summary issue if there is something meaningful to report (at least one action taken or one outlier). If everything was already in sync, print a one-line log to stdout and exit cleanly.
+
+            ---
+
+            ## Error handling
+
+            - If any single PR or issue fails, log the error, record it in the summary, and continue to the next item. Never abort the entire run for one failure.
+            - If the Jira API returns a non-2xx response, log the full response body and skip that item.
+            - If the active sprint cannot be determined, skip the "add to sprint" step but continue all other steps.
