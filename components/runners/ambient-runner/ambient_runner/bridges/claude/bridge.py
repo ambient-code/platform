@@ -42,13 +42,12 @@ class ClaudeBridge(PlatformBridge):
     """
 
     def __init__(self) -> None:
+        super().__init__()
         self._adapter: ClaudeAgentAdapter | None = None
         self._session_manager: SessionManager | None = None
         self._obs: Any = None
-        self._context: RunnerContext | None = None
 
         # Platform state (populated by _setup_platform)
-        self._ready: bool = False
         self._first_run: bool = True
         self._configured_model: str = ""
         self._cwd_path: str = ""
@@ -57,7 +56,6 @@ class ClaudeBridge(PlatformBridge):
         self._allowed_tools: list[str] = []
         self._system_prompt: dict = {}
         self._stderr_lines: list[str] = []
-        self._last_creds_refresh: float = 0.0
 
     # ------------------------------------------------------------------
     # PlatformBridge interface

@@ -42,13 +42,12 @@ class GeminiCLIBridge(PlatformBridge):
     """
 
     def __init__(self) -> None:
+        super().__init__()
         self._session_manager: GeminiSessionManager | None = None
         self._adapter: GeminiCLIAdapter | None = None
         self._obs: Any = None
-        self._context: RunnerContext | None = None
 
         # Platform state (populated by _setup_platform)
-        self._ready: bool = False
         self._configured_model: str = ""
         self._api_key: str = ""
         self._use_vertex: bool = False
@@ -56,7 +55,6 @@ class GeminiCLIBridge(PlatformBridge):
         self._include_directories: list[str] = []
         self._mcp_settings_path: str | None = None
         self._mcp_status_cache: dict | None = None
-        self._last_creds_refresh: float = 0.0
 
     # ------------------------------------------------------------------
     # PlatformBridge interface

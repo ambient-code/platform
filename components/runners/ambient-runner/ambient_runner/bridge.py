@@ -103,6 +103,11 @@ class PlatformBridge(ABC):
     - ``get_error_context()`` — returns extra error info for failed runs
     """
 
+    def __init__(self) -> None:
+        self._context: Optional[RunnerContext] = None
+        self._ready: bool = False
+        self._last_creds_refresh: float = 0.0
+
     # ------------------------------------------------------------------
     # Required (abstract)
     # ------------------------------------------------------------------
@@ -143,33 +148,31 @@ class PlatformBridge(ABC):
 
     def set_context(self, context: RunnerContext) -> None:
         """Store the runner context (called from lifespan before any requests)."""
-        self._context = context  # type: ignore[attr-defined]
+        self._context = context
 
     async def _refresh_credentials_if_stale(self) -> None:
         """Refresh platform credentials if the refresh interval has elapsed.
 
         Call this at the start of each ``run()`` to keep tokens fresh.
-        Bridges must initialise ``self._last_creds_refresh = 0.0`` in ``__init__``.
         """
         now = time.monotonic()
-        if now - self._last_creds_refresh > CREDS_REFRESH_INTERVAL_SEC:  # type: ignore[attr-defined]
+        if now - self._last_creds_refresh > CREDS_REFRESH_INTERVAL_SEC:
             from ambient_runner.platform.auth import populate_runtime_credentials
 
-            await populate_runtime_credentials(self._context)  # type: ignore[attr-defined]
-            self._last_creds_refresh = now  # type: ignore[attr-defined]
+            await populate_runtime_credentials(self._context)
+            self._last_creds_refresh = now
 
     async def _ensure_ready(self) -> None:
         """Run one-time platform setup on the first ``run()`` call.
 
         Calls ``_setup_platform()`` the first time, then sets ``self._ready``.
-        Bridges must initialise ``self._ready = False`` in ``__init__``.
         """
-        if self._ready:  # type: ignore[attr-defined]
+        if self._ready:
             return
-        if not self._context:  # type: ignore[attr-defined]
+        if not self._context:
             raise RuntimeError("Context not set — call set_context() first")
         await self._setup_platform()
-        self._ready = True  # type: ignore[attr-defined]
+        self._ready = True
         _bridge_logger.info(
             "Platform ready — model: %s",
             getattr(self, "_configured_model", ""),
