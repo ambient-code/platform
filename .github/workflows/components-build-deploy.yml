@@ -306,11 +306,22 @@ jobs:
       - name: Update agent registry ConfigMap with pinned image tags
         if: needs.detect-changes.outputs.claude-runner == 'true' || needs.detect-changes.outputs.state-sync == 'true'
         run: |
-          sed \
-            -e "s|quay.io/ambient_code/vteam_claude_runner:latest|quay.io/ambient_code/vteam_claude_runner:${{ steps.image-tags.outputs.runner_tag }}|g" \
-            -e "s|quay.io/ambient_code/vteam_state_sync:latest|quay.io/ambient_code/vteam_state_sync:${{ steps.image-tags.outputs.state_sync_tag }}|g" \
-            components/manifests/base/agent-registry-configmap.yaml \
-            | oc apply -f - -n ambient-code
+          # Fetch live JSON from cluster so unchanged images keep their current tag
+          REGISTRY=$(oc get configmap ambient-agent-registry -n ambient-code \
+            -o jsonpath='{.data.agent-registry\.json}')
+
+          # Only replace images that were actually rebuilt this run
+          if [ "${{ needs.detect-changes.outputs.claude-runner }}" == "true" ]; then
+            REGISTRY=$(echo "$REGISTRY" | sed \
+              "s|quay.io/ambient_code/vteam_claude_runner:[^\"]*|quay.io/ambient_code/vteam_claude_runner:${{ github.sha }}|g")
+          fi
+          if [ "${{ needs.detect-changes.outputs.state-sync }}" == "true" ]; then
+            REGISTRY=$(echo "$REGISTRY" | sed \
+              "s|quay.io/ambient_code/vteam_state_sync:[^\"]*|quay.io/ambient_code/vteam_state_sync:${{ github.sha }}|g")
+          fi
+
+          oc patch configmap ambient-agent-registry -n ambient-code --type=merge \
+            -p "{\"data\":{\"agent-registry.json\":$(echo "$REGISTRY" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')}}"
 
   deploy-with-disptach:
     runs-on: ubuntu-latest
@@ -371,8 +382,10 @@ jobs:
 
       - name: Update agent registry ConfigMap with pinned image tags
         run: |
-          sed \
-            -e "s|quay.io/ambient_code/vteam_claude_runner:latest|quay.io/ambient_code/vteam_claude_runner:${{ github.sha }}|g" \
-            -e "s|quay.io/ambient_code/vteam_state_sync:latest|quay.io/ambient_code/vteam_state_sync:${{ github.sha }}|g" \
-            components/manifests/base/agent-registry-configmap.yaml \
-            | oc apply -f - -n ambient-code
+          REGISTRY=$(oc get configmap ambient-agent-registry -n ambient-code \
+            -o jsonpath='{.data.agent-registry\.json}')
+          REGISTRY=$(echo "$REGISTRY" | sed \
+            -e "s|quay.io/ambient_code/vteam_claude_runner:[^\"]*|quay.io/ambient_code/vteam_claude_runner:${{ github.sha }}|g" \
+            -e "s|quay.io/ambient_code/vteam_state_sync:[^\"]*|quay.io/ambient_code/vteam_state_sync:${{ github.sha }}|g")
+          oc patch configmap ambient-agent-registry -n ambient-code --type=merge \
+            -p "{\"data\":{\"agent-registry.json\":$(echo "$REGISTRY" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))') }}"

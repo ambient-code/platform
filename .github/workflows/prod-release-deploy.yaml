@@ -277,8 +277,10 @@ jobs:
       - name: Update agent registry ConfigMap with release image tags
         run: |
           RELEASE_TAG="${{ needs.release.outputs.new_tag }}"
-          sed \
-            -e "s|quay.io/ambient_code/vteam_claude_runner:latest|quay.io/ambient_code/vteam_claude_runner:${RELEASE_TAG}|g" \
-            -e "s|quay.io/ambient_code/vteam_state_sync:latest|quay.io/ambient_code/vteam_state_sync:${RELEASE_TAG}|g" \
-            components/manifests/base/agent-registry-configmap.yaml \
-            | oc apply -f - -n ambient-code
+          REGISTRY=$(oc get configmap ambient-agent-registry -n ambient-code \
+            -o jsonpath='{.data.agent-registry\.json}')
+          REGISTRY=$(echo "$REGISTRY" | sed \
+            -e "s|quay.io/ambient_code/vteam_claude_runner:[^\"]*|quay.io/ambient_code/vteam_claude_runner:${RELEASE_TAG}|g" \
+            -e "s|quay.io/ambient_code/vteam_state_sync:[^\"]*|quay.io/ambient_code/vteam_state_sync:${RELEASE_TAG}|g")
+          oc patch configmap ambient-agent-registry -n ambient-code --type=merge \
+            -p "{\"data\":{\"agent-registry.json\":$(echo "$REGISTRY" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))') }}"
