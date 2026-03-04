@@ -19,3 +19,19 @@ objects:
     tls:
       termination: reencrypt
       insecureEdgeTerminationPolicy: Redirect
+
+- apiVersion: route.openshift.io/v1
+  kind: Route
+  metadata:
+    name: ambient-api-server-grpc
+    labels:
+      app: ambient-api-server
+  spec:
+    to:
+      kind: Service
+      name: ambient-api-server-grpc
+    port:
+      targetPort: grpc
+    tls:
+      termination: reencrypt
+      insecureEdgeTerminationPolicy: Redirect
