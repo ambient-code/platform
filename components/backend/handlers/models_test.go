@@ -574,5 +574,23 @@ var _ = Describe("Models Handler", Label(test_constants.LabelUnit, test_constant
 			result := isModelAvailable(context.Background(), K8sClient, "claude-opus-4-6", "", "test-project")
 			Expect(result).To(BeTrue())
 		})
+
+		It("should reject model when provider does not match requiredProvider", func() {
+			logger.Log("Testing isModelAvailable rejects provider mismatch")
+			writeManifestFile(validManifest)
+			setupK8sWithOverrides()
+
+			result := isModelAvailable(context.Background(), K8sClient, "claude-opus-4-6", "google", "test-ns")
+			Expect(result).To(BeFalse())
+		})
+
+		It("should accept model when provider matches requiredProvider", func() {
+			logger.Log("Testing isModelAvailable accepts matching provider")
+			writeManifestFile(validManifest)
+			setupK8sWithOverrides()
+
+			result := isModelAvailable(context.Background(), K8sClient, "claude-opus-4-6", "anthropic", "test-ns")
+			Expect(result).To(BeTrue())
+		})
 	})
 })

@@ -624,10 +624,16 @@ func CreateSession(c *gin.Context) {
 		}
 	}
 
-	// Validate that the requested model is available and matches the runner's provider
+	// Validate model availability with provider matching.
+	// If the runner type is found in the registry, enforce that the model's
+	// provider matches the runner's provider. If the registry is unavailable
+	// (e.g., ConfigMap not mounted), skip provider matching but still validate
+	// the model against the manifest.
 	runnerProvider := ""
 	if rt, rtErr := GetRuntime(runnerTypeID); rtErr == nil {
 		runnerProvider = rt.Provider
+	} else {
+		log.Printf("WARNING: could not resolve runner type %q from registry: %v", runnerTypeID, rtErr)
 	}
 	if llmSettings.Model != "" && !isModelAvailable(c.Request.Context(), reqK8s, llmSettings.Model, runnerProvider, project) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Model is not available for this runner type"})
