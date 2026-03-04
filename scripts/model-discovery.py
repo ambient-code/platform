@@ -28,6 +28,7 @@ import sys
 import time
 import urllib.error
 import urllib.parse
+from collections import defaultdict
 import urllib.request
 from pathlib import Path
 
@@ -171,12 +172,15 @@ def list_publisher_models(publisher: str, token: str) -> list[str]:
     return all_models
 
 
-def discover_models(token: str) -> list[tuple[str, str, str]]:
+def discover_models(token: str, manifest: dict) -> list[tuple[str, str, str]]:
     """Discover models from all configured publishers.
 
     Queries the Model Garden list API for each publisher, filters by
     prefix patterns, and excludes unwanted model types. Falls back to
     the SEED_MODELS list for any publisher where the API fails.
+
+    Provider default models (defaultModel + providerDefaults values) are
+    exempt from version limiting and always kept.
 
     Returns a deduplicated list of (model_id, publisher, provider) tuples.
     """
@@ -221,8 +225,17 @@ def discover_models(token: str) -> list[tuple[str, str, str]]:
             seen.add(model_id)
             result.append((model_id, publisher, provider))
 
+    # Build the set of protected model IDs (defaults are never dropped)
+    protected: set[str] = set()
+    default_model = manifest.get("defaultModel", "")
+    if default_model:
+        protected.add(default_model)
+    for model_id in manifest.get("providerDefaults", {}).values():
+        if model_id:
+            protected.add(model_id)
+
     # Keep only the N most recent versions per model family
-    result = keep_latest_versions(result, MAX_VERSIONS_PER_FAMILY)
+    result = keep_latest_versions(result, MAX_VERSIONS_PER_FAMILY, protected)
     kept_ids = {entry[0] for entry in result}
 
     # Print the summary table with accurate final disposition
@@ -231,7 +244,9 @@ def discover_models(token: str) -> list[tuple[str, str, str]]:
             continue
         print(f"  {publisher}: {len(log_entries)} model(s) from API")
         for model_id, reason in log_entries:
-            if reason == "KEEP" and model_id not in kept_ids:
+            if reason == "KEEP" and model_id in protected:
+                reason = "KEEP (default)"
+            elif reason == "KEEP" and model_id not in kept_ids:
                 reason = "DROP (version limit)"
             print(f"    {model_id:<50s} {reason}")
 
@@ -327,13 +342,17 @@ def parse_model_family(model_id: str) -> tuple[str, tuple[int, ...]]:
 
 
 def keep_latest_versions(
-    models: list[tuple[str, str, str]], max_versions: int
+    models: list[tuple[str, str, str]],
+    max_versions: int,
+    protected: set[str] | None = None,
 ) -> list[tuple[str, str, str]]:
     """Keep only the N most recent versions per model family.
 
     Models without a parseable version (e.g. gemini-2.5-flash) are always kept.
+    Provider default models (from providerDefaults in the manifest) are exempt
+    from version limiting and always kept.
     """
-    from collections import defaultdict
+    protected = protected or set()
 
     # Group by family
     families: dict[str, list[tuple[tuple[int, ...], tuple[str, str, str]]]] = (
@@ -343,6 +362,9 @@ def keep_latest_versions(
 
     for entry in models:
         model_id = entry[0]
+        if model_id in protected:
+            no_version.append(entry)
+            continue
         family, version = parse_model_family(model_id)
         if version:
             families[family].append((version, entry))
@@ -494,7 +516,7 @@ def main() -> int:
 
     # Discover models from the Model Garden API + seed list fallback
     print("Discovering models from Vertex AI Model Garden...")
-    models_to_process = discover_models(token)
+    models_to_process = discover_models(token, manifest)
     print(f"Processing {len(models_to_process)} model(s) in {region}/{project_id}...")
 
     changes = []
