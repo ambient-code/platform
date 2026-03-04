@@ -356,6 +356,16 @@ fi
 echo -e "${BLUE}Updating operator with custom runner image...${NC}"
 oc patch deployment agentic-operator -n ${NAMESPACE} -p "{\"spec\":{\"template\":{\"spec\":{\"containers\":[{\"name\":\"agentic-operator\",\"env\":[{\"name\":\"AMBIENT_CODE_RUNNER_IMAGE\",\"value\":\"${DEFAULT_RUNNER_IMAGE}\"}]}]}}}}" --type=strategic
 
+# Update agent-registry configmap with custom runner and state-sync images
+echo -e "${BLUE}Updating agent-registry configmap with custom images...${NC}"
+REGISTRY_JSON=$(oc get configmap ambient-agent-registry -n ${NAMESPACE} -o jsonpath='{.data.agent-registry\.json}')
+REGISTRY_JSON=$(echo "$REGISTRY_JSON" | sed \
+    -e "s|quay\.io/ambient_code/vteam_claude_runner:[^ \"]*|${DEFAULT_RUNNER_IMAGE}|g" \
+    -e "s|quay\.io/ambient_code/vteam_state_sync:[^ \"]*|${DEFAULT_STATE_SYNC_IMAGE}|g")
+oc patch configmap ambient-agent-registry -n ${NAMESPACE} \
+    --type=merge -p "{\"data\":{\"agent-registry.json\":$(echo "$REGISTRY_JSON" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')}}"
+echo -e "${GREEN}✅ Agent registry configmap updated${NC}"
+
 echo ""
 echo -e "${GREEN}✅ Deployment completed!${NC}"
 echo ""

@@ -192,6 +192,7 @@ export function CreateWorkspaceDialog({
                 <Label htmlFor="displayName">Workspace Name *</Label>
                 <Input
                   id="displayName"
+                  data-testid="workspace-name-input"
                   value={formData.displayName}
                   onChange={(e) => handleDisplayNameChange(e.target.value)}
                   placeholder="e.g. My Research Workspace"
@@ -206,6 +207,7 @@ export function CreateWorkspaceDialog({
                 <Label htmlFor="name">Workspace Name *</Label>
                 <Input
                   id="name"
+                  data-testid="workspace-name-input"
                   value={formData.name}
                   onChange={(e) => {
                     const name = e.target.value;
@@ -258,7 +260,7 @@ export function CreateWorkspaceDialog({
             >
               Cancel
             </Button>
-            <Button
+            <Button data-testid="create-workspace-submit"
               type="submit"
               disabled={createProjectMutation.isPending || !!nameError}
             >

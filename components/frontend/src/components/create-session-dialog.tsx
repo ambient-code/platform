@@ -441,7 +441,7 @@ export function CreateSessionDialog({
                 >
                   Cancel
                 </Button>
-                <Button type="submit" disabled={createSessionMutation.isPending || runnerTypesLoading || runnerTypesError || modelsLoading || (modelsError && models.length === 0)}>
+                <Button type="submit" data-testid="create-session-submit" disabled={createSessionMutation.isPending || runnerTypesLoading || runnerTypesError || modelsLoading || (modelsError && models.length === 0)}>
                   {createSessionMutation.isPending && (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   )}

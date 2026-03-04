@@ -1,0 +1,10 @@
+{"_type":"StreamEvent","uuid":"r-1","session_id":"replay","event":{"type":"message_start","message":{}}}
+{"_type":"StreamEvent","uuid":"r-2","session_id":"replay","event":{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}}
+{"_type":"StreamEvent","uuid":"r-3","session_id":"replay","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"I understand your request. "}}}
+{"_type":"StreamEvent","uuid":"r-4","session_id":"replay","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"I'm currently running in replay mode "}}}
+{"_type":"StreamEvent","uuid":"r-5","session_id":"replay","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"with pre-recorded responses. "}}}
+{"_type":"StreamEvent","uuid":"r-6","session_id":"replay","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"In a live session, the AI agent would process this "}}}
+{"_type":"StreamEvent","uuid":"r-7","session_id":"replay","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"and provide a detailed response."}}}
+{"_type":"StreamEvent","uuid":"r-8","session_id":"replay","event":{"type":"content_block_stop","index":0}}
+{"_type":"StreamEvent","uuid":"r-9","session_id":"replay","event":{"type":"message_stop"}}
+{"_type":"ResultMessage","subtype":"result","duration_ms":400,"duration_api_ms":300,"is_error":false,"num_turns":1,"session_id":"replay","total_cost_usd":0.001,"usage":{"input_tokens":40,"output_tokens":25}}

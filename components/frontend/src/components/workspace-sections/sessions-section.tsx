@@ -221,7 +221,7 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
               projectName={projectName}
               onSuccess={() => refetch()}
               trigger={
-                <Button>
+                <Button data-testid="new-session-btn">
                   <Plus className="w-4 h-4 mr-2" />
                   New Session
                 </Button>

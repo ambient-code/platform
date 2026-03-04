@@ -1468,7 +1468,7 @@ export default function ProjectSessionDetailPage({
                     <span className="text-sm font-medium truncate max-w-[150px]">
                       {session.spec.displayName || session.metadata.name}
                     </span>
-                    <Badge
+                    <Badge data-testid="session-phase-badge"
                       className={getPhaseColor(
                         session.status?.phase || "Pending",
                       )}

@@ -4,9 +4,12 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:coverage": "CYPRESS_COVERAGE=true next dev --webpack",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:unit": "vitest run",
+    "test:unit:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@ag-ui/client": "^0.0.45",
@@ -58,12 +61,20 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitest/coverage-istanbul": "^4.0.18",
+    "babel-loader": "^10.0.0",
+    "babel-plugin-istanbul": "^7.0.1",
     "eslint": "^9",
     "eslint-config-next": "15.5.2",
+    "jsdom": "^28.1.0",
+    "swc-plugin-coverage-instrument": "^0.0.32",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.0.18"
   }
 }
