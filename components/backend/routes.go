@@ -150,6 +150,11 @@ func registerRoutes(r *gin.Engine) {
 		// Cluster info endpoint (public, no auth required)
 		api.GET("/cluster-info", handlers.GetClusterInfo)
 
+		// LDAP search endpoints (cluster-scoped, auth-required)
+		api.GET("/ldap/users", handlers.SearchLDAPUsers)
+		api.GET("/ldap/users/:uid", handlers.GetLDAPUser)
+		api.GET("/ldap/groups", handlers.SearchLDAPGroups)
+
 		api.GET("/projects", handlers.ListProjects)
 		api.POST("/projects", handlers.CreateProject)
 		api.GET("/projects/:projectName", handlers.GetProject)

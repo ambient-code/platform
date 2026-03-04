@@ -6,7 +6,7 @@ import { Users, User as UserIcon, Plus, RefreshCw, Loader2, Trash2, Info } from 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
+import { LDAPAutocomplete } from './_components/ldap-autocomplete';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -242,7 +242,7 @@ export function SharingSection({ projectName }: SharingSectionProps) {
                 value={grantForm.subjectType}
                 onValueChange={(value) => {
                   if (addPermissionMutation.isPending) return;
-                  setGrantForm((prev) => ({ ...prev, subjectType: value as SubjectType }));
+                  setGrantForm((prev) => ({ ...prev, subjectType: value as SubjectType, subjectName: '' }));
                 }}
               >
                 <TabsList className="grid grid-cols-2 w-full">
@@ -255,11 +255,12 @@ export function SharingSection({ projectName }: SharingSectionProps) {
               <Label htmlFor="subjectName">
                 {grantForm.subjectType === 'group' ? 'Group' : 'User'} Name
               </Label>
-              <Input
+              <LDAPAutocomplete
                 id="subjectName"
+                mode={grantForm.subjectType}
                 placeholder={`Enter ${grantForm.subjectType} name`}
                 value={grantForm.subjectName}
-                onChange={(e) => setGrantForm((prev) => ({ ...prev, subjectName: e.target.value }))}
+                onChange={(val) => setGrantForm((prev) => ({ ...prev, subjectName: val }))}
                 disabled={addPermissionMutation.isPending}
               />
             </div>

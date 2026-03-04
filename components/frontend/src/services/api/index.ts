@@ -12,3 +12,4 @@ export * as keysApi from './keys';
 export * as repoApi from './repo';
 export * as workspaceApi from './workspace';
 export * as authApi from './auth';
+export * as ldapApi from './ldap';

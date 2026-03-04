@@ -18,6 +18,7 @@ resources:
 - public-api-route.yaml
 - unleash-route.yaml
 - operator-config-openshift.yaml
+- ldap-config.yaml
 
 # Patches for production environment
 # Unleash: init container to create database (RHEL doesn't support init scripts)

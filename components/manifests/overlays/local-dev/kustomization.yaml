@@ -13,6 +13,7 @@ resources:
 - backend-route.yaml
 - frontend-route.yaml
 - operator-config-crc.yaml
+- ldap-config.yaml
 - unleash-credentials.yaml
 - unleash-route.yaml
 
