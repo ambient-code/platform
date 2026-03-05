@@ -30,7 +30,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections import defaultdict
-from typing import TypedDict
+from typing import NotRequired, TypedDict
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -54,12 +54,14 @@ MAX_VERSIONS_PER_FAMILY = 2
 # prefixes:  only models whose ID starts with one of these are included.
 # exclude:   model IDs matching these regex patterns are skipped (embeddings,
 #            image models, legacy versions, etc.).
-class PublisherConfig(TypedDict, total=False):
+class PublisherConfig(TypedDict):
     publisher: str
     provider: str
     prefixes: list[str]
     exclude: list[str]
-    version_cutoff: tuple[int, ...]  # models with version <= this are excluded
+    version_cutoff: NotRequired[
+        tuple[int, ...]
+    ]  # models with version <= this are excluded
 
 
 PUBLISHERS: list[PublisherConfig] = [
