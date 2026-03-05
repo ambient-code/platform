@@ -54,11 +54,12 @@ MAX_VERSIONS_PER_FAMILY = 2
 # prefixes:  only models whose ID starts with one of these are included.
 # exclude:   model IDs matching these regex patterns are skipped (embeddings,
 #            image models, legacy versions, etc.).
-class PublisherConfig(TypedDict):
+class PublisherConfig(TypedDict, total=False):
     publisher: str
     provider: str
     prefixes: list[str]
     exclude: list[str]
+    min_version: tuple[int, ...]  # models with version <= this are excluded
 
 
 PUBLISHERS: list[PublisherConfig] = [
@@ -76,9 +77,7 @@ PUBLISHERS: list[PublisherConfig] = [
         "prefixes": ["gemini-"],
         "exclude": [
             r"-\d{3}$",  # pinned versions like gemini-2.5-flash-001
-            r"preview",  # preview models
             r"exp",  # experimental models
-            r"image",  # image generation models
             r"embedding",
             r"imagen",
             r"veo",
@@ -86,6 +85,7 @@ PUBLISHERS: list[PublisherConfig] = [
             r"codey",
             r"medlm",
         ],
+        "min_version": (2, 0),  # exclude gemini 2.0 and older
     },
 ]
 
@@ -220,6 +220,7 @@ def discover_models(
         provider = pub["provider"]
         prefixes = pub["prefixes"]
         excludes = [re.compile(p) for p in pub["exclude"]]
+        min_ver = pub.get("min_version")
 
         api_models = list_publisher_models(publisher, token)
         log_entries: list[tuple[str, str]] = []
@@ -232,6 +233,11 @@ def discover_models(
                 if any(pat.search(model_id) for pat in excludes):
                     log_entries.append((model_id, "EXCLUDE"))
                     continue
+                if min_ver:
+                    _, parsed_ver = parse_model_family(model_id)
+                    if parsed_ver and parsed_ver <= min_ver:
+                        log_entries.append((model_id, "EXCLUDE (version)"))
+                        continue
                 log_entries.append((model_id, "KEEP"))
                 if model_id not in seen:
                     seen.add(model_id)
@@ -293,19 +299,55 @@ def model_id_to_label(model_id: str) -> str:
     return " ".join(result)
 
 
+# Temporal qualifiers stripped from model names before determining family.
+# These are release stages and date stamps, not part of the model identity.
+# Applied to individual dash-segments after splitting.
+_QUALIFIER_PATTERNS = [
+    re.compile(r"^preview$"),
+    re.compile(r"^exp$"),
+    re.compile(r"^\d{2}$"),  # date segments like 04, 17 (from stamps like 04-17)
+]
+
+
 def parse_model_family(model_id: str) -> tuple[str, tuple[int, ...]]:
     """Split a model ID into (family, version_tuple).
 
-    Trailing numeric segments form the version; everything before is the family.
-    Examples:
-        "claude-opus-4-6"       -> ("claude-opus", (4, 6))
-        "claude-haiku-4-5"      -> ("claude-haiku", (4, 5))
-        "gemini-2.5-flash"      -> ("gemini-2.5-flash", ())
-        "gemini-2.5-flash-lite" -> ("gemini-2.5-flash-lite", ())
+    Handles two naming conventions:
+
+    1. Semver segment (e.g. "2.5" in "gemini-2.5-flash"):
+       The first segment matching ``\\d+\\.\\d+`` is extracted as the version
+       and removed from the family name. Temporal qualifiers (preview, exp,
+       date stamps) are also stripped so that preview variants group with
+       their stable counterpart.
+         "gemini-2.5-flash"                      -> ("gemini-flash", (2, 5))
+         "gemini-2.5-flash-lite"                 -> ("gemini-flash-lite", (2, 5))
+         "gemini-2.5-flash-preview-04-17"        -> ("gemini-flash", (2, 5))
+         "gemini-2.0-flash-preview-image-generation"
+                                                 -> ("gemini-flash-image-generation", (2, 0))
+         "gemini-3.1-flash-image-preview"        -> ("gemini-flash-image", (3, 1))
+
+    2. Trailing digits (e.g. "claude-opus-4-6"):
+       Trailing numeric dash-segments form the version.
+         "claude-opus-4-6"       -> ("claude-opus", (4, 6))
+         "claude-haiku-4-5"      -> ("claude-haiku", (4, 5))
     """
     parts = model_id.split("-")
+
+    # Check for a semver segment (e.g. "2.5", "3.1")
+    for i, part in enumerate(parts):
+        if re.fullmatch(r"\d+\.\d+", part):
+            version = tuple(int(x) for x in part.split("."))
+            family_parts = parts[:i] + parts[i + 1 :]
+            # Strip temporal qualifiers from family name
+            family_parts = [
+                p
+                for p in family_parts
+                if not any(q.match(p) for q in _QUALIFIER_PATTERNS)
+            ]
+            return "-".join(family_parts), version
+
+    # Fall back to trailing numeric segments
     version_parts: list[int] = []
-    # Walk backwards, collecting trailing numeric segments
     while parts and parts[-1].isdigit():
         version_parts.insert(0, int(parts.pop()))
     family = "-".join(parts) if parts else model_id
