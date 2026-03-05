@@ -36,6 +36,7 @@ type Field struct {
 }
 
 type Spec struct {
+	BasePath  string
 	Resources []Resource
 }
 
