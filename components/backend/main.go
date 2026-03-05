@@ -90,18 +90,20 @@ func main() {
 	defer syncCancel()
 
 	var allFlags []cmd.FlagSpec
+	var staleFlags []string
 	if manifest, err := handlers.LoadManifest(handlers.ManifestPath()); err != nil {
 		log.Printf("WARNING: cannot load model manifest for flag sync: %v", err)
 	} else {
 		allFlags = append(allFlags, cmd.FlagsFromManifest(manifest)...)
+		staleFlags = append(staleFlags, cmd.StaleFlagsFromManifest(manifest)...)
 	}
 	if extraFlags, err := cmd.FlagsFromConfig(cmd.FlagsConfigPath()); err != nil {
 		log.Printf("WARNING: cannot load flags config: %v", err)
 	} else {
 		allFlags = append(allFlags, extraFlags...)
 	}
-	if len(allFlags) > 0 {
-		cmd.SyncFlagsAsync(syncCtx, allFlags)
+	if len(allFlags) > 0 || len(staleFlags) > 0 {
+		cmd.SyncAndCleanupAsync(syncCtx, allFlags, staleFlags)
 	}
 
 	// Initialize git package

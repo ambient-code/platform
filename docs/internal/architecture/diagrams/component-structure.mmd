@@ -18,8 +18,8 @@ graph LR
     end
 
     subgraph "Development Commands"
-        DevStart[make dev-start<br/>🚀 Complete Stack]
-        DevSync[make dev-sync<br/>♻️ Hot Reloading]
+        LocalUp[make local-up<br/>🚀 Complete Stack]
+        LocalRebuild[make local-rebuild<br/>♻️ Rebuild & Reload]
         Deploy[make deploy<br/>📦 Production]
         BuildPush[make build-all push-all<br/>🏗️ Container Images]
     end
@@ -36,11 +36,11 @@ graph LR
     end
 
     %% Development flow
-    DevStart --> Local
+    LocalUp --> Local
     Local --> FrontendURL
     Local --> BackendAPI
     Local --> Console
-    DevSync -.->|File Sync| Local
+    LocalRebuild -.->|Rebuild & Reload| Local
 
     %% Production flow
     BuildPush --> Prod
@@ -64,6 +64,6 @@ graph LR
 
     class Frontend,Backend,Operator,Manifests component
     class ClaudeRunner runner
-    class DevStart,DevSync,Deploy,BuildPush command
+    class LocalUp,LocalRebuild,Deploy,BuildPush command
     class Local,Prod env
     class FrontendURL,BackendAPI,Console access
