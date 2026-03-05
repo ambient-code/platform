@@ -457,7 +457,7 @@ func archiveFlag(ctx context.Context, client *http.Client, adminURL, project, fl
 	respBody, _ := io.ReadAll(resp.Body)
 
 	switch resp.StatusCode {
-	case http.StatusOK, http.StatusAccepted:
+	case http.StatusOK, http.StatusAccepted, http.StatusNoContent:
 		return nil
 	case http.StatusNotFound:
 		return nil // already gone
