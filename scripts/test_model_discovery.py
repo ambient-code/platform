@@ -4,6 +4,7 @@ import importlib.util
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 # Import model-discovery.py as a module (it has a hyphen in the name)
 _spec = importlib.util.spec_from_file_location(
@@ -16,6 +17,7 @@ _spec.loader.exec_module(_mod)
 parse_model_family = _mod.parse_model_family
 model_id_to_label = _mod.model_id_to_label
 keep_latest_versions = _mod.keep_latest_versions
+discover_models = _mod.discover_models
 
 
 class TestParseModelFamily(unittest.TestCase):
@@ -114,6 +116,8 @@ class TestKeepLatestVersions(unittest.TestCase):
         ids = [r[0] for r in result]
         # versionless "some-model" has no trailing digits or semver
         self.assertIn("some-model", ids)
+        # single version in its family — must be kept as the latest
+        self.assertIn("gemini-2.5-flash", ids)
 
     def test_protected_models_exempt(self):
         models = [
@@ -142,6 +146,30 @@ class TestKeepLatestVersions(unittest.TestCase):
 
     def test_empty_input(self):
         self.assertEqual(keep_latest_versions([], 2), [])
+
+
+class TestDiscoverModels(unittest.TestCase):
+    """Test discover_models seed fallback with version_cutoff."""
+
+    @patch("model_discovery.list_publisher_models", return_value=[])
+    def test_seed_models_respect_version_cutoff(self, _mock_list):
+        """Seed models older than version_cutoff should be excluded."""
+        # Add a gemini-2.0 model to SEED_MODELS temporarily
+        original_seeds = _mod.SEED_MODELS[:]
+        try:
+            _mod.SEED_MODELS.append(("gemini-2.0-flash", "google", "google"))
+            manifest = {
+                "defaultModel": "claude-sonnet-4-5",
+                "providerDefaults": {"google": "gemini-2.5-flash"},
+            }
+            result = discover_models("fake-token", manifest)
+            ids = [r[0] for r in result]
+            # gemini-2.0-flash should be excluded by version_cutoff (2, 0)
+            self.assertNotIn("gemini-2.0-flash", ids)
+            # gemini-2.5-flash from seeds should still be present
+            self.assertIn("gemini-2.5-flash", ids)
+        finally:
+            _mod.SEED_MODELS[:] = original_seeds
 
 
 if __name__ == "__main__":

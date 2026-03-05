@@ -149,6 +149,7 @@ def list_publisher_models(publisher: str, token: str) -> list[tuple[str, str | N
         )
 
         data = None
+        last_err: Exception | None = None
         for attempt in range(3):
             req = urllib.request.Request(
                 url,
@@ -161,23 +162,24 @@ def list_publisher_models(publisher: str, token: str) -> list[tuple[str, str | N
                 break
             except urllib.error.HTTPError as e:
                 # Permission denied or not found — retrying won't help
-                if e.code in (403, 404) or attempt == 2:
+                if e.code in (403, 404):
                     print(
                         f"  WARNING: list models for {publisher} failed (HTTP {e.code})",
                         file=sys.stderr,
                     )
                     return []
-                time.sleep(2**attempt)
+                last_err = e
             except Exception as e:
-                if attempt == 2:
-                    print(
-                        f"  WARNING: list models for {publisher} failed ({e})",
-                        file=sys.stderr,
-                    )
-                    return []
+                last_err = e
+
+            if attempt < 2:
                 time.sleep(2**attempt)
 
         if data is None:
+            print(
+                f"  WARNING: list models for {publisher} failed after 3 attempts ({last_err})",
+                file=sys.stderr,
+            )
             return []
 
         for model in data.get("publisherModels", []):
