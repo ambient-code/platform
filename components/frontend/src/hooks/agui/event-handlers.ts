@@ -25,12 +25,12 @@ import type {
   PlatformMessage,
   PlatformToolCall,
   PlatformRawEvent,
+  PlatformRunFinishedEvent,
   AGUIMetaEvent,
   PlatformActivitySnapshotEvent,
   PlatformActivityDeltaEvent,
   WireToolCallStartEvent,
   RunStartedEvent,
-  RunFinishedEvent,
   RunErrorEvent,
   TextMessageStartEvent,
   TextMessageContentEvent,
@@ -212,7 +212,7 @@ function handleRunStarted(
 
 function handleRunFinished(
   state: AGUIClientState,
-  event: RunFinishedEvent,
+  event: PlatformRunFinishedEvent,
   callbacks: EventHandlerCallbacks,
 ): AGUIClientState {
   state.status = 'completed'
@@ -270,6 +270,17 @@ function handleRunFinished(
     callbacks.onMessage?.(msg)
   }
   state.currentThinking = null
+
+  // Track context usage from result.usage
+  if (event.result?.usage) {
+    const { input_tokens = 0, output_tokens = 0 } = event.result.usage
+    const turnTokens = input_tokens + output_tokens
+
+    state.contextUsage = {
+      used: state.contextUsage.used + turnTokens,
+      perTurn: [...state.contextUsage.perTurn, turnTokens],
+    }
+  }
 
   return state
 }

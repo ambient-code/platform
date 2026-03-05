@@ -113,6 +113,25 @@ export type PlatformRawEvent = {
   source?: string
 }
 
+/** Token usage from RUN_FINISHED result */
+export type ResultUsage = {
+  input_tokens?: number
+  output_tokens?: number
+  cache_read_input_tokens?: number
+  cache_creation_input_tokens?: number
+}
+
+/** Platform extension of RunFinishedEvent with result metadata */
+export type PlatformRunFinishedEvent = RunFinishedEvent & {
+  result?: {
+    usage?: ResultUsage
+    num_turns?: number
+    duration_ms?: number
+    total_cost_usd?: number
+    is_error?: boolean
+  }
+}
+
 // ── Platform Activity types ──
 // The core ActivitySnapshotEvent/ActivityDeltaEvent are per-message, not
 // array-based. The platform uses an array-based model for UI rendering.
@@ -212,6 +231,11 @@ export type AGUIClientState = {
     content: string
     timestamp?: string
   } | null
+  // Context window usage tracking
+  contextUsage: {
+    used: number
+    perTurn: number[]
+  }
 }
 
 // ── Type Guards ──
@@ -259,4 +283,31 @@ export function isMessagesSnapshotEvent(event: { type: string }): event is Messa
 
 export function isActivitySnapshotEvent(event: { type: string }): event is PlatformActivitySnapshotEvent {
   return event.type === EventType.ACTIVITY_SNAPSHOT
+}
+
+// ── Context Window Utilities ──
+
+/** Context window limits by model family (tokens) */
+const CONTEXT_LIMITS: Record<string, number> = {
+  // 1M context models
+  'claude-opus-4': 1_000_000,
+  // 200K context models (default)
+  'claude-sonnet': 200_000,
+  'claude-haiku': 200_000,
+}
+
+const DEFAULT_CONTEXT_LIMIT = 200_000
+
+/** Get context window limit for a model */
+export function getContextLimit(model: string | undefined): number {
+  if (!model) return DEFAULT_CONTEXT_LIMIT
+
+  // Check for exact prefix match
+  for (const [prefix, limit] of Object.entries(CONTEXT_LIMITS)) {
+    if (model.startsWith(prefix)) {
+      return limit
+    }
+  }
+
+  return DEFAULT_CONTEXT_LIMIT
 }
