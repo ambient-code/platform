@@ -22,9 +22,8 @@ func ListSessions(c *gin.Context) {
 	}
 	path := fmt.Sprintf("/api/projects/%s/agentic-sessions", project)
 
-	// Forward query parameters (e.g., labelSelector) to the backend as-is.
-	// Safe: the backend ignores unknown params and enforces RBAC via the
-	// user's own token, so no privilege escalation is possible.
+	// Forward query parameters (e.g., labelSelector) verbatim to the backend.
+	// The backend enforces its own validation and RBAC via the user's token.
 	if rawQuery := c.Request.URL.RawQuery; rawQuery != "" {
 		path = path + "?" + rawQuery
 	}
@@ -346,6 +345,8 @@ func transformSession(data map[string]interface{}) types.SessionResponse {
 // internalLabelPrefixes are K8s/system label prefixes that should not be exposed to users
 var internalLabelPrefixes = []string{
 	"app.kubernetes.io/",
+	"kubectl.kubernetes.io/",
+	"meta.kubernetes.io/",
 	"vteam.ambient-code/",
 	"ambient-code.io/",
 }

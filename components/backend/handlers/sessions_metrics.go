@@ -21,8 +21,8 @@ func GetSessionMetrics(c *gin.Context) {
 	}
 	sessionName := c.Param("sessionName")
 
-	_, k8sDyn := GetK8sClientsForRequest(c)
-	if k8sDyn == nil {
+	k8sClt, k8sDyn := GetK8sClientsForRequest(c)
+	if k8sClt == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 		c.Abort()
 		return

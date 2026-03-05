@@ -25,9 +25,8 @@ func GetSessionTranscript(c *gin.Context) {
 
 	path := fmt.Sprintf("/api/projects/%s/agentic-sessions/%s/export", project, sessionID)
 
-	// Forward query params (e.g., format) to the backend as-is.
-	// Safe: the backend ignores unknown params and enforces RBAC via the
-	// user's own token, so no privilege escalation is possible.
+	// Forward query params (e.g., format) verbatim to the backend.
+	// The backend enforces its own validation and RBAC via the user's token.
 	if rawQuery := c.Request.URL.RawQuery; rawQuery != "" {
 		path = path + "?" + rawQuery
 	}
@@ -76,9 +75,8 @@ func GetSessionLogs(c *gin.Context) {
 
 	path := fmt.Sprintf("/api/projects/%s/agentic-sessions/%s/logs", project, sessionID)
 
-	// Forward query params (tailLines, container) to the backend as-is.
-	// Safe: the backend ignores unknown params and enforces RBAC via the
-	// user's own token, so no privilege escalation is possible.
+	// Forward query params (tailLines, container) verbatim to the backend.
+	// The backend enforces its own validation and RBAC via the user's token.
 	if rawQuery := c.Request.URL.RawQuery; rawQuery != "" {
 		path = path + "?" + rawQuery
 	}
