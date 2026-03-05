@@ -125,15 +125,16 @@ def get_access_token() -> str:
     return result.stdout.strip()
 
 
-def list_publisher_models(publisher: str, token: str) -> list[str]:
-    """List model IDs from the Model Garden for a publisher.
+def list_publisher_models(publisher: str, token: str) -> list[tuple[str, str | None]]:
+    """List models from the Model Garden for a publisher.
 
     Uses the v1beta1 API: GET /publishers/{publisher}/models
-    Returns a list of model base names (e.g. ["claude-sonnet-4-5", ...]).
+    Returns a list of (model_id, version_id) tuples. version_id is the
+    versionId from the API response (e.g. "20250929") or None if absent.
     Returns an empty list on failure (caller falls back to seed list).
     """
     base_url = "https://aiplatform.googleapis.com/v1beta1"
-    all_models: list[str] = []
+    all_models: list[tuple[str, str | None]] = []
     page_token = ""
 
     for _ in range(20):  # page limit safety
@@ -172,8 +173,9 @@ def list_publisher_models(publisher: str, token: str) -> list[str]:
             # name is like "publishers/google/models/gemini-2.5-flash"
             name = model.get("name", "")
             model_id = name.rsplit("/", 1)[-1] if "/" in name else name
+            version_id = model.get("versionId")
             if model_id:
-                all_models.append(model_id)
+                all_models.append((model_id, version_id))
 
         page_token = data.get("nextPageToken", "")
         if not page_token:
@@ -184,7 +186,7 @@ def list_publisher_models(publisher: str, token: str) -> list[str]:
 
 def discover_models(
     token: str, manifest: dict[str, object]
-) -> list[tuple[str, str, str]]:
+) -> list[tuple[str, str, str, str | None]]:
     """Discover models from all configured publishers.
 
     Queries the Model Garden list API for each publisher, filters by
@@ -194,10 +196,12 @@ def discover_models(
     Provider default models (defaultModel + providerDefaults values) are
     exempt from version limiting and always kept.
 
-    Returns a deduplicated list of (model_id, publisher, provider) tuples.
+    Returns a deduplicated list of (model_id, publisher, provider, version_id)
+    tuples. version_id comes from the list API response and may be None for
+    seed models or when the API doesn't provide it.
     """
     seen: set[str] = set()
-    result: list[tuple[str, str, str]] = []
+    result: list[tuple[str, str, str, str | None]] = []
 
     # Collect per-publisher: (model_id, reason) for the summary table
     publisher_log: list[tuple[str, list[tuple[str, str]]]] = []
@@ -212,7 +216,7 @@ def discover_models(
         log_entries: list[tuple[str, str]] = []
 
         if api_models:
-            for model_id in sorted(api_models):
+            for model_id, version_id in sorted(api_models, key=lambda x: x[0]):
                 if not any(model_id.startswith(p) for p in prefixes):
                     log_entries.append((model_id, "SKIP (prefix)"))
                     continue
@@ -222,7 +226,7 @@ def discover_models(
                 log_entries.append((model_id, "KEEP"))
                 if model_id not in seen:
                     seen.add(model_id)
-                    result.append((model_id, publisher, provider))
+                    result.append((model_id, publisher, provider, version_id))
         else:
             print(
                 f"  {publisher}: API unavailable, using seed list",
@@ -235,7 +239,7 @@ def discover_models(
     for model_id, publisher, provider in SEED_MODELS:
         if model_id not in seen:
             seen.add(model_id)
-            result.append((model_id, publisher, provider))
+            result.append((model_id, publisher, provider, None))
 
     # Build the set of protected model IDs (defaults are never dropped)
     protected: set[str] = set()
@@ -263,62 +267,6 @@ def discover_models(
             print(f"    {model_id:<50s} {reason}")
 
     return sorted(result, key=lambda x: x[0])
-
-
-def resolve_version(
-    region: str, model_id: str, publisher: str, token: str
-) -> str | None:
-    """Resolve the latest version for a model via the Model Garden API.
-
-    Returns the version string (e.g. "20250929") or None if the API call
-    fails (permissions, model not found, etc.).
-
-    Note: requires ``roles/serviceusage.serviceUsageConsumer`` on the GCP
-    project. Works in CI via the Workload Identity service account; may
-    return None locally if the user lacks this role.
-    """
-    safe_id = urllib.parse.quote(model_id, safe="")
-    url = (
-        f"https://{region}-aiplatform.googleapis.com/v1/"
-        f"publishers/{publisher}/models/{safe_id}"
-    )
-
-    last_err = None
-    for attempt in range(3):
-        req = urllib.request.Request(
-            url,
-            headers={"Authorization": f"Bearer {token}"},
-            method="GET",
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                data = json.loads(resp.read().decode())
-
-            name = data.get("name", "")
-            if "@" in name:
-                return name.split("@", 1)[1]
-            return data.get("versionId")
-
-        except urllib.error.HTTPError as e:
-            if e.code in (403, 404):
-                # Permission denied or not found — retrying won't help
-                print(
-                    f"  {model_id}: version resolution unavailable (HTTP {e.code})",
-                    file=sys.stderr,
-                )
-                return None
-            last_err = e
-        except Exception as e:
-            last_err = e
-
-        if attempt < 2:
-            time.sleep(2**attempt)  # 1s, 2s backoff
-
-    print(
-        f"  {model_id}: version resolution failed after 3 attempts ({last_err})",
-        file=sys.stderr,
-    )
-    return None
 
 
 def model_id_to_label(model_id: str) -> str:
@@ -356,10 +304,10 @@ def parse_model_family(model_id: str) -> tuple[str, tuple[int, ...]]:
 
 
 def keep_latest_versions(
-    models: list[tuple[str, str, str]],
+    models: list[tuple[str, str, str, str | None]],
     max_versions: int,
     protected: set[str] | None = None,
-) -> list[tuple[str, str, str]]:
+) -> list[tuple[str, str, str, str | None]]:
     """Keep only the N most recent versions per model family.
 
     Models without a parseable version (e.g. gemini-2.5-flash) are always kept.
@@ -369,10 +317,10 @@ def keep_latest_versions(
     protected = protected or set()
 
     # Group by family
-    families: dict[str, list[tuple[tuple[int, ...], tuple[str, str, str]]]] = (
-        defaultdict(list)
-    )
-    no_version: list[tuple[str, str, str]] = []
+    families: dict[
+        str, list[tuple[tuple[int, ...], tuple[str, str, str, str | None]]]
+    ] = defaultdict(list)
+    no_version: list[tuple[str, str, str, str | None]] = []
 
     for entry in models:
         model_id = entry[0]
@@ -385,7 +333,7 @@ def keep_latest_versions(
         else:
             no_version.append(entry)
 
-    result: list[tuple[str, str, str]] = list(no_version)
+    result: list[tuple[str, str, str, str | None]] = list(no_version)
     for family, versioned in sorted(families.items()):
         # Sort by version descending, keep top N
         versioned.sort(key=lambda x: x[0], reverse=True)
@@ -536,16 +484,15 @@ def main() -> int:
 
     changes = []
 
-    for model_id, publisher, provider in models_to_process:
-        # Try to resolve the latest version via Model Garden API
-        resolved_version = resolve_version(region, model_id, publisher, token)
-
+    for model_id, publisher, provider, version_id in models_to_process:
         # Find existing entry in manifest
         existing = next((m for m in manifest["models"] if m["id"] == model_id), None)
 
-        # Determine the vertex ID to probe
-        if resolved_version:
-            vertex_id = f"{model_id}@{resolved_version}"
+        # Determine the vertex ID to probe.
+        # version_id comes from the list API; fall back to existing manifest
+        # entry or @default if neither is available.
+        if version_id:
+            vertex_id = f"{model_id}@{version_id}"
         elif existing and existing.get("vertexId"):
             vertex_id = existing["vertexId"]
         else:
@@ -557,7 +504,7 @@ def main() -> int:
 
         if existing:
             # Update vertexId if version resolution found a newer one
-            if existing.get("vertexId") != vertex_id and resolved_version:
+            if existing.get("vertexId") != vertex_id and version_id:
                 old_vid = existing.get("vertexId", "")
                 existing["vertexId"] = vertex_id
                 changes.append(
