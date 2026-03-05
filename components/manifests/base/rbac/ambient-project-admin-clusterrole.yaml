@@ -40,6 +40,10 @@ rules:
 - apiGroups: [""]
   resources: ["pods", "pods/log"]
   verbs: ["get", "list", "watch"]
+# Events (pod event monitoring)
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["get", "list", "watch"]
 # OpenShift Projects (read-only to list projects - OpenShift filters to only projects user has access to)
 - apiGroups: ["project.openshift.io"]
   resources: ["projects"]

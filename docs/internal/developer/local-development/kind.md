@@ -192,6 +192,10 @@ make kind-up LOCAL_VERTEX=true
 **Default credentials:** `~/.config/gcloud/application_default_credentials.json`
 (Created by `gcloud auth application-default login`)
 
+**Service account key (Ambient Code Support team):** Download
+`ambient-code-key.json` from the "Ambient Code Support" collection in
+Bitwarden.
+
 **Override credentials path:**
 ```bash
 make kind-up LOCAL_VERTEX=true GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json

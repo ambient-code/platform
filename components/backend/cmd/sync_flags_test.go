@@ -63,7 +63,7 @@ func TestParseManifestPath(t *testing.T) {
 
 // --- FlagsFromManifest ---
 
-func TestFlagsFromManifest_SkipsDefaultAndUnavailable(t *testing.T) {
+func TestFlagsFromManifest_SkipsDefaultUnavailableAndNonGated(t *testing.T) {
 	manifest := &types.ModelManifest{
 		DefaultModel: "claude-sonnet-4-5",
 		ProviderDefaults: map[string]string{
@@ -71,19 +71,21 @@ func TestFlagsFromManifest_SkipsDefaultAndUnavailable(t *testing.T) {
 			"google":    "gemini-2.5-flash",
 		},
 		Models: []types.ModelEntry{
-			{ID: "claude-sonnet-4-5", Label: "Sonnet 4.5", Provider: "anthropic", Available: true},
-			{ID: "claude-opus-4-6", Label: "Opus 4.6", Provider: "anthropic", Available: true},
-			{ID: "claude-opus-4-1", Label: "Opus 4.1", Provider: "anthropic", Available: false},
-			{ID: "gemini-2.5-flash", Label: "Gemini 2.5 Flash", Provider: "google", Available: true},
-			{ID: "gemini-2.5-pro", Label: "Gemini 2.5 Pro", Provider: "google", Available: true},
+			{ID: "claude-sonnet-4-5", Label: "Sonnet 4.5", Provider: "anthropic", Available: true, FeatureGated: false},
+			{ID: "claude-opus-4-6", Label: "Opus 4.6", Provider: "anthropic", Available: true, FeatureGated: true},
+			{ID: "claude-opus-4-1", Label: "Opus 4.1", Provider: "anthropic", Available: false, FeatureGated: true},
+			{ID: "claude-haiku-4-5", Label: "Haiku 4.5", Provider: "anthropic", Available: true, FeatureGated: false},
+			{ID: "gemini-2.5-flash", Label: "Gemini 2.5 Flash", Provider: "google", Available: true, FeatureGated: false},
+			{ID: "gemini-2.5-pro", Label: "Gemini 2.5 Pro", Provider: "google", Available: true, FeatureGated: true},
 		},
 	}
 
 	flags := FlagsFromManifest(manifest)
 
-	// Should skip: claude-sonnet-4-5 (global default + anthropic default),
-	//              gemini-2.5-flash (google default),
-	//              claude-opus-4-1 (unavailable)
+	// Should skip: claude-sonnet-4-5 (default + not gated),
+	//              claude-opus-4-1 (unavailable),
+	//              claude-haiku-4-5 (not gated),
+	//              gemini-2.5-flash (default + not gated)
 	// Should include: claude-opus-4-6, gemini-2.5-pro
 	if len(flags) != 2 {
 		t.Fatalf("expected 2 flags, got %d: %v", len(flags), flags)
@@ -102,6 +104,9 @@ func TestFlagsFromManifest_SkipsDefaultAndUnavailable(t *testing.T) {
 	if names["model.claude-sonnet-4-5.enabled"] {
 		t.Error("global default should be skipped")
 	}
+	if names["model.claude-haiku-4-5.enabled"] {
+		t.Error("non-gated model should be skipped")
+	}
 	if names["model.gemini-2.5-flash.enabled"] {
 		t.Error("provider default should be skipped")
 	}
@@ -112,6 +117,137 @@ func TestFlagsFromManifest_EmptyManifest(t *testing.T) {
 	flags := FlagsFromManifest(manifest)
 	if len(flags) != 0 {
 		t.Errorf("expected 0 flags, got %d", len(flags))
+	}
+}
+
+// --- StaleFlagsFromManifest ---
+
+func TestStaleFlagsFromManifest_ReturnsNonGatedModels(t *testing.T) {
+	manifest := &types.ModelManifest{
+		DefaultModel: "claude-sonnet-4-5",
+		Models: []types.ModelEntry{
+			{ID: "claude-sonnet-4-5", Provider: "anthropic", Available: true, FeatureGated: false},
+			{ID: "claude-opus-4-6", Provider: "anthropic", Available: true, FeatureGated: true},
+			{ID: "claude-haiku-4-5", Provider: "anthropic", Available: true, FeatureGated: false},
+			{ID: "gemini-2.5-pro", Provider: "google", Available: true, FeatureGated: true},
+		},
+	}
+
+	stale := StaleFlagsFromManifest(manifest)
+
+	// Non-gated models: claude-sonnet-4-5, claude-haiku-4-5
+	if len(stale) != 2 {
+		t.Fatalf("expected 2 stale flags, got %d: %v", len(stale), stale)
+	}
+	names := map[string]bool{}
+	for _, s := range stale {
+		names[s] = true
+	}
+	if !names["model.claude-sonnet-4-5.enabled"] {
+		t.Error("expected model.claude-sonnet-4-5.enabled in stale list")
+	}
+	if !names["model.claude-haiku-4-5.enabled"] {
+		t.Error("expected model.claude-haiku-4-5.enabled in stale list")
+	}
+	if names["model.claude-opus-4-6.enabled"] {
+		t.Error("gated model should not be in stale list")
+	}
+}
+
+func TestStaleFlagsFromManifest_EmptyWhenAllGated(t *testing.T) {
+	manifest := &types.ModelManifest{
+		DefaultModel: "claude-sonnet-4-5",
+		Models: []types.ModelEntry{
+			{ID: "claude-sonnet-4-5", Provider: "anthropic", Available: true, FeatureGated: true},
+		},
+	}
+
+	stale := StaleFlagsFromManifest(manifest)
+	if len(stale) != 0 {
+		t.Errorf("expected 0 stale flags, got %d", len(stale))
+	}
+}
+
+// --- CleanupStaleFlags ---
+
+func TestCleanupStaleFlags_ArchivesExistingFlags(t *testing.T) {
+	var deleteCalled bool
+	var deletePath string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" && strings.Contains(r.URL.Path, "/features/") {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"name":"model.claude-haiku-4-5.enabled"}`))
+			return
+		}
+		if r.Method == "DELETE" && strings.Contains(r.URL.Path, "/features/") {
+			deleteCalled = true
+			deletePath = r.URL.Path
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	t.Setenv("UNLEASH_ADMIN_URL", server.URL)
+	t.Setenv("UNLEASH_ADMIN_TOKEN", "test-token")
+	t.Setenv("UNLEASH_PROJECT", "default")
+
+	err := CleanupStaleFlags(context.Background(), []string{"model.claude-haiku-4-5.enabled"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !deleteCalled {
+		t.Error("expected DELETE to be called")
+	}
+	if !strings.Contains(deletePath, "model.claude-haiku-4-5.enabled") {
+		t.Errorf("expected delete path to contain flag name, got %s", deletePath)
+	}
+}
+
+func TestCleanupStaleFlags_SkipsNonExistentFlags(t *testing.T) {
+	var deleteCalled bool
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" && strings.Contains(r.URL.Path, "/features/") {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		if r.Method == "DELETE" {
+			deleteCalled = true
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	t.Setenv("UNLEASH_ADMIN_URL", server.URL)
+	t.Setenv("UNLEASH_ADMIN_TOKEN", "test-token")
+
+	err := CleanupStaleFlags(context.Background(), []string{"model.nonexistent.enabled"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if deleteCalled {
+		t.Error("DELETE should not be called for non-existent flags")
+	}
+}
+
+func TestCleanupStaleFlags_SkipsWhenEnvNotSet(t *testing.T) {
+	t.Setenv("UNLEASH_ADMIN_URL", "")
+	t.Setenv("UNLEASH_ADMIN_TOKEN", "")
+
+	err := CleanupStaleFlags(context.Background(), []string{"model.test.enabled"})
+	if err != nil {
+		t.Errorf("expected nil error when env not set, got: %v", err)
+	}
+}
+
+func TestCleanupStaleFlags_EmptyList(t *testing.T) {
+	err := CleanupStaleFlags(context.Background(), nil)
+	if err != nil {
+		t.Errorf("expected nil error for empty list, got: %v", err)
 	}
 }
 

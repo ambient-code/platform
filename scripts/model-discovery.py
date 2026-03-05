@@ -545,6 +545,7 @@ def main() -> int:
                 "vertexId": vertex_id,
                 "provider": provider,
                 "available": is_available,
+                "featureGated": True,  # New models require explicit opt-in via feature flag
             }
             manifest["models"].append(new_entry)
             changes.append(f"  {model_id}: added (available={is_available})")
