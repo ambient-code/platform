@@ -622,3 +622,46 @@ func TestCollectTagTypes(t *testing.T) {
 		t.Error("expected 'env' in tag types")
 	}
 }
+
+// --- enableFlagInEnv ---
+
+func TestEnableFlagInEnv_Success(t *testing.T) {
+	var enablePath string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" && strings.Contains(r.URL.Path, "/on") {
+			enablePath = r.URL.Path
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	err := enableFlagInEnv(context.Background(), server.Client(), server.URL, "default", "development", "model.test.enabled", "test-token")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(enablePath, "model.test.enabled") {
+		t.Errorf("expected path to contain flag name, got %s", enablePath)
+	}
+	if !strings.HasSuffix(enablePath, "/on") {
+		t.Errorf("expected path to end with /on, got %s", enablePath)
+	}
+}
+
+func TestEnableFlagInEnv_NonSuccessStatus(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		w.Write([]byte(`{"message":"forbidden"}`))
+	}))
+	defer server.Close()
+
+	err := enableFlagInEnv(context.Background(), server.Client(), server.URL, "default", "development", "model.test.enabled", "test-token")
+	if err == nil {
+		t.Error("expected error for non-success status")
+	}
+	if !strings.Contains(err.Error(), "403") {
+		t.Errorf("expected 403 in error, got: %v", err)
+	}
+}
