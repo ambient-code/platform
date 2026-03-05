@@ -22,7 +22,7 @@ import {
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useResizeTextarea } from "@/hooks/use-resize-textarea";
 import { useAutocomplete } from "@/hooks/use-autocomplete";
 import type { AutocompleteAgent, AutocompleteCommand } from "@/hooks/use-autocomplete";
@@ -177,7 +177,6 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
   onCancelQueuedMessage,
   onClearQueue,
 }) => {
-  const { toast } = useToast();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { textareaHeight, handleResizeStart } = useResizeTextarea();
@@ -239,9 +238,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
           const file = item.getAsFile();
           if (!file) continue;
           if (file.size > MAX_FILE_SIZE) {
-            toast({
-              variant: "destructive",
-              title: "File too large",
+            toast.error("File too large", {
               description: `Maximum file size is 10MB. Your file is ${(file.size / (1024 * 1024)).toFixed(1)}MB.`,
             });
             continue;
@@ -264,7 +261,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
         }
       }
     },
-    [onPasteImage, toast]
+    [onPasteImage]
   );
 
   const handleRemoveAttachment = (attachmentId: string) => {
@@ -277,9 +274,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
       const files = Array.from(e.target.files || []);
       for (const file of files) {
         if (file.size > MAX_FILE_SIZE) {
-          toast({
-            variant: "destructive",
-            title: "File too large",
+          toast.error("File too large", {
             description: `Maximum file size is 10MB. "${file.name}" is ${(file.size / (1024 * 1024)).toFixed(1)}MB.`,
           });
           continue;
@@ -293,7 +288,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
       }
       e.target.value = "";
     },
-    [toast]
+    []
   );
 
   // Handle input change — delegate autocomplete detection to hook
@@ -426,7 +421,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
       onChange("");
       resetHistory();
       setPendingAttachments([]);
-      toast({ title: "Queued message updated", description: "The queued message has been updated." });
+      toast("Queued message updated", { description: "The queued message has been updated." });
       return;
     }
 
@@ -434,7 +429,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
     if (!uploaded) return;
 
     if (isRunActive) {
-      toast({ title: "Message queued", description: "Your message will be sent when the agent is ready." });
+      toast("Message queued", { description: "Your message will be sent when the agent is ready." });
     }
     await onSend();
     resetHistory();
@@ -450,8 +445,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
     if (!uploaded) return;
 
     if (isRunActive) {
-      toast({
-        title: "Message queued",
+      toast("Message queued", {
         description: "Original cancelled. New message will be sent when the agent is ready.",
       });
     }

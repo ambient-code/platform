@@ -16,7 +16,7 @@ import { Label } from '@/components/ui/label'
 import { useIntegrationSecrets, useUpdateIntegrationSecrets } from '@/services/queries/use-secrets'
 import { useQueryClient } from '@tanstack/react-query'
 import { projectKeys } from '@/services/queries/use-projects'
-import { successToast, errorToast } from '@/hooks/use-toast'
+import { toast } from 'sonner'
 
 type GitHubConnectModalProps = {
   projectName: string
@@ -69,11 +69,11 @@ export function GitHubConnectModal({
       {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: projectKeys.integrationStatus(projectName) })
-          successToast('GitHub connection saved')
+          toast.success('GitHub connection saved')
           onOpenChange(false)
         },
         onError: (err) => {
-          errorToast(err instanceof Error ? err.message : 'Failed to save GitHub connection')
+          toast.error(err instanceof Error ? err.message : 'Failed to save GitHub connection')
         },
       }
     )
