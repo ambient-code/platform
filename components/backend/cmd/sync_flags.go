@@ -34,14 +34,12 @@ type FlagTag struct {
 }
 
 // FlagSpec describes a feature flag to sync to Unleash.
-// Flags are created with type "release" and a flexibleRollout strategy.
-// When EnabledByDefault is true, the flag is enabled in the environment
-// with 100% rollout; otherwise it is created disabled at 0%.
+// All flags are created disabled with type "release" and a flexibleRollout
+// strategy at 0%. Tags are optional and per-flag.
 type FlagSpec struct {
-	Name             string    `json:"name"`
-	Description      string    `json:"description"`
-	Tags             []FlagTag `json:"tags,omitempty"`
-	EnabledByDefault bool      `json:"enabledByDefault,omitempty"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	Tags        []FlagTag `json:"tags,omitempty"`
 }
 
 // FlagsConfig is the JSON structure for the generic flags config file.
@@ -71,10 +69,9 @@ func FlagsFromManifest(manifest *types.ModelManifest) []FlagSpec {
 			continue
 		}
 		specs = append(specs, FlagSpec{
-			Name:             fmt.Sprintf("model.%s.enabled", model.ID),
-			Description:      sanitizeLogString(fmt.Sprintf("Enable %s (%s) for users", model.Label, model.ID)),
-			Tags:             []FlagTag{{Type: "scope", Value: "workspace"}},
-			EnabledByDefault: true,
+			Name:        fmt.Sprintf("model.%s.enabled", model.ID),
+			Description: sanitizeLogString(fmt.Sprintf("Enable %s (%s) for users", model.Label, model.ID)),
+			Tags:        []FlagTag{{Type: "scope", Value: "workspace"}},
 		})
 	}
 	return specs
@@ -310,22 +307,11 @@ func SyncFlags(ctx context.Context, flags []FlagSpec) error {
 			}
 		}
 
-		rollout := "0"
-		if flag.EnabledByDefault {
-			rollout = "100"
-		}
-		if err := addRolloutStrategy(ctx, client, adminURL, project, environment, flag.Name, rollout, adminToken); err != nil {
+		if err := addRolloutStrategy(ctx, client, adminURL, project, environment, flag.Name, adminToken); err != nil {
 			log.Printf("  WARNING: created %s but failed to add rollout strategy: %v", flag.Name, err)
 		}
 
-		if flag.EnabledByDefault {
-			if err := enableFlagInEnv(ctx, client, adminURL, project, environment, flag.Name, adminToken); err != nil {
-				log.Printf("  WARNING: created %s but failed to enable in %s: %v", flag.Name, environment, err)
-			}
-			log.Printf("  %s: created (enabled, 100%% rollout)", flag.Name)
-		} else {
-			log.Printf("  %s: created (disabled, 0%% rollout)", flag.Name)
-		}
+		log.Printf("  %s: created (disabled, 0%% rollout)", flag.Name)
 		created++
 	}
 
@@ -503,13 +489,13 @@ func addFlagTag(ctx context.Context, client *http.Client, adminURL, flagName str
 	return nil
 }
 
-func addRolloutStrategy(ctx context.Context, client *http.Client, adminURL, project, environment, flagName, rollout string, token string) error {
+func addRolloutStrategy(ctx context.Context, client *http.Client, adminURL, project, environment, flagName, token string) error {
 	reqURL := fmt.Sprintf("%s/api/admin/projects/%s/features/%s/environments/%s/strategies",
 		adminURL, url.PathEscape(project), url.PathEscape(flagName), url.PathEscape(environment))
 	body, err := json.Marshal(map[string]any{
 		"name": "flexibleRollout",
 		"parameters": map[string]string{
-			"rollout":    rollout,
+			"rollout":    "0",
 			"stickiness": "default",
 			"groupId":    flagName,
 		},
@@ -526,25 +512,6 @@ func addRolloutStrategy(ctx context.Context, client *http.Client, adminURL, proj
 	respBody, _ := io.ReadAll(resp.Body)
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(respBody))
-	}
-	return nil
-}
-
-func enableFlagInEnv(ctx context.Context, client *http.Client, adminURL, project, environment, flagName, token string) error {
-	reqURL := fmt.Sprintf("%s/api/admin/projects/%s/features/%s/environments/%s/on",
-		adminURL, url.PathEscape(project), url.PathEscape(flagName), url.PathEscape(environment))
-	resp, err := doRequest(ctx, client, "POST", reqURL, token, nil)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		respBody, readErr := io.ReadAll(resp.Body)
-		if readErr != nil {
-			return fmt.Errorf("HTTP %d (failed to read body: %w)", resp.StatusCode, readErr)
-		}
 		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(respBody))
 	}
 	return nil
