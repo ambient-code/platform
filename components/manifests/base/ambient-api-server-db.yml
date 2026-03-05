@@ -55,9 +55,7 @@ spec:
         component: database
     spec:
       securityContext:
-        runAsUser: 999
-        runAsGroup: 999
-        fsGroup: 999
+        runAsNonRoot: true
       containers:
         - name: postgresql
           image: docker.io/library/postgres:16.2
@@ -100,8 +98,6 @@ spec:
             - mountPath: /var/lib/pgsql/data
               name: ambient-api-server-db-data
           securityContext:
-            runAsUser: 999
-            runAsGroup: 999
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: false
             capabilities:
