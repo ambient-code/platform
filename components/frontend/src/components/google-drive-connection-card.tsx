@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Loader2 } from 'lucide-react'
-import { successToast, errorToast } from '@/hooks/use-toast'
+import { toast } from 'sonner'
 import { useDisconnectGoogle } from '@/services/queries/use-google'
 import * as googleAuthApi from '@/services/api/google-auth'
 
@@ -57,7 +57,7 @@ export function GoogleDriveConnectionCard({ showManageButton = true, status, onR
 
       // Check if popup was blocked
       if (!popup || popup.closed) {
-        errorToast('Popup was blocked. Please allow popups for this site and try again.')
+        toast.error('Popup was blocked. Please allow popups for this site and try again.')
         setConnecting(false)
         return
       }
@@ -81,7 +81,7 @@ export function GoogleDriveConnectionCard({ showManageButton = true, status, onR
       }, 500)
     } catch (err) {
       console.error('Failed to initiate Google OAuth:', err)
-      errorToast(err instanceof Error ? err.message : 'Failed to connect Google Drive')
+      toast.error(err instanceof Error ? err.message : 'Failed to connect Google Drive')
       setConnecting(false)
     }
   }
@@ -89,11 +89,11 @@ export function GoogleDriveConnectionCard({ showManageButton = true, status, onR
   const handleDisconnect = async () => {
     disconnectMutation.mutate(undefined, {
       onSuccess: () => {
-        successToast('Google Drive disconnected successfully')
+        toast.success('Google Drive disconnected successfully')
         onRefresh?.()
       },
       onError: (error) => {
-        errorToast(error instanceof Error ? error.message : 'Failed to disconnect Google Drive')
+        toast.error(error instanceof Error ? error.message : 'Failed to disconnect Google Drive')
       },
     })
   }
@@ -103,11 +103,11 @@ export function GoogleDriveConnectionCard({ showManageButton = true, status, onR
   }
 
   return (
-    <Card className="bg-card border border-gray-200 shadow-sm flex flex-col h-full">
+    <Card className="bg-card border border-border/60 shadow-sm shadow-black/[0.03] dark:shadow-black/[0.15] flex flex-col h-full">
       <div className="p-6 flex flex-col flex-1">
         {/* Header section with icon and title */}
         <div className="flex items-start gap-4 mb-6">
-          <div className="flex-shrink-0 w-16 h-16 bg-white border border-gray-200 rounded-lg flex items-center justify-center">
+          <div className="flex-shrink-0 w-16 h-16 bg-card border border-border/60 rounded-lg flex items-center justify-center">
             <svg className="w-10 h-10" viewBox="0 0 24 24" aria-hidden="true">
               <path
                 fill="#4285F4"
@@ -187,7 +187,7 @@ export function GoogleDriveConnectionCard({ showManageButton = true, status, onR
             <Button
               onClick={handleConnect}
               disabled={isLoading || connecting}
-              className="bg-blue-600 hover:bg-blue-700 text-white"
+              className="bg-primary hover:bg-primary/90 text-primary-foreground"
             >
               {connecting ? (
                 <>

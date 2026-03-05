@@ -17,7 +17,7 @@ import { EmptyState } from '@/components/empty-state';
 import { DestructiveConfirmationDialog } from '@/components/confirmation-dialog';
 
 import { useKeys, useCreateKey, useDeleteKey } from '@/services/queries';
-import { successToast, errorToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import type { CreateKeyRequest } from '@/services/api/keys';
 import { ROLE_DEFINITIONS } from '@/lib/role-colors';
 
@@ -63,7 +63,7 @@ export function KeysSection({ projectName }: KeysSectionProps) {
       { projectName, data: request },
       {
         onSuccess: (data) => {
-          successToast(`Access key "${data.name}" created successfully`);
+          toast.success(`Access key "${data.name}" created successfully`);
           setOneTimeKey(data.key);
           setOneTimeKeyName(data.name);
           setNewKeyName('');
@@ -72,7 +72,7 @@ export function KeysSection({ projectName }: KeysSectionProps) {
           setShowCreate(false);
         },
         onError: (error) => {
-          errorToast(error instanceof Error ? error.message : 'Failed to create key');
+          toast.error(error instanceof Error ? error.message : 'Failed to create key');
         },
       }
     );
@@ -89,7 +89,7 @@ export function KeysSection({ projectName }: KeysSectionProps) {
       { projectName, keyId: keyToDelete.id },
       {
         onSuccess: () => {
-          successToast(`Access key "${keyToDelete.name}" deleted successfully`);
+          toast.success(`Access key "${keyToDelete.name}" deleted successfully`);
           setShowDeleteDialog(false);
           setKeyToDelete(null);
         },

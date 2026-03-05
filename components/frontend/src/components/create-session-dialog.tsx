@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import Link from "next/link";
-import { AlertCircle, AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
+import { AlertCircle, AlertTriangle, CheckCircle2, ChevronsUpDown, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
@@ -40,10 +41,16 @@ import { useRunnerTypes } from "@/services/queries/use-runner-types";
 import { DEFAULT_RUNNER_TYPE_ID } from "@/services/api/runner-types";
 import { useIntegrationsStatus } from "@/services/queries/use-integrations";
 import { useModels } from "@/services/queries/use-models";
-import { errorToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 
-// Static default used for form initialization before the API responds.
-const DEFAULT_MODEL = "claude-sonnet-4-5";
+// Keep in sync with components/manifests/base/models.json (available: true entries).
+const fallbackModels = [
+  { value: "claude-sonnet-4-5", label: "Claude Sonnet 4.5" },
+  { value: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
+  { value: "claude-opus-4-6", label: "Claude Opus 4.6" },
+  { value: "claude-opus-4-5", label: "Claude Opus 4.5" },
+  { value: "claude-haiku-4-5", label: "Claude Haiku 4.5" },
+];
 
 const formSchema = z.object({
   displayName: z.string().max(50).optional(),
@@ -70,8 +77,15 @@ export function CreateSessionDialog({
   const [open, setOpen] = useState(false);
   const router = useRouter();
   const createSessionMutation = useCreateSession();
-  const { data: runnerTypes, isLoading: runnerTypesLoading, isError: runnerTypesError, refetch: refetchRunnerTypes } = useRunnerTypes(projectName);
+  const { data: runnerTypes, isLoading: runnerTypesLoading, isError: runnerTypesError, refetch: refetchRunnerTypes } = useRunnerTypes();
+
+  const { data: modelsData, isLoading: modelsLoading } = useModels(projectName, open);
   const { data: integrationsStatus } = useIntegrationsStatus();
+
+  const models = modelsData
+    ? modelsData.models.map((m) => ({ value: m.id, label: m.label }))
+    : fallbackModels;
+  const defaultModel = modelsData?.defaultModel ?? "claude-sonnet-4-5";
 
   const githubConfigured = integrationsStatus?.github?.active != null;
   const gitlabConfigured = integrationsStatus?.gitlab?.connected ?? false;
@@ -83,44 +97,35 @@ export function CreateSessionDialog({
     defaultValues: {
       displayName: "",
       runnerType: DEFAULT_RUNNER_TYPE_ID,
-      model: DEFAULT_MODEL,
+      model: defaultModel,
       temperature: 0.7,
       maxTokens: 4000,
       timeout: 300,
     },
   });
 
-  const selectedRunnerType = form.watch("runnerType");
-
-  const selectedRunner = useMemo(
-    () => runnerTypes?.find((rt) => rt.id === selectedRunnerType),
-    [runnerTypes, selectedRunnerType]
-  );
-
-  // Fetch models filtered by the selected runner's provider.
-  // models.json is the single source of truth — no hardcoded fallback lists.
-  // Wait for runner types to load so we know the provider before fetching.
-  const { data: modelsData, isLoading: modelsLoading, isError: modelsError } = useModels(
-    projectName, open && !runnerTypesLoading && !runnerTypesError, selectedRunner?.provider
-  );
-
-  const models = modelsData
-    ? modelsData.models.map((m) => ({ value: m.id, label: m.label }))
-    : [];
-
-  // Update form model when API response arrives or provider changes
   useEffect(() => {
     if (modelsData?.defaultModel && !form.formState.dirtyFields.model) {
       form.setValue("model", modelsData.defaultModel, { shouldDirty: false });
     }
   }, [modelsData?.defaultModel, form]);
 
+  const selectedRunnerType = form.watch("runnerType");
+
+  // Derive the available models from the selected runner type
+  const selectedRunner = useMemo(
+    () => runnerTypes?.find((rt) => rt.id === selectedRunnerType),
+    [runnerTypes, selectedRunnerType]
+  );
+  const availableModels = selectedRunner?.models ?? models;
+
   const handleRunnerTypeChange = (value: string, onChange: (v: string) => void) => {
     onChange(value);
-    // Model list will refetch via useModels when provider changes.
-    // resetField clears both value AND dirty state so the useEffect
-    // above will set the new provider's default model.
-    form.resetField("model", { defaultValue: "" });
+    const runner = runnerTypes?.find((rt) => rt.id === value);
+    if (runner) {
+      // Reset model to the runner's default
+      form.setValue("model", runner.defaultModel);
+    }
   };
 
   const onSubmit = async (values: FormValues) => {
@@ -151,7 +156,7 @@ export function CreateSessionDialog({
           onSuccess?.();
         },
         onError: (error) => {
-          errorToast(error.message || "Failed to create session");
+          toast.error(error.message || "Failed to create session");
         },
       }
     );
@@ -272,17 +277,11 @@ export function CreateSessionDialog({
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {models.length === 0 && !modelsLoading ? (
-                          <div className="p-2 text-sm text-muted-foreground">
-                            No models available for this runner
-                          </div>
-                        ) : (
-                          models.map((m) => (
-                            <SelectItem key={m.value} value={m.value}>
-                              {m.label}
-                            </SelectItem>
-                          ))
-                        )}
+                        {availableModels.map((m) => (
+                          <SelectItem key={m.value} value={m.value}>
+                            {m.label}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -291,8 +290,12 @@ export function CreateSessionDialog({
               />
 
               {/* Integration auth status */}
-              <div className="w-full space-y-2">
-                <FormLabel>Integrations</FormLabel>
+              <Collapsible className="w-full space-y-2">
+                <CollapsibleTrigger className="flex items-center justify-between w-full">
+                  <FormLabel className="cursor-pointer">Integrations</FormLabel>
+                  <ChevronsUpDown className="h-4 w-4 text-muted-foreground" />
+                </CollapsibleTrigger>
+                <CollapsibleContent className="space-y-2">
                 {/* GitHub card */}
                 {githubConfigured ? (
                   <div className="flex items-start justify-between gap-3 p-3 border rounded-lg bg-background/50">
@@ -424,7 +427,8 @@ export function CreateSessionDialog({
                     </div>
                   </div>
                 )}
-              </div>
+                </CollapsibleContent>
+              </Collapsible>
 
               <DialogFooter>
                 <Button
@@ -435,7 +439,7 @@ export function CreateSessionDialog({
                 >
                   Cancel
                 </Button>
-                <Button type="submit" disabled={createSessionMutation.isPending || runnerTypesLoading || runnerTypesError || modelsLoading || (modelsError && models.length === 0)}>
+                <Button type="submit" disabled={createSessionMutation.isPending || runnerTypesLoading || runnerTypesError}>
                   {createSessionMutation.isPending && (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   )}

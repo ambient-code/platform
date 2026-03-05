@@ -67,7 +67,7 @@ export function McpServersAccordion({
         return <XCircle className="h-4 w-4 text-red-600" />
       case 'disconnected':
       default:
-        return <AlertCircle className="h-4 w-4 text-gray-400" />
+        return <AlertCircle className="h-4 w-4 text-muted-foreground" />
     }
   }
 
@@ -94,7 +94,7 @@ export function McpServersAccordion({
       case 'disconnected':
       default:
         return (
-          <Badge variant="outline" className="text-xs bg-gray-50 text-gray-700 border-gray-200">
+          <Badge variant="outline" className="text-xs bg-muted text-muted-foreground border-border">
             Disconnected
           </Badge>
         )

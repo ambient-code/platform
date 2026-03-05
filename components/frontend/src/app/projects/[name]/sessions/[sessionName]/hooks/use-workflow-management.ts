@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { errorToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useSessionQueue } from "@/hooks/use-session-queue";
 import type { WorkflowConfig } from "../lib/types";
 
@@ -97,7 +97,7 @@ export function useWorkflowManagement({
       return true;
     } catch (error) {
       console.error("Failed to activate workflow:", error);
-      errorToast(error instanceof Error ? error.message : "Failed to activate workflow");
+      toast.error(error instanceof Error ? error.message : "Failed to activate workflow");
       sessionQueue.clearWorkflow();
       setWorkflowActivating(false);
       return false;
@@ -121,12 +121,12 @@ export function useWorkflowManagement({
     // Find the selected workflow from OOTB workflows
     const workflow = ootbWorkflows.find(w => w.id === value);
     if (!workflow) {
-      errorToast(`Workflow ${value} not found`);
+      toast.error(`Workflow ${value} not found`);
       return null;
     }
 
     if (!workflow.enabled) {
-      errorToast(`Workflow ${workflow.name} is not yet available`);
+      toast.error(`Workflow ${workflow.name} is not yet available`);
       return null;
     }
 
