@@ -19,6 +19,7 @@ resources:
 - ambient-api-server-secrets.yml
 - ambient-api-server-db.yml
 - ambient-api-server-service.yml
+- ambient-control-plane-service.yml
 - unleash-deployment.yaml
 - agent-registry-configmap.yaml
 
@@ -51,4 +52,6 @@ images:
 - name: quay.io/ambient_code/vteam_public_api
   newTag: latest
 - name: quay.io/ambient_code/vteam_api_server
+  newTag: latest
+- name: quay.io/ambient_code/ambient_control_plane
   newTag: latest
