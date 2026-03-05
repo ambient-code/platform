@@ -250,9 +250,16 @@ def discover_models(
 
         publisher_log.append((publisher, log_entries))
 
-    # Merge in seed models that weren't discovered by the API
+    # Merge in seed models that weren't discovered by the API.
+    # Apply version_cutoff so seed models respect the same filtering as API models.
+    pub_by_name = {p["publisher"]: p for p in PUBLISHERS}
     for model_id, publisher, provider in SEED_MODELS:
         if model_id not in seen:
+            cutoff = pub_by_name.get(publisher, {}).get("version_cutoff")
+            if cutoff:
+                _, parsed_ver = parse_model_family(model_id)
+                if parsed_ver and parsed_ver <= cutoff:
+                    continue
             seen.add(model_id)
             result.append((model_id, publisher, provider, None))
 
@@ -361,7 +368,7 @@ def keep_latest_versions(
 ) -> list[tuple[str, str, str, str | None]]:
     """Keep only the N most recent versions per model family.
 
-    Models without a parseable version (e.g. gemini-2.5-flash) are always kept.
+    Models without a parseable version (no semver or trailing digits) are always kept.
     Provider default models (from providerDefaults in the manifest) are exempt
     from version limiting and always kept.
     """

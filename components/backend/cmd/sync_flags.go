@@ -539,9 +539,9 @@ func enableFlagInEnv(ctx context.Context, client *http.Client, adminURL, project
 		return err
 	}
 	defer resp.Body.Close()
-	respBody, readErr := io.ReadAll(resp.Body)
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		respBody, readErr := io.ReadAll(resp.Body)
 		if readErr != nil {
 			return fmt.Errorf("HTTP %d (failed to read body: %w)", resp.StatusCode, readErr)
 		}
