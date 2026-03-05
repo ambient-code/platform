@@ -59,7 +59,7 @@ class PublisherConfig(TypedDict, total=False):
     provider: str
     prefixes: list[str]
     exclude: list[str]
-    min_version: tuple[int, ...]  # models with version <= this are excluded
+    version_cutoff: tuple[int, ...]  # models with version <= this are excluded
 
 
 PUBLISHERS: list[PublisherConfig] = [
@@ -85,7 +85,7 @@ PUBLISHERS: list[PublisherConfig] = [
             r"codey",
             r"medlm",
         ],
-        "min_version": (2, 0),  # exclude gemini 2.0 and older
+        "version_cutoff": (2, 0),  # exclude gemini 2.0 and older
     },
 ]
 
@@ -220,7 +220,7 @@ def discover_models(
         provider = pub["provider"]
         prefixes = pub["prefixes"]
         excludes = [re.compile(p) for p in pub["exclude"]]
-        min_ver = pub.get("min_version")
+        min_ver = pub.get("version_cutoff")
 
         api_models = list_publisher_models(publisher, token)
         log_entries: list[tuple[str, str]] = []
@@ -451,6 +451,13 @@ def probe_model(
         "unavailable" - 404 (model not found)
         "unknown"     - any other status (transient error, leave unchanged)
     """
+    if publisher not in ("anthropic", "google"):
+        print(
+            f"  {vertex_id}: unsupported publisher {publisher!r}",
+            file=sys.stderr,
+        )
+        return "unknown"
+
     last_err = None
     for attempt in range(3):
         req = _build_probe_request(region, project_id, vertex_id, publisher, token)
