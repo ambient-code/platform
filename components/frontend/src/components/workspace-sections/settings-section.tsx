@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Save, Loader2, Info, AlertTriangle } from "lucide-react";
 import { Plus, Trash2, Eye, EyeOff, ChevronDown, ChevronRight } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { successToast, errorToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useProject, useUpdateProject } from "@/services/queries/use-projects";
 import { useSecretsValues, useUpdateSecrets, useIntegrationSecrets, useUpdateIntegrationSecrets } from "@/services/queries/use-secrets";
 import { useClusterInfo } from "@/hooks/use-cluster-info";
@@ -48,13 +48,13 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
 
   // Derive runner API key definitions from the runner-types registry.
   // Falls back to a hardcoded list if the fetch fails.
-  const { data: runnerTypesData, isLoading: runnerTypesLoading } = useRunnerTypes(projectName);
+  const { data: runnerTypesData, isLoading: runnerTypesLoading } = useRunnerTypes();
 
   const RUNNER_API_KEYS = useMemo(() => {
     if (!runnerTypesData) return FALLBACK_RUNNER_API_KEYS;
     const keyMap = new Map<string, Set<string>>();
     for (const rt of runnerTypesData) {
-      const keys = rt.auth?.requiredSecretKeys ?? [];
+      const keys = rt.auth?.requiredSecretKeys ?? rt.requiredSecretKeys ?? [];
       for (const secretKey of keys) {
         if (!keyMap.has(secretKey)) {
           keyMap.set(secretKey, new Set<string>());
@@ -139,11 +139,11 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
       },
       {
         onSuccess: () => {
-          successToast("Project settings updated successfully!");
+          toast.success("Project settings updated successfully!");
         },
         onError: (error) => {
           const message = error instanceof Error ? error.message : "Failed to update project";
-          errorToast(message);
+          toast.error(message);
         },
       }
     );
@@ -159,7 +159,7 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
     }
 
     if (Object.keys(runnerData).length === 0) {
-      errorToast("No API keys to save");
+      toast.error("No API keys to save");
       return;
     }
 
@@ -170,11 +170,11 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
       },
       {
         onSuccess: () => {
-          successToast("Saved to ambient-runner-secrets");
+          toast.success("Saved to ambient-runner-secrets");
         },
         onError: (error) => {
           const message = error instanceof Error ? error.message : "Failed to save runner secrets";
-          errorToast(message);
+          toast.error(message);
         },
       }
     );
@@ -206,7 +206,7 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
     }
 
     if (Object.keys(integrationData).length === 0) {
-      errorToast("No integration secrets to save");
+      toast.error("No integration secrets to save");
       return;
     }
 
@@ -217,11 +217,11 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
       },
       {
         onSuccess: () => {
-          successToast("Saved to ambient-non-vertex-integrations");
+          toast.success("Saved to ambient-non-vertex-integrations");
         },
         onError: (error) => {
           const message = error instanceof Error ? error.message : "Failed to save integration secrets";
-          errorToast(message);
+          toast.error(message);
         },
       }
     );

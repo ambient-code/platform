@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { errorToast, successToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { readWorkspaceFile } from "@/services/api/workspace";
 import type { FileTreeNode } from "@/components/file-tree";
 
@@ -44,7 +44,7 @@ export function useFileOperations({
         setViewingFile({ path: node.name, content });
       } catch (error) {
         console.error("Failed to load file:", error);
-        errorToast(error instanceof Error ? error.message : 'Failed to load file');
+        toast.error(error instanceof Error ? error.message : 'Failed to load file');
       } finally {
         setLoadingFile(false);
       }
@@ -70,9 +70,9 @@ export function useFileOperations({
       link.click();
       document.body.removeChild(link);
 
-      successToast(`Downloading ${viewingFile.path}...`);
+      toast.success(`Downloading ${viewingFile.path}...`);
     } catch (err) {
-      errorToast(err instanceof Error ? err.message : "Failed to download file");
+      toast.error(err instanceof Error ? err.message : "Failed to download file");
     }
   }, [viewingFile, currentSubPath, basePath, projectName, sessionName]);
 

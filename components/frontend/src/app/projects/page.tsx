@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { formatDistanceToNow } from 'date-fns';
-import { Plus, RefreshCw, Trash2, FolderOpen, Loader2, Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, RefreshCw, Trash2, FolderOpen, Loader2, Search } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -23,13 +23,23 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+  PaginationEllipsis,
+} from '@/components/ui/pagination';
+import { getPageNumbers } from '@/lib/pagination';
 import { useProjectsPaginated, useDeleteProject } from '@/services/queries';
 import { PageHeader } from '@/components/page-header';
 import { EmptyState } from '@/components/empty-state';
 import { ErrorMessage } from '@/components/error-message';
 import { DestructiveConfirmationDialog } from '@/components/confirmation-dialog';
 import { CreateWorkspaceDialog } from '@/components/create-workspace-dialog';
-import { successToast, errorToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import type { Project } from '@/types/api';
 import { DEFAULT_PAGE_SIZE } from '@/types/api';
 import { useDebounce } from '@/hooks/use-debounce';
@@ -108,11 +118,11 @@ export default function ProjectsPage() {
 
     deleteProjectMutation.mutate(projectToDelete.name, {
       onSuccess: () => {
-        successToast(`Project "${projectToDelete.displayName || projectToDelete.name}" deleted successfully`);
+        toast.success(`Project "${projectToDelete.displayName || projectToDelete.name}" deleted successfully`);
         closeDeleteDialog();
       },
       onError: (error) => {
-        errorToast(error instanceof Error ? error.message : 'Failed to delete project');
+        toast.error(error instanceof Error ? error.message : 'Failed to delete project');
       },
     });
   };
@@ -288,29 +298,39 @@ export default function ProjectsPage() {
                     <div className="text-sm text-muted-foreground">
                       Showing {offset + 1}-{Math.min(offset + limit, totalCount)} of {totalCount} workspaces
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handlePrevPage}
-                        disabled={offset === 0 || isFetching}
-                      >
-                        <ChevronLeft className="h-4 w-4 mr-1" />
-                        Previous
-                      </Button>
-                      <span className="text-sm text-muted-foreground px-2">
-                        Page {currentPage} of {totalPages}
-                      </span>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleNextPage}
-                        disabled={!hasMore || isFetching}
-                      >
-                        Next
-                        <ChevronRight className="h-4 w-4 ml-1" />
-                      </Button>
-                    </div>
+                    <Pagination className="mx-0 w-auto justify-end">
+                      <PaginationContent>
+                        <PaginationItem>
+                          <PaginationPrevious
+                            onClick={handlePrevPage}
+                            className={offset === 0 || isFetching ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                          />
+                        </PaginationItem>
+                        {getPageNumbers(currentPage, totalPages).map((page, i) =>
+                          page === 'ellipsis' ? (
+                            <PaginationItem key={`ellipsis-${i}`}>
+                              <PaginationEllipsis />
+                            </PaginationItem>
+                          ) : (
+                            <PaginationItem key={page}>
+                              <PaginationLink
+                                isActive={page === currentPage}
+                                onClick={() => { setOffset((page - 1) * limit); }}
+                                className="cursor-pointer"
+                              >
+                                {page}
+                              </PaginationLink>
+                            </PaginationItem>
+                          )
+                        )}
+                        <PaginationItem>
+                          <PaginationNext
+                            onClick={handleNextPage}
+                            className={!hasMore || isFetching ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                          />
+                        </PaginationItem>
+                      </PaginationContent>
+                    </Pagination>
                   </div>
                 )}
               </>

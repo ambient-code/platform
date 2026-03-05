@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { DestructiveConfirmationDialog } from '@/components/confirmation-dialog';
 
 import { useProjectPermissions, useAddProjectPermission, useRemoveProjectPermission } from '@/services/queries';
-import { successToast, errorToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import type { PermissionRole, SubjectType } from '@/types/project';
 import { ROLE_DEFINITIONS } from '@/lib/role-colors';
 
@@ -71,14 +71,14 @@ export function SharingSection({ projectName }: SharingSectionProps) {
       },
       {
         onSuccess: () => {
-          successToast(`Permission granted to ${grantForm.subjectName} successfully`);
+          toast.success(`Permission granted to ${grantForm.subjectName} successfully`);
           setShowGrantDialog(false);
           setGrantForm({ subjectType: 'group', subjectName: '', role: 'view' });
         },
         onError: (error) => {
           const message = error instanceof Error ? error.message : 'Failed to grant permission';
           setGrantError(message);
-          errorToast(message);
+          toast.error(message);
         },
       }
     );
@@ -95,12 +95,12 @@ export function SharingSection({ projectName }: SharingSectionProps) {
       },
       {
         onSuccess: () => {
-          successToast(`Permission revoked from ${toRevoke.subjectName} successfully`);
+          toast.success(`Permission revoked from ${toRevoke.subjectName} successfully`);
           setShowRevokeDialog(false);
           setToRevoke(null);
         },
         onError: (error) => {
-          errorToast(error instanceof Error ? error.message : 'Failed to revoke permission');
+          toast.error(error instanceof Error ? error.message : 'Failed to revoke permission');
         },
       }
     );

@@ -1,33 +1,20 @@
 import { useQuery } from "@tanstack/react-query";
-import { getRunnerTypes, getRunnerTypesGlobal } from "../api/runner-types";
+import { getRunnerTypes } from "../api/runner-types";
 
 export const runnerTypeKeys = {
   all: ["runner-types"] as const,
-  global: () => [...runnerTypeKeys.all, "global"] as const,
-  forProject: (projectName: string) => [...runnerTypeKeys.all, projectName] as const,
+  list: () => [...runnerTypeKeys.all, "list"] as const,
 };
 
 /**
- * Fetch available runner types for a project (with workspace override support).
+ * Fetch available runner types from the backend registry.
+ * Runner types rarely change, so we cache aggressively.
  */
-export function useRunnerTypes(projectName: string) {
+export function useRunnerTypes() {
   return useQuery({
-    queryKey: runnerTypeKeys.forProject(projectName),
-    queryFn: () => getRunnerTypes(projectName),
-    enabled: !!projectName,
-    staleTime: 5 * 60 * 1000,
-    gcTime: 30 * 60 * 1000,
-  });
-}
-
-/**
- * Fetch all runner types globally (no workspace overrides — for admin pages).
- */
-export function useRunnerTypesGlobal() {
-  return useQuery({
-    queryKey: runnerTypeKeys.global(),
-    queryFn: getRunnerTypesGlobal,
-    staleTime: 5 * 60 * 1000,
-    gcTime: 30 * 60 * 1000,
+    queryKey: runnerTypeKeys.list(),
+    queryFn: getRunnerTypes,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 30 * 60 * 1000, // 30 minutes
   });
 }
