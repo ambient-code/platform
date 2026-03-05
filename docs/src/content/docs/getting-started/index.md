@@ -36,5 +36,5 @@ Sessions run as Kubernetes Jobs with full isolation. Each session gets its own w
 
 ## Getting Started
 
-- **[Quickstart (UI)](quickstart-ui/)** -- Create your first session through the web interface.
+- **[Quickstart](quickstart-ui/)** -- Create your first session through the web interface.
 - **[Core Concepts](concepts/)** -- Understand the building blocks before diving in.
