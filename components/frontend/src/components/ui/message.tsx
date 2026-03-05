@@ -6,6 +6,8 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Components } from "react-markdown";
 import { formatTimestamp } from "@/lib/format-timestamp";
+import { useLoadingTips } from "@/services/queries/use-loading-tips";
+import { DEFAULT_LOADING_TIPS } from "@/lib/loading-tips";
 
 export type MessageRole = "bot" | "user";
 
@@ -97,39 +99,66 @@ const defaultComponents: Components = {
   ),
 };
 
-const LOADING_MESSAGES = [
-  "Pretending to be productive",
-  "Downloading more RAM",
-  "Consulting the magic 8-ball",
-  "Teaching bugs to behave",
-  "Brewing digital coffee",
-  "Rolling for initiative",
-  "Surfing the data waves",
-  "Juggling bits and bytes",
-  "Tipping my fedora",
-  "Reticulating splines",
-];
+/**
+ * Parse markdown-style links [text](url) in a string and return React elements
+ */
+function parseMarkdownLinks(text: string): React.ReactNode {
+  const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match;
+
+  while ((match = linkRegex.exec(text)) !== null) {
+    // Add text before the link
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index));
+    }
+    // Add the link
+    parts.push(
+      <a
+        key={match.index}
+        href={match[2]}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-primary hover:underline"
+      >
+        {match[1]}
+      </a>
+    );
+    lastIndex = match.index + match[0].length;
+  }
+
+  // Add remaining text after last link
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+
+  return parts.length > 0 ? parts : text;
+}
 
 export const LoadingDots = () => {
+  const { data } = useLoadingTips();
+  const tips = data?.tips ?? DEFAULT_LOADING_TIPS;
+
   const [messageIndex, setMessageIndex] = React.useState(() =>
-    Math.floor(Math.random() * LOADING_MESSAGES.length)
+    Math.floor(Math.random() * tips.length)
   );
 
   React.useEffect(() => {
     const intervalId = setInterval(() => {
-      setMessageIndex((prevIndex) => (prevIndex + 1) % LOADING_MESSAGES.length);
+      setMessageIndex((prevIndex) => (prevIndex + 1) % tips.length);
     }, 8000);
     return () => clearInterval(intervalId);
-  }, []);
+  }, [tips.length]);
 
   return (
     <div className="flex items-center mt-2">
       <svg
-        width="24"
-        height="8"
-        viewBox="0 0 24 8"
+        width="56"
+        height="16"
+        viewBox="0 0 56 16"
         xmlns="http://www.w3.org/2000/svg"
-        className="mr-2 text-primary"
+        className="mr-2"
       >
         <style>
           {`
@@ -148,36 +177,48 @@ export const LoadingDots = () => {
               animation-delay: 0s;
             }
             .loading-dot-2 {
-              animation-delay: 0.2s;
+              animation-delay: 0.15s;
             }
             .loading-dot-3 {
-              animation-delay: 0.4s;
+              animation-delay: 0.3s;
+            }
+            .loading-dot-4 {
+              animation-delay: 0.45s;
             }
           `}
         </style>
         <circle
           className="loading-dot loading-dot-1"
-          cx="4"
-          cy="4"
-          r="3"
-          fill="currentColor"
+          cx="8"
+          cy="8"
+          r="6"
+          fill="#0066B1"
         />
         <circle
           className="loading-dot loading-dot-2"
-          cx="12"
-          cy="4"
-          r="3"
-          fill="currentColor"
+          cx="22"
+          cy="8"
+          r="6"
+          fill="#522DAE"
         />
         <circle
           className="loading-dot loading-dot-3"
-          cx="20"
-          cy="4"
-          r="3"
-          fill="currentColor"
+          cx="36"
+          cy="8"
+          r="6"
+          fill="#F40000"
+        />
+        <circle
+          className="loading-dot loading-dot-4"
+          cx="50"
+          cy="8"
+          r="6"
+          fill="#FFFFFF"
+          stroke="#E0E0E0"
+          strokeWidth="1"
         />
       </svg>
-      <span className="ml-2 text-xs text-muted-foreground/60">{LOADING_MESSAGES[messageIndex]}</span>
+      <span className="ml-2 text-xs text-muted-foreground">{parseMarkdownLinks(tips[messageIndex])}</span>
     </div>
   );
 };
