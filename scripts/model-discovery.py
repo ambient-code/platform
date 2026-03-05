@@ -28,10 +28,9 @@ import sys
 import time
 import urllib.error
 import urllib.parse
+import urllib.request
 from collections import defaultdict
 from typing import TypedDict
-
-import urllib.request
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -273,7 +272,7 @@ def discover_models(
             if reason == "KEEP" and model_id in protected:
                 reason = "KEEP (default)"
             elif reason == "KEEP" and model_id not in kept_ids:
-                reason = "DROP (version limit)"
+                reason = "SKIP (version limit)"
             print(f"    {model_id:<50s} {reason}")
 
     return sorted(result, key=lambda x: x[0])
@@ -373,7 +372,7 @@ def _build_probe_request(
                 "generationConfig": {"maxOutputTokens": 1},
             }
         ).encode()
-    else:
+    elif publisher == "anthropic":
         url = (
             f"https://{region}-aiplatform.googleapis.com/v1/"
             f"projects/{project_id}/locations/{region}/"
@@ -386,6 +385,8 @@ def _build_probe_request(
                 "messages": [{"role": "user", "content": "hi"}],
             }
         ).encode()
+    else:
+        raise ValueError(f"Unknown publisher: {publisher!r}")
 
     return urllib.request.Request(
         url,
