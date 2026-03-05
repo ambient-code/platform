@@ -147,26 +147,36 @@ def list_publisher_models(publisher: str, token: str) -> list[tuple[str, str | N
             f"/models?{urllib.parse.urlencode(params)}"
         )
 
-        req = urllib.request.Request(
-            url,
-            headers={"Authorization": f"Bearer {token}"},
-            method="GET",
-        )
+        data = None
+        for attempt in range(3):
+            req = urllib.request.Request(
+                url,
+                headers={"Authorization": f"Bearer {token}"},
+                method="GET",
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    data = json.loads(resp.read().decode())
+                break
+            except urllib.error.HTTPError as e:
+                # Permission denied or not found — retrying won't help
+                if e.code in (403, 404) or attempt == 2:
+                    print(
+                        f"  WARNING: list models for {publisher} failed (HTTP {e.code})",
+                        file=sys.stderr,
+                    )
+                    return []
+                time.sleep(2**attempt)
+            except Exception as e:
+                if attempt == 2:
+                    print(
+                        f"  WARNING: list models for {publisher} failed ({e})",
+                        file=sys.stderr,
+                    )
+                    return []
+                time.sleep(2**attempt)
 
-        try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                data = json.loads(resp.read().decode())
-        except urllib.error.HTTPError as e:
-            print(
-                f"  WARNING: list models for {publisher} failed (HTTP {e.code})",
-                file=sys.stderr,
-            )
-            return []
-        except Exception as e:
-            print(
-                f"  WARNING: list models for {publisher} failed ({e})",
-                file=sys.stderr,
-            )
+        if data is None:
             return []
 
         for model in data.get("publisherModels", []):
