@@ -113,17 +113,24 @@ function parseMarkdownLinks(text: string): React.ReactNode {
     if (match.index > lastIndex) {
       parts.push(text.slice(lastIndex, match.index));
     }
-    // Add the link
+    // Validate URL scheme to prevent javascript: injection
+    const href = match[2];
+    const isSafeUrl = href.startsWith('https://') || href.startsWith('http://');
+    // Add the link (or plain text if URL is unsafe)
     parts.push(
-      <a
-        key={match.index}
-        href={match[2]}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-primary hover:underline"
-      >
-        {match[1]}
-      </a>
+      isSafeUrl ? (
+        <a
+          key={match.index}
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-primary hover:underline"
+        >
+          {match[1]}
+        </a>
+      ) : (
+        <span key={match.index}>{match[1]}</span>
+      )
     );
     lastIndex = match.index + match[0].length;
   }
@@ -143,6 +150,11 @@ export const LoadingDots = () => {
   const [messageIndex, setMessageIndex] = React.useState(() =>
     Math.floor(Math.random() * tips.length)
   );
+
+  // Reset index when tips array changes to prevent undefined access
+  React.useEffect(() => {
+    setMessageIndex((prev) => prev % tips.length);
+  }, [tips.length]);
 
   React.useEffect(() => {
     const intervalId = setInterval(() => {
@@ -214,7 +226,7 @@ export const LoadingDots = () => {
           cy="8"
           r="6"
           fill="#FFFFFF"
-          stroke="#E0E0E0"
+          stroke="#9CA3AF"
           strokeWidth="1"
         />
       </svg>
