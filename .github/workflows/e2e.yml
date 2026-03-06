@@ -10,11 +10,14 @@ on:
     branches: [ main ]
 
 concurrency:
-  group: e2e-tests-${{ github.event.pull_request.number }}
+  group: e2e-tests-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
 jobs:
   detect-changes:
+    # Only run for same-repo PRs (not forks) and pushes to main.
+    # Fork PRs build and execute untrusted code in the CI runner environment.
+    if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'push'
     runs-on: ubuntu-latest
     outputs:
       frontend: ${{ steps.filter.outputs.frontend }}
