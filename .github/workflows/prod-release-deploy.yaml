@@ -33,6 +33,8 @@ jobs:
       contents: write
     outputs:
       new_tag: ${{ steps.next_version.outputs.new_tag }}
+      build-matrix: ${{ steps.matrix.outputs.build-matrix }}
+      merge-matrix: ${{ steps.matrix.outputs.merge-matrix }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v6
@@ -145,6 +147,36 @@ jobs:
             ${{ steps.create_archive.outputs.archive_name }}
             RELEASE_CHANGELOG.md
 
+      - name: Build component matrices
+        id: matrix
+        run: |
+          ALL_COMPONENTS='[
+            {"name":"frontend","context":"./components/frontend","image":"quay.io/ambient_code/vteam_frontend","dockerfile":"./components/frontend/Dockerfile"},
+            {"name":"backend","context":"./components/backend","image":"quay.io/ambient_code/vteam_backend","dockerfile":"./components/backend/Dockerfile"},
+            {"name":"operator","context":"./components/operator","image":"quay.io/ambient_code/vteam_operator","dockerfile":"./components/operator/Dockerfile"},
+            {"name":"ambient-runner","context":"./components/runners","image":"quay.io/ambient_code/vteam_claude_runner","dockerfile":"./components/runners/ambient-runner/Dockerfile"},
+            {"name":"state-sync","context":"./components/runners/state-sync","image":"quay.io/ambient_code/vteam_state_sync","dockerfile":"./components/runners/state-sync/Dockerfile"},
+            {"name":"ambient-api-server","context":"./components/ambient-api-server","image":"quay.io/ambient_code/vteam_api_server","dockerfile":"./components/ambient-api-server/Dockerfile"}
+          ]'
+
+          FORCE_ALL="${{ github.event.inputs.force_build_all }}"
+          SELECTED="${{ github.event.inputs.components }}"
+
+          if [ "$FORCE_ALL" == "true" ] || [ -z "$SELECTED" ]; then
+            FILTERED="$ALL_COMPONENTS"
+          else
+            FILTERED=$(echo "$ALL_COMPONENTS" | jq -c --arg sel "$SELECTED" '[.[] | select(.name as $n | $sel | split(",") | map(gsub("^\\s+|\\s+$";"")) | index($n))]')
+          fi
+
+          BUILD_MATRIX=$(echo "$FILTERED" | jq -c '.')
+          MERGE_MATRIX=$(echo "$FILTERED" | jq -c '[.[] | {name, image}]')
+
+          echo "build-matrix=$BUILD_MATRIX" >> $GITHUB_OUTPUT
+          echo "merge-matrix=$MERGE_MATRIX" >> $GITHUB_OUTPUT
+
+          echo "Components to build:"
+          echo "$FILTERED" | jq -r '.[].name'
+
    build:
     needs: release
     permissions:
@@ -162,46 +194,19 @@ jobs:
           - runner: ubuntu-24.04-arm
             platform: linux/arm64
             suffix: arm64
-        component:
-          - name: frontend
-            context: ./components/frontend
-            image: quay.io/ambient_code/vteam_frontend
-            dockerfile: ./components/frontend/Dockerfile
-          - name: backend
-            context: ./components/backend
-            image: quay.io/ambient_code/vteam_backend
-            dockerfile: ./components/backend/Dockerfile
-          - name: operator
-            context: ./components/operator
-            image: quay.io/ambient_code/vteam_operator
-            dockerfile: ./components/operator/Dockerfile
-          - name: ambient-runner
-            context: ./components/runners
-            image: quay.io/ambient_code/vteam_claude_runner
-            dockerfile: ./components/runners/ambient-runner/Dockerfile
-          - name: state-sync
-            context: ./components/runners/state-sync
-            image: quay.io/ambient_code/vteam_state_sync
-            dockerfile: ./components/runners/state-sync/Dockerfile
-          - name: ambient-api-server
-            context: ./components/ambient-api-server
-            image: quay.io/ambient_code/vteam_api_server
-            dockerfile: ./components/ambient-api-server/Dockerfile
+        component: ${{ fromJSON(needs.release.outputs.build-matrix) }}
     runs-on: ${{ matrix.arch.runner }}
     steps:
       - name: Checkout code from the tag generated above
-        if: github.event.inputs.force_build_all == 'true' || contains(github.event.inputs.components, matrix.component.name) || (github.event.inputs.components == '' && github.event.inputs.force_build_all != 'false')
         uses: actions/checkout@v6
         with:
             ref: ${{ needs.release.outputs.new_tag }}
             fetch-depth: 0
 
       - name: Set up Docker Buildx
-        if: github.event.inputs.force_build_all == 'true' || contains(github.event.inputs.components, matrix.component.name) || (github.event.inputs.components == '' && github.event.inputs.force_build_all != 'false')
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to Quay.io
-        if: github.event.inputs.force_build_all == 'true' || contains(github.event.inputs.components, matrix.component.name) || (github.event.inputs.components == '' && github.event.inputs.force_build_all != 'false')
         uses: docker/login-action@v3
         with:
           registry: quay.io
@@ -209,7 +214,6 @@ jobs:
           password: ${{ secrets.QUAY_PASSWORD }}
 
       - name: Log in to Red Hat Container Registry
-        if: github.event.inputs.force_build_all == 'true' || contains(github.event.inputs.components, matrix.component.name) || (github.event.inputs.components == '' && github.event.inputs.force_build_all != 'false')
         uses: docker/login-action@v3
         with:
           registry: registry.redhat.io
@@ -217,7 +221,6 @@ jobs:
           password: ${{ secrets.REDHAT_PASSWORD }}
 
       - name: Build and push ${{ matrix.component.name }} (${{ matrix.arch.suffix }})
-        if: github.event.inputs.force_build_all == 'true' || contains(github.event.inputs.components, matrix.component.name) || (github.event.inputs.components == '' && github.event.inputs.force_build_all != 'false')
         uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.component.context }}
@@ -233,24 +236,12 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        component:
-          - name: frontend
-            image: quay.io/ambient_code/vteam_frontend
-          - name: backend
-            image: quay.io/ambient_code/vteam_backend
-          - name: operator
-            image: quay.io/ambient_code/vteam_operator
-          - name: ambient-runner
-            image: quay.io/ambient_code/vteam_claude_runner
-          - name: state-sync
-            image: quay.io/ambient_code/vteam_state_sync
+        component: ${{ fromJSON(needs.release.outputs.merge-matrix) }}
     steps:
       - name: Set up Docker Buildx
-        if: github.event.inputs.force_build_all == 'true' || contains(github.event.inputs.components, matrix.component.name) || (github.event.inputs.components == '' && github.event.inputs.force_build_all != 'false')
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to Quay.io
-        if: github.event.inputs.force_build_all == 'true' || contains(github.event.inputs.components, matrix.component.name) || (github.event.inputs.components == '' && github.event.inputs.force_build_all != 'false')
         uses: docker/login-action@v3
         with:
           registry: quay.io
@@ -258,7 +249,6 @@ jobs:
           password: ${{ secrets.QUAY_PASSWORD }}
 
       - name: Create multi-arch manifest for ${{ matrix.component.name }}
-        if: github.event.inputs.force_build_all == 'true' || contains(github.event.inputs.components, matrix.component.name) || (github.event.inputs.components == '' && github.event.inputs.force_build_all != 'false')
         run: |
           docker buildx imagetools create \
             -t ${{ matrix.component.image }}:${{ needs.release.outputs.new_tag }} \
