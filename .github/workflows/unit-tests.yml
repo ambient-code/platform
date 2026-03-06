@@ -147,7 +147,7 @@ jobs:
         if: (!cancelled()) && steps.upload.outcome != 'failure'
         with:
           xml_files: '${{ env.TESTS_DIR }}/reports'
-          custom_data: '{"HTML Report": "${{ steps.upload.outputs.artifact-url }}"}'
+          custom_data: '{\"HTML Report\": \"${{ steps.upload.outputs.artifact-url }}\"}'
         continue-on-error: true
 
       - name: Publish Test Summary
