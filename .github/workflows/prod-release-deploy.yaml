@@ -234,7 +234,11 @@ jobs:
    merge-manifests:
     needs: [release, build]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     strategy:
+      fail-fast: false
       matrix:
         component: ${{ fromJSON(needs.release.outputs.merge-matrix) }}
     steps:
@@ -249,6 +253,8 @@ jobs:
           password: ${{ secrets.QUAY_PASSWORD }}
 
       - name: Create multi-arch manifest for ${{ matrix.component.name }}
+        # Note: arch-suffixed tags (e.g. :v1.2.3-amd64) remain in the registry after
+        # merging. Clean these up via Quay tag expiration policies or a periodic job.
         run: |
           docker buildx imagetools create \
             -t ${{ matrix.component.image }}:${{ needs.release.outputs.new_tag }} \

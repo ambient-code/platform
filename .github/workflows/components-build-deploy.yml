@@ -210,6 +210,7 @@ jobs:
       contents: read
       id-token: write
     strategy:
+      fail-fast: false
       matrix:
         component: ${{ fromJSON(needs.detect-changes.outputs.merge-matrix) }}
     steps:
@@ -224,6 +225,8 @@ jobs:
           password: ${{ secrets.QUAY_PASSWORD }}
 
       - name: Create multi-arch manifest for ${{ matrix.component.name }}
+        # Note: arch-suffixed tags (e.g. :abc123-amd64) remain in the registry after
+        # merging. Clean these up via Quay tag expiration policies or a periodic job.
         run: |
           docker buildx imagetools create \
             -t ${{ matrix.component.image }}:latest \
