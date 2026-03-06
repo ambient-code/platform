@@ -146,6 +146,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # IMPORTANT: suffix values must match the hardcoded suffixes in
+        # merge-manifests. Update both together if arches change.
         arch:
           - runner: ubuntu-latest
             platform: linux/amd64
@@ -200,7 +202,6 @@ jobs:
           push: false
           tags: ${{ matrix.component.image }}:pr-${{ github.event.pull_request.number }}-${{ matrix.arch.suffix }}
           cache-from: type=gha,scope=${{ matrix.component.name }}-${{ matrix.arch.suffix }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.component.name }}-${{ matrix.arch.suffix }}
 
   merge-manifests:
     needs: [detect-changes, build]

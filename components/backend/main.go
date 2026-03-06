@@ -29,9 +29,9 @@ var (
 )
 
 func logBuildInfo() {
-	log.Println("================================================")
+	log.Println("==============================================")
 	log.Println("Backend API - Build Information")
-	log.Println("================================================")
+	log.Println("==============================================")
 	log.Printf("Version:     %s", GitVersion)
 	log.Printf("Commit:      %s", GitCommit)
 	log.Printf("Branch:      %s", GitBranch)

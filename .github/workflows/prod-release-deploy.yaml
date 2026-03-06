@@ -27,7 +27,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-   release:
+  release:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -177,7 +177,7 @@ jobs:
           echo "Components to build:"
           echo "$FILTERED" | jq -r '.[].name'
 
-   build:
+  build:
     needs: release
     permissions:
       contents: read
@@ -187,6 +187,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # IMPORTANT: suffix values must match the hardcoded suffixes in
+        # merge-manifests. Update both together if arches change.
         arch:
           - runner: ubuntu-latest
             platform: linux/amd64
@@ -231,7 +233,7 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.component.name }}-${{ matrix.arch.suffix }}
           cache-to: type=gha,mode=max,scope=${{ matrix.component.name }}-${{ matrix.arch.suffix }}
 
-   merge-manifests:
+  merge-manifests:
     needs: [release, build]
     runs-on: ubuntu-latest
     permissions:
@@ -261,7 +263,7 @@ jobs:
             ${{ matrix.component.image }}:${{ needs.release.outputs.new_tag }}-amd64 \
             ${{ matrix.component.image }}:${{ needs.release.outputs.new_tag }}-arm64
 
-   deploy-to-openshift:
+  deploy-to-openshift:
     runs-on: ubuntu-latest
     needs: [release, merge-manifests]
     steps:
