@@ -131,7 +131,7 @@ spec:
             configMapKeyRef:
               name: operator-config
               key: GOOGLE_APPLICATION_CREDENTIALS
-        # LDAP configuration (optional - autocomplete disabled when not set)
+        # LDAP configuration (optional - autocomplete gated by ldap.autocomplete.enabled feature flag)
         - name: LDAP_URL
           valueFrom:
             configMapKeyRef:
