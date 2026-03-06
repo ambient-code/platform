@@ -8,6 +8,9 @@ const nextConfig = {
   },
   experimental: {
     instrumentationHook: true,
+    // Force all static pages into a single worker to prevent QEMU SIGILL
+    // crashes during cross-architecture Docker builds (arm64 emulation).
+    staticGenerationMinPagesPerWorker: 100,
   },
   webpack(config) {
     if (isCoverage) {
