@@ -172,7 +172,8 @@ describe('useCloneSession', () => {
       result.current.mutate({
         projectName: 'proj',
         sessionName: 'sess-1',
-        data: { prompt: 'Continue from here' } as Parameters<typeof result.current.mutate>[0]['data'],
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        data: { prompt: 'Continue from here' } as any,
       });
     });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));

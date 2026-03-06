@@ -142,7 +142,7 @@ describe('SharingSection', () => {
       data: [],
       isLoading: false,
       refetch: mockRefetch,
-    } as ReturnType<typeof queries.useProjectPermissions>);
+    } as unknown as ReturnType<typeof queries.useProjectPermissions>);
 
     render(<SharingSection projectName="test-project" />);
     expect(screen.getByText('No users or groups have access yet')).toBeDefined();

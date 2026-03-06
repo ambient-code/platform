@@ -138,11 +138,11 @@ describe("StreamMessage", () => {
 
   describe("agent_message", () => {
     it("renders string content as bot message", () => {
-      const msg: MessageObject = {
+      const msg = {
         type: "agent_message",
         content: "I can help with that",
         timestamp: "2025-01-01T00:00:00Z",
-      };
+      } as unknown as MessageObject;
       const { container } = render(<StreamMessage message={msg} />);
       const el = screen.getByTestId("message");
       expect(el.getAttribute("data-role")).toBe("bot");
@@ -152,6 +152,7 @@ describe("StreamMessage", () => {
       const msg: MessageObject = {
         type: "agent_message",
         content: { type: "text_block", text: "block text" },
+        model: "test",
         timestamp: "2025-01-01T00:00:00Z",
       };
       const { container } = render(<StreamMessage message={msg} />);
@@ -162,6 +163,7 @@ describe("StreamMessage", () => {
       const msg: MessageObject = {
         type: "agent_message",
         content: { type: "reasoning_block", thinking: "deep thought", signature: "sig" },
+        model: "test",
         timestamp: "2025-01-01T00:00:00Z",
       };
       const { container } = render(<StreamMessage message={msg} />);
@@ -173,6 +175,7 @@ describe("StreamMessage", () => {
       const msg: MessageObject = {
         type: "agent_message",
         content: { type: "tool_use_block", id: "tu-1", name: "Write", input: {} },
+        model: "test",
         timestamp: "2025-01-01T00:00:00Z",
       };
       const { container } = render(<StreamMessage message={msg} />);
@@ -183,6 +186,7 @@ describe("StreamMessage", () => {
       const msg: MessageObject = {
         type: "agent_message",
         content: { type: "tool_result_block", tool_use_id: "tu-1", content: "result" },
+        model: "test",
         timestamp: "2025-01-01T00:00:00Z",
       };
       const { container } = render(<StreamMessage message={msg} />);
@@ -190,12 +194,12 @@ describe("StreamMessage", () => {
     });
 
     it("shows feedback buttons for non-streaming agent messages", () => {
-      const msg: MessageObject = {
+      const msg = {
         type: "agent_message",
         id: "msg-1",
         content: "Complete response",
         timestamp: "2025-01-01T00:00:00Z",
-      };
+      } as unknown as MessageObject;
       const { container } = render(<StreamMessage message={msg} />);
       expect(screen.getByTestId("feedback-buttons")).toBeTruthy();
     });
@@ -223,6 +227,8 @@ describe("StreamMessage", () => {
         duration_ms: 1000,
         duration_api_ms: 500,
         num_turns: 3,
+        subtype: "success",
+        session_id: "sess-1",
         timestamp: "2025-01-01T00:00:00Z",
       };
       const { container } = render(<StreamMessage message={msg} onGoToResults={onGoToResults} />);
@@ -237,6 +243,8 @@ describe("StreamMessage", () => {
         duration_ms: 500,
         duration_api_ms: 200,
         num_turns: 1,
+        subtype: "error",
+        session_id: "sess-1",
         timestamp: "2025-01-01T00:00:00Z",
       };
       const { container } = render(<StreamMessage message={msg} />);

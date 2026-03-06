@@ -64,7 +64,7 @@ function makeSession(phase: string, stoppedReason?: string): AgenticSession {
       timeout: 3600,
     },
     status: {
-      phase: phase as AgenticSession['status']['phase'],
+      phase: phase as NonNullable<AgenticSession['status']>['phase'],
       stoppedReason,
     },
   } as AgenticSession;

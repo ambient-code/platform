@@ -65,14 +65,14 @@ describe("ToolMessage", () => {
 
   describe("status indicators", () => {
     it.skip("shows loading state when there is no result", () => {
-      render(<ToolMessage toolUseBlock={makeToolUse()} />);
+      const { container } = render(<ToolMessage toolUseBlock={makeToolUse()} />);
       // Loading spinner has animate-spin class
       const spinner = container.querySelector(".animate-spin");
       expect(spinner).toBeTruthy();
     });
 
     it.skip("shows success state when result is present", () => {
-      render(
+      const { container } = render(
         <ToolMessage
           toolUseBlock={makeToolUse()}
           resultBlock={makeResult({ content: "ok" })}
@@ -82,7 +82,7 @@ describe("ToolMessage", () => {
     });
 
     it.skip("shows error state when is_error is true", () => {
-      render(
+      const { container } = render(
         <ToolMessage
           toolUseBlock={makeToolUse()}
           resultBlock={makeResult({ content: "error msg", is_error: true })}
@@ -320,7 +320,7 @@ describe("ToolMessage", () => {
 
   describe("empty result handling", () => {
     it.skip("treats empty string as no result", () => {
-      render(
+      const { container } = render(
         <ToolMessage
           toolUseBlock={makeToolUse()}
           resultBlock={makeResult({ content: "" })}
@@ -331,7 +331,7 @@ describe("ToolMessage", () => {
     });
 
     it.skip("treats empty array as no result", () => {
-      render(
+      const { container } = render(
         <ToolMessage
           toolUseBlock={makeToolUse()}
           resultBlock={makeResult({ content: [] as unknown as string })}
@@ -341,7 +341,7 @@ describe("ToolMessage", () => {
     });
 
     it.skip('treats \'\"\"\' as no result', () => {
-      render(
+      const { container } = render(
         <ToolMessage
           toolUseBlock={makeToolUse()}
           resultBlock={makeResult({ content: '""' })}
@@ -685,7 +685,7 @@ describe("ToolMessage", () => {
           timestamp: "2025-01-01T00:00:00Z",
         },
       ];
-      render(
+      const { container } = render(
         <ToolMessage
           toolUseBlock={toolUse}
           resultBlock={makeResult({ content: "done" })}
@@ -773,7 +773,7 @@ describe("ToolMessage", () => {
 
   describe("empty object result handling", () => {
     it.skip("treats empty object as no result (loading state)", () => {
-      render(
+      const { container } = render(
         <ToolMessage
           toolUseBlock={makeToolUse()}
           resultBlock={makeResult({ content: {} as unknown as string })}
@@ -783,7 +783,7 @@ describe("ToolMessage", () => {
     });
 
     it.skip("treats single quotes as no result", () => {
-      render(
+      const { container } = render(
         <ToolMessage
           toolUseBlock={makeToolUse()}
           resultBlock={makeResult({ content: "''" })}

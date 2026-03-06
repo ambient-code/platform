@@ -22,12 +22,12 @@ import { useLocalStorage } from '../use-local-storage';
 describe('useInputHistory', () => {
   beforeEach(() => {
     // Reset mock storage
-    vi.mocked(useLocalStorage).mockImplementation((_key, initial) => {
+    vi.mocked(useLocalStorage).mockImplementation((_key: string, initial: unknown) => {
       let storage = initial as string[];
-      const setState = vi.fn((fn: string[] | ((prev: string[]) => string[])) => {
-        storage = typeof fn === 'function' ? fn(storage) : fn;
-      });
-      return [storage, setState, vi.fn()];
+      const setState = (fn: unknown) => {
+        storage = typeof fn === 'function' ? fn(storage) : fn as string[];
+      };
+      return [storage, setState, () => { storage = initial as string[]; }] as unknown as ReturnType<typeof useLocalStorage>;
     });
   });
 

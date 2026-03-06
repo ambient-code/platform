@@ -13,7 +13,8 @@ vi.mock('@/hooks/use-input-history', () => ({
 import { useInputHistory } from '@/hooks/use-input-history';
 
 describe('InputWithHistory', () => {
-  let onChange: ReturnType<typeof vi.fn>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let onChange: any;
 
   beforeEach(() => {
     onChange = vi.fn();

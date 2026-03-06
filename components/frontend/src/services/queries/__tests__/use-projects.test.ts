@@ -153,7 +153,7 @@ describe('useAddProjectPermission', () => {
     act(() => {
       result.current.mutate({
         projectName: 'test-project',
-        permission: { subjectType: 'user', subjectName: 'user1', role: 'viewer' },
+        permission: { subjectType: 'user', subjectName: 'user1', role: 'view' },
       });
     });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
