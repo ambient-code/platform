@@ -229,21 +229,10 @@ jobs:
           pip install -e '.[claude]'
           pip install pytest pytest-asyncio pytest-cov httpx
 
-      - name: Run unit tests
+      - name: Run unit tests with coverage
         run: |
-          pytest tests/ -v --tb=short --color=yes -x
+          pytest tests/ -v --tb=short --color=yes -x --cov=ambient_runner --cov-report=term-missing --cov-report=xml
 
-      - name: Run tests with coverage
-        run: |
-          pytest tests/ --cov=ambient_runner --cov-report=term-missing --cov-report=xml
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
-        with:
-          files: ./components/runners/ambient-runner/coverage.xml
-          flags: runner
-          name: ambient-runner
-          fail_ci_if_error: false
 
   cli:
     runs-on: ubuntu-latest
