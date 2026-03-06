@@ -1,61 +1,61 @@
-name: Go Lint and Format
+name: Lint
 
 on:
   push:
     branches: [main]
     paths:
-      - 'components/backend/**/*.go'
-      - 'components/backend/go.mod'
-      - 'components/backend/go.sum'
-      - 'components/operator/**/*.go'
-      - 'components/operator/go.mod'
-      - 'components/operator/go.sum'
-      - 'components/ambient-api-server/**/*.go'
-      - 'components/ambient-api-server/go.mod'
-      - 'components/ambient-api-server/go.sum'
-      - 'components/ambient-cli/**/*.go'
-      - 'components/ambient-cli/go.mod'
-      - 'components/ambient-cli/go.sum'
-      - '.github/workflows/go-lint.yml'
+      - 'components/frontend/**'
+      - 'components/backend/**'
+      - 'components/operator/**'
+      - 'components/ambient-api-server/**'
+      - 'components/ambient-cli/**'
+      - '.github/workflows/lint.yml'
+      - '!**/*.md'
+
   pull_request:
     branches: [main]
     paths:
-      - 'components/backend/**/*.go'
-      - 'components/backend/go.mod'
-      - 'components/backend/go.sum'
-      - 'components/operator/**/*.go'
-      - 'components/operator/go.mod'
-      - 'components/operator/go.sum'
-      - 'components/ambient-api-server/**/*.go'
-      - 'components/ambient-api-server/go.mod'
-      - 'components/ambient-api-server/go.sum'
-      - 'components/ambient-cli/**/*.go'
-      - 'components/ambient-cli/go.mod'
-      - 'components/ambient-cli/go.sum'
-      - '.github/workflows/go-lint.yml'
+      - 'components/frontend/**'
+      - 'components/backend/**'
+      - 'components/operator/**'
+      - 'components/ambient-api-server/**'
+      - 'components/ambient-cli/**'
+      - '.github/workflows/lint.yml'
+      - '!**/*.md'
+
   workflow_dispatch:
 
 concurrency:
-  group: go-lint-${{ github.event.pull_request.number || github.ref }}
+  group: lint-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  detect-go-changes:
+  detect-changes:
     runs-on: ubuntu-latest
     outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
       backend: ${{ steps.filter.outputs.backend }}
       operator: ${{ steps.filter.outputs.operator }}
-      ambient-api-server: ${{ steps.filter.outputs.ambient-api-server }}
-      ambient-cli: ${{ steps.filter.outputs.ambient-cli }}
+      api-server: ${{ steps.filter.outputs.api-server }}
+      cli: ${{ steps.filter.outputs.cli }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      - name: Check for Go changes
+      - name: Detect changed components
         uses: dorny/paths-filter@v3
         id: filter
         with:
           filters: |
+            frontend:
+              - 'components/frontend/**/*.ts'
+              - 'components/frontend/**/*.tsx'
+              - 'components/frontend/**/*.js'
+              - 'components/frontend/**/*.jsx'
+              - 'components/frontend/package.json'
+              - 'components/frontend/package-lock.json'
+              - 'components/frontend/tsconfig.json'
+              - 'components/frontend/eslint.config.mjs'
             backend:
               - 'components/backend/**/*.go'
               - 'components/backend/go.mod'
@@ -64,19 +64,56 @@ jobs:
               - 'components/operator/**/*.go'
               - 'components/operator/go.mod'
               - 'components/operator/go.sum'
-            ambient-api-server:
+            api-server:
               - 'components/ambient-api-server/**/*.go'
               - 'components/ambient-api-server/go.mod'
               - 'components/ambient-api-server/go.sum'
-            ambient-cli:
+            cli:
               - 'components/ambient-cli/**/*.go'
               - 'components/ambient-cli/go.mod'
               - 'components/ambient-cli/go.sum'
 
-  lint-backend:
+  frontend:
     runs-on: ubuntu-latest
-    needs: detect-go-changes
-    if: needs.detect-go-changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch'
+    needs: detect-changes
+    if: needs.detect-changes.outputs.frontend == 'true' || github.event_name == 'workflow_dispatch'
+    name: Frontend Lint and Type Check
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: 'components/frontend/package.json'
+          cache: 'npm'
+          cache-dependency-path: 'components/frontend/package-lock.json'
+
+      - name: Install dependencies
+        run: |
+          cd components/frontend
+          npm ci
+
+      - name: Run ESLint
+        run: |
+          cd components/frontend
+          npm run lint
+
+      - name: Run TypeScript type check
+        run: |
+          cd components/frontend
+          npx tsc --noEmit
+
+      - name: Build check
+        run: |
+          cd components/frontend
+          npm run build
+
+  go-backend:
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch'
+    name: Go Lint - Backend
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -111,8 +148,6 @@ jobs:
           working-directory: components/backend
           args: --timeout=5m
 
-      # The backend unit tests require -tags=test (to compile test-only hooks used by handlers tests).
-      # We lint both production build (default) and test build (with tags) to avoid hiding issues.
       - name: Run golangci-lint (test build tags)
         uses: golangci/golangci-lint-action@v9
         with:
@@ -120,10 +155,11 @@ jobs:
           working-directory: components/backend
           args: --timeout=5m --build-tags=test
 
-  lint-operator:
+  go-operator:
     runs-on: ubuntu-latest
-    needs: detect-go-changes
-    if: needs.detect-go-changes.outputs.operator == 'true' || github.event_name == 'workflow_dispatch'
+    needs: detect-changes
+    if: needs.detect-changes.outputs.operator == 'true' || github.event_name == 'workflow_dispatch'
+    name: Go Lint - Operator
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -158,10 +194,11 @@ jobs:
           working-directory: components/operator
           args: --timeout=5m
 
-  lint-ambient-api-server:
+  go-api-server:
     runs-on: ubuntu-latest
-    needs: detect-go-changes
-    if: needs.detect-go-changes.outputs.ambient-api-server == 'true' || github.event_name == 'workflow_dispatch'
+    needs: detect-changes
+    if: needs.detect-changes.outputs.api-server == 'true' || github.event_name == 'workflow_dispatch'
+    name: Go Lint - API Server
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -196,10 +233,11 @@ jobs:
           working-directory: components/ambient-api-server
           args: --timeout=5m
 
-  lint-ambient-cli:
+  go-cli:
     runs-on: ubuntu-latest
-    needs: detect-go-changes
-    if: needs.detect-go-changes.outputs.ambient-cli == 'true' || github.event_name == 'workflow_dispatch'
+    needs: detect-changes
+    if: needs.detect-changes.outputs.cli == 'true' || github.event_name == 'workflow_dispatch'
+    name: Go Lint - CLI
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -234,29 +272,31 @@ jobs:
           working-directory: components/ambient-cli
           args: --timeout=5m
 
-  lint-summary:
+  summary:
     runs-on: ubuntu-latest
-    needs: [detect-go-changes, lint-backend, lint-operator, lint-ambient-api-server, lint-ambient-cli]
+    needs: [detect-changes, frontend, go-backend, go-operator, go-api-server, go-cli]
     if: always()
     steps:
       - name: Check overall status
         run: |
           failed=false
           for result in \
-            "${{ needs.lint-backend.result }}" \
-            "${{ needs.lint-operator.result }}" \
-            "${{ needs.lint-ambient-api-server.result }}" \
-            "${{ needs.lint-ambient-cli.result }}"; do
+            "${{ needs.frontend.result }}" \
+            "${{ needs.go-backend.result }}" \
+            "${{ needs.go-operator.result }}" \
+            "${{ needs.go-api-server.result }}" \
+            "${{ needs.go-cli.result }}"; do
             if [ "$result" == "failure" ] || [ "$result" == "cancelled" ]; then
               failed=true
             fi
           done
           if [ "$failed" == "true" ]; then
-            echo "Go linting failed"
-            echo "  lint-backend: ${{ needs.lint-backend.result }}"
-            echo "  lint-operator: ${{ needs.lint-operator.result }}"
-            echo "  lint-ambient-api-server: ${{ needs.lint-ambient-api-server.result }}"
-            echo "  lint-ambient-cli: ${{ needs.lint-ambient-cli.result }}"
+            echo "Linting failed"
+            echo "  frontend: ${{ needs.frontend.result }}"
+            echo "  go-backend: ${{ needs.go-backend.result }}"
+            echo "  go-operator: ${{ needs.go-operator.result }}"
+            echo "  go-api-server: ${{ needs.go-api-server.result }}"
+            echo "  go-cli: ${{ needs.go-cli.result }}"
             exit 1
           fi
-          echo "All Go linting checks passed!"
+          echo "All lint checks passed!"

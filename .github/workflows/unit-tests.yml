@@ -1,0 +1,308 @@
+name: Unit Tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'components/backend/**'
+      - 'components/ambient-api-server/**'
+      - 'components/runners/ambient-runner/**'
+      - 'components/ambient-cli/**'
+      - 'components/ambient-sdk/go-sdk/**'
+      - '.github/workflows/unit-tests.yml'
+      - '!**/*.md'
+
+  pull_request:
+    paths:
+      - 'components/backend/**'
+      - 'components/ambient-api-server/**'
+      - 'components/runners/ambient-runner/**'
+      - 'components/ambient-cli/**'
+      - 'components/ambient-sdk/go-sdk/**'
+      - '.github/workflows/unit-tests.yml'
+      - '!**/*.md'
+
+  workflow_dispatch:
+    inputs:
+      test_label:
+        description: "Backend test label filter"
+        default: 'unit'
+        required: true
+        type: string
+      default_namespace:
+        description: "Default namespace for backend testing"
+        default: 'test-namespace'
+        required: false
+        type: string
+
+concurrency:
+  group: unit-tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      api-server: ${{ steps.filter.outputs.api-server }}
+      runner: ${{ steps.filter.outputs.runner }}
+      cli: ${{ steps.filter.outputs.cli }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Detect changed components
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'components/backend/**'
+            api-server:
+              - 'components/ambient-api-server/**'
+            runner:
+              - 'components/runners/ambient-runner/**'
+            cli:
+              - 'components/ambient-cli/**'
+              - 'components/ambient-sdk/go-sdk/**'
+
+  backend:
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch'
+    name: Backend Unit Tests
+    env:
+      TESTS_DIR: "./components/backend/handlers"
+      TESTS_LABEL: "unit"
+      JUNIT_FILENAME: "junit.xml"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'components/backend/go.mod'
+          cache-dependency-path: 'components/backend/go.sum'
+
+      - name: Create reports directory
+        shell: bash
+        working-directory: ${{ env.TESTS_DIR }}
+        run: mkdir -p reports
+
+      - name: Configure Input Variables
+        shell: bash
+        id: configure
+        run: |
+          TEST_LABEL=${{ env.TESTS_LABEL }}
+          DEFAULT_NAMESPACE="test-namespace"
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            TEST_LABEL=${{ inputs.test_label }}
+            DEFAULT_NAMESPACE=${{ inputs.default_namespace }}
+          fi
+
+          {
+            echo "TEST_LABEL=$TEST_LABEL"
+            echo "DEFAULT_NAMESPACE=$DEFAULT_NAMESPACE"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Run Tests
+        id: run-tests
+        shell: bash
+        working-directory: ${{ env.TESTS_DIR }}
+        run: |
+          go run github.com/onsi/ginkgo/v2/ginkgo -r -v --cover --keep-going --github-output=true --tags=test --label-filter=${{ steps.configure.outputs.TEST_LABEL }} --junit-report=${{ env.JUNIT_FILENAME }} --output-dir=reports -- -testNamespace=${{ steps.configure.outputs.DEFAULT_NAMESPACE }}
+        continue-on-error: true
+
+      - name: Install Junit2Html plugin and generate report
+        if: (!cancelled())
+        shell: bash
+        run: |
+          pip install junit2html
+          junit2html ${{ env.TESTS_DIR }}/reports/${{ env.JUNIT_FILENAME }} ${{ env.TESTS_DIR }}/reports/test-report.html
+        continue-on-error: true
+
+      - name: Configure report name
+        id: name_gen
+        shell: bash
+        run: |
+          uuid=$(uuidgen)
+          REPORT_NAME="Backend Unit Tests HTML Report - ${{ github.run_id }}_${{ github.job }}_$uuid"
+          echo "REPORT_NAME=$REPORT_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Upload HTML Report
+        id: upload
+        uses: actions/upload-artifact@v6
+        if: (!cancelled())
+        with:
+          name: ${{ steps.name_gen.outputs.REPORT_NAME }}
+          path: ${{ env.TESTS_DIR }}/reports/test-report.html
+          retention-days: 7
+        continue-on-error: true
+
+      - name: Publish Test Summary With HTML Report
+        id: publish
+        uses: kubeflow/pipelines/.github/actions/junit-summary@master
+        if: (!cancelled()) && steps.upload.outcome != 'failure'
+        with:
+          xml_files: '${{ env.TESTS_DIR }}/reports'
+          custom_data: '{"HTML Report": "${{ steps.upload.outputs.artifact-url }}"}'
+        continue-on-error: true
+
+      - name: Publish Test Summary
+        id: summary
+        uses: kubeflow/pipelines/.github/actions/junit-summary@master
+        if: (!cancelled()) && steps.upload.outcome == 'failure'
+        with:
+          xml_files: '${{ env.TESTS_DIR }}/reports'
+        continue-on-error: true
+
+      - name: Mark Workflow failure if test step failed
+        if: steps.run-tests.outcome != 'success' && !cancelled()
+        shell: bash
+        run: exit 1
+
+      - name: Mark Workflow failure if test reporting failed
+        if: (steps.publish.outcome == 'failure' || steps.summary.outcome == 'failure' || steps.upload.outcome != 'success') && !cancelled()
+        shell: bash
+        run: exit 1
+
+  api-server:
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.api-server == 'true' || github.event_name == 'workflow_dispatch'
+    name: API Server Integration Tests
+    defaults:
+      run:
+        working-directory: components/ambient-api-server
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'components/ambient-api-server/go.mod'
+          cache-dependency-path: 'components/ambient-api-server/go.sum'
+
+      - name: Create secrets directory
+        run: |
+          mkdir -p secrets
+          printf '%s' 'localhost' > secrets/db.host
+          printf '%s' '5432' > secrets/db.port
+          printf '%s' 'ambient_api_server' > secrets/db.name
+          printf '%s' 'postgres' > secrets/db.user
+          printf '%s' 'postgres' > secrets/db.password
+
+      - name: Run tests
+        run: make test
+
+  runner:
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.runner == 'true' || github.event_name == 'workflow_dispatch'
+    name: Ambient Runner Tests
+    defaults:
+      run:
+        working-directory: components/runners/ambient-runner
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install pytest pytest-asyncio pytest-cov
+
+      - name: Run unit tests
+        run: |
+          pytest tests/ -v --tb=short --color=yes -x
+
+      - name: Run tests with coverage
+        run: |
+          pytest tests/ --cov=ambient_runner --cov-report=term-missing --cov-report=xml
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./components/runners/ambient-runner/coverage.xml
+          flags: runner
+          name: ambient-runner
+          fail_ci_if_error: false
+
+  cli:
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.cli == 'true' || github.event_name == 'workflow_dispatch'
+    name: CLI Build and Tests
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'components/ambient-cli/go.mod'
+          cache-dependency-path: 'components/ambient-cli/go.sum'
+
+      - name: Build binary
+        run: |
+          cd components/ambient-cli
+          go build -ldflags "-X github.com/ambient-code/platform/components/ambient-cli/pkg/info.Version=ci-${{ github.sha }}" -o acpctl ./cmd/acpctl/
+
+      - name: Verify binary runs
+        run: |
+          cd components/ambient-cli
+          ./acpctl version
+          ./acpctl --help
+
+      - name: Run unit tests
+        run: |
+          cd components/ambient-cli
+          go test -v -race -coverprofile=coverage.out ./...
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: cli-coverage-${{ github.run_id }}
+          path: components/ambient-cli/coverage.out
+          retention-days: 7
+
+  summary:
+    runs-on: ubuntu-latest
+    needs: [detect-changes, backend, api-server, runner, cli]
+    if: always()
+    steps:
+      - name: Check overall status
+        run: |
+          failed=false
+          for result in \
+            "${{ needs.backend.result }}" \
+            "${{ needs.api-server.result }}" \
+            "${{ needs.runner.result }}" \
+            "${{ needs.cli.result }}"; do
+            if [ "$result" == "failure" ] || [ "$result" == "cancelled" ]; then
+              failed=true
+            fi
+          done
+          if [ "$failed" == "true" ]; then
+            echo "Unit tests failed"
+            echo "  backend: ${{ needs.backend.result }}"
+            echo "  api-server: ${{ needs.api-server.result }}"
+            echo "  runner: ${{ needs.runner.result }}"
+            echo "  cli: ${{ needs.cli.result }}"
+            exit 1
+          fi
+          echo "All unit tests passed!"
