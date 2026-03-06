@@ -30,6 +30,7 @@ import { cn } from "@/lib/utils";
 // Custom components
 import MessagesTab from "@/components/session/MessagesTab";
 import { SessionStartingEvents } from "@/components/session/SessionStartingEvents";
+import { ContextUsage } from "@/components/session/ContextUsage";
 import { FileTree, type FileTreeNode } from "@/components/file-tree";
 
 import { Button } from "@/components/ui/button";
@@ -1494,6 +1495,13 @@ export default function ProjectSessionDetailPage({
                     ]}
                   />
                 </div>
+
+                {/* Context usage indicator */}
+                <ContextUsage
+                  state={aguiState}
+                  model={session.spec?.llmSettings?.model}
+                  className="hidden md:flex"
+                />
 
                 {/* Kebab menu (both mobile and desktop) */}
                 <SessionHeader
