@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect, useMemo, useLayoutEffect, useCallba
 import { MessageSquare } from "lucide-react";
 import { StreamMessage } from "@/components/ui/stream-message";
 import { LoadingDots } from "@/components/ui/message";
+import { Button } from "@/components/ui/button";
 import { ChatInputBox } from "@/components/chat/ChatInputBox";
 import { QueuedMessageBubble } from "@/components/chat/QueuedMessageBubble";
 import type { AgenticSession, MessageObject, ToolUseMessages, HierarchicalToolMessage } from "@/types/agentic-session";
@@ -17,13 +18,16 @@ const MAX_VISIBLE_MESSAGES = 100;
 function getMessageKey(m: MessageObject | ToolUseMessages | HierarchicalToolMessage, idx: number): string {
   if ('id' in m && m.id) return m.id;
   if ('toolUseBlock' in m && m.toolUseBlock?.id) return `tool-${m.toolUseBlock.id}`;
-  if ('type' in m && 'timestamp' in m) return `${(m as { type: string }).type}-${(m as { timestamp: string }).timestamp}-${idx}`;
+  // Both MessageObject and HierarchicalToolMessage carry type+timestamp; the `in` guard is sufficient.
+  if ('type' in m && 'timestamp' in m) return `${m.type}-${m.timestamp}-${idx}`;
+  // Last resort: index within the visible window. This key shifts when the window expands
+  // (Load earlier), but only affects messages with no other stable identifier.
   return `sm-${idx}`;
 }
 
 export type MessagesTabProps = {
   session: AgenticSession;
-  streamMessages: Array<MessageObject | ToolUseMessages>;
+  streamMessages: Array<MessageObject | ToolUseMessages | HierarchicalToolMessage>;
   chatInput: string;
   setChatInput: (v: string) => void;
   onSendChat: () => Promise<void>;
@@ -123,7 +127,7 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
       const scrollDelta = container.scrollHeight - prevScrollHeightRef.current;
       container.scrollTop = prevScrollTopRef.current + scrollDelta;
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- refs are stable; loadedMessageCount is the intended trigger
   }, [loadedMessageCount]);
 
   useEffect(() => {
@@ -191,12 +195,14 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
 
         {shouldShowMessages && hasMoreMessages && (
           <div className="flex justify-center py-2">
-            <button
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={loadEarlierMessages}
-              className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
+              className="text-xs text-muted-foreground underline underline-offset-2"
             >
               Load earlier messages ({filteredMessages.length - loadedMessageCount} hidden)
-            </button>
+            </Button>
           </div>
         )}
 
