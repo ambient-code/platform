@@ -16,7 +16,7 @@ Click **New Session** inside a workspace. The creation dialog lets you configure
 | **Max tokens** | Maximum output length per response (100 -- 8,000). | 4,000 |
 | **Timeout** | Hard limit on total session duration (60 -- 1,800 seconds). | 300 seconds |
 
-After the session is created, you can attach repositories and select a workflow from the session sidebar. See [Context & Artifacts](./context-and-artifacts) and [Workflows](./workflows) for details.
+After the session is created, you can attach repositories and select a workflow from the session sidebar. See [Context & Artifacts](../context-and-artifacts/) and [Workflows](../workflows/) for details.
 
 ## Session lifecycle
 

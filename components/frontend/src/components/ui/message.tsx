@@ -241,7 +241,7 @@ export const Message = React.forwardRef<HTMLDivElement, MessageProps>(
     ref
   ) => {
     const isBot = role === "bot";
-    const avatarBg = isBot ? "bg-blue-600" : "bg-green-600";
+    const avatarBg = isBot ? "bg-primary ring-2 ring-background" : "bg-emerald-600 dark:bg-emerald-500 ring-2 ring-background";
     const avatarText = isBot ? "AI" : "U";
     const formattedTime = formatTimestamp(timestamp);
     const isActivelyStreaming = streaming && isBot;
@@ -278,7 +278,7 @@ export const Message = React.forwardRef<HTMLDivElement, MessageProps>(
             )}
             <div className={cn(
               borderless ? "p-0" : "rounded-lg",
-              !borderless && (isBot ? "bg-card" : "bg-border/30")
+              !borderless && (isBot ? "bg-card" : "bg-primary/10 dark:bg-primary/15")
             )}>
               {/* Content */}
               <div className={cn("text-sm text-foreground font-mono", !isBot && "py-2 px-4")}>
@@ -296,7 +296,7 @@ export const Message = React.forwardRef<HTMLDivElement, MessageProps>(
                       {content}
                     </ReactMarkdown>
                     {isActivelyStreaming && (
-                      <span className="inline-block w-2 h-4 bg-primary/70 animate-pulse ml-0.5 align-middle" />
+                      <span className="inline-block w-0.5 h-4 bg-primary animate-[cursor-blink_1s_ease-in-out_infinite] rounded-full ml-0.5 align-middle" />
                     )}
                   </div>
                 )}

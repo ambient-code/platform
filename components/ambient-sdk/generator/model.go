@@ -221,7 +221,7 @@ func pluralize(name string) string {
 
 	// Check for already plural words ending in settings, data, etc.
 	if strings.HasSuffix(lower, "settings") || strings.HasSuffix(lower, "data") ||
-	   strings.HasSuffix(lower, "metadata") || strings.HasSuffix(lower, "info") {
+		strings.HasSuffix(lower, "metadata") || strings.HasSuffix(lower, "info") {
 		return lower
 	}
 

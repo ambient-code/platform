@@ -15,7 +15,7 @@ import type { AgenticSession } from '@/types/agentic-session';
 import { useUpdateSessionDisplayName, useCurrentUser, useSessionExport } from '@/services/queries';
 import { useMcpStatus } from '@/services/queries/use-mcp';
 import { useGoogleStatus } from '@/services/queries/use-google';
-import { successToast, errorToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import { saveToGoogleDrive } from '@/services/api/sessions';
 import { convertEventsToMarkdown, downloadAsMarkdown, exportAsPdf } from '@/utils/export-chat';
 
@@ -71,12 +71,12 @@ export function SessionHeader({
       },
       {
         onSuccess: () => {
-          successToast('Session name updated successfully');
+          toast.success('Session name updated successfully');
           setEditNameDialogOpen(false);
           onRefresh();
         },
         onError: (error) => {
-          errorToast(error instanceof Error ? error.message : 'Failed to update session name');
+          toast.error(error instanceof Error ? error.message : 'Failed to update session name');
         },
       }
     );
@@ -85,11 +85,11 @@ export function SessionHeader({
   const handleExport = async (format: 'markdown' | 'pdf' | 'gdrive') => {
     if (format === 'gdrive') {
       if (!googleStatus?.connected) {
-        errorToast('Connect Google Drive in Integrations first');
+        toast.error('Connect Google Drive in Integrations first');
         return;
       }
       if (!isRunning || !hasGdriveMcp) {
-        errorToast('Session must be running with Google Drive MCP configured');
+        toast.error('Session must be running with Google Drive MCP configured');
         return;
       }
     }
@@ -109,7 +109,7 @@ export function SessionHeader({
       switch (format) {
         case 'markdown':
           downloadAsMarkdown(markdown, `${filename}.md`);
-          successToast('Chat exported as Markdown');
+          toast.success('Chat exported as Markdown');
           break;
         case 'pdf':
           exportAsPdf(markdown, filename);
@@ -125,12 +125,12 @@ export function SessionHeader({
           if (!result.content) {
             throw new Error('Failed to create file in Google Drive');
           }
-          successToast('Saved to Google Drive');
+          toast.success('Saved to Google Drive');
           break;
         }
       }
     } catch (err) {
-      errorToast(err instanceof Error ? err.message : 'Failed to export chat');
+      toast.error(err instanceof Error ? err.message : 'Failed to export chat');
     } finally {
       setExportLoading(null);
     }

@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import Link from "next/link";
-import { AlertCircle, AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
+import { AlertCircle, AlertTriangle, CheckCircle2, ChevronsUpDown, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
@@ -40,7 +41,7 @@ import { useRunnerTypes } from "@/services/queries/use-runner-types";
 import { DEFAULT_RUNNER_TYPE_ID } from "@/services/api/runner-types";
 import { useIntegrationsStatus } from "@/services/queries/use-integrations";
 import { useModels } from "@/services/queries/use-models";
-import { errorToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 
 // Static default used for form initialization before the API responds.
 const DEFAULT_MODEL = "claude-sonnet-4-5";
@@ -151,7 +152,7 @@ export function CreateSessionDialog({
           onSuccess?.();
         },
         onError: (error) => {
-          errorToast(error.message || "Failed to create session");
+          toast.error(error.message || "Failed to create session");
         },
       }
     );
@@ -291,8 +292,12 @@ export function CreateSessionDialog({
               />
 
               {/* Integration auth status */}
-              <div className="w-full space-y-2">
-                <FormLabel>Integrations</FormLabel>
+              <Collapsible className="w-full space-y-2">
+                <CollapsibleTrigger className="flex items-center justify-between w-full">
+                  <FormLabel className="cursor-pointer">Integrations</FormLabel>
+                  <ChevronsUpDown className="h-4 w-4 text-muted-foreground" />
+                </CollapsibleTrigger>
+                <CollapsibleContent className="space-y-2">
                 {/* GitHub card */}
                 {githubConfigured ? (
                   <div className="flex items-start justify-between gap-3 p-3 border rounded-lg bg-background/50">
@@ -424,7 +429,8 @@ export function CreateSessionDialog({
                     </div>
                   </div>
                 )}
-              </div>
+                </CollapsibleContent>
+              </Collapsible>
 
               <DialogFooter>
                 <Button

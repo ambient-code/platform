@@ -55,8 +55,7 @@ spec:
         component: database
     spec:
       securityContext:
-        runAsUser: 999
-        runAsGroup: 999
+        runAsNonRoot: true
         fsGroup: 999
       containers:
         - name: postgresql
@@ -100,10 +99,9 @@ spec:
             - mountPath: /var/lib/pgsql/data
               name: ambient-api-server-db-data
           securityContext:
-            runAsUser: 999
-            runAsGroup: 999
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: false
+            runAsNonRoot: true
             capabilities:
               drop:
                 - ALL

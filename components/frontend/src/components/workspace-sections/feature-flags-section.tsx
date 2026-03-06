@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils";
 import { useFeatureFlags } from "@/services/queries/use-feature-flags-admin";
 import type { FeatureToggle } from "@/services/api/feature-flags-admin";
 import * as featureFlagsApi from "@/services/api/feature-flags-admin";
-import { successToast, errorToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 
 type FeatureFlagsSectionProps = {
@@ -163,13 +163,13 @@ export function FeatureFlagsSection({ projectName }: FeatureFlagsSectionProps) {
 
       await Promise.all(promises);
 
-      successToast(`${changed.length} feature flag${changed.length > 1 ? "s" : ""} updated`);
+      toast.success(`${changed.length} feature flag${changed.length > 1 ? "s" : ""} updated`);
 
       queryClient.invalidateQueries({ queryKey: ["feature-flags", "list", projectName] });
       queryClient.invalidateQueries({ queryKey: ["models", projectName] });
       queryClient.invalidateQueries({ queryKey: ["runner-types", projectName] });
     } catch (err) {
-      errorToast(err instanceof Error ? err.message : "Failed to save feature flags");
+      toast.error(err instanceof Error ? err.message : "Failed to save feature flags");
     } finally {
       setIsSaving(false);
     }

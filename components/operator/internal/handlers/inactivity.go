@@ -8,6 +8,8 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -24,10 +26,6 @@ const (
 	// Stopping phase handler can distinguish inactivity from user stops.
 	stopReasonAnnotation = "ambient-code.io/stop-reason"
 
-	// defaultInactivityTimeoutSec is the fallback when neither the session
-	// nor the project specifies an inactivity timeout (24 hours).
-	defaultInactivityTimeoutSec = 86400
-
 	// inactivityTimeoutCacheTTL controls how long cached ProjectSettings
 	// timeout values are valid before re-fetching from the API server.
 	inactivityTimeoutCacheTTL = 5 * time.Minute
@@ -36,6 +34,22 @@ const (
 	// ProjectSettings CR in each namespace.
 	projectSettingsName = "projectsettings"
 )
+
+// defaultInactivityTimeoutSec is the fallback when neither the session
+// nor the project specifies an inactivity timeout. Defaults to 86400 (24 hours).
+// Override via the DEFAULT_INACTIVITY_TIMEOUT env var (value in seconds).
+var defaultInactivityTimeoutSec int64 = 86400
+
+func init() {
+	if v := os.Getenv("DEFAULT_INACTIVITY_TIMEOUT"); v != "" {
+		if parsed, err := strconv.ParseInt(v, 10, 64); err == nil {
+			defaultInactivityTimeoutSec = parsed
+			log.Printf("[Inactivity] Default inactivity timeout set to %ds via DEFAULT_INACTIVITY_TIMEOUT", parsed)
+		} else {
+			log.Printf("[Inactivity] Invalid DEFAULT_INACTIVITY_TIMEOUT value %q, using default %ds", v, defaultInactivityTimeoutSec)
+		}
+	}
+}
 
 // --- Project-level timeout cache ---
 
