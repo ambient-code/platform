@@ -392,7 +392,7 @@ class TestPlatformLifecycle:
         assert resp.status_code == 200
         data = resp.json()
         assert data["event"]["metaType"] == "thumbs_up"
-        assert "recorded" in data["event"]["event"]
+        assert "recorded" in data["event"]
 
     def test_interrupt_returns_structured_error(self, client):
         """Interrupt on unknown thread returns a structured error."""
