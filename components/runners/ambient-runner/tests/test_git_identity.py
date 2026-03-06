@@ -10,14 +10,9 @@ Bug Fix: GitHub credentials aren't mounted to session - need git identity
 
 import os
 import subprocess
-import sys
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
-# Add parent directory to path to import auth module
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
 class TestConfigureGitIdentity:
@@ -34,7 +29,7 @@ class TestConfigureGitIdentity:
     @pytest.mark.asyncio
     async def test_configure_git_identity_with_valid_credentials(self):
         """Test git identity is configured with provided user name and email."""
-        from auth import configure_git_identity
+        from ambient_runner.platform.auth import configure_git_identity
 
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0)
@@ -61,7 +56,7 @@ class TestConfigureGitIdentity:
     @pytest.mark.asyncio
     async def test_configure_git_identity_falls_back_to_defaults(self):
         """Test git identity uses defaults when credentials are empty."""
-        from auth import configure_git_identity
+        from ambient_runner.platform.auth import configure_git_identity
 
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0)
@@ -79,7 +74,7 @@ class TestConfigureGitIdentity:
     @pytest.mark.asyncio
     async def test_configure_git_identity_strips_whitespace(self):
         """Test git identity strips whitespace from values."""
-        from auth import configure_git_identity
+        from ambient_runner.platform.auth import configure_git_identity
 
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0)
@@ -92,7 +87,7 @@ class TestConfigureGitIdentity:
     @pytest.mark.asyncio
     async def test_configure_git_identity_handles_subprocess_error(self):
         """Test git identity handles subprocess errors gracefully."""
-        from auth import configure_git_identity
+        from ambient_runner.platform.auth import configure_git_identity
 
         with patch("subprocess.run") as mock_run:
             mock_run.side_effect = subprocess.TimeoutExpired("git", 5)
@@ -121,8 +116,8 @@ class TestFetchGitHubCredentials:
     @pytest.mark.asyncio
     async def test_fetch_github_credentials_returns_identity(self):
         """Test that fetch_github_credentials returns userName and email."""
-        from auth import fetch_github_credentials
-        from context import RunnerContext
+        from ambient_runner.platform.auth import fetch_github_credentials
+        from ambient_runner.platform.context import RunnerContext
 
         mock_context = MagicMock(spec=RunnerContext)
         mock_context.session_id = "test-session"
@@ -134,7 +129,7 @@ class TestFetchGitHubCredentials:
             "provider": "github",
         }
 
-        with patch("auth._fetch_credential", new_callable=AsyncMock) as mock_fetch:
+        with patch("ambient_runner.platform.auth._fetch_credential", new_callable=AsyncMock) as mock_fetch:
             mock_fetch.return_value = mock_response
 
             result = await fetch_github_credentials(mock_context)
@@ -147,14 +142,14 @@ class TestFetchGitHubCredentials:
     @pytest.mark.asyncio
     async def test_fetch_github_token_delegates_to_fetch_github_credentials(self):
         """Test that fetch_github_token uses fetch_github_credentials."""
-        from auth import fetch_github_token
-        from context import RunnerContext
+        from ambient_runner.platform.auth import fetch_github_token
+        from ambient_runner.platform.context import RunnerContext
 
         mock_context = MagicMock(spec=RunnerContext)
         mock_context.session_id = "test-session"
 
         with patch(
-            "auth.fetch_github_credentials", new_callable=AsyncMock
+            "ambient_runner.platform.auth.fetch_github_credentials", new_callable=AsyncMock
         ) as mock_fetch:
             mock_fetch.return_value = {"token": "ghp_test_token", "userName": "Test"}
 
@@ -180,8 +175,8 @@ class TestFetchGitLabCredentials:
     @pytest.mark.asyncio
     async def test_fetch_gitlab_credentials_returns_identity(self):
         """Test that fetch_gitlab_credentials returns userName and email."""
-        from auth import fetch_gitlab_credentials
-        from context import RunnerContext
+        from ambient_runner.platform.auth import fetch_gitlab_credentials
+        from ambient_runner.platform.context import RunnerContext
 
         mock_context = MagicMock(spec=RunnerContext)
         mock_context.session_id = "test-session"
@@ -194,7 +189,7 @@ class TestFetchGitLabCredentials:
             "provider": "gitlab",
         }
 
-        with patch("auth._fetch_credential", new_callable=AsyncMock) as mock_fetch:
+        with patch("ambient_runner.platform.auth._fetch_credential", new_callable=AsyncMock) as mock_fetch:
             mock_fetch.return_value = mock_response
 
             result = await fetch_gitlab_credentials(mock_context)
@@ -208,14 +203,14 @@ class TestFetchGitLabCredentials:
     @pytest.mark.asyncio
     async def test_fetch_gitlab_token_delegates_to_fetch_gitlab_credentials(self):
         """Test that fetch_gitlab_token uses fetch_gitlab_credentials."""
-        from auth import fetch_gitlab_token
-        from context import RunnerContext
+        from ambient_runner.platform.auth import fetch_gitlab_token
+        from ambient_runner.platform.context import RunnerContext
 
         mock_context = MagicMock(spec=RunnerContext)
         mock_context.session_id = "test-session"
 
         with patch(
-            "auth.fetch_gitlab_credentials", new_callable=AsyncMock
+            "ambient_runner.platform.auth.fetch_gitlab_credentials", new_callable=AsyncMock
         ) as mock_fetch:
             mock_fetch.return_value = {"token": "glpat-test_token"}
 
@@ -241,8 +236,8 @@ class TestPopulateRuntimeCredentialsGitIdentity:
     @pytest.mark.asyncio
     async def test_git_identity_from_github(self):
         """Test git identity is configured from GitHub credentials."""
-        from auth import populate_runtime_credentials
-        from context import RunnerContext
+        from ambient_runner.platform.auth import populate_runtime_credentials
+        from ambient_runner.platform.context import RunnerContext
 
         mock_context = MagicMock(spec=RunnerContext)
         mock_context.session_id = "test-session"
@@ -256,16 +251,16 @@ class TestPopulateRuntimeCredentialsGitIdentity:
 
         with (
             patch(
-                "auth.fetch_google_credentials", new_callable=AsyncMock
+                "ambient_runner.platform.auth.fetch_google_credentials", new_callable=AsyncMock
             ) as mock_google,
-            patch("auth.fetch_jira_credentials", new_callable=AsyncMock) as mock_jira,
+            patch("ambient_runner.platform.auth.fetch_jira_credentials", new_callable=AsyncMock) as mock_jira,
             patch(
-                "auth.fetch_gitlab_credentials", new_callable=AsyncMock
+                "ambient_runner.platform.auth.fetch_gitlab_credentials", new_callable=AsyncMock
             ) as mock_gitlab,
             patch(
-                "auth.fetch_github_credentials", new_callable=AsyncMock
+                "ambient_runner.platform.auth.fetch_github_credentials", new_callable=AsyncMock
             ) as mock_github,
-            patch("auth.configure_git_identity", new_callable=AsyncMock) as mock_config,
+            patch("ambient_runner.platform.auth.configure_git_identity", new_callable=AsyncMock) as mock_config,
         ):
             mock_google.return_value = {}
             mock_jira.return_value = {}
@@ -280,8 +275,8 @@ class TestPopulateRuntimeCredentialsGitIdentity:
     @pytest.mark.asyncio
     async def test_git_identity_from_gitlab_when_no_github(self):
         """Test git identity is configured from GitLab when GitHub not available."""
-        from auth import populate_runtime_credentials
-        from context import RunnerContext
+        from ambient_runner.platform.auth import populate_runtime_credentials
+        from ambient_runner.platform.context import RunnerContext
 
         mock_context = MagicMock(spec=RunnerContext)
         mock_context.session_id = "test-session"
@@ -295,16 +290,16 @@ class TestPopulateRuntimeCredentialsGitIdentity:
 
         with (
             patch(
-                "auth.fetch_google_credentials", new_callable=AsyncMock
+                "ambient_runner.platform.auth.fetch_google_credentials", new_callable=AsyncMock
             ) as mock_google,
-            patch("auth.fetch_jira_credentials", new_callable=AsyncMock) as mock_jira,
+            patch("ambient_runner.platform.auth.fetch_jira_credentials", new_callable=AsyncMock) as mock_jira,
             patch(
-                "auth.fetch_gitlab_credentials", new_callable=AsyncMock
+                "ambient_runner.platform.auth.fetch_gitlab_credentials", new_callable=AsyncMock
             ) as mock_gitlab,
             patch(
-                "auth.fetch_github_credentials", new_callable=AsyncMock
+                "ambient_runner.platform.auth.fetch_github_credentials", new_callable=AsyncMock
             ) as mock_github,
-            patch("auth.configure_git_identity", new_callable=AsyncMock) as mock_config,
+            patch("ambient_runner.platform.auth.configure_git_identity", new_callable=AsyncMock) as mock_config,
         ):
             mock_google.return_value = {}
             mock_jira.return_value = {}
@@ -319,8 +314,8 @@ class TestPopulateRuntimeCredentialsGitIdentity:
     @pytest.mark.asyncio
     async def test_github_takes_precedence_over_gitlab(self):
         """Test GitHub identity takes precedence when both are available."""
-        from auth import populate_runtime_credentials
-        from context import RunnerContext
+        from ambient_runner.platform.auth import populate_runtime_credentials
+        from ambient_runner.platform.context import RunnerContext
 
         mock_context = MagicMock(spec=RunnerContext)
         mock_context.session_id = "test-session"
@@ -340,16 +335,16 @@ class TestPopulateRuntimeCredentialsGitIdentity:
 
         with (
             patch(
-                "auth.fetch_google_credentials", new_callable=AsyncMock
+                "ambient_runner.platform.auth.fetch_google_credentials", new_callable=AsyncMock
             ) as mock_google,
-            patch("auth.fetch_jira_credentials", new_callable=AsyncMock) as mock_jira,
+            patch("ambient_runner.platform.auth.fetch_jira_credentials", new_callable=AsyncMock) as mock_jira,
             patch(
-                "auth.fetch_gitlab_credentials", new_callable=AsyncMock
+                "ambient_runner.platform.auth.fetch_gitlab_credentials", new_callable=AsyncMock
             ) as mock_gitlab,
             patch(
-                "auth.fetch_github_credentials", new_callable=AsyncMock
+                "ambient_runner.platform.auth.fetch_github_credentials", new_callable=AsyncMock
             ) as mock_github,
-            patch("auth.configure_git_identity", new_callable=AsyncMock) as mock_config,
+            patch("ambient_runner.platform.auth.configure_git_identity", new_callable=AsyncMock) as mock_config,
         ):
             mock_google.return_value = {}
             mock_jira.return_value = {}
@@ -364,24 +359,24 @@ class TestPopulateRuntimeCredentialsGitIdentity:
     @pytest.mark.asyncio
     async def test_defaults_when_no_credentials(self):
         """Test defaults are used when no credentials have identity."""
-        from auth import populate_runtime_credentials
-        from context import RunnerContext
+        from ambient_runner.platform.auth import populate_runtime_credentials
+        from ambient_runner.platform.context import RunnerContext
 
         mock_context = MagicMock(spec=RunnerContext)
         mock_context.session_id = "test-session"
 
         with (
             patch(
-                "auth.fetch_google_credentials", new_callable=AsyncMock
+                "ambient_runner.platform.auth.fetch_google_credentials", new_callable=AsyncMock
             ) as mock_google,
-            patch("auth.fetch_jira_credentials", new_callable=AsyncMock) as mock_jira,
+            patch("ambient_runner.platform.auth.fetch_jira_credentials", new_callable=AsyncMock) as mock_jira,
             patch(
-                "auth.fetch_gitlab_credentials", new_callable=AsyncMock
+                "ambient_runner.platform.auth.fetch_gitlab_credentials", new_callable=AsyncMock
             ) as mock_gitlab,
             patch(
-                "auth.fetch_github_credentials", new_callable=AsyncMock
+                "ambient_runner.platform.auth.fetch_github_credentials", new_callable=AsyncMock
             ) as mock_github,
-            patch("auth.configure_git_identity", new_callable=AsyncMock) as mock_config,
+            patch("ambient_runner.platform.auth.configure_git_identity", new_callable=AsyncMock) as mock_config,
         ):
             mock_google.return_value = {}
             mock_jira.return_value = {}
@@ -400,13 +395,13 @@ class TestProviderDistinction:
     @pytest.mark.asyncio
     async def test_github_provider_field(self):
         """Test GitHub credentials include provider='github'."""
-        from auth import fetch_github_credentials
-        from context import RunnerContext
+        from ambient_runner.platform.auth import fetch_github_credentials
+        from ambient_runner.platform.context import RunnerContext
 
         mock_context = MagicMock(spec=RunnerContext)
         mock_context.session_id = "test-session"
 
-        with patch("auth._fetch_credential", new_callable=AsyncMock) as mock_fetch:
+        with patch("ambient_runner.platform.auth._fetch_credential", new_callable=AsyncMock) as mock_fetch:
             mock_fetch.return_value = {
                 "token": "ghp_test",
                 "provider": "github",
@@ -418,13 +413,13 @@ class TestProviderDistinction:
     @pytest.mark.asyncio
     async def test_gitlab_provider_field(self):
         """Test GitLab credentials include provider='gitlab'."""
-        from auth import fetch_gitlab_credentials
-        from context import RunnerContext
+        from ambient_runner.platform.auth import fetch_gitlab_credentials
+        from ambient_runner.platform.context import RunnerContext
 
         mock_context = MagicMock(spec=RunnerContext)
         mock_context.session_id = "test-session"
 
-        with patch("auth._fetch_credential", new_callable=AsyncMock) as mock_fetch:
+        with patch("ambient_runner.platform.auth._fetch_credential", new_callable=AsyncMock) as mock_fetch:
             mock_fetch.return_value = {
                 "token": "glpat-test",
                 "provider": "gitlab",
