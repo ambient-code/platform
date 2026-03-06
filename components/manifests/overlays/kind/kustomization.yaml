@@ -13,10 +13,10 @@ resources:
 - minio-credentials.yaml
 - postgresql-credentials.yaml
 - unleash-credentials.yaml
-# PostgreSQL init scripts for database creation (kind only)
-- postgresql-init-scripts.yaml
+components:
+- ../../components/postgresql-init-scripts
 
-# Patches for e2e environment
+# Patches for kind environment
 patches:
 - path: namespace-patch.yaml
   target:
@@ -76,13 +76,6 @@ patches:
     version: v1
     kind: Deployment
     name: public-api
-# PostgreSQL: add init-scripts volume for database creation
-- path: postgresql-init-scripts-patch.yaml
-  target:
-    group: apps
-    version: v1
-    kind: Deployment
-    name: postgresql
 
 # Kind overlay: Use Quay.io production images by default
 # For local development with local images, use overlays/kind-local/ instead

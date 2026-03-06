@@ -1,0 +1,27 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- backend-deployment.yaml
+- frontend-deployment.yaml
+- operator-deployment.yaml
+- public-api-deployment.yaml
+- workspace-pvc.yaml
+- minio-deployment.yaml
+- postgresql-deployment.yaml
+- ambient-api-server-db.yml
+- ambient-api-server-service.yml
+- unleash-deployment.yaml
+- agent-registry-configmap.yaml
+
+configMapGenerator:
+- name: ambient-models
+  files:
+  - models.json
+  options:
+    disableNameSuffixHash: true
+- name: ambient-flags
+  files:
+  - flags.json
+  options:
+    disableNameSuffixHash: true

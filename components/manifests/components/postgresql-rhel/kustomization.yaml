@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+patches:
+- path: postgresql-json-patch.yaml
+  target:
+    group: apps
+    kind: Deployment
+    name: postgresql
+    version: v1
+- path: unleash-init-db-patch.yaml
+  target:
+    group: apps
+    kind: Deployment
+    name: unleash
+    version: v1

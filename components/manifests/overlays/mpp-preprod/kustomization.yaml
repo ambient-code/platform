@@ -7,21 +7,11 @@ metadata:
 # Namespace for all resources
 namespace: ambient-code--runtime-int
 
-# Resources: enumerate base resources individually to skip namespace.yaml,
-# crds/, and ambient-api-server-secrets.yml (IT manages those in MPP).
+# Resources: reference base/core and base/rbac sub-directories directly,
+# skipping base/platform/ (namespace, CRDs, secrets) which IT manages in MPP.
 resources:
+- ../../base/core
 - ../../base/rbac
-- ../../base/backend-deployment.yaml
-- ../../base/frontend-deployment.yaml
-- ../../base/operator-deployment.yaml
-- ../../base/public-api-deployment.yaml
-- ../../base/workspace-pvc.yaml
-- ../../base/minio-deployment.yaml
-- ../../base/postgresql-deployment.yaml
-- ../../base/ambient-api-server-db.yml
-- ../../base/ambient-api-server-service.yml
-- ../../base/unleash-deployment.yaml
-- ../../base/agent-registry-configmap.yaml
 # Preprod-specific routes and config
 - ambient-api-server-route.yaml
 - route.yaml
@@ -30,50 +20,23 @@ resources:
 - unleash-route.yaml
 - operator-config-openshift.yaml
 
-# Replicate base configMapGenerator (can't use ../../base as a whole)
-configMapGenerator:
-- name: ambient-models
-  files:
-  - ../../base/models.json
-  options:
-    disableNameSuffixHash: true
-- name: ambient-flags
-  files:
-  - ../../base/flags.json
-  options:
-    disableNameSuffixHash: true
+components:
+- ../../components/oauth-proxy
+- ../../components/postgresql-rhel
 
 # IT MPP requires this label on all resources
-commonLabels:
-  paas.redhat.com/appcode: AMBC-001
+labels:
+- pairs:
+    paas.redhat.com/appcode: AMBC-001
+  includeSelectors: true
 
 # Patches for preprod environment
 patches:
-- path: frontend-oauth-deployment-patch.yaml
-  target:
-    kind: Deployment
-    name: frontend
-- path: frontend-oauth-service-patch.yaml
-  target:
-    kind: Service
-    name: frontend-service
-- path: postgresql-json-patch.yaml
-  target:
-    group: apps
-    kind: Deployment
-    name: postgresql
-    version: v1
-- path: unleash-init-db-patch.yaml
-  target:
-    group: apps
-    kind: Deployment
-    name: unleash
-    version: v1
 # MPP PVC requirements: aws-ebs storageClass, reclaimPolicy, appcode label
 - path: pvc-reclaim-policy-patch.yaml
   target:
     kind: PersistentVolumeClaim
-# Fix ClusterRoleBinding subject namespaces (ambient-code → ambient-code--runtime-int)
+# Fix ClusterRoleBinding subject namespaces (ambient-code -> ambient-code--runtime-int)
 - path: clusterrolebinding-namespace-patch.yaml
   target:
     kind: ClusterRoleBinding

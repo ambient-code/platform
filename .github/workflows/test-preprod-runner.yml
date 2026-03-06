@@ -5,6 +5,8 @@ on:
       - .github/workflows/test-preprod-runner.yml
       - scripts/verify-preprod-access.sh
       - components/manifests/overlays/mpp-preprod/**
+      - components/manifests/components/**
+      - components/manifests/base/**
   workflow_dispatch:
 
 jobs:
