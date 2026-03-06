@@ -135,7 +135,8 @@ func main() {
 		return server.Namespace
 	}
 
-	// Initialize LDAP client (optional - enabled when LDAP_URL is set)
+	// Initialize LDAP client (optional - requires LDAP_URL to be set)
+	// Access is gated by the "ldap.autocomplete.enabled" Unleash feature flag.
 	if ldapURL := os.Getenv("LDAP_URL"); ldapURL != "" {
 		ldapBaseDN := getEnvOrDefault("LDAP_BASE_DN", "ou=users,dc=redhat,dc=com")
 		ldapGroupBaseDN := os.Getenv("LDAP_GROUP_BASE_DN") // optional, derived from LDAP_BASE_DN if empty

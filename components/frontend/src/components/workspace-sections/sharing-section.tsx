@@ -6,6 +6,7 @@ import { Users, User as UserIcon, Plus, Loader2, Trash2, Info } from 'lucide-rea
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { LDAPAutocomplete } from './_components/ldap-autocomplete';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -14,6 +15,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { DestructiveConfirmationDialog } from '@/components/confirmation-dialog';
 
 import { useProjectPermissions, useAddProjectPermission, useRemoveProjectPermission } from '@/services/queries';
+import { useWorkspaceFlag } from '@/services/queries/use-feature-flags-admin';
 import { toast } from 'sonner';
 import type { PermissionRole, SubjectType } from '@/types/project';
 import { ROLE_DEFINITIONS } from '@/lib/role-colors';
@@ -32,6 +34,7 @@ export function SharingSection({ projectName }: SharingSectionProps) {
   const { data: permissions = [] } = useProjectPermissions(projectName);
   const addPermissionMutation = useAddProjectPermission();
   const removePermissionMutation = useRemoveProjectPermission();
+  const { enabled: ldapEnabled } = useWorkspaceFlag(projectName, 'ldap.autocomplete.enabled');
 
   const [showGrantDialog, setShowGrantDialog] = useState(false);
   const [grantForm, setGrantForm] = useState<GrantPermissionForm>({
@@ -251,14 +254,24 @@ export function SharingSection({ projectName }: SharingSectionProps) {
               <Label htmlFor="subjectName">
                 {grantForm.subjectType === 'group' ? 'Group' : 'User'} Name
               </Label>
-              <LDAPAutocomplete
-                id="subjectName"
-                mode={grantForm.subjectType}
-                placeholder={`Enter ${grantForm.subjectType} name`}
-                value={grantForm.subjectName}
-                onChange={(val) => setGrantForm((prev) => ({ ...prev, subjectName: val }))}
-                disabled={addPermissionMutation.isPending}
-              />
+              {ldapEnabled ? (
+                <LDAPAutocomplete
+                  id="subjectName"
+                  mode={grantForm.subjectType}
+                  placeholder={`Enter ${grantForm.subjectType} name`}
+                  value={grantForm.subjectName}
+                  onChange={(val) => setGrantForm((prev) => ({ ...prev, subjectName: val }))}
+                  disabled={addPermissionMutation.isPending}
+                />
+              ) : (
+                <Input
+                  id="subjectName"
+                  placeholder={`Enter ${grantForm.subjectType} name`}
+                  value={grantForm.subjectName}
+                  onChange={(e) => setGrantForm((prev) => ({ ...prev, subjectName: e.target.value }))}
+                  disabled={addPermissionMutation.isPending}
+                />
+              )}
             </div>
             <div className="space-y-2">
               <Label>Role</Label>

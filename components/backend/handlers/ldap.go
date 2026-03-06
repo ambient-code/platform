@@ -10,7 +10,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// LDAPClient is the shared LDAP client instance, initialized in main.go when LDAP is configured.
+// LDAPClient is the shared LDAP client instance, initialized in main.go when LDAP_URL is set.
+// Access is gated in the frontend by the "ldap.autocomplete.enabled" workspace feature flag.
 var LDAPClient *ldap.Client
 
 // SearchLDAPUsers handles GET /api/ldap/users?q={query}
