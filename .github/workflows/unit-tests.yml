@@ -226,7 +226,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e .
+          pip install -e '.[claude]'
           pip install pytest pytest-asyncio pytest-cov httpx
 
       - name: Run unit tests

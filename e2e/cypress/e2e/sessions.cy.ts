@@ -38,12 +38,12 @@ describe('Ambient Session Management Tests', () => {
     // Create workspace
     cy.visit('/projects')
     cy.contains('Workspaces', { timeout: 15000 }).should('be.visible')
-    cy.contains('button', 'New Workspace').click()
+    cy.get('[data-testid="new-workspace-btn"]').click()
     cy.contains('Create New Workspace', { timeout: 10000 }).should('be.visible')
     cy.wait(1500)
-    cy.get('#displayName, #name', { timeout: 10000 }).first()
+    cy.get('[data-testid="workspace-name-input"]', { timeout: 10000 })
       .should('be.visible').clear().type(workspaceName)
-    cy.contains('button', 'Create Workspace').should('not.be.disabled').click()
+    cy.get('[data-testid="create-workspace-submit"]').should('not.be.disabled').click()
     cy.url({ timeout: 20000 }).should('match', /\/projects\/[a-z0-9-]+$/)
     cy.url().then(url => {
       workspaceSlug = url.split('/').pop() || workspaceName
@@ -78,9 +78,11 @@ describe('Ambient Session Management Tests', () => {
     })).then((r) => expect(r.status).to.eq(200))
 
     // Create a session for UI tests
-    cy.contains('button', 'New Session').click()
-    cy.contains("button", /Create Session|Create/i, { timeout: 10000 }).should("not.be.disabled").click()
-    cy.contains("button", /Create Session|Create/i, { timeout: 10000 }).should("not.be.disabled").click()
+    cy.get('[data-testid="new-session-btn"]').click()
+    cy.get('[data-testid="create-session-submit"]', { timeout: 10000 })
+        .should('not.be.disabled').click()
+    cy.get('[data-testid="create-session-submit"]', { timeout: 10000 })
+        .should('not.be.disabled').click()
     cy.url({ timeout: 30000 }).should('match', /\/projects\/.*\/sessions\/[a-z0-9-]+$/)
     cy.url().then(url => {
       pendingSessionId = url.split('/').pop() || ''
@@ -178,10 +180,10 @@ describe('Ambient Session Management Tests', () => {
 
     it('should open create session dialog and interact with form', () => {
       cy.visit(`/projects/${workspaceSlug}`)
-      cy.contains('button', 'New Session', { timeout: 10000 }).click()
+      cy.get('[data-testid="new-session-btn"]', { timeout: 10000 }).click()
 
       // Create session dialog — covers create-session-dialog.tsx
-      cy.contains('button', /Create Session|Create/i, { timeout: 10000 }).should('exist')
+      cy.get('[data-testid="create-session-submit"]', { timeout: 10000 }).should('exist')
 
       // Cancel without creating
       cy.contains('button', 'Cancel').click({ force: true })
@@ -237,8 +239,8 @@ describe('Ambient Session Management Tests', () => {
 
       // Step 1: Create session
       cy.visit(`/projects/${workspaceSlug}`)
-      cy.contains('button', 'New Session').click()
-      cy.contains('button', /Create Session|Create/i, { timeout: 10000 })
+      cy.get('[data-testid="new-session-btn"]').click()
+      cy.get('[data-testid="create-session-submit"]', { timeout: 10000 })
         .should('not.be.disabled').click()
       cy.url({ timeout: 30000 }).should('match', /\/projects\/.*\/sessions\/[a-z0-9-]+$/)
       cy.url().then(url => {
