@@ -1,0 +1,18 @@
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: ambient-api-server
+  labels:
+    app: ambient-api-server
+    component: api
+spec:
+  host: ambient-api-server-ambient-code--runtime-int.apps.int.spoke.preprod.us-east-1.aws.paas.redhat.com
+  to:
+    kind: Service
+    name: ambient-api-server
+  port:
+    targetPort: api
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

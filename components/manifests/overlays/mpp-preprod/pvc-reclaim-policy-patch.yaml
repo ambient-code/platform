@@ -1,0 +1,14 @@
+# MPP preprod storage admission webhook enforces:
+# 1. kubernetes.io/reclaimPolicy annotation on all PVCs
+# 2. storageClassName must be aws-ebs or aws-efs-* (not gp3-csi)
+# 3. paas.redhat.com/appcode label required on PVCs
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: placeholder
+  labels:
+    paas.redhat.com/appcode: AMBC-001
+  annotations:
+    kubernetes.io/reclaimPolicy: Delete
+spec:
+  storageClassName: aws-ebs

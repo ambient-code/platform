@@ -4,6 +4,7 @@ on:
     paths:
       - .github/workflows/test-preprod-runner.yml
       - scripts/verify-preprod-access.sh
+      - components/manifests/overlays/mpp-preprod/**
   workflow_dispatch:
 
 jobs:
@@ -14,7 +15,9 @@ jobs:
 
       - uses: actions/checkout@v4
         with:
-          sparse-checkout: scripts
+          sparse-checkout: |
+            scripts
+            components/manifests
 
       - name: Install oc
         uses: redhat-actions/oc-installer@v1
@@ -23,3 +26,8 @@ jobs:
 
       - name: Verify cluster access
         run: ./scripts/verify-preprod-access.sh
+
+      - name: Dry-run mpp-preprod overlay
+        run: |
+          oc kustomize components/manifests/overlays/mpp-preprod \
+            | oc apply --dry-run=server -f -

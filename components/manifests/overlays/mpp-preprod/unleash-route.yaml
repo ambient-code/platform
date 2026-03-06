@@ -1,0 +1,20 @@
+# Unleash UI Route for preprod (OpenShift)
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: unleash-route
+  labels:
+    app: unleash
+    app.kubernetes.io/name: unleash
+spec:
+  host: unleash-route-ambient-code--runtime-int.apps.int.spoke.preprod.us-east-1.aws.paas.redhat.com
+  to:
+    kind: Service
+    name: unleash
+    weight: 100
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+  wildcardPolicy: None

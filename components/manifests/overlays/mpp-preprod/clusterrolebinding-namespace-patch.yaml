@@ -1,0 +1,6 @@
+# Fix ClusterRoleBinding subject namespaces for MPP preprod.
+# The base sets namespace to "ambient-code", but IT's MPP environment
+# uses "ambient-code--runtime-int".
+- op: replace
+  path: /subjects/0/namespace
+  value: ambient-code--runtime-int
