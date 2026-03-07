@@ -202,9 +202,14 @@ class TestSetupGeminiCliAuth:
 
         assert model == DEFAULT_MODEL
 
-    async def test_vertex_project_and_location_logged(self, monkeypatch, caplog):
+    async def test_vertex_project_and_location_logged(
+        self, monkeypatch, caplog, tmp_path
+    ):
         """Verify GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION are logged."""
+        creds_file = tmp_path / "creds.json"
+        creds_file.write_text("{}")
         monkeypatch.setenv("USE_VERTEX", "1")
+        monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", str(creds_file))
         monkeypatch.delenv("GEMINI_USE_VERTEX", raising=False)
         monkeypatch.delenv("GEMINI_API_KEY", raising=False)
         monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
@@ -213,6 +218,7 @@ class TestSetupGeminiCliAuth:
 
         ctx = _make_context(
             USE_VERTEX="1",
+            GOOGLE_APPLICATION_CREDENTIALS=str(creds_file),
             GOOGLE_CLOUD_PROJECT="my-project",
             GOOGLE_CLOUD_LOCATION="us-central1",
         )
