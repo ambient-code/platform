@@ -8,7 +8,7 @@ and a metadata store for cross-cutting state.
 
 import os
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from typing import Any
 
 
 @dataclass
@@ -24,14 +24,14 @@ class RunnerContext:
 
     session_id: str
     workspace_path: str
-    environment: Dict[str, str] = field(default_factory=dict)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    environment: dict[str, str] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         """Merge environment variables (explicit overrides win)."""
         self.environment = {**os.environ, **self.environment}
 
-    def get_env(self, key: str, default: Optional[str] = None) -> Optional[str]:
+    def get_env(self, key: str, default: str | None = None) -> str | None:
         """Get an environment variable value."""
         return self.environment.get(key, default)
 

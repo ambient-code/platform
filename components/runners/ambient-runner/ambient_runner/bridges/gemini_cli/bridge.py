@@ -12,7 +12,7 @@ import asyncio
 import logging
 import os
 import time
-from typing import Any, AsyncIterator, Optional
+from typing import Any, AsyncIterator
 
 from ag_ui.core import BaseEvent, RunAgentInput
 from ag_ui_gemini_cli import GeminiCLIAdapter
@@ -132,7 +132,7 @@ class GeminiCLIBridge(PlatformBridge):
             async for event in wrapped_stream:
                 yield event
 
-    async def interrupt(self, thread_id: Optional[str] = None) -> None:
+    async def interrupt(self, thread_id: str | None = None) -> None:
         """Interrupt the running session for a given thread."""
         if not self._session_manager:
             raise RuntimeError("No active session manager")

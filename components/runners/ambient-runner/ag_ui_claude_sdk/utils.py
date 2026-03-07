@@ -7,7 +7,7 @@ Helper functions for message processing, tool conversion, and prompt building.
 import json
 import logging
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 from ag_ui.core import (
     RunAgentInput,
     AssistantMessage,
@@ -26,7 +26,7 @@ def now_ms() -> int:
     return int(time.time() * 1000)
 
 
-def extract_tool_names(tools: List[Any]) -> List[str]:
+def extract_tool_names(tools: list[Any]) -> list[str]:
     """
     Extract tool names from AG-UI tool definitions.
 
@@ -77,7 +77,7 @@ def strip_mcp_prefix(tool_name: str) -> str:
     return tool_name
 
 
-def process_messages(input_data: RunAgentInput) -> Tuple[str, bool]:
+def process_messages(input_data: RunAgentInput) -> tuple[str, bool]:
     """
     Process and validate all messages from RunAgentInput.
 
@@ -280,8 +280,8 @@ def create_state_management_tool() -> Any:
 
 
 def apply_forwarded_props(
-    forwarded_props: Any, merged_kwargs: Dict[str, Any], allowed_keys: set
-) -> Dict[str, Any]:
+    forwarded_props: Any, merged_kwargs: dict[str, Any], allowed_keys: set
+) -> dict[str, Any]:
     """
     Apply forwarded_props as per-run Claude SDK option overrides.
 
@@ -327,7 +327,7 @@ def _is_state_management_tool(name: str) -> bool:
 def build_agui_assistant_message(
     sdk_message: Any,
     message_id: str,
-) -> Optional[AssistantMessage]:
+) -> AssistantMessage | None:
     """
     Convert a complete Claude SDK AssistantMessage into an AG-UI AssistantMessage.
 
@@ -345,7 +345,7 @@ def build_agui_assistant_message(
     content_blocks = getattr(sdk_message, "content", []) or []
 
     text_content = ""
-    tool_calls: List[ToolCall] = []
+    tool_calls: list[ToolCall] = []
 
     for block in content_blocks:
         block_type = getattr(block, "type", None)

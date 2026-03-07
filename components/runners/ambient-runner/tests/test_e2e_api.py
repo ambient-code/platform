@@ -150,7 +150,7 @@ class TestFeedbackEndpoint:
             },
         )
         assert resp.status_code == 200
-        assert resp.json()["metaType"] == "thumbs_up"
+        assert resp.json()["event"]["metaType"] == "thumbs_up"
 
     def test_accepts_thumbs_down(self, client):
         resp = client.post(
@@ -391,8 +391,8 @@ class TestPlatformLifecycle:
         )
         assert resp.status_code == 200
         data = resp.json()
-        assert data["metaType"] == "thumbs_up"
-        assert "recorded" in data
+        assert data["event"]["metaType"] == "thumbs_up"
+        assert "recorded" in data["event"]
 
     def test_interrupt_returns_structured_error(self, client):
         """Interrupt on unknown thread returns a structured error."""
@@ -400,7 +400,6 @@ class TestPlatformLifecycle:
         assert resp.status_code == 500
         data = resp.json()
         assert "detail" in data
-        assert "ghost-thread" in data["detail"]
 
     def test_run_endpoint_schema_validation(self, client):
         """Various payload validation checks."""

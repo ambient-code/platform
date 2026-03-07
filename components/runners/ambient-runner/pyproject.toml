@@ -3,46 +3,49 @@ name = "ambient-runner"
 version = "0.4.0"
 description = "Polymorphic AG-UI server — Claude Code, Gemini CLI, Codex SDK"
 readme = "CLAUDE.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 authors = [
   { name = "vTeam" }
 ]
 dependencies = [
   # Ambient Runner SDK core
-  "fastapi>=0.100.0",
-  "uvicorn[standard]>=0.23.0",
+  "fastapi>=0.135.1",
+  "uvicorn[standard]>=0.41.0",
   "ag-ui-protocol>=0.1.13",
-  "pydantic>=2.0.0",
-  "aiohttp>=3.8.0",
-  "requests>=2.31.0",
-  "pyjwt>=2.8.0",
+  "pydantic>=2.12.5",
+  "aiohttp>=3.13.3",
+  "requests>=2.32.5",
+  "pyjwt>=2.11.0",
 ]
 
 [project.optional-dependencies]
 claude = [
-  "anthropic[vertex]>=0.68.0",
-  "claude-agent-sdk>=0.1.23",
+  "anthropic[vertex]>=0.84.0",
+  "claude-agent-sdk>=0.1.47",
 ]
 observability = [
-  "langfuse>=3.0.0",
+  "langfuse>=3.14.5",
 ]
 mcp-atlassian = [
-  "mcp-atlassian>=0.11.9",
+  "mcp-atlassian>=0.21.0",
 ]
 # Install everything for the polymorphic runner
 all = [
   "ambient-runner[claude,observability,mcp-atlassian]",
 ]
 
-[tool.uv]
-dev-dependencies = [
-  "pytest>=7.4.0",
-  "pytest-asyncio>=0.21.0",
-  "pytest-cov>=4.1.0",
-  "ruff>=0.1.0",
-  "black>=23.0.0",
-  "httpx>=0.24.0",
+[dependency-groups]
+dev = [
+  "pytest>=9.0.2",
+  "pytest-asyncio>=1.3.0",
+  "pytest-cov>=7.0.0",
+  "ruff>=0.15.5",
+  "black>=26.3.0",
+  "httpx>=0.28.1",
 ]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
 
 [tool.setuptools]
 py-modules = ["main"]

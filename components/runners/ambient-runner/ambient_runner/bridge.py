@@ -29,7 +29,7 @@ import os
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, AsyncIterator, Optional
+from typing import Any, AsyncIterator
 
 from ag_ui.core import BaseEvent, RunAgentInput
 
@@ -81,7 +81,7 @@ class FrameworkCapabilities:
     agent_features: list[str] = field(default_factory=list)
     file_system: bool = False
     mcp: bool = False
-    tracing: Optional[str] = None
+    tracing: str | None = None
     session_persistence: bool = False
 
 
@@ -104,7 +104,7 @@ class PlatformBridge(ABC):
     """
 
     def __init__(self) -> None:
-        self._context: Optional[RunnerContext] = None
+        self._context: RunnerContext | None = None
         self._ready: bool = False
         self._last_creds_refresh: float = 0.0
 
@@ -133,7 +133,7 @@ class PlatformBridge(ABC):
         ...
 
     @abstractmethod
-    async def interrupt(self, thread_id: Optional[str] = None) -> None:
+    async def interrupt(self, thread_id: str | None = None) -> None:
         """Interrupt the current run.
 
         Args:
@@ -220,7 +220,7 @@ class PlatformBridge(ABC):
     # ------------------------------------------------------------------
 
     @property
-    def context(self) -> Optional[RunnerContext]:
+    def context(self) -> RunnerContext | None:
         """The current ``RunnerContext``, or ``None`` before ``set_context()``."""
         return None
 

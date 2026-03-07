@@ -22,7 +22,7 @@ Usage::
 """
 
 import logging
-from typing import Any, AsyncIterator, Optional
+from typing import Any, AsyncIterator
 
 from ag_ui.core import BaseEvent, RunAgentInput
 
@@ -82,7 +82,7 @@ class LangGraphBridge(PlatformBridge):
         async for event in self._adapter.run(input_data):
             yield event
 
-    async def interrupt(self, thread_id: Optional[str] = None) -> None:
+    async def interrupt(self, thread_id: str | None = None) -> None:
         """Interrupt the current LangGraph execution."""
         if self._adapter is None:
             raise RuntimeError("LangGraphBridge: no adapter to interrupt")

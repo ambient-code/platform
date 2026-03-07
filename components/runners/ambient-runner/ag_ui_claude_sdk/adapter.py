@@ -10,7 +10,7 @@ import logging
 import json
 import uuid
 from datetime import datetime, timezone
-from typing import AsyncIterator, Optional, List, Dict, Any, Union, TYPE_CHECKING
+from typing import Any, AsyncIterator, TYPE_CHECKING
 
 # AG-UI Protocol Events
 from ag_ui.core import (
@@ -183,7 +183,7 @@ class ClaudeAgentAdapter:
     def __init__(
         self,
         name: str,
-        options: Union["ClaudeAgentOptions", dict, None] = None,
+        options: "ClaudeAgentOptions | dict | None" = None,
         description: str = "",
     ):
         """
@@ -222,10 +222,10 @@ class ClaudeAgentAdapter:
         self._options = options
 
         # Result data from last run (for RunFinished event)
-        self._last_result_data: Optional[Dict[str, Any]] = None
+        self._last_result_data: dict[str, Any] | None = None
 
         # Current state tracking per run (for state management)
-        self._current_state: Optional[Any] = None
+        self._current_state: Any | None = None
 
     async def run(
         self,
@@ -367,8 +367,8 @@ class ClaudeAgentAdapter:
 
     def build_options(
         self,
-        input_data: Optional[RunAgentInput] = None,
-        thread_id: Optional[str] = None,
+        input_data: RunAgentInput | None = None,
+        thread_id: str | None = None,
     ) -> "ClaudeAgentOptions":
         """
         Build ClaudeAgentOptions from stored options (object/dict/None) plus dynamic tools.
@@ -385,7 +385,7 @@ class ClaudeAgentAdapter:
         from claude_agent_sdk import ClaudeAgentOptions, create_sdk_mcp_server
 
         # Start with sensible defaults
-        merged_kwargs: Dict[str, Any] = {
+        merged_kwargs: dict[str, Any] = {
             "include_partial_messages": True,
         }
 
@@ -542,16 +542,16 @@ class ClaudeAgentAdapter:
         """
         # Per-run state (local to this invocation)
         run_start_ts = now_ms()
-        current_message_id: Optional[str] = None
+        current_message_id: str | None = None
         in_thinking_block: bool = (
             False  # Track if we're inside a thinking content block
         )
         has_streamed_text: bool = False  # Track if we've streamed any text content
 
         # Tool call streaming state
-        current_tool_call_id: Optional[str] = None
-        current_tool_call_name: Optional[str] = None
-        current_tool_display_name: Optional[str] = (
+        current_tool_call_id: str | None = None
+        current_tool_call_name: str | None = None
+        current_tool_display_name: str | None = (
             None  # Unprefixed name for frontend matching
         )
         accumulated_tool_json: str = ""  # Accumulate partial JSON for tool arguments
@@ -562,7 +562,7 @@ class ClaudeAgentAdapter:
         # Map tool_call_id → display name for snapshot enrichment.
         # Populated when we see ToolUseBlock / content_block_start so that
         # the ToolMessage entries in MESSAGES_SNAPSHOT carry proper tool names.
-        tool_name_by_id: Dict[str, str] = {}
+        tool_name_by_id: dict[str, str] = {}
 
         # Frontend tool halt flag (like Strands pattern)
         halt_event_stream: bool = False  # Set to True when frontend tool completes
@@ -570,8 +570,8 @@ class ClaudeAgentAdapter:
         # ── MESSAGES_SNAPSHOT accumulation ──
         # All message types go here. At the end we emit:
         #   MESSAGES_SNAPSHOT = [...input_data.messages, ...run_messages]
-        run_messages: List[Any] = []
-        pending_msg: Optional[Dict[str, Any]] = None
+        run_messages: list[Any] = []
+        pending_msg: dict[str, Any] | None = None
         accumulated_thinking_text = ""
 
         def _get_msg_id(msg):
@@ -629,7 +629,7 @@ class ClaudeAgentAdapter:
 
         # Process response stream
         message_count = 0
-        stream_error: Optional[Exception] = None
+        stream_error: Exception | None = None
 
         try:
             async for message in message_stream:
@@ -1078,7 +1078,7 @@ class ClaudeAgentAdapter:
         # Enrich tool result messages with tool names so the frontend can
         # reconstruct parent-child hierarchy with proper display names.
         if run_messages:
-            enriched: List[Any] = []
+            enriched: list[Any] = []
             for msg in run_messages:
                 # Check if this is a tool result message that needs a name
                 msg_role = getattr(msg, "role", None)
@@ -1109,7 +1109,7 @@ class ClaudeAgentAdapter:
                 if run_start_ts
                 else None
             )
-            stamped_inputs: List[Any] = []
+            stamped_inputs: list[Any] = []
             for msg in input_data.messages or []:
                 if hasattr(msg, "model_dump"):
                     d = msg.model_dump(exclude_none=True)

@@ -17,7 +17,7 @@
     "google-workspace": {
       "command": "uvx",
       "args": [
-        "workspace-mcp@1.6.1",
+        "workspace-mcp@1.14.2",
         "--tools",
         "drive"
       ],

@@ -1,66 +1,27 @@
-FROM registry.access.redhat.com/ubi9/python-311@sha256:d0b35f779ca0ae87deaf17cd1923461904f52d3ef249a53dbd487e02bdabdde6
+FROM registry.access.redhat.com/ubi10/ubi@sha256:f573194e8e5231f1c9340c497e1f8d9aa9dbb42b2849e60341e34f50eec9477e
 
 USER 0
 
-# Add GitHub CLI repository and install packages
-RUN dnf install -y 'dnf-command(config-manager)' && \
-    dnf config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo && \
-    dnf install -y gh --repo gh-cli && \
-    dnf install -y git jq && \
+# Install Python 3.12 (system default on RHEL 10), pip, and build deps
+RUN dnf install -y python3 python3-pip python3-devel && \
     dnf clean all
 
+# Install git/jq first, then GitHub CLI (gh RPM requires git)
+RUN dnf install -y git jq 'dnf-command(config-manager)' && \
+    dnf config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo && \
+    dnf install -y gh --repo gh-cli && \
+    dnf clean all
 
-# Install Node.js
-# Use UBI AppStream to avoid conflicts with preinstalled nodejs-full-i18n
-RUN dnf module reset -y nodejs && \
-    dnf module enable -y nodejs:20 && \
-    dnf install -y nodejs npm && \
+# Install Node.js (RHEL 10 ships Node.js directly in AppStream, no modules)
+RUN dnf install -y nodejs npm && \
     dnf clean all
 
 # Install Go
-# Use Go 1.21 from AppStream (latest LTS version in UBI9)
 RUN dnf install -y go-toolset && \
     dnf clean all
 
-# # Install Chromium for Playwright MCP (enables headless browser automation)
-# # Required for self-development workflow where runner tests frontend changes locally
-# # Using Playwright's bundled Chromium as it's self-contained and works on UBI9
-# # Install system deps that Playwright needs on RHEL/UBI
-# ENV PLAYWRIGHT_BROWSERS_PATH=/opt/app-root/src/.cache/ms-playwright
-# RUN dnf install -y \
-#     alsa-lib atk at-spi2-atk cups-libs libdrm libXcomposite libXdamage \
-#     libXrandr mesa-libgbm pango nss nspr libxkbcommon && \
-#     dnf clean all && \
-#     mkdir -p "$PLAYWRIGHT_BROWSERS_PATH" && \
-#     npx -y playwright install chromium && \
-#     # Create symlink so 'chromium-browser' command works
-#     ln -sf /opt/app-root/src/.cache/ms-playwright/chromium-*/chrome-linux/chrome /usr/local/bin/chromium-browser && \
-#     # Make Playwright cache writable by non-root user (UID 1001) for lock files and temp dirs
-#     chown -R 1001:0 /opt/app-root/src/.cache && \
-#     chmod -R g=u /opt/app-root/src/.cache
-# MCP ref to add
-# "playwright": {
-#     "type": "stdio",
-#     "command": "npx",
-#     "args": [
-#       "@playwright/mcp@latest",
-#       "--headless",
-#       "--browser",
-#       "chromium",
-#       "--no-sandbox",
-#       "--timeout-action",
-#       "30000",
-#       "--viewport-size",
-#       "1280x720",
-#       "--block-service-workers"
-#     ],
-#     "env": {
-#       "PLAYWRIGHT_BROWSERS_PATH": "/opt/app-root/src/.cache/ms-playwright",
-#       "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD": "0"
-#     }
-#   }
 # Install uv (provides uvx for package execution) and pre-commit (for repo hooks)
-RUN pip install --no-cache-dir uv pre-commit
+RUN pip3 install --break-system-packages --no-cache-dir uv pre-commit
 
 # Create working directory
 WORKDIR /app
@@ -69,11 +30,16 @@ WORKDIR /app
 COPY ambient-runner /app/ambient-runner
 
 # Install runner as a package (pulls dependencies including AG-UI SDK)
-RUN pip install --no-cache-dir '/app/ambient-runner[all]'
+RUN pip3 install --break-system-packages --no-cache-dir '/app/ambient-runner[all]'
 
 # Install Gemini CLI (npm package, Node.js already available)
-RUN npm install -g @google/gemini-cli
+RUN npm install -g @google/gemini-cli && \
+    npm cache clean --force
 
+# Remove build-only dependencies and clean caches
+RUN dnf remove -y python3-devel && \
+    dnf clean all && \
+    rm -rf /var/cache/dnf /var/lib/dnf
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1

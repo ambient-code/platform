@@ -3,7 +3,6 @@
 import json
 import logging
 from dataclasses import dataclass, field
-from typing import Optional, Union
 
 logger = logging.getLogger(__name__)
 
@@ -45,8 +44,8 @@ class ToolResultEvent:
     timestamp: str
     tool_id: str
     status: str  # "success" | "error"
-    output: Optional[str] = None
-    error: Optional[dict] = None
+    output: str | None = None
+    error: dict | None = None
 
 
 @dataclass
@@ -62,8 +61,8 @@ class ResultEvent:
     type: str  # "result"
     timestamp: str
     status: str  # "success" | "error"
-    error: Optional[dict] = None
-    stats: Optional[dict] = None
+    error: dict | None = None
+    stats: dict | None = None
 
 
 _TYPE_MAP = {
@@ -78,11 +77,7 @@ _TYPE_MAP = {
 
 def parse_event(
     line: str,
-) -> Optional[
-    Union[
-        InitEvent, MessageEvent, ToolUseEvent, ToolResultEvent, ErrorEvent, ResultEvent
-    ]
-]:
+) -> InitEvent | MessageEvent | ToolUseEvent | ToolResultEvent | ErrorEvent | ResultEvent | None:
     """Parse a JSON line into the appropriate event dataclass.
 
     Returns ``None`` when the line cannot be parsed or has an unknown type.

@@ -196,6 +196,10 @@ export type CreateAgenticSessionRequest = {
 	labels?: Record<string, string>;
 	annotations?: Record<string, string>;
 	runnerType?: string;
+	// TODO: Backend handler must unmarshal this field and write it into the
+	// AgenticSession CR spec. Until then, Go encoding/json silently drops it.
+	// Safe while the `advanced-agent-options` Unleash flag defaults to off.
+	agentOptions?: Record<string, unknown>;
 };
 
 export type AgentPersona = {

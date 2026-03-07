@@ -29,7 +29,7 @@ import asyncio
 import logging
 import os
 from contextlib import suppress
-from typing import Any, AsyncIterator, Optional
+from typing import Any, AsyncIterator
 
 logger = logging.getLogger(__name__)
 
@@ -72,11 +72,11 @@ class SessionWorker:
 
         # Inbound: (prompt, session_id, output_queue) | _SHUTDOWN
         self._input_queue: asyncio.Queue = asyncio.Queue()
-        self._task: Optional[asyncio.Task] = None
-        self._client: Optional[Any] = None  # ClaudeSDKClient once connected
+        self._task: asyncio.Task | None = None
+        self._client: Any | None = None  # ClaudeSDKClient once connected
 
         # Session ID returned by the CLI (for resume on restart)
-        self.session_id: Optional[str] = None
+        self.session_id: str | None = None
 
     # ── lifecycle ──
 
@@ -280,7 +280,7 @@ class SessionManager:
         logger.debug(f"[SessionManager] Created worker for thread={thread_id}")
         return worker
 
-    def get_existing(self, thread_id: str) -> Optional[SessionWorker]:
+    def get_existing(self, thread_id: str) -> SessionWorker | None:
         """Return the worker for *thread_id* if it exists, else ``None``."""
         return self._workers.get(thread_id)
 
@@ -290,7 +290,7 @@ class SessionManager:
             self._locks[thread_id] = asyncio.Lock()
         return self._locks[thread_id]
 
-    def get_session_id(self, thread_id: str) -> Optional[str]:
+    def get_session_id(self, thread_id: str) -> str | None:
         """Return the CLI session ID for *thread_id*, if known."""
         worker = self._workers.get(thread_id)
         if worker and worker.session_id:

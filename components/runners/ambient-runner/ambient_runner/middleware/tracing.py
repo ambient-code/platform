@@ -19,7 +19,7 @@ unchanged with zero overhead.
 """
 
 import logging
-from typing import Any, AsyncIterator, Optional
+from typing import Any, AsyncIterator
 
 from ag_ui.core import BaseEvent, CustomEvent, EventType
 
@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 async def tracing_middleware(
     event_stream: AsyncIterator[BaseEvent],
     *,
-    obs: Optional[Any] = None,
+    obs: Any | None = None,
     model: str = "",
     prompt: str = "",
 ) -> AsyncIterator[BaseEvent]:
