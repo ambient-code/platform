@@ -211,7 +211,9 @@ export const claudeAgentOptionsSchema = z.object({
   plugins: z.array(sdkPluginConfigSchema).default([]),
 });
 
-export type ClaudeAgentOptionsForm = z.infer<typeof claudeAgentOptionsSchema>;
+// Use z.input so the form type matches the resolver's input type.
+// Fields with .default() are optional in the form but filled by Zod on validation.
+export type ClaudeAgentOptionsForm = z.input<typeof claudeAgentOptionsSchema>;
 
 export const claudeAgentOptionsDefaults: Partial<ClaudeAgentOptionsForm> = {
   permission_mode: "default",
