@@ -2,7 +2,7 @@
 
 import logging
 import uuid
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 from ag_ui.core import EventType, RunAgentInput, RunErrorEvent, ToolCallResultEvent
 from ag_ui_claude_sdk.utils import now_ms
@@ -19,19 +19,19 @@ router = APIRouter()
 class RunnerInput(BaseModel):
     """Input model with optional AG-UI fields."""
 
-    threadId: Optional[str] = None
-    thread_id: Optional[str] = None
-    runId: Optional[str] = None
-    run_id: Optional[str] = None
-    parentRunId: Optional[str] = None
-    parent_run_id: Optional[str] = None
-    messages: List[Dict[str, Any]]
-    state: Optional[Dict[str, Any]] = None
-    tools: Optional[List[Any]] = None
-    context: Optional[Union[List[Any], Dict[str, Any]]] = None
-    forwardedProps: Optional[Dict[str, Any]] = None
-    environment: Optional[Dict[str, str]] = None
-    metadata: Optional[Dict[str, Any]] = None
+    threadId: str | None = None
+    thread_id: str | None = None
+    runId: str | None = None
+    run_id: str | None = None
+    parentRunId: str | None = None
+    parent_run_id: str | None = None
+    messages: list[dict[str, Any]]
+    state: dict[str, Any] | None = None
+    tools: list[Any] | None = None
+    context: list[Any] | dict[str, Any] | None = None
+    forwardedProps: dict[str, Any] | None = None
+    environment: dict[str, str] | None = None
+    metadata: dict[str, Any] | None = None
 
     def to_run_agent_input(self) -> RunAgentInput:
         thread_id = self.threadId or self.thread_id

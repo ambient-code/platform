@@ -1,4 +1,4 @@
-FROM quay.io/fedora/fedora:latest
+FROM alpine:3.21
 
 RUN dnf install -y rclone git-core jq && \
     dnf clean all
