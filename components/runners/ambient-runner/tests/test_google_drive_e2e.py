@@ -155,23 +155,14 @@ async def test_google_drive_authentication_flow():
     shutil.rmtree(secret_mount_dir.parent, ignore_errors=True)
 
 
+@pytest.mark.skip(reason="Tool invocation test not yet implemented - requires Claude SDK integration")
 @pytest.mark.skipif(
     not os.getenv("GOOGLE_DRIVE_E2E_TEST"),
     reason="Requires GOOGLE_DRIVE_E2E_TEST=true and real credentials",
 )
-@pytest.mark.asyncio
 async def test_google_drive_tool_invocation():
-    """
-    E2E test for Google Drive MCP tool invocation.
-
-    This test would actually invoke Claude SDK with MCP tools to verify
-    Drive operations work correctly. Currently a placeholder for future implementation.
-
-    TODO: Implement actual tool invocation test with Claude SDK
-    """
-    pytest.skip(
-        "Tool invocation test not yet implemented - requires Claude SDK integration"
-    )
+    """E2E test for Google Drive MCP tool invocation."""
+    pass
 
 
 if __name__ == "__main__":

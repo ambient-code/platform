@@ -1,4 +1,4 @@
-FROM alpine:3.19
+FROM alpine:3.21
 
 # Install rclone, git, and utilities
 RUN apk add --no-cache \

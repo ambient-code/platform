@@ -12,7 +12,7 @@ Owns the entire Claude session lifecycle:
 import logging
 import os
 import time
-from typing import Any, AsyncIterator, Optional
+from typing import Any, AsyncIterator
 
 from ag_ui.core import BaseEvent, RunAgentInput
 from ag_ui_claude_sdk import ClaudeAgentAdapter
@@ -123,7 +123,7 @@ class ClaudeBridge(PlatformBridge):
 
         self._first_run = False
 
-    async def interrupt(self, thread_id: Optional[str] = None) -> None:
+    async def interrupt(self, thread_id: str | None = None) -> None:
         """Interrupt the running session for a given thread."""
         if not self._session_manager:
             raise RuntimeError("No active session manager")

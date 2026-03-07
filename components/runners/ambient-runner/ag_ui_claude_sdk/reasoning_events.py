@@ -11,48 +11,48 @@ Once ``ag-ui-protocol`` adds native support, these can be replaced with
 direct imports.
 """
 
-from typing import Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel
 
 
 class ReasoningStartEvent(BaseModel):
     type: Literal["REASONING_START"] = "REASONING_START"
-    thread_id: Optional[str] = None
-    run_id: Optional[str] = None
-    message_id: Optional[str] = None
-    timestamp: Optional[int] = None
+    thread_id: str | None = None
+    run_id: str | None = None
+    message_id: str | None = None
+    timestamp: int | None = None
 
 
 class ReasoningEndEvent(BaseModel):
     type: Literal["REASONING_END"] = "REASONING_END"
-    thread_id: Optional[str] = None
-    run_id: Optional[str] = None
-    message_id: Optional[str] = None
-    timestamp: Optional[int] = None
+    thread_id: str | None = None
+    run_id: str | None = None
+    message_id: str | None = None
+    timestamp: int | None = None
 
 
 class ReasoningMessageStartEvent(BaseModel):
     type: Literal["REASONING_MESSAGE_START"] = "REASONING_MESSAGE_START"
-    thread_id: Optional[str] = None
-    run_id: Optional[str] = None
-    message_id: Optional[str] = None
+    thread_id: str | None = None
+    run_id: str | None = None
+    message_id: str | None = None
     role: str = "assistant"
-    timestamp: Optional[int] = None
+    timestamp: int | None = None
 
 
 class ReasoningMessageContentEvent(BaseModel):
     type: Literal["REASONING_MESSAGE_CONTENT"] = "REASONING_MESSAGE_CONTENT"
-    thread_id: Optional[str] = None
-    run_id: Optional[str] = None
-    message_id: Optional[str] = None
+    thread_id: str | None = None
+    run_id: str | None = None
+    message_id: str | None = None
     delta: str = ""
-    timestamp: Optional[int] = None
+    timestamp: int | None = None
 
 
 class ReasoningMessageEndEvent(BaseModel):
     type: Literal["REASONING_MESSAGE_END"] = "REASONING_MESSAGE_END"
-    thread_id: Optional[str] = None
-    run_id: Optional[str] = None
-    message_id: Optional[str] = None
-    timestamp: Optional[int] = None
+    thread_id: str | None = None
+    run_id: str | None = None
+    message_id: str | None = None
+    timestamp: int | None = None

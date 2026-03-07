@@ -11,7 +11,7 @@ import logging
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 from ambient_runner.platform.context import RunnerContext
 
@@ -130,7 +130,7 @@ def log_auth_status(mcp_servers: dict) -> None:
 
 def _read_google_credentials(
     workspace_path: Path, secret_path: Path
-) -> Dict[str, Any] | None:
+) -> dict[str, Any] | None:
     cred_path = workspace_path if workspace_path.exists() else secret_path
     if not cred_path.exists():
         return None
@@ -157,7 +157,7 @@ def _parse_token_expiry(expiry_str: str) -> datetime | None:
 
 
 def _validate_google_token(
-    user_creds: Dict[str, Any], user_email: str
+    user_creds: dict[str, Any], user_email: str
 ) -> tuple[bool | None, str]:
     if not user_creds.get("access_token") or not user_creds.get("refresh_token"):
         return False, "Google OAuth credentials incomplete - missing or empty tokens"
