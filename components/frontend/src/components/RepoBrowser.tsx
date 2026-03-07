@@ -3,7 +3,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { GitBranch } from 'lucide-react';
+import { GitBranch, FileWarning } from 'lucide-react';
+import { isBinaryFile, contentAppearsBinary } from '@/lib/file-utils';
 import * as repoApi from '@/services/api/repo';
 import { RepoEntry, RepoBlob } from '@/types';
 import { FileTree, type FileTreeNode } from '@/components/file-tree';
@@ -186,7 +187,14 @@ export default function RepoBrowser({
                   </div>
                 </div>
                 <div className="bg-muted/50 rounded-lg p-4 overflow-auto max-h-[60vh]">
-                  <pre className="text-sm whitespace-pre-wrap break-words">{fileContent.content}</pre>
+                  {selectedPath && (isBinaryFile(selectedPath) || contentAppearsBinary(fileContent.content)) ? (
+                    <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+                      <FileWarning className="h-10 w-10 mb-3 opacity-50" />
+                      <p className="text-sm">Binary file cannot be displayed</p>
+                    </div>
+                  ) : (
+                    <pre className="text-sm whitespace-pre-wrap break-words">{fileContent.content}</pre>
+                  )}
                 </div>
               </div>
             ) : loading ? (

@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo } from "react";
-import { Folder, NotepadText, Download, FolderSync, Loader2 } from "lucide-react";
+import { Folder, NotepadText, Download, FolderSync, Loader2, FileWarning } from "lucide-react";
+import { isBinaryFile, contentAppearsBinary } from "@/lib/file-utils";
 import { AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -123,9 +124,17 @@ export function ArtifactsAccordion({
               ) : viewingFile ? (
                 /* File content view */
                 <div className="text-xs">
-                  <pre className="bg-muted/50 p-2 rounded overflow-x-auto">
-                    <code>{viewingFile.content}</code>
-                  </pre>
+                  {isBinaryFile(viewingFile.path) || contentAppearsBinary(viewingFile.content) ? (
+                    <div className="flex flex-col items-center justify-center py-6 text-muted-foreground">
+                      <FileWarning className="h-8 w-8 mb-2 opacity-50" />
+                      <p>Binary file cannot be displayed</p>
+                      <p className="text-xs mt-1">Use the download button to view this file</p>
+                    </div>
+                  ) : (
+                    <pre className="bg-muted/50 p-2 rounded overflow-x-auto">
+                      <code>{viewingFile.content}</code>
+                    </pre>
+                  )}
                 </div>
               ) : files.length === 0 ? (
                 /* Empty state */
