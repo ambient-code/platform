@@ -132,6 +132,9 @@ export type CreateAgenticSessionRequest = {
   runnerType?: string;
   // Typed as Record<string, unknown> because the backend accepts arbitrary JSON.
   // The frontend validates via ClaudeAgentOptionsForm (Zod schema) before sending.
+  // TODO: Backend handler in components/backend/ must unmarshal this field and write
+  // it into the AgenticSession CR spec. Until then, Go encoding/json silently drops
+  // the field. Safe while the `advanced-agent-options` flag defaults to off.
   agentOptions?: Record<string, unknown>;
 };
 
