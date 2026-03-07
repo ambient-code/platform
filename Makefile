@@ -784,8 +784,14 @@ check-minikube: ## Check if minikube is installed
 		(echo "$(COLOR_RED)✗$(COLOR_RESET) minikube not found. Install: https://minikube.sigs.k8s.io/docs/start/" && exit 1)
 
 check-kind: ## Check if kind is installed
-	@command -v kind >/dev/null 2>&1 || \
-		(echo "$(COLOR_RED)✗$(COLOR_RESET) kind not found. Install: https://kind.sigs.k8s.io/docs/user/quick-start/" && exit 1)
+	@command -v kind >/dev/null 2>&1 || { \
+		if command -v dnf >/dev/null 2>&1; then \
+			echo "$(COLOR_RED)✗$(COLOR_RESET) kind not found. Install with: $(COLOR_GREEN)sudo dnf install kind$(COLOR_RESET)"; \
+		else \
+			echo "$(COLOR_RED)✗$(COLOR_RESET) kind not found. Install: https://kind.sigs.k8s.io/docs/user/quick-start/"; \
+		fi; \
+		exit 1; \
+	}
 
 check-kubectl: ## Check if kubectl is installed
 	@command -v kubectl >/dev/null 2>&1 || \
