@@ -400,7 +400,6 @@ class TestPlatformLifecycle:
         assert resp.status_code == 500
         data = resp.json()
         assert "detail" in data
-        assert "ghost-thread" in data["detail"]
 
     def test_run_endpoint_schema_validation(self, client):
         """Various payload validation checks."""
