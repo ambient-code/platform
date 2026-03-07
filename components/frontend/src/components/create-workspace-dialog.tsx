@@ -192,7 +192,7 @@ export function CreateWorkspaceDialog({
                 <Label htmlFor="displayName">Workspace Name *</Label>
                 <Input
                   id="displayName"
-                  data-testid="workspace-name-input"
+                  data-testid="workspace-display-name-input"
                   value={formData.displayName}
                   onChange={(e) => handleDisplayNameChange(e.target.value)}
                   placeholder="e.g. My Research Workspace"
@@ -207,7 +207,7 @@ export function CreateWorkspaceDialog({
                 <Label htmlFor="name">Workspace Name *</Label>
                 <Input
                   id="name"
-                  data-testid="workspace-name-input"
+                  data-testid="workspace-slug-input"
                   value={formData.name}
                   onChange={(e) => {
                     const name = e.target.value;

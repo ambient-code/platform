@@ -41,7 +41,7 @@ describe('Ambient Session Management Tests', () => {
     cy.get('[data-testid="new-workspace-btn"]').click()
     cy.contains('Create New Workspace', { timeout: 10000 }).should('be.visible')
     cy.wait(1500)
-    cy.get('[data-testid="workspace-name-input"]', { timeout: 10000 })
+    cy.get('[data-testid="workspace-slug-input"]', { timeout: 10000 })
       .should('be.visible').clear().type(workspaceName)
     cy.get('[data-testid="create-workspace-submit"]').should('not.be.disabled').click()
     cy.url({ timeout: 20000 }).should('match', /\/projects\/[a-z0-9-]+$/)
