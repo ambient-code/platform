@@ -1,0 +1,96 @@
+name: ACP Triage
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  ACP_API_URL: https://ambient-code.apps.rosa.vteam-uat.0ksl.p3.openshiftapps.com
+  ACP_PROJECT: jeder-workspace
+
+jobs:
+  triage-issues:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+
+    steps:
+      - name: Set date
+        id: date
+        run: echo "date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+
+      - name: Create ACP triage session
+        id: session
+        uses: ambient-code/ambient-action@v0.0.2
+        with:
+          api-url: ${{ env.ACP_API_URL }}
+          api-token: ${{ secrets.AMBIENT_BOT_TOKEN }}
+          project: ${{ env.ACP_PROJECT }}
+          prompt: Triage the backlog for https://github.com/ambient-code/platform
+          workflow: '{"gitUrl": "https://github.com/ambient-code/workflows", "branch": "main", "path": "workflows/triage"}'
+          display-name: Triage Report ${{ steps.date.outputs.date }}
+          wait: 'true'
+          timeout: '60'
+          labels: '{"type": "triage", "target": "platform", "trigger": "scheduled"}'
+
+      - name: Post step summary
+        if: always()
+        env:
+          SESSION_NAME: ${{ steps.session.outputs.session-name }}
+          SESSION_UID: ${{ steps.session.outputs.session-uid }}
+          SESSION_PHASE: ${{ steps.session.outputs.session-phase }}
+          SESSION_RESULT: ${{ steps.session.outputs.session-result }}
+        run: |
+          SESSION_URL="${ACP_API_URL}/projects/${ACP_PROJECT}/sessions/${SESSION_NAME}"
+          {
+            echo "### ACP Triage Session"
+            echo ""
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| **Session** | \`${SESSION_NAME}\` |"
+            echo "| **UID** | \`${SESSION_UID}\` |"
+            echo "| **Phase** | ${SESSION_PHASE} |"
+            echo "| **Result** | ${SESSION_RESULT:-N/A} |"
+            echo "| **UI** | [View in ACP](${SESSION_URL}) |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Create triage report issue
+        if: steps.session.outputs.session-name != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SESSION_NAME: ${{ steps.session.outputs.session-name }}
+          SESSION_PHASE: ${{ steps.session.outputs.session-phase }}
+          SESSION_RESULT: ${{ steps.session.outputs.session-result }}
+          DATE: ${{ steps.date.outputs.date }}
+        run: |
+          SESSION_URL="${ACP_API_URL}/projects/${ACP_PROJECT}/sessions/${SESSION_NAME}"
+
+          gh label create triage-report --color 0E8A16 --description "Automated triage report" 2>/dev/null || true
+
+          cat > /tmp/triage-body.md <<EOF
+          ## Triage Report - ${DATE}
+
+          An automated triage session analyzed all open issues in [ambient-code/platform](https://github.com/ambient-code/platform/issues).
+
+          | Field | Value |
+          |-------|-------|
+          | **Session** | \`${SESSION_NAME}\` |
+          | **Phase** | ${SESSION_PHASE} |
+          | **Result** | ${SESSION_RESULT:-N/A} |
+
+          **[View full triage report in ACP](${SESSION_URL})**
+
+          Artifacts available in the session:
+          - \`artifacts/triage/report.html\` - Interactive HTML report
+          - \`artifacts/triage/triage-report.md\` - Markdown summary table
+          - \`artifacts/triage/bulk-operations.sh\` - Bulk label/milestone update script
+          EOF
+
+          gh issue create \
+            --title "Triage Report - ${DATE}" \
+            --body-file /tmp/triage-body.md \
+            --label "triage-report"

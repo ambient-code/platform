@@ -66,7 +66,9 @@ def _async_safe_manager_shutdown(manager: Any) -> None:
         try:
             asyncio.run(manager.shutdown())
         except Exception as exc:
-            _bridge_logger.warning("mark_dirty: session_manager shutdown error: %s", exc)
+            _bridge_logger.warning(
+                "mark_dirty: session_manager shutdown error: %s", exc
+            )
 
 
 @dataclass
