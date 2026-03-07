@@ -130,6 +130,9 @@ export type CreateAgenticSessionRequest = {
   labels?: Record<string, string>;
   annotations?: Record<string, string>;
   runnerType?: string;
+  // Typed as Record<string, unknown> because the backend accepts arbitrary JSON.
+  // The frontend validates via ClaudeAgentOptionsForm (Zod schema) before sending.
+  agentOptions?: Record<string, unknown>;
 };
 
 export type CreateAgenticSessionResponse = {
