@@ -6,11 +6,10 @@ USER 0
 RUN dnf install -y python3 python3-pip python3-devel && \
     dnf clean all
 
-# Add GitHub CLI repository and install packages
-RUN dnf install -y 'dnf-command(config-manager)' && \
+# Install git/jq first, then GitHub CLI (gh RPM requires git)
+RUN dnf install -y git jq 'dnf-command(config-manager)' && \
     dnf config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo && \
     dnf install -y gh --repo gh-cli && \
-    dnf install -y git jq && \
     dnf clean all
 
 # Install Node.js 22 LTS
