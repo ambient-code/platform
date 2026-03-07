@@ -139,6 +139,10 @@ class ClaudeBridge(PlatformBridge):
         logger.info(f"Interrupt request for thread={tid}")
         await worker.interrupt()
 
+        # Record interrupt in observability metrics
+        if self._obs:
+            self._obs.record_interrupt()
+
     # ------------------------------------------------------------------
     # Lifecycle methods
     # ------------------------------------------------------------------

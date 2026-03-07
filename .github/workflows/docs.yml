@@ -33,6 +33,10 @@ jobs:
         working-directory: ./docs
         run: npm ci
 
+      - name: Install Playwright Chromium
+        working-directory: ./docs
+        run: npx playwright install --with-deps chromium
+
       - name: Build documentation
         working-directory: ./docs
         run: npm run build

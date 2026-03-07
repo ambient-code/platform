@@ -285,6 +285,21 @@ func TestResolveInactivityTimeout(t *testing.T) {
 		}
 	})
 
+	t.Run("default timeout respects env var override", func(t *testing.T) {
+		resetTimeoutCache()
+		setupFakeDynamicClient()
+
+		original := defaultInactivityTimeoutSec
+		defaultInactivityTimeoutSec = 7200
+		defer func() { defaultInactivityTimeoutSec = original }()
+
+		obj := newSessionObj("s1", "ns-empty")
+		got := resolveInactivityTimeout(obj)
+		if got != 7200 {
+			t.Errorf("expected 7200 (overridden default), got %d", got)
+		}
+	})
+
 	t.Run("session timeout zero overrides project and default", func(t *testing.T) {
 		resetTimeoutCache()
 

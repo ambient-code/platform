@@ -345,7 +345,7 @@ func executeTemplate(tmpl *template.Template, outPath string, data interface{}) 
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	return tmpl.Execute(f, data)
 }
@@ -368,10 +368,10 @@ func computeSpecHash(specPath string) (string, error) {
 			return "", fmt.Errorf("open %s: %w", f, err)
 		}
 		if _, err := io.Copy(h, fh); err != nil {
-			fh.Close()
+			_ = fh.Close()
 			return "", fmt.Errorf("read %s: %w", f, err)
 		}
-		fh.Close()
+		_ = fh.Close()
 	}
 
 	return fmt.Sprintf("%x", h.Sum(nil)), nil

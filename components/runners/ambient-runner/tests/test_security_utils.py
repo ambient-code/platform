@@ -36,7 +36,7 @@ class TestSanitizeExceptionMessage:
         secrets = {"public_key": "wrong-key"}
 
         with caplog.at_level(logging.ERROR):
-            result = sanitize_exception_message(exception, secrets)
+            sanitize_exception_message(exception, secrets)
 
         # Should NOT contain the secret (even though sanitization didn't catch it)
         # Actually in this case, since we provided the wrong secret, the original

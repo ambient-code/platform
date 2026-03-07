@@ -11,11 +11,12 @@ type Model struct {
 // ModelEntry represents a model entry in the manifest file (internal).
 // Includes fields not exposed in the API response.
 type ModelEntry struct {
-	ID        string `json:"id"`
-	Label     string `json:"label"`
-	VertexID  string `json:"vertexId"`
-	Provider  string `json:"provider"`
-	Available bool   `json:"available"`
+	ID           string `json:"id"`
+	Label        string `json:"label"`
+	VertexID     string `json:"vertexId"`
+	Provider     string `json:"provider"`
+	Available    bool   `json:"available"`
+	FeatureGated bool   `json:"featureGated"`
 }
 
 // ModelManifest represents the top-level model manifest structure.

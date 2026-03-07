@@ -103,7 +103,12 @@ export function StatusBadge({
   return (
     <Badge
       variant="outline"
-      className={cn('flex items-center gap-1.5 font-medium', colorClasses, className)}
+      className={cn(
+        'flex items-center gap-1.5 font-medium rounded-full',
+        colorClasses,
+        normalizedStatus === 'running' && 'shadow-sm shadow-blue-500/20',
+        className
+      )}
     >
       {showIcon && (
         <Icon

@@ -1,6 +1,0 @@
-# Exclude environment files with secrets
-.env
-
-# Exclude any backup files
-*.bak
-backup*.tar.gz
