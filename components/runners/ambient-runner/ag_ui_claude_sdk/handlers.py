@@ -7,7 +7,7 @@ Breaks down stream processing into focused handler functions.
 import json
 import logging
 import uuid
-from typing import AsyncIterator, Any, Optional
+from typing import Any, AsyncIterator
 
 from ag_ui.core import (
     EventType,
@@ -41,8 +41,8 @@ async def handle_tool_use_block(
     message: Any,
     thread_id: str,
     run_id: str,
-    current_state: Optional[Any],
-) -> tuple[Optional[Any], AsyncIterator[BaseEvent]]:
+    current_state: Any | None,
+) -> tuple[Any | None, AsyncIterator[BaseEvent]]:
     """
     Handle ToolUseBlock from Claude SDK.
 
@@ -134,7 +134,7 @@ async def handle_tool_result_block(
     block: Any,
     thread_id: str,
     run_id: str,
-    parent_tool_use_id: Optional[str] = None,
+    parent_tool_use_id: str | None = None,
 ) -> AsyncIterator[BaseEvent]:
     """
     Handle ToolResultBlock from Claude SDK.

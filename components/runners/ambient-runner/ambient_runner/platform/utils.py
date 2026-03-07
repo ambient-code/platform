@@ -12,7 +12,7 @@ import re
 import warnings
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 from urllib.parse import urlparse, urlunparse
 
 logger = logging.getLogger(__name__)
@@ -46,7 +46,7 @@ def is_env_truthy(value: str) -> bool:
 
 def is_vertex_enabled(
     legacy_var: str = "CLAUDE_CODE_USE_VERTEX",
-    context: Optional[Any] = None,
+    context: Any | None = None,
 ) -> bool:
     """Check whether Vertex AI is enabled via environment.
 

@@ -14,7 +14,7 @@ Fields use camelCase aliases to match the AG-UI wire format (the frontend
 reads ``messageId``, ``threadId``, ``runId`` — not snake_case).
 """
 
-from typing import Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -34,41 +34,41 @@ class _ReasoningBase(BaseModel):
 
 class ReasoningStartEvent(_ReasoningBase):
     type: Literal["REASONING_START"] = "REASONING_START"
-    threadId: Optional[str] = None
-    runId: Optional[str] = None
-    messageId: Optional[str] = None
-    timestamp: Optional[int] = None
+    threadId: str | None = None
+    runId: str | None = None
+    messageId: str | None = None
+    timestamp: int | None = None
 
 
 class ReasoningEndEvent(_ReasoningBase):
     type: Literal["REASONING_END"] = "REASONING_END"
-    threadId: Optional[str] = None
-    runId: Optional[str] = None
-    messageId: Optional[str] = None
-    timestamp: Optional[int] = None
+    threadId: str | None = None
+    runId: str | None = None
+    messageId: str | None = None
+    timestamp: int | None = None
 
 
 class ReasoningMessageStartEvent(_ReasoningBase):
     type: Literal["REASONING_MESSAGE_START"] = "REASONING_MESSAGE_START"
-    threadId: Optional[str] = None
-    runId: Optional[str] = None
-    messageId: Optional[str] = None
+    threadId: str | None = None
+    runId: str | None = None
+    messageId: str | None = None
     role: str = "assistant"
-    timestamp: Optional[int] = None
+    timestamp: int | None = None
 
 
 class ReasoningMessageContentEvent(_ReasoningBase):
     type: Literal["REASONING_MESSAGE_CONTENT"] = "REASONING_MESSAGE_CONTENT"
-    threadId: Optional[str] = None
-    runId: Optional[str] = None
-    messageId: Optional[str] = None
+    threadId: str | None = None
+    runId: str | None = None
+    messageId: str | None = None
     delta: str = ""
-    timestamp: Optional[int] = None
+    timestamp: int | None = None
 
 
 class ReasoningMessageEndEvent(_ReasoningBase):
     type: Literal["REASONING_MESSAGE_END"] = "REASONING_MESSAGE_END"
-    threadId: Optional[str] = None
-    runId: Optional[str] = None
-    messageId: Optional[str] = None
-    timestamp: Optional[int] = None
+    threadId: str | None = None
+    runId: str | None = None
+    messageId: str | None = None
+    timestamp: int | None = None

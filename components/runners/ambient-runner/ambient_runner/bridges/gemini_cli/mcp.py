@@ -15,7 +15,6 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Optional
 
 from ambient_runner.platform.config import load_mcp_config
 from ambient_runner.platform.context import RunnerContext
@@ -26,7 +25,7 @@ logger = logging.getLogger(__name__)
 def build_gemini_mcp_settings(
     context: RunnerContext,
     cwd_path: str,
-) -> Optional[dict]:
+) -> dict | None:
     """Load MCP servers from platform config and return Gemini settings dict.
 
     Args:
@@ -141,7 +140,7 @@ def _build_feedback_server_entry() -> dict:
 def setup_gemini_mcp(
     context: RunnerContext,
     cwd_path: str,
-) -> Optional[str]:
+) -> str | None:
     """End-to-end MCP setup: load config, write settings file, write commands.
 
     Args:

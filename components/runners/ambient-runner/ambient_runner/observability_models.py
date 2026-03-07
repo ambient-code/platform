@@ -13,7 +13,6 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Dict, Tuple
 
 from pydantic import BaseModel, Field
 
@@ -69,7 +68,7 @@ class ToolCallType(str, Enum):
 
 
 # O(1) lookup table — built once at module load.
-_TOOL_BY_VALUE: Dict[str, ToolCallType] = {m.value: m for m in ToolCallType}
+_TOOL_BY_VALUE: dict[str, ToolCallType] = {m.value: m for m in ToolCallType}
 
 
 def classify_tool(raw_name: str) -> ToolCallType:
@@ -102,7 +101,7 @@ def classify_tool(raw_name: str) -> ToolCallType:
 # ── Cost estimation ──────────────────────────────────────────────────
 
 # Pricing per 1M tokens (USD): {model_prefix: (input, output, cache_read)}
-MODEL_PRICING: Dict[str, Tuple[float, float, float]] = {
+MODEL_PRICING: dict[str, tuple[float, float, float]] = {
     "claude-opus-4": (15.0, 75.0, 1.50),
     "claude-sonnet-4": (3.0, 15.0, 0.30),
     "claude-sonnet-3": (3.0, 15.0, 0.30),
@@ -111,7 +110,7 @@ MODEL_PRICING: Dict[str, Tuple[float, float, float]] = {
 }
 
 
-def _match_model_pricing(model: str) -> Tuple[float, float, float]:
+def _match_model_pricing(model: str) -> tuple[float, float, float]:
     """Return (input, output, cache_read) pricing per 1M tokens for *model*."""
     model_lower = model.lower()
     for prefix, pricing in MODEL_PRICING.items():
@@ -193,7 +192,7 @@ class TokenMetric(BaseModel):
     token_cache_read: int = 0
     token_total: int = 0
     estimated_cost_usd: float = 0.0
-    models_seen: Dict[str, int] = Field(
+    models_seen: dict[str, int] = Field(
         default_factory=dict,
         description="Model name -> number of API responses using that model",
     )
@@ -203,11 +202,11 @@ class InterruptMetric(BaseModel):
     """Counts of session interruptions by type."""
 
     interrupt_tool_failure_total: int = 0
-    interrupt_tool_failure_count: Dict[str, int] = Field(
+    interrupt_tool_failure_count: dict[str, int] = Field(
         default_factory=dict,
         description="ToolCallType value -> failure count",
     )
-    interrupt_tool_reason_count: Dict[str, int] = Field(
+    interrupt_tool_reason_count: dict[str, int] = Field(
         default_factory=dict,
         description="'ToolType: reason' -> failure count",
     )
@@ -219,7 +218,7 @@ class ToolsUsageMetric(BaseModel):
     """Tool call counts for the session."""
 
     tool_calls_total: int = 0
-    tool_calls_group: Dict[str, int] = Field(
+    tool_calls_group: dict[str, int] = Field(
         default_factory=dict,
         description="ToolCallType value -> count",
     )
@@ -235,9 +234,9 @@ class SessionMetric(BaseModel):
     tools_usage_metric: ToolsUsageMetric = Field(default_factory=ToolsUsageMetric)
     interrupt_metric: InterruptMetric = Field(default_factory=InterruptMetric)
 
-    def to_flat_scores(self) -> Dict[str, float]:
+    def to_flat_scores(self) -> dict[str, float]:
         """Flatten all metrics into ``{score_name: value}`` for Langfuse."""
-        scores: Dict[str, float] = {}
+        scores: dict[str, float] = {}
 
         # Interrupts
         scores["interrupt_tool_failure_total"] = float(

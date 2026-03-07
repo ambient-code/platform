@@ -9,7 +9,6 @@ import json as _json
 import logging
 import os
 from pathlib import Path
-from typing import Optional
 
 from ambient_runner.platform.context import RunnerContext
 from ambient_runner.platform.utils import expand_env_vars, parse_owner_repo
@@ -43,7 +42,7 @@ def load_ambient_config(cwd_path: str) -> dict:
         return {}
 
 
-def load_mcp_config(context: RunnerContext, cwd_path: str) -> Optional[dict]:
+def load_mcp_config(context: RunnerContext, cwd_path: str) -> dict | None:
     """Load MCP server configuration from the ambient runner's .mcp.json file.
 
     Returns:
