@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"ambient-code-operator/internal/config"
+	"ambient-code-operator/internal/models"
 	"ambient-code-operator/internal/types"
 
 	authnv1 "k8s.io/api/authentication/v1"
@@ -509,7 +510,7 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 	// This will be used to conditionally mount the secret as a volume
 	ambientVertexSecretCopied := false
 	operatorNamespace := appConfig.BackendNamespace // Assuming operator runs in same namespace as backend
-	vertexEnabled := os.Getenv("CLAUDE_CODE_USE_VERTEX") == "1"
+	vertexEnabled := IsVertexEnabled()
 
 	// Only attempt to copy the secret if Vertex AI is enabled
 	if vertexEnabled {
@@ -520,7 +521,7 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 			copyCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 			if err := copySecretToNamespace(copyCtx, ambientVertexSecret, sessionNamespace, currentObj); err != nil {
-				return fmt.Errorf("failed to copy %s secret from %s to %s (CLAUDE_CODE_USE_VERTEX=1): %w", types.AmbientVertexSecretName, operatorNamespace, sessionNamespace, err)
+				return fmt.Errorf("failed to copy %s secret from %s to %s (USE_VERTEX enabled): %w", types.AmbientVertexSecretName, operatorNamespace, sessionNamespace, err)
 			}
 			ambientVertexSecretCopied = true
 			log.Printf("Successfully copied %s secret to %s", types.AmbientVertexSecretName, sessionNamespace)
@@ -540,10 +541,10 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 				Message: errMsg,
 			})
 			_ = statusPatch.Apply()
-			return fmt.Errorf("failed to check for %s secret in %s (CLAUDE_CODE_USE_VERTEX=1): %w", types.AmbientVertexSecretName, operatorNamespace, err)
+			return fmt.Errorf("failed to check for %s secret in %s (USE_VERTEX enabled): %w", types.AmbientVertexSecretName, operatorNamespace, err)
 		} else {
 			// Vertex enabled but secret not found - fail fast
-			errMsg := fmt.Sprintf("CLAUDE_CODE_USE_VERTEX=1 but %s secret not found in namespace %s. Create it with: kubectl create secret generic %s --from-file=ambient-code-key.json=/path/to/sa.json -n %s",
+			errMsg := fmt.Sprintf("USE_VERTEX is enabled but %s secret not found in namespace %s. Create it with: kubectl create secret generic %s --from-file=ambient-code-key.json=/path/to/sa.json -n %s",
 				types.AmbientVertexSecretName, operatorNamespace, types.AmbientVertexSecretName, operatorNamespace)
 			statusPatch.SetField("phase", "Failed")
 			statusPatch.AddCondition(conditionUpdate{
@@ -559,10 +560,10 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 				Message: "Vertex AI enabled but ambient-vertex secret not found",
 			})
 			_ = statusPatch.Apply()
-			return fmt.Errorf("CLAUDE_CODE_USE_VERTEX=1 but %s secret not found in namespace %s", types.AmbientVertexSecretName, operatorNamespace)
+			return fmt.Errorf("USE_VERTEX is enabled but %s secret not found in namespace %s", types.AmbientVertexSecretName, operatorNamespace)
 		}
 	} else {
-		log.Printf("Vertex AI disabled (CLAUDE_CODE_USE_VERTEX=0), skipping %s secret copy", types.AmbientVertexSecretName)
+		log.Printf("Vertex AI disabled (USE_VERTEX not set), skipping %s secret copy", types.AmbientVertexSecretName)
 	}
 
 	// Check for Langfuse secret in the operator's namespace and copy it if enabled
@@ -718,6 +719,36 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 	// NOTE: Google email no longer fetched by operator - runner fetches credentials at runtime
 	// Runner will set USER_GOOGLE_EMAIL from backend API response in _populate_runtime_credentials()
 
+	// Parse user-provided environmentVariables once for use across all containers
+	userEnvVars := parseEnvironmentVariables(spec)
+
+	// Resolve runner type from CRD environmentVariables (injected by backend)
+	runnerTypeID := "claude-agent-sdk" // default
+	for _, ev := range userEnvVars {
+		if ev.Name == "RUNNER_TYPE" && ev.Value != "" {
+			runnerTypeID = ev.Value
+			break
+		}
+	}
+
+	// Look up runtime spec from agent registry ConfigMap (with fallback to env vars)
+	runtime := getRuntimeSpec(runnerTypeID)
+
+	// Resolve runner state directory from registry, then env vars, then default
+	runnerStateDir := ".claude"
+	if runtime != nil && runtime.Sandbox.StateDir != "" {
+		runnerStateDir = runtime.Sandbox.StateDir
+	}
+	// Allow user env var override
+	for _, ev := range userEnvVars {
+		if ev.Name == "RUNNER_STATE_DIR" && ev.Value != "" {
+			runnerStateDir = ev.Value
+			break
+		}
+	}
+	stateSubPath := runnerStateDir
+	stateMountPath := "/app/" + runnerStateDir
+
 	// Get S3 configuration for this project (from project secret or operator defaults)
 	s3Endpoint, s3Bucket, s3AccessKey, s3SecretKey, err := getS3ConfigForProject(sessionNamespace, appConfig)
 	if err != nil {
@@ -743,28 +774,126 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 		})
 	}
 
+	// Resolve registry-driven configuration with fallbacks to env vars / hardcoded defaults
+	runnerImage := appConfig.AmbientCodeRunnerImage
+	if runtime != nil && runtime.Container.Image != "" {
+		runnerImage = runtime.Container.Image
+	}
+
+	stateSyncImage := appConfig.StateSyncImage
+	if runtime != nil && runtime.Sandbox.StateSyncImage != "" {
+		stateSyncImage = runtime.Sandbox.StateSyncImage
+	}
+
+	runnerPort := int32(defaultRunnerPort)
+	if runtime != nil && runtime.Container.Port > 0 {
+		runnerPort = int32(runtime.Container.Port)
+	}
+
+	workspaceSize := "10Gi"
+	if runtime != nil && runtime.Sandbox.WorkspaceSize != "" {
+		workspaceSize = runtime.Sandbox.WorkspaceSize
+	}
+
+	terminationGrace := int64(60)
+	if runtime != nil && runtime.Sandbox.TerminationGracePeriod > 0 {
+		terminationGrace = int64(runtime.Sandbox.TerminationGracePeriod)
+	}
+
+	// Determine which pod components to include based on registry sandbox config
+	needsWorkspace := true
+	needsInitContainer := true
+	needsStateSyncSidecar := true
+	if runtime != nil {
+		persistence := runtime.Sandbox.Persistence
+		needsWorkspace = persistence != persistenceNone || runtime.Sandbox.Seed.CloneRepos
+		needsInitContainer = runtime.Sandbox.Seed.CloneRepos || runtime.Sandbox.Seed.HydrateState
+		needsStateSyncSidecar = persistence != persistenceNone
+	}
+
+	// Build runner container resource requirements from registry (with defaults)
+	runnerResources := corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("500m"),
+			corev1.ResourceMemory: resource.MustParse("512Mi"),
+		},
+		Limits: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("2000m"),
+			corev1.ResourceMemory: resource.MustParse("4Gi"),
+		},
+	}
+	if runtime != nil && runtime.Container.Resources != nil {
+		if v, ok := runtime.Container.Resources.Requests["cpu"]; ok {
+			if q, err := resource.ParseQuantity(v); err == nil {
+				runnerResources.Requests[corev1.ResourceCPU] = q
+			} else {
+				log.Printf("Warning: invalid cpu request %q in registry, using default: %v", v, err)
+			}
+		}
+		if v, ok := runtime.Container.Resources.Requests["memory"]; ok {
+			if q, err := resource.ParseQuantity(v); err == nil {
+				runnerResources.Requests[corev1.ResourceMemory] = q
+			} else {
+				log.Printf("Warning: invalid memory request %q in registry, using default: %v", v, err)
+			}
+		}
+		if v, ok := runtime.Container.Resources.Limits["cpu"]; ok {
+			if q, err := resource.ParseQuantity(v); err == nil {
+				runnerResources.Limits[corev1.ResourceCPU] = q
+			} else {
+				log.Printf("Warning: invalid cpu limit %q in registry, using default: %v", v, err)
+			}
+		}
+		if v, ok := runtime.Container.Resources.Limits["memory"]; ok {
+			if q, err := resource.ParseQuantity(v); err == nil {
+				runnerResources.Limits[corev1.ResourceMemory] = q
+			} else {
+				log.Printf("Warning: invalid memory limit %q in registry, using default: %v", v, err)
+			}
+		}
+	}
+
+	// Build registry-driven env vars for runner container
+	var registryEnvVars []corev1.EnvVar
+	if runtime != nil && len(runtime.Container.Env) > 0 {
+		for k, v := range runtime.Container.Env {
+			registryEnvVars = append(registryEnvVars, corev1.EnvVar{Name: k, Value: v})
+		}
+	}
+
 	// Create the Pod directly (no Job wrapper for faster startup)
 	podSpec := corev1.PodSpec{
 		RestartPolicy:                 corev1.RestartPolicyNever,
-		TerminationGracePeriodSeconds: int64Ptr(60), // Allow time for state-sync git backup + final sync
+		TerminationGracePeriodSeconds: &terminationGrace,
 		// Explicitly set service account for pod creation permissions
 		AutomountServiceAccountToken: boolPtr(false),
-		Volumes: []corev1.Volume{
+	}
+
+	// Workspace volume: only if persistence != persistenceNone OR repos are seeded
+	if needsWorkspace {
+		wsQuantity, err := resource.ParseQuantity(workspaceSize)
+		if err != nil {
+			log.Printf("Warning: invalid workspaceSize %q in registry, falling back to 10Gi: %v", workspaceSize, err)
+			wsQuantity = resource.MustParse("10Gi")
+		}
+		podSpec.Volumes = []corev1.Volume{
 			{
 				Name: "workspace",
 				VolumeSource: corev1.VolumeSource{
 					EmptyDir: &corev1.EmptyDirVolumeSource{
-						SizeLimit: resource.NewQuantity(10*1024*1024*1024, resource.BinarySI), // 10Gi
+						SizeLimit: &wsQuantity,
 					},
 				},
 			},
-		},
+		}
+	}
 
-		// InitContainer to hydrate session state from S3
-		InitContainers: []corev1.Container{
+	// InitContainer to hydrate session state from S3 (only if seed config requires it)
+	if needsInitContainer {
+		podSpec.InitContainers = []corev1.Container{
 			{
 				Name:            "init-hydrate",
-				Image:           appConfig.StateSyncImage,
+				Image:           stateSyncImage,
 				ImagePullPolicy: appConfig.ImagePullPolicy,
 				Command:         []string{"/usr/local/bin/hydrate.sh"},
 				SecurityContext: &corev1.SecurityContext{
@@ -824,356 +953,336 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 						}},
 					})
 
+					// Append user-provided environmentVariables (e.g. RUNNER_TYPE, RUNNER_STATE_DIR)
+					// without overriding reserved vars like SESSION_NAME, S3_ENDPOINT, etc.
+					base = appendNonConflictingEnvVars(base, userEnvVars)
+
 					return base
 				}(),
 				VolumeMounts: []corev1.VolumeMount{
 					{Name: "workspace", MountPath: "/workspace"},
-					// SubPath mount for .claude so init container writes to same location as runner
-					{Name: "workspace", MountPath: "/app/.claude", SubPath: ".claude"},
+					// SubPath mount so init container writes to same location as runner
+					{Name: "workspace", MountPath: stateMountPath, SubPath: stateSubPath},
 				},
 			},
-		},
+		}
+	}
 
-		// Runner is the main container — serves AG-UI and content endpoints on port 8001
-		Containers: []corev1.Container{
-			{
-				Name:            "ambient-code-runner",
-				Image:           appConfig.AmbientCodeRunnerImage,
-				ImagePullPolicy: appConfig.ImagePullPolicy,
-				// 🔒 Container-level security (SCC-compatible, no privileged capabilities)
-				SecurityContext: &corev1.SecurityContext{
-					AllowPrivilegeEscalation: boolPtr(false),
-					ReadOnlyRootFilesystem:   boolPtr(false), // Playwright needs to write temp files
-					Capabilities: &corev1.Capabilities{
-						Drop: []corev1.Capability{"ALL"}, // Drop all capabilities for security
+	// Runner volume mounts depend on whether workspace is present
+	var runnerVolumeMounts []corev1.VolumeMount
+	if needsWorkspace {
+		runnerVolumeMounts = []corev1.VolumeMount{
+			{Name: "workspace", MountPath: "/workspace", ReadOnly: false},
+			{Name: "workspace", MountPath: stateMountPath, SubPath: stateSubPath, ReadOnly: false},
+		}
+	}
+
+	// Runner is the main container — serves AG-UI and content endpoints
+	podSpec.Containers = []corev1.Container{
+		{
+			Name:            "ambient-code-runner",
+			Image:           runnerImage,
+			ImagePullPolicy: appConfig.ImagePullPolicy,
+			SecurityContext: &corev1.SecurityContext{
+				AllowPrivilegeEscalation: boolPtr(false),
+				ReadOnlyRootFilesystem:   boolPtr(false),
+				Capabilities: &corev1.Capabilities{
+					Drop: []corev1.Capability{"ALL"},
+				},
+			},
+
+			// Expose AG-UI server port for backend proxy
+			Ports: []corev1.ContainerPort{{
+				Name:          "agui",
+				ContainerPort: runnerPort,
+				Protocol:      corev1.ProtocolTCP,
+			}},
+
+			VolumeMounts: runnerVolumeMounts,
+
+			// Lifecycle hook to copy Google credentials from read-only secret mount to writable workspace
+			Lifecycle: &corev1.Lifecycle{
+				PostStart: &corev1.LifecycleHandler{
+					Exec: &corev1.ExecAction{
+						Command: []string{"/bin/sh", "-c",
+							"mkdir -p /workspace/.google_workspace_mcp/credentials && " +
+								"cp -f /app/.google_workspace_mcp/credentials/* /workspace/.google_workspace_mcp/credentials/ 2>/dev/null || true"},
 					},
 				},
+			},
 
-				// Expose AG-UI server port for backend proxy
-				Ports: []corev1.ContainerPort{{
-					Name:          "agui",
-					ContainerPort: 8001,
-					Protocol:      corev1.ProtocolTCP,
-				}},
+			Env: func() []corev1.EnvVar {
+				base := []corev1.EnvVar{
+					{Name: "DEBUG", Value: "true"},
+					{Name: "AGENTIC_SESSION_NAME", Value: name},
+					{Name: "AGENTIC_SESSION_NAMESPACE", Value: sessionNamespace},
+					{Name: "SESSION_ID", Value: name},
+					{Name: "PROJECT_NAME", Value: sessionNamespace},
+					{Name: "WORKSPACE_PATH", Value: "/workspace"},
+					{Name: "ARTIFACTS_DIR", Value: "artifacts"},
+					// AG-UI server port (must match containerPort and Service)
+					{Name: "AGUI_PORT", Value: fmt.Sprintf("%d", runnerPort)},
+					{Name: "GOOGLE_MCP_CREDENTIALS_DIR", Value: "/workspace/.google_workspace_mcp/credentials"},
+					{Name: "GOOGLE_OAUTH_CLIENT_ID", Value: os.Getenv("GOOGLE_OAUTH_CLIENT_ID")},
+					{Name: "GOOGLE_OAUTH_CLIENT_SECRET", Value: os.Getenv("GOOGLE_OAUTH_CLIENT_SECRET")},
+				}
 
-				VolumeMounts: []corev1.VolumeMount{
-					{Name: "workspace", MountPath: "/workspace", ReadOnly: false},
-					// Mount .claude directory for session state persistence (synced to S3)
-					// This enables SDK's built-in resume functionality
-					{Name: "workspace", MountPath: "/app/.claude", SubPath: ".claude", ReadOnly: false},
-				},
+				// For e2e: use minimal MCP config (webfetch only, no credentials needed)
+				if mcpConfigFile := os.Getenv("MCP_CONFIG_FILE"); strings.TrimSpace(mcpConfigFile) != "" {
+					base = append(base, corev1.EnvVar{Name: "MCP_CONFIG_FILE", Value: mcpConfigFile})
+				}
 
-				// Lifecycle hook to copy Google credentials from read-only secret mount to writable workspace
-				Lifecycle: &corev1.Lifecycle{
-					PostStart: &corev1.LifecycleHandler{
-						Exec: &corev1.ExecAction{
-							Command: []string{"/bin/sh", "-c",
-								"mkdir -p /workspace/.google_workspace_mcp/credentials && " +
-									"cp -f /app/.google_workspace_mcp/credentials/* /workspace/.google_workspace_mcp/credentials/ 2>/dev/null || true"},
-						},
-					},
-				},
+				// Add user context for observability and auditing (Langfuse userId, logs, etc.)
+				if userID != "" {
+					base = append(base, corev1.EnvVar{Name: "USER_ID", Value: userID})
+				}
+				if userName != "" {
+					base = append(base, corev1.EnvVar{Name: "USER_NAME", Value: userName})
+				}
 
-				Env: func() []corev1.EnvVar {
-					base := []corev1.EnvVar{
-						{Name: "DEBUG", Value: "true"},
-						{Name: "AGENTIC_SESSION_NAME", Value: name},
-						{Name: "AGENTIC_SESSION_NAMESPACE", Value: sessionNamespace},
-						// Provide session id and workspace path for the runner wrapper
-						{Name: "SESSION_ID", Value: name},
-						{Name: "PROJECT_NAME", Value: sessionNamespace}, // For runtime credential fetching
-						{Name: "WORKSPACE_PATH", Value: "/workspace"},
-						{Name: "ARTIFACTS_DIR", Value: "artifacts"},
-						// AG-UI server port (must match containerPort and Service)
-						{Name: "AGUI_PORT", Value: "8001"},
-						// Google MCP credentials directory - uses writable workspace location
-						// Credentials fetched at runtime by runner from backend API
-						{Name: "GOOGLE_MCP_CREDENTIALS_DIR", Value: "/workspace/.google_workspace_mcp/credentials"},
-						// Google OAuth client credentials for workspace-mcp
-						{Name: "GOOGLE_OAUTH_CLIENT_ID", Value: os.Getenv("GOOGLE_OAUTH_CLIENT_ID")},
-						{Name: "GOOGLE_OAUTH_CLIENT_SECRET", Value: os.Getenv("GOOGLE_OAUTH_CLIENT_SECRET")},
-						// NOTE: USER_GOOGLE_EMAIL set by runner at runtime from fetched credentials
+				// Core session env vars
+				base = append(base,
+					corev1.EnvVar{Name: "INITIAL_PROMPT", Value: prompt},
+					corev1.EnvVar{Name: "LLM_MODEL", Value: model},
+					corev1.EnvVar{Name: "LLM_TEMPERATURE", Value: fmt.Sprintf("%.2f", temperature)},
+					corev1.EnvVar{Name: "LLM_MAX_TOKENS", Value: fmt.Sprintf("%d", maxTokens)},
+					corev1.EnvVar{Name: "USE_AGUI", Value: "true"},
+					corev1.EnvVar{Name: "TIMEOUT", Value: fmt.Sprintf("%d", timeout)},
+					corev1.EnvVar{Name: "BACKEND_API_URL", Value: fmt.Sprintf("http://backend-service.%s.svc.cluster.local:8080/api", appConfig.BackendNamespace)},
+				)
+
+				// Resolve Vertex AI model ID from the model manifest ConfigMap.
+				if model != "" {
+					if manifest, err := models.LoadManifest(models.ManifestPath()); err == nil {
+						if vertexID := models.ResolveVertexID(manifest, model); vertexID != "" {
+							base = append(base, corev1.EnvVar{Name: "LLM_MODEL_VERTEX_ID", Value: vertexID})
+							log.Printf("Resolved Vertex ID for model %q: %s", model, vertexID)
+						}
+					} else {
+						log.Printf("WARNING: failed to load model manifest for Vertex ID resolution: %v", err)
 					}
+				}
 
-					// For e2e: use minimal MCP config (webfetch only, no credentials needed)
-					if mcpConfigFile := os.Getenv("MCP_CONFIG_FILE"); strings.TrimSpace(mcpConfigFile) != "" {
-						base = append(base, corev1.EnvVar{Name: "MCP_CONFIG_FILE", Value: mcpConfigFile})
-					}
-
-					// Add user context for observability and auditing (Langfuse userId, logs, etc.)
-					if userID != "" {
-						base = append(base, corev1.EnvVar{Name: "USER_ID", Value: userID})
-					}
-					if userName != "" {
-						base = append(base, corev1.EnvVar{Name: "USER_NAME", Value: userName})
-					}
-
-					// Core session env vars
+				// Platform-wide Langfuse observability configuration
+				if ambientLangfuseSecretCopied {
 					base = append(base,
-						corev1.EnvVar{Name: "INITIAL_PROMPT", Value: prompt},
-						corev1.EnvVar{Name: "LLM_MODEL", Value: model},
-						corev1.EnvVar{Name: "LLM_TEMPERATURE", Value: fmt.Sprintf("%.2f", temperature)},
-						corev1.EnvVar{Name: "LLM_MAX_TOKENS", Value: fmt.Sprintf("%d", maxTokens)},
-						corev1.EnvVar{Name: "USE_AGUI", Value: "true"},
-						corev1.EnvVar{Name: "TIMEOUT", Value: fmt.Sprintf("%d", timeout)},
-						corev1.EnvVar{Name: "BACKEND_API_URL", Value: fmt.Sprintf("http://backend-service.%s.svc.cluster.local:8080/api", appConfig.BackendNamespace)},
-						// LEGACY: WEBSOCKET_URL removed - runner now uses AG-UI server pattern (FastAPI)
-						// Backend proxies to runner's HTTP endpoint instead of WebSocket
+						corev1.EnvVar{
+							Name: "LANGFUSE_ENABLED",
+							ValueFrom: &corev1.EnvVarSource{
+								SecretKeyRef: &corev1.SecretKeySelector{
+									LocalObjectReference: corev1.LocalObjectReference{Name: "ambient-admin-langfuse-secret"},
+									Key:                  "LANGFUSE_ENABLED",
+									Optional:             boolPtr(true),
+								},
+							},
+						},
+						corev1.EnvVar{
+							Name: "LANGFUSE_HOST",
+							ValueFrom: &corev1.EnvVarSource{
+								SecretKeyRef: &corev1.SecretKeySelector{
+									LocalObjectReference: corev1.LocalObjectReference{Name: "ambient-admin-langfuse-secret"},
+									Key:                  "LANGFUSE_HOST",
+									Optional:             boolPtr(true),
+								},
+							},
+						},
+						corev1.EnvVar{
+							Name: "LANGFUSE_PUBLIC_KEY",
+							ValueFrom: &corev1.EnvVarSource{
+								SecretKeyRef: &corev1.SecretKeySelector{
+									LocalObjectReference: corev1.LocalObjectReference{Name: "ambient-admin-langfuse-secret"},
+									Key:                  "LANGFUSE_PUBLIC_KEY",
+									Optional:             boolPtr(true),
+								},
+							},
+						},
+						corev1.EnvVar{
+							Name: "LANGFUSE_SECRET_KEY",
+							ValueFrom: &corev1.EnvVarSource{
+								SecretKeyRef: &corev1.SecretKeySelector{
+									LocalObjectReference: corev1.LocalObjectReference{Name: "ambient-admin-langfuse-secret"},
+									Key:                  "LANGFUSE_SECRET_KEY",
+									Optional:             boolPtr(true),
+								},
+							},
+						},
 					)
+					log.Printf("Langfuse env vars configured via secretKeyRef for session %s", name)
+				}
 
-					// Platform-wide Langfuse observability configuration
-					// Uses secretKeyRef to prevent credential exposure in pod specs
-					// Secret is copied to session namespace from operator namespace
-					// All keys are optional to prevent pod startup failures if keys are missing
-					if ambientLangfuseSecretCopied {
-						base = append(base,
-							corev1.EnvVar{
-								Name: "LANGFUSE_ENABLED",
-								ValueFrom: &corev1.EnvVarSource{
-									SecretKeyRef: &corev1.SecretKeySelector{
-										LocalObjectReference: corev1.LocalObjectReference{Name: "ambient-admin-langfuse-secret"},
-										Key:                  "LANGFUSE_ENABLED",
-										Optional:             boolPtr(true),
-									},
-								},
-							},
-							corev1.EnvVar{
-								Name: "LANGFUSE_HOST",
-								ValueFrom: &corev1.EnvVarSource{
-									SecretKeyRef: &corev1.SecretKeySelector{
-										LocalObjectReference: corev1.LocalObjectReference{Name: "ambient-admin-langfuse-secret"},
-										Key:                  "LANGFUSE_HOST",
-										Optional:             boolPtr(true),
-									},
-								},
-							},
-							corev1.EnvVar{
-								Name: "LANGFUSE_PUBLIC_KEY",
-								ValueFrom: &corev1.EnvVarSource{
-									SecretKeyRef: &corev1.SecretKeySelector{
-										LocalObjectReference: corev1.LocalObjectReference{Name: "ambient-admin-langfuse-secret"},
-										Key:                  "LANGFUSE_PUBLIC_KEY",
-										Optional:             boolPtr(true),
-									},
-								},
-							},
-							corev1.EnvVar{
-								Name: "LANGFUSE_SECRET_KEY",
-								ValueFrom: &corev1.EnvVarSource{
-									SecretKeyRef: &corev1.SecretKeySelector{
-										LocalObjectReference: corev1.LocalObjectReference{Name: "ambient-admin-langfuse-secret"},
-										Key:                  "LANGFUSE_SECRET_KEY",
-										Optional:             boolPtr(true),
-									},
-								},
-							},
-						)
-						log.Printf("Langfuse env vars configured via secretKeyRef for session %s", name)
+				// Add Vertex AI configuration only if enabled
+				if vertexEnabled {
+					base = append(base,
+						corev1.EnvVar{Name: "USE_VERTEX", Value: "1"},
+						corev1.EnvVar{Name: "CLAUDE_CODE_USE_VERTEX", Value: "1"},
+						corev1.EnvVar{Name: "CLOUD_ML_REGION", Value: os.Getenv("CLOUD_ML_REGION")},
+						corev1.EnvVar{Name: "ANTHROPIC_VERTEX_PROJECT_ID", Value: os.Getenv("ANTHROPIC_VERTEX_PROJECT_ID")},
+						corev1.EnvVar{Name: "GOOGLE_APPLICATION_CREDENTIALS", Value: os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")},
+						corev1.EnvVar{Name: "GCE_METADATA_HOST", Value: "metadata.invalid"},
+						corev1.EnvVar{Name: "GCE_METADATA_TIMEOUT", Value: "1"},
+					)
+				} else {
+					base = append(base, corev1.EnvVar{Name: "USE_VERTEX", Value: "0"})
+					base = append(base, corev1.EnvVar{Name: "CLAUDE_CODE_USE_VERTEX", Value: "0"})
+				}
+
+				// Add PARENT_SESSION_ID if this is a continuation
+				if parentSessionID != "" {
+					base = append(base, corev1.EnvVar{Name: "PARENT_SESSION_ID", Value: parentSessionID})
+					log.Printf("Session %s: passing PARENT_SESSION_ID=%s to runner", name, parentSessionID)
+				}
+
+				// Add IS_RESUME if this session has been started before
+				if status, found, _ := unstructured.NestedMap(currentObj.Object, "status"); found {
+					if startTime, ok := status["startTime"].(string); ok && startTime != "" {
+						base = append(base, corev1.EnvVar{Name: "IS_RESUME", Value: "true"})
+						log.Printf("Session %s: marking as resume (IS_RESUME=true, startTime=%s)", name, startTime)
 					}
+				}
 
-					// Add Vertex AI configuration only if enabled
-					if vertexEnabled {
-						base = append(base,
-							corev1.EnvVar{Name: "CLAUDE_CODE_USE_VERTEX", Value: "1"},
-							corev1.EnvVar{Name: "CLOUD_ML_REGION", Value: os.Getenv("CLOUD_ML_REGION")},
-							corev1.EnvVar{Name: "ANTHROPIC_VERTEX_PROJECT_ID", Value: os.Getenv("ANTHROPIC_VERTEX_PROJECT_ID")},
-							corev1.EnvVar{Name: "GOOGLE_APPLICATION_CREDENTIALS", Value: os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")},
-							// Prevent the Claude Code CLI from hanging on the GCE metadata server
-							// in non-GCE environments (e.g., kind, on-prem). The CLI tries to reach
-							// 169.254.169.254 for auth and blocks indefinitely if unreachable.
-							corev1.EnvVar{Name: "GCE_METADATA_HOST", Value: "disabled"},
-						)
-					} else {
-						// Explicitly set to 0 when Vertex is disabled
-						base = append(base, corev1.EnvVar{Name: "CLAUDE_CODE_USE_VERTEX", Value: "0"})
-					}
-
-					// Add PARENT_SESSION_ID if this is a continuation
-					if parentSessionID != "" {
-						base = append(base, corev1.EnvVar{Name: "PARENT_SESSION_ID", Value: parentSessionID})
-						log.Printf("Session %s: passing PARENT_SESSION_ID=%s to runner", name, parentSessionID)
-					}
-
-					// Add IS_RESUME if this session has been started before
-					// Check status.startTime - if present, this is a resume (pod recreate/restart)
-					// This tells the runner to skip INITIAL_PROMPT and use continue_conversation
-					if status, found, _ := unstructured.NestedMap(currentObj.Object, "status"); found {
-						if startTime, ok := status["startTime"].(string); ok && startTime != "" {
-							base = append(base, corev1.EnvVar{Name: "IS_RESUME", Value: "true"})
-							log.Printf("Session %s: marking as resume (IS_RESUME=true, startTime=%s)", name, startTime)
+				// Inject runner token secret
+				secretName := ""
+				if meta, ok := currentObj.Object["metadata"].(map[string]interface{}); ok {
+					if anns, ok := meta["annotations"].(map[string]interface{}); ok {
+						if v, ok := anns["ambient-code.io/runner-token-secret"].(string); ok && strings.TrimSpace(v) != "" {
+							secretName = strings.TrimSpace(v)
 						}
 					}
-
-					// If backend annotated the session with a runner token secret, inject only BOT_TOKEN
-					// Secret contains: 'k8s-token' (for CR updates)
-					// Prefer annotated secret name; fallback to deterministic name
-					secretName := ""
-					if meta, ok := currentObj.Object["metadata"].(map[string]interface{}); ok {
-						if anns, ok := meta["annotations"].(map[string]interface{}); ok {
-							if v, ok := anns["ambient-code.io/runner-token-secret"].(string); ok && strings.TrimSpace(v) != "" {
-								secretName = strings.TrimSpace(v)
+				}
+				if secretName == "" {
+					secretName = fmt.Sprintf("ambient-runner-token-%s", name)
+				}
+				base = append(base, corev1.EnvVar{
+					Name: "BOT_TOKEN",
+					ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
+						Key:                  "k8s-token",
+					}},
+				})
+				// Add CR-provided envs last (override base when same key)
+				if spec, ok := currentObj.Object["spec"].(map[string]interface{}); ok {
+					if repos, ok := spec["repos"].([]interface{}); ok && len(repos) > 0 {
+						b, _ := json.Marshal(repos)
+						base = append(base, corev1.EnvVar{Name: "REPOS_JSON", Value: string(b)})
+					}
+					if mrn, ok := spec["mainRepoName"].(string); ok && strings.TrimSpace(mrn) != "" {
+						base = append(base, corev1.EnvVar{Name: "MAIN_REPO_NAME", Value: mrn})
+					}
+					if mriRaw, ok := spec["mainRepoIndex"]; ok {
+						switch v := mriRaw.(type) {
+						case int64:
+							base = append(base, corev1.EnvVar{Name: "MAIN_REPO_INDEX", Value: fmt.Sprintf("%d", v)})
+						case int32:
+							base = append(base, corev1.EnvVar{Name: "MAIN_REPO_INDEX", Value: fmt.Sprintf("%d", v)})
+						case int:
+							base = append(base, corev1.EnvVar{Name: "MAIN_REPO_INDEX", Value: fmt.Sprintf("%d", v)})
+						case float64:
+							base = append(base, corev1.EnvVar{Name: "MAIN_REPO_INDEX", Value: fmt.Sprintf("%d", int64(v))})
+						case string:
+							if strings.TrimSpace(v) != "" {
+								base = append(base, corev1.EnvVar{Name: "MAIN_REPO_INDEX", Value: v})
 							}
 						}
 					}
-					if secretName == "" {
-						secretName = fmt.Sprintf("ambient-runner-token-%s", name)
+					if workflow, ok := spec["activeWorkflow"].(map[string]interface{}); ok {
+						if gitURL, ok := workflow["gitUrl"].(string); ok && strings.TrimSpace(gitURL) != "" {
+							base = append(base, corev1.EnvVar{Name: "ACTIVE_WORKFLOW_GIT_URL", Value: gitURL})
+						}
+						if branch, ok := workflow["branch"].(string); ok && strings.TrimSpace(branch) != "" {
+							base = append(base, corev1.EnvVar{Name: "ACTIVE_WORKFLOW_BRANCH", Value: branch})
+						}
+						if path, ok := workflow["path"].(string); ok && strings.TrimSpace(path) != "" {
+							base = append(base, corev1.EnvVar{Name: "ACTIVE_WORKFLOW_PATH", Value: path})
+						}
 					}
-					base = append(base, corev1.EnvVar{
-						Name: "BOT_TOKEN",
-						ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
-							Key:                  "k8s-token",
-						}},
+				}
+
+				// Inject registry-defined env vars (e.g. RUNNER_TYPE, RUNNER_STATE_DIR)
+				base = appendNonConflictingEnvVars(base, registryEnvVars)
+
+				// Apply user-provided environmentVariables with replace-if-exists
+				// semantics (overrides are intentional for the runner container)
+				base = replaceOrAppendEnvVars(base, userEnvVars)
+
+				return base
+			}(),
+
+			EnvFrom: func() []corev1.EnvFromSource {
+				sources := []corev1.EnvFromSource{}
+
+				if integrationSecretsExist {
+					sources = append(sources, corev1.EnvFromSource{
+						SecretRef: &corev1.SecretEnvSource{
+							LocalObjectReference: corev1.LocalObjectReference{Name: integrationSecretsName},
+						},
 					})
-					// Add CR-provided envs last (override base when same key)
-					if spec, ok := currentObj.Object["spec"].(map[string]interface{}); ok {
-						// Inject REPOS_JSON and MAIN_REPO_NAME from spec.repos and spec.mainRepoName if present
-						if repos, ok := spec["repos"].([]interface{}); ok && len(repos) > 0 {
-							// Use a minimal JSON serialization via fmt (we'll rely on client to pass REPOS_JSON too)
-							// This ensures runner gets repos even if env vars weren't passed from frontend
-							b, _ := json.Marshal(repos)
-							base = append(base, corev1.EnvVar{Name: "REPOS_JSON", Value: string(b)})
-						}
-						if mrn, ok := spec["mainRepoName"].(string); ok && strings.TrimSpace(mrn) != "" {
-							base = append(base, corev1.EnvVar{Name: "MAIN_REPO_NAME", Value: mrn})
-						}
-						// Inject MAIN_REPO_INDEX if provided
-						if mriRaw, ok := spec["mainRepoIndex"]; ok {
-							switch v := mriRaw.(type) {
-							case int64:
-								base = append(base, corev1.EnvVar{Name: "MAIN_REPO_INDEX", Value: fmt.Sprintf("%d", v)})
-							case int32:
-								base = append(base, corev1.EnvVar{Name: "MAIN_REPO_INDEX", Value: fmt.Sprintf("%d", v)})
-							case int:
-								base = append(base, corev1.EnvVar{Name: "MAIN_REPO_INDEX", Value: fmt.Sprintf("%d", v)})
-							case float64:
-								base = append(base, corev1.EnvVar{Name: "MAIN_REPO_INDEX", Value: fmt.Sprintf("%d", int64(v))})
-							case string:
-								if strings.TrimSpace(v) != "" {
-									base = append(base, corev1.EnvVar{Name: "MAIN_REPO_INDEX", Value: v})
-								}
-							}
-						}
-						// Inject activeWorkflow environment variables if present
-						if workflow, ok := spec["activeWorkflow"].(map[string]interface{}); ok {
-							if gitURL, ok := workflow["gitUrl"].(string); ok && strings.TrimSpace(gitURL) != "" {
-								base = append(base, corev1.EnvVar{Name: "ACTIVE_WORKFLOW_GIT_URL", Value: gitURL})
-							}
-							if branch, ok := workflow["branch"].(string); ok && strings.TrimSpace(branch) != "" {
-								base = append(base, corev1.EnvVar{Name: "ACTIVE_WORKFLOW_BRANCH", Value: branch})
-							}
-							if path, ok := workflow["path"].(string); ok && strings.TrimSpace(path) != "" {
-								base = append(base, corev1.EnvVar{Name: "ACTIVE_WORKFLOW_PATH", Value: path})
-							}
-						}
-						if envMap, ok := spec["environmentVariables"].(map[string]interface{}); ok {
-							for k, v := range envMap {
-								if vs, ok := v.(string); ok {
-									// replace if exists
-									replaced := false
-									for i := range base {
-										if base[i].Name == k {
-											base[i].Value = vs
-											replaced = true
-											break
-										}
-									}
-									if !replaced {
-										base = append(base, corev1.EnvVar{Name: k, Value: vs})
-									}
-								}
-							}
-						}
-					}
+					log.Printf("Injecting integration secrets from '%s' for session %s", integrationSecretsName, name)
+				} else {
+					log.Printf("Skipping integration secrets '%s' for session %s (not found or not configured)", integrationSecretsName, name)
+				}
 
-					return base
-				}(),
+				if !vertexEnabled && runnerSecretsName != "" {
+					sources = append(sources, corev1.EnvFromSource{
+						SecretRef: &corev1.SecretEnvSource{
+							LocalObjectReference: corev1.LocalObjectReference{Name: runnerSecretsName},
+						},
+					})
+					log.Printf("Injecting runner secrets from '%s' for session %s (Vertex disabled)", runnerSecretsName, name)
+				} else if vertexEnabled && runnerSecretsName != "" {
+					log.Printf("Skipping runner secrets '%s' for session %s (Vertex enabled)", runnerSecretsName, name)
+				}
 
-				// Import secrets as environment variables
-				// - integrationSecretsName: Only if exists (GIT_TOKEN, JIRA_*, custom keys)
-				// - runnerSecretsName: Only when Vertex disabled (ANTHROPIC_API_KEY)
-				// - ambient-langfuse-keys: Platform-wide Langfuse observability (LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, LANGFUSE_HOST, LANGFUSE_ENABLED)
-				EnvFrom: func() []corev1.EnvFromSource {
-					sources := []corev1.EnvFromSource{}
+				return sources
+			}(),
 
-					// Only inject integration secrets if they exist (optional)
-					if integrationSecretsExist {
-						sources = append(sources, corev1.EnvFromSource{
-							SecretRef: &corev1.SecretEnvSource{
-								LocalObjectReference: corev1.LocalObjectReference{Name: integrationSecretsName},
-							},
-						})
-						log.Printf("Injecting integration secrets from '%s' for session %s", integrationSecretsName, name)
-					} else {
-						log.Printf("Skipping integration secrets '%s' for session %s (not found or not configured)", integrationSecretsName, name)
-					}
+			Resources: runnerResources,
+		},
+	}
 
-					// Only inject runner secrets (ANTHROPIC_API_KEY) when Vertex is disabled
-					if !vertexEnabled && runnerSecretsName != "" {
-						sources = append(sources, corev1.EnvFromSource{
-							SecretRef: &corev1.SecretEnvSource{
-								LocalObjectReference: corev1.LocalObjectReference{Name: runnerSecretsName},
-							},
-						})
-						log.Printf("Injecting runner secrets from '%s' for session %s (Vertex disabled)", runnerSecretsName, name)
-					} else if vertexEnabled && runnerSecretsName != "" {
-						log.Printf("Skipping runner secrets '%s' for session %s (Vertex enabled)", runnerSecretsName, name)
-					}
-
-					return sources
-				}(),
-
-				Resources: corev1.ResourceRequirements{
-					Requests: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("500m"),
-						corev1.ResourceMemory: resource.MustParse("512Mi"),
-					},
-					Limits: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("2000m"), // 2 cores for MCP + Claude SDK
-						corev1.ResourceMemory: resource.MustParse("4Gi"),   // Increased for Playwright/Chromium + dev server
-					},
+	// State-sync sidecar: only if persistence != persistenceNone
+	if needsStateSyncSidecar {
+		podSpec.Containers = append(podSpec.Containers, corev1.Container{
+			Name:            "state-sync",
+			Image:           stateSyncImage,
+			ImagePullPolicy: appConfig.ImagePullPolicy,
+			Command:         []string{"/usr/local/bin/sync.sh"},
+			SecurityContext: &corev1.SecurityContext{
+				AllowPrivilegeEscalation: boolPtr(false),
+				ReadOnlyRootFilesystem:   boolPtr(false),
+				Capabilities: &corev1.Capabilities{
+					Drop: []corev1.Capability{"ALL"},
 				},
 			},
-			// S3 state-sync sidecar - syncs .claude/, artifacts/, uploads/ to S3
-			{
-				Name:            "state-sync",
-				Image:           appConfig.StateSyncImage,
-				ImagePullPolicy: appConfig.ImagePullPolicy,
-				Command:         []string{"/usr/local/bin/sync.sh"},
-				SecurityContext: &corev1.SecurityContext{
-					AllowPrivilegeEscalation: boolPtr(false),
-					ReadOnlyRootFilesystem:   boolPtr(false),
-					Capabilities: &corev1.Capabilities{
-						Drop: []corev1.Capability{"ALL"},
-					},
-				},
-				Env: []corev1.EnvVar{
+			Env: func() []corev1.EnvVar {
+				base := []corev1.EnvVar{
 					{Name: "SESSION_NAME", Value: name},
 					{Name: "NAMESPACE", Value: sessionNamespace},
 					{Name: "S3_ENDPOINT", Value: s3Endpoint},
 					{Name: "S3_BUCKET", Value: s3Bucket},
 					{Name: "SYNC_INTERVAL", Value: "60"},
-					{Name: "MAX_SYNC_SIZE", Value: "1073741824"}, // 1GB
+					{Name: "MAX_SYNC_SIZE", Value: "1073741824"},
 					{Name: "AWS_ACCESS_KEY_ID", Value: s3AccessKey},
 					{Name: "AWS_SECRET_ACCESS_KEY", Value: s3SecretKey},
+				}
+				base = appendNonConflictingEnvVars(base, registryEnvVars)
+				base = appendNonConflictingEnvVars(base, userEnvVars)
+				return base
+			}(),
+			VolumeMounts: []corev1.VolumeMount{
+				{Name: "workspace", MountPath: "/workspace", ReadOnly: false},
+				{Name: "workspace", MountPath: stateMountPath, SubPath: stateSubPath, ReadOnly: false},
+			},
+			Resources: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("100m"),
+					corev1.ResourceMemory: resource.MustParse("128Mi"),
 				},
-				VolumeMounts: []corev1.VolumeMount{
-					{Name: "workspace", MountPath: "/workspace", ReadOnly: false},
-					// SubPath mount for .claude so sync sidecar reads from same location as runner
-					{Name: "workspace", MountPath: "/app/.claude", SubPath: ".claude", ReadOnly: false},
-				},
-				Resources: corev1.ResourceRequirements{
-					Requests: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("100m"),
-						corev1.ResourceMemory: resource.MustParse("128Mi"),
-					},
-					Limits: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("1000m"), // Increased from 200m for MCP startup
-						corev1.ResourceMemory: resource.MustParse("1Gi"),   // Increased from 256Mi
-					},
+				Limits: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("1000m"),
+					corev1.ResourceMemory: resource.MustParse("1Gi"),
 				},
 			},
-		},
+		})
 	}
 
 	if appConfig.PodFSGroup != nil {
@@ -1313,8 +1422,8 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 			Ports: []corev1.ServicePort{{
 				Name:       "agui",
 				Protocol:   corev1.ProtocolTCP,
-				Port:       8001,
-				TargetPort: intstr.FromInt(8001),
+				Port:       int32(runnerPort),
+				TargetPort: intstr.FromInt32(runnerPort),
 			}},
 		},
 	}
@@ -1338,6 +1447,57 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 	}
 
 	return nil
+}
+
+// parseEnvironmentVariables reads the environmentVariables map from a CRD spec
+// and returns a slice of EnvVar. Returns nil if not present or empty.
+func parseEnvironmentVariables(spec map[string]interface{}) []corev1.EnvVar {
+	envMap, ok := spec["environmentVariables"].(map[string]interface{})
+	if !ok || len(envMap) == 0 {
+		return nil
+	}
+	var envVars []corev1.EnvVar
+	for k, v := range envMap {
+		if vs, ok := v.(string); ok {
+			envVars = append(envVars, corev1.EnvVar{Name: k, Value: vs})
+		}
+	}
+	return envVars
+}
+
+// appendNonConflictingEnvVars appends env vars from extra to base, skipping any
+// whose Name already exists in base. This protects reserved variables.
+func appendNonConflictingEnvVars(base []corev1.EnvVar, extra []corev1.EnvVar) []corev1.EnvVar {
+	existing := make(map[string]struct{}, len(base))
+	for _, b := range base {
+		existing[b.Name] = struct{}{}
+	}
+	for _, ev := range extra {
+		if _, ok := existing[ev.Name]; !ok {
+			base = append(base, ev)
+		}
+	}
+	return base
+}
+
+// replaceOrAppendEnvVars merges extra into base: replaces existing entries by name,
+// or appends if the name does not exist. Used for the runner container where
+// user-provided overrides are intentional.
+func replaceOrAppendEnvVars(base []corev1.EnvVar, extra []corev1.EnvVar) []corev1.EnvVar {
+	for _, ev := range extra {
+		replaced := false
+		for i := range base {
+			if base[i].Name == ev.Name {
+				base[i].Value = ev.Value
+				replaced = true
+				break
+			}
+		}
+		if !replaced {
+			base = append(base, ev)
+		}
+	}
+	return base
 }
 
 // reconcileSpecReposWithPatch is a version of reconcileSpecRepos that uses StatusPatch for batched updates.
@@ -1444,7 +1604,7 @@ func reconcileSpecReposWithPatch(sessionNamespace, sessionName string, spec map[
 
 	// AG-UI pattern: Call runner's REST endpoints to update configuration
 	// Runner will restart Claude SDK client with new repo configuration
-	runnerBaseURL := fmt.Sprintf("http://session-%s.%s.svc.cluster.local:8001", sessionName, sessionNamespace)
+	runnerBaseURL := fmt.Sprintf("http://session-%s.%s.svc.cluster.local:%d", sessionName, sessionNamespace, getRunnerPort(sessionNamespace, sessionName))
 
 	// Add new repos
 	for _, repo := range toAdd {
@@ -1601,7 +1761,7 @@ func reconcileActiveWorkflowWithPatch(sessionNamespace, sessionName string, spec
 
 	// AG-UI pattern: Call runner's /workflow endpoint to update configuration
 	// Runner will restart Claude SDK client with new workflow
-	runnerURL := fmt.Sprintf("http://session-%s.%s.svc.cluster.local:8001/workflow", sessionName, sessionNamespace)
+	runnerURL := fmt.Sprintf("http://session-%s.%s.svc.cluster.local:%d/workflow", sessionName, sessionNamespace, getRunnerPort(sessionNamespace, sessionName))
 
 	payload := map[string]interface{}{
 		"gitUrl": gitURL,
@@ -2411,7 +2571,4 @@ func regenerateRunnerToken(sessionNamespace, sessionName string, session *unstru
 // This supersedes PR #562's volume mounting approach with just-in-time credential fetching
 
 // Helper functions
-var (
-	boolPtr  = func(b bool) *bool { return &b }
-	int64Ptr = func(i int64) *int64 { return &i }
-)
+var boolPtr = func(b bool) *bool { return &b }

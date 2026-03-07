@@ -29,7 +29,7 @@ TODO: all of it can be better
 
 var (
 	kind                        = "Asteroid"
-	repo                        = "github.com/ambient/platform/components"
+	repo                        = "github.com/ambient-code/platform/components"
 	project                     = "ambient-api-server"
 	fields                      = ""
 	plural                      = ""
@@ -49,7 +49,7 @@ func init() {
 	flags.AddGoFlagSet(flag.CommandLine)
 
 	flags.StringVar(&kind, "kind", kind, "the name of the kind.  e.g Account or User")
-	flags.StringVar(&repo, "repo", repo, "the module path of the repo (e.g. github.com/ambient/platform/components)")
+	flags.StringVar(&repo, "repo", repo, "the module path of the repo (e.g. github.com/ambient-code/platform/components)")
 	flags.StringVar(&project, "project", project, "the name of the project.  e.g ambient-api-server")
 	flags.StringVar(&fields, "fields", fields, "comma-separated list of custom fields in format name:type (e.g. 'name:string,age:int,active:bool')")
 	flags.StringVar(&plural, "plural", plural, "the plural form of the kind. If not provided, uses irregular plurals map or adds 's'")

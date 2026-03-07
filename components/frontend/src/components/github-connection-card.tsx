@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Loader2, Eye, EyeOff, ChevronDown, ChevronUp } from 'lucide-react'
 import { useDisconnectGitHub, useSaveGitHubPAT, useDeleteGitHubPAT } from '@/services/queries'
-import { successToast, errorToast } from '@/hooks/use-toast'
+import { toast } from 'sonner'
 
 type Props = {
   appSlug?: string
@@ -31,11 +31,11 @@ export function GitHubConnectionCard({ appSlug, showManageButton = true, status,
   const disconnectMutation = useDisconnectGitHub()
   const savePATMutation = useSaveGitHubPAT()
   const deletePATMutation = useDeleteGitHubPAT()
-  
+
   const [showPATSection, setShowPATSection] = useState(false)
   const [patToken, setPATToken] = useState('')
   const [showToken, setShowToken] = useState(false)
-  
+
   const isLoading = !status
   const patStatus = status?.pat as { configured: boolean; updatedAt?: string; valid?: boolean } | undefined
 
@@ -51,11 +51,11 @@ export function GitHubConnectionCard({ appSlug, showManageButton = true, status,
   const handleDisconnect = async () => {
     disconnectMutation.mutate(undefined, {
       onSuccess: () => {
-        successToast('GitHub disconnected successfully')
+        toast.success('GitHub disconnected successfully')
         onRefresh?.()
       },
       onError: (error) => {
-        errorToast(error instanceof Error ? error.message : 'Failed to disconnect GitHub')
+        toast.error(error instanceof Error ? error.message : 'Failed to disconnect GitHub')
       },
     })
   }
@@ -66,19 +66,19 @@ export function GitHubConnectionCard({ appSlug, showManageButton = true, status,
 
   const handleSavePAT = async () => {
     if (!patToken) {
-      errorToast('Please enter a GitHub Personal Access Token')
+      toast.error('Please enter a GitHub Personal Access Token')
       return
     }
 
     savePATMutation.mutate(patToken, {
       onSuccess: () => {
-        successToast('GitHub PAT saved successfully')
+        toast.success('GitHub PAT saved successfully')
         setPATToken('')
         setShowToken(false)
         onRefresh?.()
       },
       onError: (error) => {
-        errorToast(error instanceof Error ? error.message : 'Failed to save GitHub PAT')
+        toast.error(error instanceof Error ? error.message : 'Failed to save GitHub PAT')
       },
     })
   }
@@ -86,17 +86,17 @@ export function GitHubConnectionCard({ appSlug, showManageButton = true, status,
   const handleDeletePAT = async () => {
     deletePATMutation.mutate(undefined, {
       onSuccess: () => {
-        successToast('GitHub PAT removed successfully')
+        toast.success('GitHub PAT removed successfully')
         onRefresh?.()
       },
       onError: (error) => {
-        errorToast(error instanceof Error ? error.message : 'Failed to remove GitHub PAT')
+        toast.error(error instanceof Error ? error.message : 'Failed to remove GitHub PAT')
       },
     })
   }
 
   return (
-    <Card className="bg-card border border-gray-200 shadow-sm flex flex-col h-full">
+    <Card className="bg-card border border-border/60 shadow-sm shadow-black/[0.03] dark:shadow-black/[0.15] flex flex-col h-full">
       <div className="p-6 flex flex-col flex-1">
         {/* Header section with icon and title */}
         <div className="flex items-start gap-4 mb-6">
@@ -149,19 +149,19 @@ export function GitHubConnectionCard({ appSlug, showManageButton = true, status,
             </p>
             <div className="flex gap-2">
               {showManageButton && (
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   size="sm"
-                  onClick={handleManage} 
+                  onClick={handleManage}
                   disabled={isLoading || disconnectMutation.isPending}
                 >
                   Manage in GitHub
                 </Button>
               )}
-              <Button 
-                variant="destructive" 
+              <Button
+                variant="destructive"
                 size="sm"
-                onClick={handleDisconnect} 
+                onClick={handleDisconnect}
                 disabled={isLoading || disconnectMutation.isPending}
               >
                 Disconnect App
@@ -179,15 +179,15 @@ export function GitHubConnectionCard({ appSlug, showManageButton = true, status,
             {showPATSection ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
             Personal Access Token {patStatus?.configured && '(Active)'}
           </button>
-          
+
           {showPATSection && (
             <div className="space-y-3 pl-6 border-l-2 border-blue-500/20">
               <p className="text-xs text-muted-foreground">
-                {patStatus?.configured 
+                {patStatus?.configured
                   ? 'PAT is configured and will be used instead of GitHub App for all operations'
                   : 'Alternative to GitHub App. If set, PAT takes precedence over GitHub App.'}
               </p>
-              
+
               {patStatus?.configured ? (
                 <div className="space-y-2">
                   {patStatus?.valid === false ? (
@@ -274,10 +274,10 @@ export function GitHubConnectionCard({ appSlug, showManageButton = true, status,
         {/* Action buttons */}
         <div className="flex gap-3 mt-auto">
           {!status?.installed && !patStatus?.configured && (
-            <Button 
-              onClick={handleConnect} 
+            <Button
+              onClick={handleConnect}
               disabled={isLoading || !appSlug}
-              className="bg-blue-600 hover:bg-blue-700 text-white"
+              className="bg-primary hover:bg-primary/90 text-primary-foreground"
             >
               Connect GitHub App
             </Button>
@@ -287,4 +287,3 @@ export function GitHubConnectionCard({ appSlug, showManageButton = true, status,
     </Card>
   )
 }
-

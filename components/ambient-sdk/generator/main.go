@@ -37,9 +37,9 @@ func main() {
 		log.Fatalf("compute spec hash: %v", err)
 	}
 
-	// Use relative path for spec source 
+	// Use relative path for spec source
 	relativeSpecPath := "../../ambient-api-server/openapi/openapi.yaml"
-	
+
 	header := GeneratedHeader{
 		SpecPath:  relativeSpecPath,
 		SpecHash:  specHash,
@@ -299,8 +299,8 @@ func generatePython(spec *Spec, outDir string, header GeneratedHeader) error {
 
 func loadTemplate(path string) (*template.Template, error) {
 	funcMap := template.FuncMap{
-		"snakeCase":     toSnakeCase,
-		"lower":         strings.ToLower,
+		"snakeCase": toSnakeCase,
+		"lower":     strings.ToLower,
 		"title": func(s string) string {
 			if s == "" {
 				return s
@@ -345,7 +345,7 @@ func executeTemplate(tmpl *template.Template, outPath string, data interface{}) 
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	return tmpl.Execute(f, data)
 }
@@ -368,10 +368,10 @@ func computeSpecHash(specPath string) (string, error) {
 			return "", fmt.Errorf("open %s: %w", f, err)
 		}
 		if _, err := io.Copy(h, fh); err != nil {
-			fh.Close()
+			_ = fh.Close()
 			return "", fmt.Errorf("read %s: %w", f, err)
 		}
-		fh.Close()
+		_ = fh.Close()
 	}
 
 	return fmt.Sprintf("%x", h.Sum(nil)), nil

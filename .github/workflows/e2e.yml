@@ -5,7 +5,7 @@ name: E2E Tests
 # Maintainers: Review PR code before adding label!
 
 on:
-  pull_request_target:
+  pull_request:
     types: [labeled]
     branches: [ main, master ]
 
@@ -16,6 +16,7 @@ concurrency:
 jobs:
   # Security check - only proceed if safe-to-test label was added
   check-label:
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     outputs:
       should-run: ${{ steps.check.outputs.should-run }}
@@ -92,7 +93,7 @@ jobs:
         node-version: '20'
         cache: 'npm'
         cache-dependency-path: e2e/package-lock.json
-        
+
     - name: Install Cypress dependencies
       working-directory: e2e
       run: npm ci
@@ -146,11 +147,11 @@ jobs:
           docker tag quay.io/ambient_code/vteam_operator:latest quay.io/ambient_code/vteam_operator:e2e-test
         fi
 
-        # Build claude-code-runner image (if changed or use latest)
+        # Build ambient-runner image (if changed or use latest)
         if [ "${{ needs.detect-changes.outputs.claude-runner }}" == "true" ]; then
-          echo "Building claude-code-runner (changed)..."
+          echo "Building ambient-runner (changed)..."
           docker build -t quay.io/ambient_code/vteam_claude_runner:e2e-test \
-            -f components/runners/claude-code-runner/Dockerfile \
+            -f components/runners/ambient-runner/Dockerfile \
             components/runners
         else
           echo "Claude-runner unchanged, pulling latest..."
@@ -196,7 +197,7 @@ jobs:
       env:
         ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       run: ./scripts/deploy.sh
-        
+
     - name: Verify deployment
       run: |
         echo "Checking pods..."
@@ -204,13 +205,13 @@ jobs:
         echo ""
         echo "Checking services..."
         kubectl get svc -n ambient-code
-        
+
     - name: Run Cypress tests (with ANTHROPIC_API_KEY)
       working-directory: e2e
       env:
         ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       run: ./scripts/run-tests.sh
-      
+
     - name: Upload test results
       if: failure()
       uses: actions/upload-artifact@v6
@@ -219,7 +220,7 @@ jobs:
         path: e2e/cypress/screenshots
         if-no-files-found: ignore
         retention-days: 7
-        
+
     - name: Upload test videos
       if: failure()
       uses: actions/upload-artifact@v6
@@ -228,7 +229,7 @@ jobs:
         path: e2e/cypress/videos
         if-no-files-found: ignore
         retention-days: 7
-        
+
     - name: Debug logs on failure
       if: failure()
       run: |
@@ -240,7 +241,7 @@ jobs:
         echo ""
         echo "=== Operator logs ==="
         kubectl logs -n ambient-code -l app=agentic-operator --tail=100 || true
-        
+
     - name: Cleanup
       if: always()
       working-directory: e2e

@@ -33,4 +33,3 @@ export function useWorkflowMetadata(
     staleTime: 60 * 1000, // 1 minute
   });
 }
-

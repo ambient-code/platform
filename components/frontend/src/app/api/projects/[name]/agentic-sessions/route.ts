@@ -30,23 +30,21 @@ export async function POST(
     const { name } = await params;
     const body = await request.text();
     const headers = await buildForwardHeadersAsync(request);
-    
+
     const response = await fetch(`${BACKEND_URL}/projects/${encodeURIComponent(name)}/agentic-sessions`, {
       method: 'POST',
       headers,
       body,
     });
-    
+
     const text = await response.text();
     if (!response.ok) {
       console.error('[API Route] Backend error:', text);
     }
-    
+
     return new Response(text, { status: response.status, headers: { 'Content-Type': 'application/json' } });
   } catch (error) {
     console.error('Error creating agentic session:', error);
     return Response.json({ error: 'Failed to create agentic session', details: error instanceof Error ? error.message : String(error) }, { status: 500 });
   }
 }
-
-

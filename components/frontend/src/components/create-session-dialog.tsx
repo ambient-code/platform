@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import Link from "next/link";
-import { AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
+import { AlertCircle, AlertTriangle, CheckCircle2, ChevronsUpDown, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,9 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Select,
   SelectContent,
@@ -34,18 +37,18 @@ import {
 } from "@/components/ui/select";
 import type { CreateAgenticSessionRequest } from "@/types/agentic-session";
 import { useCreateSession } from "@/services/queries/use-sessions";
+import { useRunnerTypes } from "@/services/queries/use-runner-types";
+import { DEFAULT_RUNNER_TYPE_ID } from "@/services/api/runner-types";
 import { useIntegrationsStatus } from "@/services/queries/use-integrations";
-import { errorToast } from "@/hooks/use-toast";
+import { useModels } from "@/services/queries/use-models";
+import { toast } from "sonner";
 
-const models = [
-  { value: "claude-sonnet-4-5", label: "Claude Sonnet 4.5" },
-  { value: "claude-opus-4-6", label: "Claude Opus 4.6" },
-  { value: "claude-opus-4-5", label: "Claude Opus 4.5" },
-  { value: "claude-haiku-4-5", label: "Claude Haiku 4.5" },
-];
+// Static default used for form initialization before the API responds.
+const DEFAULT_MODEL = "claude-sonnet-4-5";
 
 const formSchema = z.object({
   displayName: z.string().max(50).optional(),
+  runnerType: z.string().min(1, "Please select a runner type"),
   model: z.string().min(1, "Please select a model"),
   temperature: z.number().min(0).max(2),
   maxTokens: z.number().min(100).max(8000),
@@ -68,7 +71,7 @@ export function CreateSessionDialog({
   const [open, setOpen] = useState(false);
   const router = useRouter();
   const createSessionMutation = useCreateSession();
-
+  const { data: runnerTypes, isLoading: runnerTypesLoading, isError: runnerTypesError, refetch: refetchRunnerTypes } = useRunnerTypes(projectName);
   const { data: integrationsStatus } = useIntegrationsStatus();
 
   const githubConfigured = integrationsStatus?.github?.active != null;
@@ -80,17 +83,52 @@ export function CreateSessionDialog({
     resolver: zodResolver(formSchema),
     defaultValues: {
       displayName: "",
-      model: "claude-sonnet-4-5",
+      runnerType: DEFAULT_RUNNER_TYPE_ID,
+      model: DEFAULT_MODEL,
       temperature: 0.7,
       maxTokens: 4000,
       timeout: 300,
     },
   });
 
+  const selectedRunnerType = form.watch("runnerType");
+
+  const selectedRunner = useMemo(
+    () => runnerTypes?.find((rt) => rt.id === selectedRunnerType),
+    [runnerTypes, selectedRunnerType]
+  );
+
+  // Fetch models filtered by the selected runner's provider.
+  // models.json is the single source of truth — no hardcoded fallback lists.
+  // Wait for runner types to load so we know the provider before fetching.
+  const { data: modelsData, isLoading: modelsLoading, isError: modelsError } = useModels(
+    projectName, open && !runnerTypesLoading && !runnerTypesError, selectedRunner?.provider
+  );
+
+  const models = modelsData
+    ? modelsData.models.map((m) => ({ value: m.id, label: m.label }))
+    : [];
+
+  // Update form model when API response arrives or provider changes
+  useEffect(() => {
+    if (modelsData?.defaultModel && !form.formState.dirtyFields.model) {
+      form.setValue("model", modelsData.defaultModel, { shouldDirty: false });
+    }
+  }, [modelsData?.defaultModel, form]);
+
+  const handleRunnerTypeChange = (value: string, onChange: (v: string) => void) => {
+    onChange(value);
+    // Model list will refetch via useModels when provider changes.
+    // resetField clears both value AND dirty state so the useEffect
+    // above will set the new provider's default model.
+    form.resetField("model", { defaultValue: "" });
+  };
+
   const onSubmit = async (values: FormValues) => {
     if (!projectName) return;
 
     const request: CreateAgenticSessionRequest = {
+      runnerType: values.runnerType,
       llmSettings: {
         model: values.model,
         temperature: values.temperature,
@@ -114,7 +152,7 @@ export function CreateSessionDialog({
           onSuccess?.();
         },
         onError: (error) => {
-          errorToast(error.message || "Failed to create session");
+          toast.error(error.message || "Failed to create session");
         },
       }
     );
@@ -165,6 +203,56 @@ export function CreateSessionDialog({
                 )}
               />
 
+              {/* Runner Type Selection */}
+              <FormField
+                control={form.control}
+                name="runnerType"
+                render={({ field }) => (
+                  <FormItem className="w-full">
+                    <FormLabel>Runner Type</FormLabel>
+                    {runnerTypesLoading ? (
+                      <Skeleton className="h-10 w-full" />
+                    ) : runnerTypesError ? (
+                      <Alert variant="destructive">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertDescription className="flex items-center justify-between">
+                          <span>Failed to load runner types.</span>
+                          <Button type="button" variant="outline" size="sm" onClick={() => refetchRunnerTypes()}>
+                            Retry
+                          </Button>
+                        </AlertDescription>
+                      </Alert>
+                    ) : (
+                      <Select
+                        onValueChange={(v) => handleRunnerTypeChange(v, field.onChange)}
+                        defaultValue={field.value}
+                      >
+                        <FormControl>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Select a runner type" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {runnerTypes?.map((rt) => (
+                            <SelectItem key={rt.id} value={rt.id}>
+                              {rt.displayName}
+                            </SelectItem>
+                          )) ?? (
+                            <SelectItem value={DEFAULT_RUNNER_TYPE_ID}>Claude Agent SDK</SelectItem>
+                          )}
+                        </SelectContent>
+                      </Select>
+                    )}
+                    {selectedRunner && (
+                      <p className="text-xs text-muted-foreground">
+                        {selectedRunner.description}
+                      </p>
+                    )}
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
               {/* Model Selection */}
               <FormField
                 control={form.control}
@@ -172,18 +260,30 @@ export function CreateSessionDialog({
                 render={({ field }) => (
                   <FormItem className="w-full">
                     <FormLabel>Model</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select
+                      onValueChange={field.onChange}
+                      value={field.value}
+                      disabled={modelsLoading}
+                    >
                       <FormControl>
                         <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Select a model" />
+                          <SelectValue
+                            placeholder={modelsLoading ? "Loading models..." : "Select a model"}
+                          />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {models.map((m) => (
-                          <SelectItem key={m.value} value={m.value}>
-                            {m.label}
-                          </SelectItem>
-                        ))}
+                        {models.length === 0 && !modelsLoading ? (
+                          <div className="p-2 text-sm text-muted-foreground">
+                            No models available for this runner
+                          </div>
+                        ) : (
+                          models.map((m) => (
+                            <SelectItem key={m.value} value={m.value}>
+                              {m.label}
+                            </SelectItem>
+                          ))
+                        )}
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -192,8 +292,12 @@ export function CreateSessionDialog({
               />
 
               {/* Integration auth status */}
-              <div className="w-full space-y-2">
-                <FormLabel>Integrations</FormLabel>
+              <Collapsible className="w-full space-y-2">
+                <CollapsibleTrigger className="flex items-center justify-between w-full">
+                  <FormLabel className="cursor-pointer">Integrations</FormLabel>
+                  <ChevronsUpDown className="h-4 w-4 text-muted-foreground" />
+                </CollapsibleTrigger>
+                <CollapsibleContent className="space-y-2">
                 {/* GitHub card */}
                 {githubConfigured ? (
                   <div className="flex items-start justify-between gap-3 p-3 border rounded-lg bg-background/50">
@@ -325,7 +429,8 @@ export function CreateSessionDialog({
                     </div>
                   </div>
                 )}
-              </div>
+                </CollapsibleContent>
+              </Collapsible>
 
               <DialogFooter>
                 <Button
@@ -336,7 +441,7 @@ export function CreateSessionDialog({
                 >
                   Cancel
                 </Button>
-                <Button type="submit" disabled={createSessionMutation.isPending}>
+                <Button type="submit" disabled={createSessionMutation.isPending || runnerTypesLoading || runnerTypesError || modelsLoading || (modelsError && models.length === 0)}>
                   {createSessionMutation.isPending && (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   )}

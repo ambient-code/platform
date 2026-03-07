@@ -6,7 +6,7 @@ import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Loader2, Eye, EyeOff } from 'lucide-react'
-import { successToast, errorToast } from '@/hooks/use-toast'
+import { toast } from 'sonner'
 import { useConnectGitLab, useDisconnectGitLab } from '@/services/queries/use-gitlab'
 
 type Props = {
@@ -23,7 +23,7 @@ export function GitLabConnectionCard({ status, onRefresh }: Props) {
   const connectMutation = useConnectGitLab()
   const disconnectMutation = useDisconnectGitLab()
   const isLoading = !status
-  
+
   const [showForm, setShowForm] = useState(false)
   const [instanceUrl, setInstanceUrl] = useState('https://gitlab.com')
   const [token, setToken] = useState('')
@@ -31,7 +31,7 @@ export function GitLabConnectionCard({ status, onRefresh }: Props) {
 
   const handleConnect = async () => {
     if (!token) {
-      errorToast('Please enter your GitLab Personal Access Token')
+      toast.error('Please enter your GitLab Personal Access Token')
       return
     }
 
@@ -39,13 +39,13 @@ export function GitLabConnectionCard({ status, onRefresh }: Props) {
       { personalAccessToken: token, instanceUrl },
       {
         onSuccess: () => {
-          successToast('GitLab connected successfully')
+          toast.success('GitLab connected successfully')
           setShowForm(false)
           setToken('')
           onRefresh?.()
         },
         onError: (error) => {
-          errorToast(error instanceof Error ? error.message : 'Failed to connect GitLab')
+          toast.error(error instanceof Error ? error.message : 'Failed to connect GitLab')
         },
       }
     )
@@ -54,11 +54,11 @@ export function GitLabConnectionCard({ status, onRefresh }: Props) {
   const handleDisconnect = async () => {
     disconnectMutation.mutate(undefined, {
       onSuccess: () => {
-        successToast('GitLab disconnected successfully')
+        toast.success('GitLab disconnected successfully')
         onRefresh?.()
       },
       onError: (error) => {
-        errorToast(error instanceof Error ? error.message : 'Failed to disconnect GitLab')
+        toast.error(error instanceof Error ? error.message : 'Failed to disconnect GitLab')
       },
     })
   }
@@ -72,7 +72,7 @@ export function GitLabConnectionCard({ status, onRefresh }: Props) {
   }
 
   return (
-    <Card className="bg-card border border-gray-200 shadow-sm flex flex-col h-full">
+    <Card className="bg-card border border-border/60 shadow-sm shadow-black/[0.03] dark:shadow-black/[0.15] flex flex-col h-full">
       <div className="p-6 flex flex-col flex-1">
         {/* Header section with icon and title */}
         <div className="flex items-start gap-4 mb-6">
@@ -218,7 +218,7 @@ export function GitLabConnectionCard({ status, onRefresh }: Props) {
             <Button
               onClick={() => setShowForm(true)}
               disabled={isLoading}
-              className="bg-blue-600 hover:bg-blue-700 text-white"
+              className="bg-primary hover:bg-primary/90 text-primary-foreground"
             >
               Connect GitLab
             </Button>

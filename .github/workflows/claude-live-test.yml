@@ -5,7 +5,7 @@ name: Claude Live Testing
 # Claude will test the feature with browser automation and provide reports
 
 on:
-  pull_request_target:
+  pull_request:
     types: [labeled]
     branches: [ main, master ]
 
@@ -21,6 +21,7 @@ concurrency:
 jobs:
   # Security check - only proceed if claude-test label was added
   check-label:
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     outputs:
       should-run: ${{ steps.check.outputs.should-run }}
@@ -57,7 +58,7 @@ jobs:
       uses: actions/setup-node@v6
       with:
         node-version: '20'
-        
+
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
       with:
@@ -74,15 +75,15 @@ jobs:
         # Build all images from PR code
         docker build -t quay.io/ambient_code/vteam_frontend:claude-test \
           -f components/frontend/Dockerfile components/frontend
-        
+
         docker build -t quay.io/ambient_code/vteam_backend:claude-test \
           -f components/backend/Dockerfile components/backend
-        
+
         docker build -t quay.io/ambient_code/vteam_operator:claude-test \
           -f components/operator/Dockerfile components/operator
-        
+
         docker build -t quay.io/ambient_code/vteam_claude_runner:claude-test \
-          -f components/runners/claude-code-runner/Dockerfile components/runners
+          -f components/runners/ambient-runner/Dockerfile components/runners
 
         echo "✅ All images built"
 
@@ -117,7 +118,7 @@ jobs:
       env:
         ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       run: ./scripts/deploy.sh
-        
+
     - name: Verify deployment
       run: |
         echo "Checking pods..."
@@ -141,7 +142,7 @@ jobs:
     - name: Create MCP configuration for Playwright
       run: |
         mkdir -p /tmp/mcp /tmp/test_output
-        
+
         # Create MCP config with video and trace recording
         cat > /tmp/mcp/playwright-config.json << 'EOF'
         {
@@ -160,7 +161,7 @@ jobs:
           }
         }
         EOF
-        
+
         echo "✅ MCP config created"
         cat /tmp/mcp/playwright-config.json
 
@@ -204,14 +205,14 @@ jobs:
 
         Video/trace recording is automatic. Focus on thorough testing of the PR changes.
         PROMPT_EOF
-        
+
         # Save to output
         {
           echo 'prompt<<GITHUB_OUTPUT_EOF'
           cat /tmp/test-prompt.txt
           echo 'GITHUB_OUTPUT_EOF'
         } >> $GITHUB_OUTPUT
-        
+
         echo "✅ Test prompt created"
 
     - name: Run Claude with Playwright MCP
@@ -254,7 +255,7 @@ jobs:
         path: /tmp/test_output/traces
         if-no-files-found: ignore
         retention-days: 30
-        
+
     - name: Debug logs on failure
       if: failure()
       run: |
@@ -266,7 +267,7 @@ jobs:
         echo ""
         echo "=== Operator logs ==="
         kubectl logs -n ambient-code -l app=agentic-operator --tail=100 || true
-        
+
     - name: Cleanup
       if: always()
       working-directory: e2e

@@ -16,4 +16,3 @@ spec:
           value: "http://vteam-backend:8080/api"
         - name: IMAGE_PULL_POLICY
           value: "IfNotPresent"
-

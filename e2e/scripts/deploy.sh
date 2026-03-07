@@ -47,7 +47,7 @@ echo "   Using overlay: kind"
 # Check for image overrides in .env
 if [ -f ".env" ]; then
   source .env
-  
+
   # Log image overrides
   if [ -n "${IMAGE_BACKEND:-}${IMAGE_FRONTEND:-}${IMAGE_OPERATOR:-}${IMAGE_RUNNER:-}${IMAGE_STATE_SYNC:-}" ]; then
     echo "   ℹ️  Image overrides from .env:"
@@ -159,4 +159,3 @@ echo "   kubectl get pods -n ambient-code"
 echo ""
 echo "Run tests:"
 echo "   ./scripts/run-tests.sh"
-

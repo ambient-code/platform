@@ -2,23 +2,62 @@
 
 import { useState, useEffect } from 'react';
 import { formatDistanceToNow } from 'date-fns';
-import { Plus, RefreshCw, MoreVertical, Square, Trash2, ArrowRight, Brain, Search, ChevronLeft, ChevronRight, Pencil } from 'lucide-react';
+import { Plus, RefreshCw, MoreVertical, Square, Trash2, ArrowRight, Brain, Search, Pencil, Clock, Cpu, MessageSquare, NotepadText } from 'lucide-react';
 import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
 import { Input } from '@/components/ui/input';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+  PaginationEllipsis,
+} from '@/components/ui/pagination';
+import { getPageNumbers } from '@/lib/pagination';
 import { EmptyState } from '@/components/empty-state';
 import { SessionPhaseBadge } from '@/components/status-badge';
 import { CreateSessionDialog } from '@/components/create-session-dialog';
 import { EditSessionNameDialog } from '@/components/edit-session-name-dialog';
 
-import { useSessionsPaginated, useStopSession, useDeleteSession, useContinueSession, useUpdateSessionDisplayName } from '@/services/queries';
-import { successToast, errorToast } from '@/hooks/use-toast';
+import { useSessionsPaginated, useStopSession, useDeleteSession, useContinueSession, useUpdateSessionDisplayName, useRunnerTypes } from '@/services/queries';
+import { toast } from 'sonner';
+import { useWorkspaceList } from '@/services/queries/use-workspace';
 import { useDebounce } from '@/hooks/use-debounce';
+import { useMemo } from 'react';
 import { DEFAULT_PAGE_SIZE } from '@/types/api';
+
+type ArtifactCountCellProps = {
+  projectName: string;
+  sessionName: string;
+};
+
+function ArtifactCountCell({ projectName, sessionName }: ArtifactCountCellProps) {
+  const { data: files, isLoading } = useWorkspaceList(projectName, sessionName, 'artifacts');
+
+  if (isLoading) {
+    return <span className="text-sm text-muted-foreground/60">—</span>;
+  }
+
+  const fileCount = files ? files.filter((f) => !f.isDir).length : 0;
+
+  if (fileCount === 0) {
+    return <span className="text-sm text-muted-foreground/60">—</span>;
+  }
+
+  return (
+    <div className="flex items-center gap-1 text-sm">
+      <NotepadText className="h-3 w-3 text-muted-foreground" />
+      <span>{fileCount}</span>
+    </div>
+  );
+}
 
 type SessionsSectionProps = {
   projectName: string;
@@ -37,6 +76,16 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
   useEffect(() => {
     setOffset(0);
   }, [debouncedSearch]);
+
+  // Runner type lookup for display names
+  const { data: runnerTypes } = useRunnerTypes(projectName);
+  const runnerTypeMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const rt of runnerTypes ?? []) {
+      map.set(rt.id, rt.displayName);
+    }
+    return map;
+  }, [runnerTypes]);
 
   // React Query hooks with pagination
   const {
@@ -59,7 +108,7 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
   const deleteSessionMutation = useDeleteSession();
   const continueSessionMutation = useContinueSession();
   const updateDisplayNameMutation = useUpdateSessionDisplayName();
-  
+
   // State for edit name dialog
   const [editingSession, setEditingSession] = useState<{ name: string; displayName: string } | null>(null);
 
@@ -68,10 +117,10 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
       { projectName, sessionName },
       {
         onSuccess: () => {
-          successToast(`Session "${sessionName}" stopped successfully`);
+          toast.success(`Session "${sessionName}" stopped successfully`);
         },
         onError: (error) => {
-          errorToast(error instanceof Error ? error.message : 'Failed to stop session');
+          toast.error(error instanceof Error ? error.message : 'Failed to stop session');
         },
       }
     );
@@ -83,10 +132,10 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
       { projectName, sessionName },
       {
         onSuccess: () => {
-          successToast(`Session "${sessionName}" deleted successfully`);
+          toast.success(`Session "${sessionName}" deleted successfully`);
         },
         onError: (error) => {
-          errorToast(error instanceof Error ? error.message : 'Failed to delete session');
+          toast.error(error instanceof Error ? error.message : 'Failed to delete session');
         },
       }
     );
@@ -97,10 +146,10 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
       { projectName, parentSessionName: sessionName },
       {
         onSuccess: () => {
-          successToast(`Session "${sessionName}" restarted successfully`);
+          toast.success(`Session "${sessionName}" restarted successfully`);
         },
         onError: (error) => {
-          errorToast(error instanceof Error ? error.message : 'Failed to restart session');
+          toast.error(error instanceof Error ? error.message : 'Failed to restart session');
         },
       }
     );
@@ -142,12 +191,12 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
       },
       {
         onSuccess: () => {
-          successToast('Session name updated successfully');
+          toast.success('Session name updated successfully');
           setEditingSession(null);
           refetch();
         },
         onError: (error) => {
-          errorToast(error instanceof Error ? error.message : 'Failed to update session name');
+          toast.error(error instanceof Error ? error.message : 'Failed to update session name');
         },
       }
     );
@@ -214,7 +263,7 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
                     <TableHead>Status</TableHead>
                     <TableHead className="hidden md:table-cell">Model</TableHead>
                     <TableHead className="hidden lg:table-cell">Created</TableHead>
-                    <TableHead className="hidden xl:table-cell">Cost</TableHead>
+                    <TableHead className="hidden xl:table-cell">Artifacts</TableHead>
                     <TableHead className="w-[50px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -229,33 +278,78 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
                     return (
                       <TableRow key={session.metadata?.uid || session.metadata?.name}>
                         <TableCell className="font-medium min-w-[180px]">
-                          <Link
-                            href={`/projects/${projectName}/sessions/${session.metadata.name}`}
-                            className="text-link hover:underline hover:text-link-hover transition-colors block"
-                          >
-                            <div>
-                              <div className="font-medium">{session.spec.displayName || session.metadata.name}</div>
-                              {session.spec.displayName && (
-                                <div className="text-xs text-muted-foreground font-normal">{session.metadata.name}</div>
-                              )}
-                            </div>
-                          </Link>
+                          <HoverCard openDelay={300} closeDelay={100}>
+                            <HoverCardTrigger asChild>
+                              <Link
+                                href={`/projects/${projectName}/sessions/${session.metadata.name}`}
+                                className="text-link hover:underline hover:text-link-hover transition-colors block"
+                              >
+                                <div>
+                                  <div className="font-medium">{session.spec.displayName || session.metadata.name}</div>
+                                  {session.spec.displayName && (
+                                    <div className="text-xs text-muted-foreground font-normal">{session.metadata.name}</div>
+                                  )}
+                                </div>
+                              </Link>
+                            </HoverCardTrigger>
+                            <HoverCardContent align="start" className="w-80">
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <p className="text-sm font-semibold truncate mr-2">
+                                    {session.spec.displayName || session.metadata.name}
+                                  </p>
+                                  <SessionPhaseBadge phase={phase} stoppedReason={session.status?.stoppedReason} />
+                                </div>
+                                {session.spec.displayName && (
+                                  <p className="text-xs text-muted-foreground">{session.metadata.name}</p>
+                                )}
+                                <div className="flex flex-col gap-1.5 pt-1">
+                                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                    <Cpu className="h-3 w-3" />
+                                    <span>{session.spec.llmSettings.model}</span>
+                                  </div>
+                                  {session.metadata?.creationTimestamp && (
+                                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                      <Clock className="h-3 w-3" />
+                                      <span>{formatDistanceToNow(new Date(session.metadata.creationTimestamp), { addSuffix: true })}</span>
+                                    </div>
+                                  )}
+                                  {session.spec.initialPrompt && (
+                                    <div className="flex items-start gap-1.5 text-xs text-muted-foreground pt-1">
+                                      <MessageSquare className="h-3 w-3 mt-0.5 shrink-0" />
+                                      <span className="line-clamp-3">{session.spec.initialPrompt}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </HoverCardContent>
+                          </HoverCard>
                         </TableCell>
                         <TableCell>
                           <SessionPhaseBadge phase={phase} stoppedReason={session.status?.stoppedReason} />
                         </TableCell>
                         <TableCell className="hidden md:table-cell">
-                          <span className="text-sm text-muted-foreground truncate max-w-[120px] block">
-                            {session.spec.llmSettings.model}
-                          </span>
+                          <div className="text-sm truncate max-w-[160px]">
+                            {(() => {
+                              const runnerType = session.spec.environmentVariables?.RUNNER_TYPE;
+                              const runnerLabel = runnerType ? runnerTypeMap.get(runnerType) : undefined;
+                              return (
+                                <>
+                                  {runnerLabel && (
+                                    <div className="text-xs font-medium text-foreground">{runnerLabel}</div>
+                                  )}
+                                  <div className="text-muted-foreground">{session.spec.llmSettings.model}</div>
+                                </>
+                              );
+                            })()}
+                          </div>
                         </TableCell>
                         <TableCell className="hidden lg:table-cell">
                           {session.metadata?.creationTimestamp &&
                             formatDistanceToNow(new Date(session.metadata.creationTimestamp), { addSuffix: true })}
                         </TableCell>
                         <TableCell className="hidden xl:table-cell">
-                          {/* total_cost_usd removed from simplified status */}
-                          <span className="text-sm text-muted-foreground/60">—</span>
+                          <ArtifactCountCell projectName={projectName} sessionName={sessionName} />
                         </TableCell>
                         <TableCell>
                           {isActionPending ? (
@@ -287,35 +381,45 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
                 <div className="text-sm text-muted-foreground">
                   Showing {offset + 1}-{Math.min(offset + limit, totalCount)} of {totalCount} sessions
                 </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handlePrevPage}
-                    disabled={offset === 0 || isFetching}
-                  >
-                    <ChevronLeft className="h-4 w-4 mr-1" />
-                    Previous
-                  </Button>
-                  <span className="text-sm text-muted-foreground px-2">
-                    Page {currentPage} of {totalPages}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleNextPage}
-                    disabled={!hasMore || isFetching}
-                  >
-                    Next
-                    <ChevronRight className="h-4 w-4 ml-1" />
-                  </Button>
-                </div>
+                <Pagination className="mx-0 w-auto justify-end">
+                  <PaginationContent>
+                    <PaginationItem>
+                      <PaginationPrevious
+                        onClick={handlePrevPage}
+                        className={offset === 0 || isFetching ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                      />
+                    </PaginationItem>
+                    {getPageNumbers(currentPage, totalPages).map((page, i) =>
+                      page === 'ellipsis' ? (
+                        <PaginationItem key={`ellipsis-${i}`}>
+                          <PaginationEllipsis />
+                        </PaginationItem>
+                      ) : (
+                        <PaginationItem key={page}>
+                          <PaginationLink
+                            isActive={page === currentPage}
+                            onClick={() => { setOffset((page - 1) * limit); }}
+                            className="cursor-pointer"
+                          >
+                            {page}
+                          </PaginationLink>
+                        </PaginationItem>
+                      )
+                    )}
+                    <PaginationItem>
+                      <PaginationNext
+                        onClick={handleNextPage}
+                        className={!hasMore || isFetching ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                      />
+                    </PaginationItem>
+                  </PaginationContent>
+                </Pagination>
               </div>
             )}
           </>
         )}
       </CardContent>
-      
+
       {/* Edit Session Name Dialog */}
       <EditSessionNameDialog
         open={!!editingSession}

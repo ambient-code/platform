@@ -22,4 +22,3 @@ export async function getCurrentUser(): Promise<UserProfile> {
     return { authenticated: false };
   }
 }
-

@@ -7,7 +7,7 @@ metadata:
     deployment-type: crc
 data:
   # Vertex AI Configuration - Disabled for CRC local development
-  CLAUDE_CODE_USE_VERTEX: "0"
+  USE_VERTEX: "0"
   CLOUD_ML_REGION: ""
   ANTHROPIC_VERTEX_PROJECT_ID: ""
   GOOGLE_APPLICATION_CREDENTIALS: ""

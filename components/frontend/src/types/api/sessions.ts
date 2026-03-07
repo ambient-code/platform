@@ -48,6 +48,7 @@ export type AgenticSessionSpec = {
   inactivityTimeout?: number;
   displayName?: string;
   project?: string;
+  environmentVariables?: Record<string, string>;
   repos?: SessionRepo[];
   mainRepoIndex?: number;
   activeWorkflow?: {
@@ -128,6 +129,7 @@ export type CreateAgenticSessionRequest = {
   userContext?: UserContext;
   labels?: Record<string, string>;
   annotations?: Record<string, string>;
+  runnerType?: string;
 };
 
 export type CreateAgenticSessionResponse = {

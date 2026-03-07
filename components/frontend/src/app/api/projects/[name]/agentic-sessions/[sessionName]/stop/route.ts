@@ -19,5 +19,3 @@ export async function POST(
     return Response.json({ error: 'Failed to stop agentic session' }, { status: 500 });
   }
 }
-
-

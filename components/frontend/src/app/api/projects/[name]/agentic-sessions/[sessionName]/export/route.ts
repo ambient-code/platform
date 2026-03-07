@@ -22,12 +22,12 @@ export async function GET(
   })
 
   const data = await resp.text()
-  
+
   // Forward headers for file download
   const responseHeaders: Record<string, string> = {
     'Content-Type': 'application/json',
   }
-  
+
   // Forward Content-Disposition if present (for download filename)
   const contentDisposition = resp.headers.get('Content-Disposition')
   if (contentDisposition) {
@@ -39,4 +39,3 @@ export async function GET(
     headers: responseHeaders,
   })
 }
-

@@ -9,7 +9,7 @@ The Ambient Platform SDK provides Go, Python, and TypeScript client libraries fo
 ## Supported Languages
 
 - **Go SDK** - `go-sdk/` - Go 1.21+ with standard library only
-- **Python SDK** - `python-sdk/` - Python 3.8+ with minimal dependencies  
+- **Python SDK** - `python-sdk/` - Python 3.8+ with minimal dependencies
 - **TypeScript SDK** - `ts-sdk/` - Modern TypeScript with proper type safety
 
 ## Quick Start
@@ -35,7 +35,7 @@ from ambient_platform.client import AmbientClient
 
 client = AmbientClient.from_env()
 session = client.sessions.create({
-    "name": "My Analysis Session", 
+    "name": "My Analysis Session",
     "prompt": "Analyze this codebase"
 })
 ```
@@ -71,7 +71,7 @@ All SDKs support these environment variables:
 The SDK provides access to 4 core resources:
 
 - **Sessions** - Create and manage AI agentic sessions
-- **Users** - User management and authentication  
+- **Users** - User management and authentication
 - **Projects** - Project configuration and settings
 - **ProjectSettings** - Project-specific configuration
 
@@ -82,7 +82,7 @@ The SDK provides access to 4 core resources:
 make generate-sdk
 
 # Verify all SDKs build correctly
-make verify-sdk  
+make verify-sdk
 
 # Build generator binary
 make build-generator

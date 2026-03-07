@@ -28,7 +28,7 @@ echo "Using container runtime: $CONTAINER_ENGINE"
 if [ "$CONTAINER_ENGINE" = "podman" ]; then
   export KIND_EXPERIMENTAL_PROVIDER=podman
   echo "   ℹ️  Set KIND_EXPERIMENTAL_PROVIDER=podman"
-  
+
   # Verify Podman is running
   if ! podman ps &> /dev/null; then
     echo "❌ Podman is installed but not running"
@@ -84,4 +84,3 @@ echo "📝 Next steps:"
 echo "   1. Deploy the platform: make kind-up (continues deployment)"
 echo "   2. Access services: make kind-port-forward (in another terminal)"
 echo "   3. Frontend: http://localhost:${HTTP_PORT}"
-

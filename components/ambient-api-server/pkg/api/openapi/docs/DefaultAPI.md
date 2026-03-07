@@ -78,9 +78,9 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **page** | **int32** | Page number of record list when record list exceeds specified page size | [default to 1]
  **size** | **int32** | Maximum number of records to return | [default to 100]
- **search** | **string** | Specifies the search criteria | 
- **orderBy** | **string** | Specifies the order by criteria | 
- **fields** | **string** | Supplies a comma-separated list of fields to be returned | 
+ **search** | **string** | Specifies the search criteria |
+ **orderBy** | **string** | Specifies the order by criteria |
+ **fields** | **string** | Supplies a comma-separated list of fields to be returned |
 
 ### Return type
 
@@ -137,7 +137,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record | 
+**id** | **string** | The id of record |
 
 ### Other Parameters
 
@@ -205,7 +205,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record | 
+**id** | **string** | The id of record |
 
 ### Other Parameters
 
@@ -274,7 +274,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record | 
+**id** | **string** | The id of record |
 
 ### Other Parameters
 
@@ -284,7 +284,7 @@ Other parameters are passed through a pointer to a apiApiAmbientV1ProjectSetting
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
- **projectSettingsPatchRequest** | [**ProjectSettingsPatchRequest**](ProjectSettingsPatchRequest.md) | Updated project settings data | 
+ **projectSettingsPatchRequest** | [**ProjectSettingsPatchRequest**](ProjectSettingsPatchRequest.md) | Updated project settings data |
 
 ### Return type
 
@@ -348,7 +348,7 @@ Other parameters are passed through a pointer to a apiApiAmbientV1ProjectSetting
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **projectSettings** | [**ProjectSettings**](ProjectSettings.md) | Project settings data | 
+ **projectSettings** | [**ProjectSettings**](ProjectSettings.md) | Project settings data |
 
 ### Return type
 
@@ -418,9 +418,9 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **page** | **int32** | Page number of record list when record list exceeds specified page size | [default to 1]
  **size** | **int32** | Maximum number of records to return | [default to 100]
- **search** | **string** | Specifies the search criteria | 
- **orderBy** | **string** | Specifies the order by criteria | 
- **fields** | **string** | Supplies a comma-separated list of fields to be returned | 
+ **search** | **string** | Specifies the search criteria |
+ **orderBy** | **string** | Specifies the order by criteria |
+ **fields** | **string** | Supplies a comma-separated list of fields to be returned |
 
 ### Return type
 
@@ -477,7 +477,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record | 
+**id** | **string** | The id of record |
 
 ### Other Parameters
 
@@ -545,7 +545,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record | 
+**id** | **string** | The id of record |
 
 ### Other Parameters
 
@@ -614,7 +614,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record | 
+**id** | **string** | The id of record |
 
 ### Other Parameters
 
@@ -624,7 +624,7 @@ Other parameters are passed through a pointer to a apiApiAmbientV1ProjectsIdPatc
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
- **projectPatchRequest** | [**ProjectPatchRequest**](ProjectPatchRequest.md) | Updated project data | 
+ **projectPatchRequest** | [**ProjectPatchRequest**](ProjectPatchRequest.md) | Updated project data |
 
 ### Return type
 
@@ -688,7 +688,7 @@ Other parameters are passed through a pointer to a apiApiAmbientV1ProjectsPostRe
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **project** | [**Project**](Project.md) | Project data | 
+ **project** | [**Project**](Project.md) | Project data |
 
 ### Return type
 
@@ -758,9 +758,9 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **page** | **int32** | Page number of record list when record list exceeds specified page size | [default to 1]
  **size** | **int32** | Maximum number of records to return | [default to 100]
- **search** | **string** | Specifies the search criteria | 
- **orderBy** | **string** | Specifies the order by criteria | 
- **fields** | **string** | Supplies a comma-separated list of fields to be returned | 
+ **search** | **string** | Specifies the search criteria |
+ **orderBy** | **string** | Specifies the order by criteria |
+ **fields** | **string** | Supplies a comma-separated list of fields to be returned |
 
 ### Return type
 
@@ -819,7 +819,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record | 
+**id** | **string** | The id of record |
 
 ### Other Parameters
 
@@ -888,7 +888,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record | 
+**id** | **string** | The id of record |
 
 ### Other Parameters
 
@@ -898,7 +898,7 @@ Other parameters are passed through a pointer to a apiApiAmbientV1SessionsIdPatc
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
- **sessionPatchRequest** | [**SessionPatchRequest**](SessionPatchRequest.md) | Updated session data | 
+ **sessionPatchRequest** | [**SessionPatchRequest**](SessionPatchRequest.md) | Updated session data |
 
 ### Return type
 
@@ -959,7 +959,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record | 
+**id** | **string** | The id of record |
 
 ### Other Parameters
 
@@ -1030,7 +1030,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record | 
+**id** | **string** | The id of record |
 
 ### Other Parameters
 
@@ -1040,7 +1040,7 @@ Other parameters are passed through a pointer to a apiApiAmbientV1SessionsIdStat
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
- **sessionStatusPatchRequest** | [**SessionStatusPatchRequest**](SessionStatusPatchRequest.md) | Session status fields to update | 
+ **sessionStatusPatchRequest** | [**SessionStatusPatchRequest**](SessionStatusPatchRequest.md) | Session status fields to update |
 
 ### Return type
 
@@ -1101,7 +1101,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record | 
+**id** | **string** | The id of record |
 
 ### Other Parameters
 
@@ -1174,7 +1174,7 @@ Other parameters are passed through a pointer to a apiApiAmbientV1SessionsPostRe
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **session** | [**Session**](Session.md) | Session data | 
+ **session** | [**Session**](Session.md) | Session data |
 
 ### Return type
 
@@ -1244,9 +1244,9 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **page** | **int32** | Page number of record list when record list exceeds specified page size | [default to 1]
  **size** | **int32** | Maximum number of records to return | [default to 100]
- **search** | **string** | Specifies the search criteria | 
- **orderBy** | **string** | Specifies the order by criteria | 
- **fields** | **string** | Supplies a comma-separated list of fields to be returned | 
+ **search** | **string** | Specifies the search criteria |
+ **orderBy** | **string** | Specifies the order by criteria |
+ **fields** | **string** | Supplies a comma-separated list of fields to be returned |
 
 ### Return type
 
@@ -1305,7 +1305,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record | 
+**id** | **string** | The id of record |
 
 ### Other Parameters
 
@@ -1374,7 +1374,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record | 
+**id** | **string** | The id of record |
 
 ### Other Parameters
 
@@ -1384,7 +1384,7 @@ Other parameters are passed through a pointer to a apiApiAmbientV1UsersIdPatchRe
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
- **userPatchRequest** | [**UserPatchRequest**](UserPatchRequest.md) | Updated user data | 
+ **userPatchRequest** | [**UserPatchRequest**](UserPatchRequest.md) | Updated user data |
 
 ### Return type
 
@@ -1448,7 +1448,7 @@ Other parameters are passed through a pointer to a apiApiAmbientV1UsersPostReque
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **user** | [**User**](User.md) | User data | 
+ **user** | [**User**](User.md) | User data |
 
 ### Return type
 
@@ -1466,4 +1466,3 @@ Name | Type | Description  | Notes
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
 [[Back to Model list]](../README.md#documentation-for-models)
 [[Back to README]](../README.md)
-

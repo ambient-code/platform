@@ -9,7 +9,7 @@ Kubernetes-native AI automation platform that orchestrates agentic sessions thro
 - `components/backend/` - Go REST API (Gin), manages K8s Custom Resources with multi-tenant project isolation
 - `components/frontend/` - NextJS web UI for session management and monitoring
 - `components/operator/` - Go Kubernetes controller, watches CRDs and creates Jobs
-- `components/runners/claude-code-runner/` - Python runner executing Claude Code CLI in Job pods
+- `components/runners/ambient-runner/` - Python runner executing Claude Code CLI in Job pods
 - `components/ambient-cli/` - Go CLI (`acpctl`), manages agentic sessions from the command line
 - `components/public-api/` - Stateless HTTP gateway, proxies to backend (no direct K8s access)
 - `components/manifests/` - Kustomize-based deployment manifests and overlays
@@ -22,7 +22,7 @@ Kubernetes-native AI automation platform that orchestrates agentic sessions thro
 - Session lifecycle: `components/backend/handlers/sessions.go`, `components/operator/internal/handlers/sessions.go`
 - Auth & RBAC middleware: `components/backend/handlers/middleware.go`
 - K8s client init: `components/operator/internal/config/config.go`
-- Runner entry point: `components/runners/claude-code-runner/main.py`
+- Runner entry point: `components/runners/ambient-runner/main.py`
 - Route registration: `components/backend/routes.go`
 - Frontend API layer: `components/frontend/src/services/api/`, `src/services/queries/`
 
@@ -55,7 +55,7 @@ cd components/operator && gofmt -l . && go vet ./... && golangci-lint run
 cd components/frontend && npm run build  # Must pass with 0 errors, 0 warnings
 
 # Runner (Python)
-cd components/runners/claude-code-runner && uv venv && uv pip install -e .
+cd components/runners/ambient-runner && uv venv && uv pip install -e .
 
 # Docs
 cd docs && npm run dev  # http://localhost:4321

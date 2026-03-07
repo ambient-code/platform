@@ -35,7 +35,7 @@ To create your first Kind:
 
 ```bash
 # Generate a HelloWorld Kind with a Message attribute
-go run ./scripts/generator.go --kind HelloWorld --fields "message:string:required" --project "ambient-api-server" --repo "github.com/ambient/platform/components"
+go run ./scripts/generator.go --kind HelloWorld --fields "message:string:required" --project "ambient-api-server" --repo "github.com/ambient-code/platform/components"
 
 ```
 
@@ -43,7 +43,7 @@ go run ./scripts/generator.go --kind HelloWorld --fields "message:string:require
 
 The generator supports these field types:
 - `string` - Text data
-- `int` - 32-bit integer  
+- `int` - 32-bit integer
 - `int64` - 64-bit integer
 - `bool` - Boolean true/false
 - `float` or `float64` - Floating point numbers
@@ -58,7 +58,7 @@ Field nullability options:
 For each Kind, the generator automatically creates:
 
 - **API model** (`plugins/{kinds}/model.go`) - Go structs for the Kind
-- **HTTP handlers** (`plugins/{kinds}/handler.go`) - REST API endpoints  
+- **HTTP handlers** (`plugins/{kinds}/handler.go`) - REST API endpoints
 - **Service layer** (`plugins/{kinds}/service.go`) - Business logic with event handlers
 - **Data access** (`plugins/{kinds}/dao.go`) - Database operations
 - **Database migration** (`plugins/{kinds}/migration.go`) - Schema changes

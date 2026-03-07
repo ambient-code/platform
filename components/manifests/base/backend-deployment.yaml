@@ -107,13 +107,13 @@ spec:
           value: "workflows"
         # Vertex AI configuration from operator-config ConfigMap
         # Backend needs these for:
-        # 1. CLAUDE_CODE_USE_VERTEX: Expose vertexEnabled flag via /api/cluster-info
+        # 1. USE_VERTEX: Expose vertexEnabled flag via /api/cluster-info
         # 2. Other Vertex vars: Display name auto-generation uses Claude Haiku via Vertex
-        - name: CLAUDE_CODE_USE_VERTEX
+        - name: USE_VERTEX
           valueFrom:
             configMapKeyRef:
               name: operator-config
-              key: CLAUDE_CODE_USE_VERTEX
+              key: USE_VERTEX
         - name: CLOUD_ML_REGION
           valueFrom:
             configMapKeyRef:
@@ -188,9 +188,21 @@ spec:
         volumeMounts:
         - name: backend-state
           mountPath: /workspace
-        # Vertex AI credentials (optional - only needed when CLAUDE_CODE_USE_VERTEX=1)
+        # Vertex AI credentials (optional - only needed when USE_VERTEX=1)
         - name: vertex-credentials
           mountPath: /app/vertex
+          readOnly: true
+        # Model manifest (mounted ConfigMap — kubelet auto-syncs changes)
+        - name: model-manifest
+          mountPath: /config/models
+          readOnly: true
+        # Feature flags config (optional — kubelet auto-syncs changes)
+        - name: flags-config
+          mountPath: /config/flags
+          readOnly: true
+        # Agent registry (runner type definitions — kubelet auto-syncs changes)
+        - name: agent-registry
+          mountPath: /config/registry
           readOnly: true
       volumes:
       - name: backend-state
@@ -203,6 +215,21 @@ spec:
         secret:
           secretName: ambient-vertex
           optional: true  # Don't fail if Vertex not configured
+      # Model manifest ConfigMap (single source of truth for available models)
+      - name: model-manifest
+        configMap:
+          name: ambient-models
+          optional: true  # Don't fail if ConfigMap not yet created
+      # Feature flags config (generic flags synced to Unleash on startup)
+      - name: flags-config
+        configMap:
+          name: ambient-flags
+          optional: true  # Don't fail if no generic flags defined
+      # Agent registry ConfigMap (runner type definitions)
+      - name: agent-registry
+        configMap:
+          name: ambient-agent-registry
+          optional: true  # Don't fail if ConfigMap not yet created
 
 ---
 apiVersion: v1

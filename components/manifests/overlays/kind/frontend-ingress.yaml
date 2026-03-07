@@ -5,6 +5,8 @@ metadata:
   namespace: ambient-code
   labels:
     app: frontend
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: 50m
 spec:
   ingressClassName: nginx
   rules:
@@ -18,4 +20,3 @@ spec:
             name: frontend-service
             port:
               name: http
-

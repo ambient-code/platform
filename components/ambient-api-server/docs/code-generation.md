@@ -9,7 +9,7 @@ go run ./scripts/generator.go \
   --kind HelloWorld \
   --fields "message:string:required,priority:int,active:bool" \
   --project ambient-api-server \
-  --repo github.com/ambient/platform/components \
+  --repo github.com/ambient-code/platform/components \
   --library github.com/openshift-online/rh-trex-ai
 ```
 
@@ -20,7 +20,7 @@ go run ./scripts/generator.go \
 | `--kind` | `Asteroid` | PascalCase Kind name (e.g., `HelloWorld`) |
 | `--fields` | `""` | Comma-separated `name:type[:required\|optional]` |
 | `--project` | `ambient-api-server` | Project directory name |
-| `--repo` | `github.com/ambient/platform/components` | Module path prefix |
+| `--repo` | `github.com/ambient-code/platform/components` | Module path prefix |
 | `--library` | `github.com/openshift-online/rh-trex-ai` | rh-trex-ai module path |
 | `--plural` | auto | Override auto-pluralization |
 | `--skip-generate` | false | Skip `make generate` after code gen |
@@ -66,7 +66,7 @@ For a Kind named `HelloWorld` (pluralized to `helloWorlds`):
 | `{{.KindSnakeCasePlural}}` | `hello_worlds` | snake_case plural (URL path, table name) |
 | `{{.Project}}` | `ambient-api-server` | Project name |
 | `{{.ProjectPascalCase}}` | `AmbientApiServer` | Project in PascalCase |
-| `{{.Repo}}` | `github.com/ambient/platform/components` | Repository path |
+| `{{.Repo}}` | `github.com/ambient-code/platform/components` | Repository path |
 | `{{.Library}}` | `github.com/openshift-online/rh-trex-ai` | Framework library path |
 | `{{.Cmd}}` | `ambient-api-server` | Command directory name |
 | `{{.ID}}` | `202602141530` | Migration ID (timestamp) |

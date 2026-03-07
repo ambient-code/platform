@@ -34,11 +34,12 @@ go run .
 
 ### Frontend (local) quick start
 
-**Recommended: Use integrated CRC development environment:**
+**Recommended: Use integrated local development environment:**
 ```bash
 # From repository root - single command setup
-make dev-start
-# Access: https://vteam-frontend-vteam-dev.apps-crc.testing
+make local-up    # minikube
+# Or: make kind-up  # kind (recommended)
+# Access: http://localhost:8080
 ```
 
 **Alternative: Standalone frontend development:**

@@ -32,10 +32,11 @@ export type MessagesTabProps = {
   onUpdateQueuedMessage?: (messageId: string, newContent: string) => void;
   onPasteImage?: (file: File) => Promise<void>;
   onClearQueue?: () => void;
+  agentName?: string;
 };
 
 
-const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chatInput, setChatInput, onSendChat, onInterrupt, onGoToResults, onContinue, workflowMetadata, onCommandClick, isRunActive = false, showWelcomeExperience, welcomeExperienceComponent, activeWorkflow, userHasInteracted = false, queuedMessages = [], hasRealMessages = false, onCancelQueuedMessage, onUpdateQueuedMessage, onPasteImage, onClearQueue }) => {
+const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chatInput, setChatInput, onSendChat, onInterrupt, onGoToResults, onContinue, workflowMetadata, onCommandClick, isRunActive = false, showWelcomeExperience, welcomeExperienceComponent, activeWorkflow, userHasInteracted = false, queuedMessages = [], hasRealMessages = false, onCancelQueuedMessage, onUpdateQueuedMessage, onPasteImage, onClearQueue, agentName }) => {
   const [sendingChat, setSendingChat] = useState(false);
   const [showSystemMessages, setShowSystemMessages] = useState(false);
   const [waitingDotCount, setWaitingDotCount] = useState(0);
@@ -137,7 +138,7 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
         {showWelcomeExperience && welcomeExperienceComponent}
 
         {shouldShowMessages && filteredMessages.map((m, idx) => (
-          <StreamMessage key={`sm-${idx}`} message={m} isNewest={idx === filteredMessages.length - 1} onGoToResults={onGoToResults} />
+          <StreamMessage key={`sm-${idx}`} message={m} isNewest={idx === filteredMessages.length - 1} onGoToResults={onGoToResults} agentName={agentName} />
         ))}
 
         {/* Queued messages with cancel buttons */}
@@ -153,7 +154,7 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
           <div className="mb-4 mt-2">
             <div className="flex space-x-3 items-start">
               <div className="flex-shrink-0">
-                <div className="w-8 h-8 rounded-full flex items-center justify-center bg-blue-600">
+                <div className="w-8 h-8 rounded-full flex items-center justify-center bg-primary ring-2 ring-background">
                   <span className="text-white text-xs font-semibold">AI</span>
                 </div>
               </div>

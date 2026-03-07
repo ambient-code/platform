@@ -94,10 +94,10 @@ echo "Test 4: Workflow Trigger Validation"
 echo "------------------------------------"
 
 # amber-auto-review should trigger on PR events
-if grep -q "pull_request_target:" ".github/workflows/amber-auto-review.yml"; then
-    report_test 0 "amber-auto-review triggers on pull_request_target"
+if grep -q "pull_request:" ".github/workflows/amber-auto-review.yml"; then
+    report_test 0 "amber-auto-review triggers on pull_request"
 else
-    report_test 1 "amber-auto-review missing pull_request_target trigger"
+    report_test 1 "amber-auto-review missing pull_request trigger"
 fi
 
 # amber-issue-handler should have proper label/comment filtering

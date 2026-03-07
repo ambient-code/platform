@@ -24,12 +24,16 @@ func (c *Client) Sessions() *SessionAPI {
 }
 
 func (a *SessionAPI) Create(ctx context.Context, resource *types.Session) (*types.Session, error) {
+	return a.CreateForProject(ctx, resource, "")
+}
+
+func (a *SessionAPI) CreateForProject(ctx context.Context, resource *types.Session, project string) (*types.Session, error) {
 	body, err := json.Marshal(resource)
 	if err != nil {
 		return nil, fmt.Errorf("marshal session: %w", err)
 	}
 	var result types.Session
-	if err := a.client.do(ctx, http.MethodPost, "/sessions", body, http.StatusCreated, &result); err != nil {
+	if err := a.client.doForProject(ctx, http.MethodPost, "/sessions", body, http.StatusCreated, &result, project); err != nil {
 		return nil, err
 	}
 	return &result, nil
@@ -44,8 +48,12 @@ func (a *SessionAPI) Get(ctx context.Context, id string) (*types.Session, error)
 }
 
 func (a *SessionAPI) List(ctx context.Context, opts *types.ListOptions) (*types.SessionList, error) {
+	return a.ListForProject(ctx, opts, "")
+}
+
+func (a *SessionAPI) ListForProject(ctx context.Context, opts *types.ListOptions, project string) (*types.SessionList, error) {
 	var result types.SessionList
-	if err := a.client.doWithQuery(ctx, http.MethodGet, "/sessions", nil, http.StatusOK, &result, opts); err != nil {
+	if err := a.client.doWithQueryForProject(ctx, http.MethodGet, "/sessions", nil, http.StatusOK, &result, opts, project); err != nil {
 		return nil, err
 	}
 	return &result, nil

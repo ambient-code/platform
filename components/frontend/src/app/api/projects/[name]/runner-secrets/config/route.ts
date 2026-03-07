@@ -39,5 +39,3 @@ export async function PUT(
     return Response.json({ error: 'Failed to update runner secrets config' }, { status: 500 });
   }
 }
-
-

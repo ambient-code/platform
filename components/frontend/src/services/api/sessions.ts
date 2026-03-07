@@ -101,7 +101,7 @@ export async function createSession(
     CreateAgenticSessionResponse,
     CreateAgenticSessionRequest
   >(`/projects/${projectName}/agentic-sessions`, data);
-  
+
   // Backend returns simplified response, fetch the full session object
   return await getSession(projectName, response.name);
 }

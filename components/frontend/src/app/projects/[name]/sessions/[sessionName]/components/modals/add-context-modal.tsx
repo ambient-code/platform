@@ -69,7 +69,7 @@ export function AddContextModal({
             Add additional context to improve AI responses.
           </DialogDescription>
         </DialogHeader>
-        
+
         <div className="space-y-4">
           <Alert>
             <Info className="h-4 w-4" />
@@ -179,4 +179,3 @@ export function AddContextModal({
     </Dialog>
   );
 }
-

@@ -31,5 +31,3 @@ export function ProjectSubpageHeader({ title, description, actions, left, classN
     </div>
   );
 }
-
-

@@ -24,4 +24,3 @@ export async function PUT(request: Request, { params }: Ctx) {
     return Response.json({ error: 'Failed to update session display name' }, { status: 500 });
   }
 }
-

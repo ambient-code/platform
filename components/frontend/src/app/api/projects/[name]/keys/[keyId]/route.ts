@@ -26,5 +26,3 @@ export async function DELETE(
     return Response.json({ error: 'Failed to delete project key' }, { status: 500 });
   }
 }
-
-

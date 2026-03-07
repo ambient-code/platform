@@ -70,7 +70,7 @@ export function useSession(projectName: string, sessionName: string) {
       const session = query.state.data as AgenticSession | undefined;
       const phase = session?.status?.phase;
       const annotations = session?.metadata?.annotations || {};
-      
+
       // Check if a state transition is pending (user requested start/stop)
       // This catches the case where the phase hasn't updated yet but we know
       // a transition is coming
@@ -79,17 +79,17 @@ export function useSession(projectName: string, sessionName: string) {
         // Pending transition - poll very aggressively (every 500ms)
         return 500;
       }
-      
+
       // Transitional states - poll aggressively (every 1 second)
       const isTransitioning =
         phase === 'Stopping' ||
         phase === 'Pending' ||
         phase === 'Creating';
       if (isTransitioning) return 1000;
-      
+
       // Running state - poll normally (every 5 seconds)
       if (phase === 'Running') return 5000;
-      
+
       // Terminal states (Stopped, Completed, Failed) - no polling
       return false;
     },

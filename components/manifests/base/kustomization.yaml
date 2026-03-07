@@ -20,6 +20,21 @@ resources:
 - ambient-api-server-db.yml
 - ambient-api-server-service.yml
 - unleash-deployment.yaml
+- agent-registry-configmap.yaml
+
+# Model manifest ConfigMap (single source of truth for available models)
+# Feature flags ConfigMap (generic flags synced to Unleash on startup)
+configMapGenerator:
+- name: ambient-models
+  files:
+  - models.json
+  options:
+    disableNameSuffixHash: true
+- name: ambient-flags
+  files:
+  - flags.json
+  options:
+    disableNameSuffixHash: true
 
 # Default images (can be overridden by overlays)
 images:

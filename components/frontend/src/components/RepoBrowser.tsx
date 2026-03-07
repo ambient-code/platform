@@ -66,7 +66,7 @@ export default function RepoBrowser({
     try {
       const response = await repoApi.getRepoTree(projectName, { repo: repoUrl, ref: currentRef, path: '' });
       const rootNodes = (response.entries || [])
-        .filter((e): e is Required<typeof e> & { name: string; type: 'blob' | 'tree' } => 
+        .filter((e): e is Required<typeof e> & { name: string; type: 'blob' | 'tree' } =>
           !!e.name && (e.type === 'blob' || e.type === 'tree'))
         .map((e) => entryToNode(e));
       setNodes(rootNodes);
@@ -88,7 +88,7 @@ export default function RepoBrowser({
     try {
       const response = await repoApi.getRepoTree(projectName, { repo: repoUrl, ref: currentRef, path: node.path });
       const children = (response.entries || [])
-        .filter((e): e is Required<typeof e> & { name: string; type: 'blob' | 'tree' } => 
+        .filter((e): e is Required<typeof e> & { name: string; type: 'blob' | 'tree' } =>
           !!e.name && (e.type === 'blob' || e.type === 'tree'))
         .map((e) => entryToNode(e, node.path));
       setNodes((prev) => updateChildrenByPath(prev, node.path, children));

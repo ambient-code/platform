@@ -1,7 +1,7 @@
 /**
  * AG-UI Feedback Endpoint Proxy
  * Forwards user feedback (thumbs up/down) to backend, which sends to runner for Langfuse logging.
- * 
+ *
  * See: https://docs.ag-ui.com/drafts/meta-events#user-feedback
  */
 
@@ -24,8 +24,8 @@ export async function POST(
 
     const resp = await fetch(backendUrl, {
       method: 'POST',
-      headers: { 
-        ...headers, 
+      headers: {
+        ...headers,
         'Content-Type': 'application/json',
       },
       body,

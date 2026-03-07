@@ -69,7 +69,7 @@ for IMAGE in "${IMAGES[@]}"; do
 
   # Save as OCI archive
   $CONTAINER_ENGINE save --format oci-archive -o "/tmp/${IMAGE//://}.oci.tar" "$IMAGE"
-  
+
   # Import into kind node with docker.io/library prefix so kubelet can find it
   cat "/tmp/${IMAGE//://}.oci.tar" | \
     $CONTAINER_ENGINE exec -i ambient-local-control-plane \
@@ -77,7 +77,7 @@ for IMAGE in "${IMAGES[@]}"; do
     --index-name "docker.io/library/$IMAGE" - 2>&1 | grep -q "saved" && \
     echo "      ✓ $IMAGE loaded" || \
     echo "      ⚠️  $IMAGE may have failed"
-  
+
   # Cleanup temp file
   rm -f "/tmp/${IMAGE//://}.oci.tar"
 done

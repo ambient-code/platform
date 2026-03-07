@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/ambient/platform/components/ambient-api-server/plugins/users"
+	"github.com/ambient-code/platform/components/ambient-api-server/plugins/users"
 	"github.com/openshift-online/rh-trex-ai/pkg/environments"
 )
 

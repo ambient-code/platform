@@ -58,6 +58,56 @@ var lastActivityUpdateTimes sync.Map
 // Populated by HandleAGUIRunProxy on each run request.
 var sessionProjectMap sync.Map
 
+// sessionPortMap maps sessionName → runner port (int) so that getRunnerEndpoint
+// can use the registry-defined port instead of a hardcoded value.
+// Populated by HandleAGUIRunProxy from the session's runner type.
+var sessionPortMap sync.Map
+
+// sessionLastSeen tracks the last time each session was accessed via an AG-UI
+// handler. Used by the cleanup goroutine to prune stale entries from the
+// session-scoped sync.Maps. Key: sessionName, Value: time.Time.
+var sessionLastSeen sync.Map
+
+// staleSessionThreshold is the duration after which an inactive session's
+// cached data is pruned from the in-memory maps.
+const staleSessionThreshold = 1 * time.Hour
+
+// staleSessionCleanupInterval is how often the cleanup goroutine runs.
+const staleSessionCleanupInterval = 10 * time.Minute
+
+func init() {
+	go cleanupStaleSessions()
+}
+
+// cleanupStaleSessions periodically removes entries from session-scoped
+// sync.Maps for sessions that have not been accessed within staleSessionThreshold.
+func cleanupStaleSessions() {
+	ticker := time.NewTicker(staleSessionCleanupInterval)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		now := time.Now()
+		sessionLastSeen.Range(func(key, value interface{}) bool {
+			lastSeen := value.(time.Time)
+			if now.Sub(lastSeen) > staleSessionThreshold {
+				sessionName := key.(string)
+				sessionLastSeen.Delete(sessionName)
+				sessionPortMap.Delete(sessionName)
+				sessionProjectMap.Delete(sessionName)
+				// lastActivityUpdateTimes is keyed by "project/session";
+				// remove any entry whose suffix matches this session.
+				lastActivityUpdateTimes.Range(func(k, _ interface{}) bool {
+					if s, ok := k.(string); ok && strings.HasSuffix(s, "/"+sessionName) {
+						lastActivityUpdateTimes.Delete(k)
+					}
+					return true
+				})
+			}
+			return true
+		})
+	}
+}
+
 // HandleAGUIEvents serves the AG-UI event stream over SSE.  Clients
 // (typically EventSource) connect here to receive all events for a
 // session — both persisted history and live events from active runs.
@@ -84,6 +134,8 @@ func HandleAGUIEvents(c *gin.Context) {
 	}
 
 	log.Printf("AGUI Events: client connected for %s/%s", projectName, sessionName)
+
+	sessionLastSeen.Store(sessionName, time.Now())
 
 	// ── SSE response headers ─────────────────────────────────────
 	c.Header("Content-Type", "text/event-stream")
@@ -205,8 +257,13 @@ func HandleAGUIRunProxy(c *gin.Context) {
 
 	log.Printf("AGUI Proxy: run=%s session=%s/%s msgs=%d", truncID(runID), projectName, sessionName, len(rawMessages))
 
+	sessionLastSeen.Store(sessionName, time.Now())
+
 	// Store project→session mapping for activity tracking in persistStreamedEvent
 	sessionProjectMap.Store(sessionName, projectName)
+
+	// Resolve and cache the runner port for this session from the registry.
+	cacheSessionPort(projectName, sessionName)
 
 	// Parse messages for display name generation and hidden metadata
 	var minimalMsgs []types.Message
@@ -671,9 +728,54 @@ func connectToRunner(runnerURL string, bodyBytes []byte) (*http.Response, error)
 
 // getRunnerEndpoint returns the AG-UI server endpoint for a session.
 // The operator creates a Service named "session-{sessionName}" in the
-// project namespace.
+// project namespace. The port is resolved from the sessionPortMap cache
+// (populated by HandleAGUIRunProxy), falling back to the default port.
 func getRunnerEndpoint(projectName, sessionName string) string {
-	return fmt.Sprintf("http://session-%s.%s.svc.cluster.local:8001/", sessionName, projectName)
+	port := handlers.DefaultRunnerPort
+	if cached, ok := sessionPortMap.Load(sessionName); ok {
+		port = cached.(int)
+	}
+	return fmt.Sprintf("http://session-%s.%s.svc.cluster.local:%d/", sessionName, projectName, port)
+}
+
+// cacheSessionPort reads the session CRD to extract RUNNER_TYPE from
+// environmentVariables, then looks up the port from the agent registry.
+// The result is cached in sessionPortMap so subsequent calls to
+// getRunnerEndpoint use the correct port without CRD reads.
+//
+// cacheSessionPort uses the backend service account (not user-scoped client) for this
+// ConfigMap read. This is acceptable because RBAC was already verified by the caller
+// (HandleAGUIRunProxy performs SSAR check before reaching this point).
+func cacheSessionPort(projectName, sessionName string) {
+	// Skip if already cached
+	if _, ok := sessionPortMap.Load(sessionName); ok {
+		return
+	}
+
+	if handlers.DynamicClient == nil {
+		return
+	}
+
+	gvr := handlers.GetAgenticSessionV1Alpha1Resource()
+	obj, err := handlers.DynamicClient.Resource(gvr).Namespace(projectName).Get(
+		context.Background(), sessionName, metav1.GetOptions{},
+	)
+	if err != nil {
+		return
+	}
+
+	envVars, found, _ := unstructured.NestedStringMap(obj.Object, "spec", "environmentVariables")
+	if !found {
+		return
+	}
+
+	runnerType, ok := envVars["RUNNER_TYPE"]
+	if !ok || runnerType == "" {
+		return
+	}
+
+	port := handlers.GetRuntimePort(runnerType)
+	sessionPortMap.Store(sessionName, port)
 }
 
 // drainLiveChannel discards any buffered lines already in the channel.

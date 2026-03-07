@@ -1,0 +1,31 @@
+# CODEOWNERS - Code ownership and review requirements
+#
+# This file defines code ownership and review requirements for the Ambient Code Platform.
+# When "Require review from Code Owners" is enabled in the repository settings
+# (Settings > Branches > Branch protection rules), GitHub will automatically
+# require approval from the specified owners before PRs can be merged.
+#
+# Documentation: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+#
+# Pattern format:
+#   - Use gitignore-style patterns
+#   - Order matters: last matching pattern takes precedence
+#   - Use @org/team-name or @username for owners
+#
+# Future consideration:
+# When we introduce automation bots for PR approvals, we can maintain human
+# oversight on critical files while allowing bot approvals on most code:
+#
+# Example future configuration:
+#   # Default: bot can approve most files
+#   *  @ambient-bot
+#
+#   # Critical files require human maintainer approval
+#   CLAUDE.md                        @ambient-maintainers
+#   .github/CODEOWNERS               @ambient-maintainers
+#   components/manifests/base/crds/  @ambient-maintainers
+#   components/operator/             @ambient-maintainers
+#
+
+# Current configuration: All files require maintainer approval
+* @ambient-maintainers

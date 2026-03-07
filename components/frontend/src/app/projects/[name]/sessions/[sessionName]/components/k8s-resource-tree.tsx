@@ -127,7 +127,7 @@ export function K8sResourceTree({
           </div>
 
           {expandedJob && (
-            <div className="ml-6 space-y-2 border-l-2 border-gray-200 pl-4">
+            <div className="ml-6 space-y-2 border-l-2 border-border pl-4">
               {/* Pods */}
               {pods.map((pod) => (
                 <div key={pod.name} className="space-y-1">
@@ -159,7 +159,7 @@ export function K8sResourceTree({
                   </div>
 
                   {expandedPods[pod.name] && (
-                    <div className="ml-6 space-y-1 border-l-2 border-gray-200 pl-4">
+                    <div className="ml-6 space-y-1 border-l-2 border-border pl-4">
                       {/* Containers */}
                       {pod.containers.map((container) => (
                         <div key={container.name} className="flex items-center gap-2">
@@ -206,4 +206,3 @@ export function K8sResourceTree({
     </Card>
   );
 }
-

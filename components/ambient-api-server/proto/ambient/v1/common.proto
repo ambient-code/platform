@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package ambient.v1;
 
-option go_package = "github.com/ambient/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1;ambient_v1";
+option go_package = "github.com/ambient-code/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1;ambient_v1";
 
 import "google/protobuf/timestamp.proto";
 

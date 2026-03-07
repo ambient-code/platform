@@ -208,23 +208,23 @@ func toSnakeCase(camelCase string) string {
 
 func pluralize(name string) string {
 	lower := strings.ToLower(name)
-	
+
 	// Handle already-plural compound words
 	exceptions := map[string]string{
 		"project_settings": "project_settings",
 		"projectsettings":  "project_settings",
 	}
-	
+
 	if plural, exists := exceptions[lower]; exists {
 		return plural
 	}
-	
+
 	// Check for already plural words ending in settings, data, etc.
-	if strings.HasSuffix(lower, "settings") || strings.HasSuffix(lower, "data") || 
-	   strings.HasSuffix(lower, "metadata") || strings.HasSuffix(lower, "info") {
+	if strings.HasSuffix(lower, "settings") || strings.HasSuffix(lower, "data") ||
+		strings.HasSuffix(lower, "metadata") || strings.HasSuffix(lower, "info") {
 		return lower
 	}
-	
+
 	if strings.HasSuffix(lower, "s") {
 		return lower + "es"
 	}

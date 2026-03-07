@@ -5,7 +5,7 @@ import (
 
 	gm "github.com/onsi/gomega"
 
-	"github.com/ambient/platform/components/ambient-api-server/pkg/api/openapi"
+	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
 )
 
 func RegisterIntegration(t *testing.T) (*Helper, *openapi.APIClient) {

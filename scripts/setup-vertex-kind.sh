@@ -143,7 +143,7 @@ echo ""
 echo "Step 2/3: Patching operator-config ConfigMap..."
 kubectl patch configmap operator-config -n "$NAMESPACE" --type merge -p "{
   \"data\": {
-    \"CLAUDE_CODE_USE_VERTEX\": \"1\",
+    \"USE_VERTEX\": \"1\",
     \"ANTHROPIC_VERTEX_PROJECT_ID\": \"$ANTHROPIC_VERTEX_PROJECT_ID\",
     \"CLOUD_ML_REGION\": \"$CLOUD_ML_REGION\",
     \"GOOGLE_APPLICATION_CREDENTIALS\": \"/app/vertex/ambient-code-key.json\"
@@ -184,5 +184,5 @@ echo "  1. Create a session via the UI at http://localhost:8080"
 echo ""
 echo "To switch back to Anthropic API, update the ConfigMap:"
 echo "  kubectl patch configmap operator-config -n $NAMESPACE --type merge \\"
-echo "    -p '{\"data\":{\"CLAUDE_CODE_USE_VERTEX\":\"0\"}}'"
+echo "    -p '{\"data\":{\"USE_VERTEX\":\"0\"}}'"
 echo "  kubectl rollout restart deployment agentic-operator -n $NAMESPACE"

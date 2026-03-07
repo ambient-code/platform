@@ -53,6 +53,7 @@ type AgenticSessionStatus struct {
 type CreateAgenticSessionRequest struct {
 	InitialPrompt        string             `json:"initialPrompt,omitempty"`
 	DisplayName          string             `json:"displayName,omitempty"`
+	RunnerType           string             `json:"runnerType,omitempty"`
 	LLMSettings          *LLMSettings       `json:"llmSettings,omitempty"`
 	Timeout              *int               `json:"timeout,omitempty"`
 	ParentSessionID      string             `json:"parent_session_id,omitempty"`

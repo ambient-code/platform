@@ -1,7 +1,7 @@
 /**
  * AG-UI Interrupt Endpoint Proxy
  * Forwards interrupt signal to backend to stop Claude SDK execution.
- * 
+ *
  * See: https://platform.claude.com/docs/en/agent-sdk/python#methods
  */
 
@@ -23,8 +23,8 @@ export async function POST(
 
   const resp = await fetch(backendUrl, {
     method: 'POST',
-    headers: { 
-      ...headers, 
+    headers: {
+      ...headers,
       'Content-Type': 'application/json',
     },
     body,
@@ -36,4 +36,3 @@ export async function POST(
     headers: { 'Content-Type': 'application/json' },
   })
 }
-

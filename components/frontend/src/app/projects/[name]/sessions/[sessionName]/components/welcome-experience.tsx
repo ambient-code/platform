@@ -42,14 +42,14 @@ export function WelcomeExperience({
   const [isTypingComplete, setIsTypingComplete] = useState(false);
   const [workflowSearch, setWorkflowSearch] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
-  
+
   // Track if welcome experience was shown on initial load (persists even when messages appear)
   // This is captured on first render - if there were no real messages initially, we show welcome
   const welcomeShownOnLoadRef = useRef<boolean | null>(null);
   if (welcomeShownOnLoadRef.current === null) {
     welcomeShownOnLoadRef.current = !hasRealMessages;
   }
-  
+
   // Use the selectedWorkflow prop to determine which workflow is currently selected
   const selectedWorkflowId = selectedWorkflow !== "none" ? selectedWorkflow : null;
 
@@ -72,7 +72,7 @@ export function WelcomeExperience({
 
     let currentIndex = 0;
     let intervalId: ReturnType<typeof setInterval> | null = null;
-    
+
     intervalId = setInterval(() => {
       if (currentIndex < WELCOME_MESSAGE.length) {
         setDisplayedText(WELCOME_MESSAGE.slice(0, currentIndex + 1));
@@ -111,7 +111,7 @@ export function WelcomeExperience({
       // Custom order: PRD workflows first, then the rest
       const aHasPRD = a.name.toLowerCase().includes("prd");
       const bHasPRD = b.name.toLowerCase().includes("prd");
-      
+
       if (aHasPRD && !bHasPRD) return -1;
       if (!aHasPRD && bHasPRD) return 1;
       return 0; // Keep original order for items in the same category
@@ -131,7 +131,7 @@ export function WelcomeExperience({
     .sort((a, b) => a.name.localeCompare(b.name)); // Sort alphabetically by display name
 
   // Filter for general chat based on search
-  const showGeneralChat = !workflowSearch || 
+  const showGeneralChat = !workflowSearch ||
     "general chat".includes(workflowSearch.toLowerCase()) ||
     "A general chat session with no structured workflow.".toLowerCase().includes(workflowSearch.toLowerCase());
 
@@ -153,7 +153,7 @@ export function WelcomeExperience({
             <div className="flex space-x-3 items-start">
               {/* Avatar */}
               <div className="flex-shrink-0">
-                <div className="w-8 h-8 rounded-full flex items-center justify-center bg-blue-600">
+                <div className="w-8 h-8 rounded-full flex items-center justify-center bg-primary ring-2 ring-background">
                   <span className="text-white text-xs font-semibold">AI</span>
                 </div>
               </div>
@@ -227,7 +227,7 @@ export function WelcomeExperience({
               </div>
 
               {/* View all workflows button */}
-              <div 
+              <div
                 className="mt-6 flex justify-start items-center gap-4"
                 style={{
                   animation: `fade-in-up 0.5s ease-out ${enabledWorkflows.length * 0.1}s both`
@@ -325,7 +325,7 @@ export function WelcomeExperience({
                     </div>
                   </DropdownMenuContent>
                 </DropdownMenu>
-                
+
                 {onLoadWorkflow && (
                   <Button
                     variant="ghost"
@@ -345,4 +345,3 @@ export function WelcomeExperience({
     </>
   );
 }
-

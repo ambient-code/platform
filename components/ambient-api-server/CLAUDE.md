@@ -76,7 +76,7 @@ go run ./scripts/generator.go \
   --kind YourKind \
   --fields "name:string:required,description:string,priority:int" \
   --project ambient-api-server \
-  --repo github.com/ambient/platform/components \
+  --repo github.com/ambient-code/platform/components \
   --library github.com/openshift-online/rh-trex-ai
 ```
 

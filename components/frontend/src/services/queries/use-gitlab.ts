@@ -10,7 +10,7 @@ export function useGitLabStatus() {
 
 export function useConnectGitLab() {
   const queryClient = useQueryClient()
-  
+
   return useMutation({
     mutationFn: gitlabAuthApi.connectGitLab,
     onSuccess: () => {
@@ -21,7 +21,7 @@ export function useConnectGitLab() {
 
 export function useDisconnectGitLab() {
   const queryClient = useQueryClient()
-  
+
   return useMutation({
     mutationFn: gitlabAuthApi.disconnectGitLab,
     onSuccess: () => {

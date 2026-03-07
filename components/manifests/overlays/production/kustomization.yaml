@@ -35,12 +35,17 @@ patches:
   target:
     kind: Service
     name: frontend-service
-- path: unleash-init-db-patch.yaml
-#- path: postgresql-json-patch.yaml
+- path: postgresql-json-patch.yaml
   target:
     group: apps
     kind: Deployment
     name: postgresql
+    version: v1
+- path: unleash-init-db-patch.yaml
+  target:
+    group: apps
+    kind: Deployment
+    name: unleash
     version: v1
 
 # Production images

@@ -82,4 +82,3 @@ echo "  S3_BUCKET: ${BUCKET_NAME}"
 echo "  S3_ACCESS_KEY: ${MINIO_USER}"
 echo "  S3_SECRET_KEY: ${MINIO_PASSWORD}"
 echo "========================================="
-

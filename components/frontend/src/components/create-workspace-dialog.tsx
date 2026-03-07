@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { CreateProjectRequest } from "@/types/project";
 import { Save, Loader2, Info } from "lucide-react";
-import { successToast, errorToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useCreateProject } from "@/services/queries";
 import { useClusterInfo } from "@/hooks/use-cluster-info";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -79,7 +79,7 @@ export function CreateWorkspaceDialog({
       // Auto-generate name only if it hasn't been manually edited
       name: manuallyEditedName ? prev.name : generateWorkspaceName(displayName),
     }));
-    
+
     // Validate the auto-generated name
     if (!manuallyEditedName) {
       const generatedName = generateWorkspaceName(displayName);
@@ -145,7 +145,7 @@ export function CreateWorkspaceDialog({
 
     createProjectMutation.mutate(payload, {
       onSuccess: (project) => {
-        successToast(
+        toast.success(
           `Workspace "${formData.displayName || formData.name}" created successfully`
         );
         resetForm();
@@ -156,7 +156,7 @@ export function CreateWorkspaceDialog({
         const message =
           err instanceof Error ? err.message : "Failed to create workspace";
         setError(message);
-        errorToast(message);
+        toast.error(message);
       },
     });
   };
@@ -280,4 +280,3 @@ export function CreateWorkspaceDialog({
     </Dialog>
   );
 }
-

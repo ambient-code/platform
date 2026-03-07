@@ -59,6 +59,10 @@ rules:
 - apiGroups: ["rbac.authorization.k8s.io"]
   resources: ["rolebindings"]
   verbs: ["get", "create", "delete"]
+# ConfigMaps (agent registry for runner type resolution)
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get"]
 # Secrets (runner tokens, ambient-vertex, integration secrets)
 - apiGroups: [""]
   resources: ["secrets"]

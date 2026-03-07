@@ -25,14 +25,14 @@ export function getApiBaseUrl(): string {
  */
 function buildUrl(path: string, params?: Record<string, string | number | boolean>): string {
   const baseUrl = getApiBaseUrl();
-  
+
   // Normalize paths for concatenation
   const normalizedBase = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-  
+
   // Build the full path
   let fullUrl = `${normalizedBase}${normalizedPath}`;
-  
+
   // Add query parameters if provided
   if (params) {
     const searchParams = new URLSearchParams();
@@ -206,7 +206,7 @@ export const apiClient = {
       },
       body: content,
     });
-    
+
     if (!response.ok) {
       const errorText = await response.text().catch(() => 'Unknown error');
       throw new ApiClientError(errorText || `HTTP ${response.status}`);

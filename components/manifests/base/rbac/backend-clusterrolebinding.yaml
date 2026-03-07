@@ -10,5 +10,3 @@ subjects:
 - kind: ServiceAccount
   name: backend-api
   namespace: ambient-code
-
-

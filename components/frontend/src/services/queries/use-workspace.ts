@@ -160,10 +160,10 @@ export function useAllSessionGitHubDiffs(
         phase === 'Pending' ||
         phase === 'Creating';
       if (isTransitioning) return 5000;
-      
+
       // Running state - poll normally
       if (phase === 'Running') return 10000;
-      
+
       // Terminal states - no polling
       return false;
     },
@@ -350,4 +350,3 @@ export function useConfigureGitRemote() {
 }
 
 // Removed: useSynchronizeGit - agent handles all git operations
-

@@ -116,4 +116,3 @@ export class ProjectPatchBuilder {
     return this.data as ProjectPatchRequest;
   }
 }
-

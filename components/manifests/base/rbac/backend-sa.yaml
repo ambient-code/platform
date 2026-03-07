@@ -3,5 +3,3 @@ kind: ServiceAccount
 metadata:
   name: backend-api
   namespace: ambient-code
-
-

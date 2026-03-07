@@ -17,4 +17,3 @@ export type ClusterInfo = {
 export async function getClusterInfo(): Promise<ClusterInfo> {
   return apiClient.get<ClusterInfo>('/cluster-info');
 }
-

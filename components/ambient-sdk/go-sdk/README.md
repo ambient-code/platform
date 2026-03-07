@@ -110,7 +110,7 @@ oc auth can-i list agenticsessions.vteam.ambient-code -n your-project
 
 **401 Unauthorized**:
 ```bash
-# Check token validity  
+# Check token validity
 oc whoami  # Should return your username
 oc whoami -t  # Should return a token starting with sha256~
 ```
@@ -123,7 +123,7 @@ oc whoami -t  # Should return a token starting with sha256~
 ```bash
 # Set environment variables
 export AMBIENT_TOKEN="your-bearer-token"      # Required
-export AMBIENT_PROJECT="your-project-name"    # Required  
+export AMBIENT_PROJECT="your-project-name"    # Required
 export AMBIENT_API_URL="https://your-api.com" # Optional
 ```
 
@@ -239,7 +239,7 @@ See the `examples/` directory for complete working examples:
 func NewClient(baseURL, token, project string) *Client
 func NewClientWithTimeout(baseURL, token, project string, timeout time.Duration) *Client
 
-// Session operations  
+// Session operations
 func (c *Client) CreateSession(ctx context.Context, req *CreateSessionRequest) (*CreateSessionResponse, error)
 func (c *Client) GetSession(ctx context.Context, sessionID string) (*SessionResponse, error)
 func (c *Client) ListSessions(ctx context.Context) (*SessionListResponse, error)
@@ -295,7 +295,7 @@ type ErrorResponse struct {
 
 - **HTTP-First**: Pure REST API client with no Kubernetes dependencies
 - **Minimal Dependencies**: Uses only Go standard library
-- **Simple Integration**: Easy to embed in any Go application  
+- **Simple Integration**: Easy to embed in any Go application
 - **Type Safety**: Strongly-typed requests and responses with compile-time validation
 - **Clear Separation**: Public SDK vs internal platform implementation
 
@@ -314,7 +314,7 @@ This SDK provides a **simplified HTTP interface** to the Ambient Platform:
 ### Internal vs Public
 
 - **Backend Components**: Can use internal Kubernetes types for cluster operations
-- **SDK Users**: Get simplified HTTP API without Kubernetes complexity  
+- **SDK Users**: Get simplified HTTP API without Kubernetes complexity
 - **Type Definitions**: Shared between internal and public usage where appropriate
 
 ## Migration from Kubernetes SDK
@@ -347,7 +347,7 @@ resp, err := client.CreateSession(ctx, req)
 ```
 **Solution**: Set your Bearer token: `export AMBIENT_TOKEN="your-token"`
 
-### Project Header Missing  
+### Project Header Missing
 ```
 API error (400): Project required. Set X-Ambient-Project header
 ```

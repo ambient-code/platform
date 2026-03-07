@@ -24,7 +24,7 @@ jobs:
             PRS=$(gh pr list --state open --json number,statusCheckRollup \
               --jq '[.[] | select(.statusCheckRollup[]? | .status == "COMPLETED" and .conclusion == "FAILURE") | .number] | unique')
           else
-            PRS=$(echo "${{ inputs.prs }}" | tr ',' '\n' | jq -R 'tonumber' | jq -s .)
+            PRS=$(echo "${{ inputs.prs }}" | tr ',' '\n' | jq -R 'tonumber' | jq -sc .)
           fi
           echo "matrix={\"pr\":${PRS:-[]}}" >> $GITHUB_OUTPUT
 
@@ -70,7 +70,7 @@ jobs:
             -d "{\"model\":\"claude-sonnet-4-20250514\",\"max_tokens\":256,\"messages\":[{\"role\":\"user\",\"content\":\"Classify this CI failure as JSON only: {\\\"category\\\": \\\"flake_network|flake_timeout|flake_race|error_code|error_test|unknown\\\", \\\"summary\\\": \\\"one sentence\\\", \\\"is_flake\\\": bool}\\n\\nLogs:\\n${LOGS}\"}]}" \
             | jq -r '.content[0].text')
 
-          echo "classification=$RESULT" >> $GITHUB_OUTPUT
+          echo "classification=$(echo "$RESULT" | jq -c .)" >> $GITHUB_OUTPUT
           IS_FLAKE=$(echo "$RESULT" | jq -r '.is_flake')
 
           [ "$IS_FLAKE" = "true" ] && [ "$ATTEMPT" -eq 0 ] && echo "action=retry" >> $GITHUB_OUTPUT && exit 0

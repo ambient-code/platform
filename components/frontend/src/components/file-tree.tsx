@@ -116,5 +116,3 @@ function FileTreeItem({ node, selectedPath, onSelect, onToggle, depth = 0 }: Ite
     </div>
   );
 }
-
-

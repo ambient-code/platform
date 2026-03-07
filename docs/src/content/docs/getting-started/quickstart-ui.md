@@ -82,8 +82,3 @@ When the session completes:
 1. Open the session to see the full conversation and any final output.
 2. Expand **Shared Artifacts** in the sidebar to browse files the agent produced.
 3. If the agent opened a pull request, follow the link to review it in your source control provider.
-
-## Next Steps
-
-- **[Core Concepts](concepts/)** -- Understand workspaces, sessions, and workflows in depth.
-- **[GitHub Action](../extensions/github-action/)** -- Trigger sessions from CI/CD pipelines.
