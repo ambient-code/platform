@@ -12,9 +12,8 @@ RUN dnf install -y git jq 'dnf-command(config-manager)' && \
     dnf install -y gh --repo gh-cli && \
     dnf clean all
 
-# Install Node.js 22 LTS
-RUN dnf module enable -y nodejs:22 && \
-    dnf install -y nodejs npm && \
+# Install Node.js (RHEL 10 ships Node.js directly in AppStream, no modules)
+RUN dnf install -y nodejs npm && \
     dnf clean all
 
 # Install Go
