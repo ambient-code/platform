@@ -74,7 +74,7 @@ jobs:
 
       - name: Upload session configs
         if: steps.query.outputs.session_count != '0'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: session-configs
           path: /tmp/feedback-loop/sessions.json
