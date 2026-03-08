@@ -86,9 +86,7 @@ export function useWorkflowManagement({
       }
       
       setActiveWorkflow(workflow.id);
-      if (workflow.startupPrompt) {
-        setWorkflowGreeting(workflow.startupPrompt);
-      }
+      setWorkflowGreeting(workflow.startupPrompt || null);
       setPendingWorkflow(null);
       sessionQueue.clearWorkflow();
 

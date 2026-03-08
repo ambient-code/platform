@@ -335,8 +335,8 @@ export default function ProjectSessionDetailPage({
   useEffect(() => {
     const phase = session?.status?.phase;
     const queuedWorkflow = workflowManagement.queuedWorkflow;
-    if (phase === "Running" && queuedWorkflow && !queuedWorkflow.activatedAt) {
-      // Session is now running, activate the queued workflow
+    if (phase === "Running" && queuedWorkflow && !queuedWorkflow.activatedAt && ootbWorkflows.length > 0) {
+      // Session is now running and OOTB workflows are loaded, activate the queued workflow
       // Look up the full workflow config (including startupPrompt) from the OOTB list
       const fullWorkflow = ootbWorkflows.find(w => w.id === queuedWorkflow.id);
       workflowManagement.activateWorkflow({
@@ -351,7 +351,7 @@ export default function ProjectSessionDetailPage({
       }, phase);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.status?.phase, workflowManagement.queuedWorkflow]);
+  }, [session?.status?.phase, workflowManagement.queuedWorkflow, ootbWorkflows]);
 
   // Poll session status when messages are queued
   useEffect(() => {
