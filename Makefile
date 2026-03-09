@@ -677,6 +677,12 @@ kind-up: check-kind check-kubectl ## Start kind cluster (LOCAL_IMAGES=true to bu
 		$(MAKE) --no-print-directory _kind-load-images; \
 		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Deploying with locally-built images..."; \
 		kubectl apply --validate=false -k components/manifests/overlays/kind-local/; \
+		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Patching agent registry for local images..."; \
+		REGISTRY=$$(kubectl get configmap ambient-agent-registry -n $(NAMESPACE) -o jsonpath='{.data.agent-registry\.json}'); \
+		UPDATED=$$(echo "$$REGISTRY" | sed 's|quay.io/ambient_code/vteam_claude_runner:[^"]*|localhost/vteam_claude_runner:latest|g; s|quay.io/ambient_code/vteam_state_sync:[^"]*|localhost/vteam_state_sync:latest|g'); \
+		kubectl patch configmap ambient-agent-registry -n $(NAMESPACE) --type=merge \
+			-p "{\"data\":{\"agent-registry.json\":$$(echo "$$UPDATED" | jq -Rs .)}}"; \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Agent registry patched for local images"; \
 	else \
 		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Deploying with Quay.io images..."; \
 		kubectl apply --validate=false -k components/manifests/overlays/kind/; \
