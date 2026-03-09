@@ -36,6 +36,22 @@ func GetSessionLogs(c *gin.Context) {
 	// Safe to reuse as K8s lookup key — K8s names cannot contain control characters.
 	sessionName := SanitizeForLog(c.Param("sessionName"))
 
+	// Validate query params before any K8s calls
+	tailLines := defaultTailLines
+	if tl := c.Query("tailLines"); tl != "" {
+		parsed, err := strconv.ParseInt(tl, 10, 64)
+		if err != nil || parsed < 1 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "tailLines must be a positive integer"})
+			return
+		}
+		if parsed > maxTailLines {
+			parsed = maxTailLines
+		}
+		tailLines = parsed
+	}
+
+	container := c.Query("container")
+
 	k8sClt, k8sDyn := GetK8sClientsForRequest(c)
 	if k8sClt == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
@@ -63,22 +79,6 @@ func GetSessionLogs(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify session"})
 		return
 	}
-
-	// Parse tailLines query param
-	tailLines := defaultTailLines
-	if tl := c.Query("tailLines"); tl != "" {
-		parsed, err := strconv.ParseInt(tl, 10, 64)
-		if err != nil || parsed < 1 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "tailLines must be a positive integer"})
-			return
-		}
-		if parsed > maxTailLines {
-			parsed = maxTailLines
-		}
-		tailLines = parsed
-	}
-
-	container := c.Query("container")
 
 	// Pod naming convention: {sessionName}-runner
 	// Must match operator pod creation in internal/controller/reconcile_phases.go
