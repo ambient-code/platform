@@ -367,7 +367,7 @@ local-clean: check-minikube ## Delete minikube cluster completely
 local-status: check-kubectl ## Show status of local deployment
 	@echo "$(COLOR_BOLD)📊 Ambient Code Platform Status$(COLOR_RESET)"
 	@echo ""
-	@if $(if $(filter podman,$(CONTAINER_ENGINE)),KIND_EXPERIMENTAL_PROVIDER=podman) kind get clusters 2>/dev/null | grep -q '^$(KIND_CLUSTER_NAME)$$'; then \
+	@if kind get clusters 2>/dev/null | grep -q '^$(KIND_CLUSTER_NAME)$$'; then \
 		echo "$(COLOR_BOLD)Kind:$(COLOR_RESET)"; \
 		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Cluster '$(KIND_CLUSTER_NAME)' running"; \
 	elif command -v minikube >/dev/null 2>&1; then \
@@ -383,7 +383,7 @@ local-status: check-kubectl ## Show status of local deployment
 	@echo "$(COLOR_BOLD)Services:$(COLOR_RESET)"
 	@kubectl get svc -n $(NAMESPACE) 2>/dev/null | grep -E "NAME|NodePort" || echo "No services found"
 	@echo ""
-	@if $(if $(filter podman,$(CONTAINER_ENGINE)),KIND_EXPERIMENTAL_PROVIDER=podman) kind get clusters 2>/dev/null | grep -q '^$(KIND_CLUSTER_NAME)$$'; then \
+	@if kind get clusters 2>/dev/null | grep -q '^$(KIND_CLUSTER_NAME)$$'; then \
 		echo "$(COLOR_BOLD)Access URLs:$(COLOR_RESET)"; \
 		echo "  Run in another terminal: $(COLOR_BLUE)make kind-port-forward$(COLOR_RESET)"; \
 		echo "  Frontend: $(COLOR_BLUE)http://localhost:$(KIND_FWD_FRONTEND_PORT)$(COLOR_RESET)"; \
@@ -650,7 +650,7 @@ clean: ## Clean up Kubernetes resources
 
 kind-up: check-kind check-kubectl ## Start kind cluster (LOCAL_IMAGES=true to build from source, requires podman)
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Starting kind cluster '$(KIND_CLUSTER_NAME)'..."
-	@cd e2e && KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) KIND_HTTP_PORT=$(KIND_HTTP_PORT) KIND_HTTPS_PORT=$(KIND_HTTPS_PORT) KIND_HOST=$(KIND_HOST) CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/setup-kind.sh
+	@cd e2e && KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) KIND_HTTP_PORT=$(KIND_HTTP_PORT) KIND_HTTPS_PORT=$(KIND_HTTPS_PORT) CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/setup-kind.sh
 	@if [ -n "$(KIND_HOST)" ]; then \
 		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rewriting kubeconfig for remote host $(KIND_HOST)..."; \
 		SERVER=$$(kubectl config view -o jsonpath='{.clusters[?(@.name=="kind-$(KIND_CLUSTER_NAME)")].cluster.server}'); \
@@ -765,7 +765,7 @@ test-e2e-setup: ## Install e2e test dependencies
 e2e-setup: test-e2e-setup ## Alias for test-e2e-setup (backward compatibility)
 
 kind-rebuild: check-kind check-kubectl build-all ## Rebuild, reload, and restart all components in kind
-	@$(if $(filter podman,$(CONTAINER_ENGINE)),KIND_EXPERIMENTAL_PROVIDER=podman) kind get clusters 2>/dev/null | grep -q '^$(KIND_CLUSTER_NAME)$$' || \
+	@kind get clusters 2>/dev/null | grep -q '^$(KIND_CLUSTER_NAME)$$' || \
 		(echo "$(COLOR_RED)✗$(COLOR_RESET) Kind cluster '$(KIND_CLUSTER_NAME)' not found. Run 'make kind-up LOCAL_IMAGES=true' first." && exit 1)
 	@$(MAKE) --no-print-directory _kind-load-images
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Applying kind-local manifests..."
@@ -785,7 +785,7 @@ kind-status: ## Show all kind clusters and their port assignments
 	@echo "  NodePort: $(KIND_HTTP_PORT) (HTTP) / $(KIND_HTTPS_PORT) (HTTPS)"
 	@echo "  Forward:  $(KIND_FWD_FRONTEND_PORT) (frontend) / $(KIND_FWD_BACKEND_PORT) (backend)"
 	@echo ""
-	@CLUSTERS=$$($(if $(filter podman,$(CONTAINER_ENGINE)),KIND_EXPERIMENTAL_PROVIDER=podman) kind get clusters 2>/dev/null); \
+	@CLUSTERS=$$(kind get clusters 2>/dev/null); \
 	if [ -z "$$CLUSTERS" ]; then \
 		echo "$(COLOR_YELLOW)No kind clusters running$(COLOR_RESET)"; \
 	else \
@@ -863,14 +863,8 @@ _kind-load-images: ## Internal: Load images into kind cluster
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Loading images into kind ($(KIND_CLUSTER_NAME))..."
 	@for img in $(BACKEND_IMAGE) $(FRONTEND_IMAGE) $(OPERATOR_IMAGE) $(RUNNER_IMAGE) $(STATE_SYNC_IMAGE) $(PUBLIC_API_IMAGE); do \
 		echo "  Loading $(KIND_IMAGE_PREFIX)$$img..."; \
-		if [ -n "$(KIND_HOST)" ]; then \
-			$(CONTAINER_ENGINE) save $(KIND_IMAGE_PREFIX)$$img | \
-			$(CONTAINER_ENGINE) exec -i $(KIND_CLUSTER_NAME)-control-plane \
-			ctr --namespace=k8s.io images import -; \
-		else \
-			$(if $(filter podman,$(CONTAINER_ENGINE)),KIND_EXPERIMENTAL_PROVIDER=podman) \
-			kind load docker-image $(KIND_IMAGE_PREFIX)$$img --name $(KIND_CLUSTER_NAME); \
-		fi; \
+		$(if $(filter podman,$(CONTAINER_ENGINE)),KIND_EXPERIMENTAL_PROVIDER=podman) \
+		kind load docker-image $(KIND_IMAGE_PREFIX)$$img --name $(KIND_CLUSTER_NAME); \
 	done
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Images loaded"
 
