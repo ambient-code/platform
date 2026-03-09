@@ -61,11 +61,27 @@ else
   echo "   Using ports ${HTTP_PORT}/${HTTPS_PORT} (Docker standard ports)"
 fi
 
+API_SERVER_ADDRESS="127.0.0.1"
+CERT_SAN_PATCH=""
+if [ -n "${KIND_HOST:-}" ]; then
+  API_SERVER_ADDRESS="0.0.0.0"
+  CERT_SAN_PATCH="  kubeadmConfigPatches:
+  - |
+    kind: ClusterConfiguration
+    apiServer:
+      certSANs:
+      - ${KIND_HOST}"
+  echo "   API server binding to 0.0.0.0 (remote access via ${KIND_HOST})"
+fi
+
 cat <<EOF | kind create cluster --name "${KIND_CLUSTER_NAME}" --config=-
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
+networking:
+  apiServerAddress: "${API_SERVER_ADDRESS}"
 nodes:
 - role: control-plane
+${CERT_SAN_PATCH}
   # Kind v0.31.0 default node image
   image: kindest/node:v1.35.0@sha256:452d707d4862f52530247495d180205e029056831160e22870e37e3f6c1ac31f
   extraPortMappings:
