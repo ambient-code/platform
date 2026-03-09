@@ -29,36 +29,7 @@ type MCPServerEntry = {
   | { kind: 'credentials'; fields: FieldDefinition[] }
 )
 
-/* Context7 — stylized "C7" mark */
-const Context7Icon = (
-  <svg className="w-8 h-8" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <text x="3" y="19" fontSize="16" fontWeight="700" fontFamily="system-ui, sans-serif" fill="white">C7</text>
-  </svg>
-)
-
-/* DeepWiki — open book */
-const DeepWikiIcon = (
-  <svg className="w-8 h-8 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
-    <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
-  </svg>
-)
-
-/* Web Fetch — globe with arrow */
-const WebFetchIcon = (
-  <svg className="w-8 h-8 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <circle cx="12" cy="12" r="10" />
-    <path d="M2 12h20" />
-    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-  </svg>
-)
-
-/* Jira — the Jira logo (same SVG used in jira-connection-card) */
-const JiraMCPIcon = (
-  <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-    <path d="M11.571 11.513H0a5.218 5.218 0 0 0 5.232 5.215h2.13v2.057A5.215 5.215 0 0 0 12.575 24V12.518a1.005 1.005 0 0 0-1.005-1.005zm5.723-5.756H5.736a5.215 5.215 0 0 0 5.215 5.214h2.129v2.058a5.218 5.218 0 0 0 5.215 5.214V6.758a1.001 1.001 0 0 0-1.001-1.001zM23.013 0H11.455a5.215 5.215 0 0 0 5.215 5.215h2.129v2.057A5.215 5.215 0 0 0 24 12.483V1.005A1.001 1.001 0 0 0 23.013 0z" />
-  </svg>
-)
+/* eslint-disable @next/next/no-img-element */
 
 /**
  * All MCP servers configured in the platform (.mcp.json).
@@ -70,22 +41,28 @@ const MCP_SERVERS: Record<string, MCPServerEntry> = {
     kind: 'enabled',
     displayName: 'Context7',
     description: 'Up-to-date documentation and code examples for libraries and frameworks',
-    iconBg: 'bg-violet-600',
-    icon: Context7Icon,
+    iconBg: '',
+    icon: <img src="/logos/context7.svg" alt="Context7" className="w-16 h-16 rounded-lg" />,
   },
   deepwiki: {
     kind: 'enabled',
     displayName: 'DeepWiki',
     description: 'AI-powered knowledge base for open-source repositories',
-    iconBg: 'bg-sky-600',
-    icon: DeepWikiIcon,
+    iconBg: 'bg-white',
+    icon: <img src="/logos/deepwiki.png" alt="DeepWiki" className="w-10 h-10" />,
   },
   webfetch: {
     kind: 'enabled',
     displayName: 'Web Fetch',
     description: 'Fetch and extract content from web pages',
     iconBg: 'bg-emerald-600',
-    icon: WebFetchIcon,
+    icon: (
+      <svg className="w-8 h-8 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="10" />
+        <path d="M2 12h20" />
+        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+      </svg>
+    ),
   },
   'mcp-atlassian': {
     kind: 'credentials',
@@ -93,7 +70,11 @@ const MCP_SERVERS: Record<string, MCPServerEntry> = {
     description:
       'Provide Jira credentials for the MCP Atlassian server used in agentic sessions',
     iconBg: 'bg-blue-600',
-    icon: JiraMCPIcon,
+    icon: (
+      <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M11.571 11.513H0a5.218 5.218 0 0 0 5.232 5.215h2.13v2.057A5.215 5.215 0 0 0 12.575 24V12.518a1.005 1.005 0 0 0-1.005-1.005zm5.723-5.756H5.736a5.215 5.215 0 0 0 5.215 5.214h2.129v2.058a5.218 5.218 0 0 0 5.215 5.214V6.758a1.001 1.001 0 0 0-1.001-1.001zM23.013 0H11.455a5.215 5.215 0 0 0 5.215 5.215h2.129v2.057A5.215 5.215 0 0 0 24 12.483V1.005A1.001 1.001 0 0 0 23.013 0z" />
+      </svg>
+    ),
     fields: [
       {
         name: 'jira_url',
@@ -133,9 +114,15 @@ function MCPEnabledCard({
     <Card className="bg-card border border-border/60 shadow-sm shadow-black/[0.03] dark:shadow-black/[0.15] flex flex-col h-full">
       <div className="p-6 flex flex-col flex-1">
         <div className="flex items-start gap-4 mb-6">
-          <div className={`flex-shrink-0 w-16 h-16 ${iconBg} rounded-lg flex items-center justify-center`}>
-            {icon}
-          </div>
+          {iconBg ? (
+            <div className={`flex-shrink-0 w-16 h-16 ${iconBg} rounded-lg flex items-center justify-center`}>
+              {icon}
+            </div>
+          ) : (
+            <div className="flex-shrink-0 w-16 h-16">
+              {icon}
+            </div>
+          )}
           <div className="flex-1">
             <h3 className="text-xl font-semibold text-foreground mb-1">{displayName}</h3>
             <p className="text-muted-foreground">{description}</p>
