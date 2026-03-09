@@ -164,6 +164,10 @@ spec:
             name: ambient-api-server-auth
         - name: tls-certs
           secret:
+            # ambient-api-server-tls is auto-provisioned by OpenShift via the
+            # service annotation service.beta.openshift.io/serving-cert-secret-name.
+            # For non-OpenShift environments, create this secret manually:
+            # kubectl create secret tls ambient-api-server-tls --cert=tls.crt --key=tls.key -n ambient-code
             secretName: ambient-api-server-tls
 
 ---
@@ -176,6 +180,7 @@ metadata:
     component: api
   annotations:
     description: Exposes the ambient-api-server REST API
+    # OpenShift automatically creates and rotates the TLS secret named below
     service.beta.openshift.io/serving-cert-secret-name: ambient-api-server-tls
 spec:
   selector:

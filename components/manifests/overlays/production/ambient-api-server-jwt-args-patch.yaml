@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ambient-api-server
+spec:
+  template:
+    spec:
+      containers:
+        - name: api-server
+          command:
+            - /usr/local/bin/ambient-api-server
+            - serve
+            - --db-host-file=/secrets/db/db.host
+            - --db-port-file=/secrets/db/db.port
+            - --db-user-file=/secrets/db/db.user
+            - --db-password-file=/secrets/db/db.password
+            - --db-name-file=/secrets/db/db.name
+            - --enable-jwt=true
+            - --enable-authz=false
+            - --jwk-cert-url=https://sso.redhat.com/auth/realms/redhat-external/protocol/openid-connect/certs
+            - --enable-https=true
+            - --https-cert-file=/etc/tls/tls.crt
+            - --https-key-file=/etc/tls/tls.key
+            - --enable-tls=true
+            - --tls-cert-file=/etc/tls/tls.crt
+            - --tls-key-file=/etc/tls/tls.key
+            - --tls-auto-detect-kubernetes=false
+            - --api-server-bindaddress=:8000
+            - --metrics-server-bindaddress=:4433
+            - --health-check-server-bindaddress=:4434
+            - --enable-health-check-https=true
+            - --db-sslmode=disable
+            - --db-max-open-connections=50
+            - --enable-db-debug=false
+            - --enable-metrics-https=false
+            - --http-read-timeout=5s
+            - --http-write-timeout=30s
+            - --cors-allowed-origins=*
+            - --cors-allowed-headers=X-Ambient-Project
+            - --enable-grpc=true
+            - --grpc-server-bindaddress=:9000
+            - --grpc-enable-tls=true
+            - --grpc-tls-cert-file=/etc/tls/tls.crt
+            - --grpc-tls-key-file=/etc/tls/tls.key
+            - --alsologtostderr
+            - -v=10

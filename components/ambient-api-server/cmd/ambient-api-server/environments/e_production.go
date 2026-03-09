@@ -19,6 +19,9 @@ func (e *ProductionEnvImpl) OverrideDatabase(c *pkgenv.Database) error {
 
 func (e *ProductionEnvImpl) OverrideConfig(c *config.ApplicationConfig) error {
 	c.Server.CORSAllowedHeaders = []string{"X-Ambient-Project"}
+	c.Server.JwkCertURL = "https://sso.redhat.com/auth/realms/redhat-external/protocol/openid-connect/certs"
+	c.Server.JwkCertFile = ""
+	c.Auth.JwkCertURL = "https://sso.redhat.com/auth/realms/redhat-external/protocol/openid-connect/certs"
 	return nil
 }
 

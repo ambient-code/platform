@@ -18,9 +18,10 @@ func (e *DevEnvImpl) OverrideDatabase(c *pkgenv.Database) error {
 }
 
 func (e *DevEnvImpl) OverrideConfig(c *config.ApplicationConfig) error {
-	c.Server.EnableJWT = false
-	c.Server.EnableHTTPS = false
 	c.Server.CORSAllowedHeaders = []string{"X-Ambient-Project"}
+	c.Server.JwkCertFile = "secrets/kind-jwks.json"
+	c.Server.JwkCertURL = ""
+	c.Auth.EnableJWT = false
 	return nil
 }
 
@@ -38,11 +39,10 @@ func (e *DevEnvImpl) OverrideClients(c *pkgenv.Clients) error {
 
 func (e *DevEnvImpl) Flags() map[string]string {
 	return map[string]string{
-		"v":                      "10",
+		"v":                      "8",
 		"enable-authz":           "false",
 		"debug":                  "false",
 		"enable-mock":            "true",
-		"enable-https":           "false",
 		"enable-metrics-https":   "false",
 		"api-server-hostname":    "localhost",
 		"api-server-bindaddress": "localhost:8000",

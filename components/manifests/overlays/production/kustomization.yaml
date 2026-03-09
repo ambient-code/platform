@@ -47,6 +47,18 @@ patches:
     kind: Deployment
     name: unleash
     version: v1
+- path: ambient-api-server-env-patch.yaml
+  target:
+    group: apps
+    kind: Deployment
+    name: ambient-api-server
+    version: v1
+- path: ambient-api-server-jwt-args-patch.yaml
+  target:
+    group: apps
+    kind: Deployment
+    name: ambient-api-server
+    version: v1
 
 # Production images
 images:
