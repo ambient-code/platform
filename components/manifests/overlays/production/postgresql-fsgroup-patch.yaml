@@ -1,0 +1,21 @@
+# OpenShift: SA (nonroot SCC) + fsGroup + PodSecurity (seccomp, allowPrivilegeEscalation, capabilities, runAsNonRoot)
+# Grant nonroot SCC: oc adm policy add-scc-to-user nonroot -z postgresql -n ambient-code
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgresql
+spec:
+  template:
+    spec:
+      serviceAccountName: postgresql
+      securityContext:
+        fsGroup: 999
+      containers:
+        - name: postgresql
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            runAsNonRoot: true
+            runAsUser: 999

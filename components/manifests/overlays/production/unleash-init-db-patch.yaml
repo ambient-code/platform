@@ -37,6 +37,21 @@ spec:
             psql -h "$PGHOST" -U "$PGUSER" -c "CREATE DATABASE unleash;"
             echo "Database 'unleash' created successfully"
           fi
+
+          echo "Verifying database 'unleash' is visible..."
+          for i in 1 2 3 4 5; do
+            if psql -h "$PGHOST" -U "$PGUSER" -d unleash -c "SELECT 1" >/dev/null 2>&1; then
+              echo "Database 'unleash' verified (attempt $i)"
+              break
+            fi
+            echo "Database not yet visible, retry $i/5..."
+            sleep 2
+          done
+          if ! psql -h "$PGHOST" -U "$PGUSER" -d unleash -c "SELECT 1" >/dev/null 2>&1; then
+            echo "ERROR: Could not connect to database 'unleash' after retries"
+            exit 1
+          fi
+          echo "Init-db complete"
         env:
         - name: PGHOST
           valueFrom:

@@ -1,0 +1,8 @@
+# ServiceAccount for MinIO (runs as UID 1000).
+# Grant nonroot SCC: oc adm policy add-scc-to-user nonroot -z minio -n ambient-code
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: minio
+  labels:
+    app: minio

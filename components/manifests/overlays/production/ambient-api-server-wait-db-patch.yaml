@@ -1,0 +1,43 @@
+# Add init container to wait for ambient-api-server-db before running migration.
+# Uses postgres image for pg_isready; DB user from secret (default: ambient).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ambient-api-server
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: wait-for-db
+          image: postgres:16
+          command:
+            - sh
+            - -c
+            - |
+              until pg_isready -h ambient-api-server-db -p 5432 -U ambient 2>/dev/null; do
+                echo "waiting for ambient-api-server-db..."
+                sleep 2
+              done
+              echo "db ready"
+        - name: migration
+          image: quay.io/ambient_code/vteam_api_server:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - /usr/local/bin/ambient-api-server
+            - migrate
+            - --db-host-file=/secrets/db/db.host
+            - --db-port-file=/secrets/db/db.port
+            - --db-user-file=/secrets/db/db.user
+            - --db-password-file=/secrets/db/db.password
+            - --db-name-file=/secrets/db/db.name
+            - --alsologtostderr
+            - -v=10
+          volumeMounts:
+            - name: db-secrets
+              mountPath: /secrets/db
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL

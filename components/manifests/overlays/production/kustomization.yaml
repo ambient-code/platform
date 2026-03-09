@@ -12,14 +12,21 @@ namespace: ambient-code
 # Manage this secret separately: oc apply -f github-app-secret.yaml -n ambient-code
 resources:
 - ../../base
+- postgresql-credentials.yaml
+- minio-credentials.yaml
+- unleash-credentials.yaml
 - ambient-api-server-route.yaml
 - route.yaml
 - backend-route.yaml
 - public-api-route.yaml
 - unleash-route.yaml
 - operator-config-openshift.yaml
+- ambient-api-server-db-sa.yaml
+- postgresql-sa.yaml
+- minio-sa.yaml
 
 # Patches for production environment
+# Storage: PVC patches use OpenShift local storage (lvms-vg1). See README-storage.md.
 # Unleash: init container to create database (RHEL doesn't support init scripts)
 # PostgreSQL: use RHEL image with proper env vars and mount paths (JSON patch)
 patches:
@@ -27,6 +34,34 @@ patches:
   target:
     kind: Namespace
     name: ambient-code
+- path: pvc-patch-backend.yaml
+  target:
+    kind: PersistentVolumeClaim
+    name: backend-state-pvc
+- path: pvc-patch-postgresql.yaml
+  target:
+    kind: PersistentVolumeClaim
+    name: postgresql-data
+- path: pvc-patch-minio.yaml
+  target:
+    kind: PersistentVolumeClaim
+    name: minio-data
+- path: pvc-patch-ambient-api-server-db.yaml
+  target:
+    kind: PersistentVolumeClaim
+    name: ambient-api-server-db-data
+- path: ambient-api-server-db-scc-patch.yaml
+  target:
+    group: apps
+    kind: Deployment
+    name: ambient-api-server-db
+    version: v1
+- path: ambient-api-server-wait-db-patch.yaml
+  target:
+    group: apps
+    kind: Deployment
+    name: ambient-api-server
+    version: v1
 - path: frontend-oauth-deployment-patch.yaml
   target:
     kind: Deployment
@@ -35,11 +70,18 @@ patches:
   target:
     kind: Service
     name: frontend-service
-- path: postgresql-json-patch.yaml
+# RHEL postgresql-json-patch removed: RHEL image needs /var/lib/pgsql created as root; use standard postgres:16 (runAsUser 999 + fsGroup 999) instead.
+- path: postgresql-fsgroup-patch.yaml
   target:
     group: apps
     kind: Deployment
     name: postgresql
+    version: v1
+- path: minio-fsgroup-patch.yaml
+  target:
+    group: apps
+    kind: Deployment
+    name: minio
     version: v1
 - path: unleash-init-db-patch.yaml
   target:
