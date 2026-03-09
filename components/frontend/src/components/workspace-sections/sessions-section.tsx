@@ -23,6 +23,7 @@ import {
 import { getPageNumbers } from '@/lib/pagination';
 import { EmptyState } from '@/components/empty-state';
 import { SessionStatusDot } from '@/components/session-status-dot';
+import { SessionPhaseBadge } from '@/components/status-badge';
 import { AgentStatusIndicator } from '@/components/agent-status-indicator';
 import { deriveAgentStatusFromPhase } from '@/hooks/use-agent-status';
 import { CreateSessionDialog } from '@/components/create-session-dialog';
