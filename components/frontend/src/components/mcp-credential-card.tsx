@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useState } from 'react'
+import type { ReactNode } from 'react'
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -34,6 +35,8 @@ type Props = {
   fields: FieldDefinition[]
   status?: MCPServerStatusData
   onRefresh?: () => void
+  icon?: ReactNode
+  iconBg?: string
 }
 
 export function MCPCredentialCard({
@@ -43,6 +46,8 @@ export function MCPCredentialCard({
   fields,
   status,
   onRefresh,
+  icon,
+  iconBg,
 }: Props) {
   const connectMutation = useConnectMCPServer(serverName)
   const disconnectMutation = useDisconnectMCPServer(serverName)
@@ -100,8 +105,8 @@ export function MCPCredentialCard({
       <div className="p-6 flex flex-col flex-1">
         {/* Header */}
         <div className="flex items-start gap-4 mb-6">
-          <div className="flex-shrink-0 w-16 h-16 bg-primary rounded-lg flex items-center justify-center">
-            <Plug className="w-8 h-8 text-white" />
+          <div className={`flex-shrink-0 w-16 h-16 ${iconBg ?? 'bg-primary'} rounded-lg flex items-center justify-center`}>
+            {icon ?? <Plug className="w-8 h-8 text-white" />}
           </div>
           <div className="flex-1">
             <h3 className="text-xl font-semibold text-foreground mb-1">{displayName}</h3>
