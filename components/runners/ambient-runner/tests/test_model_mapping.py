@@ -5,15 +5,15 @@ This module tests the model name mapping from Anthropic API model names
 to Vertex AI model identifiers.
 """
 
-import sys
-from pathlib import Path
+import sys  # noqa: E402
+from pathlib import Path  # noqa: E402
 
 # Add parent directory to path for importing auth module
 runner_dir = Path(__file__).parent.parent
 if str(runner_dir) not in sys.path:
     sys.path.insert(0, str(runner_dir))
 
-from ambient_runner.bridges.claude.auth import map_to_vertex_model
+from ambient_runner.bridges.claude.auth import map_to_vertex_model  # noqa: E402
 
 
 class TestMapToVertexModel:

@@ -34,11 +34,12 @@ go run .
 
 ### Frontend (local) quick start
 
-**Recommended: Use integrated CRC development environment:**
+**Recommended: Use integrated local development environment:**
 ```bash
 # From repository root - single command setup
-make dev-start
-# Access: https://vteam-frontend-vteam-dev.apps-crc.testing
+make local-up    # minikube
+# Or: make kind-up  # kind (recommended)
+# Access: http://localhost:8080
 ```
 
 **Alternative: Standalone frontend development:**
@@ -190,3 +191,108 @@ curl -i http://localhost:3000/api/projects/my-project/agentic-sessions \
 - **Error Handling**: Comprehensive error states with recovery actions
 
 The frontend provides a complete user interface for the RFE (Request For Enhancement) workflow system, integrating GitHub repositories, AI runners, and real-time collaboration features.
+
+## Testing
+
+### Unit Tests (Vitest)
+
+466 tests across 26 files. Primary coverage metric (~74%).
+
+```bash
+# Run all tests
+npx vitest run
+
+# With coverage report
+npx vitest run --coverage
+open coverage/index.html
+
+# Watch mode
+npx vitest
+
+# Single file
+npx vitest run src/utils/__tests__/export-chat.test.ts
+```
+
+**Config**: `vitest.config.ts` — uses jsdom, Istanbul coverage, `@/` path alias.
+
+### Writing Unit Tests
+
+Place tests in `__tests__/` next to the source:
+
+```
+src/
+  components/
+    chat/
+      ChatInputBox.tsx
+      __tests__/
+        ChatInputBox.test.tsx    ← test file here
+  hooks/
+    use-session-queue.ts
+    __tests__/
+      use-session-queue.test.ts  ← test file here
+```
+
+**Pure function test:**
+```typescript
+import { describe, it, expect } from 'vitest';
+import { convertEventsToMarkdown } from '../export-chat';
+
+describe('convertEventsToMarkdown', () => {
+  it('renders text messages', () => {
+    const events = [
+      { type: 'TEXT_MESSAGE_START', role: 'user' },
+      { type: 'TEXT_MESSAGE_CONTENT', delta: 'Hello' },
+      { type: 'TEXT_MESSAGE_END' },
+    ];
+    const md = convertEventsToMarkdown(makeExport(events), makeSession());
+    expect(md).toContain('Hello');
+  });
+});
+```
+
+**Component test:**
+```typescript
+import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { MyComponent } from '../MyComponent';
+
+it('handles click', () => {
+  const onClick = vi.fn();
+  render(<MyComponent onClick={onClick} />);
+  fireEvent.click(screen.getByText('Click me'));
+  expect(onClick).toHaveBeenCalled();
+});
+```
+
+**Hook test:**
+```typescript
+import { renderHook, act } from '@testing-library/react';
+
+it('updates state', () => {
+  const { result } = renderHook(() => useMyHook());
+  act(() => result.current.setValue('new'));
+  expect(result.current.value).toBe('new');
+});
+```
+
+**Mocking:**
+```typescript
+// Module mock
+vi.mock('@/services/api/sessions', () => ({
+  createSession: vi.fn().mockResolvedValue({ name: 'test' }),
+}));
+
+// Function stub
+const onSend = vi.fn();
+
+// DOM API spy
+vi.spyOn(document, 'createElement').mockReturnValue(mockEl);
+
+// React Query wrapper
+const wrapper = ({ children }) => (
+  <QueryClientProvider client={new QueryClient()}>
+    {children}
+  </QueryClientProvider>
+);
+const { result } = renderHook(() => useMyQuery(), { wrapper });
+```

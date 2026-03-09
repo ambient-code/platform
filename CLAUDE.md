@@ -118,6 +118,13 @@ git push --no-verify      # Skip pre-push hooks
 - `tsc --noEmit` and `npm run build` are **not** included (slow; CI gates on them)
 - Branch/push protection scripts remain in `scripts/git-hooks/` and are invoked by pre-commit
 
+## Testing
+
+- **Frontend unit tests**: `cd components/frontend && npx vitest run --coverage` (466 tests, ~74% coverage). See `components/frontend/README.md`.
+- **E2E tests**: `cd e2e && npx cypress run --browser chrome` (58 tests, mock SDK). See `e2e/README.md`.
+- **Runner tests**: `cd components/runners/ambient-runner && python -m pytest tests/`
+- **Backend tests**: `cd components/backend && make test`. See `components/backend/TEST_GUIDE.md`.
+
 ## More Info
 
 See [BOOKMARKS.md](BOOKMARKS.md) for architecture decisions, development context, code patterns, and component-specific guides.

@@ -77,10 +77,11 @@ def make_tool_args(
     )
 
 
-def make_tool_end(tool_id: str = "tc-1") -> ToolCallEndEvent:
+def make_tool_end(tool_id: str = "tc-1", **kwargs) -> ToolCallEndEvent:
     return ToolCallEndEvent(
         type=EventType.TOOL_CALL_END,
         tool_call_id=tool_id,
+        **kwargs,
     )
 
 

@@ -100,7 +100,12 @@ class SessionWorker:
 
         os.environ["ANTHROPIC_API_KEY"] = self._api_key
 
-        client = ClaudeSDKClient(options=self._options)
+        from ambient_runner.bridges.claude.mock_client import MOCK_API_KEY, MockClaudeSDKClient
+        if self._api_key == MOCK_API_KEY:
+            logger.info("[SessionWorker] Using MockClaudeSDKClient (replay mode)")
+            client: Any = MockClaudeSDKClient(options=self._options)
+        else:
+            client = ClaudeSDKClient(options=self._options)
         self._client = client
 
         try:

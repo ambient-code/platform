@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { CreateProjectRequest } from "@/types/project";
 import { Save, Loader2, Info } from "lucide-react";
-import { successToast, errorToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useCreateProject } from "@/services/queries";
 import { useClusterInfo } from "@/hooks/use-cluster-info";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -145,7 +145,7 @@ export function CreateWorkspaceDialog({
 
     createProjectMutation.mutate(payload, {
       onSuccess: (project) => {
-        successToast(
+        toast.success(
           `Workspace "${formData.displayName || formData.name}" created successfully`
         );
         resetForm();
@@ -156,7 +156,7 @@ export function CreateWorkspaceDialog({
         const message =
           err instanceof Error ? err.message : "Failed to create workspace";
         setError(message);
-        errorToast(message);
+        toast.error(message);
       },
     });
   };
@@ -192,6 +192,7 @@ export function CreateWorkspaceDialog({
                 <Label htmlFor="displayName">Workspace Name *</Label>
                 <Input
                   id="displayName"
+                  data-testid="workspace-display-name-input"
                   value={formData.displayName}
                   onChange={(e) => handleDisplayNameChange(e.target.value)}
                   placeholder="e.g. My Research Workspace"
@@ -206,6 +207,7 @@ export function CreateWorkspaceDialog({
                 <Label htmlFor="name">Workspace Name *</Label>
                 <Input
                   id="name"
+                  data-testid="workspace-slug-input"
                   value={formData.name}
                   onChange={(e) => {
                     const name = e.target.value;
@@ -258,7 +260,7 @@ export function CreateWorkspaceDialog({
             >
               Cancel
             </Button>
-            <Button
+            <Button data-testid="create-workspace-submit"
               type="submit"
               disabled={createProjectMutation.isPending || !!nameError}
             >

@@ -20,12 +20,19 @@ import { EmptyState } from "@/components/empty-state";
 import { cn } from "@/lib/utils";
 
 import { useFeatureFlags } from "@/services/queries/use-feature-flags-admin";
+import type { FeatureToggle } from "@/services/api/feature-flags-admin";
 import * as featureFlagsApi from "@/services/api/feature-flags-admin";
-import { successToast, errorToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 
 type FeatureFlagsSectionProps = {
   projectName: string;
+};
+
+type FlagGroup = {
+  category: string;
+  label: string;
+  flags: FeatureToggle[];
 };
 
 // "default" = no override (use platform value), "on" = force enable, "off" = force disable
@@ -35,6 +42,41 @@ type LocalFlagState = {
   override: OverrideValue;
   serverOverride: OverrideValue; // what the server currently has
 };
+
+/** Known category labels; unknown prefixes get title-cased automatically. */
+const CATEGORY_LABELS: Record<string, string> = {
+  model: "Models",
+  runner: "Runners",
+  framework: "Frameworks",
+};
+
+/** Extract category from flag name (e.g. "model" from "model.claude-sonnet-4-5.enabled"). */
+function flagCategory(name: string): string {
+  const dot = name.indexOf(".");
+  return dot > 0 ? name.slice(0, dot) : "other";
+}
+
+/** Group flags by prefix category, sort groups and flags within each group alphabetically. */
+function groupAndSortFlags(flags: FeatureToggle[]): FlagGroup[] {
+  const groups = new Map<string, FeatureToggle[]>();
+  for (const flag of flags) {
+    const cat = flagCategory(flag.name);
+    const list = groups.get(cat);
+    if (list) {
+      list.push(flag);
+    } else {
+      groups.set(cat, [flag]);
+    }
+  }
+
+  return Array.from(groups.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([category, groupFlags]) => ({
+      category,
+      label: CATEGORY_LABELS[category] ?? category.charAt(0).toUpperCase() + category.slice(1),
+      flags: groupFlags.sort((a, b) => a.name.localeCompare(b.name)),
+    }));
+}
 
 export function FeatureFlagsSection({ projectName }: FeatureFlagsSectionProps) {
   const queryClient = useQueryClient();
@@ -68,6 +110,9 @@ export function FeatureFlagsSection({ projectName }: FeatureFlagsSectionProps) {
     setLocalState(initial);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flagsKey]);
+
+  // Group and sort flags by category
+  const groupedFlags = useMemo(() => groupAndSortFlags(flags), [flags]);
 
   // Check if there are unsaved changes
   const hasChanges = useMemo(() => {
@@ -118,13 +163,13 @@ export function FeatureFlagsSection({ projectName }: FeatureFlagsSectionProps) {
 
       await Promise.all(promises);
 
-      successToast(`${changed.length} feature flag${changed.length > 1 ? "s" : ""} updated`);
+      toast.success(`${changed.length} feature flag${changed.length > 1 ? "s" : ""} updated`);
 
       queryClient.invalidateQueries({ queryKey: ["feature-flags", "list", projectName] });
       queryClient.invalidateQueries({ queryKey: ["models", projectName] });
       queryClient.invalidateQueries({ queryKey: ["runner-types", projectName] });
     } catch (err) {
-      errorToast(err instanceof Error ? err.message : "Failed to save feature flags");
+      toast.error(err instanceof Error ? err.message : "Failed to save feature flags");
     } finally {
       setIsSaving(false);
     }
@@ -242,51 +287,15 @@ export function FeatureFlagsSection({ projectName }: FeatureFlagsSectionProps) {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {flags.map((flag) => {
-                      const state = localState[flag.name];
-                      const currentOverride = state?.override ?? "default";
-                      const isChanged = state ? state.override !== state.serverOverride : false;
-                      return (
-                        <TableRow key={flag.name} className={isChanged ? "bg-muted/50" : ""}>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium font-mono text-sm">
-                                {flag.name}
-                              </span>
-                              {isChanged && (
-                                <Badge variant="outline" className="text-xs bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200">
-                                  Unsaved
-                                </Badge>
-                              )}
-                            </div>
-                            {flag.stale && (
-                              <Badge variant="outline" className="mt-1 text-xs">
-                                Stale
-                              </Badge>
-                            )}
-                          </TableCell>
-                          <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
-                            <div className="max-w-[200px] whitespace-normal">
-                              {flag.description || "\u2014"}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant={flag.enabled ? "secondary" : "outline"} className="text-xs w-fit">
-                              {flag.enabled ? "On" : "Off"}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <OverrideControl
-                              value={currentOverride}
-                              onChange={(v) => handleOverrideChange(flag.name, v)}
-                            />
-                          </TableCell>
-                          <TableCell className="hidden xl:table-cell">
-                            {getTypeBadge(flag.type)}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
+                    {groupedFlags.map((group) => (
+                      <GroupRows
+                        key={group.category}
+                        group={group}
+                        localState={localState}
+                        onOverrideChange={handleOverrideChange}
+                        getTypeBadge={getTypeBadge}
+                      />
+                    ))}
                   </TableBody>
                 </Table>
 
@@ -342,6 +351,79 @@ export function FeatureFlagsSection({ projectName }: FeatureFlagsSectionProps) {
 function deriveServerOverride(overrideEnabled?: boolean | null): OverrideValue {
   if (overrideEnabled === undefined || overrideEnabled === null) return "default";
   return overrideEnabled ? "on" : "off";
+}
+
+/** Renders a category header row followed by the flag rows for that group. */
+function GroupRows({
+  group,
+  localState,
+  onOverrideChange,
+  getTypeBadge,
+}: {
+  group: FlagGroup;
+  localState: Record<string, LocalFlagState>;
+  onOverrideChange: (flagName: string, value: OverrideValue) => void;
+  getTypeBadge: (type?: string) => React.ReactNode;
+}) {
+  return (
+    <>
+      <TableRow className="bg-muted/30 hover:bg-muted/30">
+        <TableCell colSpan={5} className="py-2">
+          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            {group.label}
+          </span>
+          <span className="ml-2 text-xs text-muted-foreground">
+            ({group.flags.length})
+          </span>
+        </TableCell>
+      </TableRow>
+      {group.flags.map((flag) => {
+        const state = localState[flag.name];
+        const currentOverride = state?.override ?? "default";
+        const isChanged = state ? state.override !== state.serverOverride : false;
+        return (
+          <TableRow key={flag.name} className={isChanged ? "bg-muted/50" : ""}>
+            <TableCell>
+              <div className="flex items-center gap-2">
+                <span className="font-medium font-mono text-sm">
+                  {flag.name}
+                </span>
+                {isChanged && (
+                  <Badge variant="outline" className="text-xs bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200">
+                    Unsaved
+                  </Badge>
+                )}
+              </div>
+              {flag.stale && (
+                <Badge variant="outline" className="mt-1 text-xs">
+                  Stale
+                </Badge>
+              )}
+            </TableCell>
+            <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
+              <div className="max-w-[200px] whitespace-normal">
+                {flag.description || "\u2014"}
+              </div>
+            </TableCell>
+            <TableCell>
+              <Badge variant={flag.enabled ? "secondary" : "outline"} className="text-xs w-fit">
+                {flag.enabled ? "On" : "Off"}
+              </Badge>
+            </TableCell>
+            <TableCell>
+              <OverrideControl
+                value={currentOverride}
+                onChange={(v) => onOverrideChange(flag.name, v)}
+              />
+            </TableCell>
+            <TableCell className="hidden xl:table-cell">
+              {getTypeBadge(flag.type)}
+            </TableCell>
+          </TableRow>
+        );
+      })}
+    </>
+  );
 }
 
 /** Segmented control with three states: Default | On | Off */

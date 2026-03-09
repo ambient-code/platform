@@ -73,7 +73,7 @@ echo ""
 CYPRESS_TEST_TOKEN="$TEST_TOKEN" \
   CYPRESS_BASE_URL="$CYPRESS_BASE_URL" \
   CYPRESS_ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}" \
-  npm test
+  npm run test:ci
 
 exit_code=$?
 

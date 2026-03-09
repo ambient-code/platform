@@ -67,9 +67,6 @@ async def change_workflow(request: Request):
 
         bridge.mark_dirty()
 
-        logger.info("Workflow updated, adapter will reinitialize on next run")
-        asyncio.create_task(_trigger_workflow_greeting(git_url, branch, path, context))
-
         return {
             "message": "Workflow updated",
             "gitUrl": git_url,
@@ -163,18 +160,16 @@ async def clone_workflow_at_runtime(
             shutil.rmtree(temp_dir, ignore_errors=True)
 
 
-async def _trigger_workflow_greeting(git_url: str, branch: str, path: str, context):
+async def _trigger_workflow_greeting(workflow_dir: str, context):
     """Send the workflow's startupPrompt (from ambient.json) after a workflow change.
 
     If the workflow has no startupPrompt, no greeting is sent.
     """
     try:
-        workspace_path = os.getenv("WORKSPACE_PATH", "/workspace")
-        workflow_name = git_url.split("/")[-1].removesuffix(".git")
-        if path:
-            workflow_name = path.split("/")[-1]
+        if not workflow_dir or not Path(workflow_dir).exists():
+            logger.info(f"Workflow dir '{workflow_dir}' not found, skipping greeting")
+            return
 
-        workflow_dir = str(Path(workspace_path) / "workflows" / workflow_name)
         config = (
             load_ambient_config(workflow_dir) if Path(workflow_dir).exists() else {}
         )
@@ -182,7 +177,7 @@ async def _trigger_workflow_greeting(git_url: str, branch: str, path: str, conte
 
         if not startup_prompt:
             logger.info(
-                f"Workflow '{workflow_name}' has no startupPrompt in ambient.json, "
+                f"Workflow at '{workflow_dir}' has no startupPrompt in ambient.json, "
                 f"skipping greeting"
             )
             return
@@ -224,7 +219,7 @@ async def _trigger_workflow_greeting(git_url: str, branch: str, path: str, conte
         async with aiohttp.ClientSession() as session:
             async with session.post(url, json=payload, headers=headers) as resp:
                 if resp.status == 200:
-                    logger.info(f"Workflow startupPrompt sent for '{workflow_name}'")
+                    logger.info(f"Workflow startupPrompt sent for '{workflow_dir}'")
                 else:
                     logger.error(
                         f"Workflow startupPrompt failed: {resp.status} - {await resp.text()}"

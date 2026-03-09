@@ -11,49 +11,56 @@
       "label": "Claude Sonnet 4.5",
       "vertexId": "claude-sonnet-4-5@20250929",
       "provider": "anthropic",
-      "available": true
+      "available": true,
+      "featureGated": false
     },
     {
       "id": "claude-opus-4-6",
       "label": "Claude Opus 4.6",
       "vertexId": "claude-opus-4-6@default",
       "provider": "anthropic",
-      "available": true
+      "available": true,
+      "featureGated": true
     },
     {
       "id": "claude-opus-4-5",
       "label": "Claude Opus 4.5",
       "vertexId": "claude-opus-4-5@20251101",
       "provider": "anthropic",
-      "available": true
+      "available": true,
+      "featureGated": false
     },
     {
       "id": "claude-haiku-4-5",
       "label": "Claude Haiku 4.5",
       "vertexId": "claude-haiku-4-5@20251001",
       "provider": "anthropic",
-      "available": true
+      "available": true,
+      "featureGated": false
     },
     {
       "id": "claude-sonnet-4-6",
       "label": "Claude Sonnet 4.6",
       "vertexId": "claude-sonnet-4-6@default",
       "provider": "anthropic",
-      "available": true
+      "available": true,
+      "featureGated": true
     },
     {
       "id": "gemini-2.5-flash",
       "label": "Gemini 2.5 Flash",
       "vertexId": "gemini-2.5-flash",
       "provider": "google",
-      "available": true
+      "available": true,
+      "featureGated": false
     },
     {
       "id": "gemini-2.5-pro",
       "label": "Gemini 2.5 Pro",
       "vertexId": "gemini-2.5-pro",
       "provider": "google",
-      "available": true
+      "available": true,
+      "featureGated": true
     }
   ]
 }

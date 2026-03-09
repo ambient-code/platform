@@ -115,6 +115,9 @@ spec:
           value: "http://minio.ambient-code.svc:9000"  # In-cluster MinIO (change for external S3)
         - name: S3_BUCKET
           value: "ambient-sessions"  # Create this bucket in MinIO console
+        # Inactivity auto-stop configuration
+        # - name: DEFAULT_INACTIVITY_TIMEOUT
+        #   value: "86400"  # Default inactivity timeout in seconds (24h). Set to 0 to disable.
         # OpenTelemetry configuration
         - name: OTEL_EXPORTER_OTLP_ENDPOINT
           value: "otel-collector.ambient-code.svc:4317"  # Deploy OTel collector separately
