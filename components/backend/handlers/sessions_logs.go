@@ -80,6 +80,10 @@ func GetSessionLogs(c *gin.Context) {
 			c.Data(http.StatusOK, "text/plain; charset=utf-8", []byte(""))
 			return
 		}
+		if errors.IsForbidden(err) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+			return
+		}
 		log.Printf("GetSessionLogs: failed to get logs for pod %s: %v", podName, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve logs"})
 		return

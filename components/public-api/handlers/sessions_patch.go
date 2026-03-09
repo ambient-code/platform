@@ -147,7 +147,7 @@ func patchSessionUpdate(c *gin.Context, basePath string, req types.PatchSessionR
 		return
 	}
 
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
 		forwardErrorResponse(c, resp.StatusCode, body)
 		return
 	}
@@ -225,7 +225,7 @@ func patchSessionLabels(c *gin.Context, basePath string, req types.PatchSessionR
 	if err != nil {
 		// PATCH succeeded but GET failed — return success with minimal info
 		log.Printf("Label patch succeeded but follow-up GET failed: %v", err)
-		c.JSON(http.StatusOK, gin.H{"message": "Labels updated"})
+		c.JSON(http.StatusOK, gin.H{"message": "Labels updated", "id": c.Param("id")})
 		return
 	}
 	defer getResp.Body.Close()
@@ -233,13 +233,13 @@ func patchSessionLabels(c *gin.Context, basePath string, req types.PatchSessionR
 	getBody, err := io.ReadAll(getResp.Body)
 	if err != nil || getResp.StatusCode != http.StatusOK {
 		log.Printf("Label patch succeeded but follow-up GET returned unexpected result")
-		c.JSON(http.StatusOK, gin.H{"message": "Labels updated"})
+		c.JSON(http.StatusOK, gin.H{"message": "Labels updated", "id": c.Param("id")})
 		return
 	}
 
 	var backendResp map[string]interface{}
 	if err := json.Unmarshal(getBody, &backendResp); err != nil {
-		c.JSON(http.StatusOK, gin.H{"message": "Labels updated"})
+		c.JSON(http.StatusOK, gin.H{"message": "Labels updated", "id": c.Param("id")})
 		return
 	}
 

@@ -41,6 +41,10 @@ func GetSessionMetrics(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Session not found"})
 			return
 		}
+		if errors.IsForbidden(err) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+			return
+		}
 		log.Printf("GetSessionMetrics: failed to get session %s: %v", sessionName, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get session"})
 		return
