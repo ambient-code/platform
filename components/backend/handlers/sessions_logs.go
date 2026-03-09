@@ -31,7 +31,7 @@ func GetSessionLogs(c *gin.Context) {
 	if project == "" {
 		project = c.Param("projectName")
 	}
-	sessionName := c.Param("sessionName")
+	sessionName := SanitizeForLog(c.Param("sessionName"))
 
 	k8sClt, _ := GetK8sClientsForRequest(c)
 	if k8sClt == nil {

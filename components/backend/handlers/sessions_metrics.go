@@ -19,7 +19,7 @@ func GetSessionMetrics(c *gin.Context) {
 	if project == "" {
 		project = c.Param("projectName")
 	}
-	sessionName := c.Param("sessionName")
+	sessionName := SanitizeForLog(c.Param("sessionName"))
 
 	k8sClt, k8sDyn := GetK8sClientsForRequest(c)
 	if k8sClt == nil {
