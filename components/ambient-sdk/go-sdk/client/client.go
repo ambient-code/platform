@@ -64,7 +64,6 @@ func NewClient(baseURL, token, project string, opts ...ClientOption) (*Client, e
 		return nil, fmt.Errorf("placeholder token is not allowed")
 	}
 
-
 	if len(project) > 63 {
 		return nil, fmt.Errorf("project name cannot exceed 63 characters")
 	}

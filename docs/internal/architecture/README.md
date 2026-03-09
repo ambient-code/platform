@@ -2,83 +2,108 @@
 
 Technical architecture documentation for the Ambient Code Platform.
 
-## 📐 Overview
+## Overview
 
-The Ambient Code Platform follows a Kubernetes-native microservices architecture with Custom Resources, Operators, and Job-based execution.
+Two architectures coexist. V1 (legacy) is Kubernetes-native. V2 (current) is REST/PostgreSQL-first with Kubernetes as a reconciliation target, not a data store.
+
+### V1 — Kubernetes-Native (Legacy)
 
 ```
 User → Frontend → Backend API → K8s Operator → Runner Jobs → Claude Code CLI
 ```
 
-## 🗂️ Architecture Documentation
+### V2 — REST/PostgreSQL-First (Current)
 
-### System Design
-- **System Context** - High-level system boundaries and external integrations
-- **Component Architecture** - Individual component designs
-- **Data Flow** - How data moves through the system
-- **Security Architecture** - Authentication, authorization, and security patterns
+```mermaid
+graph TB
+    subgraph Consumers
+        FE["Frontend (Next.js)"]
+        CLI["acpctl CLI"]
+        SDK["ambient-sdk (Go/Python/TS)"]
+    end
+
+    subgraph "Code Generation (rh-trex-ai)"
+        TRex["TRex Generator\nscripts/generator.go"]
+        OAS["openapi.yaml\n(source of truth)"]
+        TRex -->|"generates Kind plugins\n+ OpenAPI spec"| OAS
+    end
+
+    subgraph "API Server (ambient-api-server)"
+        API["REST API :8000\nGRPC :8001\nMetrics :8080\nHealth :8083"]
+        PG[("PostgreSQL :5432")]
+        API --> PG
+    end
+
+    subgraph "Control Plane (ambient-control-plane)"
+        CP["Reconciler\ngRPC watch + list-sync"]
+    end
+
+    subgraph Kubernetes
+        OP["Operator"]
+        CRD["AgenticSession CRDs"]
+        JOB["Runner Jobs"]
+        OP --> CRD
+        OP --> JOB
+    end
+
+    Runner["Claude Code Runner (Python)"]
+
+    OAS -->|"SDK generation"| SDK
+    SDK --> FE
+    SDK --> CLI
+    SDK --> CP
+    SDK -->|"HTTP/gRPC"| API
+    CP -->|"gRPC watch"| API
+    CP -->|"Create/Patch CRDs"| CRD
+    JOB --> Runner
+    Runner -->|"status callbacks"| API
+    Runner --> Claude["Anthropic API"]
+```
+
+### Code Generation Pipeline
+
+How a data model change flows through the system:
+
+```mermaid
+flowchart LR
+    ERD["ERD / Data Model"] -->|"generator.go\n--kind Foo --fields ..."| PLUGIN
+    PLUGIN["Kind Plugin\nplugins/foo/\nmodel+handler+dao+service"] -->|"make generate"| OAS
+    OAS["openapi.yaml"] -->|"SDK codegen"| SDKS
+    SDKS["ambient-sdk\nGo / Python / TypeScript"] -->|"consumed by"| CONSUMERS
+    CONSUMERS["CLI · Control Plane · Frontend"]
+```
+
+See [code-generation.md](../developer/code-generation.md) for the full workflow.
+
+## Components
+
+### V2 Components
+
+| Component | Language | Purpose | Port(s) | Docs |
+|-----------|----------|---------|---------|------|
+| **ambient-api-server** | Go (rh-trex-ai) | REST + gRPC API, PostgreSQL persistence | 8000 / 8001 / 8080 / 8083 | [README](../../components/ambient-api-server/README.md) |
+| **ambient-sdk** | Go / Python / TypeScript | HTTP client libraries, generated from OpenAPI | — | [README](../../components/ambient-sdk/README.md) |
+| **ambient-control-plane** | Go | Reconciles API server state into Kubernetes | — | [README](../../components/ambient-control-plane/README.md) |
+| **ambient-cli (acpctl)** | Go | CLI using Go SDK | — | [README](../../components/ambient-cli/README.md) |
+
+### V1 Components (Legacy — still operational)
+
+| Component | Language | Purpose | Docs |
+|-----------|----------|---------|------|
+| **Backend** | Go + Gin | REST API over Kubernetes CRDs | [README](../../components/backend/README.md) |
+| **Frontend** | Next.js + Shadcn | Web UI | [README](../../components/frontend/README.md) |
+| **Operator** | Go | Kubernetes controller | [README](../../components/operator/README.md) |
+| **Runner** | Python | Claude Code CLI execution | [README](../../components/runners/claude-code-runner/README.md) |
 
 ### Diagrams
-**[Architecture Diagrams](diagrams/)** - Visual system representations
-- [Platform Architecture](./diagrams/platform-architecture.mmd) - Complete system diagram
-- [Component Structure](./diagrams/component-structure.mmd) - Component relationships
-- [Deployment Stack](./diagrams/deployment-stack.mmd) - Deployment topology
-- [Agentic Session Flow](./diagrams/agentic-session-flow.mmd) - Session lifecycle
-- [UX Feature Workflow](./diagrams/ux-feature-workflow.md) - Multi-agent workflow
 
-### Key Components
-
-#### Frontend (Next.js + Shadcn UI)
-**Purpose:** Web interface for session management and monitoring
-
-**Key Features:**
-- Project and session CRUD operations
-- Real-time WebSocket updates
-- Repository browsing
-- Multi-agent chat interface
-
-**Documentation:** [components/frontend/README.md](../../components/frontend/README.md)
-
----
-
-#### Backend API (Go + Gin)
-**Purpose:** REST API managing Kubernetes Custom Resources
-
-**Key Features:**
-- Project-scoped endpoints with multi-tenant isolation
-- User token-based authentication
-- Git operations (clone, fork, PR creation)
-- WebSocket support for real-time updates
-
-**Documentation:** [components/backend/README.md](../../components/backend/README.md)
-
----
-
-#### Agentic Operator (Go)
-**Purpose:** Kubernetes controller watching Custom Resources
-
-**Key Features:**
-- Watches AgenticSession CRs and creates Jobs
-- Monitors Job execution and updates CR status
-- Handles timeouts and cleanup
-- Manages runner pod lifecycle
-
-**Documentation:** [components/operator/README.md](../../components/operator/README.md)
-
----
-
-#### Claude Code Runner (Python)
-**Purpose:** Job pod executing Claude Code CLI
-
-**Key Features:**
-- Claude Code SDK integration
-- Multi-agent collaboration
-- Workspace synchronization via PVC
-- Anthropic API streaming
-
-**Documentation:** [components/runners/claude-code-runner/README.md](../../components/runners/claude-code-runner/README.md)
-
----
+| Diagram | Description |
+|---------|-------------|
+| [Platform Architecture](./diagrams/platform-architecture.mmd) | Complete system |
+| [Component Structure](./diagrams/component-structure.mmd) | Component relationships |
+| [Deployment Stack](./diagrams/deployment-stack.mmd) | Deployment topology |
+| [Agentic Session Flow](./diagrams/agentic-session-flow.mmd) | Session lifecycle |
+| [architecture.md](../../components/architecture.md) | V1 vs V2 transition |
 
 ## 🎯 Core Concepts
 

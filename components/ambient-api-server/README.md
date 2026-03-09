@@ -1,175 +1,138 @@
-
 # Ambient API Server
 
-REST API microservice built with the TRex.AI library, providing CRUD functionality via auto-generated Kind plugins.
+REST + gRPC microservice built on the [rh-trex-ai](https://github.com/openshift-online/rh-trex-ai) framework. It is the single source of truth for platform data: sessions, projects, users, and project settings are persisted in PostgreSQL and exposed via auto-generated CRUD endpoints. The Control Plane and CLI consume this API via the Go SDK; the Frontend consumes it via the TypeScript SDK.
+
+## Architecture
+
+```mermaid
+graph LR
+    CLI["acpctl CLI"] -->|REST| API
+    FE["Frontend"] -->|REST via TS SDK| API
+    CP["Control Plane"] -->|REST + gRPC watch| API
+    SDK["ambient-sdk"] -->|HTTP| API
+    API["API Server :8000\ngRPC :8001\nMetrics :8080\nHealth :8083\n(local dev defaults)"] --> PG[("PostgreSQL :5432")]
+```
+
+Three servers run concurrently:
+
+| Server | Port | Purpose |
+|--------|------|---------|
+| REST API | 8000 | CRUD endpoints for all Kinds |
+| gRPC | 8001 | Watch streams (Control Plane) |
+| Metrics | 8080 (local) / 4433 (cluster) | Prometheus |
+| Health | 8083 (local) / 4434 (cluster) | `/health` liveness probe |
 
 ## Quick Start
 
-1. **Install dependencies:**
-   ```bash
-   go mod tidy
-   ```
-
-2. **Build the service:**
-   ```bash
-   make binary
-   ```
-
-3. **Run tests:**
-   ```bash
-   make test
-   ```
-
-## Generating New Kinds
-
-This project includes the TRex.AI Kind generator to create complete CRUD functionality for new resource types.
-
-### Important Note
-
-To create your first Kind:
-
-1. Ensure your project compiles and tests pass: `make test`
-2. Generate your Kind and implement the needed TRex.AI interfaces
-
-### Basic Example: Generate a HelloWorld Kind
+**Prerequisite:** Podman or Docker for the PostgreSQL container.
 
 ```bash
-# Generate a HelloWorld Kind with a Message attribute
-go run ./scripts/generator.go --kind HelloWorld --fields "message:string:required" --project "ambient-api-server" --repo "github.com/ambient-code/platform/components"
-
+make db/setup        # start PostgreSQL :5432
+make run-no-auth     # migrate schema + start server (no auth, dev mode)
 ```
 
-### Field Types and Options
-
-The generator supports these field types:
-- `string` - Text data
-- `int` - 32-bit integer
-- `int64` - 64-bit integer
-- `bool` - Boolean true/false
-- `float` or `float64` - Floating point numbers
-- `time` - Timestamp (time.Time)
-
-Field nullability options:
-- `:required` - Non-nullable field (base types like `string`, `int`)
-- `:optional` - Nullable field (pointer types like `*string`, `*int`) - default
-
-### What the Generator Creates
-
-For each Kind, the generator automatically creates:
-
-- **API model** (`plugins/{kinds}/model.go`) - Go structs for the Kind
-- **HTTP handlers** (`plugins/{kinds}/handler.go`) - REST API endpoints
-- **Service layer** (`plugins/{kinds}/service.go`) - Business logic with event handlers
-- **Data access** (`plugins/{kinds}/dao.go`) - Database operations
-- **Database migration** (`plugins/{kinds}/migration.go`) - Schema changes
-- **OpenAPI spec** (`openapi/openapi.{kinds}.yaml`) - API documentation
-- **Tests** (`plugins/{kinds}/*_test.go`) - Unit and integration tests
-- **Plugin registration** (`plugins/{kinds}/plugin.go`) - Auto-wires everything together
-
-## Database Operations
-
-### Configuration
-
-The service reads database credentials from the `secrets/` directory. Each file contains a single value:
-
-| File | Description | Default |
-|------|-------------|---------|
-| `secrets/db.host` | Database hostname | `localhost` |
-| `secrets/db.port` | Database port | `5432` |
-| `secrets/db.name` | Database name | `ambient_api_server` |
-| `secrets/db.user` | Database user | `postgres` |
-| `secrets/db.password` | Database password | `postgres` |
-
-psql -h localhost -U ambient ambient_api_server
-
-
-These values must match the PostgreSQL instance created by `make db/setup`.
-
-### Start PostgreSQL
+Verify:
 ```bash
-make db/setup
+curl http://localhost:8083/health
+curl http://localhost:8000/api/ambient/v1/sessions
 ```
 
-Supports both Docker and Podman via the `CONTAINER_ENGINE` variable (auto-detects podman, falls back to docker):
-```bash
-make db/setup CONTAINER_ENGINE=docker
-```
+For auth-enabled mode: `make run` (requires OIDC configuration).
 
-### Run Migrations
-```bash
-./ambient-api-server migrate
-```
+## Makefile Targets
 
-### Stop Database
-```bash
-make db/teardown
-```
+| Target | Description |
+|--------|-------------|
+| `make binary` | Build the binary |
+| `make run` | Migrate + start (with auth) |
+| `make run-no-auth` | Migrate + start (no auth) |
+| `make test` | All tests (integration, requires Podman/Docker for testcontainer) |
+| `make test-integration` | Integration tests only |
+| `make generate` | Regenerate OpenAPI Go client from YAML specs |
+| `make db/setup` | Start PostgreSQL container |
+| `make db/teardown` | Stop PostgreSQL container |
 
-## Running the Service
+## Database
 
-### With Authentication
-```bash
-make run
-```
+Credentials are read from files in `secrets/`:
 
-### Without Authentication (Development)
-```bash
-make run-no-auth
-```
+| File | Default |
+|------|---------|
+| `secrets/db.host` | `localhost` |
+| `secrets/db.port` | `5432` |
+| `secrets/db.name` | `ambient_api_server` |
+| `secrets/db.user` | `postgres` |
+| `secrets/db.password` | `postgres` |
 
-The service will be available at `http://localhost:8000`.
+Schema migrations run automatically on startup (`./ambient-api-server migrate`).
 
 ## API Endpoints
 
-After generating Kinds, API endpoints follow this pattern:
-- `GET /api/ambient/v1/{kinds}` - List all items
-- `POST /api/ambient/v1/{kinds}` - Create new item
-- `GET /api/ambient/v1/{kinds}/{id}` - Get specific item
-- `PATCH /api/ambient/v1/{kinds}/{id}` - Update specific item
+All routes under `/api/ambient/v1/`:
 
-## Development Workflow
+| Method | Path | Operation |
+|--------|------|-----------|
+| GET | `/{kinds}` | List (supports `?search=`, `?page=`, `?size=`, `?orderBy=`) |
+| POST | `/{kinds}` | Create |
+| GET | `/{kinds}/{id}` | Get |
+| PATCH | `/{kinds}/{id}` | Update |
+| DELETE | `/{kinds}/{id}` | Delete |
 
-1. **Generate new Kind**: `go run ./scripts/generator.go --kind MyKind --fields "name:string:required"`
-2. **Run migrations**: `./ambient-api-server migrate`
-3. **Test the API**: `make test && make test-integration`
-4. **Start service**: `make run-no-auth`
-5. **Test endpoints**: `curl http://localhost:8000/api/ambient/v1/my_kinds`
+Active Kinds: `sessions`, `users`, `projects`, `project_settings`
 
-## Project Structure
+Search uses [Tree Search Language](https://github.com/yaacov/tree-search-language): `?search=name='foo' and status='running'`
+
+## Plugin System
+
+Each Kind is a self-contained plugin in `plugins/{kinds}/` that self-registers via `init()`:
 
 ```
-├── cmd/ambient-api-server/          # Main application entry point
-├── pkg/                     # Core packages
-│   ├── api/                 # API types (re-exports from TRex.AI library)
-│   ├── auth/                # Authentication stubs
-│   ├── db/                  # Database utilities stubs
-│   ├── errors/              # Error handling stubs
-│   └── ...                  # Other core package stubs
-├── plugins/                 # Generated Kinds (business logic)
-│   └── {kinds}/             # Each Kind gets its own plugin
-├── openapi/                 # OpenAPI specifications
-├── scripts/                 # Code generator
-├── templates/               # Generator templates
-├── secrets/                 # Database credentials (see Database Operations)
-└── test/                    # Test utilities
+plugins/sessions/
+├── plugin.go       registers routes, controller, migration
+├── model.go        GORM struct + PatchRequest
+├── handler.go      HTTP handlers
+├── service.go      business logic + event hooks (OnUpsert, OnDelete)
+├── dao.go          database operations
+├── presenter.go    model ↔ OpenAPI conversion
+├── migration.go    schema migration
+└── *_test.go       integration tests
 ```
 
-## Generated Plugin Architecture
+## Adding a New Kind
 
-Each generated Kind is a self-contained plugin with:
+```bash
+go run ./scripts/generator.go \
+  --kind MyResource \
+  --fields "name:string:required,description:string,priority:int" \
+  --project ambient-api-server \
+  --repo github.com/ambient-code/platform/components
+```
 
-- **Event-driven controllers** - Process CREATE/UPDATE/DELETE events automatically
-- **Idempotent handlers** - Safe to run multiple times
-- **Complete CRUD** - Create, Read, Update, Delete, Search operations
-- **OpenAPI integration** - Automatic API documentation generation
-- **Test coverage** - Unit and integration tests included
+Then add a side-effect import in `cmd/ambient-api-server/main.go`, run `make binary`, migrate, and regenerate the OpenAPI spec with `make generate`.
 
-## Next Steps
+See [code-generation.md](../../docs/internal/developer/code-generation.md) for the full workflow including SDK regeneration.
 
-1. Generate your first Kind to see the full functionality
-2. Customize the generated code for your specific business logic
-3. Add custom validation in the handlers
-4. Extend the service layer with additional business rules
-5. Add integration tests for your specific use cases
+## Project Layout
 
-For more information, see the [TRex.AI documentation](../../CLAUDE.md).
+```
+cmd/ambient-api-server/
+  main.go                    entry point, plugin imports
+  environments/              dev / integration_testing / production envs
+plugins/{kinds}/             one directory per resource Kind
+openapi/                     OpenAPI YAML specs (source of truth)
+pkg/api/openapi/             generated Go client (do not edit manually)
+scripts/generator.go         Kind code generator
+templates/                   generator templates
+secrets/                     database credentials
+test/                        shared test infrastructure
+```
+
+## Environment System
+
+Selected via `AMBIENT_ENV`:
+
+| Value | Database | Auth | Use For |
+|-------|----------|------|---------|
+| `development` | External PostgreSQL | Disabled | Local dev |
+| `integration_testing` | Testcontainer | Mock | CI / `make test-integration` |
+| `production` | External PostgreSQL | OIDC | Production |
