@@ -89,19 +89,25 @@ func GetSessionLogs(c *gin.Context) {
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf("Failed to read backend response: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
-		return
-	}
-
+	// For non-OK responses, buffer to forward the error body
 	if resp.StatusCode != http.StatusOK {
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			log.Printf("Failed to read backend error response: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+			return
+		}
 		forwardErrorResponse(c, resp.StatusCode, body)
 		return
 	}
 
-	c.Data(http.StatusOK, "text/plain; charset=utf-8", body)
+	// Stream the log response directly to the client to avoid buffering up to
+	// 10 MB (the backend's LimitReader cap) per concurrent request.
+	c.Header("Content-Type", "text/plain; charset=utf-8")
+	c.Status(http.StatusOK)
+	if _, err := io.Copy(c.Writer, resp.Body); err != nil {
+		log.Printf("GetSessionLogs: error streaming backend response for %s: %v", sessionID, err)
+	}
 }
 
 // GetSessionMetrics handles GET /v1/sessions/:id/metrics

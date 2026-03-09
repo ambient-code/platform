@@ -19,6 +19,8 @@ func GetSessionMetrics(c *gin.Context) {
 	if project == "" {
 		project = c.Param("projectName")
 	}
+	// SanitizeForLog strips control characters for log-injection safety.
+	// Safe to reuse as K8s lookup key — K8s names cannot contain control characters.
 	sessionName := SanitizeForLog(c.Param("sessionName"))
 
 	k8sClt, k8sDyn := GetK8sClientsForRequest(c)
