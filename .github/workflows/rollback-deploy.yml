@@ -1,0 +1,127 @@
+name: Rollback Deploy to OpenShift
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Image tag to deploy (release tag like v0.0.30, commit SHA, or "stage")'
+        required: true
+        type: string
+      confirm:
+        description: 'Type "rollback" to confirm'
+        required: true
+        type: string
+
+concurrency:
+  group: openshift-deploy
+  cancel-in-progress: false
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    if: inputs.confirm == 'rollback'
+    environment: production
+    steps:
+      - name: Checkout code at target ref
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.image_tag }}
+
+      - name: Validate image tag
+        run: |
+          TAG="${{ inputs.image_tag }}"
+          echo "Deploying image tag: $TAG"
+
+          # Verify at least one image exists on Quay with this tag
+          if docker manifest inspect quay.io/ambient_code/vteam_backend:$TAG > /dev/null 2>&1; then
+            echo "✅ Image tag '$TAG' found on Quay"
+          else
+            echo "❌ Image tag '$TAG' not found on quay.io/ambient_code/vteam_backend"
+            echo "   Available tags can be checked at: https://quay.io/repository/ambient_code/vteam_backend?tab=tags"
+            exit 1
+          fi
+
+      - name: Install oc
+        uses: redhat-actions/oc-installer@v1
+        with:
+          oc_version: 'latest'
+
+      - name: Install kustomize
+        run: |
+          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+          sudo mv kustomize /usr/local/bin/
+
+      - name: Log in to OpenShift Cluster
+        run: |
+          oc login ${{ secrets.OPENSHIFT_SERVER }} --token=${{ secrets.OPENSHIFT_TOKEN }} --insecure-skip-tls-verify
+
+      - name: Update kustomization with rollback image tag
+        working-directory: components/manifests/overlays/production
+        run: |
+          TAG="${{ inputs.image_tag }}"
+          kustomize edit set image quay.io/ambient_code/vteam_frontend:latest=quay.io/ambient_code/vteam_frontend:$TAG
+          kustomize edit set image quay.io/ambient_code/vteam_backend:latest=quay.io/ambient_code/vteam_backend:$TAG
+          kustomize edit set image quay.io/ambient_code/vteam_operator:latest=quay.io/ambient_code/vteam_operator:$TAG
+          kustomize edit set image quay.io/ambient_code/vteam_claude_runner:latest=quay.io/ambient_code/vteam_claude_runner:$TAG
+          kustomize edit set image quay.io/ambient_code/vteam_state_sync:latest=quay.io/ambient_code/vteam_state_sync:$TAG
+          kustomize edit set image quay.io/ambient_code/vteam_public_api:latest=quay.io/ambient_code/vteam_public_api:$TAG
+
+      - name: Validate kustomization
+        working-directory: components/manifests/overlays/production
+        run: |
+          kustomize build . > /dev/null
+          echo "✅ Kustomization validation passed"
+
+      - name: Apply production overlay
+        working-directory: components/manifests/overlays/production
+        run: |
+          oc apply -k . -n ambient-code
+
+      - name: Update frontend environment variables
+        run: |
+          oc set env deployment/frontend -n ambient-code -c frontend \
+            GITHUB_APP_SLUG="ambient-code-stage" \
+            VTEAM_VERSION="${{ inputs.image_tag }}" \
+            FEEDBACK_URL="https://forms.gle/7XiWrvo6No922DUz6"
+
+      - name: Update operator environment variables
+        run: |
+          TAG="${{ inputs.image_tag }}"
+          oc set env deployment/agentic-operator -n ambient-code -c agentic-operator \
+            AMBIENT_CODE_RUNNER_IMAGE="quay.io/ambient_code/vteam_claude_runner:$TAG" \
+            STATE_SYNC_IMAGE="quay.io/ambient_code/vteam_state_sync:$TAG"
+
+      - name: Update agent registry ConfigMap
+        run: |
+          TAG="${{ inputs.image_tag }}"
+          REGISTRY=$(oc get configmap ambient-agent-registry -n ambient-code \
+            -o jsonpath='{.data.agent-registry\.json}')
+
+          REGISTRY=$(echo "$REGISTRY" | sed \
+            "s|quay.io/ambient_code/vteam_claude_runner[@:][^\"]*|quay.io/ambient_code/vteam_claude_runner:$TAG|g")
+          REGISTRY=$(echo "$REGISTRY" | sed \
+            "s|quay.io/ambient_code/vteam_state_sync[@:][^\"]*|quay.io/ambient_code/vteam_state_sync:$TAG|g")
+
+          oc patch configmap ambient-agent-registry -n ambient-code --type=merge \
+            -p "{\"data\":{\"agent-registry.json\":$(echo "$REGISTRY" | jq -Rs .)}}"
+
+      - name: Verify rollout
+        run: |
+          echo "Waiting for deployments to roll out..."
+          oc rollout status deployment/backend-api -n ambient-code --timeout=120s
+          oc rollout status deployment/frontend -n ambient-code --timeout=120s
+          oc rollout status deployment/agentic-operator -n ambient-code --timeout=120s
+          echo "✅ Rollback to ${{ inputs.image_tag }} complete"
+
+      - name: Summary
+        run: |
+          echo "## Rollback Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Component | Image |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Frontend | quay.io/ambient_code/vteam_frontend:${{ inputs.image_tag }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Backend | quay.io/ambient_code/vteam_backend:${{ inputs.image_tag }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Operator | quay.io/ambient_code/vteam_operator:${{ inputs.image_tag }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Runner | quay.io/ambient_code/vteam_claude_runner:${{ inputs.image_tag }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| State Sync | quay.io/ambient_code/vteam_state_sync:${{ inputs.image_tag }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Public API | quay.io/ambient_code/vteam_public_api:${{ inputs.image_tag }} |" >> $GITHUB_STEP_SUMMARY
