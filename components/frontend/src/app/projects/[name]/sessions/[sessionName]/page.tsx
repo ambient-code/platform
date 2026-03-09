@@ -1394,7 +1394,7 @@ export default function ProjectSessionDetailPage({
         type: "ask_user_question_response",
       });
     } catch (err) {
-      errorToast(err instanceof Error ? err.message : "Failed to send answer");
+      toast.error(err instanceof Error ? err.message : "Failed to send answer");
     }
   };
 
