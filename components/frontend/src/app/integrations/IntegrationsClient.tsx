@@ -1,6 +1,5 @@
 'use client'
 
-import React from 'react'
 import { GitHubConnectionCard } from '@/components/github-connection-card'
 import { GoogleDriveConnectionCard } from '@/components/google-drive-connection-card'
 import { GitLabConnectionCard } from '@/components/gitlab-connection-card'
@@ -10,16 +9,67 @@ import { PageHeader } from '@/components/page-header'
 import { useIntegrationsStatus } from '@/services/queries/use-integrations'
 import { Loader2 } from 'lucide-react'
 
+type FieldDefinition = {
+  name: string
+  label: string
+  type: 'text' | 'password'
+  placeholder?: string
+  helpText?: string
+}
+
+type MCPServerDefinition = {
+  displayName: string
+  description: string
+  fields: FieldDefinition[]
+}
+
+/**
+ * Known MCP servers that require user-provided credentials.
+ * Servers like webfetch, context7, and deepwiki are excluded because
+ * they don't require authentication.
+ */
+const KNOWN_MCP_SERVERS: Record<string, MCPServerDefinition> = {
+  'mcp-atlassian': {
+    displayName: 'Jira (MCP)',
+    description:
+      'Provide Jira credentials for the MCP Atlassian server used in agentic sessions',
+    fields: [
+      {
+        name: 'jira_url',
+        label: 'Jira URL',
+        type: 'text',
+        placeholder: 'https://issues.redhat.com',
+      },
+      {
+        name: 'jira_email',
+        label: 'Email',
+        type: 'text',
+        placeholder: 'you@example.com',
+      },
+      {
+        name: 'jira_api_token',
+        label: 'API Token',
+        type: 'password',
+        placeholder: 'Your Jira API token',
+        helpText: 'Create a token in Jira > Profile > Personal Access Tokens',
+      },
+    ],
+  },
+}
+
 type Props = { appSlug?: string }
 
 export default function IntegrationsClient({ appSlug }: Props) {
   // Fetch all integration statuses in one call
   const { data: integrations, isLoading, refetch } = useIntegrationsStatus()
 
-  // Derive MCP server entries that have stored credentials
-  const mcpServerEntries = integrations?.mcpServers
-    ? Object.entries(integrations.mcpServers)
-    : []
+  // Merge known servers with any additional servers that have stored credentials
+  const mcpServerNames = new Set<string>(Object.keys(KNOWN_MCP_SERVERS))
+  if (integrations?.mcpServers) {
+    for (const name of Object.keys(integrations.mcpServers)) {
+      mcpServerNames.add(name)
+    }
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -64,25 +114,41 @@ export default function IntegrationsClient({ appSlug }: Props) {
                 />
               </div>
 
-              {/* MCP Servers section — shown when any MCP server credentials exist */}
-              {mcpServerEntries.length > 0 && (
+              {/* MCP Servers section — always shown for known servers */}
+              {mcpServerNames.size > 0 && (
                 <div className="mt-8">
                   <h2 className="text-lg font-semibold text-foreground mb-4">MCP Servers</h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {mcpServerEntries.map(([name, serverStatus]) => (
-                      <MCPCredentialCard
-                        key={name}
-                        serverName={name}
-                        displayName={name}
-                        description={`MCP server: ${name}`}
-                        fields={[]}
-                        status={{
-                          connected: serverStatus.connected,
-                          serverName: name,
-                        }}
-                        onRefresh={refetch}
-                      />
-                    ))}
+                    {[...mcpServerNames].map((name) => {
+                      const definition = KNOWN_MCP_SERVERS[name]
+                      const serverStatus = integrations?.mcpServers?.[name]
+                      return (
+                        <MCPCredentialCard
+                          key={name}
+                          serverName={name}
+                          displayName={definition?.displayName ?? name}
+                          description={
+                            definition?.description ?? `Credentials for the ${name} MCP server`
+                          }
+                          fields={
+                            definition?.fields ?? [
+                              {
+                                name: 'api_key',
+                                label: 'API Key',
+                                type: 'password' as const,
+                                placeholder: 'Enter API key',
+                              },
+                            ]
+                          }
+                          status={
+                            serverStatus
+                              ? { connected: serverStatus.connected, serverName: name }
+                              : { connected: false, serverName: name }
+                          }
+                          onRefresh={refetch}
+                        />
+                      )
+                    })}
                   </div>
                 </div>
               )}
