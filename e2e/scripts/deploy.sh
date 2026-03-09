@@ -7,6 +7,9 @@ echo "======================================"
 echo "Deploying Ambient to kind cluster"
 echo "======================================"
 
+# Cluster name (override via env var for multi-worktree support)
+KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-ambient-local}"
+
 # Load .env file if it exists (for ANTHROPIC_API_KEY)
 if [ -f ".env" ]; then
   echo "Loading configuration from .env..."
@@ -14,7 +17,7 @@ if [ -f ".env" ]; then
   set -a
   source .env
   set +a
-  echo "   ✓ Loaded .env"
+  echo "   Loaded .env"
 fi
 
 # Detect container runtime (same logic as setup-kind.sh)
@@ -34,8 +37,8 @@ if [ "$CONTAINER_ENGINE" = "podman" ]; then
 fi
 
 # Check if kind cluster exists
-if ! kind get clusters 2>/dev/null | grep -q "^ambient-local$"; then
-  echo "❌ Kind cluster 'ambient-local' not found"
+if ! kind get clusters 2>/dev/null | grep -q "^${KIND_CLUSTER_NAME}$"; then
+  echo "Kind cluster '${KIND_CLUSTER_NAME}' not found"
   echo "   Run './scripts/setup-kind.sh' first"
   exit 1
 fi
@@ -44,13 +47,11 @@ echo ""
 echo "Applying manifests with kustomize..."
 echo "   Using overlay: kind"
 
-# Check for image overrides in .env
+# Check for image overrides in .env (already sourced above)
 if [ -f ".env" ]; then
-  source .env
-
   # Log image overrides
   if [ -n "${IMAGE_BACKEND:-}${IMAGE_FRONTEND:-}${IMAGE_OPERATOR:-}${IMAGE_RUNNER:-}${IMAGE_STATE_SYNC:-}" ]; then
-    echo "   ℹ️  Image overrides from .env:"
+    echo "   Image overrides from .env:"
     [ -n "${IMAGE_BACKEND:-}" ] && echo "      Backend: ${IMAGE_BACKEND}"
     [ -n "${IMAGE_FRONTEND:-}" ] && echo "      Frontend: ${IMAGE_FRONTEND}"
     [ -n "${IMAGE_OPERATOR:-}" ] && echo "      Operator: ${IMAGE_OPERATOR}"
@@ -86,14 +87,14 @@ if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
   kubectl create secret generic ambient-runner-secrets -n ambient-code \
     --from-literal=ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}" \
     --dry-run=client -o yaml | kubectl apply --validate=false -f -
-  echo "   ✓ ANTHROPIC_API_KEY injected (agent testing enabled)"
+  echo "   ANTHROPIC_API_KEY injected (agent testing enabled)"
 else
   echo ""
   echo "No ANTHROPIC_API_KEY — using mock SDK client (pre-recorded fixtures)"
   kubectl create secret generic ambient-runner-secrets -n ambient-code \
     --from-literal=ANTHROPIC_API_KEY=mock-replay-key \
     --dry-run=client -o yaml | kubectl apply --validate=false -f -
-  echo "   ✓ Mock SDK configured (ANTHROPIC_API_KEY=mock-replay-key)"
+  echo "   Mock SDK configured (ANTHROPIC_API_KEY=mock-replay-key)"
 fi
 
 echo ""
@@ -106,62 +107,16 @@ echo "Initializing MinIO storage..."
 
 echo ""
 echo "Extracting test user token..."
-# Wait for the secret to be populated with a token (max 30 seconds)
-TOKEN=""
-for i in {1..15}; do
-  TOKEN=$(kubectl get secret test-user-token -n ambient-code -o jsonpath='{.data.token}' 2>/dev/null | base64 -d 2>/dev/null || echo "")
-  if [ -n "$TOKEN" ]; then
-    echo "   ✓ Token extracted successfully"
-    break
-  fi
-  if [ $i -eq 15 ]; then
-    echo "❌ Failed to extract test token after 30 seconds"
-    echo "   The secret may not be ready. Check with:"
-    echo "   kubectl get secret test-user-token -n ambient-code"
-    exit 1
-  fi
-  sleep 2
-done
+KIND_CLUSTER_NAME="$KIND_CLUSTER_NAME" KIND_HTTP_PORT="${KIND_HTTP_PORT:-}" CONTAINER_ENGINE="${CONTAINER_ENGINE:-}" ./scripts/extract-token.sh
 
-# Detect which port to use based on container engine
-# Podman uses port 8080 (rootless compatibility), Docker uses port 80
-if [ "${CONTAINER_ENGINE:-}" = "podman" ]; then
-  HTTP_PORT=8080
-else
-  # Auto-detect if not explicitly set
-  if podman ps --filter "name=ambient-local-control-plane" 2>/dev/null | grep -q "ambient-local"; then
-    HTTP_PORT=8080
-  else
-    HTTP_PORT=80
-  fi
-fi
-
-# Use localhost instead of vteam.local to avoid needing /etc/hosts modification
-BASE_URL="http://localhost"
-if [ "$HTTP_PORT" != "80" ]; then
-  BASE_URL="http://localhost:${HTTP_PORT}"
-fi
-
-echo "TEST_TOKEN=$TOKEN" > .env.test
-echo "CYPRESS_BASE_URL=$BASE_URL" >> .env.test
-# Save agent config to .env.test
+# Append ANTHROPIC_API_KEY to .env.test if set (for agent testing in Cypress)
 if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
   echo "ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY" >> .env.test
-  echo "   ✓ Token saved to .env.test"
-  echo "   ✓ Base URL: $BASE_URL"
-  echo "   ✓ API Key saved (agent testing with real LLM)"
-else
-  echo "   ✓ Token saved to .env.test"
-  echo "   ✓ Base URL: $BASE_URL"
-  echo "   ✓ Replay mode (agent testing without API key)"
+  echo "   API Key saved (agent testing enabled)"
 fi
 
 echo ""
-echo "✅ Deployment complete!"
-echo ""
-echo "Access the application:"
-echo "   Frontend: $BASE_URL"
-echo "   Backend:  $BASE_URL/api/health"
+echo "Deployment complete!"
 echo ""
 echo "Check pod status:"
 echo "   kubectl get pods -n ambient-code"

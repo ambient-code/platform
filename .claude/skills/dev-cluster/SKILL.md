@@ -5,6 +5,8 @@ description: Manages Ambient Code Platform development clusters (kind/minikube) 
 
 # Development Cluster Management Skill
 
+> **Multi-cluster support:** Each worktree/branch automatically gets its own isolated Kind cluster via `CLUSTER_SLUG`. The Makefile derives `KIND_CLUSTER_NAME`, `KIND_HTTP_PORT`, `KIND_HTTPS_PORT`, `KIND_FWD_FRONTEND_PORT`, and `KIND_FWD_BACKEND_PORT` from the slug. Run `make kind-status` to see the current assignments. Never hardcode cluster names or ports — always use the Makefile variables (in make targets) or their exported env-var equivalents (in shell commands).
+
 You are an expert **Ambient Code Platform (ACP) DevOps Specialist**. Your mission is to help developers efficiently manage local development clusters for testing platform changes.
 
 ## Your Role
@@ -41,11 +43,11 @@ The Ambient Code Platform consists of these containerized components:
 **Characteristics:**
 - Uses production Quay.io images by default
 - Lightweight single-node cluster
-- NodePort 30080 mapped to host (8080 for Podman, 80 for Docker)
+- NodePort mapped to host via `KIND_HTTP_PORT` (run `make kind-status` to see assigned ports)
 - MinIO S3 storage included
 - Test user auto-created with token in `.env.test`
 
-**Access:** http://localhost:8080 (or http://localhost with Docker)
+**Access:** `http://localhost:$KIND_FWD_FRONTEND_PORT` (run `make kind-status` for assigned ports)
 
 ### Minikube (Feature-rich)
 **Best for:** Testing with local builds, full feature development
@@ -119,9 +121,9 @@ After deployment, **check the actual port mapping** instead of assuming a fixed 
 
 ```bash
 # For kind with Docker: check the container's published ports
-docker ps --filter "name=ambient-local" --format "{{.Ports}}"
+docker ps --filter "name=$KIND_CLUSTER_NAME" --format "{{.Ports}}"
 # Example output: 0.0.0.0:80->30080/tcp  → access at http://localhost
-# Example output: 0.0.0.0:8080->30080/tcp → access at http://localhost:8080
+# Example output: 0.0.0.0:<port>->30080/tcp → access at http://localhost:<port>
 
 # Quick connectivity test
 curl -s -o /dev/null -w "%{http_code}" http://localhost:80
@@ -129,7 +131,7 @@ curl -s -o /dev/null -w "%{http_code}" http://localhost:80
 
 **Port mapping depends on the container engine:**
 - **Docker**: host port 80 → http://localhost
-- **Podman**: host port 8080 → http://localhost:8080
+- **Podman**: host port from `KIND_HTTP_PORT` → check `make kind-status`
 
 ## Workflow: Testing Changes in Kind
 
@@ -206,9 +208,9 @@ make kind-up
 **If cluster exists, load new images:**
 ```bash
 # Load images into kind
-kind load docker-image localhost/vteam_backend:latest --name ambient-local
-kind load docker-image localhost/vteam_frontend:latest --name ambient-local
-kind load docker-image localhost/vteam_operator:latest --name ambient-local
+kind load docker-image localhost/vteam_backend:latest --name $KIND_CLUSTER_NAME
+kind load docker-image localhost/vteam_frontend:latest --name $KIND_CLUSTER_NAME
+kind load docker-image localhost/vteam_operator:latest --name $KIND_CLUSTER_NAME
 # ... for each rebuilt component
 ```
 
@@ -335,7 +337,7 @@ make local-reload-backend
 
 # With kind
 make build-backend
-kind load docker-image localhost/vteam_backend:latest --name ambient-local
+kind load docker-image localhost/vteam_backend:latest --name $KIND_CLUSTER_NAME
 kubectl set image deployment/backend backend=localhost/vteam_backend:latest -n ambient-code
 kubectl rollout restart deployment/backend -n ambient-code
 kubectl rollout status deployment/backend -n ambient-code
@@ -389,9 +391,9 @@ kubectl get deployments -n ambient-code
 make build-all
 
 # Load images into kind
-kind load docker-image localhost/vteam_backend:latest --name ambient-local
-kind load docker-image localhost/vteam_frontend:latest --name ambient-local
-kind load docker-image localhost/vteam_operator:latest --name ambient-local
+kind load docker-image localhost/vteam_backend:latest --name $KIND_CLUSTER_NAME
+kind load docker-image localhost/vteam_frontend:latest --name $KIND_CLUSTER_NAME
+kind load docker-image localhost/vteam_operator:latest --name $KIND_CLUSTER_NAME
 
 # Update image pull policy
 kubectl patch deployment backend -n ambient-code -p '{"spec":{"template":{"spec":{"containers":[{"name":"backend","imagePullPolicy":"Never"}]}}}}'
@@ -450,7 +452,7 @@ make kind-port-forward
 make build-backend  # (or whatever component)
 
 # Reload into cluster
-kind load docker-image localhost/vteam_backend:latest --name ambient-local
+kind load docker-image localhost/vteam_backend:latest --name $KIND_CLUSTER_NAME
 
 # Force restart
 kubectl rollout restart deployment/backend -n ambient-code
@@ -485,7 +487,7 @@ For **frontend-only changes**, skip image rebuilds entirely. Run NextJS locally 
 
 ```bash
 # Terminal 1: port-forward backend from kind cluster
-kubectl port-forward svc/backend-service 8081:8080 -n ambient-code
+kubectl port-forward svc/backend-service $KIND_FWD_BACKEND_PORT:8080 -n ambient-code
 
 # Terminal 2: set up frontend with auth token
 cd components/frontend
@@ -496,7 +498,7 @@ TOKEN=$(kubectl get secret test-user-token -n ambient-code \
   -o jsonpath='{.data.token}' | base64 -d)
 cat > .env.local <<EOF
 OC_TOKEN=$TOKEN
-BACKEND_URL=http://localhost:8081/api
+BACKEND_URL=http://localhost:$KIND_FWD_BACKEND_PORT/api
 EOF
 
 npm run dev
@@ -574,7 +576,7 @@ Do you need to test local code changes?
 | Check status | `kubectl get pods -n ambient-code` | `make local-status` |
 | View logs | `kubectl logs -f -l app=backend -n ambient-code` | `make local-logs-backend` |
 | Tear down | `make kind-down` | `make local-clean` |
-| Access URL | Detect from port mapping (Docker: `:80`, Podman: `:8080`) | http://localhost:3000 |
+| Access URL | `make kind-status` for ports (`$KIND_FWD_FRONTEND_PORT`) | http://localhost:3000 |
 
 ## When to Invoke This Skill
 
@@ -598,12 +600,12 @@ Assistant (using dev-cluster skill):
 2. Explains: "I see changes in components/backend. I'll build the backend image, create a kind cluster, and deploy your changes."
 3. Runs: `make build-backend`
 4. Runs: `make kind-up`
-5. Loads image: `kind load docker-image localhost/vteam_backend:latest --name ambient-local`
+5. Loads image: `kind load docker-image localhost/vteam_backend:latest --name $KIND_CLUSTER_NAME`
 6. Updates deployment with local image and ImagePullPolicy: Never
 7. Verifies: `kubectl rollout status deployment/backend -n ambient-code`
 8. Provides access URL and log commands
 
-Result: User can test their backend changes at the detected URL (http://localhost for Docker, http://localhost:8080 for Podman)
+Result: User can test their backend changes at `http://localhost:$KIND_FWD_FRONTEND_PORT` (run `make kind-status` to see the assigned port)
 
 ### Example 2: Incremental Development with Minikube
 
