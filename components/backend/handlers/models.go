@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sort"
 	"sync/atomic"
 
 	"ambient-code-backend/featureflags"
@@ -98,7 +99,6 @@ func ListModelsForProject(c *gin.Context) {
 		}
 
 		isDefault := entry.ID == effectiveDefault
-		flagName := fmt.Sprintf("model.%s.enabled", entry.ID)
 
 		// Default model is always included
 		if isDefault {
@@ -109,7 +109,17 @@ func ListModelsForProject(c *gin.Context) {
 			continue
 		}
 
-		// Check workspace override first, then fall back to Unleash
+		// Non-gated models are always included (no feature flag required)
+		if !entry.FeatureGated {
+			models = append(models, types.Model{
+				ID: entry.ID, Label: entry.Label, Provider: entry.Provider,
+				IsDefault: false,
+			})
+			continue
+		}
+
+		// Gated models: check workspace override first, then fall back to Unleash
+		flagName := fmt.Sprintf("model.%s.enabled", entry.ID)
 		if isModelEnabledWithOverrides(flagName, overrides) {
 			models = append(models, types.Model{
 				ID: entry.ID, Label: entry.Label, Provider: entry.Provider,
@@ -117,6 +127,10 @@ func ListModelsForProject(c *gin.Context) {
 			})
 		}
 	}
+
+	sort.Slice(models, func(i, j int) bool {
+		return models[i].Label < models[j].Label
+	})
 
 	responseDefault := effectiveDefault
 	if len(models) == 0 {
@@ -210,6 +224,10 @@ func isModelAvailable(ctx context.Context, k8sClient kubernetes.Interface, model
 				if modelID == pd && (requiredProvider == "" || provider == requiredProvider) {
 					return true
 				}
+			}
+			// Non-gated models are always available (no feature flag required)
+			if !entry.FeatureGated {
+				return true
 			}
 			flagName := fmt.Sprintf("model.%s.enabled", entry.ID)
 			overrides, oErr := getWorkspaceOverrides(ctx, k8sClient, namespace)

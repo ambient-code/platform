@@ -1,0 +1,8 @@
+node_modules/
+.nyc_output/
+.nyc_output_merged/
+.nyc_output_merged_clean/
+coverage/
+coverage-merged/
+coverage-unit/
+.env.test

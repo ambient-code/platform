@@ -5,7 +5,7 @@ import {
   useGitStatus,
   useConfigureGitRemote,
 } from "@/services/queries/use-workspace";
-import { successToast, errorToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 
 type UseGitOperationsProps = {
   projectName: string;
@@ -40,13 +40,13 @@ export function useGitOperations({
         branch: branch.trim(),
       });
 
-      successToast("Remote configured successfully");
+      toast.success("Remote configured successfully");
       await fetchGitStatus();
 
       return true;
     } catch (error) {
       console.error("Failed to configure remote:", error);
-      errorToast(error instanceof Error ? error.message : "Failed to configure remote");
+      toast.error(error instanceof Error ? error.message : "Failed to configure remote");
       return false;
     }
   }, [projectName, sessionName, directoryPath, configureRemoteMutation, fetchGitStatus]);

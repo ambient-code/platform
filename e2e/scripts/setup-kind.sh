@@ -5,6 +5,9 @@ echo "======================================"
 echo "Setting up kind cluster for Ambient"
 echo "======================================"
 
+# Cluster name (override via env var for multi-worktree support)
+KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-ambient-local}"
+
 # Detect container runtime (prefer explicit CONTAINER_ENGINE, then Docker, then Podman)
 CONTAINER_ENGINE="${CONTAINER_ENGINE:-}"
 
@@ -14,7 +17,7 @@ if [ -z "$CONTAINER_ENGINE" ]; then
   elif command -v podman &> /dev/null; then
     CONTAINER_ENGINE="podman"
   else
-    echo "❌ Error: Neither Docker nor Podman found or running"
+    echo "Error: Neither Docker nor Podman found or running"
     echo "   Please install and start Docker or Podman"
     echo "   Docker: https://docs.docker.com/get-docker/"
     echo "   Podman: brew install podman && podman machine init && podman machine start"
@@ -27,42 +30,58 @@ echo "Using container runtime: $CONTAINER_ENGINE"
 # Configure kind to use Podman if selected
 if [ "$CONTAINER_ENGINE" = "podman" ]; then
   export KIND_EXPERIMENTAL_PROVIDER=podman
-  echo "   ℹ️  Set KIND_EXPERIMENTAL_PROVIDER=podman"
+  echo "   Set KIND_EXPERIMENTAL_PROVIDER=podman"
 
   # Verify Podman is running
   if ! podman ps &> /dev/null; then
-    echo "❌ Podman is installed but not running"
+    echo "Podman is installed but not running"
     echo "   Start it with: podman machine start"
     exit 1
   fi
 fi
 
 # Check if kind cluster already exists
-if kind get clusters 2>/dev/null | grep -q "^ambient-local$"; then
-  echo "⚠️  Kind cluster 'ambient-local' already exists"
-  echo "   Run './scripts/cleanup.sh' first to remove it"
+if kind get clusters 2>/dev/null | grep -q "^${KIND_CLUSTER_NAME}$"; then
+  echo "Kind cluster '${KIND_CLUSTER_NAME}' already exists"
+  echo "   Run 'make kind-down' or delete manually: kind delete cluster --name ${KIND_CLUSTER_NAME}"
   exit 1
 fi
 
 echo ""
-echo "Creating kind cluster..."
+echo "Creating kind cluster '${KIND_CLUSTER_NAME}'..."
 
-# Use higher ports for Podman rootless compatibility (ports >= 1024)
+# Port defaults: use env vars if set, otherwise pick based on container engine
 if [ "$CONTAINER_ENGINE" = "podman" ]; then
-  HTTP_PORT=8080
-  HTTPS_PORT=8443
-  echo "   ℹ️  Using ports 8080/8443 (Podman rootless compatibility)"
+  HTTP_PORT="${KIND_HTTP_PORT:-8080}"
+  HTTPS_PORT="${KIND_HTTPS_PORT:-8443}"
+  echo "   Using ports ${HTTP_PORT}/${HTTPS_PORT} (Podman rootless compatibility)"
 else
-  HTTP_PORT=80
-  HTTPS_PORT=443
-  echo "   ℹ️  Using ports 80/443 (Docker standard ports)"
+  HTTP_PORT="${KIND_HTTP_PORT:-80}"
+  HTTPS_PORT="${KIND_HTTPS_PORT:-443}"
+  echo "   Using ports ${HTTP_PORT}/${HTTPS_PORT} (Docker standard ports)"
 fi
 
-cat <<EOF | kind create cluster --name ambient-local --config=-
+API_SERVER_ADDRESS="127.0.0.1"
+CERT_SAN_PATCH=""
+if [ -n "${KIND_HOST:-}" ]; then
+  API_SERVER_ADDRESS="0.0.0.0"
+  CERT_SAN_PATCH="  kubeadmConfigPatches:
+  - |
+    kind: ClusterConfiguration
+    apiServer:
+      certSANs:
+      - ${KIND_HOST}"
+  echo "   API server binding to 0.0.0.0 (remote access via ${KIND_HOST})"
+fi
+
+cat <<EOF | kind create cluster --name "${KIND_CLUSTER_NAME}" --config=-
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
+networking:
+  apiServerAddress: "${API_SERVER_ADDRESS}"
 nodes:
 - role: control-plane
+${CERT_SAN_PATCH}
   # Kind v0.31.0 default node image
   image: kindest/node:v1.35.0@sha256:452d707d4862f52530247495d180205e029056831160e22870e37e3f6c1ac31f
   extraPortMappings:
@@ -75,12 +94,12 @@ nodes:
 EOF
 
 echo ""
-echo "✅ Kind cluster ready!"
-echo "   Cluster: ambient-local"
+echo "Kind cluster ready!"
+echo "   Cluster: ${KIND_CLUSTER_NAME}"
 echo "   Kubernetes: v1.35.0"
-echo "   NodePort: 30080 → host port ${HTTP_PORT}"
+echo "   NodePort: 30080 -> host port ${HTTP_PORT}"
 echo ""
-echo "📝 Next steps:"
+echo "Next steps:"
 echo "   1. Deploy the platform: make kind-up (continues deployment)"
 echo "   2. Access services: make kind-port-forward (in another terminal)"
 echo "   3. Frontend: http://localhost:${HTTP_PORT}"

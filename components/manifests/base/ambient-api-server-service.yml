@@ -159,6 +159,7 @@ metadata:
     component: api
   annotations:
     description: Exposes the ambient-api-server REST API
+    service.beta.openshift.io/serving-cert-secret-name: ambient-api-server-tls
 spec:
   selector:
     app: ambient-api-server

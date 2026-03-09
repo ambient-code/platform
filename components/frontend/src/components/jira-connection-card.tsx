@@ -6,7 +6,7 @@ import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Loader2, Eye, EyeOff } from 'lucide-react'
-import { successToast, errorToast } from '@/hooks/use-toast'
+import { toast } from 'sonner'
 import { useConnectJira, useDisconnectJira } from '@/services/queries/use-jira'
 import { useCurrentUser } from '@/services/queries/use-auth'
 
@@ -50,7 +50,7 @@ export function JiraConnectionCard({ status, onRefresh }: Props) {
 
   const handleConnect = async () => {
     if (!url || !username || !apiToken) {
-      errorToast('Please fill in all fields')
+      toast.error('Please fill in all fields')
       return
     }
 
@@ -58,7 +58,7 @@ export function JiraConnectionCard({ status, onRefresh }: Props) {
       { url, email: username, apiToken },
       {
         onSuccess: () => {
-          successToast('Jira connected successfully')
+          toast.success('Jira connected successfully')
           setShowForm(false)
           setUrl('')
           setUsername('')
@@ -66,7 +66,7 @@ export function JiraConnectionCard({ status, onRefresh }: Props) {
           onRefresh?.()
         },
         onError: (error) => {
-          errorToast(error instanceof Error ? error.message : 'Failed to connect Jira')
+          toast.error(error instanceof Error ? error.message : 'Failed to connect Jira')
         },
       }
     )
@@ -75,11 +75,11 @@ export function JiraConnectionCard({ status, onRefresh }: Props) {
   const handleDisconnect = async () => {
     disconnectMutation.mutate(undefined, {
       onSuccess: () => {
-        successToast('Jira disconnected successfully')
+        toast.success('Jira disconnected successfully')
         onRefresh?.()
       },
       onError: (error) => {
-        errorToast(error instanceof Error ? error.message : 'Failed to disconnect Jira')
+        toast.error(error instanceof Error ? error.message : 'Failed to disconnect Jira')
       },
     })
   }
@@ -94,11 +94,11 @@ export function JiraConnectionCard({ status, onRefresh }: Props) {
   }
 
   return (
-    <Card className="bg-card border border-gray-200 shadow-sm flex flex-col h-full">
+    <Card className="bg-card border border-border/60 shadow-sm shadow-black/[0.03] dark:shadow-black/[0.15] flex flex-col h-full">
       <div className="p-6 flex flex-col flex-1">
         {/* Header section with icon and title */}
         <div className="flex items-start gap-4 mb-6">
-          <div className="flex-shrink-0 w-16 h-16 bg-blue-600 rounded-lg flex items-center justify-center">
+          <div className="flex-shrink-0 w-16 h-16 bg-primary rounded-lg flex items-center justify-center">
             <svg className="w-10 h-10 text-white" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path d="M11.571 11.513H0a5.218 5.218 0 0 0 5.232 5.215h2.13v2.057A5.215 5.215 0 0 0 12.575 24V12.518a1.005 1.005 0 0 0-1.005-1.005zm5.723-5.756H5.736a5.215 5.215 0 0 0 5.215 5.214h2.129v2.058a5.218 5.218 0 0 0 5.215 5.214V6.758a1.001 1.001 0 0 0-1.001-1.001zM23.013 0H11.455a5.215 5.215 0 0 0 5.215 5.215h2.129v2.057A5.215 5.215 0 0 0 24 12.483V1.005A1.001 1.001 0 0 0 23.013 0z" />
             </svg>
@@ -255,7 +255,7 @@ export function JiraConnectionCard({ status, onRefresh }: Props) {
             <Button
               onClick={() => setShowForm(true)}
               disabled={isLoading}
-              className="bg-blue-600 hover:bg-blue-700 text-white"
+              className="bg-primary hover:bg-primary/90 text-primary-foreground"
             >
               Connect Jira
             </Button>

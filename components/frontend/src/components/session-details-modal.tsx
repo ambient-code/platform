@@ -8,7 +8,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Download, Loader2 } from 'lucide-react';
 import type { AgenticSession } from '@/types/agentic-session';
 import { getPhaseColor } from '@/utils/session-helpers';
-import { successToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import { useSessionExport } from '@/services/queries/use-sessions';
 import { triggerDownload } from '@/utils/export-chat';
 
@@ -41,7 +41,7 @@ export function SessionDetailsModal({
     setExportingAgui(true);
     try {
       triggerDownload(JSON.stringify(exportData.aguiEvents, null, 2), `${sessionName}-chat.json`, 'application/json');
-      successToast('Chat exported successfully');
+      toast.success('Chat exported successfully');
     } finally {
       setExportingAgui(false);
     }
@@ -52,7 +52,7 @@ export function SessionDetailsModal({
     setExportingLegacy(true);
     try {
       triggerDownload(JSON.stringify(exportData.legacyMessages, null, 2), `${sessionName}-legacy-messages.json`, 'application/json');
-      successToast('Legacy messages exported successfully');
+      toast.success('Legacy messages exported successfully');
     } finally {
       setExportingLegacy(false);
     }
@@ -129,7 +129,7 @@ export function SessionDetailsModal({
               <div className="mb-2">
                 <span className="font-semibold text-foreground/80">Session prompt:</span>
               </div>
-              <div className="max-h-[200px] overflow-y-auto p-4 bg-muted/50 rounded-md border border-gray-200">
+              <div className="max-h-[200px] overflow-y-auto p-4 bg-muted/50 rounded-md border border-border">
                 <p className="whitespace-pre-wrap text-sm text-foreground leading-relaxed">{session.spec.initialPrompt}</p>
               </div>
             </div>
@@ -137,7 +137,7 @@ export function SessionDetailsModal({
 
           {session.status?.conditions && session.status.conditions.length > 0 && (
             <div className="pt-4">
-              <div className="text-xs uppercase tracking-wide text-gray-500 mb-2">Reconciliation Conditions</div>
+              <div className="text-xs uppercase tracking-wide text-muted-foreground mb-2">Reconciliation Conditions</div>
               <Accordion type="multiple" className="w-full">
                 {session.status.conditions.map((condition, index) => (
                   <AccordionItem key={`${condition.type}-${index}`} value={`condition-${index}`}>

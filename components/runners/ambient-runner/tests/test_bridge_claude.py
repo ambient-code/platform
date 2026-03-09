@@ -215,7 +215,7 @@ class TestClaudeBridgeShutdown:
 
 @pytest.mark.asyncio
 class TestClaudeBridgeSetupObservability:
-    """Test _setup_observability wiring."""
+    """Test observability setup wiring via setup_bridge_observability."""
 
     async def test_forwards_workflow_env_vars_to_initialize(self):
         """Verify the three ACTIVE_WORKFLOW_* env vars are read from context and forwarded."""
@@ -241,7 +241,8 @@ class TestClaudeBridgeSetupObservability:
             "ambient_runner.observability.ObservabilityManager",
             return_value=mock_obs_instance,
         ) as mock_obs_cls:
-            await bridge._setup_observability("claude-sonnet-4-5")
+            from ambient_runner.bridge import setup_bridge_observability
+            await setup_bridge_observability(ctx, "claude-sonnet-4-5")
 
         mock_obs_cls.assert_called_once()
         mock_obs_instance.initialize.assert_awaited_once()
@@ -274,7 +275,8 @@ class TestClaudeBridgeSetupObservability:
             "ambient_runner.observability.ObservabilityManager",
             return_value=mock_obs_instance,
         ):
-            await bridge._setup_observability("claude-sonnet-4-5")
+            from ambient_runner.bridge import setup_bridge_observability
+            await setup_bridge_observability(ctx, "claude-sonnet-4-5")
 
         call_kwargs = mock_obs_instance.initialize.call_args[1]
 

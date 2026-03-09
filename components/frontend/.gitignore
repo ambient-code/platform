@@ -64,3 +64,6 @@ next-env.d.ts
 
 # Previous frontend
 previous-frontend/
+
+# Coverage
+coverage/

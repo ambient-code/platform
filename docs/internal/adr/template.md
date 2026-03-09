@@ -1,6 +1,5 @@
 # ADR-NNNN: [Short Title of Decision]
 
-**Status:** [Proposed | Accepted | Deprecated | Superseded by ADR-XXXX]
 **Date:** YYYY-MM-DD
 **Deciders:** [List of people involved]
 **Technical Story:** [Link to issue/PR if applicable]

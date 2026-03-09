@@ -34,12 +34,14 @@ type FlagTag struct {
 }
 
 // FlagSpec describes a feature flag to sync to Unleash.
-// All flags are created disabled with type "release" and a flexibleRollout
-// strategy at 0%. Tags are optional and per-flag.
+// Flags are created with type "release" and a flexibleRollout strategy.
+// When EnabledByDefault is true, the flag is enabled in the environment
+// with 100% rollout; otherwise it is created disabled at 0%.
 type FlagSpec struct {
-	Name        string    `json:"name"`
-	Description string    `json:"description"`
-	Tags        []FlagTag `json:"tags,omitempty"`
+	Name             string    `json:"name"`
+	Description      string    `json:"description"`
+	Tags             []FlagTag `json:"tags,omitempty"`
+	EnabledByDefault bool      `json:"enabledByDefault,omitempty"`
 }
 
 // FlagsConfig is the JSON structure for the generic flags config file.
@@ -48,7 +50,8 @@ type FlagsConfig struct {
 }
 
 // FlagsFromManifest converts a model manifest into FlagSpecs.
-// Skips default models (global and per-provider) and unavailable models.
+// Only creates flags for models that are available and feature-gated.
+// Skips default models (global and per-provider) as defense-in-depth.
 func FlagsFromManifest(manifest *types.ModelManifest) []FlagSpec {
 	// Build set of all default model IDs (global + per-provider)
 	defaults := map[string]bool{manifest.DefaultModel: true}
@@ -58,6 +61,9 @@ func FlagsFromManifest(manifest *types.ModelManifest) []FlagSpec {
 
 	var specs []FlagSpec
 	for _, model := range manifest.Models {
+		if !model.FeatureGated {
+			continue
+		}
 		if defaults[model.ID] {
 			continue
 		}
@@ -65,12 +71,82 @@ func FlagsFromManifest(manifest *types.ModelManifest) []FlagSpec {
 			continue
 		}
 		specs = append(specs, FlagSpec{
-			Name:        sanitizeLogString(fmt.Sprintf("model.%s.enabled", model.ID)),
-			Description: sanitizeLogString(fmt.Sprintf("Enable %s (%s) for users", model.Label, model.ID)),
-			Tags:        []FlagTag{{Type: "scope", Value: "workspace"}},
+			Name:             fmt.Sprintf("model.%s.enabled", model.ID),
+			Description:      sanitizeLogString(fmt.Sprintf("Enable %s (%s) for users", model.Label, model.ID)),
+			Tags:             []FlagTag{{Type: "scope", Value: "workspace"}},
+			EnabledByDefault: true,
 		})
 	}
 	return specs
+}
+
+// StaleFlagsFromManifest returns Unleash flag names that should be archived
+// because the corresponding model is no longer feature-gated.
+func StaleFlagsFromManifest(manifest *types.ModelManifest) []string {
+	var stale []string
+	for _, model := range manifest.Models {
+		if model.FeatureGated {
+			continue
+		}
+		stale = append(stale, fmt.Sprintf("model.%s.enabled", model.ID))
+	}
+	return stale
+}
+
+// CleanupStaleFlags archives Unleash flags that are no longer needed.
+// Flags that don't exist are silently skipped (already archived or never created).
+//
+// Required env vars: UNLEASH_ADMIN_URL, UNLEASH_ADMIN_TOKEN
+// Optional env var:  UNLEASH_PROJECT (default: "default")
+func CleanupStaleFlags(ctx context.Context, flagNames []string) error {
+	if len(flagNames) == 0 {
+		return nil
+	}
+
+	adminURL := strings.TrimSuffix(strings.TrimSpace(os.Getenv("UNLEASH_ADMIN_URL")), "/")
+	adminToken := strings.TrimSpace(os.Getenv("UNLEASH_ADMIN_TOKEN"))
+	project := strings.TrimSpace(os.Getenv("UNLEASH_PROJECT"))
+	if project == "" {
+		project = "default"
+	}
+
+	if adminURL == "" || adminToken == "" {
+		log.Printf("cleanup-flags: UNLEASH_ADMIN_URL or UNLEASH_ADMIN_TOKEN not set, skipping")
+		return nil
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+
+	var archived, skipped, errCount int
+	log.Printf("Cleaning up %d stale Unleash flag(s)...", len(flagNames))
+
+	for _, name := range flagNames {
+		exists, err := flagExists(ctx, client, adminURL, project, name, adminToken)
+		if err != nil {
+			log.Printf("  ERROR checking %s: %v", name, err)
+			errCount++
+			continue
+		}
+		if !exists {
+			skipped++
+			continue
+		}
+
+		if err := archiveFlag(ctx, client, adminURL, project, name, adminToken); err != nil {
+			log.Printf("  ERROR archiving %s: %v", name, err)
+			errCount++
+			continue
+		}
+		log.Printf("  %s: archived", name)
+		archived++
+	}
+
+	log.Printf("Cleanup summary: %d archived, %d not found, %d errors", archived, skipped, errCount)
+
+	if errCount > 0 {
+		return fmt.Errorf("%d errors occurred during cleanup", errCount)
+	}
+	return nil
 }
 
 // FlagsConfigPath returns the filesystem path to the generic flags config.
@@ -126,17 +202,31 @@ func SyncModelFlagsFromFile(manifestPath string) error {
 		return fmt.Errorf("parsing manifest: %w", err)
 	}
 
-	return SyncFlags(context.Background(), FlagsFromManifest(&manifest))
+	ctx := context.Background()
+	if err := SyncFlags(ctx, FlagsFromManifest(&manifest)); err != nil {
+		return err
+	}
+	return CleanupStaleFlags(ctx, StaleFlagsFromManifest(&manifest))
 }
 
 // SyncFlagsAsync runs SyncFlags in a background goroutine with retries.
 // Intended for use at server startup — does not block the caller.
 // Cancel the context to abort retries (e.g. on SIGTERM).
 func SyncFlagsAsync(ctx context.Context, flags []FlagSpec) {
+	SyncAndCleanupAsync(ctx, flags, nil)
+}
+
+// SyncAndCleanupAsync runs SyncFlags and CleanupStaleFlags in a background
+// goroutine with retries. After a successful sync, stale flags are archived.
+// Cancel the context to abort retries (e.g. on SIGTERM).
+func SyncAndCleanupAsync(ctx context.Context, flags []FlagSpec, staleFlags []string) {
 	go func() {
 		for attempt := 1; attempt <= maxRetries; attempt++ {
 			err := SyncFlags(ctx, flags)
 			if err == nil {
+				if cErr := CleanupStaleFlags(ctx, staleFlags); cErr != nil {
+					log.Printf("sync-flags: cleanup failed (non-fatal): %v", cErr)
+				}
 				return
 			}
 			log.Printf("sync-flags: attempt %d/%d failed: %v", attempt, maxRetries, err)
@@ -220,11 +310,22 @@ func SyncFlags(ctx context.Context, flags []FlagSpec) error {
 			}
 		}
 
-		if err := addRolloutStrategy(ctx, client, adminURL, project, environment, flag.Name, adminToken); err != nil {
+		rollout := "0"
+		if flag.EnabledByDefault {
+			rollout = "100"
+		}
+		if err := addRolloutStrategy(ctx, client, adminURL, project, environment, flag.Name, rollout, adminToken); err != nil {
 			log.Printf("  WARNING: created %s but failed to add rollout strategy: %v", flag.Name, err)
 		}
 
-		log.Printf("  %s: created (disabled, 0%% rollout)", flag.Name)
+		if flag.EnabledByDefault {
+			if err := enableFlagInEnv(ctx, client, adminURL, project, environment, flag.Name, adminToken); err != nil {
+				log.Printf("  WARNING: created %s but failed to enable in %s: %v", flag.Name, environment, err)
+			}
+			log.Printf("  %s: created (enabled, 100%% rollout)", flag.Name)
+		} else {
+			log.Printf("  %s: created (disabled, 0%% rollout)", flag.Name)
+		}
 		created++
 	}
 
@@ -360,6 +461,25 @@ func createFlag(ctx context.Context, client *http.Client, adminURL, project, fla
 	}
 }
 
+func archiveFlag(ctx context.Context, client *http.Client, adminURL, project, flagName, token string) error {
+	reqURL := fmt.Sprintf("%s/api/admin/projects/%s/features/%s", adminURL, url.PathEscape(project), url.PathEscape(flagName))
+	resp, err := doRequest(ctx, client, "DELETE", reqURL, token, nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(resp.Body)
+
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusAccepted, http.StatusNoContent:
+		return nil
+	case http.StatusNotFound:
+		return nil // already gone
+	default:
+		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(respBody))
+	}
+}
+
 func addFlagTag(ctx context.Context, client *http.Client, adminURL, flagName string, tag FlagTag, token string) error {
 	reqURL := fmt.Sprintf("%s/api/admin/features/%s/tags", adminURL, url.PathEscape(flagName))
 	body, err := json.Marshal(map[string]string{
@@ -383,13 +503,13 @@ func addFlagTag(ctx context.Context, client *http.Client, adminURL, flagName str
 	return nil
 }
 
-func addRolloutStrategy(ctx context.Context, client *http.Client, adminURL, project, environment, flagName, token string) error {
+func addRolloutStrategy(ctx context.Context, client *http.Client, adminURL, project, environment, flagName, rollout string, token string) error {
 	reqURL := fmt.Sprintf("%s/api/admin/projects/%s/features/%s/environments/%s/strategies",
 		adminURL, url.PathEscape(project), url.PathEscape(flagName), url.PathEscape(environment))
 	body, err := json.Marshal(map[string]any{
 		"name": "flexibleRollout",
 		"parameters": map[string]string{
-			"rollout":    "0",
+			"rollout":    rollout,
 			"stickiness": "default",
 			"groupId":    flagName,
 		},
@@ -406,6 +526,25 @@ func addRolloutStrategy(ctx context.Context, client *http.Client, adminURL, proj
 	respBody, _ := io.ReadAll(resp.Body)
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(respBody))
+	}
+	return nil
+}
+
+func enableFlagInEnv(ctx context.Context, client *http.Client, adminURL, project, environment, flagName, token string) error {
+	reqURL := fmt.Sprintf("%s/api/admin/projects/%s/features/%s/environments/%s/on",
+		adminURL, url.PathEscape(project), url.PathEscape(flagName), url.PathEscape(environment))
+	resp, err := doRequest(ctx, client, "POST", reqURL, token, nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		respBody, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return fmt.Errorf("HTTP %d (failed to read body: %w)", resp.StatusCode, readErr)
+		}
 		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(respBody))
 	}
 	return nil

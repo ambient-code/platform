@@ -154,7 +154,7 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
           <div className="mb-4 mt-2">
             <div className="flex space-x-3 items-start">
               <div className="flex-shrink-0">
-                <div className="w-8 h-8 rounded-full flex items-center justify-center bg-blue-600">
+                <div className="w-8 h-8 rounded-full flex items-center justify-center bg-primary ring-2 ring-background">
                   <span className="text-white text-xs font-semibold">AI</span>
                 </div>
               </div>
