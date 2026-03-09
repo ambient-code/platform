@@ -246,4 +246,11 @@ def check_mcp_authentication(server_name: str) -> tuple[bool | None, str | None]
 
         return False, "Jira not configured - connect on Integrations page"
 
+    # Generic fallback: check if MCP_{SERVER_NAME}_* env vars are populated
+    sanitized = server_name.upper().replace("-", "_")
+    prefix = f"MCP_{sanitized}_"
+    has_creds = any(k.startswith(prefix) for k in os.environ)
+    if has_creds:
+        return True, f"MCP credentials configured for {server_name}"
+
     return None, None

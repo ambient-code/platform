@@ -1,5 +1,13 @@
 {
   "mcpServers": {
+    "context7": {
+      "type": "http",
+      "url": "https://mcp.context7.com/mcp"
+    },
+    "deepwiki": {
+      "type": "http",
+      "url": "https://mcp.deepwiki.com/mcp"
+    },
     "webfetch": {
       "command": "uvx",
       "args": ["mcp-server-fetch"]

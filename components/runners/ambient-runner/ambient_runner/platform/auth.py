@@ -292,6 +292,69 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
     logger.info("Runtime credentials populated successfully")
 
 
+async def _fetch_mcp_credentials(context: RunnerContext, server_name: str) -> dict:
+    """Fetch generic MCP server credentials from backend API."""
+    data = await _fetch_credential(context, f"mcp/{server_name}")
+    if data.get("fields"):
+        logger.info(f"Fetched MCP credentials for server {server_name}")
+    return data
+
+
+async def populate_mcp_server_credentials(context: RunnerContext) -> None:
+    """Fetch and inject credentials for MCP servers that use ${MCP_*} env var patterns.
+
+    Reads the raw .mcp.json to find servers with env blocks referencing
+    ${MCP_*} variables, fetches credentials from the backend, and sets
+    the corresponding environment variables before env var expansion.
+    """
+    mcp_config_file = os.getenv("MCP_CONFIG_FILE", "/app/ambient-runner/.mcp.json")
+    config_path = Path(mcp_config_file)
+    if not config_path.exists():
+        return
+
+    try:
+        with open(config_path, "r") as f:
+            config = _json.load(f)
+        mcp_servers = config.get("mcpServers", {})
+    except Exception as e:
+        logger.warning(f"Failed to read MCP config for credential population: {e}")
+        return
+
+    mcp_env_pattern = re.compile(r"\$\{(MCP_[A-Z0-9_]+)")
+
+    for server_name, server_config in mcp_servers.items():
+        env_block = server_config.get("env", {})
+        if not env_block:
+            continue
+
+        # Check if any env value references ${MCP_*} pattern
+        needs_creds = any(
+            isinstance(v, str) and mcp_env_pattern.search(v)
+            for v in env_block.values()
+        )
+        if not needs_creds:
+            continue
+
+        try:
+            data = await _fetch_mcp_credentials(context, server_name)
+            fields = data.get("fields", {})
+            if not fields:
+                logger.warning(
+                    f"No MCP credentials found for server {server_name} — "
+                    f"tools requiring auth may not work"
+                )
+                continue
+
+            # Set env vars using convention: MCP_{SERVER_NAME}_{FIELD_NAME}
+            sanitized_name = server_name.upper().replace("-", "_")
+            for field_name, field_value in fields.items():
+                env_key = f"MCP_{sanitized_name}_{field_name.upper()}"
+                os.environ[env_key] = field_value
+                logger.info(f"Set {env_key} for MCP server {server_name}")
+        except Exception as e:
+            logger.warning(f"Failed to fetch MCP credentials for {server_name}: {e}")
+
+
 async def configure_git_identity(user_name: str, user_email: str) -> None:
     """Configure git user.name and user.email from provider credentials.
 

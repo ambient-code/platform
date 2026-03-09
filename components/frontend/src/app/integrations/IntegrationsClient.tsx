@@ -5,6 +5,7 @@ import { GitHubConnectionCard } from '@/components/github-connection-card'
 import { GoogleDriveConnectionCard } from '@/components/google-drive-connection-card'
 import { GitLabConnectionCard } from '@/components/gitlab-connection-card'
 import { JiraConnectionCard } from '@/components/jira-connection-card'
+import { MCPCredentialCard } from '@/components/mcp-credential-card'
 import { PageHeader } from '@/components/page-header'
 import { useIntegrationsStatus } from '@/services/queries/use-integrations'
 import { Loader2 } from 'lucide-react'
@@ -14,6 +15,11 @@ type Props = { appSlug?: string }
 export default function IntegrationsClient({ appSlug }: Props) {
   // Fetch all integration statuses in one call
   const { data: integrations, isLoading, refetch } = useIntegrationsStatus()
+
+  // Derive MCP server entries that have stored credentials
+  const mcpServerEntries = integrations?.mcpServers
+    ? Object.entries(integrations.mcpServers)
+    : []
 
   return (
     <div className="min-h-screen bg-background">
@@ -35,27 +41,52 @@ export default function IntegrationsClient({ appSlug }: Props) {
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <GitHubConnectionCard
-                appSlug={appSlug}
-                showManageButton={true}
-                status={integrations?.github}
-                onRefresh={refetch}
-              />
-              <GoogleDriveConnectionCard
-                showManageButton={true}
-                status={integrations?.google}
-                onRefresh={refetch}
-              />
-              <GitLabConnectionCard
-                status={integrations?.gitlab}
-                onRefresh={refetch}
-              />
-              <JiraConnectionCard
-                status={integrations?.jira}
-                onRefresh={refetch}
-              />
-            </div>
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <GitHubConnectionCard
+                  appSlug={appSlug}
+                  showManageButton={true}
+                  status={integrations?.github}
+                  onRefresh={refetch}
+                />
+                <GoogleDriveConnectionCard
+                  showManageButton={true}
+                  status={integrations?.google}
+                  onRefresh={refetch}
+                />
+                <GitLabConnectionCard
+                  status={integrations?.gitlab}
+                  onRefresh={refetch}
+                />
+                <JiraConnectionCard
+                  status={integrations?.jira}
+                  onRefresh={refetch}
+                />
+              </div>
+
+              {/* MCP Servers section — shown when any MCP server credentials exist */}
+              {mcpServerEntries.length > 0 && (
+                <div className="mt-8">
+                  <h2 className="text-lg font-semibold text-foreground mb-4">MCP Servers</h2>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {mcpServerEntries.map(([name, serverStatus]) => (
+                      <MCPCredentialCard
+                        key={name}
+                        serverName={name}
+                        displayName={name}
+                        description={`MCP server: ${name}`}
+                        fields={[]}
+                        status={{
+                          connected: serverStatus.connected,
+                          serverName: name,
+                        }}
+                        onRefresh={refetch}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

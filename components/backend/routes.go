@@ -83,6 +83,7 @@ func registerRoutes(r *gin.Engine) {
 			projectGroup.GET("/agentic-sessions/:sessionName/credentials/google", handlers.GetGoogleCredentialsForSession)
 			projectGroup.GET("/agentic-sessions/:sessionName/credentials/jira", handlers.GetJiraCredentialsForSession)
 			projectGroup.GET("/agentic-sessions/:sessionName/credentials/gitlab", handlers.GetGitLabTokenForSession)
+			projectGroup.GET("/agentic-sessions/:sessionName/credentials/mcp/:serverName", handlers.GetMCPCredentialsForSession)
 
 			// Session export
 			projectGroup.GET("/agentic-sessions/:sessionName/export", websocket.HandleExportSession)
@@ -146,6 +147,11 @@ func registerRoutes(r *gin.Engine) {
 		api.GET("/auth/gitlab/status", handlers.GetGitLabStatusGlobal)
 		api.DELETE("/auth/gitlab/disconnect", handlers.DisconnectGitLabGlobal)
 		api.POST("/auth/gitlab/test", handlers.TestGitLabConnection)
+
+		// Generic MCP server credentials (user-scoped)
+		api.POST("/auth/mcp/:serverName/connect", handlers.ConnectMCPServer)
+		api.GET("/auth/mcp/:serverName/status", handlers.GetMCPServerStatus)
+		api.DELETE("/auth/mcp/:serverName/disconnect", handlers.DisconnectMCPServer)
 
 		// Cluster info endpoint (public, no auth required)
 		api.GET("/cluster-info", handlers.GetClusterInfo)
