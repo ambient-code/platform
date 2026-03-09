@@ -1,0 +1,21 @@
+# OpenShift: SA (nonroot SCC) + fsGroup + PodSecurity (seccomp, allowPrivilegeEscalation, capabilities, runAsNonRoot)
+# Grant nonroot SCC: oc adm policy add-scc-to-user nonroot -z minio -n ambient-code
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minio
+spec:
+  template:
+    spec:
+      serviceAccountName: minio
+      securityContext:
+        fsGroup: 1000
+      containers:
+        - name: minio
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            runAsNonRoot: true
+            runAsUser: 1000

@@ -1,0 +1,22 @@
+# Use dedicated SA (granted nonroot SCC) and add seccomp for PodSecurity.
+# After deploy: oc adm policy add-scc-to-user nonroot -z ambient-api-server-db -n ambient-code
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ambient-api-server-db
+spec:
+  template:
+    spec:
+      serviceAccountName: ambient-api-server-db
+      securityContext:
+        runAsNonRoot: true
+        fsGroup: 999
+      containers:
+        - name: postgresql
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            runAsNonRoot: true
+            runAsUser: 999

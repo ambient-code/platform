@@ -1,0 +1,9 @@
+# ServiceAccount for shared PostgreSQL (runs as UID 999).
+# Grant nonroot SCC: oc adm policy add-scc-to-user nonroot -z postgresql -n ambient-code
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: postgresql
+  labels:
+    app: postgresql
+    app.kubernetes.io/name: postgresql

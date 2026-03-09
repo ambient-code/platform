@@ -1,0 +1,43 @@
+feat(manifests): production overlay for OpenShift (LVM, SCC, credentials, DB init)
+
+Add and wire production overlay resources and patches for deploying the
+Ambient Code Platform on OpenShift (e.g. chadsno2026) with LVM Storage,
+restricted SCC, and shared PostgreSQL.
+
+Storage (LVM)
+- Add PVC patches for backend, postgresql, minio, and ambient-api-server-db
+  to use storageClassName: lvms-vg1 (LVM Storage) instead of default.
+- See README-storage.md for LVMCluster and volume setup.
+
+Credentials
+- postgresql-credentials: db.host/postgresql, postgres/postgres123, db.name postgres.
+- minio-credentials: MinIO credentials for state sync.
+- unleash-credentials: DATABASE_URL to shared postgresql/unleash, API tokens,
+  default admin password, database-ssl.
+
+ServiceAccounts and SCC (nonroot)
+- postgresql-sa, minio-sa, ambient-api-server-db-sa: dedicated SAs for stateful
+  workloads so they can use nonroot SCC (no seccomp in patch; nonroot forbids it).
+- postgresql-fsgroup-patch, minio-fsgroup-patch: fsGroup and runAsUser for RHEL
+  compatibility and volume permissions.
+- ambient-api-server-db-scc-patch: runAsUser and securityContext for
+  ambient-api-server-db to run under nonroot.
+- README-SCC.md: oc adm policy add-scc-to-user nonroot and rollout restart steps.
+
+ambient-api-server
+- ambient-api-server-wait-db-patch: add wait-for-db init container (pg_isready
+  loop) and keep migration init so API server starts only after DB is ready.
+
+Unleash
+- unleash-init-db-patch: init container (RHEL postgresql-16 image) that waits
+  for shared PostgreSQL, creates database "unleash" if missing, then verifies
+  connectivity to the unleash database (retries) before main container starts.
+- kustomization: register credentials resources and all patches (PVC, SA, SCC,
+  wait-db, fsgroup, unleash-init-db); postgresql-json-patch removed (use
+  postgres:16 with fsGroup/runAsUser instead of RHEL image for shared Postgres).
+
+Docs
+- README-vertex.md: Vertex/Google Cloud notes (unchanged from existing content).
+
+Files: 18 changed (README-SCC, README-vertex, *-sa, *-scc-patch, *-wait-db-patch,
+kustomization, *-credentials, *-fsgroup-patch, pvc-patch-*, unleash-init-db-patch).

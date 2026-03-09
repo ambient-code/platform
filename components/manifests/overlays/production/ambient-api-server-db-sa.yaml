@@ -1,0 +1,10 @@
+# ServiceAccount for ambient-api-server-db (PostgreSQL sidecar).
+# Grant nonroot SCC so it can run as UID 999 (postgres):
+#   oc adm policy add-scc-to-user nonroot -z ambient-api-server-db -n ambient-code
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ambient-api-server-db
+  labels:
+    app: ambient-api-server
+    component: database
