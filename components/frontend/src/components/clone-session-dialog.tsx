@@ -163,8 +163,8 @@ export function CloneSessionDialog({
             />)}
 
             {error && (
-              <div className="bg-red-50 border border-red-200 rounded-md p-3">
-                <p className="text-red-700 dark:text-red-300 text-sm">{error}</p>
+              <div className="bg-status-error border border-status-error-border rounded-md p-3">
+                <p className="text-status-error-foreground text-sm">{error}</p>
               </div>
             )}
 

@@ -250,7 +250,7 @@ export default function ProjectsPage() {
                                 <div className="font-medium">
                                   {project.displayName || project.name}
                                 </div>
-                                <div className="text-xs text-muted-foreground font-normal">
+                                <div className="text-sm text-muted-foreground font-normal">
                                   {project.name}
                                 </div>
                               </div>

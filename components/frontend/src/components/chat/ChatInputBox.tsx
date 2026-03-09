@@ -101,11 +101,11 @@ const ToolbarItemList: React.FC<ToolbarItemListProps> = ({ items, type, onInsert
     <div className="space-y-3">
       <div className="space-y-2">
         <h4 className="font-medium text-sm">{heading}</h4>
-        <p className="text-xs text-muted-foreground">{subtitle}</p>
+        <p className="text-sm text-muted-foreground">{subtitle}</p>
       </div>
       <div className="max-h-[400px] overflow-y-scroll space-y-2 pr-2 scrollbar-thin">
         {items.length === 0 ? (
-          <p className="text-xs text-muted-foreground py-2">{emptyLabel}</p>
+          <p className="text-sm text-muted-foreground py-2">{emptyLabel}</p>
         ) : (
           items.map((item) => {
             const isAgent = type === "agent";
@@ -121,7 +121,7 @@ const ToolbarItemList: React.FC<ToolbarItemListProps> = ({ items, type, onInsert
                     <Button
                       variant="outline"
                       size="sm"
-                      className="flex-shrink-0 h-7 text-xs"
+                      className="flex-shrink-0 h-7 text-sm"
                       onClick={() => onInsertAgent?.(shortName)}
                     >
                       @{shortName}
@@ -130,7 +130,7 @@ const ToolbarItemList: React.FC<ToolbarItemListProps> = ({ items, type, onInsert
                     <Button
                       variant="outline"
                       size="sm"
-                      className="flex-shrink-0 h-7 text-xs"
+                      className="flex-shrink-0 h-7 text-sm"
                       onClick={() => onRunCommand?.(cmd!.slashCommand)}
                     >
                       Run {cmd!.slashCommand}
@@ -138,7 +138,7 @@ const ToolbarItemList: React.FC<ToolbarItemListProps> = ({ items, type, onInsert
                   )}
                 </div>
                 {item.description && (
-                  <p className="text-xs text-muted-foreground">{item.description}</p>
+                  <p className="text-sm text-muted-foreground">{item.description}</p>
                 )}
               </div>
             );
@@ -463,8 +463,8 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
   };
 
   const getTextareaStyle = () => {
-    if (editingQueuedId) return "border-blue-400/50 bg-blue-50/30 dark:bg-blue-950/10";
-    if (isRunActive) return "border-amber-400/50 bg-amber-50/30 dark:bg-amber-950/10";
+    if (editingQueuedId) return "border-status-info-border bg-status-info/30";
+    if (isRunActive) return "border-status-warning-border bg-status-warning/30";
     return "";
   };
 
@@ -473,13 +473,13 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
       <div className="px-2 pt-2 pb-0 space-y-1.5 max-w-[90%] mx-auto mb-4">
         {/* Phase status banner */}
         {isCreating && (
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-muted text-xs text-muted-foreground">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-muted text-sm text-muted-foreground">
             <Loader2 className="h-3 w-3 animate-spin" />
             Session is starting up. Messages will be queued.
           </div>
         )}
         {isTerminalState && (
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-muted text-xs text-muted-foreground">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-muted text-sm text-muted-foreground">
             Session has {sessionPhase.toLowerCase()}.
             {onContinue && (
               <button onClick={onContinue} className="text-link hover:underline font-medium">
@@ -491,12 +491,12 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
 
         {/* Editing queued message indicator */}
         {editingQueuedId && (
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 text-xs text-blue-700 dark:text-blue-300">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-status-info border border-status-info-border text-sm text-status-info-foreground">
             <Pencil className="h-3 w-3" />
             Editing queued message
             <button
               onClick={() => { onChange(draftInput); resetHistory(); }}
-              className="ml-auto hover:text-blue-900 dark:hover:text-blue-100"
+              className="ml-auto hover:text-foreground"
             >
               <X className="h-3 w-3" />
             </button>
@@ -519,13 +519,13 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
 
           {/* Queue indicator with clear button */}
           {isRunActive && queuedCount > 0 && (
-            <div className="absolute -top-6 left-0 flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
+            <div className="absolute -top-6 left-0 flex items-center gap-1 text-sm text-status-warning-foreground">
               <Clock className="h-3 w-3" />
               {queuedCount} message{queuedCount > 1 ? "s" : ""} queued
               {onClearQueue && (
                 <button
                   onClick={onClearQueue}
-                  className="ml-1 flex items-center gap-0.5 hover:text-amber-800 dark:hover:text-amber-200"
+                  className="ml-1 flex items-center gap-0.5 hover:text-foreground"
                   title="Clear all queued messages"
                 >
                   <X className="h-3 w-3" />
@@ -618,7 +618,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
                   <Users className="h-3.5 w-3.5" />
                   Agents
                   {agents.length > 0 && (
-                    <Badge variant="secondary" className="ml-0.5 h-4 px-1.5 text-[10px] font-medium">
+                    <Badge variant="secondary" className="ml-0.5 h-4 px-1.5 text-sm font-medium">
                       {agents.length}
                     </Badge>
                   )}
@@ -644,7 +644,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
                   <Terminal className="h-3.5 w-3.5" />
                   Commands
                   {commands.length > 0 && (
-                    <Badge variant="secondary" className="ml-0.5 h-4 px-1.5 text-[10px] font-medium">
+                    <Badge variant="secondary" className="ml-0.5 h-4 px-1.5 text-sm font-medium">
                       {commands.length}
                     </Badge>
                   )}
@@ -675,7 +675,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
                 <button
                   onClick={handleSendAsNew}
                   disabled={!hasContent || isSending}
-                  className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
+                  className="text-sm text-muted-foreground hover:text-foreground disabled:opacity-50"
                 >
                   Send as new
                 </button>

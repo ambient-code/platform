@@ -155,11 +155,11 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
             <div className="flex space-x-3 items-start">
               <div className="flex-shrink-0">
                 <div className="w-8 h-8 rounded-full flex items-center justify-center bg-primary ring-2 ring-background">
-                  <span className="text-white text-xs font-semibold">AI</span>
+                  <span className="text-white text-sm font-semibold">AI</span>
                 </div>
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-[10px] text-muted-foreground/60 mb-1">just now</div>
+                <div className="text-sm text-muted-foreground/60 mb-1">just now</div>
                 <div className="rounded-lg bg-card">
                   <p className="text-sm text-muted-foreground leading-relaxed mb-[0.2rem]">
                     Please wait one moment{".".repeat(waitingDotCount)}
@@ -180,7 +180,7 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
             <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-50" />
             <p className="text-sm">No messages yet</p>
-            <p className="text-xs mt-1">
+            <p className="text-sm mt-1">
               {isTerminalState
                 ? `Session has ${phase.toLowerCase()}.`
                 : "Start by sending a message below."}

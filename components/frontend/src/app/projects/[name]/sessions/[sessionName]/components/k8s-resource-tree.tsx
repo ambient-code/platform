@@ -58,7 +58,7 @@ export function K8sResourceTree({
     const [open, setOpen] = useState(false);
     return (
       <Dialog open={open} onOpenChange={setOpen}>
-        <Button variant="outline" size="sm" className="h-6 text-xs" onClick={() => setOpen(true)}>
+        <Button variant="outline" size="sm" className="h-6 text-sm" onClick={() => setOpen(true)}>
           Events ({events.length})
         </Button>
         <DialogContent className="max-w-2xl max-h-[600px] overflow-y-auto">
@@ -71,7 +71,7 @@ export function K8sResourceTree({
               <p className="text-sm text-muted-foreground">No events</p>
             ) : (
               events.map((event, idx) => (
-                <div key={idx} className="text-xs font-mono bg-muted/50 p-2 rounded border">
+                <div key={idx} className="text-sm font-mono bg-muted/50 p-2 rounded border">
                   {event}
                 </div>
               ))
@@ -114,12 +114,12 @@ export function K8sResourceTree({
                 <ChevronRight className="w-4 h-4 text-muted-foreground" />
               )}
             </button>
-            <Badge variant="outline" className="text-xs">
+            <Badge variant="outline" className="text-sm">
               <Box className="w-3 h-3 mr-1" />
               Job
             </Badge>
             <span className="text-sm font-mono">{jobName}</span>
-            <Badge className={`text-xs ${getK8sResourceStatusColor(jobStatus)}`}>
+            <Badge className={`text-sm ${getK8sResourceStatusColor(jobStatus)}`}>
               {getStatusIcon(jobStatus)}
               <span className="ml-1">{jobStatus}</span>
             </Badge>
@@ -142,14 +142,14 @@ export function K8sResourceTree({
                         <ChevronRight className="w-4 h-4 text-muted-foreground" />
                       )}
                     </button>
-                    <Badge variant="outline" className="text-xs">
+                    <Badge variant="outline" className="text-sm">
                       <Container className="w-3 h-3 mr-1" />
                       Pod
                     </Badge>
                     <span className="text-sm font-mono truncate max-w-xs" title={pod.name}>
                       {pod.name}
                     </span>
-                    <Badge className={`text-xs ${getK8sResourceStatusColor(pod.phase)}`}>
+                    <Badge className={`text-sm ${getK8sResourceStatusColor(pod.phase)}`}>
                       {getStatusIcon(pod.phase)}
                       <span className="ml-1">{pod.phase}</span>
                     </Badge>
@@ -163,20 +163,20 @@ export function K8sResourceTree({
                       {/* Containers */}
                       {pod.containers.map((container) => (
                         <div key={container.name} className="flex items-center gap-2">
-                          <Badge variant="outline" className="text-xs">
+                          <Badge variant="outline" className="text-sm">
                             <Box className="w-3 h-3 mr-1" />
                             Container
                           </Badge>
                           <span className="text-sm font-mono">{container.name}</span>
-                          <Badge className={`text-xs ${getK8sResourceStatusColor(container.state)}`}>
+                          <Badge className={`text-sm ${getK8sResourceStatusColor(container.state)}`}>
                             {getStatusIcon(container.state)}
                             <span className="ml-1">{container.state}</span>
                           </Badge>
                           {container.exitCode !== undefined && (
-                            <span className="text-xs text-muted-foreground">Exit: {container.exitCode}</span>
+                            <span className="text-sm text-muted-foreground">Exit: {container.exitCode}</span>
                           )}
                           {container.reason && (
-                            <span className="text-xs text-muted-foreground">({container.reason})</span>
+                            <span className="text-sm text-muted-foreground">({container.reason})</span>
                           )}
                         </div>
                       ))}
@@ -188,15 +188,15 @@ export function K8sResourceTree({
               {/* PVC */}
               {pvcName && (
                 <div className="flex items-center gap-2">
-                  <Badge variant="outline" className="text-xs">
+                  <Badge variant="outline" className="text-sm">
                     <HardDrive className="w-3 h-3 mr-1" />
                     PVC
                   </Badge>
                   <span className="text-sm font-mono">{pvcName}</span>
-                  <Badge className={`text-xs ${pvcExists ? STATUS_COLORS.success : STATUS_COLORS.error}`}>
+                  <Badge className={`text-sm ${pvcExists ? STATUS_COLORS.success : STATUS_COLORS.error}`}>
                     {pvcExists ? 'Exists' : 'Not Found'}
                   </Badge>
-                  {pvcSize && <span className="text-xs text-muted-foreground">{pvcSize}</span>}
+                  {pvcSize && <span className="text-sm text-muted-foreground">{pvcSize}</span>}
                 </div>
               )}
             </div>

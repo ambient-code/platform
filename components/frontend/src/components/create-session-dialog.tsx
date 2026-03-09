@@ -195,7 +195,7 @@ export function CreateSessionDialog({
                         disabled={createSessionMutation.isPending}
                       />
                     </FormControl>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-sm text-muted-foreground">
                       {(field.value ?? "").length}/50 characters. Optional; you can rename later from the session menu.
                     </p>
                     <FormMessage />
@@ -244,7 +244,7 @@ export function CreateSessionDialog({
                       </Select>
                     )}
                     {selectedRunner && (
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-sm text-muted-foreground">
                         {selectedRunner.description}
                       </p>
                     )}
@@ -304,11 +304,11 @@ export function CreateSessionDialog({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <div className="flex-shrink-0">
-                          <CheckCircle2 className="h-4 w-4 text-green-600" />
+                          <CheckCircle2 className="h-4 w-4 text-chart-5" />
                         </div>
                         <h4 className="font-medium text-sm">GitHub</h4>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-0.5">
+                      <p className="text-sm text-muted-foreground mt-0.5">
                         Authenticated. Git push and repository access enabled.
                       </p>
                     </div>
@@ -316,11 +316,11 @@ export function CreateSessionDialog({
                 ) : (
                   <div className="flex items-start gap-3 p-3 border rounded-lg bg-background/50">
                     <div className="flex-shrink-0">
-                      <AlertTriangle className="h-4 w-4 text-amber-500" />
+                      <AlertTriangle className="h-4 w-4 text-status-warning-foreground" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <h4 className="font-medium text-sm">GitHub</h4>
-                      <p className="text-xs text-muted-foreground mt-0.5">
+                      <p className="text-sm text-muted-foreground mt-0.5">
                         Not connected.{" "}
                         <Link href="/integrations" className="text-primary hover:underline">
                           Set up
@@ -336,11 +336,11 @@ export function CreateSessionDialog({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <div className="flex-shrink-0">
-                          <CheckCircle2 className="h-4 w-4 text-green-600" />
+                          <CheckCircle2 className="h-4 w-4 text-chart-5" />
                         </div>
                         <h4 className="font-medium text-sm">GitLab</h4>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-0.5">
+                      <p className="text-sm text-muted-foreground mt-0.5">
                         Authenticated. Git push and repository access enabled.
                       </p>
                     </div>
@@ -348,11 +348,11 @@ export function CreateSessionDialog({
                 ) : (
                   <div className="flex items-start gap-3 p-3 border rounded-lg bg-background/50">
                     <div className="flex-shrink-0">
-                      <AlertTriangle className="h-4 w-4 text-amber-500" />
+                      <AlertTriangle className="h-4 w-4 text-status-warning-foreground" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <h4 className="font-medium text-sm">GitLab</h4>
-                      <p className="text-xs text-muted-foreground mt-0.5">
+                      <p className="text-sm text-muted-foreground mt-0.5">
                         Not connected.{" "}
                         <Link href="/integrations" className="text-primary hover:underline">
                           Set up
@@ -368,11 +368,11 @@ export function CreateSessionDialog({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <div className="flex-shrink-0">
-                          <CheckCircle2 className="h-4 w-4 text-green-600" />
+                          <CheckCircle2 className="h-4 w-4 text-chart-5" />
                         </div>
                         <h4 className="font-medium text-sm">Google Workspace</h4>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-0.5">
+                      <p className="text-sm text-muted-foreground mt-0.5">
                         Authenticated. Drive, Calendar, and Gmail access enabled.
                       </p>
                     </div>
@@ -380,11 +380,11 @@ export function CreateSessionDialog({
                 ) : (
                   <div className="flex items-start gap-3 p-3 border rounded-lg bg-background/50">
                     <div className="flex-shrink-0">
-                      <AlertTriangle className="h-4 w-4 text-amber-500" />
+                      <AlertTriangle className="h-4 w-4 text-status-warning-foreground" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <h4 className="font-medium text-sm">Google Workspace</h4>
-                      <p className="text-xs text-muted-foreground mt-0.5">
+                      <p className="text-sm text-muted-foreground mt-0.5">
                         Not connected.{" "}
                         <Link href="/integrations" className="text-primary hover:underline">
                           Set up
@@ -400,11 +400,11 @@ export function CreateSessionDialog({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <div className="flex-shrink-0">
-                          <CheckCircle2 className="h-4 w-4 text-green-600" />
+                          <CheckCircle2 className="h-4 w-4 text-chart-5" />
                         </div>
                         <h4 className="font-medium text-sm">Jira</h4>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-0.5">
+                      <p className="text-sm text-muted-foreground mt-0.5">
                         Authenticated. Issue and project access enabled.
                       </p>
                     </div>
@@ -412,11 +412,11 @@ export function CreateSessionDialog({
                 ) : (
                   <div className="flex items-start gap-3 p-3 border rounded-lg bg-background/50">
                     <div className="flex-shrink-0">
-                      <AlertTriangle className="h-4 w-4 text-amber-500" />
+                      <AlertTriangle className="h-4 w-4 text-status-warning-foreground" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <h4 className="font-medium text-sm">Jira</h4>
-                      <p className="text-xs text-muted-foreground mt-0.5">
+                      <p className="text-sm text-muted-foreground mt-0.5">
                         Not connected.{" "}
                         <Link
                           href="/integrations"

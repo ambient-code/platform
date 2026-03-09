@@ -14,13 +14,13 @@ type SessionStartingEventsProps = {
 
 function EventIcon({ type, reason }: { type: string; reason: string }) {
   if (type === "Warning") {
-    return <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />;
+    return <AlertTriangle className="h-3.5 w-3.5 text-status-warning-foreground shrink-0" />;
   }
   if (["Pulled", "Created", "Started", "Scheduled"].includes(reason)) {
-    return <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />;
+    return <CheckCircle2 className="h-3.5 w-3.5 text-chart-5 shrink-0" />;
   }
   if (reason === "Pulling") {
-    return <Loader2 className="h-3.5 w-3.5 text-blue-500 animate-spin shrink-0" />;
+    return <Loader2 className="h-3.5 w-3.5 text-primary animate-spin shrink-0" />;
   }
   return <Info className="h-3.5 w-3.5 text-muted-foreground shrink-0" />;
 }
@@ -29,15 +29,15 @@ function EventRow({ event }: { event: PodEvent }) {
   return (
     <div
       className={cn(
-        "flex items-start gap-2 text-xs",
+        "flex items-start gap-2 text-sm",
         event.type === "Warning"
-          ? "text-amber-600 dark:text-amber-400"
+          ? "text-status-warning-foreground"
           : "text-muted-foreground",
       )}
     >
       <EventIcon type={event.type} reason={event.reason} />
       <span className="flex-1 break-words">{event.message}</span>
-      <span className="text-[10px] tabular-nums whitespace-nowrap opacity-60 flex items-center gap-0.5">
+      <span className="text-sm tabular-nums whitespace-nowrap opacity-60 flex items-center gap-0.5">
         <Clock className="h-2.5 w-2.5" />
         {formatTimestamp(event.timestamp)}
       </span>
@@ -66,7 +66,7 @@ export function SessionStartingEvents({
       <div className="w-full max-w-md">
         {/* Header */}
         <div className="flex flex-col items-center mb-6">
-          <Loader2 className="h-10 w-10 animate-spin text-blue-600 mb-3" />
+          <Loader2 className="h-10 w-10 animate-spin text-primary mb-3" />
           <h3 className="font-semibold text-lg">Starting Session</h3>
           <p className="text-sm text-muted-foreground mt-1">
             Setting up your workspace...
@@ -86,7 +86,7 @@ export function SessionStartingEvents({
                 <button
                   type="button"
                   onClick={() => setExpanded((v) => !v)}
-                  className="w-full flex items-center justify-center gap-1 px-3 py-1.5 text-[10px] text-muted-foreground hover:text-foreground hover:bg-muted/50 border-t transition-colors"
+                  className="w-full flex items-center justify-center gap-1 px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 border-t transition-colors"
                 >
                   {expanded ? (
                     <>
@@ -115,7 +115,7 @@ export function SessionStartingEvents({
 
         {/* No events yet */}
         {!latestEvent && (
-          <div className="text-center text-xs text-muted-foreground">
+          <div className="text-center text-sm text-muted-foreground">
             <p>Waiting for pod events...</p>
           </div>
         )}

@@ -287,7 +287,7 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
                                 <div>
                                   <div className="font-medium">{session.spec.displayName || session.metadata.name}</div>
                                   {session.spec.displayName && (
-                                    <div className="text-xs text-muted-foreground font-normal">{session.metadata.name}</div>
+                                    <div className="text-sm text-muted-foreground font-normal">{session.metadata.name}</div>
                                   )}
                                 </div>
                               </Link>
@@ -301,21 +301,21 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
                                   <SessionPhaseBadge phase={phase} stoppedReason={session.status?.stoppedReason} />
                                 </div>
                                 {session.spec.displayName && (
-                                  <p className="text-xs text-muted-foreground">{session.metadata.name}</p>
+                                  <p className="text-sm text-muted-foreground">{session.metadata.name}</p>
                                 )}
                                 <div className="flex flex-col gap-1.5 pt-1">
-                                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                  <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
                                     <Cpu className="h-3 w-3" />
                                     <span>{session.spec.llmSettings.model}</span>
                                   </div>
                                   {session.metadata?.creationTimestamp && (
-                                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                    <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
                                       <Clock className="h-3 w-3" />
                                       <span>{formatDistanceToNow(new Date(session.metadata.creationTimestamp), { addSuffix: true })}</span>
                                     </div>
                                   )}
                                   {session.spec.initialPrompt && (
-                                    <div className="flex items-start gap-1.5 text-xs text-muted-foreground pt-1">
+                                    <div className="flex items-start gap-1.5 text-sm text-muted-foreground pt-1">
                                       <MessageSquare className="h-3 w-3 mt-0.5 shrink-0" />
                                       <span className="line-clamp-3">{session.spec.initialPrompt}</span>
                                     </div>
@@ -336,7 +336,7 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
                               return (
                                 <>
                                   {runnerLabel && (
-                                    <div className="text-xs font-medium text-foreground">{runnerLabel}</div>
+                                    <div className="text-sm font-medium text-foreground">{runnerLabel}</div>
                                   )}
                                   <div className="text-muted-foreground">{session.spec.llmSettings.model}</div>
                                 </>
@@ -467,7 +467,7 @@ function SessionActions({ sessionName, displayName, phase, onStop, onContinue, o
       label: 'Stop',
       onClick: () => onStop(sessionName),
       icon: <Square className="h-4 w-4" />,
-      className: 'text-orange-600',
+      className: 'text-status-warning-foreground',
     });
   }
 
@@ -477,7 +477,7 @@ function SessionActions({ sessionName, displayName, phase, onStop, onContinue, o
       label: 'Continue',
       onClick: () => onContinue(sessionName),
       icon: <ArrowRight className="h-4 w-4" />,
-      className: 'text-green-600',
+      className: 'text-status-success-foreground',
     });
   }
 
@@ -487,7 +487,7 @@ function SessionActions({ sessionName, displayName, phase, onStop, onContinue, o
       label: 'Delete',
       onClick: () => onDelete(sessionName),
       icon: <Trash2 className="h-4 w-4" />,
-      className: 'text-red-600',
+      className: 'text-destructive',
     });
   }
 

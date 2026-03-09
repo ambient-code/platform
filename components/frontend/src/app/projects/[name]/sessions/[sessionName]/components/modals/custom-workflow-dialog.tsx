@@ -88,7 +88,7 @@ export function CustomWorkflowDialog({
               onChange={(e) => setCustomWorkflowPath(e.target.value)}
               disabled={isActivating}
             />
-            <p className="text-xs text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               Optional subdirectory within the repository containing the workflow
             </p>
           </div>

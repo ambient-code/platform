@@ -62,9 +62,9 @@ export function McpServersAccordion({
     switch (server.status) {
       case 'configured':
       case 'connected':
-        return <CheckCircle2 className="h-4 w-4 text-green-600" />
+        return <CheckCircle2 className="h-4 w-4 text-status-success-foreground" />
       case 'error':
-        return <XCircle className="h-4 w-4 text-red-600" />
+        return <XCircle className="h-4 w-4 text-destructive" />
       case 'disconnected':
       default:
         return <AlertCircle className="h-4 w-4 text-muted-foreground" />
@@ -75,26 +75,26 @@ export function McpServersAccordion({
     switch (server.status) {
       case 'configured':
         return (
-          <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
+          <Badge variant="outline" className="text-sm bg-status-info text-status-info-foreground border-status-info-border">
             Configured
           </Badge>
         )
       case 'connected':
         return (
-          <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
+          <Badge variant="outline" className="text-sm bg-status-success text-status-success-foreground border-status-success-border">
             Connected
           </Badge>
         )
       case 'error':
         return (
-          <Badge variant="outline" className="text-xs bg-red-50 text-red-700 border-red-200">
+          <Badge variant="outline" className="text-sm bg-status-error text-status-error-foreground border-status-error-border">
             Error
           </Badge>
         )
       case 'disconnected':
       default:
         return (
-          <Badge variant="outline" className="text-xs bg-muted text-muted-foreground border-border">
+          <Badge variant="outline" className="text-sm bg-muted text-muted-foreground border-border">
             Disconnected
           </Badge>
         )
@@ -120,10 +120,10 @@ export function McpServersAccordion({
     <Badge
       key={key}
       variant="outline"
-      className={`text-[10px] px-1.5 py-0 font-normal gap-0.5 ${
+      className={`text-sm px-1.5 py-0 font-normal gap-0.5 ${
         value
-          ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800'
-          : 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/30 dark:text-red-400 dark:border-red-800'
+          ? 'bg-status-success text-status-success-foreground border-status-success-border'
+          : 'bg-status-error text-status-error-foreground border-status-error-border'
       }`}
     >
       {value ? <Check className="h-2.5 w-2.5" /> : <X className="h-2.5 w-2.5" />}
@@ -137,7 +137,7 @@ export function McpServersAccordion({
     )
     return (
       <div key={tool.name} className="flex items-center justify-between gap-3 px-3 py-2">
-        <code className="text-xs truncate">{tool.name}</code>
+        <code className="text-sm truncate">{tool.name}</code>
         {annotations.length > 0 && (
           <div className="flex items-center gap-1 flex-shrink-0">
             {annotations.map(([k, v]) => renderAnnotationBadge(k, v as boolean))}
@@ -165,14 +165,14 @@ export function McpServersAccordion({
           </div>
           <div className="flex items-center gap-2 mt-1 ml-6">
             {server.version && (
-              <span className="text-[10px] text-muted-foreground">v{server.version}</span>
+              <span className="text-sm text-muted-foreground">v{server.version}</span>
             )}
             {toolCount > 0 && (
               <Popover>
                 <PopoverTrigger asChild>
                   <button
                     type="button"
-                    className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                    className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
                   >
                     <Info className="h-3 w-3" />
                     <span>{toolCount} {toolCount === 1 ? 'tool' : 'tools'}</span>
@@ -183,7 +183,7 @@ export function McpServersAccordion({
                   className="w-80 p-0"
                 >
                   <div className="px-3 py-2.5 border-b bg-muted/30">
-                    <p className="text-xs font-medium">
+                    <p className="text-sm font-medium">
                       {server.displayName} — {toolCount} {toolCount === 1 ? 'tool' : 'tools'}
                     </p>
                   </div>
@@ -209,7 +209,7 @@ export function McpServersAccordion({
           <Plug className="h-4 w-4" />
           <span>MCP Servers</span>
           {!showPlaceholders && mcpServers.length > 0 && (
-            <Badge variant="outline" className="text-[10px] px-2 py-0.5">
+            <Badge variant="outline" className="text-sm px-2 py-0.5">
               {mcpServers.length}
             </Badge>
           )}
@@ -225,7 +225,7 @@ export function McpServersAccordion({
           ) : mcpServers.length > 0 ? (
             mcpServers.map((server) => renderServerCard(server))
           ) : (
-            <p className="text-xs text-muted-foreground py-2">
+            <p className="text-sm text-muted-foreground py-2">
               No MCP servers available for this session.
             </p>
           )}
@@ -298,13 +298,13 @@ export function IntegrationsAccordion() {
         <div className="flex items-center gap-2">
           <div className="flex-shrink-0">
             {integration.configured ? (
-              <CheckCircle2 className="h-4 w-4 text-green-600" />
+              <CheckCircle2 className="h-4 w-4 text-status-success-foreground" />
             ) : (
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <span className="inline-flex">
-                      <AlertTriangle className="h-4 w-4 text-amber-500" />
+                      <AlertTriangle className="h-4 w-4 text-status-warning-foreground" />
                     </span>
                   </TooltipTrigger>
                   <TooltipContent>
@@ -316,7 +316,7 @@ export function IntegrationsAccordion() {
           </div>
           <h4 className="font-medium text-sm">{integration.name}</h4>
         </div>
-        <p className="text-xs text-muted-foreground mt-0.5">
+        <p className="text-sm text-muted-foreground mt-0.5">
           {integration.configured ? (
             integration.configuredMessage
           ) : (
@@ -340,7 +340,7 @@ export function IntegrationsAccordion() {
           <Link2 className="h-4 w-4" />
           <span>Integrations</span>
           {!isPending && (
-            <Badge variant="outline" className="text-[10px] px-2 py-0.5">
+            <Badge variant="outline" className="text-sm px-2 py-0.5">
               {configuredCount}/{integrations.length}
             </Badge>
           )}

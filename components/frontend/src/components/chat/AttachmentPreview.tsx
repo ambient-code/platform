@@ -52,14 +52,14 @@ export const AttachmentPreview: React.FC<AttachmentPreviewProps> = ({
             )}
 
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium truncate" title={attachment.file.name}>
+              <p className="text-sm font-medium truncate" title={attachment.file.name}>
                 {attachment.file.name}
               </p>
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 {formatFileSize(attachment.file.size)}
               </p>
               {attachment.error && (
-                <p className="text-[10px] text-destructive truncate">{attachment.error}</p>
+                <p className="text-sm text-destructive truncate">{attachment.error}</p>
               )}
             </div>
 

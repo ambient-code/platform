@@ -2,9 +2,9 @@
  * Syntax highlighting themes for highlight.js
  * Bundled locally to avoid external CDN dependencies and security risks
  *
- * Themes copied from highlight.js v11.11.1
- * - Light: github.css (https://github.com/highlightjs/highlight.js)
- * - Dark: github-dark.css
+ * Custom themes tuned for the ACP design system:
+ * - Light: cool neutral background, muted tones
+ * - Dark: soft charcoal background, calming tones
  *
  * Uses data-hljs-theme attribute set by SyntaxThemeProvider to switch between themes
  */
@@ -21,12 +21,11 @@ code.hljs {
 }
 
 /*
- * Light theme (GitHub style)
- * Default theme applied when data-hljs-theme is not "dark"
+ * Light theme — cool neutral tones on soft gray
  */
 :root:not([data-hljs-theme="dark"]) .hljs {
-  color: #24292e;
-  background: #fff;
+  color: #2e3440;
+  background: var(--code-bg, #f0f1f4);
 }
 
 :root:not([data-hljs-theme="dark"]) .hljs-doctag,
@@ -36,14 +35,14 @@ code.hljs {
 :root:not([data-hljs-theme="dark"]) .hljs-template-variable,
 :root:not([data-hljs-theme="dark"]) .hljs-type,
 :root:not([data-hljs-theme="dark"]) .hljs-variable.language_ {
-  color: #d73a49;
+  color: #b4456e;
 }
 
 :root:not([data-hljs-theme="dark"]) .hljs-title,
 :root:not([data-hljs-theme="dark"]) .hljs-title.class_,
 :root:not([data-hljs-theme="dark"]) .hljs-title.class_.inherited__,
 :root:not([data-hljs-theme="dark"]) .hljs-title.function_ {
-  color: #6f42c1;
+  color: #5e4db2;
 }
 
 :root:not([data-hljs-theme="dark"]) .hljs-attr,
@@ -56,73 +55,72 @@ code.hljs {
 :root:not([data-hljs-theme="dark"]) .hljs-selector-class,
 :root:not([data-hljs-theme="dark"]) .hljs-selector-id,
 :root:not([data-hljs-theme="dark"]) .hljs-variable {
-  color: #005cc5;
+  color: #0066b1;
 }
 
 :root:not([data-hljs-theme="dark"]) .hljs-meta .hljs-string,
 :root:not([data-hljs-theme="dark"]) .hljs-regexp,
 :root:not([data-hljs-theme="dark"]) .hljs-string {
-  color: #032f62;
+  color: #0f6e54;
 }
 
 :root:not([data-hljs-theme="dark"]) .hljs-built_in,
 :root:not([data-hljs-theme="dark"]) .hljs-symbol {
-  color: #e36209;
+  color: #c05718;
 }
 
 :root:not([data-hljs-theme="dark"]) .hljs-code,
 :root:not([data-hljs-theme="dark"]) .hljs-comment,
 :root:not([data-hljs-theme="dark"]) .hljs-formula {
-  color: #6a737d;
+  color: #8590a2;
 }
 
 :root:not([data-hljs-theme="dark"]) .hljs-name,
 :root:not([data-hljs-theme="dark"]) .hljs-quote,
 :root:not([data-hljs-theme="dark"]) .hljs-selector-pseudo,
 :root:not([data-hljs-theme="dark"]) .hljs-selector-tag {
-  color: #22863a;
+  color: #1a7f5a;
 }
 
 :root:not([data-hljs-theme="dark"]) .hljs-subst {
-  color: #24292e;
+  color: #2e3440;
 }
 
 :root:not([data-hljs-theme="dark"]) .hljs-section {
-  color: #005cc5;
+  color: #0066b1;
   font-weight: 700;
 }
 
 :root:not([data-hljs-theme="dark"]) .hljs-bullet {
-  color: #735c0f;
+  color: #8b6f00;
 }
 
 :root:not([data-hljs-theme="dark"]) .hljs-emphasis {
-  color: #24292e;
+  color: #2e3440;
   font-style: italic;
 }
 
 :root:not([data-hljs-theme="dark"]) .hljs-strong {
-  color: #24292e;
+  color: #2e3440;
   font-weight: 700;
 }
 
 :root:not([data-hljs-theme="dark"]) .hljs-addition {
-  color: #22863a;
-  background-color: #f0fff4;
+  color: #1a7f5a;
+  background-color: #e6f7ef;
 }
 
 :root:not([data-hljs-theme="dark"]) .hljs-deletion {
-  color: #b31d28;
-  background-color: #ffeef0;
+  color: #b4456e;
+  background-color: #fce8ef;
 }
 
 /*
- * Dark theme (GitHub Dark style)
- * Applied when data-hljs-theme="dark"
+ * Dark theme — soft charcoal with calming tones
  */
 [data-hljs-theme="dark"] .hljs {
-  color: #c9d1d9;
-  background: #0d1117;
+  color: #c8cdd5;
+  background: var(--code-bg, #1a1d24);
 }
 
 [data-hljs-theme="dark"] .hljs-doctag,
@@ -132,14 +130,14 @@ code.hljs {
 [data-hljs-theme="dark"] .hljs-template-variable,
 [data-hljs-theme="dark"] .hljs-type,
 [data-hljs-theme="dark"] .hljs-variable.language_ {
-  color: #ff7b72;
+  color: #e0889e;
 }
 
 [data-hljs-theme="dark"] .hljs-title,
 [data-hljs-theme="dark"] .hljs-title.class_,
 [data-hljs-theme="dark"] .hljs-title.class_.inherited__,
 [data-hljs-theme="dark"] .hljs-title.function_ {
-  color: #d2a8ff;
+  color: #c4b5fd;
 }
 
 [data-hljs-theme="dark"] .hljs-attr,
@@ -152,62 +150,62 @@ code.hljs {
 [data-hljs-theme="dark"] .hljs-selector-class,
 [data-hljs-theme="dark"] .hljs-selector-id,
 [data-hljs-theme="dark"] .hljs-variable {
-  color: #79c0ff;
+  color: #7cb8e4;
 }
 
 [data-hljs-theme="dark"] .hljs-meta .hljs-string,
 [data-hljs-theme="dark"] .hljs-regexp,
 [data-hljs-theme="dark"] .hljs-string {
-  color: #a5d6ff;
+  color: #8cd5c0;
 }
 
 [data-hljs-theme="dark"] .hljs-built_in,
 [data-hljs-theme="dark"] .hljs-symbol {
-  color: #ffa657;
+  color: #e8a96c;
 }
 
 [data-hljs-theme="dark"] .hljs-code,
 [data-hljs-theme="dark"] .hljs-comment,
 [data-hljs-theme="dark"] .hljs-formula {
-  color: #8b949e;
+  color: #6b7685;
 }
 
 [data-hljs-theme="dark"] .hljs-name,
 [data-hljs-theme="dark"] .hljs-quote,
 [data-hljs-theme="dark"] .hljs-selector-pseudo,
 [data-hljs-theme="dark"] .hljs-selector-tag {
-  color: #7ee787;
+  color: #6ecba0;
 }
 
 [data-hljs-theme="dark"] .hljs-subst {
-  color: #c9d1d9;
+  color: #c8cdd5;
 }
 
 [data-hljs-theme="dark"] .hljs-section {
-  color: #1f6feb;
+  color: #7cb8e4;
   font-weight: 700;
 }
 
 [data-hljs-theme="dark"] .hljs-bullet {
-  color: #f2cc60;
+  color: #e4cc70;
 }
 
 [data-hljs-theme="dark"] .hljs-emphasis {
-  color: #c9d1d9;
+  color: #c8cdd5;
   font-style: italic;
 }
 
 [data-hljs-theme="dark"] .hljs-strong {
-  color: #c9d1d9;
+  color: #c8cdd5;
   font-weight: 700;
 }
 
 [data-hljs-theme="dark"] .hljs-addition {
-  color: #aff5b4;
-  background-color: #033a16;
+  color: #8cd5c0;
+  background-color: #0d2f22;
 }
 
 [data-hljs-theme="dark"] .hljs-deletion {
-  color: #ffdcd7;
-  background-color: #67060c;
+  color: #e0889e;
+  background-color: #3a1525;
 }

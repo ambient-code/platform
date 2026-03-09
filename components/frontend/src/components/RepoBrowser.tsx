@@ -180,8 +180,8 @@ export default function RepoBrowser({
             {fileContent ? (
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <div className="text-xs text-muted-foreground">{selectedPath}</div>
-                  <div className="text-xs text-muted-foreground">
+                  <div className="text-sm text-muted-foreground">{selectedPath}</div>
+                  <div className="text-sm text-muted-foreground">
                     Size: {formatFileSize(fileContent.size)} | Encoding: {fileContent.encoding}
                   </div>
                 </div>

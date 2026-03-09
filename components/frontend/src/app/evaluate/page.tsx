@@ -159,7 +159,7 @@ function InstalledComponentsSection() {
             <div className="flex items-center justify-between">
               <CardTitle className="text-base">Button</CardTitle>
               <div className="flex items-center gap-2">
-                <Badge variant="outline" className="text-xs font-normal">51 imports</Badge>
+                <Badge variant="outline" className="text-sm font-normal">51 imports</Badge>
                 <TierBadge tier="installed" />
               </div>
             </div>
@@ -190,7 +190,7 @@ function InstalledComponentsSection() {
             <div className="flex items-center justify-between">
               <CardTitle className="text-base">Badge</CardTitle>
               <div className="flex items-center gap-2">
-                <Badge variant="outline" className="text-xs font-normal">15 imports</Badge>
+                <Badge variant="outline" className="text-sm font-normal">15 imports</Badge>
                 <TierBadge tier="installed" />
               </div>
             </div>
@@ -212,7 +212,7 @@ function InstalledComponentsSection() {
             <div className="flex items-center justify-between">
               <CardTitle className="text-base">Input</CardTitle>
               <div className="flex items-center gap-2">
-                <Badge variant="outline" className="text-xs font-normal">18 imports</Badge>
+                <Badge variant="outline" className="text-sm font-normal">18 imports</Badge>
                 <TierBadge tier="installed" />
               </div>
             </div>
@@ -231,7 +231,7 @@ function InstalledComponentsSection() {
             <div className="flex items-center justify-between">
               <CardTitle className="text-base">Table</CardTitle>
               <div className="flex items-center gap-2">
-                <Badge variant="outline" className="text-xs font-normal">6 imports</Badge>
+                <Badge variant="outline" className="text-sm font-normal">6 imports</Badge>
                 <TierBadge tier="installed" />
               </div>
             </div>
@@ -268,7 +268,7 @@ function InstalledComponentsSection() {
             <div className="flex items-center justify-between">
               <CardTitle className="text-base">Tabs</CardTitle>
               <div className="flex items-center gap-2">
-                <Badge variant="outline" className="text-xs font-normal">4 imports</Badge>
+                <Badge variant="outline" className="text-sm font-normal">4 imports</Badge>
                 <TierBadge tier="installed" />
               </div>
             </div>
@@ -300,7 +300,7 @@ function InstalledComponentsSection() {
             <div className="flex items-center justify-between">
               <CardTitle className="text-base">Accordion</CardTitle>
               <div className="flex items-center gap-2">
-                <Badge variant="outline" className="text-xs font-normal">6 imports</Badge>
+                <Badge variant="outline" className="text-sm font-normal">6 imports</Badge>
                 <TierBadge tier="installed" />
               </div>
             </div>
@@ -330,7 +330,7 @@ function InstalledComponentsSection() {
             <div className="flex items-center justify-between">
               <CardTitle className="text-base">Select</CardTitle>
               <div className="flex items-center gap-2">
-                <Badge variant="outline" className="text-xs font-normal">4 imports</Badge>
+                <Badge variant="outline" className="text-sm font-normal">4 imports</Badge>
                 <TierBadge tier="installed" />
               </div>
             </div>
@@ -356,7 +356,7 @@ function InstalledComponentsSection() {
             <div className="flex items-center justify-between">
               <CardTitle className="text-base">Alert</CardTitle>
               <div className="flex items-center gap-2">
-                <Badge variant="outline" className="text-xs font-normal">9 imports</Badge>
+                <Badge variant="outline" className="text-sm font-normal">9 imports</Badge>
                 <TierBadge tier="installed" />
               </div>
             </div>
@@ -377,7 +377,7 @@ function InstalledComponentsSection() {
             <div className="flex items-center justify-between">
               <CardTitle className="text-base">Tooltip</CardTitle>
               <div className="flex items-center gap-2">
-                <Badge variant="outline" className="text-xs font-normal">3 imports</Badge>
+                <Badge variant="outline" className="text-sm font-normal">3 imports</Badge>
                 <TierBadge tier="installed" />
               </div>
             </div>
@@ -413,7 +413,7 @@ function InstalledComponentsSection() {
             <div className="flex items-center justify-between">
               <CardTitle className="text-base">Dropdown Menu</CardTitle>
               <div className="flex items-center gap-2">
-                <Badge variant="outline" className="text-xs font-normal">6 imports</Badge>
+                <Badge variant="outline" className="text-sm font-normal">6 imports</Badge>
                 <TierBadge tier="installed" />
               </div>
             </div>
@@ -444,7 +444,7 @@ function InstalledComponentsSection() {
             <div className="flex items-center justify-between">
               <CardTitle className="text-base">Skeleton</CardTitle>
               <div className="flex items-center gap-2">
-                <Badge variant="outline" className="text-xs font-normal">2 imports</Badge>
+                <Badge variant="outline" className="text-sm font-normal">2 imports</Badge>
                 <TierBadge tier="installed" />
               </div>
             </div>
@@ -469,7 +469,7 @@ function InstalledComponentsSection() {
           <CardContent>
             <div className="flex flex-wrap gap-2">
               {["Dialog", "Form", "Checkbox", "Switch", "Label", "Textarea", "Progress", "Popover", "Separator", "Avatar", "Resizable", "Toast"].map((name) => (
-                <Badge key={name} variant="outline" className="text-xs">{name}</Badge>
+                <Badge key={name} variant="outline" className="text-sm">{name}</Badge>
               ))}
             </div>
             <div className="mt-4 space-y-3">
@@ -514,7 +514,7 @@ function ReplaceComponentsSection() {
               <TierBadge tier="replace" />
             </div>
             <CardDescription>
-              Replace custom <code className="text-xs bg-muted px-1 py-0.5 rounded">breadcrumbs.tsx</code> (153 lines) with shadcn standard.
+              Replace custom <code className="text-sm bg-muted px-1 py-0.5 rounded">breadcrumbs.tsx</code> (153 lines) with shadcn standard.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -533,7 +533,7 @@ function ReplaceComponentsSection() {
                 </BreadcrumbItem>
               </BreadcrumbList>
             </Breadcrumb>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               Built-in accessibility, separator customization, and ellipsis support for deep nesting.
             </p>
           </CardContent>
@@ -573,7 +573,7 @@ function ReplaceComponentsSection() {
                 </PaginationItem>
               </PaginationContent>
             </Pagination>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               Standard pagination with active state, ellipsis, and responsive labels.
             </p>
           </CardContent>
@@ -607,7 +607,7 @@ function ReplaceComponentsSection() {
                 </div>
               </CollapsibleContent>
             </Collapsible>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               No group constraints like Accordion — each section independent.
             </p>
           </CardContent>
@@ -621,7 +621,7 @@ function ReplaceComponentsSection() {
               <TierBadge tier="replace" />
             </div>
             <CardDescription>
-              Replace <code className="text-xs bg-muted px-1 py-0.5 rounded">SimpleDataTable</code> (186 lines) with TanStack Table + shadcn pattern for sorting, filtering, column visibility.
+              Replace <code className="text-sm bg-muted px-1 py-0.5 rounded">SimpleDataTable</code> (186 lines) with TanStack Table + shadcn pattern for sorting, filtering, column visibility.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -652,12 +652,12 @@ function ReplaceComponentsSection() {
               <TableBody>
                 <TableRow>
                   <TableCell className="font-medium">fix-auth-bug</TableCell>
-                  <TableCell><Badge variant="secondary" className="bg-status-success text-status-success-foreground border-0 text-xs">Running</Badge></TableCell>
+                  <TableCell><Badge variant="secondary" className="bg-status-success text-status-success-foreground border-0 text-sm">Running</Badge></TableCell>
                   <TableCell className="text-right text-muted-foreground">3m 42s</TableCell>
                 </TableRow>
               </TableBody>
             </Table>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               Adds sorting, filtering, column visibility, and row selection. Requires TanStack Table dependency.
             </p>
           </CardContent>
@@ -689,7 +689,7 @@ function AddComponentsSection() {
             <div className="flex items-center justify-between">
               <CardTitle className="text-base">Sheet / Drawer</CardTitle>
               <div className="flex items-center gap-2">
-                <Badge variant="outline" className="text-xs font-normal bg-primary/10">High Value</Badge>
+                <Badge variant="outline" className="text-sm font-normal bg-primary/10">High Value</Badge>
                 <TierBadge tier="add" />
               </div>
             </div>
@@ -736,7 +736,7 @@ function AddComponentsSection() {
                 </div>
               </SheetContent>
             </Sheet>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               Accessible slide-out panel with overlay. Supports top/right/bottom/left positioning.
             </p>
           </CardContent>
@@ -748,7 +748,7 @@ function AddComponentsSection() {
             <div className="flex items-center justify-between">
               <CardTitle className="text-base">Command Palette</CardTitle>
               <div className="flex items-center gap-2">
-                <Badge variant="outline" className="text-xs font-normal bg-primary/10">High Value</Badge>
+                <Badge variant="outline" className="text-sm font-normal bg-primary/10">High Value</Badge>
                 <TierBadge tier="add" />
               </div>
             </div>
@@ -789,8 +789,8 @@ function AddComponentsSection() {
                 </CommandGroup>
               </CommandList>
             </Command>
-            <p className="text-xs text-muted-foreground">
-              Keyboard-navigable, filterable, groupable. Built on cmdk. Supports dialog mode for <kbd className="border bg-muted px-1 rounded text-[10px]">K</kbd> shortcut.
+            <p className="text-sm text-muted-foreground">
+              Keyboard-navigable, filterable, groupable. Built on cmdk. Supports dialog mode for <kbd className="border bg-muted px-1 rounded text-sm">K</kbd> shortcut.
             </p>
           </CardContent>
         </Card>
@@ -801,7 +801,7 @@ function AddComponentsSection() {
             <div className="flex items-center justify-between">
               <CardTitle className="text-base">HoverCard</CardTitle>
               <div className="flex items-center gap-2">
-                <Badge variant="outline" className="text-xs font-normal">Medium Value</Badge>
+                <Badge variant="outline" className="text-sm font-normal">Medium Value</Badge>
                 <TierBadge tier="add" />
               </div>
             </div>
@@ -820,19 +820,19 @@ function AddComponentsSection() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <h4 className="text-sm font-semibold">fix-auth-bug</h4>
-                    <Badge variant="secondary" className="bg-status-success text-status-success-foreground border-0 text-xs">Running</Badge>
+                    <Badge variant="secondary" className="bg-status-success text-status-success-foreground border-0 text-sm">Running</Badge>
                   </div>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-sm text-muted-foreground">
                     Fixing authentication token refresh logic in the middleware handler.
                   </p>
-                  <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
                     <span className="flex items-center gap-1"><Clock className="size-3" /> 3m 42s</span>
                     <span className="flex items-center gap-1"><Package className="size-3" /> claude-sonnet-4-6</span>
                   </div>
                 </div>
               </HoverCardContent>
             </HoverCard>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               Hover to see details. Great for information density without clicks.
             </p>
           </CardContent>
@@ -844,7 +844,7 @@ function AddComponentsSection() {
             <div className="flex items-center justify-between">
               <CardTitle className="text-base">Sonner (Toast)</CardTitle>
               <div className="flex items-center gap-2">
-                <Badge variant="outline" className="text-xs font-normal">Medium Value</Badge>
+                <Badge variant="outline" className="text-sm font-normal">Medium Value</Badge>
                 <TierBadge tier="add" />
               </div>
             </div>
@@ -858,11 +858,11 @@ function AddComponentsSection() {
                 <CheckCircle2 className="size-4 text-status-success-foreground mt-0.5 shrink-0" />
                 <div className="space-y-1">
                   <p className="text-sm font-medium">Session created</p>
-                  <p className="text-xs text-muted-foreground">fix-auth-bug is now running</p>
+                  <p className="text-sm text-muted-foreground">fix-auth-bug is now running</p>
                 </div>
               </div>
             </div>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               Drop-in replacement. Supports success/error/loading states, stacking, and promise-based toasts.
             </p>
           </CardContent>
@@ -946,13 +946,13 @@ function ObservationsSection() {
                 GitHub, GitLab, Jira, and Google Drive connection cards are each ~290 lines with heavy duplication.
               </p>
               <div className="flex flex-wrap gap-1">
-                <Badge variant="outline" className="text-xs">github-connection-card.tsx</Badge>
-                <Badge variant="outline" className="text-xs">gitlab-connection-card.tsx</Badge>
-                <Badge variant="outline" className="text-xs">jira-connection-card.tsx</Badge>
-                <Badge variant="outline" className="text-xs">google-drive-connection-card.tsx</Badge>
+                <Badge variant="outline" className="text-sm">github-connection-card.tsx</Badge>
+                <Badge variant="outline" className="text-sm">gitlab-connection-card.tsx</Badge>
+                <Badge variant="outline" className="text-sm">jira-connection-card.tsx</Badge>
+                <Badge variant="outline" className="text-sm">google-drive-connection-card.tsx</Badge>
               </div>
               <p className="text-muted-foreground">
-                Extract a shared <code className="bg-muted px-1 py-0.5 rounded text-xs">IntegrationCard</code> wrapper to cut ~800 lines.
+                Extract a shared <code className="bg-muted px-1 py-0.5 rounded text-sm">IntegrationCard</code> wrapper to cut ~800 lines.
               </p>
             </div>
           </CardContent>
@@ -966,11 +966,11 @@ function ObservationsSection() {
           <CardContent>
             <div className="space-y-2 text-sm text-muted-foreground">
               <div className="flex flex-wrap gap-1">
-                <Badge variant="outline" className="text-xs">message.tsx (272 lines)</Badge>
-                <Badge variant="outline" className="text-xs">tool-message.tsx (736 lines)</Badge>
-                <Badge variant="outline" className="text-xs">stream-message.tsx</Badge>
-                <Badge variant="outline" className="text-xs">thinking-message.tsx</Badge>
-                <Badge variant="outline" className="text-xs">system-message.tsx</Badge>
+                <Badge variant="outline" className="text-sm">message.tsx (272 lines)</Badge>
+                <Badge variant="outline" className="text-sm">tool-message.tsx (736 lines)</Badge>
+                <Badge variant="outline" className="text-sm">stream-message.tsx</Badge>
+                <Badge variant="outline" className="text-sm">thinking-message.tsx</Badge>
+                <Badge variant="outline" className="text-sm">system-message.tsx</Badge>
               </div>
               <p>
                 These are highly specialized chat components. Keep as-is.
@@ -1067,7 +1067,7 @@ export default function EvaluatePage() {
             <p className="text-muted-foreground">
               Evaluation of shadcn components for the Ambient Code Platform frontend.
               <br />
-              <span className="text-xs">
+              <span className="text-sm">
                 New York style &middot; neutral base &middot; OKLch colors &middot; Lucide icons &middot; Tailwind v4
               </span>
             </p>
@@ -1078,16 +1078,16 @@ export default function EvaluatePage() {
           <Tabs defaultValue="installed" className="space-y-6">
             <TabsList>
               <TabsTrigger value="installed">
-                Installed <Badge variant="outline" className="ml-1.5 text-xs h-5">30</Badge>
+                Installed <Badge variant="outline" className="ml-1.5 text-sm h-5">30</Badge>
               </TabsTrigger>
               <TabsTrigger value="replace">
-                Replace <Badge variant="destructive" className="ml-1.5 text-xs h-5">4</Badge>
+                Replace <Badge variant="destructive" className="ml-1.5 text-sm h-5">4</Badge>
               </TabsTrigger>
               <TabsTrigger value="add">
-                Add <Badge className="ml-1.5 text-xs h-5">4</Badge>
+                Add <Badge className="ml-1.5 text-sm h-5">4</Badge>
               </TabsTrigger>
               <TabsTrigger value="skip">
-                Skip <Badge variant="secondary" className="ml-1.5 text-xs h-5">8</Badge>
+                Skip <Badge variant="secondary" className="ml-1.5 text-sm h-5">8</Badge>
               </TabsTrigger>
               <TabsTrigger value="observations">
                 Observations

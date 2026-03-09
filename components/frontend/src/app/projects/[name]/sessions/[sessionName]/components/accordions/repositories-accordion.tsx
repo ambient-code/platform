@@ -89,7 +89,7 @@ export function RepositoriesAccordion({
               variant="secondary"
               className={`ml-auto mr-2 transition-all duration-300 ${
                 badgePulse
-                  ? "bg-green-500 text-white shadow-[0_0_8px_rgba(34,197,94,0.6)] scale-110"
+                  ? "bg-chart-5 text-white shadow-[0_0_8px_rgba(104,195,160,0.6)] scale-110"
                   : ""
               }`}
             >
@@ -159,27 +159,27 @@ export function RepositoriesAccordion({
                         <div className="flex items-center gap-2 flex-wrap">
                           <div className="text-sm font-medium truncate">{repoName}</div>
                           {repo.status === "Cloning" ? (
-                            <Badge variant="outline" className="text-xs px-1.5 py-0.5 bg-yellow-50 dark:bg-yellow-950 border-yellow-300 dark:border-yellow-800 text-yellow-700 dark:text-yellow-400">
+                            <Badge variant="outline" className="text-sm px-1.5 py-0.5 bg-status-warning text-status-warning-foreground border-status-warning-border">
                               <Loader2 className="h-3 w-3 animate-spin mr-1" />
                               Cloning...
                             </Badge>
                           ) : repo.status === "Removing" ? (
-                            <Badge variant="outline" className="text-xs px-1.5 py-0.5 bg-orange-50 dark:bg-orange-950 border-orange-300 dark:border-orange-800 text-orange-700 dark:text-orange-400">
+                            <Badge variant="outline" className="text-sm px-1.5 py-0.5 bg-status-warning text-status-warning-foreground border-status-warning-border">
                               <Loader2 className="h-3 w-3 animate-spin mr-1" />
                               Removing...
                             </Badge>
                           ) : repo.status === "Failed" ? (
-                            <Badge variant="outline" className="text-xs px-1.5 py-0.5 bg-red-50 dark:bg-red-950 border-red-300 dark:border-red-800 text-red-700 dark:text-red-400">
+                            <Badge variant="outline" className="text-sm px-1.5 py-0.5 bg-status-error text-status-error-foreground border-status-error-border">
                               <AlertTriangle className="h-3 w-3 mr-1" />
                               Clone failed
                             </Badge>
                           ) : currentBranch ? (
-                            <Badge variant="outline" className="text-xs px-1.5 py-0.5 max-w-full !whitespace-normal !overflow-visible break-words bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
+                            <Badge variant="outline" className="text-sm px-1.5 py-0.5 max-w-full !whitespace-normal !overflow-visible break-words bg-status-info text-status-info-foreground border-status-info-border">
                               {currentBranch}
                             </Badge>
                           ) : null}
                         </div>
-                        <div className="text-xs text-muted-foreground truncate">{repo.url}</div>
+                        <div className="text-sm text-muted-foreground truncate">{repo.url}</div>
                       </div>
                       <Button
                         variant="ghost"
@@ -199,16 +199,16 @@ export function RepositoriesAccordion({
                     {/* Expandable branches list */}
                     {isExpanded && hasBranches && (
                       <div className="px-2 pb-2 pl-10 space-y-1">
-                        <div className="text-xs text-muted-foreground mb-1">Available branches:</div>
+                        <div className="text-sm text-muted-foreground mb-1">Available branches:</div>
                         {repo.branches!.map((branch, branchIdx) => (
                           <div
                             key={branchIdx}
-                            className="text-xs py-1 px-2 rounded bg-muted/50 flex items-center gap-2"
+                            className="text-sm py-1 px-2 rounded bg-muted/50 flex items-center gap-2"
                           >
                             <GitBranch className="h-3 w-3 text-muted-foreground" />
                             <span className="font-mono">{branch}</span>
                             {branch === currentBranch && (
-                              <Badge variant="secondary" className="text-xs px-1 py-0 h-4 ml-auto">
+                              <Badge variant="secondary" className="text-sm px-1 py-0 h-4 ml-auto">
                                 active
                               </Badge>
                             )}
@@ -227,11 +227,11 @@ export function RepositoriesAccordion({
 
                 return (
                   <div key={`file-${idx}`} className="flex items-center gap-2 p-2 border rounded bg-muted/30 hover:bg-muted/50 transition-colors">
-                    <CloudUpload className="h-4 w-4 text-blue-500 flex-shrink-0" />
+                    <CloudUpload className="h-4 w-4 text-primary flex-shrink-0" />
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium truncate">{file.name}</div>
                       {fileSizeKB && (
-                        <div className="text-xs text-muted-foreground">{fileSizeKB} KB</div>
+                        <div className="text-sm text-muted-foreground">{fileSizeKB} KB</div>
                       )}
                     </div>
                     {onRemoveFile && (

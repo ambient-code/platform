@@ -57,7 +57,7 @@ export function Navigation({ feedbackUrl }: NavigationProps) {
                     <SheetTitle>
                       <span className="text-lg font-bold">ACP</span>
                       {version && (
-                        <span className="ml-2 text-xs text-muted-foreground">{version}</span>
+                        <span className="ml-2 text-sm text-muted-foreground">{version}</span>
                       )}
                     </SheetTitle>
                   </SheetHeader>
@@ -114,7 +114,7 @@ export function Navigation({ feedbackUrl }: NavigationProps) {
                   href="https://github.com/ambient-code/platform/releases"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-[0.65rem] text-muted-foreground/60 pb-0.75 hover:text-muted-foreground transition-colors"
+                  className="text-sm text-muted-foreground/60 pb-0.75 hover:text-muted-foreground transition-colors"
                 >
                   <span>{version}</span>
                 </a>

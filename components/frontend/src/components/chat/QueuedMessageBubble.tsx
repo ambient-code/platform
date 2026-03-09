@@ -29,21 +29,21 @@ export const QueuedMessageBubble: React.FC<QueuedMessageBubbleProps> = ({
         {/* User Avatar */}
         <div className="flex-shrink-0">
           <div className="w-8 h-8 rounded-full flex items-center justify-center bg-muted">
-            <span className="text-muted-foreground text-xs font-semibold">You</span>
+            <span className="text-muted-foreground text-sm font-semibold">You</span>
           </div>
         </div>
 
         {/* Message Content */}
         <div className="flex-1 min-w-0">
           {/* Timestamp */}
-          <div className="text-[10px] text-muted-foreground/60 mb-1">{timeAgo}</div>
+          <div className="text-sm text-muted-foreground/60 mb-1">{timeAgo}</div>
 
           {/* Queued message with distinct styling */}
-          <div className="bg-amber-50 dark:bg-amber-950/30 border-l-2 border-amber-400 rounded-r-md p-3">
+          <div className="bg-status-warning border-l-2 border-status-warning-border rounded-r-md p-3">
             <div className="flex items-center justify-between mb-1">
               <div className="flex items-center gap-2">
-                <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                <span className="text-xs font-medium text-amber-700 dark:text-amber-400">
+                <Clock className="h-4 w-4 text-status-warning-foreground" />
+                <span className="text-sm font-medium text-status-warning-foreground">
                   Queued
                 </span>
               </div>

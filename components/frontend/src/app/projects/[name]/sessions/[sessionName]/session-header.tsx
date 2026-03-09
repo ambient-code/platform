@@ -241,7 +241,7 @@ export function SessionHeader({
                 <DropdownMenuItem
                   onClick={onDelete}
                   disabled={actionLoading === "deleting"}
-                  className="text-red-600 dark:text-red-400"
+                  className="text-destructive"
                 >
                   <Trash2 className="w-4 h-4 mr-2" />
                   {actionLoading === "deleting" ? "Deleting..." : "Delete"}
@@ -289,9 +289,9 @@ export function SessionHeader({
                 size="sm"
                 onClick={onStop}
                 disabled={actionLoading === "stopping"}
-                className="hover:border-red-600 hover:bg-red-50 group"
+                className="hover:border-destructive hover:bg-status-error group"
               >
-                <Octagon className="w-4 h-4 mr-2 fill-red-200 stroke-red-500 group-hover:fill-red-500 group-hover:stroke-red-700 transition-colors" />
+                <Octagon className="w-4 h-4 mr-2 fill-destructive/20 stroke-destructive group-hover:fill-destructive group-hover:stroke-destructive transition-colors" />
                 Stop
               </Button>
             )}
@@ -301,9 +301,9 @@ export function SessionHeader({
                 size="sm"
                 onClick={onContinue}
                 disabled={actionLoading === "resuming"}
-                className="hover:border-green-600 hover:bg-green-50 group"
+                className="hover:border-status-success-border hover:bg-status-success group"
               >
-                <Play className="w-4 h-4 mr-2 fill-green-200 stroke-green-600 group-hover:fill-green-500 group-hover:stroke-green-700 transition-colors" />
+                <Play className="w-4 h-4 mr-2 fill-chart-5/20 stroke-chart-5 group-hover:fill-chart-5 group-hover:stroke-chart-5 transition-colors" />
                 Resume
               </Button>
             )}
@@ -341,9 +341,9 @@ export function SessionHeader({
               size="sm"
               onClick={onStop}
               disabled={actionLoading === "stopping"}
-              className="hover:border-red-600 hover:bg-red-50 group"
+              className="hover:border-destructive hover:bg-status-error group"
             >
-              <Octagon className="w-4 h-4 mr-2 fill-red-200 stroke-red-500 group-hover:fill-red-500 group-hover:stroke-red-700 transition-colors" />
+              <Octagon className="w-4 h-4 mr-2 fill-destructive/20 stroke-destructive group-hover:fill-destructive group-hover:stroke-destructive transition-colors" />
               Stop
             </Button>
           )}
@@ -353,9 +353,9 @@ export function SessionHeader({
               size="sm"
               onClick={onContinue}
               disabled={actionLoading === "resuming"}
-              className="hover:border-green-600 hover:bg-green-50 group"
+              className="hover:border-status-success-border hover:bg-status-success group"
             >
-              <Play className="w-4 h-4 mr-2 fill-green-200 stroke-green-600 group-hover:fill-green-500 group-hover:stroke-green-700 transition-colors" />
+              <Play className="w-4 h-4 mr-2 fill-chart-5/20 stroke-chart-5 group-hover:fill-chart-5 group-hover:stroke-chart-5 transition-colors" />
               Resume
             </Button>
           )}
@@ -394,7 +394,7 @@ export function SessionHeader({
                   <DropdownMenuItem
                     onClick={onDelete}
                     disabled={actionLoading === "deleting"}
-                    className="text-red-600 dark:text-red-400"
+                    className="text-destructive"
                   >
                     <Trash2 className="w-4 h-4 mr-2" />
                     {actionLoading === "deleting" ? "Deleting..." : "Delete"}

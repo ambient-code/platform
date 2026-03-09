@@ -113,7 +113,7 @@ export function GitHubConnectModal({
           </div>
           <div className="space-y-2">
             <Label htmlFor="github-connect-git-token">GITHUB_TOKEN</Label>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               GitHub personal access token or fine-grained token for git operations and API access
             </p>
             <div className="flex items-center gap-2">

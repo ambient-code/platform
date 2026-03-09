@@ -112,7 +112,7 @@ export function JiraConnectionCard({ status, onRefresh }: Props) {
         {/* Status section */}
         <div className="mb-4">
           <div className="flex items-center gap-2 mb-2">
-            <span className={`w-2 h-2 rounded-full ${status?.connected && status.valid !== false ? 'bg-green-500' : status?.connected ? 'bg-yellow-500' : 'bg-gray-400'}`}></span>
+            <span className={`w-2 h-2 rounded-full ${status?.connected && status.valid !== false ? 'bg-chart-5' : status?.connected ? 'bg-status-warning-foreground' : 'bg-muted-foreground/40'}`}></span>
             <span className="text-sm font-medium text-foreground/80">
               {status?.connected ? (
                 <>Connected{status.email ? ` as ${status.email}` : ''}</>
@@ -122,7 +122,7 @@ export function JiraConnectionCard({ status, onRefresh }: Props) {
             </span>
           </div>
           {status?.connected && status.valid === false && (
-            <p className="text-xs text-yellow-600 dark:text-yellow-400 mb-2">
+            <p className="text-sm text-status-warning-foreground mb-2">
               ⚠️ Token appears invalid - click Edit to update
             </p>
           )}
@@ -162,7 +162,7 @@ export function JiraConnectionCard({ status, onRefresh }: Props) {
                 disabled={connectMutation.isPending}
                 className="mt-1"
               />
-              <p className="text-xs text-muted-foreground mt-1">
+              <p className="text-sm text-muted-foreground mt-1">
                 Your Jira login username (e.g., rh-dept-kerberos)
               </p>
             </div>
@@ -187,7 +187,7 @@ export function JiraConnectionCard({ status, onRefresh }: Props) {
                   {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground mt-1">
+              <p className="text-sm text-muted-foreground mt-1">
                 Create an API token at{' '}
                 <a
                   href={url ? `${url}/secure/ViewProfile.jspa?selectedTab=com.atlassian.pats.pats-plugin:jira-user-personal-access-tokens` : 'https://id.atlassian.com/manage-profile/security/api-tokens'}

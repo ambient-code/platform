@@ -63,7 +63,7 @@ export const AutocompletePopover: React.FC<AutocompletePopoverProps> = ({
   return (
     <div
       ref={containerRef}
-      className="absolute z-[100] bg-card border-2 border-blue-500 rounded-md shadow-lg max-h-60 overflow-y-auto w-80"
+      className="absolute z-[100] bg-card border-2 border-primary rounded-md shadow-lg max-h-60 overflow-y-auto w-80"
       style={{
         bottom: "100%",
         left: "0px",
@@ -73,11 +73,11 @@ export const AutocompletePopover: React.FC<AutocompletePopoverProps> = ({
       {/* Header */}
       <div className="sticky top-0 bg-card border-b px-3 py-2 flex items-center gap-2">
         <TypeIcon className="h-4 w-4 text-muted-foreground" />
-        <span className="text-xs font-medium text-muted-foreground">
+        <span className="text-sm font-medium text-muted-foreground">
           {type === "agent" ? "Mention an agent" : "Run a command"}
         </span>
         {filter && (
-          <span className="text-xs text-blue-500 ml-auto">
+          <span className="text-sm text-primary ml-auto">
             &quot;{filter}&quot;
           </span>
         )}
@@ -86,7 +86,7 @@ export const AutocompletePopover: React.FC<AutocompletePopoverProps> = ({
       {items.length === 0 ? (
         <div className="px-3 py-4 text-sm text-muted-foreground text-center">
           No {typeLabel} found
-          {filter && <span className="block text-xs mt-1">Try a different search</span>}
+          {filter && <span className="block text-sm mt-1">Try a different search</span>}
         </div>
       ) : (
         <div className="py-1">
@@ -108,8 +108,8 @@ export const AutocompletePopover: React.FC<AutocompletePopoverProps> = ({
               >
                 <div className="flex items-center gap-2">
                   {isAgent && (
-                    <div className="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
-                      <span className="text-[10px] font-bold text-blue-600 dark:text-blue-300">
+                    <div className="w-6 h-6 rounded-full bg-primary/10 dark:bg-primary/15 flex items-center justify-center">
+                      <span className="text-sm font-bold text-primary">
                         {getShortName(agent!.name).charAt(0).toUpperCase()}
                       </span>
                     </div>
@@ -118,13 +118,13 @@ export const AutocompletePopover: React.FC<AutocompletePopoverProps> = ({
                     <div className="font-medium text-sm">
                       {isAgent ? `@${getShortName(agent!.name)}` : cmd!.slashCommand}
                     </div>
-                    <div className="text-xs text-muted-foreground truncate">
+                    <div className="text-sm text-muted-foreground truncate">
                       {isAgent ? agent!.name : cmd!.name}
                     </div>
                   </div>
                 </div>
                 {item.description && (
-                  <p className="text-xs text-muted-foreground mt-1 line-clamp-2 pl-8">
+                  <p className="text-sm text-muted-foreground mt-1 line-clamp-2 pl-8">
                     {item.description}
                   </p>
                 )}
@@ -135,7 +135,7 @@ export const AutocompletePopover: React.FC<AutocompletePopoverProps> = ({
       )}
 
       {/* Footer hint */}
-      <div className="sticky bottom-0 bg-card border-t px-3 py-1.5 text-[10px] text-muted-foreground flex gap-3">
+      <div className="sticky bottom-0 bg-card border-t px-3 py-1.5 text-sm text-muted-foreground flex gap-3">
         <span>
           <kbd className="px-1 bg-muted rounded">↑↓</kbd> navigate
         </span>

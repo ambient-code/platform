@@ -137,7 +137,7 @@ export function SessionDetailsModal({
 
           {session.status?.conditions && session.status.conditions.length > 0 && (
             <div className="pt-4">
-              <div className="text-xs uppercase tracking-wide text-muted-foreground mb-2">Reconciliation Conditions</div>
+              <div className="text-sm uppercase tracking-wide text-muted-foreground mb-2">Reconciliation Conditions</div>
               <Accordion type="multiple" className="w-full">
                 {session.status.conditions.map((condition, index) => (
                   <AccordionItem key={`${condition.type}-${index}`} value={`condition-${index}`}>
@@ -165,7 +165,7 @@ export function SessionDetailsModal({
                           </div>
                         )}
                         {condition.lastTransitionTime && (
-                          <div className="text-xs text-muted-foreground pt-2">
+                          <div className="text-sm text-muted-foreground pt-2">
                             Updated {new Date(condition.lastTransitionTime).toLocaleString()}
                           </div>
                         )}

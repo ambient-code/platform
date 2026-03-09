@@ -67,7 +67,7 @@ export function ManageRemoteDialog({
                 }
               }}
             />
-            <p className="text-xs text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               Use a repository you have write access to
             </p>
           </div>

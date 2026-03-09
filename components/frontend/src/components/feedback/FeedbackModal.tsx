@@ -134,9 +134,9 @@ export function FeedbackModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {isPositive ? (
-              <ThumbsUp className="h-5 w-5 text-green-500" />
+              <ThumbsUp className="h-5 w-5 text-chart-5" />
             ) : (
-              <ThumbsDown className="h-5 w-5 text-red-500" />
+              <ThumbsDown className="h-5 w-5 text-destructive" />
             )}
             <span>Share feedback</span>
           </DialogTitle>
@@ -168,7 +168,7 @@ export function FeedbackModal({
           </div>
 
           {/* Privacy disclaimer */}
-          <div className="rounded-md border border-border/50 bg-muted/30 px-3 py-2.5 text-xs text-muted-foreground">
+          <div className="rounded-md border border-border/50 bg-muted/30 px-3 py-2.5 text-sm text-muted-foreground">
             <div className="flex items-center gap-1.5 mb-1">
               <Info className="h-3.5 w-3.5 flex-shrink-0" />
               <span className="font-medium">Privacy</span>

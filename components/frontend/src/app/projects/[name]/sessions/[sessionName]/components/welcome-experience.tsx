@@ -154,7 +154,7 @@ export function WelcomeExperience({
               {/* Avatar */}
               <div className="flex-shrink-0">
                 <div className="w-8 h-8 rounded-full flex items-center justify-center bg-primary ring-2 ring-background">
-                  <span className="text-white text-xs font-semibold">AI</span>
+                  <span className="text-white text-sm font-semibold">AI</span>
                 </div>
               </div>
 
@@ -214,7 +214,7 @@ export function WelcomeExperience({
                         {workflow.name}
                       </h3>
                       <p className={cn(
-                        "text-xs line-clamp-2",
+                        "text-sm line-clamp-2",
                         selectedWorkflowId !== null && selectedWorkflowId !== workflow.id
                           ? "text-muted-foreground/40"
                           : "text-muted-foreground"
@@ -279,7 +279,7 @@ export function WelcomeExperience({
                           >
                             <div className="flex flex-col items-start gap-0.5 py-1 w-full">
                               <span>General chat</span>
-                              <span className="text-xs text-muted-foreground font-normal line-clamp-2">
+                              <span className="text-sm text-muted-foreground font-normal line-clamp-2">
                                 A general chat session with no structured workflow.
                               </span>
                             </div>
@@ -295,7 +295,7 @@ export function WelcomeExperience({
                         >
                           <div className="flex flex-col items-start gap-0.5 py-1 w-full">
                             <span>{workflow.name}</span>
-                            <span className="text-xs text-muted-foreground font-normal line-clamp-2">
+                            <span className="text-sm text-muted-foreground font-normal line-clamp-2">
                               {workflow.description}
                             </span>
                           </div>
@@ -311,7 +311,7 @@ export function WelcomeExperience({
                         >
                           <div className="flex flex-col items-start gap-0.5 py-1 w-full">
                             <span>Custom workflow...</span>
-                            <span className="text-xs text-muted-foreground font-normal line-clamp-2">
+                            <span className="text-sm text-muted-foreground font-normal line-clamp-2">
                               Load a workflow from a custom Git repository
                             </span>
                           </div>

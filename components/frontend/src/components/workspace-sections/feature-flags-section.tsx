@@ -330,7 +330,7 @@ export function FeatureFlagsSection({ projectName }: FeatureFlagsSectionProps) {
                   </div>
                   <div className="text-sm text-muted-foreground">
                     {hasChanges ? (
-                      <span className="text-yellow-600 dark:text-yellow-400">
+                      <span className="text-status-warning-foreground">
                         {changedCount} unsaved change{changedCount > 1 ? "s" : ""}
                       </span>
                     ) : (
@@ -369,10 +369,10 @@ function GroupRows({
     <>
       <TableRow className="bg-muted/30 hover:bg-muted/30">
         <TableCell colSpan={5} className="py-2">
-          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          <span className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
             {group.label}
           </span>
-          <span className="ml-2 text-xs text-muted-foreground">
+          <span className="ml-2 text-sm text-muted-foreground">
             ({group.flags.length})
           </span>
         </TableCell>
@@ -389,13 +389,13 @@ function GroupRows({
                   {flag.name}
                 </span>
                 {isChanged && (
-                  <Badge variant="outline" className="text-xs bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200">
+                  <Badge variant="outline" className="text-sm bg-status-warning text-status-warning-foreground">
                     Unsaved
                   </Badge>
                 )}
               </div>
               {flag.stale && (
-                <Badge variant="outline" className="mt-1 text-xs">
+                <Badge variant="outline" className="mt-1 text-sm">
                   Stale
                 </Badge>
               )}
@@ -406,7 +406,7 @@ function GroupRows({
               </div>
             </TableCell>
             <TableCell>
-              <Badge variant={flag.enabled ? "secondary" : "outline"} className="text-xs w-fit">
+              <Badge variant={flag.enabled ? "secondary" : "outline"} className="text-sm w-fit">
                 {flag.enabled ? "On" : "Off"}
               </Badge>
             </TableCell>
@@ -449,12 +449,12 @@ function OverrideControl({
           size="sm"
           onClick={() => onChange(opt.val)}
           className={cn(
-            "h-auto px-2.5 py-1 text-xs font-medium rounded-sm transition-colors",
+            "h-auto px-2.5 py-1 text-sm font-medium rounded-sm transition-colors",
             value === opt.val
               ? opt.val === "on"
-                ? "bg-green-600 text-white shadow-sm hover:bg-green-700 hover:text-white"
+                ? "bg-chart-5 text-white shadow-sm hover:bg-chart-5/90 hover:text-white"
                 : opt.val === "off"
-                  ? "bg-red-600 text-white shadow-sm hover:bg-red-700 hover:text-white"
+                  ? "bg-destructive text-white shadow-sm hover:bg-destructive/90 hover:text-white"
                   : "bg-muted text-foreground shadow-sm"
               : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
           )}

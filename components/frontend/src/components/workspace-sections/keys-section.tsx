@@ -315,7 +315,7 @@ export function KeysSection({ projectName }: KeysSectionProps) {
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 How long the token remains valid. Choose &quot;No expiration&quot; for long-lived service keys.
               </p>
             </div>

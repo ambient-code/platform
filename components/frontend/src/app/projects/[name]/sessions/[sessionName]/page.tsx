@@ -1431,9 +1431,9 @@ export default function ProjectSessionDetailPage({
         </div>
         <div className="flex-grow overflow-hidden">
           <div className="h-full container mx-auto px-6 py-6">
-            <Card className="border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950/50">
+            <Card className="border-status-error-border bg-status-error">
               <CardContent className="pt-6">
-                <p className="text-red-700 dark:text-red-300">
+                <p className="text-status-error-foreground">
                   Error:{" "}
                   {error instanceof Error ? error.message : "Session not found"}
                 </p>
@@ -1476,7 +1476,7 @@ export default function ProjectSessionDetailPage({
                       {session.status?.phase || "Pending"}
                     </Badge>
                     {agentName && (
-                      <Badge variant="outline" className="text-xs font-normal">
+                      <Badge variant="outline" className="text-sm font-normal">
                         {agentName} / {session.spec.llmSettings.model}
                       </Badge>
                     )}
@@ -1593,7 +1593,7 @@ export default function ProjectSessionDetailPage({
                         {/* Starting states */}
                         {["Creating", "Pending"].includes(phase) && (
                           <>
-                            <Loader2 className="h-10 w-10 mx-auto mb-3 animate-spin text-blue-600" />
+                            <Loader2 className="h-10 w-10 mx-auto mb-3 animate-spin text-primary" />
                             <h3 className="font-semibold text-lg mb-1">Starting Session</h3>
                             <p className="text-sm text-muted-foreground">
                               Setting up your workspace...
@@ -1604,7 +1604,7 @@ export default function ProjectSessionDetailPage({
                         {/* Stopping state */}
                         {phase === "Stopping" && (
                           <>
-                            <Loader2 className="h-10 w-10 mx-auto mb-3 animate-spin text-orange-600" />
+                            <Loader2 className="h-10 w-10 mx-auto mb-3 animate-spin text-status-warning-foreground" />
                             <h3 className="font-semibold text-lg mb-1">Stopping Session</h3>
                             <p className="text-sm text-muted-foreground">
                               Saving workspace state...
@@ -1626,8 +1626,8 @@ export default function ProjectSessionDetailPage({
                             <div className="space-y-3 mb-6 text-left">
                               {workflowManagement.activeWorkflow && (
                                 <div>
-                                  <p className="text-xs font-medium text-muted-foreground mb-1.5">Workflow</p>
-                                  <Badge variant="secondary" className="text-xs">
+                                  <p className="text-sm font-medium text-muted-foreground mb-1.5">Workflow</p>
+                                  <Badge variant="secondary" className="text-sm">
                                     {workflowManagement.activeWorkflow}
                                   </Badge>
                                 </div>
@@ -1635,7 +1635,7 @@ export default function ProjectSessionDetailPage({
 
                               {session?.spec?.repos && session.spec.repos.length > 0 && (
                                 <div>
-                                  <p className="text-xs font-medium text-muted-foreground mb-1.5">
+                                  <p className="text-sm font-medium text-muted-foreground mb-1.5">
                                     Repositories ({session.spec.repos.length})
                                   </p>
                                   <div className="text-sm text-foreground/80 space-y-1">
@@ -1645,7 +1645,7 @@ export default function ProjectSessionDetailPage({
                                       </div>
                                     ))}
                                     {session.spec.repos.length > 3 && (
-                                      <div className="text-xs text-muted-foreground mt-1">
+                                      <div className="text-sm text-muted-foreground mt-1">
                                         +{session.spec.repos.length - 3} more
                                       </div>
                                     )}
@@ -1655,7 +1655,7 @@ export default function ProjectSessionDetailPage({
 
                               {(!workflowManagement.activeWorkflow && (!session?.spec?.repos || session.spec.repos.length === 0)) && (
                                 <div className="text-center py-2">
-                                  <p className="text-xs text-muted-foreground">
+                                  <p className="text-sm text-muted-foreground">
                                     No workflow or repositories configured
                                   </p>
                                 </div>
@@ -1766,7 +1766,7 @@ export default function ProjectSessionDetailPage({
                           <span>File Explorer</span>
                           <Badge
                             variant="outline"
-                            className="text-[10px] px-2 py-0.5"
+                            className="text-sm px-2 py-0.5"
                           >
                             EXPERIMENTAL
                           </Badge>
@@ -1775,7 +1775,7 @@ export default function ProjectSessionDetailPage({
                               {(gitOps.gitStatus?.totalAdded ?? 0) > 0 && (
                                 <Badge
                                   variant="outline"
-                                  className="bg-green-50 text-green-700 border-green-200 dark:bg-green-950/50 dark:text-green-300 dark:border-green-800"
+                                  className="bg-status-success text-status-success-foreground border-status-success-border"
                                 >
                                   +{gitOps.gitStatus.totalAdded}
                                 </Badge>
@@ -1783,7 +1783,7 @@ export default function ProjectSessionDetailPage({
                               {(gitOps.gitStatus?.totalRemoved ?? 0) > 0 && (
                                 <Badge
                                   variant="outline"
-                                  className="bg-red-50 text-red-700 border-red-200 dark:bg-red-950/50 dark:text-red-300 dark:border-red-800"
+                                  className="bg-status-error text-status-error-foreground border-status-error-border"
                                 >
                                   -{gitOps.gitStatus.totalRemoved}
                                 </Badge>
@@ -1802,7 +1802,7 @@ export default function ProjectSessionDetailPage({
 
                           {/* Directory Selector */}
                           <div className="flex items-center justify-between gap-2">
-                            <Label className="text-xs text-muted-foreground">
+                            <Label className="text-sm text-muted-foreground">
                               Directory:
                             </Label>
                             <Select
@@ -1867,11 +1867,11 @@ export default function ProjectSessionDetailPage({
                                         {opt.type === "workflow" && (
                                           <Sparkles className="h-3 w-3" />
                                         )}
-                                        <span className="text-xs">
+                                        <span className="text-sm">
                                           {opt.name}
                                         </span>
                                         {branchName && (
-                                          <Badge variant="outline" className="text-xs px-1.5 py-0.5 max-w-full !whitespace-normal !overflow-visible break-words bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
+                                          <Badge variant="outline" className="text-sm px-1.5 py-0.5 max-w-full !whitespace-normal !overflow-visible break-words bg-status-info border-status-info-border">
                                             {branchName}
                                           </Badge>
                                         )}
@@ -1886,7 +1886,7 @@ export default function ProjectSessionDetailPage({
                           {/* File Browser */}
                           <div className="overflow-hidden">
                             <div className="px-2 py-1.5 border-y flex items-center justify-between bg-muted/30">
-                              <div className="flex items-center gap-1 text-xs text-muted-foreground min-w-0 flex-1">
+                              <div className="flex items-center gap-1 text-sm text-muted-foreground min-w-0 flex-1">
                                 {(fileOps.currentSubPath ||
                                   fileOps.viewingFile) && (
                                   <Button
@@ -1900,7 +1900,7 @@ export default function ProjectSessionDetailPage({
                                 )}
 
                                 <Folder className="inline h-3 w-3 mr-1 flex-shrink-0" />
-                                <code className="bg-muted px-1 py-0.5 rounded text-xs truncate">
+                                <code className="bg-muted px-1 py-0.5 rounded text-sm truncate">
                                   {selectedDirectory.path}
                                   {fileOps.currentSubPath &&
                                     `/${fileOps.currentSubPath}`}
@@ -1933,13 +1933,13 @@ export default function ProjectSessionDetailPage({
                                     <DropdownMenuContent align="end">
                                       <DropdownMenuItem
                                         disabled
-                                        className="text-xs text-muted-foreground"
+                                        className="text-sm text-muted-foreground"
                                       >
                                         Sync to Jira - Coming soon
                                       </DropdownMenuItem>
                                       <DropdownMenuItem
                                         disabled
-                                        className="text-xs text-muted-foreground"
+                                        className="text-sm text-muted-foreground"
                                       >
                                         Sync to GDrive - Coming soon
                                       </DropdownMenuItem>
@@ -1976,7 +1976,7 @@ export default function ProjectSessionDetailPage({
                                   <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                                 </div>
                               ) : fileOps.viewingFile ? (
-                                <div className="text-xs">
+                                <div className="text-sm">
                                   <pre className="bg-muted/50 p-2 rounded overflow-x-auto">
                                     <code>{fileOps.viewingFile.content}</code>
                                   </pre>
@@ -1985,7 +1985,7 @@ export default function ProjectSessionDetailPage({
                                 <div className="text-center py-4 text-sm text-muted-foreground">
                                   <FolderTree className="h-8 w-8 mx-auto mb-2 opacity-30" />
                                   <p>No files yet</p>
-                                  <p className="text-xs mt-1">
+                                  <p className="text-sm mt-1">
                                     Files will appear here
                                   </p>
                                 </div>
@@ -2018,14 +2018,14 @@ export default function ProjectSessionDetailPage({
                           <div className="space-y-2">
                             {/* GitHub Not Configured Warning */}
                             {!githubConfigured && (
-                              <Alert variant="default" className="border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/50">
-                                <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-500" />
-                                <AlertTitle className="text-amber-900 dark:text-amber-100">GitHub Not Configured</AlertTitle>
-                                <AlertDescription className="text-amber-800 dark:text-amber-200">
+                              <Alert variant="warning">
+                                <AlertTriangle className="h-4 w-4 text-status-warning-foreground" />
+                                <AlertTitle className="text-status-warning-foreground">GitHub Not Configured</AlertTitle>
+                                <AlertDescription className="text-status-warning-foreground/80">
                                   Configure GitHub integration in{" "}
                                   <a
                                     href={`/projects/${projectName}?section=settings`}
-                                    className="underline font-medium hover:text-amber-900 dark:hover:text-amber-100"
+                                    className="underline font-medium hover:text-status-warning-foreground"
                                     onClick={(e) => e.stopPropagation()}
                                   >
                                     workspace settings
@@ -2043,7 +2043,7 @@ export default function ProjectSessionDetailPage({
                             ) : !hasRemote ? (
                               /* State 2: Has Git, No Remote */
                               <div className="space-y-2">
-                                <div className="border rounded-md px-2 py-1.5 text-xs">
+                                <div className="border rounded-md px-2 py-1.5 text-sm">
                                   <div className="flex items-center gap-1.5 text-muted-foreground">
                                     <GitBranch className="h-3 w-3" />
                                     <span>{currentBranch}</span>
@@ -2065,7 +2065,7 @@ export default function ProjectSessionDetailPage({
                               /* State 3: Has Git + Remote */
                               <div className="border rounded-md px-2 py-1.5 space-y-1">
                                 {/* Remote Repository */}
-                                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
                                   <Cloud className="h-3 w-3 flex-shrink-0" />
                                   <span className="truncate">
                                     {remoteUrl
@@ -2077,7 +2077,7 @@ export default function ProjectSessionDetailPage({
                                 </div>
 
                                 {/* Branch Tracking */}
-                                <div className="flex items-center gap-1.5 text-xs">
+                                <div className="flex items-center gap-1.5 text-sm">
                                   <GitBranch className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
                                   <span className="text-muted-foreground">
                                     {currentBranch}
@@ -2137,14 +2137,14 @@ export default function ProjectSessionDetailPage({
                           <div className="text-center">
                             {["Creating", "Pending"].includes(phase) && (
                               <>
-                                <Loader2 className="h-10 w-10 mx-auto mb-3 animate-spin text-blue-600" />
+                                <Loader2 className="h-10 w-10 mx-auto mb-3 animate-spin text-primary" />
                                 <h3 className="font-semibold text-lg mb-1">Starting Session</h3>
                                 <p className="text-sm text-muted-foreground">Setting up your workspace...</p>
                               </>
                             )}
                             {phase === "Stopping" && (
                               <>
-                                <Loader2 className="h-10 w-10 mx-auto mb-3 animate-spin text-orange-600" />
+                                <Loader2 className="h-10 w-10 mx-auto mb-3 animate-spin text-status-warning-foreground" />
                                 <h3 className="font-semibold text-lg mb-1">Stopping Session</h3>
                                 <p className="text-sm text-muted-foreground">Saving workspace state...</p>
                               </>
@@ -2236,7 +2236,7 @@ export default function ProjectSessionDetailPage({
                                 <span>File Explorer</span>
                                 <Badge
                                   variant="outline"
-                                  className="text-[10px] px-2 py-0.5"
+                                  className="text-sm px-2 py-0.5"
                                 >
                                   EXPERIMENTAL
                                 </Badge>
@@ -2245,7 +2245,7 @@ export default function ProjectSessionDetailPage({
                                     {(gitOps.gitStatus?.totalAdded ?? 0) > 0 && (
                                       <Badge
                                         variant="outline"
-                                        className="bg-green-50 text-green-700 border-green-200 dark:bg-green-950/50 dark:text-green-300 dark:border-green-800"
+                                        className="bg-status-success text-status-success-foreground border-status-success-border"
                                       >
                                         +{gitOps.gitStatus.totalAdded}
                                       </Badge>
@@ -2253,7 +2253,7 @@ export default function ProjectSessionDetailPage({
                                     {(gitOps.gitStatus?.totalRemoved ?? 0) > 0 && (
                                       <Badge
                                         variant="outline"
-                                        className="bg-red-50 text-red-700 border-red-200 dark:bg-red-950/50 dark:text-red-300 dark:border-red-800"
+                                        className="bg-status-error text-status-error-foreground border-status-error-border"
                                       >
                                         -{gitOps.gitStatus.totalRemoved}
                                       </Badge>
@@ -2272,7 +2272,7 @@ export default function ProjectSessionDetailPage({
 
                                 {/* Directory Selector */}
                                 <div className="flex items-center justify-between gap-2">
-                                  <Label className="text-xs text-muted-foreground">
+                                  <Label className="text-sm text-muted-foreground">
                                     Directory:
                                   </Label>
                                   <Select
@@ -2331,11 +2331,11 @@ export default function ProjectSessionDetailPage({
                                               {opt.type === "workflow" && (
                                                 <Sparkles className="h-3 w-3" />
                                               )}
-                                              <span className="text-xs">
+                                              <span className="text-sm">
                                                 {opt.name}
                                               </span>
                                               {branchName && (
-                                                <Badge variant="outline" className="text-xs px-1.5 py-0.5 max-w-full !whitespace-normal !overflow-visible break-words bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
+                                                <Badge variant="outline" className="text-sm px-1.5 py-0.5 max-w-full !whitespace-normal !overflow-visible break-words bg-status-info border-status-info-border">
                                                   {branchName}
                                                 </Badge>
                                               )}
@@ -2350,7 +2350,7 @@ export default function ProjectSessionDetailPage({
                                 {/* File Browser */}
                                 <div className="overflow-hidden">
                                   <div className="px-2 py-1.5 border-y flex items-center justify-between bg-muted/30">
-                                    <div className="flex items-center gap-1 text-xs text-muted-foreground min-w-0 flex-1">
+                                    <div className="flex items-center gap-1 text-sm text-muted-foreground min-w-0 flex-1">
                                       {(fileOps.currentSubPath ||
                                         fileOps.viewingFile) && (
                                         <Button
@@ -2364,7 +2364,7 @@ export default function ProjectSessionDetailPage({
                                       )}
 
                                       <Folder className="inline h-3 w-3 mr-1 flex-shrink-0" />
-                                      <code className="bg-muted px-1 py-0.5 rounded text-xs truncate">
+                                      <code className="bg-muted px-1 py-0.5 rounded text-sm truncate">
                                         {selectedDirectory.path}
                                         {fileOps.currentSubPath &&
                                           `/${fileOps.currentSubPath}`}
@@ -2397,13 +2397,13 @@ export default function ProjectSessionDetailPage({
                                           <DropdownMenuContent align="end">
                                             <DropdownMenuItem
                                               disabled
-                                              className="text-xs text-muted-foreground"
+                                              className="text-sm text-muted-foreground"
                                             >
                                               Sync to Jira - Coming soon
                                             </DropdownMenuItem>
                                             <DropdownMenuItem
                                               disabled
-                                              className="text-xs text-muted-foreground"
+                                              className="text-sm text-muted-foreground"
                                             >
                                               Sync to GDrive - Coming soon
                                             </DropdownMenuItem>
@@ -2440,7 +2440,7 @@ export default function ProjectSessionDetailPage({
                                         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                                       </div>
                                     ) : fileOps.viewingFile ? (
-                                      <div className="text-xs">
+                                      <div className="text-sm">
                                         <pre className="bg-muted/50 p-2 rounded overflow-x-auto">
                                           <code>{fileOps.viewingFile.content}</code>
                                         </pre>
@@ -2449,7 +2449,7 @@ export default function ProjectSessionDetailPage({
                                       <div className="text-center py-4 text-sm text-muted-foreground">
                                         <FolderTree className="h-8 w-8 mx-auto mb-2 opacity-30" />
                                         <p>No files yet</p>
-                                        <p className="text-xs mt-1">
+                                        <p className="text-sm mt-1">
                                           Files will appear here
                                         </p>
                                       </div>
@@ -2478,14 +2478,14 @@ export default function ProjectSessionDetailPage({
                                 <div className="space-y-2">
                                   {/* GitHub Not Configured Warning */}
                                   {!githubConfigured && (
-                                    <Alert variant="default" className="border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/50">
-                                      <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-500" />
-                                      <AlertTitle className="text-amber-900 dark:text-amber-100">GitHub Not Configured</AlertTitle>
-                                      <AlertDescription className="text-amber-800 dark:text-amber-200">
+                                    <Alert variant="warning">
+                                      <AlertTriangle className="h-4 w-4 text-status-warning-foreground" />
+                                      <AlertTitle className="text-status-warning-foreground">GitHub Not Configured</AlertTitle>
+                                      <AlertDescription className="text-status-warning-foreground/80">
                                         Configure GitHub integration in{" "}
                                         <a
                                           href={`/projects/${projectName}?section=settings`}
-                                          className="underline font-medium hover:text-amber-900 dark:hover:text-amber-100"
+                                          className="underline font-medium hover:text-status-warning-foreground"
                                           onClick={(e) => e.stopPropagation()}
                                         >
                                           workspace settings
@@ -2503,7 +2503,7 @@ export default function ProjectSessionDetailPage({
                                   ) : !hasRemote ? (
                                     /* State 2: Has Git, No Remote */
                                     <div className="space-y-2">
-                                      <div className="border rounded-md px-2 py-1.5 text-xs">
+                                      <div className="border rounded-md px-2 py-1.5 text-sm">
                                         <div className="flex items-center gap-1.5 text-muted-foreground">
                                           <GitBranch className="h-3 w-3" />
                                           <span>{currentBranch}</span>
@@ -2525,7 +2525,7 @@ export default function ProjectSessionDetailPage({
                                     /* State 3: Has Git + Remote */
                                     <div className="border rounded-md px-2 py-1.5 space-y-1">
                                       {/* Remote Repository */}
-                                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                      <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
                                         <Cloud className="h-3 w-3 flex-shrink-0" />
                                         <span className="truncate">
                                           {remoteUrl
@@ -2537,7 +2537,7 @@ export default function ProjectSessionDetailPage({
                                       </div>
 
                                       {/* Branch Tracking */}
-                                      <div className="flex items-center gap-1.5 text-xs">
+                                      <div className="flex items-center gap-1.5 text-sm">
                                         <GitBranch className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
                                         <span className="text-muted-foreground">
                                           {currentBranch}
@@ -2561,7 +2561,7 @@ export default function ProjectSessionDetailPage({
                           className="text-muted-foreground hover:text-foreground"
                   >
                           <ChevronLeft className="h-4 w-4 mr-1" />
-                    <span className="text-xs">Hide panel</span>
+                    <span className="text-sm">Hide panel</span>
                   </Button>
                 </div>
               </div>

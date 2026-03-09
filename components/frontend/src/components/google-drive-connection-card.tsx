@@ -136,7 +136,7 @@ export function GoogleDriveConnectionCard({ showManageButton = true, status, onR
         {/* Status section */}
         <div className="mb-4">
           <div className="flex items-center gap-2 mb-2">
-            <span className={`w-2 h-2 rounded-full ${error ? 'bg-red-500' : status?.connected ? 'bg-green-500' : 'bg-gray-400'}`}></span>
+            <span className={`w-2 h-2 rounded-full ${error ? 'bg-destructive' : status?.connected ? 'bg-chart-5' : 'bg-muted-foreground/40'}`}></span>
             <span className="text-sm font-medium text-foreground/80">
               {error ? (
                 'Connection Error'

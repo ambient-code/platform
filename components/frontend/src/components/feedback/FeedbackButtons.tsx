@@ -77,10 +77,10 @@ export function FeedbackButtons({
                 disabled={isPositiveSubmitted}
                 className={cn(
                   "p-1.5 rounded-md transition-all duration-200",
-                  "hover:bg-green-500/10 focus:outline-none focus:ring-2 focus:ring-green-500/30",
+                  "hover:bg-chart-5/10 focus:outline-none focus:ring-2 focus:ring-chart-5/30",
                   isPositiveSubmitted
-                    ? "text-green-500 bg-green-500/10 cursor-default"
-                    : "text-muted-foreground hover:text-green-500 cursor-pointer"
+                    ? "text-chart-5 bg-chart-5/10 cursor-default"
+                    : "text-muted-foreground hover:text-chart-5 cursor-pointer"
                 )}
                 aria-label={isPositiveSubmitted ? "Positive feedback submitted" : "This response was helpful"}
               >
@@ -94,7 +94,7 @@ export function FeedbackButtons({
                 )}
               </button>
             </TooltipTrigger>
-            <TooltipContent side="top" className="text-xs">
+            <TooltipContent side="top" className="text-sm">
               {isPositiveSubmitted ? "Thanks for your feedback!" : "This was helpful"}
             </TooltipContent>
           </Tooltip>
@@ -107,10 +107,10 @@ export function FeedbackButtons({
                 disabled={isNegativeSubmitted}
                 className={cn(
                   "p-1.5 rounded-md transition-all duration-200",
-                  "hover:bg-red-500/10 focus:outline-none focus:ring-2 focus:ring-red-500/30",
+                  "hover:bg-destructive/10 focus:outline-none focus:ring-2 focus:ring-destructive/30",
                   isNegativeSubmitted
-                    ? "text-red-500 bg-red-500/10 cursor-default"
-                    : "text-muted-foreground hover:text-red-500 cursor-pointer"
+                    ? "text-destructive bg-destructive/10 cursor-default"
+                    : "text-muted-foreground hover:text-destructive cursor-pointer"
                 )}
                 aria-label={isNegativeSubmitted ? "Negative feedback submitted" : "This response was not helpful"}
               >
@@ -124,7 +124,7 @@ export function FeedbackButtons({
                 )}
               </button>
             </TooltipTrigger>
-            <TooltipContent side="top" className="text-xs">
+            <TooltipContent side="top" className="text-sm">
               {isNegativeSubmitted ? "Thanks for your feedback!" : "This wasn't helpful"}
             </TooltipContent>
           </Tooltip>

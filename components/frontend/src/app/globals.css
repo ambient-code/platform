@@ -58,131 +58,149 @@
   --color-role-edit-foreground: var(--role-edit-foreground);
   --color-role-admin: var(--role-admin);
   --color-role-admin-foreground: var(--role-admin-foreground);
+  --color-code-bg: var(--code-bg);
+  --color-code-foreground: var(--code-foreground);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
 }
 
+/*
+ * Light theme — cool neutrals (slate undertone)
+ * Accents derived from spinner: blue #0066B1, purple #522DAE, red #F40000
+ */
 :root {
   --radius: 0.625rem;
-  --background: oklch(0.99 0.002 250);
-  --foreground: oklch(0.13 0.01 250);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.13 0.01 250);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.13 0.01 250);
-  --primary: oklch(0.5 0.22 264);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.965 0.003 250);
-  --secondary-foreground: oklch(0.205 0.008 250);
-  --muted: oklch(0.965 0.003 250);
-  --muted-foreground: oklch(0.556 0.005 250);
-  --accent: oklch(0.965 0.003 250);
-  --accent-foreground: oklch(0.205 0.008 250);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.91 0.005 250);
-  --input: oklch(0.91 0.005 250);
-  --ring: oklch(0.5 0.22 264);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.98 0.003 250);
-  --sidebar-foreground: oklch(0.13 0.01 250);
-  --sidebar-primary: oklch(0.5 0.22 264);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.965 0.003 250);
-  --sidebar-accent-foreground: oklch(0.205 0.008 250);
-  --sidebar-border: oklch(0.91 0.005 250);
-  --sidebar-ring: oklch(0.5 0.22 264);
+  --background: oklch(0.98 0.003 250);
+  --foreground: oklch(0.18 0.01 250);
+  --card: oklch(0.995 0.001 250);
+  --card-foreground: oklch(0.18 0.01 250);
+  --popover: oklch(0.995 0.001 250);
+  --popover-foreground: oklch(0.18 0.01 250);
+  --primary: oklch(0.48 0.18 255);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.955 0.005 250);
+  --secondary-foreground: oklch(0.25 0.008 250);
+  --muted: oklch(0.955 0.005 250);
+  --muted-foreground: oklch(0.50 0.008 250);
+  --accent: oklch(0.945 0.008 250);
+  --accent-foreground: oklch(0.22 0.008 250);
+  --destructive: oklch(0.55 0.22 25);
+  --border: oklch(0.915 0.006 250);
+  --input: oklch(0.915 0.006 250);
+  --ring: oklch(0.48 0.18 255);
+  --chart-1: oklch(0.48 0.18 255);
+  --chart-2: oklch(0.45 0.20 290);
+  --chart-3: oklch(0.55 0.22 25);
+  --chart-4: oklch(0.60 0.12 185);
+  --chart-5: oklch(0.65 0.14 145);
+  --sidebar: oklch(0.97 0.004 250);
+  --sidebar-foreground: oklch(0.18 0.01 250);
+  --sidebar-primary: oklch(0.48 0.18 255);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.945 0.008 250);
+  --sidebar-accent-foreground: oklch(0.22 0.008 250);
+  --sidebar-border: oklch(0.915 0.006 250);
+  --sidebar-ring: oklch(0.48 0.18 255);
 
-  /* Status badge semantic colors - Light theme (pastel backgrounds) */
-  --status-success: oklch(0.95 0.05 145);
-  --status-success-foreground: oklch(0.35 0.15 145);
-  --status-success-border: oklch(0.85 0.08 145);
-  --status-error: oklch(0.95 0.05 27);
-  --status-error-foreground: oklch(0.45 0.2 27);
-  --status-error-border: oklch(0.85 0.08 27);
-  --status-warning: oklch(0.95 0.1 85);
-  --status-warning-foreground: oklch(0.4 0.15 85);
-  --status-warning-border: oklch(0.85 0.12 85);
-  --status-info: oklch(0.95 0.05 240);
-  --status-info-foreground: oklch(0.45 0.15 240);
-  --status-info-border: oklch(0.85 0.08 240);
+  /* Status colors — soft pastels */
+  --status-success: oklch(0.94 0.04 150);
+  --status-success-foreground: oklch(0.35 0.12 150);
+  --status-success-border: oklch(0.86 0.06 150);
+  --status-error: oklch(0.94 0.04 25);
+  --status-error-foreground: oklch(0.45 0.18 25);
+  --status-error-border: oklch(0.86 0.06 25);
+  --status-warning: oklch(0.94 0.08 85);
+  --status-warning-foreground: oklch(0.42 0.12 85);
+  --status-warning-border: oklch(0.86 0.10 85);
+  --status-info: oklch(0.94 0.04 250);
+  --status-info-foreground: oklch(0.42 0.14 250);
+  --status-info-border: oklch(0.86 0.06 250);
 
-  /* Semantic link colors - Light theme */
-  --link: oklch(0.45 0.15 240);           /* Blue link color */
-  --link-hover: oklch(0.35 0.18 240);     /* Darker blue on hover */
+  /* Links */
+  --link: oklch(0.48 0.18 255);
+  --link-hover: oklch(0.40 0.20 255);
 
-  /* Role badge colors - Light theme (pastel backgrounds) */
-  --role-view: oklch(0.95 0.05 240);           /* Blue for view role */
-  --role-view-foreground: oklch(0.45 0.15 240);
-  --role-edit: oklch(0.95 0.05 145);           /* Green for edit role */
-  --role-edit-foreground: oklch(0.35 0.15 145);
-  --role-admin: oklch(0.95 0.1 290);           /* Purple for admin role */
-  --role-admin-foreground: oklch(0.4 0.15 290);
+  /* Role badges */
+  --role-view: oklch(0.94 0.04 250);
+  --role-view-foreground: oklch(0.42 0.14 250);
+  --role-edit: oklch(0.94 0.04 150);
+  --role-edit-foreground: oklch(0.35 0.12 150);
+  --role-admin: oklch(0.94 0.06 290);
+  --role-admin-foreground: oklch(0.42 0.14 290);
+
+  /* Code blocks — soft neutral instead of harsh black */
+  --code-bg: oklch(0.945 0.005 250);
+  --code-foreground: oklch(0.25 0.01 250);
 }
 
+/*
+ * Dark theme — soft charcoal with cool undertone
+ * Not pure black; warm enough to feel comfortable, cool enough to stay professional
+ */
 .dark {
-  --background: oklch(0.13 0.008 250);
-  --foreground: oklch(0.985 0.002 250);
-  --card: oklch(0.17 0.01 250);
-  --card-foreground: oklch(0.985 0.002 250);
-  --popover: oklch(0.17 0.01 250);
-  --popover-foreground: oklch(0.985 0.002 250);
-  --primary: oklch(0.6 0.2 264);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.25 0.008 250);
-  --secondary-foreground: oklch(0.985 0.002 250);
-  --muted: oklch(0.25 0.008 250);
-  --muted-foreground: oklch(0.708 0.005 250);
-  --accent: oklch(0.25 0.008 250);
-  --accent-foreground: oklch(0.985 0.002 250);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0.005 250 / 12%);
-  --input: oklch(1 0.005 250 / 15%);
-  --ring: oklch(0.6 0.2 264);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.17 0.01 250);
-  --sidebar-foreground: oklch(0.985 0.002 250);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.25 0.008 250);
-  --sidebar-accent-foreground: oklch(0.985 0.002 250);
-  --sidebar-border: oklch(1 0.005 250 / 12%);
-  --sidebar-ring: oklch(0.6 0.2 264);
+  --background: oklch(0.16 0.010 250);
+  --foreground: oklch(0.93 0.005 250);
+  --card: oklch(0.19 0.012 250);
+  --card-foreground: oklch(0.93 0.005 250);
+  --popover: oklch(0.19 0.012 250);
+  --popover-foreground: oklch(0.93 0.005 250);
+  --primary: oklch(0.62 0.17 255);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.23 0.010 250);
+  --secondary-foreground: oklch(0.93 0.005 250);
+  --muted: oklch(0.23 0.010 250);
+  --muted-foreground: oklch(0.65 0.008 250);
+  --accent: oklch(0.23 0.010 250);
+  --accent-foreground: oklch(0.93 0.005 250);
+  --destructive: oklch(0.65 0.18 22);
+  --border: oklch(0.28 0.010 250);
+  --input: oklch(0.28 0.010 250);
+  --ring: oklch(0.62 0.17 255);
+  --chart-1: oklch(0.62 0.17 255);
+  --chart-2: oklch(0.58 0.18 290);
+  --chart-3: oklch(0.65 0.18 22);
+  --chart-4: oklch(0.65 0.14 185);
+  --chart-5: oklch(0.68 0.15 145);
+  --sidebar: oklch(0.17 0.010 250);
+  --sidebar-foreground: oklch(0.93 0.005 250);
+  --sidebar-primary: oklch(0.62 0.17 255);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.23 0.010 250);
+  --sidebar-accent-foreground: oklch(0.93 0.005 250);
+  --sidebar-border: oklch(0.28 0.010 250);
+  --sidebar-ring: oklch(0.62 0.17 255);
 
-  /* Status badge semantic colors - Dark theme (solid backgrounds with white text) */
-  --status-success: oklch(0.35 0.15 145);
-  --status-success-foreground: oklch(0.985 0 0);
-  --status-success-border: oklch(0.35 0.15 145);
-  --status-error: oklch(0.45 0.2 27);
-  --status-error-foreground: oklch(0.985 0 0);
-  --status-error-border: oklch(0.45 0.2 27);
-  --status-warning: oklch(0.5 0.15 85);
-  --status-warning-foreground: oklch(0.985 0 0);
-  --status-warning-border: oklch(0.5 0.15 85);
-  --status-info: oklch(0.5 0.15 240);
-  --status-info-foreground: oklch(0.985 0 0);
-  --status-info-border: oklch(0.5 0.15 240);
+  /* Status colors — muted solids */
+  --status-success: oklch(0.32 0.10 150);
+  --status-success-foreground: oklch(0.88 0.04 150);
+  --status-success-border: oklch(0.32 0.10 150);
+  --status-error: oklch(0.38 0.14 25);
+  --status-error-foreground: oklch(0.90 0.03 25);
+  --status-error-border: oklch(0.38 0.14 25);
+  --status-warning: oklch(0.42 0.12 85);
+  --status-warning-foreground: oklch(0.92 0.04 85);
+  --status-warning-border: oklch(0.42 0.12 85);
+  --status-info: oklch(0.40 0.12 250);
+  --status-info-foreground: oklch(0.90 0.03 250);
+  --status-info-border: oklch(0.40 0.12 250);
 
-  /* Semantic link colors - Dark theme */
-  --link: oklch(0.65 0.15 240);           /* Lighter blue for dark mode */
-  --link-hover: oklch(0.75 0.12 240);     /* Even lighter on hover */
+  /* Links */
+  --link: oklch(0.68 0.14 255);
+  --link-hover: oklch(0.76 0.11 255);
 
-  /* Role badge colors - Dark theme (solid backgrounds with white text) */
-  --role-view: oklch(0.5 0.15 240);           /* Solid blue for view role */
-  --role-view-foreground: oklch(0.985 0 0);
-  --role-edit: oklch(0.35 0.15 145);          /* Solid green for edit role */
-  --role-edit-foreground: oklch(0.985 0 0);
-  --role-admin: oklch(0.5 0.15 290);          /* Solid purple for admin role */
-  --role-admin-foreground: oklch(0.985 0 0);
+  /* Role badges */
+  --role-view: oklch(0.40 0.12 250);
+  --role-view-foreground: oklch(0.90 0.03 250);
+  --role-edit: oklch(0.32 0.10 150);
+  --role-edit-foreground: oklch(0.88 0.04 150);
+  --role-admin: oklch(0.40 0.12 290);
+  --role-admin-foreground: oklch(0.90 0.03 290);
+
+  /* Code blocks — soft dark instead of pure black */
+  --code-bg: oklch(0.14 0.008 250);
+  --code-foreground: oklch(0.82 0.006 250);
 }
 
 @layer base {
@@ -226,54 +244,48 @@
 
 /* Thin scrollbar styling - Cross-browser support */
 .scrollbar-thin {
-  /* Firefox */
   scrollbar-width: thin;
-  scrollbar-color: var(--muted-foreground) var(--muted);
+  scrollbar-color: var(--muted-foreground) transparent;
 }
 
 .dark .scrollbar-thin {
-  /* Firefox dark mode */
-  scrollbar-color: var(--muted-foreground) var(--background);
+  scrollbar-color: var(--muted-foreground) transparent;
 }
 
-/* WebKit browsers (Chrome, Safari, Edge) */
 .scrollbar-thin::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 .scrollbar-thin::-webkit-scrollbar-track {
-  background: var(--muted);
-  border-radius: 4px;
+  background: transparent;
+  border-radius: 3px;
 }
 
 .scrollbar-thin::-webkit-scrollbar-thumb {
-  background: var(--muted-foreground);
-  border-radius: 4px;
+  background: var(--border);
+  border-radius: 3px;
 }
 
 .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-  background: var(--foreground);
-}
-
-/* WebKit dark mode */
-.dark .scrollbar-thin::-webkit-scrollbar-track {
-  background: var(--background);
-}
-
-.dark .scrollbar-thin::-webkit-scrollbar-thumb {
   background: var(--muted-foreground);
 }
 
+.dark .scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dark .scrollbar-thin::-webkit-scrollbar-thumb {
+  background: var(--border);
+}
+
 .dark .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-  background: var(--foreground);
+  background: var(--muted-foreground);
 }
 
 /* Hide scrollbar while maintaining scroll functionality */
 .scrollbar-hide {
-  /* Firefox */
   scrollbar-width: none;
-  /* WebKit browsers (Chrome, Safari, Edge) */
   -ms-overflow-style: none;
 }
 

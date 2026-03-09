@@ -52,7 +52,7 @@ export function MultiAgentSelection({ agents, selectedAgents, onChange, maxAgent
                 >
                   <div className="flex flex-col">
                     <span className="text-sm">{agent.name}</span>
-                    <span className="text-xs text-muted-foreground">{agent.role}</span>
+                    <span className="text-sm text-muted-foreground">{agent.role}</span>
                   </div>
                 </DropdownMenuCheckboxItem>
               );

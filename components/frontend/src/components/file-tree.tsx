@@ -78,9 +78,9 @@ function FileTreeItem({ node, selectedPath, onSelect, onToggle, depth = 0 }: Ite
       >
         {node.type === "folder" ? (
           expanded ? (
-            <FolderOpen className="h-4 w-4 text-blue-600" />
+            <FolderOpen className="h-4 w-4 text-primary" />
           ) : (
-            <Folder className="h-4 w-4 text-blue-600" />
+            <Folder className="h-4 w-4 text-primary" />
           )
         ) : (
           <FileText className="h-4 w-4 text-muted-foreground" />
@@ -89,13 +89,13 @@ function FileTreeItem({ node, selectedPath, onSelect, onToggle, depth = 0 }: Ite
         <span className={`flex-1 ${isSelected ? "font-medium" : ""}`}>{node.name}</span>
 
         {node.branch && (
-          <Badge variant="outline" className="text-xs px-1.5 py-0 h-5 bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
+          <Badge variant="outline" className="text-sm px-1.5 py-0 h-5 bg-status-info border-status-info-border">
             {node.branch}
           </Badge>
         )}
 
         {typeof node.sizeKb === "number" && (
-          <span className="text-xs text-muted-foreground">{node.sizeKb.toFixed(1)}K</span>
+          <span className="text-sm text-muted-foreground">{node.sizeKb.toFixed(1)}K</span>
         )}
       </div>
 

@@ -293,7 +293,7 @@ export function SharingSection({ projectName }: SharingSectionProps) {
                 })}
               </div>
             </div>
-            {grantError && <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 p-2 rounded">{grantError}</div>}
+            {grantError && <div className="text-sm text-status-error-foreground bg-status-error p-2 rounded">{grantError}</div>}
           </div>
           <DialogFooter>
             <Button

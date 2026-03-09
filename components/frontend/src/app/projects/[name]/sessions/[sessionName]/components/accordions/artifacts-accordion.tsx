@@ -67,7 +67,7 @@ export function ArtifactsAccordion({
           <div className="overflow-hidden">
             {/* Header with breadcrumbs and actions */}
             <div className="px-2 py-1.5 border-y flex items-center justify-between bg-muted/30">
-              <div className="flex items-center gap-1 text-xs text-muted-foreground min-w-0 flex-1">
+              <div className="flex items-center gap-1 text-sm text-muted-foreground min-w-0 flex-1">
                 {/* Back button when in subfolder or viewing file */}
                 {(currentSubPath || viewingFile) && (
                   <Button
@@ -82,7 +82,7 @@ export function ArtifactsAccordion({
 
                 {/* Breadcrumb path */}
                 <Folder className="inline h-3 w-3 mr-1 flex-shrink-0" />
-                <code className="bg-muted px-1 py-0.5 rounded text-xs truncate">
+                <code className="bg-muted px-1 py-0.5 rounded text-sm truncate">
                   artifacts
                   {currentSubPath && `/${currentSubPath}`}
                   {viewingFile && `/${viewingFile.path}`}
@@ -122,7 +122,7 @@ export function ArtifactsAccordion({
                 </div>
               ) : viewingFile ? (
                 /* File content view */
-                <div className="text-xs">
+                <div className="text-sm">
                   <pre className="bg-muted/50 p-2 rounded overflow-x-auto">
                     <code>{viewingFile.content}</code>
                   </pre>
@@ -132,7 +132,7 @@ export function ArtifactsAccordion({
                 <div className="text-center py-4 text-sm text-muted-foreground">
                   <NotepadText className="h-8 w-8 mx-auto mb-2 opacity-30" />
                   <p>No artifacts yet</p>
-                  <p className="text-xs mt-1">AI-generated artifacts will appear here</p>
+                  <p className="text-sm mt-1">AI-generated artifacts will appear here</p>
                 </div>
               ) : (
                 /* File tree */

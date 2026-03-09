@@ -335,7 +335,7 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
               <div className="flex items-center gap-2">
                 {runnerSecretsExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                 <span className="font-semibold">Runner API Keys</span>
-                {Object.values(runnerSecretValues).some(Boolean) && <span className="text-xs text-muted-foreground">(configured)</span>}
+                {Object.values(runnerSecretValues).some(Boolean) && <span className="text-sm text-muted-foreground">(configured)</span>}
               </div>
             </button>
             {runnerSecretsExpanded && runnerTypesLoading && (
@@ -366,7 +366,7 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
                   return (
                     <div key={secretKey} className="space-y-2">
                       <Label htmlFor={`runner-secret-${secretKey}`}>{secretKey}</Label>
-                      <div className="text-xs text-muted-foreground">
+                      <div className="text-sm text-muted-foreground">
                         {ownerName ? `Required by ${ownerName}` : "Runner API key"} (saved to ambient-runner-secrets)
                       </div>
                       <div className="flex items-center gap-2">
@@ -411,14 +411,14 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
           </div>
 
           {/* Migration Notice */}
-          <div className="border rounded-lg p-4 bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
-            <h3 className="text-sm font-semibold mb-2 text-blue-900 dark:text-blue-100">Integration Credentials Moved</h3>
-            <p className="text-xs text-blue-800 dark:text-blue-200 mb-2">
+          <div className="border rounded-lg p-4 bg-status-info border-status-info-border">
+            <h3 className="text-sm font-semibold mb-2 text-status-info-foreground">Integration Credentials Moved</h3>
+            <p className="text-sm text-status-info-foreground mb-2">
               GitHub, GitLab, Jira, and Google Drive credentials are now managed at the user level on the{' '}
               <Link href="/integrations" className="underline font-medium">Integrations page</Link>.
               This allows you to use the same credentials across all your workspaces.
             </p>
-            <p className="text-xs text-blue-700 dark:text-blue-300">
+            <p className="text-sm text-status-info-foreground">
               Any credentials previously configured here will continue to work as a fallback, but we recommend
               connecting your integrations on the Integrations page for the best experience.
             </p>
@@ -435,7 +435,7 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
             >
               <div>
                 <Label className="text-base font-semibold cursor-pointer">S3 Storage Configuration</Label>
-                <div className="text-xs text-muted-foreground mt-1">Configure S3-compatible storage for session artifacts and state</div>
+                <div className="text-sm text-muted-foreground mt-1">Configure S3-compatible storage for session artifacts and state</div>
               </div>
               {s3Expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
             </button>
@@ -458,7 +458,7 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
                           Use shared cluster storage (default)
                         </Label>
                       </div>
-                      <div className="text-xs text-muted-foreground ml-6">
+                      <div className="text-sm text-muted-foreground ml-6">
                         Automatically uses in-cluster MinIO. No configuration needed.
                       </div>
                     </div>
@@ -469,7 +469,7 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
                           Use custom S3-compatible storage
                         </Label>
                       </div>
-                      <div className="text-xs text-muted-foreground ml-6">
+                      <div className="text-sm text-muted-foreground ml-6">
                         Configure AWS S3, external MinIO, or other S3-compatible endpoint.
                       </div>
                     </div>
@@ -479,7 +479,7 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
                   <>
                     <div className="space-y-2">
                       <Label htmlFor="s3Endpoint">S3_ENDPOINT</Label>
-                      <div className="text-xs text-muted-foreground mb-1">S3-compatible endpoint (e.g., https://s3.amazonaws.com, http://minio.local:9000)</div>
+                      <div className="text-sm text-muted-foreground mb-1">S3-compatible endpoint (e.g., https://s3.amazonaws.com, http://minio.local:9000)</div>
                       <Input
                         id="s3Endpoint"
                         type="text"
@@ -490,7 +490,7 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="s3Bucket">S3_BUCKET</Label>
-                      <div className="text-xs text-muted-foreground mb-1">Bucket name for session storage</div>
+                      <div className="text-sm text-muted-foreground mb-1">Bucket name for session storage</div>
                       <Input
                         id="s3Bucket"
                         type="text"
@@ -501,7 +501,7 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="s3Region">S3_REGION</Label>
-                      <div className="text-xs text-muted-foreground mb-1">AWS region (optional, default: us-east-1)</div>
+                      <div className="text-sm text-muted-foreground mb-1">AWS region (optional, default: us-east-1)</div>
                       <Input
                         id="s3Region"
                         type="text"
@@ -512,7 +512,7 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="s3AccessKey">S3_ACCESS_KEY</Label>
-                      <div className="text-xs text-muted-foreground mb-1">S3 access key ID</div>
+                      <div className="text-sm text-muted-foreground mb-1">S3 access key ID</div>
                       <Input
                         id="s3AccessKey"
                         type="text"
@@ -523,7 +523,7 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="s3SecretKey">S3_SECRET_KEY</Label>
-                      <div className="text-xs text-muted-foreground mb-1">S3 secret access key</div>
+                      <div className="text-sm text-muted-foreground mb-1">S3 secret access key</div>
                       <div className="flex items-center gap-2">
                         <Input
                           id="s3SecretKey"
@@ -549,7 +549,7 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
             <div className="flex items-center justify-between">
               <div>
                 <Label className="text-base font-semibold">Custom Environment Variables</Label>
-                <div className="text-xs text-muted-foreground mt-1">Add any additional environment variables for your integrations</div>
+                <div className="text-sm text-muted-foreground mt-1">Add any additional environment variables for your integrations</div>
               </div>
             </div>
             <div className="space-y-2">

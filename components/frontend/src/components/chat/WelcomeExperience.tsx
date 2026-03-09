@@ -82,16 +82,16 @@ export const WelcomeExperience: React.FC<WelcomeExperienceProps> = ({
                 </div>
                 <span className="font-medium">{prompt.label}</span>
               </div>
-              <p className="text-xs text-muted-foreground">{prompt.description}</p>
+              <p className="text-sm text-muted-foreground">{prompt.description}</p>
             </Button>
           );
         })}
       </div>
 
       {/* Hint */}
-      <p className="text-xs text-muted-foreground mt-6">
-        Type <kbd className="px-1 py-0.5 bg-muted rounded text-[10px]">@</kbd> to mention an agent or{" "}
-        <kbd className="px-1 py-0.5 bg-muted rounded text-[10px]">/</kbd> for commands
+      <p className="text-sm text-muted-foreground mt-6">
+        Type <kbd className="px-1 py-0.5 bg-muted rounded text-sm">@</kbd> to mention an agent or{" "}
+        <kbd className="px-1 py-0.5 bg-muted rounded text-sm">/</kbd> for commands
       </p>
     </div>
   );

@@ -59,7 +59,7 @@ export const StreamMessage: React.FC<StreamMessageProps> = ({ message, onGoToRes
     case "agent_waiting": {
       if (!isNewest) return null;
       return (
-        <span className="text-xs text-muted-foreground">{getRandomAgentMessage()}</span>
+        <span className="text-sm text-muted-foreground">{getRandomAgentMessage()}</span>
       )
     }
     case "user_message":
@@ -132,7 +132,7 @@ export const StreamMessage: React.FC<StreamMessageProps> = ({ message, onGoToRes
           timestamp={m.timestamp}
           actions={
             <div className="flex items-center justify-between">
-              <div className="text-xs text-muted-foreground">
+              <div className="text-sm text-muted-foreground">
                 Duration: {m.duration_ms} ms • API: {m.duration_api_ms} ms • Turns: {m.num_turns}
               </div>
               <Button variant='link' size="sm" className="ml-3" onClick={onGoToResults}>Go to Results</Button>

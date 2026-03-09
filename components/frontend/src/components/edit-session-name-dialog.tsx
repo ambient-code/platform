@@ -80,7 +80,7 @@ export function EditSessionNameDialog({
               disabled={isLoading}
               autoFocus
             />
-            <p className="text-xs text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               {name.length}/50 characters
             </p>
           </div>

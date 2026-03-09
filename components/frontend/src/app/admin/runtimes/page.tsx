@@ -45,7 +45,7 @@ function RuntimeDetailPanel({ runtime }: { runtime: RunnerType }) {
             </div>
             <div className="flex gap-2">
               <span className="text-muted-foreground">Key logic:</span>
-              <Badge variant="outline" className="text-xs">
+              <Badge variant="outline" className="text-sm">
                 {runtime.auth?.secretKeyLogic ?? "any"}
               </Badge>
             </div>
@@ -57,14 +57,14 @@ function RuntimeDetailPanel({ runtime }: { runtime: RunnerType }) {
         </div>
         <div>
           <h4 className="text-sm font-medium mb-2">Provider</h4>
-          <Badge variant="outline" className="text-xs">
+          <Badge variant="outline" className="text-sm">
             {runtime.provider}
           </Badge>
         </div>
       </div>
       <div>
         <h4 className="text-sm font-medium mb-2">Full Configuration</h4>
-        <pre className="text-xs bg-muted rounded-md p-3 overflow-x-auto max-h-64 overflow-y-auto font-mono">
+        <pre className="text-sm bg-muted rounded-md p-3 overflow-x-auto max-h-64 overflow-y-auto font-mono">
           {configJson}
         </pre>
       </div>
@@ -227,7 +227,7 @@ function RuntimeRow({
         </TableCell>
         <TableCell>
           <div className="font-medium">{runtime.displayName}</div>
-          <div className="text-xs text-muted-foreground font-mono">{runtime.id}</div>
+          <div className="text-sm text-muted-foreground font-mono">{runtime.id}</div>
         </TableCell>
         <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
           {runtime.description || "\u2014"}

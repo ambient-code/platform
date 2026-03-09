@@ -46,7 +46,7 @@ const defaultComponents: Components = {
     if (inline || isShortCode) {
       return (
         <code
-          className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono"
+          className="bg-code-bg text-code-foreground px-1.5 py-0.5 rounded text-[0.9em] font-mono"
           {...(props as React.HTMLAttributes<HTMLElement>)}
         >
           {children}
@@ -56,7 +56,7 @@ const defaultComponents: Components = {
 
     // Full code blocks for longer content
     return (
-      <pre className="bg-muted text-foreground py-3 rounded text-xs overflow-x-auto border my-2">
+      <pre className="bg-code-bg text-code-foreground py-3 px-3 rounded-lg text-[0.9em] overflow-x-auto border border-border/50 my-2">
         <code
           className={className}
           {...(props as React.HTMLAttributes<HTMLElement>)}
@@ -67,22 +67,22 @@ const defaultComponents: Components = {
     );
   },
   p: ({ children }) => (
-    <div className="text-muted-foreground leading-relaxed mb-[0.2rem] text-sm">{children}</div>
+    <div className="text-foreground/80 leading-relaxed mb-1 text-base">{children}</div>
   ),
   h1: ({ children }) => (
-    <h1 className="text-lg font-bold text-foreground mb-2">{children}</h1>
+    <h1 className="text-xl font-bold text-foreground mb-2">{children}</h1>
   ),
   h2: ({ children }) => (
-    <h2 className="text-md font-semibold text-foreground mb-2">{children}</h2>
+    <h2 className="text-lg font-semibold text-foreground mb-2">{children}</h2>
   ),
   h3: ({ children }) => (
-    <h3 className="text-sm font-medium text-foreground mb-1">{children}</h3>
+    <h3 className="text-base font-medium text-foreground mb-1">{children}</h3>
   ),
   ul: ({ children }) => (
-    <ul className="list-disc list-outside ml-4 mb-2 space-y-1 text-muted-foreground text-sm">{children}</ul>
+    <ul className="list-disc list-outside ml-4 mb-2 space-y-1 text-foreground/80 text-base">{children}</ul>
   ),
   ol: ({ children }) => (
-    <ol className="list-decimal list-outside ml-4 mb-2 space-y-1 text-muted-foreground text-sm">{children}</ol>
+    <ol className="list-decimal list-outside ml-4 mb-2 space-y-1 text-foreground/80 text-base">{children}</ol>
   ),
   li: ({ children }) => (
     <li className="leading-relaxed">{children}</li>
@@ -92,7 +92,7 @@ const defaultComponents: Components = {
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="text-primary hover:underline cursor-pointer"
+      className="text-link hover:text-link-hover hover:underline cursor-pointer"
     >
       {children}
     </a>
@@ -124,7 +124,7 @@ function parseMarkdownLinks(text: string): React.ReactNode {
           href={href}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-primary hover:underline"
+          className="text-link hover:text-link-hover hover:underline"
         >
           {match[1]}
         </a>
@@ -203,34 +203,33 @@ export const LoadingDots = () => {
           className="loading-dot loading-dot-1"
           cx="8"
           cy="8"
-          r="6"
-          fill="#0066B1"
+          r="5"
+          fill="var(--primary)"
         />
         <circle
           className="loading-dot loading-dot-2"
           cx="22"
           cy="8"
-          r="6"
-          fill="#522DAE"
+          r="5"
+          fill="var(--chart-2)"
         />
         <circle
           className="loading-dot loading-dot-3"
           cx="36"
           cy="8"
-          r="6"
-          fill="#F40000"
+          r="5"
+          fill="var(--destructive)"
         />
         <circle
           className="loading-dot loading-dot-4"
           cx="50"
           cy="8"
-          r="6"
-          fill="#FFFFFF"
-          stroke="#9CA3AF"
-          strokeWidth="1"
+          r="5"
+          fill="var(--muted-foreground)"
+          opacity="0.4"
         />
       </svg>
-      <span className="ml-2 text-xs text-muted-foreground">{parseMarkdownLinks(tips[messageIndex])}</span>
+      <span className="ml-2 text-sm text-muted-foreground">{parseMarkdownLinks(tips[messageIndex])}</span>
     </div>
   );
 };
@@ -241,7 +240,7 @@ export const Message = React.forwardRef<HTMLDivElement, MessageProps>(
     ref
   ) => {
     const isBot = role === "bot";
-    const avatarBg = isBot ? "bg-primary ring-2 ring-background" : "bg-emerald-600 dark:bg-emerald-500 ring-2 ring-background";
+    const avatarBg = isBot ? "bg-primary" : "bg-chart-2";
     const avatarText = isBot ? "AI" : "U";
     const formattedTime = formatTimestamp(timestamp);
     const isActivelyStreaming = streaming && isBot;
@@ -250,12 +249,12 @@ export const Message = React.forwardRef<HTMLDivElement, MessageProps>(
       <div className="flex-shrink-0">
       <div
         className={cn(
-          "w-8 h-8 rounded-full flex items-center justify-center",
+          "w-8 h-8 rounded-full flex items-center justify-center ring-2 ring-background",
           avatarBg,
           (isLoading || isActivelyStreaming) && "animate-pulse"
         )}
       >
-        <span className="text-white text-xs font-semibold">
+        <span className="text-white text-sm font-semibold">
           {avatarText}
         </span>
       </div>
@@ -272,19 +271,19 @@ export const Message = React.forwardRef<HTMLDivElement, MessageProps>(
           <div className={cn("flex-1 min-w-0", !isBot && "max-w-[70%]")}>
             {/* Timestamp */}
             {formattedTime && (
-              <div className={cn("text-[10px] text-muted-foreground/60 mb-1", !isBot && "text-right")}>
+              <div className={cn("text-sm text-muted-foreground/60 mb-1", !isBot && "text-right")}>
                 {formattedTime}
               </div>
             )}
             <div className={cn(
               borderless ? "p-0" : "rounded-lg",
-              !borderless && (isBot ? "bg-card" : "bg-primary/10 dark:bg-primary/15")
+              !borderless && (isBot ? "bg-card" : "bg-primary/8 dark:bg-primary/12")
             )}>
               {/* Content */}
-              <div className={cn("text-sm text-foreground font-mono", !isBot && "py-2 px-4")}>
+              <div className={cn("text-base text-foreground", !isBot && "py-2 px-4")}>
                 {isLoading ? (
                   <div>
-                    <div className="text-sm text-muted-foreground mb-2">{content}</div>
+                    <div className="text-base text-muted-foreground mb-2">{content}</div>
                     <LoadingDots />
                   </div>
                 ) : (

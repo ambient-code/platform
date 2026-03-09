@@ -87,7 +87,7 @@ export function AddContextModal({
               value={contextUrl}
               onChange={(e) => setContextUrl(e.target.value)}
             />
-            <p className="text-xs text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               Currently supports GitHub repositories for code context
             </p>
           </div>
@@ -101,7 +101,7 @@ export function AddContextModal({
               value={contextBranch}
               onChange={(e) => setContextBranch(e.target.value)}
             />
-            <p className="text-xs text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               If left empty, a unique feature branch will be created for this session
             </p>
           </div>
@@ -119,7 +119,7 @@ export function AddContextModal({
               >
                 Enable auto-push
               </Label>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 Instructs Claude to commit and push changes made to this
                 repository during the session. Requires git credentials to be
                 configured.
@@ -132,7 +132,7 @@ export function AddContextModal({
               <Separator className="my-4" />
               <div className="space-y-2">
                 <Label>Upload Files</Label>
-                <p className="text-xs text-muted-foreground mb-2">
+                <p className="text-sm text-muted-foreground mb-2">
                   Upload files directly to your workspace for use as context
                 </p>
                 <Button

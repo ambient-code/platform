@@ -213,9 +213,9 @@ export function CreateWorkspaceDialog({
                     setNameError(validateProjectName(name));
                   }}
                   placeholder="my-research-workspace"
-                  className={nameError ? "border-red-500" : ""}
+                  className={nameError ? "border-destructive" : ""}
                 />
-                {nameError && <p className="text-sm text-red-600 dark:text-red-400">{nameError}</p>}
+                {nameError && <p className="text-sm text-status-error-foreground">{nameError}</p>}
                 <p className="text-sm text-muted-foreground">
                   Lowercase alphanumeric with hyphens.
                 </p>
@@ -244,8 +244,8 @@ export function CreateWorkspaceDialog({
           </div>
 
           {error && (
-            <div className="p-4 bg-red-50 border border-red-200 rounded-md dark:bg-red-950/50 dark:border-red-800">
-              <p className="text-red-700 dark:text-red-300">{error}</p>
+            <div className="p-4 bg-status-error border border-status-error-border rounded-md">
+              <p className="text-status-error-foreground">{error}</p>
             </div>
           )}
 

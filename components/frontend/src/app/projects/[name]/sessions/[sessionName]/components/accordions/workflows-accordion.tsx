@@ -90,7 +90,7 @@ export function WorkflowsAccordion({
           <Workflow className="h-4 w-4" />
           <span>Workflows</span>
           {activeWorkflow && !isExpanded && (
-            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 dark:bg-green-950/50 dark:text-green-300 dark:border-green-800">
+            <Badge variant="outline" className="bg-status-success text-status-success-foreground border-status-success-border">
               {ootbWorkflows.find(w => w.id === activeWorkflow)?.name || "Custom Workflow"}
             </Badge>
           )}
@@ -110,10 +110,10 @@ export function WorkflowsAccordion({
               <Button
                 onClick={onResume}
                 size="sm"
-                className="hover:border-green-600 hover:bg-green-50 group"
+                className="hover:border-chart-5 hover:bg-chart-5/10 group"
                 variant="outline"
               >
-                <Play className="w-4 h-4 mr-2 fill-green-200 stroke-green-600 group-hover:fill-green-500 group-hover:stroke-green-700 transition-colors" />
+                <Play className="w-4 h-4 mr-2 fill-chart-5/30 stroke-chart-5 group-hover:fill-chart-5 group-hover:stroke-chart-5 transition-colors" />
                 Resume Session
               </Button>
             )}
@@ -148,7 +148,7 @@ export function WorkflowsAccordion({
                           <Loader2 className="h-3.5 w-3.5 animate-spin" />
                           <span>Switching workflow...</span>
                         </div>
-                        <span className="text-xs text-muted-foreground font-normal">
+                        <span className="text-sm text-muted-foreground font-normal">
                           This may take a few seconds...
                         </span>
                       </div>
@@ -156,7 +156,7 @@ export function WorkflowsAccordion({
                       <div className="flex items-start justify-between w-full gap-2">
                         <div className="flex flex-col items-start gap-0.5 text-left flex-1 min-w-0">
                           <span className="font-medium truncate w-full">{getSelectedWorkflowInfo().name}</span>
-                          <span className="text-xs text-muted-foreground font-normal line-clamp-2 w-full">
+                          <span className="text-sm text-muted-foreground font-normal line-clamp-2 w-full">
                             {getSelectedWorkflowInfo().description}
                           </span>
                         </div>
@@ -198,7 +198,7 @@ export function WorkflowsAccordion({
                         >
                           <div className="flex flex-col items-start gap-0.5 py-1">
                             <span className="text-sm">General chat</span>
-                            <span className="text-xs text-muted-foreground font-normal line-clamp-2">
+                            <span className="text-sm text-muted-foreground font-normal line-clamp-2">
                               A general chat session with no structured workflow.
                             </span>
                           </div>
@@ -219,7 +219,7 @@ export function WorkflowsAccordion({
                       >
                         <div className="flex flex-col items-start gap-0.5 py-1">
                           <span className="text-sm">{workflow.name}</span>
-                          <span className="text-xs text-muted-foreground font-normal line-clamp-2">
+                          <span className="text-sm text-muted-foreground font-normal line-clamp-2">
                             {workflow.description}
                           </span>
                         </div>
@@ -238,7 +238,7 @@ export function WorkflowsAccordion({
                       >
                         <div className="flex flex-col items-start gap-0.5 py-1">
                           <span className="text-sm">Custom workflow...</span>
-                          <span className="text-xs text-muted-foreground font-normal line-clamp-2">
+                          <span className="text-sm text-muted-foreground font-normal line-clamp-2">
                             Load a workflow from a custom Git repository
                           </span>
                         </div>
