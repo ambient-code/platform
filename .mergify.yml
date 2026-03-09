@@ -1,0 +1,17 @@
+queue_rules:
+  - name: default
+    merge_method: squash
+    queue_conditions:
+      - check-success=End-to-End Tests
+      - check-success=amber-review
+      - check-success=validate-manifests
+      - check-success=test-local-dev-simulation
+
+pull_request_rules:
+  - name: enqueue on approval
+    conditions:
+      - "#approved-reviews-by>=1"
+      - "#changes-requested-reviews-by=0"
+    actions:
+      queue:
+        name: default
