@@ -3,7 +3,7 @@
 .PHONY: local-dev-token
 .PHONY: local-logs local-logs-backend local-logs-frontend local-logs-operator local-shell local-shell-frontend
 .PHONY: local-test local-test-dev local-test-quick test-all local-url local-troubleshoot local-port-forward local-stop-port-forward
-.PHONY: push-all registry-login setup-hooks remove-hooks lint check-minikube check-kind check-kubectl dev-bootstrap kind-rebuild kind-status
+.PHONY: push-all registry-login setup-hooks remove-hooks lint check-minikube check-kind check-kubectl check-local-context dev-bootstrap kind-rebuild kind-status
 .PHONY: e2e-test e2e-setup e2e-clean deploy-langfuse-openshift
 .PHONY: unleash-port-forward unleash-status
 .PHONY: setup-minio minio-console minio-logs minio-status
@@ -351,7 +351,7 @@ local-up: check-minikube check-kubectl ## Start local development environment (m
 	@echo "  • Run: $(COLOR_BOLD)make local-status$(COLOR_RESET) to check deployment"
 	@echo "  • Run: $(COLOR_BOLD)make local-logs$(COLOR_RESET) to view logs"
 
-local-down: check-kubectl ## Stop Ambient Code Platform (keep minikube running)
+local-down: check-kubectl check-local-context ## Stop Ambient Code Platform (keep minikube running)
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Stopping Ambient Code Platform..."
 	@$(MAKE) --no-print-directory local-stop-port-forward
 	@kubectl delete namespace $(NAMESPACE) --ignore-not-found=true --timeout=60s
@@ -401,13 +401,13 @@ local-sync-version: ## Sync version from git to local deployment manifests
 	rm -f components/manifests/minikube/frontend-deployment.yaml.bak && \
 	echo "  $(COLOR_GREEN)✓$(COLOR_RESET) Version synced to $$VERSION"
 
-local-rebuild: ## Rebuild and reload all components
+local-rebuild: check-local-context ## Rebuild and reload all components
 	@echo "$(COLOR_BOLD)🔄 Rebuilding all components...$(COLOR_RESET)"
 	@$(MAKE) --no-print-directory _build-and-load
 	@$(MAKE) --no-print-directory _restart-all
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) All components rebuilt and reloaded"
 
-local-reload-backend: ## Rebuild and reload backend only
+local-reload-backend: check-local-context ## Rebuild and reload backend only
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rebuilding backend..."
 	@cd components/backend && $(CONTAINER_ENGINE) build -t $(BACKEND_IMAGE) . >/dev/null 2>&1
 	@$(CONTAINER_ENGINE) tag $(BACKEND_IMAGE) localhost/$(BACKEND_IMAGE) 2>/dev/null || true
@@ -430,7 +430,7 @@ local-reload-backend: ## Rebuild and reload backend only
 		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Backend port forward restarted"; \
 	fi
 
-local-reload-frontend: ## Rebuild and reload frontend only
+local-reload-frontend: check-local-context ## Rebuild and reload frontend only
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rebuilding frontend..."
 	@cd components/frontend && $(CONTAINER_ENGINE) build -t $(FRONTEND_IMAGE) . >/dev/null 2>&1
 	@$(CONTAINER_ENGINE) tag $(FRONTEND_IMAGE) localhost/$(FRONTEND_IMAGE) 2>/dev/null || true
@@ -454,7 +454,7 @@ local-reload-frontend: ## Rebuild and reload frontend only
 	fi
 
 
-local-reload-operator: ## Rebuild and reload operator only
+local-reload-operator: check-local-context ## Rebuild and reload operator only
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rebuilding operator..."
 	@cd components/operator && $(CONTAINER_ENGINE) build -t $(OPERATOR_IMAGE) . >/dev/null 2>&1
 	@$(CONTAINER_ENGINE) tag $(OPERATOR_IMAGE) localhost/$(OPERATOR_IMAGE) 2>/dev/null || true
@@ -726,7 +726,7 @@ kind-down: ## Stop and delete kind cluster
 	@cd e2e && KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/cleanup.sh
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Kind cluster '$(KIND_CLUSTER_NAME)' deleted"
 
-kind-port-forward: check-kubectl ## Port-forward kind services (for remote Podman)
+kind-port-forward: check-kubectl check-local-context ## Port-forward kind services (for remote Podman)
 	@echo "$(COLOR_BOLD)Port forwarding kind services ($(KIND_CLUSTER_NAME))$(COLOR_RESET)"
 	@echo ""
 	@echo "  Frontend: http://localhost:$(KIND_FWD_FRONTEND_PORT)"
@@ -739,7 +739,7 @@ kind-port-forward: check-kubectl ## Port-forward kind services (for remote Podma
 	(kubectl port-forward -n ambient-code svc/backend-service $(KIND_FWD_BACKEND_PORT):8080 >/dev/null 2>&1 &); \
 	wait
 
-dev-bootstrap: check-kubectl ## Bootstrap developer workspace with API key and integrations
+dev-bootstrap: check-kubectl check-local-context ## Bootstrap developer workspace with API key and integrations
 	@./scripts/bootstrap-workspace.sh
 
 ##@ E2E Testing (Portable)
@@ -770,7 +770,7 @@ test-e2e-setup: ## Install e2e test dependencies
 
 e2e-setup: test-e2e-setup ## Alias for test-e2e-setup (backward compatibility)
 
-kind-rebuild: check-kind check-kubectl build-all ## Rebuild, reload, and restart all components in kind
+kind-rebuild: check-kind check-kubectl check-local-context build-all ## Rebuild, reload, and restart all components in kind
 	@$(if $(filter podman,$(CONTAINER_ENGINE)),KIND_EXPERIMENTAL_PROVIDER=podman) kind get clusters 2>/dev/null | grep -q '^$(KIND_CLUSTER_NAME)$$' || \
 		(echo "$(COLOR_RED)✗$(COLOR_RESET) Kind cluster '$(KIND_CLUSTER_NAME)' not found. Run 'make kind-up LOCAL_IMAGES=true' first." && exit 1)
 	@$(MAKE) --no-print-directory _kind-load-images
@@ -847,6 +847,21 @@ check-kind: ## Check if kind is installed
 check-kubectl: ## Check if kubectl is installed
 	@command -v kubectl >/dev/null 2>&1 || \
 		(echo "$(COLOR_RED)✗$(COLOR_RESET) kubectl not found. Install: https://kubernetes.io/docs/tasks/tools/" && exit 1)
+
+check-local-context: ## Verify kubectl context points to a local cluster (kind or minikube)
+ifneq ($(SKIP_CONTEXT_CHECK),true)
+	@ctx=$$(kubectl config current-context 2>/dev/null || echo ""); \
+	if echo "$$ctx" | grep -qE '^(kind-|minikube$$)'; then \
+		: ; \
+	else \
+		echo "$(COLOR_RED)✗$(COLOR_RESET) Current kubectl context '$$ctx' does not look like a local cluster."; \
+		echo "  Expected a context starting with 'kind-' or named 'minikube'."; \
+		echo "  Switch context first, e.g.: kubectl config use-context kind-ambient-local"; \
+		echo ""; \
+		echo "  To bypass this check: make <target> SKIP_CONTEXT_CHECK=true"; \
+		exit 1; \
+	fi
+endif
 
 check-architecture: ## Validate build architecture matches host
 	@echo "$(COLOR_BOLD)Architecture Check$(COLOR_RESET)"
