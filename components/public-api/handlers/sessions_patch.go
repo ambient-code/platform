@@ -232,7 +232,7 @@ func patchSessionLabels(c *gin.Context, basePath string, req types.PatchSessionR
 
 	getBody, err := io.ReadAll(getResp.Body)
 	if err != nil || getResp.StatusCode != http.StatusOK {
-		log.Printf("Label patch succeeded but follow-up GET returned unexpected result")
+		log.Printf("Label patch succeeded but follow-up GET returned unexpected result for session %s", c.Param("id"))
 		c.JSON(http.StatusOK, gin.H{"message": "Labels updated", "id": c.Param("id")})
 		return
 	}

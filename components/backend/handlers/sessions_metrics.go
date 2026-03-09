@@ -45,7 +45,7 @@ func GetSessionMetrics(c *gin.Context) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
 			return
 		}
-		log.Printf("GetSessionMetrics: failed to get session %s: %v", sessionName, err)
+		log.Printf("GetSessionMetrics: failed to get session %s/%s: %v", project, sessionName, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get session"})
 		return
 	}

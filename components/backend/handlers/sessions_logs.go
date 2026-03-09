@@ -84,7 +84,7 @@ func GetSessionLogs(c *gin.Context) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
 			return
 		}
-		log.Printf("GetSessionLogs: failed to get logs for pod %s: %v", podName, err)
+		log.Printf("GetSessionLogs: failed to get logs for pod %s in project %s: %v", podName, project, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve logs"})
 		return
 	}
@@ -94,6 +94,6 @@ func GetSessionLogs(c *gin.Context) {
 	c.Header("Content-Type", "text/plain; charset=utf-8")
 	c.Status(http.StatusOK)
 	if _, err := io.Copy(c.Writer, io.LimitReader(logStream, maxLogBytes)); err != nil {
-		log.Printf("GetSessionLogs: error streaming logs for pod %s: %v", podName, err)
+		log.Printf("GetSessionLogs: error streaming logs for pod %s in project %s: %v", podName, project, err)
 	}
 }
