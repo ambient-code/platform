@@ -85,7 +85,7 @@ func patchSessionStartStop(c *gin.Context, basePath string, stopped bool) {
 
 	resp, err := ProxyRequest(c, http.MethodPost, path, nil)
 	if err != nil {
-		log.Printf("Backend request failed for start/stop: %v", err)
+		log.Printf("Backend request failed for start/stop session %s: %v", c.Param("id"), err)
 		c.JSON(http.StatusBadGateway, gin.H{"error": "Backend unavailable"})
 		return
 	}
@@ -134,7 +134,7 @@ func patchSessionUpdate(c *gin.Context, basePath string, req types.PatchSessionR
 
 	resp, err := ProxyRequest(c, http.MethodPut, basePath, reqBody)
 	if err != nil {
-		log.Printf("Backend request failed for update: %v", err)
+		log.Printf("Backend request failed for update session %s: %v", c.Param("id"), err)
 		c.JSON(http.StatusBadGateway, gin.H{"error": "Backend unavailable"})
 		return
 	}
@@ -202,7 +202,7 @@ func patchSessionLabels(c *gin.Context, basePath string, req types.PatchSessionR
 
 	resp, err := ProxyRequest(c, http.MethodPatch, basePath, reqBody)
 	if err != nil {
-		log.Printf("Backend request failed for label patch: %v", err)
+		log.Printf("Backend request failed for label patch session %s: %v", c.Param("id"), err)
 		c.JSON(http.StatusBadGateway, gin.H{"error": "Backend unavailable"})
 		return
 	}
@@ -220,7 +220,9 @@ func patchSessionLabels(c *gin.Context, basePath string, req types.PatchSessionR
 		return
 	}
 
-	// Follow-up GET to return full session DTO (consistent with other PATCH responses)
+	// Follow-up GET to return full session DTO (consistent with other PATCH responses).
+	// Note: the resource could be modified or deleted between the PATCH and GET;
+	// the fallback below handles this race safely by returning minimal success info.
 	getResp, err := ProxyRequest(c, http.MethodGet, basePath, nil)
 	if err != nil {
 		// PATCH succeeded but GET failed — return success with minimal info

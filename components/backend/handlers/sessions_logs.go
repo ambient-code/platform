@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
@@ -35,10 +36,31 @@ func GetSessionLogs(c *gin.Context) {
 	// Safe to reuse as K8s lookup key — K8s names cannot contain control characters.
 	sessionName := SanitizeForLog(c.Param("sessionName"))
 
-	k8sClt, _ := GetK8sClientsForRequest(c)
+	k8sClt, k8sDyn := GetK8sClientsForRequest(c)
 	if k8sClt == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 		c.Abort()
+		return
+	}
+
+	// Verify the session CR exists before attempting pod log retrieval
+	gvr := GetAgenticSessionV1Alpha1Resource()
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+	defer cancel()
+
+	_, err := k8sDyn.Resource(gvr).Namespace(project).Get(ctx, sessionName, v1.GetOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Session not found"})
+			return
+		}
+		if errors.IsForbidden(err) {
+			log.Printf("GetSessionLogs: access denied for session %s/%s", project, sessionName)
+			c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+			return
+		}
+		log.Printf("GetSessionLogs: failed to verify session %s/%s: %v", project, sessionName, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify session"})
 		return
 	}
 
@@ -62,9 +84,6 @@ func GetSessionLogs(c *gin.Context) {
 	// Must match operator pod creation in internal/controller/reconcile_phases.go
 	podName := fmt.Sprintf("%s-runner", sessionName)
 
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
-	defer cancel()
-
 	logOpts := &corev1.PodLogOptions{
 		TailLines: &tailLines,
 	}
@@ -81,6 +100,7 @@ func GetSessionLogs(c *gin.Context) {
 			return
 		}
 		if errors.IsForbidden(err) {
+			log.Printf("GetSessionLogs: access denied for pod %s in project %s", podName, project)
 			c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
 			return
 		}

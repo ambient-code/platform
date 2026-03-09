@@ -42,6 +42,7 @@ func GetSessionMetrics(c *gin.Context) {
 			return
 		}
 		if errors.IsForbidden(err) {
+			log.Printf("GetSessionMetrics: access denied for session %s/%s", project, sessionName)
 			c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
 			return
 		}
@@ -68,13 +69,17 @@ func GetSessionMetrics(c *gin.Context) {
 			if completionTime, ok, _ := unstructured.NestedString(item.Object, "status", "completionTime"); ok && completionTime != "" {
 				end, err = time.Parse(time.RFC3339, completionTime)
 				if err != nil {
-					end = time.Now()
+					// Malformed completionTime — skip both fields to avoid misleading data
+					end = time.Time{}
+				} else {
+					metrics["completionTime"] = completionTime
 				}
-				metrics["completionTime"] = completionTime
 			} else {
 				end = time.Now()
 			}
-			metrics["durationSeconds"] = int(end.Sub(start).Seconds())
+			if !end.IsZero() {
+				metrics["durationSeconds"] = int(end.Sub(start).Seconds())
+			}
 		}
 	}
 	if sdkRestartCount, ok, _ := unstructured.NestedFloat64(item.Object, "status", "sdkRestartCount"); ok {
