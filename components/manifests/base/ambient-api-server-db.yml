@@ -56,7 +56,6 @@ spec:
     spec:
       securityContext:
         runAsNonRoot: true
-        fsGroup: 999
       containers:
         - name: postgresql
           image: docker.io/library/postgres:16.2
