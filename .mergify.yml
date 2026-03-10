@@ -6,7 +6,7 @@ queue_rules:
       - check-success=amber-review
       - check-success=validate-manifests
       - check-success=test-local-dev-simulation
-
+    autoqueue: true
 pull_request_rules:
   - name: enqueue on approval
     conditions:
