@@ -18,7 +18,7 @@ on:
         type: boolean
         default: true
       components:
-        description: 'Components to build (comma-separated: frontend,backend,operator,claude-runner,state-sync) - leave empty for all'
+        description: 'Components to build (comma-separated: frontend,backend,operator,claude-runner,state-sync,public-api,ambient-api-server) - leave empty for all'
         required: false
         type: string
         default: ''
@@ -176,6 +176,14 @@ jobs:
             context: ./components/runners/state-sync
             image: quay.io/ambient_code/vteam_state_sync
             dockerfile: ./components/runners/state-sync/Dockerfile
+          - name: public-api
+            context: ./components/public-api
+            image: quay.io/ambient_code/vteam_public_api
+            dockerfile: ./components/public-api/Dockerfile
+          - name: ambient-api-server
+            context: ./components/ambient-api-server
+            image: quay.io/ambient_code/vteam_api_server
+            dockerfile: ./components/ambient-api-server/Dockerfile
     steps:
       - name: Checkout code from the tag generated above
         uses: actions/checkout@v6
@@ -253,6 +261,8 @@ jobs:
           kustomize edit set image quay.io/ambient_code/vteam_operator:latest=quay.io/ambient_code/vteam_operator:${RELEASE_TAG}
           kustomize edit set image quay.io/ambient_code/vteam_claude_runner:latest=quay.io/ambient_code/vteam_claude_runner:${RELEASE_TAG}
           kustomize edit set image quay.io/ambient_code/vteam_state_sync:latest=quay.io/ambient_code/vteam_state_sync:${RELEASE_TAG}
+          kustomize edit set image quay.io/ambient_code/vteam_public_api:latest=quay.io/ambient_code/vteam_public_api:${RELEASE_TAG}
+          kustomize edit set image quay.io/ambient_code/vteam_api_server:latest=quay.io/ambient_code/vteam_api_server:${RELEASE_TAG}
 
       - name: Validate kustomization
         working-directory: components/manifests/overlays/production
