@@ -8,6 +8,10 @@ export type AgentStatus =
 	| "failed"        // Task errored
 	| "idle";         // Session running, agent between turns
 
+// Subset of AgentStatus that can be persisted in the CR status field
+// (completed/failed are derived at query time from phase, not stored)
+export type StoredAgentStatus = "working" | "idle" | "waiting_input";
+
 // AskUserQuestion tool types (Claude Agent SDK built-in)
 export type AskUserQuestionOption = {
 	label: string;
@@ -187,7 +191,7 @@ export type AgenticSessionStatus = {
 	startTime?: string;
 	completionTime?: string;
 	lastActivityTime?: string;
-	agentStatus?: "working" | "idle" | "waiting_input";
+	agentStatus?: StoredAgentStatus;
 	stoppedReason?: "user" | "inactivity";
 	reconciledRepos?: ReconciledRepo[];
 	reconciledWorkflow?: ReconciledWorkflow;
