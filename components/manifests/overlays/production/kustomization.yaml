@@ -22,11 +22,20 @@ resources:
 # Patches for production environment
 # Unleash: init container to create database (RHEL doesn't support init scripts)
 # PostgreSQL: use RHEL image with proper env vars and mount paths (JSON patch)
+# Control plane: use internal registry image with TLS fixes
 patches:
 - path: namespace-patch.yaml
   target:
     kind: Namespace
     name: ambient-code
+- path: control-plane-image-patch.yaml
+  target:
+    kind: Deployment
+    name: ambient-control-plane
+- path: api-server-image-patch.yaml
+  target:
+    kind: Deployment
+    name: ambient-api-server
 - path: frontend-oauth-deployment-patch.yaml
   target:
     kind: Deployment
@@ -50,6 +59,9 @@ patches:
 
 # Production images
 images:
+- name: quay.io/ambient_code/ambient_control_plane:latest
+  newName: quay.io/ambient_code/ambient_control_plane
+  newTag: latest
 - name: quay.io/ambient_code/vteam_api_server:latest
   newName: quay.io/ambient_code/vteam_api_server
   newTag: latest

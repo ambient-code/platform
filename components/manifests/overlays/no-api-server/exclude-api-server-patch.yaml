@@ -1,0 +1,6 @@
+# This patch excludes the ambient-api-server deployment since it's already running
+- op: remove
+  path: /spec/template/spec/containers/0
+  target:
+    kind: Deployment
+    name: ambient-api-server

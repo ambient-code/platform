@@ -1,0 +1,103 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: vteam-no-api-server
+
+# Namespace for all resources (can be overridden with kustomize edit set namespace)
+namespace: ambient-code
+
+# Use base as a resource and patch to exclude API server components
+resources:
+- ../../base
+- ambient-api-server-route.yaml  # Keep routes for existing API server
+- route.yaml
+- backend-route.yaml
+- public-api-route.yaml
+- unleash-route.yaml
+- operator-config-openshift.yaml
+
+# Import configuration map generators from base
+configMapGenerator:
+- name: ambient-models
+  files:
+  - ../../base/models.json
+  options:
+    disableNameSuffixHash: true
+- name: ambient-flags
+  files:
+  - ../../base/flags.json
+  options:
+    disableNameSuffixHash: true
+
+# Patches for production environment (same as production overlay but without API server patches)
+patches:
+- path: namespace-patch.yaml
+  target:
+    kind: Namespace
+    name: ambient-code
+- path: control-plane-image-patch.yaml
+  target:
+    kind: Deployment
+    name: ambient-control-plane
+# EXCLUDED: api-server-image-patch.yaml (API server already deployed with fixes)
+- path: frontend-oauth-deployment-patch.yaml
+  target:
+    kind: Deployment
+    name: frontend
+- path: frontend-oauth-service-patch.yaml
+  target:
+    kind: Service
+    name: frontend-service
+- path: postgresql-json-patch.yaml
+  target:
+    group: apps
+    kind: Deployment
+    name: postgresql
+    version: v1
+- path: unleash-init-db-patch.yaml
+  target:
+    group: apps
+    kind: Deployment
+    name: unleash
+    version: v1
+
+# Production images (excluding API server since it's already deployed)
+images:
+- name: quay.io/ambient_code/ambient_control_plane:latest
+  newName: quay.io/ambient_code/ambient_control_plane
+  newTag: latest
+# EXCLUDED: vteam_api_server image (already deployed with fixes)
+- name: quay.io/ambient_code/vteam_backend
+  newName: quay.io/ambient_code/vteam_backend
+  newTag: latest
+- name: quay.io/ambient_code/vteam_backend:latest
+  newName: quay.io/ambient_code/vteam_backend
+  newTag: latest
+- name: quay.io/ambient_code/vteam_claude_runner
+  newName: quay.io/ambient_code/vteam_claude_runner
+  newTag: latest
+- name: quay.io/ambient_code/vteam_claude_runner:latest
+  newName: quay.io/ambient_code/vteam_claude_runner
+  newTag: latest
+- name: quay.io/ambient_code/vteam_frontend
+  newName: quay.io/ambient_code/vteam_frontend
+  newTag: latest
+- name: quay.io/ambient_code/vteam_frontend:latest
+  newName: quay.io/ambient_code/vteam_frontend
+  newTag: latest
+- name: quay.io/ambient_code/vteam_operator
+  newName: quay.io/ambient_code/vteam_operator
+  newTag: latest
+- name: quay.io/ambient_code/vteam_operator:latest
+  newName: quay.io/ambient_code/vteam_operator
+  newTag: latest
+- name: quay.io/ambient_code/vteam_public_api
+  newName: quay.io/ambient_code/vteam_public_api
+  newTag: latest
+- name: quay.io/ambient_code/vteam_public_api:latest
+  newName: quay.io/ambient_code/vteam_public_api
+  newTag: latest
+- name: quay.io/ambient_code/vteam_state_sync:latest
+  newName: quay.io/ambient_code/vteam_state_sync
+  newTag: latest

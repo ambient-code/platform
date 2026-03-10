@@ -137,6 +137,7 @@ DEFAULT_STATE_SYNC_IMAGE="${DEFAULT_STATE_SYNC_IMAGE:-${CONTAINER_REGISTRY}/vtea
 # Content service image (defaults to same as backend, but can be overridden)
 CONTENT_SERVICE_IMAGE="${CONTENT_SERVICE_IMAGE:-${DEFAULT_BACKEND_IMAGE}}"
 DEFAULT_API_SERVER_IMAGE="${DEFAULT_API_SERVER_IMAGE:-${CONTAINER_REGISTRY}/vteam_api_server:${IMAGE_TAG}}"
+DEFAULT_CONTROL_PLANE_IMAGE="${DEFAULT_CONTROL_PLANE_IMAGE:-${CONTAINER_REGISTRY}/ambient_control_plane:${IMAGE_TAG}}"
 
 # Handle uninstall/clean command early
 if [ "${1:-}" = "uninstall" ] || [ "${1:-}" = "clean" ]; then
@@ -238,6 +239,7 @@ echo -e "Runner Image: ${GREEN}${DEFAULT_RUNNER_IMAGE}${NC}"
 echo -e "State Sync Image: ${GREEN}${DEFAULT_STATE_SYNC_IMAGE}${NC}"
 echo -e "Content Service Image: ${GREEN}${CONTENT_SERVICE_IMAGE}${NC}"
 echo -e "API Server Image: ${GREEN}${DEFAULT_API_SERVER_IMAGE}${NC}"
+echo -e "Control Plane Image: ${GREEN}${DEFAULT_CONTROL_PLANE_IMAGE}${NC}"
 echo ""
 
 # Check prerequisites
@@ -311,6 +313,7 @@ kustomize edit set image quay.io/ambient_code/vteam_operator:latest=${DEFAULT_OP
 kustomize edit set image quay.io/ambient_code/vteam_claude_runner:latest=${DEFAULT_RUNNER_IMAGE}
 kustomize edit set image quay.io/ambient_code/vteam_state_sync:latest=${DEFAULT_STATE_SYNC_IMAGE}
 kustomize edit set image quay.io/ambient_code/vteam_api_server:latest=${DEFAULT_API_SERVER_IMAGE}
+kustomize edit set image quay.io/ambient_code/ambient_control_plane:latest=${DEFAULT_CONTROL_PLANE_IMAGE}
 
 # Build and apply manifests
 echo -e "${BLUE}Building and applying manifests...${NC}"
@@ -376,6 +379,7 @@ oc rollout status deployment/backend-api --namespace=${NAMESPACE} --timeout=300s
 oc rollout status deployment/agentic-operator --namespace=${NAMESPACE} --timeout=300s
 oc rollout status deployment/frontend --namespace=${NAMESPACE} --timeout=300s
 oc rollout status deployment/unleash --namespace=${NAMESPACE} --timeout=300s
+oc rollout status deployment/ambient-control-plane --namespace=${NAMESPACE} --timeout=300s
 
 # Get service and route information
 echo -e "${BLUE}Getting service and route information...${NC}"
@@ -426,6 +430,7 @@ echo -e "   ${BLUE}oc get pods -n ${NAMESPACE} -w${NC}"
 echo -e "4. View logs:"
 echo -e "   ${BLUE}oc logs -f deployment/backend-api -n ${NAMESPACE}${NC}"
 echo -e "   ${BLUE}oc logs -f deployment/agentic-operator -n ${NAMESPACE}${NC}"
+echo -e "   ${BLUE}oc logs -f deployment/ambient-control-plane -n ${NAMESPACE}${NC}"
 echo -e "4. Monitor RFE workflows:"
 echo -e "   ${BLUE}oc get agenticsessions -n ${NAMESPACE}${NC}"
 echo ""
@@ -443,6 +448,7 @@ kustomize edit set image quay.io/ambient_code/vteam_operator:latest=quay.io/ambi
 kustomize edit set image quay.io/ambient_code/vteam_claude_runner:latest=quay.io/ambient_code/vteam_claude_runner:latest
 kustomize edit set image quay.io/ambient_code/vteam_state_sync:latest=quay.io/ambient_code/vteam_state_sync:latest
 kustomize edit set image quay.io/ambient_code/vteam_api_server:latest=quay.io/ambient_code/vteam_api_server:latest
+kustomize edit set image quay.io/ambient_code/ambient_control_plane:latest=quay.io/ambient_code/ambient_control_plane:latest
 cd ../..
 
 echo -e "${GREEN}🎯 Ready to create RFE workflows with multi-agent collaboration!${NC}"
