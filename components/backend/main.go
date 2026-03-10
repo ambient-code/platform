@@ -163,6 +163,7 @@ func main() {
 
 	// Initialize websocket package
 	websocket.StateBaseDir = server.StateBaseDir
+	handlers.DeriveAgentStatusFromEvents = websocket.DeriveAgentStatus
 
 	// Normal server mode
 	if err := server.Run(registerRoutes); err != nil {

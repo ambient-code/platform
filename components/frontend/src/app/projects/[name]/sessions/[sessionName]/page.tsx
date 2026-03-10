@@ -781,7 +781,7 @@ export default function ProjectSessionDetailPage({
   const agentStatus = useAgentStatus(
     session?.status?.phase || "Pending",
     isRunActive,
-    aguiStream.state.messages as unknown as Array<MessageObject | ToolUseMessages>,
+    aguiStream.state.messages,
   );
 
   // Phase 1: convert committed messages + streaming tool cards into display format.

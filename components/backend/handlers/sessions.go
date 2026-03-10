@@ -41,6 +41,9 @@ var (
 	GetGitHubToken                    func(context.Context, kubernetes.Interface, dynamic.Interface, string, string) (string, error)
 	GetGitLabToken                    func(context.Context, kubernetes.Interface, string, string) (string, error)
 	DeriveRepoFolderFromURL           func(string) string
+	// DeriveAgentStatusFromEvents derives agentStatus from the persisted event log.
+	// Set by the websocket package at init to avoid circular imports.
+	DeriveAgentStatusFromEvents func(sessionID string) string
 	// LEGACY: SendMessageToSession removed - AG-UI server uses HTTP/SSE instead of WebSocket
 )
 
@@ -245,10 +248,6 @@ func parseStatus(status map[string]interface{}) *types.AgenticSessionStatus {
 		result.LastActivityTime = types.StringPtr(lastActivityTime)
 	}
 
-	if agentStatus, ok := status["agentStatus"].(string); ok && agentStatus != "" {
-		result.AgentStatus = types.StringPtr(agentStatus)
-	}
-
 	if stoppedReason, ok := status["stoppedReason"].(string); ok && stoppedReason != "" {
 		result.StoppedReason = types.StringPtr(stoppedReason)
 	}
@@ -365,6 +364,25 @@ func parseStatus(status map[string]interface{}) *types.AgenticSessionStatus {
 
 // V2 API Handlers - Multi-tenant session management
 
+// enrichAgentStatus derives agentStatus from the persisted event log for
+// Running sessions.  This is the source of truth — it replaces the stale
+// CR-cached value which was subject to goroutine race conditions.
+func enrichAgentStatus(session *types.AgenticSession) {
+	if session.Status == nil || session.Status.Phase != "Running" {
+		return
+	}
+	if DeriveAgentStatusFromEvents == nil {
+		return
+	}
+	name, _ := session.Metadata["name"].(string)
+	if name == "" {
+		return
+	}
+	if derived := DeriveAgentStatusFromEvents(name); derived != "" {
+		session.Status.AgentStatus = types.StringPtr(derived)
+	}
+}
+
 func ListSessions(c *gin.Context) {
 	project := c.GetString("project")
 
@@ -417,6 +435,9 @@ func ListSessions(c *gin.Context) {
 		if status, found, err := unstructured.NestedMap(item.Object, "status"); err == nil && found {
 			session.Status = parseStatus(status)
 		}
+
+		// Derive agentStatus from event log (source of truth) for running sessions
+		enrichAgentStatus(&session)
 
 		session.AutoBranch = ComputeAutoBranch(item.GetName())
 
@@ -906,6 +927,9 @@ func GetSession(c *gin.Context) {
 	if status, ok := item.Object["status"].(map[string]interface{}); ok {
 		session.Status = parseStatus(status)
 	}
+
+	// Derive agentStatus from event log (source of truth) for running sessions
+	enrichAgentStatus(&session)
 
 	session.AutoBranch = ComputeAutoBranch(sessionName)
 

@@ -25,7 +25,6 @@ const DOT_COLORS: Record<string, string> = {
 };
 
 const DOT_ANIMATIONS: Record<string, string> = {
-  Running: "animate-pulse",
   Creating: "animate-pulse",
   Stopping: "animate-pulse",
 };

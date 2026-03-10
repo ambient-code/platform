@@ -2,9 +2,8 @@ import { useMemo } from "react";
 import type {
   AgenticSessionPhase,
   AgentStatus,
-  MessageObject,
-  ToolUseMessages,
 } from "@/types/agentic-session";
+import type { PlatformMessage } from "@/types/agui";
 
 function isAskUserQuestionTool(name: string): boolean {
   const normalized = name.toLowerCase().replace(/[^a-z]/g, "");
@@ -12,7 +11,7 @@ function isAskUserQuestionTool(name: string): boolean {
 }
 
 /**
- * Derive agent status from session data and message stream.
+ * Derive agent status from session data and the raw AG-UI message stream.
  *
  * For the session detail page where the full message stream is available,
  * this provides accurate status including `waiting_input` detection.
@@ -20,7 +19,7 @@ function isAskUserQuestionTool(name: string): boolean {
 export function useAgentStatus(
   phase: AgenticSessionPhase | string,
   isRunActive: boolean,
-  messages: Array<MessageObject | ToolUseMessages>,
+  messages: PlatformMessage[],
 ): AgentStatus {
   return useMemo(() => {
     // Terminal states from session phase
@@ -31,26 +30,25 @@ export function useAgentStatus(
     // Non-running phases
     if (phase !== "Running") return "idle";
 
-    // Check if the last tool call is an unanswered AskUserQuestion
+    // Scan backwards for the last tool call to check for unanswered AskUserQuestion.
+    // Raw AG-UI messages store tool calls in msg.toolCalls[] (PlatformToolCall[]).
     for (let i = messages.length - 1; i >= 0; i--) {
       const msg = messages[i];
+      if (!msg.toolCalls || msg.toolCalls.length === 0) continue;
 
-      // Skip non-tool messages
-      if (!("toolUseBlock" in msg)) continue;
-
-      const toolMsg = msg as ToolUseMessages;
-      if (isAskUserQuestionTool(toolMsg.toolUseBlock.name)) {
-        // Check if it has a result (answered)
+      // Check the last tool call on this message
+      const lastTc = msg.toolCalls[msg.toolCalls.length - 1];
+      if (isAskUserQuestionTool(lastTc.function.name)) {
         const hasResult =
-          toolMsg.resultBlock?.content !== undefined &&
-          toolMsg.resultBlock?.content !== null &&
-          toolMsg.resultBlock?.content !== "";
+          lastTc.result !== undefined &&
+          lastTc.result !== null &&
+          lastTc.result !== "";
         if (!hasResult) {
           return "waiting_input";
         }
       }
 
-      // Only check the most recent tool call
+      // Only check the most recent message with tool calls
       break;
     }
 
