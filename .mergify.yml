@@ -6,6 +6,6 @@ queue_rules:
       - "#approved-reviews-by>=1"
       - "#changes-requested-reviews-by=0"
       - check-success=End-to-End Tests
-      - check-success=amber-review
+      - commented-reviews-by=coderabbitai[bot]
       - check-success=validate-manifests
       - check-success=test-local-dev-simulation
