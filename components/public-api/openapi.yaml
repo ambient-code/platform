@@ -480,6 +480,28 @@ components:
                 type: string
               branch:
                 type: string
+        activeWorkflow:
+          $ref: '#/components/schemas/WorkflowRef'
+        environmentVariables:
+          type: object
+          additionalProperties:
+            type: string
+          description: Environment variables to inject into the session pod
+
+    WorkflowRef:
+      type: object
+      required: [gitUrl]
+      description: Identifies a workflow by git repository location
+      properties:
+        gitUrl:
+          type: string
+          description: Git clone URL of the repository containing the workflow
+        branch:
+          type: string
+          description: Branch to check out (defaults to main)
+        path:
+          type: string
+          description: Path within the repository to the workflow directory
 
     CreateRunRequest:
       type: object

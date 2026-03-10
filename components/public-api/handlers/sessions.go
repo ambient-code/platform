@@ -147,6 +147,21 @@ func CreateSession(c *gin.Context) {
 		}
 		backendReq["repos"] = repos
 	}
+	if req.ActiveWorkflow != nil && strings.TrimSpace(req.ActiveWorkflow.GitURL) != "" {
+		wf := map[string]interface{}{
+			"gitUrl": req.ActiveWorkflow.GitURL,
+		}
+		if req.ActiveWorkflow.Branch != "" {
+			wf["branch"] = req.ActiveWorkflow.Branch
+		}
+		if req.ActiveWorkflow.Path != "" {
+			wf["path"] = req.ActiveWorkflow.Path
+		}
+		backendReq["activeWorkflow"] = wf
+	}
+	if len(req.EnvironmentVariables) > 0 {
+		backendReq["environmentVariables"] = req.EnvironmentVariables
+	}
 
 	reqBody, err := json.Marshal(backendReq)
 	if err != nil {

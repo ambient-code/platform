@@ -23,10 +23,19 @@ type SessionListResponse struct {
 
 // CreateSessionRequest is the request body for creating a session
 type CreateSessionRequest struct {
-	Task        string `json:"task" binding:"required"`
-	DisplayName string `json:"display_name,omitempty"`
-	Model       string `json:"model,omitempty"`
-	Repos       []Repo `json:"repos,omitempty"`
+	Task                 string            `json:"task" binding:"required"`
+	DisplayName          string            `json:"display_name,omitempty"`
+	Model                string            `json:"model,omitempty"`
+	Repos                []Repo            `json:"repos,omitempty"`
+	ActiveWorkflow       *WorkflowRef      `json:"activeWorkflow,omitempty"`
+	EnvironmentVariables map[string]string `json:"environmentVariables,omitempty"`
+}
+
+// WorkflowRef identifies a workflow by git repository location.
+type WorkflowRef struct {
+	GitURL string `json:"gitUrl" binding:"required"`
+	Branch string `json:"branch,omitempty"`
+	Path   string `json:"path,omitempty"`
 }
 
 // Repo represents a repository configuration
