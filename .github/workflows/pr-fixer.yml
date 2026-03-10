@@ -2,7 +2,7 @@ name: PR Fixer
 
 on:
   # Immediate: when a PR gets the agent-managed label
-  pull_request_target:
+  pull_request:
     types: [labeled]
 
   # Immediate: when someone comments @ambient-fix on a PR
@@ -29,7 +29,7 @@ jobs:
   # -- Single PR: triggered by label, comment, or manual dispatch --
   fix-single:
     if: >-
-      (github.event_name == 'pull_request_target' && github.event.label.name == 'agent-managed')
+      (github.event_name == 'pull_request' && github.event.label.name == 'agent-managed')
       || github.event_name == 'workflow_dispatch'
       || (github.event_name == 'issue_comment'
           && github.event.issue.pull_request
