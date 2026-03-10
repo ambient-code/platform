@@ -1,0 +1,176 @@
+name: PR Fixer
+
+on:
+  # Immediate: when a PR gets the agent-managed label
+  pull_request_target:
+    types: [labeled]
+
+  # Immediate: when someone comments @ambient-fix on a PR
+  issue_comment:
+    types: [created]
+
+  # Cadence: every 4 hours on weekdays for ongoing maintenance
+  schedule:
+    - cron: '0 8,12,16,20 * * 1-5'
+
+  # Manual: for one-off fixes
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to fix'
+        required: true
+        type: number
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  # -- Single PR: triggered by label, comment, or manual dispatch --
+  fix-single:
+    if: >-
+      (github.event_name == 'pull_request_target' && github.event.label.name == 'agent-managed')
+      || github.event_name == 'workflow_dispatch'
+      || (github.event_name == 'issue_comment'
+          && github.event.issue.pull_request
+          && contains(github.event.comment.body, '@ambient-fix')
+          && (github.event.comment.author_association == 'MEMBER'
+              || github.event.comment.author_association == 'OWNER'
+              || github.event.comment.author_association == 'COLLABORATOR'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Resolve PR number
+        id: pr
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "number=${{ inputs.pr_number }}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event_name }}" = "issue_comment" ]; then
+            echo "number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
+          else
+            echo "number=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Fix PR
+        id: session
+        uses: ambient-code/ambient-action@v0.0.2
+        with:
+          api-url: ${{ secrets.AMBIENT_API_URL }}
+          api-token: ${{ secrets.AMBIENT_BOT_TOKEN }}
+          project: ${{ secrets.AMBIENT_PROJECT }}
+          prompt: >-
+            Fix PR #${{ steps.pr.outputs.number }} in https://github.com/${{ github.repository }}.
+            Fetch all PR data, rebase to resolve conflicts, evaluate reviewer
+            comments (fix valid issues, respond to invalid ones), run lints
+            and tests, and push the fixes.
+          repos: >-
+            [{"url": "https://github.com/${{ github.repository }}", "branch": "main"}]
+          workflow: >-
+            {"gitUrl": "https://github.com/ambient-code/workflows", "branch": "main", "path": "internal-workflows/pr-fixer"}
+          wait: 'true'
+          timeout: '25'
+
+      - name: Session summary
+        if: always()
+        env:
+          SESSION_NAME: ${{ steps.session.outputs.session-name }}
+          SESSION_UID: ${{ steps.session.outputs.session-uid }}
+          SESSION_PHASE: ${{ steps.session.outputs.session-phase }}
+        run: |
+          echo "### PR Fixer — #${{ steps.pr.outputs.number }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -n "$SESSION_NAME" ]; then
+            echo "- **Session**: \`$SESSION_NAME\`" >> $GITHUB_STEP_SUMMARY
+            echo "- **UID**: \`$SESSION_UID\`" >> $GITHUB_STEP_SUMMARY
+            echo "- **Phase**: \`$SESSION_PHASE\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Status**: Failed to create session" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  # -- Batch: scheduled cadence for all agent-managed PRs --
+  fix-batch:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      pr_numbers: ${{ steps.find.outputs.pr_numbers }}
+    steps:
+      - name: Find agent-managed PRs that need work
+        id: find
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Get all open PRs with agent-managed label
+          PRS=$(gh pr list --repo "${{ github.repository }}" \
+            --label "agent-managed" \
+            --state open \
+            --json number,updatedAt \
+            --limit 20)
+
+          # Filter to PRs updated in the last 4 hours (since last run)
+          NEEDS_WORK=$(echo "$PRS" | python3 -c "
+          import json, sys
+          from datetime import datetime, timezone, timedelta
+
+          prs = json.load(sys.stdin)
+          cutoff = datetime.now(timezone.utc) - timedelta(hours=4)
+          active = []
+          for pr in prs:
+              updated = pr.get('updatedAt', '')
+              if updated:
+                  try:
+                      dt = datetime.fromisoformat(updated.replace('Z', '+00:00'))
+                      if dt > cutoff:
+                          active.append(pr['number'])
+                  except Exception:
+                      active.append(pr['number'])
+          print(json.dumps(active))
+          ")
+
+          echo "pr_numbers=$NEEDS_WORK" >> $GITHUB_OUTPUT
+          COUNT=$(echo "$NEEDS_WORK" | python3 -c "import json,sys; print(len(json.load(sys.stdin)))")
+          echo "Found $COUNT agent-managed PRs with recent activity"
+
+  fix-each:
+    needs: fix-batch
+    if: needs.fix-batch.outputs.pr_numbers != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        pr_number: ${{ fromJson(needs.fix-batch.outputs.pr_numbers) }}
+    steps:
+      - name: Fix PR #${{ matrix.pr_number }}
+        id: session
+        uses: ambient-code/ambient-action@v0.0.2
+        with:
+          api-url: ${{ secrets.AMBIENT_API_URL }}
+          api-token: ${{ secrets.AMBIENT_BOT_TOKEN }}
+          project: ${{ secrets.AMBIENT_PROJECT }}
+          prompt: >-
+            Fix PR #${{ matrix.pr_number }} in https://github.com/${{ github.repository }}.
+            Fetch all PR data, rebase to resolve conflicts, evaluate reviewer
+            comments (fix valid issues, respond to invalid ones), run lints
+            and tests, and push the fixes.
+          repos: >-
+            [{"url": "https://github.com/${{ github.repository }}", "branch": "main"}]
+          workflow: >-
+            {"gitUrl": "https://github.com/ambient-code/workflows", "branch": "main", "path": "internal-workflows/pr-fixer"}
+          wait: 'false'
+
+      - name: Session summary
+        if: always()
+        env:
+          SESSION_NAME: ${{ steps.session.outputs.session-name }}
+          SESSION_UID: ${{ steps.session.outputs.session-uid }}
+          SESSION_PHASE: ${{ steps.session.outputs.session-phase }}
+        run: |
+          echo "### PR Fixer — #${{ matrix.pr_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -n "$SESSION_NAME" ]; then
+            echo "- **Session**: \`$SESSION_NAME\`" >> $GITHUB_STEP_SUMMARY
+            echo "- **UID**: \`$SESSION_UID\`" >> $GITHUB_STEP_SUMMARY
+            echo "- **Phase**: \`$SESSION_PHASE\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Status**: Failed to create session" >> $GITHUB_STEP_SUMMARY
+          fi

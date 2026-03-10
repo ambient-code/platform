@@ -1,4 +1,4 @@
-name: PR Merge Review
+name: Review Queue
 
 on:
   workflow_dispatch:
@@ -14,7 +14,7 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - name: Create PR review session
+      - name: Create review queue session
         id: session
         uses: ambient-code/ambient-action@v0.0.2
         with:
@@ -23,10 +23,10 @@ jobs:
           project: ${{ secrets.AMBIENT_PROJECT }}
           prompt: >-
             Review all open PRs in https://github.com/${{ github.repository }}
-            for merge readiness. After generating the merge meeting report,
-            manage the "Merge Queue" milestone: add clean PRs (0 blockers),
-            remove PRs that are no longer clean or have been merged/closed,
-            and update the milestone description with the full report.
+            and generate a prioritized review queue. Evaluate each PR via
+            sub-agents, classify by type (bug-fix, feature, refactor, etc.),
+            rank by urgency, test merge order, manage the "Review Queue"
+            milestone, and update the milestone description with the report.
           repos: >-
             [{"url": "https://github.com/${{ github.repository }}", "branch": "main"}]
           workflow: >-
@@ -40,9 +40,8 @@ jobs:
           SESSION_NAME: ${{ steps.session.outputs.session-name }}
           SESSION_UID: ${{ steps.session.outputs.session-uid }}
           SESSION_PHASE: ${{ steps.session.outputs.session-phase }}
-          SESSION_RESULT: ${{ steps.session.outputs.session-result }}
         run: |
-          echo "### PR Merge Review" >> $GITHUB_STEP_SUMMARY
+          echo "### Review Queue" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           if [ -n "$SESSION_NAME" ]; then
             echo "- **Session**: \`$SESSION_NAME\`" >> $GITHUB_STEP_SUMMARY
