@@ -11,16 +11,17 @@ import (
 )
 
 var args struct {
-	token   string
-	url     string
-	project string
+	token              string
+	url                string
+	project            string
+	insecureSkipVerify bool
 }
 
 var Cmd = &cobra.Command{
-	Use:   "login",
+	Use:   "login [SERVER_URL]",
 	Short: "Log in to the Ambient API server",
 	Long:  "Log in to the Ambient API server by providing an access token. The token is saved to the configuration file for subsequent commands.",
-	Args:  cobra.NoArgs,
+	Args:  cobra.MaximumNArgs(1),
 	RunE:  run,
 }
 
@@ -29,9 +30,10 @@ func init() {
 	flags.StringVar(&args.token, "token", "", "Access token (required)")
 	flags.StringVar(&args.url, "url", "", "API server URL (default: http://localhost:8000)")
 	flags.StringVar(&args.project, "project", "", "Default project name")
+	flags.BoolVar(&args.insecureSkipVerify, "insecure-skip-tls-verify", false, "Skip TLS certificate verification (insecure)")
 }
 
-func run(cmd *cobra.Command, _ []string) error {
+func run(cmd *cobra.Command, positional []string) error {
 	if args.token == "" {
 		return fmt.Errorf("--token is required")
 	}
@@ -43,16 +45,25 @@ func run(cmd *cobra.Command, _ []string) error {
 
 	cfg.AccessToken = args.token
 
-	if args.url != "" {
-		parsed, err := url.Parse(args.url)
+	serverURL := args.url
+	if len(positional) > 0 {
+		serverURL = positional[0]
+	}
+
+	if serverURL != "" {
+		parsed, err := url.Parse(serverURL)
 		if err != nil || parsed.Scheme == "" || parsed.Host == "" {
-			return fmt.Errorf("invalid URL %q: must be a valid URL with scheme and host (e.g. https://api.example.com)", args.url)
+			return fmt.Errorf("invalid URL %q: must be a valid URL with scheme and host (e.g. https://api.example.com)", serverURL)
 		}
-		cfg.APIUrl = args.url
+		cfg.APIUrl = serverURL
 	}
 
 	if args.project != "" {
 		cfg.Project = args.project
+	}
+
+	if args.insecureSkipVerify {
+		cfg.InsecureTLSVerify = true
 	}
 
 	if err := config.Save(cfg); err != nil {
@@ -64,6 +75,10 @@ func run(cmd *cobra.Command, _ []string) error {
 		fmt.Fprintln(cmd.OutOrStdout(), "Login successful. Configuration saved.")
 	} else {
 		fmt.Fprintf(cmd.OutOrStdout(), "Login successful. Configuration saved to %s\n", location)
+	}
+
+	if args.insecureSkipVerify {
+		fmt.Fprintln(cmd.ErrOrStderr(), "Warning: TLS certificate verification is disabled (--insecure-skip-tls-verify)")
 	}
 
 	if exp, err := config.TokenExpiry(args.token); err == nil && !exp.IsZero() {

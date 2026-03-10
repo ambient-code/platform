@@ -40,6 +40,10 @@ pip-delete-this-directory.txt
 # Go
 vendor/
 
+# SDK binaries (build artifacts, not source)
+**/ambient-sdk-generator
+**/examples/examples
+
 # Node / Frontend
 node_modules/
 .next/

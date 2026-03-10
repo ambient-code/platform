@@ -1,8 +1,10 @@
 package output
 
 import (
+	"fmt"
 	"io"
 	"os"
+	"time"
 
 	"golang.org/x/term"
 )
@@ -44,4 +46,18 @@ func IsTerminalWriter(w io.Writer) bool {
 		return false
 	}
 	return term.IsTerminal(fd)
+}
+
+// FormatAge formats a duration as human-readable age string (e.g., "2h", "15m", "3d")
+func FormatAge(d time.Duration) string {
+	switch {
+	case d < time.Minute:
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	case d < time.Hour:
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh", int(d.Hours()))
+	default:
+		return fmt.Sprintf("%dd", int(d.Hours()/24))
+	}
 }

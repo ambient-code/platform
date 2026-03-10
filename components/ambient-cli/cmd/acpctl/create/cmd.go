@@ -5,8 +5,8 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
+	"github.com/ambient-code/platform/components/ambient-cli/pkg/config"
 	"github.com/ambient-code/platform/components/ambient-cli/pkg/connection"
 	"github.com/ambient-code/platform/components/ambient-cli/pkg/output"
 	sdkclient "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/client"
@@ -60,7 +60,12 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 		return err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.GetRequestTimeout())
 	defer cancel()
 
 	switch resource {
@@ -88,7 +93,18 @@ func createSession(cmd *cobra.Command, ctx context.Context, client *sdkclient.Cl
 		return fmt.Errorf("--name is required")
 	}
 
-	builder := sdktypes.NewSessionBuilder().Name(createArgs.name)
+	// Get current project from config
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	currentProject := cfg.GetProject()
+	if currentProject == "" {
+		return fmt.Errorf("no project set; run 'acpctl project <name>' first")
+	}
+
+	builder := sdktypes.NewSessionBuilder().Name(createArgs.name).ProjectID(currentProject)
 
 	if createArgs.prompt != "" {
 		builder = builder.Prompt(createArgs.prompt)
