@@ -17,6 +17,8 @@ var (
 	StateBaseDir   string
 	PvcBaseDir     string
 	BaseKubeConfig *rest.Config
+	OperatorImage     string
+	ImagePullPolicy  string
 )
 
 // InitK8sClients initializes Kubernetes clients and configuration
@@ -78,5 +80,17 @@ func InitConfig() {
 	PvcBaseDir = os.Getenv("PVC_BASE_DIR")
 	if PvcBaseDir == "" {
 		PvcBaseDir = "/workspace"
+	}
+
+	// Get operator image for scheduled session trigger jobs
+	OperatorImage = os.Getenv("OPERATOR_IMAGE")
+	if OperatorImage == "" {
+		OperatorImage = "quay.io/ambient_code/vteam_operator:latest"
+	}
+
+	// Get image pull policy (used for trigger containers in scheduled sessions)
+	ImagePullPolicy = os.Getenv("IMAGE_PULL_POLICY")
+	if ImagePullPolicy == "" {
+		ImagePullPolicy = "IfNotPresent"
 	}
 }

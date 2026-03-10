@@ -780,6 +780,14 @@ kind-rebuild: check-kind check-kubectl check-local-context build-all ## Rebuild,
 	@kubectl rollout restart deployment -n $(NAMESPACE) $(QUIET_REDIRECT)
 	@kubectl rollout status deployment -n $(NAMESPACE) --timeout=120s $(QUIET_REDIRECT)
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) All components rebuilt and restarted"
+	@# Re-apply Vertex AI setup if requested (kind-rebuild re-applies manifests which resets ConfigMap)
+	@if [ "$(LOCAL_VERTEX)" = "true" ]; then \
+		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Re-configuring Vertex AI..."; \
+		ANTHROPIC_VERTEX_PROJECT_ID="$(ANTHROPIC_VERTEX_PROJECT_ID)" \
+		CLOUD_ML_REGION="$(CLOUD_ML_REGION)" \
+		GOOGLE_APPLICATION_CREDENTIALS="$(GOOGLE_APPLICATION_CREDENTIALS)" \
+		./scripts/setup-vertex-kind.sh; \
+	fi
 
 kind-status: ## Show all kind clusters and their port assignments
 	@echo "$(COLOR_BOLD)Kind Cluster Status$(COLOR_RESET)"

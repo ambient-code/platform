@@ -152,6 +152,9 @@ func main() {
 	handlers.DeriveRepoFolderFromURL = git.DeriveRepoFolderFromURL
 	// LEGACY: SendMessageToSession removed - AG-UI server uses HTTP/SSE instead of WebSocket
 
+	// Initialize scheduled session handlers
+	handlers.K8sClientScheduled = server.K8sClient
+
 	// Initialize repo handlers (default implementation already set in client_selection.go)
 	// GetK8sClientsForRequestRepoFunc uses getK8sClientsForRequestRepoDefault by default
 	handlers.GetGitHubTokenRepo = handlers.WrapGitHubTokenForRepo(git.GetGitHubToken)

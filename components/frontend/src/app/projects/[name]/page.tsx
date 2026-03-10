@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
-import { Star, Settings, Users, KeyRound, Loader2 } from 'lucide-react';
+import { Star, Settings, Users, KeyRound, Loader2, Calendar } from 'lucide-react';
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { PageHeader } from '@/components/page-header';
@@ -36,12 +36,14 @@ import { SessionsSection } from '@/components/workspace-sections/sessions-sectio
 import { SharingSection } from '@/components/workspace-sections/sharing-section';
 import { SettingsSection } from '@/components/workspace-sections/settings-section';
 import { KeysSection } from '@/components/workspace-sections/keys-section';
+import { SchedulesSection } from '@/components/workspace-sections/scheduled-sessions-tab';
 import { useProject } from '@/services/queries/use-projects';
 
-type Section = 'sessions' | 'sharing' | 'keys' | 'settings';
+type Section = 'sessions' | 'schedules' | 'sharing' | 'keys' | 'settings';
 
 const navItems: { id: Section; label: string; icon: typeof Star }[] = [
   { id: 'sessions', label: 'Sessions', icon: Star },
+  { id: 'schedules', label: 'Schedules', icon: Calendar },
   { id: 'sharing', label: 'Sharing', icon: Users },
   { id: 'keys', label: 'Access Keys', icon: KeyRound },
   { id: 'settings', label: 'Workspace Settings', icon: Settings },
@@ -102,7 +104,7 @@ export default function ProjectDetailsPage() {
   // Update active section when query parameter changes
   useEffect(() => {
     const sectionParam = searchParams.get('section') as Section;
-    if (sectionParam && ['sessions', 'sharing', 'keys', 'settings'].includes(sectionParam)) {
+    if (sectionParam && ['sessions', 'schedules', 'sharing', 'keys', 'settings'].includes(sectionParam)) {
       setActiveSection(sectionParam);
     }
   }, [searchParams]);
@@ -164,6 +166,7 @@ export default function ProjectDetailsPage() {
 
           {/* Main Content */}
           {activeSection === 'sessions' && <SessionsSection projectName={projectName} />}
+          {activeSection === 'schedules' && <SchedulesSection projectName={projectName} />}
           {activeSection === 'sharing' && <SharingSection projectName={projectName} />}
           {activeSection === 'keys' && <KeysSection projectName={projectName} />}
           {activeSection === 'settings' && <SettingsSection projectName={projectName} />}
