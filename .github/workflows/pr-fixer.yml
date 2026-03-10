@@ -9,9 +9,9 @@ on:
   issue_comment:
     types: [created]
 
-  # Cadence: every 4 hours on weekdays for ongoing maintenance
+  # Cadence: every 4 hours including overnight
   schedule:
-    - cron: '0 8,12,16,20 * * 1-5'
+    - cron: '0 */4 * * 1-5'
 
   # Manual: for one-off fixes
   workflow_dispatch:
@@ -29,7 +29,9 @@ jobs:
   # -- Single PR: triggered by label, comment, or manual dispatch --
   fix-single:
     if: >-
-      (github.event_name == 'pull_request' && github.event.label.name == 'agent-managed')
+      (github.event_name == 'pull_request'
+       && github.event.label.name == 'agent-managed'
+       && !github.event.pull_request.head.repo.fork)
       || github.event_name == 'workflow_dispatch'
       || (github.event_name == 'issue_comment'
           && github.event.issue.pull_request
@@ -51,7 +53,22 @@ jobs:
             echo "number=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
           fi
 
+      - name: Check PR is not a fork (issue_comment)
+        if: github.event_name == 'issue_comment'
+        id: fork_check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          IS_FORK=$(gh pr view ${{ steps.pr.outputs.number }} --repo "${{ github.repository }}" --json isCrossRepository --jq '.isCrossRepository')
+          if [ "$IS_FORK" = "true" ]; then
+            echo "Skipping fork PR"
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Fix PR
+        if: steps.fork_check.outputs.skip != 'true'
         id: session
         uses: ambient-code/ambient-action@v0.0.2
         with:
@@ -71,7 +88,7 @@ jobs:
           timeout: '25'
 
       - name: Session summary
-        if: always()
+        if: always() && steps.fork_check.outputs.skip != 'true'
         env:
           SESSION_NAME: ${{ steps.session.outputs.session-name }}
           SESSION_UID: ${{ steps.session.outputs.session-uid }}
@@ -100,14 +117,15 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Get all open PRs with agent-managed label
+          # Get all open PRs with agent-managed label, including last committer
           PRS=$(gh pr list --repo "${{ github.repository }}" \
             --label "agent-managed" \
             --state open \
-            --json number,updatedAt \
+            --json number,updatedAt,isCrossRepository \
             --limit 20)
 
-          # Filter to PRs updated in the last 4 hours (since last run)
+          # Filter: updated in the last 4 hours, not a fork,
+          # and last update wasn't by the fixer bot itself
           NEEDS_WORK=$(echo "$PRS" | python3 -c "
           import json, sys
           from datetime import datetime, timezone, timedelta
@@ -116,6 +134,9 @@ jobs:
           cutoff = datetime.now(timezone.utc) - timedelta(hours=4)
           active = []
           for pr in prs:
+              # Skip fork PRs
+              if pr.get('isCrossRepository', False):
+                  continue
               updated = pr.get('updatedAt', '')
               if updated:
                   try:
@@ -140,7 +161,23 @@ jobs:
       matrix:
         pr_number: ${{ fromJson(needs.fix-batch.outputs.pr_numbers) }}
     steps:
+      - name: Skip if last update was by the fixer
+        id: churn_check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Check if the most recent comment is from the fixer bot
+          LAST_AUTHOR=$(gh api "repos/${{ github.repository }}/issues/${{ matrix.pr_number }}/comments" \
+            --jq 'last | .body // ""' 2>/dev/null || echo "")
+          if echo "$LAST_AUTHOR" | grep -q '<!-- pr-fixer-bot -->'; then
+            echo "Last activity was fixer bot — skipping"
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Fix PR #${{ matrix.pr_number }}
+        if: steps.churn_check.outputs.skip != 'true'
         id: session
         uses: ambient-code/ambient-action@v0.0.2
         with:
@@ -159,7 +196,7 @@ jobs:
           wait: 'false'
 
       - name: Session summary
-        if: always()
+        if: always() && steps.churn_check.outputs.skip != 'true'
         env:
           SESSION_NAME: ${{ steps.session.outputs.session-name }}
           SESSION_UID: ${{ steps.session.outputs.session-uid }}
