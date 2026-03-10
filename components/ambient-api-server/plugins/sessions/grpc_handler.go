@@ -7,6 +7,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api"
 	localgrpc "github.com/ambient-code/platform/components/ambient-api-server/pkg/api/grpc"
@@ -22,13 +23,15 @@ type sessionGRPCHandler struct {
 	service    SessionService
 	generic    services.GenericService
 	brokerFunc func() *server.EventBroker
+	msgService MessageService
 }
 
-func NewSessionGRPCHandler(service SessionService, generic services.GenericService, brokerFunc func() *server.EventBroker) pb.SessionServiceServer {
+func NewSessionGRPCHandler(service SessionService, generic services.GenericService, brokerFunc func() *server.EventBroker, msgService MessageService) pb.SessionServiceServer {
 	return &sessionGRPCHandler{
 		service:    service,
 		generic:    generic,
 		brokerFunc: brokerFunc,
+		msgService: msgService,
 	}
 }
 
@@ -242,6 +245,75 @@ func (h *sessionGRPCHandler) ListSessions(ctx context.Context, req *pb.ListSessi
 			Total: int32(paging.Total),
 		},
 	}, nil
+}
+
+func sessionMessageToProto(msg *SessionMessage) *pb.SessionMessage {
+	return &pb.SessionMessage{
+		Id:        msg.ID,
+		SessionId: msg.SessionID,
+		Seq:       msg.Seq,
+		EventType: msg.EventType,
+		Payload:   msg.Payload,
+		CreatedAt: timestamppb.New(msg.CreatedAt),
+	}
+}
+
+func (h *sessionGRPCHandler) PushSessionMessage(ctx context.Context, req *pb.PushSessionMessageRequest) (*pb.SessionMessage, error) {
+	if req.GetSessionId() == "" {
+		return nil, status.Error(codes.InvalidArgument, "session_id is required")
+	}
+	if req.GetEventType() == "" {
+		return nil, status.Error(codes.InvalidArgument, "event_type is required")
+	}
+
+	msg, err := h.msgService.Push(ctx, req.GetSessionId(), req.GetEventType(), req.GetPayload())
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to push message: %v", err)
+	}
+	return sessionMessageToProto(msg), nil
+}
+
+func (h *sessionGRPCHandler) WatchSessionMessages(req *pb.WatchSessionMessagesRequest, stream grpc.ServerStreamingServer[pb.SessionMessage]) error {
+	if req.GetSessionId() == "" {
+		return status.Error(codes.InvalidArgument, "session_id is required")
+	}
+
+	ctx := stream.Context()
+
+	ch, cancel := h.msgService.Subscribe(ctx, req.GetSessionId())
+	defer cancel()
+
+	existing, err := h.msgService.AllBySessionIDAfterSeq(ctx, req.GetSessionId(), req.GetAfterSeq())
+	if err != nil {
+		return status.Errorf(codes.Internal, "failed to list messages: %v", err)
+	}
+
+	var maxReplayed int64
+	for i := range existing {
+		if err := stream.Send(sessionMessageToProto(&existing[i])); err != nil {
+			return err
+		}
+		if existing[i].Seq > maxReplayed {
+			maxReplayed = existing[i].Seq
+		}
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case msg, ok := <-ch:
+			if !ok {
+				return nil
+			}
+			if msg.Seq <= maxReplayed {
+				continue
+			}
+			if err := stream.Send(sessionMessageToProto(msg)); err != nil {
+				return err
+			}
+		}
+	}
 }
 
 func (h *sessionGRPCHandler) WatchSessions(req *pb.WatchSessionsRequest, stream grpc.ServerStreamingServer[pb.SessionWatchEvent]) error {

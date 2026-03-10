@@ -38,6 +38,30 @@ paths:
     $ref: 'openapi.users.yaml#/paths/~1api~1ambient~1v1~1users'
   /api/ambient/v1/users/{id}:
     $ref: 'openapi.users.yaml#/paths/~1api~1ambient~1v1~1users~1{id}'
+  /api/ambient/v1/agents:
+    $ref: 'openapi.agents.yaml#/paths/~1api~1ambient~1v1~1agents'
+  /api/ambient/v1/agents/{id}:
+    $ref: 'openapi.agents.yaml#/paths/~1api~1ambient~1v1~1agents~1{id}'
+  /api/ambient/v1/roles:
+    $ref: 'openapi.roles.yaml#/paths/~1api~1ambient~1v1~1roles'
+  /api/ambient/v1/roles/{id}:
+    $ref: 'openapi.roles.yaml#/paths/~1api~1ambient~1v1~1roles~1{id}'
+  /api/ambient/v1/role_bindings:
+    $ref: 'openapi.roleBindings.yaml#/paths/~1api~1ambient~1v1~1role_bindings'
+  /api/ambient/v1/role_bindings/{id}:
+    $ref: 'openapi.roleBindings.yaml#/paths/~1api~1ambient~1v1~1role_bindings~1{id}'
+  /api/ambient/v1/session_check_ins:
+    $ref: 'openapi.sessionCheckIns.yaml#/paths/~1api~1ambient~1v1~1session_check_ins'
+  /api/ambient/v1/session_check_ins/{id}:
+    $ref: 'openapi.sessionCheckIns.yaml#/paths/~1api~1ambient~1v1~1session_check_ins~1{id}'
+  /api/ambient/v1/project_documents:
+    $ref: 'openapi.projectDocuments.yaml#/paths/~1api~1ambient~1v1~1project_documents'
+  /api/ambient/v1/project_documents/{id}:
+    $ref: 'openapi.projectDocuments.yaml#/paths/~1api~1ambient~1v1~1project_documents~1{id}'
+  /api/ambient/v1/agent_messages:
+    $ref: 'openapi.agentMessages.yaml#/paths/~1api~1ambient~1v1~1agent_messages'
+  /api/ambient/v1/agent_messages/{id}:
+    $ref: 'openapi.agentMessages.yaml#/paths/~1api~1ambient~1v1~1agent_messages~1{id}'
   # AUTO-ADD NEW PATHS
 components:
   securitySchemes:
@@ -115,6 +139,42 @@ components:
       $ref: 'openapi.users.yaml#/components/schemas/UserList'
     UserPatchRequest:
       $ref: 'openapi.users.yaml#/components/schemas/UserPatchRequest'
+    Agent:
+      $ref: 'openapi.agents.yaml#/components/schemas/Agent'
+    AgentList:
+      $ref: 'openapi.agents.yaml#/components/schemas/AgentList'
+    AgentPatchRequest:
+      $ref: 'openapi.agents.yaml#/components/schemas/AgentPatchRequest'
+    Role:
+      $ref: 'openapi.roles.yaml#/components/schemas/Role'
+    RoleList:
+      $ref: 'openapi.roles.yaml#/components/schemas/RoleList'
+    RolePatchRequest:
+      $ref: 'openapi.roles.yaml#/components/schemas/RolePatchRequest'
+    RoleBinding:
+      $ref: 'openapi.roleBindings.yaml#/components/schemas/RoleBinding'
+    RoleBindingList:
+      $ref: 'openapi.roleBindings.yaml#/components/schemas/RoleBindingList'
+    RoleBindingPatchRequest:
+      $ref: 'openapi.roleBindings.yaml#/components/schemas/RoleBindingPatchRequest'
+    SessionCheckIn:
+      $ref: 'openapi.sessionCheckIns.yaml#/components/schemas/SessionCheckIn'
+    SessionCheckInList:
+      $ref: 'openapi.sessionCheckIns.yaml#/components/schemas/SessionCheckInList'
+    SessionCheckInPatchRequest:
+      $ref: 'openapi.sessionCheckIns.yaml#/components/schemas/SessionCheckInPatchRequest'
+    ProjectDocument:
+      $ref: 'openapi.projectDocuments.yaml#/components/schemas/ProjectDocument'
+    ProjectDocumentList:
+      $ref: 'openapi.projectDocuments.yaml#/components/schemas/ProjectDocumentList'
+    ProjectDocumentPatchRequest:
+      $ref: 'openapi.projectDocuments.yaml#/components/schemas/ProjectDocumentPatchRequest'
+    AgentMessage:
+      $ref: 'openapi.agentMessages.yaml#/components/schemas/AgentMessage'
+    AgentMessageList:
+      $ref: 'openapi.agentMessages.yaml#/components/schemas/AgentMessageList'
+    AgentMessagePatchRequest:
+      $ref: 'openapi.agentMessages.yaml#/components/schemas/AgentMessagePatchRequest'
     # AUTO-ADD NEW SCHEMAS
   parameters:
     id:

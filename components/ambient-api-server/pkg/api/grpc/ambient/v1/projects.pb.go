@@ -672,7 +672,7 @@ const file_ambient_v1_projects_proto_rawDesc = "" +
 	"\rUpdateProject\x12 .ambient.v1.UpdateProjectRequest\x1a\x13.ambient.v1.Project\x12T\n" +
 	"\rDeleteProject\x12 .ambient.v1.DeleteProjectRequest\x1a!.ambient.v1.DeleteProjectResponse\x12Q\n" +
 	"\fListProjects\x12\x1f.ambient.v1.ListProjectsRequest\x1a .ambient.v1.ListProjectsResponse\x12R\n" +
-	"\rWatchProjects\x12 .ambient.v1.WatchProjectsRequest\x1a\x1d.ambient.v1.ProjectWatchEvent0\x01B^Z\\github.com/ambient/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1;ambient_v1b\x06proto3"
+	"\rWatchProjects\x12 .ambient.v1.WatchProjectsRequest\x1a\x1d.ambient.v1.ProjectWatchEvent0\x01BcZagithub.com/ambient-code/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1;ambient_v1b\x06proto3"
 
 var (
 	file_ambient_v1_projects_proto_rawDescOnce sync.Once

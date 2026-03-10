@@ -4,12 +4,12 @@
 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
-**Name** | Pointer to **string** |  | [optional]
-**DisplayName** | Pointer to **string** |  | [optional]
-**Description** | Pointer to **string** |  | [optional]
-**Labels** | Pointer to **string** |  | [optional]
-**Annotations** | Pointer to **string** |  | [optional]
-**Status** | Pointer to **string** |  | [optional]
+**Name** | Pointer to **string** |  | [optional] 
+**DisplayName** | Pointer to **string** |  | [optional] 
+**Description** | Pointer to **string** |  | [optional] 
+**Labels** | Pointer to **string** |  | [optional] 
+**Annotations** | Pointer to **string** |  | [optional] 
+**Status** | Pointer to **string** |  | [optional] 
 
 ## Methods
 
@@ -182,3 +182,5 @@ HasStatus returns a boolean if a field has been set.
 
 
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)
+
+

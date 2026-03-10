@@ -4,16 +4,16 @@
 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
-**Phase** | Pointer to **string** |  | [optional]
-**StartTime** | Pointer to **time.Time** |  | [optional]
-**CompletionTime** | Pointer to **time.Time** |  | [optional]
-**SdkSessionId** | Pointer to **string** |  | [optional]
-**SdkRestartCount** | Pointer to **int32** |  | [optional]
-**Conditions** | Pointer to **string** |  | [optional]
-**ReconciledRepos** | Pointer to **string** |  | [optional]
-**ReconciledWorkflow** | Pointer to **string** |  | [optional]
-**KubeCrUid** | Pointer to **string** |  | [optional]
-**KubeNamespace** | Pointer to **string** |  | [optional]
+**Phase** | Pointer to **string** |  | [optional] 
+**StartTime** | Pointer to **time.Time** |  | [optional] 
+**CompletionTime** | Pointer to **time.Time** |  | [optional] 
+**SdkSessionId** | Pointer to **string** |  | [optional] 
+**SdkRestartCount** | Pointer to **int32** |  | [optional] 
+**Conditions** | Pointer to **string** |  | [optional] 
+**ReconciledRepos** | Pointer to **string** |  | [optional] 
+**ReconciledWorkflow** | Pointer to **string** |  | [optional] 
+**KubeCrUid** | Pointer to **string** |  | [optional] 
+**KubeNamespace** | Pointer to **string** |  | [optional] 
 
 ## Methods
 
@@ -286,3 +286,5 @@ HasKubeNamespace returns a boolean if a field has been set.
 
 
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)
+
+
