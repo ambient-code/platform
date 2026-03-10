@@ -4,6 +4,7 @@ package get
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"strings"
@@ -78,7 +79,7 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 	printer := output.NewPrinter(format)
 
 	if args.watch {
-		return watchSessions(cmd.Context(), client, printer)
+		return watchSessions(cmd, client, printer)
 	}
 
 	cfg, err := config.Load()
@@ -295,8 +296,8 @@ func printUserTable(printer *output.Printer, users []sdktypes.User) error {
 	return nil
 }
 
-func watchSessions(ctx context.Context, client *sdkclient.Client, printer *output.Printer) error {
-	ctx, cancel := context.WithTimeout(ctx, args.watchTimeout)
+func watchSessions(cmd *cobra.Command, client *sdkclient.Client, printer *output.Printer) error {
+	ctx, cancel := context.WithTimeout(cmd.Context(), args.watchTimeout)
 	defer cancel()
 	ctx, sigCancel := signal.NotifyContext(ctx, os.Interrupt)
 	defer sigCancel()
@@ -318,8 +319,8 @@ func watchSessions(ctx context.Context, client *sdkclient.Client, printer *outpu
 		Timeout: args.watchTimeout,
 	})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "gRPC watch unavailable (%v), falling back to polling...\n", err)
-		return watchSessionsPolling(ctx, client, table)
+		fmt.Fprintf(cmd.ErrOrStderr(), "gRPC watch unavailable (%v), falling back to polling...\n", err)
+		return watchSessionsPolling(cmd.ErrOrStderr(), ctx, client, table)
 	}
 	defer watcher.Stop()
 
@@ -331,7 +332,7 @@ func watchSessions(ctx context.Context, client *sdkclient.Client, printer *outpu
 			return nil
 		case err := <-watcher.Errors():
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Watch error: %v\n", err)
+				fmt.Fprintf(cmd.ErrOrStderr(), "Watch error: %v\n", err)
 				continue
 			}
 		case event := <-watcher.Events():
@@ -354,7 +355,7 @@ func watchSessions(ctx context.Context, client *sdkclient.Client, printer *outpu
 const maxConsecutiveErrors = 5
 
 // watchSessionsPolling implements the fallback polling-based watch
-func watchSessionsPolling(ctx context.Context, client *sdkclient.Client, table *output.Table) error {
+func watchSessionsPolling(stderr io.Writer, ctx context.Context, client *sdkclient.Client, table *output.Table) error {
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
@@ -378,7 +379,7 @@ func watchSessionsPolling(ctx context.Context, client *sdkclient.Client, table *
 
 			if err != nil {
 				consecutiveErrors++
-				fmt.Fprintf(os.Stderr, "Error processing sessions (%d/%d): %v\n", consecutiveErrors, maxConsecutiveErrors, err)
+				fmt.Fprintf(stderr, "Error processing sessions (%d/%d): %v\n", consecutiveErrors, maxConsecutiveErrors, err)
 				if consecutiveErrors >= maxConsecutiveErrors {
 					return fmt.Errorf("too many consecutive errors, stopping watch: %w", err)
 				}
