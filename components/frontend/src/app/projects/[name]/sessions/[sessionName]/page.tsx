@@ -781,7 +781,7 @@ export default function ProjectSessionDetailPage({
   const agentStatus = useAgentStatus(
     session?.status?.phase || "Pending",
     isRunActive,
-    aguiStream.state.messages as unknown as Array<MessageObject | ToolUseMessages>,
+    aguiStream.state.messages,
   );
 
   // Convert AG-UI messages to display format with hierarchical tool call rendering

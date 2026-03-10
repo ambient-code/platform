@@ -44,7 +44,7 @@ export function AgentStatusIndicator({
       return (
         <Badge
           className={cn(
-            "bg-amber-500 hover:bg-amber-500 text-white animate-pulse gap-1",
+            "bg-amber-500 hover:bg-amber-500 text-white gap-1",
             compact && "px-1.5 py-0.5 text-[10px]",
             className
           )}

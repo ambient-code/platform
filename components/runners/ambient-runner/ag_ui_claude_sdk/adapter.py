@@ -29,6 +29,7 @@ from ag_ui.core import (
     ToolCallStartEvent,
     ToolCallArgsEvent,
     ToolCallEndEvent,
+    ToolCallResultEvent,
     StateSnapshotEvent,
     MessagesSnapshotEvent,
 )
@@ -235,6 +236,8 @@ class ClaudeAgentAdapter:
 
         # Whether the last run halted due to a frontend tool (caller should interrupt)
         self._halted: bool = False
+        # Tool call ID that caused the halt (so we can emit TOOL_CALL_RESULT on next run)
+        self._halted_tool_call_id: Optional[str] = None
 
     @property
     def halted(self) -> bool:
@@ -271,9 +274,13 @@ class ClaudeAgentAdapter:
         thread_id = input_data.thread_id or str(uuid.uuid4())
         run_id = input_data.run_id or str(uuid.uuid4())
 
+        # Capture halted tool call ID before clearing (for TOOL_CALL_RESULT emission)
+        previous_halted_tool_call_id = self._halted_tool_call_id
+
         # Clear result data and halt flag from any previous run
         self._last_result_data = None
         self._halted = False
+        self._halted_tool_call_id = None
 
         # Initialize state tracking for this run
         self._current_state = input_data.state
@@ -306,6 +313,20 @@ class ClaudeAgentAdapter:
 
             # Process all messages and extract user message
             user_message, _ = process_messages(input_data)
+
+            # If the previous run halted for a frontend tool (e.g. AskUserQuestion),
+            # emit a TOOL_CALL_RESULT so the frontend can mark the question as answered.
+            if previous_halted_tool_call_id and user_message:
+                yield ToolCallResultEvent(
+                    type=EventType.TOOL_CALL_RESULT,
+                    thread_id=thread_id,
+                    run_id=run_id,
+                    message_id=f"{previous_halted_tool_call_id}-result",
+                    tool_call_id=previous_halted_tool_call_id,
+                    content=user_message,
+                    role="tool",
+                    timestamp=now_ms(),
+                )
 
             # Extract frontend tool names for halt detection (like Strands pattern)
             frontend_tool_names = (
@@ -896,6 +917,7 @@ class ClaudeAgentAdapter:
                                 # Check adapter.halted after the stream ends.
 
                                 self._halted = True
+                                self._halted_tool_call_id = current_tool_call_id
                                 halt_event_stream = True
                                 # Continue consuming remaining events for cleanup
                                 continue

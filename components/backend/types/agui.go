@@ -69,6 +69,13 @@ const (
 	EventTypeMeta = "META"
 )
 
+// Agent status values derived from the AG-UI event stream.
+const (
+	AgentStatusWorking      = "working"
+	AgentStatusIdle         = "idle"
+	AgentStatusWaitingInput = "waiting_input"
+)
+
 // AG-UI Message Roles
 // See: https://docs.ag-ui.com/concepts/messages
 const (

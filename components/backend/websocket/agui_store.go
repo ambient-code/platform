@@ -194,6 +194,68 @@ func loadEvents(sessionID string) []map[string]interface{} {
 	return events
 }
 
+// DeriveAgentStatus reads a session's event log and returns the agent
+// status derived from the last significant events.
+//
+// Returns "" if the status cannot be determined (no events, file missing, etc.).
+func DeriveAgentStatus(sessionID string) string {
+	path := fmt.Sprintf("%s/sessions/%s/agui-events.jsonl", StateBaseDir, sessionID)
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+
+	lines := splitLines(data)
+
+	// Scan backwards.  We only care about lifecycle and AskUserQuestion events.
+	//   RUN_STARTED                       → "working"
+	//   RUN_FINISHED / RUN_ERROR          → "idle", unless same run had AskUserQuestion
+	//   TOOL_CALL_START (AskUserQuestion) → "waiting_input"
+	var runEndRunID string // set when we hit RUN_FINISHED/RUN_ERROR and need to look deeper
+	for i := len(lines) - 1; i >= 0; i-- {
+		if len(lines[i]) == 0 {
+			continue
+		}
+		var evt map[string]interface{}
+		if err := json.Unmarshal(lines[i], &evt); err != nil {
+			continue
+		}
+		evtType, _ := evt["type"].(string)
+
+		switch evtType {
+		case types.EventTypeRunStarted:
+			if runEndRunID != "" {
+				// We were scanning for an AskUserQuestion but hit RUN_STARTED first → idle
+				return types.AgentStatusIdle
+			}
+			return types.AgentStatusWorking
+
+		case types.EventTypeRunFinished, types.EventTypeRunError:
+			if runEndRunID == "" {
+				// First run-end seen; scan deeper within this run for AskUserQuestion
+				runEndRunID, _ = evt["runId"].(string)
+			}
+
+		case types.EventTypeToolCallStart:
+			if runEndRunID != "" {
+				// Only relevant if we're scanning within the ended run
+				if evtRunID, _ := evt["runId"].(string); evtRunID != "" && evtRunID != runEndRunID {
+					return types.AgentStatusIdle
+				}
+			}
+			if toolName, _ := evt["toolCallName"].(string); isAskUserQuestionToolCall(toolName) {
+				return types.AgentStatusWaitingInput
+			}
+		}
+	}
+
+	if runEndRunID != "" {
+		return types.AgentStatusIdle
+	}
+	return ""
+}
+
 // ─── Compaction ──────────────────────────────────────────────────────
 //
 // Go port of @ag-ui/client compactEvents.  Concatenates streaming deltas

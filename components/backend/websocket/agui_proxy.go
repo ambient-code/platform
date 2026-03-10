@@ -32,7 +32,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/util/retry"
 )
 
 const (
@@ -448,22 +447,8 @@ func persistStreamedEvent(sessionID, runID, threadID, jsonData string) {
 		}
 	}
 
-	// Update agentStatus on CR for status-changing events (not debounced).
-	if projectName, ok := sessionProjectMap.Load(sessionID); ok {
-		proj := projectName.(string)
-		switch eventType {
-		case types.EventTypeRunStarted:
-			updateAgentStatus(proj, sessionID, "working")
-		case types.EventTypeRunFinished:
-			updateAgentStatus(proj, sessionID, "idle")
-		case types.EventTypeRunError:
-			updateAgentStatus(proj, sessionID, "idle")
-		case types.EventTypeToolCallStart:
-			if toolName, _ := event["toolCallName"].(string); isAskUserQuestionToolCall(toolName) {
-				updateAgentStatus(proj, sessionID, "waiting_input")
-			}
-		}
-	}
+	// agentStatus is derived at query time from the event log (DeriveAgentStatus).
+	// No CR updates needed here — the persisted events ARE the source of truth.
 }
 
 // ─── POST /agui/interrupt ────────────────────────────────────────────
@@ -978,75 +963,3 @@ func isAskUserQuestionToolCall(name string) bool {
 	return clean.String() == "askuserquestion"
 }
 
-// updateAgentStatus updates the agentStatus field on the AgenticSession CR status.
-// Unlike updateLastActivityTime, this is NOT debounced because status changes are
-// infrequent (2-4 per run) and should be reflected immediately.
-// It also updates lastActivityTime in the same CR write to avoid double API calls.
-func updateAgentStatus(projectName, sessionName, newStatus string) {
-	if handlers.DynamicClient == nil {
-		log.Printf("Agent status: DynamicClient is nil, skipping update for %s/%s", projectName, sessionName)
-		return
-	}
-
-	// Bound concurrency: reuse the activity semaphore.
-	select {
-	case activityUpdateSem <- struct{}{}:
-	default:
-		log.Printf("Agent status: semaphore full, dropping update %s for %s/%s", newStatus, projectName, sessionName)
-		return
-	}
-
-	go func() {
-		defer func() { <-activityUpdateSem }()
-
-		gvr := handlers.GetAgenticSessionV1Alpha1Resource()
-		ctx, cancel := context.WithTimeout(context.Background(), activityUpdateTimeout)
-		defer cancel()
-
-		var now time.Time
-		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-			obj, err := handlers.DynamicClient.Resource(gvr).Namespace(projectName).Get(ctx, sessionName, metav1.GetOptions{})
-			if err != nil {
-				return err
-			}
-
-			status, found, err := unstructured.NestedMap(obj.Object, "status")
-			if err != nil {
-				log.Printf("Agent status: failed to read nested status for %s/%s: %v", projectName, sessionName, err)
-				return nil // non-retryable
-			}
-			if !found || status == nil {
-				status = make(map[string]any)
-			}
-
-			// Skip RUN_FINISHED → "idle" if current status is "waiting_input".
-			// waiting_input is more informative and should persist until the next RUN_STARTED.
-			if newStatus == "idle" {
-				if current, _ := status["agentStatus"].(string); current == "waiting_input" {
-					return nil
-				}
-			}
-
-			status["agentStatus"] = newStatus
-			// Also update lastActivityTime to avoid a separate API call.
-			now = time.Now()
-			status["lastActivityTime"] = now.UTC().Format(time.RFC3339)
-
-			if err := unstructured.SetNestedField(obj.Object, status, "status"); err != nil {
-				log.Printf("Agent status: failed to set status for %s/%s: %v", projectName, sessionName, err)
-				return nil // non-retryable
-			}
-
-			_, err = handlers.DynamicClient.Resource(gvr).Namespace(projectName).UpdateStatus(ctx, obj, metav1.UpdateOptions{})
-			return err
-		})
-
-		if err != nil {
-			log.Printf("Agent status: failed to update agentStatus to %s for %s/%s: %v", newStatus, projectName, sessionName, err)
-		} else {
-			// Update lastActivity timestamp in the debounce map to avoid redundant activity updates.
-			key := projectName + "/" + sessionName
-			lastActivityUpdateTimes.Store(key, now)
-		}
-	}()
-}
