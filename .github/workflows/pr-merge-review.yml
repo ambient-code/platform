@@ -31,6 +31,7 @@ jobs:
             [{"url": "https://github.com/${{ github.repository }}", "branch": "main"}]
           workflow: >-
             {"gitUrl": "https://github.com/ambient-code/workflows", "branch": "main", "path": "internal-workflows/pr-overview"}
+          model: claude-sonnet-4-5
           wait: 'true'
           timeout: '10'
 
