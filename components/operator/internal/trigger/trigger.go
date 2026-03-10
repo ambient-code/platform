@@ -74,7 +74,9 @@ func RunSessionTrigger() {
 
 	// Create via dynamic client
 	gvr := types.GetAgenticSessionResource()
-	_, err = dynamicClient.Resource(gvr).Namespace(projectNamespace).Create(context.TODO(), session, metav1.CreateOptions{})
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	_, err = dynamicClient.Resource(gvr).Namespace(projectNamespace).Create(ctx, session, metav1.CreateOptions{})
 	if err != nil {
 		log.Fatalf("Failed to create AgenticSession %s in namespace %s: %v", sessionName, projectNamespace, err)
 	}
@@ -99,12 +101,12 @@ func sanitizeName(s string) string {
 			}
 		}
 	}
-	// Trim trailing hyphens
-	for len(result) > 0 && result[len(result)-1] == '-' {
-		result = result[:len(result)-1]
-	}
 	if len(result) > 40 {
 		result = result[:40]
+	}
+	// Trim trailing hyphens (must be after truncation, which can reintroduce them)
+	for len(result) > 0 && result[len(result)-1] == '-' {
+		result = result[:len(result)-1]
 	}
 	if len(result) == 0 {
 		return "run"

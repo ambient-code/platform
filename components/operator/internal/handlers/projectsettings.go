@@ -143,16 +143,27 @@ func reconcileProjectSettings(obj *unstructured.Unstructured) error {
 	}
 
 	// Ensure RBAC for scheduled session triggers
-	if err := ensureSessionTriggerRBAC(namespace); err != nil {
+	triggerRBACReady := true
+	if err := ensureSessionTriggerRBAC(namespace, obj); err != nil {
 		log.Printf("Error ensuring session trigger RBAC in namespace %s: %v", namespace, err)
+		triggerRBACReady = false
 	}
 
-	// Update status with reconciliation results (only fields defined in CRD)
+	// Update status with reconciliation results
 	statusUpdate := map[string]interface{}{
-		"groupBindingsCreated": groupBindingsCreated,
+		"groupBindingsCreated":      groupBindingsCreated,
+		"scheduledSessionRBACReady": triggerRBACReady,
 	}
 
-	return updateProjectSettingsStatus(namespace, name, statusUpdate)
+	if statusErr := updateProjectSettingsStatus(namespace, name, statusUpdate); statusErr != nil {
+		log.Printf("Failed to update ProjectSettings status in namespace %s: %v", namespace, statusErr)
+	}
+
+	if !triggerRBACReady {
+		return fmt.Errorf("failed to ensure session trigger RBAC in namespace %s", namespace)
+	}
+
+	return nil
 }
 
 func ensureRoleBinding(namespace, groupName, role string) error {
@@ -216,7 +227,7 @@ func mapRoleToKubernetesRole(role string) string {
 	}
 }
 
-func ensureSessionTriggerRBAC(namespace string) error {
+func ensureSessionTriggerRBAC(namespace string, owner *unstructured.Unstructured) error {
 	const saName = "ambient-session-trigger"
 	const roleName = "ambient-session-trigger"
 	const rbName = "ambient-session-trigger"
@@ -225,12 +236,22 @@ func ensureSessionTriggerRBAC(namespace string) error {
 		"ambient-code.io/managed": "true",
 	}
 
+	isController := true
+	ownerRef := v1.OwnerReference{
+		APIVersion: owner.GetAPIVersion(),
+		Kind:       owner.GetKind(),
+		Name:       owner.GetName(),
+		UID:        owner.GetUID(),
+		Controller: &isController,
+	}
+
 	// Create ServiceAccount (idempotent — ignore AlreadyExists)
 	sa := &corev1.ServiceAccount{
 		ObjectMeta: v1.ObjectMeta{
-			Name:      saName,
-			Namespace: namespace,
-			Labels:    managedLabels,
+			Name:            saName,
+			Namespace:       namespace,
+			Labels:          managedLabels,
+			OwnerReferences: []v1.OwnerReference{ownerRef},
 		},
 	}
 	if _, err := config.K8sClient.CoreV1().ServiceAccounts(namespace).Create(context.TODO(), sa, v1.CreateOptions{}); err != nil {
@@ -244,9 +265,10 @@ func ensureSessionTriggerRBAC(namespace string) error {
 	// Create Role (idempotent — ignore AlreadyExists)
 	role := &rbacv1.Role{
 		ObjectMeta: v1.ObjectMeta{
-			Name:      roleName,
-			Namespace: namespace,
-			Labels:    managedLabels,
+			Name:            roleName,
+			Namespace:       namespace,
+			Labels:          managedLabels,
+			OwnerReferences: []v1.OwnerReference{ownerRef},
 		},
 		Rules: []rbacv1.PolicyRule{
 			{
@@ -267,9 +289,10 @@ func ensureSessionTriggerRBAC(namespace string) error {
 	// Create RoleBinding (idempotent — ignore AlreadyExists)
 	rb := &rbacv1.RoleBinding{
 		ObjectMeta: v1.ObjectMeta{
-			Name:      rbName,
-			Namespace: namespace,
-			Labels:    managedLabels,
+			Name:            rbName,
+			Namespace:       namespace,
+			Labels:          managedLabels,
+			OwnerReferences: []v1.OwnerReference{ownerRef},
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",

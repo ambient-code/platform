@@ -80,7 +80,7 @@ vi.mock('@/services/api/scheduled-sessions', () => ({
     sessionTemplate: { initialPrompt: 'Run tests' },
     activeCount: 0,
   }),
-  triggerScheduledSession: vi.fn().mockResolvedValue({ message: 'triggered' }),
+  triggerScheduledSession: vi.fn().mockResolvedValue({ name: 'schedule-123-manual-abc', namespace: 'proj' }),
   listScheduledSessionRuns: vi.fn().mockResolvedValue([
     { metadata: { name: 'run-1' }, status: { phase: 'Running' } },
   ]),
@@ -267,6 +267,6 @@ describe('useTriggerScheduledSession', () => {
       });
     });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data?.message).toBe('triggered');
+    expect(result.current.data?.name).toBe('schedule-123-manual-abc');
   });
 });

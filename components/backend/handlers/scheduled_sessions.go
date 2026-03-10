@@ -13,6 +13,7 @@ import (
 	"ambient-code-backend/types"
 
 	"github.com/gin-gonic/gin"
+	authzv1 "k8s.io/api/authorization/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -30,13 +31,47 @@ const (
 	annotationDisplayName     = "ambient-code.io/display-name"
 )
 
+// checkScheduledSessionAccess verifies the user token and checks RBAC permission
+// for the given verb on agenticsessions in the project namespace.
+// CronJobs are platform-managed resources, so we gate access using agenticsessions
+// permissions as a proxy — the same gate used by the main session handlers.
+func checkScheduledSessionAccess(c *gin.Context, verb string) bool {
+	k8s, _ := GetK8sClientsForRequest(c)
+	if k8s == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return false
+	}
+
+	project := c.GetString("project")
+	ssar := &authzv1.SelfSubjectAccessReview{
+		Spec: authzv1.SelfSubjectAccessReviewSpec{
+			ResourceAttributes: &authzv1.ResourceAttributes{
+				Group:     "vteam.ambient-code",
+				Resource:  "agenticsessions",
+				Verb:      verb,
+				Namespace: project,
+			},
+		},
+	}
+	res, err := k8s.AuthorizationV1().SelfSubjectAccessReviews().Create(c.Request.Context(), ssar, metav1.CreateOptions{})
+	if err != nil {
+		log.Printf("RBAC check failed for scheduled session %s in project %s: %v", verb, project, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify permissions"})
+		return false
+	}
+	if !res.Status.Allowed {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Unauthorized to manage scheduled sessions in this project"})
+		return false
+	}
+	return true
+}
+
 // ListScheduledSessions lists all CronJobs labeled as scheduled sessions.
 func ListScheduledSessions(c *gin.Context) {
 	project := c.GetString("project")
 
-	if k8s, _ := GetK8sClientsForRequest(c); k8s == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
-		c.Abort()
+	if !checkScheduledSessionAccess(c, "list") {
 		return
 	}
 
@@ -64,15 +99,14 @@ func ListScheduledSessions(c *gin.Context) {
 func CreateScheduledSession(c *gin.Context) {
 	project := c.GetString("project")
 
-	if k8s, _ := GetK8sClientsForRequest(c); k8s == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
-		c.Abort()
+	if !checkScheduledSessionAccess(c, "create") {
 		return
 	}
 
 	var req types.CreateScheduledSessionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Invalid request body: %v", err)})
+		log.Printf("Invalid request body for scheduled session in project %s: %v", project, err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
 		return
 	}
 
@@ -168,9 +202,7 @@ func GetScheduledSession(c *gin.Context) {
 	project := c.GetString("project")
 	name := c.Param("scheduledSessionName")
 
-	if k8s, _ := GetK8sClientsForRequest(c); k8s == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
-		c.Abort()
+	if !checkScheduledSessionAccess(c, "get") {
 		return
 	}
 
@@ -193,15 +225,14 @@ func UpdateScheduledSession(c *gin.Context) {
 	project := c.GetString("project")
 	name := c.Param("scheduledSessionName")
 
-	if k8s, _ := GetK8sClientsForRequest(c); k8s == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
-		c.Abort()
+	if !checkScheduledSessionAccess(c, "update") {
 		return
 	}
 
 	var req types.UpdateScheduledSessionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Invalid request body: %v", err)})
+		log.Printf("Invalid request body for scheduled session update %s in project %s: %v", name, project, err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
 		return
 	}
 
@@ -241,10 +272,19 @@ func UpdateScheduledSession(c *gin.Context) {
 		for i := range cj.Spec.JobTemplate.Spec.Template.Spec.Containers {
 			container := &cj.Spec.JobTemplate.Spec.Template.Spec.Containers[i]
 			if container.Name == "trigger" {
+				found := false
 				for j := range container.Env {
 					if container.Env[j].Name == "SESSION_TEMPLATE" {
 						container.Env[j].Value = string(templateJSON)
+						found = true
+						break
 					}
+				}
+				if !found {
+					container.Env = append(container.Env, corev1.EnvVar{
+						Name:  "SESSION_TEMPLATE",
+						Value: string(templateJSON),
+					})
 				}
 			}
 		}
@@ -265,9 +305,7 @@ func DeleteScheduledSession(c *gin.Context) {
 	project := c.GetString("project")
 	name := c.Param("scheduledSessionName")
 
-	if k8s, _ := GetK8sClientsForRequest(c); k8s == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
-		c.Abort()
+	if !checkScheduledSessionAccess(c, "delete") {
 		return
 	}
 
@@ -302,9 +340,7 @@ func patchSuspend(c *gin.Context, suspend bool) {
 	project := c.GetString("project")
 	name := c.Param("scheduledSessionName")
 
-	if k8s, _ := GetK8sClientsForRequest(c); k8s == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
-		c.Abort()
+	if !checkScheduledSessionAccess(c, "update") {
 		return
 	}
 
@@ -335,9 +371,7 @@ func TriggerScheduledSession(c *gin.Context) {
 	project := c.GetString("project")
 	name := c.Param("scheduledSessionName")
 
-	if k8s, _ := GetK8sClientsForRequest(c); k8s == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
-		c.Abort()
+	if !checkScheduledSessionAccess(c, "create") {
 		return
 	}
 

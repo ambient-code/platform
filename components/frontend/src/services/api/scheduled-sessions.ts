@@ -78,8 +78,8 @@ export async function resumeScheduledSession(
 export async function triggerScheduledSession(
   projectName: string,
   name: string
-): Promise<{ message: string }> {
-  return apiClient.post<{ message: string }>(
+): Promise<{ name: string; namespace: string }> {
+  return apiClient.post<{ name: string; namespace: string }>(
     `/projects/${projectName}/scheduled-sessions/${name}/trigger`
   );
 }

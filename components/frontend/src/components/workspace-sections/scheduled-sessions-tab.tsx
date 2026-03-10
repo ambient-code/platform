@@ -1,7 +1,7 @@
 "use client";
 
 import { formatDistanceToNow } from "date-fns";
-import { Plus, RefreshCw, MoreVertical, Play, Pause, PlayCircle, Trash2, Calendar } from "lucide-react";
+import { Plus, RefreshCw, MoreVertical, Play, Pause, PlayCircle, Trash2, Calendar, Loader2, AlertCircle } from "lucide-react";
 import { getCronDescription } from "@/lib/cron";
 
 import { Button } from "@/components/ui/button";
@@ -9,8 +9,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { EmptyState } from "@/components/empty-state";
-import { CreateScheduledSessionDialog } from "@/components/create-scheduled-session-dialog";
+import { CreateScheduledSessionDialog } from "./create-scheduled-session-dialog";
 
 import {
   useScheduledSessions,
@@ -27,7 +28,7 @@ type SchedulesSectionProps = {
 };
 
 export function SchedulesSection({ projectName }: SchedulesSectionProps) {
-  const { data: scheduledSessions, isFetching, refetch } = useScheduledSessions(projectName);
+  const { data: scheduledSessions, isFetching, isLoading, error, refetch } = useScheduledSessions(projectName);
 
   const deleteMutation = useDeleteScheduledSession();
   const suspendMutation = useSuspendScheduledSession();
@@ -106,7 +107,16 @@ export function SchedulesSection({ projectName }: SchedulesSectionProps) {
         </div>
       </CardHeader>
       <CardContent>
-        {items.length === 0 ? (
+        {isLoading ? (
+          <div className="flex justify-center p-8">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : error ? (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>Failed to load scheduled sessions</AlertDescription>
+          </Alert>
+        ) : items.length === 0 ? (
           <EmptyState
             icon={Calendar}
             title="No scheduled sessions"

@@ -8,7 +8,9 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/fake"
 )
 
@@ -18,12 +20,26 @@ func setupProjectSettingsTestClient(objects ...runtime.Object) {
 	config.K8sClient = fake.NewSimpleClientset(objects...)
 }
 
+func testProjectSettingsOwner(namespace string) *unstructured.Unstructured {
+	return &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "vteam.ambient-code/v1alpha1",
+			"kind":       "ProjectSettings",
+			"metadata": map[string]interface{}{
+				"name":      "projectsettings",
+				"namespace": namespace,
+				"uid":       string(k8stypes.UID("test-uid-1234")),
+			},
+		},
+	}
+}
+
 func TestEnsureSessionTriggerRBAC_CreatesAllResources(t *testing.T) {
 	setupProjectSettingsTestClient()
 
 	namespace := "test-namespace"
 
-	err := ensureSessionTriggerRBAC(namespace)
+	err := ensureSessionTriggerRBAC(namespace, testProjectSettingsOwner(namespace))
 	if err != nil {
 		t.Fatalf("ensureSessionTriggerRBAC() returned error: %v", err)
 	}
@@ -120,13 +136,14 @@ func TestEnsureSessionTriggerRBAC_Idempotent(t *testing.T) {
 	namespace := "test-namespace"
 
 	// First call — Role and RoleBinding don't exist yet, SA already exists
-	err := ensureSessionTriggerRBAC(namespace)
+	owner := testProjectSettingsOwner(namespace)
+	err := ensureSessionTriggerRBAC(namespace, owner)
 	if err != nil {
 		t.Fatalf("First ensureSessionTriggerRBAC() returned error: %v", err)
 	}
 
 	// Second call — all three resources already exist
-	err = ensureSessionTriggerRBAC(namespace)
+	err = ensureSessionTriggerRBAC(namespace, owner)
 	if err != nil {
 		t.Fatalf("Second ensureSessionTriggerRBAC() returned error: %v", err)
 	}
@@ -156,7 +173,7 @@ func TestEnsureSessionTriggerRBAC_MultipleNamespaces(t *testing.T) {
 	namespaces := []string{"project-alpha", "project-beta"}
 
 	for _, ns := range namespaces {
-		err := ensureSessionTriggerRBAC(ns)
+		err := ensureSessionTriggerRBAC(ns, testProjectSettingsOwner(ns))
 		if err != nil {
 			t.Fatalf("ensureSessionTriggerRBAC(%q) returned error: %v", ns, err)
 		}

@@ -3,7 +3,7 @@ package types
 // CreateScheduledSessionRequest is the request body for creating a scheduled session.
 type CreateScheduledSessionRequest struct {
 	Schedule        string                      `json:"schedule" binding:"required"`
-	DisplayName     string                      `json:"displayName" binding:"required"`
+	DisplayName     string                      `json:"displayName"`
 	SessionTemplate CreateAgenticSessionRequest `json:"sessionTemplate" binding:"required"`
 	Suspend         bool                        `json:"suspend,omitempty"`
 }
