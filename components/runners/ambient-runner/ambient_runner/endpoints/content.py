@@ -221,7 +221,7 @@ async def content_git_status(path: str = ""):
     # Also check for untracked and staged files
     rc2, status_out, _ = await _git("status", "--porcelain", cwd=cwd)
     status_lines = (
-        [l for l in status_out.split("\n") if l.strip()] if status_out else []
+        [line for line in status_out.split("\n") if line.strip()] if status_out else []
     )
 
     files_added = 0

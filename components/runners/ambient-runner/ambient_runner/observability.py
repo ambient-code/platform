@@ -55,6 +55,14 @@ from ambient_runner.platform.security_utils import (
     with_sync_timeout,
 )
 
+# Canonical token key names used across usage dicts from the Claude Agent SDK.
+_TOKEN_KEYS = (
+    "input_tokens",
+    "output_tokens",
+    "cache_creation_input_tokens",
+    "cache_read_input_tokens",
+)
+
 
 def is_langfuse_enabled() -> bool:
     """Check whether Langfuse observability is enabled via env var."""
@@ -147,6 +155,7 @@ class ObservabilityManager:
         self.session_id = session_id
         self.user_id = user_id
         self.user_name = user_name
+        self.namespace = ""
         self.langfuse_client = None
         self._propagate_ctx = None
         self._tool_spans: dict[str, Any] = {}  # Stores span objects directly
@@ -156,6 +165,20 @@ class ObservabilityManager:
         self._current_turn_ctx = None  # Track turn context manager for proper cleanup
         self._pending_initial_prompt = None  # Store initial prompt for turn 1
         self._last_trace_id: str | None = None  # Persists after end_turn() for feedback
+
+        # Session-level metrics (in-memory, accumulated across turns)
+        self._metric_tool_calls: dict[str, int] = {}  # ToolCallType.value -> count
+        self._metric_tool_calls_total: int = 0
+        self._metric_tool_failures_total: int = 0
+        self._metric_tool_failure_counts: dict[str, int] = {}
+        self._metric_tool_failure_reasons: dict[str, int] = {}
+        self._metric_unclear_context: int = 0
+        self._metric_human_interrupts: int = 0
+        self._metric_accumulated_usage: dict[str, int] = {}
+        self._metric_models_seen: dict[str, int] = {}
+        self._metric_total_cost_usd: float = 0.0
+        # Track last seen usage to compute deltas (SDK may report cumulative values)
+        self._metric_prev_usage: dict[str, int] = {}
 
     async def initialize(
         self,
@@ -243,6 +266,9 @@ class ObservabilityManager:
             self.langfuse_client = Langfuse(
                 public_key=public_key, secret_key=secret_key, host=host, mask=mask_fn
             )
+
+            # Store namespace for use in session metrics span
+            self.namespace = namespace
 
             # Build metadata with model information
             metadata = {
@@ -475,28 +501,11 @@ class ObservabilityManager:
             )
 
             # Calculate usage_details if we have usage data
-            usage_details_dict = None
-            if usage and isinstance(usage, dict):
-                input_tokens = usage.get("input_tokens", 0)
-                output_tokens = usage.get("output_tokens", 0)
-                cache_creation = usage.get("cache_creation_input_tokens", 0)
-                cache_read = usage.get("cache_read_input_tokens", 0)
+            usage_details_dict = self._build_usage_details(usage)
 
-                # Langfuse canonical format with separate cache tokens for accurate cost calculation
-                # Each token type has different pricing in Anthropic Claude:
-                # - input: $3.00 per 1M tokens
-                # - cache_creation_input_tokens: $3.75 per 1M (25% premium)
-                # - cache_read_input_tokens: $0.30 per 1M (90% discount)
-                usage_details_dict = {
-                    "input": input_tokens,  # Regular input tokens only
-                    "output": output_tokens,
-                }
-
-                # Add cache tokens separately if present for accurate cost calculation
-                if cache_read > 0:
-                    usage_details_dict["cache_read_input_tokens"] = cache_read
-                if cache_creation > 0:
-                    usage_details_dict["cache_creation_input_tokens"] = cache_creation
+            # Accumulate session-level usage metrics
+            evt_model = getattr(self, "_evt_model", "")
+            self._accumulate_usage(usage, evt_model)
 
             # Update with output, usage_details, and turn number in metadata
             # SDK v3 requires 'usage_details' parameter for usage tracking
@@ -649,6 +658,235 @@ class ObservabilityManager:
             logging.debug(f"Langfuse: Failed to track tool result: {e}")
 
     # ------------------------------------------------------------------
+    # Session-level metrics
+    # ------------------------------------------------------------------
+
+    def record_interrupt(self) -> None:
+        """Record a human interrupt (called by the bridge on interrupt)."""
+        self._metric_human_interrupts += 1
+        logging.debug(
+            f"Langfuse metrics: human interrupt recorded "
+            f"(total={self._metric_human_interrupts})"
+        )
+
+    def _track_metrics_from_event(self, event: Any, etype: Any) -> None:
+        """Accumulate session-level metrics from an AG-UI event.
+
+        Called inside ``track_agui_event()`` for every event. Classifies
+        tool calls by type, counts failures with reasons, and detects
+        unclear-context signals (AskUserQuestion tool).
+
+        Args:
+            event: An AG-UI ``BaseEvent`` (or subclass).
+            etype: The resolved ``EventType`` value (avoids redundant import).
+        """
+        from ag_ui.core import EventType
+        from ambient_runner.observability_models import classify_tool
+
+        if etype == EventType.TOOL_CALL_START:
+            tool_name = getattr(event, "tool_call_name", "")
+            tool_id = getattr(event, "tool_call_id", "")
+            tool_type = classify_tool(tool_name).value
+
+            # Cache the classification so TOOL_CALL_END can reuse it
+            self._evt_tool_types[tool_id] = tool_type
+
+            self._metric_tool_calls[tool_type] = (
+                self._metric_tool_calls.get(tool_type, 0) + 1
+            )
+            self._metric_tool_calls_total += 1
+
+            if tool_name == "AskUserQuestion":
+                self._metric_unclear_context += 1
+
+            logging.debug(
+                f"Langfuse metrics: tool call {tool_name} -> {tool_type} "
+                f"(total={self._metric_tool_calls_total})"
+            )
+
+        elif etype == EventType.TOOL_CALL_END:
+            error = getattr(event, "error", None)
+            if error:
+                tool_id = getattr(event, "tool_call_id", "")
+                # Reuse cached classification from TOOL_CALL_START
+                tool_type = self._evt_tool_types.get(tool_id)
+                if tool_type is None:
+                    tool_name = self._evt_tool_names.get(tool_id, "unknown")
+                    tool_type = classify_tool(tool_name).value
+
+                self._metric_tool_failures_total += 1
+                self._metric_tool_failure_counts[tool_type] = (
+                    self._metric_tool_failure_counts.get(tool_type, 0) + 1
+                )
+
+                reason = str(error).split("\n", 1)[0].strip()[:80] or "Unknown"
+                reason_key = f"{tool_type}: {reason}"
+                self._metric_tool_failure_reasons[reason_key] = (
+                    self._metric_tool_failure_reasons.get(reason_key, 0) + 1
+                )
+
+                logging.debug(
+                    f"Langfuse metrics: tool failure "
+                    f"{self._evt_tool_names.get(tool_id, 'unknown')} -> "
+                    f"{tool_type}: {reason}"
+                )
+
+            # Clean up cached classification
+            tool_id = getattr(event, "tool_call_id", "")
+            self._evt_tool_types.pop(tool_id, None)
+
+    def _accumulate_usage(self, usage: dict | None, model: str = "") -> None:
+        """Accumulate token usage and cost from a completed turn.
+
+        The Claude Agent SDK may report **cumulative** token counts in
+        ``ResultMessage.usage`` (i.e., each query's usage includes all
+        previous queries in the session).  To avoid double-counting, we
+        compute the delta between the current and previous usage values
+        and only accumulate the difference.
+
+        If the SDK reports per-query values instead, the delta logic is
+        still correct (prev is always zero-like since values only grow).
+
+        Called from ``end_turn()`` and ``_close_turn_from_agui_result()``.
+        """
+        if not usage or not isinstance(usage, dict):
+            return
+
+        # Compute deltas against previous cumulative values
+        delta_usage: dict[str, int] = {}
+        for key in _TOKEN_KEYS:
+            current = int(usage.get(key, 0))
+            previous = self._metric_prev_usage.get(key, 0)
+            delta = max(current - previous, 0)
+            if delta > 0:
+                delta_usage[key] = delta
+                self._metric_accumulated_usage[key] = (
+                    self._metric_accumulated_usage.get(key, 0) + delta
+                )
+
+        # Update prev to current for next call
+        for key in _TOKEN_KEYS:
+            val = int(usage.get(key, 0))
+            if val > 0:
+                self._metric_prev_usage[key] = val
+
+        if model:
+            self._metric_models_seen[model] = self._metric_models_seen.get(model, 0) + 1
+
+        # Estimate cost from the delta, not the cumulative values
+        from ambient_runner.observability_models import estimate_cost
+
+        self._metric_total_cost_usd += estimate_cost(delta_usage, model)
+
+    @staticmethod
+    def _build_usage_details(usage: dict | None) -> dict | None:
+        """Build Langfuse ``usage_details`` dict from SDK usage data.
+
+        Returns a dict with ``input``, ``output``, and optional cache token
+        fields, or ``None`` if *usage* is empty/invalid.
+        """
+        if not usage or not isinstance(usage, dict):
+            return None
+        input_tokens = usage.get("input_tokens", 0)
+        output_tokens = usage.get("output_tokens", 0)
+        cache_creation = usage.get("cache_creation_input_tokens", 0)
+        cache_read = usage.get("cache_read_input_tokens", 0)
+        details: dict[str, int] = {
+            "input": input_tokens,
+            "output": output_tokens,
+        }
+        if cache_read > 0:
+            details["cache_read_input_tokens"] = cache_read
+        if cache_creation > 0:
+            details["cache_creation_input_tokens"] = cache_creation
+        return details
+
+    def _detect_and_record_clarification(self, text: str) -> None:
+        """Check if assistant text is a clarification request and record it."""
+        if not text:
+            return
+
+        from ambient_runner.observability_models import is_clarification_request
+
+        if is_clarification_request(text):
+            self._metric_unclear_context += 1
+            logging.debug(
+                "Langfuse metrics: clarification request detected in assistant text"
+            )
+
+    def _emit_session_summary(self) -> None:
+        """Emit session-level summary metrics as Langfuse numeric scores.
+
+        Creates a span with all accumulated metrics flattened into
+        numeric scores for Langfuse dashboard visualization.
+        """
+        if not self.langfuse_client:
+            return
+
+        # Skip if no metrics were collected
+        if self._metric_tool_calls_total == 0 and not self._metric_accumulated_usage:
+            logging.debug("Langfuse metrics: no metrics to emit, skipping summary")
+            return
+
+        try:
+            from ambient_runner.observability_models import SessionMetric
+
+            metric = SessionMetric.build(
+                session_id=self.session_id,
+                user_id=self.user_id,
+                tool_calls=self._metric_tool_calls,
+                tool_calls_total=self._metric_tool_calls_total,
+                tool_failures_total=self._metric_tool_failures_total,
+                tool_failure_counts=self._metric_tool_failure_counts,
+                tool_failure_reasons=self._metric_tool_failure_reasons,
+                unclear_context=self._metric_unclear_context,
+                human_interrupts=self._metric_human_interrupts,
+                accumulated_usage=self._metric_accumulated_usage,
+                models_seen=self._metric_models_seen,
+                total_cost_usd=self._metric_total_cost_usd,
+            )
+
+            scores = metric.to_flat_scores()
+
+            # Merge flat scores into metadata so all metrics are searchable
+            # and plottable in the Langfuse dashboard without needing
+            # individual score objects.
+            span_metadata = {
+                "source": "claude-code-metrics",
+                "session_id": self.session_id,
+                "user_id": self.user_id,
+                "namespace": self.namespace,
+                "user_name": self.user_name,
+                "collected_at": metric.timestamp,
+                "models_seen": metric.token_metrics.models_seen,
+                **scores,
+            }
+
+            with self.langfuse_client.start_as_current_span(
+                name="Claude Code - Session Metrics",
+                input={
+                    "session_id": self.session_id,
+                    "user_id": self.user_id,
+                    "namespace": self.namespace,
+                    "user_name": self.user_name,
+                },
+                metadata=span_metadata,
+            ) as metrics_span:
+                metrics_span.update(output=metric.model_dump())
+
+            logging.info(
+                f"Langfuse metrics: emitted session summary as metadata "
+                f"(tools={self._metric_tool_calls_total}, "
+                f"cost=${self._metric_total_cost_usd:.4f})"
+            )
+
+        except Exception as e:
+            logging.error(
+                f"Langfuse metrics: failed to emit session summary: {e}",
+                exc_info=True,
+            )
+
+    # ------------------------------------------------------------------
     # AG-UI event-driven tracking
     # ------------------------------------------------------------------
 
@@ -667,6 +905,7 @@ class ObservabilityManager:
         self._evt_accumulated_text = ""
         self._evt_tool_args: dict[str, str] = {}
         self._evt_tool_names: dict[str, str] = {}
+        self._evt_tool_types: dict[str, str] = {}
 
     def track_agui_event(self, event: Any) -> None:
         """Track a single AG-UI event for Langfuse observability.
@@ -683,6 +922,9 @@ class ObservabilityManager:
         from ag_ui.core import EventType
 
         etype = getattr(event, "type", None)
+
+        # Accumulate session-level metrics (tool counts, failures, etc.)
+        self._track_metrics_from_event(event, etype)
 
         # --- Turn start: first assistant text message ----
         if etype == EventType.TEXT_MESSAGE_START:
@@ -762,6 +1004,15 @@ class ObservabilityManager:
             usage = usage_raw if isinstance(usage_raw, dict) else None
             num_turns = result.get("num_turns", 1) or 1
 
+        # Accumulate session-level usage metrics and check for clarification
+        model = (
+            result.get("model", self._evt_model)
+            if isinstance(result, dict)
+            else self._evt_model
+        )
+        self._accumulate_usage(usage, model)
+        self._detect_and_record_clarification(self._evt_accumulated_text)
+
         self._close_turn_with_text(
             turn_count=num_turns,
             text=self._evt_accumulated_text,
@@ -783,21 +1034,7 @@ class ObservabilityManager:
         try:
             output_text = text or "(no text output)"
 
-            usage_details_dict = None
-            if usage and isinstance(usage, dict):
-                input_tokens = usage.get("input_tokens", 0)
-                output_tokens = usage.get("output_tokens", 0)
-                cache_creation = usage.get("cache_creation_input_tokens", 0)
-                cache_read = usage.get("cache_read_input_tokens", 0)
-
-                usage_details_dict = {
-                    "input": input_tokens,
-                    "output": output_tokens,
-                }
-                if cache_read > 0:
-                    usage_details_dict["cache_read_input_tokens"] = cache_read
-                if cache_creation > 0:
-                    usage_details_dict["cache_creation_input_tokens"] = cache_creation
+            usage_details_dict = self._build_usage_details(usage)
 
             update_params: dict[str, Any] = {
                 "output": output_text,
@@ -871,9 +1108,24 @@ class ObservabilityManager:
                     logging.warning(f"Failed to close tool span {tool_id}: {e}")
             self._tool_spans.clear()
 
-            # Exit propagate_attributes context
+            # Emit session-level summary metrics before closing context
+            self._emit_session_summary()
+
+            # Exit propagate_attributes context.
+            # The context uses OpenTelemetry contextvars internally.  When
+            # initialize() and finalize() run in different async tasks (e.g.
+            # lifespan startup vs shutdown), the contextvar token belongs to
+            # a different Context and detach raises ValueError.  This is
+            # harmless — all trace data has already been flushed — so we
+            # suppress the error rather than letting it propagate.
             if self._propagate_ctx:
-                self._propagate_ctx.__exit__(None, None, None)
+                try:
+                    self._propagate_ctx.__exit__(None, None, None)
+                except (ValueError, RuntimeError):
+                    logging.debug(
+                        "Langfuse: propagate_attributes context detach failed "
+                        "(cross-task contextvar — safe to ignore)"
+                    )
                 logging.info("Langfuse: Session context closed")
 
             # Flush data
@@ -930,9 +1182,12 @@ class ObservabilityManager:
                     )
             self._tool_spans.clear()
 
-            # Close propagate context
+            # Close propagate context (see finalize() for cross-task note)
             if self._propagate_ctx:
-                self._propagate_ctx.__exit__(None, None, None)
+                try:
+                    self._propagate_ctx.__exit__(None, None, None)
+                except (ValueError, RuntimeError):
+                    pass
 
             # Timeout is configurable via LANGFUSE_FLUSH_TIMEOUT (default: 30s)
             flush_timeout = float(os.getenv("LANGFUSE_FLUSH_TIMEOUT", "30.0"))

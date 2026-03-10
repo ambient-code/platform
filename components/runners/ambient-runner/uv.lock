@@ -139,6 +139,75 @@ wheels = [
 ]
 
 [[package]]
+name = "ambient-runner"
+version = "0.4.0"
+source = { editable = "." }
+dependencies = [
+    { name = "ag-ui-protocol" },
+    { name = "aiohttp" },
+    { name = "fastapi" },
+    { name = "pydantic" },
+    { name = "pyjwt" },
+    { name = "requests" },
+    { name = "uvicorn", extra = ["standard"] },
+]
+
+[package.optional-dependencies]
+all = [
+    { name = "anthropic", extra = ["vertex"] },
+    { name = "claude-agent-sdk" },
+    { name = "langfuse" },
+    { name = "mcp-atlassian" },
+]
+claude = [
+    { name = "anthropic", extra = ["vertex"] },
+    { name = "claude-agent-sdk" },
+]
+mcp-atlassian = [
+    { name = "mcp-atlassian" },
+]
+observability = [
+    { name = "langfuse" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "black" },
+    { name = "httpx" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-cov" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "ag-ui-protocol", specifier = ">=0.1.13" },
+    { name = "aiohttp", specifier = ">=3.8.0" },
+    { name = "ambient-runner", extras = ["claude", "observability", "mcp-atlassian"], marker = "extra == 'all'" },
+    { name = "anthropic", extras = ["vertex"], marker = "extra == 'claude'", specifier = ">=0.68.0" },
+    { name = "claude-agent-sdk", marker = "extra == 'claude'", specifier = ">=0.1.23" },
+    { name = "fastapi", specifier = ">=0.100.0" },
+    { name = "langfuse", marker = "extra == 'observability'", specifier = ">=3.0.0" },
+    { name = "mcp-atlassian", marker = "extra == 'mcp-atlassian'", specifier = ">=0.11.9" },
+    { name = "pydantic", specifier = ">=2.0.0" },
+    { name = "pyjwt", specifier = ">=2.8.0" },
+    { name = "requests", specifier = ">=2.31.0" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.23.0" },
+]
+provides-extras = ["claude", "observability", "mcp-atlassian", "all"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "black", specifier = ">=23.0.0" },
+    { name = "httpx", specifier = ">=0.24.0" },
+    { name = "pytest", specifier = ">=7.4.0" },
+    { name = "pytest-asyncio", specifier = ">=0.21.0" },
+    { name = "pytest-cov", specifier = ">=4.1.0" },
+    { name = "ruff", specifier = ">=0.1.0" },
+]
+
+[[package]]
 name = "annotated-doc"
 version = "0.0.4"
 source = { registry = "https://pypi.org/simple" }
@@ -490,75 +559,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/28/33/0511fdf5b21d10947ab5e839a63b60034bf4cff31777e5237e9dc99fea14/claude_agent_sdk-0.1.23-py3-none-manylinux_2_17_aarch64.whl", hash = "sha256:2575f38a39e7e64a84cbd7144b4485b5cdcef88e35aab6ef42ceb919747d0e2d", size = 68705060, upload-time = "2026-01-27T01:46:07.024Z" },
     { url = "https://files.pythonhosted.org/packages/76/6e/0e41f496ac979243e8bb2ee80899587377ecfda2979fb8a994861b9857b2/claude_agent_sdk-0.1.23-py3-none-manylinux_2_17_x86_64.whl", hash = "sha256:a392700455741d0ad0ef50412f6babd56657ba0ebc7a5bd26a13b82d4c4ae078", size = 70420014, upload-time = "2026-01-27T01:46:10.669Z" },
     { url = "https://files.pythonhosted.org/packages/ef/92/bb00bd631c4d88d9fbf1417a864c2645b992259886123c0e44ccfe87f355/claude_agent_sdk-0.1.23-py3-none-win_amd64.whl", hash = "sha256:05a44208a199cbd7c6cce034d3f91be3cb1a2b11df8e85bedb7c0e31c783d8c7", size = 72624773, upload-time = "2026-01-27T01:46:14.094Z" },
-]
-
-[[package]]
-name = "claude-code-runner"
-version = "0.3.0"
-source = { editable = "." }
-dependencies = [
-    { name = "ag-ui-protocol" },
-    { name = "aiohttp" },
-    { name = "fastapi" },
-    { name = "pydantic" },
-    { name = "pyjwt" },
-    { name = "requests" },
-    { name = "uvicorn", extra = ["standard"] },
-]
-
-[package.optional-dependencies]
-all = [
-    { name = "anthropic", extra = ["vertex"] },
-    { name = "claude-agent-sdk" },
-    { name = "langfuse" },
-    { name = "mcp-atlassian" },
-]
-claude = [
-    { name = "anthropic", extra = ["vertex"] },
-    { name = "claude-agent-sdk" },
-]
-mcp-atlassian = [
-    { name = "mcp-atlassian" },
-]
-observability = [
-    { name = "langfuse" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "black" },
-    { name = "httpx" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-cov" },
-    { name = "ruff" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "ag-ui-protocol", specifier = ">=0.1.13" },
-    { name = "aiohttp", specifier = ">=3.8.0" },
-    { name = "anthropic", extras = ["vertex"], marker = "extra == 'claude'", specifier = ">=0.68.0" },
-    { name = "claude-agent-sdk", marker = "extra == 'claude'", specifier = ">=0.1.23" },
-    { name = "claude-code-runner", extras = ["claude", "observability", "mcp-atlassian"], marker = "extra == 'all'" },
-    { name = "fastapi", specifier = ">=0.100.0" },
-    { name = "langfuse", marker = "extra == 'observability'", specifier = ">=3.0.0" },
-    { name = "mcp-atlassian", marker = "extra == 'mcp-atlassian'", specifier = ">=0.11.9" },
-    { name = "pydantic", specifier = ">=2.0.0" },
-    { name = "pyjwt", specifier = ">=2.8.0" },
-    { name = "requests", specifier = ">=2.31.0" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.23.0" },
-]
-provides-extras = ["claude", "observability", "mcp-atlassian", "all"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "black", specifier = ">=23.0.0" },
-    { name = "httpx", specifier = ">=0.24.0" },
-    { name = "pytest", specifier = ">=7.4.0" },
-    { name = "pytest-asyncio", specifier = ">=0.21.0" },
-    { name = "pytest-cov", specifier = ">=4.1.0" },
-    { name = "ruff", specifier = ">=0.1.0" },
 ]
 
 [[package]]

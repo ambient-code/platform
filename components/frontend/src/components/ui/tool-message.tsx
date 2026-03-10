@@ -582,9 +582,9 @@ export const ToolMessage = React.forwardRef<HTMLDivElement, ToolMessageProps>(
                     <Badge
                       className={cn(
                         "text-xs text-white",
-                        isLoading && "bg-blue-500",
-                        isError && "bg-red-600",
-                        isSuccess && "bg-green-600",
+                        isLoading && "bg-primary",
+                        isError && "bg-destructive",
+                        isSuccess && "bg-emerald-600 dark:bg-emerald-500",
                         isSubagent && subagentClasses?.badgeBg,
                         isCompact && "!py-0 px-1.5 leading-tight"
                       )}

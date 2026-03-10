@@ -1,0 +1,60 @@
+# Patch ambient-api-server to add init container that waits for the database
+# Required for RHEL PostgreSQL which doesn't support /docker-entrypoint-initdb.d/
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ambient-api-server
+spec:
+  template:
+    spec:
+      initContainers:
+      - name: init-db
+        image: registry.redhat.io/rhel10/postgresql-16:10.1
+        command:
+        - /bin/bash
+        - -c
+        - |
+          set -e
+          echo "Waiting for PostgreSQL to be ready (timeout: 10 minutes)..."
+          MAX_RETRIES=300
+          RETRY_COUNT=0
+          until pg_isready -h "$PGHOST" -U "$PGUSER"; do
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            if [ $RETRY_COUNT -ge $MAX_RETRIES ]; then
+              echo "ERROR: PostgreSQL not ready after 10 minutes, giving up"
+              exit 1
+            fi
+            echo "PostgreSQL not ready, waiting... (attempt $RETRY_COUNT/$MAX_RETRIES)"
+            sleep 2
+          done
+          echo "PostgreSQL is ready"
+
+          echo "Checking if database '$PGDATABASE' exists..."
+          if psql -h "$PGHOST" -U "$PGUSER" -lqt | cut -d \| -f 1 | grep -qw "$PGDATABASE"; then
+            echo "Database '$PGDATABASE' already exists"
+          else
+            echo "Creating database '$PGDATABASE'..."
+            psql -h "$PGHOST" -U "$PGUSER" -c "CREATE DATABASE $PGDATABASE;"
+            echo "Database '$PGDATABASE' created successfully"
+          fi
+        env:
+        - name: PGHOST
+          valueFrom:
+            secretKeyRef:
+              name: ambient-api-server-db
+              key: db.host
+        - name: PGUSER
+          valueFrom:
+            secretKeyRef:
+              name: ambient-api-server-db
+              key: db.user
+        - name: PGPASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: ambient-api-server-db
+              key: db.password
+        - name: PGDATABASE
+          valueFrom:
+            secretKeyRef:
+              name: ambient-api-server-db
+              key: db.name

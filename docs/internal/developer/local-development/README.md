@@ -112,7 +112,7 @@ make kind-down
 make local-up    # Note: CRC dev-* targets have been replaced with local-* equivalents
 ```
 
-**Full Guide:** [crc.md](crc.md)
+**Full Guides:** [crc.md](crc.md) | [openshift.md](openshift.md)
 
 ---
 
@@ -182,13 +182,14 @@ make kind-up
 
 ---
 
-### Choose **CRC** only if:
+### Choose **OpenShift** only if:
 - 🔴 You **specifically** need OpenShift Routes (not Ingress)
 - 🏗️ You're testing OpenShift BuildConfigs
 - 🔐 You're developing OpenShift OAuth integration
 - 🎛️ You need the OpenShift console
+- ☁️ You're deploying to production OpenShift clusters
 
-**Note:** CRC is for OpenShift-specific features only. If you don't need OpenShift features, use Kind.
+**Note:** OpenShift is for OpenShift-specific features only. If you don't need OpenShift features, use Kind.
 
 ---
 
@@ -225,9 +226,10 @@ make test-e2e
 ```
 
 ### Need OpenShift-Specific Features?
-Use **CRC** only if you need Routes, BuildConfigs, etc:
+Use **CRC** for local OpenShift or **OpenShift cluster** for cloud deployment:
 ```bash
-make local-up  # Local dev (minikube-based)
+make local-up  # Local CRC dev
+# OR deploy to OpenShift cluster (see openshift.md)
 ```
 
 ### Need to Debug with Breakpoints?
@@ -243,5 +245,6 @@ cd components/backend && go run .
 - [Minikube Setup](minikube.md) - Older approach (deprecated)
 - [Kind Development Guide](kind.md) - Using Kind for development and testing
 - [CRC Development Guide](crc.md) - OpenShift Local development
+- [OpenShift Cluster Guide](openshift.md) - OpenShift cluster deployment
 - [Hybrid Development Guide](hybrid.md) - Running components locally
 - [E2E Testing](../../testing/e2e-guide.md) - End-to-end test suite

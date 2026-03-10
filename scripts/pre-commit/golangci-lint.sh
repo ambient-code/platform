@@ -13,6 +13,7 @@ REPO_ROOT="$(git rev-parse --show-toplevel)"
 # Known Go module directories (relative to repo root)
 GO_MODULES=(
     "components/ambient-api-server"
+    "components/ambient-sdk/generator"
     "components/backend"
     "components/operator"
     "components/public-api"
@@ -20,7 +21,7 @@ GO_MODULES=(
 )
 
 # Determine which modules are affected by the staged files
-declare -A affected_modules
+declare -A affected_modules=()
 for file in "$@"; do
     for mod in "${GO_MODULES[@]}"; do
         if [[ "$file" == "$mod/"* || "$file" == "$REPO_ROOT/$mod/"* ]]; then

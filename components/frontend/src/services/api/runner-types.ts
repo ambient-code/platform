@@ -20,7 +20,3 @@ export const DEFAULT_RUNNER_TYPE_ID = "claude-agent-sdk" as const;
 export async function getRunnerTypes(projectName: string): Promise<RunnerType[]> {
   return apiClient.get<RunnerType[]>(`/projects/${projectName}/runner-types`);
 }
-
-export async function getRunnerTypesGlobal(): Promise<RunnerType[]> {
-  return apiClient.get<RunnerType[]>("/runner-types");
-}

@@ -5,16 +5,19 @@ cd "$(dirname "$0")/.."
 
 echo "Extracting test user token..."
 
+# Cluster name (override via env var for multi-worktree support)
+KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-ambient-local}"
+
 # Wait for the secret to be populated with a token (max 30 seconds)
 TOKEN=""
 for i in {1..15}; do
   TOKEN=$(kubectl get secret test-user-token -n ambient-code -o jsonpath='{.data.token}' 2>/dev/null | base64 -d 2>/dev/null || echo "")
   if [ -n "$TOKEN" ]; then
-    echo "   ✓ Token extracted successfully"
+    echo "   Token extracted successfully"
     break
   fi
   if [ $i -eq 15 ]; then
-    echo "❌ Failed to extract test token after 30 seconds"
+    echo "Failed to extract test token after 30 seconds"
     echo "   The secret may not be ready. Check with:"
     echo "   kubectl get secret test-user-token -n ambient-code"
     exit 1
@@ -33,12 +36,14 @@ if [ -z "$CONTAINER_ENGINE" ]; then
 fi
 
 # Detect which port to use based on container engine
-# Podman uses port 8080 (rootless compatibility), Docker uses port 80
-if [ "$CONTAINER_ENGINE" = "podman" ]; then
+# Respect KIND_HTTP_PORT env var if set, otherwise auto-detect
+if [ -n "${KIND_HTTP_PORT:-}" ]; then
+  HTTP_PORT="$KIND_HTTP_PORT"
+elif [ "$CONTAINER_ENGINE" = "podman" ]; then
   HTTP_PORT=8080
 else
   # Auto-detect if not explicitly set
-  if podman ps --filter "name=ambient-local-control-plane" 2>/dev/null | grep -q "ambient-local"; then
+  if podman ps --filter "name=${KIND_CLUSTER_NAME}-control-plane" 2>/dev/null | grep -q "$KIND_CLUSTER_NAME"; then
     HTTP_PORT=8080
   else
     HTTP_PORT=80
@@ -55,9 +60,9 @@ fi
 echo "TEST_TOKEN=$TOKEN" > .env.test
 echo "CYPRESS_BASE_URL=$BASE_URL" >> .env.test
 
-echo "   ✓ Token saved to .env.test"
-echo "   ✓ Base URL: $BASE_URL"
+echo "   Token saved to .env.test"
+echo "   Base URL: $BASE_URL"
 echo ""
-echo "💡 To enable agent testing:"
+echo "To enable agent testing:"
 echo "   Add ANTHROPIC_API_KEY to e2e/.env"
 echo "   Then run: make test-e2e"

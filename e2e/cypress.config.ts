@@ -17,6 +17,8 @@ export default defineConfig({
   e2e: {
     // Use CYPRESS_BASE_URL env var, fallback to default
     baseUrl: process.env.CYPRESS_BASE_URL || 'http://vteam.local',
+    // Chrome handles SSE/EventSource properly; Electron drops events
+    browser: 'chrome' as any,
     video: true,  // Enable video recording
     screenshotOnRunFailure: true,
     defaultCommandTimeout: 10000,
@@ -25,6 +27,9 @@ export default defineConfig({
     viewportWidth: 1280,
     viewportHeight: 720,
     setupNodeEvents(on, config) {
+      // Register code coverage tasks
+      require('@cypress/code-coverage/task')(on, config)
+
       // Pass environment variables to Cypress tests
       // CYPRESS_* env vars are automatically exposed, but we explicitly set these too
       config.env.ANTHROPIC_API_KEY = process.env.CYPRESS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || ''

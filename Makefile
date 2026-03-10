@@ -3,12 +3,12 @@
 .PHONY: local-dev-token
 .PHONY: local-logs local-logs-backend local-logs-frontend local-logs-operator local-shell local-shell-frontend
 .PHONY: local-test local-test-dev local-test-quick test-all local-url local-troubleshoot local-port-forward local-stop-port-forward
-.PHONY: push-all registry-login setup-hooks remove-hooks lint check-minikube check-kind check-kubectl dev-bootstrap kind-rebuild
+.PHONY: push-all registry-login setup-hooks remove-hooks lint check-minikube check-kind check-kubectl check-local-context dev-bootstrap kind-rebuild kind-status
 .PHONY: e2e-test e2e-setup e2e-clean deploy-langfuse-openshift
 .PHONY: unleash-port-forward unleash-status
 .PHONY: setup-minio minio-console minio-logs minio-status
 .PHONY: validate-makefile lint-makefile check-shell makefile-health
-.PHONY: _create-operator-config _auto-port-forward _show-access-info _build-and-load
+.PHONY: _create-operator-config _auto-port-forward _show-access-info _build-and-load _kind-load-images
 
 # Default target
 .DEFAULT_GOAL := help
@@ -70,6 +70,31 @@ API_SERVER_IMAGE ?= vteam_api_server:$(IMAGE_TAG)
 # name so containerd can match the image reference used in the deployment spec
 KIND_IMAGE_PREFIX := $(if $(filter podman,$(CONTAINER_ENGINE)),localhost/,)
 
+# Load local developer config (KIND_HOST, etc.) — gitignored, set once per machine
+-include .env.local
+
+# Kind cluster configuration — derived from git branch for multi-worktree support
+# Each worktree/branch gets a unique cluster name and ports automatically.
+# Override any variable: make kind-up KIND_CLUSTER_NAME=ambient-custom KIND_FWD_FRONTEND_PORT=8080
+CLUSTER_SLUG ?= $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null | sed 's/[^a-zA-Z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-//' | sed 's/-$$//' | cut -c1-20)
+CLUSTER_SLUG := $(CLUSTER_SLUG)
+KIND_CLUSTER_NAME ?= ambient-$(CLUSTER_SLUG)
+KIND_CLUSTER_NAME := $(KIND_CLUSTER_NAME)
+# Deterministic port offset from slug hash (0-999) — all ports derive from this
+KIND_PORT_OFFSET ?= $(shell printf '%s' '$(CLUSTER_SLUG)' | cksum | awk '{print $$1 % 1000}')
+KIND_PORT_OFFSET := $(KIND_PORT_OFFSET)
+KIND_HTTP_PORT ?= $(shell echo $$((9000 + $(KIND_PORT_OFFSET))))
+KIND_HTTP_PORT := $(KIND_HTTP_PORT)
+KIND_HTTPS_PORT ?= $(shell echo $$((10000 + $(KIND_PORT_OFFSET))))
+KIND_HTTPS_PORT := $(KIND_HTTPS_PORT)
+KIND_FWD_FRONTEND_PORT ?= $(shell echo $$((11000 + $(KIND_PORT_OFFSET))))
+KIND_FWD_FRONTEND_PORT := $(KIND_FWD_FRONTEND_PORT)
+KIND_FWD_BACKEND_PORT ?= $(shell echo $$((12000 + $(KIND_PORT_OFFSET))))
+KIND_FWD_BACKEND_PORT := $(KIND_FWD_BACKEND_PORT)
+# Remote kind host — set to Tailscale IP/hostname of the Linux build machine.
+# When set, kubeconfig is rewritten so kubectl/port-forward work from Mac.
+KIND_HOST ?=
+
 # Vertex AI Configuration (for LOCAL_VERTEX=true)
 # These inherit from environment if set, or can be overridden on command line
 LOCAL_IMAGES ?= false
@@ -118,9 +143,15 @@ help: ## Display this help message
 	@echo '  NAMESPACE=$(NAMESPACE)'
 	@echo '  PLATFORM=$(PLATFORM) (detected: $(DETECTED_PLATFORM) from $(HOST_OS)/$(HOST_ARCH))'
 	@echo ''
+	@echo '$(COLOR_BOLD)Kind Cluster (current worktree):$(COLOR_RESET)'
+	@echo '  CLUSTER_SLUG=$(CLUSTER_SLUG)'
+	@echo '  KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME)'
+	@echo '  Ports: frontend=$(KIND_FWD_FRONTEND_PORT) backend=$(KIND_FWD_BACKEND_PORT) http=$(KIND_HTTP_PORT) https=$(KIND_HTTPS_PORT)'
+	@echo ''
 	@echo '$(COLOR_BOLD)Examples:$(COLOR_RESET)'
 	@echo '  make kind-up LOCAL_IMAGES=true    Build from source and deploy to kind (requires podman)'
 	@echo '  make kind-rebuild                 Rebuild and reload all components in kind'
+	@echo '  make kind-status                  Show all kind clusters and their ports'
 	@echo '  make local-up CONTAINER_ENGINE=docker'
 	@echo '  make local-reload-backend'
 	@echo '  make build-all PLATFORM=linux/arm64'
@@ -320,7 +351,7 @@ local-up: check-minikube check-kubectl ## Start local development environment (m
 	@echo "  • Run: $(COLOR_BOLD)make local-status$(COLOR_RESET) to check deployment"
 	@echo "  • Run: $(COLOR_BOLD)make local-logs$(COLOR_RESET) to view logs"
 
-local-down: check-kubectl ## Stop Ambient Code Platform (keep minikube running)
+local-down: check-kubectl check-local-context ## Stop Ambient Code Platform (keep minikube running)
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Stopping Ambient Code Platform..."
 	@$(MAKE) --no-print-directory local-stop-port-forward
 	@kubectl delete namespace $(NAMESPACE) --ignore-not-found=true --timeout=60s
@@ -336,9 +367,9 @@ local-clean: check-minikube ## Delete minikube cluster completely
 local-status: check-kubectl ## Show status of local deployment
 	@echo "$(COLOR_BOLD)📊 Ambient Code Platform Status$(COLOR_RESET)"
 	@echo ""
-	@if kind get clusters 2>/dev/null | grep -q '^ambient-local$$'; then \
+	@if $(if $(filter podman,$(CONTAINER_ENGINE)),KIND_EXPERIMENTAL_PROVIDER=podman) kind get clusters 2>/dev/null | grep -q '^$(KIND_CLUSTER_NAME)$$'; then \
 		echo "$(COLOR_BOLD)Kind:$(COLOR_RESET)"; \
-		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Cluster 'ambient-local' running"; \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Cluster '$(KIND_CLUSTER_NAME)' running"; \
 	elif command -v minikube >/dev/null 2>&1; then \
 		echo "$(COLOR_BOLD)Minikube:$(COLOR_RESET)"; \
 		minikube status 2>/dev/null || echo "$(COLOR_RED)✗$(COLOR_RESET) Minikube not running"; \
@@ -352,11 +383,11 @@ local-status: check-kubectl ## Show status of local deployment
 	@echo "$(COLOR_BOLD)Services:$(COLOR_RESET)"
 	@kubectl get svc -n $(NAMESPACE) 2>/dev/null | grep -E "NAME|NodePort" || echo "No services found"
 	@echo ""
-	@if kind get clusters 2>/dev/null | grep -q '^ambient-local$$'; then \
+	@if $(if $(filter podman,$(CONTAINER_ENGINE)),KIND_EXPERIMENTAL_PROVIDER=podman) kind get clusters 2>/dev/null | grep -q '^$(KIND_CLUSTER_NAME)$$'; then \
 		echo "$(COLOR_BOLD)Access URLs:$(COLOR_RESET)"; \
 		echo "  Run in another terminal: $(COLOR_BLUE)make kind-port-forward$(COLOR_RESET)"; \
-		echo "  Frontend: $(COLOR_BLUE)http://localhost:8080$(COLOR_RESET)"; \
-		echo "  Backend:  $(COLOR_BLUE)http://localhost:8081$(COLOR_RESET)"; \
+		echo "  Frontend: $(COLOR_BLUE)http://localhost:$(KIND_FWD_FRONTEND_PORT)$(COLOR_RESET)"; \
+		echo "  Backend:  $(COLOR_BLUE)http://localhost:$(KIND_FWD_BACKEND_PORT)$(COLOR_RESET)"; \
 	else \
 		$(MAKE) --no-print-directory _show-access-info; \
 	fi
@@ -370,13 +401,13 @@ local-sync-version: ## Sync version from git to local deployment manifests
 	rm -f components/manifests/minikube/frontend-deployment.yaml.bak && \
 	echo "  $(COLOR_GREEN)✓$(COLOR_RESET) Version synced to $$VERSION"
 
-local-rebuild: ## Rebuild and reload all components
+local-rebuild: check-local-context ## Rebuild and reload all components
 	@echo "$(COLOR_BOLD)🔄 Rebuilding all components...$(COLOR_RESET)"
 	@$(MAKE) --no-print-directory _build-and-load
 	@$(MAKE) --no-print-directory _restart-all
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) All components rebuilt and reloaded"
 
-local-reload-backend: ## Rebuild and reload backend only
+local-reload-backend: check-local-context ## Rebuild and reload backend only
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rebuilding backend..."
 	@cd components/backend && $(CONTAINER_ENGINE) build -t $(BACKEND_IMAGE) . >/dev/null 2>&1
 	@$(CONTAINER_ENGINE) tag $(BACKEND_IMAGE) localhost/$(BACKEND_IMAGE) 2>/dev/null || true
@@ -399,7 +430,7 @@ local-reload-backend: ## Rebuild and reload backend only
 		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Backend port forward restarted"; \
 	fi
 
-local-reload-frontend: ## Rebuild and reload frontend only
+local-reload-frontend: check-local-context ## Rebuild and reload frontend only
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rebuilding frontend..."
 	@cd components/frontend && $(CONTAINER_ENGINE) build -t $(FRONTEND_IMAGE) . >/dev/null 2>&1
 	@$(CONTAINER_ENGINE) tag $(FRONTEND_IMAGE) localhost/$(FRONTEND_IMAGE) 2>/dev/null || true
@@ -423,7 +454,7 @@ local-reload-frontend: ## Rebuild and reload frontend only
 	fi
 
 
-local-reload-operator: ## Rebuild and reload operator only
+local-reload-operator: check-local-context ## Rebuild and reload operator only
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rebuilding operator..."
 	@cd components/operator && $(CONTAINER_ENGINE) build -t $(OPERATOR_IMAGE) . >/dev/null 2>&1
 	@$(CONTAINER_ENGINE) tag $(OPERATOR_IMAGE) localhost/$(OPERATOR_IMAGE) 2>/dev/null || true
@@ -618,8 +649,15 @@ clean: ## Clean up Kubernetes resources
 ##@ Kind Local Development
 
 kind-up: check-kind check-kubectl ## Start kind cluster (LOCAL_IMAGES=true to build from source, requires podman)
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Starting kind cluster..."
-	@cd e2e && CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/setup-kind.sh
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Starting kind cluster '$(KIND_CLUSTER_NAME)'..."
+	@cd e2e && KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) KIND_HTTP_PORT=$(KIND_HTTP_PORT) KIND_HTTPS_PORT=$(KIND_HTTPS_PORT) KIND_HOST=$(KIND_HOST) CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/setup-kind.sh
+	@if [ -n "$(KIND_HOST)" ]; then \
+		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rewriting kubeconfig for remote host $(KIND_HOST)..."; \
+		SERVER=$$(kubectl config view -o jsonpath='{.clusters[?(@.name=="kind-$(KIND_CLUSTER_NAME)")].cluster.server}'); \
+		FIXED=$$(echo "$$SERVER" | sed 's/127\.0\.0\.1/$(KIND_HOST)/; s/0\.0\.0\.0/$(KIND_HOST)/'); \
+		kubectl config set-cluster kind-$(KIND_CLUSTER_NAME) --server="$$FIXED" >/dev/null; \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) API server: $$FIXED"; \
+	fi
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for API server to be accessible..."
 	@for i in 1 2 3 4 5 6 7 8 9 10; do \
 		if kubectl cluster-info >/dev/null 2>&1; then \
@@ -636,15 +674,15 @@ kind-up: check-kind check-kubectl ## Start kind cluster (LOCAL_IMAGES=true to bu
 	@if [ "$(LOCAL_IMAGES)" = "true" ]; then \
 		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building images from source..."; \
 		$(MAKE) --no-print-directory build-all; \
-		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Loading images into kind..."; \
-		for img in $(BACKEND_IMAGE) $(FRONTEND_IMAGE) $(OPERATOR_IMAGE) $(RUNNER_IMAGE) $(STATE_SYNC_IMAGE) $(PUBLIC_API_IMAGE); do \
-			echo "  Loading $(KIND_IMAGE_PREFIX)$$img..."; \
-			$(if $(filter podman,$(CONTAINER_ENGINE)),KIND_EXPERIMENTAL_PROVIDER=podman) \
-			kind load docker-image $(KIND_IMAGE_PREFIX)$$img --name ambient-local; \
-		done; \
-		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Images loaded"; \
+		$(MAKE) --no-print-directory _kind-load-images; \
 		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Deploying with locally-built images..."; \
 		kubectl apply --validate=false -k components/manifests/overlays/kind-local/; \
+		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Patching agent registry for local images..."; \
+		REGISTRY=$$(kubectl get configmap ambient-agent-registry -n $(NAMESPACE) -o jsonpath='{.data.agent-registry\.json}'); \
+		UPDATED=$$(echo "$$REGISTRY" | sed 's|quay.io/ambient_code/vteam_claude_runner:[^"]*|localhost/vteam_claude_runner:latest|g; s|quay.io/ambient_code/vteam_state_sync:[^"]*|localhost/vteam_state_sync:latest|g'); \
+		kubectl patch configmap ambient-agent-registry -n $(NAMESPACE) --type=merge \
+			-p "{\"data\":{\"agent-registry.json\":$$(echo "$$UPDATED" | jq -Rs .)}}"; \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Agent registry patched for local images"; \
 	else \
 		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Deploying with Quay.io images..."; \
 		kubectl apply --validate=false -k components/manifests/overlays/kind/; \
@@ -654,8 +692,8 @@ kind-up: check-kind check-kubectl ## Start kind cluster (LOCAL_IMAGES=true to bu
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Initializing MinIO..."
 	@cd e2e && ./scripts/init-minio.sh
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Extracting test token..."
-	@cd e2e && CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/extract-token.sh
-	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Kind cluster ready!"
+	@cd e2e && KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) KIND_HTTP_PORT=$(KIND_HTTP_PORT) CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/extract-token.sh
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Kind cluster '$(KIND_CLUSTER_NAME)' ready!"
 	@# Vertex AI setup if requested
 	@if [ "$(LOCAL_VERTEX)" = "true" ]; then \
 		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Configuring Vertex AI..."; \
@@ -671,11 +709,12 @@ kind-up: check-kind check-kubectl ## Start kind cluster (LOCAL_IMAGES=true to bu
 	fi
 	@echo ""
 	@echo "$(COLOR_BOLD)Access the platform:$(COLOR_RESET)"
+	@echo "  Cluster:  $(KIND_CLUSTER_NAME) (slug: $(CLUSTER_SLUG))"
 	@echo "  Run in another terminal: $(COLOR_BLUE)make kind-port-forward$(COLOR_RESET)"
 	@echo ""
 	@echo "  Then access:"
-	@echo "  Frontend: http://localhost:8080"
-	@echo "  Backend:  http://localhost:8081"
+	@echo "  Frontend: http://localhost:$(KIND_FWD_FRONTEND_PORT)"
+	@echo "  Backend:  http://localhost:$(KIND_FWD_BACKEND_PORT)"
 	@echo ""
 	@echo "  Get test token: kubectl get secret test-user-token -n ambient-code -o jsonpath='{.data.token}' | base64 -d"
 	@echo ""
@@ -683,24 +722,24 @@ kind-up: check-kind check-kubectl ## Start kind cluster (LOCAL_IMAGES=true to bu
 	@echo "  make test-e2e"
 
 kind-down: ## Stop and delete kind cluster
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Cleaning up kind cluster..."
-	@cd e2e && CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/cleanup.sh
-	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Kind cluster deleted"
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Cleaning up kind cluster '$(KIND_CLUSTER_NAME)'..."
+	@cd e2e && KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/cleanup.sh
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Kind cluster '$(KIND_CLUSTER_NAME)' deleted"
 
-kind-port-forward: check-kubectl ## Port-forward kind services (for remote Podman)
-	@echo "$(COLOR_BOLD)🔌 Port forwarding kind services$(COLOR_RESET)"
+kind-port-forward: check-kubectl check-local-context ## Port-forward kind services (for remote Podman)
+	@echo "$(COLOR_BOLD)Port forwarding kind services ($(KIND_CLUSTER_NAME))$(COLOR_RESET)"
 	@echo ""
-	@echo "  Frontend: http://localhost:8080"
-	@echo "  Backend:  http://localhost:8081"
+	@echo "  Frontend: http://localhost:$(KIND_FWD_FRONTEND_PORT)"
+	@echo "  Backend:  http://localhost:$(KIND_FWD_BACKEND_PORT)"
 	@echo ""
 	@echo "$(COLOR_YELLOW)Press Ctrl+C to stop$(COLOR_RESET)"
 	@echo ""
 	@trap 'echo ""; echo "$(COLOR_GREEN)✓$(COLOR_RESET) Port forwarding stopped"; exit 0' INT; \
-	(kubectl port-forward -n ambient-code svc/frontend-service 8080:3000 >/dev/null 2>&1 &); \
-	(kubectl port-forward -n ambient-code svc/backend-service 8081:8080 >/dev/null 2>&1 &); \
+	(kubectl port-forward -n ambient-code svc/frontend-service $(KIND_FWD_FRONTEND_PORT):3000 >/dev/null 2>&1 &); \
+	(kubectl port-forward -n ambient-code svc/backend-service $(KIND_FWD_BACKEND_PORT):8080 >/dev/null 2>&1 &); \
 	wait
 
-dev-bootstrap: check-kubectl ## Bootstrap developer workspace with API key and integrations
+dev-bootstrap: check-kubectl check-local-context ## Bootstrap developer workspace with API key and integrations
 	@./scripts/bootstrap-workspace.sh
 
 ##@ E2E Testing (Portable)
@@ -721,7 +760,7 @@ test-e2e: ## Run e2e tests against current CYPRESS_BASE_URL
 test-e2e-local: ## Run complete e2e test suite with kind (setup, deploy, test, cleanup)
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Running e2e tests with kind (local)..."
 	@$(MAKE) kind-up CONTAINER_ENGINE=$(CONTAINER_ENGINE)
-	@cd e2e && trap 'CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/cleanup.sh' EXIT; ./scripts/run-tests.sh
+	@cd e2e && trap 'KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/cleanup.sh' EXIT; ./scripts/run-tests.sh
 
 e2e-test: test-e2e-local ## Alias for test-e2e-local (backward compatibility)
 
@@ -731,22 +770,40 @@ test-e2e-setup: ## Install e2e test dependencies
 
 e2e-setup: test-e2e-setup ## Alias for test-e2e-setup (backward compatibility)
 
-kind-rebuild: check-kind check-kubectl build-all ## Rebuild, reload, and restart all components in kind
-	@kind get clusters 2>/dev/null | grep -q '^ambient-local$$' || \
-		(echo "$(COLOR_RED)✗$(COLOR_RESET) Kind cluster 'ambient-local' not found. Run 'make kind-up LOCAL_IMAGES=true' first." && exit 1)
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Loading images into kind..."
-	@for img in $(BACKEND_IMAGE) $(FRONTEND_IMAGE) $(OPERATOR_IMAGE) $(RUNNER_IMAGE) $(STATE_SYNC_IMAGE) $(PUBLIC_API_IMAGE); do \
-		echo "  Loading $(KIND_IMAGE_PREFIX)$$img..."; \
-		$(if $(filter podman,$(CONTAINER_ENGINE)),KIND_EXPERIMENTAL_PROVIDER=podman) \
-		kind load docker-image $(KIND_IMAGE_PREFIX)$$img --name ambient-local; \
-	done
-	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Images loaded"
+kind-rebuild: check-kind check-kubectl check-local-context build-all ## Rebuild, reload, and restart all components in kind
+	@$(if $(filter podman,$(CONTAINER_ENGINE)),KIND_EXPERIMENTAL_PROVIDER=podman) kind get clusters 2>/dev/null | grep -q '^$(KIND_CLUSTER_NAME)$$' || \
+		(echo "$(COLOR_RED)✗$(COLOR_RESET) Kind cluster '$(KIND_CLUSTER_NAME)' not found. Run 'make kind-up LOCAL_IMAGES=true' first." && exit 1)
+	@$(MAKE) --no-print-directory _kind-load-images
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Applying kind-local manifests..."
 	@kubectl apply --validate=false -k components/manifests/overlays/kind-local/ $(QUIET_REDIRECT)
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Restarting deployments..."
 	@kubectl rollout restart deployment -n $(NAMESPACE) $(QUIET_REDIRECT)
 	@kubectl rollout status deployment -n $(NAMESPACE) --timeout=120s $(QUIET_REDIRECT)
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) All components rebuilt and restarted"
+
+kind-status: ## Show all kind clusters and their port assignments
+	@echo "$(COLOR_BOLD)Kind Cluster Status$(COLOR_RESET)"
+	@echo ""
+	@echo "$(COLOR_BOLD)Current worktree:$(COLOR_RESET)"
+	@echo "  Slug:     $(CLUSTER_SLUG)"
+	@echo "  Cluster:  $(KIND_CLUSTER_NAME)"
+	@if [ -n "$(KIND_HOST)" ]; then echo "  Host:     $(KIND_HOST) (remote)"; else echo "  Host:     localhost"; fi
+	@echo "  NodePort: $(KIND_HTTP_PORT) (HTTP) / $(KIND_HTTPS_PORT) (HTTPS)"
+	@echo "  Forward:  $(KIND_FWD_FRONTEND_PORT) (frontend) / $(KIND_FWD_BACKEND_PORT) (backend)"
+	@echo ""
+	@CLUSTERS=$$($(if $(filter podman,$(CONTAINER_ENGINE)),KIND_EXPERIMENTAL_PROVIDER=podman) kind get clusters 2>/dev/null); \
+	if [ -z "$$CLUSTERS" ]; then \
+		echo "$(COLOR_YELLOW)No kind clusters running$(COLOR_RESET)"; \
+	else \
+		echo "$(COLOR_BOLD)Running clusters:$(COLOR_RESET)"; \
+		echo "$$CLUSTERS" | while read -r cluster; do \
+			if [ "$$cluster" = "$(KIND_CLUSTER_NAME)" ]; then \
+				echo "  $(COLOR_GREEN)* $$cluster$(COLOR_RESET) (this worktree)"; \
+			else \
+				echo "    $$cluster"; \
+			fi; \
+		done; \
+	fi
 
 kind-clean: kind-down ## Alias for kind-down
 
@@ -791,6 +848,21 @@ check-kubectl: ## Check if kubectl is installed
 	@command -v kubectl >/dev/null 2>&1 || \
 		(echo "$(COLOR_RED)✗$(COLOR_RESET) kubectl not found. Install: https://kubernetes.io/docs/tasks/tools/" && exit 1)
 
+check-local-context: ## Verify kubectl context points to a local cluster (kind or minikube)
+ifneq ($(SKIP_CONTEXT_CHECK),true)
+	@ctx=$$(kubectl config current-context 2>/dev/null || echo ""); \
+	if echo "$$ctx" | grep -qE '^(kind-|minikube$$)'; then \
+		: ; \
+	else \
+		echo "$(COLOR_RED)✗$(COLOR_RESET) Current kubectl context '$$ctx' does not look like a local cluster."; \
+		echo "  Expected a context starting with 'kind-' or named 'minikube'."; \
+		echo "  Switch context first, e.g.: kubectl config use-context kind-ambient-local"; \
+		echo ""; \
+		echo "  To bypass this check: make <target> SKIP_CONTEXT_CHECK=true"; \
+		exit 1; \
+	fi
+endif
+
 check-architecture: ## Validate build architecture matches host
 	@echo "$(COLOR_BOLD)Architecture Check$(COLOR_RESET)"
 	@echo "  Host: $(HOST_OS) / $(HOST_ARCH)"
@@ -807,6 +879,21 @@ check-architecture: ## Validate build architecture matches host
 	else \
 		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Using native architecture"; \
 	fi
+
+_kind-load-images: ## Internal: Load images into kind cluster
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Loading images into kind ($(KIND_CLUSTER_NAME))..."
+	@for img in $(BACKEND_IMAGE) $(FRONTEND_IMAGE) $(OPERATOR_IMAGE) $(RUNNER_IMAGE) $(STATE_SYNC_IMAGE) $(PUBLIC_API_IMAGE); do \
+		echo "  Loading $(KIND_IMAGE_PREFIX)$$img..."; \
+		if [ -n "$(KIND_HOST)" ]; then \
+			$(CONTAINER_ENGINE) save $(KIND_IMAGE_PREFIX)$$img | \
+			$(CONTAINER_ENGINE) exec -i $(KIND_CLUSTER_NAME)-control-plane \
+			ctr --namespace=k8s.io images import -; \
+		else \
+			$(if $(filter podman,$(CONTAINER_ENGINE)),KIND_EXPERIMENTAL_PROVIDER=podman) \
+			kind load docker-image $(KIND_IMAGE_PREFIX)$$img --name $(KIND_CLUSTER_NAME); \
+		fi; \
+	done
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Images loaded"
 
 _build-and-load: ## Internal: Build and load images
 	@echo "  Building backend ($(PLATFORM))..."

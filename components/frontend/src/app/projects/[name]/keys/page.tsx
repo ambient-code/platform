@@ -16,10 +16,18 @@ import { ProjectSubpageHeader } from '@/components/project-subpage-header';
 import { ErrorMessage } from '@/components/error-message';
 import { EmptyState } from '@/components/empty-state';
 import { DestructiveConfirmationDialog } from '@/components/confirmation-dialog';
-import { Breadcrumbs } from '@/components/breadcrumbs';
+import {
+  Breadcrumb,
+  BreadcrumbList,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from '@/components/ui/breadcrumb';
+import Link from 'next/link';
 
 import { useKeys, useCreateKey, useDeleteKey } from '@/services/queries';
-import { successToast, errorToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import type { CreateKeyRequest } from '@/services/api/keys';
 import { ROLE_DEFINITIONS } from '@/lib/role-colors';
 
@@ -55,7 +63,7 @@ export default function ProjectKeysPage() {
       { projectName, data: request },
       {
         onSuccess: (data) => {
-          successToast(`Access key "${data.name}" created successfully`);
+          toast.success(`Access key "${data.name}" created successfully`);
           setOneTimeKey(data.key);
           setOneTimeKeyName(data.name);
           setNewKeyName('');
@@ -63,7 +71,7 @@ export default function ProjectKeysPage() {
           setShowCreate(false);
         },
         onError: (error) => {
-          errorToast(error instanceof Error ? error.message : 'Failed to create key');
+          toast.error(error instanceof Error ? error.message : 'Failed to create key');
         },
       }
     );
@@ -80,7 +88,7 @@ export default function ProjectKeysPage() {
       { projectName, keyId: keyToDelete.id },
       {
         onSuccess: () => {
-          successToast(`Access key "${keyToDelete.name}" deleted successfully`);
+          toast.success(`Access key "${keyToDelete.name}" deleted successfully`);
 
           setShowDeleteDialog(false);
           setKeyToDelete(null);
@@ -108,14 +116,25 @@ export default function ProjectKeysPage() {
 
   return (
     <div className="container mx-auto p-6">
-      <Breadcrumbs
-        items={[
-          { label: 'Projects', href: '/projects' },
-          { label: projectName, href: `/projects/${projectName}` },
-          { label: 'Keys' },
-        ]}
-        className="mb-4"
-      />
+      <Breadcrumb className="mb-4">
+        <BreadcrumbList>
+          <BreadcrumbItem>
+            <BreadcrumbLink asChild>
+              <Link href="/projects">Projects</Link>
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbLink asChild>
+              <Link href={`/projects/${projectName}`}>{projectName}</Link>
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbPage>Keys</BreadcrumbPage>
+          </BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
       <ProjectSubpageHeader
         title={
           <>

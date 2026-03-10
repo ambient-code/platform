@@ -18,6 +18,10 @@ resources:
 
 # Patches for e2e environment
 patches:
+- path: ambient-api-server-jwks-patch.yaml
+  target:
+    kind: ConfigMap
+    name: ambient-api-server-auth
 - path: namespace-patch.yaml
   target:
     kind: Namespace

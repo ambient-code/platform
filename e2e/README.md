@@ -1,334 +1,115 @@
 # E2E Testing Suite
 
-Automated end-to-end testing for the Ambient Code Platform using Cypress. Tests can run against **any deployed instance** — kind, CRC, dev cluster, or production.
+Cypress E2E tests for the Ambient Code Platform. Tests run against a live cluster using a **mock SDK client** — no real Anthropic API key needed.
 
-> **Status**: ✅ Production Ready | **Tests**: 12 | **Runtime**: ~10 seconds | **CI**: Automated on PRs
+> **Tests**: 58 | **Runtime**: ~3 min (Chrome) | **Coverage**: Integration confidence
 
 ## Quick Start
 
-### Test Against Kind (Local)
-
 ```bash
-make kind-up          # Start local cluster
-make test-e2e         # Run tests
-make kind-down        # Cleanup
-```
-
-**Iterative testing:**
-```bash
-make kind-up
-# Edit e2e/.env to override images
-make kind-down && make kind-up
-make test-e2e
-```
-
-### Test Against External Cluster
-
-```bash
-# Set environment
-export CYPRESS_BASE_URL=https://ambient-code.apps.your-cluster.com
-export TEST_TOKEN=$(oc whoami -t)  # or kubectl get secret...
-
-# Run tests
-cd e2e && npm test
-```
-
-## Test Suites
-
-### **vteam.cy.ts** - Platform Smoke Tests (5 tests)
-
-> Note: Filename uses "vteam" prefix for backward compatibility with existing CI/CD workflows.
-
-Core platform functionality:
-1. Authentication with token
-2. Workspace creation dialog
-3. Create new workspace
-4. List workspaces
-5. Backend API connectivity (`/api/cluster-info`)
-
-**Runtime:** ~2 seconds
-
----
-
-### **sessions.cy.ts** - Session Management (7 tests)
-
-Complete session user journey (reuses one workspace across all tests):
-
-1. **Workspace & Session Creation** - Creates workspace, waits for namespace, creates session
-2. **Session Page UI** - All accordions, status badge, breadcrumbs
-3. **Workflow Cards & Selection** - Display cards, links, interactions
-4. **Workflow Interactions** - Click card, view all, load workflow
-5. **Chat Interface** - Welcome message, chat availability
-6. **Breadcrumb Navigation** - Navigate back to workspace
-7. **Complete Lifecycle** (requires API key configured via UI):
-   - Wait for session Running
-   - Send "Hello!" and get REAL Claude response
-   - Select workflow and verify acknowledgement
-   - Check auto-generated session name
-
-**Runtime:** ~10 seconds (test 7 skipped without API key configuration)
-
-**Note on Agent Testing:**
-Test 7 requires `ANTHROPIC_API_KEY` to be configured in the project via the UI (**Project Settings → API Keys**). Simply having the key in `e2e/.env` isn't sufficient — the backend must create `ambient-runner-secrets` in the project namespace via the proper API flow.
-
----
-
-## Prerequisites
-
-### Required Software
-
-- **Node.js 20+**: For Cypress
-  - Install: `brew install node`
-- **kubectl**: For Kubernetes clusters
-- **oc CLI**: For OpenShift clusters (optional)
-
-### For Kind Local Development
-
-See [Kind Local Development Guide](../docs/developer/local-development/kind.md) for kind-specific setup.
-
-### Install Test Dependencies
-
-```bash
-make test-e2e-setup
-# or
+# Prerequisites: frontend running (npm run dev), backend port-forwarded
 cd e2e && npm install
+
+# Run headless
+TEST_TOKEN=$(kubectl get secret test-user-token -n ambient-code \
+  -o jsonpath='{.data.token}' | base64 -d) \
+CYPRESS_BASE_URL=http://localhost:3000 \
+npx cypress run --browser chrome --spec "cypress/e2e/sessions.cy.ts"
+
+# Interactive mode (for debugging)
+TEST_TOKEN=$(kubectl get secret test-user-token -n ambient-code \
+  -o jsonpath='{.data.token}' | base64 -d) \
+CYPRESS_BASE_URL=http://localhost:3000 \
+npx cypress open
 ```
 
-## Running Tests
+## Mock SDK Client
 
-### Option 1: Against Kind (Automated)
+Tests always use `ANTHROPIC_API_KEY=mock-replay-key`. When the runner pod sees this key, `MockClaudeSDKClient` replays pre-recorded SDK messages from JSONL fixtures through the real `ClaudeAgentAdapter`. This tests the full AG-UI translation pipeline without calling the Anthropic API.
 
+**Fixtures**: `components/runners/ambient-runner/ambient_runner/bridges/claude/fixtures/`
+
+**Capturing new fixtures** (requires real API key):
 ```bash
-# Full automated flow
-make test-e2e-local
-
-# Or step-by-step
-make kind-up
-make test-e2e
-make kind-down
+cd components/runners/ambient-runner
+ANTHROPIC_API_KEY=sk-ant-... uv run --extra claude python scripts/capture-fixtures.py 'your prompt'
 ```
 
-### Option 2: Against External Cluster
+**Prompt matching**: `hello` → `hello.jsonl`, `comprehensive` → `comprehensive.jsonl`, default → `default.jsonl`
 
-```bash
-cd e2e
+## Test Structure
 
-# Set config
-export CYPRESS_BASE_URL=https://your-frontend.com
-export TEST_TOKEN=$(oc whoami -t)  # or your auth token
+One file: `cypress/e2e/sessions.cy.ts` — 58 tests across 15 describe blocks:
 
-# Run tests
-npm test
-```
+| Block | Tests | What it covers |
+|-------|-------|----------------|
+| Workspace & Session Creation | 1 | Create workspace, wait for namespace, create session |
+| Session Page UI | 4 | Phase badge, accordions, breadcrumbs, chat area |
+| Workspace Page | 3 | Sessions list, admin tabs, create session dialog |
+| Projects List | 2 | Workspace list, status badges |
+| Agent Interaction | 1 | Send message, verify response, workflow selection |
+| Session Header Actions | 1 | Three-dot menu interactions |
+| Workspace Admin Tabs | 3 | Settings, sharing, keys tab rendering |
+| Session Header Menu Deep | 4 | View details, edit name, clone, export chat |
+| Chat Input Features | 3 | Toolbar buttons, autocomplete, history |
+| Feedback Buttons | 1 | Thumbs up/down on agent messages |
+| Theme & Navigation | 2 | Dark/light/system toggle, nav component |
+| Session Page Modals | 6 | Add context, upload, workflow, clone, details, edit name |
+| Workspace Admin Form Submissions | 7 | Save settings, create keys, grant permissions, feature flags |
+| Chat Input Deep | 3 | Slash commands, Ctrl+Space, agents/commands buttons |
+| Welcome Experience | 3 | Workflow cards, view all, search |
 
-### Option 3: Headed Mode (With UI)
+## Writing Tests
 
-```bash
-cd e2e
-
-# Set config (or source .env.test from kind-up)
-export CYPRESS_BASE_URL=http://localhost:8080
-export TEST_TOKEN=your-token-here
-
-# Open Cypress UI
-npm run test:headed
-```
-
----
-
-## Configuration
-
-### Environment Variables
-
-**Required:**
-- `CYPRESS_BASE_URL`: Frontend URL (e.g., `http://localhost:8080`)
-- `TEST_TOKEN`: Bearer token for API authentication
-- `ANTHROPIC_API_KEY`: Claude API key (required for agent session test)
-
-**Optional:**
-- `KEEP_WORKSPACES`: Set to `true` to keep test workspaces after run (debugging)
-
-### For Kind (Local Docker/Podman)
-
-`make kind-up` automatically creates `.env.test`:
-
-```bash
-TEST_TOKEN=eyJhbGc...
-CYPRESS_BASE_URL=http://localhost:8080
-```
-
-Tests auto-load this file. Agent test requires `ANTHROPIC_API_KEY` in `e2e/.env`.
-
-### For External Cluster
-
-Create `.env.test` manually or use env vars:
-
-```bash
-# Get token from OpenShift
-export TEST_TOKEN=$(oc whoami -t)
-export CYPRESS_BASE_URL=https://ambient-code.apps.cluster.com
-
-# Run
-cd e2e && npm test
-```
-
----
-
-## Test Organization
-
-### Shared Workspace Strategy
-
-All tests in `sessions.cy.ts` reuse **one workspace and one session**:
-- Created in `before()` hook
-- Shared across tests 1-6
-- Cleaned up in `after()` hook (unless `KEEP_WORKSPACES=true`)
-- Test 7 creates its own session (needs Running state)
-
-**Benefits:**
-- ✅ Faster (no repeated setup)
-- ✅ Tests real user flow
-- ✅ Reduced cluster load
-
-### Test Independence
-
-Tests can run in any order within their suite.
-
----
-
-## Debugging
-
-### View Test Results
-
-```bash
-# Screenshots (on failure)
-ls cypress/screenshots/
-
-# Videos (always captured)
-open cypress/videos/sessions.cy.ts.mp4
-```
-
-### Run Single Test
-
-```bash
-source .env.test
-CYPRESS_TEST_TOKEN="$TEST_TOKEN" npx cypress run --spec "cypress/e2e/vteam.cy.ts"
-```
-
-### Debug with UI
-
-```bash
-source .env.test
-npm run test:headed
-# Click on test file to run interactively
-```
-
-### Check Cluster State
-
-```bash
-# Kind
-kubectl get pods -n ambient-code
-kubectl logs -n ambient-code deployment/backend-api
-
-# OpenShift
-oc get pods -n ambient-code
-oc logs -n ambient-code deployment/backend-api
-```
-
----
-
-## Writing New Tests
-
-### Add to Existing Suite
-
-Edit `cypress/e2e/sessions.cy.ts` or `vteam.cy.ts`:
+All tests go in `sessions.cy.ts`. They share one workspace created in `before()`.
 
 ```typescript
-it('should test new feature', () => {
-  cy.visit('/your-page')
-  cy.contains('Expected Content').should('be.visible')
-  cy.get('[data-testid="button"]').click()
-  cy.url().should('include', '/expected-url')
+// Add new tests inside an existing describe block, or create a new one:
+describe('My Feature', () => {
+  it('should do the thing', () => {
+    cy.visit(`/projects/${workspaceSlug}/sessions/${pendingSessionId}`)
+
+    // Use data-testid for reliable selectors
+    cy.get('[data-testid="my-button"]').click({ force: true })
+
+    // Conditional checks for optional elements
+    cy.get('body').then(($body) => {
+      if ($body.find('.optional-element').length) {
+        cy.get('.optional-element').click({ force: true })
+      }
+    })
+
+    // Close modals with Escape
+    cy.get('body').type('{esc}')
+  })
 })
 ```
 
-### Testing Guidelines
+**Rules:**
+- Use `{ force: true }` on all clicks (elements may be in overflow containers)
+- Wrap optional elements in `.then($body => { if ($body.find(...).length) { ... } })`
+- Use `data-testid` attributes — add them to frontend components as needed
+- Never use real API keys — tests always use `mock-replay-key`
+- Use Chrome, not Electron (Electron drops SSE events)
 
-- ✅ Test user journeys, not isolated UI elements
-- ✅ Use `data-testid` selectors when possible
-- ✅ Wait for conditions, not fixed timeouts
-- ✅ Use descriptive test names
-- ❌ Don't test implementation details
-- ❌ Don't rely on test execution order
-- ❌ Don't manually add auth headers (auto-injected)
+## Environment Variables
 
-See [E2E Testing Guide](../docs/testing/e2e-guide.md) for detailed patterns.
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `TEST_TOKEN` | Yes | K8s service account token for API auth |
+| `CYPRESS_BASE_URL` | Yes | Frontend URL (e.g., `http://localhost:3000`) |
+| `CYPRESS_OC_TOKEN` | No | OpenShift OAuth token (only for OCP clusters) |
+| `KEEP_WORKSPACES` | No | Set to `true` to skip cleanup after tests |
 
----
+## Debugging
 
-## CI Integration
+```bash
+# Screenshots (on failure)
+open cypress/screenshots/
 
-GitHub Actions runs tests automatically:
-- **Trigger**: All PRs to main
-- **Workflow**: `.github/workflows/e2e.yml`
-- **Environment**: kind with Docker
-- **Runtime**: ~6-7 minutes (includes cluster setup)
-- **Artifacts**: Screenshots/videos uploaded on failure
+# Videos (always captured)
+open cypress/videos/sessions.cy.ts.mp4
 
----
-
-## Performance
-
-| Phase | Time | Notes |
-|-------|------|-------|
-| Cluster setup | ~2 min | kind creation + ingress |
-| Deployment | ~2-3 min | Pull images, start pods |
-| MinIO init | ~5 sec | Create bucket |
-| Test execution | ~10 sec | All 12 tests |
-| **Total** | **~5 min** | With Quay images |
-
----
-
-## Maintenance
-
-### Before Merging PR
-
-- [ ] All tests passing locally
-- [ ] Tests passing in CI
-- [ ] No new Cypress errors
-- [ ] Screenshots/videos reviewed
-
-### After Frontend Changes
-
-- [ ] Update selectors if UI structure changed
-- [ ] Update expected text if copy changed
-- [ ] Run with UI to verify: `npm run test:headed`
-
-### After Backend Changes
-
-- [ ] Update API assertions if response format changed
-- [ ] Update auth if token format changed
-
----
-
-## Migration from Old E2E Setup
-
-**Old commands** → **New commands**:
-- `make e2e-test` → `make test-e2e-local` (still works as alias)
-- `make e2e-clean` → `make kind-down` (still works as alias)
-- `make e2e-setup` → `make test-e2e-setup` (still works as alias)
-
-**Old overlay** → **New overlay**:
-- `overlays/e2e/` → `overlays/kind/` (Quay images)
-- New: `overlays/kind-local/` (local images)
-
-**Old cluster name** → **New cluster name**:
-- `vteam-e2e` → `ambient-local`
-
----
-
-## See Also
-
-- [Kind Local Development](../docs/developer/local-development/kind.md) - Using kind for development
-- [E2E Testing Guide](../docs/testing/e2e-guide.md) - Writing e2e tests
-- [Testing Strategy](../CLAUDE.md#testing-strategy) - Testing overview
-- [Cypress Documentation](https://docs.cypress.io/)
+# Interactive mode — best for debugging
+npx cypress open
+```

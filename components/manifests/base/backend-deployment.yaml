@@ -6,6 +6,8 @@ metadata:
     app: backend-api
 spec:
   replicas: 1  # Single pod for RWO PVC
+  strategy:
+    type: Recreate  # Required: RWO PVC cannot be multi-attached during rolling updates
   selector:
     matchLabels:
       app: backend-api
