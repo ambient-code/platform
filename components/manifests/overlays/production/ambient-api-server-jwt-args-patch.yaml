@@ -1,5 +1,3 @@
-# Production: enable end-to-end TLS and fetch JWKS from Red Hat SSO.
-# TLS certs are auto-provisioned by OpenShift service-ca via the Service annotation.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -18,9 +16,7 @@ spec:
             - --db-password-file=/secrets/db/db.password
             - --db-name-file=/secrets/db/db.name
             - --enable-jwt=true
-            # Authz disabled: api-server has no internal RBAC middleware yet.
-            # Auth is handled by the backend proxy. TODO: enable when authz is implemented.
-            - --enable-authz=false
+            - --enable-authz=true
             - --jwk-cert-url=https://sso.redhat.com/auth/realms/redhat-external/protocol/openid-connect/certs
             - --enable-https=true
             - --https-cert-file=/etc/tls/tls.crt
@@ -33,9 +29,7 @@ spec:
             - --metrics-server-bindaddress=:4433
             - --health-check-server-bindaddress=:4434
             - --enable-health-check-https=true
-            # SSL disabled: PostgreSQL is in-cluster (same namespace, pod network only).
-            # Switch to --db-sslmode=require if using an external database.
-            - --db-sslmode=disable
+            - --db-sslmode=require
             - --db-max-open-connections=50
             - --enable-db-debug=false
             - --enable-metrics-https=false
@@ -49,31 +43,4 @@ spec:
             - --grpc-tls-cert-file=/etc/tls/tls.crt
             - --grpc-tls-key-file=/etc/tls/tls.key
             - --alsologtostderr
-            - -v=4
-          volumeMounts:
-            - name: tls-certs
-              mountPath: /etc/tls
-              readOnly: true
-          livenessProbe:
-            httpGet:
-              path: /api/ambient
-              port: 8000
-              scheme: HTTPS
-            initialDelaySeconds: 15
-            periodSeconds: 5
-          readinessProbe:
-            httpGet:
-              path: /healthcheck
-              port: 4434
-              scheme: HTTPS
-              httpHeaders:
-                - name: User-Agent
-                  value: Probe
-            initialDelaySeconds: 20
-            periodSeconds: 10
-      volumes:
-        - name: tls-certs
-          secret:
-            # Auto-provisioned by OpenShift service-ca via the Service annotation
-            # service.beta.openshift.io/serving-cert-secret-name: ambient-api-server-tls
-            secretName: ambient-api-server-tls
+            - -v=2

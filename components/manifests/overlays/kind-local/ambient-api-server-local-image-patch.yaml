@@ -1,0 +1,15 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ambient-api-server
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: migration
+          image: localhost/vteam_api_server:latest
+          imagePullPolicy: IfNotPresent
+      containers:
+        - name: api-server
+          image: localhost/vteam_api_server:latest
+          imagePullPolicy: IfNotPresent
