@@ -18,7 +18,35 @@ func main() {
 	goOut := flag.String("go-out", "", "output directory for Go SDK")
 	pythonOut := flag.String("python-out", "", "output directory for Python SDK")
 	tsOut := flag.String("ts-out", "", "output directory for TypeScript SDK")
+	protoPath := flag.String("proto", "", "path to .proto file (required for --grpc-python-out)")
+	grpcPythonOut := flag.String("grpc-python-out", "", "output directory for Python gRPC client")
 	flag.Parse()
+
+	if *grpcPythonOut != "" {
+		if *protoPath == "" {
+			log.Fatal("--proto is required when --grpc-python-out is set")
+		}
+		protoSpec, err := parseProto(*protoPath)
+		if err != nil {
+			log.Fatalf("parse proto: %v", err)
+		}
+		protoHash, err := hashFile(*protoPath)
+		if err != nil {
+			log.Fatalf("hash proto: %v", err)
+		}
+		header := ProtoGeneratedHeader{
+			ProtoPath: *protoPath,
+			ProtoHash: protoHash,
+			Timestamp: time.Now().UTC().Format(time.RFC3339),
+		}
+		if err := generateGRPCPython(protoSpec, *grpcPythonOut, header); err != nil {
+			log.Fatalf("generate gRPC Python: %v", err)
+		}
+		fmt.Printf("Python gRPC client generated in %s\n", *grpcPythonOut)
+		if *specPath == "" {
+			return
+		}
+	}
 
 	if *specPath == "" {
 		log.Fatal("--spec is required")
@@ -77,6 +105,165 @@ type GeneratedHeader struct {
 	SpecPath  string
 	SpecHash  string
 	Timestamp string
+}
+
+type ProtoGeneratedHeader struct {
+	ProtoPath string
+	ProtoHash string
+	Timestamp string
+}
+
+type ProtoRPC struct {
+	Name           string
+	InputType      string
+	OutputType     string
+	ServerStreaming bool
+}
+
+type ProtoService struct {
+	Name    string
+	Package string
+	RPCs    []ProtoRPC
+}
+
+type ProtoSpec struct {
+	Service ProtoService
+}
+
+type grpcPythonTemplateData struct {
+	Header  ProtoGeneratedHeader
+	Service ProtoService
+	Spec    *ProtoSpec
+}
+
+func parseProto(path string) (*ProtoSpec, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read proto: %w", err)
+	}
+	content := string(data)
+
+	pkg := ""
+	for _, line := range strings.Split(content, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "package ") {
+			pkg = strings.TrimSuffix(strings.TrimPrefix(line, "package "), ";")
+			pkg = strings.TrimSpace(pkg)
+			break
+		}
+	}
+
+	var serviceName string
+	var rpcs []ProtoRPC
+	inService := false
+	for _, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if !inService {
+			if strings.HasPrefix(trimmed, "service ") {
+				parts := strings.Fields(trimmed)
+				if len(parts) >= 2 {
+					serviceName = parts[1]
+				}
+				inService = true
+			}
+			continue
+		}
+		if trimmed == "}" {
+			inService = false
+			continue
+		}
+		if strings.HasPrefix(trimmed, "rpc ") {
+			rpc := parseRPCLine(trimmed)
+			if rpc != nil {
+				rpcs = append(rpcs, *rpc)
+			}
+		}
+	}
+
+	return &ProtoSpec{
+		Service: ProtoService{
+			Name:    serviceName,
+			Package: pkg,
+			RPCs:    rpcs,
+		},
+	}, nil
+}
+
+func parseRPCLine(line string) *ProtoRPC {
+	line = strings.TrimPrefix(line, "rpc ")
+	parenIdx := strings.Index(line, "(")
+	if parenIdx < 0 {
+		return nil
+	}
+	name := strings.TrimSpace(line[:parenIdx])
+	rest := line[parenIdx+1:]
+	closeIdx := strings.Index(rest, ")")
+	if closeIdx < 0 {
+		return nil
+	}
+	inputType := strings.TrimSpace(rest[:closeIdx])
+	rest = rest[closeIdx+1:]
+	returnsIdx := strings.Index(rest, "returns")
+	if returnsIdx < 0 {
+		return nil
+	}
+	rest = rest[returnsIdx+len("returns"):]
+	serverStreaming := strings.Contains(rest, "stream")
+	rest = strings.ReplaceAll(rest, "stream", "")
+	openParen := strings.Index(rest, "(")
+	closeParen := strings.Index(rest, ")")
+	if openParen < 0 || closeParen < 0 {
+		return nil
+	}
+	outputType := strings.TrimSpace(rest[openParen+1 : closeParen])
+	return &ProtoRPC{
+		Name:           name,
+		InputType:      inputType,
+		OutputType:     outputType,
+		ServerStreaming: serverStreaming,
+	}
+}
+
+func hashFile(path string) (string, error) {
+	h := sha256.New()
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = f.Close() }()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%x", h.Sum(nil)), nil
+}
+
+func generateGRPCPython(spec *ProtoSpec, outDir string, header ProtoGeneratedHeader) error {
+	if err := os.MkdirAll(outDir, 0755); err != nil {
+		return err
+	}
+
+	tmplDir := filepath.Join(getTemplateDir(), "grpc", "python")
+	data := grpcPythonTemplateData{Header: header, Service: spec.Service, Spec: spec}
+
+	files := []struct {
+		tmpl string
+		out  string
+	}{
+		{"grpc_client.py.tmpl", "_grpc_client.py"},
+		{"messages_api.py.tmpl", "_session_messages_api.py"},
+	}
+
+	for _, f := range files {
+		tmpl, err := loadTemplate(filepath.Join(tmplDir, f.tmpl))
+		if err != nil {
+			return fmt.Errorf("load %s: %w", f.tmpl, err)
+		}
+		if err := executeTemplate(tmpl, filepath.Join(outDir, f.out), data); err != nil {
+			return fmt.Errorf("execute %s: %w", f.tmpl, err)
+		}
+	}
+
+	return nil
 }
 
 type goTemplateData struct {
@@ -360,6 +547,12 @@ func computeSpecHash(specPath string) (string, error) {
 		filepath.Join(specDir, "openapi.projects.yaml"),
 		filepath.Join(specDir, "openapi.projectSettings.yaml"),
 		filepath.Join(specDir, "openapi.users.yaml"),
+		filepath.Join(specDir, "openapi.agents.yaml"),
+		filepath.Join(specDir, "openapi.roles.yaml"),
+		filepath.Join(specDir, "openapi.roleBindings.yaml"),
+		filepath.Join(specDir, "openapi.sessionCheckIns.yaml"),
+		filepath.Join(specDir, "openapi.projectDocuments.yaml"),
+		filepath.Join(specDir, "openapi.agentMessages.yaml"),
 	}
 
 	for _, f := range files {
