@@ -251,6 +251,14 @@ export default function ProjectSessionDetailPage({
     return undefined;
   }, [capabilities?.framework, runnerTypes]);
 
+  // Update page title with display name when available
+  useEffect(() => {
+    const title = session?.spec?.displayName || sessionName;
+    if (title) {
+      document.title = `${title} · Ambient Code Platform`;
+    }
+  }, [session?.spec?.displayName, sessionName]);
+
   // Track the current Langfuse trace ID for feedback association
   const [langfuseTraceId, setLangfuseTraceId] = useState<string | null>(null);
 

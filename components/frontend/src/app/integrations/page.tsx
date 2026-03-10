@@ -1,5 +1,10 @@
+import type { Metadata } from 'next'
 import React from 'react'
 import IntegrationsClient from '@/app/integrations/IntegrationsClient'
+
+export const metadata: Metadata = {
+  title: 'Integrations · Ambient Code Platform',
+}
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0

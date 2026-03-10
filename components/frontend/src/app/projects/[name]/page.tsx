@@ -99,6 +99,12 @@ export default function ProjectDetailsPage() {
   const initialSection = (searchParams.get('section') as Section) || 'sessions';
   const [activeSection, setActiveSection] = useState<Section>(initialSection);
 
+  // Update page title with display name when available
+  useEffect(() => {
+    const title = project?.displayName || projectName;
+    document.title = `${title} · Ambient Code Platform`;
+  }, [project?.displayName, projectName]);
+
   // Update active section when query parameter changes
   useEffect(() => {
     const sectionParam = searchParams.get('section') as Section;
