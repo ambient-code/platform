@@ -11,6 +11,7 @@ package websocket
 
 import (
 	"ambient-code-backend/types"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -201,9 +202,49 @@ func loadEvents(sessionID string) []map[string]interface{} {
 func DeriveAgentStatus(sessionID string) string {
 	path := fmt.Sprintf("%s/sessions/%s/agui-events.jsonl", StateBaseDir, sessionID)
 
-	data, err := os.ReadFile(path)
+	// Read only the tail of the file to avoid loading entire event log into memory.
+	// 64KB is sufficient for recent lifecycle events (scanning backwards).
+	const maxTailBytes = 64 * 1024
+
+	file, err := os.Open(path)
 	if err != nil {
 		return ""
+	}
+	defer file.Close()
+
+	stat, err := file.Stat()
+	if err != nil {
+		return ""
+	}
+
+	fileSize := stat.Size()
+	var data []byte
+
+	if fileSize <= maxTailBytes {
+		// File is small, read it all
+		data, err = os.ReadFile(path)
+		if err != nil {
+			return ""
+		}
+	} else {
+		// File is large, seek to tail and read last N bytes
+		offset := fileSize - maxTailBytes
+		_, err = file.Seek(offset, 0)
+		if err != nil {
+			return ""
+		}
+
+		data = make([]byte, maxTailBytes)
+		n, err := file.Read(data)
+		if err != nil {
+			return ""
+		}
+		data = data[:n]
+
+		// Skip partial first line (we seeked into the middle of a line)
+		if idx := bytes.IndexByte(data, '\n'); idx >= 0 {
+			data = data[idx+1:]
+		}
 	}
 
 	lines := splitLines(data)
