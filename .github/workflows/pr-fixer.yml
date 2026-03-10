@@ -67,6 +67,15 @@ jobs:
             echo "skip=false" >> $GITHUB_OUTPUT
           fi
 
+      - name: Get PR branch
+        if: steps.fork_check.outputs.skip != 'true'
+        id: pr_branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH=$(gh pr view ${{ steps.pr.outputs.number }} --repo "${{ github.repository }}" --json headRefName --jq '.headRefName')
+          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
+
       - name: Fix PR
         if: steps.fork_check.outputs.skip != 'true'
         id: session
@@ -81,7 +90,7 @@ jobs:
             comments (fix valid issues, respond to invalid ones), run lints
             and tests, and push the fixes.
           repos: >-
-            [{"url": "https://github.com/${{ github.repository }}", "branch": "main"}]
+            [{"url": "https://github.com/${{ github.repository }}", "branch": "${{ steps.pr_branch.outputs.branch }}"}]
           workflow: >-
             {"gitUrl": "https://github.com/ambient-code/workflows", "branch": "main", "path": "internal-workflows/pr-fixer"}
           model: claude-sonnet-4-5
@@ -177,6 +186,15 @@ jobs:
             echo "skip=false" >> $GITHUB_OUTPUT
           fi
 
+      - name: Get PR branch
+        if: steps.churn_check.outputs.skip != 'true'
+        id: pr_branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH=$(gh pr view ${{ matrix.pr_number }} --repo "${{ github.repository }}" --json headRefName --jq '.headRefName')
+          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
+
       - name: Fix PR #${{ matrix.pr_number }}
         if: steps.churn_check.outputs.skip != 'true'
         id: session
@@ -191,7 +209,7 @@ jobs:
             comments (fix valid issues, respond to invalid ones), run lints
             and tests, and push the fixes.
           repos: >-
-            [{"url": "https://github.com/${{ github.repository }}", "branch": "main"}]
+            [{"url": "https://github.com/${{ github.repository }}", "branch": "${{ steps.pr_branch.outputs.branch }}"}]
           workflow: >-
             {"gitUrl": "https://github.com/ambient-code/workflows", "branch": "main", "path": "internal-workflows/pr-fixer"}
           model: claude-sonnet-4-5
