@@ -6,13 +6,18 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"time"
 )
 
 type Config struct {
-	APIUrl      string `json:"api_url,omitempty"`
-	AccessToken string `json:"access_token,omitempty"`
-	Project     string `json:"project,omitempty"`
-	Pager       string `json:"pager,omitempty"` // TODO: Wire pager support into output commands (e.g. pipe through less)
+	APIUrl            string `json:"api_url,omitempty"`
+	AccessToken       string `json:"access_token,omitempty"`
+	Project           string `json:"project,omitempty"`
+	Pager             string `json:"pager,omitempty"`            // TODO: Wire pager support into output commands (e.g. pipe through less)
+	RequestTimeout    int    `json:"request_timeout,omitempty"`  // Request timeout in seconds
+	PollingInterval   int    `json:"polling_interval,omitempty"` // Watch polling interval in seconds
+	InsecureTLSVerify bool   `json:"insecure_tls_verify,omitempty"`
 }
 
 func Location() (string, error) {
@@ -102,4 +107,30 @@ func (c *Config) GetToken() string {
 		return env
 	}
 	return c.AccessToken
+}
+
+// GetRequestTimeout returns the request timeout duration with fallback to default
+func (c *Config) GetRequestTimeout() time.Duration {
+	if env := os.Getenv("AMBIENT_REQUEST_TIMEOUT"); env != "" {
+		if seconds, err := strconv.Atoi(env); err == nil && seconds > 0 {
+			return time.Duration(seconds) * time.Second
+		}
+	}
+	if c.RequestTimeout > 0 {
+		return time.Duration(c.RequestTimeout) * time.Second
+	}
+	return 30 * time.Second // Default 30 seconds
+}
+
+// GetPollingInterval returns the watch polling interval with fallback to default
+func (c *Config) GetPollingInterval() time.Duration {
+	if env := os.Getenv("AMBIENT_POLLING_INTERVAL"); env != "" {
+		if seconds, err := strconv.Atoi(env); err == nil && seconds > 0 {
+			return time.Duration(seconds) * time.Second
+		}
+	}
+	if c.PollingInterval > 0 {
+		return time.Duration(c.PollingInterval) * time.Second
+	}
+	return 2 * time.Second // Default 2 seconds
 }

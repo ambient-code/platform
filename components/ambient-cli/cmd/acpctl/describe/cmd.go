@@ -5,8 +5,8 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
+	"github.com/ambient-code/platform/components/ambient-cli/pkg/config"
 	"github.com/ambient-code/platform/components/ambient-cli/pkg/connection"
 	"github.com/ambient-code/platform/components/ambient-cli/pkg/output"
 	"github.com/spf13/cobra"
@@ -18,8 +18,10 @@ var Cmd = &cobra.Command{
 	Long: `Show detailed information about a specific resource.
 
 Valid resource types:
-  session    (aliases: sess)
-  project    (aliases: proj)`,
+  session          (aliases: sess)
+  project          (aliases: proj)
+  project-settings (aliases: ps)
+  user             (aliases: usr)`,
 	Args: cobra.ExactArgs(2),
 	RunE: run,
 }
@@ -33,7 +35,12 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 		return err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.GetRequestTimeout())
 	defer cancel()
 
 	printer := output.NewPrinter(output.FormatJSON)
@@ -60,7 +67,14 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 		}
 		return printer.PrintJSON(settings)
 
+	case "user", "users", "usr":
+		user, err := client.Users().Get(ctx, name)
+		if err != nil {
+			return fmt.Errorf("describe user %q: %w", name, err)
+		}
+		return printer.PrintJSON(user)
+
 	default:
-		return fmt.Errorf("unknown resource type: %s\nValid types: session, project, project-settings", cmdArgs[0])
+		return fmt.Errorf("unknown resource type: %s\nValid types: session, project, project-settings, user", cmdArgs[0])
 	}
 }
