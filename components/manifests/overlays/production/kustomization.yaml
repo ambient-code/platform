@@ -22,6 +22,7 @@ resources:
 # Patches for production environment
 # Unleash: init container to create database (RHEL doesn't support init scripts)
 # PostgreSQL: use RHEL image with proper env vars and mount paths (JSON patch)
+# Ambient API Server: init container to wait for DB and create database
 patches:
 - path: namespace-patch.yaml
   target:
@@ -41,6 +42,18 @@ patches:
     kind: Deployment
     name: postgresql
     version: v1
+- path: ambient-api-server-db-json-patch.yaml
+  target:
+    group: apps
+    kind: Deployment
+    name: ambient-api-server-db
+    version: v1
+- path: ambient-api-server-init-db-patch.yaml
+  target:
+    group: apps
+    kind: Deployment
+    name: ambient-api-server
+    version: v1
 - path: unleash-init-db-patch.yaml
   target:
     group: apps
@@ -57,6 +70,11 @@ patches:
   target:
     group: apps
     kind: Deployment
+    name: ambient-api-server
+    version: v1
+- path: ambient-api-server-service-ca-patch.yaml
+  target:
+    kind: Service
     name: ambient-api-server
     version: v1
 

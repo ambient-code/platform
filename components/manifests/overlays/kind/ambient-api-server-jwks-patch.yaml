@@ -1,3 +1,5 @@
+# Test-only JWKS public key for Kind/E2E environments.
+# This keypair has no relationship to any staging or production identity provider.
 apiVersion: v1
 kind: ConfigMap
 metadata:
