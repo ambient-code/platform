@@ -1,0 +1,13 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ambient-api-server
+spec:
+  template:
+    spec:
+      containers:
+      - name: api-server
+        image: image-registry.openshift-image-registry.svc:5000/ambient-code/vteam_api_server:latest
+      initContainers:
+      - name: migration
+        image: image-registry.openshift-image-registry.svc:5000/ambient-code/vteam_api_server:latest

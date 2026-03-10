@@ -56,29 +56,26 @@ spec:
     spec:
       securityContext:
         runAsNonRoot: true
-        fsGroup: 999
       containers:
         - name: postgresql
-          image: docker.io/library/postgres:16.2
+          image: registry.redhat.io/rhel9/postgresql-16:latest
           imagePullPolicy: IfNotPresent
           env:
-            - name: POSTGRES_USER
+            - name: POSTGRESQL_USER
               valueFrom:
                 secretKeyRef:
                   key: db.user
                   name: ambient-api-server-db
-            - name: POSTGRES_PASSWORD
+            - name: POSTGRESQL_PASSWORD
               valueFrom:
                 secretKeyRef:
                   key: db.password
                   name: ambient-api-server-db
-            - name: POSTGRES_DB
+            - name: POSTGRESQL_DATABASE
               valueFrom:
                 secretKeyRef:
                   key: db.name
                   name: ambient-api-server-db
-            - name: PGDATA
-              value: /var/lib/pgsql/data/pgdata
           ports:
             - containerPort: 5432
               protocol: TCP
@@ -92,7 +89,7 @@ spec:
               command:
                 - /bin/sh
                 - -c
-                - exec /usr/bin/pg_isready -U $POSTGRES_USER -d $POSTGRES_DB -h localhost -p 5432
+                - exec pg_isready -U $POSTGRESQL_USER -d $POSTGRESQL_DATABASE -h localhost -p 5432
             initialDelaySeconds: 5
             timeoutSeconds: 1
           volumeMounts:

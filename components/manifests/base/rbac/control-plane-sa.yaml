@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ambient-control-plane
+  namespace: ambient-code
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ambient-control-plane-token
+  namespace: ambient-code
+  annotations:
+    kubernetes.io/service-account.name: ambient-control-plane
+type: kubernetes.io/service-account-token

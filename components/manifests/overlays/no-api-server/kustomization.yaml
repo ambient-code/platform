@@ -2,27 +2,35 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 metadata:
-  name: vteam-production
+  name: vteam-no-api-server
 
 # Namespace for all resources (can be overridden with kustomize edit set namespace)
 namespace: ambient-code
 
-# Resources (base + production-specific)
-# github-app-secret.yaml - excluded from automated deployment to prevent overwriting existing secret values
-# Manage this secret separately: oc apply -f github-app-secret.yaml -n ambient-code
+# Use base as a resource and patch to exclude API server components
 resources:
 - ../../base
-- ambient-api-server-route.yaml
+- ambient-api-server-route.yaml  # Keep routes for existing API server
 - route.yaml
 - backend-route.yaml
 - public-api-route.yaml
 - unleash-route.yaml
 - operator-config-openshift.yaml
 
-# Patches for production environment
-# Unleash: init container to create database (RHEL doesn't support init scripts)
-# PostgreSQL: use RHEL image with proper env vars and mount paths (JSON patch)
-# Control plane: use internal registry image with TLS fixes
+# Import configuration map generators from base
+configMapGenerator:
+- name: ambient-models
+  files:
+  - ../../base/models.json
+  options:
+    disableNameSuffixHash: true
+- name: ambient-flags
+  files:
+  - ../../base/flags.json
+  options:
+    disableNameSuffixHash: true
+
+# Patches for production environment (same as production overlay but without API server patches)
 patches:
 - path: namespace-patch.yaml
   target:
@@ -32,10 +40,7 @@ patches:
   target:
     kind: Deployment
     name: ambient-control-plane
-- path: api-server-image-patch.yaml
-  target:
-    kind: Deployment
-    name: ambient-api-server
+# EXCLUDED: api-server-image-patch.yaml (API server already deployed with fixes)
 - path: frontend-oauth-deployment-patch.yaml
   target:
     kind: Deployment
@@ -57,14 +62,12 @@ patches:
     name: unleash
     version: v1
 
-# Production images
+# Production images (excluding API server since it's already deployed)
 images:
 - name: quay.io/ambient_code/ambient_control_plane:latest
   newName: quay.io/ambient_code/ambient_control_plane
   newTag: latest
-- name: quay.io/ambient_code/vteam_api_server:latest
-  newName: quay.io/ambient_code/vteam_api_server
-  newTag: latest
+# EXCLUDED: vteam_api_server image (already deployed with fixes)
 - name: quay.io/ambient_code/vteam_backend
   newName: quay.io/ambient_code/vteam_backend
   newTag: latest
