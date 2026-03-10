@@ -20,26 +20,32 @@ func main() {
 	fmt.Println("==========================================")
 	fmt.Println()
 
-	c, err := client.NewClientFromEnv(client.WithTimeout(120 * time.Second))
-	if err != nil {
-		log.Fatalf("Failed to create client: %v", err)
-	}
-
 	ctx := context.Background()
 
 	projectName := os.Getenv("AMBIENT_PROJECT")
 	if projectName == "" {
-		projectName = os.Getenv("ANTHROPIC_VERTEX_PROJECT_ID")
-	}
-	if projectName == "" {
 		projectName = "sdk-demo"
-		fmt.Println("Note: No AMBIENT_PROJECT set, using flexible project handling with project:", projectName)
+		fmt.Println("Note: No AMBIENT_PROJECT set, using default project:", projectName)
 	}
 
-	runFullLifecycle(ctx, c, projectName)
+	apiURL := os.Getenv("AMBIENT_API_URL")
+	if apiURL == "" {
+		apiURL = "http://localhost:8080"
+	}
+	token := os.Getenv("AMBIENT_TOKEN")
+	if token == "" {
+		log.Fatalf("AMBIENT_TOKEN environment variable is required")
+	}
+
+	c, err := client.NewClient(apiURL, token, projectName, client.WithTimeout(120*time.Second))
+	if err != nil {
+		log.Fatalf("Failed to create client: %v", err)
+	}
+
+	runFullLifecycle(ctx, c, projectName, apiURL, token)
 }
 
-func runFullLifecycle(ctx context.Context, c *client.Client, projectName string) {
+func runFullLifecycle(ctx context.Context, c *client.Client, projectName, apiURL, token string) {
 	fmt.Println("Step 1: Create Workspace (Project)")
 	fmt.Println("-----------------------------------")
 
@@ -133,9 +139,6 @@ func runFullLifecycle(ctx context.Context, c *client.Client, projectName string)
 
 	fmt.Println("Step 5: Send a Message via AG-UI")
 	fmt.Println("--------------------------------")
-
-	apiURL := os.Getenv("AMBIENT_API_URL")
-	token := os.Getenv("AMBIENT_TOKEN")
 
 	aguiBaseURL := deriveAGUIBaseURL(apiURL, projectName, createdSession.KubeCrName, createdSession.ID)
 
