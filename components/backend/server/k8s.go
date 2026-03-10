@@ -11,14 +11,14 @@ import (
 )
 
 var (
-	K8sClient      *kubernetes.Clientset
-	DynamicClient  dynamic.Interface
-	Namespace      string
-	StateBaseDir   string
-	PvcBaseDir     string
-	BaseKubeConfig *rest.Config
-	OperatorImage     string
-	ImagePullPolicy  string
+	K8sClient       *kubernetes.Clientset
+	DynamicClient   dynamic.Interface
+	Namespace       string
+	StateBaseDir    string
+	PvcBaseDir      string
+	BaseKubeConfig  *rest.Config
+	OperatorImage   string
+	ImagePullPolicy string
 )
 
 // InitK8sClients initializes Kubernetes clients and configuration

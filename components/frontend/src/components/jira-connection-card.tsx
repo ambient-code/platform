@@ -46,7 +46,7 @@ export function JiraConnectionCard({ status, onRefresh }: Props) {
         setUsername(currentUser.email)
       }
     }
-  }, [showForm, currentUser?.email])
+  }, [showForm, currentUser?.email, url, username])
 
   const handleConnect = async () => {
     if (!url || !username || !apiToken) {

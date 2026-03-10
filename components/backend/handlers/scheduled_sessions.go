@@ -515,7 +515,7 @@ func isValidCronExpression(expr string) bool {
 		}
 		for _, ch := range field {
 			if !strings.ContainsRune("0123456789*,-/JANFEBMARAPRMAYJUNJULAUGSEPOCTNOVDECMONTUEWEDTHUFRISATSUN", ch) &&
-				!(ch >= 'a' && ch <= 'z') {
+				(ch < 'a' || ch > 'z') {
 				return false
 			}
 		}

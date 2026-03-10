@@ -268,7 +268,7 @@ export function CreateScheduledSessionDialog({
                 onRunnerTypeChange={handleRunnerTypeChange}
               />
 
-              <ModelField form={form} models={models} modelsLoading={modelsLoading} modelsError={modelsError} />
+              <ModelField form={form} models={models} modelsLoading={modelsLoading} />
 
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={createMutation.isPending}>
@@ -344,10 +344,9 @@ type ModelFieldProps = {
   form: ReturnType<typeof useForm<FormValues>>;
   models: { value: string; label: string }[];
   modelsLoading: boolean;
-  modelsError: boolean;
 };
 
-function ModelField({ form, models, modelsLoading, modelsError }: ModelFieldProps) {
+function ModelField({ form, models, modelsLoading }: ModelFieldProps) {
   return (
     <FormField
       control={form.control}
