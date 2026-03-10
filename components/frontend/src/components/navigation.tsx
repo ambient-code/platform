@@ -134,15 +134,20 @@ export function Navigation({ feedbackUrl }: NavigationProps) {
               </a>
             )}
             <ThemeToggle />
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => router.push('/integrations')}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <Plug className="w-4 h-4 mr-1" />
+              Integrations
+            </Button>
             <DropdownMenu>
               <DropdownMenuTrigger className="outline-none">
                 <UserBubble />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onSelect={() => router.push('/integrations')}>
-                  <Plug className="w-4 h-4 mr-2" />
-                  Integrations
-                </DropdownMenuItem>
                 <DropdownMenuItem onSelect={handleLogout}>
                   <LogOut className="w-4 h-4 mr-2" />
                   Logout
