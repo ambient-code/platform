@@ -4,7 +4,7 @@ import React from "react";
 import { MessageObject, ToolUseMessages, HierarchicalToolMessage } from "@/types/agentic-session";
 import { LoadingDots, Message } from "@/components/ui/message";
 import { ToolMessage } from "@/components/ui/tool-message";
-import { AskUserQuestionMessage } from "@/components/ui/ask-user-question";
+import { AskUserQuestionMessage } from "@/components/session/ask-user-question";
 import { ThinkingMessage } from "@/components/ui/thinking-message";
 import { SystemMessage } from "@/components/ui/system-message";
 import { Button } from "@/components/ui/button";

@@ -141,8 +141,6 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
     scrollToBottom();
   }, []);
 
-
-
   useEffect(() => {
     const unsentCount = queuedMessages.filter(m => !m.sentAt).length;
     if (unsentCount === 0) return;
