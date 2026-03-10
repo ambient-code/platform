@@ -1,0 +1,7 @@
+# OpenShift service-ca: auto-provision and rotate TLS certs for ambient-api-server.
+apiVersion: v1
+kind: Service
+metadata:
+  name: ambient-api-server
+  annotations:
+    service.beta.openshift.io/serving-cert-secret-name: ambient-api-server-tls

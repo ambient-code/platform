@@ -54,13 +54,12 @@ spec:
         app: ambient-api-server
         component: database
     spec:
-      securityContext:
-        runAsNonRoot: true
-        fsGroup: 999
       containers:
         - name: postgresql
-          image: docker.io/library/postgres:16.2
-          imagePullPolicy: IfNotPresent
+          image: postgres:16
+          ports:
+            - containerPort: 5432
+              name: postgresql
           env:
             - name: POSTGRES_USER
               valueFrom:
@@ -78,33 +77,28 @@ spec:
                   key: db.name
                   name: ambient-api-server-db
             - name: PGDATA
-              value: /var/lib/pgsql/data/pgdata
-          ports:
-            - containerPort: 5432
-              protocol: TCP
-          livenessProbe:
-            tcpSocket:
-              port: 5432
-            initialDelaySeconds: 120
-            timeoutSeconds: 10
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: ambient-api-server-db-data
+              mountPath: /var/lib/postgresql/data
           readinessProbe:
             exec:
               command:
                 - /bin/sh
                 - -c
-                - exec /usr/bin/pg_isready -U $POSTGRES_USER -d $POSTGRES_DB -h localhost -p 5432
-            initialDelaySeconds: 5
-            timeoutSeconds: 1
-          volumeMounts:
-            - mountPath: /var/lib/pgsql/data
-              name: ambient-api-server-db-data
-          securityContext:
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: false
-            runAsNonRoot: true
-            capabilities:
-              drop:
-                - ALL
+                - pg_isready -U "$POSTGRES_USER"
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - pg_isready -U "$POSTGRES_USER"
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
       volumes:
         - name: ambient-api-server-db-data
           persistentVolumeClaim:
