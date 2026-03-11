@@ -28,12 +28,18 @@ class RunnerContext:
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        """Merge environment variables (explicit overrides win)."""
+        """Store explicit overrides for precedence in get_env(); keep environment populated for backward compatibility."""
+        self._overrides = dict(self.environment)
         self.environment = {**os.environ, **self.environment}
 
     def get_env(self, key: str, default: Optional[str] = None) -> Optional[str]:
-        """Get an environment variable value."""
-        return self.environment.get(key, default)
+        """Get an environment variable, with explicit overrides winning. Reads live from os.environ for non-overridden keys."""
+        overrides = getattr(self, "_overrides", None)
+        if overrides is None:
+            return self.environment.get(key, default)
+        if key in overrides:
+            return overrides[key]
+        return os.environ.get(key, default)
 
     def set_metadata(self, key: str, value: Any) -> None:
         """Set a metadata value."""
