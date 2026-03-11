@@ -82,12 +82,7 @@ jobs:
             echo "Fix: cd components/ambient-sdk && make generate-sdk"
             echo ""
             echo "Diff:"
-            git diff \
-              --ignore-matching-lines='Spec SHA256:' \
-              --ignore-matching-lines='Generated:' \
-              -- components/ambient-sdk/go-sdk/ \
-                 components/ambient-sdk/python-sdk/ \
-                 components/ambient-sdk/ts-sdk/
+            echo "$DRIFT"
             exit 1
           fi
 

@@ -44,9 +44,17 @@ func WithTimeout(timeout time.Duration) ClientOption {
 func WithInsecureSkipVerify() ClientOption {
 	return func(c *Client) {
 		c.insecureSkipVerify = true
-		c.httpClient.Transport = &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec
+		t, ok := c.httpClient.Transport.(*http.Transport)
+		if !ok || t == nil {
+			t = http.DefaultTransport.(*http.Transport).Clone()
+		} else {
+			t = t.Clone()
 		}
+		if t.TLSClientConfig == nil {
+			t.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+		}
+		t.TLSClientConfig.InsecureSkipVerify = true //nolint:gosec
+		c.httpClient.Transport = t
 	}
 }
 
