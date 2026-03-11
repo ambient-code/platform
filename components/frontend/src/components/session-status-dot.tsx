@@ -37,9 +37,10 @@ export function SessionStatusDot({ phase, className }: SessionStatusDotProps) {
     <TooltipProvider delayDuration={300}>
       <Tooltip>
         <TooltipTrigger asChild>
-          <span
+          <button
+            type="button"
             className={cn(
-              "inline-block w-2.5 h-2.5 rounded-full flex-shrink-0",
+              "inline-block w-2.5 h-2.5 rounded-full flex-shrink-0 border-0 p-0 cursor-default",
               color,
               animation,
               className

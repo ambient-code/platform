@@ -84,7 +84,6 @@ func TransitionToStopped(ctx context.Context, session *unstructured.Unstructured
 	statusPatch.SetField("phase", "Stopped")
 	statusPatch.SetField("completionTime", time.Now().UTC().Format(time.RFC3339))
 	statusPatch.SetField("stoppedReason", stopReason)
-	statusPatch.SetField("agentStatus", "idle")
 	statusPatch.AddCondition(conditionUpdate{
 		Type:    conditionReady,
 		Status:  "False",
@@ -130,7 +129,6 @@ func TransitionToFailed(ctx context.Context, session *unstructured.Unstructured,
 	statusPatch := NewStatusPatch(namespace, name)
 	statusPatch.SetField("phase", "Failed")
 	statusPatch.SetField("completionTime", time.Now().UTC().Format(time.RFC3339))
-	statusPatch.SetField("agentStatus", "idle")
 	statusPatch.AddCondition(conditionUpdate{
 		Type:    conditionReady,
 		Status:  "False",
@@ -241,7 +239,6 @@ func UpdateSessionFromPodStatus(ctx context.Context, session *unstructured.Unstr
 	case corev1.PodSucceeded:
 		statusPatch.SetField("phase", "Completed")
 		statusPatch.SetField("completionTime", time.Now().UTC().Format(time.RFC3339))
-		statusPatch.SetField("agentStatus", "idle")
 		statusPatch.AddCondition(conditionUpdate{
 			Type:    conditionReady,
 			Status:  "False",
@@ -258,7 +255,6 @@ func UpdateSessionFromPodStatus(ctx context.Context, session *unstructured.Unstr
 		log.Printf("Pod %s failed: %s", podName, errorMsg)
 		statusPatch.SetField("phase", "Failed")
 		statusPatch.SetField("completionTime", time.Now().UTC().Format(time.RFC3339))
-		statusPatch.SetField("agentStatus", "idle")
 		statusPatch.AddCondition(conditionUpdate{
 			Type:    conditionReady,
 			Status:  "False",
