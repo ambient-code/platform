@@ -215,6 +215,14 @@ export const AskUserQuestionMessage: React.FC<AskUserQuestionMessageProps> = ({
             disabled && "cursor-default opacity-60"
           )}
           onClick={() => !disabled && handleOtherToggle(q.question)}
+          onKeyDown={(e) => {
+            if (!disabled && (e.key === "Enter" || e.key === " ")) {
+              e.preventDefault();
+              handleOtherToggle(q.question);
+            }
+          }}
+          tabIndex={disabled ? -1 : 0}
+          role="button"
         >
           <div className={cn(
             "aspect-square h-4 w-4 rounded-full border border-primary flex items-center justify-center flex-shrink-0",

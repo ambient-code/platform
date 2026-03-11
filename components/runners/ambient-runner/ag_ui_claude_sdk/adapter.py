@@ -919,6 +919,14 @@ class ClaudeAgentAdapter:
                                 self._halted = True
                                 self._halted_tool_call_id = current_tool_call_id
                                 halt_event_stream = True
+
+                                # Clear in-flight tool call state to prevent duplicate
+                                # ToolCallEndEvent emission in the finally block
+                                current_tool_call_id = None
+                                current_tool_call_name = None
+                                current_tool_display_name = None
+                                accumulated_tool_json = ""
+
                                 # Continue consuming remaining events for cleanup
                                 continue
 
