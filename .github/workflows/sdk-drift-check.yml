@@ -54,6 +54,12 @@ jobs:
         working-directory: components/ambient-sdk/go-sdk
         run: go fmt ./...
 
+      - name: Fix trailing newlines (match pre-commit end-of-file-fixer)
+        run: |
+          find components/ambient-sdk/go-sdk components/ambient-sdk/python-sdk components/ambient-sdk/ts-sdk \
+            -type f \( -name '*.go' -o -name '*.py' -o -name '*.ts' \) \
+            -exec sed -i -e :a -e '/^\n*$/{$d;N;ba' -e '}' {} +
+
       - name: Check for drift
         run: |
           # Ignore timestamp and hash lines (they change every run)
