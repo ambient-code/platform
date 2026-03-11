@@ -884,12 +884,11 @@ _kind-load-images: ## Internal: Load images into kind cluster
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Loading images into kind ($(KIND_CLUSTER_NAME))..."
 	@for img in $(BACKEND_IMAGE) $(FRONTEND_IMAGE) $(OPERATOR_IMAGE) $(RUNNER_IMAGE) $(STATE_SYNC_IMAGE) $(PUBLIC_API_IMAGE); do \
 		echo "  Loading $(KIND_IMAGE_PREFIX)$$img..."; \
-		if [ -n "$(KIND_HOST)" ]; then \
+		if [ -n "$(KIND_HOST)" ] || [ "$(CONTAINER_ENGINE)" = "podman" ]; then \
 			$(CONTAINER_ENGINE) save $(KIND_IMAGE_PREFIX)$$img | \
 			$(CONTAINER_ENGINE) exec -i $(KIND_CLUSTER_NAME)-control-plane \
 			ctr --namespace=k8s.io images import -; \
 		else \
-			$(if $(filter podman,$(CONTAINER_ENGINE)),KIND_EXPERIMENTAL_PROVIDER=podman) \
 			kind load docker-image $(KIND_IMAGE_PREFIX)$$img --name $(KIND_CLUSTER_NAME); \
 		fi; \
 	done
