@@ -57,9 +57,10 @@ jobs:
       - name: Check for drift
         run: |
           # Ignore timestamp and hash lines (they change every run)
+          # Patterns cover both // (Go/TS) and # (Python) comment styles
           DRIFT=$(git diff \
-            --ignore-matching-lines='// Spec SHA256:' \
-            --ignore-matching-lines='// Generated:' \
+            --ignore-matching-lines='Spec SHA256:' \
+            --ignore-matching-lines='Generated:' \
             -- components/ambient-sdk/go-sdk/ \
                components/ambient-sdk/python-sdk/ \
                components/ambient-sdk/ts-sdk/)
@@ -76,8 +77,8 @@ jobs:
             echo ""
             echo "Diff:"
             git diff \
-              --ignore-matching-lines='// Spec SHA256:' \
-              --ignore-matching-lines='// Generated:' \
+              --ignore-matching-lines='Spec SHA256:' \
+              --ignore-matching-lines='Generated:' \
               -- components/ambient-sdk/go-sdk/ \
                  components/ambient-sdk/python-sdk/ \
                  components/ambient-sdk/ts-sdk/
