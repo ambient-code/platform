@@ -440,9 +440,6 @@ func ListSessions(c *gin.Context) {
 			session.Status = parseStatus(status)
 		}
 
-		// Derive agentStatus from event log (source of truth) for running sessions
-		enrichAgentStatus(&session)
-
 		session.AutoBranch = ComputeAutoBranch(item.GetName())
 
 		sessions = append(sessions, session)
@@ -459,6 +456,11 @@ func ListSessions(c *gin.Context) {
 	// Apply pagination
 	totalCount := len(sessions)
 	paginatedSessions, hasMore, nextOffset := paginateSessions(sessions, params.Offset, params.Limit)
+
+	// Derive agentStatus from event log only for paginated sessions (performance optimization)
+	for i := range paginatedSessions {
+		enrichAgentStatus(&paginatedSessions[i])
+	}
 
 	response := types.PaginatedResponse{
 		Items:      paginatedSessions,

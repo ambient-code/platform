@@ -39,6 +39,7 @@ export function SessionStatusDot({ phase, className }: SessionStatusDotProps) {
         <TooltipTrigger asChild>
           <button
             type="button"
+            data-testid="session-phase-badge"
             className={cn(
               "inline-block w-2.5 h-2.5 rounded-full flex-shrink-0 border-0 p-0 cursor-default",
               color,

@@ -102,5 +102,10 @@ export function AgentStatusIndicator({
           )}
         </div>
       );
+
+    default: {
+      const _exhaustiveCheck: never = status;
+      return null;
+    }
   }
 }
