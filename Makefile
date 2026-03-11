@@ -735,8 +735,8 @@ kind-port-forward: check-kubectl check-local-context ## Port-forward kind servic
 	@echo "$(COLOR_YELLOW)Press Ctrl+C to stop$(COLOR_RESET)"
 	@echo ""
 	@trap 'kill 0; echo ""; echo "$(COLOR_GREEN)✓$(COLOR_RESET) Port forwarding stopped"; exit 0' INT; \
-	kubectl port-forward -n ambient-code svc/frontend-service $(KIND_FWD_FRONTEND_PORT):3000 >/dev/null 2>&1 & \
-	kubectl port-forward -n ambient-code svc/backend-service $(KIND_FWD_BACKEND_PORT):8080 >/dev/null 2>&1 & \
+	kubectl port-forward -n $(NAMESPACE) svc/frontend-service $(KIND_FWD_FRONTEND_PORT):3000 >/dev/null 2>&1 & \
+	kubectl port-forward -n $(NAMESPACE) svc/backend-service $(KIND_FWD_BACKEND_PORT):8080 >/dev/null 2>&1 & \
 	wait
 
 dev-bootstrap: check-kubectl check-local-context ## Bootstrap developer workspace with API key and integrations

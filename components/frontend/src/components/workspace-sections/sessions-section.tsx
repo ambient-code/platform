@@ -23,7 +23,6 @@ import {
 import { getPageNumbers } from '@/lib/pagination';
 import { EmptyState } from '@/components/empty-state';
 import { SessionStatusDot } from '@/components/session-status-dot';
-import { SessionPhaseBadge } from '@/components/status-badge';
 import { AgentStatusIndicator } from '@/components/agent-status-indicator';
 import { deriveAgentStatusFromPhase } from '@/hooks/use-agent-status';
 import { CreateSessionDialog } from '@/components/create-session-dialog';
@@ -305,7 +304,10 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
                                   <p className="text-sm font-semibold truncate mr-2">
                                     {session.spec.displayName || session.metadata.name}
                                   </p>
-                                  <SessionPhaseBadge phase={phase} stoppedReason={session.status?.stoppedReason} />
+                                  <AgentStatusIndicator
+                                    status={session.status?.agentStatus ?? deriveAgentStatusFromPhase(phase)}
+                                    compact
+                                  />
                                 </div>
                                 {session.spec.displayName && (
                                   <p className="text-xs text-muted-foreground">{session.metadata.name}</p>
@@ -333,11 +335,9 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
                           </HoverCard>
                         </TableCell>
                         <TableCell>
-                          <AgentStatusIndicator status={
-                            (phase === 'Completed' || phase === 'Failed' || phase === 'Stopped')
-                              ? deriveAgentStatusFromPhase(phase)
-                              : (session.status?.agentStatus ?? deriveAgentStatusFromPhase(phase))
-                          } />
+                          <AgentStatusIndicator
+                            status={session.status?.agentStatus ?? deriveAgentStatusFromPhase(phase)}
+                          />
                         </TableCell>
                         <TableCell className="hidden md:table-cell">
                           <div className="text-sm truncate max-w-[160px]">
