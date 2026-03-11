@@ -8,7 +8,8 @@ from unittest.mock import patch
 
 # Import model-discovery.py as a module (it has a hyphen in the name)
 _spec = importlib.util.spec_from_file_location(
-    "model_discovery", Path(__file__).parent / "model-discovery.py"
+    "model_discovery",
+    Path(__file__).resolve().parent.parent / ".github" / "scripts" / "model-discovery.py",
 )
 _mod = importlib.util.module_from_spec(_spec)
 sys.modules["model_discovery"] = _mod
@@ -149,27 +150,100 @@ class TestKeepLatestVersions(unittest.TestCase):
 
 
 class TestDiscoverModels(unittest.TestCase):
-    """Test discover_models seed fallback with version_cutoff."""
+    """Test discover_models with API discovery, seed fallback, and filtering."""
+
+    _default_manifest = {
+        "defaultModel": "claude-sonnet-4-5",
+        "providerDefaults": {"google": "gemini-2.5-flash"},
+    }
 
     @patch("model_discovery.list_publisher_models", return_value=[])
+    @patch(
+        "model_discovery.SEED_MODELS",
+        _mod.SEED_MODELS + [("gemini-2.0-flash", "google", "google")],
+    )
     def test_seed_models_respect_version_cutoff(self, _mock_list):
         """Seed models older than version_cutoff should be excluded."""
-        # Add a gemini-2.0 model to SEED_MODELS temporarily
-        original_seeds = _mod.SEED_MODELS[:]
-        try:
-            _mod.SEED_MODELS.append(("gemini-2.0-flash", "google", "google"))
-            manifest = {
-                "defaultModel": "claude-sonnet-4-5",
-                "providerDefaults": {"google": "gemini-2.5-flash"},
-            }
-            result = discover_models("fake-token", manifest)
-            ids = [r[0] for r in result]
-            # gemini-2.0-flash should be excluded by version_cutoff (2, 0)
-            self.assertNotIn("gemini-2.0-flash", ids)
-            # gemini-2.5-flash from seeds should still be present
-            self.assertIn("gemini-2.5-flash", ids)
-        finally:
-            _mod.SEED_MODELS[:] = original_seeds
+        result = discover_models("fake-token", self._default_manifest)
+        ids = [r[0] for r in result]
+        self.assertNotIn("gemini-2.0-flash", ids)
+        self.assertIn("gemini-2.5-flash", ids)
+
+    @patch("model_discovery.list_publisher_models")
+    def test_api_discovered_models_included(self, mock_list):
+        """Models returned by the list API should appear in results."""
+        def fake_list(publisher, token):
+            if publisher == "anthropic":
+                return [("claude-sonnet-4-5", "20250929"), ("claude-opus-4-6", None)]
+            if publisher == "google":
+                return [("gemini-2.5-flash", None), ("gemini-2.5-pro", None)]
+            return []
+
+        mock_list.side_effect = fake_list
+        result = discover_models("fake-token", self._default_manifest)
+        ids = [r[0] for r in result]
+        self.assertIn("claude-sonnet-4-5", ids)
+        self.assertIn("claude-opus-4-6", ids)
+        self.assertIn("gemini-2.5-flash", ids)
+        self.assertIn("gemini-2.5-pro", ids)
+
+    @patch("model_discovery.list_publisher_models")
+    def test_protected_models_exempt_from_pruning(self, mock_list):
+        """Default model and provider defaults are never pruned by version limiting."""
+        def fake_list(publisher, token):
+            if publisher == "anthropic":
+                return [
+                    ("claude-sonnet-4-5", None),  # defaultModel
+                    ("claude-sonnet-4-6", None),
+                    ("claude-opus-4-6", None),
+                    ("claude-opus-4-5", None),
+                    ("claude-haiku-4-5", None),
+                ]
+            if publisher == "google":
+                return [("gemini-2.5-flash", None)]  # providerDefault
+            return []
+
+        mock_list.side_effect = fake_list
+        result = discover_models("fake-token", self._default_manifest)
+        ids = [r[0] for r in result]
+        # Protected models must always be present
+        self.assertIn("claude-sonnet-4-5", ids)  # defaultModel
+        self.assertIn("gemini-2.5-flash", ids)  # providerDefault for google
+
+    @patch("model_discovery.list_publisher_models")
+    def test_prefix_and_exclude_filters(self, mock_list):
+        """Prefix filtering keeps matching models; exclude patterns remove unwanted ones."""
+        def fake_list(publisher, token):
+            if publisher == "anthropic":
+                return [
+                    ("claude-sonnet-4-5", None),  # matches prefix, no exclude
+                    ("claude-opus-4", None),       # matches exclude: base alias without minor
+                    ("not-claude-model", None),    # doesn't match prefix
+                ]
+            if publisher == "google":
+                return [
+                    ("gemini-2.5-flash", None),
+                    ("gemini-2.5-flash-001", None),  # matches exclude: pinned version
+                    ("gemini-2.0-flash-preview-image-generation", None),  # excluded by version_cutoff
+                ]
+            return []
+
+        mock_list.side_effect = fake_list
+        result = discover_models("fake-token", self._default_manifest)
+        ids = [r[0] for r in result]
+        self.assertIn("claude-sonnet-4-5", ids)
+        self.assertNotIn("claude-opus-4", ids)      # excluded: base alias
+        self.assertNotIn("not-claude-model", ids)   # excluded: wrong prefix
+        self.assertIn("gemini-2.5-flash", ids)
+        self.assertNotIn("gemini-2.5-flash-001", ids)  # excluded: pinned version
+        self.assertNotIn("gemini-2.0-flash-preview-image-generation", ids)  # excluded: version_cutoff
+
+    @patch("model_discovery.list_publisher_models")
+    def test_auth_error_propagates(self, mock_list):
+        """Auth errors from list_publisher_models should propagate, not fall back to seeds."""
+        mock_list.side_effect = RuntimeError("HTTP 401: check GCP credentials")
+        with self.assertRaises(RuntimeError):
+            discover_models("fake-token", self._default_manifest)
 
 
 if __name__ == "__main__":

@@ -38,7 +38,7 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 
 DEFAULT_MANIFEST = (
-    Path(__file__).resolve().parent.parent
+    Path(__file__).resolve().parent.parent.parent
     / "components"
     / "manifests"
     / "base"
@@ -48,6 +48,10 @@ DEFAULT_MANIFEST = (
 # Keep only the N most recent versions per model family.
 # e.g. claude-opus-4-6 and claude-opus-4-5 are kept, claude-opus-4-1 is dropped.
 MAX_VERSIONS_PER_FAMILY = 2
+
+# Model Garden list API pagination settings.
+LIST_PAGE_SIZE = 100
+MAX_LIST_PAGES = 20
 
 
 # Publisher discovery configuration.
@@ -119,10 +123,10 @@ def get_access_token() -> str:
             check=True,
             timeout=30,
         )
-    except subprocess.TimeoutExpired:
-        raise RuntimeError("Timed out getting GCP access token via gcloud")
-    except subprocess.CalledProcessError:
-        raise RuntimeError("Failed to get GCP access token via gcloud")
+    except subprocess.TimeoutExpired as err:
+        raise RuntimeError("Timed out getting GCP access token via gcloud") from err
+    except subprocess.CalledProcessError as err:
+        raise RuntimeError("Failed to get GCP access token via gcloud") from err
     return result.stdout.strip()
 
 
@@ -138,8 +142,8 @@ def list_publisher_models(publisher: str, token: str) -> list[tuple[str, str | N
     all_models: list[tuple[str, str | None]] = []
     page_token = ""
 
-    for _ in range(20):  # page limit safety
-        params = {"pageSize": "100"}
+    for _ in range(MAX_LIST_PAGES):
+        params = {"pageSize": str(LIST_PAGE_SIZE)}
         if page_token:
             params["pageToken"] = page_token
 
@@ -161,10 +165,16 @@ def list_publisher_models(publisher: str, token: str) -> list[tuple[str, str | N
                     data = json.loads(resp.read().decode())
                 break
             except urllib.error.HTTPError as e:
-                # Permission denied or not found — retrying won't help
-                if e.code in (403, 404):
+                # Auth failures are fatal — don't fall back to seeds with bad credentials
+                if e.code in (401, 403):
+                    raise RuntimeError(
+                        f"list models for {publisher} failed (HTTP {e.code}): "
+                        f"check GCP credentials and IAM permissions"
+                    ) from e
+                # Not found — retrying won't help
+                if e.code == 404:
                     print(
-                        f"  WARNING: list models for {publisher} failed (HTTP {e.code})",
+                        f"  WARNING: list models for {publisher} returned 404",
                         file=sys.stderr,
                     )
                     return []
@@ -503,22 +513,24 @@ def probe_model(
 
 
 def load_manifest(path: Path) -> dict:
-    """Load the model manifest JSON, or return a blank manifest if missing/empty."""
-    blank = {"version": 1, "defaultModel": "claude-sonnet-4-5", "models": []}
+    """Load the model manifest JSON, or return a blank manifest if missing.
+
+    Raises on malformed JSON to prevent overwriting a corrupt file.
+    Returns a blank manifest only when the file does not exist yet.
+    """
     if not path.exists():
-        return blank
-    try:
-        with open(path) as f:
-            data = json.load(f)
-        if not isinstance(data, dict) or "models" not in data:
-            return blank
-        return data
-    except (json.JSONDecodeError, ValueError) as e:
-        print(
-            f"WARNING: malformed manifest at {path}, starting fresh ({e})",
-            file=sys.stderr,
+        return {"version": 1, "defaultModel": "claude-sonnet-4-5", "models": []}
+
+    with open(path) as f:
+        data = json.load(f)
+
+    if not isinstance(data, dict) or "models" not in data:
+        raise ValueError(
+            f"manifest at {path} is missing required 'models' key — "
+            f"fix the file manually or delete it to start fresh"
         )
-        return blank
+
+    return data
 
 
 def save_manifest(path: Path, manifest: dict) -> None:
