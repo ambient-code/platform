@@ -152,10 +152,12 @@ kubectl patch configmap operator-config -n "$NAMESPACE" --type merge -p "{
 echo "  Done"
 echo ""
 
-# Step 3: Restart operator to pick up changes
-echo "Step 3/3: Restarting operator to apply changes..."
+# Step 3: Restart operator and backend to pick up changes
+echo "Step 3/3: Restarting operator and backend to apply changes..."
 kubectl rollout restart deployment agentic-operator -n "$NAMESPACE"
+kubectl rollout restart deployment backend-api -n "$NAMESPACE"
 kubectl rollout status deployment agentic-operator -n "$NAMESPACE" --timeout=60s
+kubectl rollout status deployment backend-api -n "$NAMESPACE" --timeout=60s
 echo ""
 
 echo "=== Setup Complete ==="

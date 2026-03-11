@@ -775,8 +775,10 @@ export default function ProjectSessionDetailPage({
     handleWorkflowChange(workflowId);
   };
 
-  // Convert AG-UI messages to display format with hierarchical tool call rendering
-  const streamMessages: Array<MessageObject | ToolUseMessages | HierarchicalToolMessage> = useMemo(() => {
+  // Phase 1: convert committed messages + streaming tool cards into display format.
+  // Does NOT depend on currentMessage / currentReasoning so it skips the full
+  // O(n) traversal during text-streaming deltas (the most frequent event type).
+  const committedStreamMessages: Array<MessageObject | ToolUseMessages | HierarchicalToolMessage> = useMemo(() => {
 
     // Helper function to parse tool arguments
     const parseToolArgs = (args: string | undefined): Record<string, unknown> => {
@@ -1043,33 +1045,6 @@ export default function ProjectSessionDetailPage({
       }
     }
 
-    // Add streaming reasoning if currently reasoning
-    const activeReasoning = aguiState.currentReasoning || aguiState.currentThinking;
-    if (activeReasoning?.content) {
-      result.push({
-        type: "agent_message",
-        content: {
-          type: "reasoning_block",
-          thinking: activeReasoning.content,
-          signature: "",
-        },
-        model: "claude",
-        timestamp: activeReasoning.timestamp || "",
-        streaming: true,
-      } as MessageObject & { streaming?: boolean });
-    }
-
-    // Add streaming message if currently streaming
-    if (aguiState.currentMessage?.content) {
-      result.push({
-        type: "agent_message",
-        content: { type: "text_block", text: aguiState.currentMessage.content },
-        model: "claude",
-        timestamp: aguiState.currentMessage.timestamp || "",
-        streaming: true,
-      } as MessageObject & { streaming?: boolean });
-    }
-
     // Render ALL currently streaming tool calls (supports parallel tool execution)
     // CRITICAL: This renders tools immediately when TOOL_CALL_START arrives,
     // not waiting until TOOL_CALL_END like the allToolCalls map approach does
@@ -1161,12 +1136,48 @@ export default function ProjectSessionDetailPage({
     return result;
   }, [
     aguiState.messages,
+    aguiState.currentToolCall,   // Needed in Phase A to avoid orphaned-child promotion
+    aguiState.pendingToolCalls,  // CRITICAL: Include so UI updates when new tools start
+    aguiState.pendingChildren,   // CRITICAL: Include so UI updates when children finish
+  ]);
+
+  // Phase 2: append streaming text / reasoning bubbles to the committed list.
+  // This is O(1) and is the only memo that re-runs on every TEXT_MESSAGE_CONTENT
+  // or REASONING_MESSAGE_CONTENT delta (the most frequent events during active runs).
+  const streamMessages: Array<MessageObject | ToolUseMessages | HierarchicalToolMessage> = useMemo(() => {
+    const result = [...committedStreamMessages];
+
+    const activeReasoning = aguiState.currentReasoning || aguiState.currentThinking;
+    if (activeReasoning?.content) {
+      result.push({
+        type: "agent_message",
+        content: {
+          type: "reasoning_block",
+          thinking: activeReasoning.content,
+          signature: "",
+        },
+        model: "claude",
+        timestamp: activeReasoning.timestamp || "",
+        streaming: true,
+      } as MessageObject & { streaming?: boolean });
+    }
+
+    if (aguiState.currentMessage?.content) {
+      result.push({
+        type: "agent_message",
+        content: { type: "text_block", text: aguiState.currentMessage.content },
+        model: "claude",
+        timestamp: aguiState.currentMessage.timestamp || "",
+        streaming: true,
+      } as MessageObject & { streaming?: boolean });
+    }
+
+    return result;
+  }, [
+    committedStreamMessages,
     aguiState.currentMessage,
     aguiState.currentReasoning,
     aguiState.currentThinking,
-    aguiState.currentToolCall,
-    aguiState.pendingToolCalls,  // CRITICAL: Include so UI updates when new tools start
-    aguiState.pendingChildren,   // CRITICAL: Include so UI updates when children finish
   ]);
 
   // Check if there are any real messages (user or assistant messages, not just system)
