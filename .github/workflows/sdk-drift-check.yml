@@ -1,0 +1,87 @@
+name: SDK Drift Check
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'components/ambient-sdk/generator/**'
+      - 'components/ambient-sdk/go-sdk/**'
+      - 'components/ambient-sdk/python-sdk/**'
+      - 'components/ambient-sdk/ts-sdk/**'
+      - 'components/ambient-api-server/openapi/**'
+      - '.github/workflows/sdk-drift-check.yml'
+
+  push:
+    branches: [main]
+    paths:
+      - 'components/ambient-sdk/generator/**'
+      - 'components/ambient-sdk/go-sdk/**'
+      - 'components/ambient-sdk/python-sdk/**'
+      - 'components/ambient-sdk/ts-sdk/**'
+      - 'components/ambient-api-server/openapi/**'
+      - '.github/workflows/sdk-drift-check.yml'
+
+  workflow_dispatch:
+
+concurrency:
+  group: sdk-drift-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check-drift:
+    name: SDK Generator Drift
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: components/ambient-sdk/generator/go.mod
+          cache-dependency-path: components/ambient-sdk/generator/go.sum
+
+      - name: Regenerate SDK from OpenAPI spec
+        working-directory: components/ambient-sdk/generator
+        run: |
+          go run . \
+            -spec ../../ambient-api-server/openapi/openapi.yaml \
+            -go-out ../go-sdk \
+            -python-out ../python-sdk/ambient_platform \
+            -ts-out ../ts-sdk
+
+      - name: Run gofmt on generated Go code
+        working-directory: components/ambient-sdk/go-sdk
+        run: go fmt ./...
+
+      - name: Check for drift
+        run: |
+          # Ignore timestamp and hash lines (they change every run)
+          DRIFT=$(git diff \
+            --ignore-matching-lines='// Spec SHA256:' \
+            --ignore-matching-lines='// Generated:' \
+            -- components/ambient-sdk/go-sdk/ \
+               components/ambient-sdk/python-sdk/ \
+               components/ambient-sdk/ts-sdk/)
+
+          if [ -n "$DRIFT" ]; then
+            echo "❌ SDK drift detected — regenerated code differs from committed code."
+            echo ""
+            echo "This means either:"
+            echo "  1. A generator template was updated but the SDK was not regenerated"
+            echo "  2. The OpenAPI spec changed but the SDK was not regenerated"
+            echo "  3. Generated files were hand-edited (update the templates instead)"
+            echo ""
+            echo "Fix: cd components/ambient-sdk && make generate-sdk"
+            echo ""
+            echo "Diff:"
+            git diff \
+              --ignore-matching-lines='// Spec SHA256:' \
+              --ignore-matching-lines='// Generated:' \
+              -- components/ambient-sdk/go-sdk/ \
+                 components/ambient-sdk/python-sdk/ \
+                 components/ambient-sdk/ts-sdk/
+            exit 1
+          fi
+
+          echo "✅ No SDK drift detected"
