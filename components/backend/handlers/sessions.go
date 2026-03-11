@@ -43,6 +43,7 @@ var (
 	DeriveRepoFolderFromURL           func(string) string
 	// DeriveAgentStatusFromEvents derives agentStatus from the persisted event log.
 	// Set by the websocket package at init to avoid circular imports.
+	// sessionID should be namespace-qualified (e.g., "namespace/sessionName") to avoid cross-project collisions.
 	DeriveAgentStatusFromEvents func(sessionID string) string
 	// LEGACY: SendMessageToSession removed - AG-UI server uses HTTP/SSE instead of WebSocket
 )
@@ -375,10 +376,13 @@ func enrichAgentStatus(session *types.AgenticSession) {
 		return
 	}
 	name, _ := session.Metadata["name"].(string)
-	if name == "" {
+	namespace, _ := session.Metadata["namespace"].(string)
+	if name == "" || namespace == "" {
 		return
 	}
-	if derived := DeriveAgentStatusFromEvents(name); derived != "" {
+	// Use namespace-qualified key to avoid cross-project collisions in the event store
+	sessionID := namespace + "/" + name
+	if derived := DeriveAgentStatusFromEvents(sessionID); derived != "" {
 		session.Status.AgentStatus = types.StringPtr(derived)
 	}
 }

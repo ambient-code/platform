@@ -1406,6 +1406,7 @@ export default function ProjectSessionDetailPage({
       });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to send answer");
+      throw err;
     }
   };
 

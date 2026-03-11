@@ -38,7 +38,7 @@ export function useAgentStatus(
 
       // Check the last tool call on this message
       const lastTc = msg.toolCalls[msg.toolCalls.length - 1];
-      if (isAskUserQuestionTool(lastTc.function.name)) {
+      if (lastTc.function?.name && isAskUserQuestionTool(lastTc.function.name)) {
         const hasResult =
           lastTc.result !== undefined &&
           lastTc.result !== null &&

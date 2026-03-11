@@ -198,8 +198,10 @@ func loadEvents(sessionID string) []map[string]interface{} {
 // DeriveAgentStatus reads a session's event log and returns the agent
 // status derived from the last significant events.
 //
+// sessionID should be namespace-qualified (e.g., "namespace/sessionName") to avoid cross-project collisions.
 // Returns "" if the status cannot be determined (no events, file missing, etc.).
 func DeriveAgentStatus(sessionID string) string {
+	// sessionID is now namespace-qualified, e.g., "default/session-123"
 	path := fmt.Sprintf("%s/sessions/%s/agui-events.jsonl", StateBaseDir, sessionID)
 
 	// Read only the tail of the file to avoid loading entire event log into memory.

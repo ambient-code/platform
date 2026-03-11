@@ -13,7 +13,7 @@ import { FeedbackButtons } from "@/components/feedback";
 export type StreamMessageProps = {
   message: (MessageObject | ToolUseMessages | HierarchicalToolMessage) & { streaming?: boolean };
   onGoToResults?: () => void;
-  onSubmitAnswer?: (formattedAnswer: string) => void;
+  onSubmitAnswer?: (formattedAnswer: string) => Promise<void>;
   plainCard?: boolean;
   isNewest?: boolean;
   agentName?: string;

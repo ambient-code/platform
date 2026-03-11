@@ -19,7 +19,7 @@ export type AskUserQuestionMessageProps = {
   toolUseBlock: ToolUseBlock;
   resultBlock?: ToolResultBlock;
   timestamp?: string;
-  onSubmitAnswer?: (formattedAnswer: string) => void;
+  onSubmitAnswer?: (formattedAnswer: string) => Promise<void>;
   isNewest?: boolean;
 };
 
@@ -56,7 +56,8 @@ export const AskUserQuestionMessage: React.FC<AskUserQuestionMessageProps> = ({
 
   // Only interactive when newest message AND not already answered/submitted
   const [submitted, setSubmitted] = useState(false);
-  const disabled = alreadyAnswered || submitted || !isNewest;
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const disabled = alreadyAnswered || submitted || isSubmitting || !isNewest;
 
   // Active tab index (for multi-question tabbed view)
   const [activeTab, setActiveTab] = useState(0);
@@ -108,7 +109,7 @@ export const AskUserQuestionMessage: React.FC<AskUserQuestionMessageProps> = ({
 
   const allQuestionsAnswered = questions.every(isQuestionAnswered);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!onSubmitAnswer || !allQuestionsAnswered || disabled) return;
 
     // Build the structured response matching Claude SDK format
@@ -120,8 +121,13 @@ export const AskUserQuestionMessage: React.FC<AskUserQuestionMessageProps> = ({
 
     // Send as JSON matching the AskUserQuestion response format
     const response = JSON.stringify({ questions, answers });
-    onSubmitAnswer(response);
-    setSubmitted(true);
+    try {
+      setIsSubmitting(true);
+      await onSubmitAnswer(response);
+      setSubmitted(true);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   if (questions.length === 0) return null;
@@ -276,6 +282,7 @@ export const AskUserQuestionMessage: React.FC<AskUserQuestionMessageProps> = ({
                   const active = idx === activeTab;
                   return (
                     <button
+                      type="button"
                       key={idx}
                       onClick={() => setActiveTab(idx)}
                       className={cn(

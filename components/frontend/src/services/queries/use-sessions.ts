@@ -55,7 +55,7 @@ export function useSessionsPaginated(projectName: string, params: PaginationPara
 
       // Tier 2: Any session with agent actively working → moderate (5s)
       const hasWorking = items.some((s) => {
-        return s.status?.phase === 'Running' && s.status?.agentStatus === 'working';
+        return s.status?.phase === 'Running' && (!s.status?.agentStatus || s.status?.agentStatus === 'working');
       });
       if (hasWorking) return 5000;
 
