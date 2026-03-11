@@ -824,7 +824,7 @@ unleash-port-forward: check-kubectl ## Port-forward Unleash (localhost:4242)
 	@echo "$(COLOR_BOLD)🔌 Port forwarding Unleash$(COLOR_RESET)"
 	@echo ""
 	@echo "  Unleash UI: http://localhost:4242"
-	@echo "  Login: admin / unleash4all"
+	@echo "  Login: admin / $$(kubectl get secret unleash-credentials -n $${NAMESPACE:-ambient-code} -o jsonpath='{.data.default-admin-password}' 2>/dev/null | base64 -d || echo '(unknown — check unleash-credentials secret)')"
 	@echo ""
 	@echo "$(COLOR_YELLOW)Press Ctrl+C to stop$(COLOR_RESET)"
 	@kubectl port-forward svc/unleash 4242:4242 -n $${NAMESPACE:-ambient-code}

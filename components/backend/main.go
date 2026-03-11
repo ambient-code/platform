@@ -13,6 +13,7 @@ import (
 	"ambient-code-backend/github"
 	"ambient-code-backend/handlers"
 	"ambient-code-backend/k8s"
+	"ambient-code-backend/ldap"
 	"ambient-code-backend/server"
 	"ambient-code-backend/websocket"
 
@@ -132,6 +133,16 @@ func main() {
 	git.GitHubTokenManager = github.Manager
 	git.GetBackendNamespace = func() string {
 		return server.Namespace
+	}
+
+	// Initialize LDAP client (optional - requires LDAP_URL to be set)
+	// Access is gated by the "ldap.autocomplete.enabled" Unleash feature flag.
+	if ldapURL := os.Getenv("LDAP_URL"); ldapURL != "" {
+		ldapBaseDN := getEnvOrDefault("LDAP_BASE_DN", "ou=users,dc=redhat,dc=com")
+		ldapGroupBaseDN := os.Getenv("LDAP_GROUP_BASE_DN") // optional, derived from LDAP_BASE_DN if empty
+		skipTLS := os.Getenv("LDAP_SKIP_TLS_VERIFY") == "true"
+		handlers.LDAPClient = ldap.NewClient(ldapURL, ldapBaseDN, ldapGroupBaseDN, skipTLS)
+		log.Printf("LDAP client initialized: %s (base DN: %s, group base DN: %s, skipTLSVerify: %v)", ldapURL, ldapBaseDN, ldapGroupBaseDN, skipTLS)
 	}
 
 	// Initialize GitHub auth handlers

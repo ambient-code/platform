@@ -26,6 +26,10 @@ vi.mock('@/services/queries', () => ({
   })),
 }));
 
+vi.mock('@/services/queries/use-feature-flags-admin', () => ({
+  useWorkspaceFlag: vi.fn(() => ({ enabled: false, isLoading: false })),
+}));
+
 vi.mock('@/hooks/use-toast', () => ({
   successToast: vi.fn(),
   errorToast: vi.fn(),

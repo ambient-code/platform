@@ -9,6 +9,16 @@
           "value": "workspace"
         }
       ]
+    },
+    {
+      "name": "ldap.autocomplete.enabled",
+      "description": "Enable LDAP user and group autocomplete for workspace sharing",
+      "tags": [
+        {
+          "type": "scope",
+          "value": "workspace"
+        }
+      ]
     }
   ]
 }
