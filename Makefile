@@ -76,7 +76,7 @@ KIND_IMAGE_PREFIX := $(if $(filter podman,$(CONTAINER_ENGINE)),localhost/,)
 # Kind cluster configuration — derived from git branch for multi-worktree support
 # Each worktree/branch gets a unique cluster name and ports automatically.
 # Override any variable: make kind-up KIND_CLUSTER_NAME=ambient-custom KIND_FWD_FRONTEND_PORT=8080
-CLUSTER_SLUG ?= $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null | sed 's/[^a-zA-Z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-//' | sed 's/-$$//' | cut -c1-20)
+CLUSTER_SLUG ?= $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null | tr 'A-Z' 'a-z' | sed 's/[^a-z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-//' | sed 's/-$$//' | cut -c1-20)
 CLUSTER_SLUG := $(CLUSTER_SLUG)
 KIND_CLUSTER_NAME ?= ambient-$(CLUSTER_SLUG)
 KIND_CLUSTER_NAME := $(KIND_CLUSTER_NAME)
