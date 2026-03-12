@@ -369,6 +369,7 @@ class ClaudeAgentAdapter:
         self,
         input_data: Optional[RunAgentInput] = None,
         thread_id: Optional[str] = None,
+        resume_from: Optional[str] = None,
     ) -> "ClaudeAgentOptions":
         """
         Build ClaudeAgentOptions from stored options (object/dict/None) plus dynamic tools.
@@ -378,6 +379,8 @@ class ClaudeAgentAdapter:
         Args:
             input_data: Optional RunAgentInput for extracting dynamic tools
             thread_id: Optional thread_id for session resumption lookup
+            resume_from: Optional CLI session ID to resume (preserves chat history
+                across adapter rebuilds, e.g. after a repo is added mid-session)
 
         Returns:
             Configured ClaudeAgentOptions instance
@@ -451,6 +454,11 @@ class ClaudeAgentAdapter:
 
         # Remove api_key from options kwargs (handled via environment variable)
         merged_kwargs.pop("api_key", None)
+
+        # Resume from a previous CLI session (preserves chat context)
+        if resume_from:
+            merged_kwargs["resume"] = resume_from
+
         logger.debug(f"Merged kwargs after pop: {merged_kwargs}")
 
         # Apply forwarded_props as per-run overrides (before adding dynamic tools)

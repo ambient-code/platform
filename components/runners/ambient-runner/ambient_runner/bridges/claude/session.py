@@ -100,7 +100,11 @@ class SessionWorker:
 
         os.environ["ANTHROPIC_API_KEY"] = self._api_key
 
-        from ambient_runner.bridges.claude.mock_client import MOCK_API_KEY, MockClaudeSDKClient
+        from ambient_runner.bridges.claude.mock_client import (
+            MOCK_API_KEY,
+            MockClaudeSDKClient,
+        )
+
         if self._api_key == MOCK_API_KEY:
             logger.info("[SessionWorker] Using MockClaudeSDKClient (replay mode)")
             client: Any = MockClaudeSDKClient(options=self._options)
@@ -301,6 +305,14 @@ class SessionManager:
         if worker and worker.session_id:
             return worker.session_id
         return self._session_ids.get(thread_id)
+
+    def get_all_session_ids(self) -> dict[str, str]:
+        """Return a snapshot of all known session IDs (live workers + cached)."""
+        result = dict(self._session_ids)
+        for tid, worker in self._workers.items():
+            if worker.session_id:
+                result[tid] = worker.session_id
+        return result
 
     async def destroy(self, thread_id: str) -> None:
         """Stop and remove the worker for *thread_id*.

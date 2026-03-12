@@ -56,6 +56,8 @@ class ClaudeBridge(PlatformBridge):
         self._allowed_tools: list[str] = []
         self._system_prompt: dict = {}
         self._stderr_lines: list[str] = []
+        # Preserved session IDs across adapter rebuilds (e.g. repo additions)
+        self._saved_session_ids: dict[str, str] = {}
 
     # ------------------------------------------------------------------
     # PlatformBridge interface
@@ -99,7 +101,10 @@ class ClaudeBridge(PlatformBridge):
         # 4. Get or create session worker for this thread
         thread_id = input_data.thread_id or self._context.session_id
         api_key = os.getenv("ANTHROPIC_API_KEY", "")
-        sdk_options = self._adapter.build_options(input_data, thread_id=thread_id)
+        saved_session_id = self._saved_session_ids.pop(thread_id, None)
+        sdk_options = self._adapter.build_options(
+            input_data, thread_id=thread_id, resume_from=saved_session_id
+        )
         worker = await self._session_manager.get_or_create(
             thread_id, sdk_options, api_key
         )
@@ -167,6 +172,9 @@ class ClaudeBridge(PlatformBridge):
         self._first_run = True
         self._adapter = None
         if self._session_manager:
+            # Preserve session IDs so --resume works after adapter rebuild.
+            # Must be captured synchronously before the async shutdown task runs.
+            self._saved_session_ids.update(self._session_manager.get_all_session_ids())
             manager = self._session_manager
             self._session_manager = None
             _async_safe_manager_shutdown(manager)
