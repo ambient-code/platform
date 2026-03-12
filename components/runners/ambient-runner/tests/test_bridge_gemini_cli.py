@@ -141,6 +141,7 @@ class TestGeminiCLIBridgeMarkDirty:
         """mark_dirty() should trigger shutdown on the old session manager."""
         bridge = GeminiCLIBridge()
         mock_manager = AsyncMock()
+        mock_manager.clear_session_ids = MagicMock()
         bridge._session_manager = mock_manager
 
         # We need a running event loop for mark_dirty to schedule shutdown
@@ -150,6 +151,7 @@ class TestGeminiCLIBridgeMarkDirty:
                 mock_future.return_value = MagicMock()
                 bridge.mark_dirty()
 
+        mock_manager.clear_session_ids.assert_called_once()
         assert bridge._session_manager is None
 
 

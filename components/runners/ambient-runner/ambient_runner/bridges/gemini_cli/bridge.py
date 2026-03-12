@@ -171,6 +171,7 @@ class GeminiCLIBridge(PlatformBridge):
         self._adapter = None
         self._mcp_status_cache = None
         if self._session_manager:
+            self._session_manager.clear_session_ids()
             manager = self._session_manager
             self._session_manager = None
             _async_safe_manager_shutdown(manager)
