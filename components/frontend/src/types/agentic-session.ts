@@ -1,5 +1,34 @@
 export type AgenticSessionPhase = "Pending" | "Creating" | "Running" | "Stopping" | "Stopped" | "Completed" | "Failed";
 
+// Agent status (derived from message stream, distinct from session phase)
+export type AgentStatus =
+	| "working"       // Actively processing
+	| "waiting_input" // AskUserQuestion pending, needs human response
+	| "completed"     // Task finished successfully
+	| "failed"        // Task errored
+	| "idle";         // Session running, agent between turns
+
+// Subset of AgentStatus that can be persisted in the CR status field
+// (completed/failed are derived at query time from phase, not stored)
+export type StoredAgentStatus = "working" | "idle" | "waiting_input";
+
+// AskUserQuestion tool types (Claude Agent SDK built-in)
+export type AskUserQuestionOption = {
+	label: string;
+	description?: string;
+};
+
+export type AskUserQuestionItem = {
+	question: string;
+	header?: string;
+	options: AskUserQuestionOption[];
+	multiSelect?: boolean;
+};
+
+export type AskUserQuestionInput = {
+	questions: AskUserQuestionItem[];
+};
+
 export type LLMSettings = {
 	model: string;
 	temperature: number;
@@ -162,6 +191,7 @@ export type AgenticSessionStatus = {
 	startTime?: string;
 	completionTime?: string;
 	lastActivityTime?: string;
+	agentStatus?: StoredAgentStatus;
 	stoppedReason?: "user" | "inactivity";
 	reconciledRepos?: ReconciledRepo[];
 	reconciledWorkflow?: ReconciledWorkflow;

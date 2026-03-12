@@ -439,15 +439,19 @@ func persistStreamedEvent(sessionID, runID, threadID, jsonData string) {
 
 	persistEvent(sessionID, event)
 
-	// Update lastActivityTime on CR for activity events (debounced).
-	// Extract event type to check; projectName is derived from the
+	// Extract event type; projectName is derived from the
 	// sessionID-to-project mapping populated by HandleAGUIRunProxy.
 	eventType, _ := event["type"].(string)
+
+	// Update lastActivityTime on CR for activity events (debounced).
 	if isActivityEvent(eventType) {
 		if projectName, ok := sessionProjectMap.Load(sessionID); ok {
 			updateLastActivityTime(projectName.(string), sessionID, eventType == types.EventTypeRunStarted)
 		}
 	}
+
+	// agentStatus is derived at query time from the event log (DeriveAgentStatus).
+	// No CR updates needed here — the persisted events ARE the source of truth.
 }
 
 // ─── POST /agui/interrupt ────────────────────────────────────────────
@@ -947,4 +951,17 @@ func updateLastActivityTime(projectName, sessionName string, immediate bool) {
 			log.Printf("Activity tracking: failed to update lastActivityTime for %s/%s: %v", projectName, sessionName, err)
 		}
 	}()
+}
+
+// isAskUserQuestionToolCall checks if a tool call name is the AskUserQuestion HITL tool.
+// Uses case-insensitive comparison after stripping non-alpha characters,
+// matching the frontend pattern in use-agent-status.ts.
+func isAskUserQuestionToolCall(name string) bool {
+	var clean strings.Builder
+	for _, r := range strings.ToLower(name) {
+		if r >= 'a' && r <= 'z' {
+			clean.WriteRune(r)
+		}
+	}
+	return clean.String() == "askuserquestion"
 }

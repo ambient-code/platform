@@ -58,6 +58,8 @@ class ClaudeBridge(PlatformBridge):
         self._stderr_lines: list[str] = []
         # Preserved session IDs across adapter rebuilds (e.g. repo additions)
         self._saved_session_ids: dict[str, str] = {}
+        # Per-thread halt tracking to avoid race conditions on shared adapter
+        self._halted_by_thread: dict[str, bool] = {}
 
     # ------------------------------------------------------------------
     # PlatformBridge interface
@@ -134,6 +136,22 @@ class ClaudeBridge(PlatformBridge):
                 self._session_manager._session_ids[thread_id] = worker.session_id
                 self._session_manager._persist_session_ids()
 
+            # Capture halt state for this thread to avoid race conditions
+            # with concurrent runs modifying the shared adapter's halted flag
+            self._halted_by_thread[thread_id] = self._adapter.halted
+
+            # If the adapter halted (frontend tool or built-in HITL tool like
+            # AskUserQuestion), interrupt the worker to prevent the SDK from
+            # auto-approving the tool call with a placeholder result.
+            if self._halted_by_thread.get(thread_id, False):
+                logger.info(
+                    f"Adapter halted for thread={thread_id}, "
+                    "interrupting worker to await user input"
+                )
+                await worker.interrupt()
+                # Clear the halt flag for this thread
+                self._halted_by_thread.pop(thread_id, None)
+
         self._first_run = False
 
     async def interrupt(self, thread_id: Optional[str] = None) -> None:
@@ -179,6 +197,7 @@ class ClaudeBridge(PlatformBridge):
         self._ready = False
         self._first_run = True
         self._adapter = None
+        self._halted_by_thread.clear()
         if self._session_manager:
             # Preserve session IDs so --resume works after adapter rebuild.
             # Must be captured synchronously before the async shutdown task runs.

@@ -31,6 +31,7 @@ export type MessagesTabProps = {
   chatInput: string;
   setChatInput: (v: string) => void;
   onSendChat: () => Promise<void>;
+  onSendToolAnswer?: (formattedAnswer: string) => Promise<void>;
   onInterrupt: () => Promise<void>;
   onGoToResults?: () => void;
   onContinue: () => void;
@@ -51,7 +52,7 @@ export type MessagesTabProps = {
 };
 
 
-const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chatInput, setChatInput, onSendChat, onInterrupt, onGoToResults, onContinue, workflowMetadata, onCommandClick, isRunActive = false, showWelcomeExperience, welcomeExperienceComponent, activeWorkflow, userHasInteracted = false, queuedMessages = [], hasRealMessages = false, onCancelQueuedMessage, onUpdateQueuedMessage, onPasteImage, onClearQueue, agentName }) => {
+const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chatInput, setChatInput, onSendChat, onSendToolAnswer, onInterrupt, onGoToResults, onContinue, workflowMetadata, onCommandClick, isRunActive = false, showWelcomeExperience, welcomeExperienceComponent, activeWorkflow, userHasInteracted = false, queuedMessages = [], hasRealMessages = false, onCancelQueuedMessage, onUpdateQueuedMessage, onPasteImage, onClearQueue, agentName }) => {
   const [sendingChat, setSendingChat] = useState(false);
   const [showSystemMessages, setShowSystemMessages] = useState(false);
   const [waitingDotCount, setWaitingDotCount] = useState(0);
@@ -213,6 +214,7 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
             isNewest={idx === visibleMessages.length - 1}
             onGoToResults={onGoToResults}
             agentName={agentName}
+            onSubmitAnswer={onSendToolAnswer}
           />
         ))}
 
