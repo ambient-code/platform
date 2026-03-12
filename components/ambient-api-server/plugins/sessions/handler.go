@@ -204,7 +204,8 @@ func (h sessionHandler) List(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			var sessions []Session
-			paging, err := h.generic.List(ctx, "id", listArgs, &sessions)
+			username := auth.GetUsernameFromContext(ctx)
+			paging, err := h.generic.List(ctx, username, listArgs, &sessions)
 			if err != nil {
 				return nil, err
 			}

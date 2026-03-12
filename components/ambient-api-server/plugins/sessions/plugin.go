@@ -13,6 +13,7 @@ import (
 	"github.com/openshift-online/rh-trex-ai/pkg/environments"
 	"github.com/openshift-online/rh-trex-ai/pkg/registry"
 	pkgserver "github.com/openshift-online/rh-trex-ai/pkg/server"
+	"github.com/openshift-online/rh-trex-ai/pkg/services"
 	"github.com/openshift-online/rh-trex-ai/plugins/events"
 	"github.com/openshift-online/rh-trex-ai/plugins/generic"
 	"google.golang.org/grpc"
@@ -44,6 +45,11 @@ func Service(s *environments.Services) SessionService {
 }
 
 func init() {
+	services.SetUserScopeConfig("Session", &services.UserScopeConfig{
+		OwnershipField: "created_by_user_id",
+		AdminRoles:     []string{"admin", "platform-admin"},
+	})
+
 	registry.RegisterService("Sessions", func(env interface{}) interface{} {
 		return NewServiceLocator(env.(*environments.Env))
 	})

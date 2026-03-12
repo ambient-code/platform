@@ -11,6 +11,7 @@ import (
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api"
 	localgrpc "github.com/ambient-code/platform/components/ambient-api-server/pkg/api/grpc"
 	pb "github.com/ambient-code/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1"
+	"github.com/openshift-online/rh-trex-ai/pkg/auth"
 	"github.com/openshift-online/rh-trex-ai/pkg/server"
 	"github.com/openshift-online/rh-trex-ai/pkg/server/grpcutil"
 	"github.com/openshift-online/rh-trex-ai/pkg/services"
@@ -116,7 +117,8 @@ func (h *userGRPCHandler) ListUsers(ctx context.Context, req *pb.ListUsersReques
 	}
 
 	var users []User
-	paging, svcErr := h.generic.List(ctx, "id", &listArgs, &users)
+	username := auth.GetUsernameFromContext(ctx)
+	paging, svcErr := h.generic.List(ctx, username, &listArgs, &users)
 	if svcErr != nil {
 		return nil, grpcutil.ServiceErrorToGRPC(svcErr)
 	}

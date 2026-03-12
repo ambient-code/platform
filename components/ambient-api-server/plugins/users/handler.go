@@ -7,6 +7,7 @@ import (
 
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
 	"github.com/openshift-online/rh-trex-ai/pkg/api/presenters"
+	"github.com/openshift-online/rh-trex-ai/pkg/auth"
 	"github.com/openshift-online/rh-trex-ai/pkg/errors"
 	"github.com/openshift-online/rh-trex-ai/pkg/handlers"
 	"github.com/openshift-online/rh-trex-ai/pkg/services"
@@ -91,7 +92,8 @@ func (h userHandler) List(w http.ResponseWriter, r *http.Request) {
 
 			listArgs := services.NewListArguments(r.URL.Query())
 			var users []User
-			paging, err := h.generic.List(ctx, "id", listArgs, &users)
+			username := auth.GetUsernameFromContext(ctx)
+			paging, err := h.generic.List(ctx, username, listArgs, &users)
 			if err != nil {
 				return nil, err
 			}

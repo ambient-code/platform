@@ -7,6 +7,7 @@ import (
 
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
 	"github.com/openshift-online/rh-trex-ai/pkg/api/presenters"
+	"github.com/openshift-online/rh-trex-ai/pkg/auth"
 	"github.com/openshift-online/rh-trex-ai/pkg/errors"
 	"github.com/openshift-online/rh-trex-ai/pkg/handlers"
 	"github.com/openshift-online/rh-trex-ai/pkg/services"
@@ -100,7 +101,8 @@ func (h projectHandler) List(w http.ResponseWriter, r *http.Request) {
 
 			listArgs := services.NewListArguments(r.URL.Query())
 			var projects []Project
-			paging, err := h.generic.List(ctx, "id", listArgs, &projects)
+			username := auth.GetUsernameFromContext(ctx)
+			paging, err := h.generic.List(ctx, username, listArgs, &projects)
 			if err != nil {
 				return nil, err
 			}
