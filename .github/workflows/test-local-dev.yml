@@ -6,7 +6,7 @@ on:
 env:
   # Pin versions for reliable caching
   KUBECTL_VERSION: "v1.31.4"
-  KIND_VERSION: "v0.27.0"
+  KIND_VERSION: "v0.31.0"
 
 jobs:
   # Fast job that doesn't need the cluster - runs in parallel
