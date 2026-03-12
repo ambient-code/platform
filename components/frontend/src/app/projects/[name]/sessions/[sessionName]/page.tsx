@@ -1458,6 +1458,7 @@ export default function ProjectSessionDetailPage({
 
   return (
     <>
+      <title>{`${session.spec.displayName || session.metadata.name} · Ambient Code Platform`}</title>
       <div className="absolute inset-0 top-16 overflow-hidden bg-background flex flex-col">
         {/* Fixed header */}
         <div className="flex-shrink-0 bg-card border-b">
