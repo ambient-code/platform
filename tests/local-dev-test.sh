@@ -32,49 +32,17 @@ FAILED_TESTS=0
 PASSED_TESTS=0
 KNOWN_FAILURES=0
 
-# Detect if we need to use localhost (macOS + Podman VM networking)
-# On macOS with Podman, minikube runs inside a VM and its IP is not directly accessible
+# Get test URL for a service via port-forwarding (kind uses localhost)
 get_test_url() {
     local port=$1
-    local minikube_ip
 
-    # Check if we're on macOS with Podman (VM networking doesn't expose minikube IP)
-    if [[ "$(uname -s)" == "Darwin" ]]; then
-        # On macOS, prefer localhost with port-forwarding
-        # Check if port-forward is running
-        if pgrep -f "kubectl.*port-forward.*${port}" >/dev/null 2>&1; then
-            if [[ "$port" == "30080" ]]; then
-                echo "http://localhost:8080"
-            elif [[ "$port" == "30030" ]]; then
-                echo "http://localhost:3000"
-            fi
-            return 0
-        fi
-
-        # Try minikube ip anyway (might work with Docker driver)
-        minikube_ip=$(minikube ip 2>/dev/null)
-        if [[ -n "$minikube_ip" ]]; then
-            # Test if we can actually reach it
-            if curl -sf --connect-timeout 2 "http://${minikube_ip}:${port}" >/dev/null 2>&1; then
-                echo "http://${minikube_ip}:${port}"
-                return 0
-            fi
-        fi
-
-        # Fallback to localhost (requires port-forwarding)
-        if [[ "$port" == "30080" ]]; then
-            echo "http://localhost:8080"
-        elif [[ "$port" == "30030" ]]; then
-            echo "http://localhost:3000"
-        fi
+    # Kind uses port-forwarding to localhost
+    if [[ "$port" == "30080" ]]; then
+        echo "http://localhost:8080"
+    elif [[ "$port" == "30030" ]]; then
+        echo "http://localhost:3000"
     else
-        # Linux: minikube IP is directly accessible
-        minikube_ip=$(minikube ip 2>/dev/null)
-        if [[ -n "$minikube_ip" ]]; then
-            echo "http://${minikube_ip}:${port}"
-        else
-            echo ""
-        fi
+        echo "http://localhost:${port}"
     fi
 }
 
@@ -224,7 +192,7 @@ test_prerequisites() {
 
     assert_command_exists "make"
     assert_command_exists "kubectl"
-    assert_command_exists "minikube"
+    assert_command_exists "kind"
     assert_command_exists "podman" || assert_command_exists "docker"
 
     # Check if running on macOS or Linux
@@ -248,23 +216,23 @@ test_makefile_help() {
     assert_contains "$help_output" "local-up" "Help lists local-up command"
     assert_contains "$help_output" "local-status" "Help lists local-status command"
     assert_contains "$help_output" "local-logs" "Help lists local-logs command"
-    assert_contains "$help_output" "local-reload-backend" "Help lists reload commands"
+    assert_contains "$help_output" "kind-up" "Help lists kind-up command"
 }
 
-# Test: Minikube Status Check
-test_minikube_status() {
-    log_section "Test 3: Minikube Status"
+# Test: Kind Status Check
+test_kind_status() {
+    log_section "Test 3: Kind Status"
 
-    if minikube status >/dev/null 2>&1; then
-        log_success "Minikube is running"
+    if kind get clusters 2>/dev/null | grep -q .; then
+        log_success "Kind cluster is running"
         ((PASSED_TESTS++))
 
-        # Check minikube version
+        # Check kind version
         local version
-        version=$(minikube version --short 2>/dev/null || echo "unknown")
-        log_info "Minikube version: $version"
+        version=$(kind version 2>/dev/null || echo "unknown")
+        log_info "Kind version: $version"
     else
-        log_error "Minikube is NOT running"
+        log_error "No Kind cluster is running"
         ((FAILED_TESTS++))
         return 1
     fi
@@ -277,7 +245,7 @@ test_kubernetes_context() {
     local context
     context=$(kubectl config current-context 2>/dev/null || echo "none")
 
-    assert_contains "$context" "minikube" "kubectl context is set to minikube"
+    assert_contains "$context" "kind-" "kubectl context is set to a kind cluster"
 
     # Test kubectl connectivity
     if kubectl cluster-info >/dev/null 2>&1; then
@@ -391,7 +359,7 @@ test_backend_health() {
         log_info "Backend URL: $backend_url"
         assert_http_ok "${backend_url}/health" "Backend health endpoint responds" 10
     else
-        log_error "Could not determine backend URL (minikube not running or port-forward not active)"
+        log_error "Could not determine backend URL (kind cluster not running or port-forward not active)"
         ((FAILED_TESTS++))
     fi
 }
@@ -407,7 +375,7 @@ test_frontend_accessibility() {
         log_info "Frontend URL: $frontend_url"
         assert_http_ok "$frontend_url" "Frontend is accessible" 10
     else
-        log_error "Could not determine frontend URL (minikube not running or port-forward not active)"
+        log_error "Could not determine frontend URL (kind cluster not running or port-forward not active)"
         ((FAILED_TESTS++))
     fi
 }
@@ -553,7 +521,7 @@ test_make_status() {
     status_output=$(make local-status 2>&1 || echo "")
 
     assert_contains "$status_output" "Ambient Code Platform Status" "Status shows correct branding"
-    assert_contains "$status_output" "Minikube" "Status shows Minikube section"
+    assert_contains "$status_output" "Kind" "Status shows Kind section"
     assert_contains "$status_output" "Pods" "Status shows Pods section"
 }
 
@@ -865,7 +833,7 @@ test_critical_token_minting() {
         ((PASSED_TESTS++))
     else
         log_error "Step 1/3: local-dev-user ServiceAccount does NOT exist"
-        log_error "  Expected: applied via components/manifests/minikube/local-dev-rbac.yaml"
+        log_error "  Expected: applied via kind overlay RBAC manifests"
         ((FAILED_TESTS++))
         return 1
     fi
@@ -876,7 +844,7 @@ test_critical_token_minting() {
         ((PASSED_TESTS++))
     else
         log_error "Step 2/3: local-dev-user RoleBinding does NOT exist"
-        log_error "  Expected: applied via components/manifests/minikube/local-dev-rbac.yaml"
+        log_error "  Expected: applied via kind overlay RBAC manifests"
         ((FAILED_TESTS++))
         return 1
     fi
@@ -968,21 +936,9 @@ test_production_manifest_safety() {
         fi
     done
 
-    # Verify minikube manifests DO have dev mode (sanity check)
-    if [ -f "components/manifests/minikube/backend-deployment.yaml" ]; then
-        if grep -q "DISABLE_AUTH" "components/manifests/minikube/backend-deployment.yaml" 2>/dev/null; then
-            log_success "Minikube manifest correctly includes DISABLE_AUTH (expected for local dev)"
-            ((PASSED_TESTS++))
-        else
-            log_error "Minikube manifest missing DISABLE_AUTH (dev mode broken)"
-            ((FAILED_TESTS++))
-        fi
-    fi
-
     if [ "$found_issues" = false ]; then
         log_info ""
         log_info "✅ Production manifests are safe"
-        log_info "✅ Dev mode only in components/manifests/minikube/"
         log_info "✅ Clear separation between dev and production configs"
     fi
 }
@@ -1012,7 +968,7 @@ test_critical_backend_sa_usage() {
     local has_cluster_admin=false
     if kubectl get clusterrolebinding -o json 2>/dev/null | grep -q "serviceaccount:$NAMESPACE:$backend_sa"; then
         has_cluster_admin=true
-        log_warning "Backend SA '$backend_sa' has cluster-level role bindings (expected in current minikube local-dev manifests)"
+        log_warning "Backend SA '$backend_sa' has cluster-level role bindings (expected in local dev manifests)"
 
         # List the actual bindings (best effort)
         log_warning "Cluster role bindings for backend SA:"
@@ -1060,7 +1016,7 @@ main() {
     # Run tests
     test_prerequisites
     test_makefile_help
-    test_minikube_status
+    test_kind_status
     test_kubernetes_context
     test_namespace_exists
     test_crds_installed
