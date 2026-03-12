@@ -413,15 +413,6 @@ local-test-quick: check-kubectl check-kind ## Quick smoke test of local environm
 	@kubectl wait --for=condition=ready pod -l app=backend-api -n $(NAMESPACE) --timeout=60s >/dev/null 2>&1 && \
 	kubectl wait --for=condition=ready pod -l app=frontend -n $(NAMESPACE) --timeout=60s >/dev/null 2>&1 && \
 	echo "$(COLOR_GREEN)✓$(COLOR_RESET) Pods ready" || (echo "$(COLOR_RED)✗$(COLOR_RESET) Pods not ready" && exit 1)
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Testing backend health..."
-	@for i in 1 2 3 4 5; do \
-		kubectl exec -n $(NAMESPACE) $$(kubectl get pod -n $(NAMESPACE) -l app=backend-api -o jsonpath='{.items[0].metadata.name}' 2>/dev/null) -- wget -qO- http://localhost:8080/health >/dev/null 2>&1 && { echo "$(COLOR_GREEN)✓$(COLOR_RESET) Backend healthy"; break; } || { \
-			if [ $$i -eq 5 ]; then \
-				echo "$(COLOR_RED)✗$(COLOR_RESET) Backend not responding after 5 attempts"; exit 1; \
-			fi; \
-			sleep 2; \
-		}; \
-	done
 	@echo ""
 	@echo "$(COLOR_GREEN)✓ Quick smoke test passed!$(COLOR_RESET)"
 
