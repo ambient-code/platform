@@ -43,8 +43,9 @@ var (
 )
 
 // WrapGitHubTokenForRepo wraps git.GetGitHubToken to accept kubernetes.Interface instead of *kubernetes.Clientset
-// This allows dependency injection while maintaining compatibility with git.GetGitHubToken
-func WrapGitHubTokenForRepo(originalFunc func(context.Context, *kubernetes.Clientset, dynamic.Interface, string, string) (string, error)) func(context.Context, kubernetes.Interface, dynamic.Interface, string, string) (string, error) {
+// This allows dependency injection while maintaining compatibility with git.GetGitHubToken.
+// The expiresAt return value is discarded since callers only need the token string.
+func WrapGitHubTokenForRepo(originalFunc func(context.Context, *kubernetes.Clientset, dynamic.Interface, string, string) (string, time.Time, error)) func(context.Context, kubernetes.Interface, dynamic.Interface, string, string) (string, error) {
 	return func(ctx context.Context, k8s kubernetes.Interface, dyn dynamic.Interface, project, userID string) (string, error) {
 		// Type assert to *kubernetes.Clientset for git.GetGitHubToken
 		var k8sClient *kubernetes.Clientset
@@ -55,7 +56,8 @@ func WrapGitHubTokenForRepo(originalFunc func(context.Context, *kubernetes.Clien
 				return "", fmt.Errorf("kubernetes client is not a *Clientset (got %T)", k8s)
 			}
 		}
-		return originalFunc(ctx, k8sClient, dyn, project, userID)
+		token, _, err := originalFunc(ctx, k8sClient, dyn, project, userID)
+		return token, err
 	}
 }
 

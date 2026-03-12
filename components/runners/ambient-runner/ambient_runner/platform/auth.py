@@ -10,6 +10,8 @@ import json as _json
 import logging
 import os
 import re
+import time
+from datetime import datetime
 from pathlib import Path
 from urllib import request as _urllib_request
 from urllib.parse import urlparse
@@ -20,6 +22,12 @@ logger = logging.getLogger(__name__)
 
 # Placeholder email used by the platform when no real email is available.
 _PLACEHOLDER_EMAIL = "user@example.com"
+
+# Tracks credential expiry timestamps (epoch seconds) by provider name.
+_credential_expiry: dict[str, float] = {}
+
+# How many seconds before expiry to trigger a proactive refresh.
+_EXPIRY_BUFFER_SEC = 5 * 60
 
 
 # ---------------------------------------------------------------------------
@@ -127,7 +135,7 @@ async def _fetch_credential(context: RunnerContext, credential_type: str) -> dic
 async def fetch_github_credentials(context: RunnerContext) -> dict:
     """Fetch GitHub credentials from backend API (always fresh — PAT or minted App token).
 
-    Returns dict with: token, userName, email, provider
+    Returns dict with: token, userName, email, provider, and optionally expiresAt
     """
     data = await _fetch_credential(context, "github")
     if data.get("token"):
@@ -135,6 +143,16 @@ async def fetch_github_credentials(context: RunnerContext) -> dict:
             f"Using fresh GitHub credentials from backend "
             f"(user: {data.get('userName', 'unknown')}, hasEmail: {bool(data.get('email'))})"
         )
+        if data.get("expiresAt"):
+            try:
+                exp_dt = datetime.fromisoformat(data["expiresAt"])
+                _credential_expiry["github"] = exp_dt.timestamp()
+                logger.info(f"GitHub token expires at {data['expiresAt']}")
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Failed to parse GitHub expiresAt: {e}")
+        else:
+            # PAT or legacy token without expiry — clear any stale tracking
+            _credential_expiry.pop("github", None)
     return data
 
 
@@ -142,6 +160,14 @@ async def fetch_github_token(context: RunnerContext) -> str:
     """Fetch GitHub token from backend API (always fresh — PAT or minted App token)."""
     data = await fetch_github_credentials(context)
     return data.get("token", "")
+
+
+def github_token_expiring_soon() -> bool:
+    """Return True if the cached GitHub token will expire within the buffer window."""
+    expiry = _credential_expiry.get("github")
+    if not expiry:
+        return False
+    return time.time() > expiry - _EXPIRY_BUFFER_SEC
 
 
 async def fetch_google_credentials(context: RunnerContext) -> dict:
@@ -329,8 +355,7 @@ async def populate_mcp_server_credentials(context: RunnerContext) -> None:
 
         # Check if any env value references ${MCP_*} pattern
         needs_creds = any(
-            isinstance(v, str) and mcp_env_pattern.search(v)
-            for v in env_block.values()
+            isinstance(v, str) and mcp_env_pattern.search(v) for v in env_block.values()
         )
         if not needs_creds:
             continue
