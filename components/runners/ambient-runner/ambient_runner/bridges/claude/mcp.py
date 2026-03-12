@@ -30,13 +30,19 @@ DEFAULT_ALLOWED_TOOLS = [
 ]
 
 
-def build_mcp_servers(context: RunnerContext, cwd_path: str, obs: Any = None) -> dict:
+def build_mcp_servers(
+    context: RunnerContext,
+    cwd_path: str,
+    obs: Any = None,
+    bridge_ref: Any = None,
+) -> dict:
     """Build the full MCP server config dict including platform tools.
 
     Args:
         context: Runner context.
         cwd_path: Working directory (used to find rubric files).
         obs: Optional ObservabilityManager (passed to rubric tool).
+        bridge_ref: Reference to the bridge instance (deferred adapter access).
 
     Returns:
         Dict of MCP server name -> server config.
@@ -56,7 +62,7 @@ def build_mcp_servers(context: RunnerContext, cwd_path: str, obs: Any = None) ->
     mcp_servers = load_mcp_config(context, cwd_path) or {}
 
     # Session control tools
-    restart_tool = create_restart_session_tool(None, sdk_tool)
+    restart_tool = create_restart_session_tool(bridge_ref, sdk_tool)
     refresh_creds_tool = create_refresh_credentials_tool(context, sdk_tool)
     session_server = create_sdk_mcp_server(
         name="session", version="1.0.0", tools=[restart_tool, refresh_creds_tool]

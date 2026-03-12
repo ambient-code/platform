@@ -29,12 +29,13 @@ logger = logging.getLogger(__name__)
 # ------------------------------------------------------------------
 
 
-def create_restart_session_tool(adapter_ref, sdk_tool_decorator):
+def create_restart_session_tool(bridge_ref, sdk_tool_decorator):
     """Create the restart_session MCP tool.
 
     Args:
-        adapter_ref: Reference to the ClaudeCodeAdapter instance
-            (used to set _restart_requested flag).
+        bridge_ref: Reference to the bridge instance whose ``_adapter``
+            attribute is resolved at call time (may be ``None`` during
+            MCP setup).
         sdk_tool_decorator: The ``tool`` decorator from ``claude_agent_sdk``.
 
     Returns:
@@ -48,7 +49,19 @@ def create_restart_session_tool(adapter_ref, sdk_tool_decorator):
     )
     async def restart_session_tool(args: dict) -> dict:
         """Tool that allows Claude to request a session restart."""
-        adapter_ref._restart_requested = True
+        adapter = getattr(bridge_ref, "_adapter", None) if bridge_ref else None
+        if adapter is None:
+            logger.warning("restart_session called but adapter not ready")
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "Session not ready — cannot restart yet. Try again shortly.",
+                    }
+                ],
+                "isError": True,
+            }
+        adapter._restart_requested = True
         logger.info("Session restart requested by Claude via MCP tool")
         return {
             "content": [
