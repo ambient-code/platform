@@ -53,7 +53,7 @@ Internal developer documentation lives alongside these docs in [`docs/internal/`
 | [Design](https://github.com/ambient-code/platform/tree/main/docs/internal/design) | Technical design docs (session reconciliation, runner-operator contract, status redesign) |
 | [Deployment](https://github.com/ambient-code/platform/tree/main/docs/internal/deployment) | OpenShift deployment, OAuth, git authentication, S3 storage |
 | [Integrations](https://github.com/ambient-code/platform/tree/main/docs/internal/integrations) | GitHub App, GitLab, Google Workspace setup |
-| [Local dev](https://github.com/ambient-code/platform/tree/main/docs/internal/developer/local-development) | Kind, CRC, Minikube, and hybrid development setup |
+| [Local dev](https://github.com/ambient-code/platform/tree/main/docs/internal/developer/local-development) | Kind, CRC, and hybrid development setup |
 | [Testing](https://github.com/ambient-code/platform/tree/main/docs/internal/testing) | E2E testing guide, test overview |
 | [Observability](https://github.com/ambient-code/platform/tree/main/docs/internal/observability) | Langfuse, operator metrics, Grafana dashboards |
 

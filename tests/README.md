@@ -11,9 +11,9 @@ This directory contains tests for the Ambient Code Platform, with a focus on val
 Comprehensive integration test suite that validates the complete local development environment.
 
 **What it tests:**
-- ✅ Prerequisites (make, kubectl, minikube, podman/docker)
+- ✅ Prerequisites (make, kubectl, kind, podman/docker)
 - ✅ Makefile commands and syntax
-- ✅ Minikube cluster status
+- ✅ Kind cluster status
 - ✅ Kubernetes configuration
 - ✅ Namespace and CRDs
 - ✅ Pod health and readiness
@@ -56,7 +56,7 @@ make local-test-quick
 ```
 
 Tests:
-- Minikube running
+- Kind cluster running
 - Namespace exists
 - Pods running
 - Backend healthy
@@ -197,9 +197,9 @@ Exit code: 1
 
 ### Common Failures
 
-#### "Minikube not running"
+#### "Kind cluster not running"
 ```bash
-make local-up
+make kind-up
 ```
 
 #### "Namespace missing"
