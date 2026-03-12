@@ -36,11 +36,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { CreateAgenticSessionRequest } from "@/types/agentic-session";
+import type { WorkflowSelection } from "@/types/workflow";
 import { useCreateSession } from "@/services/queries/use-sessions";
 import { useRunnerTypes } from "@/services/queries/use-runner-types";
 import { DEFAULT_RUNNER_TYPE_ID } from "@/services/api/runner-types";
 import { useIntegrationsStatus } from "@/services/queries/use-integrations";
 import { useModels } from "@/services/queries/use-models";
+import { useOOTBWorkflows } from "@/services/queries/use-workflows";
+import { WorkflowPicker } from "@/components/workflow-picker";
+import { CustomWorkflowDialog } from "@/app/projects/[name]/sessions/[sessionName]/components/modals/custom-workflow-dialog";
 import { toast } from "sonner";
 
 // Static default used for form initialization before the API responds.
@@ -69,10 +73,14 @@ export function CreateSessionDialog({
   onSuccess,
 }: CreateSessionDialogProps) {
   const [open, setOpen] = useState(false);
+  const [selectedWorkflow, setSelectedWorkflow] = useState("none");
+  const [workflowSelection, setWorkflowSelection] = useState<WorkflowSelection | null>(null);
+  const [customWorkflowOpen, setCustomWorkflowOpen] = useState(false);
   const router = useRouter();
   const createSessionMutation = useCreateSession();
   const { data: runnerTypes, isLoading: runnerTypesLoading, isError: runnerTypesError, refetch: refetchRunnerTypes } = useRunnerTypes(projectName);
   const { data: integrationsStatus } = useIntegrationsStatus();
+  const { data: ootbWorkflows = [], isLoading: workflowsLoading } = useOOTBWorkflows(projectName);
 
   const githubConfigured = integrationsStatus?.github?.active != null;
   const gitlabConfigured = integrationsStatus?.gitlab?.connected ?? false;
@@ -124,6 +132,31 @@ export function CreateSessionDialog({
     form.resetField("model", { defaultValue: "" });
   };
 
+  const handleWorkflowChange = (value: string) => {
+    setSelectedWorkflow(value);
+    if (value === "custom") {
+      setCustomWorkflowOpen(true);
+      return;
+    }
+    if (value === "none") {
+      setWorkflowSelection(null);
+      return;
+    }
+    const workflow = ootbWorkflows.find(w => w.id === value);
+    if (workflow) {
+      setWorkflowSelection({
+        gitUrl: workflow.gitUrl,
+        branch: workflow.branch,
+        path: workflow.path,
+      });
+    }
+  };
+
+  const handleCustomWorkflowSubmit = (url: string, branch: string, path: string) => {
+    setWorkflowSelection({ gitUrl: url, branch, path: path || undefined });
+    setCustomWorkflowOpen(false);
+  };
+
   const onSubmit = async (values: FormValues) => {
     if (!projectName) return;
 
@@ -139,6 +172,9 @@ export function CreateSessionDialog({
     const trimmedName = values.displayName?.trim();
     if (trimmedName) {
       request.displayName = trimmedName;
+    }
+    if (workflowSelection) {
+      request.activeWorkflow = workflowSelection;
     }
 
     createSessionMutation.mutate(
@@ -162,6 +198,8 @@ export function CreateSessionDialog({
     setOpen(newOpen);
     if (!newOpen) {
       form.reset();
+      setSelectedWorkflow("none");
+      setWorkflowSelection(null);
     }
   };
 
@@ -202,6 +240,23 @@ export function CreateSessionDialog({
                   </FormItem>
                 )}
               />
+
+              {/* Workflow Selection */}
+              <div className="space-y-2">
+                <FormLabel>Workflow</FormLabel>
+                <WorkflowPicker
+                  selectedWorkflow={selectedWorkflow}
+                  ootbWorkflows={ootbWorkflows}
+                  onWorkflowChange={handleWorkflowChange}
+                  disabled={createSessionMutation.isPending}
+                  isLoading={workflowsLoading}
+                  loadingMessage="Loading available workflows..."
+                  placeholder="Select workflow..."
+                />
+                <p className="text-xs text-muted-foreground">
+                  Optional. Select a workflow to structure the session.
+                </p>
+              </div>
 
               {/* Runner Type Selection */}
               <FormField
@@ -452,6 +507,11 @@ export function CreateSessionDialog({
           </Form>
         </DialogContent>
       </Dialog>
+      <CustomWorkflowDialog
+        open={customWorkflowOpen}
+        onOpenChange={setCustomWorkflowOpen}
+        onSubmit={handleCustomWorkflowSubmit}
+      />
     </>
   );
 }

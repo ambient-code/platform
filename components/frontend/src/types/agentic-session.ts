@@ -223,6 +223,11 @@ export type CreateAgenticSessionRequest = {
   	environmentVariables?: Record<string, string>;
 	// Multi-repo support
 	repos?: SessionRepo[];
+	activeWorkflow?: {
+		gitUrl: string;
+		branch: string;
+		path?: string;
+	};
 	labels?: Record<string, string>;
 	annotations?: Record<string, string>;
 	runnerType?: string;

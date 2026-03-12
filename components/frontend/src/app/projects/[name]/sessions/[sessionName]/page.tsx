@@ -1237,9 +1237,16 @@ export default function ProjectSessionDetailPage({
           setUserHasInteracted(true);
         }
       } else {
-        // No matching OOTB workflow found - treat as custom workflow
+        // No matching OOTB workflow found - treat as custom workflow.
+        // Restore the full custom workflow details from the session CR
+        // so they survive page refresh.
+        const aw = session.spec.activeWorkflow;
+        workflowManagement.setCustomWorkflow(
+          aw.gitUrl,
+          aw.branch || "main",
+          aw.path || ""
+        );
         workflowManagement.setActiveWorkflow("custom");
-        workflowManagement.setSelectedWorkflow("custom");
         if (hasRealMessages) {
           setUserHasInteracted(true);
         }
