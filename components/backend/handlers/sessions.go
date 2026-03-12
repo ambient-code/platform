@@ -41,10 +41,6 @@ var (
 	GetGitHubToken                    func(context.Context, kubernetes.Interface, dynamic.Interface, string, string) (string, error)
 	GetGitLabToken                    func(context.Context, kubernetes.Interface, string, string) (string, error)
 	DeriveRepoFolderFromURL           func(string) string
-	// DeriveAgentStatusFromEvents derives agentStatus from the persisted event log.
-	// Set by the websocket package at init to avoid circular imports.
-	// sessionID should be namespace-qualified (e.g., "namespace/sessionName") to avoid cross-project collisions.
-	DeriveAgentStatusFromEvents func(sessionID string) string
 	// LEGACY: SendMessageToSession removed - AG-UI server uses HTTP/SSE instead of WebSocket
 )
 
@@ -365,28 +361,6 @@ func parseStatus(status map[string]interface{}) *types.AgenticSessionStatus {
 
 // V2 API Handlers - Multi-tenant session management
 
-// enrichAgentStatus derives agentStatus from the persisted event log for
-// Running sessions.  This is the source of truth — it replaces the stale
-// CR-cached value which was subject to goroutine race conditions.
-func enrichAgentStatus(session *types.AgenticSession) {
-	if session.Status == nil || session.Status.Phase != "Running" {
-		return
-	}
-	if DeriveAgentStatusFromEvents == nil {
-		return
-	}
-	name, _ := session.Metadata["name"].(string)
-	namespace, _ := session.Metadata["namespace"].(string)
-	if name == "" || namespace == "" {
-		return
-	}
-	// Use namespace-qualified key to avoid cross-project collisions in the event store
-	sessionID := namespace + "/" + name
-	if derived := DeriveAgentStatusFromEvents(sessionID); derived != "" {
-		session.Status.AgentStatus = types.StringPtr(derived)
-	}
-}
-
 func ListSessions(c *gin.Context) {
 	project := c.GetString("project")
 
@@ -456,11 +430,6 @@ func ListSessions(c *gin.Context) {
 	// Apply pagination
 	totalCount := len(sessions)
 	paginatedSessions, hasMore, nextOffset := paginateSessions(sessions, params.Offset, params.Limit)
-
-	// Derive agentStatus from event log only for paginated sessions (performance optimization)
-	for i := range paginatedSessions {
-		enrichAgentStatus(&paginatedSessions[i])
-	}
 
 	response := types.PaginatedResponse{
 		Items:      paginatedSessions,
@@ -676,9 +645,9 @@ func CreateSession(c *gin.Context) {
 		timeout = *req.Timeout
 	}
 
-	// Generate unique name (millisecond timestamp for burst-creation safety)
+	// Generate unique name (timestamp-based)
 	// Note: Runner will create branch as "ambient/{session-name}"
-	timestamp := time.Now().UnixMilli()
+	timestamp := time.Now().Unix()
 	name := fmt.Sprintf("session-%d", timestamp)
 
 	// Create the custom resource
@@ -933,9 +902,6 @@ func GetSession(c *gin.Context) {
 	if status, ok := item.Object["status"].(map[string]interface{}); ok {
 		session.Status = parseStatus(status)
 	}
-
-	// Derive agentStatus from event log (source of truth) for running sessions
-	enrichAgentStatus(&session)
 
 	session.AutoBranch = ComputeAutoBranch(sessionName)
 

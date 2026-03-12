@@ -56,8 +56,6 @@ class ClaudeBridge(PlatformBridge):
         self._allowed_tools: list[str] = []
         self._system_prompt: dict = {}
         self._stderr_lines: list[str] = []
-        # Per-thread halt tracking to avoid race conditions on shared adapter
-        self._halted_by_thread: dict[str, bool] = {}
 
     # ------------------------------------------------------------------
     # PlatformBridge interface
@@ -123,22 +121,6 @@ class ClaudeBridge(PlatformBridge):
             async for event in wrapped_stream:
                 yield event
 
-            # Capture halt state for this thread to avoid race conditions
-            # with concurrent runs modifying the shared adapter's halted flag
-            self._halted_by_thread[thread_id] = self._adapter.halted
-
-            # If the adapter halted (frontend tool or built-in HITL tool like
-            # AskUserQuestion), interrupt the worker to prevent the SDK from
-            # auto-approving the tool call with a placeholder result.
-            if self._halted_by_thread.get(thread_id, False):
-                logger.info(
-                    f"Adapter halted for thread={thread_id}, "
-                    "interrupting worker to await user input"
-                )
-                await worker.interrupt()
-                # Clear the halt flag for this thread
-                self._halted_by_thread.pop(thread_id, None)
-
         self._first_run = False
 
     async def interrupt(self, thread_id: Optional[str] = None) -> None:
@@ -184,7 +166,6 @@ class ClaudeBridge(PlatformBridge):
         self._ready = False
         self._first_run = True
         self._adapter = None
-        self._halted_by_thread.clear()
         if self._session_manager:
             manager = self._session_manager
             self._session_manager = None
