@@ -85,15 +85,6 @@ RUBRIC_EVALUATION_PROCESS = (
     "Provide honest, calibrated scores with clear reasoning.\n\n"
 )
 
-HUMAN_INPUT_INSTRUCTIONS = (
-    "## Human-in-the-Loop\n"
-    "When you need user input, a decision, or confirmation before proceeding, "
-    "you MUST use the AskUserQuestion tool. Do not ask questions in plain text "
-    "and wait for a response — the AskUserQuestion tool triggers platform "
-    "notifications and status indicators that help users know you need their "
-    "attention.\n\n"
-)
-
 RESTART_TOOL_DESCRIPTION = (
     "Restart the Claude session to recover from issues, clear state, "
     "or get a fresh connection. Use this if you detect you're in a "
@@ -214,9 +205,6 @@ def build_workspace_context_prompt(
                 repo_name = repo.get("name", "unknown")
                 prompt += f"- **repos/{repo_name}/**\n"
             prompt += GIT_PUSH_STEPS.format(branch=push_branch)
-
-    # Human-in-the-loop instructions
-    prompt += HUMAN_INPUT_INSTRUCTIONS
 
     # MCP integration setup instructions
     prompt += MCP_INTEGRATIONS_PROMPT

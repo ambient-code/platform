@@ -22,9 +22,7 @@ import {
 } from '@/components/ui/pagination';
 import { getPageNumbers } from '@/lib/pagination';
 import { EmptyState } from '@/components/empty-state';
-import { SessionStatusDot } from '@/components/session-status-dot';
-import { AgentStatusIndicator } from '@/components/agent-status-indicator';
-import { deriveAgentStatusFromPhase } from '@/hooks/use-agent-status';
+import { SessionPhaseBadge } from '@/components/status-badge';
 import { CreateSessionDialog } from '@/components/create-session-dialog';
 import { EditSessionNameDialog } from '@/components/edit-session-name-dialog';
 
@@ -261,7 +259,6 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-[20px] px-0"></TableHead>
                     <TableHead className="min-w-[180px]">Name</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="hidden md:table-cell">Model</TableHead>
@@ -280,9 +277,6 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
 
                     return (
                       <TableRow key={session.metadata?.uid || session.metadata?.name}>
-                        <TableCell className="w-[20px] px-0 pr-1">
-                          <SessionStatusDot phase={phase} />
-                        </TableCell>
                         <TableCell className="font-medium min-w-[180px]">
                           <HoverCard openDelay={300} closeDelay={100}>
                             <HoverCardTrigger asChild>
@@ -304,10 +298,7 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
                                   <p className="text-sm font-semibold truncate mr-2">
                                     {session.spec.displayName || session.metadata.name}
                                   </p>
-                                  <AgentStatusIndicator
-                                    status={session.status?.agentStatus ?? deriveAgentStatusFromPhase(phase)}
-                                    compact
-                                  />
+                                  <SessionPhaseBadge phase={phase} stoppedReason={session.status?.stoppedReason} />
                                 </div>
                                 {session.spec.displayName && (
                                   <p className="text-xs text-muted-foreground">{session.metadata.name}</p>
@@ -335,9 +326,7 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
                           </HoverCard>
                         </TableCell>
                         <TableCell>
-                          <AgentStatusIndicator
-                            status={session.status?.agentStatus ?? deriveAgentStatusFromPhase(phase)}
-                          />
+                          <SessionPhaseBadge phase={phase} stoppedReason={session.status?.stoppedReason} />
                         </TableCell>
                         <TableCell className="hidden md:table-cell">
                           <div className="text-sm truncate max-w-[160px]">

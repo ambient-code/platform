@@ -11,7 +11,6 @@ package websocket
 
 import (
 	"ambient-code-backend/types"
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -193,110 +192,6 @@ func loadEvents(sessionID string) []map[string]interface{} {
 		}
 	}
 	return events
-}
-
-// DeriveAgentStatus reads a session's event log and returns the agent
-// status derived from the last significant events.
-//
-// sessionID should be namespace-qualified (e.g., "namespace/sessionName") to avoid cross-project collisions.
-// Returns "" if the status cannot be determined (no events, file missing, etc.).
-func DeriveAgentStatus(sessionID string) string {
-	// sessionID is now namespace-qualified, e.g., "default/session-123"
-	path := fmt.Sprintf("%s/sessions/%s/agui-events.jsonl", StateBaseDir, sessionID)
-
-	// Read only the tail of the file to avoid loading entire event log into memory.
-	// 64KB is sufficient for recent lifecycle events (scanning backwards).
-	const maxTailBytes = 64 * 1024
-
-	file, err := os.Open(path)
-	if err != nil {
-		return ""
-	}
-	defer file.Close()
-
-	stat, err := file.Stat()
-	if err != nil {
-		return ""
-	}
-
-	fileSize := stat.Size()
-	var data []byte
-
-	if fileSize <= maxTailBytes {
-		// File is small, read it all
-		data, err = os.ReadFile(path)
-		if err != nil {
-			return ""
-		}
-	} else {
-		// File is large, seek to tail and read last N bytes
-		offset := fileSize - maxTailBytes
-		_, err = file.Seek(offset, 0)
-		if err != nil {
-			return ""
-		}
-
-		data = make([]byte, maxTailBytes)
-		n, err := file.Read(data)
-		if err != nil {
-			return ""
-		}
-		data = data[:n]
-
-		// Skip partial first line (we seeked into the middle of a line)
-		if idx := bytes.IndexByte(data, '\n'); idx >= 0 {
-			data = data[idx+1:]
-		}
-	}
-
-	lines := splitLines(data)
-
-	// Scan backwards.  We only care about lifecycle and AskUserQuestion events.
-	//   RUN_STARTED                       → "working"
-	//   RUN_FINISHED / RUN_ERROR          → "idle", unless same run had AskUserQuestion
-	//   TOOL_CALL_START (AskUserQuestion) → "waiting_input"
-	var runEndRunID string // set when we hit RUN_FINISHED/RUN_ERROR and need to look deeper
-	for i := len(lines) - 1; i >= 0; i-- {
-		if len(lines[i]) == 0 {
-			continue
-		}
-		var evt map[string]interface{}
-		if err := json.Unmarshal(lines[i], &evt); err != nil {
-			continue
-		}
-		evtType, _ := evt["type"].(string)
-
-		switch evtType {
-		case types.EventTypeRunStarted:
-			if runEndRunID != "" {
-				// We were scanning for an AskUserQuestion but hit RUN_STARTED first → idle
-				return types.AgentStatusIdle
-			}
-			return types.AgentStatusWorking
-
-		case types.EventTypeRunFinished, types.EventTypeRunError:
-			if runEndRunID == "" {
-				// First run-end seen; scan deeper within this run for AskUserQuestion
-				runEndRunID, _ = evt["runId"].(string)
-			}
-
-		case types.EventTypeToolCallStart:
-			if runEndRunID != "" {
-				// Only relevant if we're scanning within the ended run
-				if evtRunID, _ := evt["runId"].(string); evtRunID != "" && evtRunID != runEndRunID {
-					return types.AgentStatusIdle
-				}
-			}
-			if toolName, _ := evt["toolCallName"].(string); isAskUserQuestionToolCall(toolName) {
-				return types.AgentStatusWaitingInput
-			}
-		}
-	}
-
-	if runEndRunID != "" {
-		return types.AgentStatusIdle
-	}
-	return ""
 }
 
 // ─── Compaction ──────────────────────────────────────────────────────

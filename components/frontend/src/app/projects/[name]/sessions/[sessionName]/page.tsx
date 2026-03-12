@@ -66,9 +66,7 @@ import {
 } from "@/components/ui/breadcrumb";
 import Link from "next/link";
 import { SessionHeader } from "./session-header";
-import { SessionStatusDot } from "@/components/session-status-dot";
-import { AgentStatusIndicator } from "@/components/agent-status-indicator";
-import { useAgentStatus } from "@/hooks/use-agent-status";
+import { getPhaseColor } from "@/utils/session-helpers";
 
 // Extracted components
 import { AddContextModal } from "./components/modals/add-context-modal";
@@ -777,13 +775,6 @@ export default function ProjectSessionDetailPage({
     handleWorkflowChange(workflowId);
   };
 
-  // Derive agent-level status from session data and messages
-  const agentStatus = useAgentStatus(
-    session?.status?.phase || "Pending",
-    isRunActive,
-    aguiStream.state.messages,
-  );
-
   // Phase 1: convert committed messages + streaming tool cards into display format.
   // Does NOT depend on currentMessage / currentReasoning so it skips the full
   // O(n) traversal during text-streaming deltas (the most frequent event type).
@@ -932,12 +923,6 @@ export default function ProjectSessionDetailPage({
 
       // Handle text content by role
       if (msg.role === "user") {
-        // Hide AskUserQuestion response messages from the chat
-        const msgMeta = msg.metadata as Record<string, unknown> | undefined;
-        if (msgMeta?.type === "ask_user_question_response") {
-          continue;
-        }
-
         result.push({
           type: "user_message",
           id: msg.id,  // Preserve message ID for feedback association
@@ -1398,18 +1383,6 @@ export default function ProjectSessionDetailPage({
     }
   };
 
-  // Send an AskUserQuestion response (hidden from chat, properly formatted)
-  const sendToolAnswer = async (formattedAnswer: string) => {
-    try {
-      await aguiSendMessage(formattedAnswer, {
-        type: "ask_user_question_response",
-      });
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to send answer");
-      throw err;
-    }
-  };
-
   const handleCommandClick = async (slashCommand: string) => {
     try {
       await aguiSendMessage(slashCommand);
@@ -1506,8 +1479,13 @@ export default function ProjectSessionDetailPage({
                     <span className="text-sm font-medium truncate max-w-[150px]">
                       {session.spec.displayName || session.metadata.name}
                     </span>
-                    <SessionStatusDot phase={session.status?.phase || "Pending"} />
-                    <AgentStatusIndicator status={agentStatus} compact />
+                    <Badge data-testid="session-phase-badge"
+                      className={getPhaseColor(
+                        session.status?.phase || "Pending",
+                      )}
+                    >
+                      {session.status?.phase || "Pending"}
+                    </Badge>
                     {agentName && (
                       <Badge variant="outline" className="text-xs font-normal">
                         {agentName} / {session.spec.llmSettings.model}
@@ -1541,8 +1519,13 @@ export default function ProjectSessionDetailPage({
                       <BreadcrumbItem>
                         <BreadcrumbPage className="flex items-center gap-1.5">
                           {session.spec.displayName || session.metadata.name}
-                          <SessionStatusDot phase={session.status?.phase || "Pending"} />
-                          <AgentStatusIndicator status={agentStatus} />
+                          <Badge
+                            className={getPhaseColor(
+                              session.status?.phase || "Pending",
+                            )}
+                          >
+                            {session.status?.phase || "Pending"}
+                          </Badge>
                         </BreadcrumbPage>
                       </BreadcrumbItem>
                     </BreadcrumbList>
@@ -2644,7 +2627,6 @@ export default function ProjectSessionDetailPage({
                         chatInput={chatInput}
                         setChatInput={setChatInput}
                         onSendChat={() => Promise.resolve(sendChat())}
-                        onSendToolAnswer={sendToolAnswer}
                         onInterrupt={aguiInterrupt}
                         onGoToResults={() => {}}
                         onContinue={handleContinue}
@@ -2723,7 +2705,6 @@ export default function ProjectSessionDetailPage({
                           chatInput={chatInput}
                           setChatInput={setChatInput}
                           onSendChat={() => Promise.resolve(sendChat())}
-                          onSendToolAnswer={sendToolAnswer}
                           onInterrupt={aguiInterrupt}
                           onGoToResults={() => {}}
                           onContinue={handleContinue}
