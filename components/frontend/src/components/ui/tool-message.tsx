@@ -11,6 +11,7 @@ import {
   Check,
   X,
   Cog,
+  ListTodo,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
@@ -25,6 +26,67 @@ export type ToolMessageProps = {
   borderless?: boolean;
   timestamp?: string;
 };
+
+// TodoWrite types and helpers
+type TodoItem = {
+  id?: string;
+  content: string;
+  status: "pending" | "in_progress" | "completed";
+  priority?: "high" | "medium" | "low";
+};
+
+const parseTodoItems = (input?: Record<string, unknown>): TodoItem[] | null => {
+  if (!input) return null;
+  const todos = input.todos;
+  if (!Array.isArray(todos) || todos.length === 0) return null;
+  return todos as TodoItem[];
+};
+
+const isTodoWriteTool = (toolName: string) =>
+  toolName.toLowerCase() === "todowrite";
+
+const TodoListView: React.FC<{ todos: TodoItem[] }> = ({ todos }) => (
+  <div className="space-y-1">
+    {todos.map((todo, idx) => (
+      <div key={todo.id ?? idx} className="flex items-start gap-2 py-0.5">
+        <div className="flex-shrink-0 mt-0.5">
+          {todo.status === "completed" && (
+            <Check className="w-3.5 h-3.5 text-green-500" />
+          )}
+          {todo.status === "in_progress" && (
+            <Loader2 className="w-3.5 h-3.5 text-blue-500 animate-spin" />
+          )}
+          {todo.status === "pending" && (
+            <div className="w-3.5 h-3.5 rounded-full border-2 border-muted-foreground/40" />
+          )}
+        </div>
+        <span
+          className={cn(
+            "text-xs flex-1 leading-tight",
+            todo.status === "completed" && "line-through text-muted-foreground",
+            todo.status === "in_progress" && "text-foreground font-medium",
+            todo.status === "pending" && "text-muted-foreground"
+          )}
+        >
+          {todo.content}
+        </span>
+        {todo.priority && (
+          <Badge
+            variant="outline"
+            className={cn(
+              "text-[9px] px-1 py-0 flex-shrink-0 leading-tight",
+              todo.priority === "high" && "border-red-300 text-red-600 dark:border-red-700 dark:text-red-400",
+              todo.priority === "medium" && "border-yellow-300 text-yellow-600 dark:border-yellow-700 dark:text-yellow-400",
+              todo.priority === "low" && "border-border text-muted-foreground"
+            )}
+          >
+            {todo.priority}
+          </Badge>
+        )}
+      </div>
+    ))}
+  </div>
+);
 
 const formatToolName = (toolName?: string) => {
   if (!toolName) return "Unknown Tool";
@@ -308,6 +370,22 @@ const extractTextFromResultContent = (content: unknown): string => {
 const generateToolSummary = (toolName: string, input?: Record<string, unknown>): string => {
   if (!input || Object.keys(input).length === 0) return formatToolName(toolName);
 
+  // TodoWrite - summarize task counts by status
+  if (isTodoWriteTool(toolName)) {
+    const todos = parseTodoItems(input);
+    if (todos) {
+      const total = todos.length;
+      const completed = todos.filter((t) => t.status === "completed").length;
+      const inProgress = todos.filter((t) => t.status === "in_progress").length;
+      const pending = todos.filter((t) => t.status === "pending").length;
+      const parts: string[] = [];
+      if (completed > 0) parts.push(`${completed} done`);
+      if (inProgress > 0) parts.push(`${inProgress} in progress`);
+      if (pending > 0) parts.push(`${pending} pending`);
+      return `${total} task${total !== 1 ? "s" : ""}${parts.length > 0 ? `: ${parts.join(", ")}` : ""}`;
+    }
+  }
+
   // WebSearch - show query
   if (toolName.toLowerCase().includes("websearch") || toolName.toLowerCase().includes("web_search")) {
     const query = input.query as string | undefined;
@@ -526,6 +604,10 @@ export const ToolMessage = React.forwardRef<HTMLDivElement, ToolMessageProps>(
                   {getInitials(subagentType)}
                 </span>
               </div>
+            ) : isTodoWriteTool(toolUseBlock?.name ?? "") ? (
+              <div className="w-8 h-8 rounded-full flex items-center justify-center bg-indigo-600">
+                <ListTodo className="w-4 h-4 text-white" />
+              </div>
             ) : (
               <div className="w-8 h-8 rounded-full flex items-center justify-center bg-purple-600">
                 <Cog className="w-4 h-4 text-white" />
@@ -690,7 +772,25 @@ export const ToolMessage = React.forwardRef<HTMLDivElement, ToolMessageProps>(
                 // Default tool rendering (existing behavior)
                 isExpanded && (
                   <div className="px-3 pb-3 space-y-3 bg-muted/50">
-                    {toolUseBlock?.input && (
+                    {/* TodoWrite: render structured task list */}
+                    {isTodoWriteTool(toolUseBlock?.name ?? "") && (() => {
+                      const todos = parseTodoItems(inputData);
+                      if (!todos) return null;
+                      return (
+                        <div>
+                          <h4 className="text-xs font-medium text-foreground/80 mb-2 flex items-center gap-1.5">
+                            <ListTodo className="w-3.5 h-3.5" />
+                            Tasks
+                          </h4>
+                          <div className="rounded border border-border bg-card p-2">
+                            <TodoListView todos={todos} />
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Generic input for non-TodoWrite tools */}
+                    {toolUseBlock?.input && !isTodoWriteTool(toolUseBlock.name) && (
                       <div>
                         <h4 className="text-xs font-medium text-foreground/80 mb-1">Input</h4>
                         <div className="bg-slate-950 dark:bg-black rounded text-xs p-2 overflow-x-auto">
