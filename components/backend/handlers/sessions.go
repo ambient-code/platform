@@ -34,6 +34,9 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
+// k8sListPageSize bounds per-call memory when listing CRs from the API server.
+const k8sListPageSize = 500
+
 // Package-level variables for session handlers (set from main package)
 var (
 	GetAgenticSessionV1Alpha1Resource func() schema.GroupVersionResource
@@ -380,21 +383,34 @@ func ListSessions(c *gin.Context) {
 	}
 	types.NormalizePaginationParams(&params)
 
-	// Build list options with pagination
-	// Note: Kubernetes List with Limit returns a continue token for server-side pagination
-	// We use offset-based pagination on top of fetching all items for search/sort flexibility
+	// Build list options with K8s-level pagination to avoid loading all CRs into memory.
+	// We still need all items for search/sort, but fetching in pages bounds per-call memory.
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	list, err := k8sDyn.Resource(gvr).Namespace(project).List(ctx, v1.ListOptions{})
+	listOpts := v1.ListOptions{Limit: k8sListPageSize}
+	list, err := k8sDyn.Resource(gvr).Namespace(project).List(ctx, listOpts)
 	if err != nil {
 		log.Printf("Failed to list agentic sessions in project %s: %v", project, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list agentic sessions"})
 		return
 	}
 
+	// Fetch remaining pages if the list was truncated by the Limit.
+	allItems := list.Items
+	for list.GetContinue() != "" {
+		listOpts.Continue = list.GetContinue()
+		list, err = k8sDyn.Resource(gvr).Namespace(project).List(ctx, listOpts)
+		if err != nil {
+			log.Printf("Failed to list agentic sessions (continue) in project %s: %v", project, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list agentic sessions"})
+			return
+		}
+		allItems = append(allItems, list.Items...)
+	}
+
 	var sessions []types.AgenticSession
-	for _, item := range list.Items {
+	for _, item := range allItems {
 		meta, _, err := unstructured.NestedMap(item.Object, "metadata")
 		if err != nil {
 			log.Printf("ListSessions: failed to read metadata for %s/%s: %v", project, item.GetName(), err)

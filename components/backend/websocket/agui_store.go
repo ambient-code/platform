@@ -11,6 +11,8 @@ package websocket
 
 import (
 	"ambient-code-backend/types"
+	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -157,13 +159,14 @@ func persistEvent(sessionID string, event map[string]interface{}) {
 
 // ─── Read path ───────────────────────────────────────────────────────
 
-// loadEvents reads all AG-UI events for a session from the JSONL log.
+// loadEvents reads all AG-UI events for a session from the JSONL log
+// using a streaming scanner to avoid loading the entire file into memory.
 // Automatically triggers legacy migration if the log doesn't exist but
 // a pre-AG-UI messages.jsonl file does.
 func loadEvents(sessionID string) []map[string]interface{} {
 	path := fmt.Sprintf("%s/sessions/%s/agui-events.jsonl", StateBaseDir, sessionID)
 
-	data, err := os.ReadFile(path)
+	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			// Attempt legacy migration (messages.jsonl → agui-events.jsonl)
@@ -171,7 +174,7 @@ func loadEvents(sessionID string) []map[string]interface{} {
 				log.Printf("AGUI Store: legacy migration failed for %s: %v", sessionID, mErr)
 			}
 			// Retry after migration
-			data, err = os.ReadFile(path)
+			f, err = os.Open(path)
 			if err != nil {
 				return nil
 			}
@@ -180,9 +183,14 @@ func loadEvents(sessionID string) []map[string]interface{} {
 			return nil
 		}
 	}
+	defer f.Close()
 
 	events := make([]map[string]interface{}, 0, 64)
-	for _, line := range splitLines(data) {
+	scanner := bufio.NewScanner(f)
+	// Allow lines up to 1MB (default 64KB may truncate large tool outputs)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	for scanner.Scan() {
+		line := scanner.Bytes()
 		if len(line) == 0 {
 			continue
 		}
@@ -190,6 +198,9 @@ func loadEvents(sessionID string) []map[string]interface{} {
 		if err := json.Unmarshal(line, &evt); err == nil {
 			events = append(events, evt)
 		}
+	}
+	if err := scanner.Err(); err != nil {
+		log.Printf("AGUI Store: error scanning event log for %s: %v", sessionID, err)
 	}
 	return events
 }

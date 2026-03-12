@@ -41,6 +41,9 @@ const (
 
 	// activityUpdateTimeout bounds how long a single activity status update can take.
 	activityUpdateTimeout = 10 * time.Second
+
+	// maxErrorBodyBytes caps how much of an error response body we read into memory.
+	maxErrorBodyBytes = 1024
 )
 
 // activityUpdateSem limits concurrent goroutines spawned by updateLastActivityTime.
@@ -70,10 +73,10 @@ var sessionLastSeen sync.Map
 
 // staleSessionThreshold is the duration after which an inactive session's
 // cached data is pruned from the in-memory maps.
-const staleSessionThreshold = 1 * time.Hour
+const staleSessionThreshold = 10 * time.Minute
 
 // staleSessionCleanupInterval is how often the cleanup goroutine runs.
-const staleSessionCleanupInterval = 10 * time.Minute
+const staleSessionCleanupInterval = 2 * time.Minute
 
 func init() {
 	go cleanupStaleSessions()
@@ -321,7 +324,7 @@ func proxyRunnerStream(runnerURL string, bodyBytes []byte, sessionName, runID, t
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodyBytes))
 		log.Printf("AGUI Proxy: runner returned %d: %s", resp.StatusCode, string(body))
 		publishAndPersistErrorEvents(sessionName, runID, threadID, fmt.Sprintf("Runner error: HTTP %d", resp.StatusCode))
 		return
@@ -484,7 +487,7 @@ func HandleAGUIInterrupt(c *gin.Context) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodyBytes))
 		c.JSON(resp.StatusCode, gin.H{"error": string(body)})
 		return
 	}
@@ -549,7 +552,7 @@ func HandleAGUIFeedback(c *gin.Context) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodyBytes))
 		log.Printf("AGUI Feedback: runner returned %d for %s: %s", resp.StatusCode, sessionName, string(body))
 		c.JSON(resp.StatusCode, gin.H{"error": "Runner rejected feedback", "status": "failed"})
 		return
