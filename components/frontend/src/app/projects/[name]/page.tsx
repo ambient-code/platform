@@ -127,51 +127,54 @@ export default function ProjectDetailsPage() {
   }
 
   return (
-    <SidebarProvider
-      defaultOpen={true}
-      className="min-h-[calc(100svh-4rem)]"
-    >
-      <WorkspaceSidebar
-        activeSection={activeSection}
-        onSectionChange={setActiveSection}
-      />
-      <SidebarInset>
-        {/* Sticky header with breadcrumbs and sidebar trigger */}
-        <header className="sticky top-0 z-20 flex items-center gap-2 bg-background border-b px-4 h-12">
-          <SidebarTrigger className="-ml-1" />
-          <Separator orientation="vertical" className="mr-2 h-4" />
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem>
-                <BreadcrumbLink asChild>
-                  <Link href="/projects">Workspaces</Link>
-                </BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator />
-              <BreadcrumbItem>
-                <BreadcrumbPage>{projectName}</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-        </header>
+    <>
+      <title>{`${project?.displayName || projectName} · Ambient Code Platform`}</title>
+      <SidebarProvider
+        defaultOpen={true}
+        className="min-h-[calc(100svh-4rem)]"
+      >
+        <WorkspaceSidebar
+          activeSection={activeSection}
+          onSectionChange={setActiveSection}
+        />
+        <SidebarInset>
+          {/* Sticky header with breadcrumbs and sidebar trigger */}
+          <header className="sticky top-0 z-20 flex items-center gap-2 bg-background border-b px-4 h-12">
+            <SidebarTrigger className="-ml-1" />
+            <Separator orientation="vertical" className="mr-2 h-4" />
+            <Breadcrumb>
+              <BreadcrumbList>
+                <BreadcrumbItem>
+                  <BreadcrumbLink asChild>
+                    <Link href="/projects">Workspaces</Link>
+                  </BreadcrumbLink>
+                </BreadcrumbItem>
+                <BreadcrumbSeparator />
+                <BreadcrumbItem>
+                  <BreadcrumbPage>{projectName}</BreadcrumbPage>
+                </BreadcrumbItem>
+              </BreadcrumbList>
+            </Breadcrumb>
+          </header>
 
-        {/* Page content */}
-        <div className="p-6">
-          <PageHeader
-            title={project?.displayName || projectName}
-            description={project?.description || 'Manage agentic sessions, configure settings, and control access for this workspace'}
-          />
+          {/* Page content */}
+          <div className="p-6">
+            <PageHeader
+              title={project?.displayName || projectName}
+              description={project?.description || 'Manage agentic sessions, configure settings, and control access for this workspace'}
+            />
 
-          <hr className="border-t my-6" />
+            <hr className="border-t my-6" />
 
-          {/* Main Content */}
-          {activeSection === 'sessions' && <SessionsSection projectName={projectName} />}
-          {activeSection === 'schedules' && <SchedulesSection projectName={projectName} />}
-          {activeSection === 'sharing' && <SharingSection projectName={projectName} />}
-          {activeSection === 'keys' && <KeysSection projectName={projectName} />}
-          {activeSection === 'settings' && <SettingsSection projectName={projectName} />}
-        </div>
-      </SidebarInset>
-    </SidebarProvider>
+            {/* Main Content */}
+            {activeSection === 'sessions' && <SessionsSection projectName={projectName} />}
+            {activeSection === 'schedules' && <SchedulesSection projectName={projectName} />}
+            {activeSection === 'sharing' && <SharingSection projectName={projectName} />}
+            {activeSection === 'keys' && <KeysSection projectName={projectName} />}
+            {activeSection === 'settings' && <SettingsSection projectName={projectName} />}
+          </div>
+        </SidebarInset>
+      </SidebarProvider>
+    </>
   );
 }
