@@ -167,7 +167,7 @@ func forwardedIdentityMiddleware() gin.HandlerFunc {
 		// key-authenticated requests to inherit the creating user's identity
 		// so that integration credentials (GitHub, Jira, GitLab) are accessible.
 		if c.GetString("userID") == "" {
-			if ns, saName, ok := extractServiceAccountFromBearer(c); ok && K8sClient != nil {
+			if ns, saName, ok := ExtractServiceAccountFromAuth(c); ok && K8sClient != nil {
 				sa, err := K8sClient.CoreV1().ServiceAccounts(ns).Get(c.Request.Context(), saName, v1.GetOptions{})
 				if err == nil && sa.Annotations != nil {
 					if uid := sa.Annotations["ambient-code.io/created-by-user-id"]; uid != "" {
@@ -181,10 +181,10 @@ func forwardedIdentityMiddleware() gin.HandlerFunc {
 	}
 }
 
-// extractServiceAccountFromBearer extracts namespace and SA name from a Bearer
-// JWT's "sub" claim (format: "system:serviceaccount:<ns>:<name>").
-// Also checks the X-Remote-User header for the same format.
-func extractServiceAccountFromBearer(c *gin.Context) (string, string, bool) {
+// ExtractServiceAccountFromAuth extracts namespace and ServiceAccount name from the Authorization Bearer JWT 'sub' claim.
+// Also checks X-Remote-User header for service account format (OpenShift OAuth proxy format).
+// Returns (namespace, saName, true) when a SA subject is present, otherwise ("","",false).
+func ExtractServiceAccountFromAuth(c *gin.Context) (string, string, bool) {
 	// Check X-Remote-User header (OpenShift OAuth proxy format)
 	if remoteUser := c.GetHeader("X-Remote-User"); remoteUser != "" {
 		const prefix = "system:serviceaccount:"
