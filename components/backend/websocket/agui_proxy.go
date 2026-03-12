@@ -73,10 +73,10 @@ var sessionLastSeen sync.Map
 
 // staleSessionThreshold is the duration after which an inactive session's
 // cached data is pruned from the in-memory maps.
-const staleSessionThreshold = 10 * time.Minute
+const staleSessionThreshold = 1 * time.Hour
 
 // staleSessionCleanupInterval is how often the cleanup goroutine runs.
-const staleSessionCleanupInterval = 2 * time.Minute
+const staleSessionCleanupInterval = 10 * time.Minute
 
 func init() {
 	go cleanupStaleSessions()

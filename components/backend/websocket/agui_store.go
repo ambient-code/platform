@@ -12,7 +12,6 @@ package websocket
 import (
 	"ambient-code-backend/types"
 	"bufio"
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -54,6 +53,12 @@ func evictStaleWriteMutexes() {
 // StateBaseDir is the root directory for session state persistence.
 // Set from the STATE_BASE_DIR env var (default "/workspace") at startup.
 var StateBaseDir string
+
+const (
+	// Scanner buffer sizes for reading JSONL files
+	scannerInitialBufferSize = 64 * 1024    // 64KB initial buffer
+	scannerMaxLineSize       = 1024 * 1024  // 1MB max line size
+)
 
 // ─── Live event pipe (multi-client broadcast) ───────────────────────
 // The run handler pipes raw SSE lines to ALL connect handlers tailing
@@ -188,7 +193,7 @@ func loadEvents(sessionID string) []map[string]interface{} {
 	events := make([]map[string]interface{}, 0, 64)
 	scanner := bufio.NewScanner(f)
 	// Allow lines up to 1MB (default 64KB may truncate large tool outputs)
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	scanner.Buffer(make([]byte, 0, scannerInitialBufferSize), scannerMaxLineSize)
 	for scanner.Scan() {
 		line := scanner.Bytes()
 		if len(line) == 0 {

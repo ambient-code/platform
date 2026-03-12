@@ -208,7 +208,7 @@ func readJSONLFile(path string) ([]map[string]interface{}, error) {
 
 	var events []map[string]interface{}
 	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	scanner.Buffer(make([]byte, 0, scannerInitialBufferSize), scannerMaxLineSize)
 
 	for scanner.Scan() {
 		line := scanner.Bytes()
