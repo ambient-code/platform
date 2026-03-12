@@ -89,6 +89,7 @@ Class | Method | HTTP request | Description
 *DefaultAPI* | [**ApiAmbientV1ProjectsIdPatch**](docs/DefaultAPI.md#apiambientv1projectsidpatch) | **Patch** /api/ambient/v1/projects/{id} | Update a project
 *DefaultAPI* | [**ApiAmbientV1ProjectsPost**](docs/DefaultAPI.md#apiambientv1projectspost) | **Post** /api/ambient/v1/projects | Create a new project
 *DefaultAPI* | [**ApiAmbientV1SessionsGet**](docs/DefaultAPI.md#apiambientv1sessionsget) | **Get** /api/ambient/v1/sessions | Returns a list of sessions
+*DefaultAPI* | [**ApiAmbientV1SessionsIdDelete**](docs/DefaultAPI.md#apiambientv1sessionsiddelete) | **Delete** /api/ambient/v1/sessions/{id} | Delete a session by id
 *DefaultAPI* | [**ApiAmbientV1SessionsIdGet**](docs/DefaultAPI.md#apiambientv1sessionsidget) | **Get** /api/ambient/v1/sessions/{id} | Get an session by id
 *DefaultAPI* | [**ApiAmbientV1SessionsIdPatch**](docs/DefaultAPI.md#apiambientv1sessionsidpatch) | **Patch** /api/ambient/v1/sessions/{id} | Update an session
 *DefaultAPI* | [**ApiAmbientV1SessionsIdStartPost**](docs/DefaultAPI.md#apiambientv1sessionsidstartpost) | **Post** /api/ambient/v1/sessions/{id}/start | Start a session
