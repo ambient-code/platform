@@ -2,6 +2,8 @@
 package server
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -9,6 +11,7 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // RouterFunc is a function that can register routes on a Gin router
@@ -158,6 +161,76 @@ func forwardedIdentityMiddleware() gin.HandlerFunc {
 		if v := c.GetHeader("X-Forwarded-Access-Token"); v != "" {
 			c.Set("forwardedAccessToken", v)
 		}
+
+		// Fallback: if userID is still empty, try to resolve it from the
+		// ServiceAccount's created-by-user-id annotation. This enables API
+		// key-authenticated requests to inherit the creating user's identity
+		// so that integration credentials (GitHub, Jira, GitLab) are accessible.
+		if c.GetString("userID") == "" {
+			if ns, saName, ok := extractServiceAccountFromBearer(c); ok && K8sClient != nil {
+				sa, err := K8sClient.CoreV1().ServiceAccounts(ns).Get(c.Request.Context(), saName, v1.GetOptions{})
+				if err == nil && sa.Annotations != nil {
+					if uid := sa.Annotations["ambient-code.io/created-by-user-id"]; uid != "" {
+						c.Set("userID", uid)
+					}
+				}
+			}
+		}
+
 		c.Next()
 	}
+}
+
+// extractServiceAccountFromBearer extracts namespace and SA name from a Bearer
+// JWT's "sub" claim (format: "system:serviceaccount:<ns>:<name>").
+// Also checks the X-Remote-User header for the same format.
+func extractServiceAccountFromBearer(c *gin.Context) (string, string, bool) {
+	// Check X-Remote-User header (OpenShift OAuth proxy format)
+	if remoteUser := c.GetHeader("X-Remote-User"); remoteUser != "" {
+		const prefix = "system:serviceaccount:"
+		if strings.HasPrefix(remoteUser, prefix) {
+			parts := strings.SplitN(strings.TrimPrefix(remoteUser, prefix), ":", 2)
+			if len(parts) == 2 {
+				return parts[0], parts[1], true
+			}
+		}
+	}
+
+	// Standard Authorization Bearer JWT parsing
+	rawAuth := c.GetHeader("Authorization")
+	parts := strings.SplitN(rawAuth, " ", 2)
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+		return "", "", false
+	}
+	token := strings.TrimSpace(parts[1])
+	if token == "" {
+		return "", "", false
+	}
+	segs := strings.Split(token, ".")
+	if len(segs) < 2 {
+		return "", "", false
+	}
+	payloadB64 := segs[1]
+	if m := len(payloadB64) % 4; m != 0 {
+		payloadB64 += strings.Repeat("=", 4-m)
+	}
+	data, err := base64.URLEncoding.DecodeString(payloadB64)
+	if err != nil {
+		return "", "", false
+	}
+	var payload map[string]interface{}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return "", "", false
+	}
+	sub, _ := payload["sub"].(string)
+	const prefix = "system:serviceaccount:"
+	if !strings.HasPrefix(sub, prefix) {
+		return "", "", false
+	}
+	rest := strings.TrimPrefix(sub, prefix)
+	parts2 := strings.SplitN(rest, ":", 2)
+	if len(parts2) != 2 {
+		return "", "", false
+	}
+	return parts2[0], parts2[1], true
 }

@@ -390,10 +390,11 @@ func CreateProjectKey(c *gin.Context) {
 			Namespace: projectName,
 			Labels:    map[string]string{"app": "ambient-access-key"},
 			Annotations: map[string]string{
-				"ambient-code.io/key-name":    req.Name,
-				"ambient-code.io/description": req.Description,
-				"ambient-code.io/created-at":  time.Now().Format(time.RFC3339),
-				"ambient-code.io/role":        role,
+				"ambient-code.io/key-name":           req.Name,
+				"ambient-code.io/description":        req.Description,
+				"ambient-code.io/created-at":         time.Now().Format(time.RFC3339),
+				"ambient-code.io/role":               role,
+				"ambient-code.io/created-by-user-id": c.GetString("userID"),
 			},
 		},
 	}
