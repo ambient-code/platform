@@ -153,30 +153,15 @@ func HandleAGUIEvents(c *gin.Context) {
 	liveCh, cleanup := subscribeLive(sessionName)
 	defer cleanup()
 
-	events := loadEvents(sessionName)
+	// loadEventsForReplay handles finished vs active runs:
+	// - Finished: returns snapshot-compacted events (MESSAGES_SNAPSHOT),
+	//   cached to disk for future reads.
+	// - Active: returns raw events to preserve streaming structure.
+	events := loadEventsForReplay(sessionName)
 
 	if len(events) > 0 {
-		// Check if the last run is finished.
-		runFinished := false
-		if last := events[len(events)-1]; last != nil {
-			if t, _ := last["type"].(string); t == types.EventTypeRunFinished {
-				runFinished = true
-			}
-		}
-
-		if runFinished {
-			// Finished runs get compacted replay (fast, small).
-			compacted := compactStreamingEvents(events)
-			log.Printf("AGUI Events: %d raw → %d compacted events for %s (finished)", len(events), len(compacted), sessionName)
-			for _, evt := range compacted {
-				writeSSEEvent(c.Writer, evt)
-			}
-		} else {
-			// Active run — send raw events to preserve streaming structure.
-			log.Printf("AGUI Events: replaying %d raw events for %s (running)", len(events), sessionName)
-			for _, evt := range events {
-				writeSSEEvent(c.Writer, evt)
-			}
+		for _, evt := range events {
+			writeSSEEvent(c.Writer, evt)
 		}
 		c.Writer.Flush()
 	}

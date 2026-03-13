@@ -18,6 +18,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -160,6 +162,13 @@ func persistEvent(sessionID string, event map[string]interface{}) {
 
 	if _, err := f.Write(append(data, '\n')); err != nil {
 		log.Printf("AGUI Store: failed to write event: %v", err)
+	}
+
+	// Invalidate compacted cache when a new run starts or an error arrives after caching
+	eventType, _ := event["type"].(string)
+	if eventType == types.EventTypeRunStarted || eventType == types.EventTypeRunError {
+		compactedPath := dir + "/agui-events-compacted.jsonl"
+		os.Remove(compactedPath) // best-effort; ignore errors
 	}
 }
 
@@ -313,185 +322,253 @@ func DeriveAgentStatus(sessionID string) string {
 	return ""
 }
 
-// ─── Compaction ──────────────────────────────────────────────────────
+// ─── Snapshot compaction (AG-UI serialization spec) ──────────────────
 //
-// Go port of @ag-ui/client compactEvents.  Concatenates streaming deltas
-// so reconnect replays are compact and fast.
+// compactToSnapshots collapses a finished event stream into MESSAGES_SNAPSHOT
+// events per the AG-UI serialization spec. This is far more aggressive than
+// delta compaction: entire TEXT_MESSAGE and TOOL_CALL sequences become fully
+// assembled Message objects inside a single MESSAGES_SNAPSHOT event.
+//
+// See: https://docs.ag-ui.com/concepts/serialization
 
-type pendingText struct {
-	start       map[string]interface{}
-	deltas      []string
-	end         map[string]interface{}
-	otherEvents []map[string]interface{}
-}
+// compactToSnapshots converts a finished event stream into snapshot events.
+// It assembles TEXT_MESSAGE and TOOL_CALL sequences into Message objects,
+// emits a MESSAGES_SNAPSHOT, and passes through lifecycle + RAW events.
+func compactToSnapshots(events []map[string]interface{}) []map[string]interface{} {
+	var messages []map[string]interface{}
+	var result []map[string]interface{}
 
-type pendingTool struct {
-	start       map[string]interface{}
-	deltas      []string
-	end         map[string]interface{}
-	otherEvents []map[string]interface{}
-}
-
-// compactStreamingEvents concatenates TEXT_MESSAGE_CONTENT and TOOL_CALL_ARGS
-// deltas for the same messageId/toolCallId.  All other events pass through.
-func compactStreamingEvents(events []map[string]interface{}) []map[string]interface{} {
-	compacted := make([]map[string]interface{}, 0, len(events)/2)
-
-	textByID := make(map[string]*pendingText)
-	var textOrder []string
-	toolByID := make(map[string]*pendingTool)
-	var toolOrder []string
-
-	getText := func(id string) *pendingText {
-		if p, ok := textByID[id]; ok {
-			return p
-		}
-		p := &pendingText{}
-		textByID[id] = p
-		textOrder = append(textOrder, id)
-		return p
-	}
-	getTool := func(id string) *pendingTool {
-		if p, ok := toolByID[id]; ok {
-			return p
-		}
-		p := &pendingTool{}
-		toolByID[id] = p
-		toolOrder = append(toolOrder, id)
-		return p
-	}
-
-	flushText := func(id string) {
-		p := textByID[id]
-		if p == nil {
-			return
-		}
-		if p.start != nil {
-			compacted = append(compacted, p.start)
-		}
-		if len(p.deltas) > 0 {
-			combined := ""
-			for _, d := range p.deltas {
-				combined += d
-			}
-			compacted = append(compacted, map[string]interface{}{
-				"type":      types.EventTypeTextMessageContent,
-				"messageId": id,
-				"delta":     combined,
-			})
-		}
-		if p.end != nil {
-			compacted = append(compacted, p.end)
-		}
-		compacted = append(compacted, p.otherEvents...)
-		delete(textByID, id)
-	}
-
-	flushTool := func(id string) {
-		p := toolByID[id]
-		if p == nil {
-			return
-		}
-		if p.start != nil {
-			compacted = append(compacted, p.start)
-		}
-		if len(p.deltas) > 0 {
-			combined := ""
-			for _, d := range p.deltas {
-				combined += d
-			}
-			compacted = append(compacted, map[string]interface{}{
-				"type":       types.EventTypeToolCallArgs,
-				"toolCallId": id,
-				"delta":      combined,
-			})
-		}
-		if p.end != nil {
-			compacted = append(compacted, p.end)
-		}
-		compacted = append(compacted, p.otherEvents...)
-		delete(toolByID, id)
-	}
+	// Track in-progress text messages and tool calls
+	textContent := make(map[string]*strings.Builder) // messageId → accumulated content
+	textRole := make(map[string]string)              // messageId → role
+	textMeta := make(map[string]interface{})         // messageId → metadata
+	toolArgs := make(map[string]*strings.Builder)    // toolCallId → accumulated args
+	toolName := make(map[string]string)              // toolCallId → tool name
+	toolResult := make(map[string]string)            // toolCallId → result content
+	var messageOrder []string                        // ordered messageIds
+	messageToolCalls := make(map[string][]string)    // messageId → []toolCallId
 
 	for _, evt := range events {
 		eventType, _ := evt["type"].(string)
 		switch eventType {
 		case types.EventTypeTextMessageStart:
-			if id, _ := evt["messageId"].(string); id != "" {
-				getText(id).start = evt
-			} else {
-				compacted = append(compacted, evt)
+			msgID, _ := evt["messageId"].(string)
+			if msgID == "" {
+				continue
 			}
+			role, _ := evt["role"].(string)
+			textRole[msgID] = role
+			textContent[msgID] = &strings.Builder{}
+			if meta := evt["metadata"]; meta != nil {
+				textMeta[msgID] = meta
+			}
+			messageOrder = append(messageOrder, msgID)
+
 		case types.EventTypeTextMessageContent:
-			if id, _ := evt["messageId"].(string); id != "" {
-				delta, _ := evt["delta"].(string)
-				getText(id).deltas = append(getText(id).deltas, delta)
-			} else {
-				compacted = append(compacted, evt)
+			msgID, _ := evt["messageId"].(string)
+			if msgID == "" {
+				continue
 			}
+			delta, _ := evt["delta"].(string)
+			if b, ok := textContent[msgID]; ok {
+				b.WriteString(delta)
+			}
+
 		case types.EventTypeTextMessageEnd:
-			if id, _ := evt["messageId"].(string); id != "" {
-				getText(id).end = evt
-				flushText(id)
-			} else {
-				compacted = append(compacted, evt)
-			}
+			// Content is finalized in the message assembly below
+
 		case types.EventTypeToolCallStart:
-			if id, _ := evt["toolCallId"].(string); id != "" {
-				getTool(id).start = evt
-			} else {
-				compacted = append(compacted, evt)
+			tcID, _ := evt["toolCallId"].(string)
+			if tcID == "" {
+				continue
 			}
+			name, _ := evt["toolCallName"].(string)
+			toolName[tcID] = name
+			toolArgs[tcID] = &strings.Builder{}
+			// Associate tool call with its parent message
+			parentMsgID, _ := evt["messageId"].(string)
+			if parentMsgID != "" {
+				messageToolCalls[parentMsgID] = append(messageToolCalls[parentMsgID], tcID)
+			}
+
 		case types.EventTypeToolCallArgs:
-			if id, _ := evt["toolCallId"].(string); id != "" {
-				delta, _ := evt["delta"].(string)
-				getTool(id).deltas = append(getTool(id).deltas, delta)
-			} else {
-				compacted = append(compacted, evt)
+			tcID, _ := evt["toolCallId"].(string)
+			if tcID == "" {
+				continue
 			}
+			delta, _ := evt["delta"].(string)
+			if b, ok := toolArgs[tcID]; ok {
+				b.WriteString(delta)
+			}
+
 		case types.EventTypeToolCallEnd:
-			if id, _ := evt["toolCallId"].(string); id != "" {
-				getTool(id).end = evt
-				flushTool(id)
-			} else {
-				compacted = append(compacted, evt)
+			tcID, _ := evt["toolCallId"].(string)
+			if tcID == "" {
+				continue
 			}
-		default:
-			// Buffer "other" events into ALL currently open (incomplete)
-			// sequences so they replay in the correct position after
-			// compaction.  If no sequences are open, emit directly.
-			buffered := false
-			for _, id := range textOrder {
-				if p := textByID[id]; p != nil && p.start != nil && p.end == nil {
-					p.otherEvents = append(p.otherEvents, evt)
-					buffered = true
+			if res, ok := evt["result"].(string); ok && res != "" {
+				toolResult[tcID] = res
+			}
+
+		case types.EventTypeRunStarted, types.EventTypeRunFinished, types.EventTypeRunError,
+			types.EventTypeStepStarted, types.EventTypeStepFinished:
+			// Pass through lifecycle events as-is
+			result = append(result, evt)
+
+		case types.EventTypeRaw:
+			// Pass through RAW events (e.g. hidden message metadata, feedback)
+			result = append(result, evt)
+
+		case types.EventTypeMessagesSnapshot:
+			// If there's already a snapshot in the stream, pass it through
+			result = append(result, evt)
+
+		case types.EventTypeStateSnapshot, types.EventTypeStateDelta:
+			// Pass through state events
+			result = append(result, evt)
+		}
+	}
+
+	// Assemble messages from tracked state
+	for _, msgID := range messageOrder {
+		role := textRole[msgID]
+		content := ""
+		if b, ok := textContent[msgID]; ok {
+			content = b.String()
+		}
+
+		msg := map[string]interface{}{
+			"id":   msgID,
+			"role": role,
+		}
+		if content != "" {
+			msg["content"] = content
+		}
+		if meta, ok := textMeta[msgID]; ok {
+			msg["metadata"] = meta
+		}
+
+		// Attach tool calls if this is an assistant message
+		if tcIDs, ok := messageToolCalls[msgID]; ok && len(tcIDs) > 0 {
+			var toolCalls []map[string]interface{}
+			for _, tcID := range tcIDs {
+				args := ""
+				if b, ok := toolArgs[tcID]; ok {
+					args = b.String()
 				}
-			}
-			for _, id := range toolOrder {
-				if p := toolByID[id]; p != nil && p.start != nil && p.end == nil {
-					p.otherEvents = append(p.otherEvents, evt)
-					buffered = true
+				tc := map[string]interface{}{
+					"id":   tcID,
+					"name": toolName[tcID],
+					"args": args,
 				}
+				toolCalls = append(toolCalls, tc)
 			}
-			if !buffered {
-				compacted = append(compacted, evt)
+			msg["toolCalls"] = toolCalls
+		}
+
+		messages = append(messages, msg)
+
+		// Emit tool result messages after the assistant message
+		if tcIDs, ok := messageToolCalls[msgID]; ok {
+			for _, tcID := range tcIDs {
+				if res, ok := toolResult[tcID]; ok {
+					toolMsg := map[string]interface{}{
+						"id":         generateEventID(),
+						"role":       types.RoleTool,
+						"content":    res,
+						"toolCallId": tcID,
+						"name":       toolName[tcID],
+					}
+					messages = append(messages, toolMsg)
+				}
 			}
 		}
 	}
 
-	// Flush incomplete sequences (mid-run reconnect)
-	for _, id := range textOrder {
-		if textByID[id] != nil {
-			flushText(id)
+	// Emit MESSAGES_SNAPSHOT if we have messages
+	if len(messages) > 0 {
+		snapshot := map[string]interface{}{
+			"type":     types.EventTypeMessagesSnapshot,
+			"messages": messages,
 		}
+		result = append(result, snapshot)
 	}
-	for _, id := range toolOrder {
-		if toolByID[id] != nil {
-			flushTool(id)
-		}
+
+	return result
+}
+
+// loadEventsForReplay loads events for SSE replay, using cached snapshots
+// for finished sessions. For finished sessions, it writes a compacted snapshot
+// file on first access and serves from it on subsequent reads.
+func loadEventsForReplay(sessionID string) []map[string]interface{} {
+	compactedPath := fmt.Sprintf("%s/sessions/%s/agui-events-compacted.jsonl", StateBaseDir, sessionID)
+
+	// Try to serve from cached compacted file first
+	if events, err := readJSONLFile(compactedPath); err == nil && len(events) > 0 {
+		log.Printf("AGUI Events: serving %d cached snapshot events for %s", len(events), sessionID)
+		return events
 	}
+
+	// Load raw events
+	events := loadEvents(sessionID)
+	if len(events) == 0 {
+		return events
+	}
+
+	// Check if the last run is finished
+	last := events[len(events)-1]
+	if last == nil {
+		return events
+	}
+	lastType, _ := last["type"].(string)
+	if lastType != types.EventTypeRunFinished && lastType != types.EventTypeRunError {
+		// Active run — return raw events to preserve streaming structure
+		log.Printf("AGUI Events: replaying %d raw events for %s (running)", len(events), sessionID)
+		return events
+	}
+
+	// Finished run — compact to snapshots
+	compacted := compactToSnapshots(events)
+	log.Printf("AGUI Events: %d raw → %d snapshot events for %s (finished)", len(events), len(compacted), sessionID)
+
+	// Persist compacted file for future reads (best-effort, non-blocking)
+	go writeCompactedFile(compactedPath, compacted)
 
 	return compacted
+}
+
+// writeCompactedFile writes snapshot events to the compacted JSONL file.
+func writeCompactedFile(path string, events []map[string]interface{}) {
+	f, err := os.CreateTemp(filepath.Dir(path), "compacted-*.tmp")
+	if err != nil {
+		log.Printf("AGUI Store: failed to create compacted temp file: %v", err)
+		return
+	}
+	tmpPath := f.Name()
+
+	w := bufio.NewWriter(f)
+	for _, evt := range events {
+		data, err := json.Marshal(evt)
+		if err != nil {
+			f.Close()
+			os.Remove(tmpPath)
+			return
+		}
+		w.Write(data)
+		w.WriteByte('\n')
+	}
+	if err := w.Flush(); err != nil {
+		f.Close()
+		os.Remove(tmpPath)
+		return
+	}
+	f.Close()
+
+	// Atomic rename
+	if err := os.Rename(tmpPath, path); err != nil {
+		log.Printf("AGUI Store: failed to rename compacted file: %v", err)
+		os.Remove(tmpPath)
+	}
 }
 
 // ─── Timestamp sanitization ──────────────────────────────────────────
