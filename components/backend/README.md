@@ -66,7 +66,7 @@ curl -H "Authorization: Bearer ${OC_TOKEN}" \
   http://localhost:8080/health
 ```
 
-#### Option B: kind/minikube (ServiceAccount token for local dev)
+#### Option B: kind (ServiceAccount token for local dev)
 
 Kubernetes v1.24+ supports `kubectl create token`:
 

@@ -20,6 +20,7 @@ import (
 	"ambient-code-operator/internal/controller"
 	"ambient-code-operator/internal/handlers"
 	"ambient-code-operator/internal/preflight"
+	"ambient-code-operator/internal/trigger"
 )
 
 // Build-time metadata (set via -ldflags -X during build)
@@ -39,6 +40,12 @@ func init() {
 }
 
 func main() {
+	// Handle subcommands before flag parsing
+	if len(os.Args) > 1 && os.Args[1] == "session-trigger" {
+		trigger.RunSessionTrigger()
+		return
+	}
+
 	// Parse command line flags
 	var metricsAddr string
 	var enableLeaderElection bool

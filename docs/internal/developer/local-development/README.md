@@ -36,60 +36,6 @@ make kind-up
 
 ---
 
-### 🚀 Minikube (Older Alternative)
-
-**Status:** ⚠️ Still supported but Kind is recommended for new development
-
-**Best for:** Beginners uncomfortable with Docker, Windows users
-
-**Best for:** First-time setup, general development, stable environment
-
-**Pros:**
-- ✅ Mature and well-documented
-- ✅ Works on all platforms (macOS, Linux, Windows)
-- ✅ Simpler troubleshooting
-- ✅ Stable driver support
-
-**Cons:**
-- ⏱️ Slower startup (~2-3 minutes)
-- 💾 Higher memory usage
-
-**Quick Start:**
-```bash
-make local-up
-# Access at http://$(minikube ip):30030
-```
-
-**Full Guide:** [minikube.md](minikube.md)
-
----
-
-### 🐳 Kind (Kubernetes in Docker)
-
-**Best for:** E2E testing, CI/CD, experienced Kubernetes developers
-
-**Pros:**
-- ⚡ Fast startup (~30 seconds)
-- 🎯 Same environment as CI/CD
-- 💨 Lightweight and quick to reset
-- 🔄 Multiple clusters easy
-
-**Cons:**
-- 📚 Steeper learning curve
-- 🐛 Less forgiving of configuration mistakes
-- 🐳 Requires Docker knowledge
-
-**Quick Start:**
-```bash
-make kind-up
-make test-e2e
-make kind-down
-```
-
-**Full Guide:** [kind.md](kind.md)
-
----
-
 ### 🔴 OpenShift Local (CRC) (Specialized Use)
 
 **Status:** ⚠️ Use only when you need OpenShift-specific features
@@ -144,21 +90,21 @@ make kind-up
 
 ## Quick Comparison
 
-| Feature | **Kind (Recommended)** | Minikube | CRC | Hybrid |
-|---------|------------------------|----------|-----|--------|
-| **Status** | ✅ **Recommended** | ⚠️ Older | ⚠️ Specialized | Advanced |
-| **Startup Time** | ⚡ ~30 sec | ~2-3 min | ~5-10 min | ~30 sec + manual |
-| **Memory Usage** | Lower | Higher | Highest | Lowest |
-| **CI/CD Match** | ✅ **Yes (exact!)** | No | No | No |
-| **Learning Curve** | Moderate | Easier | Moderate | Advanced |
-| **Code Iteration** | Moderate | Slow (rebuild) | Fast (hot-reload) | ⚡ Instant |
-| **Debugging** | Logs only | Logs only | Logs only | ✅ IDE debugging |
-| **OpenShift Features** | No | No | ✅ Yes | No |
-| **Production-Like** | Good | Basic | ✅ Best | No |
-| **Integration Testing** | ✅ **Best** | Yes | Yes | Limited |
-| **E2E Testing** | ✅ **Required** | Yes | Yes | No |
-| **Platform Support** | Linux/macOS | All | macOS/Linux | All |
-| **Our CI Uses** | ✅ **Kind** | No | No | No |
+| Feature | **Kind (Recommended)** | CRC | Hybrid |
+|---------|------------------------|-----|--------|
+| **Status** | ✅ **Recommended** | ⚠️ Specialized | Advanced |
+| **Startup Time** | ⚡ ~30 sec | ~5-10 min | ~30 sec + manual |
+| **Memory Usage** | Lower | Highest | Lowest |
+| **CI/CD Match** | ✅ **Yes (exact!)** | No | No |
+| **Learning Curve** | Moderate | Moderate | Advanced |
+| **Code Iteration** | Moderate | Fast (hot-reload) | ⚡ Instant |
+| **Debugging** | Logs only | Logs only | ✅ IDE debugging |
+| **OpenShift Features** | No | ✅ Yes | No |
+| **Production-Like** | Good | ✅ Best | No |
+| **Integration Testing** | ✅ **Best** | Yes | Limited |
+| **E2E Testing** | ✅ **Required** | Yes | No |
+| **Platform Support** | Linux/macOS | macOS/Linux | All |
+| **Our CI Uses** | ✅ **Kind** | No | No |
 
 ## Which Should I Use?
 
@@ -170,15 +116,6 @@ make kind-up
 - 🎯 You want to match CI/CD environment → **Use Kind**
 
 **TL;DR:** Just use Kind. It's faster, lighter, and matches our CI environment.
-
----
-
-### Choose **Minikube** only if:
-- 💻 You're on Windows (Kind doesn't work well on Windows)
-- 🆘 Kind doesn't work on your machine for some reason
-- 📚 You already have Minikube experience
-
-**Note:** Minikube is the older approach. We recommend migrating to Kind.
 
 ---
 
@@ -242,7 +179,6 @@ cd components/backend && go run .
 ## Additional Resources
 
 - [Kind Quick Start](../../../QUICK_START.md) - 2-minute setup
-- [Minikube Setup](minikube.md) - Older approach (deprecated)
 - [Kind Development Guide](kind.md) - Using Kind for development and testing
 - [CRC Development Guide](crc.md) - OpenShift Local development
 - [OpenShift Cluster Guide](openshift.md) - OpenShift cluster deployment

@@ -66,7 +66,9 @@ import {
 } from "@/components/ui/breadcrumb";
 import Link from "next/link";
 import { SessionHeader } from "./session-header";
-import { getPhaseColor } from "@/utils/session-helpers";
+import { SessionStatusDot } from "@/components/session-status-dot";
+import { AgentStatusIndicator } from "@/components/agent-status-indicator";
+import { useAgentStatus } from "@/hooks/use-agent-status";
 
 // Extracted components
 import { AddContextModal } from "./components/modals/add-context-modal";
@@ -77,7 +79,7 @@ import { WorkflowsAccordion } from "./components/accordions/workflows-accordion"
 import { RepositoriesAccordion } from "./components/accordions/repositories-accordion";
 import { ArtifactsAccordion } from "./components/accordions/artifacts-accordion";
 import { McpServersAccordion, IntegrationsAccordion } from "./components/accordions/mcp-integrations-accordion";
-import { WelcomeExperience } from "./components/welcome-experience";
+
 // Extracted hooks and utilities
 import { useGitOperations } from "./hooks/use-git-operations";
 import { useWorkflowManagement } from "./hooks/use-workflow-management";
@@ -166,8 +168,6 @@ export default function ProjectSessionDetailPage({
   const [repoChanging, setRepoChanging] = useState(false);
   const [pendingRepo, setPendingRepo] = useState<{ url: string; branch: string; status: "Cloning" } | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [userHasInteracted, setUserHasInteracted] = useState(false);
-
   // Left panel visibility and size state (persisted to localStorage)
   const [leftPanelVisible, setLeftPanelVisible] = useState(() => {
     if (typeof window === 'undefined') return true;
@@ -684,11 +684,6 @@ export default function ProjectSessionDetailPage({
   const initializedFromSessionRef = useRef(false);
   const workflowLoadedFromSessionRef = useRef(false);
 
-  // Note: userHasInteracted is only set when:
-  // 1. User explicitly selects a workflow (handleWelcomeWorkflowSelect -> onUserInteraction)
-  // 2. User sends a message (sendChat sets it to true)
-  // It should NOT be set automatically when backend messages arrive
-
   // Load remotes from session annotations (one-time initialization)
   useEffect(() => {
     if (initializedFromSessionRef.current || !session) return;
@@ -770,13 +765,17 @@ export default function ProjectSessionDetailPage({
     }
   };
 
-  // Handle workflow selection from welcome experience
-  const handleWelcomeWorkflowSelect = (workflowId: string) => {
-    handleWorkflowChange(workflowId);
-  };
+  // Derive agent-level status from session data and messages
+  const agentStatus = useAgentStatus(
+    session?.status?.phase || "Pending",
+    isRunActive,
+    aguiStream.state.messages,
+  );
 
-  // Convert AG-UI messages to display format with hierarchical tool call rendering
-  const streamMessages: Array<MessageObject | ToolUseMessages | HierarchicalToolMessage> = useMemo(() => {
+  // Phase 1: convert committed messages + streaming tool cards into display format.
+  // Does NOT depend on currentMessage / currentReasoning so it skips the full
+  // O(n) traversal during text-streaming deltas (the most frequent event type).
+  const committedStreamMessages: Array<MessageObject | ToolUseMessages | HierarchicalToolMessage> = useMemo(() => {
 
     // Helper function to parse tool arguments
     const parseToolArgs = (args: string | undefined): Record<string, unknown> => {
@@ -921,6 +920,12 @@ export default function ProjectSessionDetailPage({
 
       // Handle text content by role
       if (msg.role === "user") {
+        // Hide AskUserQuestion response messages from the chat
+        const msgMeta = msg.metadata as Record<string, unknown> | undefined;
+        if (msgMeta?.type === "ask_user_question_response") {
+          continue;
+        }
+
         result.push({
           type: "user_message",
           id: msg.id,  // Preserve message ID for feedback association
@@ -1043,33 +1048,6 @@ export default function ProjectSessionDetailPage({
       }
     }
 
-    // Add streaming reasoning if currently reasoning
-    const activeReasoning = aguiState.currentReasoning || aguiState.currentThinking;
-    if (activeReasoning?.content) {
-      result.push({
-        type: "agent_message",
-        content: {
-          type: "reasoning_block",
-          thinking: activeReasoning.content,
-          signature: "",
-        },
-        model: "claude",
-        timestamp: activeReasoning.timestamp || "",
-        streaming: true,
-      } as MessageObject & { streaming?: boolean });
-    }
-
-    // Add streaming message if currently streaming
-    if (aguiState.currentMessage?.content) {
-      result.push({
-        type: "agent_message",
-        content: { type: "text_block", text: aguiState.currentMessage.content },
-        model: "claude",
-        timestamp: aguiState.currentMessage.timestamp || "",
-        streaming: true,
-      } as MessageObject & { streaming?: boolean });
-    }
-
     // Render ALL currently streaming tool calls (supports parallel tool execution)
     // CRITICAL: This renders tools immediately when TOOL_CALL_START arrives,
     // not waiting until TOOL_CALL_END like the allToolCalls map approach does
@@ -1161,12 +1139,48 @@ export default function ProjectSessionDetailPage({
     return result;
   }, [
     aguiState.messages,
+    aguiState.currentToolCall,   // Needed in Phase A to avoid orphaned-child promotion
+    aguiState.pendingToolCalls,  // CRITICAL: Include so UI updates when new tools start
+    aguiState.pendingChildren,   // CRITICAL: Include so UI updates when children finish
+  ]);
+
+  // Phase 2: append streaming text / reasoning bubbles to the committed list.
+  // This is O(1) and is the only memo that re-runs on every TEXT_MESSAGE_CONTENT
+  // or REASONING_MESSAGE_CONTENT delta (the most frequent events during active runs).
+  const streamMessages: Array<MessageObject | ToolUseMessages | HierarchicalToolMessage> = useMemo(() => {
+    const result = [...committedStreamMessages];
+
+    const activeReasoning = aguiState.currentReasoning || aguiState.currentThinking;
+    if (activeReasoning?.content) {
+      result.push({
+        type: "agent_message",
+        content: {
+          type: "reasoning_block",
+          thinking: activeReasoning.content,
+          signature: "",
+        },
+        model: "claude",
+        timestamp: activeReasoning.timestamp || "",
+        streaming: true,
+      } as MessageObject & { streaming?: boolean });
+    }
+
+    if (aguiState.currentMessage?.content) {
+      result.push({
+        type: "agent_message",
+        content: { type: "text_block", text: aguiState.currentMessage.content },
+        model: "claude",
+        timestamp: aguiState.currentMessage.timestamp || "",
+        streaming: true,
+      } as MessageObject & { streaming?: boolean });
+    }
+
+    return result;
+  }, [
+    committedStreamMessages,
     aguiState.currentMessage,
     aguiState.currentReasoning,
     aguiState.currentThinking,
-    aguiState.currentToolCall,
-    aguiState.pendingToolCalls,  // CRITICAL: Include so UI updates when new tools start
-    aguiState.pendingChildren,   // CRITICAL: Include so UI updates when children finish
   ]);
 
   // Check if there are any real messages (user or assistant messages, not just system)
@@ -1206,17 +1220,17 @@ export default function ProjectSessionDetailPage({
       if (matchingWorkflow) {
         workflowManagement.setActiveWorkflow(matchingWorkflow.id);
         workflowManagement.setSelectedWorkflow(matchingWorkflow.id);
-        // Mark as interacted for existing sessions with messages
-        if (hasRealMessages) {
-          setUserHasInteracted(true);
-        }
       } else {
-        // No matching OOTB workflow found - treat as custom workflow
+        // No matching OOTB workflow found - treat as custom workflow.
+        // Restore the full custom workflow details from the session CR
+        // so they survive page refresh.
+        const aw = session.spec.activeWorkflow;
+        workflowManagement.setCustomWorkflow(
+          aw.gitUrl,
+          aw.branch || "main",
+          aw.path || ""
+        );
         workflowManagement.setActiveWorkflow("custom");
-        workflowManagement.setSelectedWorkflow("custom");
-        if (hasRealMessages) {
-          setUserHasInteracted(true);
-        }
       }
       workflowLoadedFromSessionRef.current = true;
     }
@@ -1354,8 +1368,6 @@ export default function ProjectSessionDetailPage({
     clearDraft();
 
     // Mark user interaction when they send first message
-    setUserHasInteracted(true);
-
     const phase = session?.status?.phase;
 
     // If session is not yet running, queue the message for later
@@ -1369,6 +1381,18 @@ export default function ProjectSessionDetailPage({
       await aguiSendMessage(finalMessage);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to send message");
+    }
+  };
+
+  // Send an AskUserQuestion response (hidden from chat, properly formatted)
+  const sendToolAnswer = async (formattedAnswer: string) => {
+    try {
+      await aguiSendMessage(formattedAnswer, {
+        type: "ask_user_question_response",
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to send answer");
+      throw err;
     }
   };
 
@@ -1447,6 +1471,7 @@ export default function ProjectSessionDetailPage({
 
   return (
     <>
+      <title>{`${session.spec.displayName || session.metadata.name} · Ambient Code Platform`}</title>
       <div className="absolute inset-0 top-16 overflow-hidden bg-background flex flex-col">
         {/* Fixed header */}
         <div className="flex-shrink-0 bg-card border-b">
@@ -1468,13 +1493,8 @@ export default function ProjectSessionDetailPage({
                     <span className="text-sm font-medium truncate max-w-[150px]">
                       {session.spec.displayName || session.metadata.name}
                     </span>
-                    <Badge data-testid="session-phase-badge"
-                      className={getPhaseColor(
-                        session.status?.phase || "Pending",
-                      )}
-                    >
-                      {session.status?.phase || "Pending"}
-                    </Badge>
+                    <SessionStatusDot phase={session.status?.phase || "Pending"} />
+                    <AgentStatusIndicator status={agentStatus} compact />
                     {agentName && (
                       <Badge variant="outline" className="text-xs font-normal">
                         {agentName} / {session.spec.llmSettings.model}
@@ -1508,13 +1528,8 @@ export default function ProjectSessionDetailPage({
                       <BreadcrumbItem>
                         <BreadcrumbPage className="flex items-center gap-1.5">
                           {session.spec.displayName || session.metadata.name}
-                          <Badge
-                            className={getPhaseColor(
-                              session.status?.phase || "Pending",
-                            )}
-                          >
-                            {session.status?.phase || "Pending"}
-                          </Badge>
+                          <SessionStatusDot phase={session.status?.phase || "Pending"} />
+                          <AgentStatusIndicator status={agentStatus} />
                         </BreadcrumbPage>
                       </BreadcrumbItem>
                     </BreadcrumbList>
@@ -2616,33 +2631,19 @@ export default function ProjectSessionDetailPage({
                         chatInput={chatInput}
                         setChatInput={setChatInput}
                         onSendChat={() => Promise.resolve(sendChat())}
+                        onSendToolAnswer={sendToolAnswer}
                         onInterrupt={aguiInterrupt}
                         onGoToResults={() => {}}
                         onContinue={handleContinue}
                         workflowMetadata={workflowMetadata}
                         onCommandClick={handleCommandClick}
                         isRunActive={isRunActive}
-                        showWelcomeExperience={session?.status?.phase === "Running"}
-                        activeWorkflow={workflowManagement.activeWorkflow}
-                        userHasInteracted={userHasInteracted}
                         queuedMessages={sessionQueue.messages}
                         hasRealMessages={hasRealMessages}
                         onCancelQueuedMessage={sessionQueue.cancelMessage}
                         onUpdateQueuedMessage={sessionQueue.updateMessage}
                         onClearQueue={sessionQueue.clearMessages}
                         agentName={agentName}
-                        welcomeExperienceComponent={
-                          <WelcomeExperience
-                            ootbWorkflows={ootbWorkflows}
-                            onWorkflowSelect={handleWelcomeWorkflowSelect}
-                            onUserInteraction={() => setUserHasInteracted(true)}
-                            userHasInteracted={userHasInteracted}
-                            sessionPhase={session?.status?.phase}
-                            hasRealMessages={hasRealMessages}
-                            onLoadWorkflow={() => setCustomWorkflowDialogOpen(true)}
-                            selectedWorkflow={workflowManagement.selectedWorkflow}
-                          />
-                        }
                       />
                       </FeedbackProvider>
                     </div>
@@ -2694,6 +2695,7 @@ export default function ProjectSessionDetailPage({
                           chatInput={chatInput}
                           setChatInput={setChatInput}
                           onSendChat={() => Promise.resolve(sendChat())}
+                          onSendToolAnswer={sendToolAnswer}
                           onInterrupt={aguiInterrupt}
                           onGoToResults={() => {}}
                           onContinue={handleContinue}
@@ -2701,26 +2703,11 @@ export default function ProjectSessionDetailPage({
                           onCommandClick={handleCommandClick}
                           agentName={agentName}
                           isRunActive={isRunActive}
-                          showWelcomeExperience={session?.status?.phase === "Running"}
-                          activeWorkflow={workflowManagement.activeWorkflow}
-                          userHasInteracted={userHasInteracted}
                           queuedMessages={sessionQueue.messages}
                           hasRealMessages={hasRealMessages}
                           onCancelQueuedMessage={sessionQueue.cancelMessage}
                           onUpdateQueuedMessage={sessionQueue.updateMessage}
                           onClearQueue={sessionQueue.clearMessages}
-                          welcomeExperienceComponent={
-                            <WelcomeExperience
-                              ootbWorkflows={ootbWorkflows}
-                              onWorkflowSelect={handleWelcomeWorkflowSelect}
-                              onUserInteraction={() => setUserHasInteracted(true)}
-                              userHasInteracted={userHasInteracted}
-                              sessionPhase={session?.status?.phase}
-                              hasRealMessages={hasRealMessages}
-                              onLoadWorkflow={() => setCustomWorkflowDialogOpen(true)}
-                              selectedWorkflow={workflowManagement.selectedWorkflow}
-                            />
-                          }
                         />
                       </FeedbackProvider>
                     </div>

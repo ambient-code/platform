@@ -34,6 +34,9 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
+// k8sListPageSize bounds per-call memory when listing CRs from the API server.
+const k8sListPageSize = 500
+
 // Package-level variables for session handlers (set from main package)
 var (
 	GetAgenticSessionV1Alpha1Resource func() schema.GroupVersionResource
@@ -41,6 +44,9 @@ var (
 	GetGitHubToken                    func(context.Context, kubernetes.Interface, dynamic.Interface, string, string) (string, error)
 	GetGitLabToken                    func(context.Context, kubernetes.Interface, string, string) (string, error)
 	DeriveRepoFolderFromURL           func(string) string
+	// DeriveAgentStatusFromEvents derives agentStatus from the persisted event log.
+	// Set by the websocket package at init to avoid circular imports.
+	DeriveAgentStatusFromEvents func(sessionName string) string
 	// LEGACY: SendMessageToSession removed - AG-UI server uses HTTP/SSE instead of WebSocket
 )
 
@@ -361,6 +367,25 @@ func parseStatus(status map[string]interface{}) *types.AgenticSessionStatus {
 
 // V2 API Handlers - Multi-tenant session management
 
+// enrichAgentStatus derives agentStatus from the persisted event log for
+// Running sessions.  This is the source of truth — it replaces the stale
+// CR-cached value which was subject to goroutine race conditions.
+func enrichAgentStatus(session *types.AgenticSession) {
+	if session.Status == nil || session.Status.Phase != "Running" {
+		return
+	}
+	if DeriveAgentStatusFromEvents == nil {
+		return
+	}
+	name, _ := session.Metadata["name"].(string)
+	if name == "" {
+		return
+	}
+	if derived := DeriveAgentStatusFromEvents(name); derived != "" {
+		session.Status.AgentStatus = types.StringPtr(derived)
+	}
+}
+
 func ListSessions(c *gin.Context) {
 	project := c.GetString("project")
 
@@ -380,21 +405,34 @@ func ListSessions(c *gin.Context) {
 	}
 	types.NormalizePaginationParams(&params)
 
-	// Build list options with pagination
-	// Note: Kubernetes List with Limit returns a continue token for server-side pagination
-	// We use offset-based pagination on top of fetching all items for search/sort flexibility
+	// Build list options with K8s-level pagination to avoid loading all CRs into memory.
+	// We still need all items for search/sort, but fetching in pages bounds per-call memory.
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	list, err := k8sDyn.Resource(gvr).Namespace(project).List(ctx, v1.ListOptions{})
+	listOpts := v1.ListOptions{Limit: k8sListPageSize}
+	list, err := k8sDyn.Resource(gvr).Namespace(project).List(ctx, listOpts)
 	if err != nil {
 		log.Printf("Failed to list agentic sessions in project %s: %v", project, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list agentic sessions"})
 		return
 	}
 
+	// Fetch remaining pages if the list was truncated by the Limit.
+	allItems := list.Items
+	for list.GetContinue() != "" {
+		listOpts.Continue = list.GetContinue()
+		list, err = k8sDyn.Resource(gvr).Namespace(project).List(ctx, listOpts)
+		if err != nil {
+			log.Printf("Failed to list agentic sessions (continue) in project %s: %v", project, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list agentic sessions"})
+			return
+		}
+		allItems = append(allItems, list.Items...)
+	}
+
 	var sessions []types.AgenticSession
-	for _, item := range list.Items {
+	for _, item := range allItems {
 		meta, _, err := unstructured.NestedMap(item.Object, "metadata")
 		if err != nil {
 			log.Printf("ListSessions: failed to read metadata for %s/%s: %v", project, item.GetName(), err)
@@ -430,6 +468,11 @@ func ListSessions(c *gin.Context) {
 	// Apply pagination
 	totalCount := len(sessions)
 	paginatedSessions, hasMore, nextOffset := paginateSessions(sessions, params.Offset, params.Limit)
+
+	// Derive agentStatus from event log only for paginated sessions (performance optimization)
+	for i := range paginatedSessions {
+		enrichAgentStatus(&paginatedSessions[i])
+	}
 
 	response := types.PaginatedResponse{
 		Items:      paginatedSessions,
@@ -608,7 +651,7 @@ func CreateSession(c *gin.Context) {
 
 	// Set defaults for LLM settings if not provided
 	llmSettings := types.LLMSettings{
-		Model:       "sonnet",
+		Model:       "claude-sonnet-4-5",
 		Temperature: 0.7,
 		MaxTokens:   4000,
 	}
@@ -902,6 +945,9 @@ func GetSession(c *gin.Context) {
 	if status, ok := item.Object["status"].(map[string]interface{}); ok {
 		session.Status = parseStatus(status)
 	}
+
+	// Derive agentStatus from event log (source of truth) for running sessions
+	enrichAgentStatus(&session)
 
 	session.AutoBranch = ComputeAutoBranch(sessionName)
 

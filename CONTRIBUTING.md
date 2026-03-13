@@ -167,8 +167,8 @@ Use conventional commit messages:
 
 ```bash
 git commit -m "feat: add multi-repo session support"
-git commit -m "fix: resolve PVC mounting issue in minikube"
-git commit -m "docs: update minikube setup instructions"
+git commit -m "fix: resolve PVC mounting issue in kind cluster"
+git commit -m "docs: update local development setup instructions"
 git commit -m "test: add integration tests for operator"
 ```
 
@@ -357,8 +357,6 @@ Your PR should include:
 
 The recommended way to develop and test Ambient Code Platform locally is using **Kind (Kubernetes in Docker)**. This provides a lightweight Kubernetes environment that matches our CI/CD setup.
 
-> **Migrating from Minikube?** Kind is faster, lighter, and matches CI. See [Local Development Guide](docs/internal/developer/local-development/) for comparison.
-
 ### Installing Kind and Prerequisites
 
 #### macOS
@@ -423,10 +421,6 @@ Restart:
 ```bash
 make kind-up
 ```
-
-#### Alternative: Minikube (Older Approach)
-
-If Kind doesn't work for you, see the [Minikube setup guide](docs/internal/developer/local-development/minikube.md).
 
 ### Additional Development Commands
 

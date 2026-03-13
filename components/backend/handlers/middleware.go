@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"ambient-code-backend/server"
+
 	"github.com/gin-gonic/gin"
 	authv1 "k8s.io/api/authorization/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -261,61 +263,10 @@ func updateAccessKeyLastUsedAnnotation(c *gin.Context) {
 	}
 }
 
-// ExtractServiceAccountFromAuth extracts namespace and ServiceAccount name from the Authorization Bearer JWT 'sub' claim
-// Also checks X-Remote-User header for service account format (OpenShift OAuth proxy format)
-// Returns (namespace, saName, true) when a SA subject is present, otherwise ("","",false)
+// ExtractServiceAccountFromAuth delegates to server.ExtractServiceAccountFromAuth.
+// Kept as a forwarding function for backward compatibility with callers in this package.
 func ExtractServiceAccountFromAuth(c *gin.Context) (string, string, bool) {
-	// Check X-Remote-User header (OpenShift OAuth proxy format)
-	// This is a production feature, not just for tests
-	remoteUser := c.GetHeader("X-Remote-User")
-	if remoteUser != "" {
-		const prefix = "system:serviceaccount:"
-		if strings.HasPrefix(remoteUser, prefix) {
-			rest := strings.TrimPrefix(remoteUser, prefix)
-			parts := strings.SplitN(rest, ":", 2)
-			if len(parts) == 2 {
-				return parts[0], parts[1], true
-			}
-		}
-	}
-
-	// Standard Authorization Bearer JWT parsing
-	rawAuth := c.GetHeader("Authorization")
-	parts := strings.SplitN(rawAuth, " ", 2)
-	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-		return "", "", false
-	}
-	token := strings.TrimSpace(parts[1])
-	if token == "" {
-		return "", "", false
-	}
-	segs := strings.Split(token, ".")
-	if len(segs) < 2 {
-		return "", "", false
-	}
-	payloadB64 := segs[1]
-	if m := len(payloadB64) % 4; m != 0 {
-		payloadB64 += strings.Repeat("=", 4-m)
-	}
-	data, err := base64.URLEncoding.DecodeString(payloadB64)
-	if err != nil {
-		return "", "", false
-	}
-	var payload map[string]interface{}
-	if err := json.Unmarshal(data, &payload); err != nil {
-		return "", "", false
-	}
-	sub, _ := payload["sub"].(string)
-	const prefix = "system:serviceaccount:"
-	if !strings.HasPrefix(sub, prefix) {
-		return "", "", false
-	}
-	rest := strings.TrimPrefix(sub, prefix)
-	parts2 := strings.SplitN(rest, ":", 2)
-	if len(parts2) != 2 {
-		return "", "", false
-	}
-	return parts2[0], parts2[1], true
+	return server.ExtractServiceAccountFromAuth(c)
 }
 
 // ValidateProjectContext is middleware for project context validation

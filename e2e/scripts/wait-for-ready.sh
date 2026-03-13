@@ -22,6 +22,12 @@ kubectl wait --for=condition=available --timeout=300s \
   deployment/frontend \
   -n ambient-code
 
+# Wait for Unleash (feature flags - frontend retries on connect failure cause re-render loops)
+echo "⏳ Waiting for unleash..."
+kubectl wait --for=condition=available --timeout=300s \
+  deployment/unleash \
+  -n ambient-code 2>/dev/null || echo "⚠️  Unleash not deployed (feature flags disabled)"
+
 # Wait for MinIO (required for session state persistence)
 echo "⏳ Waiting for minio..."
 kubectl wait --for=condition=available --timeout=300s \

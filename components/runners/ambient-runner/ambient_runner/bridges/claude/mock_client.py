@@ -137,9 +137,7 @@ def _deserialize(data: dict) -> Optional[Any]:
     if cls in (AssistantMessage, UserMessage) and "content" in data:
         content = data["content"]
         if isinstance(content, list):
-            data["content"] = [
-                b for b in (_deserialize_block(b) for b in content) if b
-            ]
+            data["content"] = [b for b in (_deserialize_block(b) for b in content) if b]
 
     try:
         return cls(**data)

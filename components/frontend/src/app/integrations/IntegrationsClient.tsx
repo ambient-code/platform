@@ -1,6 +1,5 @@
 'use client'
 
-import React from 'react'
 import { GitHubConnectionCard } from '@/components/github-connection-card'
 import { GoogleDriveConnectionCard } from '@/components/google-drive-connection-card'
 import { GitLabConnectionCard } from '@/components/gitlab-connection-card'
@@ -12,7 +11,6 @@ import { Loader2 } from 'lucide-react'
 type Props = { appSlug?: string }
 
 export default function IntegrationsClient({ appSlug }: Props) {
-  // Fetch all integration statuses in one call
   const { data: integrations, isLoading, refetch } = useIntegrationsStatus()
 
   return (

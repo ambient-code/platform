@@ -11,6 +11,8 @@ package websocket
 
 import (
 	"ambient-code-backend/types"
+	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -52,6 +54,12 @@ func evictStaleWriteMutexes() {
 // StateBaseDir is the root directory for session state persistence.
 // Set from the STATE_BASE_DIR env var (default "/workspace") at startup.
 var StateBaseDir string
+
+const (
+	// Scanner buffer sizes for reading JSONL files
+	scannerInitialBufferSize = 64 * 1024   // 64KB initial buffer
+	scannerMaxLineSize       = 1024 * 1024 // 1MB max line size
+)
 
 // ─── Live event pipe (multi-client broadcast) ───────────────────────
 // The run handler pipes raw SSE lines to ALL connect handlers tailing
@@ -157,13 +165,14 @@ func persistEvent(sessionID string, event map[string]interface{}) {
 
 // ─── Read path ───────────────────────────────────────────────────────
 
-// loadEvents reads all AG-UI events for a session from the JSONL log.
+// loadEvents reads all AG-UI events for a session from the JSONL log
+// using a streaming scanner to avoid loading the entire file into memory.
 // Automatically triggers legacy migration if the log doesn't exist but
 // a pre-AG-UI messages.jsonl file does.
 func loadEvents(sessionID string) []map[string]interface{} {
 	path := fmt.Sprintf("%s/sessions/%s/agui-events.jsonl", StateBaseDir, sessionID)
 
-	data, err := os.ReadFile(path)
+	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			// Attempt legacy migration (messages.jsonl → agui-events.jsonl)
@@ -171,7 +180,7 @@ func loadEvents(sessionID string) []map[string]interface{} {
 				log.Printf("AGUI Store: legacy migration failed for %s: %v", sessionID, mErr)
 			}
 			// Retry after migration
-			data, err = os.ReadFile(path)
+			f, err = os.Open(path)
 			if err != nil {
 				return nil
 			}
@@ -180,9 +189,14 @@ func loadEvents(sessionID string) []map[string]interface{} {
 			return nil
 		}
 	}
+	defer f.Close()
 
 	events := make([]map[string]interface{}, 0, 64)
-	for _, line := range splitLines(data) {
+	scanner := bufio.NewScanner(f)
+	// Allow lines up to 1MB (default 64KB may truncate large tool outputs)
+	scanner.Buffer(make([]byte, 0, scannerInitialBufferSize), scannerMaxLineSize)
+	for scanner.Scan() {
+		line := scanner.Bytes()
 		if len(line) == 0 {
 			continue
 		}
@@ -191,7 +205,112 @@ func loadEvents(sessionID string) []map[string]interface{} {
 			events = append(events, evt)
 		}
 	}
+	if err := scanner.Err(); err != nil {
+		log.Printf("AGUI Store: error scanning event log for %s: %v", sessionID, err)
+	}
 	return events
+}
+
+// DeriveAgentStatus reads a session's event log and returns the agent
+// status derived from the last significant events.
+//
+// Returns "" if the status cannot be determined (no events, file missing, etc.).
+func DeriveAgentStatus(sessionID string) string {
+	path := fmt.Sprintf("%s/sessions/%s/agui-events.jsonl", StateBaseDir, sessionID)
+
+	// Read only the tail of the file to avoid loading entire event log into memory.
+	// 64KB is sufficient for recent lifecycle events (scanning backwards).
+	const maxTailBytes = 64 * 1024
+
+	file, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer file.Close()
+
+	stat, err := file.Stat()
+	if err != nil {
+		return ""
+	}
+
+	fileSize := stat.Size()
+	var data []byte
+
+	if fileSize <= maxTailBytes {
+		// File is small, read it all
+		data, err = os.ReadFile(path)
+		if err != nil {
+			return ""
+		}
+	} else {
+		// File is large, seek to tail and read last N bytes
+		offset := fileSize - maxTailBytes
+		_, err = file.Seek(offset, 0)
+		if err != nil {
+			return ""
+		}
+
+		data = make([]byte, maxTailBytes)
+		n, err := file.Read(data)
+		if err != nil {
+			return ""
+		}
+		data = data[:n]
+
+		// Skip partial first line (we seeked into the middle of a line)
+		if idx := bytes.IndexByte(data, '\n'); idx >= 0 {
+			data = data[idx+1:]
+		}
+	}
+
+	lines := splitLines(data)
+
+	// Scan backwards.  We only care about lifecycle and AskUserQuestion events.
+	//   RUN_STARTED                       → "working"
+	//   RUN_FINISHED / RUN_ERROR          → "idle", unless same run had AskUserQuestion
+	//   TOOL_CALL_START (AskUserQuestion) → "waiting_input"
+	var runEndRunID string // set when we hit RUN_FINISHED/RUN_ERROR and need to look deeper
+	for i := len(lines) - 1; i >= 0; i-- {
+		if len(lines[i]) == 0 {
+			continue
+		}
+		var evt map[string]interface{}
+		if err := json.Unmarshal(lines[i], &evt); err != nil {
+			continue
+		}
+		evtType, _ := evt["type"].(string)
+
+		switch evtType {
+		case types.EventTypeRunStarted:
+			if runEndRunID != "" {
+				// We were scanning for an AskUserQuestion but hit RUN_STARTED first → idle
+				return types.AgentStatusIdle
+			}
+			return types.AgentStatusWorking
+
+		case types.EventTypeRunFinished, types.EventTypeRunError:
+			if runEndRunID == "" {
+				// First run-end seen; scan deeper within this run for AskUserQuestion
+				runEndRunID, _ = evt["runId"].(string)
+			}
+
+		case types.EventTypeToolCallStart:
+			if runEndRunID != "" {
+				// Only relevant if we're scanning within the ended run
+				if evtRunID, _ := evt["runId"].(string); evtRunID != "" && evtRunID != runEndRunID {
+					return types.AgentStatusIdle
+				}
+			}
+			if toolName, _ := evt["toolCallName"].(string); isAskUserQuestionToolCall(toolName) {
+				return types.AgentStatusWaitingInput
+			}
+		}
+	}
+
+	if runEndRunID != "" {
+		return types.AgentStatusIdle
+	}
+	return ""
 }
 
 // ─── Compaction ──────────────────────────────────────────────────────

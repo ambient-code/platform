@@ -8,6 +8,7 @@ package client
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -23,12 +24,13 @@ import (
 )
 
 type Client struct {
-	httpClient  *http.Client
-	baseURL     string
-	token       string
-	project     string
-	logger      *slog.Logger
-	userAgent   string
+	httpClient         *http.Client
+	baseURL            string
+	token              string
+	project            string
+	logger             *slog.Logger
+	userAgent          string
+	insecureSkipVerify bool
 }
 
 type ClientOption func(*Client)
@@ -36,6 +38,23 @@ type ClientOption func(*Client)
 func WithTimeout(timeout time.Duration) ClientOption {
 	return func(c *Client) {
 		c.httpClient.Timeout = timeout
+	}
+}
+
+func WithInsecureSkipVerify() ClientOption {
+	return func(c *Client) {
+		c.insecureSkipVerify = true
+		t, ok := c.httpClient.Transport.(*http.Transport)
+		if !ok || t == nil {
+			t = http.DefaultTransport.(*http.Transport).Clone()
+		} else {
+			t = t.Clone()
+		}
+		if t.TLSClientConfig == nil {
+			t.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+		}
+		t.TLSClientConfig.InsecureSkipVerify = true //nolint:gosec
+		c.httpClient.Transport = t
 	}
 }
 
@@ -116,7 +135,7 @@ func NewClientFromEnv(opts ...ClientOption) (*Client, error) {
 }
 
 func (c *Client) do(ctx context.Context, method, path string, body []byte, expectedStatus int, result interface{}) error {
-	url := c.baseURL + "/api/ambient-api-server/v1" + path
+	url := c.baseURL + "{{.Spec.BasePath}}" + path
 
 	req, err := http.NewRequestWithContext(ctx, method, url, nil)
 	if err != nil {
@@ -226,7 +245,8 @@ func validateURL(rawURL string) error {
 	return nil
 }
 
+var bearerTokenPattern = regexp.MustCompile(`([Bb]earer\s+)[a-zA-Z0-9\-_~.+/=]+`)
+
 func sanitizeLogURL(rawURL string) string {
-	tokenPattern := regexp.MustCompile(`([Bb]earer\s+)[a-zA-Z0-9\-_~.+/=]+`)
-	return tokenPattern.ReplaceAllString(rawURL, "${1}[REDACTED]")
+	return bearerTokenPattern.ReplaceAllString(rawURL, "${1}[REDACTED]")
 }

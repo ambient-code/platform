@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -141,12 +142,28 @@ func reconcileProjectSettings(obj *unstructured.Unstructured) error {
 		}
 	}
 
-	// Update status with reconciliation results (only fields defined in CRD)
-	statusUpdate := map[string]interface{}{
-		"groupBindingsCreated": groupBindingsCreated,
+	// Ensure RBAC for scheduled session triggers
+	triggerRBACReady := true
+	if err := ensureSessionTriggerRBAC(namespace, obj); err != nil {
+		log.Printf("Error ensuring session trigger RBAC in namespace %s: %v", namespace, err)
+		triggerRBACReady = false
 	}
 
-	return updateProjectSettingsStatus(namespace, name, statusUpdate)
+	// Update status with reconciliation results
+	statusUpdate := map[string]interface{}{
+		"groupBindingsCreated":      groupBindingsCreated,
+		"scheduledSessionRBACReady": triggerRBACReady,
+	}
+
+	if statusErr := updateProjectSettingsStatus(namespace, name, statusUpdate); statusErr != nil {
+		log.Printf("Failed to update ProjectSettings status in namespace %s: %v", namespace, statusErr)
+	}
+
+	if !triggerRBACReady {
+		return fmt.Errorf("failed to ensure session trigger RBAC in namespace %s", namespace)
+	}
+
+	return nil
 }
 
 func ensureRoleBinding(namespace, groupName, role string) error {
@@ -208,6 +225,97 @@ func mapRoleToKubernetesRole(role string) string {
 	default:
 		return "ambient-project-view" // Default to view role
 	}
+}
+
+func ensureSessionTriggerRBAC(namespace string, owner *unstructured.Unstructured) error {
+	const saName = "ambient-session-trigger"
+	const roleName = "ambient-session-trigger"
+	const rbName = "ambient-session-trigger"
+
+	managedLabels := map[string]string{
+		"ambient-code.io/managed": "true",
+	}
+
+	isController := true
+	ownerRef := v1.OwnerReference{
+		APIVersion: owner.GetAPIVersion(),
+		Kind:       owner.GetKind(),
+		Name:       owner.GetName(),
+		UID:        owner.GetUID(),
+		Controller: &isController,
+	}
+
+	// Create ServiceAccount (idempotent — ignore AlreadyExists)
+	sa := &corev1.ServiceAccount{
+		ObjectMeta: v1.ObjectMeta{
+			Name:            saName,
+			Namespace:       namespace,
+			Labels:          managedLabels,
+			OwnerReferences: []v1.OwnerReference{ownerRef},
+		},
+	}
+	if _, err := config.K8sClient.CoreV1().ServiceAccounts(namespace).Create(context.TODO(), sa, v1.CreateOptions{}); err != nil {
+		if !errors.IsAlreadyExists(err) {
+			return fmt.Errorf("failed to create ServiceAccount %s: %v", saName, err)
+		}
+	} else {
+		log.Printf("Created ServiceAccount %s in namespace %s", saName, namespace)
+	}
+
+	// Create Role (idempotent — ignore AlreadyExists)
+	role := &rbacv1.Role{
+		ObjectMeta: v1.ObjectMeta{
+			Name:            roleName,
+			Namespace:       namespace,
+			Labels:          managedLabels,
+			OwnerReferences: []v1.OwnerReference{ownerRef},
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"vteam.ambient-code"},
+				Resources: []string{"agenticsessions"},
+				Verbs:     []string{"create", "get", "list"},
+			},
+		},
+	}
+	if _, err := config.K8sClient.RbacV1().Roles(namespace).Create(context.TODO(), role, v1.CreateOptions{}); err != nil {
+		if !errors.IsAlreadyExists(err) {
+			return fmt.Errorf("failed to create Role %s: %v", roleName, err)
+		}
+	} else {
+		log.Printf("Created Role %s in namespace %s", roleName, namespace)
+	}
+
+	// Create RoleBinding (idempotent — ignore AlreadyExists)
+	rb := &rbacv1.RoleBinding{
+		ObjectMeta: v1.ObjectMeta{
+			Name:            rbName,
+			Namespace:       namespace,
+			Labels:          managedLabels,
+			OwnerReferences: []v1.OwnerReference{ownerRef},
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "Role",
+			Name:     roleName,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      saName,
+				Namespace: namespace,
+			},
+		},
+	}
+	if _, err := config.K8sClient.RbacV1().RoleBindings(namespace).Create(context.TODO(), rb, v1.CreateOptions{}); err != nil {
+		if !errors.IsAlreadyExists(err) {
+			return fmt.Errorf("failed to create RoleBinding %s: %v", rbName, err)
+		}
+	} else {
+		log.Printf("Created RoleBinding %s in namespace %s", rbName, namespace)
+	}
+
+	return nil
 }
 
 func updateProjectSettingsStatus(namespace, name string, statusUpdate map[string]interface{}) error {

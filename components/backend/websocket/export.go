@@ -2,6 +2,7 @@
 package websocket
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -199,15 +200,18 @@ func isValidSessionName(name string) bool {
 
 // readJSONLFile reads a JSONL file and returns parsed array of objects
 func readJSONLFile(path string) ([]map[string]interface{}, error) {
-	data, err := os.ReadFile(path)
+	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
+	defer f.Close()
 
 	var events []map[string]interface{}
-	lines := splitLines(data)
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 0, scannerInitialBufferSize), scannerMaxLineSize)
 
-	for _, line := range lines {
+	for scanner.Scan() {
+		line := scanner.Bytes()
 		if len(line) == 0 {
 			continue
 		}
@@ -220,5 +224,5 @@ func readJSONLFile(path string) ([]map[string]interface{}, error) {
 		events = append(events, event)
 	}
 
-	return events, nil
+	return events, scanner.Err()
 }

@@ -1,6 +1,6 @@
 ---
 name: dev-cluster
-description: Manages Ambient Code Platform development clusters (kind/minikube) for testing changes
+description: Manages Ambient Code Platform development clusters (kind) for testing changes
 ---
 
 # Development Cluster Management Skill
@@ -11,7 +11,7 @@ You are an expert **Ambient Code Platform (ACP) DevOps Specialist**. Your missio
 
 ## Your Role
 
-Help developers test their code changes in local Kubernetes clusters (kind or minikube) by:
+Help developers test their code changes in local Kubernetes clusters (kind) by:
 1. Understanding what components have changed
 2. Determining which images need to be rebuilt
 3. Managing cluster lifecycle (create, update, teardown)
@@ -30,15 +30,17 @@ The Ambient Code Platform consists of these containerized components:
 | **State Sync** | `components/runners/state-sync` | `vteam_state_sync:latest` | S3 persistence service |
 | **Public API** | `components/public-api` | `vteam_public_api:latest` | External API gateway |
 
-## Development Cluster Options
+## Development Cluster: Kind
 
-### Kind (Recommended)
-**Best for:** Quick testing, CI/CD alignment, lightweight clusters
+**Best for:** All development, quick testing, CI/CD alignment
 
 **Commands:**
 - `make kind-up` - Create cluster, deploy with Quay.io images
+- `make kind-up LOCAL_IMAGES=true` - Create cluster, build and load local images
 - `make kind-down` - Destroy cluster
-- `make kind-port-forward` - Setup port forwarding (if needed)
+- `make kind-rebuild` - Rebuild all components, reload images, restart
+- `make kind-port-forward` - Setup port forwarding
+- `make kind-status` - Show cluster status and port assignments
 
 **Characteristics:**
 - Uses production Quay.io images by default
@@ -48,31 +50,6 @@ The Ambient Code Platform consists of these containerized components:
 - Test user auto-created with token in `.env.test`
 
 **Access:** `http://localhost:$KIND_FWD_FRONTEND_PORT` (run `make kind-status` for assigned ports)
-
-### Minikube (Feature-rich)
-**Best for:** Testing with local builds, full feature development
-
-**Commands:**
-- `make local-up` - Create cluster, build and load local images
-- `make local-down` - Stop services (keeps cluster)
-- `make local-clean` - Destroy cluster
-- `make local-rebuild` - Rebuild all components and restart
-- `make local-reload-backend` - Rebuild and reload backend only
-- `make local-reload-frontend` - Rebuild and reload frontend only
-- `make local-reload-operator` - Rebuild and reload operator only
-- `make local-status` - Check pod status
-- `make local-logs-backend` - Follow backend logs
-- `make local-logs-frontend` - Follow frontend logs
-- `make local-logs-operator` - Follow operator logs
-
-**Characteristics:**
-- Builds images locally from source
-- Uses `localhost/` image prefix
-- Includes ingress and storage-provisioner addons
-- Authentication disabled (`DISABLE_AUTH=true`)
-- Automatic port forwarding on macOS with Podman
-
-**Access:** http://localhost:3000 (frontend) / http://localhost:8080 (backend)
 
 ## Workflow: Setting Up from a PR
 
@@ -91,7 +68,7 @@ git checkout <branch_name>
 ```
 
 ### Step 3: Determine Affected Components
-Analyze the changed files from the PR to identify which components need rebuilding (see component mapping below). Then follow the appropriate cluster workflow (Kind or Minikube).
+Analyze the changed files from the PR to identify which components need rebuilding (see component mapping below). Then follow the kind cluster workflow.
 
 ## Detecting the Container Engine
 
@@ -159,7 +136,7 @@ I found changes in: [list of components]
 
 To test these in kind, I'll:
 1. Build the affected images: [list components]
-2. Push them to a local registry or load into kind
+2. Load them into the kind cluster
 3. Update the kind cluster to use these images
 4. Verify the deployment
 
@@ -175,22 +152,11 @@ Note: By default, kind uses production Quay.io images. We'll need to:
 
 ```bash
 # Build specific components — always pass CONTAINER_ENGINE
-# Build backend (if changed)
 make build-backend CONTAINER_ENGINE=$CONTAINER_ENGINE
-
-# Build frontend (if changed)
 make build-frontend CONTAINER_ENGINE=$CONTAINER_ENGINE
-
-# Build operator (if changed)
 make build-operator CONTAINER_ENGINE=$CONTAINER_ENGINE
-
-# Build runner (if changed)
 make build-runner CONTAINER_ENGINE=$CONTAINER_ENGINE
-
-# Build state-sync (if changed)
 make build-state-sync CONTAINER_ENGINE=$CONTAINER_ENGINE
-
-# Build public-api (if changed)
 make build-public-api CONTAINER_ENGINE=$CONTAINER_ENGINE
 
 # Or build all at once
@@ -201,38 +167,24 @@ make build-all CONTAINER_ENGINE=$CONTAINER_ENGINE
 
 **If cluster doesn't exist:**
 ```bash
-# Create kind cluster
-make kind-up
+# Create kind cluster with local images
+make kind-up LOCAL_IMAGES=true
 ```
 
-**If cluster exists, load new images:**
+**If cluster exists, rebuild and reload:**
 ```bash
-# Load images into kind
+# Rebuild all, load images, restart deployments
+make kind-rebuild
+```
+
+**Or load individual images:**
+```bash
 kind load docker-image localhost/vteam_backend:latest --name $KIND_CLUSTER_NAME
 kind load docker-image localhost/vteam_frontend:latest --name $KIND_CLUSTER_NAME
 kind load docker-image localhost/vteam_operator:latest --name $KIND_CLUSTER_NAME
-# ... for each rebuilt component
 ```
 
-### Step 5: Update Deployments
-```bash
-# Update deployments to use local images and Never pull policy
-kubectl set image deployment/backend backend=localhost/vteam_backend:latest -n ambient-code
-kubectl set image deployment/frontend frontend=localhost/vteam_frontend:latest -n ambient-code
-kubectl set image deployment/operator operator=localhost/vteam_operator:latest -n ambient-code
-
-# Update image pull policy
-kubectl patch deployment backend -n ambient-code -p '{"spec":{"template":{"spec":{"containers":[{"name":"backend","imagePullPolicy":"Never"}]}}}}'
-kubectl patch deployment frontend -n ambient-code -p '{"spec":{"template":{"spec":{"containers":[{"name":"frontend","imagePullPolicy":"Never"}]}}}}'
-kubectl patch deployment operator -n ambient-code -p '{"spec":{"template":{"spec":{"containers":[{"name":"operator","imagePullPolicy":"Never"}]}}}}'
-
-# Restart deployments to pick up new images
-kubectl rollout restart deployment/backend -n ambient-code
-kubectl rollout restart deployment/frontend -n ambient-code
-kubectl rollout restart deployment/operator -n ambient-code
-```
-
-### Step 6: Verify Deployment
+### Step 5: Verify Deployment
 ```bash
 # Wait for rollout to complete
 kubectl rollout status deployment/backend -n ambient-code
@@ -244,13 +196,9 @@ kubectl get pods -n ambient-code
 
 # Check for errors
 kubectl get events -n ambient-code --sort-by='.lastTimestamp'
-
-# Get pod details if issues
-kubectl describe pod -l app=backend -n ambient-code
-kubectl logs -l app=backend -n ambient-code --tail=50
 ```
 
-### Step 7: Provide Access Info
+### Step 6: Provide Access Info
 
 **Detect the actual URL** by checking the kind container's port mapping (see "Detecting the Access URL" above), then provide the correct URL to the user.
 
@@ -270,72 +218,20 @@ To teardown:
   make kind-down
 ```
 
-## Workflow: Testing Changes in Minikube
-
-When a user wants to test in minikube:
-
-### Full Rebuild and Deploy
-```bash
-cd /workspace/repos/platform
-
-# If cluster doesn't exist, this will create it and build everything
-make local-up
-
-# If cluster exists and you want to rebuild everything
-make local-rebuild
-```
-
-### Incremental Updates (Faster)
-```bash
-# Just rebuild and reload specific components
-make local-reload-backend   # If only backend changed
-make local-reload-frontend  # If only frontend changed
-make local-reload-operator  # If only operator changed
-```
-
-### Check Status
-```bash
-# Quick status check
-make local-status
-
-# Detailed troubleshooting
-make local-troubleshoot
-
-# Follow logs
-make local-logs-backend
-make local-logs-frontend
-make local-logs-operator
-```
-
 ## Common Tasks
 
 ### "Bring up a fresh cluster"
 ```bash
-# With kind (uses Quay.io images)
 make kind-up
-
-# With minikube (builds from source)
-make local-up
 ```
 
 ### "Rebuild everything and test"
 ```bash
-# With minikube
-cd /workspace/repos/platform
-make local-rebuild
-
-# With kind (requires manual steps)
-cd /workspace/repos/platform
-make build-all
-# Then load images and update deployments (see Step 4-5 above)
+make kind-rebuild
 ```
 
 ### "Just rebuild the backend"
 ```bash
-# With minikube
-make local-reload-backend
-
-# With kind
 make build-backend
 kind load docker-image localhost/vteam_backend:latest --name $KIND_CLUSTER_NAME
 kubectl set image deployment/backend backend=localhost/vteam_backend:latest -n ambient-code
@@ -345,12 +241,6 @@ kubectl rollout status deployment/backend -n ambient-code
 
 ### "Show me the logs"
 ```bash
-# With minikube
-make local-logs-backend
-make local-logs-frontend
-make local-logs-operator
-
-# With kind (or minikube, direct kubectl)
 kubectl logs -f -l app=backend -n ambient-code
 kubectl logs -f -l app=frontend -n ambient-code
 kubectl logs -f -l app=operator -n ambient-code
@@ -358,23 +248,11 @@ kubectl logs -f -l app=operator -n ambient-code
 
 ### "Tear down the cluster"
 ```bash
-# With kind
 make kind-down
-
-# With minikube (keep cluster)
-make local-down
-
-# With minikube (delete cluster)
-make local-clean
 ```
 
 ### "Check if cluster is healthy"
 ```bash
-# With minikube
-make local-status
-make local-test-quick
-
-# With kind or any cluster
 kubectl get pods -n ambient-code
 kubectl get events -n ambient-code --sort-by='.lastTimestamp'
 kubectl get deployments -n ambient-code
@@ -385,7 +263,7 @@ kubectl get deployments -n ambient-code
 ### Pods stuck in ImagePullBackOff
 **Cause:** Cluster trying to pull images from registry but they don't exist or aren't accessible
 
-**Solution for kind:**
+**Solution:**
 ```bash
 # Ensure images are built locally
 make build-all
@@ -397,12 +275,6 @@ kind load docker-image localhost/vteam_operator:latest --name $KIND_CLUSTER_NAME
 
 # Update image pull policy
 kubectl patch deployment backend -n ambient-code -p '{"spec":{"template":{"spec":{"containers":[{"name":"backend","imagePullPolicy":"Never"}]}}}}'
-```
-
-**Solution for minikube:**
-```bash
-# Minikube should handle this automatically, but if issues persist:
-make local-rebuild
 ```
 
 ### Pods stuck in CrashLoopBackOff
@@ -425,16 +297,7 @@ kubectl describe pod -l app=backend -n ambient-code
 ### Port forwarding not working
 **Cause:** Port already in use or forwarding process died
 
-**Solution for minikube:**
-```bash
-# Kill existing port-forward processes
-pkill -f "kubectl port-forward"
-
-# Restart port forwarding
-make local-up  # Will setup port forwarding again
-```
-
-**Solution for kind:**
+**Solution:**
 ```bash
 # Check NodePort mapping
 kubectl get svc -n ambient-code
@@ -510,21 +373,6 @@ npm run dev
 - `OC_TOKEN` is forwarded as both `X-Forwarded-Access-Token` and `Authorization: Bearer` headers (the backend's `ExtractServiceAccountFromAuth` reads `Authorization` for JWT parsing)
 - Every file save triggers instant hot-reload — no Docker build, no kind load, no rollout restart
 
-**Running sessions (not just browsing the UI):**
-
-With **Vertex AI** enabled (`setup-vertex-kind.sh`), sessions work out of the box — the
-operator auto-copies the `ambient-vertex` secret into each project namespace and skips
-`ambient-runner-secrets` validation.
-
-With a **direct Anthropic API key** (no Vertex), you must create the runner secret in
-each project namespace manually:
-
-```bash
-kubectl create secret generic ambient-runner-secrets \
-  --from-literal=ANTHROPIC_API_KEY=sk-ant-... \
-  -n <your-project-namespace>
-```
-
 **When to use:**
 - Frontend-only changes (components, styles, pages, API routes)
 - Iterating on UI features rapidly
@@ -537,17 +385,16 @@ kubectl create secret generic ambient-runner-secrets \
 ## Best Practices
 
 1. **Use local dev server for frontend**: Fastest feedback loop, no image rebuilds needed
-2. **Use kind for backend/operator validation**: When you need to rebuild non-frontend components
-3. **Use minikube for development**: Better tooling for iterative development with `local-reload-*` commands
-4. **Always check logs**: After deploying, verify pods started successfully
-5. **Clean up when done**: `make kind-down` or `make local-clean` to free resources
-6. **Check what changed first**: Use `git status` and `git diff` to understand scope
-7. **Build only what changed**: Don't rebuild everything if only one component changed
-8. **Verify image pull policy**: Ensure deployments use `imagePullPolicy: Never` for local images
+2. **Use kind for backend/operator validation**: Rebuild with `make kind-rebuild`
+3. **Always check logs**: After deploying, verify pods started successfully
+4. **Clean up when done**: `make kind-down` to free resources
+5. **Check what changed first**: Use `git status` and `git diff` to understand scope
+6. **Build only what changed**: Don't rebuild everything if only one component changed
+7. **Verify image pull policy**: Ensure deployments use `imagePullPolicy: Never` for local images
 
 ## Quick Reference
 
-### Decision Tree: Which Cluster Type?
+### Decision Tree: Which Approach?
 
 ```
 Do you need to test local code changes?
@@ -558,25 +405,22 @@ Do you need to test local code changes?
          ├─ Yes → Run locally with npm run dev
          │        Instant hot-reload, no image builds
          │
-         └─ No → Do you need to iterate frequently?
-                  ├─ No → Use kind with manual image loading
-                  │        Good for one-off tests
-                  │
-                  └─ Yes → Use minikube (make local-up)
-                           Best for development with hot-reload
+         └─ No → Use kind with local images
+                  make kind-up LOCAL_IMAGES=true (first time)
+                  make kind-rebuild (subsequent rebuilds)
 ```
 
 ### Cheat Sheet
 
-| Task | Kind | Minikube |
-|------|------|----------|
-| Create cluster | `make kind-up` | `make local-up` |
-| Rebuild all | Build + load + update | `make local-rebuild` |
-| Rebuild backend | Build + load + restart | `make local-reload-backend` |
-| Check status | `kubectl get pods -n ambient-code` | `make local-status` |
-| View logs | `kubectl logs -f -l app=backend -n ambient-code` | `make local-logs-backend` |
-| Tear down | `make kind-down` | `make local-clean` |
-| Access URL | `make kind-status` for ports (`$KIND_FWD_FRONTEND_PORT`) | http://localhost:3000 |
+| Task | Command |
+|------|---------|
+| Create cluster | `make kind-up` |
+| Create cluster with local images | `make kind-up LOCAL_IMAGES=true` |
+| Rebuild all | `make kind-rebuild` |
+| Check status | `make kind-status` |
+| View logs | `kubectl logs -f -l app=backend -n ambient-code` |
+| Tear down | `make kind-down` |
+| Access URL | `make kind-status` for ports (`$KIND_FWD_FRONTEND_PORT`) |
 
 ## When to Invoke This Skill
 
@@ -607,18 +451,15 @@ Assistant (using dev-cluster skill):
 
 Result: User can test their backend changes at `http://localhost:$KIND_FWD_FRONTEND_PORT` (run `make kind-status` to see the assigned port)
 
-### Example 2: Incremental Development with Minikube
+### Example 2: Iterative Development
 
 User: "I'm working on the frontend, set me up for quick iterations"
 
 Assistant (using dev-cluster skill):
-1. Runs: `make local-up` (creates cluster, builds all images)
-2. Explains the reload commands available
-3. User makes frontend changes
-4. User says: "Reload the frontend"
-5. Runs: `make local-reload-frontend`
-6. Verifies deployment
-7. User continues iterating with quick reload cycles
+1. Runs: `make kind-up` (creates cluster)
+2. Explains the local dev server approach for frontend
+3. Sets up port-forward and local NextJS dev server
+4. User makes frontend changes with instant hot-reload
 
 Result: Fast iteration loop for frontend development
 
@@ -639,22 +480,17 @@ Result: Issue diagnosed and resolved
 
 ## Integration with Makefile
 
-This skill knows all the relevant Makefile targets in /workspace/repos/platform:
+This skill knows all the relevant Makefile targets:
 
 - `make kind-up` - Create kind cluster
+- `make kind-up LOCAL_IMAGES=true` - Create kind cluster with locally-built images
 - `make kind-down` - Destroy kind cluster
-- `make local-up` - Create minikube cluster with local builds
-- `make local-down` - Stop minikube services
-- `make local-clean` - Delete minikube cluster
-- `make local-rebuild` - Rebuild all and restart
-- `make local-reload-backend` - Rebuild/reload backend only
-- `make local-reload-frontend` - Rebuild/reload frontend only
-- `make local-reload-operator` - Rebuild/reload operator only
+- `make kind-rebuild` - Rebuild all, reload images, restart deployments
+- `make kind-port-forward` - Port-forward services to localhost
+- `make kind-status` - Show cluster status and port assignments
 - `make build-all` - Build all container images
 - `make build-backend` - Build backend image only
 - `make build-frontend` - Build frontend image only
 - `make build-operator` - Build operator image only
 - `make local-status` - Check pod status
-- `make local-logs-backend` - Follow backend logs
-- `make local-logs-frontend` - Follow frontend logs
-- `make local-logs-operator` - Follow operator logs
+- `make local-logs` - Follow all component logs

@@ -847,14 +847,21 @@ function handleMessagesSnapshot(
 
   // Sort by timestamp so messages from interleaved runs appear in
   // chronological order.  Messages without timestamps keep their
-  // relative position (stable sort).
+  // relative position.  Use original index as tiebreaker so that
+  // thinking blocks with identical timestamps stay interleaved with
+  // their corresponding agent messages.
+  const originalOrder = new Map(filtered.map((msg, idx) => [msg.id, idx]))
   filtered.sort((a, b) => {
     const ta = a.timestamp ? new Date(a.timestamp).getTime() : null
     const tb = b.timestamp ? new Date(b.timestamp).getTime() : null
-    if (ta == null && tb == null) return 0
-    if (ta == null) return 0  // keep relative position
-    if (tb == null) return 0
-    return ta - tb
+
+    if (ta != null && tb != null) {
+      const diff = ta - tb
+      if (diff !== 0) return diff
+    }
+
+    // Equal or missing timestamps: preserve original snapshot order
+    return (originalOrder.get(a.id) ?? 0) - (originalOrder.get(b.id) ?? 0)
   })
   state.messages = filtered
 

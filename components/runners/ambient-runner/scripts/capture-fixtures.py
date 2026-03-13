@@ -62,7 +62,11 @@ async def capture(prompt: str, output_path: Path) -> None:
             # Tag content blocks with their type so they can be deserialized
             if type_name in ("AssistantMessage", "UserMessage") and "content" in data:
                 content = data["content"]
-                if isinstance(content, list) and hasattr(msg, "content") and isinstance(msg.content, list):
+                if (
+                    isinstance(content, list)
+                    and hasattr(msg, "content")
+                    and isinstance(msg.content, list)
+                ):
                     for block, orig in zip(content, msg.content):
                         if isinstance(block, dict):
                             block["_type"] = type(orig).__name__
@@ -81,13 +85,17 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("prompt", help="Prompt to send to Claude (use single quotes)")
-    parser.add_argument("--out", help="Output JSONL path (default: fixtures/<slug>.jsonl)")
+    parser.add_argument(
+        "--out", help="Output JSONL path (default: fixtures/<slug>.jsonl)"
+    )
     args = parser.parse_args()
 
     if args.out:
         output_path = Path(args.out)
     else:
-        slug = "".join(c if c.isalnum() else "-" for c in args.prompt.lower()[:30]).strip("-")
+        slug = "".join(
+            c if c.isalnum() else "-" for c in args.prompt.lower()[:30]
+        ).strip("-")
         output_path = (
             Path(__file__).parent.parent
             / "ambient_runner/bridges/claude/fixtures"

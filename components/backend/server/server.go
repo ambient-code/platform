@@ -9,6 +9,8 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	authnv1 "k8s.io/api/authentication/v1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // RouterFunc is a function that can register routes on a Gin router
@@ -158,6 +160,72 @@ func forwardedIdentityMiddleware() gin.HandlerFunc {
 		if v := c.GetHeader("X-Forwarded-Access-Token"); v != "" {
 			c.Set("forwardedAccessToken", v)
 		}
+
+		// Fallback: if userID is still empty, verify the Bearer token via
+		// TokenReview to securely resolve the ServiceAccount identity, then
+		// read the created-by-user-id annotation. This enables API key-
+		// authenticated requests to inherit the creating user's identity
+		// so that integration credentials (GitHub, Jira, GitLab) are accessible.
+		if c.GetString("userID") == "" && K8sClient != nil {
+			if ns, saName, ok := resolveServiceAccountFromToken(c); ok {
+				sa, err := K8sClient.CoreV1().ServiceAccounts(ns).Get(c.Request.Context(), saName, v1.GetOptions{})
+				if err == nil && sa.Annotations != nil {
+					if uid := sa.Annotations["ambient-code.io/created-by-user-id"]; uid != "" {
+						c.Set("userID", uid)
+					}
+				}
+			}
+		}
+
 		c.Next()
 	}
+}
+
+// resolveServiceAccountFromToken verifies the Bearer token via K8s TokenReview
+// and extracts the ServiceAccount namespace and name from the authenticated identity.
+// Returns (namespace, saName, true) when verified, otherwise ("","",false).
+func resolveServiceAccountFromToken(c *gin.Context) (string, string, bool) {
+	rawAuth := c.GetHeader("Authorization")
+	parts := strings.SplitN(rawAuth, " ", 2)
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+		return "", "", false
+	}
+	token := strings.TrimSpace(parts[1])
+	if token == "" {
+		return "", "", false
+	}
+
+	tr := &authnv1.TokenReview{Spec: authnv1.TokenReviewSpec{Token: token}}
+	rv, err := K8sClient.AuthenticationV1().TokenReviews().Create(c.Request.Context(), tr, v1.CreateOptions{})
+	if err != nil || !rv.Status.Authenticated || rv.Status.Error != "" {
+		return "", "", false
+	}
+
+	subj := strings.TrimSpace(rv.Status.User.Username)
+	const prefix = "system:serviceaccount:"
+	if !strings.HasPrefix(subj, prefix) {
+		return "", "", false
+	}
+	rest := strings.TrimPrefix(subj, prefix)
+	segs := strings.SplitN(rest, ":", 2)
+	if len(segs) != 2 {
+		return "", "", false
+	}
+	return segs[0], segs[1], true
+}
+
+// ExtractServiceAccountFromAuth extracts namespace and ServiceAccount name
+// from the X-Remote-User header (OpenShift OAuth proxy format).
+// Returns (namespace, saName, true) when a SA subject is present, otherwise ("","",false).
+func ExtractServiceAccountFromAuth(c *gin.Context) (string, string, bool) {
+	if remoteUser := c.GetHeader("X-Remote-User"); remoteUser != "" {
+		const prefix = "system:serviceaccount:"
+		if strings.HasPrefix(remoteUser, prefix) {
+			parts := strings.SplitN(strings.TrimPrefix(remoteUser, prefix), ":", 2)
+			if len(parts) == 2 {
+				return parts[0], parts[1], true
+			}
+		}
+	}
+	return "", "", false
 }

@@ -122,10 +122,6 @@ Recommended local dev setup using Kind (Kubernetes in Docker).
 
 OpenShift Local (CRC) setup for OpenShift-specific features.
 
-### [Minikube Setup](docs/internal/developer/local-development/minikube.md)
-
-Older approach, still supported.
-
 ### [Hybrid Development](docs/internal/developer/local-development/hybrid.md)
 
 Run components locally with breakpoint debugging.

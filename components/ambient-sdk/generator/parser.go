@@ -17,6 +17,29 @@ type openAPIDoc struct {
 	} `yaml:"components"`
 }
 
+func extractBasePath(paths map[string]interface{}) string {
+	for path := range paths {
+		parts := strings.Split(path, "/")
+		// Expect paths like /api/ambient/v1/resource or /api/ambient-api-server/v1/resource
+		// Find the common prefix by looking for the version segment (v\d+)
+		for i, part := range parts {
+			if len(part) > 1 && part[0] == 'v' {
+				allDigits := true
+				for _, c := range part[1:] {
+					if c < '0' || c > '9' {
+						allDigits = false
+						break
+					}
+				}
+				if allDigits {
+					return strings.Join(parts[:i+1], "/")
+				}
+			}
+		}
+	}
+	return "/api/ambient/v1"
+}
+
 type subSpecDoc struct {
 	Paths      map[string]interface{} `yaml:"paths"`
 	Components struct {
@@ -76,7 +99,9 @@ func parseSpec(specPath string) (*Spec, error) {
 		return resources[i].Name < resources[j].Name
 	})
 
-	return &Spec{Resources: resources}, nil
+	basePath := extractBasePath(mainDoc.Paths)
+
+	return &Spec{BasePath: basePath, Resources: resources}, nil
 }
 
 func extractResource(name, pathSegment string, doc *subSpecDoc) (*Resource, error) {
@@ -313,7 +338,8 @@ func extractPatchFields(schemaMap map[string]interface{}) ([]Field, []string, er
 }
 
 func checkHasPatch(paths map[string]interface{}, pathSegment string) bool {
-	idPath := fmt.Sprintf("/api/ambient-api-server/v1/%s/{id}", pathSegment)
+	basePath := extractBasePath(paths)
+	idPath := fmt.Sprintf("%s/%s/{id}", basePath, pathSegment)
 	pathVal, ok := paths[idPath]
 	if !ok {
 		return false
@@ -329,7 +355,8 @@ func checkHasPatch(paths map[string]interface{}, pathSegment string) bool {
 }
 
 func checkHasDelete(paths map[string]interface{}, pathSegment string) bool {
-	idPath := fmt.Sprintf("/api/ambient-api-server/v1/%s/{id}", pathSegment)
+	basePath := extractBasePath(paths)
+	idPath := fmt.Sprintf("%s/%s/{id}", basePath, pathSegment)
 	pathVal, ok := paths[idPath]
 	if !ok {
 		return false
@@ -345,10 +372,11 @@ func checkHasDelete(paths map[string]interface{}, pathSegment string) bool {
 }
 
 func detectActions(paths map[string]interface{}, pathSegment string) []string {
+	basePath := extractBasePath(paths)
 	knownActions := []string{"start", "stop"}
 	var found []string
 	for _, action := range knownActions {
-		actionPath := fmt.Sprintf("/api/ambient-api-server/v1/%s/{id}/%s", pathSegment, action)
+		actionPath := fmt.Sprintf("%s/%s/{id}/%s", basePath, pathSegment, action)
 		pathVal, ok := paths[actionPath]
 		if !ok {
 			continue

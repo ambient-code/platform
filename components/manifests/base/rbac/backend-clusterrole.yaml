@@ -59,10 +59,15 @@ rules:
   resources: ["projects"]
   verbs: ["get", "list", "watch", "update", "patch"]
 
-# Jobs (for monitoring and cleanup when stopping sessions)
+# Jobs (for monitoring and cleanup when stopping sessions; create for manual triggers)
 - apiGroups: ["batch"]
   resources: ["jobs"]
-  verbs: ["get", "list", "watch", "delete"]
+  verbs: ["get", "list", "watch", "create", "delete"]
+
+# CronJobs (for scheduled sessions)
+- apiGroups: ["batch"]
+  resources: ["cronjobs"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 
 # Pods (for cleanup when stopping sessions and spawning temp content pods)
 - apiGroups: [""]

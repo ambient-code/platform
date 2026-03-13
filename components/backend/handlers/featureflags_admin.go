@@ -18,6 +18,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -417,21 +418,8 @@ func setFlagOverride(c *gin.Context, value string, responseMsg string) {
 		return
 	}
 
-	// Check if ConfigMap exists to determine required verb
-	cm, err := reqK8s.CoreV1().ConfigMaps(namespace).Get(ctx, FeatureFlagOverridesConfigMap, metav1.GetOptions{})
-	configMapExists := !errors.IsNotFound(err)
-	if err != nil && !errors.IsNotFound(err) {
-		log.Printf("Failed to get feature flag overrides ConfigMap in %s: %v", namespace, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to set feature flag override"})
-		return
-	}
-
-	// Check user has permission to create/update ConfigMaps in namespace
-	verb := "update"
-	if !configMapExists {
-		verb = "create"
-	}
-	allowed, err := checkConfigMapPermission(ctx, reqK8s, namespace, verb)
+	// Check user has permission to patch ConfigMaps in namespace
+	allowed, err := checkConfigMapPermission(ctx, reqK8s, namespace, "patch")
 	if err != nil {
 		log.Printf("Failed to check ConfigMap permissions in %s: %v", namespace, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check permissions"})
@@ -442,8 +430,21 @@ func setFlagOverride(c *gin.Context, value string, responseMsg string) {
 		return
 	}
 
-	// Use service account for the write (after validation)
-	if !configMapExists {
+	// Merge patch: atomically sets a single key in the ConfigMap data map.
+	// Concurrent patches to different keys never conflict because each patch
+	// only touches its own key — no read-modify-write cycle required.
+	// If the ConfigMap doesn't exist yet, create it first, then patch.
+	mergePatch := fmt.Sprintf(`{"data":{%q:%q}}`, flagName, value)
+
+	_, err = K8sClient.CoreV1().ConfigMaps(namespace).Patch(
+		ctx,
+		FeatureFlagOverridesConfigMap,
+		types.MergePatchType,
+		[]byte(mergePatch),
+		metav1.PatchOptions{},
+	)
+	if errors.IsNotFound(err) {
+		// ConfigMap doesn't exist yet — create it with the flag value, then done.
 		newCM := &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      FeatureFlagOverridesConfigMap,
@@ -453,28 +454,22 @@ func setFlagOverride(c *gin.Context, value string, responseMsg string) {
 					"app.kubernetes.io/component":  "feature-flags",
 				},
 			},
-			Data: map[string]string{},
+			Data: map[string]string{flagName: value},
 		}
-		cm, err = K8sClient.CoreV1().ConfigMaps(namespace).Create(ctx, newCM, metav1.CreateOptions{})
+		_, err = K8sClient.CoreV1().ConfigMaps(namespace).Create(ctx, newCM, metav1.CreateOptions{})
 		if errors.IsAlreadyExists(err) {
-			// Another concurrent request created the ConfigMap; fetch it and proceed to update.
-			cm, err = K8sClient.CoreV1().ConfigMaps(namespace).Get(ctx, FeatureFlagOverridesConfigMap, metav1.GetOptions{})
-		}
-		if err != nil {
-			log.Printf("Failed to create feature flag overrides ConfigMap in %s: %v", namespace, err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to set feature flag override"})
-			return
+			// Another request created it concurrently — retry the patch.
+			_, err = K8sClient.CoreV1().ConfigMaps(namespace).Patch(
+				ctx,
+				FeatureFlagOverridesConfigMap,
+				types.MergePatchType,
+				[]byte(mergePatch),
+				metav1.PatchOptions{},
+			)
 		}
 	}
-
-	if cm.Data == nil {
-		cm.Data = map[string]string{}
-	}
-	cm.Data[flagName] = value
-
-	_, err = K8sClient.CoreV1().ConfigMaps(namespace).Update(ctx, cm, metav1.UpdateOptions{})
 	if err != nil {
-		log.Printf("Failed to update feature flag overrides ConfigMap in %s: %v", namespace, err)
+		log.Printf("Failed to set feature flag override ConfigMap in %s: %v", namespace, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to set feature flag override"})
 		return
 	}
@@ -519,21 +514,7 @@ func DeleteFeatureFlagOverride(c *gin.Context) {
 		return
 	}
 
-	cm, err := reqK8s.CoreV1().ConfigMaps(namespace).Get(ctx, FeatureFlagOverridesConfigMap, metav1.GetOptions{})
-	if errors.IsNotFound(err) {
-		c.JSON(http.StatusOK, gin.H{
-			"message": "No override to remove",
-			"flag":    flagName,
-		})
-		return
-	}
-	if err != nil {
-		log.Printf("Failed to get feature flag overrides ConfigMap in %s: %v", namespace, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get overrides"})
-		return
-	}
-
-	allowed, err := checkConfigMapPermission(ctx, reqK8s, namespace, "update")
+	allowed, err := checkConfigMapPermission(ctx, reqK8s, namespace, "patch")
 	if err != nil {
 		log.Printf("Failed to check ConfigMap permissions in %s: %v", namespace, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check permissions"})
@@ -544,13 +525,26 @@ func DeleteFeatureFlagOverride(c *gin.Context) {
 		return
 	}
 
-	if cm.Data != nil {
-		delete(cm.Data, flagName)
-	}
+	// JSON Merge Patch: setting a key to null removes it from the map.
+	// If the ConfigMap doesn't exist, the patch returns 404 — treat as no-op.
+	mergePatch := fmt.Sprintf(`{"data":{%q:null}}`, flagName)
 
-	_, err = K8sClient.CoreV1().ConfigMaps(namespace).Update(ctx, cm, metav1.UpdateOptions{})
+	_, err = K8sClient.CoreV1().ConfigMaps(namespace).Patch(
+		ctx,
+		FeatureFlagOverridesConfigMap,
+		types.MergePatchType,
+		[]byte(mergePatch),
+		metav1.PatchOptions{},
+	)
+	if errors.IsNotFound(err) {
+		c.JSON(http.StatusOK, gin.H{
+			"message": "No override to remove",
+			"flag":    flagName,
+		})
+		return
+	}
 	if err != nil {
-		log.Printf("Failed to update feature flag overrides ConfigMap in %s: %v", namespace, err)
+		log.Printf("Failed to patch feature flag overrides ConfigMap in %s: %v", namespace, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to remove override"})
 		return
 	}

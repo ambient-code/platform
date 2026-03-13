@@ -26,9 +26,11 @@ Usage::
 """
 
 import asyncio
+import json
 import logging
 import os
 from contextlib import suppress
+from pathlib import Path
 from typing import Any, AsyncIterator, Optional
 
 logger = logging.getLogger(__name__)
@@ -100,7 +102,11 @@ class SessionWorker:
 
         os.environ["ANTHROPIC_API_KEY"] = self._api_key
 
-        from ambient_runner.bridges.claude.mock_client import MOCK_API_KEY, MockClaudeSDKClient
+        from ambient_runner.bridges.claude.mock_client import (
+            MOCK_API_KEY,
+            MockClaudeSDKClient,
+        )
+
         if self._api_key == MOCK_API_KEY:
             logger.info("[SessionWorker] Using MockClaudeSDKClient (replay mode)")
             client: Any = MockClaudeSDKClient(options=self._options)
@@ -248,13 +254,18 @@ class SessionManager:
     mix messages on the single underlying SDK client).
 
     Tracks session IDs returned by the CLI so that workers can be recreated
-    with ``--resume`` after a pod restart.
+    with ``--resume`` after a pod restart.  Session IDs are persisted to disk
+    so they survive pod restarts.
     """
 
-    def __init__(self) -> None:
+    _SESSION_IDS_FILE = "claude_session_ids.json"
+
+    def __init__(self, state_dir: str = "") -> None:
         self._workers: dict[str, SessionWorker] = {}
         self._locks: dict[str, asyncio.Lock] = {}
         self._session_ids: dict[str, str] = {}  # thread_id -> CLI session_id
+        self._state_dir = state_dir
+        self._restore_session_ids()
 
     async def get_or_create(
         self,
@@ -302,6 +313,14 @@ class SessionManager:
             return worker.session_id
         return self._session_ids.get(thread_id)
 
+    def get_all_session_ids(self) -> dict[str, str]:
+        """Return a snapshot of all known session IDs (live workers + cached)."""
+        result = dict(self._session_ids)
+        for tid, worker in self._workers.items():
+            if worker.session_id:
+                result[tid] = worker.session_id
+        return result
+
     async def destroy(self, thread_id: str) -> None:
         """Stop and remove the worker for *thread_id*.
 
@@ -312,6 +331,7 @@ class SessionManager:
         if worker is not None:
             if worker.session_id:
                 self._session_ids[thread_id] = worker.session_id
+                self._persist_session_ids()
             await worker.stop()
         self._locks.pop(thread_id, None)
         logger.debug(f"[SessionManager] Destroyed worker for thread={thread_id}")
@@ -322,3 +342,39 @@ class SessionManager:
         for tid in thread_ids:
             await self.destroy(tid)
         logger.info("[SessionManager] All workers shut down")
+
+    # ── session ID persistence ──
+
+    def _session_ids_path(self) -> Path | None:
+        if not self._state_dir:
+            return None
+        return Path(self._state_dir) / self._SESSION_IDS_FILE
+
+    def _persist_session_ids(self) -> None:
+        """Save session IDs to disk for --resume across pod restarts."""
+        path = self._session_ids_path()
+        if not path or not self._session_ids:
+            return
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with open(path, "w") as f:
+                json.dump(self._session_ids, f)
+            logger.info("Persisted %d session ID(s) to %s", len(self._session_ids), path)
+        except OSError:
+            logger.debug("Could not persist session IDs to %s", path, exc_info=True)
+
+    def _restore_session_ids(self) -> None:
+        """Restore session IDs from disk (written by a previous pod)."""
+        path = self._session_ids_path()
+        if not path or not path.exists():
+            return
+        try:
+            with open(path) as f:
+                restored = json.load(f)
+            if isinstance(restored, dict):
+                self._session_ids.update(restored)
+                logger.info(
+                    "Restored %d Claude session ID(s) from %s", len(restored), path
+                )
+        except (OSError, json.JSONDecodeError):
+            logger.debug("Could not restore session IDs from %s", path, exc_info=True)

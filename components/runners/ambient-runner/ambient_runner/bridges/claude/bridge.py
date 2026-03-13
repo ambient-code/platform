@@ -56,6 +56,10 @@ class ClaudeBridge(PlatformBridge):
         self._allowed_tools: list[str] = []
         self._system_prompt: dict = {}
         self._stderr_lines: list[str] = []
+        # Preserved session IDs across adapter rebuilds (e.g. repo additions)
+        self._saved_session_ids: dict[str, str] = {}
+        # Per-thread halt tracking to avoid race conditions on shared adapter
+        self._halted_by_thread: dict[str, bool] = {}
 
     # ------------------------------------------------------------------
     # PlatformBridge interface
@@ -99,7 +103,13 @@ class ClaudeBridge(PlatformBridge):
         # 4. Get or create session worker for this thread
         thread_id = input_data.thread_id or self._context.session_id
         api_key = os.getenv("ANTHROPIC_API_KEY", "")
-        sdk_options = self._adapter.build_options(input_data, thread_id=thread_id)
+        saved_session_id = (
+            self._saved_session_ids.pop(thread_id, None)
+            or self._session_manager.get_session_id(thread_id)
+        )
+        sdk_options = self._adapter.build_options(
+            input_data, thread_id=thread_id, resume_from=saved_session_id
+        )
         worker = await self._session_manager.get_or_create(
             thread_id, sdk_options, api_key
         )
@@ -120,6 +130,27 @@ class ClaudeBridge(PlatformBridge):
 
             async for event in wrapped_stream:
                 yield event
+
+            # Persist session ID after turn completes (for --resume on pod restart)
+            if worker.session_id:
+                self._session_manager._session_ids[thread_id] = worker.session_id
+                self._session_manager._persist_session_ids()
+
+            # Capture halt state for this thread to avoid race conditions
+            # with concurrent runs modifying the shared adapter's halted flag
+            self._halted_by_thread[thread_id] = self._adapter.halted
+
+            # If the adapter halted (frontend tool or built-in HITL tool like
+            # AskUserQuestion), interrupt the worker to prevent the SDK from
+            # auto-approving the tool call with a placeholder result.
+            if self._halted_by_thread.get(thread_id, False):
+                logger.info(
+                    f"Adapter halted for thread={thread_id}, "
+                    "interrupting worker to await user input"
+                )
+                await worker.interrupt()
+                # Clear the halt flag for this thread
+                self._halted_by_thread.pop(thread_id, None)
 
         self._first_run = False
 
@@ -166,7 +197,11 @@ class ClaudeBridge(PlatformBridge):
         self._ready = False
         self._first_run = True
         self._adapter = None
+        self._halted_by_thread.clear()
         if self._session_manager:
+            # Preserve session IDs so --resume works after adapter rebuild.
+            # Must be captured synchronously before the async shutdown task runs.
+            self._saved_session_ids.update(self._session_manager.get_all_session_ids())
             manager = self._session_manager
             self._session_manager = None
             _async_safe_manager_shutdown(manager)
@@ -279,11 +314,18 @@ class ClaudeBridge(PlatformBridge):
         """Full platform setup: auth, workspace, MCP, observability."""
         # Session manager
         if self._session_manager is None:
-            self._session_manager = SessionManager()
+            state_dir = os.path.join(
+                os.getenv("WORKSPACE_PATH", "/workspace"),
+                os.getenv("RUNNER_STATE_DIR", ".claude"),
+            )
+            self._session_manager = SessionManager(state_dir=state_dir)
 
         # Claude-specific auth
         from ambient_runner.bridges.claude.auth import setup_sdk_authentication
-        from ambient_runner.platform.auth import populate_runtime_credentials
+        from ambient_runner.platform.auth import (
+            populate_mcp_server_credentials,
+            populate_runtime_credentials,
+        )
         from ambient_runner.platform.workspace import (
             resolve_workspace_paths,
             validate_prerequisites,
@@ -296,6 +338,7 @@ class ClaudeBridge(PlatformBridge):
 
         # Populate credentials before building system prompt (prompt checks env vars)
         await populate_runtime_credentials(self._context)
+        await populate_mcp_server_credentials(self._context)
         self._last_creds_refresh = time.monotonic()
 
         # Workspace paths

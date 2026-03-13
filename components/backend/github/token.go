@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -23,13 +22,6 @@ import (
 type TokenManager struct {
 	AppID      string
 	PrivateKey *rsa.PrivateKey
-	cacheMu    *sync.Mutex
-	cache      map[int64]cachedInstallationToken
-}
-
-type cachedInstallationToken struct {
-	token     string
-	expiresAt time.Time
 }
 
 // NewTokenManager creates a new token manager
@@ -62,8 +54,6 @@ func NewTokenManager() (*TokenManager, error) {
 	return &TokenManager{
 		AppID:      appID,
 		PrivateKey: privateKey,
-		cacheMu:    &sync.Mutex{},
-		cache:      map[int64]cachedInstallationToken{},
 	}, nil
 }
 
@@ -117,18 +107,6 @@ func (m *TokenManager) MintInstallationTokenForHost(ctx context.Context, install
 	if m == nil {
 		return "", time.Time{}, fmt.Errorf("GitHub App not configured")
 	}
-	// Serve from cache if still valid (>3 minutes left)
-	m.cacheMu.Lock()
-	if entry, ok := m.cache[installationID]; ok {
-		if time.Until(entry.expiresAt) > 3*time.Minute {
-			token := entry.token
-			exp := entry.expiresAt
-			m.cacheMu.Unlock()
-			return token, exp, nil
-		}
-	}
-	m.cacheMu.Unlock()
-
 	jwtToken, err := m.GenerateJWT()
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("failed to generate JWT: %w", err)
@@ -163,9 +141,6 @@ func (m *TokenManager) MintInstallationTokenForHost(ctx context.Context, install
 	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
 		return "", time.Time{}, fmt.Errorf("failed to parse token response: %w", err)
 	}
-	m.cacheMu.Lock()
-	m.cache[installationID] = cachedInstallationToken{token: parsed.Token, expiresAt: parsed.ExpiresAt}
-	m.cacheMu.Unlock()
 	return parsed.Token, parsed.ExpiresAt, nil
 }
 

@@ -25,6 +25,27 @@ patches:
 - path: pvc-patch.yaml
 - path: backend-clusterrole-patch.yaml
 - path: operator-clusterrole-patch.yaml
+# Ambient API Server: enable end-to-end TLS (OpenShift service-ca provides certs)
+- path: ambient-api-server-tls-patch.yaml
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: ambient-api-server
+- path: ambient-api-server-service-ca-patch.yaml
+  target:
+    version: v1
+    kind: Service
+    name: ambient-api-server
+# Ambient API Server DB: fix db.host for vteam- namePrefix
+- path: ambient-api-server-db-credentials-patch.yaml
+# Ambient API Server: init container to wait for DB and create database
+- path: ambient-api-server-init-db-patch.yaml
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: ambient-api-server
 # Unleash: init container to create database (RHEL doesn't support init scripts)
 - path: unleash-init-db-patch.yaml
 # PostgreSQL: use RHEL image with proper env vars and mount paths (JSON patch)
@@ -34,6 +55,12 @@ patches:
     version: v1
     kind: Deployment
     name: postgresql
+- path: ambient-api-server-db-json-patch.yaml
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: ambient-api-server-db
 
 # Name prefix for local dev resources
 namePrefix: vteam-

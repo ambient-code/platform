@@ -85,9 +85,21 @@ func registerRoutes(r *gin.Engine) {
 			projectGroup.GET("/agentic-sessions/:sessionName/credentials/google", handlers.GetGoogleCredentialsForSession)
 			projectGroup.GET("/agentic-sessions/:sessionName/credentials/jira", handlers.GetJiraCredentialsForSession)
 			projectGroup.GET("/agentic-sessions/:sessionName/credentials/gitlab", handlers.GetGitLabTokenForSession)
+			projectGroup.GET("/agentic-sessions/:sessionName/credentials/mcp/:serverName", handlers.GetMCPCredentialsForSession)
 
 			// Session export
 			projectGroup.GET("/agentic-sessions/:sessionName/export", websocket.HandleExportSession)
+
+			// Scheduled sessions (CronJob-backed)
+			projectGroup.GET("/scheduled-sessions", handlers.ListScheduledSessions)
+			projectGroup.POST("/scheduled-sessions", handlers.CreateScheduledSession)
+			projectGroup.GET("/scheduled-sessions/:scheduledSessionName", handlers.GetScheduledSession)
+			projectGroup.PUT("/scheduled-sessions/:scheduledSessionName", handlers.UpdateScheduledSession)
+			projectGroup.DELETE("/scheduled-sessions/:scheduledSessionName", handlers.DeleteScheduledSession)
+			projectGroup.POST("/scheduled-sessions/:scheduledSessionName/suspend", handlers.SuspendScheduledSession)
+			projectGroup.POST("/scheduled-sessions/:scheduledSessionName/resume", handlers.ResumeScheduledSession)
+			projectGroup.POST("/scheduled-sessions/:scheduledSessionName/trigger", handlers.TriggerScheduledSession)
+			projectGroup.GET("/scheduled-sessions/:scheduledSessionName/runs", handlers.ListScheduledSessionRuns)
 
 			projectGroup.GET("/permissions", handlers.ListProjectPermissions)
 			projectGroup.POST("/permissions", handlers.AddProjectPermission)
@@ -148,6 +160,11 @@ func registerRoutes(r *gin.Engine) {
 		api.GET("/auth/gitlab/status", handlers.GetGitLabStatusGlobal)
 		api.DELETE("/auth/gitlab/disconnect", handlers.DisconnectGitLabGlobal)
 		api.POST("/auth/gitlab/test", handlers.TestGitLabConnection)
+
+		// Generic MCP server credentials (user-scoped)
+		api.POST("/auth/mcp/:serverName/connect", handlers.ConnectMCPServer)
+		api.GET("/auth/mcp/:serverName/status", handlers.GetMCPServerStatus)
+		api.DELETE("/auth/mcp/:serverName/disconnect", handlers.DisconnectMCPServer)
 
 		// Cluster info endpoint (public, no auth required)
 		api.GET("/cluster-info", handlers.GetClusterInfo)

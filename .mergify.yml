@@ -1,0 +1,42 @@
+queue_rules:
+  - name: large-pr
+    autoqueue: true
+    merge_method: squash
+    queue_conditions:
+      - "#approved-reviews-by>=2"
+      - "#changes-requested-reviews-by=0"
+      - check-success=End-to-End Tests
+      - commented-reviews-by=coderabbitai[bot]
+      - check-success=validate-manifests
+      - check-success=test-local-dev-simulation
+
+  - name: default
+    autoqueue: true
+    merge_method: squash
+    queue_conditions:
+      - "#approved-reviews-by>=1"
+      - "#changes-requested-reviews-by=0"
+      - check-success=End-to-End Tests
+      - commented-reviews-by=coderabbitai[bot]
+      - check-success=validate-manifests
+      - check-success=test-local-dev-simulation
+
+pull_request_rules:
+  - name: queue large PRs
+    conditions:
+      - or:
+        - "#files>10"
+        - "#added-lines>500"
+        - "#deleted-lines>500"
+    actions:
+      queue:
+        name: large-pr
+
+  - name: queue normal PRs
+    conditions:
+      - "#files<=10"
+      - "#added-lines<=500"
+      - "#deleted-lines<=500"
+    actions:
+      queue:
+        name: default

@@ -121,7 +121,7 @@ jobs:
 
     steps:
       - name: Download session configs
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: session-configs
 
@@ -166,6 +166,7 @@ jobs:
           repos: ${{ steps.config.outputs.repos }}
           labels: ${{ steps.config.outputs.labels }}
           environment-variables: ${{ steps.config.outputs.environment-variables }}
+          model: claude-sonnet-4-5
 
       - name: Session summary
         if: always()

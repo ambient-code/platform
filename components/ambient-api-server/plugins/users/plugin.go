@@ -48,7 +48,7 @@ func init() {
 		return NewServiceLocator(env.(*environments.Env))
 	})
 
-	pkgserver.RegisterRoutes("users", func(apiV1Router *mux.Router, services pkgserver.ServicesInterface, authMiddleware auth.JWTMiddleware, authzMiddleware auth.AuthorizationMiddleware) {
+	pkgserver.RegisterRoutes("users", func(apiV1Router *mux.Router, services pkgserver.ServicesInterface, authMiddleware environments.JWTMiddleware, authzMiddleware auth.AuthorizationMiddleware) {
 		envServices := services.(*environments.Services)
 		userHandler := NewUserHandler(Service(envServices), generic.Service(envServices))
 

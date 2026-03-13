@@ -41,6 +41,9 @@ const (
 
 	// activityUpdateTimeout bounds how long a single activity status update can take.
 	activityUpdateTimeout = 10 * time.Second
+
+	// maxErrorBodyBytes caps how much of an error response body we read into memory.
+	maxErrorBodyBytes = 1024
 )
 
 // activityUpdateSem limits concurrent goroutines spawned by updateLastActivityTime.
@@ -321,7 +324,7 @@ func proxyRunnerStream(runnerURL string, bodyBytes []byte, sessionName, runID, t
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodyBytes))
 		log.Printf("AGUI Proxy: runner returned %d: %s", resp.StatusCode, string(body))
 		publishAndPersistErrorEvents(sessionName, runID, threadID, fmt.Sprintf("Runner error: HTTP %d", resp.StatusCode))
 		return
@@ -436,15 +439,19 @@ func persistStreamedEvent(sessionID, runID, threadID, jsonData string) {
 
 	persistEvent(sessionID, event)
 
-	// Update lastActivityTime on CR for activity events (debounced).
-	// Extract event type to check; projectName is derived from the
+	// Extract event type; projectName is derived from the
 	// sessionID-to-project mapping populated by HandleAGUIRunProxy.
 	eventType, _ := event["type"].(string)
+
+	// Update lastActivityTime on CR for activity events (debounced).
 	if isActivityEvent(eventType) {
 		if projectName, ok := sessionProjectMap.Load(sessionID); ok {
 			updateLastActivityTime(projectName.(string), sessionID, eventType == types.EventTypeRunStarted)
 		}
 	}
+
+	// agentStatus is derived at query time from the event log (DeriveAgentStatus).
+	// No CR updates needed here — the persisted events ARE the source of truth.
 }
 
 // ─── POST /agui/interrupt ────────────────────────────────────────────
@@ -484,7 +491,7 @@ func HandleAGUIInterrupt(c *gin.Context) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodyBytes))
 		c.JSON(resp.StatusCode, gin.H{"error": string(body)})
 		return
 	}
@@ -549,7 +556,7 @@ func HandleAGUIFeedback(c *gin.Context) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodyBytes))
 		log.Printf("AGUI Feedback: runner returned %d for %s: %s", resp.StatusCode, sessionName, string(body))
 		c.JSON(resp.StatusCode, gin.H{"error": "Runner rejected feedback", "status": "failed"})
 		return
@@ -944,4 +951,17 @@ func updateLastActivityTime(projectName, sessionName string, immediate bool) {
 			log.Printf("Activity tracking: failed to update lastActivityTime for %s/%s: %v", projectName, sessionName, err)
 		}
 	}()
+}
+
+// isAskUserQuestionToolCall checks if a tool call name is the AskUserQuestion HITL tool.
+// Uses case-insensitive comparison after stripping non-alpha characters,
+// matching the frontend pattern in use-agent-status.ts.
+func isAskUserQuestionToolCall(name string) bool {
+	var clean strings.Builder
+	for _, r := range strings.ToLower(name) {
+		if r >= 'a' && r <= 'z' {
+			clean.WriteRune(r)
+		}
+	}
+	return clean.String() == "askuserquestion"
 }

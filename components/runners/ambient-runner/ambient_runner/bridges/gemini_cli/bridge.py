@@ -171,6 +171,7 @@ class GeminiCLIBridge(PlatformBridge):
         self._adapter = None
         self._mcp_status_cache = None
         if self._session_manager:
+            self._session_manager.clear_session_ids()
             manager = self._session_manager
             self._session_manager = None
             _async_safe_manager_shutdown(manager)
@@ -287,7 +288,9 @@ class GeminiCLIBridge(PlatformBridge):
 
         # MCP servers — write .gemini/settings.json so the CLI discovers them
         from ambient_runner.bridges.gemini_cli.mcp import setup_gemini_mcp
-        from ambient_runner.bridges.gemini_cli.system_prompt import write_gemini_system_prompt
+        from ambient_runner.bridges.gemini_cli.system_prompt import (
+            write_gemini_system_prompt,
+        )
 
         mcp_settings_path = setup_gemini_mcp(self._context, cwd_path)
 

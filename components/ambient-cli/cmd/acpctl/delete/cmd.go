@@ -22,7 +22,8 @@ var Cmd = &cobra.Command{
 
 Valid resource types:
   project    (aliases: proj)
-  project-settings (aliases: ps)`,
+  project-settings (aliases: ps)
+  session    (aliases: sess)`,
 	Args: cobra.ExactArgs(2),
 	RunE: run,
 }
@@ -71,8 +72,14 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 		fmt.Fprintf(cmd.OutOrStdout(), "project-settings/%s deleted\n", name)
 		return nil
 
-	// TODO: Add "session" deletion once the SDK exposes Sessions().Delete().
+	case "session", "sessions", "sess":
+		if err := client.Sessions().Delete(ctx, name); err != nil {
+			return fmt.Errorf("delete session %q: %w", name, err)
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "session/%s deleted\n", name)
+		return nil
+
 	default:
-		return fmt.Errorf("unknown or non-deletable resource type: %s\nDeletable types: project, project-settings", cmdArgs[0])
+		return fmt.Errorf("unknown or non-deletable resource type: %s\nDeletable types: project, project-settings, session", cmdArgs[0])
 	}
 }

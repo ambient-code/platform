@@ -45,7 +45,7 @@ spec:
             - --db-password-file=/secrets/db/db.password
             - --db-name-file=/secrets/db/db.name
             - --alsologtostderr
-            - -v=10
+            - -v=4
           volumeMounts:
             - name: db-secrets
               mountPath: /secrets/db
@@ -67,12 +67,17 @@ spec:
             - --db-user-file=/secrets/db/db.user
             - --db-password-file=/secrets/db/db.password
             - --db-name-file=/secrets/db/db.name
-            - --enable-jwt=false
+            - --enable-jwt=true
+            # Authz disabled: api-server has no internal RBAC middleware yet.
+            # Auth is handled by the backend proxy. TODO: enable when authz is implemented.
             - --enable-authz=false
+            - --jwk-cert-file=/configs/authentication/jwks.json
             - --enable-https=false
             - --api-server-bindaddress=:8000
             - --metrics-server-bindaddress=:4433
             - --health-check-server-bindaddress=:4434
+            # SSL disabled: PostgreSQL is in-cluster (same namespace, pod network only).
+            # Switch to --db-sslmode=require if using an external database.
             - --db-sslmode=disable
             - --db-max-open-connections=50
             - --enable-db-debug=false
@@ -84,7 +89,7 @@ spec:
             - --enable-grpc=true
             - --grpc-server-bindaddress=:9000
             - --alsologtostderr
-            - -v=10
+            - -v=4
           env:
             - name: AMBIENT_ENV
               value: development
@@ -159,7 +164,6 @@ metadata:
     component: api
   annotations:
     description: Exposes the ambient-api-server REST API
-    service.beta.openshift.io/serving-cert-secret-name: ambient-api-server-tls
 spec:
   selector:
     app: ambient-api-server
