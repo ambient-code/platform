@@ -336,9 +336,7 @@ class ClaudeBridge(PlatformBridge):
             log_auth_status,
         )
 
-        mcp_servers = build_mcp_servers(
-            self._context, cwd_path, self._obs, bridge_ref=self
-        )
+        mcp_servers = build_mcp_servers(self._context, cwd_path, self._obs)
         log_auth_status(mcp_servers)
         allowed_tools = build_allowed_tools(mcp_servers)
 

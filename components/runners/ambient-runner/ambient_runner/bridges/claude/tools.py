@@ -4,7 +4,6 @@ Claude-specific MCP tool definitions.
 Tools are created dynamically per-run and registered as in-process
 MCP servers alongside the Claude Agent SDK.
 
-- ``restart_session`` — allows Claude to request a session restart
 - ``refresh_credentials`` — allows Claude to refresh auth tokens mid-run
 - ``evaluate_rubric`` — logs a rubric evaluation score to Langfuse
 """
@@ -18,65 +17,11 @@ from typing import Any
 from ambient_runner.bridge import TOOL_REFRESH_MIN_INTERVAL_SEC
 from ambient_runner.platform.prompts import (
     REFRESH_CREDENTIALS_TOOL_DESCRIPTION,
-    RESTART_TOOL_DESCRIPTION,
 )
 
 logger = logging.getLogger(__name__)
 
 
-# ------------------------------------------------------------------
-# Session restart tool
-# ------------------------------------------------------------------
-
-
-def create_restart_session_tool(bridge_ref, sdk_tool_decorator):
-    """Create the restart_session MCP tool.
-
-    Args:
-        bridge_ref: Reference to the bridge instance whose ``_adapter``
-            attribute is resolved at call time (may be ``None`` during
-            MCP setup).
-        sdk_tool_decorator: The ``tool`` decorator from ``claude_agent_sdk``.
-
-    Returns:
-        Decorated async tool function.
-    """
-
-    @sdk_tool_decorator(
-        "restart_session",
-        RESTART_TOOL_DESCRIPTION,
-        {},
-    )
-    async def restart_session_tool(args: dict) -> dict:
-        """Tool that allows Claude to request a session restart."""
-        adapter = getattr(bridge_ref, "_adapter", None) if bridge_ref else None
-        if adapter is None:
-            logger.warning("restart_session called but adapter not ready")
-            return {
-                "content": [
-                    {
-                        "type": "text",
-                        "text": "Session not ready — cannot restart yet. Try again shortly.",
-                    }
-                ],
-                "isError": True,
-            }
-        adapter._restart_requested = True
-        logger.info("Session restart requested by Claude via MCP tool")
-        return {
-            "content": [
-                {
-                    "type": "text",
-                    "text": (
-                        "Session restart has been requested. The current run "
-                        "will complete and a fresh session will be established. "
-                        "Your conversation context will be preserved on disk."
-                    ),
-                }
-            ]
-        }
-
-    return restart_session_tool
 
 
 # ------------------------------------------------------------------
