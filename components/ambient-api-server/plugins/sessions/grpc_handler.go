@@ -224,7 +224,8 @@ func (h *sessionGRPCHandler) ListSessions(ctx context.Context, req *pb.ListSessi
 	}
 
 	var sessions []Session
-	paging, svcErr := h.generic.List(ctx, "id", &listArgs, &sessions)
+	username := auth.GetUsernameFromContext(ctx)
+	paging, svcErr := h.generic.List(ctx, username, &listArgs, &sessions)
 	if svcErr != nil {
 		return nil, grpcutil.ServiceErrorToGRPC(svcErr)
 	}

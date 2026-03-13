@@ -9,6 +9,7 @@ import (
 
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
 	"github.com/openshift-online/rh-trex-ai/pkg/api/presenters"
+	"github.com/openshift-online/rh-trex-ai/pkg/auth"
 	"github.com/openshift-online/rh-trex-ai/pkg/errors"
 	"github.com/openshift-online/rh-trex-ai/pkg/handlers"
 	"github.com/openshift-online/rh-trex-ai/pkg/services"
@@ -106,7 +107,8 @@ func (h projectSettingsHandler) List(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			var items []ProjectSettings
-			paging, err := h.generic.List(ctx, "id", listArgs, &items)
+			username := auth.GetUsernameFromContext(ctx)
+			paging, err := h.generic.List(ctx, username, listArgs, &items)
 			if err != nil {
 				return nil, err
 			}

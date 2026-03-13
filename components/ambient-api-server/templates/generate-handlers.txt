@@ -7,6 +7,7 @@ import (
 
 	"{{.Repo}}/{{.Project}}/pkg/api/openapi"
 	"{{.Library}}/pkg/api/presenters"
+	"{{.Library}}/pkg/auth"
 	"{{.Library}}/pkg/errors"
 	"{{.Library}}/pkg/handlers"
 	"{{.Library}}/pkg/services"
@@ -94,7 +95,8 @@ func (h {{.KindLowerSingular}}Handler) List(w http.ResponseWriter, r *http.Reque
 
 			listArgs := services.NewListArguments(r.URL.Query())
 			var {{.KindLowerPlural}} []{{.Kind}}
-			paging, err := h.generic.List(ctx, "id", listArgs, &{{.KindLowerPlural}})
+			username := auth.GetUsernameFromContext(ctx)
+			paging, err := h.generic.List(ctx, username, listArgs, &{{.KindLowerPlural}})
 			if err != nil {
 				return nil, err
 			}
