@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -17,6 +18,8 @@ import (
 
 	"ambient-code-backend/gitlab"
 )
+
+var validateGitLabConnectivityFn = validateGitLabConnectivity
 
 // GitLabAuthHandler handles GitLab authentication endpoints
 type GitLabAuthHandler struct {
@@ -110,6 +113,40 @@ func validateGitLabInput(instanceURL, token string) error {
 			char != '-' && char != '_' && char != '.' {
 			return fmt.Errorf("token contains invalid characters")
 		}
+	}
+
+	return nil
+}
+
+// validateGitLabConnectivity validates that the instance is resolvable and PAT can authenticate.
+func validateGitLabConnectivity(ctx context.Context, instanceURL, token string) error {
+	parsedURL, err := url.Parse(instanceURL)
+	if err != nil {
+		return fmt.Errorf("invalid instance URL format")
+	}
+
+	hostname := parsedURL.Hostname()
+	if hostname == "" {
+		return fmt.Errorf("instance URL must have a valid hostname")
+	}
+
+	resolveCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	addresses, err := net.DefaultResolver.LookupHost(resolveCtx, hostname)
+	if err != nil {
+		return fmt.Errorf("cannot resolve GitLab instance host '%s': %w", hostname, err)
+	}
+	if len(addresses) == 0 {
+		return fmt.Errorf("cannot resolve GitLab instance host '%s': no addresses returned", hostname)
+	}
+
+	valid, err := ValidateGitLabToken(ctx, token, instanceURL)
+	if err != nil {
+		return fmt.Errorf("failed to connect to GitLab API at %s: %w", instanceURL, err)
+	}
+	if !valid {
+		return fmt.Errorf("failed to authenticate with the provided Personal Access Token")
 	}
 
 	return nil
@@ -407,6 +444,12 @@ func ConnectGitLabGlobal(c *gin.Context) {
 	// Validate input
 	if err := validateGitLabInput(req.InstanceURL, req.PersonalAccessToken); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Invalid input: %v", err)})
+		return
+	}
+
+	// Validate connectivity/auth before storing credentials.
+	if err := validateGitLabConnectivityFn(c.Request.Context(), req.InstanceURL, req.PersonalAccessToken); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("GitLab connectivity check failed: %v", err)})
 		return
 	}
 
