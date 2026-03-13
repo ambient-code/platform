@@ -697,8 +697,14 @@ unleash-status: check-kubectl ## Show Unleash deployment status
 ##@ Internal Helpers (do not call directly)
 
 check-kind: ## Check if kind is installed
-	@command -v kind >/dev/null 2>&1 || \
-		(echo "$(COLOR_RED)✗$(COLOR_RESET) kind not found. Install: https://kind.sigs.k8s.io/docs/user/quick-start/" && exit 1)
+	@command -v kind >/dev/null 2>&1 || { \
+		if command -v dnf >/dev/null 2>&1; then \
+			echo "$(COLOR_RED)✗$(COLOR_RESET) kind not found. Install with: $(COLOR_GREEN)sudo dnf install kind$(COLOR_RESET)"; \
+		else \
+			echo "$(COLOR_RED)✗$(COLOR_RESET) kind not found. Install: https://kind.sigs.k8s.io/docs/user/quick-start/"; \
+		fi; \
+		exit 1; \
+	}
 
 check-kubectl: ## Check if kubectl is installed
 	@command -v kubectl >/dev/null 2>&1 || \
