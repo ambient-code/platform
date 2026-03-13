@@ -237,7 +237,7 @@ jobs:
 
     - name: Upload test report and screenshots
       if: always()
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: claude-test-report-pr-${{ github.event.pull_request.number }}
         path: |
@@ -249,7 +249,7 @@ jobs:
 
     - name: Upload Playwright traces (includes video)
       if: always()
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: playwright-traces-pr-${{ github.event.pull_request.number }}
         path: /tmp/test_output/traces
