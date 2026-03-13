@@ -96,6 +96,9 @@ func main() {
 		v1.POST("/sessions", handlers.CreateSession)
 		v1.GET("/sessions/:id", handlers.GetSession)
 		v1.DELETE("/sessions/:id", handlers.DeleteSession)
+
+		// Session runs (AG-UI prompt delivery)
+		v1.POST("/sessions/:id/runs", handlers.CreateSessionRun)
 	}
 
 	// Get port from environment or default to 8081
