@@ -55,15 +55,17 @@ def _async_safe_manager_shutdown(manager: Any) -> None:
     try:
         loop = asyncio.get_running_loop()
         task = loop.create_task(manager.shutdown())
-        task.add_done_callback(
-            lambda f: (
+
+        def _log_shutdown_error(f: asyncio.Future) -> None:
+            if f.cancelled():
+                return
+            exc = f.exception()
+            if exc is not None:
                 _bridge_logger.warning(
-                    "mark_dirty: session_manager shutdown error: %s", f.exception()
+                    "mark_dirty: session_manager shutdown error: %s", exc
                 )
-                if f.exception()
-                else None
-            )
-        )
+
+        task.add_done_callback(_log_shutdown_error)
     except RuntimeError:
         try:
             asyncio.run(manager.shutdown())

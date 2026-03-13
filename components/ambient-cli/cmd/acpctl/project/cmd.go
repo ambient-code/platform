@@ -24,13 +24,13 @@ var Cmd = &cobra.Command{
 	Long:  `Manage projects in the Ambient Code Platform.`,
 	Example: `  # Set current project context (shorthand)
   acpctl project my-project
-  
-  # Set current project context (explicit)  
+
+  # Set current project context (explicit)
   acpctl project set my-project
-  
-  # Get current project context  
+
+  # Get current project context
   acpctl project current
-  
+
   # List all projects
   acpctl project list`,
 	Args: cobra.MaximumNArgs(1),

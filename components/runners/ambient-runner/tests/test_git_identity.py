@@ -129,7 +129,9 @@ class TestFetchGitHubCredentials:
             "provider": "github",
         }
 
-        with patch("ambient_runner.platform.auth._fetch_credential", new_callable=AsyncMock) as mock_fetch:
+        with patch(
+            "ambient_runner.platform.auth._fetch_credential", new_callable=AsyncMock
+        ) as mock_fetch:
             mock_fetch.return_value = mock_response
 
             result = await fetch_github_credentials(mock_context)
@@ -149,7 +151,8 @@ class TestFetchGitHubCredentials:
         mock_context.session_id = "test-session"
 
         with patch(
-            "ambient_runner.platform.auth.fetch_github_credentials", new_callable=AsyncMock
+            "ambient_runner.platform.auth.fetch_github_credentials",
+            new_callable=AsyncMock,
         ) as mock_fetch:
             mock_fetch.return_value = {"token": "ghp_test_token", "userName": "Test"}
 
@@ -189,7 +192,9 @@ class TestFetchGitLabCredentials:
             "provider": "gitlab",
         }
 
-        with patch("ambient_runner.platform.auth._fetch_credential", new_callable=AsyncMock) as mock_fetch:
+        with patch(
+            "ambient_runner.platform.auth._fetch_credential", new_callable=AsyncMock
+        ) as mock_fetch:
             mock_fetch.return_value = mock_response
 
             result = await fetch_gitlab_credentials(mock_context)
@@ -210,7 +215,8 @@ class TestFetchGitLabCredentials:
         mock_context.session_id = "test-session"
 
         with patch(
-            "ambient_runner.platform.auth.fetch_gitlab_credentials", new_callable=AsyncMock
+            "ambient_runner.platform.auth.fetch_gitlab_credentials",
+            new_callable=AsyncMock,
         ) as mock_fetch:
             mock_fetch.return_value = {"token": "glpat-test_token"}
 
@@ -251,16 +257,25 @@ class TestPopulateRuntimeCredentialsGitIdentity:
 
         with (
             patch(
-                "ambient_runner.platform.auth.fetch_google_credentials", new_callable=AsyncMock
+                "ambient_runner.platform.auth.fetch_google_credentials",
+                new_callable=AsyncMock,
             ) as mock_google,
-            patch("ambient_runner.platform.auth.fetch_jira_credentials", new_callable=AsyncMock) as mock_jira,
             patch(
-                "ambient_runner.platform.auth.fetch_gitlab_credentials", new_callable=AsyncMock
+                "ambient_runner.platform.auth.fetch_jira_credentials",
+                new_callable=AsyncMock,
+            ) as mock_jira,
+            patch(
+                "ambient_runner.platform.auth.fetch_gitlab_credentials",
+                new_callable=AsyncMock,
             ) as mock_gitlab,
             patch(
-                "ambient_runner.platform.auth.fetch_github_credentials", new_callable=AsyncMock
+                "ambient_runner.platform.auth.fetch_github_credentials",
+                new_callable=AsyncMock,
             ) as mock_github,
-            patch("ambient_runner.platform.auth.configure_git_identity", new_callable=AsyncMock) as mock_config,
+            patch(
+                "ambient_runner.platform.auth.configure_git_identity",
+                new_callable=AsyncMock,
+            ) as mock_config,
         ):
             mock_google.return_value = {}
             mock_jira.return_value = {}
@@ -290,16 +305,25 @@ class TestPopulateRuntimeCredentialsGitIdentity:
 
         with (
             patch(
-                "ambient_runner.platform.auth.fetch_google_credentials", new_callable=AsyncMock
+                "ambient_runner.platform.auth.fetch_google_credentials",
+                new_callable=AsyncMock,
             ) as mock_google,
-            patch("ambient_runner.platform.auth.fetch_jira_credentials", new_callable=AsyncMock) as mock_jira,
             patch(
-                "ambient_runner.platform.auth.fetch_gitlab_credentials", new_callable=AsyncMock
+                "ambient_runner.platform.auth.fetch_jira_credentials",
+                new_callable=AsyncMock,
+            ) as mock_jira,
+            patch(
+                "ambient_runner.platform.auth.fetch_gitlab_credentials",
+                new_callable=AsyncMock,
             ) as mock_gitlab,
             patch(
-                "ambient_runner.platform.auth.fetch_github_credentials", new_callable=AsyncMock
+                "ambient_runner.platform.auth.fetch_github_credentials",
+                new_callable=AsyncMock,
             ) as mock_github,
-            patch("ambient_runner.platform.auth.configure_git_identity", new_callable=AsyncMock) as mock_config,
+            patch(
+                "ambient_runner.platform.auth.configure_git_identity",
+                new_callable=AsyncMock,
+            ) as mock_config,
         ):
             mock_google.return_value = {}
             mock_jira.return_value = {}
@@ -335,16 +359,25 @@ class TestPopulateRuntimeCredentialsGitIdentity:
 
         with (
             patch(
-                "ambient_runner.platform.auth.fetch_google_credentials", new_callable=AsyncMock
+                "ambient_runner.platform.auth.fetch_google_credentials",
+                new_callable=AsyncMock,
             ) as mock_google,
-            patch("ambient_runner.platform.auth.fetch_jira_credentials", new_callable=AsyncMock) as mock_jira,
             patch(
-                "ambient_runner.platform.auth.fetch_gitlab_credentials", new_callable=AsyncMock
+                "ambient_runner.platform.auth.fetch_jira_credentials",
+                new_callable=AsyncMock,
+            ) as mock_jira,
+            patch(
+                "ambient_runner.platform.auth.fetch_gitlab_credentials",
+                new_callable=AsyncMock,
             ) as mock_gitlab,
             patch(
-                "ambient_runner.platform.auth.fetch_github_credentials", new_callable=AsyncMock
+                "ambient_runner.platform.auth.fetch_github_credentials",
+                new_callable=AsyncMock,
             ) as mock_github,
-            patch("ambient_runner.platform.auth.configure_git_identity", new_callable=AsyncMock) as mock_config,
+            patch(
+                "ambient_runner.platform.auth.configure_git_identity",
+                new_callable=AsyncMock,
+            ) as mock_config,
         ):
             mock_google.return_value = {}
             mock_jira.return_value = {}
@@ -367,16 +400,25 @@ class TestPopulateRuntimeCredentialsGitIdentity:
 
         with (
             patch(
-                "ambient_runner.platform.auth.fetch_google_credentials", new_callable=AsyncMock
+                "ambient_runner.platform.auth.fetch_google_credentials",
+                new_callable=AsyncMock,
             ) as mock_google,
-            patch("ambient_runner.platform.auth.fetch_jira_credentials", new_callable=AsyncMock) as mock_jira,
             patch(
-                "ambient_runner.platform.auth.fetch_gitlab_credentials", new_callable=AsyncMock
+                "ambient_runner.platform.auth.fetch_jira_credentials",
+                new_callable=AsyncMock,
+            ) as mock_jira,
+            patch(
+                "ambient_runner.platform.auth.fetch_gitlab_credentials",
+                new_callable=AsyncMock,
             ) as mock_gitlab,
             patch(
-                "ambient_runner.platform.auth.fetch_github_credentials", new_callable=AsyncMock
+                "ambient_runner.platform.auth.fetch_github_credentials",
+                new_callable=AsyncMock,
             ) as mock_github,
-            patch("ambient_runner.platform.auth.configure_git_identity", new_callable=AsyncMock) as mock_config,
+            patch(
+                "ambient_runner.platform.auth.configure_git_identity",
+                new_callable=AsyncMock,
+            ) as mock_config,
         ):
             mock_google.return_value = {}
             mock_jira.return_value = {}
@@ -401,7 +443,9 @@ class TestProviderDistinction:
         mock_context = MagicMock(spec=RunnerContext)
         mock_context.session_id = "test-session"
 
-        with patch("ambient_runner.platform.auth._fetch_credential", new_callable=AsyncMock) as mock_fetch:
+        with patch(
+            "ambient_runner.platform.auth._fetch_credential", new_callable=AsyncMock
+        ) as mock_fetch:
             mock_fetch.return_value = {
                 "token": "ghp_test",
                 "provider": "github",
@@ -419,7 +463,9 @@ class TestProviderDistinction:
         mock_context = MagicMock(spec=RunnerContext)
         mock_context.session_id = "test-session"
 
-        with patch("ambient_runner.platform.auth._fetch_credential", new_callable=AsyncMock) as mock_fetch:
+        with patch(
+            "ambient_runner.platform.auth._fetch_credential", new_callable=AsyncMock
+        ) as mock_fetch:
             mock_fetch.return_value = {
                 "token": "glpat-test",
                 "provider": "gitlab",

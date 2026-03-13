@@ -2,7 +2,6 @@
 
 import os
 
-import pytest
 
 from ambient_runner.platform.context import RunnerContext
 

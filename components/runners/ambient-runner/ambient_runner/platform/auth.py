@@ -145,10 +145,13 @@ async def fetch_github_credentials(context: RunnerContext) -> dict:
         )
         if data.get("expiresAt"):
             try:
-                exp_dt = datetime.fromisoformat(data["expiresAt"])
+                exp_dt = datetime.fromisoformat(
+                    data["expiresAt"].replace("Z", "+00:00")
+                )
                 _credential_expiry["github"] = exp_dt.timestamp()
                 logger.info(f"GitHub token expires at {data['expiresAt']}")
             except (ValueError, TypeError) as e:
+                _credential_expiry.pop("github", None)
                 logger.warning(f"Failed to parse GitHub expiresAt: {e}")
         else:
             # PAT or legacy token without expiry — clear any stale tracking

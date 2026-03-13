@@ -242,6 +242,7 @@ class TestClaudeBridgeSetupObservability:
             return_value=mock_obs_instance,
         ) as mock_obs_cls:
             from ambient_runner.bridge import setup_bridge_observability
+
             await setup_bridge_observability(ctx, "claude-sonnet-4-5")
 
         mock_obs_cls.assert_called_once()
@@ -276,6 +277,7 @@ class TestClaudeBridgeSetupObservability:
             return_value=mock_obs_instance,
         ):
             from ambient_runner.bridge import setup_bridge_observability
+
             await setup_bridge_observability(ctx, "claude-sonnet-4-5")
 
         call_kwargs = mock_obs_instance.initialize.call_args[1]
