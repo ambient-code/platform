@@ -61,6 +61,7 @@ Create an ADR for decisions that:
 | [0003](0003-multi-repo-support.md) | Multi-Repository Support in AgenticSessions | Accepted | 2024-11-21 |
 | [0004](0004-go-backend-python-runner.md) | Go Backend with Python Claude Runner | Accepted | 2024-11-21 |
 | [0005](0005-nextjs-shadcn-react-query.md) | Next.js with Shadcn UI and React Query | Accepted | 2024-11-21 |
+| [0006](0006-ambient-runner-sdk-architecture.md) | Ambient Runner SDK Architecture | Accepted | 2026-02-10 |
 
 ## References
 
