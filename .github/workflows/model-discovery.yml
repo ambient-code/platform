@@ -44,12 +44,13 @@ jobs:
 
       - name: Check for changes
         id: diff
-        run: git diff --quiet && echo "changed=false" >> "$GITHUB_OUTPUT" || echo "changed=true" >> "$GITHUB_OUTPUT"
+        run: git diff --quiet -- components/manifests/base/models.json && echo "changed=false" >> "$GITHUB_OUTPUT" || echo "changed=true" >> "$GITHUB_OUTPUT"
 
       - name: Create or update PR
         if: steps.diff.outputs.changed == 'true'
         uses: peter-evans/create-pull-request@v8
         with:
+          add-paths: components/manifests/base/models.json
           branch: automated/model-discovery
           commit-message: "chore: update model manifest from Vertex AI discovery"
           title: "chore: update model manifest"
