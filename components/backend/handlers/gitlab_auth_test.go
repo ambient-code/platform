@@ -22,16 +22,19 @@ import (
 
 var _ = Describe("GitLab Auth Handler", Label(test_constants.LabelUnit, test_constants.LabelHandlers, test_constants.LabelGitLabAuth), func() {
 	var (
-		httpUtils         *test_utils.HTTPTestUtils
-		k8sUtils          *test_utils.K8sTestUtils
-		originalNamespace string
-		testToken         string
+		httpUtils                          *test_utils.HTTPTestUtils
+		k8sUtils                           *test_utils.K8sTestUtils
+		originalNamespace                  string
+		originalValidateGitLabConnectivity func(context.Context, string, string) error
+		testToken                          string
 	)
 
 	BeforeEach(func() {
 		logger.Log("Setting up GitLab Auth Handler test")
 
 		originalNamespace = Namespace
+		originalValidateGitLabConnectivity = validateGitLabConnectivityFn
+		validateGitLabConnectivityFn = func(_ context.Context, _, _ string) error { return nil }
 
 		// Use centralized handler dependencies setup
 		k8sUtils = test_utils.NewK8sTestUtils(false, *config.TestNamespace)
@@ -67,6 +70,7 @@ var _ = Describe("GitLab Auth Handler", Label(test_constants.LabelUnit, test_con
 
 	AfterEach(func() {
 		Namespace = originalNamespace
+		validateGitLabConnectivityFn = originalValidateGitLabConnectivity
 
 		// Clean up created namespace (best-effort)
 		if k8sUtils != nil {
@@ -566,6 +570,46 @@ var _ = Describe("GitLab Auth Handler", Label(test_constants.LabelUnit, test_con
 
 			// Note: Global function K8s client validation tested at integration level
 			// Unit tests focus on specific handler logic
+
+			It("Should fail when GitLab hostname cannot be resolved", func() {
+				validateGitLabConnectivityFn = func(_ context.Context, _, _ string) error {
+					return fmt.Errorf("cannot resolve GitLab instance host 'gitlab.internal': lookup failed")
+				}
+
+				requestBody := map[string]interface{}{
+					"personalAccessToken": "valid_token_1234567890",
+					"instanceUrl":         "https://gitlab.internal",
+				}
+
+				context := httpUtils.CreateTestGinContext("POST", "/auth/gitlab/connect", requestBody)
+				httpUtils.SetAuthHeader(testToken)
+				httpUtils.SetUserContext("test-user", "Test User", "test@example.com")
+
+				ConnectGitLabGlobal(context)
+
+				httpUtils.AssertHTTPStatus(http.StatusBadRequest)
+				httpUtils.AssertErrorMessage("GitLab connectivity check failed: cannot resolve GitLab instance host 'gitlab.internal': lookup failed")
+			})
+
+			It("Should fail when GitLab PAT authentication fails", func() {
+				validateGitLabConnectivityFn = func(_ context.Context, _, _ string) error {
+					return fmt.Errorf("failed to authenticate with the provided Personal Access Token")
+				}
+
+				requestBody := map[string]interface{}{
+					"personalAccessToken": "valid_token_1234567890",
+					"instanceUrl":         "https://gitlab.com",
+				}
+
+				context := httpUtils.CreateTestGinContext("POST", "/auth/gitlab/connect", requestBody)
+				httpUtils.SetAuthHeader(testToken)
+				httpUtils.SetUserContext("test-user", "Test User", "test@example.com")
+
+				ConnectGitLabGlobal(context)
+
+				httpUtils.AssertHTTPStatus(http.StatusBadRequest)
+				httpUtils.AssertErrorMessage("GitLab connectivity check failed: failed to authenticate with the provided Personal Access Token")
+			})
 		})
 
 		Describe("GetGitLabStatusGlobal", func() {
