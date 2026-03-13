@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"net/http/httptest"
 	"testing"
 
@@ -23,8 +24,8 @@ func TestTransformSession(t *testing.T) {
 					"creationTimestamp": "2026-01-29T10:00:00Z",
 				},
 				"spec": map[string]interface{}{
-					"prompt": "Fix the bug",
-					"model":  "claude-sonnet-4",
+					"initialPrompt": "Fix the bug",
+					"model":         "claude-sonnet-4",
 				},
 				"status": map[string]interface{}{
 					"phase":          "Running",
@@ -36,6 +37,27 @@ func TestTransformSession(t *testing.T) {
 				Status:    "running",
 				Task:      "Fix the bug",
 				Model:     "claude-sonnet-4",
+				CreatedAt: "2026-01-29T10:00:00Z",
+			},
+		},
+		{
+			name: "Legacy prompt field fallback",
+			input: map[string]interface{}{
+				"metadata": map[string]interface{}{
+					"name":              "session-legacy",
+					"creationTimestamp": "2026-01-29T10:00:00Z",
+				},
+				"spec": map[string]interface{}{
+					"prompt": "Legacy prompt",
+				},
+				"status": map[string]interface{}{
+					"phase": "Running",
+				},
+			},
+			expected: types.SessionResponse{
+				ID:        "session-legacy",
+				Status:    "running",
+				Task:      "Legacy prompt",
 				CreatedAt: "2026-01-29T10:00:00Z",
 			},
 		},
@@ -105,6 +127,40 @@ func TestTransformSession(t *testing.T) {
 			},
 		},
 		{
+			name: "Session with displayName and repos",
+			input: map[string]interface{}{
+				"metadata": map[string]interface{}{
+					"name":              "session-with-repos",
+					"creationTimestamp": "2026-01-29T10:00:00Z",
+				},
+				"spec": map[string]interface{}{
+					"prompt":      "Fix the bug",
+					"displayName": "My Cool Session",
+					"repos": []interface{}{
+						map[string]interface{}{
+							"input": map[string]interface{}{
+								"url":    "https://github.com/org/repo",
+								"branch": "main",
+							},
+						},
+					},
+				},
+				"status": map[string]interface{}{
+					"phase": "Running",
+				},
+			},
+			expected: types.SessionResponse{
+				ID:          "session-with-repos",
+				Status:      "running",
+				DisplayName: "My Cool Session",
+				Task:        "Fix the bug",
+				Repos: []types.SessionRepo{
+					{URL: "https://github.com/org/repo", Branch: "main"},
+				},
+				CreatedAt: "2026-01-29T10:00:00Z",
+			},
+		},
+		{
 			name:  "Empty session",
 			input: map[string]interface{}{},
 			expected: types.SessionResponse{
@@ -141,6 +197,21 @@ func TestTransformSession(t *testing.T) {
 			if result.Error != tt.expected.Error {
 				t.Errorf("Error = %q, want %q", result.Error, tt.expected.Error)
 			}
+			if result.DisplayName != tt.expected.DisplayName {
+				t.Errorf("DisplayName = %q, want %q", result.DisplayName, tt.expected.DisplayName)
+			}
+			if len(result.Repos) != len(tt.expected.Repos) {
+				t.Errorf("Repos count = %d, want %d", len(result.Repos), len(tt.expected.Repos))
+			} else {
+				for i, r := range result.Repos {
+					if r.URL != tt.expected.Repos[i].URL {
+						t.Errorf("Repos[%d].URL = %q, want %q", i, r.URL, tt.expected.Repos[i].URL)
+					}
+					if r.Branch != tt.expected.Repos[i].Branch {
+						t.Errorf("Repos[%d].Branch = %q, want %q", i, r.Branch, tt.expected.Repos[i].Branch)
+					}
+				}
+			}
 		})
 	}
 }
@@ -159,7 +230,8 @@ func TestNormalizePhase(t *testing.T) {
 		{"Succeeded", "completed"},
 		{"Failed", "failed"},
 		{"Error", "failed"},
-		{"Unknown", "Unknown"},
+		{"Unknown", "unknown"},
+		{"Stopping", "stopping"},
 	}
 
 	for _, tt := range tests {
@@ -217,6 +289,20 @@ func TestForwardErrorResponse(t *testing.T) {
 			expectedStatus: 500,
 			expectJSON:     true, // Should be wrapped in generic JSON
 		},
+		{
+			name:           "Backend returns JSON with extra internal fields",
+			statusCode:     500,
+			body:           []byte(`{"error": "Session failed", "internal_trace": "k8s.io/xyz:123", "namespace": "secret-ns"}`),
+			expectedStatus: 500,
+			expectJSON:     true, // Should only forward "error" field
+		},
+		{
+			name:           "Backend returns JSON without error field",
+			statusCode:     500,
+			body:           []byte(`{"message": "some internal detail"}`),
+			expectedStatus: 500,
+			expectJSON:     true, // Should fall back to generic error
+		},
 	}
 
 	for _, tt := range tests {
@@ -238,6 +324,51 @@ func TestForwardErrorResponse(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestForwardErrorResponse_FiltersInternalFields(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	// Backend returns JSON with extra internal fields that should be stripped
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("GET", "/", nil)
+
+	forwardErrorResponse(c, 500, []byte(`{"error": "Session failed", "internal_trace": "k8s.io/xyz:123", "namespace": "secret-ns"}`))
+
+	var response map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &response)
+
+	if response["error"] != "Session failed" {
+		t.Errorf("Expected error 'Session failed', got %v", response["error"])
+	}
+	if _, exists := response["internal_trace"]; exists {
+		t.Error("Expected internal_trace to be stripped from response")
+	}
+	if _, exists := response["namespace"]; exists {
+		t.Error("Expected namespace to be stripped from response")
+	}
+}
+
+func TestForwardErrorResponse_NoErrorField(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	// Backend returns JSON without an "error" field
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("GET", "/", nil)
+
+	forwardErrorResponse(c, 500, []byte(`{"message": "some internal detail"}`))
+
+	var response map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &response)
+
+	if response["error"] != "Request failed" {
+		t.Errorf("Expected generic error 'Request failed', got %v", response["error"])
+	}
+	if _, exists := response["message"]; exists {
+		t.Error("Expected message to not be forwarded")
 	}
 }
 

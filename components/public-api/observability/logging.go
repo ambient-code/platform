@@ -1,3 +1,4 @@
+// Package observability provides structured logging and tracing for the public API.
 package observability
 
 import (

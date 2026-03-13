@@ -96,6 +96,21 @@ func main() {
 		v1.POST("/sessions", handlers.CreateSession)
 		v1.GET("/sessions/:id", handlers.GetSession)
 		v1.DELETE("/sessions/:id", handlers.DeleteSession)
+
+		// Runs
+		v1.POST("/sessions/:id/runs", handlers.CreateRun)
+		v1.GET("/sessions/:id/runs", handlers.GetSessionRuns)
+
+		// Messaging
+		v1.POST("/sessions/:id/message", handlers.SendMessage)
+
+		// Output
+		v1.GET("/sessions/:id/output", handlers.GetSessionOutput)
+
+		// Lifecycle
+		v1.POST("/sessions/:id/start", handlers.StartSession)
+		v1.POST("/sessions/:id/stop", handlers.StopSession)
+		v1.POST("/sessions/:id/interrupt", handlers.InterruptSession)
 	}
 
 	// Get port from environment or default to 8081

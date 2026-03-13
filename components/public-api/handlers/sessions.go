@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 
 	"ambient-code-public-api/types"
 
@@ -21,11 +22,12 @@ func ListSessions(c *gin.Context) {
 	}
 	path := fmt.Sprintf("/api/projects/%s/agentic-sessions", project)
 
-	resp, err := ProxyRequest(c, http.MethodGet, path, nil)
+	resp, cancel, err := ProxyRequest(c, http.MethodGet, path, nil)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": "Backend unavailable"})
 		return
 	}
+	defer cancel()
 	defer resp.Body.Close()
 
 	// Read response body
@@ -77,12 +79,13 @@ func GetSession(c *gin.Context) {
 	}
 	path := fmt.Sprintf("/api/projects/%s/agentic-sessions/%s", project, sessionID)
 
-	resp, err := ProxyRequest(c, http.MethodGet, path, nil)
+	resp, cancel, err := ProxyRequest(c, http.MethodGet, path, nil)
 	if err != nil {
 		log.Printf("Backend request failed for session %s: %v", sessionID, err)
 		c.JSON(http.StatusBadGateway, gin.H{"error": "Backend unavailable"})
 		return
 	}
+	defer cancel()
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
@@ -117,13 +120,16 @@ func CreateSession(c *gin.Context) {
 
 	var req types.CreateSessionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
 		return
 	}
 
 	// Transform to backend format
 	backendReq := map[string]interface{}{
-		"prompt": req.Task,
+		"initialPrompt": req.Task,
+	}
+	if req.DisplayName != "" {
+		backendReq["displayName"] = req.DisplayName
 	}
 	if req.Model != "" {
 		backendReq["model"] = req.Model
@@ -131,14 +137,30 @@ func CreateSession(c *gin.Context) {
 	if len(req.Repos) > 0 {
 		repos := make([]map[string]interface{}, len(req.Repos))
 		for i, r := range req.Repos {
-			repos[i] = map[string]interface{}{
-				"input": map[string]interface{}{
-					"url":    r.URL,
-					"branch": r.Branch,
-				},
+			repo := map[string]interface{}{
+				"url": r.URL,
 			}
+			if r.Branch != "" {
+				repo["branch"] = r.Branch
+			}
+			repos[i] = repo
 		}
 		backendReq["repos"] = repos
+	}
+	if req.ActiveWorkflow != nil && strings.TrimSpace(req.ActiveWorkflow.GitURL) != "" {
+		wf := map[string]interface{}{
+			"gitUrl": req.ActiveWorkflow.GitURL,
+		}
+		if req.ActiveWorkflow.Branch != "" {
+			wf["branch"] = req.ActiveWorkflow.Branch
+		}
+		if req.ActiveWorkflow.Path != "" {
+			wf["path"] = req.ActiveWorkflow.Path
+		}
+		backendReq["activeWorkflow"] = wf
+	}
+	if len(req.EnvironmentVariables) > 0 {
+		backendReq["environmentVariables"] = req.EnvironmentVariables
 	}
 
 	reqBody, err := json.Marshal(backendReq)
@@ -150,12 +172,13 @@ func CreateSession(c *gin.Context) {
 
 	path := fmt.Sprintf("/api/projects/%s/agentic-sessions", project)
 
-	resp, err := ProxyRequest(c, http.MethodPost, path, reqBody)
+	resp, cancel, err := ProxyRequest(c, http.MethodPost, path, reqBody)
 	if err != nil {
 		log.Printf("Backend request failed for create session: %v", err)
 		c.JSON(http.StatusBadGateway, gin.H{"error": "Backend unavailable"})
 		return
 	}
+	defer cancel()
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
@@ -199,12 +222,13 @@ func DeleteSession(c *gin.Context) {
 	}
 	path := fmt.Sprintf("/api/projects/%s/agentic-sessions/%s", project, sessionID)
 
-	resp, err := ProxyRequest(c, http.MethodDelete, path, nil)
+	resp, cancel, err := ProxyRequest(c, http.MethodDelete, path, nil)
 	if err != nil {
 		log.Printf("Backend request failed for delete session %s: %v", sessionID, err)
 		c.JSON(http.StatusBadGateway, gin.H{"error": "Backend unavailable"})
 		return
 	}
+	defer cancel()
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNoContent || resp.StatusCode == http.StatusOK {
@@ -221,17 +245,19 @@ func DeleteSession(c *gin.Context) {
 	forwardErrorResponse(c, resp.StatusCode, body)
 }
 
-// forwardErrorResponse forwards backend error with consistent JSON format
+// forwardErrorResponse forwards backend error with consistent JSON format.
+// SECURITY: Only forwards the "error" field to prevent leaking internal details.
 func forwardErrorResponse(c *gin.Context, statusCode int, body []byte) {
-	// Try to parse as JSON error response
+	// Try to parse as JSON and extract only the "error" field
 	var errorResp map[string]interface{}
 	if err := json.Unmarshal(body, &errorResp); err == nil {
-		// Backend returned valid JSON, forward it
-		c.JSON(statusCode, errorResp)
-		return
+		if errMsg, ok := errorResp["error"].(string); ok {
+			c.JSON(statusCode, gin.H{"error": errMsg})
+			return
+		}
 	}
 
-	// Backend returned non-JSON, wrap in standard error format
+	// Backend returned non-JSON or no "error" field, wrap in standard error format
 	c.JSON(statusCode, gin.H{"error": "Request failed"})
 }
 
@@ -258,11 +284,36 @@ func transformSession(data map[string]interface{}) types.SessionResponse {
 
 	// Extract spec
 	if spec, ok := data["spec"].(map[string]interface{}); ok {
-		if prompt, ok := spec["prompt"].(string); ok {
+		if prompt, ok := spec["initialPrompt"].(string); ok {
+			session.Task = prompt
+		} else if prompt, ok := spec["prompt"].(string); ok {
 			session.Task = prompt
 		}
 		if model, ok := spec["model"].(string); ok {
 			session.Model = model
+		}
+		if displayName, ok := spec["displayName"].(string); ok {
+			session.DisplayName = displayName
+		}
+		if repos, ok := spec["repos"].([]interface{}); ok {
+			for _, r := range repos {
+				repo, ok := r.(map[string]interface{})
+				if !ok {
+					continue
+				}
+				sr := types.SessionRepo{}
+				if input, ok := repo["input"].(map[string]interface{}); ok {
+					if url, ok := input["url"].(string); ok {
+						sr.URL = url
+					}
+					if branch, ok := input["branch"].(string); ok {
+						sr.Branch = branch
+					}
+				}
+				if sr.URL != "" {
+					session.Repos = append(session.Repos, sr)
+				}
+			}
 		}
 	}
 
@@ -290,7 +341,8 @@ func transformSession(data map[string]interface{}) types.SessionResponse {
 	return session
 }
 
-// normalizePhase converts K8s phase to simplified status
+// normalizePhase converts K8s phase to simplified lowercase status.
+// The public API contract guarantees status values are always lowercase.
 func normalizePhase(phase string) string {
 	switch phase {
 	case "Pending", "Creating", "Initializing":
@@ -302,6 +354,6 @@ func normalizePhase(phase string) string {
 	case "Failed", "Error":
 		return "failed"
 	default:
-		return phase
+		return strings.ToLower(phase)
 	}
 }

@@ -79,9 +79,10 @@ func TestProxyRequest_BackendUnavailable(t *testing.T) {
 	c.Set(ContextKeyToken, "test-token")
 	c.Set(ContextKeyProject, "test-project")
 
-	resp, err := ProxyRequest(c, http.MethodGet, "/api/projects/test/sessions", nil)
+	resp, cancel, err := ProxyRequest(c, http.MethodGet, "/api/projects/test/sessions", nil)
 
 	if err == nil {
+		cancel()
 		resp.Body.Close()
 		t.Error("Expected error for unavailable backend")
 	}

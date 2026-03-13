@@ -1,0 +1,797 @@
+openapi: 3.0.3
+info:
+  title: Ambient Code Public API
+  description: Simplified, versioned REST API gateway for the Ambient Code Platform.
+  version: 1.0.0
+servers:
+  - url: https://public-api-ambient-code.apps.okd1.timslab/v1
+    description: Lab OKD cluster
+  - url: http://localhost:8081/v1
+    description: Local development
+
+security:
+  - BearerAuth: []
+
+paths:
+  /sessions:
+    get:
+      summary: List sessions
+      operationId: listSessions
+      parameters:
+        - $ref: '#/components/parameters/ProjectHeader'
+      responses:
+        '200':
+          description: List of sessions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+
+    post:
+      summary: Create a session
+      operationId: createSession
+      parameters:
+        - $ref: '#/components/parameters/ProjectHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSessionRequest'
+      responses:
+        '201':
+          description: Session created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    example: session-abc123
+                  message:
+                    type: string
+                    example: Session created
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+
+  /sessions/{id}:
+    get:
+      summary: Get session details
+      operationId: getSession
+      parameters:
+        - $ref: '#/components/parameters/ProjectHeader'
+        - $ref: '#/components/parameters/SessionID'
+      responses:
+        '200':
+          description: Session details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+
+    delete:
+      summary: Delete a session
+      operationId: deleteSession
+      parameters:
+        - $ref: '#/components/parameters/ProjectHeader'
+        - $ref: '#/components/parameters/SessionID'
+      responses:
+        '204':
+          description: Session deleted
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+
+  /sessions/{id}/message:
+    post:
+      summary: Send a message to a session
+      description: >
+        Sends a user message to the session. The public API handles all
+        AG-UI protocol details (run ID generation, message envelope
+        construction, thread mapping). The resulting run executes
+        asynchronously; use GET /sessions/{id}/runs to track progress
+        and GET /sessions/{id}/output to retrieve results.
+      operationId: sendMessage
+      parameters:
+        - $ref: '#/components/parameters/ProjectHeader'
+        - $ref: '#/components/parameters/SessionID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendMessageRequest'
+      responses:
+        '202':
+          description: Message accepted, run created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SendMessageResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          description: Session is not in a running state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+
+  /sessions/{id}/output:
+    get:
+      summary: Get session output
+      description: >
+        Returns session output in one of three formats controlled by the
+        `format` query parameter.
+
+
+        - **transcript** (default) — Assembled conversation messages extracted
+          from MESSAGES_SNAPSHOT events. Each message has a role, full content,
+          and optional tool calls. This is the smallest and most useful format
+          for most consumers.
+
+        - **compact** — AG-UI events with streaming deltas merged. All
+          TEXT_MESSAGE_CONTENT deltas for the same message are concatenated
+          into a single event, and likewise for TOOL_CALL_ARGS. Significantly
+          smaller than raw events while preserving full event structure.
+
+        - **events** — Raw AG-UI events exactly as persisted. Includes every
+          individual streaming delta. Can be very large even for short sessions.
+
+
+        All formats support optional `run_id` filtering.
+      operationId: getSessionOutput
+      parameters:
+        - $ref: '#/components/parameters/ProjectHeader'
+        - $ref: '#/components/parameters/SessionID'
+        - name: format
+          in: query
+          required: false
+          description: Output format
+          schema:
+            type: string
+            enum: [transcript, compact, events]
+            default: transcript
+        - name: run_id
+          in: query
+          required: false
+          description: Filter output to a specific run (must be a valid UUID)
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: >
+            Session output. Response schema depends on the `format` parameter.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/TranscriptOutputResponse'
+                  - $ref: '#/components/schemas/EventsOutputResponse'
+                discriminator:
+                  propertyName: format
+                  mapping:
+                    transcript: '#/components/schemas/TranscriptOutputResponse'
+                    compact: '#/components/schemas/EventsOutputResponse'
+                    events: '#/components/schemas/EventsOutputResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Session or run not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+
+  /sessions/{id}/runs:
+    post:
+      summary: Create a run
+      description: >
+        Creates a new AG-UI run with full control over the run input.
+        The caller provides the complete RunAgentInput payload including
+        run ID, thread ID, and messages. For a simpler interface that
+        handles AG-UI details automatically, use POST /sessions/{id}/message.
+      operationId: createRun
+      parameters:
+        - $ref: '#/components/parameters/ProjectHeader'
+        - $ref: '#/components/parameters/SessionID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRunRequest'
+      responses:
+        '202':
+          description: Run accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateRunResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          description: Session is not in a running state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+
+    get:
+      summary: List runs in a session
+      description: >
+        Returns a summary of all AG-UI runs in the session, including
+        status, timestamps, event counts, and the originating user message.
+      operationId: getSessionRuns
+      parameters:
+        - $ref: '#/components/parameters/ProjectHeader'
+        - $ref: '#/components/parameters/SessionID'
+      responses:
+        '200':
+          description: List of runs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionRunsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+
+  /sessions/{id}/start:
+    post:
+      summary: Start (resume) a session
+      description: >
+        Resumes a stopped or completed session. The session transitions
+        back to Running state and can accept new messages. Returns 422
+        if the session is already running or pending, or 409 if the
+        session state is unknown.
+      operationId: startSession
+      parameters:
+        - $ref: '#/components/parameters/ProjectHeader'
+        - $ref: '#/components/parameters/SessionID'
+      responses:
+        '202':
+          description: Start accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Session state is unknown
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Session is already running or pending
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+
+  /sessions/{id}/stop:
+    post:
+      summary: Stop a session
+      description: >
+        Stops a running session. The session's pod is terminated and the
+        session transitions to a completed state. This is a session-level
+        lifecycle action — use interrupt instead to cancel only the
+        current run without killing the session. Returns 422 if the
+        session is already completed or failed, or 409 if the session
+        state is unknown.
+      operationId: stopSession
+      parameters:
+        - $ref: '#/components/parameters/ProjectHeader'
+        - $ref: '#/components/parameters/SessionID'
+      responses:
+        '202':
+          description: Stop accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Session state is unknown
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Session is not in a running state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+
+  /sessions/{id}/interrupt:
+    post:
+      summary: Interrupt the current run
+      description: >
+        Sends an interrupt signal to cancel the agent's current execution
+        without killing the session. The session remains in Running state
+        and can accept new messages. Equivalent to the red "Stop" button
+        in the chat UI.
+      operationId: interruptSession
+      parameters:
+        - $ref: '#/components/parameters/ProjectHeader'
+        - $ref: '#/components/parameters/SessionID'
+      responses:
+        '200':
+          description: Interrupt signal sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: OpenShift token or access key
+
+  parameters:
+    ProjectHeader:
+      name: X-Ambient-Project
+      in: header
+      required: true
+      description: Target project/namespace
+      schema:
+        type: string
+        pattern: '^[a-z0-9][a-z0-9-]*[a-z0-9]$'
+        example: my-project
+
+    SessionID:
+      name: id
+      in: path
+      required: true
+      description: Session ID (valid Kubernetes name)
+      schema:
+        type: string
+        pattern: '^[a-z0-9][a-z0-9-]*[a-z0-9]$'
+        example: session-abc123
+
+  schemas:
+    SessionResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+          enum: [pending, running, completed, failed]
+        display_name:
+          type: string
+        task:
+          type: string
+        model:
+          type: string
+        repos:
+          type: array
+          description: Repositories configured for this session
+          items:
+            $ref: '#/components/schemas/SessionRepo'
+        created_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        result:
+          type: string
+        error:
+          type: string
+
+    SessionListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SessionResponse'
+        total:
+          type: integer
+
+    CreateSessionRequest:
+      type: object
+      required: [task]
+      properties:
+        task:
+          type: string
+          description: The initial prompt / task for the agent
+        display_name:
+          type: string
+          description: Human-readable name for the session
+        model:
+          type: string
+        repos:
+          type: array
+          items:
+            type: object
+            required: [url]
+            properties:
+              url:
+                type: string
+              branch:
+                type: string
+        activeWorkflow:
+          $ref: '#/components/schemas/WorkflowRef'
+        environmentVariables:
+          type: object
+          additionalProperties:
+            type: string
+          description: Environment variables to inject into the session pod
+
+    WorkflowRef:
+      type: object
+      required: [gitUrl]
+      description: Identifies a workflow by git repository location
+      properties:
+        gitUrl:
+          type: string
+          description: Git clone URL of the repository containing the workflow
+        branch:
+          type: string
+          description: Branch to check out (defaults to main)
+        path:
+          type: string
+          description: Path within the repository to the workflow directory
+
+    CreateRunRequest:
+      type: object
+      required: [messages]
+      properties:
+        run_id:
+          type: string
+          format: uuid
+          description: Caller-provided run ID. Generated server-side if omitted.
+        thread_id:
+          type: string
+          description: AG-UI thread ID. Defaults to the session ID if omitted.
+        messages:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/RunMessage'
+
+    CreateRunResponse:
+      type: object
+      properties:
+        run_id:
+          type: string
+          format: uuid
+        thread_id:
+          type: string
+
+    RunMessage:
+      type: object
+      required: [role, content]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Message ID. Generated server-side if omitted.
+        role:
+          type: string
+          enum: [user, assistant, system]
+        content:
+          type: string
+
+    SendMessageRequest:
+      type: object
+      required: [content]
+      properties:
+        content:
+          type: string
+          description: The user message to send to the agent
+
+    SendMessageResponse:
+      type: object
+      properties:
+        run_id:
+          type: string
+          format: uuid
+          description: UUID identifying this run
+        thread_id:
+          type: string
+          description: Session ID (same as the path parameter)
+
+    TranscriptOutputResponse:
+      type: object
+      description: >
+        Transcript format (default). Returns assembled conversation messages
+        extracted from MESSAGES_SNAPSHOT events emitted at the end of each run.
+      properties:
+        session_id:
+          type: string
+        format:
+          type: string
+          enum: [transcript]
+        messages:
+          type: array
+          description: Assembled conversation messages in chronological order
+          items:
+            $ref: '#/components/schemas/TranscriptMessage'
+
+    TranscriptMessage:
+      type: object
+      description: >
+        A single assembled message from the conversation. Extracted from
+        MESSAGES_SNAPSHOT events which the runner emits at the end of each
+        run containing the full conversation up to that point.
+      properties:
+        id:
+          type: string
+          description: Message ID
+        role:
+          type: string
+          enum: [user, assistant, system, tool, developer]
+        content:
+          type: string
+          description: Full message content
+        tool_calls:
+          type: array
+          description: Tool calls made by the assistant (present when role is assistant)
+          items:
+            $ref: '#/components/schemas/TranscriptToolCall'
+        tool_call_id:
+          type: string
+          description: ID of the tool call this message is a response to (present when role is tool)
+        name:
+          type: string
+          description: Tool name (present when role is tool)
+        timestamp:
+          type: string
+
+    TranscriptToolCall:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        args:
+          type: string
+          description: JSON-encoded tool call arguments
+        result:
+          type: string
+          description: Tool call result (if completed)
+        status:
+          type: string
+          enum: [pending, running, completed, error]
+        duration:
+          type: integer
+          format: int64
+          description: Execution time in milliseconds
+
+    EventsOutputResponse:
+      type: object
+      description: >
+        Events format. Used for both `compact` and `events` formats.
+        In compact mode, streaming deltas (TEXT_MESSAGE_CONTENT,
+        TOOL_CALL_ARGS) are merged per message/tool call. In events
+        mode, raw events are returned as persisted.
+      properties:
+        session_id:
+          type: string
+        format:
+          type: string
+          enum: [compact, events]
+        events:
+          type: array
+          description: AG-UI protocol events in emission order
+          items:
+            $ref: '#/components/schemas/AGUIEvent'
+
+    AGUIEvent:
+      type: object
+      description: >
+        A single AG-UI protocol event. The `type` field determines which
+        additional fields are present. All events carry `type` and `runId`;
+        other fields depend on the event type.
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum:
+            - RUN_STARTED
+            - RUN_FINISHED
+            - RUN_ERROR
+            - TEXT_MESSAGE_START
+            - TEXT_MESSAGE_CONTENT
+            - TEXT_MESSAGE_END
+            - TOOL_CALL_START
+            - TOOL_CALL_ARGS
+            - TOOL_CALL_END
+            - STEP_STARTED
+            - STEP_FINISHED
+            - STATE_DELTA
+            - CUSTOM
+          description: AG-UI event type
+        runId:
+          type: string
+          format: uuid
+          description: Run this event belongs to
+        threadId:
+          type: string
+          description: Thread (session) this event belongs to
+        timestamp:
+          type: integer
+          format: int64
+          description: Unix timestamp in milliseconds
+        messageId:
+          type: string
+          description: Message ID (present on TEXT_MESSAGE_* events)
+        role:
+          type: string
+          enum: [user, assistant, system]
+          description: Message role (present on TEXT_MESSAGE_START)
+        content:
+          type: string
+          description: Full message content (present on TEXT_MESSAGE_START for user messages)
+        delta:
+          type: string
+          description: >
+            Incremental content chunk (present on TEXT_MESSAGE_CONTENT,
+            TOOL_CALL_ARGS). In compact format, all deltas for the same
+            message/tool call are merged into a single event.
+        toolCallId:
+          type: string
+          description: Tool call ID (present on TOOL_CALL_* events)
+        toolCallName:
+          type: string
+          description: Tool name (present on TOOL_CALL_START)
+        stepName:
+          type: string
+          description: Step name (present on STEP_STARTED, STEP_FINISHED)
+        rawEvent:
+          type: object
+          description: Custom event payload (present on CUSTOM events, e.g. thinking blocks)
+      additionalProperties: true
+
+    SessionRunsResponse:
+      type: object
+      properties:
+        session_id:
+          type: string
+        runs:
+          type: array
+          items:
+            $ref: '#/components/schemas/RunSummary'
+
+    RunSummary:
+      type: object
+      properties:
+        run_id:
+          type: string
+          format: uuid
+        started_at:
+          type: integer
+          format: int64
+          description: Unix timestamp in milliseconds
+        finished_at:
+          type: integer
+          format: int64
+          description: Unix timestamp in milliseconds
+        status:
+          type: string
+          enum: [running, completed, error]
+        user_message:
+          type: string
+          description: The user message that initiated this run
+        event_count:
+          type: integer
+          description: Total number of AG-UI events in this run
+
+    SessionRepo:
+      type: object
+      properties:
+        url:
+          type: string
+        branch:
+          type: string
+
+    MessageResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: Interrupt signal sent
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+
+  responses:
+    BadRequest:
+      description: Invalid input
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Missing or invalid authentication
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    BadGateway:
+      description: Backend unavailable
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'

@@ -27,6 +27,14 @@ func setupTestRouter() *gin.Engine {
 		v1.POST("/sessions", CreateSession)
 		v1.GET("/sessions/:id", GetSession)
 		v1.DELETE("/sessions/:id", DeleteSession)
+
+		v1.POST("/sessions/:id/runs", CreateRun)
+		v1.GET("/sessions/:id/runs", GetSessionRuns)
+		v1.POST("/sessions/:id/message", SendMessage)
+		v1.GET("/sessions/:id/output", GetSessionOutput)
+		v1.POST("/sessions/:id/start", StartSession)
+		v1.POST("/sessions/:id/stop", StopSession)
+		v1.POST("/sessions/:id/interrupt", InterruptSession)
 	}
 
 	return r
@@ -109,8 +117,43 @@ func TestE2E_CreateSession(t *testing.T) {
 	}
 
 	// Verify request body was transformed correctly
-	if !strings.Contains(requestBody, "prompt") {
-		t.Errorf("Expected request body to contain 'prompt', got %s", requestBody)
+	if !strings.Contains(requestBody, "initialPrompt") {
+		t.Errorf("Expected request body to contain 'initialPrompt', got %s", requestBody)
+	}
+}
+
+func TestE2E_CreateSession_WithDisplayName(t *testing.T) {
+	var receivedBody map[string]interface{}
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		decoder := json.NewDecoder(r.Body)
+		decoder.Decode(&receivedBody)
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(map[string]string{"name": "session-123"})
+	}))
+	defer backend.Close()
+
+	originalURL := BackendURL
+	BackendURL = backend.URL
+	defer func() { BackendURL = originalURL }()
+
+	router := setupTestRouter()
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/sessions",
+		strings.NewReader(`{"task": "Fix the bug", "display_name": "Bug Fix Session"}`))
+	req.Header.Set("Authorization", "Bearer test-token")
+	req.Header.Set("X-Ambient-Project", "test-project")
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Errorf("Expected status 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Verify display_name was forwarded as displayName (camelCase) to backend
+	if receivedBody["displayName"] != "Bug Fix Session" {
+		t.Errorf("Expected displayName 'Bug Fix Session' in backend request, got %v", receivedBody["displayName"])
 	}
 }
 
