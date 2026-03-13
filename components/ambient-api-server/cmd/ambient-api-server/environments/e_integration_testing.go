@@ -33,6 +33,7 @@ func (e *IntegrationTestingEnvImpl) OverrideConfig(c *config.ApplicationConfig) 
 }
 
 func (e *IntegrationTestingEnvImpl) OverrideServices(s *pkgenv.Services) error {
+	s.SetService("RBACMiddleware", nil)
 	return nil
 }
 

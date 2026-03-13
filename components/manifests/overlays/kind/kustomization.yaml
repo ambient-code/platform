@@ -18,6 +18,24 @@ resources:
 
 # Patches for e2e environment
 patches:
+- path: ambient-api-server-dev-patch.yaml
+  target:
+    group: apps
+    kind: Deployment
+    name: ambient-api-server
+    version: v1
+- path: ambient-api-server-notls-patch.yaml
+  target:
+    group: apps
+    kind: Deployment
+    name: ambient-api-server
+    version: v1
+- path: ambient-api-server-db-notls-patch.yaml
+  target:
+    group: apps
+    kind: Deployment
+    name: ambient-api-server-db
+    version: v1
 - path: ambient-api-server-jwks-patch.yaml
   target:
     kind: ConfigMap

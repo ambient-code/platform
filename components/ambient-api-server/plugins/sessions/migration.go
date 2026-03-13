@@ -62,6 +62,44 @@ func constraintMigration() *gormigrate.Migration {
 	}
 }
 
+func sessionMessagesMigration() *gormigrate.Migration {
+	migrateStatements := []string{
+		`CREATE TABLE IF NOT EXISTS session_messages (
+			id         VARCHAR(36) PRIMARY KEY,
+			session_id VARCHAR(36) NOT NULL,
+			seq        BIGSERIAL UNIQUE NOT NULL,
+			event_type VARCHAR(255) NOT NULL,
+			payload    TEXT NOT NULL,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_session_messages_session_seq ON session_messages(session_id, seq)`,
+	}
+	rollbackStatements := []string{
+		`DROP INDEX IF EXISTS idx_session_messages_session_seq`,
+		`DROP TABLE IF EXISTS session_messages`,
+	}
+
+	return &gormigrate.Migration{
+		ID: "202503100001",
+		Migrate: func(tx *gorm.DB) error {
+			for _, stmt := range migrateStatements {
+				if err := tx.Exec(stmt).Error; err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			for _, stmt := range rollbackStatements {
+				if err := tx.Exec(stmt).Error; err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+	}
+}
+
 func schemaExpansionMigration() *gormigrate.Migration {
 	migrateStatements := []string{
 		`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS repos TEXT`,

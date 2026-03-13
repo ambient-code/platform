@@ -1,0 +1,84 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ambient-api-server
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: migration
+          imagePullPolicy: IfNotPresent
+          command:
+            - /usr/local/bin/ambient-api-server
+            - migrate
+            - --db-host-file=/secrets/db/db.host
+            - --db-port-file=/secrets/db/db.port
+            - --db-user-file=/secrets/db/db.user
+            - --db-password-file=/secrets/db/db.password
+            - --db-name-file=/secrets/db/db.name
+            - --db-sslmode=disable
+            - --alsologtostderr
+            - -v=10
+      containers:
+        - name: api-server
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: AMBIENT_ENV
+              value: development
+          command:
+            - /usr/local/bin/ambient-api-server
+            - serve
+            - --db-host-file=/secrets/db/db.host
+            - --db-port-file=/secrets/db/db.port
+            - --db-user-file=/secrets/db/db.user
+            - --db-password-file=/secrets/db/db.password
+            - --db-name-file=/secrets/db/db.name
+            - --enable-jwt=true
+            - --enable-authz=false
+            - --jwk-cert-file=/configs/authentication/jwks.json
+            - --enable-https=false
+            - --enable-tls=false
+            - --enable-grpc=true
+            - --grpc-enable-tls=false
+            - --api-server-bindaddress=:8000
+            - --metrics-server-bindaddress=:4433
+            - --health-check-server-bindaddress=:4434
+            - --enable-health-check-https=false
+            - --db-sslmode=disable
+            - --db-max-open-connections=50
+            - --enable-db-debug=false
+            - --enable-metrics-https=false
+            - --http-read-timeout=5s
+            - --http-write-timeout=30s
+            - --cors-allowed-origins=*
+            - --cors-allowed-headers=X-Ambient-Project
+            - --grpc-server-bindaddress=:9000
+            - --alsologtostderr
+            - -v=10
+          volumeMounts:
+            - name: db-secrets
+              mountPath: /secrets/db
+            - name: app-secrets
+              mountPath: /secrets/service
+            - name: auth-config
+              mountPath: /configs/authentication
+          livenessProbe:
+            httpGet:
+              path: /api/ambient
+              port: 8000
+              scheme: HTTP
+            initialDelaySeconds: 15
+            periodSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /healthcheck
+              port: 4434
+              scheme: HTTP
+              httpHeaders:
+                - name: User-Agent
+                  value: Probe
+            initialDelaySeconds: 20
+            periodSeconds: 10
+      volumes:
+        - name: tls-certs
+          emptyDir: {}

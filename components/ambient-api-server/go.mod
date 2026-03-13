@@ -5,17 +5,17 @@ go 1.24.0
 toolchain go1.24.9
 
 require (
-	github.com/go-gormigrate/gormigrate/v2 v2.0.0
+	github.com/go-gormigrate/gormigrate/v2 v2.1.5
 	github.com/golang/glog v1.2.5
 	github.com/gorilla/mux v1.7.3
 	github.com/onsi/gomega v1.27.1
 	github.com/openshift-online/ocm-sdk-go v0.1.334
-	github.com/openshift-online/rh-trex-ai v0.0.19 // v0.0.14→v0.0.19: gRPC TLS support, JWT audience validation fix, OpenAPI generator improvements
+	github.com/openshift-online/rh-trex-ai v0.0.21 // v0.0.21: consolidated auth config, fixed authz middleware, removed ServerConfig.JwkCertFile/JwkCertURL
 	github.com/spf13/pflag v1.0.6
 	google.golang.org/grpc v1.75.1
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/resty.v1 v1.12.0
-	gorm.io/gorm v1.20.5
+	gorm.io/gorm v1.31.1
 )
 
 require (
@@ -54,16 +54,13 @@ require (
 	github.com/gorilla/css v1.0.0 // indirect
 	github.com/gorilla/handlers v1.4.2 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
-	github.com/jackc/chunkreader/v2 v2.0.1 // indirect
-	github.com/jackc/pgconn v1.14.3 // indirect
-	github.com/jackc/pgio v1.0.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
-	github.com/jackc/pgproto3/v2 v2.3.3 // indirect
-	github.com/jackc/pgservicefile v0.0.0-20221227161230-091c0ba34f0a // indirect
-	github.com/jackc/pgtype v1.14.0 // indirect
+	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/pgx/v4 v4.18.2 // indirect
+	github.com/jackc/pgx/v5 v5.6.0 // indirect
+	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
-	github.com/jinzhu/now v1.1.1 // indirect
+	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/lann/builder v0.0.0-20180802200727-47ae307949d0 // indirect
@@ -113,6 +110,7 @@ require (
 	go.opentelemetry.io/proto/otlp v1.9.0 // indirect
 	golang.org/x/crypto v0.45.0 // indirect
 	golang.org/x/net v0.47.0 // indirect
+	golang.org/x/sync v0.18.0 // indirect
 	golang.org/x/sys v0.40.0 // indirect
 	golang.org/x/text v0.31.0 // indirect
 	golang.org/x/time v0.3.0 // indirect
@@ -120,5 +118,5 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251014184007-4626949a642f // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	gorm.io/driver/postgres v1.0.5 // indirect
+	gorm.io/driver/postgres v1.6.0 // indirect
 )

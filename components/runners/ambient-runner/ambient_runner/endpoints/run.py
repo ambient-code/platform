@@ -1,5 +1,6 @@
 """POST / — AG-UI run endpoint (delegates to bridge)."""
 
+import json
 import logging
 import uuid
 from typing import Any, Dict, List, Optional, Union
@@ -12,6 +13,31 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
+
+try:
+    from ambient_platform._grpc_client import AmbientGRPCClient
+    _grpc_client: Optional[AmbientGRPCClient] = AmbientGRPCClient.from_env()
+except Exception as _grpc_init_err:
+    logger.warning("gRPC client unavailable, session messages will not be pushed: %s", _grpc_init_err)
+    _grpc_client = None
+
+
+def _push_event(session_id: Optional[str], event: Any) -> None:
+    """Push an AG-UI event to the session messages stream. Best-effort; never raises."""
+    if _grpc_client is None or not session_id:
+        return
+    try:
+        event_type = getattr(event, "type", None)
+        if event_type is None:
+            return
+        event_type_str = event_type.value if hasattr(event_type, "value") else str(event_type)
+        try:
+            payload = json.dumps(event, default=str)
+        except Exception:
+            payload = str(event)
+        _grpc_client.session_messages.push(session_id, event_type_str, payload)
+    except Exception as exc:
+        logger.debug("_push_event failed: %s", exc)
 
 router = APIRouter()
 
@@ -64,9 +90,12 @@ async def run_agent(input_data: RunnerInput, request: Request):
         f"Run: thread_id={run_agent_input.thread_id}, run_id={run_agent_input.run_id}"
     )
 
+    session_id = run_agent_input.thread_id
+
     async def event_stream():
         try:
             async for event in bridge.run(run_agent_input):
+                _push_event(session_id, event)
                 try:
                     yield encoder.encode(event)
                 except Exception as encode_err:

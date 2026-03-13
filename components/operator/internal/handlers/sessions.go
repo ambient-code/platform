@@ -1049,6 +1049,7 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 					corev1.EnvVar{Name: "USE_AGUI", Value: "true"},
 					corev1.EnvVar{Name: "TIMEOUT", Value: fmt.Sprintf("%d", timeout)},
 					corev1.EnvVar{Name: "BACKEND_API_URL", Value: fmt.Sprintf("http://backend-service.%s.svc.cluster.local:8080/api", appConfig.BackendNamespace)},
+					corev1.EnvVar{Name: "AMBIENT_GRPC_URL", Value: fmt.Sprintf("ambient-api-server.%s.svc.cluster.local:9000", appConfig.BackendNamespace)},
 				)
 
 				// Resolve Vertex AI model ID from the model manifest ConfigMap.

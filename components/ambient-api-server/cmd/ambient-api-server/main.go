@@ -18,6 +18,13 @@ import (
 	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/projects"
 	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/sessions"
 	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/users"
+	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/agents"
+	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/rbac"
+	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/roles"
+	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/roleBindings"
+	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/sessionCheckIns"
+	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/projectDocuments"
+	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/agentMessages"
 )
 
 func main() {

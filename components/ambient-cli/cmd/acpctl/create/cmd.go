@@ -20,36 +20,58 @@ var Cmd = &cobra.Command{
 	Long: `Create a resource.
 
 Valid resource types:
-  session    Create an agentic session
-  project    Create a project`,
+  session       Create an agentic session
+  project       Create a project
+  agent         Create an agent
+  role          Create a role
+  role-binding  Create a role binding
+  agent-message Send a message to an agent`,
 	Args: cobra.MinimumNArgs(1),
 	RunE: run,
 }
 
 var createArgs struct {
-	name         string
-	prompt       string
-	repoURL      string
-	model        string
-	maxTokens    int
-	temperature  float64
-	timeout      int
-	displayName  string
-	description  string
-	outputFormat string
+	name             string
+	prompt           string
+	repoURL          string
+	model            string
+	maxTokens        int
+	temperature      float64
+	timeout          int
+	displayName      string
+	description      string
+	outputFormat     string
+	projectID        string
+	ownerUserID      string
+	permissions      string
+	userID           string
+	roleID           string
+	scope            string
+	scopeID          string
+	recipientAgentID string
+	body             string
 }
 
 func init() {
-	Cmd.Flags().StringVar(&createArgs.name, "name", "", "Resource name (required)")
-	Cmd.Flags().StringVar(&createArgs.prompt, "prompt", "", "Session prompt")
+	Cmd.Flags().StringVar(&createArgs.name, "name", "", "Resource name")
+	Cmd.Flags().StringVar(&createArgs.prompt, "prompt", "", "Session/agent prompt")
 	Cmd.Flags().StringVar(&createArgs.repoURL, "repo-url", "", "Repository URL")
 	Cmd.Flags().StringVar(&createArgs.model, "model", "", "LLM model")
 	Cmd.Flags().IntVar(&createArgs.maxTokens, "max-tokens", 0, "LLM max tokens")
 	Cmd.Flags().Float64Var(&createArgs.temperature, "temperature", 0, "LLM temperature")
 	Cmd.Flags().IntVar(&createArgs.timeout, "timeout", 0, "Session timeout in seconds")
-	Cmd.Flags().StringVar(&createArgs.displayName, "display-name", "", "Project display name")
-	Cmd.Flags().StringVar(&createArgs.description, "description", "", "Project description")
+	Cmd.Flags().StringVar(&createArgs.displayName, "display-name", "", "Display name")
+	Cmd.Flags().StringVar(&createArgs.description, "description", "", "Description")
 	Cmd.Flags().StringVarP(&createArgs.outputFormat, "output", "o", "", "Output format: json")
+	Cmd.Flags().StringVar(&createArgs.projectID, "project-id", "", "Project ID")
+	Cmd.Flags().StringVar(&createArgs.ownerUserID, "owner-user-id", "", "Owner user ID (agent)")
+	Cmd.Flags().StringVar(&createArgs.permissions, "permissions", "", "Role permissions (JSON)")
+	Cmd.Flags().StringVar(&createArgs.userID, "user-id", "", "User ID (role-binding)")
+	Cmd.Flags().StringVar(&createArgs.roleID, "role-id", "", "Role ID (role-binding)")
+	Cmd.Flags().StringVar(&createArgs.scope, "scope", "", "Scope (role-binding)")
+	Cmd.Flags().StringVar(&createArgs.scopeID, "scope-id", "", "Scope ID (role-binding)")
+	Cmd.Flags().StringVar(&createArgs.recipientAgentID, "recipient-agent-id", "", "Recipient agent ID (agent-message)")
+	Cmd.Flags().StringVar(&createArgs.body, "body", "", "Message body (agent-message)")
 }
 
 func run(cmd *cobra.Command, cmdArgs []string) error {
@@ -73,8 +95,16 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 		return createSession(cmd, ctx, client)
 	case "project", "proj":
 		return createProject(cmd, ctx, client)
+	case "agent":
+		return createAgent(cmd, ctx, client)
+	case "role":
+		return createRole(cmd, ctx, client)
+	case "role-binding", "rolebinding", "rb":
+		return createRoleBinding(cmd, ctx, client)
+	case "agent-message", "agentmessage", "am":
+		return createAgentMessage(cmd, ctx, client)
 	default:
-		return fmt.Errorf("unknown resource type: %s\nValid types: session, project", cmdArgs[0])
+		return fmt.Errorf("unknown resource type: %s\nValid types: session, project, agent, role, role-binding, agent-message", cmdArgs[0])
 	}
 }
 
@@ -86,8 +116,17 @@ func warnUnusedFlags(cmd *cobra.Command, names ...string) {
 	}
 }
 
+func printCreated(cmd *cobra.Command, kind, id string, obj interface{}) error {
+	if createArgs.outputFormat == "json" {
+		printer := output.NewPrinter(output.FormatJSON)
+		return printer.PrintJSON(obj)
+	}
+	fmt.Fprintf(cmd.OutOrStdout(), "%s/%s created\n", kind, id)
+	return nil
+}
+
 func createSession(cmd *cobra.Command, ctx context.Context, client *sdkclient.Client) error {
-	warnUnusedFlags(cmd, "display-name", "description")
+	warnUnusedFlags(cmd, "display-name", "project-id", "owner-user-id", "permissions", "user-id", "role-id", "scope", "scope-id", "recipient-agent-id", "body")
 
 	if createArgs.name == "" {
 		return fmt.Errorf("--name is required")
@@ -124,6 +163,7 @@ func createSession(cmd *cobra.Command, ctx context.Context, client *sdkclient.Cl
 	if cmd.Flags().Changed("timeout") {
 		builder = builder.Timeout(createArgs.timeout)
 	}
+
 	session, err := builder.Build()
 	if err != nil {
 		return fmt.Errorf("build session: %w", err)
@@ -134,17 +174,11 @@ func createSession(cmd *cobra.Command, ctx context.Context, client *sdkclient.Cl
 		return fmt.Errorf("create session: %w", err)
 	}
 
-	if createArgs.outputFormat == "json" {
-		printer := output.NewPrinter(output.FormatJSON)
-		return printer.PrintJSON(created)
-	}
-
-	fmt.Fprintf(cmd.OutOrStdout(), "session/%s created\n", created.ID)
-	return nil
+	return printCreated(cmd, "session", created.ID, created)
 }
 
 func createProject(cmd *cobra.Command, ctx context.Context, client *sdkclient.Client) error {
-	warnUnusedFlags(cmd, "prompt", "repo-url", "model", "max-tokens", "temperature", "timeout")
+	warnUnusedFlags(cmd, "prompt", "repo-url", "model", "max-tokens", "temperature", "timeout", "project-id", "owner-user-id", "permissions", "user-id", "role-id", "scope", "scope-id", "recipient-agent-id", "body")
 
 	if createArgs.name == "" {
 		return fmt.Errorf("--name is required")
@@ -169,11 +203,146 @@ func createProject(cmd *cobra.Command, ctx context.Context, client *sdkclient.Cl
 		return fmt.Errorf("create project: %w", err)
 	}
 
-	if createArgs.outputFormat == "json" {
-		printer := output.NewPrinter(output.FormatJSON)
-		return printer.PrintJSON(created)
+	return printCreated(cmd, "project", created.ID, created)
+}
+
+func createAgent(cmd *cobra.Command, ctx context.Context, client *sdkclient.Client) error {
+	warnUnusedFlags(cmd, "timeout", "user-id", "role-id", "scope", "scope-id", "recipient-agent-id", "body")
+
+	if createArgs.name == "" {
+		return fmt.Errorf("--name is required")
+	}
+	if createArgs.projectID == "" {
+		return fmt.Errorf("--project-id is required")
+	}
+	if createArgs.ownerUserID == "" {
+		return fmt.Errorf("--owner-user-id is required")
 	}
 
-	fmt.Fprintf(cmd.OutOrStdout(), "project/%s created\n", created.ID)
-	return nil
+	builder := sdktypes.NewAgentBuilder().
+		Name(createArgs.name).
+		ProjectID(createArgs.projectID).
+		OwnerUserID(createArgs.ownerUserID)
+
+	if createArgs.prompt != "" {
+		builder = builder.Prompt(createArgs.prompt)
+	}
+	if createArgs.repoURL != "" {
+		builder = builder.RepoURL(createArgs.repoURL)
+	}
+	if createArgs.model != "" {
+		builder = builder.LlmModel(createArgs.model)
+	}
+	if createArgs.displayName != "" {
+		builder = builder.DisplayName(createArgs.displayName)
+	}
+	if createArgs.description != "" {
+		builder = builder.Description(createArgs.description)
+	}
+
+	agent, err := builder.Build()
+	if err != nil {
+		return fmt.Errorf("build agent: %w", err)
+	}
+
+	created, err := client.Agents().Create(ctx, agent)
+	if err != nil {
+		return fmt.Errorf("create agent: %w", err)
+	}
+
+	return printCreated(cmd, "agent", created.ID, created)
+}
+
+func createRole(cmd *cobra.Command, ctx context.Context, client *sdkclient.Client) error {
+	warnUnusedFlags(cmd, "prompt", "repo-url", "model", "max-tokens", "temperature", "timeout", "project-id", "owner-user-id", "user-id", "role-id", "scope", "scope-id", "recipient-agent-id", "body")
+
+	if createArgs.name == "" {
+		return fmt.Errorf("--name is required")
+	}
+
+	builder := sdktypes.NewRoleBuilder().Name(createArgs.name)
+
+	if createArgs.displayName != "" {
+		builder = builder.DisplayName(createArgs.displayName)
+	}
+	if createArgs.description != "" {
+		builder = builder.Description(createArgs.description)
+	}
+	if createArgs.permissions != "" {
+		builder = builder.Permissions(createArgs.permissions)
+	}
+
+	role, err := builder.Build()
+	if err != nil {
+		return fmt.Errorf("build role: %w", err)
+	}
+
+	created, err := client.Roles().Create(ctx, role)
+	if err != nil {
+		return fmt.Errorf("create role: %w", err)
+	}
+
+	return printCreated(cmd, "role", created.ID, created)
+}
+
+func createRoleBinding(cmd *cobra.Command, ctx context.Context, client *sdkclient.Client) error {
+	warnUnusedFlags(cmd, "name", "prompt", "repo-url", "model", "max-tokens", "temperature", "timeout", "display-name", "description", "project-id", "owner-user-id", "permissions", "recipient-agent-id", "body")
+
+	if createArgs.userID == "" {
+		return fmt.Errorf("--user-id is required")
+	}
+	if createArgs.roleID == "" {
+		return fmt.Errorf("--role-id is required")
+	}
+	if createArgs.scope == "" {
+		return fmt.Errorf("--scope is required")
+	}
+
+	builder := sdktypes.NewRoleBindingBuilder().
+		UserID(createArgs.userID).
+		RoleID(createArgs.roleID).
+		Scope(createArgs.scope)
+
+	if createArgs.scopeID != "" {
+		builder = builder.ScopeID(createArgs.scopeID)
+	}
+
+	rb, err := builder.Build()
+	if err != nil {
+		return fmt.Errorf("build role-binding: %w", err)
+	}
+
+	created, err := client.RoleBindings().Create(ctx, rb)
+	if err != nil {
+		return fmt.Errorf("create role-binding: %w", err)
+	}
+
+	return printCreated(cmd, "role-binding", created.ID, created)
+}
+
+func createAgentMessage(cmd *cobra.Command, ctx context.Context, client *sdkclient.Client) error {
+	warnUnusedFlags(cmd, "name", "prompt", "repo-url", "model", "max-tokens", "temperature", "timeout", "display-name", "description", "project-id", "owner-user-id", "permissions", "user-id", "role-id", "scope", "scope-id")
+
+	if createArgs.recipientAgentID == "" {
+		return fmt.Errorf("--recipient-agent-id is required")
+	}
+
+	builder := sdktypes.NewAgentMessageBuilder().
+		RecipientAgentID(createArgs.recipientAgentID)
+
+	if createArgs.body != "" {
+		builder = builder.Body(createArgs.body)
+	}
+
+	msg, err := builder.Build()
+	if err != nil {
+		return fmt.Errorf("build agent-message: %w", err)
+	}
+
+	created, err := client.AgentMessages().Create(ctx, msg)
+	if err != nil {
+		return fmt.Errorf("create agent-message: %w", err)
+	}
+
+	return printCreated(cmd, "agent-message", created.ID, created)
 }

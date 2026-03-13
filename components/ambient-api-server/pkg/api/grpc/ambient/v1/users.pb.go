@@ -593,7 +593,7 @@ const file_ambient_v1_users_proto_rawDesc = "" +
 	"DeleteUser\x12\x1d.ambient.v1.DeleteUserRequest\x1a\x1e.ambient.v1.DeleteUserResponse\x12H\n" +
 	"\tListUsers\x12\x1c.ambient.v1.ListUsersRequest\x1a\x1d.ambient.v1.ListUsersResponse\x12I\n" +
 	"\n" +
-	"WatchUsers\x12\x1d.ambient.v1.WatchUsersRequest\x1a\x1a.ambient.v1.UserWatchEvent0\x01B^Z\\github.com/ambient/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1;ambient_v1b\x06proto3"
+	"WatchUsers\x12\x1d.ambient.v1.WatchUsersRequest\x1a\x1a.ambient.v1.UserWatchEvent0\x01BcZagithub.com/ambient-code/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1;ambient_v1b\x06proto3"
 
 var (
 	file_ambient_v1_users_proto_rawDescOnce sync.Once

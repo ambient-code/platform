@@ -1192,6 +1192,1398 @@ paths:
       security:
       - Bearer: []
       summary: Update an user
+  /api/ambient/v1/agents:
+    get:
+      parameters:
+      - description: Page number of record list when record list exceeds specified
+          page size
+        explode: true
+        in: query
+        name: page
+        required: false
+        schema:
+          default: 1
+          minimum: 1
+          type: integer
+        style: form
+      - description: Maximum number of records to return
+        explode: true
+        in: query
+        name: size
+        required: false
+        schema:
+          default: 100
+          minimum: 0
+          type: integer
+        style: form
+      - description: Specifies the search criteria
+        explode: true
+        in: query
+        name: search
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Specifies the order by criteria
+        explode: true
+        in: query
+        name: orderBy
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Supplies a comma-separated list of fields to be returned
+        explode: true
+        in: query
+        name: fields
+        required: false
+        schema:
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentList"
+          description: A JSON array of agent objects
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Returns a list of agents
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Agent"
+        description: Agent data
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Agent"
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Validation errors occurred
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Agent already exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: An unexpected error occurred creating the agent
+      security:
+      - Bearer: []
+      summary: Create a new agent
+  /api/ambient/v1/agents/{id}:
+    get:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Agent"
+          description: Agent found by id
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No agent with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Get an agent by id
+    patch:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentPatchRequest"
+        description: Updated agent data
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Agent"
+          description: Agent updated successfully
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Validation errors occurred
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No agent with specified id exists
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Agent already exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error updating agent
+      security:
+      - Bearer: []
+      summary: Update an agent
+  /api/ambient/v1/roles:
+    get:
+      parameters:
+      - description: Page number of record list when record list exceeds specified
+          page size
+        explode: true
+        in: query
+        name: page
+        required: false
+        schema:
+          default: 1
+          minimum: 1
+          type: integer
+        style: form
+      - description: Maximum number of records to return
+        explode: true
+        in: query
+        name: size
+        required: false
+        schema:
+          default: 100
+          minimum: 0
+          type: integer
+        style: form
+      - description: Specifies the search criteria
+        explode: true
+        in: query
+        name: search
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Specifies the order by criteria
+        explode: true
+        in: query
+        name: orderBy
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Supplies a comma-separated list of fields to be returned
+        explode: true
+        in: query
+        name: fields
+        required: false
+        schema:
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoleList"
+          description: A JSON array of role objects
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Returns a list of roles
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Role"
+        description: Role data
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Role"
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Validation errors occurred
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Role already exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: An unexpected error occurred creating the role
+      security:
+      - Bearer: []
+      summary: Create a new role
+  /api/ambient/v1/roles/{id}:
+    get:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Role"
+          description: Role found by id
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No role with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Get an role by id
+    patch:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RolePatchRequest"
+        description: Updated role data
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Role"
+          description: Role updated successfully
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Validation errors occurred
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No role with specified id exists
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Role already exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error updating role
+      security:
+      - Bearer: []
+      summary: Update an role
+  /api/ambient/v1/role_bindings:
+    get:
+      parameters:
+      - description: Page number of record list when record list exceeds specified
+          page size
+        explode: true
+        in: query
+        name: page
+        required: false
+        schema:
+          default: 1
+          minimum: 1
+          type: integer
+        style: form
+      - description: Maximum number of records to return
+        explode: true
+        in: query
+        name: size
+        required: false
+        schema:
+          default: 100
+          minimum: 0
+          type: integer
+        style: form
+      - description: Specifies the search criteria
+        explode: true
+        in: query
+        name: search
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Specifies the order by criteria
+        explode: true
+        in: query
+        name: orderBy
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Supplies a comma-separated list of fields to be returned
+        explode: true
+        in: query
+        name: fields
+        required: false
+        schema:
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoleBindingList"
+          description: A JSON array of roleBinding objects
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Returns a list of roleBindings
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RoleBinding"
+        description: RoleBinding data
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoleBinding"
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Validation errors occurred
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: RoleBinding already exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: An unexpected error occurred creating the roleBinding
+      security:
+      - Bearer: []
+      summary: Create a new roleBinding
+  /api/ambient/v1/role_bindings/{id}:
+    get:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoleBinding"
+          description: RoleBinding found by id
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No roleBinding with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Get an roleBinding by id
+    patch:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RoleBindingPatchRequest"
+        description: Updated roleBinding data
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoleBinding"
+          description: RoleBinding updated successfully
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Validation errors occurred
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No roleBinding with specified id exists
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: RoleBinding already exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error updating roleBinding
+      security:
+      - Bearer: []
+      summary: Update an roleBinding
+  /api/ambient/v1/session_check_ins:
+    get:
+      parameters:
+      - description: Page number of record list when record list exceeds specified
+          page size
+        explode: true
+        in: query
+        name: page
+        required: false
+        schema:
+          default: 1
+          minimum: 1
+          type: integer
+        style: form
+      - description: Maximum number of records to return
+        explode: true
+        in: query
+        name: size
+        required: false
+        schema:
+          default: 100
+          minimum: 0
+          type: integer
+        style: form
+      - description: Specifies the search criteria
+        explode: true
+        in: query
+        name: search
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Specifies the order by criteria
+        explode: true
+        in: query
+        name: orderBy
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Supplies a comma-separated list of fields to be returned
+        explode: true
+        in: query
+        name: fields
+        required: false
+        schema:
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionCheckInList"
+          description: A JSON array of sessionCheckIn objects
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Returns a list of sessionCheckIns
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionCheckIn"
+        description: SessionCheckIn data
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionCheckIn"
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Validation errors occurred
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: SessionCheckIn already exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: An unexpected error occurred creating the sessionCheckIn
+      security:
+      - Bearer: []
+      summary: Create a new sessionCheckIn
+  /api/ambient/v1/session_check_ins/{id}:
+    get:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionCheckIn"
+          description: SessionCheckIn found by id
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No sessionCheckIn with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Get an sessionCheckIn by id
+    patch:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionCheckInPatchRequest"
+        description: Updated sessionCheckIn data
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionCheckIn"
+          description: SessionCheckIn updated successfully
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Validation errors occurred
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No sessionCheckIn with specified id exists
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: SessionCheckIn already exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error updating sessionCheckIn
+      security:
+      - Bearer: []
+      summary: Update an sessionCheckIn
+  /api/ambient/v1/project_documents:
+    get:
+      parameters:
+      - description: Page number of record list when record list exceeds specified
+          page size
+        explode: true
+        in: query
+        name: page
+        required: false
+        schema:
+          default: 1
+          minimum: 1
+          type: integer
+        style: form
+      - description: Maximum number of records to return
+        explode: true
+        in: query
+        name: size
+        required: false
+        schema:
+          default: 100
+          minimum: 0
+          type: integer
+        style: form
+      - description: Specifies the search criteria
+        explode: true
+        in: query
+        name: search
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Specifies the order by criteria
+        explode: true
+        in: query
+        name: orderBy
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Supplies a comma-separated list of fields to be returned
+        explode: true
+        in: query
+        name: fields
+        required: false
+        schema:
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectDocumentList"
+          description: A JSON array of projectDocument objects
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Returns a list of projectDocuments
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectDocument"
+        description: ProjectDocument data
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectDocument"
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Validation errors occurred
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: ProjectDocument already exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: An unexpected error occurred creating the projectDocument
+      security:
+      - Bearer: []
+      summary: Create a new projectDocument
+  /api/ambient/v1/project_documents/{id}:
+    get:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectDocument"
+          description: ProjectDocument found by id
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No projectDocument with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Get an projectDocument by id
+    patch:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectDocumentPatchRequest"
+        description: Updated projectDocument data
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectDocument"
+          description: ProjectDocument updated successfully
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Validation errors occurred
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No projectDocument with specified id exists
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: ProjectDocument already exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error updating projectDocument
+      security:
+      - Bearer: []
+      summary: Update an projectDocument
+  /api/ambient/v1/agent_messages:
+    get:
+      parameters:
+      - description: Page number of record list when record list exceeds specified
+          page size
+        explode: true
+        in: query
+        name: page
+        required: false
+        schema:
+          default: 1
+          minimum: 1
+          type: integer
+        style: form
+      - description: Maximum number of records to return
+        explode: true
+        in: query
+        name: size
+        required: false
+        schema:
+          default: 100
+          minimum: 0
+          type: integer
+        style: form
+      - description: Specifies the search criteria
+        explode: true
+        in: query
+        name: search
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Specifies the order by criteria
+        explode: true
+        in: query
+        name: orderBy
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Supplies a comma-separated list of fields to be returned
+        explode: true
+        in: query
+        name: fields
+        required: false
+        schema:
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentMessageList"
+          description: A JSON array of agentMessage objects
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Returns a list of agentMessages
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentMessage"
+        description: AgentMessage data
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentMessage"
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Validation errors occurred
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: AgentMessage already exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: An unexpected error occurred creating the agentMessage
+      security:
+      - Bearer: []
+      summary: Create a new agentMessage
+  /api/ambient/v1/agent_messages/{id}:
+    get:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentMessage"
+          description: AgentMessage found by id
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No agentMessage with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Get an agentMessage by id
+    patch:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentMessagePatchRequest"
+        description: Updated agentMessage data
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentMessage"
+          description: AgentMessage updated successfully
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Validation errors occurred
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No agentMessage with specified id exists
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: AgentMessage already exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error updating agentMessage
+      security:
+      - Bearer: []
+      summary: Update an agentMessage
 components:
   parameters:
     id:
@@ -1830,6 +3222,638 @@ components:
           type: string
         email:
           type: string
+      type: object
+    Agent:
+      allOf:
+      - $ref: "#/components/schemas/ObjectReference"
+      - properties:
+          project_id:
+            type: string
+          parent_agent_id:
+            type: string
+          owner_user_id:
+            type: string
+          name:
+            type: string
+          display_name:
+            type: string
+          description:
+            type: string
+          prompt:
+            type: string
+          repo_url:
+            type: string
+          workflow_id:
+            type: string
+          llm_model:
+            type: string
+          llm_temperature:
+            format: double
+            type: number
+          llm_max_tokens:
+            format: int32
+            type: integer
+          bot_account_name:
+            type: string
+          resource_overrides:
+            type: string
+          environment_variables:
+            type: string
+          labels:
+            type: string
+          annotations:
+            type: string
+          current_session_id:
+            type: string
+        required:
+        - name
+        - owner_user_id
+        - project_id
+        type: object
+      example:
+        repo_url: repo_url
+        workflow_id: workflow_id
+        llm_model: llm_model
+        resource_overrides: resource_overrides
+        owner_user_id: owner_user_id
+        current_session_id: current_session_id
+        kind: kind
+        llm_temperature: 5.962133916683182
+        created_at: 2000-01-23T04:56:07.000+00:00
+        description: description
+        annotations: annotations
+        display_name: display_name
+        llm_max_tokens: 5
+        labels: labels
+        environment_variables: environment_variables
+        parent_agent_id: parent_agent_id
+        updated_at: 2000-01-23T04:56:07.000+00:00
+        project_id: project_id
+        bot_account_name: bot_account_name
+        name: name
+        id: id
+        href: href
+        prompt: prompt
+    AgentList:
+      allOf:
+      - $ref: "#/components/schemas/List"
+      - properties:
+          items:
+            items:
+              $ref: "#/components/schemas/Agent"
+            type: array
+        type: object
+      example:
+        total: 1
+        size: 6
+        kind: kind
+        page: 0
+        items:
+        - repo_url: repo_url
+          workflow_id: workflow_id
+          llm_model: llm_model
+          resource_overrides: resource_overrides
+          owner_user_id: owner_user_id
+          current_session_id: current_session_id
+          kind: kind
+          llm_temperature: 5.962133916683182
+          created_at: 2000-01-23T04:56:07.000+00:00
+          description: description
+          annotations: annotations
+          display_name: display_name
+          llm_max_tokens: 5
+          labels: labels
+          environment_variables: environment_variables
+          parent_agent_id: parent_agent_id
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          project_id: project_id
+          bot_account_name: bot_account_name
+          name: name
+          id: id
+          href: href
+          prompt: prompt
+        - repo_url: repo_url
+          workflow_id: workflow_id
+          llm_model: llm_model
+          resource_overrides: resource_overrides
+          owner_user_id: owner_user_id
+          current_session_id: current_session_id
+          kind: kind
+          llm_temperature: 5.962133916683182
+          created_at: 2000-01-23T04:56:07.000+00:00
+          description: description
+          annotations: annotations
+          display_name: display_name
+          llm_max_tokens: 5
+          labels: labels
+          environment_variables: environment_variables
+          parent_agent_id: parent_agent_id
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          project_id: project_id
+          bot_account_name: bot_account_name
+          name: name
+          id: id
+          href: href
+          prompt: prompt
+    AgentPatchRequest:
+      example:
+        repo_url: repo_url
+        workflow_id: workflow_id
+        llm_model: llm_model
+        resource_overrides: resource_overrides
+        owner_user_id: owner_user_id
+        current_session_id: current_session_id
+        llm_temperature: 0.8008281904610115
+        description: description
+        annotations: annotations
+        display_name: display_name
+        llm_max_tokens: 6
+        labels: labels
+        environment_variables: environment_variables
+        parent_agent_id: parent_agent_id
+        project_id: project_id
+        bot_account_name: bot_account_name
+        name: name
+        prompt: prompt
+      properties:
+        project_id:
+          type: string
+        parent_agent_id:
+          type: string
+        owner_user_id:
+          type: string
+        name:
+          type: string
+        display_name:
+          type: string
+        description:
+          type: string
+        prompt:
+          type: string
+        repo_url:
+          type: string
+        workflow_id:
+          type: string
+        llm_model:
+          type: string
+        llm_temperature:
+          format: double
+          type: number
+        llm_max_tokens:
+          format: int32
+          type: integer
+        bot_account_name:
+          type: string
+        resource_overrides:
+          type: string
+        environment_variables:
+          type: string
+        labels:
+          type: string
+        annotations:
+          type: string
+        current_session_id:
+          type: string
+      type: object
+    Role:
+      allOf:
+      - $ref: "#/components/schemas/ObjectReference"
+      - properties:
+          name:
+            type: string
+          display_name:
+            type: string
+          description:
+            type: string
+          permissions:
+            type: string
+          built_in:
+            type: boolean
+        required:
+        - name
+        type: object
+      example:
+        updated_at: 2000-01-23T04:56:07.000+00:00
+        kind: kind
+        permissions: permissions
+        built_in: true
+        name: name
+        created_at: 2000-01-23T04:56:07.000+00:00
+        description: description
+        id: id
+        href: href
+        display_name: display_name
+    RoleList:
+      allOf:
+      - $ref: "#/components/schemas/List"
+      - properties:
+          items:
+            items:
+              $ref: "#/components/schemas/Role"
+            type: array
+        type: object
+      example:
+        total: 1
+        size: 6
+        kind: kind
+        page: 0
+        items:
+        - updated_at: 2000-01-23T04:56:07.000+00:00
+          kind: kind
+          permissions: permissions
+          built_in: true
+          name: name
+          created_at: 2000-01-23T04:56:07.000+00:00
+          description: description
+          id: id
+          href: href
+          display_name: display_name
+        - updated_at: 2000-01-23T04:56:07.000+00:00
+          kind: kind
+          permissions: permissions
+          built_in: true
+          name: name
+          created_at: 2000-01-23T04:56:07.000+00:00
+          description: description
+          id: id
+          href: href
+          display_name: display_name
+    RolePatchRequest:
+      example:
+        permissions: permissions
+        built_in: true
+        name: name
+        description: description
+        display_name: display_name
+      properties:
+        name:
+          type: string
+        display_name:
+          type: string
+        description:
+          type: string
+        permissions:
+          type: string
+        built_in:
+          type: boolean
+      type: object
+    RoleBinding:
+      allOf:
+      - $ref: "#/components/schemas/ObjectReference"
+      - properties:
+          user_id:
+            type: string
+          role_id:
+            type: string
+          scope:
+            type: string
+          scope_id:
+            type: string
+        required:
+        - role_id
+        - scope
+        - user_id
+        type: object
+      example:
+        updated_at: 2000-01-23T04:56:07.000+00:00
+        user_id: user_id
+        role_id: role_id
+        scope_id: scope_id
+        kind: kind
+        scope: scope
+        created_at: 2000-01-23T04:56:07.000+00:00
+        id: id
+        href: href
+    RoleBindingList:
+      allOf:
+      - $ref: "#/components/schemas/List"
+      - properties:
+          items:
+            items:
+              $ref: "#/components/schemas/RoleBinding"
+            type: array
+        type: object
+      example:
+        total: 1
+        size: 6
+        kind: kind
+        page: 0
+        items:
+        - updated_at: 2000-01-23T04:56:07.000+00:00
+          user_id: user_id
+          role_id: role_id
+          scope_id: scope_id
+          kind: kind
+          scope: scope
+          created_at: 2000-01-23T04:56:07.000+00:00
+          id: id
+          href: href
+        - updated_at: 2000-01-23T04:56:07.000+00:00
+          user_id: user_id
+          role_id: role_id
+          scope_id: scope_id
+          kind: kind
+          scope: scope
+          created_at: 2000-01-23T04:56:07.000+00:00
+          id: id
+          href: href
+    RoleBindingPatchRequest:
+      example:
+        user_id: user_id
+        role_id: role_id
+        scope_id: scope_id
+        scope: scope
+      properties:
+        user_id:
+          type: string
+        role_id:
+          type: string
+        scope:
+          type: string
+        scope_id:
+          type: string
+      type: object
+    SessionCheckIn:
+      allOf:
+      - $ref: "#/components/schemas/ObjectReference"
+      - properties:
+          session_id:
+            type: string
+          agent_id:
+            type: string
+          summary:
+            type: string
+          branch:
+            type: string
+          worktree:
+            type: string
+          pr:
+            type: string
+          phase:
+            type: string
+          test_count:
+            format: int32
+            type: integer
+          next_steps:
+            type: string
+        required:
+        - agent_id
+        - session_id
+        type: object
+      example:
+        summary: summary
+        phase: phase
+        pr: pr
+        agent_id: agent_id
+        kind: kind
+        test_count: 5
+        created_at: 2000-01-23T04:56:07.000+00:00
+        session_id: session_id
+        branch: branch
+        worktree: worktree
+        next_steps: next_steps
+        updated_at: 2000-01-23T04:56:07.000+00:00
+        id: id
+        href: href
+    SessionCheckInList:
+      allOf:
+      - $ref: "#/components/schemas/List"
+      - properties:
+          items:
+            items:
+              $ref: "#/components/schemas/SessionCheckIn"
+            type: array
+        type: object
+      example:
+        total: 1
+        size: 6
+        kind: kind
+        page: 0
+        items:
+        - summary: summary
+          phase: phase
+          pr: pr
+          agent_id: agent_id
+          kind: kind
+          test_count: 5
+          created_at: 2000-01-23T04:56:07.000+00:00
+          session_id: session_id
+          branch: branch
+          worktree: worktree
+          next_steps: next_steps
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          id: id
+          href: href
+        - summary: summary
+          phase: phase
+          pr: pr
+          agent_id: agent_id
+          kind: kind
+          test_count: 5
+          created_at: 2000-01-23T04:56:07.000+00:00
+          session_id: session_id
+          branch: branch
+          worktree: worktree
+          next_steps: next_steps
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          id: id
+          href: href
+    SessionCheckInPatchRequest:
+      example:
+        summary: summary
+        phase: phase
+        pr: pr
+        agent_id: agent_id
+        test_count: 0
+        session_id: session_id
+        branch: branch
+        worktree: worktree
+        next_steps: next_steps
+      properties:
+        session_id:
+          type: string
+        agent_id:
+          type: string
+        summary:
+          type: string
+        branch:
+          type: string
+        worktree:
+          type: string
+        pr:
+          type: string
+        phase:
+          type: string
+        test_count:
+          format: int32
+          type: integer
+        next_steps:
+          type: string
+      type: object
+    ProjectDocument:
+      allOf:
+      - $ref: "#/components/schemas/ObjectReference"
+      - properties:
+          project_id:
+            type: string
+          slug:
+            type: string
+          title:
+            type: string
+          content:
+            type: string
+        required:
+        - project_id
+        - slug
+        type: object
+      example:
+        updated_at: 2000-01-23T04:56:07.000+00:00
+        project_id: project_id
+        kind: kind
+        created_at: 2000-01-23T04:56:07.000+00:00
+        id: id
+        href: href
+        title: title
+        slug: slug
+        content: content
+    ProjectDocumentList:
+      allOf:
+      - $ref: "#/components/schemas/List"
+      - properties:
+          items:
+            items:
+              $ref: "#/components/schemas/ProjectDocument"
+            type: array
+        type: object
+      example:
+        total: 1
+        size: 6
+        kind: kind
+        page: 0
+        items:
+        - updated_at: 2000-01-23T04:56:07.000+00:00
+          project_id: project_id
+          kind: kind
+          created_at: 2000-01-23T04:56:07.000+00:00
+          id: id
+          href: href
+          title: title
+          slug: slug
+          content: content
+        - updated_at: 2000-01-23T04:56:07.000+00:00
+          project_id: project_id
+          kind: kind
+          created_at: 2000-01-23T04:56:07.000+00:00
+          id: id
+          href: href
+          title: title
+          slug: slug
+          content: content
+    ProjectDocumentPatchRequest:
+      example:
+        project_id: project_id
+        title: title
+        slug: slug
+        content: content
+      properties:
+        project_id:
+          type: string
+        slug:
+          type: string
+        title:
+          type: string
+        content:
+          type: string
+      type: object
+    AgentMessage:
+      allOf:
+      - $ref: "#/components/schemas/ObjectReference"
+      - properties:
+          recipient_agent_id:
+            type: string
+          sender_agent_id:
+            type: string
+          sender_user_id:
+            type: string
+          sender_name:
+            type: string
+          body:
+            type: string
+          read:
+            type: boolean
+        required:
+        - recipient_agent_id
+        type: object
+      example:
+        read: true
+        updated_at: 2000-01-23T04:56:07.000+00:00
+        kind: kind
+        sender_agent_id: sender_agent_id
+        created_at: 2000-01-23T04:56:07.000+00:00
+        recipient_agent_id: recipient_agent_id
+        sender_name: sender_name
+        id: id
+        href: href
+        body: body
+        sender_user_id: sender_user_id
+    AgentMessageList:
+      allOf:
+      - $ref: "#/components/schemas/List"
+      - properties:
+          items:
+            items:
+              $ref: "#/components/schemas/AgentMessage"
+            type: array
+        type: object
+      example:
+        total: 1
+        size: 6
+        kind: kind
+        page: 0
+        items:
+        - read: true
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          kind: kind
+          sender_agent_id: sender_agent_id
+          created_at: 2000-01-23T04:56:07.000+00:00
+          recipient_agent_id: recipient_agent_id
+          sender_name: sender_name
+          id: id
+          href: href
+          body: body
+          sender_user_id: sender_user_id
+        - read: true
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          kind: kind
+          sender_agent_id: sender_agent_id
+          created_at: 2000-01-23T04:56:07.000+00:00
+          recipient_agent_id: recipient_agent_id
+          sender_name: sender_name
+          id: id
+          href: href
+          body: body
+          sender_user_id: sender_user_id
+    AgentMessagePatchRequest:
+      example:
+        read: true
+        sender_agent_id: sender_agent_id
+        recipient_agent_id: recipient_agent_id
+        sender_name: sender_name
+        body: body
+        sender_user_id: sender_user_id
+      properties:
+        recipient_agent_id:
+          type: string
+        sender_agent_id:
+          type: string
+        sender_user_id:
+          type: string
+        sender_name:
+          type: string
+        body:
+          type: string
+        read:
+          type: boolean
       type: object
   securitySchemes:
     Bearer:

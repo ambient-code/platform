@@ -7,6 +7,12 @@ resources:
 
 # Override operator env to use locally-built runner/state-sync images
 patches:
+- path: ambient-api-server-local-image-patch.yaml
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: ambient-api-server
 - path: operator-env-patch.yaml
   target:
     kind: Deployment
@@ -37,6 +43,12 @@ patches:
     version: v1
     kind: Deployment
     name: public-api
+- path: image-pull-policy-patch.yaml
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: ambient-api-server
 
 # Remap images from Quay.io to locally-built names
 # Podman tags images with localhost/ prefix, which kind preserves when loading
@@ -52,4 +64,7 @@ images:
   newTag: latest
 - name: quay.io/ambient_code/vteam_public_api
   newName: localhost/vteam_public_api
+  newTag: latest
+- name: quay.io/ambient_code/vteam_api_server
+  newName: localhost/vteam_api_server
   newTag: latest
