@@ -95,11 +95,10 @@ func TestE2E_PatchSession_Start(t *testing.T) {
 }
 
 func TestE2E_PatchSession_Update(t *testing.T) {
+	methodReceived := ""
 	var receivedBody map[string]interface{}
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPut {
-			t.Errorf("Expected PUT, got %s", r.Method)
-		}
+		methodReceived = r.Method
 		json.NewDecoder(r.Body).Decode(&receivedBody)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -133,6 +132,10 @@ func TestE2E_PatchSession_Update(t *testing.T) {
 
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	if methodReceived != http.MethodPut {
+		t.Errorf("Expected PUT, got %s", methodReceived)
 	}
 
 	// Verify the backend received the correct fields

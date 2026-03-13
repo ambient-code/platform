@@ -311,7 +311,8 @@ func transformSession(data map[string]interface{}) types.SessionResponse {
 			session.DisplayName = displayName
 		}
 		if timeout, ok := spec["timeout"].(float64); ok {
-			session.Timeout = int(timeout)
+			t := int(timeout)
+			session.Timeout = &t
 		}
 		if reposRaw, ok := spec["repos"].([]interface{}); ok {
 			session.Repos = extractRepos(reposRaw)

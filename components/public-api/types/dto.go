@@ -13,7 +13,7 @@ type SessionResponse struct {
 	Error       string            `json:"error,omitempty"`
 	Repos       []Repo            `json:"repos,omitempty"`
 	Labels      map[string]string `json:"labels,omitempty"`
-	Timeout     int               `json:"timeout,omitempty"`
+	Timeout     *int              `json:"timeout,omitempty"`
 }
 
 // SessionListResponse is the response for listing sessions

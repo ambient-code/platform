@@ -19,9 +19,12 @@ func GetSessionMetrics(c *gin.Context) {
 	if project == "" {
 		project = c.Param("projectName")
 	}
-	// SanitizeForLog strips control characters for log-injection safety.
-	// Safe to reuse as K8s lookup key — K8s names cannot contain control characters.
-	sessionName := SanitizeForLog(c.Param("sessionName"))
+	sessionName := c.Param("sessionName")
+	if !isValidKubernetesName(sessionName) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid session name format"})
+		return
+	}
+	safeSessionName := SanitizeForLog(sessionName)
 
 	k8sClt, k8sDyn := GetK8sClientsForRequest(c)
 	if k8sClt == nil {
@@ -42,11 +45,11 @@ func GetSessionMetrics(c *gin.Context) {
 			return
 		}
 		if errors.IsForbidden(err) {
-			log.Printf("GetSessionMetrics: access denied for session %s/%s", project, sessionName)
+			log.Printf("GetSessionMetrics: access denied for session %s/%s", project, safeSessionName)
 			c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
 			return
 		}
-		log.Printf("GetSessionMetrics: failed to get session %s/%s: %v", project, sessionName, err)
+		log.Printf("GetSessionMetrics: failed to get session %s/%s: %v", project, safeSessionName, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get session"})
 		return
 	}
@@ -82,12 +85,12 @@ func GetSessionMetrics(c *gin.Context) {
 			}
 		}
 	}
-	if sdkRestartCount, ok, _ := unstructured.NestedFloat64(item.Object, "status", "sdkRestartCount"); ok {
+	if sdkRestartCount, ok, _ := unstructured.NestedInt64(item.Object, "status", "sdkRestartCount"); ok {
 		metrics["restartCount"] = int(sdkRestartCount)
 	}
 
 	// Extract timeout from spec
-	if timeout, ok, _ := unstructured.NestedFloat64(item.Object, "spec", "timeout"); ok {
+	if timeout, ok, _ := unstructured.NestedInt64(item.Object, "spec", "timeout"); ok {
 		metrics["timeoutSeconds"] = int(timeout)
 	}
 

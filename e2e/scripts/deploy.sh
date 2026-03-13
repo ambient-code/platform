@@ -72,7 +72,7 @@ kubectl kustomize ../components/manifests/overlays/kind/ | \
   sed "s|quay.io/ambient_code/vteam_claude_runner:latest|${IMAGE_RUNNER:-quay.io/ambient_code/vteam_claude_runner:latest}|g" | \
   sed "s|quay.io/ambient_code/vteam_state_sync:latest|${IMAGE_STATE_SYNC:-quay.io/ambient_code/vteam_state_sync:latest}|g" | \
   sed "s|quay.io/ambient_code/vteam_public_api:latest|${IMAGE_PUBLIC_API:-quay.io/ambient_code/vteam_public_api:latest}|g" | \
-  if [ -n "${IMAGE_BACKEND:-}${IMAGE_FRONTEND:-}${IMAGE_OPERATOR:-}${IMAGE_RUNNER:-}${IMAGE_PUBLIC_API:-}" ]; then
+  if [ -n "${IMAGE_BACKEND:-}${IMAGE_FRONTEND:-}${IMAGE_OPERATOR:-}${IMAGE_RUNNER:-}${IMAGE_STATE_SYNC:-}${IMAGE_PUBLIC_API:-}" ]; then
     sed "s|imagePullPolicy: Always|imagePullPolicy: IfNotPresent|g"
   else
     cat

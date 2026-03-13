@@ -267,21 +267,12 @@ var _ = Describe("Middleware Handlers", Label(test_constants.LabelUnit, test_con
 	})
 
 	Describe("ExtractServiceAccountFromAuth", func() {
-		It("Should extract service account from token review", func() {
+		It("Should extract service account from X-Remote-User header", func() {
 			context := httpUtils.CreateTestGinContext("GET", "/api/projects/test-project/sessions", nil)
-
-			_, _, err := httpUtils.SetValidTestToken(
-				k8sUtils,
-				"test-project",
-				[]string{"get", "list"},
-				"agenticsessions",
-				"test-sa",
-				"test-agenticsessions-read-role",
-			)
-			Expect(err).NotTo(HaveOccurred())
+			context.Request.Header.Set("X-Remote-User", "system:serviceaccount:test-project:test-sa")
 
 			namespace, serviceAccount, found := ExtractServiceAccountFromAuth(context)
-			Expect(found).To(BeTrue(), "Should find service account from token")
+			Expect(found).To(BeTrue(), "Should find service account from X-Remote-User header")
 			Expect(namespace).To(Equal("test-project"))
 			Expect(serviceAccount).To(Equal("test-sa"))
 			logger.Log("Extracted service account: %s/%s", namespace, serviceAccount)

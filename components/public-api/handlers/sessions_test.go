@@ -9,6 +9,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func intPtr(v int) *int { return &v }
+
 func TestTransformSession(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -51,7 +53,7 @@ func TestTransformSession(t *testing.T) {
 				Task:        "Fix the bug",
 				Model:       "claude-sonnet-4",
 				DisplayName: "Bug Fix Session",
-				Timeout:     600,
+				Timeout:     intPtr(600),
 				CreatedAt:   "2026-01-29T10:00:00Z",
 				Repos:       []types.Repo{{URL: "https://github.com/org/repo", Branch: "main"}},
 				Labels:      map[string]string{"env": "staging"},
@@ -162,8 +164,8 @@ func TestTransformSession(t *testing.T) {
 			if result.Error != tt.expected.Error {
 				t.Errorf("Error = %q, want %q", result.Error, tt.expected.Error)
 			}
-			if result.Timeout != tt.expected.Timeout {
-				t.Errorf("Timeout = %d, want %d", result.Timeout, tt.expected.Timeout)
+			if (result.Timeout == nil) != (tt.expected.Timeout == nil) || (result.Timeout != nil && tt.expected.Timeout != nil && *result.Timeout != *tt.expected.Timeout) {
+				t.Errorf("Timeout = %v, want %v", result.Timeout, tt.expected.Timeout)
 			}
 			if len(result.Repos) != len(tt.expected.Repos) {
 				t.Errorf("Repos len = %d, want %d", len(result.Repos), len(tt.expected.Repos))
@@ -178,6 +180,9 @@ func TestTransformSession(t *testing.T) {
 				}
 			}
 			if len(tt.expected.Labels) > 0 {
+				if len(result.Labels) != len(tt.expected.Labels) {
+					t.Errorf("Labels count = %d, want %d", len(result.Labels), len(tt.expected.Labels))
+				}
 				for k, v := range tt.expected.Labels {
 					if result.Labels[k] != v {
 						t.Errorf("Labels[%q] = %q, want %q", k, result.Labels[k], v)

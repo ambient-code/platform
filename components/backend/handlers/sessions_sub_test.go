@@ -97,7 +97,7 @@ var _ = Describe("Session Sub-Resource Handlers", Label(test_constants.LabelUnit
 
 				_ = unstructured.SetNestedField(session.Object, "Running", "status", "phase")
 				_ = unstructured.SetNestedField(session.Object, "2026-03-04T10:00:00Z", "status", "startTime")
-				_ = unstructured.SetNestedField(session.Object, float64(300), "spec", "timeout")
+				_ = unstructured.SetNestedField(session.Object, int64(300), "spec", "timeout")
 
 				_, err := k8sUtils.DynamicClient.Resource(sessionGVR).Namespace(testNamespace).Create(
 					ctx, session, v1.CreateOptions{})

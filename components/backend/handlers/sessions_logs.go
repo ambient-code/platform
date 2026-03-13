@@ -32,9 +32,12 @@ func GetSessionLogs(c *gin.Context) {
 	if project == "" {
 		project = c.Param("projectName")
 	}
-	// SanitizeForLog strips control characters for log-injection safety.
-	// Safe to reuse as K8s lookup key — K8s names cannot contain control characters.
-	sessionName := SanitizeForLog(c.Param("sessionName"))
+	sessionName := c.Param("sessionName")
+	if !isValidKubernetesName(sessionName) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid session name format"})
+		return
+	}
+	safeSessionName := SanitizeForLog(sessionName)
 
 	// Validate query params before any K8s calls
 	tailLines := defaultTailLines
@@ -71,11 +74,11 @@ func GetSessionLogs(c *gin.Context) {
 			return
 		}
 		if errors.IsForbidden(err) {
-			log.Printf("GetSessionLogs: access denied for session %s/%s", project, sessionName)
+			log.Printf("GetSessionLogs: access denied for session %s/%s", project, safeSessionName)
 			c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
 			return
 		}
-		log.Printf("GetSessionLogs: failed to verify session %s/%s: %v", project, sessionName, err)
+		log.Printf("GetSessionLogs: failed to verify session %s/%s: %v", project, safeSessionName, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify session"})
 		return
 	}
@@ -100,11 +103,11 @@ func GetSessionLogs(c *gin.Context) {
 			return
 		}
 		if errors.IsForbidden(err) {
-			log.Printf("GetSessionLogs: access denied for pod %s in project %s", podName, project)
+			log.Printf("GetSessionLogs: access denied for pod %s in project %s", safeSessionName, project)
 			c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
 			return
 		}
-		log.Printf("GetSessionLogs: failed to get logs for pod %s in project %s: %v", podName, project, err)
+		log.Printf("GetSessionLogs: failed to get logs for pod %s in project %s: %v", safeSessionName, project, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve logs"})
 		return
 	}
@@ -114,6 +117,6 @@ func GetSessionLogs(c *gin.Context) {
 	c.Header("Content-Type", "text/plain; charset=utf-8")
 	c.Status(http.StatusOK)
 	if _, err := io.Copy(c.Writer, io.LimitReader(logStream, maxLogBytes)); err != nil {
-		log.Printf("GetSessionLogs: error streaming logs for pod %s in project %s: %v", podName, project, err)
+		log.Printf("GetSessionLogs: error streaming logs for pod %s in project %s: %v", safeSessionName, project, err)
 	}
 }
