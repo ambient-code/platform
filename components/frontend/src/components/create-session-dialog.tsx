@@ -43,8 +43,6 @@ import { DEFAULT_RUNNER_TYPE_ID } from "@/services/api/runner-types";
 import { useIntegrationsStatus } from "@/services/queries/use-integrations";
 import { useModels } from "@/services/queries/use-models";
 import { useOOTBWorkflows } from "@/services/queries/use-workflows";
-import { WorkflowPicker } from "@/components/workflow-picker";
-import { CustomWorkflowDialog } from "@/app/projects/[name]/sessions/[sessionName]/components/modals/custom-workflow-dialog";
 import { toast } from "sonner";
 
 // Static default used for form initialization before the API responds.
@@ -75,7 +73,9 @@ export function CreateSessionDialog({
   const [open, setOpen] = useState(false);
   const [selectedWorkflow, setSelectedWorkflow] = useState("none");
   const [workflowSelection, setWorkflowSelection] = useState<WorkflowSelection | null>(null);
-  const [customWorkflowOpen, setCustomWorkflowOpen] = useState(false);
+  const [customGitUrl, setCustomGitUrl] = useState("");
+  const [customBranch, setCustomBranch] = useState("main");
+  const [customPath, setCustomPath] = useState("");
   const router = useRouter();
   const createSessionMutation = useCreateSession();
   const { data: runnerTypes, isLoading: runnerTypesLoading, isError: runnerTypesError, refetch: refetchRunnerTypes } = useRunnerTypes(projectName);
@@ -132,10 +132,22 @@ export function CreateSessionDialog({
     form.resetField("model", { defaultValue: "" });
   };
 
+  const selectedWorkflowDescription = useMemo(() => {
+    if (selectedWorkflow === "none") return "A general chat session with no structured workflow.";
+    if (selectedWorkflow === "custom") return "Load a workflow from a custom Git repository.";
+    const wf = ootbWorkflows.find(w => w.id === selectedWorkflow);
+    return wf?.description ?? "";
+  }, [selectedWorkflow, ootbWorkflows]);
+
   const handleWorkflowChange = (value: string) => {
     setSelectedWorkflow(value);
     if (value === "custom") {
-      setCustomWorkflowOpen(true);
+      // Custom fields will show inline; update selection when user fills them
+      setWorkflowSelection(
+        customGitUrl.trim()
+          ? { gitUrl: customGitUrl.trim(), branch: customBranch || "main", path: customPath || undefined }
+          : null
+      );
       return;
     }
     if (value === "none") {
@@ -152,10 +164,18 @@ export function CreateSessionDialog({
     }
   };
 
-  const handleCustomWorkflowSubmit = (url: string, branch: string, path: string) => {
-    setWorkflowSelection({ gitUrl: url, branch, path: path || undefined });
-    setCustomWorkflowOpen(false);
-  };
+  // Keep workflowSelection in sync with custom fields
+  useEffect(() => {
+    if (selectedWorkflow === "custom" && customGitUrl.trim()) {
+      setWorkflowSelection({
+        gitUrl: customGitUrl.trim(),
+        branch: customBranch || "main",
+        path: customPath || undefined,
+      });
+    } else if (selectedWorkflow === "custom") {
+      setWorkflowSelection(null);
+    }
+  }, [customGitUrl, customBranch, customPath, selectedWorkflow]);
 
   const onSubmit = async (values: FormValues) => {
     if (!projectName) return;
@@ -200,6 +220,9 @@ export function CreateSessionDialog({
       form.reset();
       setSelectedWorkflow("none");
       setWorkflowSelection(null);
+      setCustomGitUrl("");
+      setCustomBranch("main");
+      setCustomPath("");
     }
   };
 
@@ -241,21 +264,71 @@ export function CreateSessionDialog({
                 )}
               />
 
-              {/* Workflow Selection */}
+              {/* Workflow Selection — standard shadcn Select with descriptions */}
               <div className="space-y-2">
                 <FormLabel>Workflow</FormLabel>
-                <WorkflowPicker
-                  selectedWorkflow={selectedWorkflow}
-                  ootbWorkflows={ootbWorkflows}
-                  onWorkflowChange={handleWorkflowChange}
-                  disabled={createSessionMutation.isPending}
-                  isLoading={workflowsLoading}
-                  loadingMessage="Loading available workflows..."
-                  placeholder="Select workflow..."
-                />
-                <p className="text-xs text-muted-foreground">
-                  Optional. Select a workflow to structure the session.
-                </p>
+                {workflowsLoading ? (
+                  <Skeleton className="h-10 w-full" />
+                ) : (
+                  <Select
+                    value={selectedWorkflow}
+                    onValueChange={handleWorkflowChange}
+                    disabled={createSessionMutation.isPending}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select workflow..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">General chat</SelectItem>
+                      {ootbWorkflows
+                        .filter(w => w.enabled)
+                        .sort((a, b) => a.name.localeCompare(b.name))
+                        .map((workflow) => (
+                          <SelectItem key={workflow.id} value={workflow.id}>
+                            {workflow.name}
+                          </SelectItem>
+                        ))}
+                      <SelectItem value="custom">Custom workflow...</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+                {selectedWorkflowDescription && (
+                  <p className="text-xs text-muted-foreground">
+                    {selectedWorkflowDescription}
+                  </p>
+                )}
+                {/* Custom workflow fields — shown inline when "Custom workflow..." selected */}
+                {selectedWorkflow === "custom" && (
+                  <>
+                    <div className="space-y-1">
+                      <FormLabel className="text-xs">Git Repository URL *</FormLabel>
+                      <Input
+                        value={customGitUrl}
+                        onChange={(e) => setCustomGitUrl(e.target.value)}
+                        placeholder="https://github.com/org/workflow-repo.git"
+                        disabled={createSessionMutation.isPending}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <FormLabel className="text-xs">Branch</FormLabel>
+                      <Input
+                        value={customBranch}
+                        onChange={(e) => setCustomBranch(e.target.value)}
+                        placeholder="main"
+                        disabled={createSessionMutation.isPending}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <FormLabel className="text-xs">Path (optional)</FormLabel>
+                      <Input
+                        value={customPath}
+                        onChange={(e) => setCustomPath(e.target.value)}
+                        placeholder="workflows/my-workflow"
+                        disabled={createSessionMutation.isPending}
+                      />
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* Runner Type Selection */}
@@ -507,11 +580,6 @@ export function CreateSessionDialog({
           </Form>
         </DialogContent>
       </Dialog>
-      <CustomWorkflowDialog
-        open={customWorkflowOpen}
-        onOpenChange={setCustomWorkflowOpen}
-        onSubmit={handleCustomWorkflowSubmit}
-      />
     </>
   );
 }
