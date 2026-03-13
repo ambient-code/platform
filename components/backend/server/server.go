@@ -2,8 +2,6 @@
 package server
 
 import (
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -11,6 +9,7 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	authnv1 "k8s.io/api/authentication/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -162,12 +161,13 @@ func forwardedIdentityMiddleware() gin.HandlerFunc {
 			c.Set("forwardedAccessToken", v)
 		}
 
-		// Fallback: if userID is still empty, try to resolve it from the
-		// ServiceAccount's created-by-user-id annotation. This enables API
-		// key-authenticated requests to inherit the creating user's identity
+		// Fallback: if userID is still empty, verify the Bearer token via
+		// TokenReview to securely resolve the ServiceAccount identity, then
+		// read the created-by-user-id annotation. This enables API key-
+		// authenticated requests to inherit the creating user's identity
 		// so that integration credentials (GitHub, Jira, GitLab) are accessible.
-		if c.GetString("userID") == "" {
-			if ns, saName, ok := ExtractServiceAccountFromAuth(c); ok && K8sClient != nil {
+		if c.GetString("userID") == "" && K8sClient != nil {
+			if ns, saName, ok := resolveServiceAccountFromToken(c); ok {
 				sa, err := K8sClient.CoreV1().ServiceAccounts(ns).Get(c.Request.Context(), saName, v1.GetOptions{})
 				if err == nil && sa.Annotations != nil {
 					if uid := sa.Annotations["ambient-code.io/created-by-user-id"]; uid != "" {
@@ -181,22 +181,10 @@ func forwardedIdentityMiddleware() gin.HandlerFunc {
 	}
 }
 
-// ExtractServiceAccountFromAuth extracts namespace and ServiceAccount name from the Authorization Bearer JWT 'sub' claim.
-// Also checks X-Remote-User header for service account format (OpenShift OAuth proxy format).
-// Returns (namespace, saName, true) when a SA subject is present, otherwise ("","",false).
-func ExtractServiceAccountFromAuth(c *gin.Context) (string, string, bool) {
-	// Check X-Remote-User header (OpenShift OAuth proxy format)
-	if remoteUser := c.GetHeader("X-Remote-User"); remoteUser != "" {
-		const prefix = "system:serviceaccount:"
-		if strings.HasPrefix(remoteUser, prefix) {
-			parts := strings.SplitN(strings.TrimPrefix(remoteUser, prefix), ":", 2)
-			if len(parts) == 2 {
-				return parts[0], parts[1], true
-			}
-		}
-	}
-
-	// Standard Authorization Bearer JWT parsing
+// resolveServiceAccountFromToken verifies the Bearer token via K8s TokenReview
+// and extracts the ServiceAccount namespace and name from the authenticated identity.
+// Returns (namespace, saName, true) when verified, otherwise ("","",false).
+func resolveServiceAccountFromToken(c *gin.Context) (string, string, bool) {
 	rawAuth := c.GetHeader("Authorization")
 	parts := strings.SplitN(rawAuth, " ", 2)
 	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
@@ -206,31 +194,38 @@ func ExtractServiceAccountFromAuth(c *gin.Context) (string, string, bool) {
 	if token == "" {
 		return "", "", false
 	}
-	segs := strings.Split(token, ".")
-	if len(segs) < 2 {
+
+	tr := &authnv1.TokenReview{Spec: authnv1.TokenReviewSpec{Token: token}}
+	rv, err := K8sClient.AuthenticationV1().TokenReviews().Create(c.Request.Context(), tr, v1.CreateOptions{})
+	if err != nil || !rv.Status.Authenticated || rv.Status.Error != "" {
 		return "", "", false
 	}
-	payloadB64 := segs[1]
-	if m := len(payloadB64) % 4; m != 0 {
-		payloadB64 += strings.Repeat("=", 4-m)
-	}
-	data, err := base64.URLEncoding.DecodeString(payloadB64)
-	if err != nil {
-		return "", "", false
-	}
-	var payload map[string]interface{}
-	if err := json.Unmarshal(data, &payload); err != nil {
-		return "", "", false
-	}
-	sub, _ := payload["sub"].(string)
+
+	subj := strings.TrimSpace(rv.Status.User.Username)
 	const prefix = "system:serviceaccount:"
-	if !strings.HasPrefix(sub, prefix) {
+	if !strings.HasPrefix(subj, prefix) {
 		return "", "", false
 	}
-	rest := strings.TrimPrefix(sub, prefix)
-	parts2 := strings.SplitN(rest, ":", 2)
-	if len(parts2) != 2 {
+	rest := strings.TrimPrefix(subj, prefix)
+	segs := strings.SplitN(rest, ":", 2)
+	if len(segs) != 2 {
 		return "", "", false
 	}
-	return parts2[0], parts2[1], true
+	return segs[0], segs[1], true
+}
+
+// ExtractServiceAccountFromAuth extracts namespace and ServiceAccount name
+// from the X-Remote-User header (OpenShift OAuth proxy format).
+// Returns (namespace, saName, true) when a SA subject is present, otherwise ("","",false).
+func ExtractServiceAccountFromAuth(c *gin.Context) (string, string, bool) {
+	if remoteUser := c.GetHeader("X-Remote-User"); remoteUser != "" {
+		const prefix = "system:serviceaccount:"
+		if strings.HasPrefix(remoteUser, prefix) {
+			parts := strings.SplitN(strings.TrimPrefix(remoteUser, prefix), ":", 2)
+			if len(parts) == 2 {
+				return parts[0], parts[1], true
+			}
+		}
+	}
+	return "", "", false
 }

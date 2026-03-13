@@ -381,6 +381,13 @@ func CreateProjectKey(c *gin.Context) {
 		return
 	}
 
+	// Require authenticated user identity so integration access works
+	creatorUserID := c.GetString("userID")
+	if creatorUserID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "User identity required to create access keys"})
+		return
+	}
+
 	// Create a dedicated ServiceAccount per key
 	ts := time.Now().Unix()
 	saName := fmt.Sprintf("ambient-key-%s-%d", sanitizeName(req.Name), ts)
@@ -394,7 +401,7 @@ func CreateProjectKey(c *gin.Context) {
 				"ambient-code.io/description":        req.Description,
 				"ambient-code.io/created-at":         time.Now().Format(time.RFC3339),
 				"ambient-code.io/role":               role,
-				"ambient-code.io/created-by-user-id": c.GetString("userID"),
+				"ambient-code.io/created-by-user-id": creatorUserID,
 			},
 		},
 	}
