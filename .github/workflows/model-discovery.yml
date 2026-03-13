@@ -40,7 +40,7 @@ jobs:
         env:
           GCP_REGION: ${{ secrets.GCP_REGION }}
           GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
-        run: python scripts/model-discovery.py
+        run: python .github/scripts/model-discovery.py
 
       - name: Check for changes
         id: diff
