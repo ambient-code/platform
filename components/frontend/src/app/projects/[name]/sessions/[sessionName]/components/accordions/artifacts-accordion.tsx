@@ -17,7 +17,7 @@ type WorkspaceFile = {
 type ArtifactsAccordionProps = {
   files: WorkspaceFile[];
   currentSubPath: string;
-  viewingFile: { path: string; content: string } | null;
+  viewingFile: { path: string; content: string; imageUrl?: string } | null;
   isLoadingFile: boolean;
   onFileOrFolderSelect: (node: FileTreeNode) => void;
   onRefresh: () => void;
@@ -122,11 +122,22 @@ export function ArtifactsAccordion({
                 </div>
               ) : viewingFile ? (
                 /* File content view */
-                <div className="text-xs">
-                  <pre className="bg-muted/50 p-2 rounded overflow-x-auto">
-                    <code>{viewingFile.content}</code>
-                  </pre>
-                </div>
+                viewingFile.imageUrl ? (
+                  <div className="flex justify-center p-2">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={viewingFile.imageUrl}
+                      alt={viewingFile.path}
+                      className="max-w-full max-h-56 object-contain rounded"
+                    />
+                  </div>
+                ) : (
+                  <div className="text-xs">
+                    <pre className="bg-muted/50 p-2 rounded overflow-x-auto">
+                      <code>{viewingFile.content}</code>
+                    </pre>
+                  </div>
+                )
               ) : files.length === 0 ? (
                 /* Empty state */
                 <div className="text-center py-4 text-sm text-muted-foreground">

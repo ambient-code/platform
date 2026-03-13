@@ -5,9 +5,19 @@ import { toast } from "sonner";
 import { readWorkspaceFile } from "@/services/api/workspace";
 import type { FileTreeNode } from "@/components/file-tree";
 
+const IMAGE_EXTENSIONS = new Set([
+  "png", "jpg", "jpeg", "gif", "webp", "bmp", "ico", "svg", "tiff", "tif", "avif",
+]);
+
+function isImageFile(filename: string): boolean {
+  const ext = filename.split(".").pop()?.toLowerCase() ?? "";
+  return IMAGE_EXTENSIONS.has(ext);
+}
+
 type ViewingFile = {
   path: string;
   content: string;
+  imageUrl?: string;
 };
 
 type UseFileOperationsProps = {
@@ -40,8 +50,13 @@ export function useFileOperations({
           ? `${basePath}/${currentSubPath}/${node.name}`
           : `${basePath}/${node.name}`;
 
-        const content = await readWorkspaceFile(projectName, sessionName, fullPath);
-        setViewingFile({ path: node.name, content });
+        if (isImageFile(node.name)) {
+          const imageUrl = `/api/projects/${encodeURIComponent(projectName)}/agentic-sessions/${encodeURIComponent(sessionName)}/workspace/${encodeURIComponent(fullPath)}`;
+          setViewingFile({ path: node.name, content: "", imageUrl });
+        } else {
+          const content = await readWorkspaceFile(projectName, sessionName, fullPath);
+          setViewingFile({ path: node.name, content });
+        }
       } catch (error) {
         console.error("Failed to load file:", error);
         toast.error(error instanceof Error ? error.message : 'Failed to load file');

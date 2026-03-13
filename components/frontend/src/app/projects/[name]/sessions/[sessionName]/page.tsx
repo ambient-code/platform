@@ -1991,11 +1991,22 @@ export default function ProjectSessionDetailPage({
                                   <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                                 </div>
                               ) : fileOps.viewingFile ? (
-                                <div className="text-xs">
-                                  <pre className="bg-muted/50 p-2 rounded overflow-x-auto">
-                                    <code>{fileOps.viewingFile.content}</code>
-                                  </pre>
-                                </div>
+                                fileOps.viewingFile.imageUrl ? (
+                                  <div className="flex justify-center p-2">
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img
+                                      src={fileOps.viewingFile.imageUrl}
+                                      alt={fileOps.viewingFile.path}
+                                      className="max-w-full max-h-56 object-contain rounded"
+                                    />
+                                  </div>
+                                ) : (
+                                  <div className="text-xs">
+                                    <pre className="bg-muted/50 p-2 rounded overflow-x-auto">
+                                      <code>{fileOps.viewingFile.content}</code>
+                                    </pre>
+                                  </div>
+                                )
                               ) : directoryFiles.length === 0 ? (
                                 <div className="text-center py-4 text-sm text-muted-foreground">
                                   <FolderTree className="h-8 w-8 mx-auto mb-2 opacity-30" />
@@ -2455,11 +2466,22 @@ export default function ProjectSessionDetailPage({
                                         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                                       </div>
                                     ) : fileOps.viewingFile ? (
-                                      <div className="text-xs">
-                                        <pre className="bg-muted/50 p-2 rounded overflow-x-auto">
-                                          <code>{fileOps.viewingFile.content}</code>
-                                        </pre>
-                                      </div>
+                                      fileOps.viewingFile.imageUrl ? (
+                                        <div className="flex justify-center p-2">
+                                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                                          <img
+                                            src={fileOps.viewingFile.imageUrl}
+                                            alt={fileOps.viewingFile.path}
+                                            className="max-w-full max-h-56 object-contain rounded"
+                                          />
+                                        </div>
+                                      ) : (
+                                        <div className="text-xs">
+                                          <pre className="bg-muted/50 p-2 rounded overflow-x-auto">
+                                            <code>{fileOps.viewingFile.content}</code>
+                                          </pre>
+                                        </div>
+                                      )
                                     ) : directoryFiles.length === 0 ? (
                                       <div className="text-center py-4 text-sm text-muted-foreground">
                                         <FolderTree className="h-8 w-8 mx-auto mb-2 opacity-30" />
