@@ -270,15 +270,9 @@ var _ = Describe("Middleware Handlers", Label(test_constants.LabelUnit, test_con
 		It("Should extract service account from token review", func() {
 			context := httpUtils.CreateTestGinContext("GET", "/api/projects/test-project/sessions", nil)
 
-			_, _, err := httpUtils.SetValidTestToken(
-				k8sUtils,
-				"test-project",
-				[]string{"get", "list"},
-				"agenticsessions",
-				"test-sa",
-				"test-agenticsessions-read-role",
-			)
-			Expect(err).NotTo(HaveOccurred())
+			// ExtractServiceAccountFromAuth reads the X-Remote-User header
+			// (set by OpenShift OAuth proxy) to identify service accounts
+			context.Request.Header.Set("X-Remote-User", "system:serviceaccount:test-project:test-sa")
 
 			namespace, serviceAccount, found := ExtractServiceAccountFromAuth(context)
 			Expect(found).To(BeTrue(), "Should find service account from token")
