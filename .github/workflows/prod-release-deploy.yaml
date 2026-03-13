@@ -18,7 +18,7 @@ on:
         type: boolean
         default: true
       components:
-        description: 'Components to build (comma-separated: frontend,backend,operator,claude-runner,state-sync,public-api,ambient-api-server) - leave empty for all'
+        description: 'Components to build (comma-separated: frontend,backend,operator,ambient-runner,state-sync,public-api,ambient-api-server) - leave empty for all'
         required: false
         type: string
         default: ''
@@ -27,12 +27,14 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-   release:
+  release:
     runs-on: ubuntu-latest
     permissions:
       contents: write
     outputs:
       new_tag: ${{ steps.next_version.outputs.new_tag }}
+      build-matrix: ${{ steps.matrix.outputs.build-matrix }}
+      merge-matrix: ${{ steps.matrix.outputs.merge-matrix }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v6
@@ -145,8 +147,38 @@ jobs:
             ${{ steps.create_archive.outputs.archive_name }}
             RELEASE_CHANGELOG.md
 
-   build-and-push:
-    runs-on: ubuntu-latest
+      - name: Build component matrices
+        id: matrix
+        run: |
+          ALL_COMPONENTS='[
+            {"name":"frontend","context":"./components/frontend","image":"quay.io/ambient_code/vteam_frontend","dockerfile":"./components/frontend/Dockerfile"},
+            {"name":"backend","context":"./components/backend","image":"quay.io/ambient_code/vteam_backend","dockerfile":"./components/backend/Dockerfile"},
+            {"name":"operator","context":"./components/operator","image":"quay.io/ambient_code/vteam_operator","dockerfile":"./components/operator/Dockerfile"},
+            {"name":"ambient-runner","context":"./components/runners","image":"quay.io/ambient_code/vteam_claude_runner","dockerfile":"./components/runners/ambient-runner/Dockerfile"},
+            {"name":"state-sync","context":"./components/runners/state-sync","image":"quay.io/ambient_code/vteam_state_sync","dockerfile":"./components/runners/state-sync/Dockerfile"},
+            {"name":"public-api","context":"./components/public-api","image":"quay.io/ambient_code/vteam_public_api","dockerfile":"./components/public-api/Dockerfile"},
+            {"name":"ambient-api-server","context":"./components/ambient-api-server","image":"quay.io/ambient_code/vteam_api_server","dockerfile":"./components/ambient-api-server/Dockerfile"}
+          ]'
+
+          FORCE_ALL="${{ github.event.inputs.force_build_all }}"
+          SELECTED="${{ github.event.inputs.components }}"
+
+          if [ "$FORCE_ALL" == "true" ] || [ -z "$SELECTED" ]; then
+            FILTERED="$ALL_COMPONENTS"
+          else
+            FILTERED=$(echo "$ALL_COMPONENTS" | jq -c --arg sel "$SELECTED" '[.[] | select(.name as $n | $sel | split(",") | map(gsub("^\\s+|\\s+$";"")) | index($n))]')
+          fi
+
+          BUILD_MATRIX=$(echo "$FILTERED" | jq -c '.')
+          MERGE_MATRIX=$(echo "$FILTERED" | jq -c '[.[] | {name, image}]')
+
+          echo "build-matrix=$BUILD_MATRIX" >> $GITHUB_OUTPUT
+          echo "merge-matrix=$MERGE_MATRIX" >> $GITHUB_OUTPUT
+
+          echo "Components to build:"
+          echo "$FILTERED" | jq -r '.[].name'
+
+  build:
     needs: release
     permissions:
       contents: read
@@ -154,36 +186,19 @@ jobs:
       issues: read
       id-token: write
     strategy:
+      fail-fast: false
       matrix:
-        component:
-          - name: frontend
-            context: ./components/frontend
-            image: quay.io/ambient_code/vteam_frontend
-            dockerfile: ./components/frontend/Dockerfile
-          - name: backend
-            context: ./components/backend
-            image: quay.io/ambient_code/vteam_backend
-            dockerfile: ./components/backend/Dockerfile
-          - name: operator
-            context: ./components/operator
-            image: quay.io/ambient_code/vteam_operator
-            dockerfile: ./components/operator/Dockerfile
-          - name: ambient-runner
-            context: ./components/runners
-            image: quay.io/ambient_code/vteam_claude_runner
-            dockerfile: ./components/runners/ambient-runner/Dockerfile
-          - name: state-sync
-            context: ./components/runners/state-sync
-            image: quay.io/ambient_code/vteam_state_sync
-            dockerfile: ./components/runners/state-sync/Dockerfile
-          - name: public-api
-            context: ./components/public-api
-            image: quay.io/ambient_code/vteam_public_api
-            dockerfile: ./components/public-api/Dockerfile
-          - name: ambient-api-server
-            context: ./components/ambient-api-server
-            image: quay.io/ambient_code/vteam_api_server
-            dockerfile: ./components/ambient-api-server/Dockerfile
+        # IMPORTANT: suffix values must match the hardcoded suffixes in
+        # merge-manifests. Update both together if arches change.
+        arch:
+          - runner: ubuntu-latest
+            platform: linux/amd64
+            suffix: amd64
+          - runner: ubuntu-24.04-arm
+            platform: linux/arm64
+            suffix: arm64
+        component: ${{ fromJSON(needs.release.outputs.build-matrix) }}
+    runs-on: ${{ matrix.arch.runner }}
     steps:
       - name: Checkout code from the tag generated above
         uses: actions/checkout@v6
@@ -191,11 +206,8 @@ jobs:
             ref: ${{ needs.release.outputs.new_tag }}
             fetch-depth: 0
 
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-        with:
-          platforms: linux/amd64,linux/arm64
 
       - name: Log in to Quay.io
         uses: docker/login-action@v3
@@ -211,23 +223,51 @@ jobs:
           username: ${{ secrets.REDHAT_USERNAME }}
           password: ${{ secrets.REDHAT_PASSWORD }}
 
-      - name: Build and push ${{ matrix.component.name }} image
-        if: github.event.inputs.force_build_all == 'true' || contains(github.event.inputs.components, matrix.component.name) || (github.event.inputs.components == '' && github.event.inputs.force_build_all != 'false')
+      - name: Build and push ${{ matrix.component.name }} (${{ matrix.arch.suffix }})
         uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.component.context }}
           file: ${{ matrix.component.dockerfile }}
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ matrix.arch.platform }}
           push: true
-          tags: |
-            ${{ matrix.component.image }}:${{ needs.release.outputs.new_tag }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          tags: ${{ matrix.component.image }}:${{ needs.release.outputs.new_tag }}-${{ matrix.arch.suffix }}
+          cache-from: type=gha,scope=${{ matrix.component.name }}-${{ matrix.arch.suffix }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.component.name }}-${{ matrix.arch.suffix }}
 
-
-   deploy-to-openshift:
+  merge-manifests:
+    needs: [release, build]
     runs-on: ubuntu-latest
-    needs: [release, build-and-push]
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        component: ${{ fromJSON(needs.release.outputs.merge-matrix) }}
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Quay.io
+        uses: docker/login-action@v3
+        with:
+          registry: quay.io
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_PASSWORD }}
+
+      - name: Create multi-arch manifest for ${{ matrix.component.name }}
+        # Suffixes (-amd64, -arm64) must match the arch matrix in the build job above.
+        # Arch-suffixed tags remain in the registry after merging. Clean these up
+        # via Quay tag expiration policies or a periodic job.
+        run: |
+          docker buildx imagetools create \
+            -t ${{ matrix.component.image }}:${{ needs.release.outputs.new_tag }} \
+            ${{ matrix.component.image }}:${{ needs.release.outputs.new_tag }}-amd64 \
+            ${{ matrix.component.image }}:${{ needs.release.outputs.new_tag }}-arm64
+
+  deploy-to-openshift:
+    runs-on: ubuntu-latest
+    needs: [release, merge-manifests]
     steps:
       - name: Checkout code from release tag
         uses: actions/checkout@v6
@@ -252,17 +292,33 @@ jobs:
         run: |
           oc apply -k components/manifests/observability/
 
+      - name: Determine which components were built
+        id: built
+        run: |
+          MATRIX='${{ needs.release.outputs.build-matrix }}'
+          NAMES=$(echo "$MATRIX" | jq -r '[.[].name] | join(",")')
+          echo "names=$NAMES" >> $GITHUB_OUTPUT
+          echo "Built components: $NAMES"
+
       - name: Update kustomization with release image tags
         working-directory: components/manifests/overlays/production
         run: |
           RELEASE_TAG="${{ needs.release.outputs.new_tag }}"
-          kustomize edit set image quay.io/ambient_code/vteam_frontend:latest=quay.io/ambient_code/vteam_frontend:${RELEASE_TAG}
-          kustomize edit set image quay.io/ambient_code/vteam_backend:latest=quay.io/ambient_code/vteam_backend:${RELEASE_TAG}
-          kustomize edit set image quay.io/ambient_code/vteam_operator:latest=quay.io/ambient_code/vteam_operator:${RELEASE_TAG}
-          kustomize edit set image quay.io/ambient_code/vteam_claude_runner:latest=quay.io/ambient_code/vteam_claude_runner:${RELEASE_TAG}
-          kustomize edit set image quay.io/ambient_code/vteam_state_sync:latest=quay.io/ambient_code/vteam_state_sync:${RELEASE_TAG}
-          kustomize edit set image quay.io/ambient_code/vteam_public_api:latest=quay.io/ambient_code/vteam_public_api:${RELEASE_TAG}
-          kustomize edit set image quay.io/ambient_code/vteam_api_server:latest=quay.io/ambient_code/vteam_api_server:${RELEASE_TAG}
+          BUILT="${{ steps.built.outputs.names }}"
+          for comp_image in \
+            "frontend:quay.io/ambient_code/vteam_frontend" \
+            "backend:quay.io/ambient_code/vteam_backend" \
+            "operator:quay.io/ambient_code/vteam_operator" \
+            "ambient-runner:quay.io/ambient_code/vteam_claude_runner" \
+            "state-sync:quay.io/ambient_code/vteam_state_sync" \
+            "public-api:quay.io/ambient_code/vteam_public_api" \
+            "ambient-api-server:quay.io/ambient_code/vteam_api_server"; do
+            COMP="${comp_image%%:*}"
+            IMAGE="${comp_image#*:}"
+            if echo "$BUILT" | grep -q "$COMP"; then
+              kustomize edit set image ${IMAGE}:latest=${IMAGE}:${RELEASE_TAG}
+            fi
+          done
 
       - name: Validate kustomization
         working-directory: components/manifests/overlays/production
@@ -284,17 +340,32 @@ jobs:
 
       - name: Update operator environment variables
         run: |
-          oc set env deployment/agentic-operator -n ambient-code -c agentic-operator \
-            AMBIENT_CODE_RUNNER_IMAGE="quay.io/ambient_code/vteam_claude_runner:${{ needs.release.outputs.new_tag }}" \
-            STATE_SYNC_IMAGE="quay.io/ambient_code/vteam_state_sync:${{ needs.release.outputs.new_tag }}"
+          RELEASE_TAG="${{ needs.release.outputs.new_tag }}"
+          BUILT="${{ steps.built.outputs.names }}"
+          ARGS=""
+          if echo "$BUILT" | grep -q "ambient-runner"; then
+            ARGS="$ARGS AMBIENT_CODE_RUNNER_IMAGE=quay.io/ambient_code/vteam_claude_runner:${RELEASE_TAG}"
+          fi
+          if echo "$BUILT" | grep -q "state-sync"; then
+            ARGS="$ARGS STATE_SYNC_IMAGE=quay.io/ambient_code/vteam_state_sync:${RELEASE_TAG}"
+          fi
+          if [ -n "$ARGS" ]; then
+            oc set env deployment/agentic-operator -n ambient-code -c agentic-operator $ARGS
+          fi
 
       - name: Update agent registry ConfigMap with release image tags
         run: |
           RELEASE_TAG="${{ needs.release.outputs.new_tag }}"
+          BUILT="${{ steps.built.outputs.names }}"
           REGISTRY=$(oc get configmap ambient-agent-registry -n ambient-code \
             -o jsonpath='{.data.agent-registry\.json}')
-          REGISTRY=$(echo "$REGISTRY" | sed \
-            -e "s|quay.io/ambient_code/vteam_claude_runner[@:][^\"]*|quay.io/ambient_code/vteam_claude_runner:${RELEASE_TAG}|g" \
-            -e "s|quay.io/ambient_code/vteam_state_sync[@:][^\"]*|quay.io/ambient_code/vteam_state_sync:${RELEASE_TAG}|g")
+          if echo "$BUILT" | grep -q "ambient-runner"; then
+            REGISTRY=$(echo "$REGISTRY" | sed \
+              "s|quay.io/ambient_code/vteam_claude_runner[@:][^\"]*|quay.io/ambient_code/vteam_claude_runner:${RELEASE_TAG}|g")
+          fi
+          if echo "$BUILT" | grep -q "state-sync"; then
+            REGISTRY=$(echo "$REGISTRY" | sed \
+              "s|quay.io/ambient_code/vteam_state_sync[@:][^\"]*|quay.io/ambient_code/vteam_state_sync:${RELEASE_TAG}|g")
+          fi
           oc patch configmap ambient-agent-registry -n ambient-code --type=merge \
             -p "{\"data\":{\"agent-registry.json\":$(echo "$REGISTRY" | jq -Rs .)}}"

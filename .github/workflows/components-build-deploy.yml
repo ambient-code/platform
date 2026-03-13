@@ -31,7 +31,7 @@ on:
         type: boolean
         default: false
       components:
-        description: 'Components to build (comma-separated: frontend,backend,operator,claude-runner,state-sync,public-api,ambient-api-server) - leave empty for all'
+        description: 'Components to build (comma-separated: frontend,backend,operator,ambient-runner,state-sync,public-api,ambient-api-server) - leave empty for all'
         required: false
         type: string
         default: ''
@@ -45,13 +45,16 @@ jobs:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     outputs:
+      build-matrix: ${{ steps.matrix.outputs.build-matrix }}
+      merge-matrix: ${{ steps.matrix.outputs.merge-matrix }}
+      has-builds: ${{ steps.matrix.outputs.has-builds }}
       frontend: ${{ steps.filter.outputs.frontend }}
       backend: ${{ steps.filter.outputs.backend }}
       operator: ${{ steps.filter.outputs.operator }}
       claude-runner: ${{ steps.filter.outputs.claude-runner }}
       state-sync: ${{ steps.filter.outputs.state-sync }}
-      public-api: ${{ steps.filter.outputs.public-api }}
       ambient-api-server: ${{ steps.filter.outputs.ambient-api-server }}
+      public-api: ${{ steps.filter.outputs.public-api }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -78,65 +81,99 @@ jobs:
             ambient-api-server:
               - 'components/ambient-api-server/**'
 
-  build-and-push:
-    runs-on: ubuntu-latest
+      - name: Build component matrices
+        id: matrix
+        run: |
+          # All components definition
+          ALL_COMPONENTS='[
+            {"name":"frontend","context":"./components/frontend","image":"quay.io/ambient_code/vteam_frontend","dockerfile":"./components/frontend/Dockerfile"},
+            {"name":"backend","context":"./components/backend","image":"quay.io/ambient_code/vteam_backend","dockerfile":"./components/backend/Dockerfile"},
+            {"name":"operator","context":"./components/operator","image":"quay.io/ambient_code/vteam_operator","dockerfile":"./components/operator/Dockerfile"},
+            {"name":"ambient-runner","context":"./components/runners","image":"quay.io/ambient_code/vteam_claude_runner","dockerfile":"./components/runners/ambient-runner/Dockerfile"},
+            {"name":"state-sync","context":"./components/runners/state-sync","image":"quay.io/ambient_code/vteam_state_sync","dockerfile":"./components/runners/state-sync/Dockerfile"},
+            {"name":"public-api","context":"./components/public-api","image":"quay.io/ambient_code/vteam_public_api","dockerfile":"./components/public-api/Dockerfile"},
+            {"name":"ambient-api-server","context":"./components/ambient-api-server","image":"quay.io/ambient_code/vteam_api_server","dockerfile":"./components/ambient-api-server/Dockerfile"}
+          ]'
+
+          FORCE_ALL="${{ github.event.inputs.force_build_all }}"
+          SELECTED="${{ github.event.inputs.components }}"
+          EVENT="${{ github.event_name }}"
+
+          # Map component names to paths-filter output names
+          # (ambient-runner uses claude-runner filter)
+          declare -A FILTER_MAP=(
+            [frontend]="${{ steps.filter.outputs.frontend }}"
+            [backend]="${{ steps.filter.outputs.backend }}"
+            [operator]="${{ steps.filter.outputs.operator }}"
+            [ambient-runner]="${{ steps.filter.outputs.claude-runner }}"
+            [state-sync]="${{ steps.filter.outputs.state-sync }}"
+            [public-api]="${{ steps.filter.outputs.public-api }}"
+            [ambient-api-server]="${{ steps.filter.outputs.ambient-api-server }}"
+          )
+
+          if [ "$FORCE_ALL" == "true" ]; then
+            # Force build all
+            FILTERED="$ALL_COMPONENTS"
+          elif [ "$EVENT" == "workflow_dispatch" ] && [ -z "$SELECTED" ] && [ "$FORCE_ALL" != "true" ]; then
+            # Dispatch with no selection and no force — build all
+            FILTERED="$ALL_COMPONENTS"
+          elif [ -n "$SELECTED" ]; then
+            # Dispatch with specific components
+            FILTERED=$(echo "$ALL_COMPONENTS" | jq -c --arg sel "$SELECTED" '[.[] | select(.name as $n | $sel | split(",") | map(gsub("^\\s+|\\s+$";"")) | index($n))]')
+          else
+            # Push or PR — only changed components
+            FILTERED="[]"
+            for comp in $(echo "$ALL_COMPONENTS" | jq -r '.[].name'); do
+              if [ "${FILTER_MAP[$comp]}" == "true" ]; then
+                FILTERED=$(echo "$FILTERED" | jq -c --arg name "$comp" --argjson all "$ALL_COMPONENTS" '. + [$all[] | select(.name == $name)]')
+              fi
+            done
+          fi
+
+          # Build matrix includes context/dockerfile; merge matrix only needs name/image
+          BUILD_MATRIX=$(echo "$FILTERED" | jq -c '.')
+          MERGE_MATRIX=$(echo "$FILTERED" | jq -c '[.[] | {name, image}]')
+          HAS_BUILDS=$(echo "$FILTERED" | jq -c 'length > 0')
+
+          echo "build-matrix=$BUILD_MATRIX" >> $GITHUB_OUTPUT
+          echo "merge-matrix=$MERGE_MATRIX" >> $GITHUB_OUTPUT
+          echo "has-builds=$HAS_BUILDS" >> $GITHUB_OUTPUT
+
+          echo "Components to build:"
+          echo "$FILTERED" | jq -r '.[].name'
+
+  build:
     needs: detect-changes
+    if: needs.detect-changes.outputs.has-builds == 'true'
     permissions:
       contents: read
       pull-requests: read
       issues: read
       id-token: write
     strategy:
+      fail-fast: false
       matrix:
-        component:
-          - name: frontend
-            context: ./components/frontend
-            image: quay.io/ambient_code/vteam_frontend
-            dockerfile: ./components/frontend/Dockerfile
-            changed: ${{ needs.detect-changes.outputs.frontend }}
-          - name: backend
-            context: ./components/backend
-            image: quay.io/ambient_code/vteam_backend
-            dockerfile: ./components/backend/Dockerfile
-            changed: ${{ needs.detect-changes.outputs.backend }}
-          - name: operator
-            context: ./components/operator
-            image: quay.io/ambient_code/vteam_operator
-            dockerfile: ./components/operator/Dockerfile
-            changed: ${{ needs.detect-changes.outputs.operator }}
-          - name: ambient-runner
-            context: ./components/runners
-            image: quay.io/ambient_code/vteam_claude_runner
-            dockerfile: ./components/runners/ambient-runner/Dockerfile
-            changed: ${{ needs.detect-changes.outputs.claude-runner }}
-          - name: state-sync
-            context: ./components/runners/state-sync
-            image: quay.io/ambient_code/vteam_state_sync
-            dockerfile: ./components/runners/state-sync/Dockerfile
-            changed: ${{ needs.detect-changes.outputs.state-sync }}
-          - name: public-api
-            context: ./components/public-api
-            image: quay.io/ambient_code/vteam_public_api
-            dockerfile: ./components/public-api/Dockerfile
-            changed: ${{ needs.detect-changes.outputs.public-api }}
-          - name: ambient-api-server
-            context: ./components/ambient-api-server
-            image: quay.io/ambient_code/vteam_api_server
-            dockerfile: ./components/ambient-api-server/Dockerfile
-            changed: ${{ needs.detect-changes.outputs.ambient-api-server }}
+        # IMPORTANT: suffix values must match the hardcoded suffixes in
+        # merge-manifests. Update both together if arches change.
+        arch:
+          - runner: ubuntu-latest
+            platform: linux/amd64
+            suffix: amd64
+          - runner: ubuntu-24.04-arm
+            platform: linux/arm64
+            suffix: arm64
+        component: ${{ fromJSON(needs.detect-changes.outputs.build-matrix) }}
+    runs-on: ${{ matrix.arch.runner }}
     steps:
       - name: Checkout code
-        if: matrix.component.changed == 'true' || github.event.inputs.force_build_all == 'true' || contains(github.event.inputs.components, matrix.component.name) || (github.event_name == 'workflow_dispatch' && github.event.inputs.components == '' && github.event.inputs.force_build_all != 'true')
         uses: actions/checkout@v6
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up Docker Buildx
-        if: matrix.component.changed == 'true' || github.event.inputs.force_build_all == 'true' || contains(github.event.inputs.components, matrix.component.name) || (github.event_name == 'workflow_dispatch' && github.event.inputs.components == '' && github.event.inputs.force_build_all != 'true')
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to Quay.io
-        if: matrix.component.changed == 'true' || github.event.inputs.force_build_all == 'true' || contains(github.event.inputs.components, matrix.component.name) || (github.event_name == 'workflow_dispatch' && github.event.inputs.components == '' && github.event.inputs.force_build_all != 'true')
         uses: docker/login-action@v3
         with:
           registry: quay.io
@@ -144,44 +181,73 @@ jobs:
           password: ${{ secrets.QUAY_PASSWORD }}
 
       - name: Log in to Red Hat Container Registry
-        if: matrix.component.changed == 'true' || github.event.inputs.force_build_all == 'true' || contains(github.event.inputs.components, matrix.component.name) || (github.event_name == 'workflow_dispatch' && github.event.inputs.components == '' && github.event.inputs.force_build_all != 'true')
         uses: docker/login-action@v3
         with:
           registry: registry.redhat.io
           username: ${{ secrets.REDHAT_USERNAME }}
           password: ${{ secrets.REDHAT_PASSWORD }}
 
-      - name: Build and push ${{ matrix.component.name }} image only for merge into main
-        if: (matrix.component.changed == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event.inputs.force_build_all == 'true' || contains(github.event.inputs.components, matrix.component.name) || (github.event_name == 'workflow_dispatch' && github.event.inputs.components == '' && github.event.inputs.force_build_all != 'true')
+      - name: Build and push ${{ matrix.component.name }} (${{ matrix.arch.suffix }})
+        if: github.event_name != 'pull_request'
         uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.component.context }}
           file: ${{ matrix.component.dockerfile }}
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ matrix.arch.platform }}
           push: true
-          tags: |
-            ${{ matrix.component.image }}:latest
-            ${{ matrix.component.image }}:${{ github.sha }}
-            ${{ matrix.component.image }}:stage
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          tags: ${{ matrix.component.image }}:${{ github.sha }}-${{ matrix.arch.suffix }}
+          cache-from: type=gha,scope=${{ matrix.component.name }}-${{ matrix.arch.suffix }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.component.name }}-${{ matrix.arch.suffix }}
 
-      - name: Build ${{ matrix.component.name }} image for pull requests but don't push
-        if: (matrix.component.changed == 'true' || github.event.inputs.force_build_all == 'true' || contains(github.event.inputs.components, matrix.component.name)) && github.event_name == 'pull_request'
+      - name: Build ${{ matrix.component.name }} (${{ matrix.arch.suffix }}) for pull request
+        if: github.event_name == 'pull_request'
         uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.component.context }}
           file: ${{ matrix.component.dockerfile }}
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ matrix.arch.platform }}
           push: false
-          tags: ${{ matrix.component.image }}:pr-${{ github.event.pull_request.number }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          tags: ${{ matrix.component.image }}:pr-${{ github.event.pull_request.number }}-${{ matrix.arch.suffix }}
+          cache-from: type=gha,scope=${{ matrix.component.name }}-${{ matrix.arch.suffix }}
+
+  merge-manifests:
+    needs: [detect-changes, build]
+    if: github.event_name != 'pull_request' && needs.detect-changes.outputs.has-builds == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        component: ${{ fromJSON(needs.detect-changes.outputs.merge-matrix) }}
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Quay.io
+        uses: docker/login-action@v3
+        with:
+          registry: quay.io
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_PASSWORD }}
+
+      - name: Create multi-arch manifest for ${{ matrix.component.name }}
+        # Suffixes (-amd64, -arm64) must match the arch matrix in the build job above.
+        # Arch-suffixed tags remain in the registry after merging. Clean these up
+        # via Quay tag expiration policies or a periodic job.
+        run: |
+          docker buildx imagetools create \
+            -t ${{ matrix.component.image }}:latest \
+            -t ${{ matrix.component.image }}:${{ github.sha }} \
+            -t ${{ matrix.component.image }}:stage \
+            ${{ matrix.component.image }}:${{ github.sha }}-amd64 \
+            ${{ matrix.component.image }}:${{ github.sha }}-arm64
 
   update-rbac-and-crd:
     runs-on: ubuntu-latest
-    needs: [detect-changes, build-and-push]
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
+    needs: [detect-changes, merge-manifests]
+    if: always() && !cancelled() && (github.event_name == 'push' && github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch')
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -207,8 +273,8 @@ jobs:
 
   deploy-to-openshift:
     runs-on: ubuntu-latest
-    needs: [detect-changes, build-and-push, update-rbac-and-crd]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && (needs.detect-changes.outputs.frontend == 'true' || needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.operator == 'true' || needs.detect-changes.outputs.claude-runner == 'true' || needs.detect-changes.outputs.state-sync == 'true' || needs.detect-changes.outputs.public-api == 'true' || needs.detect-changes.outputs.ambient-api-server == 'true')
+    needs: [detect-changes, merge-manifests, update-rbac-and-crd]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && (needs.detect-changes.outputs.frontend == 'true' || needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.operator == 'true' || needs.detect-changes.outputs.claude-runner == 'true' || needs.detect-changes.outputs.state-sync == 'true' || needs.detect-changes.outputs.ambient-api-server == 'true' || needs.detect-changes.outputs.public-api == 'true')
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -261,16 +327,16 @@ jobs:
             echo "state_sync_tag=latest" >> $GITHUB_OUTPUT
           fi
 
-          if [ "${{ needs.detect-changes.outputs.public-api }}" == "true" ]; then
-            echo "public_api_tag=${{ github.sha }}" >> $GITHUB_OUTPUT
-          else
-            echo "public_api_tag=stage" >> $GITHUB_OUTPUT
-          fi
-
           if [ "${{ needs.detect-changes.outputs.ambient-api-server }}" == "true" ]; then
             echo "api_server_tag=${{ github.sha }}" >> $GITHUB_OUTPUT
           else
             echo "api_server_tag=stage" >> $GITHUB_OUTPUT
+          fi
+
+          if [ "${{ needs.detect-changes.outputs.public-api }}" == "true" ]; then
+            echo "public_api_tag=${{ github.sha }}" >> $GITHUB_OUTPUT
+          else
+            echo "public_api_tag=stage" >> $GITHUB_OUTPUT
           fi
 
       - name: Update kustomization with image tags
@@ -281,8 +347,8 @@ jobs:
           kustomize edit set image quay.io/ambient_code/vteam_operator:latest=quay.io/ambient_code/vteam_operator:${{ steps.image-tags.outputs.operator_tag }}
           kustomize edit set image quay.io/ambient_code/vteam_claude_runner:latest=quay.io/ambient_code/vteam_claude_runner:${{ steps.image-tags.outputs.runner_tag }}
           kustomize edit set image quay.io/ambient_code/vteam_state_sync:latest=quay.io/ambient_code/vteam_state_sync:${{ steps.image-tags.outputs.state_sync_tag }}
-          kustomize edit set image quay.io/ambient_code/vteam_public_api:latest=quay.io/ambient_code/vteam_public_api:${{ steps.image-tags.outputs.public_api_tag }}
           kustomize edit set image quay.io/ambient_code/vteam_api_server:latest=quay.io/ambient_code/vteam_api_server:${{ steps.image-tags.outputs.api_server_tag }}
+          kustomize edit set image quay.io/ambient_code/vteam_public_api:latest=quay.io/ambient_code/vteam_public_api:${{ steps.image-tags.outputs.public_api_tag }}
 
       - name: Validate kustomization
         working-directory: components/manifests/overlays/production
@@ -333,7 +399,7 @@ jobs:
 
   deploy-with-disptach:
     runs-on: ubuntu-latest
-    needs: [detect-changes, build-and-push, update-rbac-and-crd]
+    needs: [detect-changes, merge-manifests, update-rbac-and-crd]
     if: github.event_name == 'workflow_dispatch'
     steps:
       - name: Checkout code
@@ -362,7 +428,6 @@ jobs:
           kustomize edit set image quay.io/ambient_code/vteam_operator:latest=quay.io/ambient_code/vteam_operator:stage
           kustomize edit set image quay.io/ambient_code/vteam_claude_runner:latest=quay.io/ambient_code/vteam_claude_runner:stage
           kustomize edit set image quay.io/ambient_code/vteam_state_sync:latest=quay.io/ambient_code/vteam_state_sync:stage
-          kustomize edit set image quay.io/ambient_code/vteam_public_api:latest=quay.io/ambient_code/vteam_public_api:stage
           kustomize edit set image quay.io/ambient_code/vteam_api_server:latest=quay.io/ambient_code/vteam_api_server:stage
 
       - name: Validate kustomization
@@ -383,18 +448,37 @@ jobs:
             VTEAM_VERSION="${{ github.sha }}" \
             FEEDBACK_URL="https://forms.gle/7XiWrvo6No922DUz6"
 
-      - name: Update operator environment variables
+      - name: Determine which components were built
+        id: built
         run: |
-          oc set env deployment/agentic-operator -n ambient-code -c agentic-operator \
-            AMBIENT_CODE_RUNNER_IMAGE="quay.io/ambient_code/vteam_claude_runner:${{ github.sha }}" \
-            STATE_SYNC_IMAGE="quay.io/ambient_code/vteam_state_sync:${{ github.sha }}"
+          MATRIX='${{ needs.detect-changes.outputs.build-matrix }}'
+          echo "has-runner=$(echo "$MATRIX" | jq -r '[.[].name] | if index("ambient-runner") then "true" else "false" end')" >> $GITHUB_OUTPUT
+          echo "has-state-sync=$(echo "$MATRIX" | jq -r '[.[].name] | if index("state-sync") then "true" else "false" end')" >> $GITHUB_OUTPUT
+
+      - name: Update operator environment variables
+        if: steps.built.outputs.has-runner == 'true' || steps.built.outputs.has-state-sync == 'true'
+        run: |
+          ARGS=""
+          if [ "${{ steps.built.outputs.has-runner }}" == "true" ]; then
+            ARGS="$ARGS AMBIENT_CODE_RUNNER_IMAGE=quay.io/ambient_code/vteam_claude_runner:${{ github.sha }}"
+          fi
+          if [ "${{ steps.built.outputs.has-state-sync }}" == "true" ]; then
+            ARGS="$ARGS STATE_SYNC_IMAGE=quay.io/ambient_code/vteam_state_sync:${{ github.sha }}"
+          fi
+          oc set env deployment/agentic-operator -n ambient-code -c agentic-operator $ARGS
 
       - name: Update agent registry ConfigMap with pinned image tags
+        if: steps.built.outputs.has-runner == 'true' || steps.built.outputs.has-state-sync == 'true'
         run: |
           REGISTRY=$(oc get configmap ambient-agent-registry -n ambient-code \
             -o jsonpath='{.data.agent-registry\.json}')
-          REGISTRY=$(echo "$REGISTRY" | sed \
-            -e "s|quay.io/ambient_code/vteam_claude_runner[@:][^\"]*|quay.io/ambient_code/vteam_claude_runner:${{ github.sha }}|g" \
-            -e "s|quay.io/ambient_code/vteam_state_sync[@:][^\"]*|quay.io/ambient_code/vteam_state_sync:${{ github.sha }}|g")
+          if [ "${{ steps.built.outputs.has-runner }}" == "true" ]; then
+            REGISTRY=$(echo "$REGISTRY" | sed \
+              "s|quay.io/ambient_code/vteam_claude_runner[@:][^\"]*|quay.io/ambient_code/vteam_claude_runner:${{ github.sha }}|g")
+          fi
+          if [ "${{ steps.built.outputs.has-state-sync }}" == "true" ]; then
+            REGISTRY=$(echo "$REGISTRY" | sed \
+              "s|quay.io/ambient_code/vteam_state_sync[@:][^\"]*|quay.io/ambient_code/vteam_state_sync:${{ github.sha }}|g")
+          fi
           oc patch configmap ambient-agent-registry -n ambient-code --type=merge \
             -p "{\"data\":{\"agent-registry.json\":$(echo "$REGISTRY" | jq -Rs .)}}"
