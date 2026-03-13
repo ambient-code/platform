@@ -101,7 +101,10 @@ class ClaudeBridge(PlatformBridge):
         # 4. Get or create session worker for this thread
         thread_id = input_data.thread_id or self._context.session_id
         api_key = os.getenv("ANTHROPIC_API_KEY", "")
-        saved_session_id = self._saved_session_ids.pop(thread_id, None)
+        saved_session_id = (
+            self._saved_session_ids.pop(thread_id, None)
+            or self._session_manager.get_session_id(thread_id)
+        )
         sdk_options = self._adapter.build_options(
             input_data, thread_id=thread_id, resume_from=saved_session_id
         )
@@ -125,6 +128,11 @@ class ClaudeBridge(PlatformBridge):
 
             async for event in wrapped_stream:
                 yield event
+
+            # Persist session ID after turn completes (for --resume on pod restart)
+            if worker.session_id:
+                self._session_manager._session_ids[thread_id] = worker.session_id
+                self._session_manager._persist_session_ids()
 
         self._first_run = False
 
@@ -287,7 +295,11 @@ class ClaudeBridge(PlatformBridge):
         """Full platform setup: auth, workspace, MCP, observability."""
         # Session manager
         if self._session_manager is None:
-            self._session_manager = SessionManager()
+            state_dir = os.path.join(
+                os.getenv("WORKSPACE_PATH", "/workspace"),
+                os.getenv("RUNNER_STATE_DIR", ".claude"),
+            )
+            self._session_manager = SessionManager(state_dir=state_dir)
 
         # Claude-specific auth
         from ambient_runner.bridges.claude.auth import setup_sdk_authentication
