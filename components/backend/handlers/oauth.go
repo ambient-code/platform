@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"ambient-code-backend/models"
 	"github.com/gin-gonic/gin"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -1199,4 +1200,40 @@ func getGoogleUserEmail(ctx context.Context, accessToken string) (string, error)
 	}
 
 	return userInfo.Email, nil
+}
+
+// Google OAuth2 scopes for Drive integration.
+const (
+	// ScopeOpenID is the OpenID Connect scope.
+	ScopeOpenID = "openid"
+	// ScopeUserEmail provides access to the user's email.
+	ScopeUserEmail = "https://www.googleapis.com/auth/userinfo.email"
+	// ScopeUserProfile provides access to the user's profile.
+	ScopeUserProfile = "https://www.googleapis.com/auth/userinfo.profile"
+	// ScopeDriveFull provides full access to all Drive files (legacy).
+	ScopeDriveFull = "https://www.googleapis.com/auth/drive"
+	// ScopeDriveReadOnly provides read-only access to all Drive files.
+	ScopeDriveReadOnly = "https://www.googleapis.com/auth/drive.readonly"
+	// ScopeDriveFile provides access only to files opened/created by the app.
+	ScopeDriveFile = "https://www.googleapis.com/auth/drive.file"
+)
+
+// GetGoogleDriveScopes returns the appropriate OAuth2 scopes based on the
+// requested permission scope. New integrations default to granular (drive.file).
+func GetGoogleDriveScopes(permissionScope models.PermissionScope) []string {
+	baseScopes := []string{
+		ScopeOpenID,
+		ScopeUserEmail,
+		ScopeUserProfile,
+	}
+
+	switch permissionScope {
+	case models.PermissionScopeFull:
+		return append(baseScopes, ScopeDriveFull, ScopeDriveReadOnly)
+	case models.PermissionScopeGranular:
+		return append(baseScopes, ScopeDriveFile)
+	default:
+		// Default to granular (least privilege) for new integrations
+		return append(baseScopes, ScopeDriveFile)
+	}
 }

@@ -1,0 +1,349 @@
+openapi: 3.1.0
+info:
+  title: Google Drive Granular Permissions API
+  version: 1.0.0
+  description: >
+    API contracts for managing Google Drive integrations with granular
+    file-level permissions via the Google Picker.
+
+paths:
+  /api/projects/{projectName}/integrations/google-drive/setup:
+    post:
+      summary: Initiate Google Drive integration with granular permissions
+      description: >
+        Starts the OAuth flow with drive.file scope. Returns the OAuth
+        authorization URL for the user to authenticate with Google.
+      operationId: initDriveSetup
+      tags: [Drive Integration]
+      parameters:
+        - $ref: '#/components/parameters/ProjectName'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                permissionScope:
+                  type: string
+                  enum: [granular, full]
+                  default: granular
+                  description: Permission scope for the integration. Defaults to granular (drive.file).
+                redirectUri:
+                  type: string
+                  format: uri
+                  description: The URI to redirect to after OAuth completes.
+              required:
+                - redirectUri
+      responses:
+        '200':
+          description: OAuth authorization URL generated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  authUrl:
+                    type: string
+                    format: uri
+                    description: Google OAuth2 authorization URL to redirect the user to.
+                  state:
+                    type: string
+                    description: HMAC-signed state parameter for CSRF protection.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/projects/{projectName}/integrations/google-drive/callback:
+    get:
+      summary: OAuth callback handler
+      description: >
+        Handles the OAuth callback from Google after user authentication.
+        Exchanges the authorization code for tokens and stores them.
+      operationId: handleDriveCallback
+      tags: [Drive Integration]
+      parameters:
+        - $ref: '#/components/parameters/ProjectName'
+        - name: code
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Authorization code from Google OAuth.
+        - name: state
+          in: query
+          required: true
+          schema:
+            type: string
+          description: HMAC-signed state parameter for verification.
+      responses:
+        '200':
+          description: OAuth tokens stored successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  integrationId:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+                    enum: [active]
+                  pickerToken:
+                    type: string
+                    description: Short-lived access token for the Google Picker.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/projects/{projectName}/integrations/google-drive/picker-token:
+    get:
+      summary: Get a fresh access token for the Google Picker
+      description: >
+        Returns a short-lived access token suitable for initializing the
+        Google Picker on the frontend. Refreshes the token if expired.
+      operationId: getPickerToken
+      tags: [Drive Integration]
+      parameters:
+        - $ref: '#/components/parameters/ProjectName'
+      responses:
+        '200':
+          description: Picker token returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken:
+                    type: string
+                    description: Short-lived OAuth2 access token for the Picker.
+                  expiresIn:
+                    type: integer
+                    description: Token validity in seconds.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: No active Google Drive integration found.
+
+  /api/projects/{projectName}/integrations/google-drive/files:
+    get:
+      summary: List granted files
+      description: >
+        Returns all files the user has granted the platform access to
+        for this project's Google Drive integration.
+      operationId: listGrantedFiles
+      tags: [File Grants]
+      parameters:
+        - $ref: '#/components/parameters/ProjectName'
+      responses:
+        '200':
+          description: List of granted files
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  files:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FileGrant'
+                  totalCount:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: No active Google Drive integration found.
+
+    put:
+      summary: Update file grants (add/remove files)
+      description: >
+        Replaces the current file grant set with the provided list.
+        Called after a Picker session to sync selected files.
+      operationId: updateFileGrants
+      tags: [File Grants]
+      parameters:
+        - $ref: '#/components/parameters/ProjectName'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                files:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/PickerFile'
+                  minItems: 1
+                  description: Files selected via the Google Picker.
+              required:
+                - files
+      responses:
+        '200':
+          description: File grants updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  files:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FileGrant'
+                  added:
+                    type: integer
+                    description: Number of new files added.
+                  removed:
+                    type: integer
+                    description: Number of files removed.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/projects/{projectName}/integrations/google-drive:
+    get:
+      summary: Get integration status
+      description: Returns the current state of the Google Drive integration.
+      operationId: getDriveIntegration
+      tags: [Drive Integration]
+      parameters:
+        - $ref: '#/components/parameters/ProjectName'
+      responses:
+        '200':
+          description: Integration details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DriveIntegration'
+        '404':
+          description: No Google Drive integration found.
+
+    delete:
+      summary: Disconnect Google Drive integration
+      description: >
+        Disconnects the Google Drive integration, revokes tokens,
+        and removes all file grants.
+      operationId: disconnectDriveIntegration
+      tags: [Drive Integration]
+      parameters:
+        - $ref: '#/components/parameters/ProjectName'
+      responses:
+        '204':
+          description: Integration disconnected successfully.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: No active integration found.
+
+components:
+  parameters:
+    ProjectName:
+      name: projectName
+      in: path
+      required: true
+      schema:
+        type: string
+      description: The name of the project.
+
+  schemas:
+    DriveIntegration:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectName:
+          type: string
+        permissionScope:
+          type: string
+          enum: [granular, full]
+        status:
+          type: string
+          enum: [active, disconnected, expired, error]
+        fileCount:
+          type: integer
+          description: Number of files currently granted.
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    FileGrant:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        googleFileId:
+          type: string
+        fileName:
+          type: string
+        mimeType:
+          type: string
+        fileUrl:
+          type: string
+          format: uri
+        sizeBytes:
+          type: integer
+          nullable: true
+        isFolder:
+          type: boolean
+        status:
+          type: string
+          enum: [active, unavailable, revoked]
+        grantedAt:
+          type: string
+          format: date-time
+
+    PickerFile:
+      type: object
+      description: File data as returned by the Google Picker callback.
+      properties:
+        id:
+          type: string
+          description: Google Drive file ID.
+        name:
+          type: string
+        mimeType:
+          type: string
+        url:
+          type: string
+          format: uri
+        sizeBytes:
+          type: integer
+          nullable: true
+        isFolder:
+          type: boolean
+          default: false
+      required:
+        - id
+        - name
+        - mimeType
+
+  responses:
+    BadRequest:
+      description: Invalid request parameters.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+              details:
+                type: string
+    Unauthorized:
+      description: Authentication required or token expired.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
