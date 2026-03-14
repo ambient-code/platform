@@ -4,23 +4,31 @@
 
 import { apiClient } from './client';
 
+export type GoogleAccessLevel = 'read_only' | 'full_access';
+
 export type GoogleOAuthStatus = {
   connected: boolean;
   email?: string;
   expiresAt?: string;
   expired?: boolean;
+  scopes?: string[];
+  accessLevel?: GoogleAccessLevel;
 };
 
 export type GoogleOAuthURLResponse = {
   url: string;
   state: string;
+  accessLevel: GoogleAccessLevel;
 };
 
 /**
- * Get Google OAuth URL for cluster-level authentication
+ * Get Google OAuth URL for cluster-level authentication.
+ * @param accessLevel - Requested Drive permission level (defaults to 'full_access')
  */
-export async function getGoogleOAuthURL(): Promise<GoogleOAuthURLResponse> {
-  return apiClient.post<GoogleOAuthURLResponse>('/auth/google/connect');
+export async function getGoogleOAuthURL(
+  accessLevel: GoogleAccessLevel = 'full_access'
+): Promise<GoogleOAuthURLResponse> {
+  return apiClient.post<GoogleOAuthURLResponse>('/auth/google/connect', { accessLevel });
 }
 
 /**

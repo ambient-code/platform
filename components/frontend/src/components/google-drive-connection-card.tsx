@@ -7,6 +7,7 @@ import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useDisconnectGoogle } from '@/services/queries/use-google'
 import * as googleAuthApi from '@/services/api/google-auth'
+import type { GoogleAccessLevel } from '@/services/api/google-auth'
 
 type Props = {
   showManageButton?: boolean
@@ -15,8 +16,20 @@ type Props = {
     email?: string
     expiresAt?: string
     updatedAt?: string
+    accessLevel?: GoogleAccessLevel
+    scopes?: string[]
   }
   onRefresh?: () => void
+}
+
+const ACCESS_LEVEL_LABELS: Record<GoogleAccessLevel, string> = {
+  read_only: 'Read-only',
+  full_access: 'Full access',
+}
+
+const ACCESS_LEVEL_DESCRIPTIONS: Record<GoogleAccessLevel, string> = {
+  read_only: 'View files only — no changes will be made to your Drive',
+  full_access: 'View and edit files in your Drive',
 }
 
 export function GoogleDriveConnectionCard({ showManageButton = true, status, onRefresh }: Props) {
@@ -24,6 +37,7 @@ export function GoogleDriveConnectionCard({ showManageButton = true, status, onR
   const isLoading = !status
   const error = null
   const [connecting, setConnecting] = useState(false)
+  const [selectedAccessLevel, setSelectedAccessLevel] = useState<GoogleAccessLevel>('full_access')
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // Cleanup polling interval on unmount
@@ -39,8 +53,8 @@ export function GoogleDriveConnectionCard({ showManageButton = true, status, onR
     setConnecting(true)
 
     try {
-      // Get OAuth URL from backend
-      const response = await googleAuthApi.getGoogleOAuthURL()
+      // Get OAuth URL from backend with the selected access level
+      const response = await googleAuthApi.getGoogleOAuthURL(selectedAccessLevel)
       const authUrl = response.url
 
       // Open OAuth flow in popup window
@@ -147,13 +161,52 @@ export function GoogleDriveConnectionCard({ showManageButton = true, status, onR
               )}
             </span>
           </div>
-          <p className="text-muted-foreground">
-            {error
-              ? 'Failed to check connection status. Please try again.'
-              : 'Connect to Google Drive to access files in all your sessions via MCP'
-            }
-          </p>
+          {status?.connected && status.accessLevel ? (
+            <p className="text-muted-foreground text-sm">
+              Permission level: <span className="font-medium text-foreground/80">{ACCESS_LEVEL_LABELS[status.accessLevel]}</span>
+              {' — '}{ACCESS_LEVEL_DESCRIPTIONS[status.accessLevel]}
+            </p>
+          ) : (
+            <p className="text-muted-foreground">
+              {error
+                ? 'Failed to check connection status. Please try again.'
+                : 'Connect to Google Drive to access files in all your sessions via MCP'
+              }
+            </p>
+          )}
         </div>
+
+        {/* Permission selector (shown only when not yet connected) */}
+        {!status?.connected && !error && (
+          <div className="mb-4">
+            <p className="text-sm font-medium text-foreground/80 mb-2">Permission level</p>
+            <div className="flex flex-col gap-2">
+              {(['read_only', 'full_access'] as GoogleAccessLevel[]).map((level) => (
+                <label
+                  key={level}
+                  className={`flex items-start gap-3 p-3 rounded-md border cursor-pointer transition-colors ${
+                    selectedAccessLevel === level
+                      ? 'border-primary bg-primary/5'
+                      : 'border-border/60 hover:border-border'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="accessLevel"
+                    value={level}
+                    checked={selectedAccessLevel === level}
+                    onChange={() => setSelectedAccessLevel(level)}
+                    className="mt-0.5 accent-primary"
+                  />
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{ACCESS_LEVEL_LABELS[level]}</p>
+                    <p className="text-xs text-muted-foreground">{ACCESS_LEVEL_DESCRIPTIONS[level]}</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Action buttons */}
         <div className="flex gap-3 mt-auto">

@@ -63,14 +63,9 @@ func getOAuthProvider(provider string) (*OAuthProvider, error) {
 			ClientID:     clientID,
 			ClientSecret: clientSecret,
 			TokenURL:     "https://oauth2.googleapis.com/token",
-			Scopes: []string{
-				"openid",
-				"https://www.googleapis.com/auth/userinfo.email",
-				"https://www.googleapis.com/auth/userinfo.profile",
-				"https://www.googleapis.com/auth/drive",
-				"https://www.googleapis.com/auth/drive.readonly",
-				"https://www.googleapis.com/auth/drive.file",
-			},
+			// Default scopes used by the legacy session-specific OAuth flow.
+			// Cluster-level OAuth uses googleScopesForAccessLevel() instead.
+			Scopes: googleScopesForAccessLevel(GoogleAccessFull),
 		}, nil
 
 	case "github":
@@ -829,8 +824,47 @@ func isValidUserID(userID string) bool {
 	return true
 }
 
+// GoogleAccessLevel represents the requested level of Google Drive access
+type GoogleAccessLevel string
+
+const (
+	// GoogleAccessReadOnly requests read-only access to Google Drive files
+	GoogleAccessReadOnly GoogleAccessLevel = "read_only"
+	// GoogleAccessFull requests full read/write access to Google Drive files
+	GoogleAccessFull GoogleAccessLevel = "full_access"
+)
+
+// googleScopesForAccessLevel returns the OAuth scopes for a given access level
+func googleScopesForAccessLevel(level GoogleAccessLevel) []string {
+	base := []string{
+		"openid",
+		"https://www.googleapis.com/auth/userinfo.email",
+		"https://www.googleapis.com/auth/userinfo.profile",
+	}
+	switch level {
+	case GoogleAccessReadOnly:
+		return append(base, "https://www.googleapis.com/auth/drive.readonly")
+	default: // GoogleAccessFull and any unrecognized value default to full access
+		return append(base,
+			"https://www.googleapis.com/auth/drive",
+			"https://www.googleapis.com/auth/drive.file",
+		)
+	}
+}
+
+// deriveAccessLevel infers the GoogleAccessLevel from a list of stored scopes
+func deriveAccessLevel(scopes []string) GoogleAccessLevel {
+	for _, s := range scopes {
+		if s == "https://www.googleapis.com/auth/drive" {
+			return GoogleAccessFull
+		}
+	}
+	return GoogleAccessReadOnly
+}
+
 // GetGoogleOAuthURLGlobal handles POST /api/auth/google/connect
-// Returns OAuth URL for cluster-level Google authentication
+// Returns OAuth URL for cluster-level Google authentication.
+// Accepts optional JSON body: {"accessLevel": "read_only" | "full_access"}
 func GetGoogleOAuthURLGlobal(c *gin.Context) {
 	// Verify user has valid K8s token (follows RBAC pattern)
 	reqK8s, _ := GetK8sClientsForRequest(c)
@@ -850,7 +884,21 @@ func GetGoogleOAuthURLGlobal(c *gin.Context) {
 		return
 	}
 
-	// Get OAuth provider config
+	// Parse optional access level from request body
+	var reqBody struct {
+		AccessLevel GoogleAccessLevel `json:"accessLevel"`
+	}
+	// Ignore decode errors — body is optional; default to full access
+	_ = c.ShouldBindJSON(&reqBody)
+	if reqBody.AccessLevel == "" {
+		reqBody.AccessLevel = GoogleAccessFull
+	}
+	if reqBody.AccessLevel != GoogleAccessReadOnly && reqBody.AccessLevel != GoogleAccessFull {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid accessLevel: must be 'read_only' or 'full_access'"})
+		return
+	}
+
+	// Get OAuth provider config (used for client credentials)
 	provider, err := getOAuthProvider("google")
 	if err != nil {
 		log.Printf("Failed to get OAuth provider: %v", err)
@@ -858,12 +906,16 @@ func GetGoogleOAuthURLGlobal(c *gin.Context) {
 		return
 	}
 
+	// Use scopes for the requested access level instead of all provider scopes
+	scopes := googleScopesForAccessLevel(reqBody.AccessLevel)
+
 	// Build state with user context only (no session/project)
 	stateData := map[string]interface{}{
-		"provider":  "google",
-		"userID":    userID,
-		"timestamp": time.Now().Unix(),
-		"cluster":   true, // Flag to indicate cluster-level OAuth
+		"provider":    "google",
+		"userID":      userID,
+		"timestamp":   time.Now().Unix(),
+		"cluster":     true, // Flag to indicate cluster-level OAuth
+		"accessLevel": string(reqBody.AccessLevel),
 	}
 
 	// Serialize state to JSON
@@ -902,15 +954,16 @@ func GetGoogleOAuthURLGlobal(c *gin.Context) {
 		"https://accounts.google.com/o/oauth2/v2/auth?client_id=%s&redirect_uri=%s&response_type=code&scope=%s&access_type=offline&state=%s&prompt=consent",
 		provider.ClientID,
 		redirectURI,
-		strings.Join(provider.Scopes, " "),
+		strings.Join(scopes, " "),
 		stateToken,
 	)
 
-	log.Printf("Generated cluster-level Google OAuth URL for user %s", userID)
+	log.Printf("Generated cluster-level Google OAuth URL for user %s (accessLevel: %s)", userID, reqBody.AccessLevel)
 
 	c.JSON(http.StatusOK, gin.H{
-		"url":   authURL,
-		"state": stateToken,
+		"url":         authURL,
+		"state":       stateToken,
+		"accessLevel": string(reqBody.AccessLevel),
 	})
 }
 
@@ -922,7 +975,16 @@ func HandleGoogleOAuthCallback(ctx context.Context, code string, stateData map[s
 		return fmt.Errorf("missing userID in state")
 	}
 
-	// Get OAuth provider config
+	// Recover the access level that was requested during the connect flow
+	accessLevel := GoogleAccessLevel(func() string {
+		if v, ok := stateData["accessLevel"].(string); ok && v != "" {
+			return v
+		}
+		return string(GoogleAccessFull) // backward-compatible default
+	}())
+	scopes := googleScopesForAccessLevel(accessLevel)
+
+	// Get OAuth provider config (needed for client credentials only)
 	provider, err := getOAuthProvider("google")
 	if err != nil {
 		return fmt.Errorf("failed to get OAuth provider: %w", err)
@@ -948,13 +1010,13 @@ func HandleGoogleOAuthCallback(ctx context.Context, code string, stateData map[s
 		userEmail = "" // Non-fatal
 	}
 
-	// Store credentials in cluster-level ConfigMap
+	// Store credentials in cluster-level Secret
 	credentials := GoogleOAuthCredentials{
 		UserID:       userID,
 		Email:        userEmail,
 		AccessToken:  tokenData.AccessToken,
 		RefreshToken: tokenData.RefreshToken,
-		Scopes:       provider.Scopes,
+		Scopes:       scopes,
 		ExpiresAt:    time.Now().Add(time.Duration(tokenData.ExpiresIn) * time.Second),
 		UpdatedAt:    time.Now(),
 	}
@@ -963,7 +1025,7 @@ func HandleGoogleOAuthCallback(ctx context.Context, code string, stateData map[s
 		return fmt.Errorf("failed to store credentials: %w", err)
 	}
 
-	log.Printf("✓ Stored cluster-level Google OAuth credentials for user %s", userID)
+	log.Printf("✓ Stored cluster-level Google OAuth credentials for user %s (accessLevel: %s)", userID, accessLevel)
 	return nil
 }
 
@@ -1101,11 +1163,16 @@ func GetGoogleOAuthStatusGlobal(c *gin.Context) {
 	// Check if token is expired
 	isExpired := time.Now().After(creds.ExpiresAt)
 
+	// Derive the access level from stored scopes for the frontend
+	accessLevel := deriveAccessLevel(creds.Scopes)
+
 	c.JSON(http.StatusOK, gin.H{
-		"connected": true,
-		"email":     creds.Email,
-		"expiresAt": creds.ExpiresAt.Format(time.RFC3339),
-		"expired":   isExpired,
+		"connected":   true,
+		"email":       creds.Email,
+		"expiresAt":   creds.ExpiresAt.Format(time.RFC3339),
+		"expired":     isExpired,
+		"scopes":      creds.Scopes,
+		"accessLevel": string(accessLevel),
 	})
 }
 
