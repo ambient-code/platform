@@ -13,6 +13,9 @@ func registerRoutes(r *gin.Engine) {
 	{
 		// Public endpoints (no auth required)
 		api.GET("/workflows/ootb", handlers.ListOOTBWorkflows)
+
+		// Google Drive integration (granular permissions)
+		handlers.InitDriveIntegration(api)
 		// Global runner-types endpoint (no workspace overrides — for admin pages)
 		api.GET("/runner-types", handlers.GetRunnerTypesGlobal)
 
