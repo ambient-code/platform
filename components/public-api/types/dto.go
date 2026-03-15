@@ -2,14 +2,18 @@ package types
 
 // SessionResponse is the simplified session response for the public API
 type SessionResponse struct {
-	ID          string `json:"id"`
-	Status      string `json:"status"` // "pending", "running", "completed", "failed"
-	Task        string `json:"task"`
-	Model       string `json:"model,omitempty"`
-	CreatedAt   string `json:"createdAt"`
-	CompletedAt string `json:"completedAt,omitempty"`
-	Result      string `json:"result,omitempty"`
-	Error       string `json:"error,omitempty"`
+	ID          string            `json:"id"`
+	Status      string            `json:"status"` // "pending", "running", "completed", "failed"
+	Task        string            `json:"task"`
+	Model       string            `json:"model,omitempty"`
+	DisplayName string            `json:"displayName,omitempty"`
+	CreatedAt   string            `json:"createdAt"`
+	CompletedAt string            `json:"completedAt,omitempty"`
+	Result      string            `json:"result,omitempty"`
+	Error       string            `json:"error,omitempty"`
+	Repos       []Repo            `json:"repos,omitempty"`
+	Labels      map[string]string `json:"labels,omitempty"`
+	Timeout     *int              `json:"timeout,omitempty"`
 }
 
 // SessionListResponse is the response for listing sessions
@@ -20,9 +24,21 @@ type SessionListResponse struct {
 
 // CreateSessionRequest is the request body for creating a session
 type CreateSessionRequest struct {
-	Task  string `json:"task" binding:"required"`
-	Model string `json:"model,omitempty"`
-	Repos []Repo `json:"repos,omitempty"`
+	Task        string            `json:"task" binding:"required"`
+	Model       string            `json:"model,omitempty"`
+	DisplayName string            `json:"displayName,omitempty"`
+	Repos       []Repo            `json:"repos,omitempty"`
+	Labels      map[string]string `json:"labels,omitempty"`
+	Timeout     *int              `json:"timeout,omitempty"`
+}
+
+// PatchSessionRequest is the request body for patching a session
+type PatchSessionRequest struct {
+	Stopped      *bool             `json:"stopped,omitempty"`
+	DisplayName  *string           `json:"displayName,omitempty"`
+	Timeout      *int              `json:"timeout,omitempty"`
+	Labels       map[string]string `json:"labels,omitempty"`
+	RemoveLabels []string          `json:"removeLabels,omitempty"`
 }
 
 // Repo represents a repository configuration

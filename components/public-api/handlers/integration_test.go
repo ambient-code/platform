@@ -26,7 +26,11 @@ func setupTestRouter() *gin.Engine {
 		v1.GET("/sessions", ListSessions)
 		v1.POST("/sessions", CreateSession)
 		v1.GET("/sessions/:id", GetSession)
+		v1.PATCH("/sessions/:id", PatchSession)
 		v1.DELETE("/sessions/:id", DeleteSession)
+		v1.GET("/sessions/:id/logs", GetSessionLogs)
+		v1.GET("/sessions/:id/transcript", GetSessionTranscript)
+		v1.GET("/sessions/:id/metrics", GetSessionMetrics)
 	}
 
 	return r
@@ -108,9 +112,9 @@ func TestE2E_CreateSession(t *testing.T) {
 		t.Errorf("Expected status 201, got %d: %s", w.Code, w.Body.String())
 	}
 
-	// Verify request body was transformed correctly
-	if !strings.Contains(requestBody, "prompt") {
-		t.Errorf("Expected request body to contain 'prompt', got %s", requestBody)
+	// Verify request body was transformed correctly (task maps to initialPrompt for backend)
+	if !strings.Contains(requestBody, "initialPrompt") {
+		t.Errorf("Expected request body to contain 'initialPrompt', got %s", requestBody)
 	}
 }
 

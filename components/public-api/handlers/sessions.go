@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 
 	"ambient-code-public-api/types"
 
@@ -20,6 +21,12 @@ func ListSessions(c *gin.Context) {
 		return
 	}
 	path := fmt.Sprintf("/api/projects/%s/agentic-sessions", project)
+
+	// Forward query parameters (e.g., labelSelector) verbatim to the backend.
+	// The backend enforces its own validation and RBAC via the user's token.
+	if rawQuery := c.Request.URL.RawQuery; rawQuery != "" {
+		path = path + "?" + rawQuery
+	}
 
 	resp, err := ProxyRequest(c, http.MethodGet, path, nil)
 	if err != nil {
@@ -123,20 +130,42 @@ func CreateSession(c *gin.Context) {
 
 	// Transform to backend format
 	backendReq := map[string]interface{}{
-		"prompt": req.Task,
+		"initialPrompt": req.Task,
 	}
 	if req.Model != "" {
-		backendReq["model"] = req.Model
+		backendReq["llmSettings"] = map[string]interface{}{
+			"model": req.Model,
+		}
+	}
+	if req.DisplayName != "" {
+		backendReq["displayName"] = req.DisplayName
+	}
+	if req.Timeout != nil {
+		backendReq["timeout"] = *req.Timeout
+	}
+	if len(req.Labels) > 0 {
+		keys := make([]string, 0, len(req.Labels))
+		for k := range req.Labels {
+			keys = append(keys, k)
+		}
+		if key, prefix, ok := validateLabelKeys(keys); !ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("label key %q uses reserved prefix %q", key, prefix)})
+			return
+		}
+		// Send as annotations (not labels) so the write/read paths are symmetric.
+		// The read path extracts user labels from metadata.annotations.
+		backendReq["annotations"] = req.Labels
 	}
 	if len(req.Repos) > 0 {
 		repos := make([]map[string]interface{}, len(req.Repos))
 		for i, r := range req.Repos {
-			repos[i] = map[string]interface{}{
-				"input": map[string]interface{}{
-					"url":    r.URL,
-					"branch": r.Branch,
-				},
+			repo := map[string]interface{}{
+				"url": r.URL,
 			}
+			if r.Branch != "" {
+				repo["branch"] = r.Branch
+			}
+			repos[i] = repo
 		}
 		backendReq["repos"] = repos
 	}
@@ -247,6 +276,12 @@ func transformSession(data map[string]interface{}) types.SessionResponse {
 		if creationTimestamp, ok := metadata["creationTimestamp"].(string); ok {
 			session.CreatedAt = creationTimestamp
 		}
+		if annotationsRaw, ok := metadata["annotations"].(map[string]interface{}); ok {
+			labels := filterUserLabels(annotationsRaw)
+			if len(labels) > 0 {
+				session.Labels = labels
+			}
+		}
 	}
 
 	// If no metadata, try top-level name (list response format)
@@ -258,11 +293,29 @@ func transformSession(data map[string]interface{}) types.SessionResponse {
 
 	// Extract spec
 	if spec, ok := data["spec"].(map[string]interface{}); ok {
-		if prompt, ok := spec["prompt"].(string); ok {
+		if prompt, ok := spec["initialPrompt"].(string); ok {
+			session.Task = prompt
+		}
+		if prompt, ok := spec["prompt"].(string); ok && session.Task == "" {
 			session.Task = prompt
 		}
 		if model, ok := spec["model"].(string); ok {
 			session.Model = model
+		}
+		if llm, ok := spec["llmSettings"].(map[string]interface{}); ok {
+			if model, ok := llm["model"].(string); ok && session.Model == "" {
+				session.Model = model
+			}
+		}
+		if displayName, ok := spec["displayName"].(string); ok {
+			session.DisplayName = displayName
+		}
+		if timeout, ok := spec["timeout"].(float64); ok {
+			t := int(timeout)
+			session.Timeout = &t
+		}
+		if reposRaw, ok := spec["repos"].([]interface{}); ok {
+			session.Repos = extractRepos(reposRaw)
 		}
 	}
 
@@ -288,6 +341,80 @@ func transformSession(data map[string]interface{}) types.SessionResponse {
 	}
 
 	return session
+}
+
+// internalLabelPrefixes are K8s/system label prefixes that should not be exposed to users
+var internalLabelPrefixes = []string{
+	"app.kubernetes.io/",
+	"kubectl.kubernetes.io/",
+	"meta.kubernetes.io/",
+	"vteam.ambient-code/",
+	"ambient-code.io/",
+}
+
+// validateLabelKeys checks that no label keys use reserved internal prefixes
+func validateLabelKeys(keys []string) (string, string, bool) {
+	for _, k := range keys {
+		for _, prefix := range internalLabelPrefixes {
+			if strings.HasPrefix(k, prefix) {
+				return k, prefix, false
+			}
+		}
+	}
+	return "", "", true
+}
+
+// filterUserLabels returns only user-defined labels, stripping internal/system labels
+func filterUserLabels(labelsRaw map[string]interface{}) map[string]string {
+	labels := make(map[string]string)
+	for k, v := range labelsRaw {
+		internal := false
+		for _, prefix := range internalLabelPrefixes {
+			if strings.HasPrefix(k, prefix) {
+				internal = true
+				break
+			}
+		}
+		if !internal {
+			if s, ok := v.(string); ok {
+				labels[k] = s
+			}
+		}
+	}
+	return labels
+}
+
+// extractRepos converts the repos array from the backend response to typed Repo objects
+func extractRepos(reposRaw []interface{}) []types.Repo {
+	repos := make([]types.Repo, 0, len(reposRaw))
+	for _, r := range reposRaw {
+		repoMap, ok := r.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		repo := types.Repo{}
+
+		// Handle both flat format (url/branch at top level) and nested format (input.url/input.branch)
+		if url, ok := repoMap["url"].(string); ok {
+			repo.URL = url
+		}
+		if branch, ok := repoMap["branch"].(string); ok {
+			repo.Branch = branch
+		}
+		if input, ok := repoMap["input"].(map[string]interface{}); ok {
+			if url, ok := input["url"].(string); ok {
+				repo.URL = url
+			}
+			if branch, ok := input["branch"].(string); ok {
+				repo.Branch = branch
+			}
+		}
+		if repo.URL != "" {
+			repos = append(repos, repo)
+		}
+	}
+	return repos
 }
 
 // normalizePhase converts K8s phase to simplified status

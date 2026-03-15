@@ -9,6 +9,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func intPtr(v int) *int { return &v }
+
 func TestTransformSession(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -21,10 +23,24 @@ func TestTransformSession(t *testing.T) {
 				"metadata": map[string]interface{}{
 					"name":              "session-123",
 					"creationTimestamp": "2026-01-29T10:00:00Z",
+					"annotations": map[string]interface{}{
+						"env":                   "staging",
+						"app.kubernetes.io/foo": "bar", // should be filtered
+					},
 				},
 				"spec": map[string]interface{}{
-					"prompt": "Fix the bug",
-					"model":  "claude-sonnet-4",
+					"initialPrompt": "Fix the bug",
+					"displayName":   "Bug Fix Session",
+					"timeout":       float64(600),
+					"llmSettings": map[string]interface{}{
+						"model": "claude-sonnet-4",
+					},
+					"repos": []interface{}{
+						map[string]interface{}{
+							"url":    "https://github.com/org/repo",
+							"branch": "main",
+						},
+					},
 				},
 				"status": map[string]interface{}{
 					"phase":          "Running",
@@ -32,11 +48,15 @@ func TestTransformSession(t *testing.T) {
 				},
 			},
 			expected: types.SessionResponse{
-				ID:        "session-123",
-				Status:    "running",
-				Task:      "Fix the bug",
-				Model:     "claude-sonnet-4",
-				CreatedAt: "2026-01-29T10:00:00Z",
+				ID:          "session-123",
+				Status:      "running",
+				Task:        "Fix the bug",
+				Model:       "claude-sonnet-4",
+				DisplayName: "Bug Fix Session",
+				Timeout:     intPtr(600),
+				CreatedAt:   "2026-01-29T10:00:00Z",
+				Repos:       []types.Repo{{URL: "https://github.com/org/repo", Branch: "main"}},
+				Labels:      map[string]string{"env": "staging"},
 			},
 		},
 		{
@@ -129,6 +149,9 @@ func TestTransformSession(t *testing.T) {
 			if result.Model != tt.expected.Model {
 				t.Errorf("Model = %q, want %q", result.Model, tt.expected.Model)
 			}
+			if result.DisplayName != tt.expected.DisplayName {
+				t.Errorf("DisplayName = %q, want %q", result.DisplayName, tt.expected.DisplayName)
+			}
 			if result.CreatedAt != tt.expected.CreatedAt {
 				t.Errorf("CreatedAt = %q, want %q", result.CreatedAt, tt.expected.CreatedAt)
 			}
@@ -140,6 +163,31 @@ func TestTransformSession(t *testing.T) {
 			}
 			if result.Error != tt.expected.Error {
 				t.Errorf("Error = %q, want %q", result.Error, tt.expected.Error)
+			}
+			if (result.Timeout == nil) != (tt.expected.Timeout == nil) || (result.Timeout != nil && tt.expected.Timeout != nil && *result.Timeout != *tt.expected.Timeout) {
+				t.Errorf("Timeout = %v, want %v", result.Timeout, tt.expected.Timeout)
+			}
+			if len(result.Repos) != len(tt.expected.Repos) {
+				t.Errorf("Repos len = %d, want %d", len(result.Repos), len(tt.expected.Repos))
+			} else {
+				for i, r := range result.Repos {
+					if r.URL != tt.expected.Repos[i].URL {
+						t.Errorf("Repos[%d].URL = %q, want %q", i, r.URL, tt.expected.Repos[i].URL)
+					}
+					if r.Branch != tt.expected.Repos[i].Branch {
+						t.Errorf("Repos[%d].Branch = %q, want %q", i, r.Branch, tt.expected.Repos[i].Branch)
+					}
+				}
+			}
+			if len(tt.expected.Labels) > 0 {
+				if len(result.Labels) != len(tt.expected.Labels) {
+					t.Errorf("Labels count = %d, want %d", len(result.Labels), len(tt.expected.Labels))
+				}
+				for k, v := range tt.expected.Labels {
+					if result.Labels[k] != v {
+						t.Errorf("Labels[%q] = %q, want %q", k, result.Labels[k], v)
+					}
+				}
 			}
 		})
 	}
@@ -238,6 +286,59 @@ func TestForwardErrorResponse(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestValidateLabelKeys(t *testing.T) {
+	tests := []struct {
+		name       string
+		keys       []string
+		wantOK     bool
+		wantKey    string
+		wantPrefix string
+	}{
+		{"valid user keys", []string{"env", "team", "custom-label"}, true, "", ""},
+		{"app.kubernetes.io prefix rejected", []string{"app.kubernetes.io/name"}, false, "app.kubernetes.io/name", "app.kubernetes.io/"},
+		{"vteam.ambient-code prefix rejected", []string{"vteam.ambient-code/session"}, false, "vteam.ambient-code/session", "vteam.ambient-code/"},
+		{"ambient-code.io prefix rejected", []string{"ambient-code.io/runner-sa"}, false, "ambient-code.io/runner-sa", "ambient-code.io/"},
+		{"mixed valid and reserved", []string{"env", "ambient-code.io/evil"}, false, "ambient-code.io/evil", "ambient-code.io/"},
+		{"empty keys list", []string{}, true, "", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			key, prefix, ok := validateLabelKeys(tt.keys)
+			if ok != tt.wantOK {
+				t.Errorf("validateLabelKeys() ok = %v, want %v", ok, tt.wantOK)
+			}
+			if key != tt.wantKey {
+				t.Errorf("validateLabelKeys() key = %q, want %q", key, tt.wantKey)
+			}
+			if prefix != tt.wantPrefix {
+				t.Errorf("validateLabelKeys() prefix = %q, want %q", prefix, tt.wantPrefix)
+			}
+		})
+	}
+}
+
+func TestFilterUserLabels_EmptyValues(t *testing.T) {
+	input := map[string]interface{}{
+		"tag":                   "",
+		"env":                   "prod",
+		"app.kubernetes.io/foo": "filtered",
+	}
+	result := filterUserLabels(input)
+
+	if val, exists := result["tag"]; !exists {
+		t.Error("expected empty-string label key to be present in result")
+	} else if val != "" {
+		t.Errorf("expected empty-string label value, got %q", val)
+	}
+	if result["env"] != "prod" {
+		t.Errorf("expected env=prod, got %q", result["env"])
+	}
+	if _, exists := result["app.kubernetes.io/foo"]; exists {
+		t.Error("expected internal label to be filtered out")
 	}
 }
 

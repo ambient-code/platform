@@ -91,11 +91,17 @@ func main() {
 	v1 := r.Group("/v1")
 	v1.Use(handlers.AuthMiddleware())
 	{
-		// Sessions
+		// Sessions CRUD
 		v1.GET("/sessions", handlers.ListSessions)
 		v1.POST("/sessions", handlers.CreateSession)
 		v1.GET("/sessions/:id", handlers.GetSession)
+		v1.PATCH("/sessions/:id", handlers.PatchSession)
 		v1.DELETE("/sessions/:id", handlers.DeleteSession)
+
+		// Session sub-resources
+		v1.GET("/sessions/:id/logs", handlers.GetSessionLogs)
+		v1.GET("/sessions/:id/transcript", handlers.GetSessionTranscript)
+		v1.GET("/sessions/:id/metrics", handlers.GetSessionMetrics)
 	}
 
 	// Get port from environment or default to 8081

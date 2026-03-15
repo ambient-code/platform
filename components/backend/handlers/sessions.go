@@ -1106,7 +1106,11 @@ func PatchSession(c *gin.Context) {
 				anns = map[string]interface{}{}
 			}
 			for k, v := range annsPatch {
-				anns[k] = v
+				if v == nil {
+					delete(anns, k)
+				} else {
+					anns[k] = v
+				}
 			}
 			_ = unstructured.SetNestedMap(metadata, anns, "annotations")
 			_ = unstructured.SetNestedMap(item.Object, metadata, "metadata")
