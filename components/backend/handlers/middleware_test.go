@@ -269,6 +269,9 @@ var _ = Describe("Middleware Handlers", Label(test_constants.LabelUnit, test_con
 	Describe("ExtractServiceAccountFromAuth", func() {
 		It("Should extract service account from X-Remote-User header", func() {
 			context := httpUtils.CreateTestGinContext("GET", "/api/projects/test-project/sessions", nil)
+
+			// ExtractServiceAccountFromAuth reads the X-Remote-User header
+			// (set by OpenShift OAuth proxy) to identify service accounts
 			context.Request.Header.Set("X-Remote-User", "system:serviceaccount:test-project:test-sa")
 
 			namespace, serviceAccount, found := ExtractServiceAccountFromAuth(context)
