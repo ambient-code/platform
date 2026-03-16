@@ -7,6 +7,7 @@ enabling Gemini-powered agents to work with any AG-UI compatible frontend.
 import json
 import logging
 import uuid
+from datetime import datetime
 from typing import AsyncIterator, Optional
 
 from ag_ui.core import (
@@ -38,6 +39,15 @@ from .types import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _iso_to_ms(iso_timestamp: str) -> Optional[int]:
+    """Convert an ISO 8601 timestamp string to epoch milliseconds."""
+    try:
+        dt = datetime.fromisoformat(iso_timestamp.replace("Z", "+00:00"))
+        return int(dt.timestamp() * 1000)
+    except (ValueError, AttributeError):
+        return None
 
 
 def _summarize_event(event: object) -> str:
@@ -88,6 +98,7 @@ class GeminiCLIAdapter:
         text_message_open = False
         current_message_id: Optional[str] = None
         accumulated_text = ""
+        message_timestamp_ms: Optional[int] = None
 
         # Tool tracking
         current_tool_call_id: Optional[str] = None
@@ -141,10 +152,12 @@ class GeminiCLIAdapter:
                         # First text chunk: open a text message
                         if not text_message_open:
                             current_message_id = str(uuid.uuid4())
+                            message_timestamp_ms = _iso_to_ms(event.timestamp)
                             yield TextMessageStartEvent(
                                 type=EventType.TEXT_MESSAGE_START,
                                 message_id=current_message_id,
                                 role="assistant",
+                                timestamp=message_timestamp_ms,
                             )
                             text_message_open = True
                             accumulated_text = ""
@@ -163,10 +176,12 @@ class GeminiCLIAdapter:
                     if event.role == "assistant" and not event.delta:
                         if not text_message_open:
                             current_message_id = str(uuid.uuid4())
+                            message_timestamp_ms = _iso_to_ms(event.timestamp)
                             yield TextMessageStartEvent(
                                 type=EventType.TEXT_MESSAGE_START,
                                 message_id=current_message_id,
                                 role="assistant",
+                                timestamp=message_timestamp_ms,
                             )
                             text_message_open = True
                             accumulated_text = ""
@@ -193,10 +208,12 @@ class GeminiCLIAdapter:
                                     id=current_message_id,
                                     role="assistant",
                                     content=accumulated_text,
+                                    timestamp=message_timestamp_ms,
                                 )
                             )
                         current_message_id = None
                         accumulated_text = ""
+                        message_timestamp_ms = None
                         continue
 
                 # ── tool_use ──
@@ -213,11 +230,13 @@ class GeminiCLIAdapter:
                                     id=current_message_id,
                                     role="assistant",
                                     content=accumulated_text,
+                                    timestamp=message_timestamp_ms,
                                 )
                             )
                         text_message_open = False
                         current_message_id = None
                         accumulated_text = ""
+                        message_timestamp_ms = None
 
                     current_tool_call_id = event.tool_id or str(uuid.uuid4())
                     yield ToolCallStartEvent(
@@ -297,11 +316,13 @@ class GeminiCLIAdapter:
                                     id=current_message_id,
                                     role="assistant",
                                     content=accumulated_text,
+                                    timestamp=message_timestamp_ms,
                                 )
                             )
                         text_message_open = False
                         current_message_id = None
                         accumulated_text = ""
+                        message_timestamp_ms = None
 
                     if event.status == "error":
                         error_msg = "Gemini CLI run failed"

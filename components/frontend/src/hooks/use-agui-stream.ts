@@ -223,7 +223,7 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
   // Send a message to start/continue the conversation
   // AG-UI server pattern: POST returns SSE stream directly
   const sendMessage = useCallback(
-    async (content: string) => {
+    async (content: string, metadata?: Record<string, unknown>) => {
       // Send to backend via run endpoint - this returns an SSE stream
       const runUrl = `/api/projects/${encodeURIComponent(projectName)}/agentic-sessions/${encodeURIComponent(sessionName)}/agui/run`
 
@@ -231,6 +231,7 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
         id: crypto.randomUUID(),
         role: 'user' as const,
         content,
+        ...(metadata ? { metadata } : {}),
       }
 
       // Add user message to state immediately for instant UI feedback.

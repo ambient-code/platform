@@ -29,6 +29,10 @@ export type AgenticSessionPhase =
   | 'Completed'
   | 'Failed';
 
+// Subset of agent status values that can be persisted in the CR status field
+// (completed/failed are derived at query time from phase, not stored)
+export type StoredAgentStatus = "working" | "idle" | "waiting_input";
+
 export type LLMSettings = {
   model: string;
   temperature: number;
@@ -91,6 +95,7 @@ export type AgenticSessionStatus = {
   startTime?: string;
   completionTime?: string;
   lastActivityTime?: string;
+  agentStatus?: StoredAgentStatus;
   stoppedReason?: "user" | "inactivity";
   jobName?: string;
   runnerPodName?: string;

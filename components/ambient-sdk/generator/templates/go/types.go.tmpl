@@ -44,8 +44,7 @@ func (b *{{$.Resource.Name}}Builder) {{.GoName}}(v {{.GoType}}) *{{$.Resource.Na
 	b.resource.{{.GoName}} = v
 	return b
 }
-{{end}}{{end}}
-
+{{end}}{{- end}}
 func (b *{{.Resource.Name}}Builder) Build() (*{{.Resource.Name}}, error) {
 {{- range .Resource.Fields}}
 	{{- if .Required}}
@@ -78,7 +77,6 @@ func (b *{{$.Resource.Name}}PatchBuilder) {{.GoName}}(v {{.GoType}}) *{{$.Resour
 	return b
 }
 {{end}}
-
 func (b *{{.Resource.Name}}PatchBuilder) Build() map[string]any {
 	return b.patch
 }
@@ -97,7 +95,6 @@ func (b *{{$.Resource.Name}}StatusPatchBuilder) {{.GoName}}(v {{.GoType}}) *{{$.
 	return b
 }
 {{end}}
-
 func (b *{{.Resource.Name}}StatusPatchBuilder) Build() map[string]any {
 	return b.patch
 }

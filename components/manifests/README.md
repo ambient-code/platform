@@ -2,47 +2,13 @@
 
 This directory contains Kubernetes/OpenShift manifests organized using **Kustomize overlays** to eliminate duplication across environments.
 
-## Directory Structure
+## Layout
 
-```
-manifests/
-├── base/                          # Common resources shared across all environments
-│   ├── backend-deployment.yaml
-│   ├── frontend-deployment.yaml
-│   ├── operator-deployment.yaml
-│   ├── workspace-pvc.yaml
-│   ├── namespace.yaml
-│   ├── crds/                      # Custom Resource Definitions
-│   └── rbac/                      # Role-Based Access Control
-│
-├── overlays/                      # Environment-specific configurations
-│   ├── production/                # OpenShift production environment
-│   │   ├── kustomization.yaml
-│   │   ├── route.yaml
-│   │   ├── backend-route.yaml
-│   │   ├── frontend-oauth-*.yaml  # OAuth proxy patches
-│   │   ├── github-app-secret.yaml
-│   │   └── namespace-patch.yaml
-│   │
-│   ├── e2e/                       # Kind/K8s testing environment
-│   │   ├── kustomization.yaml
-│   │   ├── *-ingress.yaml        # K8s Ingress resources
-│   │   ├── test-user.yaml        # Test user with cluster-admin
-│   │   ├── secrets.yaml
-│   │   └── *-patch.yaml          # Environment-specific patches
-│   │
-│   └── local-dev/                 # CRC local development environment
-│       ├── kustomization.yaml
-│       ├── build-configs.yaml    # OpenShift BuildConfigs
-│       ├── dev-users.yaml        # Local development users
-│       ├── frontend-auth.yaml
-│       ├── *-route.yaml
-│       └── *-patch.yaml          # Local dev patches
-│
-├── deploy.sh                      # Production deployment script
-├── env.example                    # Example environment variables
-└── README.md                      # This file
-```
+This directory is organized into the following top-level directories:
+
+- **`base/`** — Common resources (deployments, services, CRDs, RBAC) shared across all environments
+- **`overlays/`** — Environment-specific Kustomize overlays (e.g. `production`, `e2e`, `kind`, `kind-local`, `local-dev`)
+- **`observability/`** — Monitoring and observability resources
 
 ## Environment Differences
 
@@ -196,15 +162,6 @@ NAMESPACE=my-namespace IMAGE_TAG=v1.0 ./deploy.sh
 ✅ **Easy to Maintain**: Changes to base apply to all environments
 ✅ **Clear Differences**: Overlays show exactly what's unique per environment
 ✅ **Type-Safe**: Kustomize validates patches against base resources
-
-## Migration Notes
-
-This structure replaces the previous duplicated manifests:
-- ~~`components/manifests/*.yaml`~~ → `base/` + `overlays/production/`
-- ~~`e2e/manifests/*.yaml`~~ → `overlays/e2e/`
-- ~~`components/scripts/local-dev/manifests/*.yaml`~~ → `overlays/local-dev/`
-
-Old manifest directories have been preserved for reference but are no longer used by deployment scripts.
 
 ## Troubleshooting
 

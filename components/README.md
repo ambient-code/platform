@@ -39,15 +39,12 @@ components/
 
 ### Local Development (Recommended)
 ```bash
-# Single command to start everything (minikube)
-make local-up
-
-# Or use Kind (recommended for most development)
+# Single command to start everything
 make kind-up
 ```
 
 **Prerequisites:**
-- Minikube (`brew install minikube`) or Kind (`brew install kind`) + Docker
+- Kind (`brew install kind`) + Docker or Podman
 
 **What you get:**
 - ✅ Complete local development environment

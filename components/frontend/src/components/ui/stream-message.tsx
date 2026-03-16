@@ -4,6 +4,7 @@ import React from "react";
 import { MessageObject, ToolUseMessages, HierarchicalToolMessage } from "@/types/agentic-session";
 import { LoadingDots, Message } from "@/components/ui/message";
 import { ToolMessage } from "@/components/ui/tool-message";
+import { AskUserQuestionMessage } from "@/components/session/ask-user-question";
 import { ThinkingMessage } from "@/components/ui/thinking-message";
 import { SystemMessage } from "@/components/ui/system-message";
 import { Button } from "@/components/ui/button";
@@ -12,10 +13,16 @@ import { FeedbackButtons } from "@/components/feedback";
 export type StreamMessageProps = {
   message: (MessageObject | ToolUseMessages | HierarchicalToolMessage) & { streaming?: boolean };
   onGoToResults?: () => void;
+  onSubmitAnswer?: (formattedAnswer: string) => Promise<void>;
   plainCard?: boolean;
   isNewest?: boolean;
   agentName?: string;
 };
+
+function isAskUserQuestionTool(name: string): boolean {
+  const normalized = name.toLowerCase().replace(/[^a-z]/g, "");
+  return normalized === "askuserquestion";
+}
 
 const getRandomAgentMessage = () => {
   const messages = [
@@ -33,11 +40,24 @@ const getRandomAgentMessage = () => {
   return messages[Math.floor(Math.random() * messages.length)];
 };
 
-export const StreamMessage: React.FC<StreamMessageProps> = ({ message, onGoToResults, plainCard=false, isNewest=false, agentName }) => {
+export const StreamMessage: React.FC<StreamMessageProps> = ({ message, onGoToResults, onSubmitAnswer, plainCard=false, isNewest=false, agentName }) => {
   const isToolUsePair = (m: MessageObject | ToolUseMessages | HierarchicalToolMessage): m is ToolUseMessages | HierarchicalToolMessage =>
     m != null && typeof m === "object" && "toolUseBlock" in m && "resultBlock" in m;
 
   if (isToolUsePair(message)) {
+    // Render AskUserQuestion with a custom interactive component
+    if (isAskUserQuestionTool(message.toolUseBlock.name)) {
+      return (
+        <AskUserQuestionMessage
+          toolUseBlock={message.toolUseBlock}
+          resultBlock={message.resultBlock}
+          timestamp={message.timestamp}
+          onSubmitAnswer={onSubmitAnswer}
+          isNewest={isNewest}
+        />
+      );
+    }
+
     // Check if this is a hierarchical message with children
     const hierarchical = message as HierarchicalToolMessage;
     return (

@@ -42,31 +42,10 @@ export type DirectoryRemote = {
   branch: string;
 };
 
-export type WorkflowConfig = {
-  id: string;
-  name: string;
-  description: string;
-  gitUrl: string;
-  branch: string;
-  path?: string;
-  enabled: boolean;
-};
-
-export type WorkflowCommand = {
-  id: string;
-  name: string;
-  slashCommand: string;
-  description?: string;
-  icon?: string;
-};
-
-export type WorkflowAgent = {
-  id: string;
-  name: string;
-  description?: string;
-};
-
-export type WorkflowMetadata = {
-  commands: Array<WorkflowCommand>;
-  agents: Array<WorkflowAgent>;
-};
+export type {
+  WorkflowConfig,
+  WorkflowCommand,
+  WorkflowAgent,
+  WorkflowMetadata,
+  WorkflowSelection,
+} from "@/types/workflow";

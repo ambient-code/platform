@@ -37,8 +37,7 @@ go run .
 **Recommended: Use integrated local development environment:**
 ```bash
 # From repository root - single command setup
-make local-up    # minikube
-# Or: make kind-up  # kind (recommended)
+make kind-up
 # Access: http://localhost:8080
 ```
 

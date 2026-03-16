@@ -214,7 +214,9 @@ def _build_system_prompt(cwd_path: str) -> str:
     if active_workflow_url:
         ambient_config = load_ambient_config(cwd_path) or {}
     if ambient_config.get("systemPrompt"):
-        sections.append(f"## Workflow Instructions\n\n{ambient_config['systemPrompt']}\n")
+        sections.append(
+            f"## Workflow Instructions\n\n{ambient_config['systemPrompt']}\n"
+        )
 
     # ---- Rubric instructions (when rubric config exists) ----
     rubric_config = ambient_config.get("rubric", {})

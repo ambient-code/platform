@@ -39,6 +39,9 @@ func GetIntegrationsStatus(c *gin.Context) {
 	// GitLab status
 	response["gitlab"] = getGitLabStatusForUser(ctx, userID)
 
+	// MCP server credentials status
+	response["mcpServers"] = getMCPServerStatusForUser(ctx, userID)
+
 	c.JSON(http.StatusOK, response)
 }
 

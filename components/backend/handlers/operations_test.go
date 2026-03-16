@@ -40,7 +40,7 @@ var _ = Describe("Git Operations", Label(test_constants.LabelUnit, test_constant
 				// Act
 				k8sClient := k8sUtils.K8sClient
 				clientset, _ := k8sClient.(*kubernetes.Clientset)
-				token, err := git.GetGitHubToken(ctx, clientset, k8sUtils.DynamicClient, projectName, userID)
+				token, _, err := git.GetGitHubToken(ctx, clientset, k8sUtils.DynamicClient, projectName, userID)
 
 				// Assert - function should return error for missing/invalid setup
 				Expect(err).To(HaveOccurred(), "Should return error for missing token/secret")

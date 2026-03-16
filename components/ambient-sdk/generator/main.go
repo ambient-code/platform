@@ -341,13 +341,15 @@ func loadTemplate(path string) (*template.Template, error) {
 }
 
 func executeTemplate(tmpl *template.Template, outPath string, data interface{}) error {
-	f, err := os.Create(outPath)
-	if err != nil {
+	var buf strings.Builder
+	if err := tmpl.Execute(&buf, data); err != nil {
 		return err
 	}
-	defer func() { _ = f.Close() }()
 
-	return tmpl.Execute(f, data)
+	// Ensure file ends with exactly one newline (match pre-commit end-of-file-fixer)
+	content := strings.TrimRight(buf.String(), "\n") + "\n"
+
+	return os.WriteFile(outPath, []byte(content), 0644)
 }
 
 func computeSpecHash(specPath string) (string, error) {

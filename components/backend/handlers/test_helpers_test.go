@@ -25,6 +25,7 @@ func SetupHandlerDependencies(k8sUtils *test_utils.K8sTestUtils) {
 	DynamicClientProjects = k8sUtils.DynamicClient
 	K8sClientMw = k8sUtils.K8sClient
 	K8sClient = k8sUtils.K8sClient
+	K8sClientScheduled = k8sUtils.K8sClient
 
 	// Common GVR helpers used by sessions handlers
 	GetAgenticSessionV1Alpha1Resource = func() schema.GroupVersionResource {

@@ -11,7 +11,7 @@ import { useConnectJira, useDisconnectJira } from '@/services/queries/use-jira'
 import { useCurrentUser } from '@/services/queries/use-auth'
 
 // Default Jira URL for Red Hat (can be changed by user)
-const DEFAULT_JIRA_URL = 'https://issues.redhat.com'
+const DEFAULT_JIRA_URL = 'https://redhat.atlassian.net'
 
 type Props = {
   status?: {
@@ -46,7 +46,7 @@ export function JiraConnectionCard({ status, onRefresh }: Props) {
         setUsername(currentUser.email)
       }
     }
-  }, [showForm, currentUser?.email])
+  }, [showForm, currentUser?.email, url, username])
 
   const handleConnect = async () => {
     if (!url || !username || !apiToken) {
@@ -144,7 +144,7 @@ export function JiraConnectionCard({ status, onRefresh }: Props) {
               <Input
                 id="jira-url"
                 type="url"
-                placeholder="https://issues.redhat.com"
+                placeholder="https://redhat.atlassian.net"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 disabled={connectMutation.isPending}

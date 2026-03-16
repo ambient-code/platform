@@ -109,9 +109,10 @@ func extractProjectFromToken(token string) string {
 // 1. PURPOSE: Used exclusively for routing (extracting project namespace from ServiceAccount tokens)
 // 2. NO TRUST: The extracted value is NEVER used for authorization decisions
 // 3. BACKEND VALIDATES: The Go backend performs FULL token validation including:
-//    - Signature verification against K8s API server public keys
-//    - Expiration checking
-//    - RBAC enforcement via SelfSubjectAccessReview
+//   - Signature verification against K8s API server public keys
+//   - Expiration checking
+//   - RBAC enforcement via SelfSubjectAccessReview
+//
 // 4. FAIL-SAFE: If the token is invalid/forged, the backend rejects it with 401/403
 //
 // DO NOT use this function's output for:

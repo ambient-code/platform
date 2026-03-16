@@ -11,7 +11,7 @@ This directory contains internal developer documentation for the Ambient Code Pl
 | `api/` | Internal API reference notes (GitLab endpoints) |
 | `architecture/` | Architecture overviews, Mermaid diagrams, and screenshots |
 | `design/` | Technical design documents (session status, reconciliation, runner contract) |
-| `developer/` | Local development setup guides (Kind, CRC, Minikube, Hybrid) |
+| `developer/` | Local development setup guides (Kind, CRC, Hybrid) |
 | `observability/` | Langfuse observability and operator metrics documentation |
 | `proposals/` | Technical proposals (Public REST API) |
 | `testing/` | Testing guides and E2E test patterns |

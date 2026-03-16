@@ -439,10 +439,13 @@ var _ = Describe("Sessions Handler", Label(test_constants.LabelUnit, test_consta
 
 		Context("When API keys are not configured", func() {
 			It("Should block session creation when ambient-runner-secrets is missing (Vertex disabled)", func() {
-				// Arrange - ensure Vertex is disabled
+				// Arrange - ensure Vertex is disabled (both current and deprecated env vars)
 				originalVertexValue := os.Getenv("USE_VERTEX")
+				originalClaudeVertexValue := os.Getenv("CLAUDE_CODE_USE_VERTEX")
 				os.Setenv("USE_VERTEX", "0")
+				os.Unsetenv("CLAUDE_CODE_USE_VERTEX")
 				defer os.Setenv("USE_VERTEX", originalVertexValue)
+				defer os.Setenv("CLAUDE_CODE_USE_VERTEX", originalClaudeVertexValue)
 
 				// Ensure ambient-runner-secrets does NOT exist in test namespace
 				_ = k8sUtils.K8sClient.CoreV1().Secrets(testNamespace).Delete(ctx, "ambient-runner-secrets", v1.DeleteOptions{})
@@ -478,10 +481,13 @@ var _ = Describe("Sessions Handler", Label(test_constants.LabelUnit, test_consta
 			})
 
 			It("Should allow session creation when ambient-runner-secrets exists (Vertex disabled)", func() {
-				// Arrange - ensure Vertex is disabled
+				// Arrange - ensure Vertex is disabled (both current and deprecated env vars)
 				originalVertexValue := os.Getenv("USE_VERTEX")
+				originalClaudeVertexValue := os.Getenv("CLAUDE_CODE_USE_VERTEX")
 				os.Setenv("USE_VERTEX", "0")
+				os.Unsetenv("CLAUDE_CODE_USE_VERTEX")
 				defer os.Setenv("USE_VERTEX", originalVertexValue)
+				defer os.Setenv("CLAUDE_CODE_USE_VERTEX", originalClaudeVertexValue)
 
 				// Create ambient-runner-secrets
 				secret := &corev1.Secret{

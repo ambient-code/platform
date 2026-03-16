@@ -1,21 +1,37 @@
 "use client";
 
-import React, { useState, useRef, useEffect, useMemo } from "react";
+import React, { useState, useRef, useEffect, useMemo, useLayoutEffect, useCallback } from "react";
 import { MessageSquare } from "lucide-react";
 import { StreamMessage } from "@/components/ui/stream-message";
 import { LoadingDots } from "@/components/ui/message";
+import { Button } from "@/components/ui/button";
 import { ChatInputBox } from "@/components/chat/ChatInputBox";
 import { QueuedMessageBubble } from "@/components/chat/QueuedMessageBubble";
-import type { AgenticSession, MessageObject, ToolUseMessages } from "@/types/agentic-session";
+import type { AgenticSession, MessageObject, ToolUseMessages, HierarchicalToolMessage } from "@/types/agentic-session";
 import type { WorkflowMetadata } from "@/app/projects/[name]/sessions/[sessionName]/lib/types";
 import type { QueuedMessageItem } from "@/hooks/use-session-queue";
 
+/** Maximum number of messages rendered at once. Older messages are loaded on demand. */
+const MAX_VISIBLE_MESSAGES = 100;
+
+/** Derive a stable React key for any message variant. */
+function getMessageKey(m: MessageObject | ToolUseMessages | HierarchicalToolMessage, idx: number): string {
+  if ('id' in m && m.id) return m.id;
+  if ('toolUseBlock' in m && m.toolUseBlock?.id) return `tool-${m.toolUseBlock.id}`;
+  // Both MessageObject and HierarchicalToolMessage carry type+timestamp; the `in` guard is sufficient.
+  if ('type' in m && 'timestamp' in m) return `${m.type}-${m.timestamp}-${idx}`;
+  // Last resort: index within the visible window. This key shifts when the window expands
+  // (Load earlier), but only affects messages with no other stable identifier.
+  return `sm-${idx}`;
+}
+
 export type MessagesTabProps = {
   session: AgenticSession;
-  streamMessages: Array<MessageObject | ToolUseMessages>;
+  streamMessages: Array<MessageObject | ToolUseMessages | HierarchicalToolMessage>;
   chatInput: string;
   setChatInput: (v: string) => void;
   onSendChat: () => Promise<void>;
+  onSendToolAnswer?: (formattedAnswer: string) => Promise<void>;
   onInterrupt: () => Promise<void>;
   onGoToResults?: () => void;
   onContinue: () => void;
@@ -36,13 +52,19 @@ export type MessagesTabProps = {
 };
 
 
-const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chatInput, setChatInput, onSendChat, onInterrupt, onGoToResults, onContinue, workflowMetadata, onCommandClick, isRunActive = false, showWelcomeExperience, welcomeExperienceComponent, activeWorkflow, userHasInteracted = false, queuedMessages = [], hasRealMessages = false, onCancelQueuedMessage, onUpdateQueuedMessage, onPasteImage, onClearQueue, agentName }) => {
+const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chatInput, setChatInput, onSendChat, onSendToolAnswer, onInterrupt, onGoToResults, onContinue, workflowMetadata, onCommandClick, isRunActive = false, showWelcomeExperience, welcomeExperienceComponent, activeWorkflow, userHasInteracted = false, queuedMessages = [], hasRealMessages = false, onCancelQueuedMessage, onUpdateQueuedMessage, onPasteImage, onClearQueue, agentName }) => {
   const [sendingChat, setSendingChat] = useState(false);
   const [showSystemMessages, setShowSystemMessages] = useState(false);
   const [waitingDotCount, setWaitingDotCount] = useState(0);
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
+  // How many messages (counting from the end) are currently rendered.
+  const [loadedMessageCount, setLoadedMessageCount] = useState(MAX_VISIBLE_MESSAGES);
+  // Refs for scroll-position preservation when loading earlier messages.
+  const prevScrollHeightRef = useRef(0);
+  const prevScrollTopRef = useRef(0);
+  const preservingScrollRef = useRef(false);
 
   const phase = session?.status?.phase || "";
 
@@ -55,16 +77,25 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
     return true;
   });
 
+  // Only render the latest N messages; older ones are revealed via "Load earlier" button.
+  const visibleMessages = useMemo(() => {
+    if (filteredMessages.length <= loadedMessageCount) return filteredMessages;
+    return filteredMessages.slice(filteredMessages.length - loadedMessageCount);
+  }, [filteredMessages, loadedMessageCount]);
+
+  const hasMoreMessages = filteredMessages.length > loadedMessageCount;
+
   const checkIfAtBottom = () => {
     const container = messagesContainerRef.current;
     if (!container) return true;
     const threshold = 50;
-    const isBottom = container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
-    return isBottom;
+    return container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
   };
 
   const handleScroll = () => {
-    setIsAtBottom(checkIfAtBottom());
+    const bottom = checkIfAtBottom();
+    // Avoid a re-render when the value hasn't changed.
+    setIsAtBottom((prev) => (prev === bottom ? prev : bottom));
   };
 
   const scrollToBottom = () => {
@@ -73,6 +104,31 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
       container.scrollTop = container.scrollHeight;
     }
   };
+
+  // Load earlier messages and preserve the user's visual scroll position.
+  const loadEarlierMessages = useCallback(() => {
+    const container = messagesContainerRef.current;
+    if (container) {
+      // Capture BEFORE state update so we have the pre-render values.
+      prevScrollHeightRef.current = container.scrollHeight;
+      prevScrollTopRef.current = container.scrollTop;
+      preservingScrollRef.current = true;
+    }
+    setLoadedMessageCount((prev) => prev + MAX_VISIBLE_MESSAGES);
+  }, []);
+
+  // After React commits the expanded list, forcibly set scrollTop so the
+  // viewport stays anchored to the same content regardless of whether the
+  // browser's native scroll-anchoring has already adjusted it.
+  useLayoutEffect(() => {
+    if (!preservingScrollRef.current) return;
+    preservingScrollRef.current = false;
+    const container = messagesContainerRef.current;
+    if (container) {
+      const scrollDelta = container.scrollHeight - prevScrollHeightRef.current;
+      container.scrollTop = prevScrollTopRef.current + scrollDelta;
+    }
+  }, [loadedMessageCount]);
 
   useEffect(() => {
     if (isAtBottom) {
@@ -137,8 +193,28 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
       >
         {showWelcomeExperience && welcomeExperienceComponent}
 
-        {shouldShowMessages && filteredMessages.map((m, idx) => (
-          <StreamMessage key={`sm-${idx}`} message={m} isNewest={idx === filteredMessages.length - 1} onGoToResults={onGoToResults} agentName={agentName} />
+        {shouldShowMessages && hasMoreMessages && (
+          <div className="flex justify-center py-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={loadEarlierMessages}
+              className="text-xs text-muted-foreground underline underline-offset-2"
+            >
+              Load earlier messages ({filteredMessages.length - loadedMessageCount} hidden)
+            </Button>
+          </div>
+        )}
+
+        {shouldShowMessages && visibleMessages.map((m, idx) => (
+          <StreamMessage
+            key={getMessageKey(m, idx)}
+            message={m}
+            isNewest={idx === visibleMessages.length - 1}
+            onGoToResults={onGoToResults}
+            agentName={agentName}
+            onSubmitAnswer={onSendToolAnswer}
+          />
         ))}
 
         {/* Queued messages with cancel buttons */}
@@ -176,7 +252,7 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
           </div>
         )}
 
-        {!showWelcomeExperience && !isCreating && filteredMessages.length === 0 && (
+        {!showWelcomeExperience && !isCreating && visibleMessages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
             <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-50" />
             <p className="text-sm">No messages yet</p>

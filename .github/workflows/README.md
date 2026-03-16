@@ -6,6 +6,29 @@ For a complete inventory of workflows, read the `name:` field in each
 `.yml`/`.yaml` file in this directory. Do not rely on a static list here —
 see [#769](https://github.com/ambient-code/platform/issues/769).
 
+## Runners
+
+Almost all workflows use GitHub-hosted `ubuntu-latest` runners. Continue
+following this pattern for new jobs.
+
+*If you need direct cluster access*, use our self-hosted runner on IT's preprod
+OpenShift cluster:
+
+```yaml
+runs-on: [self-hosted, preprod]
+```
+
+Only use this for the *few* jobs that *must* run inside the firewall (e.g.
+deploying to the preprod OpenShift environment with `oc`).
+
+**Security constraint:** The `preprod` runner has direct access to the cluster
+API. Never run or process user-submitted code on it. Only trigger `preprod`
+runner jobs from `main` (e.g. `on: push: branches: [main]`) or from
+`workflow_dispatch`. *Never* use `pull_request`, `pull_request_target`, or
+[other risky
+triggers](https://securitylab.github.com/resources/github-actions-untrusted-input/)
+with `[self-hosted, preprod]`.
+
 ## Security
 
 ### Permissions

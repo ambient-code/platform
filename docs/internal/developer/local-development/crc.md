@@ -145,7 +145,7 @@ The `make local-up` script will automatically use this pull secret.
 - ✅ You're testing OAuth integration
 - ✅ You need OpenShift console access
 
-**Use Kind/Minikube when:**
+**Use Kind when:**
 - ✅ You want faster startup
 - ✅ You're running E2E tests
 - ✅ You don't need OpenShift-specific features
@@ -239,7 +239,7 @@ make local-clean
 
 ## See Also
 
-- [Local Development Comparison](README.md) - CRC vs Kind vs Minikube
+- [Local Development Comparison](README.md) - CRC vs Kind
 - [Kind Development](kind.md) - Alternative local environment
 - [Hybrid Development](hybrid.md) - Run components locally
 - [CLAUDE.md](../../../CLAUDE.md) - Development standards

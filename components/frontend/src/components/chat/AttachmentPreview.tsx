@@ -40,6 +40,7 @@ export const AttachmentPreview: React.FC<AttachmentPreviewProps> = ({
             className="relative group flex items-center gap-2 bg-background border rounded-md p-2 pr-8 max-w-[200px]"
           >
             {isImage && attachment.preview ? (
+              // eslint-disable-next-line @next/next/no-img-element -- data URL preview, not suited for next/image
               <img
                 src={attachment.preview}
                 alt={attachment.file.name}

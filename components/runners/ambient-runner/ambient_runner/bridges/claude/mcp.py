@@ -2,7 +2,7 @@
 Claude-specific MCP server building and authentication checks.
 
 Assembles the full MCP server dict (external servers from .mcp.json +
-platform tools like restart_session and rubric evaluation) and provides
+platform tools like refresh_credentials and rubric evaluation) and provides
 a pre-flight auth check that logs status without emitting events.
 """
 
@@ -30,7 +30,11 @@ DEFAULT_ALLOWED_TOOLS = [
 ]
 
 
-def build_mcp_servers(context: RunnerContext, cwd_path: str, obs: Any = None) -> dict:
+def build_mcp_servers(
+    context: RunnerContext,
+    cwd_path: str,
+    obs: Any = None,
+) -> dict:
     """Build the full MCP server config dict including platform tools.
 
     Args:
@@ -47,7 +51,6 @@ def build_mcp_servers(context: RunnerContext, cwd_path: str, obs: Any = None) ->
     from ambient_runner.platform.config import load_mcp_config
     from ambient_runner.bridges.claude.tools import (
         create_refresh_credentials_tool,
-        create_restart_session_tool,
         create_rubric_mcp_tool,
         load_rubric_content,
     )
@@ -56,14 +59,13 @@ def build_mcp_servers(context: RunnerContext, cwd_path: str, obs: Any = None) ->
     mcp_servers = load_mcp_config(context, cwd_path) or {}
 
     # Session control tools
-    restart_tool = create_restart_session_tool(None, sdk_tool)
     refresh_creds_tool = create_refresh_credentials_tool(context, sdk_tool)
     session_server = create_sdk_mcp_server(
-        name="session", version="1.0.0", tools=[restart_tool, refresh_creds_tool]
+        name="session", version="1.0.0", tools=[refresh_creds_tool]
     )
     mcp_servers["session"] = session_server
     logger.info(
-        "Added session control MCP tools (restart_session, refresh_credentials)"
+        "Added session control MCP tools (refresh_credentials)"
     )
 
     # Rubric evaluation tool
@@ -245,5 +247,12 @@ def check_mcp_authentication(server_name: str) -> tuple[bool | None, str | None]
             pass
 
         return False, "Jira not configured - connect on Integrations page"
+
+    # Generic fallback: check if MCP_{SERVER_NAME}_* env vars are populated
+    sanitized = server_name.upper().replace("-", "_")
+    prefix = f"MCP_{sanitized}_"
+    has_creds = any(k.startswith(prefix) for k in os.environ)
+    if has_creds:
+        return True, f"MCP credentials configured for {server_name}"
 
     return None, None

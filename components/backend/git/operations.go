@@ -54,7 +54,7 @@ type DiffSummary struct {
 // 1. User's Personal Access Token (cluster-level, highest priority)
 // 2. GitHub App installation token (cluster-level)
 // 3. Project-level GITHUB_TOKEN (legacy fallback)
-func GetGitHubToken(ctx context.Context, k8sClient *kubernetes.Clientset, dynClient dynamic.Interface, project, userID string) (string, error) {
+func GetGitHubToken(ctx context.Context, k8sClient *kubernetes.Clientset, dynClient dynamic.Interface, project, userID string) (string, time.Time, error) {
 	// Priority 1: Check for user's GitHub PAT (cluster-level)
 	if GetGitHubPATCredentials != nil {
 		patCreds, err := GetGitHubPATCredentials(ctx, userID)
@@ -66,7 +66,8 @@ func GetGitHubToken(ctx context.Context, k8sClient *kubernetes.Clientset, dynCli
 				token := pat.GetToken()
 				if token != "" {
 					log.Printf("Using GitHub PAT for user %s (overrides GitHub App)", userID)
-					return token, nil
+					// PATs don't expire on a short schedule; return zero time
+					return token, time.Time{}, nil
 				}
 			}
 		}
@@ -88,10 +89,10 @@ func GetGitHubToken(ctx context.Context, k8sClient *kubernetes.Clientset, dynCli
 
 			if inst, ok := installation.(githubInstallation); ok {
 				if mgr, ok := GitHubTokenManager.(tokenManager); ok {
-					token, _, err := mgr.MintInstallationTokenForHost(ctx, inst.GetInstallationID(), inst.GetHost())
+					token, expiresAt, err := mgr.MintInstallationTokenForHost(ctx, inst.GetInstallationID(), inst.GetHost())
 					if err == nil && token != "" {
-						log.Printf("Using GitHub App token for user %s", userID)
-						return token, nil
+						log.Printf("Using GitHub App token for user %s (expires %s)", userID, expiresAt.Format(time.RFC3339))
+						return token, expiresAt, nil
 					}
 					log.Printf("Failed to mint GitHub App token for user %s: %v", userID, err)
 				}
@@ -102,7 +103,7 @@ func GetGitHubToken(ctx context.Context, k8sClient *kubernetes.Clientset, dynCli
 	// Priority 3: Fall back to project integration secret GITHUB_TOKEN (legacy, deprecated)
 	if k8sClient == nil {
 		log.Printf("Cannot read integration secret: k8s client is nil")
-		return "", fmt.Errorf("no GitHub credentials available. Connect GitHub on the Integrations page")
+		return "", time.Time{}, fmt.Errorf("no GitHub credentials available. Connect GitHub on the Integrations page")
 	}
 
 	const secretName = "ambient-non-vertex-integrations"
@@ -112,29 +113,30 @@ func GetGitHubToken(ctx context.Context, k8sClient *kubernetes.Clientset, dynCli
 	secret, err := k8sClient.CoreV1().Secrets(project).Get(ctx, secretName, v1.GetOptions{})
 	if err != nil {
 		log.Printf("Failed to get integration secret %s/%s: %v", project, secretName, err)
-		return "", fmt.Errorf("no GitHub credentials available. Connect GitHub on the Integrations page")
+		return "", time.Time{}, fmt.Errorf("no GitHub credentials available. Connect GitHub on the Integrations page")
 	}
 
 	if secret.Data == nil {
 		log.Printf("Secret %s/%s exists but Data is nil", project, secretName)
-		return "", fmt.Errorf("no GitHub credentials available. Connect GitHub on the Integrations page")
+		return "", time.Time{}, fmt.Errorf("no GitHub credentials available. Connect GitHub on the Integrations page")
 	}
 
 	token, ok := secret.Data["GITHUB_TOKEN"]
 	if !ok {
 		log.Printf("Secret %s/%s exists but has no GITHUB_TOKEN key (available keys: %v)", project, secretName, getSecretKeys(secret.Data))
-		return "", fmt.Errorf("no GitHub credentials available. Connect GitHub on the Integrations page")
+		return "", time.Time{}, fmt.Errorf("no GitHub credentials available. Connect GitHub on the Integrations page")
 	}
 
 	if len(token) == 0 {
 		log.Printf("Secret %s/%s has GITHUB_TOKEN key but value is empty", project, secretName)
-		return "", fmt.Errorf("no GitHub credentials available. Connect GitHub on the Integrations page")
+		return "", time.Time{}, fmt.Errorf("no GitHub credentials available. Connect GitHub on the Integrations page")
 	}
 
 	// Trim whitespace and newlines from token (common issue when copying from web UI)
 	cleanToken := strings.TrimSpace(string(token))
 	log.Printf("Using GITHUB_TOKEN from integration secret %s/%s (length=%d, legacy fallback)", project, secretName, len(cleanToken))
-	return cleanToken, nil
+	// Legacy PATs don't have known expiry; return zero time
+	return cleanToken, time.Time{}, nil
 }
 
 // GetGitLabToken retrieves a GitLab Personal Access Token for a user
@@ -197,7 +199,8 @@ func GetGitToken(ctx context.Context, k8sClient *kubernetes.Clientset, dynClient
 
 	switch provider {
 	case types.ProviderGitHub:
-		return GetGitHubToken(ctx, k8sClient, dynClient, project, userID)
+		token, _, err := GetGitHubToken(ctx, k8sClient, dynClient, project, userID)
+		return token, err
 	case types.ProviderGitLab:
 		return GetGitLabToken(ctx, k8sClient, project, userID)
 	default:

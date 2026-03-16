@@ -1,0 +1,47 @@
+name: kustomize-build
+on:
+  pull_request:
+    paths:
+      - components/manifests/**
+      - .github/workflows/kustomize-check.yml
+  push:
+    paths:
+      - components/manifests/**
+      - .github/workflows/kustomize-check.yml
+
+  workflow_dispatch:
+
+concurrency:
+  group: kustomize-build-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  kustomize-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install oc
+        uses: redhat-actions/openshift-tools-installer@v1
+        with:
+          oc: latest
+
+      - name: Build all overlays
+        run: |
+          failed=0
+          for overlay in production e2e kind kind-local local-dev; do
+            echo "=== $overlay ==="
+            if oc kustomize "components/manifests/overlays/$overlay" > /dev/null; then
+              echo "OK"
+            else
+              echo "FAILED"
+              failed=1
+            fi
+            echo ""
+          done
+
+          if [ "$failed" -eq 1 ]; then
+            echo "ERROR: one or more overlays failed to build (see above)"
+            exit 1
+          fi
+          echo "All overlays build successfully"

@@ -143,8 +143,8 @@ func getAllowedOrigins() []string {
 
 	// Default: allow common development origins
 	return []string{
-		"http://localhost:3000",  // Next.js dev server
-		"http://localhost:8080",  // Frontend in kind
+		"http://localhost:3000",      // Next.js dev server
+		"http://localhost:8080",      // Frontend in kind
 		"https://*.apps-crc.testing", // CRC routes
 	}
 }

@@ -107,6 +107,7 @@ def _error(msg_id, code: int, message: str) -> None:
 # Tool handlers
 # ---------------------------------------------------------------------------
 
+
 def _handle_evaluate_rubric(args: dict) -> dict:
     from ambient_runner.platform.feedback import log_rubric_score
 
@@ -116,7 +117,9 @@ def _handle_evaluate_rubric(args: dict) -> dict:
 
     success, err = log_rubric_score(score=score, comment=comment, session_id=session_id)
     if success:
-        return {"content": [{"type": "text", "text": f"Score {score} logged to Langfuse."}]}
+        return {
+            "content": [{"type": "text", "text": f"Score {score} logged to Langfuse."}]
+        }
     return {
         "content": [{"type": "text", "text": f"Failed to log score: {err}"}],
         "isError": True,
@@ -137,7 +140,9 @@ def _handle_log_correction(args: dict) -> dict:
         source=args.get("source", "human"),
     )
     if success:
-        return {"content": [{"type": "text", "text": "Correction logged successfully."}]}
+        return {
+            "content": [{"type": "text", "text": "Correction logged successfully."}]
+        }
     return {
         "content": [{"type": "text", "text": f"Failed to log correction: {err}"}],
         "isError": True,

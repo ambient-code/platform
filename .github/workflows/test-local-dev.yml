@@ -6,7 +6,7 @@ on:
 env:
   # Pin versions for reliable caching
   KUBECTL_VERSION: "v1.31.4"
-  MINIKUBE_VERSION: "v1.34.0"
+  KIND_VERSION: "v0.31.0"
 
 jobs:
   # Fast job that doesn't need the cluster - runs in parallel
@@ -60,16 +60,16 @@ jobs:
         go-version-file: 'components/backend/go.mod'
         cache-dependency-path: 'components/backend/go.sum'
 
-    - name: Cache kubectl and minikube
+    - name: Cache kubectl and kind
       uses: actions/cache@v4
       id: k8s-tools-cache
       with:
         path: |
           ~/k8s-tools/kubectl
-          ~/k8s-tools/minikube
-        key: k8s-tools-${{ runner.os }}-kubectl-${{ env.KUBECTL_VERSION }}-minikube-${{ env.MINIKUBE_VERSION }}
+          ~/k8s-tools/kind
+        key: k8s-tools-${{ runner.os }}-kubectl-${{ env.KUBECTL_VERSION }}-kind-${{ env.KIND_VERSION }}
 
-    - name: Install minikube and kubectl
+    - name: Install kind and kubectl
       run: |
         mkdir -p ~/k8s-tools
 
@@ -84,35 +84,25 @@ jobs:
         fi
         sudo cp ~/k8s-tools/kubectl /usr/local/bin/kubectl
 
-        # Install minikube if not cached
-        if [[ ! -f ~/k8s-tools/minikube ]]; then
-          echo "Downloading minikube $MINIKUBE_VERSION..."
-          curl -sLO "https://storage.googleapis.com/minikube/releases/${MINIKUBE_VERSION}/minikube-linux-amd64"
-          chmod +x minikube-linux-amd64
-          mv minikube-linux-amd64 ~/k8s-tools/minikube
+        # Install kind if not cached
+        if [[ ! -f ~/k8s-tools/kind ]]; then
+          echo "Downloading kind $KIND_VERSION..."
+          curl -sLO "https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-linux-amd64"
+          chmod +x kind-linux-amd64
+          mv kind-linux-amd64 ~/k8s-tools/kind
         else
-          echo "Using cached minikube"
+          echo "Using cached kind"
         fi
-        sudo cp ~/k8s-tools/minikube /usr/local/bin/minikube
+        sudo cp ~/k8s-tools/kind /usr/local/bin/kind
 
         # Verify installations
         kubectl version --client
-        minikube version
-
-    - name: Cache minikube preload images
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.minikube/cache
-        key: minikube-cache-${{ runner.os }}-${{ env.MINIKUBE_VERSION }}-${{ hashFiles('components/manifests/base/**/*.yaml') }}
-        restore-keys: |
-          minikube-cache-${{ runner.os }}-${{ env.MINIKUBE_VERSION }}-
-          minikube-cache-${{ runner.os }}-
+        kind version
 
     - name: Deploy using Makefile
       run: |
         echo "Using Makefile to deploy complete stack..."
-        make local-up CONTAINER_ENGINE=docker CI_MODE=true
+        make kind-up CONTAINER_ENGINE=docker CI_MODE=true
 
     - name: Wait for deployments
       run: |
@@ -250,4 +240,4 @@ jobs:
       if: always()
       run: |
         echo "Cleaning up using Makefile..."
-        make local-clean 2>&1 || echo "(Cleanup failed or cluster already removed)"
+        make kind-down 2>&1 || echo "(Cleanup failed or cluster already removed)"

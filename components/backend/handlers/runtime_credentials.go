@@ -78,7 +78,7 @@ func GetGitHubTokenForSession(c *gin.Context) {
 		return
 	}
 
-	token, err := git.GetGitHubToken(c.Request.Context(), k8sClientset, DynamicClient, project, userID)
+	token, expiresAt, err := git.GetGitHubToken(c.Request.Context(), k8sClientset, DynamicClient, project, userID)
 	if err != nil {
 		log.Printf("Failed to get GitHub token for user %s: %v", userID, err)
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
@@ -92,12 +92,16 @@ func GetGitHubTokenForSession(c *gin.Context) {
 		log.Printf("Returning GitHub credentials with identity for session %s/%s", project, session)
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	resp := gin.H{
 		"token":    token,
 		"userName": userName,
 		"email":    userEmail,
 		"provider": "github",
-	})
+	}
+	if !expiresAt.IsZero() {
+		resp["expiresAt"] = expiresAt.Format(time.RFC3339)
+	}
+	c.JSON(http.StatusOK, resp)
 }
 
 // GetGoogleCredentialsForSession handles GET /api/projects/:project/agentic-sessions/:session/credentials/google

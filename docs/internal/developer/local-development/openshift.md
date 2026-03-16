@@ -209,7 +209,7 @@ oc exec deployment/ambient-api-server-db -n ambient-code -- psql -U ambient -d a
 # Check control plane is connecting via TLS gRPC
 oc logs deployment/ambient-control-plane -n ambient-code --tail=10 | grep -i grpc
 
-# Verify API server gRPC streams are active  
+# Verify API server gRPC streams are active
 oc logs deployment/ambient-api-server -n ambient-code --tail=20 | grep "gRPC stream started"
 ```
 
@@ -229,7 +229,7 @@ oc get route -n ambient-code
 
 **Main routes:**
 - **Frontend**: https://ambient-code.apps.<cluster-domain>/
-- **Backend API**: https://backend-route-ambient-code.apps.<cluster-domain>/  
+- **Backend API**: https://backend-route-ambient-code.apps.<cluster-domain>/
 - **Public API**: https://public-api-route-ambient-code.apps.<cluster-domain>/
 - **Ambient API Server**: https://ambient-api-server-ambient-code.apps.<cluster-domain>/
 
@@ -335,7 +335,7 @@ OAuth configuration requires cluster-admin permissions for creating the OAuthCli
 ## What the Deployment Provides
 
 - ✅ **Applies all CRDs** (Custom Resource Definitions)
-- ✅ **Creates RBAC** roles and service accounts  
+- ✅ **Creates RBAC** roles and service accounts
 - ✅ **Deploys all components** with correct OpenShift-compatible security contexts
 - ✅ **Configures OAuth** integration automatically (with cluster-admin)
 - ✅ **Creates all routes** for external access

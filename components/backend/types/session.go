@@ -42,6 +42,7 @@ type AgenticSessionStatus struct {
 	StartTime          *string             `json:"startTime,omitempty"`
 	CompletionTime     *string             `json:"completionTime,omitempty"`
 	LastActivityTime   *string             `json:"lastActivityTime,omitempty"`
+	AgentStatus        *string             `json:"agentStatus,omitempty"`
 	StoppedReason      *string             `json:"stoppedReason,omitempty"`
 	ReconciledRepos    []ReconciledRepo    `json:"reconciledRepos,omitempty"`
 	ReconciledWorkflow *ReconciledWorkflow `json:"reconciledWorkflow,omitempty"`

@@ -372,6 +372,19 @@ class GeminiSessionManager:
         except (OSError, json.JSONDecodeError):
             logger.debug("Could not restore session IDs from %s", path, exc_info=True)
 
+    def clear_session_ids(self) -> None:
+        """Clear persisted session IDs from disk (e.g., after workflow change)."""
+        self._session_ids.clear()
+        path = self._session_ids_path()
+        if path:
+            try:
+                path.unlink()
+                logger.info("Cleared stale Gemini session IDs from %s", path)
+            except FileNotFoundError:
+                pass
+            except OSError:
+                logger.debug("Could not remove session IDs at %s", path, exc_info=True)
+
     async def interrupt(self, thread_id: str) -> None:
         """Interrupt the active worker for a thread."""
         worker = self._workers.get(thread_id)

@@ -113,7 +113,7 @@ This description is structured for agent cold-start. Shall I create this issue? 
 
 ### 5. Create the Jira Issue
 
-Use the `mcp_mcp-atlassian_jira_create_issue` tool with:
+Use the `mcp__jira__jira_create_issue` tool with:
 
 ```json
 {
@@ -121,19 +121,33 @@ Use the `mcp_mcp-atlassian_jira_create_issue` tool with:
   "summary": "[user provided summary]",
   "issue_type": "Story",
   "description": "[structured description from template]",
-  "components": "Agentic"
+  "components": "Agentic",
+  "additional_fields": "{\"labels\": [\"team:ambient\"]}"
 }
 ```
 
-Then **update the issue** to set the Team field (must be done as a separate update call):
+Then **update the issue** to set the Atlassian Team field (must be done as a separate update call — cannot be set on create):
 
 ```json
 {
   "issue_key": "[CREATED_ISSUE_KEY]",
-  "fields": {
-    "customfield_12313240": "6290"
-  }
+  "fields": "{}",
+  "additional_fields": "{\"customfield_10001\": \"ec74d716-af36-4b3c-950f-f79213d08f71-1917\"}"
 }
+```
+
+Then **add to sprint** (sprint field `customfield_10020` is screen-restricted, use the sprint API instead):
+
+```json
+mcp__jira__jira_add_issues_to_sprint({
+  "sprint_id": "[ACTIVE_SPRINT_ID]",
+  "issue_keys": "[CREATED_ISSUE_KEY]"
+})
+```
+
+To find the active sprint ID, use:
+```json
+mcp__jira__jira_get_sprints_from_board({ "board_id": "1115", "state": "active" })
 ```
 
 ### 6. Report Success
@@ -142,11 +156,12 @@ After creation, report:
 
 ```
 ✅ Created: [ISSUE_KEY]
-🔗 Link: https://issues.redhat.com/browse/[ISSUE_KEY]
+🔗 Link: https://redhat.atlassian.net/browse/[ISSUE_KEY]
 
 Summary: [summary]
 Component: Agentic
 Team: Ambient team
+Sprint: [sprint name]
 
 📋 Agent Cold-Start Ready: Yes
 ```
@@ -228,15 +243,19 @@ Tests:
 - Add test for cache invalidation edge case
 ```
 
-## Field Reference
+## Field Reference (Jira Cloud — redhat.atlassian.net)
 
 | Field | Value | Notes |
 |-------|-------|-------|
 | Project | RHOAIENG | Red Hat OpenShift AI Engineering |
 | Component | Agentic | Pre-filled |
-| Team | Ambient team | Custom field `customfield_12313240` = `6290` |
+| Team | Ambient team | `customfield_10001` = `ec74d716-af36-4b3c-950f-f79213d08f71-1917` (Atlassian Team type, set via update) |
+| Sprint | Active sprint | Use `jira_add_issues_to_sprint` with board `1115` |
+| Label | `team:ambient` | Set on create via `additional_fields` |
 | Issue Type | Story | Default, can override with [Bug], [Task] |
 | Priority | Normal | Default |
+| Browse URL | `https://redhat.atlassian.net/browse/` | NOT `issues.redhat.com` (that was on-prem) |
+| Board | `1115` (scrum) / `1109` (kanban) | "AI Driven Development" |
 
 ## Agent Cold-Start Checklist
 

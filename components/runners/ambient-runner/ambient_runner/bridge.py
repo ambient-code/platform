@@ -55,18 +55,24 @@ def _async_safe_manager_shutdown(manager: Any) -> None:
     try:
         loop = asyncio.get_running_loop()
         task = loop.create_task(manager.shutdown())
-        task.add_done_callback(
-            lambda f: _bridge_logger.warning(
-                "mark_dirty: session_manager shutdown error: %s", f.exception()
-            )
-            if f.exception()
-            else None
-        )
+
+        def _log_shutdown_error(f: asyncio.Future) -> None:
+            if f.cancelled():
+                return
+            exc = f.exception()
+            if exc is not None:
+                _bridge_logger.warning(
+                    "mark_dirty: session_manager shutdown error: %s", exc
+                )
+
+        task.add_done_callback(_log_shutdown_error)
     except RuntimeError:
         try:
             asyncio.run(manager.shutdown())
         except Exception as exc:
-            _bridge_logger.warning("mark_dirty: session_manager shutdown error: %s", exc)
+            _bridge_logger.warning(
+                "mark_dirty: session_manager shutdown error: %s", exc
+            )
 
 
 @dataclass
@@ -151,12 +157,18 @@ class PlatformBridge(ABC):
         self._context = context
 
     async def _refresh_credentials_if_stale(self) -> None:
-        """Refresh platform credentials if the refresh interval has elapsed.
+        """Refresh platform credentials if the refresh interval has elapsed
+        or if the GitHub token is expiring soon.
 
         Call this at the start of each ``run()`` to keep tokens fresh.
         """
         now = time.monotonic()
-        if now - self._last_creds_refresh > CREDS_REFRESH_INTERVAL_SEC:
+        needs_refresh = now - self._last_creds_refresh > CREDS_REFRESH_INTERVAL_SEC
+        if not needs_refresh:
+            from ambient_runner.platform.auth import github_token_expiring_soon
+
+            needs_refresh = github_token_expiring_soon()
+        if needs_refresh:
             from ambient_runner.platform.auth import populate_runtime_credentials
 
             await populate_runtime_credentials(self._context)
