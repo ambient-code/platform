@@ -78,7 +78,13 @@ describe('Ambient Session Management Tests', () => {
     })).then((r) => expect(r.status).to.eq(200))
 
     // Create a session for UI tests
-    cy.get('[data-testid="new-session-btn"]').click()
+    // Re-visit the workspace page so the sessions list fetch fires after the
+    // intercept is registered, avoiding "element detached from DOM" errors
+    // from React re-renders while clicking.
+    cy.intercept('GET', '**/api/projects/*/agentic-sessions*').as('sessionsList')
+    cy.then(() => cy.visit(`/projects/${workspaceSlug}`))
+    cy.wait('@sessionsList', { timeout: 15000 })
+    cy.get('[data-testid="new-session-btn"]').should('be.visible').click()
     cy.get('[data-testid="create-session-submit"]', { timeout: 10000 })
         .should('not.be.disabled').click()
     cy.get('[data-testid="create-session-submit"]', { timeout: 10000 })
