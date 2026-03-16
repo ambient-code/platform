@@ -13,11 +13,12 @@
       "args": ["mcp-server-fetch"]
     },
     "mcp-atlassian": {
-      "command": "mcp-atlassian",
-      "args": [],
+      "command": "uvx",
+      "args": ["mcp-atlassian"],
       "env": {
         "JIRA_URL": "${JIRA_URL}",
-        "JIRA_PERSONAL_TOKEN": "${JIRA_API_TOKEN}",
+        "JIRA_USERNAME": "${JIRA_EMAIL}",
+        "JIRA_API_TOKEN": "${JIRA_API_TOKEN}",
         "JIRA_SSL_VERIFY": "true",
         "READ_ONLY_MODE": "true"
       }
