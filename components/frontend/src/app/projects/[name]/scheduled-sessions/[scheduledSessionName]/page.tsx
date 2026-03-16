@@ -184,7 +184,7 @@ export default function ScheduledSessionDetailPage() {
         </div>
       </div>
 
-      <ScheduledSessionDetailsCard scheduledSession={scheduledSession} />
+      <ScheduledSessionDetailsCard scheduledSession={scheduledSession} projectName={projectName} />
       <ScheduledSessionRunsTable runs={runs} projectName={projectName} />
     </div>
   );

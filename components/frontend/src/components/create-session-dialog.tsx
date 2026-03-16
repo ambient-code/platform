@@ -46,7 +46,7 @@ import { useOOTBWorkflows } from "@/services/queries/use-workflows";
 import { toast } from "sonner";
 
 // Static default used for form initialization before the API responds.
-const DEFAULT_MODEL = "claude-sonnet-4-5";
+const DEFAULT_MODEL = "";
 
 const formSchema = z.object({
   displayName: z.string().max(50).optional(),
