@@ -29,10 +29,11 @@ Each workspace carries its own configuration. Open **Settings** from the workspa
 
 ### Storage
 
-By default, session data is stored in a shared storage backend. If your organization requires data isolation you can configure a **custom S3-compatible bucket** per workspace:
+Session state is stored using a cluster-wide S3-compatible backend (such as MinIO) configured by the platform administrator.
 
-- Bucket name, endpoint, region
-- Access key and secret key
+:::note
+Custom S3-compatible storage configuration per workspace is a planned feature. Currently, all workspaces share the cluster-wide storage backend.
+:::
 
 ### Secrets
 

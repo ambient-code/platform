@@ -1,5 +1,5 @@
 ---
-title: "Quickstart"
+title: "Quick start"
 ---
 
 This guide walks you through creating your first AI agent session using the Ambient Code Platform web interface.
@@ -29,9 +29,9 @@ To connect a service:
 1. Open your workspace and navigate to **Settings** > **Integrations**.
 2. Select the service you want to connect:
    - **GitHub** -- Authenticate via GitHub App installation or Personal Access Token.
-   - **GitLab** -- Authenticate via OAuth.
-   - **Jira** -- Authenticate via OAuth.
-   - **Google Workspace** -- Authenticate via OAuth (covers Drive, Calendar, and Gmail).
+   - **GitLab** -- Authenticate with a Personal Access Token.
+   - **Jira** -- Authenticate with your Jira instance URL, email, and API token.
+   - **Google Drive** -- Authenticate via OAuth to access Drive files.
 3. Follow the OAuth or token flow to authorize ACP.
 
 Once connected, agents in this workspace can read from and write to the linked service.
@@ -41,7 +41,7 @@ Once connected, agents in this workspace can read from and write to the linked s
 1. From your workspace, click **New Session**.
 2. In the create session dialog, configure:
    - **Display name** (optional) -- A human-readable label for the session.
-   - **Model** -- Select the LLM to use from the dropdown (Claude Sonnet 4.5, Claude Opus 4.6, Claude Opus 4.5, or Claude Haiku 4.5).
+   - **Model** -- Select the LLM to use from the dropdown. Available models include Claude Sonnet 4.5, Claude Opus 4.5, Claude Haiku 4.5, and Gemini 2.5 Flash (generally available), plus Claude Opus 4.6, Claude Sonnet 4.6, and Gemini 2.5 Pro (feature-gated, when enabled by your administrator).
    - **Integrations** -- Review the read-only status indicators showing which integrations are connected.
 3. Click **Create Session**.
 

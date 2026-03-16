@@ -2,7 +2,7 @@
 title: "Integrations"
 ---
 
-Integrations connect external services to the Ambient Code Platform, giving the AI agent access to tools like repository hosting, issue trackers, and document storage. Integrations are **global** -- once configured, they work across all your workspaces.
+Integrations connect external services to the Ambient Code Platform, giving the AI agent access to tools like repository hosting, issue trackers, and document storage. Integrations are **user-scoped** -- they are tied to your SSO identity and stored at the cluster level, so once configured, they are available across all your workspaces. MCP tools and runner secrets are workspace-scoped.
 
 ## Overview
 
@@ -27,7 +27,7 @@ GitHub integration lets the agent clone repositories, read pull requests, create
 ### GitHub App
 
 1. Navigate to **Integrations > GitHub**.
-2. Click **Connect with GitHub App**.
+2. Click **Connect to GitHub App**.
 3. You will be redirected to GitHub to authorize the Ambient Code Platform app.
 4. Select the organization and repositories you want to grant access to.
 5. Complete the OAuth flow -- you will be redirected back to the platform.
@@ -46,25 +46,12 @@ PATs do not auto-refresh. You will need to rotate them before they expire.
 
 GitLab integration provides the same repository access capabilities as GitHub.
 
-### Setup options
-
-| Method | Best for |
-|--------|---------|
-| **OAuth 2.0** (recommended) | Self-managed and SaaS GitLab instances with SSO. |
-| **Personal Access Token** | Quick setup or service accounts. |
-
-### OAuth
+### Setup
 
 1. Navigate to **Integrations > GitLab**.
-2. Click **Connect with GitLab**.
-3. Authorize the application in GitLab.
-4. You will be redirected back to the platform once complete.
-
-### Personal Access Token
-
-1. In GitLab, go to **Preferences > Access Tokens**.
-2. Create a token with `read_repository` and `write_repository` scopes.
-3. Paste the token in **Integrations > GitLab** on the platform.
+2. Optionally enter your **GitLab instance URL** if you use a self-managed instance (defaults to `https://gitlab.com`).
+3. In GitLab, go to **Preferences > Access Tokens** and create a token with `read_repository` and `write_repository` scopes.
+4. Paste the token and click **Connect**.
 
 ## Jira
 
@@ -73,27 +60,29 @@ Jira integration enables the agent to read issues, create tickets, and update st
 ### Setup
 
 1. Navigate to **Integrations > Jira**.
-2. Click **Connect with Jira**.
-3. Complete the OAuth 2.0 authorization flow in Atlassian.
+2. Provide your **Jira instance URL** (e.g., `https://yourcompany.atlassian.net`).
+3. Enter the **email address** associated with your Jira account.
+4. Generate an [API token](https://id.atlassian.com/manage-profile/security/api-tokens) from your Atlassian account and paste it into the **API Token** field.
+5. Click **Connect**.
 
 Ensure your Atlassian account has the required project permissions.
 
-## Google Workspace
+## Google Drive
 
-Google Workspace integration allows the agent to access Google Drive, Calendar, and Gmail.
+Google Drive integration allows the agent to access files stored in your Google Drive.
 
 ### Setup
 
-1. Navigate to **Integrations > Google Workspace**.
-2. Click **Connect with Google Workspace**.
-3. Sign in with your Google account and grant the requested permissions.
+1. Navigate to **Integrations > Google Drive**.
+2. Click **Connect Google Drive**.
+3. Sign in with your Google account and grant the requested Drive permissions.
 4. You will be redirected back to the platform once authorization is complete.
 
 ## Troubleshooting
 
 | Symptom | Likely cause | Fix |
 |---------|-------------|-----|
-| Status stays **Disconnected** after setup | OAuth callback did not complete | Retry the connection flow; check for pop-up blockers. |
+| Status stays **Disconnected** after setup | Authorization callback did not complete | Retry the connection flow; check for pop-up blockers. |
 | Token expired errors in sessions | PAT reached its expiry date | Generate a new token and update the integration. |
 | "Insufficient permissions" in agent logs | Token scope is too narrow | Recreate the token with the required scopes. |
 | Jira actions fail | Network or permission issue | Verify the Jira URL is reachable from the cluster and that your account has project access. |

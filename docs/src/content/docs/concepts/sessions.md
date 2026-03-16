@@ -11,10 +11,10 @@ Click **New Session** inside a workspace. The creation dialog lets you configure
 | Setting | Description | Default |
 |---------|------------|---------|
 | **Display name** | A label for the session. | Auto-generated |
-| **Model** | Which Claude model to use: Claude Sonnet 4.5, Claude Opus 4.6, Claude Opus 4.5, or Claude Haiku 4.5. | Claude Sonnet 4.5 |
+| **Model** | Which AI model to use. Available models: Claude Sonnet 4.5, Claude Opus 4.5, Claude Haiku 4.5, Gemini 2.5 Flash (generally available); Claude Opus 4.6, Claude Sonnet 4.6, Gemini 2.5 Pro (feature-gated, visible only when enabled for your workspace). | Claude Sonnet 4.5 |
 | **Temperature** | Controls response randomness (0 = deterministic, 2 = highly creative). | 0.7 |
-| **Max tokens** | Maximum output length per response (100 -- 8,000). | 4,000 |
-| **Timeout** | Hard limit on total session duration (60 -- 1,800 seconds). | 300 seconds |
+| **Max tokens** | Maximum output length per response. The UI enforces a range of 100--8,000, but the platform API accepts other values. | 4,000 |
+| **Timeout** | Hard limit on total session duration. The UI enforces a range of 60--1,800 seconds, but the platform API accepts other values. A separate `inactivityTimeout` field controls how long a session can remain idle before the platform auto-stops it; if omitted, it falls back to the project-level setting and then to a 24-hour default. | 300 seconds |
 
 After the session is created, you can attach repositories and select a workflow from the session sidebar. See [Context & Artifacts](../context-and-artifacts/) and [Workflows](../workflows/) for details.
 
@@ -69,13 +69,13 @@ If the agent is heading in the wrong direction while it is still **Working**, yo
 | **Stop** | Gracefully halts the agent. You can resume later. |
 | **Resume** | Resumes a stopped session from where it left off. |
 | **Clone** | Creates a new session with the same configuration and repos -- useful for trying a different approach. Chat history is not copied. |
-| **Export** | Exports the chat history in one of three formats: Markdown, PDF, or Google Drive. |
+| **Export** | Downloads session data and offers Markdown or PDF export. If the session is running and Google Drive is connected, you can also save directly to your Drive. |
 | **Delete** | Permanently removes the session and its data. |
 
 ## Tips for effective sessions
 
 - **Be specific in your first message.** A clear prompt saves back-and-forth. Instead of "fix the bug," try "the login endpoint in `auth.go` returns 500 when the token is expired -- fix the error handling."
 - **Attach the right repos.** The agent can only see code that has been added as context.
-- **Pick the right model.** Sonnet 4.5 is fast and cost-effective for most tasks. Opus 4.6 excels at complex multi-step reasoning.
+- **Pick the right model.** Sonnet 4.5 is fast and cost-effective for most tasks. Opus 4.6 excels at complex multi-step reasoning (if enabled for your workspace).
 - **Use workflows for structured tasks.** If there is a workflow that matches your goal (bug fix, triage, spec writing), attach it from the session sidebar to give the agent a proven plan.
 - **Review tool calls.** Expanding tool-use blocks lets you verify what the agent actually did before merging its changes.

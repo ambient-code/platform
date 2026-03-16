@@ -23,12 +23,12 @@ sequenceDiagram
     participant Job as Runner Pod
 
     User->>Frontend: Create session
-    Frontend->>Backend: POST /sessions
+    Frontend->>Backend: POST /api/projects/{project}/agentic-sessions
     Backend->>K8s: Create AgenticSession CR
     Operator->>K8s: Watch detects new CR
     Operator->>K8s: Create Job + Secret + PVC
     K8s->>Job: Schedule pod
-    Job->>Job: Clone repos, run Claude CLI
+    Job->>Job: Clone repos, run AI agent
     Job->>K8s: Update CR status
     Frontend->>K8s: Stream CR updates
     Frontend->>User: Display progress
@@ -42,7 +42,7 @@ sequenceDiagram
 
 **Operator** -- Go controller built with controller-runtime. Watches AgenticSession CRDs and reconciles desired state by creating Jobs, Secrets, and PVCs with proper owner references.
 
-**Runner** -- Python process that runs inside each Job pod. Wraps the Claude Code CLI, streams output back to the CR status, and handles graceful shutdown on timeout or cancellation.
+**Runner** -- Polymorphic AG-UI server that runs inside each Job pod. Supports multiple AI provider bridges (Claude Agent SDK, Gemini CLI, LangGraph), streams output back to the CR status, and handles graceful shutdown on timeout or cancellation.
 
 **Frontend** -- NextJS application with Shadcn UI components. Provides the session creation dialog, real-time chat interface, and workspace management. Uses React Query for server state.
 
