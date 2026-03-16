@@ -1,0 +1,83 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: vteam-mpp-preprod
+
+namespace: ambient-code--runtime-int
+
+resources:
+- ../../base
+- ambient-api-server-route.yaml
+- route.yaml
+- backend-route.yaml
+- public-api-route.yaml
+- unleash-route.yaml
+- operator-config-openshift.yaml
+
+components:
+- ../../components/oauth-proxy
+- ../../components/postgresql-rhel
+- ../../components/ambient-api-server-db
+
+patches:
+- path: namespace-patch.yaml
+  target:
+    kind: Namespace
+    name: ambient-code
+- path: ambient-api-server-env-patch.yaml
+  target:
+    group: apps
+    kind: Deployment
+    name: ambient-api-server
+    version: v1
+- path: ambient-api-server-jwt-args-patch.yaml
+  target:
+    group: apps
+    kind: Deployment
+    name: ambient-api-server
+    version: v1
+- path: ambient-api-server-service-ca-patch.yaml
+  target:
+    kind: Service
+    name: ambient-api-server
+    version: v1
+
+# Production images from Quay.io
+images:
+- name: quay.io/ambient_code/vteam_api_server:latest
+  newName: quay.io/ambient_code/vteam_api_server
+  newTag: latest
+- name: quay.io/ambient_code/vteam_backend
+  newName: quay.io/ambient_code/vteam_backend
+  newTag: latest
+- name: quay.io/ambient_code/vteam_backend:latest
+  newName: quay.io/ambient_code/vteam_backend
+  newTag: latest
+- name: quay.io/ambient_code/vteam_claude_runner
+  newName: quay.io/ambient_code/vteam_claude_runner
+  newTag: latest
+- name: quay.io/ambient_code/vteam_claude_runner:latest
+  newName: quay.io/ambient_code/vteam_claude_runner
+  newTag: latest
+- name: quay.io/ambient_code/vteam_frontend
+  newName: quay.io/ambient_code/vteam_frontend
+  newTag: latest
+- name: quay.io/ambient_code/vteam_frontend:latest
+  newName: quay.io/ambient_code/vteam_frontend
+  newTag: latest
+- name: quay.io/ambient_code/vteam_operator
+  newName: quay.io/ambient_code/vteam_operator
+  newTag: latest
+- name: quay.io/ambient_code/vteam_operator:latest
+  newName: quay.io/ambient_code/vteam_operator
+  newTag: latest
+- name: quay.io/ambient_code/vteam_public_api
+  newName: quay.io/ambient_code/vteam_public_api
+  newTag: latest
+- name: quay.io/ambient_code/vteam_public_api:latest
+  newName: quay.io/ambient_code/vteam_public_api
+  newTag: latest
+- name: quay.io/ambient_code/vteam_state_sync:latest
+  newName: quay.io/ambient_code/vteam_state_sync
+  newTag: latest
