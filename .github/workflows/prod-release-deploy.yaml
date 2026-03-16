@@ -361,7 +361,7 @@ jobs:
             fi
 
             # Override with the new release tag if this component was built
-            if echo "$BUILT" | grep -q "$COMP"; then
+            if echo ",$BUILT," | grep -q ",$COMP,"; then
               kustomize edit set image ${IMAGE}:latest=${IMAGE}:${RELEASE_TAG}
             fi
           done
@@ -389,10 +389,10 @@ jobs:
           RELEASE_TAG="${{ needs.release.outputs.new_tag }}"
           BUILT="${{ steps.built.outputs.names }}"
           ARGS=""
-          if echo "$BUILT" | grep -q "ambient-runner"; then
+          if echo ",$BUILT," | grep -q ",ambient-runner,"; then
             ARGS="$ARGS AMBIENT_CODE_RUNNER_IMAGE=quay.io/ambient_code/vteam_claude_runner:${RELEASE_TAG}"
           fi
-          if echo "$BUILT" | grep -q "state-sync"; then
+          if echo ",$BUILT," | grep -q ",state-sync,"; then
             ARGS="$ARGS STATE_SYNC_IMAGE=quay.io/ambient_code/vteam_state_sync:${RELEASE_TAG}"
           fi
           if [ -n "$ARGS" ]; then
@@ -405,11 +405,11 @@ jobs:
           BUILT="${{ steps.built.outputs.names }}"
           REGISTRY=$(oc get configmap ambient-agent-registry -n ambient-code \
             -o jsonpath='{.data.agent-registry\.json}')
-          if echo "$BUILT" | grep -q "ambient-runner"; then
+          if echo ",$BUILT," | grep -q ",ambient-runner,"; then
             REGISTRY=$(echo "$REGISTRY" | sed \
               "s|quay.io/ambient_code/vteam_claude_runner[@:][^\"]*|quay.io/ambient_code/vteam_claude_runner:${RELEASE_TAG}|g")
           fi
-          if echo "$BUILT" | grep -q "state-sync"; then
+          if echo ",$BUILT," | grep -q ",state-sync,"; then
             REGISTRY=$(echo "$REGISTRY" | sed \
               "s|quay.io/ambient_code/vteam_state_sync[@:][^\"]*|quay.io/ambient_code/vteam_state_sync:${RELEASE_TAG}|g")
           fi
