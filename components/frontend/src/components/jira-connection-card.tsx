@@ -190,7 +190,7 @@ export function JiraConnectionCard({ status, onRefresh }: Props) {
               <p className="text-xs text-muted-foreground mt-1">
                 Create an API token at{' '}
                 <a
-                  href={url ? `${url}/secure/ViewProfile.jspa?selectedTab=com.atlassian.pats.pats-plugin:jira-user-personal-access-tokens` : 'https://id.atlassian.com/manage-profile/security/api-tokens'}
+                  href="https://id.atlassian.com/manage-profile/security/api-tokens"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="underline"
