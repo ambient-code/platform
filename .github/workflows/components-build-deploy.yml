@@ -10,7 +10,6 @@ on:
       - 'components/operator/**'
       - 'components/backend/**'
       - 'components/frontend/**'
-      - 'components/public-api/**'
       - 'components/ambient-api-server/**'
   pull_request:
     branches: [main]
@@ -21,7 +20,6 @@ on:
       - 'components/operator/**'
       - 'components/backend/**'
       - 'components/frontend/**'
-      - 'components/public-api/**'
       - 'components/ambient-api-server/**'
   workflow_dispatch:
     inputs:
@@ -31,7 +29,7 @@ on:
         type: boolean
         default: false
       components:
-        description: 'Components to build (comma-separated: frontend,backend,operator,claude-runner,state-sync,public-api,ambient-api-server) - leave empty for all'
+        description: 'Components to build (comma-separated: frontend,backend,operator,claude-runner,state-sync,ambient-api-server) - leave empty for all'
         required: false
         type: string
         default: ''
@@ -50,7 +48,6 @@ jobs:
       operator: ${{ steps.filter.outputs.operator }}
       claude-runner: ${{ steps.filter.outputs.claude-runner }}
       state-sync: ${{ steps.filter.outputs.state-sync }}
-      public-api: ${{ steps.filter.outputs.public-api }}
       ambient-api-server: ${{ steps.filter.outputs.ambient-api-server }}
     steps:
       - name: Checkout code
@@ -73,8 +70,6 @@ jobs:
               - 'components/runners/ambient-runner/**'
             state-sync:
               - 'components/runners/state-sync/**'
-            public-api:
-              - 'components/public-api/**'
             ambient-api-server:
               - 'components/ambient-api-server/**'
 
@@ -114,11 +109,6 @@ jobs:
             image: quay.io/ambient_code/vteam_state_sync
             dockerfile: ./components/runners/state-sync/Dockerfile
             changed: ${{ needs.detect-changes.outputs.state-sync }}
-          - name: public-api
-            context: ./components/public-api
-            image: quay.io/ambient_code/vteam_public_api
-            dockerfile: ./components/public-api/Dockerfile
-            changed: ${{ needs.detect-changes.outputs.public-api }}
           - name: ambient-api-server
             context: ./components/ambient-api-server
             image: quay.io/ambient_code/vteam_api_server
@@ -208,7 +198,7 @@ jobs:
   deploy-to-openshift:
     runs-on: ubuntu-latest
     needs: [detect-changes, build-and-push, update-rbac-and-crd]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && (needs.detect-changes.outputs.frontend == 'true' || needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.operator == 'true' || needs.detect-changes.outputs.claude-runner == 'true' || needs.detect-changes.outputs.state-sync == 'true' || needs.detect-changes.outputs.public-api == 'true' || needs.detect-changes.outputs.ambient-api-server == 'true')
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && (needs.detect-changes.outputs.frontend == 'true' || needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.operator == 'true' || needs.detect-changes.outputs.claude-runner == 'true' || needs.detect-changes.outputs.state-sync == 'true' || needs.detect-changes.outputs.ambient-api-server == 'true')
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -261,12 +251,6 @@ jobs:
             echo "state_sync_tag=latest" >> $GITHUB_OUTPUT
           fi
 
-          if [ "${{ needs.detect-changes.outputs.public-api }}" == "true" ]; then
-            echo "public_api_tag=${{ github.sha }}" >> $GITHUB_OUTPUT
-          else
-            echo "public_api_tag=stage" >> $GITHUB_OUTPUT
-          fi
-
           if [ "${{ needs.detect-changes.outputs.ambient-api-server }}" == "true" ]; then
             echo "api_server_tag=${{ github.sha }}" >> $GITHUB_OUTPUT
           else
@@ -281,7 +265,6 @@ jobs:
           kustomize edit set image quay.io/ambient_code/vteam_operator:latest=quay.io/ambient_code/vteam_operator:${{ steps.image-tags.outputs.operator_tag }}
           kustomize edit set image quay.io/ambient_code/vteam_claude_runner:latest=quay.io/ambient_code/vteam_claude_runner:${{ steps.image-tags.outputs.runner_tag }}
           kustomize edit set image quay.io/ambient_code/vteam_state_sync:latest=quay.io/ambient_code/vteam_state_sync:${{ steps.image-tags.outputs.state_sync_tag }}
-          kustomize edit set image quay.io/ambient_code/vteam_public_api:latest=quay.io/ambient_code/vteam_public_api:${{ steps.image-tags.outputs.public_api_tag }}
           kustomize edit set image quay.io/ambient_code/vteam_api_server:latest=quay.io/ambient_code/vteam_api_server:${{ steps.image-tags.outputs.api_server_tag }}
 
       - name: Validate kustomization
@@ -362,7 +345,6 @@ jobs:
           kustomize edit set image quay.io/ambient_code/vteam_operator:latest=quay.io/ambient_code/vteam_operator:stage
           kustomize edit set image quay.io/ambient_code/vteam_claude_runner:latest=quay.io/ambient_code/vteam_claude_runner:stage
           kustomize edit set image quay.io/ambient_code/vteam_state_sync:latest=quay.io/ambient_code/vteam_state_sync:stage
-          kustomize edit set image quay.io/ambient_code/vteam_public_api:latest=quay.io/ambient_code/vteam_public_api:stage
           kustomize edit set image quay.io/ambient_code/vteam_api_server:latest=quay.io/ambient_code/vteam_api_server:stage
 
       - name: Validate kustomization
