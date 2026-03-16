@@ -169,6 +169,11 @@ jobs:
             FILTERED=$(echo "$ALL_COMPONENTS" | jq -c --arg sel "$SELECTED" '[.[] | select(.name as $n | $sel | split(",") | map(gsub("^\\s+|\\s+$";"")) | index($n))]')
           fi
 
+          if [ "$(echo "$FILTERED" | jq 'length')" -eq 0 ]; then
+            echo "::error::No components matched the selection. Aborting release."
+            exit 1
+          fi
+
           BUILD_MATRIX=$(echo "$FILTERED" | jq -c '.')
           MERGE_MATRIX=$(echo "$FILTERED" | jq -c '[.[] | {name, image}]')
 
@@ -305,6 +310,17 @@ jobs:
         run: |
           RELEASE_TAG="${{ needs.release.outputs.new_tag }}"
           BUILT="${{ steps.built.outputs.names }}"
+
+          # Map component names to their deployment names and container names
+          # runner and state-sync are Jobs (no deployment); their tags come from the operator env
+          declare -A DEPLOY_MAP=(
+            ["frontend"]="frontend:frontend"
+            ["backend"]="backend-api:backend-api"
+            ["operator"]="agentic-operator:agentic-operator"
+            ["public-api"]="public-api:public-api"
+            ["ambient-api-server"]="ambient-api-server:ambient-api-server"
+          )
+
           for comp_image in \
             "frontend:quay.io/ambient_code/vteam_frontend" \
             "backend:quay.io/ambient_code/vteam_backend" \
@@ -315,6 +331,36 @@ jobs:
             "ambient-api-server:quay.io/ambient_code/vteam_api_server"; do
             COMP="${comp_image%%:*}"
             IMAGE="${comp_image#*:}"
+
+            # Seed kustomize with the currently deployed tag so unbuilt components
+            # don't fall back to the repo's ":latest" placeholder
+            DEPLOY_INFO="${DEPLOY_MAP[$COMP]:-}"
+            if [ -n "$DEPLOY_INFO" ]; then
+              DEPLOY_NAME="${DEPLOY_INFO%%:*}"
+              CONTAINER_NAME="${DEPLOY_INFO#*:}"
+              CURRENT_TAG=$(oc get deployment "$DEPLOY_NAME" -n ambient-code \
+                -o jsonpath="{.spec.template.spec.containers[?(@.name=='${CONTAINER_NAME}')].image}" 2>/dev/null \
+                | grep -oP ':\K[^"]+$' || true)
+              if [ -n "$CURRENT_TAG" ]; then
+                kustomize edit set image ${IMAGE}:latest=${IMAGE}:${CURRENT_TAG}
+              fi
+            elif [ "$COMP" = "ambient-runner" ]; then
+              CURRENT_TAG=$(oc get deployment agentic-operator -n ambient-code \
+                -o jsonpath='{.spec.template.spec.containers[?(@.name=="agentic-operator")].env[?(@.name=="AMBIENT_CODE_RUNNER_IMAGE")].value}' 2>/dev/null \
+                | grep -oP ':\K[^"]+$' || true)
+              if [ -n "$CURRENT_TAG" ]; then
+                kustomize edit set image ${IMAGE}:latest=${IMAGE}:${CURRENT_TAG}
+              fi
+            elif [ "$COMP" = "state-sync" ]; then
+              CURRENT_TAG=$(oc get deployment agentic-operator -n ambient-code \
+                -o jsonpath='{.spec.template.spec.containers[?(@.name=="agentic-operator")].env[?(@.name=="STATE_SYNC_IMAGE")].value}' 2>/dev/null \
+                | grep -oP ':\K[^"]+$' || true)
+              if [ -n "$CURRENT_TAG" ]; then
+                kustomize edit set image ${IMAGE}:latest=${IMAGE}:${CURRENT_TAG}
+              fi
+            fi
+
+            # Override with the new release tag if this component was built
             if echo "$BUILT" | grep -q "$COMP"; then
               kustomize edit set image ${IMAGE}:latest=${IMAGE}:${RELEASE_TAG}
             fi
