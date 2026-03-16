@@ -62,6 +62,24 @@ At any moment the agent is in one of three states:
 
 If the agent is heading in the wrong direction while it is still **Working**, you can send a new message at any time. The agent will read your message after its current tool call finishes and adjust course.
 
+## Human-in-the-loop
+
+Sometimes the agent needs your input before it can continue. When this happens, the agent pauses and presents a **question panel** in the chat. The agent's status changes to `waiting_input` until you respond. After you submit your answer, the agent resumes work automatically.
+
+### Question types
+
+The question panel supports three input styles depending on what the agent needs to know:
+
+- **Free-text** -- an open text field for you to type any response.
+- **Single-select** -- a list of radio buttons when the agent offers predefined choices. An **Other** option lets you type a custom answer if none of the choices fit.
+- **Multi-select** -- a list of checkboxes when the agent wants you to pick one or more options.
+
+### Multiple questions at once
+
+When the agent has several questions, the panel displays them in a **tabbed interface**. Each tab shows one question, and a counter tracks how many you have answered. After you select an answer the panel auto-advances to the next tab. You can click any tab to revisit a previous answer before submitting.
+
+Once all questions are answered, click **Submit** to send your responses and let the agent continue.
+
 ## Session operations
 
 | Operation | What it does |
@@ -71,6 +89,10 @@ If the agent is heading in the wrong direction while it is still **Working**, yo
 | **Clone** | Creates a new session with the same configuration and repos -- useful for trying a different approach. Chat history is not copied. |
 | **Export** | Downloads session data and offers Markdown or PDF export. If the session is running and Google Drive is connected, you can also save directly to your Drive. |
 | **Delete** | Permanently removes the session and its data. |
+
+## Feedback
+
+You can rate any agent response with a thumbs-up or thumbs-down button that appears alongside messages in the chat. Clicking either button opens a feedback modal where you can optionally add a comment explaining what went well or what could be improved. The platform sends your rating to Langfuse for observability and quality tracking, automatically associating it with the session, message, user, active workflow, and trace so that teams can analyze agent performance over time.
 
 ## Tips for effective sessions
 
