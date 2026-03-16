@@ -1,13 +1,7 @@
-FROM alpine:3.19
+FROM quay.io/fedora/fedora:latest
 
-# Install rclone, git, and utilities
-RUN apk add --no-cache \
-    rclone \
-    git \
-    bash \
-    curl \
-    jq \
-    ca-certificates
+RUN dnf install -y rclone git-core jq && \
+    dnf clean all
 
 # Copy scripts
 COPY hydrate.sh /usr/local/bin/hydrate.sh
