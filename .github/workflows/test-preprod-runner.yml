@@ -1,0 +1,35 @@
+name: "TEST: preprod runner"
+on:
+  push:
+    paths:
+      - .github/workflows/test-preprod-runner.yml
+      - scripts/verify-preprod-access.sh
+      - components/manifests/overlays/mpp-preprod/**
+      - components/manifests/components/**
+      - components/manifests/base/**
+  workflow_dispatch:
+
+jobs:
+  hello:
+    runs-on: [self-hosted, preprod]
+    steps:
+      - run: echo "Hello from $(hostname)"
+
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            scripts
+            components/manifests
+
+      - name: Install oc
+        uses: redhat-actions/oc-installer@v1
+        with:
+          oc_version: 'latest'
+
+      - name: Verify cluster access
+        run: ./scripts/verify-preprod-access.sh
+
+      - name: Dry-run mpp-preprod overlay
+        run: |
+          oc kustomize components/manifests/overlays/mpp-preprod \
+            | oc apply --dry-run=server -f -
