@@ -6,8 +6,11 @@ metadata:
 
 namespace: ambient-code--runtime-int
 
+# Reference core/ and rbac/ directly, skipping platform/ which contains
+# Namespace, CRDs, and Secrets that IT manages outside kustomize.
 resources:
-- ../../base
+- ../../base/core
+- ../../base/rbac
 - ambient-api-server-route.yaml
 - route.yaml
 - backend-route.yaml
@@ -21,10 +24,6 @@ components:
 - ../../components/ambient-api-server-db
 
 patches:
-- path: namespace-patch.yaml
-  target:
-    kind: Namespace
-    name: ambient-code
 - path: ambient-api-server-env-patch.yaml
   target:
     group: apps
@@ -42,6 +41,10 @@ patches:
     kind: Service
     name: ambient-api-server
     version: v1
+# IT MPP requires aws-ebs storage class and appcode label on all PVCs
+- path: pvc-mpp-patch.yaml
+  target:
+    kind: PersistentVolumeClaim
 
 # Production images from Quay.io
 images:

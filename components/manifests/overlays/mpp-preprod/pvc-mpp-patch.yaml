@@ -1,0 +1,11 @@
+# IT MPP requires aws-ebs storage class, reclaim policy annotation, and appcode label
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: placeholder
+  labels:
+    paas.redhat.com/appcode: AMBC-001
+  annotations:
+    kubernetes.io/reclaimPolicy: Delete
+spec:
+  storageClassName: aws-ebs
