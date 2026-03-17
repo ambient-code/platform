@@ -119,12 +119,13 @@ export function ContextTab({
 
                 return (
                   <div
-                    key={`repo-${idx}`}
+                    key={repo.url}
                     className="border rounded bg-muted/30"
                   >
                     <div className="flex items-center gap-2 p-2 hover:bg-muted/50 transition-colors">
                       {hasBranches ? (
                         <button
+                          type="button"
                           onClick={toggleExpanded}
                           className="h-4 w-4 text-muted-foreground flex-shrink-0 hover:text-foreground cursor-pointer"
                         >
@@ -187,6 +188,7 @@ export function ContextTab({
                           repo.status === "Cloning" ||
                           repo.status === "Removing"
                         }
+                        aria-label={`Remove ${repoName}`}
                       >
                         {isRemoving ? (
                           <Loader2 className="h-3 w-3 animate-spin" />
@@ -259,7 +261,7 @@ export function ContextTab({
             </div>
           ) : (
             <div className="space-y-2">
-              {uploadedFiles.map((file, idx) => {
+              {uploadedFiles.map((file) => {
                 const isRemoving = removingFile === file.name;
                 const fileSizeKB = file.size
                   ? (file.size / 1024).toFixed(1)
@@ -267,7 +269,7 @@ export function ContextTab({
 
                 return (
                   <div
-                    key={`file-${idx}`}
+                    key={file.path || file.name}
                     className="flex items-center gap-2 p-2 border rounded bg-muted/30 hover:bg-muted/50 transition-colors"
                   >
                     <CloudUpload className="h-4 w-4 text-blue-500 flex-shrink-0" />
@@ -288,6 +290,7 @@ export function ContextTab({
                         className="h-7 w-7 p-0 flex-shrink-0"
                         onClick={() => handleRemoveFile(file.name)}
                         disabled={isRemoving}
+                        aria-label={`Remove ${file.name}`}
                       >
                         {isRemoving ? (
                           <Loader2 className="h-3 w-3 animate-spin" />

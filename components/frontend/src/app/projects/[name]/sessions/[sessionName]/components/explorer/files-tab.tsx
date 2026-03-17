@@ -76,8 +76,8 @@ export function FilesTab({
   const handleSelect = (node: FileTreeNode) => {
     if (node.type === "file" && onFileOpen) {
       const fullPath = currentSubPath
-        ? `${selectedDirectory.path}/${currentSubPath}/${node.name}`
-        : `${selectedDirectory.path}/${node.name}`;
+        ? `${selectedDirectory.path}/${currentSubPath}/${node.path}`
+        : `${selectedDirectory.path}/${node.path}`;
       onFileOpen(fullPath);
     } else {
       onFileOrFolderSelect(node);

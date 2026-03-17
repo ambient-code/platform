@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useMemo, useState } from 'react';
-import { Users, User as UserIcon, Plus, RefreshCw, Loader2, Trash2, Info } from 'lucide-react';
+import { Users, User as UserIcon, Plus, Loader2, Trash2, Info } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -29,7 +29,7 @@ type SharingSectionProps = {
 };
 
 export function SharingSection({ projectName }: SharingSectionProps) {
-  const { data: permissions = [], isLoading, refetch } = useProjectPermissions(projectName);
+  const { data: permissions = [] } = useProjectPermissions(projectName);
   const addPermissionMutation = useAddProjectPermission();
   const removePermissionMutation = useRemoveProjectPermission();
 

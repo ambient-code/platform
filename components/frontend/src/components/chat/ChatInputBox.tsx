@@ -479,7 +479,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-muted text-xs text-muted-foreground">
             Session has {sessionPhase.toLowerCase()}.
             {onContinue && (
-              <button onClick={onContinue} className="text-link hover:underline font-medium">
+              <button type="button" onClick={onContinue} className="text-link hover:underline font-medium">
                 Resume session
               </button>
             )}
@@ -492,6 +492,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
             <Pencil className="h-3 w-3" />
             Editing queued message
             <button
+              type="button"
               onClick={() => { onChange(draftInput); resetHistory(); }}
               className="ml-auto hover:text-blue-900 dark:hover:text-blue-100"
             >
@@ -521,6 +522,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
               {queuedCount} message{queuedCount > 1 ? "s" : ""} queued
               {onClearQueue && (
                 <button
+                  type="button"
                   onClick={onClearQueue}
                   className="ml-1 flex items-center gap-0.5 hover:text-amber-800 dark:hover:text-amber-200"
                   title="Clear all queued messages"
@@ -667,6 +669,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
               ) : editingQueuedId ? (
                 <>
                   <button
+                    type="button"
                     onClick={handleSendAsNew}
                     disabled={!hasContent || isSending}
                     className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"

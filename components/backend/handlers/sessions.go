@@ -898,8 +898,11 @@ func CreateSession(c *gin.Context) {
 	// initialPrompt message, so sessions created with only an initialPrompt
 	// (e.g., from the new-session page) would never get a generated name.
 	if strings.TrimSpace(req.InitialPrompt) != "" && strings.TrimSpace(req.DisplayName) == "" {
-		sessionCtx := ExtractSessionContext(created.Object["spec"].(map[string]interface{}))
-		GenerateDisplayNameAsync(project, name, req.InitialPrompt, sessionCtx)
+		spec, ok := created.Object["spec"].(map[string]interface{})
+		if ok {
+			sessionCtx := ExtractSessionContext(spec)
+			GenerateDisplayNameAsync(project, name, req.InitialPrompt, sessionCtx)
+		}
 	}
 
 	c.JSON(http.StatusCreated, gin.H{

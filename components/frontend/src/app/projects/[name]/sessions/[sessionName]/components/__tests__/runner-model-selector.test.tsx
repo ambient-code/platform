@@ -25,7 +25,7 @@ const mockRunnerTypes: RunnerType[] = [
 const mockUseRunnerTypes = vi.fn(() => ({ data: mockRunnerTypes }));
 
 vi.mock('@/services/queries/use-runner-types', () => ({
-  useRunnerTypes: (projectName: string) => mockUseRunnerTypes(projectName),
+  useRunnerTypes: () => mockUseRunnerTypes(),
 }));
 
 describe('RunnerModelSelector', () => {

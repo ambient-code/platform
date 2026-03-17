@@ -28,7 +28,7 @@ type SchedulesSectionProps = {
 };
 
 export function SchedulesSection({ projectName }: SchedulesSectionProps) {
-  const { data: scheduledSessions, isFetching, isLoading, error, refetch } = useScheduledSessions(projectName);
+  const { data: scheduledSessions, isLoading, error, refetch } = useScheduledSessions(projectName);
 
   const deleteMutation = useDeleteScheduledSession();
   const suspendMutation = useSuspendScheduledSession();

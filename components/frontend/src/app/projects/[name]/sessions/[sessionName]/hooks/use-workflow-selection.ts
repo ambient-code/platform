@@ -27,7 +27,7 @@ export function useWorkflowSelection({
         const lower = search.toLowerCase();
         return (
           workflow.name.toLowerCase().includes(lower) ||
-          workflow.description.toLowerCase().includes(lower)
+          (workflow.description ?? "").toLowerCase().includes(lower)
         );
       })
       .sort((a, b) => a.name.localeCompare(b.name)),

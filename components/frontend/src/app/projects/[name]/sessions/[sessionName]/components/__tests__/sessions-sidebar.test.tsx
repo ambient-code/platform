@@ -31,6 +31,7 @@ vi.mock('@/components/session-status-dot', () => ({
   SessionStatusDot: ({ phase }: { phase: string }) => (
     <span data-testid="status-dot">{phase}</span>
   ),
+  sessionPhaseLabel: (phase: string) => phase || 'Unknown',
 }));
 
 vi.mock('date-fns', () => ({

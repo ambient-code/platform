@@ -16,6 +16,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { UserBubble } from "@/components/user-bubble";
 import { cn } from "@/lib/utils";
 import { useLocalStorage } from "@/hooks/use-local-storage";
+import { useResizePanel } from "@/hooks/use-resize-panel";
 import { SessionsSidebar } from "./sessions/[sessionName]/components/sessions-sidebar";
 
 export default function ProjectLayout({
@@ -38,6 +39,7 @@ export default function ProjectLayout({
     "session-sidebar-visible",
     true
   );
+  const sidebarResize = useResizePanel("session-sidebar-width", 280, 220, 450, "left");
   const { data: version } = useVersion();
 
   const handleLogout = () => {
@@ -59,18 +61,25 @@ export default function ProjectLayout({
         {/* Left sidebar */}
         <div
           className={cn(
-            "h-full overflow-hidden border-r transition-[width] duration-200 ease-in-out flex-shrink-0",
-            sidebarVisible ? "w-[300px]" : "w-0 border-r-0"
+            "h-full overflow-hidden border-r flex-shrink-0 relative",
+            !sidebarResize.isDragging && "transition-[width] duration-200 ease-in-out",
+            !sidebarVisible && "!w-0 border-r-0"
           )}
+          style={{ width: sidebarVisible ? sidebarResize.width : 0 }}
         >
-          <div className="h-full w-[280px]">
+          <div className="h-full" style={{ width: sidebarResize.width }}>
             <SessionsSidebar
               projectName={projectName}
               currentSessionName={currentSessionName}
-              collapsed={false}
+              collapsed={!sidebarVisible}
               onCollapse={() => setSidebarVisible(false)}
             />
           </div>
+          {/* Drag handle */}
+          <div
+            className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50 transition-colors z-10"
+            onMouseDown={sidebarResize.onMouseDown}
+          />
         </div>
 
         {/* Main content */}

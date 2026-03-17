@@ -1316,6 +1316,9 @@ export default function ProjectSessionDetailPage({
 
     try {
       await aguiSendMessage(finalMessage);
+      // Invalidate session caches so sidebar/list reflect the new activity
+      queryClient.invalidateQueries({ queryKey: sessionKeys.detail(projectName, sessionName) });
+      queryClient.invalidateQueries({ queryKey: sessionKeys.list(projectName) });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to send message");
     }
@@ -1327,6 +1330,9 @@ export default function ProjectSessionDetailPage({
       await aguiSendMessage(formattedAnswer, {
         type: "ask_user_question_response",
       });
+      // Invalidate session caches so sidebar/list reflect the resumed activity
+      queryClient.invalidateQueries({ queryKey: sessionKeys.detail(projectName, sessionName) });
+      queryClient.invalidateQueries({ queryKey: sessionKeys.list(projectName) });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to send answer");
       throw err;
@@ -1337,6 +1343,8 @@ export default function ProjectSessionDetailPage({
     try {
       await aguiSendMessage(slashCommand);
       toast.success(`Command ${slashCommand} sent`);
+      queryClient.invalidateQueries({ queryKey: sessionKeys.detail(projectName, sessionName) });
+      queryClient.invalidateQueries({ queryKey: sessionKeys.list(projectName) });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to send command");
     }

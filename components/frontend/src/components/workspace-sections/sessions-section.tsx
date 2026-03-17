@@ -172,10 +172,7 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
     setSearchInput(e.target.value);
   };
 
-  const handleRefresh = () => {
-    setOffset(0);
-    refetch();
-  };
+
 
   const handleEditName = (sessionName: string, currentDisplayName: string) => {
     setEditingSession({ name: sessionName, displayName: currentDisplayName });

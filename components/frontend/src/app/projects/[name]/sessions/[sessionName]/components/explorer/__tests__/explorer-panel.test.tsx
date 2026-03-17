@@ -32,7 +32,7 @@ describe('ExplorerPanel', () => {
     // Context tab props
     repositories: [],
     uploadedFiles: [],
-    onAddContext: vi.fn(),
+    onAddRepository: vi.fn(),
     onRemoveRepository: vi.fn(),
     onRemoveFile: vi.fn(),
   };

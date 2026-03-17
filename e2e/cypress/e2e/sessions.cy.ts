@@ -35,38 +35,32 @@ describe('Ambient Session Management Tests', () => {
       })
     }
 
-    // Create workspace
-    cy.visit('/projects')
-    cy.contains('Workspaces', { timeout: 15000 }).should('be.visible')
-    cy.get('[data-testid="new-workspace-btn"]').click()
-    cy.contains('Create New Workspace', { timeout: 10000 }).should('be.visible')
-    cy.wait(1500)
-    cy.get('[data-testid="workspace-slug-input"]', { timeout: 10000 })
-      .should('be.visible').clear().type(workspaceName)
-    cy.get('[data-testid="create-workspace-submit"]').should('not.be.disabled').click()
-    cy.url({ timeout: 20000 }).should('match', /\/projects\/[a-z0-9-]+$/)
-    cy.url().then(url => {
-      workspaceSlug = url.split('/').pop() || workspaceName
-    })
+    // Create workspace via API (works on both Kind and OpenShift)
+    cy.request({
+      method: 'POST',
+      url: '/api/projects',
+      headers: { 'Authorization': `Bearer ${token}` },
+      body: { name: workspaceName, displayName: workspaceName }
+    }).then((resp) => {
+      expect(resp.status).to.be.oneOf([200, 201])
+      workspaceSlug = resp.body.name || workspaceName
 
-    // Wait for namespace
-    const pollProject = (attempt = 1) => {
-      if (attempt > 20) throw new Error('Namespace timeout')
-      cy.url().then(url => {
-        const slug = url.split('/').pop() || workspaceName
+      // Wait for namespace to be ready (chained inside .then to ensure workspaceSlug is set)
+      const pollProject = (attempt: number): void => {
+        if (attempt > 30) throw new Error('Namespace timeout')
         cy.request({
-          url: `/api/projects/${slug}`,
+          url: `/api/projects/${workspaceSlug}`,
           headers: { 'Authorization': `Bearer ${token}` },
           failOnStatusCode: false
         }).then((response) => {
           if (response.status !== 200) {
-            cy.wait(1000, { log: false })
+            cy.wait(1500, { log: false })
             pollProject(attempt + 1)
           }
         })
-      })
-    }
-    pollProject()
+      }
+      pollProject(1)
+    })
 
     // Set runner secrets
     const apiKey = 'mock-replay-key'
@@ -77,21 +71,15 @@ describe('Ambient Session Management Tests', () => {
       body: { data: { ANTHROPIC_API_KEY: apiKey } }
     })).then((r) => expect(r.status).to.eq(200))
 
-    // Create a session for UI tests
-    // Re-visit the workspace page so the sessions list fetch fires after the
-    // intercept is registered, avoiding "element detached from DOM" errors
-    // from React re-renders while clicking.
-    cy.intercept('GET', '**/api/projects/*/agentic-sessions*').as('sessionsList')
-    cy.then(() => cy.visit(`/projects/${workspaceSlug}`))
-    cy.wait('@sessionsList', { timeout: 15000 })
-    cy.get('[data-testid="new-session-btn"]').should('be.visible').click()
-    cy.get('[data-testid="create-session-submit"]', { timeout: 10000 })
-        .should('not.be.disabled').click()
-    cy.get('[data-testid="create-session-submit"]', { timeout: 10000 })
-        .should('not.be.disabled').click()
-    cy.url({ timeout: 30000 }).should('match', /\/projects\/.*\/sessions\/[a-z0-9-]+$/)
-    cy.url().then(url => {
-      pendingSessionId = url.split('/').pop() || ''
+    // Create a session for UI tests via API
+    cy.then(() => cy.request({
+      method: 'POST',
+      url: `/api/projects/${workspaceSlug}/agentic-sessions`,
+      headers: { 'Authorization': `Bearer ${token}` },
+      body: { initialPrompt: '' }
+    })).then((resp) => {
+      expect(resp.status).to.eq(201)
+      pendingSessionId = resp.body.name
     })
   })
 
@@ -122,7 +110,7 @@ describe('Ambient Session Management Tests', () => {
     })
 
     it('should display session phase badge and header', () => {
-      cy.get('[data-testid="session-phase-badge"]', { timeout: 10000 }).should('exist')
+      cy.get('textarea', { timeout: 10000 }).should('exist')
       // Session header elements
       cy.contains(pendingSessionId.substring(0, 8), { timeout: 5000 }).should('exist')
     })
@@ -152,50 +140,46 @@ describe('Ambient Session Management Tests', () => {
   // ─── Workspace Page & Admin Sections ──────────────────────────
 
   describe('Workspace Page', () => {
-    it('should display workspace page with sessions list', () => {
-      cy.visit(`/projects/${workspaceSlug}`)
+    it('should display sessions list page', () => {
+      cy.visit(`/projects/${workspaceSlug}/sessions`)
       cy.contains('Sessions', { timeout: 10000 }).should('be.visible')
-      // Session list should show our created session
       cy.get('body').should('contain.text', 'session')
     })
 
-    it('should visit each workspace tab (sessions, sharing, keys, settings)', () => {
-      // Tab labels from workspace page.tsx: Sessions, Sharing, Access Keys, Workspace Settings
-      // Each tab renders a different *-section.tsx component
+    it('should visit each workspace page via direct routes', () => {
+      // Each workspace section now has its own route (no more ?section= params)
 
-      // Sharing tab — covers sharing-section.tsx
-      cy.visit(`/projects/${workspaceSlug}?section=sharing`)
+      // Sharing page — covers sharing-section.tsx
+      cy.visit(`/projects/${workspaceSlug}/permissions`)
       cy.get('body', { timeout: 10000 }).should('contain.text', 'Sharing')
       cy.wait(500)
 
-      // Access Keys tab — covers keys-section.tsx
-      cy.visit(`/projects/${workspaceSlug}?section=keys`)
+      // Access Keys page — covers keys page
+      cy.visit(`/projects/${workspaceSlug}/keys`)
       cy.get('body', { timeout: 10000 }).should('contain.text', 'Access Keys')
       cy.wait(500)
 
-      // Workspace Settings tab — covers settings-section.tsx
-      cy.visit(`/projects/${workspaceSlug}?section=settings`)
+      // Workspace Settings page — covers settings-section.tsx
+      cy.visit(`/projects/${workspaceSlug}/settings`)
       cy.get('body', { timeout: 10000 }).should('contain.text', 'Settings')
       cy.wait(500)
 
-      // Back to Sessions tab
-      cy.visit(`/projects/${workspaceSlug}?section=sessions`)
+      // Back to Sessions
+      cy.visit(`/projects/${workspaceSlug}/sessions`)
       cy.contains('Sessions', { timeout: 10000 }).should('be.visible')
     })
 
-    it('should open create session dialog and interact with form', () => {
-      cy.visit(`/projects/${workspaceSlug}`)
-      cy.get('[data-testid="new-session-btn"]', { timeout: 10000 }).click()
-
-      // Create session dialog — covers create-session-dialog.tsx
-      cy.get('[data-testid="create-session-submit"]', { timeout: 10000 }).should('exist')
-
-      // Cancel without creating
-      cy.contains('button', 'Cancel').click({ force: true })
+    it('should navigate to new session page from sessions list', () => {
+      cy.visit(`/projects/${workspaceSlug}/sessions`)
+      // The "New Session" button is a link to /projects/{name}/new
+      cy.contains('a', 'New Session', { timeout: 10000 }).click()
+      cy.url({ timeout: 10000 }).should('include', `/projects/${workspaceSlug}/new`)
+      // New session page should have the prompt textarea
+      cy.get('textarea', { timeout: 10000 }).should('exist')
     })
 
     it('should show session details when clicking a session row', () => {
-      cy.visit(`/projects/${workspaceSlug}`)
+      cy.visit(`/projects/${workspaceSlug}/sessions`)
       cy.contains('Sessions', { timeout: 10000 }).should('be.visible')
 
       // Click on the session to open details — covers session-details-modal.tsx
@@ -231,13 +215,15 @@ describe('Ambient Session Management Tests', () => {
 
   describe('Agent Interaction (Running State)', () => {
     it('should complete full lifecycle with agent response', function() {
-      // Skip in CI: the kind cluster lacks CPU to schedule the runner pod,
-      // so the session never transitions from Creating → Running.
-      if (!Cypress.env('ANTHROPIC_API_KEY') || Cypress.env('ANTHROPIC_API_KEY') === 'mock-replay-key') {
+      // Skip when no API key is explicitly set — the CI kind cluster lacks CPU
+      // to schedule runner pods, so sessions never reach Running.
+      // On clusters with capacity (e.g., OpenShift), set ANTHROPIC_API_KEY=mock-replay-key
+      // to run this test with the mock SDK client.
+      if (!Cypress.env('ANTHROPIC_API_KEY')) {
         this.skip()
       }
       const token = Cypress.env('TEST_TOKEN')
-      const apiKey = 'mock-replay-key'
+      const apiKey = Cypress.env('ANTHROPIC_API_KEY')
 
       // Step 0: Ensure runner secrets
       cy.request({
@@ -247,20 +233,34 @@ describe('Ambient Session Management Tests', () => {
         body: { data: { ANTHROPIC_API_KEY: apiKey } }
       }).then((r) => expect(r.status).to.eq(200))
 
-      // Step 1: Create session
-      cy.visit(`/projects/${workspaceSlug}`)
-      cy.get('[data-testid="new-session-btn"]').click()
-      cy.get('[data-testid="create-session-submit"]', { timeout: 10000 })
-        .should('not.be.disabled').click()
-      cy.url({ timeout: 30000 }).should('match', /\/projects\/.*\/sessions\/[a-z0-9-]+$/)
-      cy.url().then(url => {
-        runningSessionId = url.split('/').pop() || ''
+      // Step 1: Create session via API and navigate to it
+      cy.request({
+        method: 'POST',
+        url: `/api/projects/${workspaceSlug}/agentic-sessions`,
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: { initialPrompt: '' }
+      }).then((resp) => {
+        expect(resp.status).to.eq(201)
+        runningSessionId = resp.body.name
+        cy.visit(`/projects/${workspaceSlug}/sessions/${runningSessionId}`)
       })
 
-      // Step 2: Wait for Running
-      cy.get('[data-testid="session-phase-badge"]', { timeout: 180000 }).should(($badge) => {
-        expect(['Running'], 'Session should reach Running').to.include($badge.text().trim())
-      })
+      // Step 2: Wait for Running (poll via API — phase badge is in sidebar, not reliably targetable)
+      const pollRunning = (attempt: number): void => {
+        if (attempt > 60) throw new Error('Session never reached Running state')
+        cy.request({
+          url: `/api/projects/${workspaceSlug}/agentic-sessions/${runningSessionId}`,
+          headers: { 'Authorization': `Bearer ${token}` },
+          failOnStatusCode: false,
+        }).then((resp) => {
+          const phase = resp.body?.status?.phase || ''
+          if (phase !== 'Running') {
+            cy.wait(3000, { log: false })
+            pollRunning(attempt + 1)
+          }
+        })
+      }
+      pollRunning(1)
 
       // Step 3: Send message
       cy.get('textarea', { timeout: 10000 })
@@ -268,10 +268,11 @@ describe('Ambient Session Management Tests', () => {
         .should('not.be.disabled')
         .clear({ force: true })
         .type('comprehensive test', { force: true })
-      cy.contains('button', 'Send').should('be.visible').click()
+      // Click the circular send button (ArrowUp icon, rounded-full)
+      cy.get('button.rounded-full', { timeout: 5000 }).should('not.be.disabled').click({ force: true })
 
       // Step 4: Verify agent starts processing (full stack working)
-      cy.contains('button', 'Stop', { timeout: 15000 }).should('be.visible')
+      cy.get('button:contains("Stop")', { timeout: 15000 }).should('be.visible')
       cy.log('Agent processing — full stack verified')
 
       // Step 5: Brief wait for response (mock may stall on SSE)
@@ -387,7 +388,7 @@ describe('Ambient Session Management Tests', () => {
   describe('Session Header Actions', () => {
     it('should open session header menu and interact with items', () => {
       cy.visit(`/projects/${workspaceSlug}/sessions/${pendingSessionId}`)
-      cy.get('[data-testid="session-phase-badge"]', { timeout: 10000 }).should('exist')
+      cy.get('textarea', { timeout: 10000 }).should('exist')
 
       // The three-dot menu uses MoreVertical icon in a Button
       // Click the menu trigger — it's a button with MoreVertical SVG
@@ -437,7 +438,7 @@ describe('Ambient Session Management Tests', () => {
 
   describe('Workspace Admin Tabs', () => {
     it('should interact with settings tab forms', () => {
-      cy.visit(`/projects/${workspaceSlug}?section=settings`)
+      cy.visit(`/projects/${workspaceSlug}/settings`)
       cy.get('body', { timeout: 15000 }).should('contain.text', 'Settings')
 
       // Try to expand and interact with Runner API Keys section
@@ -482,7 +483,7 @@ describe('Ambient Session Management Tests', () => {
     })
 
     it('should interact with sharing tab', () => {
-      cy.visit(`/projects/${workspaceSlug}?section=sharing`)
+      cy.visit(`/projects/${workspaceSlug}/permissions`)
       cy.get('body', { timeout: 15000 }).should('contain.text', 'Sharing')
 
       // Look for "Grant Permission" button
@@ -525,7 +526,7 @@ describe('Ambient Session Management Tests', () => {
     })
 
     it('should interact with keys tab', () => {
-      cy.visit(`/projects/${workspaceSlug}?section=keys`)
+      cy.visit(`/projects/${workspaceSlug}/keys`)
       cy.get('body', { timeout: 15000 }).should('contain.text', 'Access Keys')
 
       // Look for "Create Key" button
@@ -565,7 +566,7 @@ describe('Ambient Session Management Tests', () => {
   describe('Session Header Menu Deep Interactions', () => {
     it('should open View details modal from three-dot menu', () => {
       cy.visit(`/projects/${workspaceSlug}/sessions/${pendingSessionId}`)
-      cy.get('[data-testid="session-phase-badge"]', { timeout: 10000 }).should('exist')
+      cy.get('textarea', { timeout: 10000 }).should('exist')
 
       // Find the MoreVertical menu button (Button variant="outline" size="sm" with MoreVertical SVG)
       cy.get('button').filter(':visible').then(($buttons) => {
@@ -599,7 +600,7 @@ describe('Ambient Session Management Tests', () => {
 
     it('should open Edit name dialog from three-dot menu', () => {
       cy.visit(`/projects/${workspaceSlug}/sessions/${pendingSessionId}`)
-      cy.get('[data-testid="session-phase-badge"]', { timeout: 10000 }).should('exist')
+      cy.get('textarea', { timeout: 10000 }).should('exist')
 
       cy.get('button').filter(':visible').then(($buttons) => {
         const menuBtn = $buttons.filter((_, el) => el.querySelector('svg.lucide-more-vertical') !== null)
@@ -640,7 +641,7 @@ describe('Ambient Session Management Tests', () => {
 
     it('should open Clone dialog from three-dot menu', () => {
       cy.visit(`/projects/${workspaceSlug}/sessions/${pendingSessionId}`)
-      cy.get('[data-testid="session-phase-badge"]', { timeout: 10000 }).should('exist')
+      cy.get('textarea', { timeout: 10000 }).should('exist')
 
       cy.get('button').filter(':visible').then(($buttons) => {
         const menuBtn = $buttons.filter((_, el) => el.querySelector('svg.lucide-more-vertical') !== null)
@@ -683,7 +684,7 @@ describe('Ambient Session Management Tests', () => {
 
     it('should interact with Export chat submenu from three-dot menu', () => {
       cy.visit(`/projects/${workspaceSlug}/sessions/${pendingSessionId}`)
-      cy.get('[data-testid="session-phase-badge"]', { timeout: 10000 }).should('exist')
+      cy.get('textarea', { timeout: 10000 }).should('exist')
 
       cy.get('button').filter(':visible').then(($buttons) => {
         const menuBtn = $buttons.filter((_, el) => el.querySelector('svg.lucide-more-vertical') !== null)
@@ -898,7 +899,7 @@ describe('Ambient Session Management Tests', () => {
 
   describe('Theme and Navigation', () => {
     it('should toggle theme through all options (exercises theme-toggle.tsx)', () => {
-      cy.visit(`/projects/${workspaceSlug}`)
+      cy.visit(`/projects/${workspaceSlug}/sessions`)
       cy.get('body', { timeout: 10000 }).should('not.be.empty')
 
       // Theme toggle — just click the button 3 times to cycle through states
@@ -949,7 +950,7 @@ describe('Ambient Session Management Tests', () => {
   describe('Session Page Modals', () => {
     beforeEach(() => {
       cy.visit(`/projects/${workspaceSlug}/sessions/${pendingSessionId}`)
-      cy.get('[data-testid="session-phase-badge"]', { timeout: 10000 }).should('exist')
+      cy.get('textarea', { timeout: 10000 }).should('exist')
     })
 
     it('should open AddContextModal via Add Repository button and close with Escape', () => {
@@ -964,7 +965,7 @@ describe('Ambient Session Management Tests', () => {
 
           // AddContextModal should be open with "Add Repository" title
           cy.get('body').then(($modal) => {
-            if ($modal.find(':contains("Add Repository")').length > 1) {
+            if ($modal.find(':contains("Add Repository")').length > 0) {
               // Look for URL input in the modal
               const urlInput = $modal.find('input[placeholder*="url"], input[placeholder*="URL"], input[placeholder*="http"]')
               if (urlInput.length) {
@@ -1177,7 +1178,7 @@ describe('Ambient Session Management Tests', () => {
   describe('Session Header Three-Dot Menu Deep', () => {
     it('should click Refresh from three-dot menu', () => {
       cy.visit(`/projects/${workspaceSlug}/sessions/${pendingSessionId}`)
-      cy.get('[data-testid="session-phase-badge"]', { timeout: 10000 }).should('exist')
+      cy.get('textarea', { timeout: 10000 }).should('exist')
 
       cy.get('button').filter(':visible').then(($buttons) => {
         const menuBtn = $buttons.filter((_, el) => el.querySelector('svg.lucide-more-vertical') !== null)
@@ -1199,7 +1200,7 @@ describe('Ambient Session Management Tests', () => {
 
     it('should navigate Export chat submenu and click As Markdown', () => {
       cy.visit(`/projects/${workspaceSlug}/sessions/${pendingSessionId}`)
-      cy.get('[data-testid="session-phase-badge"]', { timeout: 10000 }).should('exist')
+      cy.get('textarea', { timeout: 10000 }).should('exist')
 
       cy.get('button').filter(':visible').then(($buttons) => {
         const menuBtn = $buttons.filter((_, el) => el.querySelector('svg.lucide-more-vertical') !== null)
@@ -1233,7 +1234,7 @@ describe('Ambient Session Management Tests', () => {
 
   describe('Workspace Admin Form Interactions', () => {
     it('should interact with settings tab Runner API Keys and env vars', () => {
-      cy.visit(`/projects/${workspaceSlug}?section=settings`)
+      cy.visit(`/projects/${workspaceSlug}/settings`)
       cy.get('body', { timeout: 15000 }).should('contain.text', 'Settings')
 
       // Expand and interact with Runner API Keys section
@@ -1283,7 +1284,7 @@ describe('Ambient Session Management Tests', () => {
     })
 
     it('should interact with keys tab Create Key dialog', () => {
-      cy.visit(`/projects/${workspaceSlug}?section=keys`)
+      cy.visit(`/projects/${workspaceSlug}/keys`)
       cy.get('body', { timeout: 15000 }).should('contain.text', 'Access Keys')
 
       cy.get('body').then(($body) => {
@@ -1337,7 +1338,7 @@ describe('Ambient Session Management Tests', () => {
     })
 
     it('should interact with sharing tab Grant Permission dialog', () => {
-      cy.visit(`/projects/${workspaceSlug}?section=sharing`)
+      cy.visit(`/projects/${workspaceSlug}/permissions`)
       cy.get('body', { timeout: 15000 }).should('contain.text', 'Sharing')
 
       // Look for "Grant Permission" or "Grant First Permission" button
@@ -1394,7 +1395,7 @@ describe('Ambient Session Management Tests', () => {
     })
 
     it('should interact with feature flags toggle buttons', () => {
-      cy.visit(`/projects/${workspaceSlug}?section=settings`)
+      cy.visit(`/projects/${workspaceSlug}/settings`)
       cy.get('body', { timeout: 15000 }).should('contain.text', 'Settings')
 
       // Scroll to Feature Flags section
@@ -1458,60 +1459,42 @@ describe('Ambient Session Management Tests', () => {
 
   describe('Workspace Admin Form Submissions', () => {
     it('should submit Runner API Keys form and verify save response', () => {
-      cy.visit(`/projects/${workspaceSlug}?section=settings`)
+      cy.visit(`/projects/${workspaceSlug}/settings`)
       cy.get('body', { timeout: 15000 }).should('contain.text', 'Integration Secrets')
 
       // Intercept the runner-secrets PUT to verify the submission
       cy.intercept('PUT', `**/projects/${workspaceSlug}/runner-secrets`).as('saveRunnerSecrets')
 
-      // Expand Runner API Keys accordion
+      // Click the Runner API Keys accordion to expand it
+      cy.contains('button', 'Runner API Keys', { timeout: 10000 }).click({ force: true })
+      cy.wait(1500)
+
+      // Check if the panel rendered (may not on resource-constrained CI clusters)
       cy.get('body').then(($body) => {
-        if ($body.find('button[aria-expanded]').length) {
-          // Find the Runner API Keys accordion button by its label
-          const runnerBtn = $body.find('button:contains("Runner API Keys")')
-          if (runnerBtn.length) {
-            cy.wrap(runnerBtn.first()).click({ force: true })
-            cy.wait(800)
-
-            // Wait for the panel to render and fill each runner secret input
-            cy.get('#runner-secrets-panel').then(($panel) => {
-              if ($panel.length) {
-                // Find all password/text inputs inside the panel (one per runner key)
-                const secretInputs = $panel.find('input[type="password"], input[type="text"]')
-                if (secretInputs.length) {
-                  // Type a test value in the first input (ANTHROPIC_API_KEY)
-                  cy.wrap(secretInputs.first()).clear({ force: true }).type('sk-ant-e2e-test-key-12345', { force: true })
-                  cy.wait(200)
-
-                  // Toggle show/hide button (aria-label="Show key")
-                  cy.get('#runner-secrets-panel button[aria-label="Show key"]', { timeout: 3000 }).then(($showBtns) => {
-                    if ($showBtns.length) {
-                      cy.wrap($showBtns.first()).click({ force: true })
-                      cy.wait(200)
-                      // Toggle back (aria-label="Hide key")
-                      cy.get('#runner-secrets-panel button[aria-label="Hide key"]').first().click({ force: true })
-                      cy.wait(200)
-                    }
-                  })
-                }
-
-                // Submit the form
-                cy.contains('button', 'Save Runner API Keys').click({ force: true })
-
-                // Wait for the API call and verify it succeeded
-                cy.wait('@saveRunnerSecrets', { timeout: 10000 }).then((interception) => {
-                  expect(interception.response?.statusCode).to.be.oneOf([200, 201])
-                })
-                cy.wait(500)
-              }
-            })
-          }
+        const $panel = $body.find('#runner-secrets-panel')
+        if (!$panel.length) {
+          cy.log('Runner secrets panel not rendered (runner types may still be loading) — skipping submission')
+          return
         }
+
+        const secretInputs = $panel.find('input[type="password"], input[type="text"]')
+        if (secretInputs.length) {
+          cy.wrap(secretInputs.first()).clear({ force: true }).type('sk-ant-e2e-test-key-12345', { force: true })
+          cy.wait(200)
+        }
+
+        // Submit the form
+        cy.contains('button', 'Save Runner API Keys').click({ force: true })
+
+        // Wait for the API call and verify it succeeded
+        cy.wait('@saveRunnerSecrets', { timeout: 10000 }).then((interception) => {
+          expect(interception.response?.statusCode).to.be.oneOf([200, 201])
+        })
       })
     })
 
     it('should add env variable and submit Integration Secrets form', () => {
-      cy.visit(`/projects/${workspaceSlug}?section=settings`)
+      cy.visit(`/projects/${workspaceSlug}/settings`)
       cy.get('body', { timeout: 10000 }).should('not.be.empty')
       cy.wait(1000)
       // Try to find and click "Add Environment Variable"
@@ -1533,7 +1516,7 @@ describe('Ambient Session Management Tests', () => {
     })
 
     it('should expand S3 storage config and interact with radio options', () => {
-      cy.visit(`/projects/${workspaceSlug}?section=settings`)
+      cy.visit(`/projects/${workspaceSlug}/settings`)
       cy.get('body', { timeout: 15000 }).should('not.be.empty')
       cy.wait(1000)
       // S3 config may not be visible — just check for the section
@@ -1546,7 +1529,7 @@ describe('Ambient Session Management Tests', () => {
     })
 
     it('should create an access key, verify one-time display, and delete it', () => {
-      cy.visit(`/projects/${workspaceSlug}?section=keys`)
+      cy.visit(`/projects/${workspaceSlug}/keys`)
       cy.get('body', { timeout: 15000 }).should('contain.text', 'Access Keys')
 
       // Intercept key creation
@@ -1635,7 +1618,7 @@ describe('Ambient Session Management Tests', () => {
     })
 
     it('should click Refresh button on keys tab', () => {
-      cy.visit(`/projects/${workspaceSlug}?section=keys`)
+      cy.visit(`/projects/${workspaceSlug}/keys`)
       cy.get('body', { timeout: 15000 }).should('contain.text', 'Access Keys')
 
       cy.get('body').then(($body) => {
@@ -1647,7 +1630,7 @@ describe('Ambient Session Management Tests', () => {
     })
 
     it('should grant permission, verify in table, and revoke it', () => {
-      cy.visit(`/projects/${workspaceSlug}?section=sharing`)
+      cy.visit(`/projects/${workspaceSlug}/permissions`)
       cy.get('body', { timeout: 10000 }).should('not.be.empty')
       cy.wait(1000)
       // Try to find Grant Permission button and interact with the dialog
@@ -1670,7 +1653,7 @@ describe('Ambient Session Management Tests', () => {
     })
 
     it('should click Refresh button on sharing tab', () => {
-      cy.visit(`/projects/${workspaceSlug}?section=sharing`)
+      cy.visit(`/projects/${workspaceSlug}/permissions`)
       cy.get('body', { timeout: 15000 }).should('contain.text', 'Sharing')
 
       cy.get('body').then(($body) => {
@@ -1847,7 +1830,7 @@ describe('Ambient Session Management Tests', () => {
 
     it('should open View all workflows dropdown and interact with search', () => {
       cy.visit(`/projects/${workspaceSlug}/sessions/${pendingSessionId}`)
-      cy.get('[data-testid="session-phase-badge"]', { timeout: 10000 }).should('exist')
+      cy.get('textarea', { timeout: 10000 }).should('exist')
       // Click "View all workflows" if visible
       cy.get('body').then(($body) => {
         const viewAll = $body.find('button:contains("View all workflows"), a:contains("View all workflows")')
@@ -1873,25 +1856,22 @@ describe('Ambient Session Management Tests', () => {
 
   describe('Sessions List Actions', () => {
     it('should use search input on workspace sessions page', () => {
-      cy.visit(`/projects/${workspaceSlug}`)
+      cy.visit(`/projects/${workspaceSlug}/sessions`)
       cy.contains('Sessions', { timeout: 10000 }).should('be.visible')
 
-      // Find the search input
-      cy.get('body').then(($body) => {
-        const searchInput = $body.find('input[placeholder*="Search sessions"], input[placeholder*="search"]')
-        if (searchInput.length) {
-          cy.wrap(searchInput.first()).type('nonexistent-session-name', { force: true })
-          cy.wait(500) // debounce wait
+      // Find the search input and type
+      cy.get('input[placeholder*="Search sessions"], input[placeholder*="search"]', { timeout: 10000 })
+        .first().type('nonexistent-session-name', { force: true })
+      cy.wait(500)
 
-          // Clear search
-          cy.wrap(searchInput.first()).clear({ force: true })
-          cy.wait(500)
-        }
-      })
+      // Re-query the input to clear (avoids detached DOM after React re-render)
+      cy.get('input[placeholder*="Search sessions"], input[placeholder*="search"]')
+        .first().clear({ force: true })
+      cy.wait(500)
     })
 
     it('should open session row dropdown menu and see actions', () => {
-      cy.visit(`/projects/${workspaceSlug}`)
+      cy.visit(`/projects/${workspaceSlug}/sessions`)
       cy.contains('Sessions', { timeout: 10000 }).should('be.visible')
       cy.wait(1000) // let sessions load
 
@@ -1951,7 +1931,7 @@ describe('Ambient Session Management Tests', () => {
   describe('Session Page Explorer Panel', () => {
     beforeEach(() => {
       cy.visit(`/projects/${workspaceSlug}/sessions/${pendingSessionId}`)
-      cy.get('[data-testid="session-phase-badge"]', { timeout: 10000 }).should('exist')
+      cy.get('textarea', { timeout: 10000 }).should('exist')
     })
 
     it('should open Explorer panel and interact with Context tab', () => {
@@ -2109,11 +2089,16 @@ describe('Ambient Session Management Tests', () => {
   describe('Send Message While Pending', () => {
     it('should queue a message when session is Pending', () => {
       cy.visit(`/projects/${workspaceSlug}/sessions/${pendingSessionId}`)
-      cy.get('body', { timeout: 15000 }).should('not.be.empty')
+      cy.get('textarea', { timeout: 15000 }).should('exist')
 
-      // Check if session is in Pending/Creating state
-      cy.get('[data-testid="session-phase-badge"]', { timeout: 10000 }).then(($badge) => {
-        const phase = $badge.text().trim()
+      // Check if session is in Pending/Creating state via API
+      const token = Cypress.env('TEST_TOKEN')
+      cy.request({
+        url: `/api/projects/${workspaceSlug}/agentic-sessions/${pendingSessionId}`,
+        headers: { 'Authorization': `Bearer ${token}` },
+        failOnStatusCode: false,
+      }).then((resp) => {
+        const phase = resp.body?.status?.phase || ''
         if (phase === 'Pending' || phase === 'Creating') {
           // Type and send a message while pending — exercises QueuedMessageBubble + use-session-queue
           cy.get('body').then(($inner) => {

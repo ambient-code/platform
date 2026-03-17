@@ -71,6 +71,7 @@ export function ExplorerPanel({
       <div className="flex items-center justify-between border-b px-1">
         <div className="flex">
           <button
+            type="button"
             onClick={() => onTabChange("files")}
             className={cn(
               "px-3 py-2 text-sm font-medium transition-colors flex items-center gap-1.5",
@@ -83,6 +84,7 @@ export function ExplorerPanel({
             Files
           </button>
           <button
+            type="button"
             onClick={() => onTabChange("context")}
             className={cn(
               "px-3 py-2 text-sm font-medium transition-colors flex items-center gap-1.5",

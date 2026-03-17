@@ -7,8 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
-import { AgentStatusIndicator } from "@/components/agent-status-indicator";
+import { AgentStatusIndicator, agentStatusLabel } from "@/components/agent-status-indicator";
 import { deriveAgentStatusFromPhase } from "@/hooks/use-agent-status";
+import { SessionStatusDot, sessionPhaseLabel } from "@/components/session-status-dot";
 import {
   Plus,
   PanelLeftClose,
@@ -61,7 +62,7 @@ export function SessionsSidebar({
   const [showAll, setShowAll] = useState(false);
   const { data, isLoading, isFetching, dataUpdatedAt, refetch } = useSessionsPaginated(
     collapsed ? "" : projectName,
-    { limit: 100 },
+    { limit: 20 },
   );
 
   const sessions = useMemo(() => {
@@ -199,14 +200,9 @@ export function SessionsSidebar({
       {/* Recents Section */}
       <div className="flex flex-col flex-1 min-h-0">
         <div className="flex items-center justify-between px-3 pt-3 pb-1">
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Recents
-            </span>
-            {isFetching && !isLoading && (
-              <RefreshCw className="h-3 w-3 animate-spin text-muted-foreground/50" />
-            )}
-          </div>
+          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            Recents
+          </span>
           <button
             type="button"
             onClick={() => refetch()}
@@ -214,7 +210,7 @@ export function SessionsSidebar({
             className="text-muted-foreground/60 hover:text-muted-foreground transition-colors disabled:opacity-50"
             title={dataUpdatedAt ? `Last updated ${formatDistanceToNow(new Date(dataUpdatedAt), { addSuffix: true })}` : "Refresh"}
           >
-            <RefreshCw className={cn("h-3 w-3", isFetching && "animate-spin")} />
+            <RefreshCw className="h-3 w-3" />
           </button>
         </div>
 
@@ -239,9 +235,21 @@ export function SessionsSidebar({
                     session.metadata.name === currentSessionName;
                   const createdAt = session.metadata.creationTimestamp;
 
+                  const borderColor =
+                    phase === "Running"
+                      ? "border-l-blue-500"
+                      : phase === "Failed"
+                        ? "border-l-red-500"
+                        : phase === "Pending" || phase === "Creating" || phase === "Stopping"
+                          ? "border-l-orange-400"
+                          : "border-l-transparent";
+
+                  const agentStatus = session.status?.agentStatus ?? deriveAgentStatusFromPhase(phase);
+
                   return (
                     <HoverCard key={session.metadata.uid} openDelay={300} closeDelay={100}>
                       <HoverCardTrigger asChild>
+                        {/* div used instead of button to avoid nesting with SessionStatusDot's tooltip button */}
                         <div
                           role="button"
                           tabIndex={0}
@@ -256,13 +264,15 @@ export function SessionsSidebar({
                           }}
                           className={cn(
                             "w-full flex items-center gap-2 px-2 py-2 rounded-md text-left text-sm transition-colors cursor-pointer",
+                            "border-l-2",
+                            borderColor,
                             "hover:bg-accent hover:text-accent-foreground",
                             isActive &&
                               "bg-accent text-accent-foreground font-medium"
                           )}
                         >
                           <AgentStatusIndicator
-                            status={session.status?.agentStatus ?? deriveAgentStatusFromPhase(phase)}
+                            status={agentStatus}
                             compact
                             className="flex-shrink-0"
                           />
@@ -279,19 +289,24 @@ export function SessionsSidebar({
                       </HoverCardTrigger>
                       <HoverCardContent side="right" align="start" className="w-80">
                         <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <p className="text-sm font-semibold truncate mr-2">
-                              {name}
-                            </p>
-                            <AgentStatusIndicator
-                              status={session.status?.agentStatus ?? deriveAgentStatusFromPhase(phase)}
-                              compact
-                            />
-                          </div>
+                          <p className="text-sm font-semibold truncate">
+                            {name}
+                          </p>
                           {session.spec.displayName && (
                             <p className="text-xs text-muted-foreground">{session.metadata.name}</p>
                           )}
                           <div className="flex flex-col gap-1.5 pt-1">
+                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                              <SessionStatusDot phase={phase} />
+                              <span>Session: {sessionPhaseLabel(phase)}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                              <AgentStatusIndicator
+                                status={agentStatus}
+                                compact
+                              />
+                              <span>Agent: {agentStatusLabel(agentStatus)}</span>
+                            </div>
                             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                               <Cpu className="h-3 w-3" />
                               <span>{session.spec.llmSettings.model}</span>
