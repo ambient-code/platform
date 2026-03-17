@@ -12,11 +12,9 @@ Changelog (v1.0.0):
 
 Changelog (v0.2.0):
   - Added Development Standards: Naming & Legacy Migration subsection
-    * Safe vs. breaking change guidance for vTeam → ACP transition
-    * Incremental migration approach (documentation first, then UI, then code)
-    * DO NOT update list: API groups, CRDs, container names, K8s resources
+    * Naming guidance for legacy vTeam references
+    * DO NOT update without explicit instruction: API groups, CRDs, container names, K8s resources
     * Safe to update: docs, comments, logs, UI text, new variable names
-    * Rationale: Gradual migration improves clarity while preserving backward compatibility
 
 Changelog (v0.1.0):
   - Added Principle X: Commit Discipline & Code Review
@@ -48,7 +46,7 @@ Follow-up TODOs:
   - Design RAG pipeline architecture
   - Add commit size validation tooling (pre-commit hook or CI check)
   - Update PR template to include commit discipline checklist
-  - Continue vTeam → ACP migration incrementally (docs → UI → code)
+  - Do NOT rename Kubernetes API group (vteam.ambient-code), CRDs, or container image names without explicit instruction
 -->
 
 # ACP Constitution
@@ -144,7 +142,7 @@ All components MUST support operational visibility:
 
 - Prometheus format on dedicated management port
 - Standard labels: service, namespace, version
-- Focus on metrics critical to project success (e.g., session execution time for vTeam)
+- Focus on metrics critical to project success (e.g., session execution time for ACP)
 
 **Rationale**: Production systems fail. Without observability, debugging is impossible and MTTR explodes. Metrics enable proactive monitoring and capacity planning.
 
@@ -163,7 +161,7 @@ Kubernetes resources MUST have proper lifecycle management:
 
 ### VIII. Context Engineering & Prompt Optimization
 
-vTeam is a context engineering hub - AI output quality depends on input quality:
+ACP is a context engineering hub - AI output quality depends on input quality:
 
 - **Context Budgets**: Respect token limits (200K for Claude Sonnet 4.5)
 - **Context Prioritization**: System context > conversation history > examples
@@ -310,37 +308,19 @@ Each commit MUST be atomic, reviewable, and independently testable:
 
 ### Naming & Legacy Migration
 
-**vTeam → ACP Transition**:
+**Legacy Naming (vteam)**:
 
-Replace usage of "vTeam" with "ACP" (Ambient Code Platform) where it is safe and unobtrusive to do so:
+The project was renamed from vTeam to Ambient Code Platform (ACP). Use "ACP" in all new code, docs, and UI text.
 
-**Safe to Update** (non-breaking changes):
-
-- User-facing documentation and README files
-- Code comments and inline documentation
-- Log messages and error messages
-- UI text and labels
-- Variable names in new code
-
-**DO NOT Update** (breaking changes - maintain for backward compatibility):
+**DO NOT rename without explicit instruction**:
 
 - Kubernetes API group: `vteam.ambient-code`
 - Custom Resource Definitions (CRD kinds)
 - Container image names: `vteam_frontend`, `vteam_backend`, etc.
 - Kubernetes resource names: deployments, services, routes
 - Environment variables referenced in deployment configs
-- File paths in scripts that reference namespaces/resources
-- Git repository name and URLs
 
-**Incremental Approach**:
-
-- Update documentation first (README, CLAUDE.md, docs/)
-- Update UI text in new features
-- Use ACP naming in new code modules
-- Do NOT perform mass renames - update organically during feature work
-- Document remaining vTeam references in "Legacy vTeam References" section
-
-**Rationale**: The project rebranded from vTeam to Ambient Code Platform, but technical artifacts retain "vteam" for backward compatibility. Gradual, safe migration improves clarity while avoiding breaking changes for existing deployments.
+These retain `vteam` for backward compatibility. Renaming requires coordinated migration across deployments and is only done when explicitly instructed.
 
 ## Deployment & Operations
 
