@@ -5,4 +5,3 @@ resources:
 - namespace.yaml
 - ../crds
 - ambient-api-server-secrets.yml
-- ambient-api-server-db.yml
