@@ -1,19 +1,17 @@
 'use client';
 
-import { useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
+import { SharingSection } from '@/components/workspace-sections/sharing-section';
 
 export default function PermissionsPage() {
   const params = useParams();
-  const router = useRouter();
   const projectName = params?.name as string;
 
-  // Redirect to main workspace page
-  useEffect(() => {
-    if (projectName) {
-      router.replace(`/projects/${projectName}?section=sharing`);
-    }
-  }, [projectName, router]);
+  if (!projectName) return null;
 
-  return null;
+  return (
+    <div className="h-full overflow-auto p-6">
+      <SharingSection projectName={projectName} />
+    </div>
+  );
 }

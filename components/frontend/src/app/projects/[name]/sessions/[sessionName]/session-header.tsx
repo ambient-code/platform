@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { RefreshCw, Octagon, Trash2, Copy, MoreVertical, Info, Play, Pencil, Download, FileText, Printer, Loader2, HardDrive, Clock } from 'lucide-react';
+import { RefreshCw, Octagon, Trash2, Copy, MoreVertical, Info, Play, Pencil, Download, FileText, Printer, Loader2, HardDrive, Clock, Settings } from 'lucide-react';
 import { CloneSessionDialog } from '@/components/clone-session-dialog';
 import { SessionDetailsModal } from '@/components/session-details-modal';
 import { EditSessionNameDialog } from '@/components/edit-session-name-dialog';
@@ -27,6 +27,7 @@ type SessionHeaderProps = {
   onStop: () => void;
   onContinue: () => void;
   onDelete: () => void;
+  onOpenSettings?: () => void;
   renderMode?: 'full' | 'actions-only' | 'kebab-only';
 };
 
@@ -38,6 +39,7 @@ export function SessionHeader({
   onStop,
   onContinue,
   onDelete,
+  onOpenSettings,
   renderMode = 'full',
 }: SessionHeaderProps) {
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
@@ -186,16 +188,11 @@ export function SessionHeader({
       <>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm">
+            <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
               <MoreVertical className="w-4 h-4" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={onRefresh} disabled={actionLoading !== null}>
-              <RefreshCw className="w-4 h-4 mr-2" />
-              Refresh
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => setDetailsModalOpen(true)}>
               <Info className="w-4 h-4 mr-2" />
               View details
@@ -224,16 +221,6 @@ export function SessionHeader({
               </DropdownMenuItem>
             )}
             {(canStop || canResume) && <DropdownMenuSeparator />}
-            <CloneSessionDialog
-              session={session}
-              trigger={
-                <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
-                  <Copy className="w-4 h-4 mr-2" />
-                  Clone
-                </DropdownMenuItem>
-              }
-              projectName={projectName}
-            />
             {exportSubMenu}
             {canDelete && (
               <>
@@ -245,6 +232,15 @@ export function SessionHeader({
                 >
                   <Trash2 className="w-4 h-4 mr-2" />
                   {actionLoading === "deleting" ? "Deleting..." : "Delete"}
+                </DropdownMenuItem>
+              </>
+            )}
+            {onOpenSettings && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={onOpenSettings}>
+                  <Settings className="w-4 h-4 mr-2" />
+                  Settings
                 </DropdownMenuItem>
               </>
             )}

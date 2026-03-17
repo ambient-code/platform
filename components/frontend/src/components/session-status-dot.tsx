@@ -9,6 +9,10 @@ import {
 } from "@/components/ui/tooltip";
 import type { AgenticSessionPhase } from "@/types/agentic-session";
 
+export function sessionPhaseLabel(phase: string): string {
+  return phase || "Unknown";
+}
+
 type SessionStatusDotProps = {
   phase: AgenticSessionPhase | string;
   className?: string;

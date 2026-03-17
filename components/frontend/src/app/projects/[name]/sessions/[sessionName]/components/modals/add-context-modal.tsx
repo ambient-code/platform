@@ -1,14 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2, Info, Upload } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Separator } from "@/components/ui/separator";
 import { InputWithHistory } from "@/components/input-with-history";
 import { useInputHistory } from "@/hooks/use-input-history";
 
@@ -16,7 +14,6 @@ type AddContextModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onAddRepository: (url: string, branch: string, autoPush?: boolean) => Promise<void>;
-  onUploadFile?: () => void;
   isLoading?: boolean;
   autoBranch?: string;   // Auto-generated branch from backend (single source of truth)
 };
@@ -25,7 +22,6 @@ export function AddContextModal({
   open,
   onOpenChange,
   onAddRepository,
-  onUploadFile,
   isLoading = false,
   autoBranch,
 }: AddContextModalProps) {
@@ -64,20 +60,13 @@ export function AddContextModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
-          <DialogTitle>Add Context</DialogTitle>
+          <DialogTitle>Add Repository</DialogTitle>
           <DialogDescription>
-            Add additional context to improve AI responses.
+            Add a repository to your workspace for code context.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
-          <Alert>
-            <Info className="h-4 w-4" />
-            <AlertDescription>
-              Note: additional data sources like Jira, Google Drive, files, and MCP Servers are on the roadmap!
-            </AlertDescription>
-          </Alert>
-
           <div className="space-y-2">
             <Label htmlFor="context-url">Repository URL</Label>
             <InputWithHistory
@@ -127,29 +116,6 @@ export function AddContextModal({
             </div>
           </div>
 
-          {onUploadFile && (
-            <>
-              <Separator className="my-4" />
-              <div className="space-y-2">
-                <Label>Upload Files</Label>
-                <p className="text-xs text-muted-foreground mb-2">
-                  Upload files directly to your workspace for use as context
-                </p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    onUploadFile();
-                    onOpenChange(false);
-                  }}
-                  className="w-full"
-                >
-                  <Upload className="h-4 w-4 mr-2" />
-                  Upload Files
-                </Button>
-              </div>
-            </>
-          )}
         </div>
 
         <DialogFooter>

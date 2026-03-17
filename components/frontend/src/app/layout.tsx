@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import "./globals.css";
-import { Navigation } from "@/components/navigation";
+import { NavigationWrapper } from "@/components/navigation-wrapper";
 import { QueryProvider } from "@/components/providers/query-provider";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import { SyntaxThemeProvider } from "@/components/providers/syntax-theme-provider";
@@ -44,7 +44,7 @@ export default function RootLayout({
           <SyntaxThemeProvider />
           <FeatureFlagProvider>
             <QueryProvider>
-              <Navigation feedbackUrl={feedbackUrl} />
+              <NavigationWrapper feedbackUrl={feedbackUrl} />
               <main className="flex-1 bg-background overflow-auto">{children}</main>
               <CommandPalette />
               <Toaster />
