@@ -1,9 +1,9 @@
 'use client';
 
 import { useParams } from 'next/navigation';
-import { SettingsSection } from '@/components/workspace-sections/settings-section';
+import { SchedulesSection } from '@/components/workspace-sections/scheduled-sessions-tab';
 
-export default function ProjectSettingsPage() {
+export default function ScheduledSessionsPage() {
   const params = useParams();
   const projectName = params?.name as string;
 
@@ -11,7 +11,7 @@ export default function ProjectSettingsPage() {
 
   return (
     <div className="h-full overflow-auto p-6">
-      <SettingsSection projectName={projectName} />
+      <SchedulesSection projectName={projectName} />
     </div>
   );
 }

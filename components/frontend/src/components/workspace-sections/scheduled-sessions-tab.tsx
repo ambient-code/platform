@@ -89,10 +89,6 @@ export function SchedulesSection({ projectName }: SchedulesSectionProps) {
             </CardDescription>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => refetch()} disabled={isFetching}>
-              <RefreshCw className={`w-4 h-4 mr-2 ${isFetching ? "animate-spin" : ""}`} />
-              Refresh
-            </Button>
             <CreateScheduledSessionDialog
               projectName={projectName}
               onSuccess={() => refetch()}

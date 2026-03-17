@@ -49,12 +49,15 @@ export type MessagesTabProps = {
   onPasteImage?: (file: File) => Promise<void>;
   onClearQueue?: () => void;
   agentName?: string;
+  onAddRepository?: () => void;
+  onUploadFile?: () => void;
+  workflowSlot?: React.ReactNode;
 };
 
 
-const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chatInput, setChatInput, onSendChat, onSendToolAnswer, onInterrupt, onGoToResults, onContinue, workflowMetadata, onCommandClick, isRunActive = false, showWelcomeExperience, welcomeExperienceComponent, activeWorkflow, userHasInteracted = false, queuedMessages = [], hasRealMessages = false, onCancelQueuedMessage, onUpdateQueuedMessage, onPasteImage, onClearQueue, agentName }) => {
+const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chatInput, setChatInput, onSendChat, onSendToolAnswer, onInterrupt, onGoToResults, onContinue, workflowMetadata, onCommandClick, isRunActive = false, showWelcomeExperience, welcomeExperienceComponent, activeWorkflow, userHasInteracted = false, queuedMessages = [], hasRealMessages = false, onCancelQueuedMessage, onUpdateQueuedMessage, onPasteImage, onClearQueue, agentName, onAddRepository, onUploadFile, workflowSlot }) => {
   const [sendingChat, setSendingChat] = useState(false);
-  const [showSystemMessages, setShowSystemMessages] = useState(false);
+  const showSystemMessages = false;
   const [waitingDotCount, setWaitingDotCount] = useState(0);
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -276,8 +279,6 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
         agents={workflowMetadata?.agents || []}
         commands={workflowMetadata?.commands || []}
         onCommandClick={onCommandClick}
-        showSystemMessages={showSystemMessages}
-        onShowSystemMessagesChange={setShowSystemMessages}
         queuedCount={pendingQueuedCount}
         sessionPhase={phase}
         onContinue={onContinue}
@@ -286,6 +287,9 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
         onUpdateQueuedMessage={onUpdateQueuedMessage}
         onCancelQueuedMessage={onCancelQueuedMessage}
         onClearQueue={onClearQueue}
+        onAddRepository={onAddRepository}
+        onUploadFile={onUploadFile}
+        workflowSlot={workflowSlot}
       />
     </div>
   );

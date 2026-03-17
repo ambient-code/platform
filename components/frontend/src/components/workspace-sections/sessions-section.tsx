@@ -25,7 +25,6 @@ import { EmptyState } from '@/components/empty-state';
 import { SessionStatusDot } from '@/components/session-status-dot';
 import { AgentStatusIndicator } from '@/components/agent-status-indicator';
 import { deriveAgentStatusFromPhase } from '@/hooks/use-agent-status';
-import { CreateSessionDialog } from '@/components/create-session-dialog';
 import { EditSessionNameDialog } from '@/components/edit-session-name-dialog';
 
 import { useSessionsPaginated, useStopSession, useDeleteSession, useContinueSession, useUpdateSessionDisplayName, useRunnerTypes } from '@/services/queries';
@@ -215,20 +214,12 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
             </CardDescription>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={handleRefresh} disabled={isFetching}>
-              <RefreshCw className={`w-4 h-4 mr-2 ${isFetching ? 'animate-spin' : ''}`} />
-              Refresh
+            <Button data-testid="new-session-btn" asChild>
+              <Link href={`/projects/${projectName}/new`}>
+                <Plus className="w-4 h-4 mr-2" />
+                New Session
+              </Link>
             </Button>
-            <CreateSessionDialog
-              projectName={projectName}
-              onSuccess={() => refetch()}
-              trigger={
-                <Button data-testid="new-session-btn">
-                  <Plus className="w-4 h-4 mr-2" />
-                  New Session
-                </Button>
-              }
-            />
           </div>
         </div>
         {/* Search input */}

@@ -145,10 +145,6 @@ export function SharingSection({ projectName }: SharingSectionProps) {
               <CardDescription>Users and groups with access to this workspace and their roles</CardDescription>
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => refetch()} disabled={isLoading}>
-                <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-                Refresh
-              </Button>
               {isAdmin && (
                 <Button onClick={() => setShowGrantDialog(true)}>
                   <Plus className="w-4 h-4 mr-2" />
