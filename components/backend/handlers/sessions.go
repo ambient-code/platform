@@ -893,6 +893,18 @@ func CreateSession(c *gin.Context) {
 	// Runner token provisioning is handled by the operator when creating the pod.
 	// This ensures consistent behavior whether sessions are created via API or kubectl.
 
+	// Trigger async display name generation when initialPrompt is provided
+	// but no explicit displayName was set. The AG-UI proxy skips the
+	// initialPrompt message, so sessions created with only an initialPrompt
+	// (e.g., from the new-session page) would never get a generated name.
+	if strings.TrimSpace(req.InitialPrompt) != "" && strings.TrimSpace(req.DisplayName) == "" {
+		spec, ok := created.Object["spec"].(map[string]interface{})
+		if ok {
+			sessionCtx := ExtractSessionContext(spec)
+			GenerateDisplayNameAsync(project, name, req.InitialPrompt, sessionCtx)
+		}
+	}
+
 	c.JSON(http.StatusCreated, gin.H{
 		"message":    "Agentic session created successfully",
 		"name":       name,

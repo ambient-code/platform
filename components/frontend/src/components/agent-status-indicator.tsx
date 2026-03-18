@@ -11,6 +11,23 @@ import {
 } from "lucide-react";
 import type { AgentStatus } from "@/types/agentic-session";
 
+export function agentStatusLabel(status: AgentStatus): string {
+  switch (status) {
+    case "working":
+      return "Working";
+    case "waiting_input":
+      return "Needs Input";
+    case "completed":
+      return "Completed";
+    case "failed":
+      return "Failed";
+    case "idle":
+      return "Idle";
+    default:
+      return "Unknown";
+  }
+}
+
 type AgentStatusIndicatorProps = {
   status: AgentStatus;
   compact?: boolean;

@@ -152,18 +152,18 @@ export function JiraConnectionCard({ status, onRefresh }: Props) {
               />
             </div>
             <div>
-              <Label htmlFor="jira-username" className="text-sm">Username</Label>
+              <Label htmlFor="jira-email" className="text-sm">Email</Label>
               <Input
-                id="jira-username"
-                type="text"
-                placeholder="rh-dept-kerberos or your-email@redhat.com"
+                id="jira-email"
+                type="email"
+                placeholder="your-email@redhat.com"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 disabled={connectMutation.isPending}
                 className="mt-1"
               />
               <p className="text-xs text-muted-foreground mt-1">
-                Your Jira login username (e.g., rh-dept-kerberos)
+                Your Jira Cloud login email (e.g., jdoe@redhat.com)
               </p>
             </div>
             <div>
@@ -190,7 +190,7 @@ export function JiraConnectionCard({ status, onRefresh }: Props) {
               <p className="text-xs text-muted-foreground mt-1">
                 Create an API token at{' '}
                 <a
-                  href={url ? `${url}/secure/ViewProfile.jspa?selectedTab=com.atlassian.pats.pats-plugin:jira-user-personal-access-tokens` : 'https://id.atlassian.com/manage-profile/security/api-tokens'}
+                  href="https://id.atlassian.com/manage-profile/security/api-tokens"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="underline"

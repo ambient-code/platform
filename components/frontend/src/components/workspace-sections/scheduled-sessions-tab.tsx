@@ -28,7 +28,7 @@ type SchedulesSectionProps = {
 };
 
 export function SchedulesSection({ projectName }: SchedulesSectionProps) {
-  const { data: scheduledSessions, isFetching, isLoading, error, refetch } = useScheduledSessions(projectName);
+  const { data: scheduledSessions, isLoading, error, refetch } = useScheduledSessions(projectName);
 
   const deleteMutation = useDeleteScheduledSession();
   const suspendMutation = useSuspendScheduledSession();
@@ -89,10 +89,6 @@ export function SchedulesSection({ projectName }: SchedulesSectionProps) {
             </CardDescription>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => refetch()} disabled={isFetching}>
-              <RefreshCw className={`w-4 h-4 mr-2 ${isFetching ? "animate-spin" : ""}`} />
-              Refresh
-            </Button>
             <CreateScheduledSessionDialog
               projectName={projectName}
               onSuccess={() => refetch()}

@@ -1,19 +1,17 @@
 'use client';
 
-import { useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
+import { SessionsSection } from '@/components/workspace-sections/sessions-section';
 
 export default function ProjectSessionsListPage() {
   const params = useParams();
-  const router = useRouter();
   const projectName = params?.name as string;
 
-  // Redirect to main workspace page (sessions is the default view)
-  useEffect(() => {
-    if (projectName) {
-      router.replace(`/projects/${projectName}`);
-    }
-  }, [projectName, router]);
+  if (!projectName) return null;
 
-  return null;
+  return (
+    <div className="h-full overflow-auto p-6">
+      <SessionsSection projectName={projectName} />
+    </div>
+  );
 }

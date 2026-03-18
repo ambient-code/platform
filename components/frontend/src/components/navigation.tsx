@@ -105,7 +105,7 @@ export function Navigation({ feedbackUrl }: NavigationProps) {
               </Sheet>
             )}
             <div className="flex items-end gap-2">
-              <Link href="/" className="text-xl font-bold">
+              <Link href="/" className="text-lg font-bold">
                 <span className="hidden md:inline">Ambient Code Platform</span>
                 <span className="md:hidden">ACP</span>
               </Link>

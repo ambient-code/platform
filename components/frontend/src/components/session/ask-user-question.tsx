@@ -31,6 +31,13 @@ function parseQuestions(input: Record<string, unknown>): AskUserQuestionItem[] {
   if (isAskUserQuestionInput(input)) {
     return input.questions;
   }
+  // Handle simple { question: "..." } format (e.g. from Claude Code AskUserQuestion tool)
+  if (typeof input.question === 'string' && input.question.trim()) {
+    return [{
+      question: input.question,
+      options: [],
+    }];
+  }
   return [];
 }
 
@@ -136,6 +143,31 @@ export const AskUserQuestionMessage: React.FC<AskUserQuestionMessageProps> = ({
 
   const renderQuestionOptions = (q: AskUserQuestionItem) => {
     const isOther = usingOther[q.question];
+
+    // Free-form text input when no predefined options (e.g. simple question string)
+    if (!q.options || q.options.length === 0) {
+      return (
+        <div className="space-y-1">
+          <Input
+            autoFocus={!disabled}
+            placeholder="Type your answer..."
+            value={(selections[q.question] as string) || ""}
+            onChange={(e) => {
+              if (disabled) return;
+              setSelections((prev) => ({ ...prev, [q.question]: e.target.value }));
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey && allQuestionsAnswered) {
+                e.preventDefault();
+                handleSubmit();
+              }
+            }}
+            disabled={disabled}
+            className="h-8 text-sm"
+          />
+        </div>
+      );
+    }
 
     if (q.multiSelect) {
       return (

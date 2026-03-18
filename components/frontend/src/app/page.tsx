@@ -7,8 +7,14 @@ import { Loader2 } from "lucide-react";
 export default function HomeRedirect() {
   const router = useRouter();
   useEffect(() => {
-    // Redirect to RFE workflows as the new main interface
-    router.replace("/projects");
+    const lastProject = typeof window !== "undefined"
+      ? localStorage.getItem("selectedProject")
+      : null;
+    if (lastProject) {
+      router.replace(`/projects/${encodeURIComponent(lastProject)}`);
+    } else {
+      router.replace("/projects");
+    }
   }, [router]);
 
   return (

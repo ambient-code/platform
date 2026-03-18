@@ -12,19 +12,9 @@ import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ProjectSubpageHeader } from '@/components/project-subpage-header';
 import { ErrorMessage } from '@/components/error-message';
 import { EmptyState } from '@/components/empty-state';
 import { DestructiveConfirmationDialog } from '@/components/confirmation-dialog';
-import {
-  Breadcrumb,
-  BreadcrumbList,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from '@/components/ui/breadcrumb';
-import Link from 'next/link';
 
 import { useKeys, useCreateKey, useDeleteKey } from '@/services/queries';
 import { toast } from 'sonner';
@@ -115,47 +105,7 @@ export default function ProjectKeysPage() {
   }
 
   return (
-    <div className="container mx-auto p-6">
-      <Breadcrumb className="mb-4">
-        <BreadcrumbList>
-          <BreadcrumbItem>
-            <BreadcrumbLink asChild>
-              <Link href="/projects">Projects</Link>
-            </BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <BreadcrumbLink asChild>
-              <Link href={`/projects/${projectName}`}>{projectName}</Link>
-            </BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <BreadcrumbPage>Keys</BreadcrumbPage>
-          </BreadcrumbItem>
-        </BreadcrumbList>
-      </Breadcrumb>
-      <ProjectSubpageHeader
-        title={
-          <>
-            <KeyRound className="w-6 h-6" />
-            Access Keys
-          </>
-        }
-        description={<>Create and manage API keys for non-user access</>}
-        actions={
-          <>
-            <Button onClick={() => setShowCreate(true)}>
-              <Plus className="w-4 h-4 mr-2" />
-              Create Key
-            </Button>
-            <Button variant="outline" onClick={() => refetch()} disabled={isLoading}>
-              <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-              Refresh
-            </Button>
-          </>
-        }
-      />
+    <div className="h-full overflow-auto p-6">
 
       {/* Error state */}
       {error && <ErrorMessage error={error} onRetry={() => refetch()} />}
@@ -174,11 +124,20 @@ export default function ProjectKeysPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <KeyRound className="w-5 h-5" />
-            Access Keys ({keys.length})
-          </CardTitle>
-          <CardDescription>API keys scoped to this project</CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                Access Keys
+              </CardTitle>
+              <CardDescription>Create and manage API keys for non-user access</CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button size="sm" onClick={() => setShowCreate(true)}>
+                <Plus className="w-4 h-4 mr-2" />
+                Create Key
+              </Button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           {keys.length > 0 ? (

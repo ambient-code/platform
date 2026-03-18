@@ -85,7 +85,11 @@ describe("ChatInputBox", () => {
 
     it("renders Send button when not running", () => {
       renderInput({ value: "hello" });
-      expect(screen.getByText("Send")).toBeTruthy();
+      // Send is now a circular icon button with ArrowUp, no text label
+      const sendBtn = screen.getAllByRole("button").find(
+        (btn) => !btn.hasAttribute("disabled") && btn.className.includes("rounded-full")
+      );
+      expect(sendBtn).toBeTruthy();
     });
 
     it("renders Stop button when run is active", () => {
@@ -213,7 +217,9 @@ describe("ChatInputBox", () => {
     it("applies amber style when run is active", () => {
       renderInput({ isRunActive: true });
       const textarea = screen.getByRole("textbox");
-      expect(textarea.className).toContain("border-amber");
+      // Border styling is now on the container wrapper, not the textarea
+      const container = textarea.closest("div.border");
+      expect(container?.className).toContain("border-amber");
     });
   });
 
@@ -618,7 +624,9 @@ describe("ChatInputBox", () => {
       fireEvent.keyDown(textarea, { key: "ArrowUp" });
 
       await waitFor(() => {
-        expect(textarea.className).toContain("border-blue");
+        // Border styling is now on the container wrapper, not the textarea
+        const container = textarea.closest("div.border");
+        expect(container?.className).toContain("border-blue");
       });
     });
   });

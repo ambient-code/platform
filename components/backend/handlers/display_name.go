@@ -82,6 +82,11 @@ func ValidateDisplayName(name string) string {
 // - Safe for backend restarts: orphaned goroutines will timeout naturally
 func GenerateDisplayNameAsync(projectName, sessionName, userMessage string, sessionCtx SessionContext) {
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("DisplayNameGen: Recovered from panic for %s/%s: %v", projectName, sessionName, r)
+			}
+		}()
 		if err := generateAndUpdateDisplayName(projectName, sessionName, userMessage, sessionCtx); err != nil {
 			log.Printf("DisplayNameGen: Failed to generate display name for %s/%s: %v", projectName, sessionName, err)
 		}

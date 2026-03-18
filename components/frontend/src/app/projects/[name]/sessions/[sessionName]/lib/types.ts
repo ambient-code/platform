@@ -37,6 +37,24 @@ export type DirectoryOption = {
   path: string;
 };
 
+export type GitStatusSummary = Pick<GitStatus, 'hasChanges' | 'totalAdded' | 'totalRemoved'>;
+
+export type Repository = {
+  url: string;
+  name?: string;
+  branch?: string;
+  branches?: string[];
+  currentActiveBranch?: string;
+  defaultBranch?: string;
+  status?: "Cloning" | "Ready" | "Failed" | "Removing";
+};
+
+export type UploadedFile = {
+  name: string;
+  path: string;
+  size?: number;
+};
+
 export type DirectoryRemote = {
   url: string;
   branch: string;
