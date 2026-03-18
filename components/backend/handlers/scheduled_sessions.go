@@ -117,6 +117,30 @@ func CreateScheduledSession(c *gin.Context) {
 
 	userID := c.GetString("userID")
 
+	// Inject userContext into the session template so triggered sessions can
+	// resolve credentials (GitHub, GitLab, etc.) via the backend API.
+	// The trigger creates the CR directly, bypassing CreateAgenticSession's
+	// server-side userContext injection, so we must embed it here.
+	if req.SessionTemplate.UserContext == nil && userID != "" {
+		displayName := ""
+		if v, ok := c.Get("userName"); ok {
+			if s, ok2 := v.(string); ok2 {
+				displayName = s
+			}
+		}
+		groups := []string{}
+		if v, ok := c.Get("userGroups"); ok {
+			if gg, ok2 := v.([]string); ok2 {
+				groups = gg
+			}
+		}
+		req.SessionTemplate.UserContext = &types.UserContext{
+			UserID:      userID,
+			DisplayName: displayName,
+			Groups:      groups,
+		}
+	}
+
 	timestamp := time.Now().Unix()
 	name := fmt.Sprintf("schedule-%d", timestamp)
 
