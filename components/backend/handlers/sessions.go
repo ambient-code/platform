@@ -1118,10 +1118,16 @@ func PatchSession(c *gin.Context) {
 				anns = map[string]interface{}{}
 			}
 			for k, v := range annsPatch {
-				if v == nil {
+				switch vv := v.(type) {
+				case nil:
 					delete(anns, k)
-				} else {
-					anns[k] = v
+				case string:
+					anns[k] = vv
+				default:
+					c.JSON(http.StatusBadRequest, gin.H{
+						"error": fmt.Sprintf("Invalid annotation value for key %q: must be string or null", k),
+					})
+					return
 				}
 			}
 			_ = unstructured.SetNestedMap(metadata, anns, "annotations")
