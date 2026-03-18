@@ -1,19 +1,17 @@
 'use client';
 
-import { useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
+import { SettingsSection } from '@/components/workspace-sections/settings-section';
 
 export default function ProjectSettingsPage() {
   const params = useParams();
-  const router = useRouter();
   const projectName = params?.name as string;
 
-  // Redirect to main workspace page
-  useEffect(() => {
-    if (projectName) {
-      router.replace(`/projects/${projectName}?section=settings`);
-    }
-  }, [projectName, router]);
+  if (!projectName) return null;
 
-  return null;
+  return (
+    <div className="h-full overflow-auto p-6">
+      <SettingsSection projectName={projectName} />
+    </div>
+  );
 }

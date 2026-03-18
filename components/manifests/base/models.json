@@ -49,7 +49,7 @@
     {
       "id": "gemini-2.5-flash",
       "label": "Gemini 2.5 Flash",
-      "vertexId": "gemini-2.5-flash",
+      "vertexId": "gemini-2.5-flash@default",
       "provider": "google",
       "available": true,
       "featureGated": false
@@ -57,9 +57,33 @@
     {
       "id": "gemini-2.5-pro",
       "label": "Gemini 2.5 Pro",
-      "vertexId": "gemini-2.5-pro",
+      "vertexId": "gemini-2.5-pro@default",
       "provider": "google",
       "available": true,
+      "featureGated": true
+    },
+    {
+      "id": "gemini-2.5-flash-lite",
+      "label": "Gemini 2.5 Flash Lite",
+      "vertexId": "gemini-2.5-flash-lite@default",
+      "provider": "google",
+      "available": true,
+      "featureGated": true
+    },
+    {
+      "id": "gemini-2.5-flash-preview-04-17",
+      "label": "Gemini 2.5 Flash Preview 04.17",
+      "vertexId": "gemini-2.5-flash-preview-04-17@default",
+      "provider": "google",
+      "available": false,
+      "featureGated": true
+    },
+    {
+      "id": "gemini-3.1-flash-image-preview",
+      "label": "Gemini 3.1 Flash Image Preview",
+      "vertexId": "gemini-3.1-flash-image-preview@default",
+      "provider": "google",
+      "available": false,
       "featureGated": true
     }
   ]

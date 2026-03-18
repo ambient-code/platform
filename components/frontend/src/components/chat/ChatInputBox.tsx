@@ -5,21 +5,22 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   Loader2,
-  Settings,
   Terminal,
   Users,
-  Paperclip,
   Clock,
   X,
   Pencil,
+  Plus,
+  GitBranch,
+  Upload,
+  ArrowUp,
 } from "lucide-react";
+import { Separator } from "@/components/ui/separator";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuCheckboxItem,
+  DropdownMenuItem,
   DropdownMenuTrigger,
-  DropdownMenuSeparator,
-  DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toast } from "sonner";
@@ -44,8 +45,6 @@ export type ChatInputBoxProps = {
   agents?: AutocompleteAgent[];
   commands?: AutocompleteCommand[];
   onCommandClick?: (slashCommand: string) => void;
-  showSystemMessages?: boolean;
-  onShowSystemMessagesChange?: (show: boolean) => void;
   queuedCount?: number;
   sessionPhase?: string;
   onContinue?: () => void;
@@ -54,6 +53,9 @@ export type ChatInputBoxProps = {
   onUpdateQueuedMessage?: (messageId: string, newContent: string) => void;
   onCancelQueuedMessage?: (messageId: string) => void;
   onClearQueue?: () => void;
+  onAddRepository?: () => void;
+  onUploadFile?: () => void;
+  workflowSlot?: React.ReactNode;
 };
 
 type HistoryEntry = {
@@ -166,8 +168,6 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
   agents = [],
   commands = [],
   onCommandClick,
-  showSystemMessages = false,
-  onShowSystemMessagesChange,
   queuedCount = 0,
   sessionPhase = "",
   onContinue,
@@ -176,6 +176,9 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
   onUpdateQueuedMessage,
   onCancelQueuedMessage,
   onClearQueue,
+  onAddRepository,
+  onUploadFile,
+  workflowSlot,
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -462,15 +465,9 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
     }
   };
 
-  const getTextareaStyle = () => {
-    if (editingQueuedId) return "border-blue-400/50 bg-blue-50/30 dark:bg-blue-950/10";
-    if (isRunActive) return "border-amber-400/50 bg-amber-50/30 dark:bg-amber-950/10";
-    return "";
-  };
-
   return (
-    <div className="sticky bottom-0 bg-card">
-      <div className="px-2 pt-2 pb-0 space-y-1.5 max-w-[90%] mx-auto mb-4">
+    <div className="bg-card">
+      <div className="px-4 pt-2 pb-2 space-y-1.5">
         {/* Phase status banner */}
         {isCreating && (
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-muted text-xs text-muted-foreground">
@@ -482,7 +479,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-muted text-xs text-muted-foreground">
             Session has {sessionPhase.toLowerCase()}.
             {onContinue && (
-              <button onClick={onContinue} className="text-link hover:underline font-medium">
+              <button type="button" onClick={onContinue} className="text-link hover:underline font-medium">
                 Resume session
               </button>
             )}
@@ -495,6 +492,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
             <Pencil className="h-3 w-3" />
             Editing queued message
             <button
+              type="button"
               onClick={() => { onChange(draftInput); resetHistory(); }}
               className="ml-auto hover:text-blue-900 dark:hover:text-blue-100"
             >
@@ -506,8 +504,8 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
         {/* Attachment preview */}
         <AttachmentPreview attachments={pendingAttachments} onRemove={handleRemoveAttachment} />
 
-        {/* Textarea with autocomplete */}
-        <div className="relative">
+        {/* Single bordered container for textarea + toolbar */}
+        <div className={`relative border rounded-lg bg-background shadow-sm focus-within:ring-1 focus-within:ring-ring ${editingQueuedId ? "border-blue-400/50" : isRunActive ? "border-amber-400/50" : ""}`}>
           {/* Resize handle */}
           <div
             className="absolute -top-1.5 left-1/2 -translate-x-1/2 z-10 cursor-ns-resize px-3 py-1 group"
@@ -524,6 +522,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
               {queuedCount} message{queuedCount > 1 ? "s" : ""} queued
               {onClearQueue && (
                 <button
+                  type="button"
                   onClick={onClearQueue}
                   className="ml-1 flex items-center gap-0.5 hover:text-amber-800 dark:hover:text-amber-200"
                   title="Clear all queued messages"
@@ -537,7 +536,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
 
           <textarea
             ref={textareaRef}
-            className={`w-full border rounded p-2 text-sm transition-colors resize-none focus:outline-none focus:ring-2 focus:ring-ring ${getTextareaStyle()}`}
+            className={`w-full border-0 rounded-t-lg p-2 text-sm transition-colors resize-none focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 ${editingQueuedId ? "bg-blue-50/30 dark:bg-blue-950/10" : isRunActive ? "bg-amber-50/30 dark:bg-amber-950/10" : "bg-transparent"}`}
             placeholder={getPlaceholder()}
             value={value}
             onChange={handleInputChange}
@@ -568,128 +567,135 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
             onSelectedIndexChange={autocomplete.setSelectedIndex}
             onClose={autocomplete.close}
           />
-        </div>
 
-        {/* Toolbar */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            {/* Settings dropdown */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
-                  <Settings className="h-4 w-4" />
+          {/* Toolbar — inside the container */}
+          <div className="flex items-center justify-between px-2 py-2">
+            <div className="flex items-center gap-2">
+              {/* Add context dropdown */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" side="top">
+                  <DropdownMenuItem onClick={() => onAddRepository?.()}>
+                    <GitBranch className="w-4 h-4 mr-2" />
+                    Add Repository
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => onUploadFile?.()}>
+                    <Upload className="w-4 h-4 mr-2" />
+                    Upload File
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept="image/*,.pdf,.txt,.md,.json,.csv,.xml,.yaml,.yml,.log,.py,.js,.ts,.go,.java,.rs,.rb,.sh,.html,.css"
+                className="hidden"
+                onChange={handleFileSelect}
+              />
+
+              <Separator orientation="vertical" className="h-5" />
+
+              {/* Agents popover */}
+              <Popover open={agentsPopoverOpen} onOpenChange={setAgentsPopoverOpen}>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-7 gap-1.5" disabled={agents.length === 0}>
+                    <Users className="h-3.5 w-3.5" />
+                    Agents
+                    {agents.length > 0 && (
+                      <Badge variant="secondary" className="ml-0.5 h-4 px-1.5 text-[10px] font-medium">
+                        {agents.length}
+                      </Badge>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="start" side="top" className="w-[500px]">
+                  <ToolbarItemList
+                    items={agents}
+                    type="agent"
+                    onInsertAgent={(name) => {
+                      onChange(value + `@${name} `);
+                      setAgentsPopoverOpen(false);
+                      textareaRef.current?.focus();
+                    }}
+                  />
+                </PopoverContent>
+              </Popover>
+
+              {/* Commands popover */}
+              <Popover open={commandsPopoverOpen} onOpenChange={setCommandsPopoverOpen}>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-7 gap-1.5" disabled={commands.length === 0}>
+                    <Terminal className="h-3.5 w-3.5" />
+                    Commands
+                    {commands.length > 0 && (
+                      <Badge variant="secondary" className="ml-0.5 h-4 px-1.5 text-[10px] font-medium">
+                        {commands.length}
+                      </Badge>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="start" side="top" className="w-[500px]">
+                  <ToolbarItemList
+                    items={commands}
+                    type="command"
+                    onRunCommand={(slashCommand) => {
+                      onCommandClick?.(slashCommand);
+                      setCommandsPopoverOpen(false);
+                    }}
+                  />
+                </PopoverContent>
+              </Popover>
+
+            </div>
+
+            {/* Right side: Workflow selector + Send/Stop buttons */}
+            <div className="flex gap-2 items-center">
+              {workflowSlot}
+
+              {isRunActive ? (
+                <Button variant="destructive" size="sm" onClick={handleInterrupt} disabled={interrupting}>
+                  {interrupting && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
+                  Stop
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start">
-                <DropdownMenuLabel>Display Settings</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuCheckboxItem
-                  checked={showSystemMessages}
-                  onCheckedChange={(checked) => onShowSystemMessagesChange?.(checked)}
+              ) : editingQueuedId ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleSendAsNew}
+                    disabled={!hasContent || isSending}
+                    className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
+                  >
+                    Send as new
+                  </button>
+                  <Button size="sm" onClick={handleSendOrUpdate} disabled={!hasContent || isSending || disabled}>
+                    {isSending && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
+                    Update
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  size="icon"
+                  className="h-8 w-8 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground"
+                  onClick={handleSendOrUpdate}
+                  disabled={!hasContent || isSending || disabled}
                 >
-                  Show system messages
-                </DropdownMenuCheckboxItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            {/* Attach button */}
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 w-7 p-0"
-              onClick={() => fileInputRef.current?.click()}
-              title="Attach file"
-            >
-              <Paperclip className="h-4 w-4" />
-            </Button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              accept="image/*,.pdf,.txt,.md,.json,.csv,.xml,.yaml,.yml,.log,.py,.js,.ts,.go,.java,.rs,.rb,.sh,.html,.css"
-              className="hidden"
-              onChange={handleFileSelect}
-            />
-
-            {/* Agents popover */}
-            <Popover open={agentsPopoverOpen} onOpenChange={setAgentsPopoverOpen}>
-              <PopoverTrigger asChild>
-                <Button variant="outline" size="sm" className="h-7 gap-1.5" disabled={agents.length === 0}>
-                  <Users className="h-3.5 w-3.5" />
-                  Agents
-                  {agents.length > 0 && (
-                    <Badge variant="secondary" className="ml-0.5 h-4 px-1.5 text-[10px] font-medium">
-                      {agents.length}
-                    </Badge>
+                  {isSending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <ArrowUp className="h-4 w-4" />
                   )}
                 </Button>
-              </PopoverTrigger>
-              <PopoverContent align="start" side="top" className="w-[500px]">
-                <ToolbarItemList
-                  items={agents}
-                  type="agent"
-                  onInsertAgent={(name) => {
-                    onChange(value + `@${name} `);
-                    setAgentsPopoverOpen(false);
-                    textareaRef.current?.focus();
-                  }}
-                />
-              </PopoverContent>
-            </Popover>
-
-            {/* Commands popover */}
-            <Popover open={commandsPopoverOpen} onOpenChange={setCommandsPopoverOpen}>
-              <PopoverTrigger asChild>
-                <Button variant="outline" size="sm" className="h-7 gap-1.5" disabled={commands.length === 0}>
-                  <Terminal className="h-3.5 w-3.5" />
-                  Commands
-                  {commands.length > 0 && (
-                    <Badge variant="secondary" className="ml-0.5 h-4 px-1.5 text-[10px] font-medium">
-                      {commands.length}
-                    </Badge>
-                  )}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent align="start" side="top" className="w-[500px]">
-                <ToolbarItemList
-                  items={commands}
-                  type="command"
-                  onRunCommand={(slashCommand) => {
-                    onCommandClick?.(slashCommand);
-                    setCommandsPopoverOpen(false);
-                  }}
-                />
-              </PopoverContent>
-            </Popover>
-          </div>
-
-          {/* Send/Stop buttons */}
-          <div className="flex gap-2 items-center">
-            {isRunActive ? (
-              <Button variant="destructive" size="sm" onClick={handleInterrupt} disabled={interrupting}>
-                {interrupting && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
-                Stop
-              </Button>
-            ) : editingQueuedId ? (
-              <>
-                <button
-                  onClick={handleSendAsNew}
-                  disabled={!hasContent || isSending}
-                  className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
-                >
-                  Send as new
-                </button>
-                <Button size="sm" onClick={handleSendOrUpdate} disabled={!hasContent || isSending || disabled}>
-                  {isSending && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
-                  Update
-                </Button>
-              </>
-            ) : (
-              <Button size="sm" onClick={handleSendOrUpdate} disabled={!hasContent || isSending || disabled}>
-                {isSending && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
-                Send
-              </Button>
-            )}
+              )}
+            </div>
           </div>
         </div>
       </div>
