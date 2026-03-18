@@ -41,8 +41,9 @@ export async function readWorkspaceFile(
   sessionName: string,
   path: string
 ): Promise<string> {
+  const encodedPath = path.split('/').map(encodeURIComponent).join('/');
   const response = await apiClient.getRaw(
-    `/projects/${projectName}/agentic-sessions/${sessionName}/workspace/${encodeURIComponent(path)}`
+    `/projects/${projectName}/agentic-sessions/${sessionName}/workspace/${encodedPath}`
   );
   if (!response.ok) {
     throw new Error('Failed to read workspace file');
@@ -59,8 +60,9 @@ export async function writeWorkspaceFile(
   path: string,
   content: string
 ): Promise<void> {
+  const encodedPath = path.split('/').map(encodeURIComponent).join('/');
   await apiClient.putText(
-    `/projects/${projectName}/agentic-sessions/${sessionName}/workspace/${encodeURIComponent(path)}`,
+    `/projects/${projectName}/agentic-sessions/${sessionName}/workspace/${encodedPath}`,
     content
   );
 }
