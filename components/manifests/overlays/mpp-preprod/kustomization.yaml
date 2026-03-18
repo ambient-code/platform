@@ -22,6 +22,7 @@ components:
 - ../../components/oauth-proxy
 - ../../components/postgresql-rhel
 - ../../components/ambient-api-server-db
+- ../../components/mpp-rbac
 
 patches:
 - path: ambient-api-server-env-patch.yaml

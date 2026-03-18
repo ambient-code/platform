@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+# Namespace-scoped RBAC for IT's managed platform (MP+).
+# On ROSA we use ClusterRoles + ClusterRoleBindings (base/rbac/).
+# On MP+ the runner SA cannot create cluster-scoped RBAC, so we use
+# namespace-scoped Roles + RoleBindings instead.
+#
+# Cluster-scoped permissions that IT must grant separately:
+#   - authentication.k8s.io/tokenreviews (create)
+#   - authorization.k8s.io/subjectaccessreviews (create)
+#   - namespaces (get, list, watch, create, update, patch, delete)
+#   - clusterroles (bind: ambient-project-admin, -edit, -view)
+#   - project.openshift.io/projects (get, list, watch, update, patch)
+
+resources:
+- operator-role.yaml
+- operator-rolebinding.yaml
+- backend-role.yaml
+- backend-rolebinding.yaml
+- frontend-role.yaml
+- frontend-rolebinding.yaml

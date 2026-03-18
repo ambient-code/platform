@@ -1,0 +1,15 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ambient-frontend-auth
+rules:
+# The frontend needs tokenreviews and subjectaccessreviews for
+# authentication, but those are cluster-scoped resources that
+# cannot be granted via a namespace-scoped Role. IT must grant
+# these separately via a ClusterRoleBinding.
+#
+# This Role is a placeholder so the RoleBinding can be created.
+# Add namespace-scoped frontend permissions here as needed.
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get"]
