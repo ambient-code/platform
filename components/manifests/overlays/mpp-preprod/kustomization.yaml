@@ -6,11 +6,11 @@ metadata:
 
 namespace: ambient-code--runtime-int
 
-# Reference core/ and rbac/ directly, skipping platform/ which contains
-# Namespace, CRDs, and Secrets that IT manages outside kustomize.
+# Reference core/ only, skipping platform/ (Namespace, CRDs, Secrets)
+# and rbac/ (ClusterRoles, ClusterRoleBindings) which IT manages
+# outside kustomize.
 resources:
 - ../../base/core
-- ../../base/rbac
 - ambient-api-server-route.yaml
 - route.yaml
 - backend-route.yaml
