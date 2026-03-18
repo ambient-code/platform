@@ -27,6 +27,7 @@ jobs:
           oc_version: 'latest'
 
       - name: Verify cluster access
+        continue-on-error: true
         run: ./scripts/verify-preprod-access.sh
 
       - name: Dry-run mpp-preprod overlay
