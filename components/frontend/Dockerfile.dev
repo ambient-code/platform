@@ -1,10 +1,9 @@
 # Development Dockerfile for Next.js with hot-reloading
-FROM node:20-alpine
+FROM registry.access.redhat.com/ubi9/nodejs-20
+
+USER 0
 
 WORKDIR /app
-
-# Install dependencies for building native modules
-RUN apk add --no-cache libc6-compat python3 make g++
 
 # Set NODE_ENV to development
 ENV NODE_ENV=development
