@@ -18,6 +18,7 @@ resources:
 - public-api-route.yaml
 - unleash-route.yaml
 - operator-config-openshift.yaml
+- ldap-config.yaml
 
 components:
 - ../../components/oauth-proxy
