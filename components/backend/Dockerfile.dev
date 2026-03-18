@@ -1,10 +1,11 @@
 # Development Dockerfile for Go backend (simplified, no Air)
-FROM golang:1.24-alpine
+FROM registry.access.redhat.com/ubi9/go-toolset:1.24
+
+USER 0
 
 WORKDIR /app
-
-# Install git and build dependencies
-RUN apk add --no-cache git build-base
+RUN chown -R 1001:0 /app
+USER 1001
 
 # Set environment variables
 ENV AGENTS_DIR=/app/agents
