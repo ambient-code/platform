@@ -2,6 +2,9 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 resources:
+- operator-sa.yaml
+- backend-sa.yaml
+- frontend-sa.yaml
 - backend-deployment.yaml
 - frontend-deployment.yaml
 - operator-deployment.yaml
