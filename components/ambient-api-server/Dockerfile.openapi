@@ -1,19 +1,18 @@
-FROM docker.io/openapitools/openapi-generator-cli:v7.16.0
+FROM registry.access.redhat.com/ubi9/ubi:9.7
 
-RUN apt-get update
-RUN apt-get install -y make sudo git golang-1.21
+# Install Java (to run openapi-generator), Go (for gofmt), and git
+RUN dnf install -y java-17-openjdk-headless go-toolset git && dnf clean all
+
+# Download openapi-generator-cli JAR
+RUN curl -L -o /usr/local/bin/openapi-generator-cli.jar \
+    https://repo1.maven.org/maven2/org/openapitools/openapi-generator-cli/7.16.0/openapi-generator-cli-7.16.0.jar
 
 RUN mkdir -p /local
 COPY . /local
 
-ENV PATH="/ambient/bin:/usr/lib/go-1.21/bin/:${PATH}"
-ENV GOPATH="/ambient"
-ENV GOBIN /usr/lib/go-1.21/bin/
-ENV CGO_ENABLED=0
-
 WORKDIR /local
 
-RUN bash /usr/local/bin/docker-entrypoint.sh generate -i /local/openapi/openapi.yaml -g go -o /local/pkg/api/openapi
+RUN java -jar /usr/local/bin/openapi-generator-cli.jar generate -i /local/openapi/openapi.yaml -g go -o /local/pkg/api/openapi
 RUN rm /local/pkg/api/openapi/go.mod /local/pkg/api/openapi/go.sum
 RUN rm -rf /local/pkg/api/openapi/test
 RUN rm -rf /local/pkg/api/openapi/git_push.sh
