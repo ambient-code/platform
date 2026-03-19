@@ -8,6 +8,13 @@ import type {
   PlatformMessage,
 } from '@/types/agui'
 
+/**
+ * Maximum number of messages to retain in memory for long-running sessions.
+ * Prevents unbounded memory growth while maintaining sufficient context.
+ * Matches the pattern used in use-session-queue.ts.
+ */
+export const MAX_MESSAGES = 500
+
 export type UseAGUIStreamOptions = {
   projectName: string
   sessionName: string

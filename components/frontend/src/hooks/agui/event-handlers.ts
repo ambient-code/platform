@@ -44,16 +44,64 @@ import type {
   ReasoningMessageStartEvent,
   ReasoningMessageContentEvent,
   ReasoningMessageEndEvent,
+  PendingToolCall,
+  MessageFeedback,
 } from '@/types/agui'
 import { normalizeSnapshotMessages } from './normalize-snapshot'
+import { MAX_MESSAGES } from './types'
+
+/**
+ * Trim messages array to MAX_MESSAGES limit to prevent unbounded memory growth.
+ * Keeps most recent messages based on timestamp order.
+ */
+function trimMessages(messages: PlatformMessage[]): PlatformMessage[] {
+  if (messages.length <= MAX_MESSAGES) return messages
+
+  // Keep the most recent MAX_MESSAGES
+  return messages.slice(-MAX_MESSAGES)
+}
+
+/**
+ * Clean up stale entries from pendingToolCalls Map.
+ * Removes tool calls that are no longer referenced in messages.
+ * Prevents memory leaks from abandoned tool calls.
+ */
+function cleanupPendingToolCalls(
+  pendingToolCalls: Map<string, PendingToolCall>,
+  messages: PlatformMessage[]
+): Map<string, PendingToolCall> {
+  // Collect all tool call IDs that are currently referenced in messages
+  const activeToolCallIds = new Set<string>()
+  for (const msg of messages) {
+    if (msg.toolCalls) {
+      for (const tc of msg.toolCalls) {
+        activeToolCallIds.add(tc.id)
+      }
+    }
+  }
+
+  // Keep only tool calls that are still referenced in messages
+  const cleaned = new Map<string, PendingToolCall>()
+  for (const [id, toolCall] of pendingToolCalls) {
+    if (activeToolCallIds.has(id)) {
+      cleaned.set(id, toolCall)
+    }
+  }
+
+  return cleaned
+}
 
 /**
  * Insert a message into the list in timestamp order.
  * Messages without timestamps are appended to the end.
+ * Automatically trims to MAX_MESSAGES to prevent memory leaks.
  */
 function insertByTimestamp(messages: PlatformMessage[], msg: PlatformMessage): PlatformMessage[] {
   const msgTime = msg.timestamp ? new Date(msg.timestamp).getTime() : null
-  if (msgTime == null) return [...messages, msg]
+
+  if (msgTime == null) {
+    return trimMessages([...messages, msg])
+  }
 
   // Find the first message with a later timestamp and insert before it.
   for (let i = messages.length - 1; i >= 0; i--) {
@@ -61,11 +109,12 @@ function insertByTimestamp(messages: PlatformMessage[], msg: PlatformMessage): P
     if (t != null && t <= msgTime) {
       const copy = [...messages]
       copy.splice(i + 1, 0, msg)
-      return copy
+      return trimMessages(copy)
     }
   }
+
   // All existing messages are later (or have no timestamp) — prepend.
-  return [msg, ...messages]
+  return trimMessages([msg, ...messages])
 }
 
 /** Callbacks that event handlers may invoke for side effects */
@@ -730,9 +779,12 @@ function handleMessagesSnapshot(
   // Normalize snapshot: reconstruct parent-child tool call hierarchy
   const normalizedMessages = normalizeSnapshotMessages(visibleMessages)
 
+  // Trim normalized snapshot to MAX_MESSAGES before processing
+  const trimmedNormalized = trimMessages(normalizedMessages)
+
   // Merge normalized snapshot into existing messages while preserving
   // chronological order.
-  const snapshotMap = new Map(normalizedMessages.map(m => [m.id, m]))
+  const snapshotMap = new Map(trimmedNormalized.map(m => [m.id, m]))
   const existingIds = new Set(state.messages.map(m => m.id))
 
   // Update existing messages in-place with snapshot data.
@@ -773,8 +825,8 @@ function handleMessagesSnapshot(
   })
 
   // Insert new snapshot messages at the correct position
-  for (let i = 0; i < normalizedMessages.length; i++) {
-    const msg = normalizedMessages[i]
+  for (let i = 0; i < trimmedNormalized.length; i++) {
+    const msg = trimmedNormalized[i]
     if (existingIds.has(msg.id)) continue
 
     let insertBeforeId: string | null = null
@@ -798,9 +850,12 @@ function handleMessagesSnapshot(
     existingIds.add(msg.id)
   }
 
+  // Apply MAX_MESSAGES limit after merge to prevent unbounded growth
+  const trimmedMerged = trimMessages(merged)
+
   // Recover tool names from streaming state before cleanup
   const toolNameMap = new Map<string, string>()
-  for (const msg of merged) {
+  for (const msg of trimmedMerged) {
     if (msg.role === 'tool' && msg.toolCalls) {
       for (const tc of msg.toolCalls) {
         if (tc.id && tc.function.name && tc.function.name !== 'tool' && tc.function.name !== 'unknown_tool') {
@@ -815,7 +870,7 @@ function handleMessagesSnapshot(
     }
   }
   // Apply recovered names
-  for (const msg of merged) {
+  for (const msg of trimmedMerged) {
     if (msg.role === 'assistant' && msg.toolCalls) {
       for (const tc of msg.toolCalls) {
         if ((!tc.function.name || tc.function.name === 'tool' || tc.function.name === 'unknown_tool') &&
@@ -831,14 +886,14 @@ function handleMessagesSnapshot(
 
   // Remove redundant standalone role=tool messages that are now nested
   const nestedToolCallIds = new Set<string>()
-  for (const msg of merged) {
+  for (const msg of trimmedMerged) {
     if (msg.role === 'assistant' && msg.toolCalls) {
       for (const tc of msg.toolCalls) {
         nestedToolCallIds.add(tc.id)
       }
     }
   }
-  const filtered = merged.filter(msg => {
+  const filtered = trimmedMerged.filter(msg => {
     if (msg.role !== 'tool') return true
     if ('toolCallId' in msg && msg.toolCallId && nestedToolCallIds.has(msg.toolCallId)) return false
     if (msg.toolCalls?.some(tc => nestedToolCallIds.has(tc.id))) return false
@@ -868,6 +923,20 @@ function handleMessagesSnapshot(
   // Clear pendingChildren -- the normalized snapshot subsumes any
   // pending child data from streaming
   state.pendingChildren = new Map()
+
+  // Clean up stale pendingToolCalls entries
+  state.pendingToolCalls = cleanupPendingToolCalls(state.pendingToolCalls, state.messages)
+
+  // Clean up stale messageFeedback entries (keep only for messages that still exist)
+  const existingMessageIds = new Set(state.messages.map(m => m.id))
+  const cleanedFeedback = new Map<string, MessageFeedback>()
+  for (const [msgId, feedback] of state.messageFeedback) {
+    if (existingMessageIds.has(msgId)) {
+      cleanedFeedback.set(msgId, feedback)
+    }
+  }
+  state.messageFeedback = cleanedFeedback
+
   return state
 }
 

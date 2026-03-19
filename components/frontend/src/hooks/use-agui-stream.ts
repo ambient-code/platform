@@ -23,7 +23,9 @@ export type { UseAGUIStreamOptions, UseAGUIStreamReturn } from './agui/types'
 
 export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamReturn {
   // Track hidden message IDs (auto-sent initial/workflow prompts)
+  // Periodically cleaned up to prevent unbounded growth
   const hiddenMessageIdsRef = useRef<Set<string>>(new Set())
+  const hiddenMessageCleanupTimerRef = useRef<NodeJS.Timeout | null>(null)
   const {
     projectName,
     sessionName,
@@ -54,6 +56,27 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
     mountedRef.current = true
     return () => {
       mountedRef.current = false
+    }
+  }, [])
+
+  // Periodic cleanup of hidden message IDs to prevent unbounded growth
+  // Clean up every 5 minutes during long sessions
+  useEffect(() => {
+    const CLEANUP_INTERVAL = 5 * 60 * 1000 // 5 minutes
+    const MAX_HIDDEN_IDS = 200 // Keep most recent hidden IDs
+
+    hiddenMessageCleanupTimerRef.current = setInterval(() => {
+      if (hiddenMessageIdsRef.current.size > MAX_HIDDEN_IDS) {
+        // Convert to array, keep most recent, convert back to Set
+        const idsArray = Array.from(hiddenMessageIdsRef.current)
+        hiddenMessageIdsRef.current = new Set(idsArray.slice(-MAX_HIDDEN_IDS))
+      }
+    }, CLEANUP_INTERVAL)
+
+    return () => {
+      if (hiddenMessageCleanupTimerRef.current) {
+        clearInterval(hiddenMessageCleanupTimerRef.current)
+      }
     }
   }, [])
 
@@ -169,20 +192,30 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
 
   // Disconnect from the event stream
   const disconnect = useCallback(() => {
+    // Clear reconnect timeout
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current)
       reconnectTimeoutRef.current = null
     }
+    // Close EventSource connection
     if (eventSourceRef.current) {
       eventSourceRef.current.close()
       eventSourceRef.current = null
     }
+    // Clear periodic cleanup timer
+    if (hiddenMessageCleanupTimerRef.current) {
+      clearInterval(hiddenMessageCleanupTimerRef.current)
+      hiddenMessageCleanupTimerRef.current = null
+    }
+    // Reset state
     setState((prev) => ({
       ...prev,
       status: 'idle',
     }))
     setIsRunActive(false)
     currentRunIdRef.current = null
+    // Reset reconnect attempts counter
+    reconnectAttemptsRef.current = 0
     onDisconnected?.()
   }, [onDisconnected])
 
@@ -239,12 +272,20 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
         ...userMessage,
         timestamp: new Date().toISOString(),
       } as PlatformMessage
-      setState((prev) => ({
-        ...prev,
-        status: 'connected',
-        error: null,
-        messages: [...prev.messages, userMsgWithTimestamp],
-      }))
+      setState((prev) => {
+        // Apply MAX_MESSAGES limit to prevent unbounded growth
+        const updatedMessages = [...prev.messages, userMsgWithTimestamp]
+        const trimmedMessages = updatedMessages.length > 500
+          ? updatedMessages.slice(-500)
+          : updatedMessages
+
+        return {
+          ...prev,
+          status: 'connected',
+          error: null,
+          messages: trimmedMessages,
+        }
+      })
 
       try {
         const response = await fetch(runUrl, {
