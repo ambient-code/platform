@@ -60,14 +60,19 @@ export function NewSessionView({
   const currentRunner = runnerTypes?.find((r) => r.id === selectedRunner);
 
   // Fetch models for the selected runner's provider
-  const { data: modelsData } = useModels(projectName, true, currentRunner?.provider);
+  // Enabled as soon as projectName is available - provider filter is optional
+  const { data: modelsData } = useModels(
+    projectName,
+    !!projectName,
+    currentRunner?.provider
+  );
 
-  // Set default model when models load or runner changes
+  // Set default model when models load
   useEffect(() => {
-    if (modelsData?.defaultModel) {
+    if (modelsData?.defaultModel && !selectedModel) {
       setSelectedModel(modelsData.defaultModel);
     }
-  }, [modelsData?.defaultModel]);
+  }, [modelsData?.defaultModel, selectedModel]);
 
   // Once runner types load, default to the first available if current selection isn't available
   useEffect(() => {
