@@ -90,6 +90,10 @@ export function FileViewer({
 
   const fileName = filePath.split("/").pop() ?? "file";
 
+  // Build the direct workspace API URL for binary files (images, PDFs)
+  const encodedPath = filePath.split('/').map(encodeURIComponent).join('/');
+  const fileUrl = `/api/projects/${encodeURIComponent(projectName)}/agentic-sessions/${encodeURIComponent(sessionName)}/workspace/${encodedPath}`;
+
   return (
     <div className="flex flex-col h-full">
       {/* File header */}
@@ -128,6 +132,7 @@ export function FileViewer({
         <FileContentViewer
           fileName={fileName}
           content={content}
+          fileUrl={fileUrl}
           onDownload={handleDownload}
         />
       </div>
