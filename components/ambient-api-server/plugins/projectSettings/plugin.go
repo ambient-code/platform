@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	pb "github.com/ambient-code/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1"
+	pkgrbac "github.com/ambient-code/platform/components/ambient-api-server/plugins/rbac"
 	"github.com/gorilla/mux"
 	"github.com/openshift-online/rh-trex-ai/pkg/api"
 	"github.com/openshift-online/rh-trex-ai/pkg/api/presenters"
@@ -50,6 +51,9 @@ func init() {
 
 	pkgserver.RegisterRoutes("project_settings", func(apiV1Router *mux.Router, services pkgserver.ServicesInterface, authMiddleware environments.JWTMiddleware, authzMiddleware auth.AuthorizationMiddleware) {
 		envServices := services.(*environments.Services)
+		if dbAuthz := pkgrbac.Middleware(envServices); dbAuthz != nil {
+			authzMiddleware = dbAuthz
+		}
 		handler := NewProjectSettingsHandler(Service(envServices), generic.Service(envServices))
 
 		router := apiV1Router.PathPrefix("/project_settings").Subrouter()

@@ -1,0 +1,15 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ambient-api-server-db
+spec:
+  template:
+    spec:
+      securityContext:
+        runAsNonRoot: false
+      containers:
+        - name: postgresql
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: false

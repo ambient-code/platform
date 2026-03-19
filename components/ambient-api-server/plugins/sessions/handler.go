@@ -3,6 +3,7 @@ package sessions
 import (
 	"net/http"
 
+	"github.com/golang/glog"
 	"github.com/gorilla/mux"
 
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
@@ -18,12 +19,14 @@ var _ handlers.RestHandler = sessionHandler{}
 
 type sessionHandler struct {
 	session SessionService
+	msg     MessageService
 	generic services.GenericService
 }
 
-func NewSessionHandler(session SessionService, generic services.GenericService) *sessionHandler {
+func NewSessionHandler(session SessionService, msg MessageService, generic services.GenericService) *sessionHandler {
 	return &sessionHandler{
 		session: session,
+		msg:     msg,
 		generic: generic,
 	}
 }
@@ -41,9 +44,19 @@ func (h sessionHandler) Create(w http.ResponseWriter, r *http.Request) {
 			if username := auth.GetUsernameFromContext(ctx); username != "" {
 				sessionModel.CreatedByUserId = &username
 			}
+			if sessionModel.ProjectId == nil {
+				if hdr := r.Header.Get("X-Ambient-Project"); hdr != "" {
+					sessionModel.ProjectId = &hdr
+				}
+			}
 			sessionModel, err := h.session.Create(ctx, sessionModel)
 			if err != nil {
 				return nil, err
+			}
+			if sessionModel.Prompt != nil && *sessionModel.Prompt != "" {
+				if _, pushErr := h.msg.Push(ctx, sessionModel.ID, "user", *sessionModel.Prompt); pushErr != nil {
+					glog.Errorf("Create: push prompt for session %s: %v", sessionModel.ID, pushErr)
+				}
 			}
 			return PresentSession(sessionModel), nil
 		},
