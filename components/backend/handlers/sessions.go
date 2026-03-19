@@ -124,6 +124,13 @@ func parseSpec(spec map[string]interface{}) types.AgenticSessionSpec {
 		result.Timeout = int(timeout)
 	}
 
+	if inactivityTimeout, ok := spec["inactivityTimeout"].(float64); ok {
+		v := int(inactivityTimeout)
+		if v >= 0 {
+			result.InactivityTimeout = &v
+		}
+	}
+
 	if llmSettings, ok := spec["llmSettings"].(map[string]interface{}); ok {
 		if model, ok := llmSettings["model"].(string); ok {
 			result.LLMSettings.Model = model
@@ -726,6 +733,13 @@ func CreateSession(c *gin.Context) {
 	}
 	if strings.TrimSpace(req.InitialPrompt) != "" {
 		spec["initialPrompt"] = req.InitialPrompt
+	}
+	if req.InactivityTimeout != nil {
+		if *req.InactivityTimeout < 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "inactivityTimeout must be >= 0"})
+			return
+		}
+		spec["inactivityTimeout"] = *req.InactivityTimeout
 	}
 
 	session := map[string]interface{}{

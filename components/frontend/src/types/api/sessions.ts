@@ -127,10 +127,16 @@ export type CreateAgenticSessionRequest = {
   llmSettings?: Partial<LLMSettings>;
   displayName?: string;
   timeout?: number;
+  inactivityTimeout?: number;
   project?: string;
   parent_session_id?: string;
   environmentVariables?: Record<string, string>;
   repos?: SessionRepo[];
+  activeWorkflow?: {
+    gitUrl: string;
+    branch: string;
+    path?: string;
+  };
   userContext?: UserContext;
   labels?: Record<string, string>;
   annotations?: Record<string, string>;
