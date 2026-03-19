@@ -57,8 +57,8 @@ var StateBaseDir string
 
 const (
 	// Scanner buffer sizes for reading JSONL files
-	scannerInitialBufferSize = 64 * 1024   // 64KB initial buffer
-	scannerMaxLineSize       = 1024 * 1024 // 1MB max line size
+	scannerInitialBufferSize = 64 * 1024        // 64KB initial buffer
+	scannerMaxLineSize       = 10 * 1024 * 1024 // 10MB max line size (increased from 1MB to support large MCP tool results)
 )
 
 // ─── Live event pipe (multi-client broadcast) ───────────────────────
