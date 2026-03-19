@@ -41,6 +41,7 @@ type FilesTabProps = {
   onFileOpen?: (filePath: string) => void;
   gitStatus?: GitStatusSummary;
   repoBranches?: Record<string, string | undefined>;
+  canModify: boolean;
 };
 
 export function FilesTab({
@@ -59,6 +60,7 @@ export function FilesTab({
   onFileOpen,
   gitStatus,
   repoBranches,
+  canModify,
 }: FilesTabProps) {
   const fileNodes = useMemo(
     () =>
@@ -179,15 +181,17 @@ export function FilesTab({
             </Button>
           ) : (
             <>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onUploadFile}
-                className="h-6 px-2 flex-shrink-0"
-                title="Upload file"
-              >
-                <Upload className="h-3 w-3" />
-              </Button>
+              {canModify && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onUploadFile}
+                  className="h-6 px-2 flex-shrink-0"
+                  title="Upload file"
+                >
+                  <Upload className="h-3 w-3" />
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="sm"
