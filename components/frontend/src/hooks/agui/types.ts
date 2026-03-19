@@ -39,9 +39,6 @@ export type UseAGUIStreamReturn = {
   isRunActive: boolean
 }
 
-// Re-export MAX_MESSAGES for testing
-export { MAX_MESSAGES }
-
 export const initialState: AGUIClientState = {
   threadId: null,
   runId: null,

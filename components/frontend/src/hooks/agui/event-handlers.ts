@@ -44,6 +44,8 @@ import type {
   ReasoningMessageStartEvent,
   ReasoningMessageContentEvent,
   ReasoningMessageEndEvent,
+  PendingToolCall,
+  MessageFeedback,
 } from '@/types/agui'
 import { normalizeSnapshotMessages } from './normalize-snapshot'
 import { MAX_MESSAGES } from './types'
@@ -65,13 +67,10 @@ function trimMessages(messages: PlatformMessage[]): PlatformMessage[] {
  * Prevents memory leaks from abandoned tool calls.
  */
 function cleanupPendingToolCalls(
-  pendingToolCalls: Map<string, PlatformToolCall>,
+  pendingToolCalls: Map<string, PendingToolCall>,
   messages: PlatformMessage[]
-): Map<string, PlatformToolCall> {
-  // Maximum age for pending tool calls (5 minutes)
-  const MAX_AGE_MS = 5 * 60 * 1000
-  const now = Date.now()
-
+): Map<string, PendingToolCall> {
+  // Collect all tool call IDs that are currently referenced in messages
   const activeToolCallIds = new Set<string>()
   for (const msg of messages) {
     if (msg.toolCalls) {
@@ -81,12 +80,10 @@ function cleanupPendingToolCalls(
     }
   }
 
-  const cleaned = new Map<string, PlatformToolCall>()
+  // Keep only tool calls that are still referenced in messages
+  const cleaned = new Map<string, PendingToolCall>()
   for (const [id, toolCall] of pendingToolCalls) {
-    // Keep if referenced in messages or recently created
-    const timestamp = toolCall.timestamp ? new Date(toolCall.timestamp).getTime() : 0
-    const age = now - timestamp
-    if (activeToolCallIds.has(id) || age < MAX_AGE_MS) {
+    if (activeToolCallIds.has(id)) {
       cleaned.set(id, toolCall)
     }
   }
@@ -101,30 +98,23 @@ function cleanupPendingToolCalls(
  */
 function insertByTimestamp(messages: PlatformMessage[], msg: PlatformMessage): PlatformMessage[] {
   const msgTime = msg.timestamp ? new Date(msg.timestamp).getTime() : null
-  let result: PlatformMessage[]
 
   if (msgTime == null) {
-    result = [...messages, msg]
-  } else {
-    // Find the first message with a later timestamp and insert before it.
-    let inserted = false
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const t = messages[i].timestamp ? new Date(messages[i].timestamp!).getTime() : null
-      if (t != null && t <= msgTime) {
-        const copy = [...messages]
-        copy.splice(i + 1, 0, msg)
-        result = copy
-        inserted = true
-        break
-      }
-    }
-    // All existing messages are later (or have no timestamp) — prepend.
-    if (!inserted) {
-      result = [msg, ...messages]
+    return trimMessages([...messages, msg])
+  }
+
+  // Find the first message with a later timestamp and insert before it.
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const t = messages[i].timestamp ? new Date(messages[i].timestamp!).getTime() : null
+    if (t != null && t <= msgTime) {
+      const copy = [...messages]
+      copy.splice(i + 1, 0, msg)
+      return trimMessages(copy)
     }
   }
 
-  return trimMessages(result)
+  // All existing messages are later (or have no timestamp) — prepend.
+  return trimMessages([msg, ...messages])
 }
 
 /** Callbacks that event handlers may invoke for side effects */
@@ -939,7 +929,7 @@ function handleMessagesSnapshot(
 
   // Clean up stale messageFeedback entries (keep only for messages that still exist)
   const existingMessageIds = new Set(state.messages.map(m => m.id))
-  const cleanedFeedback = new Map<string, string>()
+  const cleanedFeedback = new Map<string, MessageFeedback>()
   for (const [msgId, feedback] of state.messageFeedback) {
     if (existingMessageIds.has(msgId)) {
       cleanedFeedback.set(msgId, feedback)
