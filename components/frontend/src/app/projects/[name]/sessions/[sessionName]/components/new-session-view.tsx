@@ -86,13 +86,16 @@ export function NewSessionView({
 
   const handleSubmit = useCallback(() => {
     const trimmed = prompt.trim();
-    if (!trimmed) return;
+    const hasWorkflow = selectedWorkflow !== "none";
+
+    // Require either a prompt OR a workflow with startupPrompt
+    if (!trimmed && !hasWorkflow) return;
 
     onCreateSession({
       prompt: trimmed,
       runner: selectedRunner,
       model: selectedModel,
-      workflow: selectedWorkflow !== "none" ? selectedWorkflow : undefined,
+      workflow: hasWorkflow ? selectedWorkflow : undefined,
       repos: pendingRepos.length > 0 ? pendingRepos.map((r) => ({ url: r.url })) : undefined,
     });
   }, [prompt, selectedRunner, selectedModel, selectedWorkflow, pendingRepos, onCreateSession]);
@@ -121,7 +124,7 @@ export function NewSessionView({
             What are you working on?
           </h1>
           <p className="text-muted-foreground">
-            Start a new session by typing a message.
+            Start a new session by typing a message or selecting a workflow.
           </p>
         </div>
 
@@ -173,7 +176,7 @@ export function NewSessionView({
               <Button
                 size="icon"
                 className="h-8 w-8 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground"
-                disabled={!prompt.trim() || isSubmitting}
+                disabled={(!prompt.trim() && selectedWorkflow === "none") || isSubmitting}
                 onClick={handleSubmit}
               >
                 {isSubmitting ? (
