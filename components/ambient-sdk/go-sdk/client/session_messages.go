@@ -35,7 +35,7 @@ func (a *SessionAPI) PushMessage(ctx context.Context, sessionID, payload string)
 	return &result, nil
 }
 
-func (a *SessionAPI) ListMessages(ctx context.Context, sessionID string, afterSeq int64) ([]types.SessionMessage, error) {
+func (a *SessionAPI) ListMessages(ctx context.Context, sessionID string, afterSeq int) ([]types.SessionMessage, error) {
 	path := fmt.Sprintf("/sessions/%s/messages?after_seq=%d", url.PathEscape(sessionID), afterSeq)
 	var result []types.SessionMessage
 	if err := a.client.do(ctx, http.MethodGet, path, nil, http.StatusOK, &result); err != nil {
@@ -44,26 +44,10 @@ func (a *SessionAPI) ListMessages(ctx context.Context, sessionID string, afterSe
 	return result, nil
 }
 
-func (a *SessionAPI) SendAgUI(ctx context.Context, sessionID string, payload string) (*types.SessionMessage, error) {
-	push := &types.SessionMessagePush{
-		EventType: "user",
-		Payload:   payload,
-	}
-	body, err := json.Marshal(push)
-	if err != nil {
-		return nil, fmt.Errorf("marshal ag_ui turn: %w", err)
-	}
-	var result types.SessionMessage
-	if err := a.client.do(ctx, http.MethodPost, "/sessions/"+url.PathEscape(sessionID)+"/ag_ui", body, http.StatusCreated, &result); err != nil {
-		return nil, err
-	}
-	return &result, nil
-}
-
 // WatchMessages streams session messages from afterSeq onward via SSE.
 // Returns a channel of messages, a stop function, and any immediate connection error.
 // Call stop() to cancel the stream and release resources.
-func (a *SessionAPI) WatchMessages(ctx context.Context, sessionID string, afterSeq int64) (<-chan *types.SessionMessage, func(), error) {
+func (a *SessionAPI) WatchMessages(ctx context.Context, sessionID string, afterSeq int) (<-chan *types.SessionMessage, func(), error) {
 	watchCtx, cancel := context.WithCancel(ctx)
 	msgs := make(chan *types.SessionMessage, 64)
 
@@ -92,7 +76,7 @@ func (a *SessionAPI) WatchMessages(ctx context.Context, sessionID string, afterS
 				}
 			}()
 
-			err := a.consumeSSE(watchCtx, sessionID, "messages", lastSeq, plain, func(seq int64) {
+			err := a.consumeSSE(watchCtx, sessionID, "messages", lastSeq, plain, func(seq int) {
 				lastSeq = seq
 			})
 			close(plain)
@@ -127,13 +111,12 @@ func (a *SessionAPI) WatchMessages(ctx context.Context, sessionID string, afterS
 	return msgs, cancel, nil
 }
 
-
 func (a *SessionAPI) consumeSSE(
 	ctx context.Context,
 	sessionID, endpoint string,
-	afterSeq int64,
+	afterSeq int,
 	msgs chan<- types.SessionMessage,
-	onMsg func(seq int64),
+	onMsg func(seq int),
 ) error {
 	rawURL := fmt.Sprintf("%s/api/ambient/v1/sessions/%s/%s?after_seq=%d",
 		strings.TrimRight(a.client.baseURL, "/"),
@@ -156,11 +139,11 @@ func (a *SessionAPI) consumeSSE(
 		req.Header.Set("X-Ambient-Project", a.client.project)
 	}
 
-	resp, err := a.client.sseClient.Do(req)
+	resp, err := a.client.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("connect: %w", err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("status %d", resp.StatusCode)

@@ -5,9 +5,9 @@ import (
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
 	sdkclient "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/client"
 	sdktypes "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 type NavSection int
@@ -84,11 +84,19 @@ func (c *cmdInputModel) deleteForward() {
 	}
 }
 
-func (c *cmdInputModel) moveLeft()  { if c.cursor > 0 { c.cursor-- } }
-func (c *cmdInputModel) moveRight() { if c.cursor < len([]rune(c.value)) { c.cursor++ } }
-func (c *cmdInputModel) moveHome()  { c.cursor = 0 }
-func (c *cmdInputModel) moveEnd()   { c.cursor = len([]rune(c.value)) }
-func (c *cmdInputModel) clear()     { c.value = ""; c.cursor = 0 }
+func (c *cmdInputModel) moveLeft() {
+	if c.cursor > 0 {
+		c.cursor--
+	}
+}
+func (c *cmdInputModel) moveRight() {
+	if c.cursor < len([]rune(c.value)) {
+		c.cursor++
+	}
+}
+func (c *cmdInputModel) moveHome() { c.cursor = 0 }
+func (c *cmdInputModel) moveEnd()  { c.cursor = len([]rune(c.value)) }
+func (c *cmdInputModel) clear()    { c.value = ""; c.cursor = 0 }
 
 func (c *cmdInputModel) render() string {
 	runes := []rune(c.value)
@@ -103,21 +111,21 @@ func (c *cmdInputModel) render() string {
 }
 
 type Model struct {
-	client        *sdkclient.Client
-	width         int
-	height        int
-	nav           NavSection
-	data          DashData
-	mainLines     []string
-	mainScroll    int
-	input         cmdInputModel
-	history       []string
-	histIdx       int
-	cmdRunning    bool
-	refreshing    bool
-	lastFetch     time.Time
-	msgCh         chan tea.Msg
-	cmdFocus      bool
+	client          *sdkclient.Client
+	width           int
+	height          int
+	nav             NavSection
+	data            DashData
+	mainLines       []string
+	mainScroll      int
+	input           cmdInputModel
+	history         []string
+	histIdx         int
+	cmdRunning      bool
+	refreshing      bool
+	lastFetch       time.Time
+	msgCh           chan tea.Msg
+	cmdFocus        bool
 	sessionMsgs     map[string][]sdktypes.SessionMessage
 	sessionWatching map[string]context.CancelFunc
 }

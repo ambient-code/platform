@@ -1928,61 +1928,50 @@ paths:
       security:
       - Bearer: []
       summary: Update an roleBinding
-  /api/ambient/v1/session_check_ins:
+  /api/ambient/v1/sessions/{id}/messages:
     get:
+      description: |-
+        Returns messages for a session after the given sequence number.
+        Set `Accept: text/event-stream` to receive a real-time SSE stream
+        instead of a JSON array. The stream replays existing messages first,
+        then pushes new ones as they arrive. Keep-alive comments (`: keep-alive`)
+        are sent every 15 seconds.
       parameters:
-      - description: Page number of record list when record list exceeds specified
-          page size
-        explode: true
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Return only messages with seq greater than this value (default
+          0 = all messages)
         in: query
-        name: page
+        name: after_seq
         required: false
         schema:
-          default: 1
-          minimum: 1
+          default: 0
+          format: int64
           type: integer
-        style: form
-      - description: Maximum number of records to return
-        explode: true
-        in: query
-        name: size
-        required: false
-        schema:
-          default: 100
-          minimum: 0
-          type: integer
-        style: form
-      - description: Specifies the search criteria
-        explode: true
-        in: query
-        name: search
-        required: false
-        schema:
-          type: string
-        style: form
-      - description: Specifies the order by criteria
-        explode: true
-        in: query
-        name: orderBy
-        required: false
-        schema:
-          type: string
-        style: form
-      - description: Supplies a comma-separated list of fields to be returned
-        explode: true
-        in: query
-        name: fields
-        required: false
-        schema:
-          type: string
-        style: form
       responses:
         "200":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SessionCheckInList"
-          description: A JSON array of sessionCheckIn objects
+                $ref: "#/components/schemas/SessionMessageList"
+            text/event-stream:
+              schema:
+                description: |-
+                  Server-Sent Events stream. Each event is a JSON-encoded
+                  SessionMessage prefixed with `data: ` and terminated by
+                  a blank line. Example:
+
+                  data: {"id":"...","session_id":"...","seq":1,...}
+                type: string
+          description: |-
+            JSON array of messages (default), or SSE stream when
+            `Accept: text/event-stream` is set.
         "401":
           content:
             application/json:
@@ -1995,6 +1984,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
           description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No session with specified id exists
         "500":
           content:
             application/json:
@@ -2003,73 +1998,40 @@ paths:
           description: Unexpected error occurred
       security:
       - Bearer: []
-      summary: Returns a list of sessionCheckIns
+      summary: List or stream session messages
     post:
+      description: |-
+        Appends a message to the session's message log. The message is
+        assigned a monotonically increasing sequence number. Subscribers
+        on the SSE stream will receive the message immediately.
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
       requestBody:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/SessionCheckIn"
-        description: SessionCheckIn data
+              $ref: "#/components/schemas/SessionMessagePushRequest"
         required: true
       responses:
         "201":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SessionCheckIn"
-          description: Created
+                $ref: "#/components/schemas/SessionMessage"
+          description: Message created
         "400":
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-          description: Validation errors occurred
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Auth token is invalid
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Unauthorized to perform operation
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: SessionCheckIn already exists
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: An unexpected error occurred creating the sessionCheckIn
-      security:
-      - Bearer: []
-      summary: Create a new sessionCheckIn
-  /api/ambient/v1/session_check_ins/{id}:
-    get:
-      parameters:
-      - description: The id of record
-        explode: false
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-        style: simple
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SessionCheckIn"
-          description: SessionCheckIn found by id
+          description: Invalid request body
         "401":
           content:
             application/json:
@@ -2087,7 +2049,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-          description: No sessionCheckIn with specified id exists
+          description: No session with specified id exists
         "500":
           content:
             application/json:
@@ -2096,766 +2058,7 @@ paths:
           description: Unexpected error occurred
       security:
       - Bearer: []
-      summary: Get an sessionCheckIn by id
-    patch:
-      parameters:
-      - description: The id of record
-        explode: false
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-        style: simple
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/SessionCheckInPatchRequest"
-        description: Updated sessionCheckIn data
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SessionCheckIn"
-          description: SessionCheckIn updated successfully
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Validation errors occurred
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Auth token is invalid
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Unauthorized to perform operation
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: No sessionCheckIn with specified id exists
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: SessionCheckIn already exists
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Unexpected error updating sessionCheckIn
-      security:
-      - Bearer: []
-      summary: Update an sessionCheckIn
-  /api/ambient/v1/project_documents:
-    get:
-      parameters:
-      - description: Page number of record list when record list exceeds specified
-          page size
-        explode: true
-        in: query
-        name: page
-        required: false
-        schema:
-          default: 1
-          minimum: 1
-          type: integer
-        style: form
-      - description: Maximum number of records to return
-        explode: true
-        in: query
-        name: size
-        required: false
-        schema:
-          default: 100
-          minimum: 0
-          type: integer
-        style: form
-      - description: Specifies the search criteria
-        explode: true
-        in: query
-        name: search
-        required: false
-        schema:
-          type: string
-        style: form
-      - description: Specifies the order by criteria
-        explode: true
-        in: query
-        name: orderBy
-        required: false
-        schema:
-          type: string
-        style: form
-      - description: Supplies a comma-separated list of fields to be returned
-        explode: true
-        in: query
-        name: fields
-        required: false
-        schema:
-          type: string
-        style: form
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ProjectDocumentList"
-          description: A JSON array of projectDocument objects
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Auth token is invalid
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Unauthorized to perform operation
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Unexpected error occurred
-      security:
-      - Bearer: []
-      summary: Returns a list of projectDocuments
-    post:
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ProjectDocument"
-        description: ProjectDocument data
-        required: true
-      responses:
-        "201":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ProjectDocument"
-          description: Created
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Validation errors occurred
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Auth token is invalid
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Unauthorized to perform operation
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: ProjectDocument already exists
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: An unexpected error occurred creating the projectDocument
-      security:
-      - Bearer: []
-      summary: Create a new projectDocument
-  /api/ambient/v1/project_documents/{id}:
-    get:
-      parameters:
-      - description: The id of record
-        explode: false
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-        style: simple
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ProjectDocument"
-          description: ProjectDocument found by id
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Auth token is invalid
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Unauthorized to perform operation
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: No projectDocument with specified id exists
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Unexpected error occurred
-      security:
-      - Bearer: []
-      summary: Get an projectDocument by id
-    patch:
-      parameters:
-      - description: The id of record
-        explode: false
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-        style: simple
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ProjectDocumentPatchRequest"
-        description: Updated projectDocument data
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ProjectDocument"
-          description: ProjectDocument updated successfully
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Validation errors occurred
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Auth token is invalid
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Unauthorized to perform operation
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: No projectDocument with specified id exists
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: ProjectDocument already exists
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Unexpected error updating projectDocument
-      security:
-      - Bearer: []
-      summary: Update an projectDocument
-  /api/ambient/v1/agent_messages:
-    get:
-      parameters:
-      - description: Page number of record list when record list exceeds specified
-          page size
-        explode: true
-        in: query
-        name: page
-        required: false
-        schema:
-          default: 1
-          minimum: 1
-          type: integer
-        style: form
-      - description: Maximum number of records to return
-        explode: true
-        in: query
-        name: size
-        required: false
-        schema:
-          default: 100
-          minimum: 0
-          type: integer
-        style: form
-      - description: Specifies the search criteria
-        explode: true
-        in: query
-        name: search
-        required: false
-        schema:
-          type: string
-        style: form
-      - description: Specifies the order by criteria
-        explode: true
-        in: query
-        name: orderBy
-        required: false
-        schema:
-          type: string
-        style: form
-      - description: Supplies a comma-separated list of fields to be returned
-        explode: true
-        in: query
-        name: fields
-        required: false
-        schema:
-          type: string
-        style: form
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AgentMessageList"
-          description: A JSON array of agentMessage objects
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Auth token is invalid
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Unauthorized to perform operation
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Unexpected error occurred
-      security:
-      - Bearer: []
-      summary: Returns a list of agentMessages
-    post:
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/AgentMessage"
-        description: AgentMessage data
-        required: true
-      responses:
-        "201":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AgentMessage"
-          description: Created
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Validation errors occurred
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Auth token is invalid
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Unauthorized to perform operation
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: AgentMessage already exists
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: An unexpected error occurred creating the agentMessage
-      security:
-      - Bearer: []
-      summary: Create a new agentMessage
-  /api/ambient/v1/agent_messages/{id}:
-    get:
-      parameters:
-      - description: The id of record
-        explode: false
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-        style: simple
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AgentMessage"
-          description: AgentMessage found by id
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Auth token is invalid
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Unauthorized to perform operation
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: No agentMessage with specified id exists
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Unexpected error occurred
-      security:
-      - Bearer: []
-      summary: Get an agentMessage by id
-    patch:
-      parameters:
-      - description: The id of record
-        explode: false
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-        style: simple
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/AgentMessagePatchRequest"
-        description: Updated agentMessage data
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AgentMessage"
-          description: AgentMessage updated successfully
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Validation errors occurred
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Auth token is invalid
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Unauthorized to perform operation
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: No agentMessage with specified id exists
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: AgentMessage already exists
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Unexpected error updating agentMessage
-      security:
-      - Bearer: []
-      summary: Update an agentMessage
-  /api/ambient/v1/ag_ui_events:
-    get:
-      parameters:
-      - description: Page number of record list when record list exceeds specified
-          page size
-        explode: true
-        in: query
-        name: page
-        required: false
-        schema:
-          default: 1
-          minimum: 1
-          type: integer
-        style: form
-      - description: Maximum number of records to return
-        explode: true
-        in: query
-        name: size
-        required: false
-        schema:
-          default: 100
-          minimum: 0
-          type: integer
-        style: form
-      - description: Specifies the search criteria
-        explode: true
-        in: query
-        name: search
-        required: false
-        schema:
-          type: string
-        style: form
-      - description: Specifies the order by criteria
-        explode: true
-        in: query
-        name: orderBy
-        required: false
-        schema:
-          type: string
-        style: form
-      - description: Supplies a comma-separated list of fields to be returned
-        explode: true
-        in: query
-        name: fields
-        required: false
-        schema:
-          type: string
-        style: form
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AGUIEventList"
-          description: A JSON array of AGUIEvent objects
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Auth token is invalid
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Unauthorized to perform operation
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Unexpected error occurred
-      security:
-      - Bearer: []
-      summary: Returns a list of AGUIEvents
-    post:
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/AGUIEvent"
-        description: AGUIEvent data
-        required: true
-      responses:
-        "201":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AGUIEvent"
-          description: Created
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Validation errors occurred
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Auth token is invalid
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Unauthorized to perform operation
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: AGUIEvent already exists
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: An unexpected error occurred creating the AGUIEvent
-      security:
-      - Bearer: []
-      summary: Create a new AGUIEvent
-  /api/ambient/v1/ag_ui_events/{id}:
-    get:
-      parameters:
-      - description: The id of record
-        explode: false
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-        style: simple
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AGUIEvent"
-          description: AGUIEvent found by id
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Auth token is invalid
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Unauthorized to perform operation
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: No AGUIEvent with specified id exists
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Unexpected error occurred
-      security:
-      - Bearer: []
-      summary: Get an AGUIEvent by id
-    patch:
-      parameters:
-      - description: The id of record
-        explode: false
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-        style: simple
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/AGUIEventPatchRequest"
-        description: Updated AGUIEvent data
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AGUIEvent"
-          description: AGUIEvent updated successfully
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Validation errors occurred
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Auth token is invalid
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Unauthorized to perform operation
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: No AGUIEvent with specified id exists
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: AGUIEvent already exists
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Unexpected error updating AGUIEvent
-      security:
-      - Bearer: []
-      summary: Update an AGUIEvent
+      summary: Push a message to a session
 components:
   parameters:
     id:
@@ -3845,307 +3048,32 @@ components:
         scope_id:
           type: string
       type: object
-    SessionCheckIn:
+    SessionMessage:
       allOf:
       - $ref: "#/components/schemas/ObjectReference"
       - properties:
           session_id:
-            type: string
-          agent_id:
-            type: string
-          summary:
-            type: string
-          branch:
-            type: string
-          worktree:
-            type: string
-          pr:
-            type: string
-          phase:
-            type: string
-          test_count:
-            format: int32
-            type: integer
-          next_steps:
-            type: string
-        required:
-        - agent_id
-        - session_id
-        type: object
-      example:
-        summary: summary
-        phase: phase
-        pr: pr
-        agent_id: agent_id
-        kind: kind
-        test_count: 5
-        created_at: 2000-01-23T04:56:07.000+00:00
-        session_id: session_id
-        branch: branch
-        worktree: worktree
-        next_steps: next_steps
-        updated_at: 2000-01-23T04:56:07.000+00:00
-        id: id
-        href: href
-    SessionCheckInList:
-      allOf:
-      - $ref: "#/components/schemas/List"
-      - properties:
-          items:
-            items:
-              $ref: "#/components/schemas/SessionCheckIn"
-            type: array
-        type: object
-      example:
-        total: 1
-        size: 6
-        kind: kind
-        page: 0
-        items:
-        - summary: summary
-          phase: phase
-          pr: pr
-          agent_id: agent_id
-          kind: kind
-          test_count: 5
-          created_at: 2000-01-23T04:56:07.000+00:00
-          session_id: session_id
-          branch: branch
-          worktree: worktree
-          next_steps: next_steps
-          updated_at: 2000-01-23T04:56:07.000+00:00
-          id: id
-          href: href
-        - summary: summary
-          phase: phase
-          pr: pr
-          agent_id: agent_id
-          kind: kind
-          test_count: 5
-          created_at: 2000-01-23T04:56:07.000+00:00
-          session_id: session_id
-          branch: branch
-          worktree: worktree
-          next_steps: next_steps
-          updated_at: 2000-01-23T04:56:07.000+00:00
-          id: id
-          href: href
-    SessionCheckInPatchRequest:
-      example:
-        summary: summary
-        phase: phase
-        pr: pr
-        agent_id: agent_id
-        test_count: 0
-        session_id: session_id
-        branch: branch
-        worktree: worktree
-        next_steps: next_steps
-      properties:
-        session_id:
-          type: string
-        agent_id:
-          type: string
-        summary:
-          type: string
-        branch:
-          type: string
-        worktree:
-          type: string
-        pr:
-          type: string
-        phase:
-          type: string
-        test_count:
-          format: int32
-          type: integer
-        next_steps:
-          type: string
-      type: object
-    ProjectDocument:
-      allOf:
-      - $ref: "#/components/schemas/ObjectReference"
-      - properties:
-          project_id:
-            type: string
-          slug:
-            type: string
-          title:
-            type: string
-          content:
-            type: string
-        required:
-        - project_id
-        - slug
-        type: object
-      example:
-        updated_at: 2000-01-23T04:56:07.000+00:00
-        project_id: project_id
-        kind: kind
-        created_at: 2000-01-23T04:56:07.000+00:00
-        id: id
-        href: href
-        title: title
-        slug: slug
-        content: content
-    ProjectDocumentList:
-      allOf:
-      - $ref: "#/components/schemas/List"
-      - properties:
-          items:
-            items:
-              $ref: "#/components/schemas/ProjectDocument"
-            type: array
-        type: object
-      example:
-        total: 1
-        size: 6
-        kind: kind
-        page: 0
-        items:
-        - updated_at: 2000-01-23T04:56:07.000+00:00
-          project_id: project_id
-          kind: kind
-          created_at: 2000-01-23T04:56:07.000+00:00
-          id: id
-          href: href
-          title: title
-          slug: slug
-          content: content
-        - updated_at: 2000-01-23T04:56:07.000+00:00
-          project_id: project_id
-          kind: kind
-          created_at: 2000-01-23T04:56:07.000+00:00
-          id: id
-          href: href
-          title: title
-          slug: slug
-          content: content
-    ProjectDocumentPatchRequest:
-      example:
-        project_id: project_id
-        title: title
-        slug: slug
-        content: content
-      properties:
-        project_id:
-          type: string
-        slug:
-          type: string
-        title:
-          type: string
-        content:
-          type: string
-      type: object
-    AgentMessage:
-      allOf:
-      - $ref: "#/components/schemas/ObjectReference"
-      - properties:
-          recipient_agent_id:
-            type: string
-          sender_agent_id:
-            type: string
-          sender_user_id:
-            type: string
-          sender_name:
-            type: string
-          body:
-            type: string
-          read:
-            type: boolean
-        required:
-        - recipient_agent_id
-        type: object
-      example:
-        read: true
-        updated_at: 2000-01-23T04:56:07.000+00:00
-        kind: kind
-        sender_agent_id: sender_agent_id
-        created_at: 2000-01-23T04:56:07.000+00:00
-        recipient_agent_id: recipient_agent_id
-        sender_name: sender_name
-        id: id
-        href: href
-        body: body
-        sender_user_id: sender_user_id
-    AgentMessageList:
-      allOf:
-      - $ref: "#/components/schemas/List"
-      - properties:
-          items:
-            items:
-              $ref: "#/components/schemas/AgentMessage"
-            type: array
-        type: object
-      example:
-        total: 1
-        size: 6
-        kind: kind
-        page: 0
-        items:
-        - read: true
-          updated_at: 2000-01-23T04:56:07.000+00:00
-          kind: kind
-          sender_agent_id: sender_agent_id
-          created_at: 2000-01-23T04:56:07.000+00:00
-          recipient_agent_id: recipient_agent_id
-          sender_name: sender_name
-          id: id
-          href: href
-          body: body
-          sender_user_id: sender_user_id
-        - read: true
-          updated_at: 2000-01-23T04:56:07.000+00:00
-          kind: kind
-          sender_agent_id: sender_agent_id
-          created_at: 2000-01-23T04:56:07.000+00:00
-          recipient_agent_id: recipient_agent_id
-          sender_name: sender_name
-          id: id
-          href: href
-          body: body
-          sender_user_id: sender_user_id
-    AgentMessagePatchRequest:
-      example:
-        read: true
-        sender_agent_id: sender_agent_id
-        recipient_agent_id: recipient_agent_id
-        sender_name: sender_name
-        body: body
-        sender_user_id: sender_user_id
-      properties:
-        recipient_agent_id:
-          type: string
-        sender_agent_id:
-          type: string
-        sender_user_id:
-          type: string
-        sender_name:
-          type: string
-        body:
-          type: string
-        read:
-          type: boolean
-      type: object
-    AGUIEvent:
-      allOf:
-      - $ref: "#/components/schemas/ObjectReference"
-      - properties:
-          session_id:
+            description: ID of the parent session
+            readOnly: true
             type: string
           seq:
+            description: Monotonically increasing sequence number within the session
             format: int64
+            readOnly: true
             type: integer
           event_type:
+            default: user
+            description: |-
+              Event type tag. Common values: `user` (human turn),
+              `assistant` (model reply), `tool_use`, `tool_result`,
+              `system`, `error`.
             type: string
           payload:
+            description: Message body (plain text or JSON-encoded event payload)
             type: string
-        required:
-        - event_type
-        - session_id
         type: object
       example:
-        event_type: event_type
+        event_type: user
         updated_at: 2000-01-23T04:56:07.000+00:00
         payload: payload
         kind: kind
@@ -4153,55 +3081,22 @@ components:
         session_id: session_id
         id: id
         href: href
-        seq: 5
-    AGUIEventList:
-      allOf:
-      - $ref: "#/components/schemas/List"
-      - properties:
-          items:
-            items:
-              $ref: "#/components/schemas/AGUIEvent"
-            type: array
-        type: object
-      example:
-        total: 1
-        size: 6
-        kind: kind
-        page: 0
-        items:
-        - event_type: event_type
-          updated_at: 2000-01-23T04:56:07.000+00:00
-          payload: payload
-          kind: kind
-          created_at: 2000-01-23T04:56:07.000+00:00
-          session_id: session_id
-          id: id
-          href: href
-          seq: 5
-        - event_type: event_type
-          updated_at: 2000-01-23T04:56:07.000+00:00
-          payload: payload
-          kind: kind
-          created_at: 2000-01-23T04:56:07.000+00:00
-          session_id: session_id
-          id: id
-          href: href
-          seq: 5
-    AGUIEventPatchRequest:
-      example:
-        event_type: event_type
-        payload: payload
-        session_id: session_id
         seq: 0
+    SessionMessageList:
+      items:
+        $ref: "#/components/schemas/SessionMessage"
+      type: array
+    SessionMessagePushRequest:
+      example:
+        event_type: user
+        payload: payload
       properties:
-        session_id:
-          type: string
-        seq:
-          format: int64
-          type: integer
         event_type:
+          default: user
+          description: Event type tag. Defaults to `user` if omitted.
           type: string
         payload:
+          description: Message body
           type: string
       type: object
   securitySchemes:

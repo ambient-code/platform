@@ -101,8 +101,6 @@ func init() {
 		sessionsRouter.HandleFunc("/{id}", sessionHandler.Delete).Methods(http.MethodDelete)
 		sessionsRouter.HandleFunc("/{id}/messages", msgHandler.GetMessages).Methods(http.MethodGet)
 		sessionsRouter.HandleFunc("/{id}/messages", msgHandler.PushMessage).Methods(http.MethodPost)
-		sessionsRouter.HandleFunc("/{id}/ag_ui", msgHandler.StreamAgUI).Methods(http.MethodGet)
-		sessionsRouter.HandleFunc("/{id}/ag_ui", msgHandler.SendAgUI).Methods(http.MethodPost)
 		sessionsRouter.Use(authMiddleware.AuthenticateAccountJWT)
 		sessionsRouter.Use(authzMiddleware.AuthorizeApi)
 	})

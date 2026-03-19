@@ -14,8 +14,7 @@ Examples:
   acpctl session messages <id>               # list messages (snapshot)
   acpctl session messages <id> -f            # stream messages live
   acpctl session send <id> "Hello!"          # send a message (any event_type)
-  acpctl session ag_ui stream <id>           # stream AG-UI events live (SSE)
-  acpctl session ag_ui send <id> "Hello!"    # send a user turn (canonical write path)`,
+  acpctl session send <id> "Hello!"          # send a message`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return cmd.Help()
 	},
@@ -24,5 +23,4 @@ Examples:
 func init() {
 	Cmd.AddCommand(messagesCmd)
 	Cmd.AddCommand(sendCmd)
-	Cmd.AddCommand(agUICmd)
 }

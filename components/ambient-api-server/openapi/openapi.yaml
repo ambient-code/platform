@@ -52,8 +52,6 @@ paths:
     $ref: 'openapi.roleBindings.yaml#/paths/~1api~1ambient~1v1~1role_bindings~1{id}'
   /api/ambient/v1/sessions/{id}/messages:
     $ref: 'openapi.sessionMessages.yaml#/paths/~1api~1ambient~1v1~1sessions~1{id}~1messages'
-  /api/ambient/v1/sessions/{id}/ag_ui:
-    $ref: 'openapi.sessionMessages.yaml#/paths/~1api~1ambient~1v1~1sessions~1{id}~1ag_ui'
   # AUTO-ADD NEW PATHS
 components:
   securitySchemes:

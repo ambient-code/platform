@@ -4,22 +4,10 @@ All URIs are relative to *http://localhost:8000*
 
 Method | HTTP request | Description
 ------------- | ------------- | -------------
-[**ApiAmbientV1AgUiEventsGet**](DefaultAPI.md#ApiAmbientV1AgUiEventsGet) | **Get** /api/ambient/v1/ag_ui_events | Returns a list of AGUIEvents
-[**ApiAmbientV1AgUiEventsIdGet**](DefaultAPI.md#ApiAmbientV1AgUiEventsIdGet) | **Get** /api/ambient/v1/ag_ui_events/{id} | Get an AGUIEvent by id
-[**ApiAmbientV1AgUiEventsIdPatch**](DefaultAPI.md#ApiAmbientV1AgUiEventsIdPatch) | **Patch** /api/ambient/v1/ag_ui_events/{id} | Update an AGUIEvent
-[**ApiAmbientV1AgUiEventsPost**](DefaultAPI.md#ApiAmbientV1AgUiEventsPost) | **Post** /api/ambient/v1/ag_ui_events | Create a new AGUIEvent
-[**ApiAmbientV1AgentMessagesGet**](DefaultAPI.md#ApiAmbientV1AgentMessagesGet) | **Get** /api/ambient/v1/agent_messages | Returns a list of agentMessages
-[**ApiAmbientV1AgentMessagesIdGet**](DefaultAPI.md#ApiAmbientV1AgentMessagesIdGet) | **Get** /api/ambient/v1/agent_messages/{id} | Get an agentMessage by id
-[**ApiAmbientV1AgentMessagesIdPatch**](DefaultAPI.md#ApiAmbientV1AgentMessagesIdPatch) | **Patch** /api/ambient/v1/agent_messages/{id} | Update an agentMessage
-[**ApiAmbientV1AgentMessagesPost**](DefaultAPI.md#ApiAmbientV1AgentMessagesPost) | **Post** /api/ambient/v1/agent_messages | Create a new agentMessage
 [**ApiAmbientV1AgentsGet**](DefaultAPI.md#ApiAmbientV1AgentsGet) | **Get** /api/ambient/v1/agents | Returns a list of agents
 [**ApiAmbientV1AgentsIdGet**](DefaultAPI.md#ApiAmbientV1AgentsIdGet) | **Get** /api/ambient/v1/agents/{id} | Get an agent by id
 [**ApiAmbientV1AgentsIdPatch**](DefaultAPI.md#ApiAmbientV1AgentsIdPatch) | **Patch** /api/ambient/v1/agents/{id} | Update an agent
 [**ApiAmbientV1AgentsPost**](DefaultAPI.md#ApiAmbientV1AgentsPost) | **Post** /api/ambient/v1/agents | Create a new agent
-[**ApiAmbientV1ProjectDocumentsGet**](DefaultAPI.md#ApiAmbientV1ProjectDocumentsGet) | **Get** /api/ambient/v1/project_documents | Returns a list of projectDocuments
-[**ApiAmbientV1ProjectDocumentsIdGet**](DefaultAPI.md#ApiAmbientV1ProjectDocumentsIdGet) | **Get** /api/ambient/v1/project_documents/{id} | Get an projectDocument by id
-[**ApiAmbientV1ProjectDocumentsIdPatch**](DefaultAPI.md#ApiAmbientV1ProjectDocumentsIdPatch) | **Patch** /api/ambient/v1/project_documents/{id} | Update an projectDocument
-[**ApiAmbientV1ProjectDocumentsPost**](DefaultAPI.md#ApiAmbientV1ProjectDocumentsPost) | **Post** /api/ambient/v1/project_documents | Create a new projectDocument
 [**ApiAmbientV1ProjectSettingsGet**](DefaultAPI.md#ApiAmbientV1ProjectSettingsGet) | **Get** /api/ambient/v1/project_settings | Returns a list of project settings
 [**ApiAmbientV1ProjectSettingsIdDelete**](DefaultAPI.md#ApiAmbientV1ProjectSettingsIdDelete) | **Delete** /api/ambient/v1/project_settings/{id} | Delete a project settings by id
 [**ApiAmbientV1ProjectSettingsIdGet**](DefaultAPI.md#ApiAmbientV1ProjectSettingsIdGet) | **Get** /api/ambient/v1/project_settings/{id} | Get a project settings by id
@@ -38,13 +26,11 @@ Method | HTTP request | Description
 [**ApiAmbientV1RolesIdGet**](DefaultAPI.md#ApiAmbientV1RolesIdGet) | **Get** /api/ambient/v1/roles/{id} | Get an role by id
 [**ApiAmbientV1RolesIdPatch**](DefaultAPI.md#ApiAmbientV1RolesIdPatch) | **Patch** /api/ambient/v1/roles/{id} | Update an role
 [**ApiAmbientV1RolesPost**](DefaultAPI.md#ApiAmbientV1RolesPost) | **Post** /api/ambient/v1/roles | Create a new role
-[**ApiAmbientV1SessionCheckInsGet**](DefaultAPI.md#ApiAmbientV1SessionCheckInsGet) | **Get** /api/ambient/v1/session_check_ins | Returns a list of sessionCheckIns
-[**ApiAmbientV1SessionCheckInsIdGet**](DefaultAPI.md#ApiAmbientV1SessionCheckInsIdGet) | **Get** /api/ambient/v1/session_check_ins/{id} | Get an sessionCheckIn by id
-[**ApiAmbientV1SessionCheckInsIdPatch**](DefaultAPI.md#ApiAmbientV1SessionCheckInsIdPatch) | **Patch** /api/ambient/v1/session_check_ins/{id} | Update an sessionCheckIn
-[**ApiAmbientV1SessionCheckInsPost**](DefaultAPI.md#ApiAmbientV1SessionCheckInsPost) | **Post** /api/ambient/v1/session_check_ins | Create a new sessionCheckIn
 [**ApiAmbientV1SessionsGet**](DefaultAPI.md#ApiAmbientV1SessionsGet) | **Get** /api/ambient/v1/sessions | Returns a list of sessions
 [**ApiAmbientV1SessionsIdDelete**](DefaultAPI.md#ApiAmbientV1SessionsIdDelete) | **Delete** /api/ambient/v1/sessions/{id} | Delete a session by id
 [**ApiAmbientV1SessionsIdGet**](DefaultAPI.md#ApiAmbientV1SessionsIdGet) | **Get** /api/ambient/v1/sessions/{id} | Get an session by id
+[**ApiAmbientV1SessionsIdMessagesGet**](DefaultAPI.md#ApiAmbientV1SessionsIdMessagesGet) | **Get** /api/ambient/v1/sessions/{id}/messages | List or stream session messages
+[**ApiAmbientV1SessionsIdMessagesPost**](DefaultAPI.md#ApiAmbientV1SessionsIdMessagesPost) | **Post** /api/ambient/v1/sessions/{id}/messages | Push a message to a session
 [**ApiAmbientV1SessionsIdPatch**](DefaultAPI.md#ApiAmbientV1SessionsIdPatch) | **Patch** /api/ambient/v1/sessions/{id} | Update an session
 [**ApiAmbientV1SessionsIdStartPost**](DefaultAPI.md#ApiAmbientV1SessionsIdStartPost) | **Post** /api/ambient/v1/sessions/{id}/start | Start a session
 [**ApiAmbientV1SessionsIdStatusPatch**](DefaultAPI.md#ApiAmbientV1SessionsIdStatusPatch) | **Patch** /api/ambient/v1/sessions/{id}/status | Update session status fields
@@ -55,554 +41,6 @@ Method | HTTP request | Description
 [**ApiAmbientV1UsersIdPatch**](DefaultAPI.md#ApiAmbientV1UsersIdPatch) | **Patch** /api/ambient/v1/users/{id} | Update an user
 [**ApiAmbientV1UsersPost**](DefaultAPI.md#ApiAmbientV1UsersPost) | **Post** /api/ambient/v1/users | Create a new user
 
-
-
-## ApiAmbientV1AgUiEventsGet
-
-> AGUIEventList ApiAmbientV1AgUiEventsGet(ctx).Page(page).Size(size).Search(search).OrderBy(orderBy).Fields(fields).Execute()
-
-Returns a list of AGUIEvents
-
-### Example
-
-```go
-package main
-
-import (
-	"context"
-	"fmt"
-	"os"
-	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
-)
-
-func main() {
-	page := int32(56) // int32 | Page number of record list when record list exceeds specified page size (optional) (default to 1)
-	size := int32(56) // int32 | Maximum number of records to return (optional) (default to 100)
-	search := "search_example" // string | Specifies the search criteria (optional)
-	orderBy := "orderBy_example" // string | Specifies the order by criteria (optional)
-	fields := "fields_example" // string | Supplies a comma-separated list of fields to be returned (optional)
-
-	configuration := openapiclient.NewConfiguration()
-	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1AgUiEventsGet(context.Background()).Page(page).Size(size).Search(search).OrderBy(orderBy).Fields(fields).Execute()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1AgUiEventsGet``: %v\n", err)
-		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
-	}
-	// response from `ApiAmbientV1AgUiEventsGet`: AGUIEventList
-	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1AgUiEventsGet`: %v\n", resp)
-}
-```
-
-### Path Parameters
-
-
-
-### Other Parameters
-
-Other parameters are passed through a pointer to a apiApiAmbientV1AgUiEventsGetRequest struct via the builder pattern
-
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
- **page** | **int32** | Page number of record list when record list exceeds specified page size | [default to 1]
- **size** | **int32** | Maximum number of records to return | [default to 100]
- **search** | **string** | Specifies the search criteria | 
- **orderBy** | **string** | Specifies the order by criteria | 
- **fields** | **string** | Supplies a comma-separated list of fields to be returned | 
-
-### Return type
-
-[**AGUIEventList**](AGUIEventList.md)
-
-### Authorization
-
-[Bearer](../README.md#Bearer)
-
-### HTTP request headers
-
-- **Content-Type**: Not defined
-- **Accept**: application/json
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
-[[Back to Model list]](../README.md#documentation-for-models)
-[[Back to README]](../README.md)
-
-
-## ApiAmbientV1AgUiEventsIdGet
-
-> AGUIEvent ApiAmbientV1AgUiEventsIdGet(ctx, id).Execute()
-
-Get an AGUIEvent by id
-
-### Example
-
-```go
-package main
-
-import (
-	"context"
-	"fmt"
-	"os"
-	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
-)
-
-func main() {
-	id := "id_example" // string | The id of record
-
-	configuration := openapiclient.NewConfiguration()
-	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1AgUiEventsIdGet(context.Background(), id).Execute()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1AgUiEventsIdGet``: %v\n", err)
-		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
-	}
-	// response from `ApiAmbientV1AgUiEventsIdGet`: AGUIEvent
-	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1AgUiEventsIdGet`: %v\n", resp)
-}
-```
-
-### Path Parameters
-
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
-**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record | 
-
-### Other Parameters
-
-Other parameters are passed through a pointer to a apiApiAmbientV1AgUiEventsIdGetRequest struct via the builder pattern
-
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
-
-
-### Return type
-
-[**AGUIEvent**](AGUIEvent.md)
-
-### Authorization
-
-[Bearer](../README.md#Bearer)
-
-### HTTP request headers
-
-- **Content-Type**: Not defined
-- **Accept**: application/json
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
-[[Back to Model list]](../README.md#documentation-for-models)
-[[Back to README]](../README.md)
-
-
-## ApiAmbientV1AgUiEventsIdPatch
-
-> AGUIEvent ApiAmbientV1AgUiEventsIdPatch(ctx, id).AGUIEventPatchRequest(aGUIEventPatchRequest).Execute()
-
-Update an AGUIEvent
-
-### Example
-
-```go
-package main
-
-import (
-	"context"
-	"fmt"
-	"os"
-	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
-)
-
-func main() {
-	id := "id_example" // string | The id of record
-	aGUIEventPatchRequest := *openapiclient.NewAGUIEventPatchRequest() // AGUIEventPatchRequest | Updated AGUIEvent data
-
-	configuration := openapiclient.NewConfiguration()
-	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1AgUiEventsIdPatch(context.Background(), id).AGUIEventPatchRequest(aGUIEventPatchRequest).Execute()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1AgUiEventsIdPatch``: %v\n", err)
-		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
-	}
-	// response from `ApiAmbientV1AgUiEventsIdPatch`: AGUIEvent
-	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1AgUiEventsIdPatch`: %v\n", resp)
-}
-```
-
-### Path Parameters
-
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
-**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record | 
-
-### Other Parameters
-
-Other parameters are passed through a pointer to a apiApiAmbientV1AgUiEventsIdPatchRequest struct via the builder pattern
-
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
-
- **aGUIEventPatchRequest** | [**AGUIEventPatchRequest**](AGUIEventPatchRequest.md) | Updated AGUIEvent data | 
-
-### Return type
-
-[**AGUIEvent**](AGUIEvent.md)
-
-### Authorization
-
-[Bearer](../README.md#Bearer)
-
-### HTTP request headers
-
-- **Content-Type**: application/json
-- **Accept**: application/json
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
-[[Back to Model list]](../README.md#documentation-for-models)
-[[Back to README]](../README.md)
-
-
-## ApiAmbientV1AgUiEventsPost
-
-> AGUIEvent ApiAmbientV1AgUiEventsPost(ctx).AGUIEvent(aGUIEvent).Execute()
-
-Create a new AGUIEvent
-
-### Example
-
-```go
-package main
-
-import (
-	"context"
-	"fmt"
-	"os"
-	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
-)
-
-func main() {
-	aGUIEvent := *openapiclient.NewAGUIEvent("SessionId_example", "EventType_example") // AGUIEvent | AGUIEvent data
-
-	configuration := openapiclient.NewConfiguration()
-	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1AgUiEventsPost(context.Background()).AGUIEvent(aGUIEvent).Execute()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1AgUiEventsPost``: %v\n", err)
-		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
-	}
-	// response from `ApiAmbientV1AgUiEventsPost`: AGUIEvent
-	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1AgUiEventsPost`: %v\n", resp)
-}
-```
-
-### Path Parameters
-
-
-
-### Other Parameters
-
-Other parameters are passed through a pointer to a apiApiAmbientV1AgUiEventsPostRequest struct via the builder pattern
-
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
- **aGUIEvent** | [**AGUIEvent**](AGUIEvent.md) | AGUIEvent data | 
-
-### Return type
-
-[**AGUIEvent**](AGUIEvent.md)
-
-### Authorization
-
-[Bearer](../README.md#Bearer)
-
-### HTTP request headers
-
-- **Content-Type**: application/json
-- **Accept**: application/json
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
-[[Back to Model list]](../README.md#documentation-for-models)
-[[Back to README]](../README.md)
-
-
-## ApiAmbientV1AgentMessagesGet
-
-> AgentMessageList ApiAmbientV1AgentMessagesGet(ctx).Page(page).Size(size).Search(search).OrderBy(orderBy).Fields(fields).Execute()
-
-Returns a list of agentMessages
-
-### Example
-
-```go
-package main
-
-import (
-	"context"
-	"fmt"
-	"os"
-	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
-)
-
-func main() {
-	page := int32(56) // int32 | Page number of record list when record list exceeds specified page size (optional) (default to 1)
-	size := int32(56) // int32 | Maximum number of records to return (optional) (default to 100)
-	search := "search_example" // string | Specifies the search criteria (optional)
-	orderBy := "orderBy_example" // string | Specifies the order by criteria (optional)
-	fields := "fields_example" // string | Supplies a comma-separated list of fields to be returned (optional)
-
-	configuration := openapiclient.NewConfiguration()
-	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1AgentMessagesGet(context.Background()).Page(page).Size(size).Search(search).OrderBy(orderBy).Fields(fields).Execute()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1AgentMessagesGet``: %v\n", err)
-		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
-	}
-	// response from `ApiAmbientV1AgentMessagesGet`: AgentMessageList
-	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1AgentMessagesGet`: %v\n", resp)
-}
-```
-
-### Path Parameters
-
-
-
-### Other Parameters
-
-Other parameters are passed through a pointer to a apiApiAmbientV1AgentMessagesGetRequest struct via the builder pattern
-
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
- **page** | **int32** | Page number of record list when record list exceeds specified page size | [default to 1]
- **size** | **int32** | Maximum number of records to return | [default to 100]
- **search** | **string** | Specifies the search criteria | 
- **orderBy** | **string** | Specifies the order by criteria | 
- **fields** | **string** | Supplies a comma-separated list of fields to be returned | 
-
-### Return type
-
-[**AgentMessageList**](AgentMessageList.md)
-
-### Authorization
-
-[Bearer](../README.md#Bearer)
-
-### HTTP request headers
-
-- **Content-Type**: Not defined
-- **Accept**: application/json
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
-[[Back to Model list]](../README.md#documentation-for-models)
-[[Back to README]](../README.md)
-
-
-## ApiAmbientV1AgentMessagesIdGet
-
-> AgentMessage ApiAmbientV1AgentMessagesIdGet(ctx, id).Execute()
-
-Get an agentMessage by id
-
-### Example
-
-```go
-package main
-
-import (
-	"context"
-	"fmt"
-	"os"
-	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
-)
-
-func main() {
-	id := "id_example" // string | The id of record
-
-	configuration := openapiclient.NewConfiguration()
-	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1AgentMessagesIdGet(context.Background(), id).Execute()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1AgentMessagesIdGet``: %v\n", err)
-		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
-	}
-	// response from `ApiAmbientV1AgentMessagesIdGet`: AgentMessage
-	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1AgentMessagesIdGet`: %v\n", resp)
-}
-```
-
-### Path Parameters
-
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
-**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record | 
-
-### Other Parameters
-
-Other parameters are passed through a pointer to a apiApiAmbientV1AgentMessagesIdGetRequest struct via the builder pattern
-
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
-
-
-### Return type
-
-[**AgentMessage**](AgentMessage.md)
-
-### Authorization
-
-[Bearer](../README.md#Bearer)
-
-### HTTP request headers
-
-- **Content-Type**: Not defined
-- **Accept**: application/json
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
-[[Back to Model list]](../README.md#documentation-for-models)
-[[Back to README]](../README.md)
-
-
-## ApiAmbientV1AgentMessagesIdPatch
-
-> AgentMessage ApiAmbientV1AgentMessagesIdPatch(ctx, id).AgentMessagePatchRequest(agentMessagePatchRequest).Execute()
-
-Update an agentMessage
-
-### Example
-
-```go
-package main
-
-import (
-	"context"
-	"fmt"
-	"os"
-	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
-)
-
-func main() {
-	id := "id_example" // string | The id of record
-	agentMessagePatchRequest := *openapiclient.NewAgentMessagePatchRequest() // AgentMessagePatchRequest | Updated agentMessage data
-
-	configuration := openapiclient.NewConfiguration()
-	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1AgentMessagesIdPatch(context.Background(), id).AgentMessagePatchRequest(agentMessagePatchRequest).Execute()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1AgentMessagesIdPatch``: %v\n", err)
-		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
-	}
-	// response from `ApiAmbientV1AgentMessagesIdPatch`: AgentMessage
-	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1AgentMessagesIdPatch`: %v\n", resp)
-}
-```
-
-### Path Parameters
-
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
-**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record | 
-
-### Other Parameters
-
-Other parameters are passed through a pointer to a apiApiAmbientV1AgentMessagesIdPatchRequest struct via the builder pattern
-
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
-
- **agentMessagePatchRequest** | [**AgentMessagePatchRequest**](AgentMessagePatchRequest.md) | Updated agentMessage data | 
-
-### Return type
-
-[**AgentMessage**](AgentMessage.md)
-
-### Authorization
-
-[Bearer](../README.md#Bearer)
-
-### HTTP request headers
-
-- **Content-Type**: application/json
-- **Accept**: application/json
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
-[[Back to Model list]](../README.md#documentation-for-models)
-[[Back to README]](../README.md)
-
-
-## ApiAmbientV1AgentMessagesPost
-
-> AgentMessage ApiAmbientV1AgentMessagesPost(ctx).AgentMessage(agentMessage).Execute()
-
-Create a new agentMessage
-
-### Example
-
-```go
-package main
-
-import (
-	"context"
-	"fmt"
-	"os"
-	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
-)
-
-func main() {
-	agentMessage := *openapiclient.NewAgentMessage("RecipientAgentId_example") // AgentMessage | AgentMessage data
-
-	configuration := openapiclient.NewConfiguration()
-	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1AgentMessagesPost(context.Background()).AgentMessage(agentMessage).Execute()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1AgentMessagesPost``: %v\n", err)
-		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
-	}
-	// response from `ApiAmbientV1AgentMessagesPost`: AgentMessage
-	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1AgentMessagesPost`: %v\n", resp)
-}
-```
-
-### Path Parameters
-
-
-
-### Other Parameters
-
-Other parameters are passed through a pointer to a apiApiAmbientV1AgentMessagesPostRequest struct via the builder pattern
-
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
- **agentMessage** | [**AgentMessage**](AgentMessage.md) | AgentMessage data | 
-
-### Return type
-
-[**AgentMessage**](AgentMessage.md)
-
-### Authorization
-
-[Bearer](../README.md#Bearer)
-
-### HTTP request headers
-
-- **Content-Type**: application/json
-- **Accept**: application/json
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
-[[Back to Model list]](../README.md#documentation-for-models)
-[[Back to README]](../README.md)
 
 
 ## ApiAmbientV1AgentsGet
@@ -864,280 +302,6 @@ Name | Type | Description  | Notes
 ### Return type
 
 [**Agent**](Agent.md)
-
-### Authorization
-
-[Bearer](../README.md#Bearer)
-
-### HTTP request headers
-
-- **Content-Type**: application/json
-- **Accept**: application/json
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
-[[Back to Model list]](../README.md#documentation-for-models)
-[[Back to README]](../README.md)
-
-
-## ApiAmbientV1ProjectDocumentsGet
-
-> ProjectDocumentList ApiAmbientV1ProjectDocumentsGet(ctx).Page(page).Size(size).Search(search).OrderBy(orderBy).Fields(fields).Execute()
-
-Returns a list of projectDocuments
-
-### Example
-
-```go
-package main
-
-import (
-	"context"
-	"fmt"
-	"os"
-	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
-)
-
-func main() {
-	page := int32(56) // int32 | Page number of record list when record list exceeds specified page size (optional) (default to 1)
-	size := int32(56) // int32 | Maximum number of records to return (optional) (default to 100)
-	search := "search_example" // string | Specifies the search criteria (optional)
-	orderBy := "orderBy_example" // string | Specifies the order by criteria (optional)
-	fields := "fields_example" // string | Supplies a comma-separated list of fields to be returned (optional)
-
-	configuration := openapiclient.NewConfiguration()
-	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1ProjectDocumentsGet(context.Background()).Page(page).Size(size).Search(search).OrderBy(orderBy).Fields(fields).Execute()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ProjectDocumentsGet``: %v\n", err)
-		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
-	}
-	// response from `ApiAmbientV1ProjectDocumentsGet`: ProjectDocumentList
-	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1ProjectDocumentsGet`: %v\n", resp)
-}
-```
-
-### Path Parameters
-
-
-
-### Other Parameters
-
-Other parameters are passed through a pointer to a apiApiAmbientV1ProjectDocumentsGetRequest struct via the builder pattern
-
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
- **page** | **int32** | Page number of record list when record list exceeds specified page size | [default to 1]
- **size** | **int32** | Maximum number of records to return | [default to 100]
- **search** | **string** | Specifies the search criteria | 
- **orderBy** | **string** | Specifies the order by criteria | 
- **fields** | **string** | Supplies a comma-separated list of fields to be returned | 
-
-### Return type
-
-[**ProjectDocumentList**](ProjectDocumentList.md)
-
-### Authorization
-
-[Bearer](../README.md#Bearer)
-
-### HTTP request headers
-
-- **Content-Type**: Not defined
-- **Accept**: application/json
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
-[[Back to Model list]](../README.md#documentation-for-models)
-[[Back to README]](../README.md)
-
-
-## ApiAmbientV1ProjectDocumentsIdGet
-
-> ProjectDocument ApiAmbientV1ProjectDocumentsIdGet(ctx, id).Execute()
-
-Get an projectDocument by id
-
-### Example
-
-```go
-package main
-
-import (
-	"context"
-	"fmt"
-	"os"
-	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
-)
-
-func main() {
-	id := "id_example" // string | The id of record
-
-	configuration := openapiclient.NewConfiguration()
-	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1ProjectDocumentsIdGet(context.Background(), id).Execute()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ProjectDocumentsIdGet``: %v\n", err)
-		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
-	}
-	// response from `ApiAmbientV1ProjectDocumentsIdGet`: ProjectDocument
-	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1ProjectDocumentsIdGet`: %v\n", resp)
-}
-```
-
-### Path Parameters
-
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
-**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record | 
-
-### Other Parameters
-
-Other parameters are passed through a pointer to a apiApiAmbientV1ProjectDocumentsIdGetRequest struct via the builder pattern
-
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
-
-
-### Return type
-
-[**ProjectDocument**](ProjectDocument.md)
-
-### Authorization
-
-[Bearer](../README.md#Bearer)
-
-### HTTP request headers
-
-- **Content-Type**: Not defined
-- **Accept**: application/json
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
-[[Back to Model list]](../README.md#documentation-for-models)
-[[Back to README]](../README.md)
-
-
-## ApiAmbientV1ProjectDocumentsIdPatch
-
-> ProjectDocument ApiAmbientV1ProjectDocumentsIdPatch(ctx, id).ProjectDocumentPatchRequest(projectDocumentPatchRequest).Execute()
-
-Update an projectDocument
-
-### Example
-
-```go
-package main
-
-import (
-	"context"
-	"fmt"
-	"os"
-	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
-)
-
-func main() {
-	id := "id_example" // string | The id of record
-	projectDocumentPatchRequest := *openapiclient.NewProjectDocumentPatchRequest() // ProjectDocumentPatchRequest | Updated projectDocument data
-
-	configuration := openapiclient.NewConfiguration()
-	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1ProjectDocumentsIdPatch(context.Background(), id).ProjectDocumentPatchRequest(projectDocumentPatchRequest).Execute()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ProjectDocumentsIdPatch``: %v\n", err)
-		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
-	}
-	// response from `ApiAmbientV1ProjectDocumentsIdPatch`: ProjectDocument
-	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1ProjectDocumentsIdPatch`: %v\n", resp)
-}
-```
-
-### Path Parameters
-
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
-**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record | 
-
-### Other Parameters
-
-Other parameters are passed through a pointer to a apiApiAmbientV1ProjectDocumentsIdPatchRequest struct via the builder pattern
-
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
-
- **projectDocumentPatchRequest** | [**ProjectDocumentPatchRequest**](ProjectDocumentPatchRequest.md) | Updated projectDocument data | 
-
-### Return type
-
-[**ProjectDocument**](ProjectDocument.md)
-
-### Authorization
-
-[Bearer](../README.md#Bearer)
-
-### HTTP request headers
-
-- **Content-Type**: application/json
-- **Accept**: application/json
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
-[[Back to Model list]](../README.md#documentation-for-models)
-[[Back to README]](../README.md)
-
-
-## ApiAmbientV1ProjectDocumentsPost
-
-> ProjectDocument ApiAmbientV1ProjectDocumentsPost(ctx).ProjectDocument(projectDocument).Execute()
-
-Create a new projectDocument
-
-### Example
-
-```go
-package main
-
-import (
-	"context"
-	"fmt"
-	"os"
-	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
-)
-
-func main() {
-	projectDocument := *openapiclient.NewProjectDocument("ProjectId_example", "Slug_example") // ProjectDocument | ProjectDocument data
-
-	configuration := openapiclient.NewConfiguration()
-	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1ProjectDocumentsPost(context.Background()).ProjectDocument(projectDocument).Execute()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ProjectDocumentsPost``: %v\n", err)
-		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
-	}
-	// response from `ApiAmbientV1ProjectDocumentsPost`: ProjectDocument
-	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1ProjectDocumentsPost`: %v\n", resp)
-}
-```
-
-### Path Parameters
-
-
-
-### Other Parameters
-
-Other parameters are passed through a pointer to a apiApiAmbientV1ProjectDocumentsPostRequest struct via the builder pattern
-
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
- **projectDocument** | [**ProjectDocument**](ProjectDocument.md) | ProjectDocument data | 
-
-### Return type
-
-[**ProjectDocument**](ProjectDocument.md)
 
 ### Authorization
 
@@ -2381,280 +1545,6 @@ Name | Type | Description  | Notes
 [[Back to README]](../README.md)
 
 
-## ApiAmbientV1SessionCheckInsGet
-
-> SessionCheckInList ApiAmbientV1SessionCheckInsGet(ctx).Page(page).Size(size).Search(search).OrderBy(orderBy).Fields(fields).Execute()
-
-Returns a list of sessionCheckIns
-
-### Example
-
-```go
-package main
-
-import (
-	"context"
-	"fmt"
-	"os"
-	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
-)
-
-func main() {
-	page := int32(56) // int32 | Page number of record list when record list exceeds specified page size (optional) (default to 1)
-	size := int32(56) // int32 | Maximum number of records to return (optional) (default to 100)
-	search := "search_example" // string | Specifies the search criteria (optional)
-	orderBy := "orderBy_example" // string | Specifies the order by criteria (optional)
-	fields := "fields_example" // string | Supplies a comma-separated list of fields to be returned (optional)
-
-	configuration := openapiclient.NewConfiguration()
-	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1SessionCheckInsGet(context.Background()).Page(page).Size(size).Search(search).OrderBy(orderBy).Fields(fields).Execute()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1SessionCheckInsGet``: %v\n", err)
-		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
-	}
-	// response from `ApiAmbientV1SessionCheckInsGet`: SessionCheckInList
-	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1SessionCheckInsGet`: %v\n", resp)
-}
-```
-
-### Path Parameters
-
-
-
-### Other Parameters
-
-Other parameters are passed through a pointer to a apiApiAmbientV1SessionCheckInsGetRequest struct via the builder pattern
-
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
- **page** | **int32** | Page number of record list when record list exceeds specified page size | [default to 1]
- **size** | **int32** | Maximum number of records to return | [default to 100]
- **search** | **string** | Specifies the search criteria | 
- **orderBy** | **string** | Specifies the order by criteria | 
- **fields** | **string** | Supplies a comma-separated list of fields to be returned | 
-
-### Return type
-
-[**SessionCheckInList**](SessionCheckInList.md)
-
-### Authorization
-
-[Bearer](../README.md#Bearer)
-
-### HTTP request headers
-
-- **Content-Type**: Not defined
-- **Accept**: application/json
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
-[[Back to Model list]](../README.md#documentation-for-models)
-[[Back to README]](../README.md)
-
-
-## ApiAmbientV1SessionCheckInsIdGet
-
-> SessionCheckIn ApiAmbientV1SessionCheckInsIdGet(ctx, id).Execute()
-
-Get an sessionCheckIn by id
-
-### Example
-
-```go
-package main
-
-import (
-	"context"
-	"fmt"
-	"os"
-	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
-)
-
-func main() {
-	id := "id_example" // string | The id of record
-
-	configuration := openapiclient.NewConfiguration()
-	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1SessionCheckInsIdGet(context.Background(), id).Execute()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1SessionCheckInsIdGet``: %v\n", err)
-		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
-	}
-	// response from `ApiAmbientV1SessionCheckInsIdGet`: SessionCheckIn
-	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1SessionCheckInsIdGet`: %v\n", resp)
-}
-```
-
-### Path Parameters
-
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
-**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record | 
-
-### Other Parameters
-
-Other parameters are passed through a pointer to a apiApiAmbientV1SessionCheckInsIdGetRequest struct via the builder pattern
-
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
-
-
-### Return type
-
-[**SessionCheckIn**](SessionCheckIn.md)
-
-### Authorization
-
-[Bearer](../README.md#Bearer)
-
-### HTTP request headers
-
-- **Content-Type**: Not defined
-- **Accept**: application/json
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
-[[Back to Model list]](../README.md#documentation-for-models)
-[[Back to README]](../README.md)
-
-
-## ApiAmbientV1SessionCheckInsIdPatch
-
-> SessionCheckIn ApiAmbientV1SessionCheckInsIdPatch(ctx, id).SessionCheckInPatchRequest(sessionCheckInPatchRequest).Execute()
-
-Update an sessionCheckIn
-
-### Example
-
-```go
-package main
-
-import (
-	"context"
-	"fmt"
-	"os"
-	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
-)
-
-func main() {
-	id := "id_example" // string | The id of record
-	sessionCheckInPatchRequest := *openapiclient.NewSessionCheckInPatchRequest() // SessionCheckInPatchRequest | Updated sessionCheckIn data
-
-	configuration := openapiclient.NewConfiguration()
-	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1SessionCheckInsIdPatch(context.Background(), id).SessionCheckInPatchRequest(sessionCheckInPatchRequest).Execute()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1SessionCheckInsIdPatch``: %v\n", err)
-		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
-	}
-	// response from `ApiAmbientV1SessionCheckInsIdPatch`: SessionCheckIn
-	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1SessionCheckInsIdPatch`: %v\n", resp)
-}
-```
-
-### Path Parameters
-
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
-**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record | 
-
-### Other Parameters
-
-Other parameters are passed through a pointer to a apiApiAmbientV1SessionCheckInsIdPatchRequest struct via the builder pattern
-
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
-
- **sessionCheckInPatchRequest** | [**SessionCheckInPatchRequest**](SessionCheckInPatchRequest.md) | Updated sessionCheckIn data | 
-
-### Return type
-
-[**SessionCheckIn**](SessionCheckIn.md)
-
-### Authorization
-
-[Bearer](../README.md#Bearer)
-
-### HTTP request headers
-
-- **Content-Type**: application/json
-- **Accept**: application/json
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
-[[Back to Model list]](../README.md#documentation-for-models)
-[[Back to README]](../README.md)
-
-
-## ApiAmbientV1SessionCheckInsPost
-
-> SessionCheckIn ApiAmbientV1SessionCheckInsPost(ctx).SessionCheckIn(sessionCheckIn).Execute()
-
-Create a new sessionCheckIn
-
-### Example
-
-```go
-package main
-
-import (
-	"context"
-	"fmt"
-	"os"
-	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
-)
-
-func main() {
-	sessionCheckIn := *openapiclient.NewSessionCheckIn("SessionId_example", "AgentId_example") // SessionCheckIn | SessionCheckIn data
-
-	configuration := openapiclient.NewConfiguration()
-	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1SessionCheckInsPost(context.Background()).SessionCheckIn(sessionCheckIn).Execute()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1SessionCheckInsPost``: %v\n", err)
-		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
-	}
-	// response from `ApiAmbientV1SessionCheckInsPost`: SessionCheckIn
-	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1SessionCheckInsPost`: %v\n", resp)
-}
-```
-
-### Path Parameters
-
-
-
-### Other Parameters
-
-Other parameters are passed through a pointer to a apiApiAmbientV1SessionCheckInsPostRequest struct via the builder pattern
-
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
- **sessionCheckIn** | [**SessionCheckIn**](SessionCheckIn.md) | SessionCheckIn data | 
-
-### Return type
-
-[**SessionCheckIn**](SessionCheckIn.md)
-
-### Authorization
-
-[Bearer](../README.md#Bearer)
-
-### HTTP request headers
-
-- **Content-Type**: application/json
-- **Accept**: application/json
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
-[[Back to Model list]](../README.md#documentation-for-models)
-[[Back to README]](../README.md)
-
-
 ## ApiAmbientV1SessionsGet
 
 > SessionList ApiAmbientV1SessionsGet(ctx).Page(page).Size(size).Search(search).OrderBy(orderBy).Fields(fields).Execute()
@@ -2854,6 +1744,150 @@ Name | Type | Description  | Notes
 ### HTTP request headers
 
 - **Content-Type**: Not defined
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## ApiAmbientV1SessionsIdMessagesGet
+
+> []SessionMessage ApiAmbientV1SessionsIdMessagesGet(ctx, id).AfterSeq(afterSeq).Execute()
+
+List or stream session messages
+
+
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	id := "id_example" // string | The id of record
+	afterSeq := int64(789) // int64 | Return only messages with seq greater than this value (default 0 = all messages) (optional) (default to 0)
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1SessionsIdMessagesGet(context.Background(), id).AfterSeq(afterSeq).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1SessionsIdMessagesGet``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `ApiAmbientV1SessionsIdMessagesGet`: []SessionMessage
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1SessionsIdMessagesGet`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**id** | **string** | The id of record | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiApiAmbientV1SessionsIdMessagesGetRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+ **afterSeq** | **int64** | Return only messages with seq greater than this value (default 0 &#x3D; all messages) | [default to 0]
+
+### Return type
+
+[**[]SessionMessage**](SessionMessage.md)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: application/json, text/event-stream
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## ApiAmbientV1SessionsIdMessagesPost
+
+> SessionMessage ApiAmbientV1SessionsIdMessagesPost(ctx, id).SessionMessagePushRequest(sessionMessagePushRequest).Execute()
+
+Push a message to a session
+
+
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	id := "id_example" // string | The id of record
+	sessionMessagePushRequest := *openapiclient.NewSessionMessagePushRequest() // SessionMessagePushRequest | 
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1SessionsIdMessagesPost(context.Background(), id).SessionMessagePushRequest(sessionMessagePushRequest).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1SessionsIdMessagesPost``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `ApiAmbientV1SessionsIdMessagesPost`: SessionMessage
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1SessionsIdMessagesPost`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**id** | **string** | The id of record | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiApiAmbientV1SessionsIdMessagesPostRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+ **sessionMessagePushRequest** | [**SessionMessagePushRequest**](SessionMessagePushRequest.md) |  | 
+
+### Return type
+
+[**SessionMessage**](SessionMessage.md)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: application/json
 - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)

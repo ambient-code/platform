@@ -22,7 +22,7 @@ import (
 var msgArgs struct {
 	follow       bool
 	outputFormat string
-	afterSeq     int64
+	afterSeq     int
 }
 
 var messagesCmd = &cobra.Command{
@@ -42,7 +42,7 @@ Examples:
 func init() {
 	messagesCmd.Flags().BoolVarP(&msgArgs.follow, "follow", "f", false, "Stream messages live")
 	messagesCmd.Flags().StringVarP(&msgArgs.outputFormat, "output", "o", "", "Output format: json")
-	messagesCmd.Flags().Int64Var(&msgArgs.afterSeq, "after", 0, "Only show messages after this sequence number")
+	messagesCmd.Flags().IntVar(&msgArgs.afterSeq, "after", 0, "Only show messages after this sequence number")
 }
 
 func runMessages(cmd *cobra.Command, args []string) error {
@@ -189,7 +189,10 @@ func listMessages(ctx context.Context, client *sdkclient.Client, printer *output
 		if display == "" {
 			continue
 		}
-		age := output.FormatAge(time.Since(msg.CreatedAt))
+		var age string
+		if msg.CreatedAt != nil {
+			age = output.FormatAge(time.Since(*msg.CreatedAt))
+		}
 		header := fmt.Sprintf("#%-4d  %-28s  %s", msg.Seq, msg.EventType, age)
 		fmt.Fprintln(w, header)
 		printWrapped(w, display, width, "      ")
@@ -207,7 +210,7 @@ func printWrapped(w io.Writer, text string, width int, indent string) {
 	words := strings.Fields(text)
 	line := indent
 	for _, word := range words {
-		if len(line)+len(word)+1 > width && line != indent {
+		if len(line)+len(word)+1 > lineWidth && line != indent {
 			fmt.Fprintln(w, line)
 			line = indent + word
 		} else if line == indent {

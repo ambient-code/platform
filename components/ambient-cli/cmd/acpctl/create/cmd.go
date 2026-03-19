@@ -32,23 +32,23 @@ Valid resource types:
 }
 
 var createArgs struct {
-	name             string
-	prompt           string
-	repoURL          string
-	model            string
-	maxTokens        int
-	temperature      float64
-	timeout          int
-	displayName      string
-	description      string
-	outputFormat     string
-	projectID        string
-	ownerUserID      string
-	permissions      string
-	userID           string
-	roleID           string
-	scope            string
-	scopeID          string
+	name         string
+	prompt       string
+	repoURL      string
+	model        string
+	maxTokens    int
+	temperature  float64
+	timeout      int
+	displayName  string
+	description  string
+	outputFormat string
+	projectID    string
+	ownerUserID  string
+	permissions  string
+	userID       string
+	roleID       string
+	scope        string
+	scopeID      string
 }
 
 func init() {
@@ -326,4 +326,3 @@ func createRoleBinding(cmd *cobra.Command, ctx context.Context, client *sdkclien
 
 	return printCreated(cmd, "role-binding", created.ID, created)
 }
-

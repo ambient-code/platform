@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
-	tea "github.com/charmbracelet/bubbletea"
 	sdktypes "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 func (m *Model) rebuildMain() {

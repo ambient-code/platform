@@ -13,92 +13,76 @@ from ._base import ListMeta, _parse_datetime
 
 
 @dataclass(frozen=True)
-class ProjectSettings:
+class SessionMessage:
     id: str = ""
     kind: str = ""
     href: str = ""
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
-    group_access: str = ""
-    project_id: str = ""
-    repositories: str = ""
+    event_type: str = ""
+    payload: str = ""
+    seq: int = 0
+    session_id: str = ""
 
     @classmethod
-    def from_dict(cls, data: dict) -> ProjectSettings:
+    def from_dict(cls, data: dict) -> SessionMessage:
         return cls(
             id=data.get("id", ""),
             kind=data.get("kind", ""),
             href=data.get("href", ""),
             created_at=_parse_datetime(data.get("created_at")),
             updated_at=_parse_datetime(data.get("updated_at")),
-            group_access=data.get("group_access", ""),
-            project_id=data.get("project_id", ""),
-            repositories=data.get("repositories", ""),
+            event_type=data.get("event_type", ""),
+            payload=data.get("payload", ""),
+            seq=data.get("seq", 0),
+            session_id=data.get("session_id", ""),
         )
 
     @classmethod
-    def builder(cls) -> ProjectSettingsBuilder:
-        return ProjectSettingsBuilder()
+    def builder(cls) -> SessionMessageBuilder:
+        return SessionMessageBuilder()
 
 
 @dataclass(frozen=True)
-class ProjectSettingsList:
+class SessionMessageList:
     kind: str = ""
     page: int = 0
     size: int = 0
     total: int = 0
-    items: list[ProjectSettings] = ()
+    items: list[SessionMessage] = ()
 
     @classmethod
-    def from_dict(cls, data: dict) -> ProjectSettingsList:
+    def from_dict(cls, data: dict) -> SessionMessageList:
         return cls(
             kind=data.get("kind", ""),
             page=data.get("page", 0),
             size=data.get("size", 0),
             total=data.get("total", 0),
-            items=[ProjectSettings.from_dict(item) for item in data.get("items", [])],
+            items=[SessionMessage.from_dict(item) for item in data.get("items", [])],
         )
 
 
-class ProjectSettingsBuilder:
+class SessionMessageBuilder:
     def __init__(self) -> None:
         self._data: dict[str, Any] = {}
 
 
-    def group_access(self, value: str) -> ProjectSettingsBuilder:
-        self._data["group_access"] = value
+    def event_type(self, value: str) -> SessionMessageBuilder:
+        self._data["event_type"] = value
         return self
 
-    def project_id(self, value: str) -> ProjectSettingsBuilder:
-        self._data["project_id"] = value
-        return self
-
-    def repositories(self, value: str) -> ProjectSettingsBuilder:
-        self._data["repositories"] = value
+    def payload(self, value: str) -> SessionMessageBuilder:
+        self._data["payload"] = value
         return self
 
     def build(self) -> dict:
-        if "project_id" not in self._data:
-            raise ValueError("project_id is required")
         return dict(self._data)
 
 
-class ProjectSettingsPatch:
+class SessionMessagePatch:
     def __init__(self) -> None:
         self._data: dict[str, Any] = {}
 
-
-    def group_access(self, value: str) -> ProjectSettingsPatch:
-        self._data["group_access"] = value
-        return self
-
-    def project_id(self, value: str) -> ProjectSettingsPatch:
-        self._data["project_id"] = value
-        return self
-
-    def repositories(self, value: str) -> ProjectSettingsPatch:
-        self._data["repositories"] = value
-        return self
 
     def to_dict(self) -> dict:
         return dict(self._data)

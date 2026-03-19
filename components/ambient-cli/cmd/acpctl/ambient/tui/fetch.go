@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
 	sdkclient "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/client"
 	sdktypes "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 func fetchAll(client *sdkclient.Client, msgCh chan tea.Msg) tea.Cmd {

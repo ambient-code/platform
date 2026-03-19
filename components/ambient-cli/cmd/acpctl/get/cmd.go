@@ -18,7 +18,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-
 var args struct {
 	outputFormat string
 	limit        int
@@ -619,4 +618,3 @@ func sessionChanged(old, current sdktypes.Session) bool {
 		old.LlmModel != current.LlmModel ||
 		(old.UpdatedAt != nil && current.UpdatedAt != nil && !old.UpdatedAt.Equal(*current.UpdatedAt))
 }
-

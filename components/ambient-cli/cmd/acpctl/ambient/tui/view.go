@@ -9,14 +9,14 @@ import (
 )
 
 var (
-	colorOrange  = lipgloss.Color("214")
-	colorCyan    = lipgloss.Color("36")
-	colorGreen   = lipgloss.Color("32")
-	colorRed     = lipgloss.Color("31")
-	colorYellow  = lipgloss.Color("33")
-	colorDim     = lipgloss.Color("240")
-	colorWhite   = lipgloss.Color("255")
-	colorBlue    = lipgloss.Color("69")
+	colorOrange = lipgloss.Color("214")
+	colorCyan   = lipgloss.Color("36")
+	colorGreen  = lipgloss.Color("32")
+	colorRed    = lipgloss.Color("31")
+	colorYellow = lipgloss.Color("33")
+	colorDim    = lipgloss.Color("240")
+	colorWhite  = lipgloss.Color("255")
+	colorBlue   = lipgloss.Color("69")
 
 	styleOrange = lipgloss.NewStyle().Foreground(colorOrange)
 	styleCyan   = lipgloss.NewStyle().Foreground(colorCyan)
