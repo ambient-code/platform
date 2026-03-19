@@ -279,8 +279,6 @@ func HandleAGUIRunProxy(c *gin.Context) {
 		for _, raw := range rawMessages {
 			var msg types.Message
 			if err := json.Unmarshal(raw, &msg); err == nil {
-				minimalMsgs = append(minimalMsgs, msg)
-
 				// Inject sender metadata into user messages for multi-user attribution
 				if msg.Role == types.RoleUser && senderUserID != "" {
 					var metadata map[string]interface{}
@@ -303,6 +301,9 @@ func HandleAGUIRunProxy(c *gin.Context) {
 						raw = modifiedRaw
 					}
 				}
+
+				// Append to minimalMsgs AFTER metadata injection so snapshot includes sender info
+				minimalMsgs = append(minimalMsgs, msg)
 			}
 			modifiedMessages = append(modifiedMessages, raw)
 		}
