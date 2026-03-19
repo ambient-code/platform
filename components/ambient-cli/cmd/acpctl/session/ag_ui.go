@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"time"
 
+	"github.com/ambient-code/platform/components/ambient-cli/pkg/config"
 	"github.com/ambient-code/platform/components/ambient-cli/pkg/connection"
 	sdkclient "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/client"
 	sdktypes "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
@@ -88,7 +88,12 @@ func runAgUISend(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+
+	ctx, cancel := context.WithTimeout(cmd.Context(), cfg.GetRequestTimeout())
 	defer cancel()
 
 	msg, err := client.Sessions().SendAgUI(ctx, sessionID, payload)
@@ -100,36 +105,25 @@ func runAgUISend(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func drain(ch <-chan sdktypes.SessionMessage) {
-	for range ch {
-	}
-}
-
 func streamAgUI(cmd *cobra.Command, client *sdkclient.Client, sessionID string) error {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 
 	fmt.Fprintf(cmd.OutOrStdout(), "Streaming AG-UI events for session %s (Ctrl+C to stop)...\n\n", sessionID)
 
-	msgs, errs := client.Sessions().StreamAgUI(ctx, sessionID, agUIStreamArgs.afterSeq)
+	msgs, stop, err := client.Sessions().WatchMessages(ctx, sessionID, agUIStreamArgs.afterSeq)
+	if err != nil {
+		return fmt.Errorf("watch messages: %w", err)
+	}
+	defer stop()
 
-	var streamErr error
 	for msg := range msgs {
-		select {
-		case <-ctx.Done():
-			drain(msgs)
-			return nil
-		default:
-		}
 		printAgUILine(cmd, msg)
 	}
-	if err := <-errs; err != nil && ctx.Err() == nil {
-		streamErr = fmt.Errorf("stream error: %w", err)
-	}
-	return streamErr
+	return nil
 }
 
-func printAgUILine(cmd *cobra.Command, msg sdktypes.SessionMessage) {
+func printAgUILine(cmd *cobra.Command, msg *sdktypes.SessionMessage) {
 	ts := msg.CreatedAt.Format("15:04:05")
 	display := displayPayload(msg.EventType, msg.Payload)
 	fmt.Fprintf(cmd.OutOrStdout(), "[%s] #%d (%s) %s\n", ts, msg.Seq, msg.EventType, display)
