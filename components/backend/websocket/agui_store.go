@@ -219,8 +219,9 @@ func DeriveAgentStatus(sessionID string) string {
 	path := fmt.Sprintf("%s/sessions/%s/agui-events.jsonl", StateBaseDir, sessionID)
 
 	// Read only the tail of the file to avoid loading entire event log into memory.
-	// 64KB is sufficient for recent lifecycle events (scanning backwards).
-	const maxTailBytes = 64 * 1024
+	// Use 2x scannerMaxLineSize to ensure we can read at least one complete max-sized
+	// event line plus additional events for proper status derivation.
+	maxTailBytes := int64(scannerMaxLineSize * 2)
 
 	file, err := os.Open(path)
 	if err != nil {
