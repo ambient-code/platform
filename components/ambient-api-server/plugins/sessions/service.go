@@ -167,6 +167,13 @@ var validPhases = map[string]bool{
 }
 
 func (s *sqlSessionService) UpdateStatus(ctx context.Context, id string, patch *SessionStatusPatchRequest) (*Session, *errors.ServiceError) {
+	if patch.Phase == nil && patch.StartTime == nil && patch.CompletionTime == nil &&
+		patch.SdkSessionId == nil && patch.SdkRestartCount == nil && patch.Conditions == nil &&
+		patch.ReconciledRepos == nil && patch.ReconciledWorkflow == nil &&
+		patch.KubeCrUid == nil && patch.KubeNamespace == nil {
+		return nil, errors.Validation("status patch body must set at least one field: phase, start_time, completion_time, sdk_session_id, sdk_restart_count, conditions, reconciled_repos, reconciled_workflow, kube_cr_uid, kube_namespace")
+	}
+
 	session, err := s.sessionDao.Get(ctx, id)
 	if err != nil {
 		return nil, services.HandleGetError("Session", "id", id, err)

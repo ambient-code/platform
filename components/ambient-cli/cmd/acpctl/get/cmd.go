@@ -31,13 +31,17 @@ var Cmd = &cobra.Command{
 	Long: `Display one or many resources.
 
 Valid resource types:
-  sessions         (aliases: session, sess)
-  projects         (aliases: project, proj)
-  project-settings (aliases: projectsettings, ps)
-  users            (aliases: user, usr)`,
+  sessions            (aliases: session, sess)
+  projects            (aliases: project, proj)
+  project-settings    (aliases: projectsettings, ps)
+  users               (aliases: user, usr)
+  agents              (aliases: agent)
+  roles               (aliases: role)
+  role-bindings       (aliases: role-binding, rb)
+`,
 	Args:    cobra.RangeArgs(1, 2),
 	RunE:    run,
-	Example: "  acpctl get sessions\n  acpctl get session my-session-id\n  acpctl get projects -o json\n  acpctl get sessions -w  # Watch for real-time session changes",
+	Example: "  acpctl get sessions\n  acpctl get session my-session-id\n  acpctl get projects -o json\n  acpctl get agents\n  acpctl get sessions -w  # Watch for real-time session changes",
 }
 
 func init() {
@@ -76,7 +80,7 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 	if err != nil {
 		return err
 	}
-	printer := output.NewPrinter(format)
+	printer := output.NewPrinter(format, cmd.OutOrStdout())
 
 	if args.watch {
 		return watchSessions(cmd, client, printer)
@@ -99,8 +103,14 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 		return getProjectSettings(ctx, client, printer, name)
 	case "users":
 		return getUsers(ctx, client, printer, name)
+	case "agents":
+		return getAgents(ctx, client, printer, name)
+	case "roles":
+		return getRoles(ctx, client, printer, name)
+	case "role-bindings":
+		return getRoleBindings(ctx, client, printer, name)
 	default:
-		return fmt.Errorf("unknown resource type: %s\nValid types: sessions, projects, project-settings, users", cmdArgs[0])
+		return fmt.Errorf("unknown resource type: %s\nValid types: sessions, projects, project-settings, users, agents, roles, role-bindings", cmdArgs[0])
 	}
 }
 
@@ -114,6 +124,12 @@ func normalizeResource(r string) string {
 		return "project-settings"
 	case "user", "users", "usr":
 		return "users"
+	case "agent", "agents":
+		return "agents"
+	case "role", "roles":
+		return "roles"
+	case "role-binding", "role-bindings", "rolebinding", "rolebindings", "rb":
+		return "role-bindings"
 	default:
 		return r
 	}
@@ -292,6 +308,132 @@ func printUserTable(printer *output.Printer, users []sdktypes.User) error {
 
 	for _, u := range users {
 		table.WriteRow(u.ID, u.Username, u.Name, u.Email)
+	}
+	return nil
+}
+
+func getAgents(ctx context.Context, client *sdkclient.Client, printer *output.Printer, name string) error {
+	if name != "" {
+		agent, err := client.Agents().Get(ctx, name)
+		if err != nil {
+			return fmt.Errorf("get agent %q: %w", name, err)
+		}
+		if printer.Format() == output.FormatJSON {
+			return printer.PrintJSON(agent)
+		}
+		return printAgentTable(printer, []sdktypes.Agent{*agent})
+	}
+
+	opts := sdktypes.NewListOptions().Size(args.limit).Build()
+	list, err := client.Agents().List(ctx, opts)
+	if err != nil {
+		return fmt.Errorf("list agents: %w", err)
+	}
+
+	if printer.Format() == output.FormatJSON {
+		return printer.PrintJSON(list)
+	}
+
+	return printAgentTable(printer, list.Items)
+}
+
+func printAgentTable(printer *output.Printer, agents []sdktypes.Agent) error {
+	columns := []output.Column{
+		{Name: "ID", Width: 27},
+		{Name: "NAME", Width: 30},
+		{Name: "PROJECT", Width: 20},
+		{Name: "MODEL", Width: 16},
+		{Name: "AGE", Width: 10},
+	}
+
+	table := output.NewTable(printer.Writer(), columns)
+	table.WriteHeaders()
+
+	for _, a := range agents {
+		age := ""
+		if a.CreatedAt != nil {
+			age = output.FormatAge(time.Since(*a.CreatedAt))
+		}
+		table.WriteRow(a.ID, a.Name, a.ProjectID, a.LlmModel, age)
+	}
+	return nil
+}
+
+func getRoles(ctx context.Context, client *sdkclient.Client, printer *output.Printer, name string) error {
+	if name != "" {
+		role, err := client.Roles().Get(ctx, name)
+		if err != nil {
+			return fmt.Errorf("get role %q: %w", name, err)
+		}
+		if printer.Format() == output.FormatJSON {
+			return printer.PrintJSON(role)
+		}
+		return printRoleTable(printer, []sdktypes.Role{*role})
+	}
+	opts := sdktypes.NewListOptions().Size(args.limit).Build()
+	list, err := client.Roles().List(ctx, opts)
+	if err != nil {
+		return fmt.Errorf("list roles: %w", err)
+	}
+	if printer.Format() == output.FormatJSON {
+		return printer.PrintJSON(list)
+	}
+	return printRoleTable(printer, list.Items)
+}
+
+func printRoleTable(printer *output.Printer, roles []sdktypes.Role) error {
+	columns := []output.Column{
+		{Name: "ID", Width: 27},
+		{Name: "NAME", Width: 30},
+		{Name: "DISPLAY NAME", Width: 30},
+		{Name: "BUILT-IN", Width: 9},
+	}
+	table := output.NewTable(printer.Writer(), columns)
+	table.WriteHeaders()
+	for _, r := range roles {
+		builtin := "false"
+		if r.BuiltIn {
+			builtin = "true"
+		}
+		table.WriteRow(r.ID, r.Name, r.DisplayName, builtin)
+	}
+	return nil
+}
+
+func getRoleBindings(ctx context.Context, client *sdkclient.Client, printer *output.Printer, name string) error {
+	if name != "" {
+		rb, err := client.RoleBindings().Get(ctx, name)
+		if err != nil {
+			return fmt.Errorf("get role-binding %q: %w", name, err)
+		}
+		if printer.Format() == output.FormatJSON {
+			return printer.PrintJSON(rb)
+		}
+		return printRoleBindingTable(printer, []sdktypes.RoleBinding{*rb})
+	}
+	opts := sdktypes.NewListOptions().Size(args.limit).Build()
+	list, err := client.RoleBindings().List(ctx, opts)
+	if err != nil {
+		return fmt.Errorf("list role-bindings: %w", err)
+	}
+	if printer.Format() == output.FormatJSON {
+		return printer.PrintJSON(list)
+	}
+	return printRoleBindingTable(printer, list.Items)
+}
+
+func printRoleBindingTable(printer *output.Printer, rbs []sdktypes.RoleBinding) error {
+	columns := []output.Column{
+		{Name: "ID", Width: 27},
+		{Name: "USER", Width: 27},
+		{Name: "ROLE", Width: 27},
+		{Name: "SCOPE", Width: 10},
+		{Name: "SCOPE ID", Width: 27},
+	}
+	table := output.NewTable(printer.Writer(), columns)
+	table.WriteHeaders()
+	for _, rb := range rbs {
+		table.WriteRow(rb.ID, rb.UserID, rb.RoleID, rb.Scope, rb.ScopeID)
 	}
 	return nil
 }

@@ -3,7 +3,7 @@ kind: Kustomization
 
 namespace: ambient-code
 
-# Resources (base + kind-specific)
+# Resources (base + e2e-specific)
 resources:
 - ../../base
 - secrets.yaml
@@ -13,13 +13,29 @@ resources:
 - minio-credentials.yaml
 - postgresql-credentials.yaml
 - unleash-credentials.yaml
-- ldap-config.yaml
+# PostgreSQL init scripts for database creation (kind only)
+- postgresql-init-scripts.yaml
 
-components:
-- ../../components/postgresql-init-scripts
-
-# Patches for kind environment
+# Patches for e2e environment
 patches:
+- path: ambient-api-server-dev-patch.yaml
+  target:
+    group: apps
+    kind: Deployment
+    name: ambient-api-server
+    version: v1
+- path: api-server-no-jwt-patch.yaml
+  target:
+    group: apps
+    kind: Deployment
+    name: ambient-api-server
+    version: v1
+- path: api-server-db-security-patch.yaml
+  target:
+    group: apps
+    kind: Deployment
+    name: ambient-api-server-db
+    version: v1
 - path: ambient-api-server-jwks-patch.yaml
   target:
     kind: ConfigMap
@@ -82,6 +98,13 @@ patches:
     version: v1
     kind: Deployment
     name: public-api
+# PostgreSQL: add init-scripts volume for database creation
+- path: postgresql-init-scripts-patch.yaml
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: postgresql
 
 # Kind overlay: Use Quay.io production images by default
 # For local development with local images, use overlays/kind-local/ instead

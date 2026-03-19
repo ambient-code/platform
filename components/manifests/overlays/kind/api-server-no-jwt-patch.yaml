@@ -1,0 +1,66 @@
+- op: replace
+  path: /spec/template/spec/volumes
+  value:
+  - name: db-secrets
+    secret:
+      secretName: ambient-api-server-db
+  - name: app-secrets
+    secret:
+      secretName: ambient-api-server
+  - name: auth-config
+    configMap:
+      name: ambient-api-server-auth
+- op: replace
+  path: /spec/template/spec/containers/0/volumeMounts
+  value:
+  - name: db-secrets
+    mountPath: /secrets/db
+    readOnly: true
+  - name: app-secrets
+    mountPath: /secrets/app
+    readOnly: true
+  - name: auth-config
+    mountPath: /configs/authentication
+    readOnly: true
+- op: replace
+  path: /spec/template/spec/containers/0/command
+  value:
+  - /usr/local/bin/ambient-api-server
+  - serve
+  - --db-host-file=/secrets/db/db.host
+  - --db-port-file=/secrets/db/db.port
+  - --db-user-file=/secrets/db/db.user
+  - --db-password-file=/secrets/db/db.password
+  - --db-name-file=/secrets/db/db.name
+  - --enable-jwt=false
+  - --enable-authz=false
+  - --jwk-cert-file=/configs/authentication/jwks.json
+  - --enable-https=false
+  - --enable-grpc=true
+  - --grpc-enable-tls=false
+  - --api-server-bindaddress=:8000
+  - --metrics-server-bindaddress=:4433
+  - --health-check-server-bindaddress=:4434
+  - --enable-health-check-https=false
+  - --db-sslmode=disable
+  - --db-max-open-connections=50
+  - --enable-db-debug=false
+  - --enable-metrics-https=false
+  - --http-read-timeout=5s
+  - --http-write-timeout=30s
+  - --cors-allowed-origins=*
+  - --cors-allowed-headers=X-Ambient-Project
+  - --grpc-server-bindaddress=:9000
+  - --alsologtostderr
+  - -v=10
+- op: replace
+  path: /spec/template/spec/containers/0/livenessProbe
+  value:
+    httpGet:
+      path: /healthcheck
+      port: 4434
+      scheme: HTTP
+    initialDelaySeconds: 15
+    periodSeconds: 5
+    timeoutSeconds: 1
+    failureThreshold: 3

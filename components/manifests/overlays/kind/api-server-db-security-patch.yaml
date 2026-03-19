@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ambient-api-server-db
+spec:
+  template:
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+      containers:
+      - name: postgresql
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 999
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: false
+        env:
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: ambient-api-server-db
+              key: db.user
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: ambient-api-server-db
+              key: db.password
+        - name: POSTGRES_DB
+          valueFrom:
+            secretKeyRef:
+              name: ambient-api-server-db
+              key: db.name
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata

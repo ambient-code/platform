@@ -1,0 +1,9 @@
+- op: replace
+  path: /spec/template/spec/securityContext/runAsNonRoot
+  value: false
+- op: replace
+  path: /spec/template/spec/containers/0/securityContext
+  value:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: false
+    runAsNonRoot: false
