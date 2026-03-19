@@ -21,9 +21,14 @@ var Cmd = &cobra.Command{
 	Long: `Delete a resource by ID.
 
 Valid resource types:
-  project    (aliases: proj)
-  project-settings (aliases: ps)
-  session    (aliases: sess)`,
+  project           (aliases: proj)
+  project-settings  (aliases: ps)
+  session           (aliases: sess)
+  agent
+  role
+  role-binding      (aliases: rolebinding, rb)
+  session-check-in  (aliases: checkin)
+  project-document  (aliases: doc)`,
 	Args: cobra.ExactArgs(2),
 	RunE: run,
 }
@@ -79,7 +84,42 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 		fmt.Fprintf(cmd.OutOrStdout(), "session/%s deleted\n", name)
 		return nil
 
+	case "agent", "agents":
+		if err := client.Agents().Delete(ctx, name); err != nil {
+			return fmt.Errorf("delete agent %q: %w", name, err)
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "agent/%s deleted\n", name)
+		return nil
+
+	case "role", "roles":
+		if err := client.Roles().Delete(ctx, name); err != nil {
+			return fmt.Errorf("delete role %q: %w", name, err)
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "role/%s deleted\n", name)
+		return nil
+
+	case "role-binding", "role-bindings", "rolebinding", "rolebindings", "rb":
+		if err := client.RoleBindings().Delete(ctx, name); err != nil {
+			return fmt.Errorf("delete role-binding %q: %w", name, err)
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "role-binding/%s deleted\n", name)
+		return nil
+
+	case "session-check-in", "session-check-ins", "checkin", "checkins":
+		if err := client.SessionCheckIns().Delete(ctx, name); err != nil {
+			return fmt.Errorf("delete session-check-in %q: %w", name, err)
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "session-check-in/%s deleted\n", name)
+		return nil
+
+	case "project-document", "project-documents", "doc", "docs":
+		if err := client.ProjectDocuments().Delete(ctx, name); err != nil {
+			return fmt.Errorf("delete project-document %q: %w", name, err)
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "project-document/%s deleted\n", name)
+		return nil
+
 	default:
-		return fmt.Errorf("unknown or non-deletable resource type: %s\nDeletable types: project, project-settings, session", cmdArgs[0])
+		return fmt.Errorf("unknown or non-deletable resource type: %s\nDeletable types: project, project-settings, session, agent, role, role-binding, session-check-in, project-document", cmdArgs[0])
 	}
 }
