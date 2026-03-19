@@ -41,3 +41,5 @@ require (
 )
 
 replace github.com/ambient-code/platform/components/ambient-sdk/go-sdk => ../ambient-sdk/go-sdk
+
+replace github.com/ambient-code/platform/components/ambient-api-server => ../ambient-api-server

@@ -23,4 +23,5 @@ Examples:
 func init() {
 	Cmd.AddCommand(messagesCmd)
 	Cmd.AddCommand(sendCmd)
+	Cmd.AddCommand(eventsCmd)
 }

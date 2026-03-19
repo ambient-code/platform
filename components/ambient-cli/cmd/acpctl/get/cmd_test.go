@@ -162,8 +162,7 @@ func TestGetAgents_List(t *testing.T) {
 				{
 					ObjectReference: types.ObjectReference{ID: "a1", CreatedAt: makeTime("2026-01-01T00:00:00Z")},
 					Name:            "overlord",
-					DisplayName:     "Overlord",
-					ProjectID:       testhelper.TestProject,
+					OwnerUserID:     testhelper.TestProject,
 				},
 			},
 		})
@@ -185,7 +184,7 @@ func TestGetAgents_Single(t *testing.T) {
 		srv.RespondJSON(t, w, http.StatusOK, &types.Agent{
 			ObjectReference: types.ObjectReference{ID: "a1"},
 			Name:            "overlord",
-			ProjectID:       testhelper.TestProject,
+			OwnerUserID:     testhelper.TestProject,
 		})
 	})
 

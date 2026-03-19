@@ -33,6 +33,7 @@ var Cmd = &cobra.Command{
 Valid resource types:
   sessions            (aliases: session, sess)
   projects            (aliases: project, proj)
+  project-agents      (aliases: project-agent, pa)
   project-settings    (aliases: projectsettings, ps)
   users               (aliases: user, usr)
   agents              (aliases: agent)
@@ -41,7 +42,12 @@ Valid resource types:
 `,
 	Args:    cobra.RangeArgs(1, 2),
 	RunE:    run,
-	Example: "  acpctl get sessions\n  acpctl get session my-session-id\n  acpctl get projects -o json\n  acpctl get agents\n  acpctl get sessions -w  # Watch for real-time session changes",
+	Example: "  acpctl get sessions\n  acpctl get session my-session-id\n  acpctl get projects -o json\n  acpctl get agents\n  acpctl get project-agents --project-id <id>\n  acpctl get sessions -w  # Watch for real-time session changes",
+}
+
+var projectAgentArgs struct {
+	projectID    string
+	paID         string
 }
 
 func init() {
@@ -49,6 +55,8 @@ func init() {
 	Cmd.Flags().IntVar(&args.limit, "limit", 100, "Maximum number of items to return")
 	Cmd.Flags().BoolVarP(&args.watch, "watch", "w", false, "Watch for real-time changes (sessions only)")
 	Cmd.Flags().DurationVar(&args.watchTimeout, "watch-timeout", 30*time.Minute, "Timeout for watch mode (e.g. 1h, 10m)")
+	Cmd.Flags().StringVar(&projectAgentArgs.projectID, "project-id", "", "Project ID (required for project-agents)")
+	Cmd.Flags().StringVar(&projectAgentArgs.paID, "project-agent", "", "Filter sessions by project-agent ID (requires --project-id)")
 }
 
 func run(cmd *cobra.Command, cmdArgs []string) error {
@@ -96,9 +104,20 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 
 	switch resource {
 	case "sessions":
+		if projectAgentArgs.paID != "" {
+			if projectAgentArgs.projectID == "" {
+				return fmt.Errorf("--project-id is required when using --project-agent")
+			}
+			return getSessionsByProjectAgent(ctx, client, printer, projectAgentArgs.projectID, projectAgentArgs.paID)
+		}
 		return getSessions(ctx, client, printer, name)
 	case "projects":
 		return getProjects(ctx, client, printer, name)
+	case "project-agents":
+		if projectAgentArgs.projectID == "" {
+			return fmt.Errorf("--project-id is required for project-agents")
+		}
+		return getProjectAgents(ctx, client, printer, projectAgentArgs.projectID, name)
 	case "project-settings":
 		return getProjectSettings(ctx, client, printer, name)
 	case "users":
@@ -110,7 +129,7 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 	case "role-bindings":
 		return getRoleBindings(ctx, client, printer, name)
 	default:
-		return fmt.Errorf("unknown resource type: %s\nValid types: sessions, projects, project-settings, users, agents, roles, role-bindings", cmdArgs[0])
+		return fmt.Errorf("unknown resource type: %s\nValid types: sessions, projects, project-agents, project-settings, users, agents, roles, role-bindings", cmdArgs[0])
 	}
 }
 
@@ -120,6 +139,8 @@ func normalizeResource(r string) string {
 		return "sessions"
 	case "project", "projects", "proj":
 		return "projects"
+	case "project-agent", "project-agents", "pa":
+		return "project-agents"
 	case "project-settings", "projectsettings", "project-setting", "ps":
 		return "project-settings"
 	case "user", "users", "usr":
@@ -133,6 +154,68 @@ func normalizeResource(r string) string {
 	default:
 		return r
 	}
+}
+
+func getProjectAgents(ctx context.Context, client *sdkclient.Client, printer *output.Printer, projectID, name string) error {
+	if name != "" {
+		pa, err := client.ProjectAgents().Get(ctx, projectID, name)
+		if err != nil {
+			return fmt.Errorf("get project-agent %q: %w", name, err)
+		}
+		if printer.Format() == output.FormatJSON {
+			return printer.PrintJSON(pa)
+		}
+		return printProjectAgentTable(printer, []sdktypes.ProjectAgent{*pa})
+	}
+
+	opts := sdktypes.NewListOptions().Size(args.limit).Build()
+	list, err := client.ProjectAgents().List(ctx, projectID, opts)
+	if err != nil {
+		return fmt.Errorf("list project-agents: %w", err)
+	}
+
+	if printer.Format() == output.FormatJSON {
+		return printer.PrintJSON(list)
+	}
+
+	return printProjectAgentTable(printer, list.Items)
+}
+
+func printProjectAgentTable(printer *output.Printer, pas []sdktypes.ProjectAgent) error {
+	columns := []output.Column{
+		{Name: "ID", Width: 27},
+		{Name: "PROJECT", Width: 27},
+		{Name: "AGENT", Width: 27},
+		{Name: "VERSION", Width: 9},
+		{Name: "SESSION", Width: 27},
+		{Name: "AGE", Width: 10},
+	}
+
+	table := output.NewTable(printer.Writer(), columns)
+	table.WriteHeaders()
+
+	for _, pa := range pas {
+		age := ""
+		if pa.CreatedAt != nil {
+			age = output.FormatAge(time.Since(*pa.CreatedAt))
+		}
+		table.WriteRow(pa.ID, pa.ProjectID, pa.AgentID, fmt.Sprintf("%d", pa.AgentVersion), pa.CurrentSessionID, age)
+	}
+	return nil
+}
+
+func getSessionsByProjectAgent(ctx context.Context, client *sdkclient.Client, printer *output.Printer, projectID, paID string) error {
+	opts := sdktypes.NewListOptions().Size(args.limit).Build()
+	list, err := client.ProjectAgents().Sessions(ctx, projectID, paID, opts)
+	if err != nil {
+		return fmt.Errorf("list sessions for project-agent %q: %w", paID, err)
+	}
+
+	if printer.Format() == output.FormatJSON {
+		return printer.PrintJSON(list)
+	}
+
+	return printSessionTable(printer, list.Items)
 }
 
 func getSessions(ctx context.Context, client *sdkclient.Client, printer *output.Printer, name string) error {
@@ -341,8 +424,8 @@ func printAgentTable(printer *output.Printer, agents []sdktypes.Agent) error {
 	columns := []output.Column{
 		{Name: "ID", Width: 27},
 		{Name: "NAME", Width: 30},
-		{Name: "PROJECT", Width: 20},
-		{Name: "MODEL", Width: 16},
+		{Name: "OWNER", Width: 27},
+		{Name: "VERSION", Width: 9},
 		{Name: "AGE", Width: 10},
 	}
 
@@ -354,7 +437,7 @@ func printAgentTable(printer *output.Printer, agents []sdktypes.Agent) error {
 		if a.CreatedAt != nil {
 			age = output.FormatAge(time.Since(*a.CreatedAt))
 		}
-		table.WriteRow(a.ID, a.Name, a.ProjectID, a.LlmModel, age)
+		table.WriteRow(a.ID, a.Name, a.OwnerUserID, fmt.Sprintf("%d", a.Version), age)
 	}
 	return nil
 }

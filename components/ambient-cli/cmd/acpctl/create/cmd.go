@@ -23,6 +23,7 @@ var Cmd = &cobra.Command{
 Valid resource types:
   session         Create an agentic session
   project         Create a project
+  project-agent   Assign an agent to a project
   agent           Create an agent
   role            Create a role
   role-binding    Create a role binding
@@ -43,6 +44,8 @@ var createArgs struct {
 	description  string
 	outputFormat string
 	projectID    string
+	agentID      string
+	agentVersion int
 	ownerUserID  string
 	permissions  string
 	userID       string
@@ -63,6 +66,8 @@ func init() {
 	Cmd.Flags().StringVar(&createArgs.description, "description", "", "Description")
 	Cmd.Flags().StringVarP(&createArgs.outputFormat, "output", "o", "", "Output format: json")
 	Cmd.Flags().StringVar(&createArgs.projectID, "project-id", "", "Project ID")
+	Cmd.Flags().StringVar(&createArgs.agentID, "agent-id", "", "Agent ID (project-agent)")
+	Cmd.Flags().IntVar(&createArgs.agentVersion, "agent-version", 0, "Agent version to pin (project-agent)")
 	Cmd.Flags().StringVar(&createArgs.ownerUserID, "owner-user-id", "", "Owner user ID (agent)")
 	Cmd.Flags().StringVar(&createArgs.permissions, "permissions", "", "Role permissions (JSON)")
 	Cmd.Flags().StringVar(&createArgs.userID, "user-id", "", "User ID (role-binding)")
@@ -92,6 +97,8 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 		return createSession(cmd, ctx, client)
 	case "project", "proj":
 		return createProject(cmd, ctx, client)
+	case "project-agent", "pa":
+		return createProjectAgent(cmd, ctx, client)
 	case "agent":
 		return createAgent(cmd, ctx, client)
 	case "role":
@@ -99,7 +106,7 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 	case "role-binding", "rolebinding", "rb":
 		return createRoleBinding(cmd, ctx, client)
 	default:
-		return fmt.Errorf("unknown resource type: %s\nValid types: session, project, agent, role, role-binding", cmdArgs[0])
+		return fmt.Errorf("unknown resource type: %s\nValid types: session, project, project-agent, agent, role, role-binding", cmdArgs[0])
 	}
 }
 
@@ -213,14 +220,42 @@ func createProject(cmd *cobra.Command, ctx context.Context, client *sdkclient.Cl
 	return printCreated(cmd, "project", created.ID, created)
 }
 
+func createProjectAgent(cmd *cobra.Command, ctx context.Context, client *sdkclient.Client) error {
+	warnUnusedFlags(cmd, "name", "prompt", "repo-url", "model", "max-tokens", "temperature", "timeout", "display-name", "description", "owner-user-id", "permissions", "user-id", "role-id", "scope", "scope-id")
+
+	if createArgs.projectID == "" {
+		return fmt.Errorf("--project-id is required")
+	}
+	if createArgs.agentID == "" {
+		return fmt.Errorf("--agent-id is required")
+	}
+
+	builder := sdktypes.NewProjectAgentBuilder().
+		ProjectID(createArgs.projectID).
+		AgentID(createArgs.agentID)
+
+	if cmd.Flags().Changed("agent-version") {
+		builder = builder.AgentVersion(createArgs.agentVersion)
+	}
+
+	pa, err := builder.Build()
+	if err != nil {
+		return fmt.Errorf("build project-agent: %w", err)
+	}
+
+	created, err := client.ProjectAgents().Create(ctx, createArgs.projectID, pa)
+	if err != nil {
+		return fmt.Errorf("create project-agent: %w", err)
+	}
+
+	return printCreated(cmd, "project-agent", created.ID, created)
+}
+
 func createAgent(cmd *cobra.Command, ctx context.Context, client *sdkclient.Client) error {
-	warnUnusedFlags(cmd, "timeout", "user-id", "role-id", "scope", "scope-id", "recipient-agent-id", "body")
+	warnUnusedFlags(cmd, "repo-url", "model", "max-tokens", "temperature", "timeout", "display-name", "description", "project-id", "user-id", "role-id", "scope", "scope-id")
 
 	if createArgs.name == "" {
 		return fmt.Errorf("--name is required")
-	}
-	if createArgs.projectID == "" {
-		return fmt.Errorf("--project-id is required")
 	}
 	if createArgs.ownerUserID == "" {
 		return fmt.Errorf("--owner-user-id is required")
@@ -228,23 +263,10 @@ func createAgent(cmd *cobra.Command, ctx context.Context, client *sdkclient.Clie
 
 	builder := sdktypes.NewAgentBuilder().
 		Name(createArgs.name).
-		ProjectID(createArgs.projectID).
 		OwnerUserID(createArgs.ownerUserID)
 
 	if createArgs.prompt != "" {
 		builder = builder.Prompt(createArgs.prompt)
-	}
-	if createArgs.repoURL != "" {
-		builder = builder.RepoURL(createArgs.repoURL)
-	}
-	if createArgs.model != "" {
-		builder = builder.LlmModel(createArgs.model)
-	}
-	if createArgs.displayName != "" {
-		builder = builder.DisplayName(createArgs.displayName)
-	}
-	if createArgs.description != "" {
-		builder = builder.Description(createArgs.description)
 	}
 
 	agent, err := builder.Build()

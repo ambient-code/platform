@@ -72,7 +72,7 @@ func TestCreateAgent_Success(t *testing.T) {
 		srv.RespondJSON(t, w, http.StatusCreated, &types.Agent{
 			ObjectReference: types.ObjectReference{ID: "a-new"},
 			Name:            "overlord",
-			ProjectID:       "my-project",
+			OwnerUserID:     "user-1",
 		})
 	})
 
@@ -105,15 +105,19 @@ func TestCreateAgent_MissingName(t *testing.T) {
 	}
 }
 
-func TestCreateAgent_MissingProjectID(t *testing.T) {
+func TestCreateAgent_NoProjectIDRequired(t *testing.T) {
 	srv := testhelper.NewServer(t)
+	srv.Handle("/api/ambient/v1/agents", func(w http.ResponseWriter, r *http.Request) {
+		srv.RespondJSON(t, w, http.StatusCreated, &types.Agent{
+			ObjectReference: types.ObjectReference{ID: "a-global"},
+			Name:            "x",
+			OwnerUserID:     "u1",
+		})
+	})
 	testhelper.Configure(t, srv.URL)
 	result := testhelper.Run(t, Cmd, "agent", "--name", "x", "--owner-user-id", "u1")
-	if result.Err == nil {
-		t.Fatal("expected error for missing --project-id")
-	}
-	if !strings.Contains(result.Err.Error(), "--project-id is required") {
-		t.Errorf("expected '--project-id is required', got: %v", result.Err)
+	if result.Err != nil {
+		t.Fatalf("agents are global resources — --project-id should not be required, got: %v", result.Err)
 	}
 }
 
