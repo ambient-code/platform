@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ldap-config
+  labels:
+    app: backend-api
+data:
+  LDAP_URL: "ldaps://ldap.corp.redhat.com"
+  LDAP_BASE_DN: "ou=users,dc=redhat,dc=com"
+  LDAP_SKIP_TLS_VERIFY: "true"
