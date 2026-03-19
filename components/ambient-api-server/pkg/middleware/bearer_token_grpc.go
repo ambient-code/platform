@@ -61,4 +61,3 @@ type serviceCallerStream struct {
 func (s *serviceCallerStream) Context() context.Context {
 	return s.ctx
 }
-
