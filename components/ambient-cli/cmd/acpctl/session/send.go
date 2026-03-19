@@ -3,8 +3,8 @@ package session
 import (
 	"context"
 	"fmt"
-	"time"
 
+	"github.com/ambient-code/platform/components/ambient-cli/pkg/config"
 	"github.com/ambient-code/platform/components/ambient-cli/pkg/connection"
 	"github.com/spf13/cobra"
 )
@@ -30,7 +30,12 @@ func runSend(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+
+	ctx, cancel := context.WithTimeout(cmd.Context(), cfg.GetRequestTimeout())
 	defer cancel()
 
 	msg, err := client.Sessions().PushMessage(ctx, sessionID, payload)

@@ -27,7 +27,6 @@ Valid resource types:
   agent
   role
   role-binding      (aliases: rolebinding, rb)
-  session-check-in  (aliases: checkin)
   project-document  (aliases: doc)`,
 	Args: cobra.ExactArgs(2),
 	RunE: run,
@@ -105,13 +104,6 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 		fmt.Fprintf(cmd.OutOrStdout(), "role-binding/%s deleted\n", name)
 		return nil
 
-	case "session-check-in", "session-check-ins", "checkin", "checkins":
-		if err := client.SessionCheckIns().Delete(ctx, name); err != nil {
-			return fmt.Errorf("delete session-check-in %q: %w", name, err)
-		}
-		fmt.Fprintf(cmd.OutOrStdout(), "session-check-in/%s deleted\n", name)
-		return nil
-
 	case "project-document", "project-documents", "doc", "docs":
 		if err := client.ProjectDocuments().Delete(ctx, name); err != nil {
 			return fmt.Errorf("delete project-document %q: %w", name, err)
@@ -120,6 +112,6 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 		return nil
 
 	default:
-		return fmt.Errorf("unknown or non-deletable resource type: %s\nDeletable types: project, project-settings, session, agent, role, role-binding, session-check-in, project-document", cmdArgs[0])
+		return fmt.Errorf("unknown or non-deletable resource type: %s\nDeletable types: project, project-settings, session, agent, role, role-binding, project-document", cmdArgs[0])
 	}
 }

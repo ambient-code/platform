@@ -25,7 +25,6 @@ Valid resource types:
   agent             (aliases: agents)
   role
   role-binding      (aliases: rb)
-  session-check-in  (aliases: checkin)
   project-document  (aliases: doc)`,
 	Args: cobra.ExactArgs(2),
 	RunE: run,
@@ -100,13 +99,6 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 		}
 		return printer.PrintJSON(rb)
 
-	case "session-check-in", "session-check-ins", "checkin":
-		ci, err := client.SessionCheckIns().Get(ctx, name)
-		if err != nil {
-			return fmt.Errorf("describe session-check-in %q: %w", name, err)
-		}
-		return printer.PrintJSON(ci)
-
 	case "project-document", "project-documents", "doc":
 		doc, err := client.ProjectDocuments().Get(ctx, name)
 		if err != nil {
@@ -115,6 +107,6 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 		return printer.PrintJSON(doc)
 
 	default:
-		return fmt.Errorf("unknown resource type: %s\nValid types: session, project, project-settings, user, agent, role, role-binding, session-check-in, project-document", cmdArgs[0])
+		return fmt.Errorf("unknown resource type: %s\nValid types: session, project, project-settings, user, agent, role, role-binding, project-document", cmdArgs[0])
 	}
 }

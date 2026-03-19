@@ -37,15 +37,13 @@ Valid resource types:
   project-settings    (aliases: projectsettings, ps)
   users               (aliases: user, usr)
   agents              (aliases: agent)
-  agent-messages      (aliases: agent-message, messages, msgs)
   roles               (aliases: role)
   role-bindings       (aliases: role-binding, rb)
-  session-check-ins   (aliases: session-check-in, checkins, checkin)
   project-documents   (aliases: project-document, docs, doc)
 `,
 	Args:    cobra.RangeArgs(1, 2),
 	RunE:    run,
-	Example: "  acpctl get sessions\n  acpctl get session my-session-id\n  acpctl get projects -o json\n  acpctl get agents\n  acpctl get agent-messages\n  acpctl get sessions -w  # Watch for real-time session changes",
+	Example: "  acpctl get sessions\n  acpctl get session my-session-id\n  acpctl get projects -o json\n  acpctl get agents\n  acpctl get sessions -w  # Watch for real-time session changes",
 }
 
 func init() {
@@ -109,18 +107,14 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 		return getUsers(ctx, client, printer, name)
 	case "agents":
 		return getAgents(ctx, client, printer, name)
-	case "agent-messages":
-		return getAgentMessages(ctx, client, printer, name)
 	case "roles":
 		return getRoles(ctx, client, printer, name)
 	case "role-bindings":
 		return getRoleBindings(ctx, client, printer, name)
-	case "session-check-ins":
-		return getSessionCheckIns(ctx, client, printer, name)
 	case "project-documents":
 		return getProjectDocuments(ctx, client, printer, name)
 	default:
-		return fmt.Errorf("unknown resource type: %s\nValid types: sessions, projects, project-settings, users, agents, agent-messages, roles, role-bindings, session-check-ins, project-documents", cmdArgs[0])
+		return fmt.Errorf("unknown resource type: %s\nValid types: sessions, projects, project-settings, users, agents, roles, role-bindings, project-documents", cmdArgs[0])
 	}
 }
 
@@ -136,14 +130,10 @@ func normalizeResource(r string) string {
 		return "users"
 	case "agent", "agents":
 		return "agents"
-	case "agent-message", "agent-messages", "messages", "msgs":
-		return "agent-messages"
 	case "role", "roles":
 		return "roles"
 	case "role-binding", "role-bindings", "rolebinding", "rolebindings", "rb":
 		return "role-bindings"
-	case "session-check-in", "session-check-ins", "checkin", "checkins":
-		return "session-check-ins"
 	case "project-document", "project-documents", "doc", "docs":
 		return "project-documents"
 	default:
@@ -375,66 +365,6 @@ func printAgentTable(printer *output.Printer, agents []sdktypes.Agent) error {
 	return nil
 }
 
-func getAgentMessages(ctx context.Context, client *sdkclient.Client, printer *output.Printer, name string) error {
-	if name != "" {
-		msg, err := client.AgentMessages().Get(ctx, name)
-		if err != nil {
-			return fmt.Errorf("get agent-message %q: %w", name, err)
-		}
-		if printer.Format() == output.FormatJSON {
-			return printer.PrintJSON(msg)
-		}
-		return printAgentMessageTable(printer, []sdktypes.AgentMessage{*msg})
-	}
-
-	opts := sdktypes.NewListOptions().Size(args.limit).Build()
-	list, err := client.AgentMessages().List(ctx, opts)
-	if err != nil {
-		return fmt.Errorf("list agent-messages: %w", err)
-	}
-
-	if printer.Format() == output.FormatJSON {
-		return printer.PrintJSON(list)
-	}
-
-	return printAgentMessageTable(printer, list.Items)
-}
-
-func printAgentMessageTable(printer *output.Printer, messages []sdktypes.AgentMessage) error {
-	columns := []output.Column{
-		{Name: "ID", Width: 27},
-		{Name: "RECIPIENT AGENT", Width: 27},
-		{Name: "SENDER", Width: 20},
-		{Name: "READ", Width: 6},
-		{Name: "AGE", Width: 10},
-		{Name: "BODY", Width: 60},
-	}
-
-	table := output.NewTable(printer.Writer(), columns)
-	table.WriteHeaders()
-
-	for _, m := range messages {
-		age := ""
-		if m.CreatedAt != nil {
-			age = output.FormatAge(time.Since(*m.CreatedAt))
-		}
-		sender := m.SenderName
-		if sender == "" {
-			sender = m.SenderUserID
-		}
-		read := "false"
-		if m.Read {
-			read = "true"
-		}
-		body := m.Body
-		if len(body) > 57 {
-			body = body[:57] + "..."
-		}
-		table.WriteRow(m.ID, m.RecipientAgentID, sender, read, age, body)
-	}
-	return nil
-}
-
 func getRoles(ctx context.Context, client *sdkclient.Client, printer *output.Printer, name string) error {
 	if name != "" {
 		role, err := client.Roles().Get(ctx, name)
@@ -510,51 +440,6 @@ func printRoleBindingTable(printer *output.Printer, rbs []sdktypes.RoleBinding) 
 	table.WriteHeaders()
 	for _, rb := range rbs {
 		table.WriteRow(rb.ID, rb.UserID, rb.RoleID, rb.Scope, rb.ScopeID)
-	}
-	return nil
-}
-
-func getSessionCheckIns(ctx context.Context, client *sdkclient.Client, printer *output.Printer, name string) error {
-	if name != "" {
-		ci, err := client.SessionCheckIns().Get(ctx, name)
-		if err != nil {
-			return fmt.Errorf("get session-check-in %q: %w", name, err)
-		}
-		if printer.Format() == output.FormatJSON {
-			return printer.PrintJSON(ci)
-		}
-		return printSessionCheckInTable(printer, []sdktypes.SessionCheckIn{*ci})
-	}
-	opts := sdktypes.NewListOptions().Size(args.limit).Build()
-	list, err := client.SessionCheckIns().List(ctx, opts)
-	if err != nil {
-		return fmt.Errorf("list session-check-ins: %w", err)
-	}
-	if printer.Format() == output.FormatJSON {
-		return printer.PrintJSON(list)
-	}
-	return printSessionCheckInTable(printer, list.Items)
-}
-
-func printSessionCheckInTable(printer *output.Printer, cis []sdktypes.SessionCheckIn) error {
-	columns := []output.Column{
-		{Name: "ID", Width: 27},
-		{Name: "SESSION", Width: 27},
-		{Name: "AGENT", Width: 27},
-		{Name: "PHASE", Width: 12},
-		{Name: "BRANCH", Width: 20},
-		{Name: "PR", Width: 10},
-		{Name: "TESTS", Width: 6},
-		{Name: "AGE", Width: 10},
-	}
-	table := output.NewTable(printer.Writer(), columns)
-	table.WriteHeaders()
-	for _, ci := range cis {
-		age := ""
-		if ci.CreatedAt != nil {
-			age = output.FormatAge(time.Since(*ci.CreatedAt))
-		}
-		table.WriteRow(ci.ID, ci.SessionID, ci.AgentID, ci.Phase, ci.Branch, ci.Pr, fmt.Sprintf("%d", ci.TestCount), age)
 	}
 	return nil
 }

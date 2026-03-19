@@ -18,9 +18,6 @@ func (a *RoleBindingAPI) Delete(ctx context.Context, id string) error {
 	return a.client.do(ctx, http.MethodDelete, "/role_bindings/"+url.PathEscape(id), nil, http.StatusNoContent, nil)
 }
 
-func (a *SessionCheckInAPI) Delete(ctx context.Context, id string) error {
-	return a.client.do(ctx, http.MethodDelete, "/session_check_ins/"+url.PathEscape(id), nil, http.StatusNoContent, nil)
-}
 
 func (a *ProjectDocumentAPI) Delete(ctx context.Context, id string) error {
 	return a.client.do(ctx, http.MethodDelete, "/project_documents/"+url.PathEscape(id), nil, http.StatusNoContent, nil)

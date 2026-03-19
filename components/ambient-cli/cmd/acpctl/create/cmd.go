@@ -26,7 +26,6 @@ Valid resource types:
   agent           Create an agent
   role            Create a role
   role-binding    Create a role binding
-  agent-message   Send a message to an agent
 `,
 	Args: cobra.MinimumNArgs(1),
 	RunE: run,
@@ -50,8 +49,6 @@ var createArgs struct {
 	roleID           string
 	scope            string
 	scopeID          string
-	recipientAgentID string
-	body             string
 }
 
 func init() {
@@ -72,8 +69,6 @@ func init() {
 	Cmd.Flags().StringVar(&createArgs.roleID, "role-id", "", "Role ID (role-binding)")
 	Cmd.Flags().StringVar(&createArgs.scope, "scope", "", "Scope (role-binding)")
 	Cmd.Flags().StringVar(&createArgs.scopeID, "scope-id", "", "Scope ID (role-binding)")
-	Cmd.Flags().StringVar(&createArgs.recipientAgentID, "recipient-agent-id", "", "Recipient agent ID (agent-message)")
-	Cmd.Flags().StringVar(&createArgs.body, "body", "", "Message body (agent-message)")
 }
 
 func run(cmd *cobra.Command, cmdArgs []string) error {
@@ -103,10 +98,8 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 		return createRole(cmd, ctx, client)
 	case "role-binding", "rolebinding", "rb":
 		return createRoleBinding(cmd, ctx, client)
-	case "agent-message", "agentmessage", "am":
-		return createAgentMessage(cmd, ctx, client)
 	default:
-		return fmt.Errorf("unknown resource type: %s\nValid types: session, project, agent, role, role-binding, agent-message", cmdArgs[0])
+		return fmt.Errorf("unknown resource type: %s\nValid types: session, project, agent, role, role-binding", cmdArgs[0])
 	}
 }
 
@@ -332,32 +325,5 @@ func createRoleBinding(cmd *cobra.Command, ctx context.Context, client *sdkclien
 	}
 
 	return printCreated(cmd, "role-binding", created.ID, created)
-}
-
-func createAgentMessage(cmd *cobra.Command, ctx context.Context, client *sdkclient.Client) error {
-	warnUnusedFlags(cmd, "name", "prompt", "repo-url", "model", "max-tokens", "temperature", "timeout", "display-name", "description", "project-id", "owner-user-id", "permissions", "user-id", "role-id", "scope", "scope-id")
-
-	if createArgs.recipientAgentID == "" {
-		return fmt.Errorf("--recipient-agent-id is required")
-	}
-
-	builder := sdktypes.NewAgentMessageBuilder().
-		RecipientAgentID(createArgs.recipientAgentID)
-
-	if createArgs.body != "" {
-		builder = builder.Body(createArgs.body)
-	}
-
-	msg, err := builder.Build()
-	if err != nil {
-		return fmt.Errorf("build agent-message: %w", err)
-	}
-
-	created, err := client.AgentMessages().Create(ctx, msg)
-	if err != nil {
-		return fmt.Errorf("create agent-message: %w", err)
-	}
-
-	return printCreated(cmd, "agent-message", created.ID, created)
 }
 

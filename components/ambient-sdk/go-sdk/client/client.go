@@ -25,6 +25,7 @@ import (
 
 type Client struct {
 	httpClient         *http.Client
+	sseClient          *http.Client
 	baseURL            string
 	token              string
 	project            string
@@ -44,17 +45,23 @@ func WithTimeout(timeout time.Duration) ClientOption {
 func WithInsecureSkipVerify() ClientOption {
 	return func(c *Client) {
 		c.insecureSkipVerify = true
-		t, ok := c.httpClient.Transport.(*http.Transport)
-		if !ok || t == nil {
-			t = http.DefaultTransport.(*http.Transport).Clone()
-		} else {
-			t = t.Clone()
+
+		applyInsecureTLS := func(client *http.Client) {
+			t, ok := client.Transport.(*http.Transport)
+			if !ok || t == nil {
+				t = http.DefaultTransport.(*http.Transport).Clone()
+			} else {
+				t = t.Clone()
+			}
+			if t.TLSClientConfig == nil {
+				t.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+			}
+			t.TLSClientConfig.InsecureSkipVerify = true //nolint:gosec
+			client.Transport = t
 		}
-		if t.TLSClientConfig == nil {
-			t.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
-		}
-		t.TLSClientConfig.InsecureSkipVerify = true //nolint:gosec
-		c.httpClient.Transport = t
+
+		applyInsecureTLS(c.httpClient)
+		applyInsecureTLS(c.sseClient)
 	}
 }
 
@@ -98,6 +105,10 @@ func NewClient(baseURL, token, project string, opts ...ClientOption) (*Client, e
 	c := &Client{
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
+		},
+		sseClient: &http.Client{
+			Timeout:   0,
+			Transport: &http.Transport{DisableCompression: true},
 		},
 		baseURL:   strings.TrimSuffix(baseURL, "/"),
 		token:     token,

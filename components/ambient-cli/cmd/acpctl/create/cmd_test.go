@@ -277,62 +277,6 @@ func TestCreateRoleBinding_Aliases(t *testing.T) {
 	}
 }
 
-func TestCreateAgentMessage_Success(t *testing.T) {
-	srv := testhelper.NewServer(t)
-	srv.Handle("/api/ambient/v1/agent_messages", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			t.Errorf("expected POST, got %s", r.Method)
-		}
-		srv.RespondJSON(t, w, http.StatusCreated, &types.AgentMessage{
-			ObjectReference:  types.ObjectReference{ID: "am-new"},
-			RecipientAgentID: "agent-1",
-			Body:             "Hello from the operator",
-		})
-	})
-
-	testhelper.Configure(t, srv.URL)
-	result := testhelper.Run(t, Cmd, "agent-message",
-		"--recipient-agent-id", "agent-1",
-		"--body", "Hello from the operator",
-	)
-	if result.Err != nil {
-		t.Fatalf("unexpected error: %v\nstdout: %s\nstderr: %s", result.Err, result.Stdout, result.Stderr)
-	}
-	if !strings.Contains(result.Stdout, "agent-message/am-new") {
-		t.Errorf("expected 'agent-message/am-new created', got: %s", result.Stdout)
-	}
-}
-
-func TestCreateAgentMessage_MissingRecipient(t *testing.T) {
-	srv := testhelper.NewServer(t)
-	testhelper.Configure(t, srv.URL)
-	result := testhelper.Run(t, Cmd, "agent-message", "--body", "hello")
-	if result.Err == nil {
-		t.Fatal("expected error for missing --recipient-agent-id")
-	}
-	if !strings.Contains(result.Err.Error(), "--recipient-agent-id is required") {
-		t.Errorf("expected '--recipient-agent-id is required', got: %v", result.Err)
-	}
-}
-
-func TestCreateAgentMessage_Aliases(t *testing.T) {
-	srv := testhelper.NewServer(t)
-	srv.Handle("/api/ambient/v1/agent_messages", func(w http.ResponseWriter, r *http.Request) {
-		srv.RespondJSON(t, w, http.StatusCreated, &types.AgentMessage{
-			ObjectReference: types.ObjectReference{ID: "am-1"},
-			RecipientAgentID: "a1",
-		})
-	})
-
-	for _, alias := range []string{"agent-message", "agentmessage", "am"} {
-		testhelper.Configure(t, srv.URL)
-		result := testhelper.Run(t, Cmd, alias, "--recipient-agent-id", "a1")
-		if result.Err != nil {
-			t.Errorf("alias %q: unexpected error: %v", alias, result.Err)
-		}
-	}
-}
-
 func TestCreateUnknownResource(t *testing.T) {
 	srv := testhelper.NewServer(t)
 	testhelper.Configure(t, srv.URL)

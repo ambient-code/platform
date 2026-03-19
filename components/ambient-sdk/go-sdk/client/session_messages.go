@@ -60,10 +60,6 @@ func (a *SessionAPI) SendAgUI(ctx context.Context, sessionID string, payload str
 	return &result, nil
 }
 
-func (a *SessionAPI) StreamAgUI(ctx context.Context, sessionID string, afterSeq int64) (<-chan types.SessionMessage, <-chan error) {
-	return a.streamSSE(ctx, sessionID, "ag_ui", afterSeq)
-}
-
 // WatchMessages streams session messages from afterSeq onward via SSE.
 // Returns a channel of messages, a stop function, and any immediate connection error.
 // Call stop() to cancel the stream and release resources.
@@ -131,65 +127,6 @@ func (a *SessionAPI) WatchMessages(ctx context.Context, sessionID string, afterS
 	return msgs, cancel, nil
 }
 
-// StreamMessages streams session messages. Deprecated: use WatchMessages instead.
-func (a *SessionAPI) StreamMessages(ctx context.Context, sessionID string, afterSeq int64) (<-chan types.SessionMessage, <-chan error) {
-	return a.streamSSE(ctx, sessionID, "messages", afterSeq)
-}
-
-func (a *SessionAPI) streamSSE(ctx context.Context, sessionID, endpoint string, afterSeq int64) (<-chan types.SessionMessage, <-chan error) {
-	msgs := make(chan types.SessionMessage, 64)
-	errs := make(chan error, 1)
-
-	go func() {
-		defer close(msgs)
-		defer close(errs)
-
-		lastSeq := afterSeq
-		backoff := sseInitialBackoff
-
-		for {
-			if ctx.Err() != nil {
-				return
-			}
-
-			err := a.consumeSSE(ctx, sessionID, endpoint, lastSeq, msgs, func(seq int64) {
-				lastSeq = seq
-			})
-
-			if ctx.Err() != nil {
-				return
-			}
-
-			if err != nil {
-				a.client.logger.Debug("sse stream error, will reconnect",
-					"endpoint", endpoint,
-					"session_id", sessionID,
-					"after_seq", lastSeq,
-					"backoff", backoff,
-					"err", err,
-				)
-			}
-
-			select {
-			case <-ctx.Done():
-				return
-			case <-time.After(backoff):
-			}
-
-			backoff *= 2
-			if backoff > sseMaxBackoff {
-				backoff = sseMaxBackoff
-			}
-		}
-	}()
-
-	return msgs, errs
-}
-
-var sseHTTPClient = &http.Client{
-	Timeout:   0,
-	Transport: &http.Transport{DisableCompression: true},
-}
 
 func (a *SessionAPI) consumeSSE(
 	ctx context.Context,
@@ -219,7 +156,7 @@ func (a *SessionAPI) consumeSSE(
 		req.Header.Set("X-Ambient-Project", a.client.project)
 	}
 
-	resp, err := sseHTTPClient.Do(req)
+	resp, err := a.client.sseClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("connect: %w", err)
 	}
