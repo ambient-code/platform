@@ -3,7 +3,8 @@
 import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Download, ExternalLink, FileWarning } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Download, FileWarning } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
@@ -74,29 +75,11 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
 }
 
-/**
- * Open content in a new browser tab
- */
-function openInNewTab(fileName: string, content: string, mimeType: string) {
-  const blob = new Blob([content], { type: mimeType });
-  const url = URL.createObjectURL(blob);
-  const newWindow = window.open(url, '_blank', 'noopener,noreferrer');
-
-  // Clean up the URL after the window loads or after a delay
-  setTimeout(() => URL.revokeObjectURL(url), newWindow ? 1000 : 5000);
-}
-
 export function FileContentViewer({ fileName, content, onDownload }: FileContentViewerProps) {
   const [imageError, setImageError] = useState(false);
 
   const fileInfo = useMemo(() => detectFileType(fileName, content), [fileName, content]);
   const fileSize = useMemo(() => new Blob([content]).size, [content]);
-
-  const handleOpenInTab = () => {
-    if (fileInfo.mimeType) {
-      openInNewTab(fileName, content, fileInfo.mimeType);
-    }
-  };
 
   // Image viewer
   if (fileInfo.type === 'image' && !imageError) {
@@ -147,16 +130,6 @@ export function FileContentViewer({ fileName, content, onDownload }: FileContent
             PDF • {formatFileSize(fileSize)}
           </Badge>
           <div className="flex gap-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleOpenInTab}
-              className="h-7 px-2"
-              title="Open in new tab"
-            >
-              <ExternalLink className="h-3 w-3 mr-1" />
-              <span className="text-xs">Open</span>
-            </Button>
             {onDownload && (
               <Button
                 variant="ghost"
@@ -181,7 +154,7 @@ export function FileContentViewer({ fileName, content, onDownload }: FileContent
     );
   }
 
-  // HTML viewer
+  // HTML viewer with tabs
   if (fileInfo.type === 'html') {
     return (
       <div className="space-y-2">
@@ -190,16 +163,6 @@ export function FileContentViewer({ fileName, content, onDownload }: FileContent
             HTML • {formatFileSize(fileSize)}
           </Badge>
           <div className="flex gap-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleOpenInTab}
-              className="h-7 px-2"
-              title="Render in new tab"
-            >
-              <ExternalLink className="h-3 w-3 mr-1" />
-              <span className="text-xs">Render</span>
-            </Button>
             {onDownload && (
               <Button
                 variant="ghost"
@@ -213,16 +176,34 @@ export function FileContentViewer({ fileName, content, onDownload }: FileContent
             )}
           </div>
         </div>
-        <div className="text-xs">
-          <pre className="bg-muted/50 p-3 rounded overflow-x-auto max-h-96 overflow-y-auto border">
-            <code>{content}</code>
-          </pre>
-        </div>
+        <Tabs defaultValue="raw" className="w-full">
+          <TabsList className="w-full justify-start">
+            <TabsTrigger value="raw" className="text-xs">Raw</TabsTrigger>
+            <TabsTrigger value="rendered" className="text-xs">Rendered</TabsTrigger>
+          </TabsList>
+          <TabsContent value="raw" className="mt-2">
+            <div className="text-xs">
+              <pre className="bg-muted/50 p-3 rounded overflow-x-auto max-h-96 overflow-y-auto border">
+                <code>{content}</code>
+              </pre>
+            </div>
+          </TabsContent>
+          <TabsContent value="rendered" className="mt-2">
+            <div className="bg-muted/50 rounded border overflow-hidden">
+              <iframe
+                srcDoc={content}
+                className="w-full h-96 bg-white"
+                title={fileName}
+                sandbox="allow-scripts"
+              />
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
     );
   }
 
-  // Markdown viewer
+  // Markdown viewer with tabs
   if (fileInfo.type === 'markdown') {
     return (
       <div className="space-y-2">
@@ -231,16 +212,6 @@ export function FileContentViewer({ fileName, content, onDownload }: FileContent
             Markdown • {formatFileSize(fileSize)}
           </Badge>
           <div className="flex gap-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleOpenInTab}
-              className="h-7 px-2"
-              title="Open rendered view in new tab"
-            >
-              <ExternalLink className="h-3 w-3 mr-1" />
-              <span className="text-xs">Visualize</span>
-            </Button>
             {onDownload && (
               <Button
                 variant="ghost"
@@ -254,14 +225,29 @@ export function FileContentViewer({ fileName, content, onDownload }: FileContent
             )}
           </div>
         </div>
-        <div className="bg-muted/50 p-4 rounded border overflow-auto max-h-96 prose prose-sm dark:prose-invert max-w-none">
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
-            rehypePlugins={[rehypeHighlight]}
-          >
-            {content}
-          </ReactMarkdown>
-        </div>
+        <Tabs defaultValue="rendered" className="w-full">
+          <TabsList className="w-full justify-start">
+            <TabsTrigger value="rendered" className="text-xs">Rendered</TabsTrigger>
+            <TabsTrigger value="raw" className="text-xs">Raw</TabsTrigger>
+          </TabsList>
+          <TabsContent value="rendered" className="mt-2">
+            <div className="bg-muted/50 p-4 rounded border overflow-auto max-h-96 prose prose-sm dark:prose-invert max-w-none">
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                rehypePlugins={[rehypeHighlight]}
+              >
+                {content}
+              </ReactMarkdown>
+            </div>
+          </TabsContent>
+          <TabsContent value="raw" className="mt-2">
+            <div className="text-xs">
+              <pre className="bg-muted/50 p-3 rounded overflow-x-auto max-h-96 overflow-y-auto border">
+                <code>{content}</code>
+              </pre>
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
     );
   }
