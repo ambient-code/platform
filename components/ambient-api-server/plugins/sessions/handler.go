@@ -1,21 +1,18 @@
 package sessions
 
 import (
-	"fmt"
 	"net/http"
-	"regexp"
 
 	"github.com/gorilla/mux"
 
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
+	"github.com/ambient-code/platform/components/ambient-api-server/plugins/common"
 	"github.com/openshift-online/rh-trex-ai/pkg/api/presenters"
 	"github.com/openshift-online/rh-trex-ai/pkg/auth"
 	"github.com/openshift-online/rh-trex-ai/pkg/errors"
 	"github.com/openshift-online/rh-trex-ai/pkg/handlers"
 	"github.com/openshift-online/rh-trex-ai/pkg/services"
 )
-
-var safeProjectIDPattern = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 
 var _ handlers.RestHandler = sessionHandler{}
 
@@ -192,16 +189,8 @@ func (h sessionHandler) List(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
 
 			listArgs := services.NewListArguments(r.URL.Query())
-			if projectID := r.URL.Query().Get("project_id"); projectID != "" {
-				if !safeProjectIDPattern.MatchString(projectID) {
-					return nil, errors.Validation("invalid project_id format")
-				}
-				projectFilter := fmt.Sprintf("project_id = '%s'", projectID)
-				if listArgs.Search != "" {
-					listArgs.Search = fmt.Sprintf("%s and (%s)", projectFilter, listArgs.Search)
-				} else {
-					listArgs.Search = projectFilter
-				}
+			if err := common.ApplyProjectScope(r, listArgs); err != nil {
+				return nil, err
 			}
 			var sessions []Session
 			paging, err := h.generic.List(ctx, "id", listArgs, &sessions)
