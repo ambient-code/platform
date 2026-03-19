@@ -77,7 +77,8 @@ describe('Ambient Session Management Tests', () => {
       body: { data: { ANTHROPIC_API_KEY: apiKey } }
     })).then((r) => expect(r.status).to.eq(200))
 
-    // Create a session for UI tests
+    // Wait for the workspace page to finish loading before creating a session
+    cy.get('[data-testid="new-session-btn"]', { timeout: 20000 }).should('be.visible')
     cy.get('[data-testid="new-session-btn"]').click()
     cy.get('[data-testid="create-session-submit"]', { timeout: 10000 })
         .should('not.be.disabled').click()
@@ -180,7 +181,7 @@ describe('Ambient Session Management Tests', () => {
 
     it('should open create session dialog and interact with form', () => {
       cy.visit(`/projects/${workspaceSlug}`)
-      cy.get('[data-testid="new-session-btn"]', { timeout: 10000 }).click()
+      cy.get('[data-testid="new-session-btn"]', { timeout: 10000 }).should('be.visible').click()
 
       // Create session dialog — covers create-session-dialog.tsx
       cy.get('[data-testid="create-session-submit"]', { timeout: 10000 }).should('exist')
@@ -244,7 +245,7 @@ describe('Ambient Session Management Tests', () => {
 
       // Step 1: Create session
       cy.visit(`/projects/${workspaceSlug}`)
-      cy.get('[data-testid="new-session-btn"]').click()
+      cy.get('[data-testid="new-session-btn"]', { timeout: 10000 }).should('be.visible').click()
       cy.get('[data-testid="create-session-submit"]', { timeout: 10000 })
         .should('not.be.disabled').click()
       cy.url({ timeout: 30000 }).should('match', /\/projects\/.*\/sessions\/[a-z0-9-]+$/)
