@@ -22,10 +22,10 @@ rules:
 - apiGroups: [""]
   resources: ["configmaps"]
   verbs: ["get"]
-# Secrets (only for creating runner tokens during session provisioning)
+# Secrets (read ambient-runner-secrets for validation, create runner tokens)
 - apiGroups: [""]
   resources: ["secrets"]
-  verbs: ["create"]
+  verbs: ["get", "create"]
 # Jobs (session management - read access for monitoring, delete for cleanup)
 # Note: Job creation is handled by the backend service account, not users
 - apiGroups: ["batch"]

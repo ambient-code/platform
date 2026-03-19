@@ -27,6 +27,12 @@ vi.mock('@/services/queries/use-google', () => ({
   useGoogleStatus: vi.fn(() => ({ data: null })),
 }));
 
+vi.mock('@/services/queries/use-project-access', () => ({
+  useProjectAccess: vi.fn(() => ({
+    data: { userRole: 'admin' },
+  })),
+}));
+
 vi.mock('@/hooks/use-toast', () => ({
   successToast: vi.fn(),
   errorToast: vi.fn(),

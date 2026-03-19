@@ -35,6 +35,13 @@ export type LLMSettings = {
 	maxTokens: number;
 };
 
+// User context captured at session creation time (for authorization and audit)
+export type UserContext = {
+	userId: string;
+	displayName: string;
+	groups: string[];
+};
+
 // Generic repo type used by RFE workflows (retains optional clonePath)
 export type GitRepository = {
     url: string;
@@ -55,6 +62,7 @@ export type AgenticSessionSpec = {
 	inactivityTimeout?: number;
 	displayName?: string;
 	project?: string;
+	userContext?: UserContext;
 	// Runner type (e.g. "claude-agent-sdk", "gemini-cli")
 	environmentVariables?: Record<string, string>;
 	// Multi-repo support
@@ -153,6 +161,11 @@ export type UserMessage = {
 	id?: string;  // Message ID for feedback association
 	content: ContentBlock | string;
 	timestamp: string;
+	metadata?: {
+		senderId?: string;
+		senderDisplayName?: string;
+		[key: string]: unknown;
+	};
 }
 export type AgentMessage = {
 	type: "agent_message";
@@ -160,6 +173,9 @@ export type AgentMessage = {
 	content: ContentBlock;
 	model: string;
 	timestamp: string;
+	metadata?: {
+		[key: string]: unknown;
+	};
 }
 export type SystemMessage = {
 	type: "system_message";

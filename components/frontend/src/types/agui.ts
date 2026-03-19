@@ -83,9 +83,17 @@ export type ReasoningContent = {
   signature: string
 }
 
+/** Message metadata for sender attribution in multi-user sessions */
+export type MessageMetadata = {
+  senderId?: string
+  senderDisplayName?: string
+  hidden?: boolean
+  [key: string]: unknown
+}
+
 export type PlatformMessage = Message & {
   timestamp?: string
-  metadata?: unknown
+  metadata?: MessageMetadata
   content?: string | ReasoningContent  // Widened to support structured reasoning blocks
   name?: string  // Tool name (not on core ToolMessage, but platform sends it)
   toolCalls?: PlatformToolCall[]
