@@ -101,6 +101,11 @@ func init() {
 		sessionsRouter.HandleFunc("/{id}", sessionHandler.Delete).Methods(http.MethodDelete)
 		sessionsRouter.HandleFunc("/{id}/messages", msgHandler.GetMessages).Methods(http.MethodGet)
 		sessionsRouter.HandleFunc("/{id}/messages", msgHandler.PushMessage).Methods(http.MethodPost)
+<<<<<<< HEAD
+=======
+		sessionsRouter.HandleFunc("/{id}/ag_ui", msgHandler.StreamAgUI).Methods(http.MethodGet)
+		sessionsRouter.HandleFunc("/{id}/ag_ui", msgHandler.SendAgUI).Methods(http.MethodPost)
+>>>>>>> c3c86777 (feat(api): session messages, gRPC watch, agent plugins, RBAC, rh-trex-ai v0.0.25, kind-login)
 		sessionsRouter.Use(authMiddleware.AuthenticateAccountJWT)
 		sessionsRouter.Use(authzMiddleware.AuthorizeApi)
 	})

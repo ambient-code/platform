@@ -6,6 +6,7 @@ const (
 	ResourceUser            Resource = "user"
 	ResourceProject         Resource = "project"
 	ResourceProjectSettings Resource = "project_settings"
+	ResourceProjectDocument Resource = "project_document"
 	ResourceAgent           Resource = "agent"
 	ResourceSession         Resource = "session"
 	ResourceSessionMessage  Resource = "session_message"
@@ -65,6 +66,12 @@ var (
 
 	PermProjectSettingsRead   = Permission{ResourceProjectSettings, ActionRead}
 	PermProjectSettingsUpdate = Permission{ResourceProjectSettings, ActionUpdate}
+
+	PermProjectDocumentRead   = Permission{ResourceProjectDocument, ActionRead}
+	PermProjectDocumentCreate = Permission{ResourceProjectDocument, ActionCreate}
+	PermProjectDocumentUpdate = Permission{ResourceProjectDocument, ActionUpdate}
+	PermProjectDocumentDelete = Permission{ResourceProjectDocument, ActionDelete}
+	PermProjectDocumentList   = Permission{ResourceProjectDocument, ActionList}
 
 	PermAgentCreate = Permission{ResourceAgent, ActionCreate}
 	PermAgentRead   = Permission{ResourceAgent, ActionRead}

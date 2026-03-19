@@ -1,6 +1,7 @@
 package agents
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -141,20 +142,20 @@ func (h *igniteHandler) IgnitionPreview(w http.ResponseWriter, r *http.Request) 
 func buildIgnitionPrompt(agent *Agent, peers AgentList) string {
 	var sb strings.Builder
 
-	fmt.Fprintf(&sb, "# Agent Ignition: %s\n\n", agent.Name)
+	sb.WriteString(fmt.Sprintf("# Agent Ignition: %s\n\n", agent.Name))
 	if agent.DisplayName != nil {
-		fmt.Fprintf(&sb, "You are **%s**", *agent.DisplayName)
+		sb.WriteString(fmt.Sprintf("You are **%s**", *agent.DisplayName))
 	} else {
-		fmt.Fprintf(&sb, "You are **%s**", agent.Name)
+		sb.WriteString(fmt.Sprintf("You are **%s**", agent.Name))
 	}
-	fmt.Fprintf(&sb, ", working in project **%s**.\n\n", agent.ProjectId)
+	sb.WriteString(fmt.Sprintf(", working in project **%s**.\n\n", agent.ProjectId))
 
 	if agent.Description != nil {
-		fmt.Fprintf(&sb, "## Role\n\n%s\n\n", *agent.Description)
+		sb.WriteString(fmt.Sprintf("## Role\n\n%s\n\n", *agent.Description))
 	}
 
 	if agent.Prompt != nil {
-		fmt.Fprintf(&sb, "## Instructions\n\n%s\n\n", *agent.Prompt)
+		sb.WriteString(fmt.Sprintf("## Instructions\n\n%s\n\n", *agent.Prompt))
 	}
 
 	var peerAgents AgentList
@@ -173,10 +174,27 @@ func buildIgnitionPrompt(agent *Agent, peers AgentList) string {
 			if p.Description != nil {
 				desc = *p.Description
 			}
-			fmt.Fprintf(&sb, "| %s | %s |\n", p.Name, desc)
+			sb.WriteString(fmt.Sprintf("| %s | %s |\n", p.Name, desc))
 		}
 		sb.WriteString("\n")
 	}
+
+	sb.WriteString("## Check-In Protocol\n\n")
+	sb.WriteString("Post status updates to your session check-in endpoint:\n\n")
+	sb.WriteString("```bash\n")
+	sb.WriteString("# POST /api/ambient/v1/sessions/{session_id}/checkin\n")
+	checkInTemplate, _ := json.MarshalIndent(map[string]interface{}{
+		"agent_id":   agent.ID,
+		"status":     "active",
+		"summary":    "Brief summary of current work",
+		"branch":     "feat/your-branch",
+		"pr":         "#123",
+		"test_count": 0,
+		"items":      []string{"Completed item 1"},
+		"next_steps": "What you will do next",
+	}, "", "  ")
+	sb.Write(checkInTemplate)
+	sb.WriteString("\n```\n")
 
 	return sb.String()
 }
