@@ -9,6 +9,8 @@ require (
 	google.golang.org/grpc v1.79.1
 )
 
+replace github.com/ambient-code/platform/components/ambient-api-server => ../../ambient-api-server
+
 require (
 	golang.org/x/net v0.48.0 // indirect
 	golang.org/x/sys v0.40.0 // indirect
