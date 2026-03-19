@@ -1,11 +1,11 @@
 """POST / — AG-UI run endpoint (delegates to bridge)."""
 
 import logging
+import time
 import uuid
 from typing import Any, Dict, List, Optional, Union
 
 from ag_ui.core import EventType, RunAgentInput, RunErrorEvent, ToolCallResultEvent
-from ag_ui_claude_sdk.utils import now_ms
 from ag_ui.encoder import EventEncoder
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
@@ -14,6 +14,11 @@ from pydantic import BaseModel
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def now_ms() -> int:
+    """Current time as epoch milliseconds for AG-UI event timestamps."""
+    return int(time.time() * 1000)
 
 
 class RunnerInput(BaseModel):
