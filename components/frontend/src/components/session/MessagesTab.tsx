@@ -7,6 +7,7 @@ import { LoadingDots } from "@/components/ui/message";
 import { Button } from "@/components/ui/button";
 import { ChatInputBox } from "@/components/chat/ChatInputBox";
 import { QueuedMessageBubble } from "@/components/chat/QueuedMessageBubble";
+import { useCurrentUser } from "@/services/queries/use-auth";
 import type { AgenticSession, MessageObject, ToolUseMessages, HierarchicalToolMessage } from "@/types/agentic-session";
 import type { WorkflowMetadata } from "@/app/projects/[name]/sessions/[sessionName]/lib/types";
 import type { QueuedMessageItem } from "@/hooks/use-session-queue";
@@ -59,6 +60,7 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
   const [sendingChat, setSendingChat] = useState(false);
   const showSystemMessages = false;
   const [waitingDotCount, setWaitingDotCount] = useState(0);
+  const { data: currentUser } = useCurrentUser();
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
@@ -217,6 +219,7 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
             onGoToResults={onGoToResults}
             agentName={agentName}
             onSubmitAnswer={onSendToolAnswer}
+            currentUserId={currentUser?.userId}
           />
         ))}
 
