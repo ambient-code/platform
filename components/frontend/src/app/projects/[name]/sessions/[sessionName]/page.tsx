@@ -1480,6 +1480,7 @@ export default function ProjectSessionDetailPage({
           projectName={projectName}
           sessionName={sessionName}
           filePath={fileTabs.activeTab.path}
+          sessionPhase={phase}
         />
       );
     }
