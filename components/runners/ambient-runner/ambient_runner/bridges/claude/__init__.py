@@ -8,6 +8,10 @@ Usage::
     app = create_ambient_app(ClaudeBridge(), title="Claude Runner")
 """
 
-from ambient_runner.bridges.claude.bridge import ClaudeBridge
+# Apply mock patch early if needed (before any imports of claude_agent_sdk)
+from ambient_runner.bridges.claude import mock_patch  # noqa: F401
 
-__all__ = ["ClaudeBridge"]
+from ambient_runner.bridges.claude.bridge import ClaudeBridge
+from ambient_runner.bridges.claude.bridge_v2 import ClaudeBridgeV2
+
+__all__ = ["ClaudeBridge", "ClaudeBridgeV2"]

@@ -22,6 +22,7 @@ dependencies = [
 claude = [
   "anthropic[vertex]>=0.68.0",
   "claude-agent-sdk>=0.1.23",
+  "ag-ui-claude-sdk @ git+https://github.com/ag-ui-protocol/ag-ui.git#subdirectory=integrations/claude-agent-sdk/python",
 ]
 observability = [
   "langfuse>=3.0.0",
@@ -46,7 +47,7 @@ dev-dependencies = [
 
 [tool.setuptools]
 py-modules = ["main"]
-packages = ["ag_ui_claude_sdk", "ag_ui_gemini_cli", "ambient_runner", "ambient_runner.endpoints", "ambient_runner.middleware", "ambient_runner.platform", "ambient_runner.bridges", "ambient_runner.bridges.claude", "ambient_runner.bridges.langgraph", "ambient_runner.bridges.gemini_cli"]
+packages = ["ag_ui_gemini_cli", "ambient_runner", "ambient_runner.endpoints", "ambient_runner.middleware", "ambient_runner.platform", "ambient_runner.bridges", "ambient_runner.bridges.claude", "ambient_runner.bridges.langgraph", "ambient_runner.bridges.gemini_cli"]
 
 [build-system]
 requires = ["setuptools>=61.0"]
