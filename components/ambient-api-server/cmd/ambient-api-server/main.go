@@ -27,7 +27,6 @@ import (
 	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/roles"
 	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/roleBindings"
 	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/projectDocuments"
-	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/ui"
 )
 
 func main() {
