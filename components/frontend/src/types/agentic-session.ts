@@ -35,6 +35,13 @@ export type LLMSettings = {
 	maxTokens: number;
 };
 
+// User context captured at session creation time (for authorization and audit)
+export type UserContext = {
+	userId: string;
+	displayName: string;
+	groups: string[];
+};
+
 // Generic repo type used by RFE workflows (retains optional clonePath)
 export type GitRepository = {
     url: string;
@@ -55,6 +62,7 @@ export type AgenticSessionSpec = {
 	inactivityTimeout?: number;
 	displayName?: string;
 	project?: string;
+	userContext?: UserContext;
 	// Runner type (e.g. "claude-agent-sdk", "gemini-cli")
 	environmentVariables?: Record<string, string>;
 	// Multi-repo support
