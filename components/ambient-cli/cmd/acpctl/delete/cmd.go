@@ -26,7 +26,6 @@ Valid resource types:
   session           (aliases: sess)
   agent
   role
-  role-binding      (aliases: rolebinding, rb)
   role-binding      (aliases: rolebinding, rb)`,
 	Args: cobra.ExactArgs(2),
 	RunE: run,

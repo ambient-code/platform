@@ -106,7 +106,7 @@ func runAgUISend(cmd *cobra.Command, args []string) error {
 }
 
 func streamAgUI(cmd *cobra.Command, client *sdkclient.Client, sessionID string) error {
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, cancel := signal.NotifyContext(cmd.Context(), os.Interrupt)
 	defer cancel()
 
 	fmt.Fprintf(cmd.OutOrStdout(), "Streaming AG-UI events for session %s (Ctrl+C to stop)...\n\n", sessionID)
@@ -124,7 +124,10 @@ func streamAgUI(cmd *cobra.Command, client *sdkclient.Client, sessionID string) 
 }
 
 func printAgUILine(cmd *cobra.Command, msg *sdktypes.SessionMessage) {
-	ts := msg.CreatedAt.Format("15:04:05")
+	ts := "??:??:??"
+	if !msg.CreatedAt.IsZero() {
+		ts = msg.CreatedAt.Format("15:04:05")
+	}
 	display := displayPayload(msg.EventType, msg.Payload)
 	fmt.Fprintf(cmd.OutOrStdout(), "[%s] #%d (%s) %s\n", ts, msg.Seq, msg.EventType, display)
 }

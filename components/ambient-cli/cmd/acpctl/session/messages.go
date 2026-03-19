@@ -222,7 +222,7 @@ func printWrapped(w io.Writer, text string, width int, indent string) {
 }
 
 func streamMessages(cmd *cobra.Command, client *sdkclient.Client, sessionID string) error {
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, cancel := signal.NotifyContext(cmd.Context(), os.Interrupt)
 	defer cancel()
 
 	fmt.Fprintf(cmd.OutOrStdout(), "Streaming messages for session %s (Ctrl+C to stop)...\n\n", sessionID)

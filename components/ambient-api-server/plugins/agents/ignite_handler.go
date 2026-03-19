@@ -1,7 +1,6 @@
 package agents
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -178,23 +177,6 @@ func buildIgnitionPrompt(agent *Agent, peers AgentList) string {
 		}
 		sb.WriteString("\n")
 	}
-
-	sb.WriteString("## Check-In Protocol\n\n")
-	sb.WriteString("Post status updates to your session check-in endpoint:\n\n")
-	sb.WriteString("```bash\n")
-	sb.WriteString("# POST /api/ambient/v1/sessions/{session_id}/checkin\n")
-	checkInTemplate, _ := json.MarshalIndent(map[string]interface{}{
-		"agent_id":   agent.ID,
-		"status":     "active",
-		"summary":    "Brief summary of current work",
-		"branch":     "feat/your-branch",
-		"pr":         "#123",
-		"test_count": 0,
-		"items":      []string{"Completed item 1"},
-		"next_steps": "What you will do next",
-	}, "", "  ")
-	sb.Write(checkInTemplate)
-	sb.WriteString("\n```\n")
 
 	return sb.String()
 }

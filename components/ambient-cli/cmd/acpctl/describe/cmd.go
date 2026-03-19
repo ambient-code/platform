@@ -24,7 +24,6 @@ Valid resource types:
   user              (aliases: usr)
   agent             (aliases: agents)
   role
-  role-binding      (aliases: rb)
   role-binding      (aliases: rb)`,
 	Args: cobra.ExactArgs(2),
 	RunE: run,
