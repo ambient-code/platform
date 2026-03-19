@@ -152,10 +152,10 @@ def create_ambient_app(
                 )
                 task.add_done_callback(_log_auto_exec_failure)
         else:
-            # Log but don't execute on resume
-            workflow_startup_prompt = _get_workflow_startup_prompt()
-            user_initial_prompt = os.getenv("INITIAL_PROMPT", "").strip()
-            if workflow_startup_prompt or user_initial_prompt:
+            # Log but don't execute on resume (avoid filesystem I/O, just check env vars)
+            has_workflow = bool(os.getenv("ACTIVE_WORKFLOW_GIT_URL", "").strip())
+            has_user_prompt = bool(os.getenv("INITIAL_PROMPT", "").strip())
+            if has_workflow or has_user_prompt:
                 logger.info("Prompts detected but not auto-executing (resumed session)")
 
         logger.info(f"AG-UI server ready for session {session_id}")
