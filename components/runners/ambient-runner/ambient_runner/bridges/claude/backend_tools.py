@@ -3,6 +3,7 @@
 Provides session management tools as MCP-compatible SDK tools.
 """
 
+import json
 import logging
 from typing import Any, Callable, List, Optional
 
@@ -34,28 +35,31 @@ def create_backend_mcp_tools(
 
     tools = []
 
-    @sdk_tool_decorator
-    def acp_list_sessions(include_completed: bool = False) -> str:
-        """List all active agentic sessions in the current project.
-
-        This tool retrieves all running and pending sessions. By default, it excludes completed/stopped sessions.
-
-        Use this to:
-        - See what sessions are currently running
-        - Get session names and IDs for use with other tools
-        - Check session status and metadata
-
-        Args:
-            include_completed: Whether to include stopped/completed sessions (default: false)
-
-        Returns:
-            JSON string with session list and count
-        """
-        import json
-
+    # Tool 1: List Sessions
+    @sdk_tool_decorator(
+        "acp_list_sessions",
+        (
+            "List all active agentic sessions in the current project. "
+            "Retrieves running and pending sessions. By default excludes "
+            "completed/stopped sessions."
+        ),
+        {
+            "type": "object",
+            "properties": {
+                "include_completed": {
+                    "type": "boolean",
+                    "description": "Whether to include stopped/completed sessions",
+                }
+            },
+            "required": [],
+        },
+    )
+    async def acp_list_sessions(args: dict) -> dict:
+        """List all active agentic sessions."""
         try:
+            include_completed = args.get("include_completed", False)
             sessions = api_client.list_sessions(include_completed=include_completed)
-            return json.dumps(
+            result = json.dumps(
                 {
                     "success": True,
                     "sessions": sessions,
@@ -63,91 +67,103 @@ def create_backend_mcp_tools(
                 },
                 indent=2,
             )
+            return {"content": [{"type": "text", "text": result}]}
         except Exception as e:
             logger.error(f"Error listing sessions: {e}", exc_info=True)
-            return json.dumps({"success": False, "error": str(e)}, indent=2)
+            error = json.dumps({"success": False, "error": str(e)}, indent=2)
+            return {"content": [{"type": "text", "text": error}], "isError": True}
 
     tools.append(acp_list_sessions)
 
-    @sdk_tool_decorator
-    def acp_get_session(session_name: str) -> str:
-        """Get detailed information about a specific agentic session.
-
-        Retrieves the full session object including spec, status, and metadata.
-
-        Use this to:
-        - Get detailed info about a specific session
-        - Check session configuration (model, repos, prompts)
-        - See session status and phase
-
-        Args:
-            session_name: The name of the session (from list_sessions or known identifier)
-
-        Returns:
-            JSON string with full session details
-        """
-        import json
-
+    # Tool 2: Get Session
+    @sdk_tool_decorator(
+        "acp_get_session",
+        (
+            "Get detailed information about a specific agentic session. "
+            "Retrieves full session object including spec, status, and metadata."
+        ),
+        {
+            "type": "object",
+            "properties": {
+                "session_name": {
+                    "type": "string",
+                    "description": "Name of the session to retrieve",
+                }
+            },
+            "required": ["session_name"],
+        },
+    )
+    async def acp_get_session(args: dict) -> dict:
+        """Get detailed information about a specific session."""
         try:
+            session_name = args["session_name"]
             session = api_client.get_session(session_name)
-            return json.dumps({"success": True, "session": session}, indent=2)
+            result = json.dumps({"success": True, "session": session}, indent=2)
+            return {"content": [{"type": "text", "text": result}]}
         except Exception as e:
-            logger.error(f"Error getting session {session_name}: {e}", exc_info=True)
-            return json.dumps({"success": False, "error": str(e)}, indent=2)
+            logger.error(f"Error getting session: {e}", exc_info=True)
+            error = json.dumps({"success": False, "error": str(e)}, indent=2)
+            return {"content": [{"type": "text", "text": error}], "isError": True}
 
     tools.append(acp_get_session)
 
-    @sdk_tool_decorator
-    def acp_create_session(
-        session_name: str,
-        initial_prompt: Optional[str] = None,
-        display_name: Optional[str] = None,
-        repos: Optional[str] = None,
-        model: Optional[str] = None,
-    ) -> str:
-        """Create a new agentic session in the current project.
-
-        Creates and starts a new Claude session with the specified configuration.
-
-        Use this to:
-        - Spawn a new agent session for a task
-        - Start a session with specific repos and prompts
-        - Create sessions with custom model settings
-
-        Args:
-            session_name: Unique identifier (DNS-compatible: lowercase, hyphens, no spaces)
-            initial_prompt: (optional) Initial message to send to the agent
-            display_name: (optional) Human-readable name
-            repos: (optional) JSON array of repo configs: '[{"url": "https://...", "branch": "main"}]'
-            model: (optional) LLM model override (e.g., "claude-sonnet-4-5")
-
-        Returns:
-            JSON string with created session details
-
-        Example:
-            acp_create_session(
-                session_name="my-task",
-                initial_prompt="Review recent PRs",
-                display_name="PR Review",
-                repos='[{"url": "https://github.com/org/repo", "branch": "main"}]'
-            )
-        """
-        import json
-
+    # Tool 3: Create Session
+    @sdk_tool_decorator(
+        "acp_create_session",
+        (
+            "Create a new agentic session in the current project. "
+            "Creates and starts a new Claude session with the specified configuration."
+        ),
+        {
+            "type": "object",
+            "properties": {
+                "session_name": {
+                    "type": "string",
+                    "description": "Unique identifier (DNS-compatible: lowercase, hyphens, no spaces)",
+                },
+                "initial_prompt": {
+                    "type": "string",
+                    "description": "Initial message to send to the agent",
+                },
+                "display_name": {
+                    "type": "string",
+                    "description": "Human-readable display name",
+                },
+                "repos": {
+                    "type": "string",
+                    "description": 'JSON array of repo configs: [{"url": "https://...", "branch": "main"}]',
+                },
+                "model": {
+                    "type": "string",
+                    "description": "LLM model override (e.g., claude-sonnet-4-5)",
+                },
+            },
+            "required": ["session_name"],
+        },
+    )
+    async def acp_create_session(args: dict) -> dict:
+        """Create a new agentic session."""
         try:
+            session_name = args["session_name"]
+            initial_prompt = args.get("initial_prompt")
+            display_name = args.get("display_name")
+            repos_str = args.get("repos")
+            model = args.get("model")
+
             # Parse repos if provided
             repos_list = None
-            if repos:
+            if repos_str:
                 try:
-                    repos_list = json.loads(repos)
+                    repos_list = json.loads(repos_str)
                 except json.JSONDecodeError as e:
-                    return json.dumps(
-                        {
-                            "success": False,
-                            "error": f"Invalid repos JSON: {e}",
-                        },
+                    error = json.dumps(
+                        {"success": False, "error": f"Invalid repos JSON: {e}"},
                         indent=2,
                     )
+                    return {
+                        "content": [{"type": "text", "text": error}],
+                        "isError": True,
+                    }
 
             session = api_client.create_session(
                 session_name=session_name,
@@ -156,7 +172,7 @@ def create_backend_mcp_tools(
                 repos=repos_list,
                 model=model,
             )
-            return json.dumps(
+            result = json.dumps(
                 {
                     "success": True,
                     "message": f"Session '{session_name}' created successfully",
@@ -164,112 +180,126 @@ def create_backend_mcp_tools(
                 },
                 indent=2,
             )
+            return {"content": [{"type": "text", "text": result}]}
         except Exception as e:
-            logger.error(f"Error creating session {session_name}: {e}", exc_info=True)
-            return json.dumps({"success": False, "error": str(e)}, indent=2)
+            logger.error(f"Error creating session: {e}", exc_info=True)
+            error = json.dumps({"success": False, "error": str(e)}, indent=2)
+            return {"content": [{"type": "text", "text": error}], "isError": True}
 
     tools.append(acp_create_session)
 
-    @sdk_tool_decorator
-    def acp_stop_session(session_name: str) -> str:
-        """Stop a running agentic session.
-
-        Gracefully stops the specified session, cleaning up resources.
-
-        Use this to:
-        - Stop a session that has completed its work
-        - Clean up idle or stuck sessions
-        - Free resources
-
-        Args:
-            session_name: Name of the session to stop
-
-        Returns:
-            JSON string with confirmation
-        """
-        import json
-
+    # Tool 4: Stop Session
+    @sdk_tool_decorator(
+        "acp_stop_session",
+        (
+            "Stop a running agentic session. "
+            "Gracefully stops the specified session and cleans up resources."
+        ),
+        {
+            "type": "object",
+            "properties": {
+                "session_name": {
+                    "type": "string",
+                    "description": "Name of the session to stop",
+                }
+            },
+            "required": ["session_name"],
+        },
+    )
+    async def acp_stop_session(args: dict) -> dict:
+        """Stop a running agentic session."""
         try:
-            result = api_client.stop_session(session_name)
-            return json.dumps(
+            session_name = args["session_name"]
+            api_result = api_client.stop_session(session_name)
+            result = json.dumps(
                 {
                     "success": True,
                     "message": f"Session '{session_name}' stop initiated",
-                    "result": result,
+                    "result": api_result,
                 },
                 indent=2,
             )
+            return {"content": [{"type": "text", "text": result}]}
         except Exception as e:
-            logger.error(f"Error stopping session {session_name}: {e}", exc_info=True)
-            return json.dumps({"success": False, "error": str(e)}, indent=2)
+            logger.error(f"Error stopping session: {e}", exc_info=True)
+            error = json.dumps({"success": False, "error": str(e)}, indent=2)
+            return {"content": [{"type": "text", "text": error}], "isError": True}
 
     tools.append(acp_stop_session)
 
-    @sdk_tool_decorator
-    def acp_send_message(
-        session_name: str,
-        message: str,
-        thread_id: Optional[str] = None,
-    ) -> str:
-        """Send a message to an agentic session.
-
-        Sends a user message to the specified session, triggering a new agent run.
-
-        Use this to:
-        - Send commands or questions to a running session
-        - Continue a conversation with an agent
-        - Provide feedback or additional context
-
-        Args:
-            session_name: Name of the target session
-            message: Message content to send
-            thread_id: (optional) Thread ID for multi-threaded sessions
-
-        Returns:
-            JSON string with run metadata (runId, threadId)
-
-        Note: This is asynchronous - the agent will process the message in the background.
-        To see the response, you would need to monitor events (via frontend or logs).
-        """
-        import json
-
+    # Tool 5: Send Message
+    @sdk_tool_decorator(
+        "acp_send_message",
+        (
+            "Send a message to an agentic session. "
+            "Sends a user message to the specified session, triggering a new agent run. "
+            "This is asynchronous - the agent will process the message in the background."
+        ),
+        {
+            "type": "object",
+            "properties": {
+                "session_name": {
+                    "type": "string",
+                    "description": "Name of the session to send message to",
+                },
+                "message": {
+                    "type": "string",
+                    "description": "Message content to send",
+                },
+                "thread_id": {
+                    "type": "string",
+                    "description": "Optional thread ID for multi-threaded sessions",
+                },
+            },
+            "required": ["session_name", "message"],
+        },
+    )
+    async def acp_send_message(args: dict) -> dict:
+        """Send a message to an agentic session."""
         try:
-            result = api_client.send_message(
+            session_name = args["session_name"]
+            message = args["message"]
+            thread_id = args.get("thread_id")
+
+            api_result = api_client.send_message(
                 session_name=session_name,
                 message=message,
                 thread_id=thread_id,
             )
-            return json.dumps(
+            result = json.dumps(
                 {
                     "success": True,
                     "message": f"Message sent to session '{session_name}'",
-                    "run": result,
+                    "run": api_result,
                 },
                 indent=2,
             )
+            return {"content": [{"type": "text", "text": result}]}
         except Exception as e:
-            logger.error(
-                f"Error sending message to session {session_name}: {e}", exc_info=True
-            )
-            return json.dumps({"success": False, "error": str(e)}, indent=2)
+            logger.error(f"Error sending message: {e}", exc_info=True)
+            error = json.dumps({"success": False, "error": str(e)}, indent=2)
+            return {"content": [{"type": "text", "text": error}], "isError": True}
 
     tools.append(acp_send_message)
 
-    @sdk_tool_decorator
-    def acp_get_api_reference() -> str:
-        """Get comprehensive API reference documentation for the Ambient Code Platform backend.
-
-        Returns detailed information about available REST API endpoints, authentication,
-        request/response formats, and code examples. Use this when you need to:
-        - Generate code that calls the ACP backend API directly
-        - Create HTML dashboards, scripts, or integrations
-        - Understand API endpoints, payloads, and authentication
-
-        This is the authoritative reference for integrating with the platform programmatically.
-
-        Returns:
-            Comprehensive API documentation in markdown format
-        """
+    # Tool 6: Get API Reference
+    @sdk_tool_decorator(
+        "acp_get_api_reference",
+        (
+            "Get comprehensive API reference documentation for the Ambient Code Platform backend. "
+            "Returns detailed information about available REST API endpoints, authentication, "
+            "request/response formats, and code examples. Use this when you need to generate "
+            "code that calls the ACP backend API directly, create HTML dashboards, scripts, "
+            "or integrations."
+        ),
+        {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    )
+    async def acp_get_api_reference(args: dict) -> dict:
+        """Get comprehensive API reference documentation."""
         import os
 
         backend_url = os.getenv("BACKEND_API_URL", "http://backend:8080/api")
@@ -774,7 +804,7 @@ Sessions progress through these phases:
 
 Use these values when generating code or making API calls from this session.
 """
-        return docs
+        return {"content": [{"type": "text", "text": docs}]}
 
     tools.append(acp_get_api_reference)
 

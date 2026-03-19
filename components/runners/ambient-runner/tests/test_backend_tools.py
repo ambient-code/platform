@@ -343,9 +343,15 @@ class TestBackendMCPTools:
             create_backend_mcp_tools,
         )
 
-        # Mock the sdk_tool decorator
-        def mock_tool(func):
-            return func
+        # Mock the sdk_tool decorator (decorator factory pattern)
+        def mock_tool(name, description, schema):
+            def decorator(func):
+                func._tool_name = name
+                func._tool_description = description
+                func._tool_schema = schema
+                return func
+
+            return decorator
 
         # Create with valid client
         client = BackendAPIClient(
@@ -360,7 +366,7 @@ class TestBackendMCPTools:
         )  # 6 tools: list, get, create, stop, send_message, get_api_reference
 
         # Verify tool names
-        tool_names = [t.__name__ for t in tools]
+        tool_names = [t._tool_name for t in tools]
         assert "acp_list_sessions" in tool_names
         assert "acp_get_session" in tool_names
         assert "acp_create_session" in tool_names
@@ -378,15 +384,19 @@ class TestBackendMCPTools:
         monkeypatch.delenv("PROJECT_NAME", raising=False)
         monkeypatch.delenv("AGENTIC_SESSION_NAMESPACE", raising=False)
 
-        def mock_tool(func):
-            return func
+        def mock_tool(name, description, schema):
+            def decorator(func):
+                return func
+
+            return decorator
 
         tools = create_backend_mcp_tools(sdk_tool_decorator=mock_tool)
 
         assert tools == []
 
     @patch("urllib.request.urlopen")
-    def test_tool_execution_list_sessions(self, mock_urlopen, monkeypatch):
+    @pytest.mark.asyncio
+    async def test_tool_execution_list_sessions(self, mock_urlopen, monkeypatch):
         """Test executing the acp_list_sessions tool."""
         from ambient_runner.bridges.claude.backend_tools import (
             create_backend_mcp_tools,
@@ -402,21 +412,37 @@ class TestBackendMCPTools:
         mock_response.__enter__.return_value = mock_response
         mock_urlopen.return_value = mock_response
 
-        def mock_tool(func):
-            return func
+        def mock_tool(name, description, schema):
+            def decorator(func):
+                return func
+
+            return decorator
 
         client = BackendAPIClient()
         tools = create_backend_mcp_tools(sdk_tool_decorator=mock_tool, client=client)
 
-        list_tool = next(t for t in tools if t.__name__ == "acp_list_sessions")
-        result = list_tool(include_completed=False)
+        list_tool = (
+            next(
+                t
+                for t in tools
+                if hasattr(t, "_tool_name") and t._tool_name == "acp_list_sessions"
+            )
+            if any(hasattr(t, "_tool_name") for t in tools)
+            else next(t for t in tools if t.__name__ == "acp_list_sessions")
+        )
+        result = await list_tool({"include_completed": False})
 
-        result_data = json.loads(result)
+        # Extract text from content array
+        assert "content" in result
+        assert len(result["content"]) > 0
+        result_text = result["content"][0]["text"]
+        result_data = json.loads(result_text)
         assert result_data["success"] is True
         assert result_data["count"] == 1
         assert result_data["sessions"][0]["name"] == "session-1"
 
-    def test_api_reference_tool(self, monkeypatch):
+    @pytest.mark.asyncio
+    async def test_api_reference_tool(self, monkeypatch):
         """Test the acp_get_api_reference tool returns documentation."""
         from ambient_runner.bridges.claude.backend_tools import (
             create_backend_mcp_tools,
@@ -426,41 +452,57 @@ class TestBackendMCPTools:
         monkeypatch.setenv("PROJECT_NAME", "test-project")
         monkeypatch.setenv("BOT_TOKEN", "test-token-123")
 
-        def mock_tool(func):
-            return func
+        def mock_tool(name, description, schema):
+            def decorator(func):
+                return func
+
+            return decorator
 
         client = BackendAPIClient()
         tools = create_backend_mcp_tools(sdk_tool_decorator=mock_tool, client=client)
 
-        api_ref_tool = next(t for t in tools if t.__name__ == "acp_get_api_reference")
-        result = api_ref_tool()
+        api_ref_tool = (
+            next(
+                t
+                for t in tools
+                if hasattr(t, "_tool_name") and t._tool_name == "acp_get_api_reference"
+            )
+            if any(hasattr(t, "_tool_name") for t in tools)
+            else next(t for t in tools if t.__name__ == "acp_get_api_reference")
+        )
+        result = await api_ref_tool({})
+
+        # Extract text from content array
+        assert "content" in result
+        assert len(result["content"]) > 0
+        docs = result["content"][0]["text"]
 
         # Verify it returns markdown documentation
-        assert isinstance(result, str)
-        assert "# Ambient Code Platform API Reference" in result
-        assert "Base URL" in result
-        assert "http://test-backend:8080/api" in result
-        assert "test-project" in result
+        assert isinstance(docs, str)
+        assert "# Ambient Code Platform API Reference" in docs
+        assert "Base URL" in docs
+        assert "http://test-backend:8080/api" in docs
+        assert "test-project" in docs
 
         # Verify all endpoints are documented
-        assert "List Sessions" in result
-        assert "GET" in result
-        assert "/api/projects/{projectName}/agentic-sessions" in result
-        assert "Create Session" in result
-        assert "POST" in result
-        assert "Stop Session" in result
-        assert "Send Message" in result
+        assert "List Sessions" in docs
+        assert "GET" in docs
+        assert "/api/projects/{projectName}/agentic-sessions" in docs
+        assert "Create Session" in docs
+        assert "POST" in docs
+        assert "Stop Session" in docs
+        assert "Send Message" in docs
 
         # Verify code examples are included
-        assert "fetch(" in result
-        assert "const headers" in result
-        assert "Authorization" in result
-        assert "Bearer" in result
+        assert "fetch(" in docs
+        assert "const headers" in docs
+        assert "Authorization" in docs
+        assert "Bearer" in docs
 
         # Verify HTML example
-        assert "<button" in result
-        assert "onclick" in result
+        assert "<button" in docs
+        assert "onclick" in docs
 
         # Verify Python example
-        assert "import requests" in result
-        assert "def list_sessions()" in result
+        assert "import requests" in docs
+        assert "def list_sessions()" in docs
