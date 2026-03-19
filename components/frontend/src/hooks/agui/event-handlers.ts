@@ -76,6 +76,7 @@ export type EventHandlerCallbacks = {
   setIsRunActive: (active: boolean) => void
   currentRunIdRef: { current: string | null }
   hiddenMessageIdsRef: { current: Set<string> }
+  onFrontendToolCall?: (toolName: string, args: Record<string, unknown>) => Promise<string>
 }
 
 /**
@@ -515,6 +516,23 @@ function handleToolCallEnd(
     return state
   }
 
+  // Execute frontend tool if applicable
+  let toolResult: string | undefined = undefined
+  if (callbacks.onFrontendToolCall && toolCallName === 'open_in_browser') {
+    try {
+      const args = toolCallArgs ? JSON.parse(toolCallArgs) : {}
+      // Execute frontend tool asynchronously but don't wait (fire and forget)
+      // Result will be displayed to user directly, not sent back to backend
+      callbacks.onFrontendToolCall(toolCallName, args).catch((error) => {
+        console.error('[handleToolCallEnd] Frontend tool execution failed:', error)
+      })
+      toolResult = 'Frontend tool executing...'
+    } catch (error) {
+      console.error('[handleToolCallEnd] Failed to parse tool args:', error)
+      toolResult = `Error: Failed to execute frontend tool - ${error instanceof Error ? error.message : String(error)}`
+    }
+  }
+
   // Create completed tool call using @ag-ui/core ToolCall format
   const completedToolCall: PlatformToolCall = {
     id: toolCallId,
@@ -523,7 +541,7 @@ function handleToolCallEnd(
       name: toolCallName,
       arguments: toolCallArgs,
     },
-    result: undefined as string | undefined,
+    result: toolResult,
     status: 'completed' as const,
     parentToolUseId: parentToolUseId,
   }
