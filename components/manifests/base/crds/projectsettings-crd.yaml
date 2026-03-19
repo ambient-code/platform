@@ -74,6 +74,9 @@ spec:
                 type: integer
                 minimum: 0
                 description: "Number of group RoleBindings successfully created"
+              scheduledSessionRBACReady:
+                type: boolean
+                description: "Whether RBAC for scheduled session triggers is provisioned"
     additionalPrinterColumns:
     - name: Age
       type: date
