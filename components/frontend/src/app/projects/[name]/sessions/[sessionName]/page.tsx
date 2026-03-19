@@ -1540,6 +1540,7 @@ export default function ProjectSessionDetailPage({
                 agentName={agentName}
                 onAddRepository={handleOpenContextModal}
                 onUploadFile={handleOpenUploadModal}
+                projectName={projectName}
                 workflowSlot={
                   <WorkflowSelector
                     sessionPhase={session?.status?.phase}
@@ -1649,6 +1650,7 @@ export default function ProjectSessionDetailPage({
               activeTab={explorer.activeTab}
               onTabChange={explorer.setActiveTab}
               onClose={explorer.close}
+              projectName={projectName}
               directoryOptions={directoryOptions}
               selectedDirectory={selectedDirectory}
               onDirectoryChange={setSelectedDirectory}
