@@ -75,6 +75,7 @@ func TestAgentPost(t *testing.T) {
 	Expect(*agentOutput.Href).To(Equal(fmt.Sprintf("/api/ambient/v1/agents/%s", *agentOutput.Id)))
 
 	jwtToken := ctx.Value(openapi.ContextAccessToken)
+	var restyResp *resty.Response
 	restyResp, err = resty.R().
 		SetHeader("Content-Type", "application/json").
 		SetHeader("Authorization", fmt.Sprintf("Bearer %s", jwtToken)).
@@ -103,6 +104,7 @@ func TestAgentPatch(t *testing.T) {
 	Expect(*agentOutput.Href).To(Equal(fmt.Sprintf("/api/ambient/v1/agents/%s", *agentOutput.Id)))
 
 	jwtToken := ctx.Value(openapi.ContextAccessToken)
+	var restyResp *resty.Response
 	restyResp, err = resty.R().
 		SetHeader("Content-Type", "application/json").
 		SetHeader("Authorization", fmt.Sprintf("Bearer %s", jwtToken)).
