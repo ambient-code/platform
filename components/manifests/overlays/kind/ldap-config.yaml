@@ -5,7 +5,6 @@ metadata:
   labels:
     app: backend-api
 data:
-  LDAP_SRV_DOMAIN: "ipa.redhat.com"
   LDAP_URL: "ldaps://ipa.corp.redhat.com"
   LDAP_BASE_DN: "cn=users,cn=accounts,dc=ipa,dc=redhat,dc=com"
   LDAP_GROUP_BASE_DN: "cn=groups,cn=accounts,dc=ipa,dc=redhat,dc=com"
