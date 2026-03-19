@@ -36,6 +36,8 @@ type Client struct {
 
 type ClientOption func(*Client)
 
+// WithTimeout sets the timeout for regular HTTP API calls.
+// It intentionally does not apply to sseClient, which requires Timeout: 0 for streaming.
 func WithTimeout(timeout time.Duration) ClientOption {
 	return func(c *Client) {
 		c.httpClient.Timeout = timeout
