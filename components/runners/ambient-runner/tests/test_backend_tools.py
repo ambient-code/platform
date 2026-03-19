@@ -355,7 +355,9 @@ class TestBackendMCPTools:
         tools = create_backend_mcp_tools(sdk_tool_decorator=mock_tool, client=client)
 
         assert isinstance(tools, list)
-        assert len(tools) == 5  # 5 tools: list, get, create, stop, send_message
+        assert (
+            len(tools) == 6
+        )  # 6 tools: list, get, create, stop, send_message, get_api_reference
 
         # Verify tool names
         tool_names = [t.__name__ for t in tools]
@@ -364,6 +366,7 @@ class TestBackendMCPTools:
         assert "acp_create_session" in tool_names
         assert "acp_stop_session" in tool_names
         assert "acp_send_message" in tool_names
+        assert "acp_get_api_reference" in tool_names
 
     def test_create_backend_tools_returns_empty_when_no_env(self, monkeypatch):
         """Test that create_backend_mcp_tools returns empty list when env vars missing."""
@@ -412,3 +415,52 @@ class TestBackendMCPTools:
         assert result_data["success"] is True
         assert result_data["count"] == 1
         assert result_data["sessions"][0]["name"] == "session-1"
+
+    def test_api_reference_tool(self, monkeypatch):
+        """Test the acp_get_api_reference tool returns documentation."""
+        from ambient_runner.bridges.claude.backend_tools import (
+            create_backend_mcp_tools,
+        )
+
+        monkeypatch.setenv("BACKEND_API_URL", "http://test-backend:8080/api")
+        monkeypatch.setenv("PROJECT_NAME", "test-project")
+        monkeypatch.setenv("BOT_TOKEN", "test-token-123")
+
+        def mock_tool(func):
+            return func
+
+        client = BackendAPIClient()
+        tools = create_backend_mcp_tools(sdk_tool_decorator=mock_tool, client=client)
+
+        api_ref_tool = next(t for t in tools if t.__name__ == "acp_get_api_reference")
+        result = api_ref_tool()
+
+        # Verify it returns markdown documentation
+        assert isinstance(result, str)
+        assert "# Ambient Code Platform API Reference" in result
+        assert "Base URL" in result
+        assert "http://test-backend:8080/api" in result
+        assert "test-project" in result
+
+        # Verify all endpoints are documented
+        assert "List Sessions" in result
+        assert "GET" in result
+        assert "/api/projects/{projectName}/agentic-sessions" in result
+        assert "Create Session" in result
+        assert "POST" in result
+        assert "Stop Session" in result
+        assert "Send Message" in result
+
+        # Verify code examples are included
+        assert "fetch(" in result
+        assert "const headers" in result
+        assert "Authorization" in result
+        assert "Bearer" in result
+
+        # Verify HTML example
+        assert "<button" in result
+        assert "onclick" in result
+
+        # Verify Python example
+        assert "import requests" in result
+        assert "def list_sessions()" in result
