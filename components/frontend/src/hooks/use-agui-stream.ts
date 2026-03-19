@@ -16,6 +16,7 @@ import { processAGUIEvent } from './agui/event-handlers'
 import type { EventHandlerCallbacks } from './agui/event-handlers'
 import { initialState } from './agui/types'
 import type { UseAGUIStreamOptions, UseAGUIStreamReturn } from './agui/types'
+import { frontendTools, executeFrontendTool } from '@/lib/frontend-tools'
 
 // Re-export types so existing consumers can import from this module
 export { initialState } from './agui/types'
@@ -80,6 +81,17 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
     }
   }, [])
 
+  // Execute frontend tool calls
+  const handleFrontendToolCall = useCallback(
+    async (toolName: string, args: Record<string, unknown>): Promise<string> => {
+      return executeFrontendTool(toolName, args, {
+        projectName,
+        sessionName,
+      })
+    },
+    [projectName, sessionName],
+  )
+
   // Process incoming AG-UI events
   const processEvent = useCallback(
     (event: PlatformEvent) => {
@@ -92,11 +104,12 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
         setIsRunActive,
         currentRunIdRef,
         hiddenMessageIdsRef,
+        onFrontendToolCall: handleFrontendToolCall,
       }
 
       setState((prev) => processAGUIEvent(prev, event, callbacks))
     },
-    [onEvent, onMessage, onError, onTraceId],
+    [onEvent, onMessage, onError, onTraceId, handleFrontendToolCall],
   )
 
   // Connect to the AG-UI event stream
@@ -297,6 +310,7 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
             threadId: state.threadId || sessionName,
             parentRunId: state.runId,
             messages: [userMessage],
+            tools: frontendTools,
           }),
         })
 

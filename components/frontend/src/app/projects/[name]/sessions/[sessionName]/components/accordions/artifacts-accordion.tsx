@@ -6,6 +6,7 @@ import { AccordionItem, AccordionTrigger, AccordionContent } from "@/components/
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { FileTree, type FileTreeNode } from "@/components/file-tree";
+import { FileContentViewer } from "@/components/file-content-viewer";
 
 type WorkspaceFile = {
   name: string;
@@ -122,11 +123,11 @@ export function ArtifactsAccordion({
                 </div>
               ) : viewingFile ? (
                 /* File content view */
-                <div className="text-xs">
-                  <pre className="bg-muted/50 p-2 rounded overflow-x-auto">
-                    <code>{viewingFile.content}</code>
-                  </pre>
-                </div>
+                <FileContentViewer
+                  fileName={viewingFile.path}
+                  content={viewingFile.content}
+                  onDownload={onDownloadFile}
+                />
               ) : files.length === 0 ? (
                 /* Empty state */
                 <div className="text-center py-4 text-sm text-muted-foreground">

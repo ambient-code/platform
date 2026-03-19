@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { FileTree, type FileTreeNode } from "@/components/file-tree";
+import { FileContentViewer } from "@/components/file-content-viewer";
 import type { DirectoryOption, GitStatusSummary } from "../../lib/types";
 import type { WorkspaceItem } from "@/services/api/workspace";
 
@@ -231,11 +232,11 @@ export function FilesTab({
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : viewingFile ? (
-          <div className="text-xs">
-            <pre className="bg-muted/50 p-2 rounded overflow-x-auto">
-              <code>{viewingFile.content}</code>
-            </pre>
-          </div>
+          <FileContentViewer
+            fileName={viewingFile.path.split('/').pop() || 'file'}
+            content={viewingFile.content}
+            onDownload={onDownloadFile}
+          />
         ) : files.length === 0 ? (
           <div className="text-center py-4 text-sm text-muted-foreground">
             <FolderTree className="h-8 w-8 mx-auto mb-2 opacity-30" />
