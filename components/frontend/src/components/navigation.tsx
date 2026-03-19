@@ -24,10 +24,23 @@ export function Navigation({ feedbackUrl }: NavigationProps) {
   const isMobile = useIsMobile();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const handleLogout = () => {
-    // Redirect to oauth-proxy logout endpoint
-    // This clears the OpenShift OAuth session and redirects back to login
-    window.location.href = '/oauth/sign_out';
+  const handleLogout = async () => {
+    // In production with OAuth proxy: redirect to /oauth/sign_out
+    // In local development without OAuth proxy: reload the page to clear state
+    // Check if the OAuth proxy is available by testing the healthz endpoint
+    try {
+      const response = await fetch('/oauth/healthz', { method: 'HEAD' });
+      if (response.ok) {
+        // OAuth proxy is available - use the sign_out endpoint
+        window.location.href = '/oauth/sign_out';
+      } else {
+        // No OAuth proxy - just reload to clear client-side state
+        window.location.href = '/';
+      }
+    } catch {
+      // Network error or OAuth proxy not available - reload to clear state
+      window.location.href = '/';
+    }
   };
 
   const handleMobileNav = (path: string) => {
