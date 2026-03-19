@@ -6,12 +6,6 @@ vi.mock('@/services/queries/use-workspace', () => ({
   useWorkspaceFile: vi.fn(),
 }));
 
-vi.mock('highlight.js', () => ({
-  default: {
-    highlightElement: vi.fn(),
-  },
-}));
-
 import { useWorkspaceFile } from '@/services/queries/use-workspace';
 
 const mockUseWorkspaceFile = vi.mocked(useWorkspaceFile);
@@ -50,7 +44,7 @@ describe('FileViewer', () => {
     expect(screen.getByText('File not found')).toBeDefined();
   });
 
-  it('renders file content with line numbers', () => {
+  it('renders file content using FileContentViewer', () => {
     const content = 'const a = 1;\nconst b = 2;\nconst c = 3;';
     mockUseWorkspaceFile.mockReturnValue({
       data: content,
@@ -60,17 +54,12 @@ describe('FileViewer', () => {
 
     const { container } = render(<FileViewer {...defaultProps} />);
 
-    // Verify line numbers are rendered
-    expect(screen.getByText('1')).toBeDefined();
-    expect(screen.getByText('2')).toBeDefined();
-    expect(screen.getByText('3')).toBeDefined();
-
     // Verify the file content is rendered inside <code>
     const codeElement = container.querySelector('code');
     expect(codeElement?.textContent).toBe(content);
   });
 
-  it('renders file path and language badge', () => {
+  it('renders file path in header', () => {
     mockUseWorkspaceFile.mockReturnValue({
       data: 'const x = 1;',
       isLoading: false,
@@ -80,7 +69,6 @@ describe('FileViewer', () => {
     render(<FileViewer {...defaultProps} filePath="src/app.tsx" />);
 
     expect(screen.getByText('src/app.tsx')).toBeDefined();
-    expect(screen.getByText('typescript')).toBeDefined();
   });
 
   it('renders download button', () => {
@@ -92,6 +80,20 @@ describe('FileViewer', () => {
 
     render(<FileViewer {...defaultProps} />);
 
-    expect(screen.getByRole('button', { name: 'Download file' })).toBeDefined();
+    // Should have at least one download button
+    const downloadButtons = screen.getAllByRole('button', { name: /download/i });
+    expect(downloadButtons.length).toBeGreaterThan(0);
+  });
+
+  it('renders no content state when content is undefined', () => {
+    mockUseWorkspaceFile.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      error: null,
+    } as ReturnType<typeof useWorkspaceFile>);
+
+    render(<FileViewer {...defaultProps} />);
+
+    expect(screen.getByText('No content available')).toBeDefined();
   });
 });
