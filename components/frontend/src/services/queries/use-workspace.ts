@@ -45,7 +45,7 @@ export function useWorkspaceFile(
   projectName: string,
   sessionName: string,
   path: string,
-  options?: { enabled?: boolean; refetchInterval?: number | false }
+  options?: { enabled?: boolean; refetchInterval?: number | false; refetchOnMount?: boolean }
 ) {
   return useQuery({
     queryKey: workspaceKeys.file(projectName, sessionName, path),
@@ -53,6 +53,7 @@ export function useWorkspaceFile(
     enabled: !!projectName && !!sessionName && !!path && (options?.enabled ?? true),
     staleTime: 10 * 1000, // 10 seconds
     refetchInterval: options?.refetchInterval,
+    refetchOnMount: options?.refetchOnMount,
   });
 }
 

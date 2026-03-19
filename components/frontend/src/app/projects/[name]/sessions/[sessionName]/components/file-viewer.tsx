@@ -73,6 +73,10 @@ export function FileViewer({
     error,
     refetch,
   } = useWorkspaceFile(projectName, sessionName, filePath, {
+    // Refetch when tab is first opened
+    refetchOnMount: true,
+    // Only poll while actively viewing this file tab (component is mounted) AND session is running
+    // Automatically stops when switching to another tab (component unmounts)
     refetchInterval: sessionPhase === "Running" ? 5000 : false,
   });
 
