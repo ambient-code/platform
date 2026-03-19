@@ -52,6 +52,7 @@ export type AgenticSessionSpec = {
   inactivityTimeout?: number;
   displayName?: string;
   project?: string;
+  userContext?: UserContext;
   environmentVariables?: Record<string, string>;
   repos?: SessionRepo[];
   mainRepoIndex?: number;

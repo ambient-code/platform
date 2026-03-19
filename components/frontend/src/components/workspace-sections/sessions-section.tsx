@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { formatDistanceToNow } from 'date-fns';
-import { Plus, RefreshCw, MoreVertical, Square, Trash2, ArrowRight, Brain, Search, Pencil, Clock, Cpu, MessageSquare, NotepadText } from 'lucide-react';
+import { Plus, RefreshCw, MoreVertical, Square, Trash2, ArrowRight, Brain, Search, Pencil, Clock, Cpu, MessageSquare, NotepadText, User } from 'lucide-react';
 import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
@@ -254,7 +254,8 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
                     <TableHead>Status</TableHead>
                     <TableHead className="hidden md:table-cell">Model</TableHead>
                     <TableHead className="hidden lg:table-cell">Created</TableHead>
-                    <TableHead className="hidden xl:table-cell">Artifacts</TableHead>
+                    <TableHead className="hidden xl:table-cell">Creator</TableHead>
+                    <TableHead className="hidden 2xl:table-cell">Artifacts</TableHead>
                     <TableHead className="w-[50px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -311,6 +312,12 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
                                       <span>{formatDistanceToNow(new Date(session.metadata.creationTimestamp), { addSuffix: true })}</span>
                                     </div>
                                   )}
+                                  {session.spec.userContext && (
+                                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                      <User className="h-3 w-3" />
+                                      <span>{session.spec.userContext.displayName || session.spec.userContext.userId}</span>
+                                    </div>
+                                  )}
                                   {session.spec.initialPrompt && (
                                     <div className="flex items-start gap-1.5 text-xs text-muted-foreground pt-1">
                                       <MessageSquare className="h-3 w-3 mt-0.5 shrink-0" />
@@ -348,6 +355,11 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
                             formatDistanceToNow(new Date(session.metadata.creationTimestamp), { addSuffix: true })}
                         </TableCell>
                         <TableCell className="hidden xl:table-cell">
+                          <div className="text-sm text-muted-foreground truncate max-w-[140px]">
+                            {session.spec.userContext?.displayName || session.spec.userContext?.userId || '—'}
+                          </div>
+                        </TableCell>
+                        <TableCell className="hidden 2xl:table-cell">
                           <ArtifactCountCell projectName={projectName} sessionName={sessionName} />
                         </TableCell>
                         <TableCell>
