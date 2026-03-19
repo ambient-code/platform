@@ -14,43 +14,17 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useRunnerTypes } from "@/services/queries/use-runner-types";
+import { useModels } from "@/services/queries/use-models";
 
 type ModelOption = {
   id: string;
   name: string;
 };
 
-const MODELS_BY_RUNNER: Record<string, ModelOption[]> = {
-  "claude-code": [
-    { id: "claude-haiku-4-5", name: "Claude Haiku 4.5" },
-    { id: "claude-sonnet-4-5", name: "Claude Sonnet 4.5" },
-    { id: "claude-opus-4-5", name: "Claude Opus 4.5" },
-  ],
-  "claude-agent-sdk": [
-    { id: "claude-haiku-4-5", name: "Claude Haiku 4.5" },
-    { id: "claude-sonnet-4-5", name: "Claude Sonnet 4.5" },
-    { id: "claude-opus-4-5", name: "Claude Opus 4.5" },
-  ],
-  "gemini-cli": [
-    { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash" },
-    { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro" },
-  ],
-  "openai-codex": [
-    { id: "gpt-4o", name: "GPT-4o" },
-    { id: "gpt-4.1", name: "GPT-4.1" },
-  ],
-  amp: [
-    { id: "claude-sonnet-4-5", name: "Claude Sonnet 4.5" },
-    { id: "gpt-4o", name: "GPT-4o" },
-  ],
-};
-
-function getModelsForRunner(runnerId: string): ModelOption[] {
-  return MODELS_BY_RUNNER[runnerId] ?? [{ id: "default", name: "Default" }];
-}
-
-function getDefaultModel(runnerId: string): string {
-  const models = getModelsForRunner(runnerId);
+function getDefaultModel(models: ModelOption[], defaultModelId?: string): string {
+  if (defaultModelId && models.some((m) => m.id === defaultModelId)) {
+    return defaultModelId;
+  }
   return models[1]?.id ?? models[0]?.id ?? "default";
 }
 
@@ -60,6 +34,48 @@ type RunnerModelSelectorProps = {
   selectedModel: string;
   onSelect: (runner: string, model: string) => void;
 };
+
+type RunnerModelsRadioGroupProps = {
+  projectName: string;
+  runner: { id: string; provider: string };
+  selectedRunner: string;
+  selectedModel: string;
+  onSelect: (runner: string, model: string) => void;
+};
+
+function RunnerModelsRadioGroup({
+  projectName,
+  runner,
+  selectedRunner,
+  selectedModel,
+  onSelect,
+}: RunnerModelsRadioGroupProps) {
+  // Fetch models for this specific runner's provider
+  const { data: modelsData } = useModels(projectName, true, runner.provider);
+
+  const models = modelsData?.models.map((m) => ({ id: m.id, name: m.label })) ?? [];
+
+  if (models.length === 0) {
+    return (
+      <div className="px-2 py-4 text-center text-sm text-muted-foreground">
+        No models available
+      </div>
+    );
+  }
+
+  return (
+    <DropdownMenuRadioGroup
+      value={selectedRunner === runner.id ? selectedModel : ""}
+      onValueChange={(modelId) => onSelect(runner.id, modelId)}
+    >
+      {models.map((model) => (
+        <DropdownMenuRadioItem key={model.id} value={model.id}>
+          {model.name}
+        </DropdownMenuRadioItem>
+      ))}
+    </DropdownMenuRadioGroup>
+  );
+}
 
 export function RunnerModelSelector({
   projectName,
@@ -74,7 +90,14 @@ export function RunnerModelSelector({
   const currentRunner = runners.find((r) => r.id === selectedRunner);
   const currentRunnerName = currentRunner?.displayName ?? selectedRunner;
 
-  const models = useMemo(() => getModelsForRunner(selectedRunner), [selectedRunner]);
+  // Fetch models from API filtered by the current runner's provider.
+  // models.json is the single source of truth — no hardcoded fallback lists.
+  const { data: modelsData } = useModels(projectName, true, currentRunner?.provider);
+
+  const models = useMemo(() => {
+    return modelsData?.models.map((m) => ({ id: m.id, name: m.label })) ?? [];
+  }, [modelsData]);
+
   const currentModel = models.find((m) => m.id === selectedModel);
   const currentModelName = currentModel?.name ?? selectedModel;
 
@@ -93,26 +116,20 @@ export function RunnerModelSelector({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" side="top" sideOffset={4}>
-        {runners.map((runner) => {
-          const runnerModels = getModelsForRunner(runner.id);
-          return (
-            <DropdownMenuSub key={runner.id}>
-              <DropdownMenuSubTrigger>{runner.displayName}</DropdownMenuSubTrigger>
-              <DropdownMenuSubContent>
-                <DropdownMenuRadioGroup
-                  value={selectedRunner === runner.id ? selectedModel : ""}
-                  onValueChange={(modelId) => onSelect(runner.id, modelId)}
-                >
-                  {runnerModels.map((model) => (
-                    <DropdownMenuRadioItem key={model.id} value={model.id}>
-                      {model.name}
-                    </DropdownMenuRadioItem>
-                  ))}
-                </DropdownMenuRadioGroup>
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
-          );
-        })}
+        {runners.map((runner) => (
+          <DropdownMenuSub key={runner.id}>
+            <DropdownMenuSubTrigger>{runner.displayName}</DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              <RunnerModelsRadioGroup
+                projectName={projectName}
+                runner={runner}
+                selectedRunner={selectedRunner}
+                selectedModel={selectedModel}
+                onSelect={onSelect}
+              />
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+        ))}
         {runners.length === 0 && (
           <div className="px-2 py-4 text-center text-sm text-muted-foreground">
             No runner types available
@@ -123,4 +140,4 @@ export function RunnerModelSelector({
   );
 }
 
-export { getDefaultModel, getModelsForRunner };
+export { getDefaultModel };

@@ -21,6 +21,7 @@ import { RunnerModelSelector, getDefaultModel } from "./runner-model-selector";
 import { WorkflowSelector } from "./workflow-selector";
 import { AddContextModal } from "./modals/add-context-modal";
 import { useRunnerTypes } from "@/services/queries/use-runner-types";
+import { useModels } from "@/services/queries/use-models";
 import { DEFAULT_RUNNER_TYPE_ID } from "@/services/api/runner-types";
 import type { WorkflowConfig } from "../lib/types";
 
@@ -54,18 +55,32 @@ export function NewSessionView({
 
   const [prompt, setPrompt] = useState("");
   const [selectedRunner, setSelectedRunner] = useState<string>(DEFAULT_RUNNER_TYPE_ID);
-  const [selectedModel, setSelectedModel] = useState(() =>
-    getDefaultModel(DEFAULT_RUNNER_TYPE_ID)
+  const [selectedModel, setSelectedModel] = useState<string>("");
+
+  const currentRunner = runnerTypes?.find((r) => r.id === selectedRunner);
+
+  // Fetch models for the selected runner's provider
+  // Enabled as soon as projectName is available - provider filter is optional
+  const { data: modelsData } = useModels(
+    projectName,
+    !!projectName,
+    currentRunner?.provider
   );
+
+  // Set default model when models load
+  useEffect(() => {
+    if (modelsData?.defaultModel && !selectedModel) {
+      setSelectedModel(modelsData.defaultModel);
+    }
+  }, [modelsData?.defaultModel, selectedModel]);
 
   // Once runner types load, default to the first available if current selection isn't available
   useEffect(() => {
     if (runnerTypes && runnerTypes.length > 0) {
       const isCurrentAvailable = runnerTypes.some((r) => r.id === selectedRunner);
       if (!isCurrentAvailable) {
-        const firstRunner = runnerTypes[0].id;
-        setSelectedRunner(firstRunner);
-        setSelectedModel(getDefaultModel(firstRunner));
+        setSelectedRunner(runnerTypes[0].id);
+        // Model will be set by the modelsData effect above
       }
     }
   }, [runnerTypes, selectedRunner]);
