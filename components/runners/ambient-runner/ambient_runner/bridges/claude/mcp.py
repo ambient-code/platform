@@ -55,6 +55,7 @@ def build_mcp_servers(
         load_rubric_content,
     )
     from ambient_runner.bridges.claude.corrections import create_correction_mcp_tool
+    from ambient_runner.bridges.claude.backend_tools import create_backend_mcp_tools
 
     mcp_servers = load_mcp_config(context, cwd_path) or {}
 
@@ -102,6 +103,18 @@ def build_mcp_servers(
         )
         mcp_servers["corrections"] = correction_server
         logger.info("Added corrections feedback MCP tool (log_correction)")
+
+    # Backend API tools (session management)
+    backend_tools = create_backend_mcp_tools(sdk_tool_decorator=sdk_tool)
+    if backend_tools:
+        backend_server = create_sdk_mcp_server(
+            name="acp", version="1.0.0", tools=backend_tools
+        )
+        mcp_servers["acp"] = backend_server
+        tool_names = [t.__name__ for t in backend_tools]
+        logger.info(
+            f"Added backend API MCP tools ({len(backend_tools)}): {', '.join(tool_names)}"
+        )
 
     return mcp_servers
 
