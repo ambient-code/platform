@@ -88,8 +88,21 @@ Class | Method | HTTP request | Description
 *DefaultAPI* | [**ApiAmbientV1ProjectSettingsIdPatch**](docs/DefaultAPI.md#apiambientv1projectsettingsidpatch) | **Patch** /api/ambient/v1/project_settings/{id} | Update a project settings
 *DefaultAPI* | [**ApiAmbientV1ProjectSettingsPost**](docs/DefaultAPI.md#apiambientv1projectsettingspost) | **Post** /api/ambient/v1/project_settings | Create a new project settings
 *DefaultAPI* | [**ApiAmbientV1ProjectsGet**](docs/DefaultAPI.md#apiambientv1projectsget) | **Get** /api/ambient/v1/projects | Returns a list of projects
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdAgentsGet**](docs/DefaultAPI.md#apiambientv1projectsidagentsget) | **Get** /api/ambient/v1/projects/{id}/agents | Returns a list of project agents in a project
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdAgentsPaIdDelete**](docs/DefaultAPI.md#apiambientv1projectsidagentspaiddelete) | **Delete** /api/ambient/v1/projects/{id}/agents/{pa_id} | Remove an agent from a project
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdAgentsPaIdGet**](docs/DefaultAPI.md#apiambientv1projectsidagentspaidget) | **Get** /api/ambient/v1/projects/{id}/agents/{pa_id} | Get a project agent by id
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdAgentsPaIdIgnitePost**](docs/DefaultAPI.md#apiambientv1projectsidagentspaidignitepost) | **Post** /api/ambient/v1/projects/{id}/agents/{pa_id}/ignite | Ignite a project agent — creates a Session (idempotent)
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdAgentsPaIdIgnitionGet**](docs/DefaultAPI.md#apiambientv1projectsidagentspaidignitionget) | **Get** /api/ambient/v1/projects/{id}/agents/{pa_id}/ignition | Preview ignition context (dry run — no session created)
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdAgentsPaIdInboxGet**](docs/DefaultAPI.md#apiambientv1projectsidagentspaidinboxget) | **Get** /api/ambient/v1/projects/{id}/agents/{pa_id}/inbox | Read inbox messages for a project agent (unread first)
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdAgentsPaIdInboxMsgIdDelete**](docs/DefaultAPI.md#apiambientv1projectsidagentspaidinboxmsgiddelete) | **Delete** /api/ambient/v1/projects/{id}/agents/{pa_id}/inbox/{msg_id} | Delete an inbox message
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdAgentsPaIdInboxMsgIdPatch**](docs/DefaultAPI.md#apiambientv1projectsidagentspaidinboxmsgidpatch) | **Patch** /api/ambient/v1/projects/{id}/agents/{pa_id}/inbox/{msg_id} | Mark an inbox message as read
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdAgentsPaIdInboxPost**](docs/DefaultAPI.md#apiambientv1projectsidagentspaidinboxpost) | **Post** /api/ambient/v1/projects/{id}/agents/{pa_id}/inbox | Send a message to a project agent&#39;s inbox
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdAgentsPaIdPatch**](docs/DefaultAPI.md#apiambientv1projectsidagentspaidpatch) | **Patch** /api/ambient/v1/projects/{id}/agents/{pa_id} | Update a project agent (e.g. re-pin to a newer agent version)
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdAgentsPaIdSessionsGet**](docs/DefaultAPI.md#apiambientv1projectsidagentspaidsessionsget) | **Get** /api/ambient/v1/projects/{id}/agents/{pa_id}/sessions | Get session run history for a project agent
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdAgentsPost**](docs/DefaultAPI.md#apiambientv1projectsidagentspost) | **Post** /api/ambient/v1/projects/{id}/agents | Add an agent to a project (create ProjectAgent)
 *DefaultAPI* | [**ApiAmbientV1ProjectsIdDelete**](docs/DefaultAPI.md#apiambientv1projectsiddelete) | **Delete** /api/ambient/v1/projects/{id} | Delete a project by id
 *DefaultAPI* | [**ApiAmbientV1ProjectsIdGet**](docs/DefaultAPI.md#apiambientv1projectsidget) | **Get** /api/ambient/v1/projects/{id} | Get a project by id
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdHomeGet**](docs/DefaultAPI.md#apiambientv1projectsidhomeget) | **Get** /api/ambient/v1/projects/{id}/home | Project home — latest status for every ProjectAgent in this project
 *DefaultAPI* | [**ApiAmbientV1ProjectsIdPatch**](docs/DefaultAPI.md#apiambientv1projectsidpatch) | **Patch** /api/ambient/v1/projects/{id} | Update a project
 *DefaultAPI* | [**ApiAmbientV1ProjectsPost**](docs/DefaultAPI.md#apiambientv1projectspost) | **Post** /api/ambient/v1/projects | Create a new project
 *DefaultAPI* | [**ApiAmbientV1RoleBindingsGet**](docs/DefaultAPI.md#apiambientv1rolebindingsget) | **Get** /api/ambient/v1/role_bindings | Returns a list of roleBindings
@@ -122,9 +135,20 @@ Class | Method | HTTP request | Description
  - [AgentList](docs/AgentList.md)
  - [AgentPatchRequest](docs/AgentPatchRequest.md)
  - [Error](docs/Error.md)
+ - [IgniteRequest](docs/IgniteRequest.md)
+ - [IgniteResponse](docs/IgniteResponse.md)
+ - [InboxMessage](docs/InboxMessage.md)
+ - [InboxMessageList](docs/InboxMessageList.md)
+ - [InboxMessagePatchRequest](docs/InboxMessagePatchRequest.md)
  - [List](docs/List.md)
  - [ObjectReference](docs/ObjectReference.md)
  - [Project](docs/Project.md)
+ - [ProjectAgent](docs/ProjectAgent.md)
+ - [ProjectAgentList](docs/ProjectAgentList.md)
+ - [ProjectAgentPatchRequest](docs/ProjectAgentPatchRequest.md)
+ - [ProjectAgentSessionList](docs/ProjectAgentSessionList.md)
+ - [ProjectHome](docs/ProjectHome.md)
+ - [ProjectHomeAgent](docs/ProjectHomeAgent.md)
  - [ProjectList](docs/ProjectList.md)
  - [ProjectPatchRequest](docs/ProjectPatchRequest.md)
  - [ProjectSettings](docs/ProjectSettings.md)

@@ -26,6 +26,8 @@ Name | Type | Description | Notes
 **EnvironmentVariables** | Pointer to **string** |  | [optional] 
 **Labels** | Pointer to **string** |  | [optional] 
 **Annotations** | Pointer to **string** |  | [optional] 
+**ProjectAgentId** | Pointer to **string** | The ProjectAgent that owns this session. Immutable after creation. | [optional] 
+**TriggeredByUserId** | Pointer to **string** | User who pressed ignite | [optional] [readonly] 
 **ProjectId** | Pointer to **string** | Immutable after creation. Set at creation time only. | [optional] 
 **Phase** | Pointer to **string** |  | [optional] [readonly] 
 **StartTime** | Pointer to **time.Time** |  | [optional] [readonly] 
@@ -602,6 +604,56 @@ SetAnnotations sets Annotations field to given value.
 `func (o *Session) HasAnnotations() bool`
 
 HasAnnotations returns a boolean if a field has been set.
+
+### GetProjectAgentId
+
+`func (o *Session) GetProjectAgentId() string`
+
+GetProjectAgentId returns the ProjectAgentId field if non-nil, zero value otherwise.
+
+### GetProjectAgentIdOk
+
+`func (o *Session) GetProjectAgentIdOk() (*string, bool)`
+
+GetProjectAgentIdOk returns a tuple with the ProjectAgentId field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetProjectAgentId
+
+`func (o *Session) SetProjectAgentId(v string)`
+
+SetProjectAgentId sets ProjectAgentId field to given value.
+
+### HasProjectAgentId
+
+`func (o *Session) HasProjectAgentId() bool`
+
+HasProjectAgentId returns a boolean if a field has been set.
+
+### GetTriggeredByUserId
+
+`func (o *Session) GetTriggeredByUserId() string`
+
+GetTriggeredByUserId returns the TriggeredByUserId field if non-nil, zero value otherwise.
+
+### GetTriggeredByUserIdOk
+
+`func (o *Session) GetTriggeredByUserIdOk() (*string, bool)`
+
+GetTriggeredByUserIdOk returns a tuple with the TriggeredByUserId field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetTriggeredByUserId
+
+`func (o *Session) SetTriggeredByUserId(v string)`
+
+SetTriggeredByUserId sets TriggeredByUserId field to given value.
+
+### HasTriggeredByUserId
+
+`func (o *Session) HasTriggeredByUserId() bool`
+
+HasTriggeredByUserId returns a boolean if a field has been set.
 
 ### GetProjectId
 

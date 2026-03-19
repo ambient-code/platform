@@ -14,8 +14,21 @@ Method | HTTP request | Description
 [**ApiAmbientV1ProjectSettingsIdPatch**](DefaultAPI.md#ApiAmbientV1ProjectSettingsIdPatch) | **Patch** /api/ambient/v1/project_settings/{id} | Update a project settings
 [**ApiAmbientV1ProjectSettingsPost**](DefaultAPI.md#ApiAmbientV1ProjectSettingsPost) | **Post** /api/ambient/v1/project_settings | Create a new project settings
 [**ApiAmbientV1ProjectsGet**](DefaultAPI.md#ApiAmbientV1ProjectsGet) | **Get** /api/ambient/v1/projects | Returns a list of projects
+[**ApiAmbientV1ProjectsIdAgentsGet**](DefaultAPI.md#ApiAmbientV1ProjectsIdAgentsGet) | **Get** /api/ambient/v1/projects/{id}/agents | Returns a list of project agents in a project
+[**ApiAmbientV1ProjectsIdAgentsPaIdDelete**](DefaultAPI.md#ApiAmbientV1ProjectsIdAgentsPaIdDelete) | **Delete** /api/ambient/v1/projects/{id}/agents/{pa_id} | Remove an agent from a project
+[**ApiAmbientV1ProjectsIdAgentsPaIdGet**](DefaultAPI.md#ApiAmbientV1ProjectsIdAgentsPaIdGet) | **Get** /api/ambient/v1/projects/{id}/agents/{pa_id} | Get a project agent by id
+[**ApiAmbientV1ProjectsIdAgentsPaIdIgnitePost**](DefaultAPI.md#ApiAmbientV1ProjectsIdAgentsPaIdIgnitePost) | **Post** /api/ambient/v1/projects/{id}/agents/{pa_id}/ignite | Ignite a project agent — creates a Session (idempotent)
+[**ApiAmbientV1ProjectsIdAgentsPaIdIgnitionGet**](DefaultAPI.md#ApiAmbientV1ProjectsIdAgentsPaIdIgnitionGet) | **Get** /api/ambient/v1/projects/{id}/agents/{pa_id}/ignition | Preview ignition context (dry run — no session created)
+[**ApiAmbientV1ProjectsIdAgentsPaIdInboxGet**](DefaultAPI.md#ApiAmbientV1ProjectsIdAgentsPaIdInboxGet) | **Get** /api/ambient/v1/projects/{id}/agents/{pa_id}/inbox | Read inbox messages for a project agent (unread first)
+[**ApiAmbientV1ProjectsIdAgentsPaIdInboxMsgIdDelete**](DefaultAPI.md#ApiAmbientV1ProjectsIdAgentsPaIdInboxMsgIdDelete) | **Delete** /api/ambient/v1/projects/{id}/agents/{pa_id}/inbox/{msg_id} | Delete an inbox message
+[**ApiAmbientV1ProjectsIdAgentsPaIdInboxMsgIdPatch**](DefaultAPI.md#ApiAmbientV1ProjectsIdAgentsPaIdInboxMsgIdPatch) | **Patch** /api/ambient/v1/projects/{id}/agents/{pa_id}/inbox/{msg_id} | Mark an inbox message as read
+[**ApiAmbientV1ProjectsIdAgentsPaIdInboxPost**](DefaultAPI.md#ApiAmbientV1ProjectsIdAgentsPaIdInboxPost) | **Post** /api/ambient/v1/projects/{id}/agents/{pa_id}/inbox | Send a message to a project agent&#39;s inbox
+[**ApiAmbientV1ProjectsIdAgentsPaIdPatch**](DefaultAPI.md#ApiAmbientV1ProjectsIdAgentsPaIdPatch) | **Patch** /api/ambient/v1/projects/{id}/agents/{pa_id} | Update a project agent (e.g. re-pin to a newer agent version)
+[**ApiAmbientV1ProjectsIdAgentsPaIdSessionsGet**](DefaultAPI.md#ApiAmbientV1ProjectsIdAgentsPaIdSessionsGet) | **Get** /api/ambient/v1/projects/{id}/agents/{pa_id}/sessions | Get session run history for a project agent
+[**ApiAmbientV1ProjectsIdAgentsPost**](DefaultAPI.md#ApiAmbientV1ProjectsIdAgentsPost) | **Post** /api/ambient/v1/projects/{id}/agents | Add an agent to a project (create ProjectAgent)
 [**ApiAmbientV1ProjectsIdDelete**](DefaultAPI.md#ApiAmbientV1ProjectsIdDelete) | **Delete** /api/ambient/v1/projects/{id} | Delete a project by id
 [**ApiAmbientV1ProjectsIdGet**](DefaultAPI.md#ApiAmbientV1ProjectsIdGet) | **Get** /api/ambient/v1/projects/{id} | Get a project by id
+[**ApiAmbientV1ProjectsIdHomeGet**](DefaultAPI.md#ApiAmbientV1ProjectsIdHomeGet) | **Get** /api/ambient/v1/projects/{id}/home | Project home — latest status for every ProjectAgent in this project
 [**ApiAmbientV1ProjectsIdPatch**](DefaultAPI.md#ApiAmbientV1ProjectsIdPatch) | **Patch** /api/ambient/v1/projects/{id} | Update a project
 [**ApiAmbientV1ProjectsPost**](DefaultAPI.md#ApiAmbientV1ProjectsPost) | **Post** /api/ambient/v1/projects | Create a new project
 [**ApiAmbientV1RoleBindingsGet**](DefaultAPI.md#ApiAmbientV1RoleBindingsGet) | **Get** /api/ambient/v1/role_bindings | Returns a list of roleBindings
@@ -272,7 +285,7 @@ import (
 )
 
 func main() {
-	agent := *openapiclient.NewAgent("ProjectId_example", "OwnerUserId_example", "Name_example") // Agent | Agent data
+	agent := *openapiclient.NewAgent("Name_example", "OwnerUserId_example") // Agent | Agent data
 
 	configuration := openapiclient.NewConfiguration()
 	apiClient := openapiclient.NewAPIClient(configuration)
@@ -729,6 +742,884 @@ Name | Type | Description  | Notes
 [[Back to README]](../README.md)
 
 
+## ApiAmbientV1ProjectsIdAgentsGet
+
+> ProjectAgentList ApiAmbientV1ProjectsIdAgentsGet(ctx, id).Page(page).Size(size).Search(search).OrderBy(orderBy).Fields(fields).Execute()
+
+Returns a list of project agents in a project
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	id := "id_example" // string | The id of record
+	page := int32(56) // int32 | Page number of record list when record list exceeds specified page size (optional) (default to 1)
+	size := int32(56) // int32 | Maximum number of records to return (optional) (default to 100)
+	search := "search_example" // string | Specifies the search criteria (optional)
+	orderBy := "orderBy_example" // string | Specifies the order by criteria (optional)
+	fields := "fields_example" // string | Supplies a comma-separated list of fields to be returned (optional)
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1ProjectsIdAgentsGet(context.Background(), id).Page(page).Size(size).Search(search).OrderBy(orderBy).Fields(fields).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ProjectsIdAgentsGet``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `ApiAmbientV1ProjectsIdAgentsGet`: ProjectAgentList
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1ProjectsIdAgentsGet`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**id** | **string** | The id of record | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiApiAmbientV1ProjectsIdAgentsGetRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+ **page** | **int32** | Page number of record list when record list exceeds specified page size | [default to 1]
+ **size** | **int32** | Maximum number of records to return | [default to 100]
+ **search** | **string** | Specifies the search criteria | 
+ **orderBy** | **string** | Specifies the order by criteria | 
+ **fields** | **string** | Supplies a comma-separated list of fields to be returned | 
+
+### Return type
+
+[**ProjectAgentList**](ProjectAgentList.md)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## ApiAmbientV1ProjectsIdAgentsPaIdDelete
+
+> ApiAmbientV1ProjectsIdAgentsPaIdDelete(ctx, id, paId).Execute()
+
+Remove an agent from a project
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	id := "id_example" // string | The id of record
+	paId := "paId_example" // string | The id of the project agent
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	r, err := apiClient.DefaultAPI.ApiAmbientV1ProjectsIdAgentsPaIdDelete(context.Background(), id, paId).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ProjectsIdAgentsPaIdDelete``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**id** | **string** | The id of record | 
+**paId** | **string** | The id of the project agent | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiApiAmbientV1ProjectsIdAgentsPaIdDeleteRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+
+
+### Return type
+
+ (empty response body)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## ApiAmbientV1ProjectsIdAgentsPaIdGet
+
+> ProjectAgent ApiAmbientV1ProjectsIdAgentsPaIdGet(ctx, id, paId).Execute()
+
+Get a project agent by id
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	id := "id_example" // string | The id of record
+	paId := "paId_example" // string | The id of the project agent
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1ProjectsIdAgentsPaIdGet(context.Background(), id, paId).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ProjectsIdAgentsPaIdGet``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `ApiAmbientV1ProjectsIdAgentsPaIdGet`: ProjectAgent
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1ProjectsIdAgentsPaIdGet`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**id** | **string** | The id of record | 
+**paId** | **string** | The id of the project agent | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiApiAmbientV1ProjectsIdAgentsPaIdGetRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+
+
+### Return type
+
+[**ProjectAgent**](ProjectAgent.md)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## ApiAmbientV1ProjectsIdAgentsPaIdIgnitePost
+
+> IgniteResponse ApiAmbientV1ProjectsIdAgentsPaIdIgnitePost(ctx, id, paId).IgniteRequest(igniteRequest).Execute()
+
+Ignite a project agent — creates a Session (idempotent)
+
+
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	id := "id_example" // string | The id of record
+	paId := "paId_example" // string | The id of the project agent
+	igniteRequest := *openapiclient.NewIgniteRequest() // IgniteRequest | Optional ignition parameters (optional)
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1ProjectsIdAgentsPaIdIgnitePost(context.Background(), id, paId).IgniteRequest(igniteRequest).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ProjectsIdAgentsPaIdIgnitePost``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `ApiAmbientV1ProjectsIdAgentsPaIdIgnitePost`: IgniteResponse
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1ProjectsIdAgentsPaIdIgnitePost`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**id** | **string** | The id of record | 
+**paId** | **string** | The id of the project agent | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiApiAmbientV1ProjectsIdAgentsPaIdIgnitePostRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+
+ **igniteRequest** | [**IgniteRequest**](IgniteRequest.md) | Optional ignition parameters | 
+
+### Return type
+
+[**IgniteResponse**](IgniteResponse.md)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: application/json
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## ApiAmbientV1ProjectsIdAgentsPaIdIgnitionGet
+
+> IgniteResponse ApiAmbientV1ProjectsIdAgentsPaIdIgnitionGet(ctx, id, paId).Execute()
+
+Preview ignition context (dry run — no session created)
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	id := "id_example" // string | The id of record
+	paId := "paId_example" // string | The id of the project agent
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1ProjectsIdAgentsPaIdIgnitionGet(context.Background(), id, paId).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ProjectsIdAgentsPaIdIgnitionGet``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `ApiAmbientV1ProjectsIdAgentsPaIdIgnitionGet`: IgniteResponse
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1ProjectsIdAgentsPaIdIgnitionGet`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**id** | **string** | The id of record | 
+**paId** | **string** | The id of the project agent | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiApiAmbientV1ProjectsIdAgentsPaIdIgnitionGetRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+
+
+### Return type
+
+[**IgniteResponse**](IgniteResponse.md)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## ApiAmbientV1ProjectsIdAgentsPaIdInboxGet
+
+> InboxMessageList ApiAmbientV1ProjectsIdAgentsPaIdInboxGet(ctx, id, paId).Page(page).Size(size).Execute()
+
+Read inbox messages for a project agent (unread first)
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	id := "id_example" // string | The id of record
+	paId := "paId_example" // string | The id of the project agent
+	page := int32(56) // int32 | Page number of record list when record list exceeds specified page size (optional) (default to 1)
+	size := int32(56) // int32 | Maximum number of records to return (optional) (default to 100)
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1ProjectsIdAgentsPaIdInboxGet(context.Background(), id, paId).Page(page).Size(size).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ProjectsIdAgentsPaIdInboxGet``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `ApiAmbientV1ProjectsIdAgentsPaIdInboxGet`: InboxMessageList
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1ProjectsIdAgentsPaIdInboxGet`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**id** | **string** | The id of record | 
+**paId** | **string** | The id of the project agent | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiApiAmbientV1ProjectsIdAgentsPaIdInboxGetRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+
+ **page** | **int32** | Page number of record list when record list exceeds specified page size | [default to 1]
+ **size** | **int32** | Maximum number of records to return | [default to 100]
+
+### Return type
+
+[**InboxMessageList**](InboxMessageList.md)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## ApiAmbientV1ProjectsIdAgentsPaIdInboxMsgIdDelete
+
+> ApiAmbientV1ProjectsIdAgentsPaIdInboxMsgIdDelete(ctx, id, paId, msgId).Execute()
+
+Delete an inbox message
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	id := "id_example" // string | The id of record
+	paId := "paId_example" // string | The id of the project agent
+	msgId := "msgId_example" // string | The id of the inbox message
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	r, err := apiClient.DefaultAPI.ApiAmbientV1ProjectsIdAgentsPaIdInboxMsgIdDelete(context.Background(), id, paId, msgId).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ProjectsIdAgentsPaIdInboxMsgIdDelete``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**id** | **string** | The id of record | 
+**paId** | **string** | The id of the project agent | 
+**msgId** | **string** | The id of the inbox message | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiApiAmbientV1ProjectsIdAgentsPaIdInboxMsgIdDeleteRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+
+
+
+### Return type
+
+ (empty response body)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## ApiAmbientV1ProjectsIdAgentsPaIdInboxMsgIdPatch
+
+> InboxMessage ApiAmbientV1ProjectsIdAgentsPaIdInboxMsgIdPatch(ctx, id, paId, msgId).InboxMessagePatchRequest(inboxMessagePatchRequest).Execute()
+
+Mark an inbox message as read
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	id := "id_example" // string | The id of record
+	paId := "paId_example" // string | The id of the project agent
+	msgId := "msgId_example" // string | The id of the inbox message
+	inboxMessagePatchRequest := *openapiclient.NewInboxMessagePatchRequest() // InboxMessagePatchRequest | Inbox message patch
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1ProjectsIdAgentsPaIdInboxMsgIdPatch(context.Background(), id, paId, msgId).InboxMessagePatchRequest(inboxMessagePatchRequest).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ProjectsIdAgentsPaIdInboxMsgIdPatch``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `ApiAmbientV1ProjectsIdAgentsPaIdInboxMsgIdPatch`: InboxMessage
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1ProjectsIdAgentsPaIdInboxMsgIdPatch`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**id** | **string** | The id of record | 
+**paId** | **string** | The id of the project agent | 
+**msgId** | **string** | The id of the inbox message | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiApiAmbientV1ProjectsIdAgentsPaIdInboxMsgIdPatchRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+
+
+ **inboxMessagePatchRequest** | [**InboxMessagePatchRequest**](InboxMessagePatchRequest.md) | Inbox message patch | 
+
+### Return type
+
+[**InboxMessage**](InboxMessage.md)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: application/json
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## ApiAmbientV1ProjectsIdAgentsPaIdInboxPost
+
+> InboxMessage ApiAmbientV1ProjectsIdAgentsPaIdInboxPost(ctx, id, paId).InboxMessage(inboxMessage).Execute()
+
+Send a message to a project agent's inbox
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	id := "id_example" // string | The id of record
+	paId := "paId_example" // string | The id of the project agent
+	inboxMessage := *openapiclient.NewInboxMessage("ProjectAgentId_example", "Body_example") // InboxMessage | Inbox message to send
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1ProjectsIdAgentsPaIdInboxPost(context.Background(), id, paId).InboxMessage(inboxMessage).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ProjectsIdAgentsPaIdInboxPost``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `ApiAmbientV1ProjectsIdAgentsPaIdInboxPost`: InboxMessage
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1ProjectsIdAgentsPaIdInboxPost`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**id** | **string** | The id of record | 
+**paId** | **string** | The id of the project agent | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiApiAmbientV1ProjectsIdAgentsPaIdInboxPostRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+
+ **inboxMessage** | [**InboxMessage**](InboxMessage.md) | Inbox message to send | 
+
+### Return type
+
+[**InboxMessage**](InboxMessage.md)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: application/json
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## ApiAmbientV1ProjectsIdAgentsPaIdPatch
+
+> ProjectAgent ApiAmbientV1ProjectsIdAgentsPaIdPatch(ctx, id, paId).ProjectAgentPatchRequest(projectAgentPatchRequest).Execute()
+
+Update a project agent (e.g. re-pin to a newer agent version)
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	id := "id_example" // string | The id of record
+	paId := "paId_example" // string | The id of the project agent
+	projectAgentPatchRequest := *openapiclient.NewProjectAgentPatchRequest() // ProjectAgentPatchRequest | Updated project_agent data
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1ProjectsIdAgentsPaIdPatch(context.Background(), id, paId).ProjectAgentPatchRequest(projectAgentPatchRequest).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ProjectsIdAgentsPaIdPatch``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `ApiAmbientV1ProjectsIdAgentsPaIdPatch`: ProjectAgent
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1ProjectsIdAgentsPaIdPatch`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**id** | **string** | The id of record | 
+**paId** | **string** | The id of the project agent | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiApiAmbientV1ProjectsIdAgentsPaIdPatchRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+
+ **projectAgentPatchRequest** | [**ProjectAgentPatchRequest**](ProjectAgentPatchRequest.md) | Updated project_agent data | 
+
+### Return type
+
+[**ProjectAgent**](ProjectAgent.md)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: application/json
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## ApiAmbientV1ProjectsIdAgentsPaIdSessionsGet
+
+> ProjectAgentSessionList ApiAmbientV1ProjectsIdAgentsPaIdSessionsGet(ctx, id, paId).Page(page).Size(size).Execute()
+
+Get session run history for a project agent
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	id := "id_example" // string | The id of record
+	paId := "paId_example" // string | The id of the project agent
+	page := int32(56) // int32 | Page number of record list when record list exceeds specified page size (optional) (default to 1)
+	size := int32(56) // int32 | Maximum number of records to return (optional) (default to 100)
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1ProjectsIdAgentsPaIdSessionsGet(context.Background(), id, paId).Page(page).Size(size).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ProjectsIdAgentsPaIdSessionsGet``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `ApiAmbientV1ProjectsIdAgentsPaIdSessionsGet`: ProjectAgentSessionList
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1ProjectsIdAgentsPaIdSessionsGet`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**id** | **string** | The id of record | 
+**paId** | **string** | The id of the project agent | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiApiAmbientV1ProjectsIdAgentsPaIdSessionsGetRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+
+ **page** | **int32** | Page number of record list when record list exceeds specified page size | [default to 1]
+ **size** | **int32** | Maximum number of records to return | [default to 100]
+
+### Return type
+
+[**ProjectAgentSessionList**](ProjectAgentSessionList.md)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## ApiAmbientV1ProjectsIdAgentsPost
+
+> ProjectAgent ApiAmbientV1ProjectsIdAgentsPost(ctx, id).ProjectAgent(projectAgent).Execute()
+
+Add an agent to a project (create ProjectAgent)
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	id := "id_example" // string | The id of record
+	projectAgent := *openapiclient.NewProjectAgent("ProjectId_example", "AgentId_example") // ProjectAgent | ProjectAgent data
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1ProjectsIdAgentsPost(context.Background(), id).ProjectAgent(projectAgent).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ProjectsIdAgentsPost``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `ApiAmbientV1ProjectsIdAgentsPost`: ProjectAgent
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1ProjectsIdAgentsPost`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**id** | **string** | The id of record | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiApiAmbientV1ProjectsIdAgentsPostRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+ **projectAgent** | [**ProjectAgent**](ProjectAgent.md) | ProjectAgent data | 
+
+### Return type
+
+[**ProjectAgent**](ProjectAgent.md)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: application/json
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
 ## ApiAmbientV1ProjectsIdDelete
 
 > ApiAmbientV1ProjectsIdDelete(ctx, id).Execute()
@@ -848,6 +1739,74 @@ Name | Type | Description  | Notes
 ### Return type
 
 [**Project**](Project.md)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## ApiAmbientV1ProjectsIdHomeGet
+
+> ProjectHome ApiAmbientV1ProjectsIdHomeGet(ctx, id).Execute()
+
+Project home — latest status for every ProjectAgent in this project
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	id := "id_example" // string | The id of record
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1ProjectsIdHomeGet(context.Background(), id).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ProjectsIdHomeGet``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `ApiAmbientV1ProjectsIdHomeGet`: ProjectHome
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1ProjectsIdHomeGet`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**id** | **string** | The id of record | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiApiAmbientV1ProjectsIdHomeGetRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+
+### Return type
+
+[**ProjectHome**](ProjectHome.md)
 
 ### Authorization
 

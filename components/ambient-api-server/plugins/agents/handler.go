@@ -62,50 +62,8 @@ func (h agentHandler) Patch(w http.ResponseWriter, r *http.Request) {
 				return nil, err
 			}
 
-			if patch.ParentAgentId != nil {
-				found.ParentAgentId = patch.ParentAgentId
-			}
-			if patch.DisplayName != nil {
-				found.DisplayName = patch.DisplayName
-			}
-			if patch.Description != nil {
-				found.Description = patch.Description
-			}
 			if patch.Prompt != nil {
 				found.Prompt = patch.Prompt
-			}
-			if patch.RepoUrl != nil {
-				found.RepoUrl = patch.RepoUrl
-			}
-			if patch.WorkflowId != nil {
-				found.WorkflowId = patch.WorkflowId
-			}
-			if patch.LlmModel != nil {
-				found.LlmModel = *patch.LlmModel
-			}
-			if patch.LlmTemperature != nil {
-				found.LlmTemperature = *patch.LlmTemperature
-			}
-			if patch.LlmMaxTokens != nil {
-				found.LlmMaxTokens = *patch.LlmMaxTokens
-			}
-			if patch.BotAccountName != nil {
-				found.BotAccountName = patch.BotAccountName
-			}
-			if patch.ResourceOverrides != nil {
-				found.ResourceOverrides = patch.ResourceOverrides
-			}
-			if patch.EnvironmentVariables != nil {
-				found.EnvironmentVariables = patch.EnvironmentVariables
-			}
-			if patch.Labels != nil {
-				found.Labels = patch.Labels
-			}
-			if patch.Annotations != nil {
-				found.Annotations = patch.Annotations
-			}
-			if patch.CurrentSessionId != nil {
-				found.CurrentSessionId = patch.CurrentSessionId
 			}
 
 			agentModel, err := h.agent.Replace(ctx, found)

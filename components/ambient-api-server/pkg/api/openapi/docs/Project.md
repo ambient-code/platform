@@ -14,6 +14,7 @@ Name | Type | Description | Notes
 **Description** | Pointer to **string** |  | [optional] 
 **Labels** | Pointer to **string** |  | [optional] 
 **Annotations** | Pointer to **string** |  | [optional] 
+**Prompt** | Pointer to **string** | Workspace-level context injected into every ignition in this project | [optional] 
 **Status** | Pointer to **string** |  | [optional] 
 
 ## Methods
@@ -279,6 +280,31 @@ SetAnnotations sets Annotations field to given value.
 `func (o *Project) HasAnnotations() bool`
 
 HasAnnotations returns a boolean if a field has been set.
+
+### GetPrompt
+
+`func (o *Project) GetPrompt() string`
+
+GetPrompt returns the Prompt field if non-nil, zero value otherwise.
+
+### GetPromptOk
+
+`func (o *Project) GetPromptOk() (*string, bool)`
+
+GetPromptOk returns a tuple with the Prompt field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetPrompt
+
+`func (o *Project) SetPrompt(v string)`
+
+SetPrompt sets Prompt field to given value.
+
+### HasPrompt
+
+`func (o *Project) HasPrompt() bool`
+
+HasPrompt returns a boolean if a field has been set.
 
 ### GetStatus
 

@@ -2059,6 +2059,806 @@ paths:
       security:
       - Bearer: []
       summary: Push a message to a session
+  /api/ambient/v1/projects/{id}/agents:
+    get:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Page number of record list when record list exceeds specified
+          page size
+        explode: true
+        in: query
+        name: page
+        required: false
+        schema:
+          default: 1
+          minimum: 1
+          type: integer
+        style: form
+      - description: Maximum number of records to return
+        explode: true
+        in: query
+        name: size
+        required: false
+        schema:
+          default: 100
+          minimum: 0
+          type: integer
+        style: form
+      - description: Specifies the search criteria
+        explode: true
+        in: query
+        name: search
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Specifies the order by criteria
+        explode: true
+        in: query
+        name: orderBy
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Supplies a comma-separated list of fields to be returned
+        explode: true
+        in: query
+        name: fields
+        required: false
+        schema:
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectAgentList"
+          description: A JSON array of project_agent objects
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No project with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Returns a list of project agents in a project
+    post:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectAgent"
+        description: ProjectAgent data
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectAgent"
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Validation errors occurred
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No project with specified id exists
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: ProjectAgent already exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: An unexpected error occurred creating the project_agent
+      security:
+      - Bearer: []
+      summary: Add an agent to a project (create ProjectAgent)
+  /api/ambient/v1/projects/{id}/agents/{pa_id}:
+    delete:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The id of the project agent
+        in: path
+        name: pa_id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: ProjectAgent deleted successfully
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No project_agent with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Remove an agent from a project
+    get:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The id of the project agent
+        in: path
+        name: pa_id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectAgent"
+          description: ProjectAgent found by id
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No project_agent with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Get a project agent by id
+    patch:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The id of the project agent
+        in: path
+        name: pa_id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectAgentPatchRequest"
+        description: Updated project_agent data
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectAgent"
+          description: ProjectAgent updated successfully
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Validation errors occurred
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No project_agent with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error updating project_agent
+      security:
+      - Bearer: []
+      summary: Update a project agent (e.g. re-pin to a newer agent version)
+  /api/ambient/v1/projects/{id}/agents/{pa_id}/ignite:
+    post:
+      description: |
+        Creates a new Session for this ProjectAgent and drains the inbox into the ignition context.
+        If an active session already exists, it is returned as-is.
+        Unread Inbox messages are marked read and injected as context before the first turn.
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The id of the project agent
+        in: path
+        name: pa_id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IgniteRequest"
+        description: Optional ignition parameters
+        required: false
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IgniteResponse"
+          description: Session already active — returned as-is
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IgniteResponse"
+          description: New session created and ignited
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No project_agent with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Ignite a project agent — creates a Session (idempotent)
+  /api/ambient/v1/projects/{id}/agents/{pa_id}/ignition:
+    get:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The id of the project agent
+        in: path
+        name: pa_id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IgniteResponse"
+          description: Ignition context preview
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No project_agent with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Preview ignition context (dry run — no session created)
+  /api/ambient/v1/projects/{id}/agents/{pa_id}/sessions:
+    get:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The id of the project agent
+        in: path
+        name: pa_id
+        required: true
+        schema:
+          type: string
+      - description: Page number of record list when record list exceeds specified
+          page size
+        explode: true
+        in: query
+        name: page
+        required: false
+        schema:
+          default: 1
+          minimum: 1
+          type: integer
+        style: form
+      - description: Maximum number of records to return
+        explode: true
+        in: query
+        name: size
+        required: false
+        schema:
+          default: 100
+          minimum: 0
+          type: integer
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectAgentSessionList"
+          description: Session run history
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No project_agent with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Get session run history for a project agent
+  /api/ambient/v1/projects/{id}/home:
+    get:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectHome"
+          description: Project home dashboard payload
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No project with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Project home — latest status for every ProjectAgent in this project
+  /api/ambient/v1/projects/{id}/agents/{pa_id}/inbox:
+    get:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The id of the project agent
+        in: path
+        name: pa_id
+        required: true
+        schema:
+          type: string
+      - description: Page number of record list when record list exceeds specified
+          page size
+        explode: true
+        in: query
+        name: page
+        required: false
+        schema:
+          default: 1
+          minimum: 1
+          type: integer
+        style: form
+      - description: Maximum number of records to return
+        explode: true
+        in: query
+        name: size
+        required: false
+        schema:
+          default: 100
+          minimum: 0
+          type: integer
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InboxMessageList"
+          description: Inbox messages
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No project_agent with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Read inbox messages for a project agent (unread first)
+    post:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The id of the project agent
+        in: path
+        name: pa_id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InboxMessage"
+        description: Inbox message to send
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InboxMessage"
+          description: Message sent
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Validation errors occurred
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No project_agent with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: An unexpected error occurred sending the message
+      security:
+      - Bearer: []
+      summary: Send a message to a project agent's inbox
+  /api/ambient/v1/projects/{id}/agents/{pa_id}/inbox/{msg_id}:
+    delete:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The id of the project agent
+        in: path
+        name: pa_id
+        required: true
+        schema:
+          type: string
+      - description: The id of the inbox message
+        in: path
+        name: msg_id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: Message deleted
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No inbox message with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Delete an inbox message
+    patch:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The id of the project agent
+        in: path
+        name: pa_id
+        required: true
+        schema:
+          type: string
+      - description: The id of the inbox message
+        in: path
+        name: msg_id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InboxMessagePatchRequest"
+        description: Inbox message patch
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InboxMessage"
+          description: Message updated
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No inbox message with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Mark an inbox message as read
 components:
   parameters:
     id:
@@ -2215,6 +3015,14 @@ components:
             type: string
           annotations:
             type: string
+          project_agent_id:
+            description: The ProjectAgent that owns this session. Immutable after
+              creation.
+            type: string
+          triggered_by_user_id:
+            description: User who pressed ignite
+            readOnly: true
+            type: string
           project_id:
             description: Immutable after creation. Set at creation time only.
             type: string
@@ -2261,10 +3069,12 @@ components:
         completion_time: 2000-01-23T04:56:07.000+00:00
         created_at: 2000-01-23T04:56:07.000+00:00
         annotations: annotations
+        project_agent_id: project_agent_id
         reconciled_workflow: reconciled_workflow
         timeout: 5
         environment_variables: environment_variables
         kube_cr_uid: kube_cr_uid
+        triggered_by_user_id: triggered_by_user_id
         sdk_restart_count: 7
         updated_at: 2000-01-23T04:56:07.000+00:00
         project_id: project_id
@@ -2310,10 +3120,12 @@ components:
           completion_time: 2000-01-23T04:56:07.000+00:00
           created_at: 2000-01-23T04:56:07.000+00:00
           annotations: annotations
+          project_agent_id: project_agent_id
           reconciled_workflow: reconciled_workflow
           timeout: 5
           environment_variables: environment_variables
           kube_cr_uid: kube_cr_uid
+          triggered_by_user_id: triggered_by_user_id
           sdk_restart_count: 7
           updated_at: 2000-01-23T04:56:07.000+00:00
           project_id: project_id
@@ -2344,10 +3156,12 @@ components:
           completion_time: 2000-01-23T04:56:07.000+00:00
           created_at: 2000-01-23T04:56:07.000+00:00
           annotations: annotations
+          project_agent_id: project_agent_id
           reconciled_workflow: reconciled_workflow
           timeout: 5
           environment_variables: environment_variables
           kube_cr_uid: kube_cr_uid
+          triggered_by_user_id: triggered_by_user_id
           sdk_restart_count: 7
           updated_at: 2000-01-23T04:56:07.000+00:00
           project_id: project_id
@@ -2477,6 +3291,10 @@ components:
             type: string
           annotations:
             type: string
+          prompt:
+            description: Workspace-level context injected into every ignition in this
+              project
+            type: string
           status:
             type: string
           created_at:
@@ -2498,6 +3316,7 @@ components:
         id: id
         href: href
         display_name: display_name
+        prompt: prompt
         labels: labels
         status: status
     ProjectList:
@@ -2524,6 +3343,7 @@ components:
           id: id
           href: href
           display_name: display_name
+          prompt: prompt
           labels: labels
           status: status
         - updated_at: 2000-01-23T04:56:07.000+00:00
@@ -2535,6 +3355,7 @@ components:
           id: id
           href: href
           display_name: display_name
+          prompt: prompt
           labels: labels
           status: status
     ProjectPatchRequest:
@@ -2543,6 +3364,7 @@ components:
         description: description
         annotations: annotations
         display_name: display_name
+        prompt: prompt
         labels: labels
         status: status
       properties:
@@ -2555,6 +3377,8 @@ components:
         labels:
           type: string
         annotations:
+          type: string
+        prompt:
           type: string
         status:
           type: string
@@ -2702,72 +3526,34 @@ components:
       allOf:
       - $ref: "#/components/schemas/ObjectReference"
       - properties:
-          project_id:
-            type: string
-          parent_agent_id:
-            type: string
-          owner_user_id:
-            type: string
+          version:
+            description: Monotonic version number. Incremented on each PATCH. Old
+              versions are preserved.
+            readOnly: true
+            type: integer
           name:
-            type: string
-          display_name:
-            type: string
-          description:
+            description: "Human-readable identifier, stable across versions"
             type: string
           prompt:
+            description: Defines who this agent is. Write-only — never returned in
+              GET responses.
             type: string
-          repo_url:
-            type: string
-          workflow_id:
-            type: string
-          llm_model:
-            type: string
-          llm_temperature:
-            format: double
-            type: number
-          llm_max_tokens:
-            format: int32
-            type: integer
-          bot_account_name:
-            type: string
-          resource_overrides:
-            type: string
-          environment_variables:
-            type: string
-          labels:
-            type: string
-          annotations:
-            type: string
-          current_session_id:
+            writeOnly: true
+          owner_user_id:
             type: string
         required:
         - name
         - owner_user_id
-        - project_id
         type: object
       example:
-        repo_url: repo_url
-        workflow_id: workflow_id
-        llm_model: llm_model
-        resource_overrides: resource_overrides
-        owner_user_id: owner_user_id
-        current_session_id: current_session_id
-        kind: kind
-        llm_temperature: 5.962133916683182
-        created_at: 2000-01-23T04:56:07.000+00:00
-        description: description
-        annotations: annotations
-        display_name: display_name
-        llm_max_tokens: 5
-        labels: labels
-        environment_variables: environment_variables
-        parent_agent_id: parent_agent_id
         updated_at: 2000-01-23T04:56:07.000+00:00
-        project_id: project_id
-        bot_account_name: bot_account_name
+        owner_user_id: owner_user_id
+        kind: kind
         name: name
+        created_at: 2000-01-23T04:56:07.000+00:00
         id: id
         href: href
+        version: 5
         prompt: prompt
     AgentList:
       allOf:
@@ -2784,111 +3570,34 @@ components:
         kind: kind
         page: 0
         items:
-        - repo_url: repo_url
-          workflow_id: workflow_id
-          llm_model: llm_model
-          resource_overrides: resource_overrides
+        - updated_at: 2000-01-23T04:56:07.000+00:00
           owner_user_id: owner_user_id
-          current_session_id: current_session_id
           kind: kind
-          llm_temperature: 5.962133916683182
-          created_at: 2000-01-23T04:56:07.000+00:00
-          description: description
-          annotations: annotations
-          display_name: display_name
-          llm_max_tokens: 5
-          labels: labels
-          environment_variables: environment_variables
-          parent_agent_id: parent_agent_id
-          updated_at: 2000-01-23T04:56:07.000+00:00
-          project_id: project_id
-          bot_account_name: bot_account_name
           name: name
+          created_at: 2000-01-23T04:56:07.000+00:00
           id: id
           href: href
+          version: 5
           prompt: prompt
-        - repo_url: repo_url
-          workflow_id: workflow_id
-          llm_model: llm_model
-          resource_overrides: resource_overrides
+        - updated_at: 2000-01-23T04:56:07.000+00:00
           owner_user_id: owner_user_id
-          current_session_id: current_session_id
           kind: kind
-          llm_temperature: 5.962133916683182
-          created_at: 2000-01-23T04:56:07.000+00:00
-          description: description
-          annotations: annotations
-          display_name: display_name
-          llm_max_tokens: 5
-          labels: labels
-          environment_variables: environment_variables
-          parent_agent_id: parent_agent_id
-          updated_at: 2000-01-23T04:56:07.000+00:00
-          project_id: project_id
-          bot_account_name: bot_account_name
           name: name
+          created_at: 2000-01-23T04:56:07.000+00:00
           id: id
           href: href
+          version: 5
           prompt: prompt
     AgentPatchRequest:
+      description: PATCH creates a new Agent version (version+1). The prior version
+        is preserved.
       example:
-        repo_url: repo_url
-        workflow_id: workflow_id
-        llm_model: llm_model
-        resource_overrides: resource_overrides
-        owner_user_id: owner_user_id
-        current_session_id: current_session_id
-        llm_temperature: 0.8008281904610115
-        description: description
-        annotations: annotations
-        display_name: display_name
-        llm_max_tokens: 6
-        labels: labels
-        environment_variables: environment_variables
-        parent_agent_id: parent_agent_id
-        project_id: project_id
-        bot_account_name: bot_account_name
-        name: name
         prompt: prompt
       properties:
-        project_id:
-          type: string
-        parent_agent_id:
-          type: string
-        owner_user_id:
-          type: string
-        name:
-          type: string
-        display_name:
-          type: string
-        description:
-          type: string
         prompt:
+          description: Updating prompt creates a new immutable version of this agent
           type: string
-        repo_url:
-          type: string
-        workflow_id:
-          type: string
-        llm_model:
-          type: string
-        llm_temperature:
-          format: double
-          type: number
-        llm_max_tokens:
-          format: int32
-          type: integer
-        bot_account_name:
-          type: string
-        resource_overrides:
-          type: string
-        environment_variables:
-          type: string
-        labels:
-          type: string
-        annotations:
-          type: string
-        current_session_id:
-          type: string
+          writeOnly: true
       type: object
     Role:
       allOf:
@@ -3099,6 +3808,341 @@ components:
           description: Message body
           type: string
       type: object
+    ProjectAgent:
+      allOf:
+      - $ref: "#/components/schemas/ObjectReference"
+      - properties:
+          project_id:
+            type: string
+          agent_id:
+            type: string
+          agent_version:
+            description: Pinned to a specific Agent version
+            type: integer
+          current_session_id:
+            description: "Denormalized for fast reads — the active session, if any"
+            readOnly: true
+            type: string
+        required:
+        - agent_id
+        - project_id
+        type: object
+      example:
+        agent_version: 5
+        updated_at: 2000-01-23T04:56:07.000+00:00
+        agent_id: agent_id
+        project_id: project_id
+        current_session_id: current_session_id
+        kind: kind
+        created_at: 2000-01-23T04:56:07.000+00:00
+        id: id
+        href: href
+    ProjectAgentList:
+      allOf:
+      - $ref: "#/components/schemas/List"
+      - properties:
+          items:
+            items:
+              $ref: "#/components/schemas/ProjectAgent"
+            type: array
+        type: object
+      example:
+        total: 1
+        size: 6
+        kind: kind
+        page: 0
+        items:
+        - agent_version: 5
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          agent_id: agent_id
+          project_id: project_id
+          current_session_id: current_session_id
+          kind: kind
+          created_at: 2000-01-23T04:56:07.000+00:00
+          id: id
+          href: href
+        - agent_version: 5
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          agent_id: agent_id
+          project_id: project_id
+          current_session_id: current_session_id
+          kind: kind
+          created_at: 2000-01-23T04:56:07.000+00:00
+          id: id
+          href: href
+    ProjectAgentPatchRequest:
+      example:
+        agent_version: 0
+      properties:
+        agent_version:
+          description: Re-pin this ProjectAgent to a different Agent version
+          type: integer
+      type: object
+    IgniteRequest:
+      example:
+        prompt: prompt
+      properties:
+        prompt:
+          description: Task scope for this specific run (Session.prompt)
+          type: string
+      type: object
+    IgniteResponse:
+      example:
+        ignition_context: ignition_context
+        session:
+          workflow_id: workflow_id
+          completion_time: 2000-01-23T04:56:07.000+00:00
+          created_at: 2000-01-23T04:56:07.000+00:00
+          annotations: annotations
+          project_agent_id: project_agent_id
+          reconciled_workflow: reconciled_workflow
+          timeout: 5
+          environment_variables: environment_variables
+          kube_cr_uid: kube_cr_uid
+          triggered_by_user_id: triggered_by_user_id
+          sdk_restart_count: 7
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          project_id: project_id
+          parent_session_id: parent_session_id
+          id: id
+          href: href
+          phase: phase
+          repo_url: repo_url
+          llm_model: llm_model
+          resource_overrides: resource_overrides
+          kind: kind
+          llm_temperature: 5.637376656633329
+          assigned_user_id: assigned_user_id
+          created_by_user_id: created_by_user_id
+          llm_max_tokens: 2
+          labels: labels
+          reconciled_repos: reconciled_repos
+          start_time: 2000-01-23T04:56:07.000+00:00
+          sdk_session_id: sdk_session_id
+          bot_account_name: bot_account_name
+          repos: repos
+          name: name
+          kube_cr_name: kube_cr_name
+          conditions: conditions
+          kube_namespace: kube_namespace
+          prompt: prompt
+      properties:
+        session:
+          $ref: "#/components/schemas/Session"
+        ignition_context:
+          description: Assembled ignition context — Project.prompt + Agent.prompt
+            + Inbox + Session.prompt + peer roster
+          type: string
+      type: object
+    ProjectHome:
+      example:
+        project_id: project_id
+        agents:
+        - summary: summary
+          agent_version: 0
+          agent_name: agent_name
+          session_phase: session_phase
+          inbox_unread_count: 6
+          project_agent_id: project_agent_id
+        - summary: summary
+          agent_version: 0
+          agent_name: agent_name
+          session_phase: session_phase
+          inbox_unread_count: 6
+          project_agent_id: project_agent_id
+      properties:
+        project_id:
+          type: string
+        agents:
+          items:
+            $ref: "#/components/schemas/ProjectHomeAgent"
+          type: array
+      type: object
+    ProjectHomeAgent:
+      example:
+        summary: summary
+        agent_version: 0
+        agent_name: agent_name
+        session_phase: session_phase
+        inbox_unread_count: 6
+        project_agent_id: project_agent_id
+      properties:
+        project_agent_id:
+          type: string
+        agent_name:
+          type: string
+        agent_version:
+          type: integer
+        session_phase:
+          type: string
+        inbox_unread_count:
+          type: integer
+        summary:
+          type: string
+      type: object
+    InboxMessage:
+      allOf:
+      - $ref: "#/components/schemas/ObjectReference"
+      - properties:
+          project_agent_id:
+            description: Recipient — the workspace/agent address
+            type: string
+          from_project_agent_id:
+            description: Sender ProjectAgent id — null if sent by a human
+            type: string
+          from_name:
+            description: Denormalized sender display name
+            type: string
+          body:
+            type: string
+          read:
+            description: false = unread; drained at session ignition
+            readOnly: true
+            type: boolean
+        required:
+        - body
+        - project_agent_id
+        type: object
+      example:
+        from_project_agent_id: from_project_agent_id
+        read: true
+        updated_at: 2000-01-23T04:56:07.000+00:00
+        kind: kind
+        created_at: 2000-01-23T04:56:07.000+00:00
+        id: id
+        href: href
+        from_name: from_name
+        body: body
+        project_agent_id: project_agent_id
+    InboxMessageList:
+      allOf:
+      - $ref: "#/components/schemas/List"
+      - properties:
+          items:
+            items:
+              $ref: "#/components/schemas/InboxMessage"
+            type: array
+        type: object
+      example:
+        total: 1
+        size: 6
+        kind: kind
+        page: 0
+        items:
+        - from_project_agent_id: from_project_agent_id
+          read: true
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          kind: kind
+          created_at: 2000-01-23T04:56:07.000+00:00
+          id: id
+          href: href
+          from_name: from_name
+          body: body
+          project_agent_id: project_agent_id
+        - from_project_agent_id: from_project_agent_id
+          read: true
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          kind: kind
+          created_at: 2000-01-23T04:56:07.000+00:00
+          id: id
+          href: href
+          from_name: from_name
+          body: body
+          project_agent_id: project_agent_id
+    InboxMessagePatchRequest:
+      example:
+        read: true
+      properties:
+        read:
+          type: boolean
+      type: object
+    ProjectAgentSessionList:
+      allOf:
+      - $ref: "#/components/schemas/List"
+      - properties:
+          items:
+            items:
+              $ref: "#/components/schemas/Session"
+            type: array
+        type: object
+      example:
+        total: 1
+        size: 6
+        kind: kind
+        page: 0
+        items:
+        - workflow_id: workflow_id
+          completion_time: 2000-01-23T04:56:07.000+00:00
+          created_at: 2000-01-23T04:56:07.000+00:00
+          annotations: annotations
+          project_agent_id: project_agent_id
+          reconciled_workflow: reconciled_workflow
+          timeout: 5
+          environment_variables: environment_variables
+          kube_cr_uid: kube_cr_uid
+          triggered_by_user_id: triggered_by_user_id
+          sdk_restart_count: 7
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          project_id: project_id
+          parent_session_id: parent_session_id
+          id: id
+          href: href
+          phase: phase
+          repo_url: repo_url
+          llm_model: llm_model
+          resource_overrides: resource_overrides
+          kind: kind
+          llm_temperature: 5.637376656633329
+          assigned_user_id: assigned_user_id
+          created_by_user_id: created_by_user_id
+          llm_max_tokens: 2
+          labels: labels
+          reconciled_repos: reconciled_repos
+          start_time: 2000-01-23T04:56:07.000+00:00
+          sdk_session_id: sdk_session_id
+          bot_account_name: bot_account_name
+          repos: repos
+          name: name
+          kube_cr_name: kube_cr_name
+          conditions: conditions
+          kube_namespace: kube_namespace
+          prompt: prompt
+        - workflow_id: workflow_id
+          completion_time: 2000-01-23T04:56:07.000+00:00
+          created_at: 2000-01-23T04:56:07.000+00:00
+          annotations: annotations
+          project_agent_id: project_agent_id
+          reconciled_workflow: reconciled_workflow
+          timeout: 5
+          environment_variables: environment_variables
+          kube_cr_uid: kube_cr_uid
+          triggered_by_user_id: triggered_by_user_id
+          sdk_restart_count: 7
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          project_id: project_id
+          parent_session_id: parent_session_id
+          id: id
+          href: href
+          phase: phase
+          repo_url: repo_url
+          llm_model: llm_model
+          resource_overrides: resource_overrides
+          kind: kind
+          llm_temperature: 5.637376656633329
+          assigned_user_id: assigned_user_id
+          created_by_user_id: created_by_user_id
+          llm_max_tokens: 2
+          labels: labels
+          reconciled_repos: reconciled_repos
+          start_time: 2000-01-23T04:56:07.000+00:00
+          sdk_session_id: sdk_session_id
+          bot_account_name: bot_account_name
+          repos: repos
+          name: name
+          kube_cr_name: kube_cr_name
+          conditions: conditions
+          kube_namespace: kube_namespace
+          prompt: prompt
   securitySchemes:
     Bearer:
       bearerFormat: JWT

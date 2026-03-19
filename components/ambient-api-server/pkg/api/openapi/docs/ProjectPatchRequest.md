@@ -9,6 +9,7 @@ Name | Type | Description | Notes
 **Description** | Pointer to **string** |  | [optional] 
 **Labels** | Pointer to **string** |  | [optional] 
 **Annotations** | Pointer to **string** |  | [optional] 
+**Prompt** | Pointer to **string** |  | [optional] 
 **Status** | Pointer to **string** |  | [optional] 
 
 ## Methods
@@ -154,6 +155,31 @@ SetAnnotations sets Annotations field to given value.
 `func (o *ProjectPatchRequest) HasAnnotations() bool`
 
 HasAnnotations returns a boolean if a field has been set.
+
+### GetPrompt
+
+`func (o *ProjectPatchRequest) GetPrompt() string`
+
+GetPrompt returns the Prompt field if non-nil, zero value otherwise.
+
+### GetPromptOk
+
+`func (o *ProjectPatchRequest) GetPromptOk() (*string, bool)`
+
+GetPromptOk returns a tuple with the Prompt field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetPrompt
+
+`func (o *ProjectPatchRequest) SetPrompt(v string)`
+
+SetPrompt sets Prompt field to given value.
+
+### HasPrompt
+
+`func (o *ProjectPatchRequest) HasPrompt() bool`
+
+HasPrompt returns a boolean if a field has been set.
 
 ### GetStatus
 

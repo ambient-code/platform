@@ -46,6 +46,10 @@ type Session struct {
 	EnvironmentVariables *string  `json:"environment_variables,omitempty"`
 	Labels               *string  `json:"labels,omitempty"`
 	Annotations          *string  `json:"annotations,omitempty"`
+	// The ProjectAgent that owns this session. Immutable after creation.
+	ProjectAgentId *string `json:"project_agent_id,omitempty"`
+	// User who pressed ignite
+	TriggeredByUserId *string `json:"triggered_by_user_id,omitempty"`
 	// Immutable after creation. Set at creation time only.
 	ProjectId          *string    `json:"project_id,omitempty"`
 	Phase              *string    `json:"phase,omitempty"`
@@ -777,6 +781,70 @@ func (o *Session) SetAnnotations(v string) {
 	o.Annotations = &v
 }
 
+// GetProjectAgentId returns the ProjectAgentId field value if set, zero value otherwise.
+func (o *Session) GetProjectAgentId() string {
+	if o == nil || IsNil(o.ProjectAgentId) {
+		var ret string
+		return ret
+	}
+	return *o.ProjectAgentId
+}
+
+// GetProjectAgentIdOk returns a tuple with the ProjectAgentId field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Session) GetProjectAgentIdOk() (*string, bool) {
+	if o == nil || IsNil(o.ProjectAgentId) {
+		return nil, false
+	}
+	return o.ProjectAgentId, true
+}
+
+// HasProjectAgentId returns a boolean if a field has been set.
+func (o *Session) HasProjectAgentId() bool {
+	if o != nil && !IsNil(o.ProjectAgentId) {
+		return true
+	}
+
+	return false
+}
+
+// SetProjectAgentId gets a reference to the given string and assigns it to the ProjectAgentId field.
+func (o *Session) SetProjectAgentId(v string) {
+	o.ProjectAgentId = &v
+}
+
+// GetTriggeredByUserId returns the TriggeredByUserId field value if set, zero value otherwise.
+func (o *Session) GetTriggeredByUserId() string {
+	if o == nil || IsNil(o.TriggeredByUserId) {
+		var ret string
+		return ret
+	}
+	return *o.TriggeredByUserId
+}
+
+// GetTriggeredByUserIdOk returns a tuple with the TriggeredByUserId field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Session) GetTriggeredByUserIdOk() (*string, bool) {
+	if o == nil || IsNil(o.TriggeredByUserId) {
+		return nil, false
+	}
+	return o.TriggeredByUserId, true
+}
+
+// HasTriggeredByUserId returns a boolean if a field has been set.
+func (o *Session) HasTriggeredByUserId() bool {
+	if o != nil && !IsNil(o.TriggeredByUserId) {
+		return true
+	}
+
+	return false
+}
+
+// SetTriggeredByUserId gets a reference to the given string and assigns it to the TriggeredByUserId field.
+func (o *Session) SetTriggeredByUserId(v string) {
+	o.TriggeredByUserId = &v
+}
+
 // GetProjectId returns the ProjectId field value if set, zero value otherwise.
 func (o *Session) GetProjectId() string {
 	if o == nil || IsNil(o.ProjectId) {
@@ -1234,6 +1302,12 @@ func (o Session) ToMap() (map[string]interface{}, error) {
 	}
 	if !IsNil(o.Annotations) {
 		toSerialize["annotations"] = o.Annotations
+	}
+	if !IsNil(o.ProjectAgentId) {
+		toSerialize["project_agent_id"] = o.ProjectAgentId
+	}
+	if !IsNil(o.TriggeredByUserId) {
+		toSerialize["triggered_by_user_id"] = o.TriggeredByUserId
 	}
 	if !IsNil(o.ProjectId) {
 		toSerialize["project_id"] = o.ProjectId

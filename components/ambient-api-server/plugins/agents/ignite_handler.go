@@ -1,6 +1,8 @@
 package agents
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -10,94 +12,122 @@ import (
 	"github.com/gorilla/mux"
 
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
+	"github.com/ambient-code/platform/components/ambient-api-server/plugins/inbox"
 	"github.com/ambient-code/platform/components/ambient-api-server/plugins/sessions"
 	"github.com/openshift-online/rh-trex-ai/pkg/auth"
 	pkgerrors "github.com/openshift-online/rh-trex-ai/pkg/errors"
 	"github.com/openshift-online/rh-trex-ai/pkg/handlers"
 )
 
-type IgniteResponse struct {
+type StartResponse struct {
 	Session        openapi.Session `json:"session"`
 	IgnitionPrompt string          `json:"ignition_prompt"`
 }
 
-type igniteHandler struct {
-	agent   AgentService
-	session sessions.SessionService
-	msg     sessions.MessageService
+type ProjectPromptFetcher interface {
+	GetPrompt(ctx context.Context, projectID string) (*string, error)
 }
 
-func NewIgniteHandler(agent AgentService, session sessions.SessionService, msg sessions.MessageService) *igniteHandler {
-	return &igniteHandler{
+type startHandler struct {
+	agent   AgentService
+	inbox   inbox.InboxMessageService
+	session sessions.SessionService
+	msg     sessions.MessageService
+	project ProjectPromptFetcher
+}
+
+func NewStartHandler(agent AgentService, inboxSvc inbox.InboxMessageService, session sessions.SessionService, msg sessions.MessageService, project ProjectPromptFetcher) *startHandler {
+	return &startHandler{
 		agent:   agent,
+		inbox:   inboxSvc,
 		session: session,
 		msg:     msg,
+		project: project,
 	}
 }
 
-func (h *igniteHandler) Ignite(w http.ResponseWriter, r *http.Request) {
+func (h *startHandler) Start(w http.ResponseWriter, r *http.Request) {
 	cfg := &handlers.HandlerConfig{
 		Action: func() (interface{}, *pkgerrors.ServiceError) {
 			ctx := r.Context()
-			agentID := mux.Vars(r)["id"]
+			agentID := mux.Vars(r)["pa_id"]
 
 			agent, err := h.agent.Get(ctx, agentID)
 			if err != nil {
 				return nil, err
 			}
 
-			username := auth.GetUsernameFromContext(ctx)
+			unread, inboxErr := h.inbox.UnreadByProjectAgentID(ctx, agentID)
+			if inboxErr != nil {
+				return nil, inboxErr
+			}
 
-			llmModel := agent.LlmModel
-			llmTemp := agent.LlmTemperature
-			llmTokens := agent.LlmMaxTokens
+			var requestPrompt *string
+			var body struct {
+				Prompt string `json:"prompt"`
+			}
+			if r.ContentLength > 0 {
+				if decErr := json.NewDecoder(r.Body).Decode(&body); decErr == nil && body.Prompt != "" {
+					requestPrompt = &body.Prompt
+				}
+			}
 
 			sess := &sessions.Session{
-				Name:                 fmt.Sprintf("%s-%d", agent.Name, time.Now().Unix()),
-				Prompt:               agent.Prompt,
-				RepoUrl:              agent.RepoUrl,
-				WorkflowId:           agent.WorkflowId,
-				LlmModel:             &llmModel,
-				LlmTemperature:       &llmTemp,
-				LlmMaxTokens:         &llmTokens,
-				BotAccountName:       agent.BotAccountName,
-				ResourceOverrides:    agent.ResourceOverrides,
-				EnvironmentVariables: agent.EnvironmentVariables,
-				ProjectId:            &agent.ProjectId,
-			}
+				Name:      fmt.Sprintf("%s-%d", agent.Name, time.Now().Unix()),
+				Prompt:    agent.Prompt,
+				ProjectId: &agent.ProjectId,
+				}
+
+			username := auth.GetUsernameFromContext(ctx)
 			if username != "" {
 				sess.CreatedByUserId = &username
 			}
 
-			created, serr := h.session.Create(ctx, sess)
-			if serr != nil {
-				return nil, serr
+			created, sessErr := h.session.Create(ctx, sess)
+			if sessErr != nil {
+				return nil, sessErr
+			}
+
+			for _, msg := range unread {
+				read := true
+				msgCopy := *msg
+				msgCopy.Read = &read
+				if _, replErr := h.inbox.Replace(ctx, &msgCopy); replErr != nil {
+					glog.Warningf("Start agent %s: mark inbox message %s read: %v", agentID, msg.ID, replErr)
+				}
+			}
+
+			peers, peersErr := h.agent.AllByProjectID(ctx, agent.ProjectId)
+			if peersErr != nil {
+				return nil, peersErr
+			}
+
+			var projectPrompt *string
+			if h.project != nil {
+				if pp, ppErr := h.project.GetPrompt(ctx, agent.ProjectId); ppErr == nil {
+					projectPrompt = pp
+				}
+			}
+
+			prompt := buildStartPrompt(agent, peers, unread, projectPrompt, requestPrompt)
+
+			if prompt != "" {
+				if _, pushErr := h.msg.Push(ctx, created.ID, "user", prompt); pushErr != nil {
+					glog.Errorf("Start agent %s: store start prompt for session %s: %v", agentID, created.ID, pushErr)
+				}
 			}
 
 			agentCopy := *agent
 			agentCopy.CurrentSessionId = &created.ID
-			if _, rerr := h.agent.Replace(ctx, &agentCopy); rerr != nil {
-				return nil, rerr
+			if _, replErr := h.agent.Replace(ctx, &agentCopy); replErr != nil {
+				return nil, replErr
 			}
 
-			peers, perr := h.agent.AllByProjectID(ctx, agent.ProjectId)
-			if perr != nil {
-				return nil, perr
+			if _, startErr := h.session.Start(ctx, created.ID); startErr != nil {
+				return nil, startErr
 			}
 
-			prompt := buildIgnitionPrompt(agent, peers)
-
-			if prompt != "" {
-				if _, merr := h.msg.Push(ctx, created.ID, "user", prompt); merr != nil {
-					glog.Errorf("Ignite: store ignition prompt for session %s: %v", created.ID, merr)
-				}
-			}
-
-			if _, serr2 := h.session.Start(ctx, created.ID); serr2 != nil {
-				return nil, serr2
-			}
-
-			return &IgniteResponse{
+			return &StartResponse{
 				Session:        sessions.PresentSession(created),
 				IgnitionPrompt: prompt,
 			}, nil
@@ -107,23 +137,35 @@ func (h *igniteHandler) Ignite(w http.ResponseWriter, r *http.Request) {
 	handlers.Handle(w, r, cfg, http.StatusCreated)
 }
 
-func (h *igniteHandler) IgnitionPreview(w http.ResponseWriter, r *http.Request) {
+func (h *startHandler) IgnitionPreview(w http.ResponseWriter, r *http.Request) {
 	cfg := &handlers.HandlerConfig{
 		Action: func() (interface{}, *pkgerrors.ServiceError) {
 			ctx := r.Context()
-			agentID := mux.Vars(r)["id"]
+			agentID := mux.Vars(r)["agent_id"]
 
 			agent, err := h.agent.Get(ctx, agentID)
 			if err != nil {
 				return nil, err
 			}
 
-			peers, perr := h.agent.AllByProjectID(ctx, agent.ProjectId)
-			if perr != nil {
-				return nil, perr
+			unread, inboxErr := h.inbox.UnreadByProjectAgentID(ctx, agentID)
+			if inboxErr != nil {
+				return nil, inboxErr
 			}
 
-			prompt := buildIgnitionPrompt(agent, peers)
+			peers, peersErr := h.agent.AllByProjectID(ctx, agent.ProjectId)
+			if peersErr != nil {
+				return nil, peersErr
+			}
+
+			var projectPrompt *string
+			if h.project != nil {
+				if pp, ppErr := h.project.GetPrompt(ctx, agent.ProjectId); ppErr == nil {
+					projectPrompt = pp
+				}
+			}
+
+			prompt := buildStartPrompt(agent, peers, unread, projectPrompt, nil)
 
 			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 			w.WriteHeader(http.StatusOK)
@@ -138,23 +180,18 @@ func (h *igniteHandler) IgnitionPreview(w http.ResponseWriter, r *http.Request) 
 	handlers.Handle(w, r, cfg, http.StatusOK)
 }
 
-func buildIgnitionPrompt(agent *Agent, peers AgentList) string {
+func buildStartPrompt(agent *Agent, peers AgentList, unread inbox.InboxMessageList, projectPrompt *string, requestPrompt *string) string {
 	var sb strings.Builder
 
-	fmt.Fprintf(&sb, "# Agent Ignition: %s\n\n", agent.Name)
-	if agent.DisplayName != nil {
-		fmt.Fprintf(&sb, "You are **%s**", *agent.DisplayName)
-	} else {
-		fmt.Fprintf(&sb, "You are **%s**", agent.Name)
-	}
-	fmt.Fprintf(&sb, ", working in project **%s**.\n\n", agent.ProjectId)
+	fmt.Fprintf(&sb, "# Agent Start: %s\n\n", agent.Name)
+	fmt.Fprintf(&sb, "You are **%s**, working in project **%s**.\n\n", agent.Name, agent.ProjectId)
 
-	if agent.Description != nil {
-		fmt.Fprintf(&sb, "## Role\n\n%s\n\n", *agent.Description)
+	if projectPrompt != nil && *projectPrompt != "" {
+		fmt.Fprintf(&sb, "## Workspace Context\n\n%s\n\n", *projectPrompt)
 	}
 
-	if agent.Prompt != nil {
-		fmt.Fprintf(&sb, "## Instructions\n\n%s\n\n", *agent.Prompt)
+	if agent.Prompt != nil && *agent.Prompt != "" {
+		fmt.Fprintf(&sb, "## Standing Instructions\n\n%s\n\n", *agent.Prompt)
 	}
 
 	var peerAgents AgentList
@@ -165,17 +202,30 @@ func buildIgnitionPrompt(agent *Agent, peers AgentList) string {
 	}
 
 	if len(peerAgents) > 0 {
-		sb.WriteString("## Peer Agents\n\n")
+		sb.WriteString("## Peer Agents in this Project\n\n")
 		sb.WriteString("| Agent | Description |\n")
 		sb.WriteString("| ----- | ----------- |\n")
 		for _, p := range peerAgents {
-			desc := "—"
-			if p.Description != nil {
-				desc = *p.Description
-			}
-			fmt.Fprintf(&sb, "| %s | %s |\n", p.Name, desc)
+			fmt.Fprintf(&sb, "| %s | — |\n", p.Name)
 		}
 		sb.WriteString("\n")
+	}
+
+	if len(unread) > 0 {
+		sb.WriteString("## Inbox Messages (unread at start)\n\n")
+		for _, m := range unread {
+			from := "system"
+			if m.FromName != nil && *m.FromName != "" {
+				from = *m.FromName
+			} else if m.FromProjectAgentId != nil && *m.FromProjectAgentId != "" {
+				from = *m.FromProjectAgentId
+			}
+			fmt.Fprintf(&sb, "**From %s:** %s\n\n", from, m.Body)
+		}
+	}
+
+	if requestPrompt != nil && *requestPrompt != "" {
+		fmt.Fprintf(&sb, "## Task for this Run\n\n%s\n\n", *requestPrompt)
 	}
 
 	return sb.String()

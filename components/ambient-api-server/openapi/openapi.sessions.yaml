@@ -400,6 +400,13 @@ components:
               type: string
             annotations:
               type: string
+            project_agent_id:
+              type: string
+              description: The ProjectAgent that owns this session. Immutable after creation.
+            triggered_by_user_id:
+              type: string
+              readOnly: true
+              description: User who pressed ignite
             project_id:
               type: string
               description: Immutable after creation. Set at creation time only.

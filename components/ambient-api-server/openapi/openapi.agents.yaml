@@ -188,47 +188,21 @@ components:
         - $ref: 'openapi.yaml#/components/schemas/ObjectReference'
         - type: object
           required:
-            - project_id
             - owner_user_id
             - name
           properties:
-            project_id:
-              type: string
-            parent_agent_id:
-              type: string
-            owner_user_id:
-              type: string
+            version:
+              type: integer
+              readOnly: true
+              description: Monotonic version number. Incremented on each PATCH. Old versions are preserved.
             name:
               type: string
-            display_name:
-              type: string
-            description:
-              type: string
+              description: Human-readable identifier, stable across versions
             prompt:
               type: string
-            repo_url:
-              type: string
-            workflow_id:
-              type: string
-            llm_model:
-              type: string
-            llm_temperature:
-              type: number
-              format: double
-            llm_max_tokens:
-              type: integer
-              format: int32
-            bot_account_name:
-              type: string
-            resource_overrides:
-              type: string
-            environment_variables:
-              type: string
-            labels:
-              type: string
-            annotations:
-              type: string
-            current_session_id:
+              writeOnly: true
+              description: Defines who this agent is. Write-only — never returned in GET responses.
+            owner_user_id:
               type: string
     # NEW SCHEMA START
     AgentList:
@@ -245,45 +219,12 @@ components:
     AgentPatchRequest:
     # NEW SCHEMA END
       type: object
+      description: PATCH creates a new Agent version (version+1). The prior version is preserved.
       properties:
-        project_id:
-          type: string
-        parent_agent_id:
-          type: string
-        owner_user_id:
-          type: string
-        name:
-          type: string
-        display_name:
-          type: string
-        description:
-          type: string
         prompt:
           type: string
-        repo_url:
-          type: string
-        workflow_id:
-          type: string
-        llm_model:
-          type: string
-        llm_temperature:
-          type: number
-          format: double
-        llm_max_tokens:
-          type: integer
-          format: int32
-        bot_account_name:
-          type: string
-        resource_overrides:
-          type: string
-        environment_variables:
-          type: string
-        labels:
-          type: string
-        annotations:
-          type: string
-        current_session_id:
-          type: string
+          writeOnly: true
+          description: Updating prompt creates a new immutable version of this agent
   parameters:
       id:
         name: id

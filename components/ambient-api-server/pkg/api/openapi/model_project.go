@@ -33,7 +33,9 @@ type Project struct {
 	Description *string    `json:"description,omitempty"`
 	Labels      *string    `json:"labels,omitempty"`
 	Annotations *string    `json:"annotations,omitempty"`
-	Status      *string    `json:"status,omitempty"`
+	// Workspace-level context injected into every ignition in this project
+	Prompt *string `json:"prompt,omitempty"`
+	Status *string `json:"status,omitempty"`
 }
 
 type _Project Project
@@ -368,6 +370,38 @@ func (o *Project) SetAnnotations(v string) {
 	o.Annotations = &v
 }
 
+// GetPrompt returns the Prompt field value if set, zero value otherwise.
+func (o *Project) GetPrompt() string {
+	if o == nil || IsNil(o.Prompt) {
+		var ret string
+		return ret
+	}
+	return *o.Prompt
+}
+
+// GetPromptOk returns a tuple with the Prompt field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Project) GetPromptOk() (*string, bool) {
+	if o == nil || IsNil(o.Prompt) {
+		return nil, false
+	}
+	return o.Prompt, true
+}
+
+// HasPrompt returns a boolean if a field has been set.
+func (o *Project) HasPrompt() bool {
+	if o != nil && !IsNil(o.Prompt) {
+		return true
+	}
+
+	return false
+}
+
+// SetPrompt gets a reference to the given string and assigns it to the Prompt field.
+func (o *Project) SetPrompt(v string) {
+	o.Prompt = &v
+}
+
 // GetStatus returns the Status field value if set, zero value otherwise.
 func (o *Project) GetStatus() string {
 	if o == nil || IsNil(o.Status) {
@@ -437,6 +471,9 @@ func (o Project) ToMap() (map[string]interface{}, error) {
 	}
 	if !IsNil(o.Annotations) {
 		toSerialize["annotations"] = o.Annotations
+	}
+	if !IsNil(o.Prompt) {
+		toSerialize["prompt"] = o.Prompt
 	}
 	if !IsNil(o.Status) {
 		toSerialize["status"] = o.Status
