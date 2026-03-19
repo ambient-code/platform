@@ -6,6 +6,22 @@
  */
 
 import type { Tool } from '@ag-ui/client';
+import { marked } from 'marked';
+import DOMPurify from 'dompurify';
+
+/**
+ * Escape HTML to prevent XSS attacks
+ */
+function escapeHtml(text: string): string {
+  const map: Record<string, string> = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#039;',
+  };
+  return text.replace(/[&<>"']/g, (char) => map[char]);
+}
 
 /**
  * Tool: open_in_browser
@@ -98,7 +114,25 @@ async function executeOpenInBrowser(
         throw new Error(`Failed to fetch file: ${response.statusText}`);
       }
 
-      fileContent = await response.text();
+      // Check content type to handle binary files appropriately
+      const contentType = response.headers.get('content-type') || '';
+      if (
+        contentType.startsWith('image/') ||
+        contentType === 'application/pdf' ||
+        contentType === 'application/octet-stream'
+      ) {
+        // For binary files, convert to base64
+        const arrayBuffer = await response.arrayBuffer();
+        const bytes = new Uint8Array(arrayBuffer);
+        let binary = '';
+        for (let i = 0; i < bytes.length; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        fileContent = btoa(binary);
+      } else {
+        // For text files, use text()
+        fileContent = await response.text();
+      }
     }
 
     // Auto-detect content type if needed
@@ -128,16 +162,20 @@ async function executeOpenInBrowser(
 
     const mimeType = mimeTypeMap[detectedType] || 'text/plain';
 
-    // If markdown, convert to HTML first
+    // If markdown, convert to HTML first with sanitization
     let finalContent = fileContent;
     if (detectedType === 'markdown') {
-      // Simple markdown wrapper for rendering
+      // Parse markdown and sanitize the result to prevent XSS
+      const rawHtml = marked.parse(fileContent) as string;
+      const sanitizedHtml = DOMPurify.sanitize(rawHtml);
+
+      // Wrapper for rendering
       finalContent = `
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
-  <title>${filePath}</title>
+  <title>${escapeHtml(filePath)}</title>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -161,30 +199,19 @@ async function executeOpenInBrowser(
   </style>
 </head>
 <body>
-  <div id="content"></div>
-  <script type="module">
-    import { marked } from 'https://cdn.jsdelivr.net/npm/marked@11.1.1/+esm';
-    const content = ${JSON.stringify(fileContent)};
-    document.getElementById('content').innerHTML = marked.parse(content);
-  </script>
+  <div id="content">${sanitizedHtml}</div>
 </body>
 </html>
       `;
     }
 
-    // Open in new tab
+    // Open in new tab with security flags
     const blob = new Blob([finalContent], { type: mimeType });
     const url = URL.createObjectURL(blob);
-    const newWindow = window.open(url, '_blank');
+    const newWindow = window.open(url, '_blank', 'noopener,noreferrer');
 
-    // Clean up URL after opening
-    if (newWindow) {
-      newWindow.onload = () => {
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
-      };
-    } else {
-      setTimeout(() => URL.revokeObjectURL(url), 5000);
-    }
+    // Clean up URL after opening or after a delay
+    setTimeout(() => URL.revokeObjectURL(url), newWindow ? 1000 : 5000);
 
     return `✓ Opened ${filePath} in a new browser tab`;
   } catch (error) {

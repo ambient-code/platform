@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Download, ExternalLink, FileWarning, FileCode } from "lucide-react";
+import { Download, ExternalLink, FileWarning } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
@@ -11,7 +11,6 @@ import rehypeHighlight from "rehype-highlight";
 type FileContentViewerProps = {
   fileName: string;
   content: string;
-  filePath: string;
   onDownload?: () => void;
 };
 
@@ -81,20 +80,13 @@ function formatFileSize(bytes: number): string {
 function openInNewTab(fileName: string, content: string, mimeType: string) {
   const blob = new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);
-  const newWindow = window.open(url, '_blank');
+  const newWindow = window.open(url, '_blank', 'noopener,noreferrer');
 
-  // Clean up the URL after the window loads
-  if (newWindow) {
-    newWindow.onload = () => {
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-    };
-  } else {
-    // Fallback: clean up after a delay if popup was blocked
-    setTimeout(() => URL.revokeObjectURL(url), 5000);
-  }
+  // Clean up the URL after the window loads or after a delay
+  setTimeout(() => URL.revokeObjectURL(url), newWindow ? 1000 : 5000);
 }
 
-export function FileContentViewer({ fileName, content, filePath, onDownload }: FileContentViewerProps) {
+export function FileContentViewer({ fileName, content, onDownload }: FileContentViewerProps) {
   const [imageError, setImageError] = useState(false);
 
   const fileInfo = useMemo(() => detectFileType(fileName, content), [fileName, content]);
@@ -132,6 +124,7 @@ export function FileContentViewer({ fileName, content, filePath, onDownload }: F
           </div>
         </div>
         <div className="bg-muted/50 p-4 rounded border flex items-center justify-center">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={dataUrl}
             alt={fileName}

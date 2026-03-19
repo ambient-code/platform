@@ -518,18 +518,27 @@ function handleToolCallEnd(
 
   // Execute frontend tool if applicable
   let toolResult: string | undefined = undefined
-  if (callbacks.onFrontendToolCall && toolCallName === 'open_in_browser') {
-    try {
-      const args = toolCallArgs ? JSON.parse(toolCallArgs) : {}
-      // Execute frontend tool asynchronously but don't wait (fire and forget)
-      // Result will be displayed to user directly, not sent back to backend
-      callbacks.onFrontendToolCall(toolCallName, args).catch((error) => {
-        console.error('[handleToolCallEnd] Frontend tool execution failed:', error)
-      })
-      toolResult = 'Frontend tool executing...'
-    } catch (error) {
-      console.error('[handleToolCallEnd] Failed to parse tool args:', error)
-      toolResult = `Error: Failed to execute frontend tool - ${error instanceof Error ? error.message : String(error)}`
+  if (callbacks.onFrontendToolCall) {
+    // Check if this is a known frontend tool
+    const frontendTools = ['open_in_browser'];
+    if (frontendTools.includes(toolCallName)) {
+      try {
+        const args = toolCallArgs ? JSON.parse(toolCallArgs) : {}
+        // Execute frontend tool asynchronously and log results
+        // Note: We return immediate feedback rather than waiting for completion
+        // to avoid blocking the state update pipeline
+        callbacks.onFrontendToolCall(toolCallName, args)
+          .then((result) => {
+            console.log('[handleToolCallEnd] Frontend tool executed successfully:', result)
+          })
+          .catch((error) => {
+            console.error('[handleToolCallEnd] Frontend tool execution failed:', error)
+          })
+        toolResult = `Executing frontend tool: ${toolCallName}`
+      } catch (error) {
+        console.error('[handleToolCallEnd] Failed to parse tool args:', error)
+        toolResult = `Error: Failed to execute frontend tool - ${error instanceof Error ? error.message : String(error)}`
+      }
     }
   }
 
