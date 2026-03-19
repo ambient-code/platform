@@ -62,6 +62,7 @@ func TestRolePost(t *testing.T) {
 	Expect(*roleOutput.Href).To(Equal(fmt.Sprintf("/api/ambient/v1/roles/%s", *roleOutput.Id)))
 
 	jwtToken := ctx.Value(openapi.ContextAccessToken)
+	var restyResp *resty.Response
 	restyResp, err = resty.R().
 		SetHeader("Content-Type", "application/json").
 		SetHeader("Authorization", fmt.Sprintf("Bearer %s", jwtToken)).
@@ -90,6 +91,7 @@ func TestRolePatch(t *testing.T) {
 	Expect(*roleOutput.Href).To(Equal(fmt.Sprintf("/api/ambient/v1/roles/%s", *roleOutput.Id)))
 
 	jwtToken := ctx.Value(openapi.ContextAccessToken)
+	var restyResp *resty.Response
 	restyResp, err = resty.R().
 		SetHeader("Content-Type", "application/json").
 		SetHeader("Authorization", fmt.Sprintf("Bearer %s", jwtToken)).
