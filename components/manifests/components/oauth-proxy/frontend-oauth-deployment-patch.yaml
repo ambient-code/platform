@@ -1,0 +1,78 @@
+# Patch for production frontend deployment
+# - Adds OAuth proxy sidecar for authentication
+# - Overrides resource limits to prevent OOMKills (sawtooth memory pattern)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+spec:
+  template:
+    spec:
+      containers:
+      # Frontend container - increased limits to prevent OOMKills
+      - name: frontend
+        resources:
+          requests:
+            memory: 512Mi
+            cpu: 200m
+          limits:
+            memory: 2Gi
+            cpu: 1000m
+      # OAuth proxy sidecar
+      - name: oauth-proxy
+        image: quay.io/openshift/origin-oauth-proxy:4.14
+        args:
+        - --http-address=:8443
+        - --https-address=
+        - --provider=openshift
+        - --upstream=http://localhost:3000
+        - --client-id=ambient-frontend
+        - --client-secret-file=/etc/oauth/config/client-secret
+        - --cookie-secret-file=/etc/oauth/config/cookie_secret
+        - --cookie-expire=23h0m0s
+        - --pass-access-token
+        - --scope=user:full
+        - --openshift-delegate-urls={"/":{"resource":"projects","verb":"list"}}
+        - --skip-auth-regex=^/metrics
+        ports:
+        - containerPort: 8443
+          name: dashboard-ui
+        livenessProbe:
+          httpGet:
+            path: /oauth/healthz
+            port: dashboard-ui
+            scheme: HTTP
+          initialDelaySeconds: 30
+          timeoutSeconds: 1
+          periodSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /oauth/healthz
+            port: dashboard-ui
+            scheme: HTTP
+          initialDelaySeconds: 5
+          timeoutSeconds: 1
+          periodSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+        resources:
+          requests:
+            memory: 256Mi
+            cpu: 50m
+          limits:
+            memory: 512Mi
+            cpu: 200m
+        volumeMounts:
+        - mountPath: /etc/oauth/config
+          name: oauth-config
+        - mountPath: /etc/tls/private
+          name: proxy-tls
+      volumes:
+      - name: oauth-config
+        secret:
+          secretName: frontend-oauth-config
+      - name: proxy-tls
+        secret:
+          secretName: dashboard-proxy-tls

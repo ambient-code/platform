@@ -48,27 +48,31 @@ spec:
           value: "quay.io/ambient_code/vteam_claude_runner:latest"
         - name: IMAGE_PULL_POLICY
           value: "IfNotPresent"
-        # Vertex AI configuration from ConfigMap
+        # Vertex AI configuration from ConfigMap (optional — set by setup-vertex-kind.sh or production overlay)
         - name: USE_VERTEX
           valueFrom:
             configMapKeyRef:
               name: operator-config
               key: USE_VERTEX
+              optional: true
         - name: CLOUD_ML_REGION
           valueFrom:
             configMapKeyRef:
               name: operator-config
               key: CLOUD_ML_REGION
+              optional: true
         - name: ANTHROPIC_VERTEX_PROJECT_ID
           valueFrom:
             configMapKeyRef:
               name: operator-config
               key: ANTHROPIC_VERTEX_PROJECT_ID
+              optional: true
         - name: GOOGLE_APPLICATION_CREDENTIALS
           valueFrom:
             configMapKeyRef:
               name: operator-config
               key: GOOGLE_APPLICATION_CREDENTIALS
+              optional: true
         # Platform-wide Langfuse observability configuration
         # All LANGFUSE_* config stored in ambient-admin-langfuse-secret (platform-admin managed)
         - name: LANGFUSE_ENABLED

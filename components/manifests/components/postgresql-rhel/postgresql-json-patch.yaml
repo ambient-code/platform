@@ -1,0 +1,42 @@
+# JSON patch to replace PostgreSQL container for RHEL image
+# Replaces volumeMounts to fix mount path for RHEL data directory
+# Replaces env vars for RHEL naming convention (POSTGRESQL_* instead of POSTGRES_*)
+# Replaces probes to use POSTGRESQL_USER env var
+- op: replace
+  path: /spec/template/spec/containers/0/image
+  value: registry.redhat.io/rhel10/postgresql-16:10.1
+- op: replace
+  path: /spec/template/spec/containers/0/env
+  value:
+  - name: POSTGRESQL_USER
+    valueFrom:
+      secretKeyRef:
+        name: postgresql-credentials
+        key: db.user
+  - name: POSTGRESQL_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: postgresql-credentials
+        key: db.password
+  - name: POSTGRESQL_DATABASE
+    valueFrom:
+      secretKeyRef:
+        name: postgresql-credentials
+        key: db.name
+- op: replace
+  path: /spec/template/spec/containers/0/volumeMounts
+  value:
+  - name: data
+    mountPath: /var/lib/pgsql/data
+- op: replace
+  path: /spec/template/spec/containers/0/readinessProbe/exec/command
+  value:
+  - /bin/sh
+  - -c
+  - pg_isready -U "$POSTGRESQL_USER"
+- op: replace
+  path: /spec/template/spec/containers/0/livenessProbe/exec/command
+  value:
+  - /bin/sh
+  - -c
+  - pg_isready -U "$POSTGRESQL_USER"
