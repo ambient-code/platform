@@ -25,6 +25,8 @@ export type MessageProps = {
   streaming?: boolean;
   /** Feedback buttons to show below the message (for bot messages) */
   feedbackButtons?: React.ReactNode;
+  /** Sender display name for multi-user session attribution (user messages only) */
+  senderAttribution?: string;
 };
 
 const defaultComponents: Components = {
@@ -237,7 +239,7 @@ export const LoadingDots = () => {
 
 export const Message = React.forwardRef<HTMLDivElement, MessageProps>(
   (
-    { role, content, isLoading, className, components, borderless, actions, timestamp, streaming, feedbackButtons, ...props },
+    { role, content, isLoading, className, components, borderless, actions, timestamp, streaming, feedbackButtons, senderAttribution, ...props },
     ref
   ) => {
     const isBot = role === "bot";
@@ -270,10 +272,14 @@ export const Message = React.forwardRef<HTMLDivElement, MessageProps>(
 
           {/* Message Content */}
           <div className={cn("flex-1 min-w-0", !isBot && "max-w-[70%]")}>
-            {/* Timestamp */}
-            {formattedTime && (
+            {/* Timestamp and Sender */}
+            {(formattedTime || senderAttribution) && (
               <div className={cn("text-[10px] text-muted-foreground/60 mb-1", !isBot && "text-right")}>
-                {formattedTime}
+                {senderAttribution && (
+                  <span className="font-medium">{senderAttribution}</span>
+                )}
+                {senderAttribution && formattedTime && <span className="mx-1">•</span>}
+                {formattedTime && <span>{formattedTime}</span>}
               </div>
             )}
             <div className={cn(

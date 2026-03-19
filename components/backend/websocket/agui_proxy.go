@@ -268,16 +268,52 @@ func HandleAGUIRunProxy(c *gin.Context) {
 	// Resolve and cache the runner port for this session from the registry.
 	cacheSessionPort(projectName, sessionName)
 
-	// Parse messages for display name generation and hidden metadata
+	// Extract sender identity for message attribution
+	senderUserID := c.GetString("userID")
+	senderDisplayName := c.GetString("userName")
+
+	// Parse messages for display name generation, hidden metadata, and sender injection
 	var minimalMsgs []types.Message
+	var modifiedMessages []json.RawMessage
 	if len(rawMessages) > 0 {
 		for _, raw := range rawMessages {
 			var msg types.Message
 			if err := json.Unmarshal(raw, &msg); err == nil {
 				minimalMsgs = append(minimalMsgs, msg)
+
+				// Inject sender metadata into user messages for multi-user attribution
+				if msg.Role == types.RoleUser && senderUserID != "" {
+					var metadata map[string]interface{}
+					if msg.Metadata != nil {
+						if m, ok := msg.Metadata.(map[string]interface{}); ok {
+							metadata = m
+						}
+					}
+					if metadata == nil {
+						metadata = make(map[string]interface{})
+					}
+					metadata["senderId"] = senderUserID
+					if senderDisplayName != "" {
+						metadata["senderDisplayName"] = senderDisplayName
+					}
+					msg.Metadata = metadata
+
+					// Re-serialize the modified message
+					if modifiedRaw, err := json.Marshal(msg); err == nil {
+						raw = modifiedRaw
+					}
+				}
 			}
+			modifiedMessages = append(modifiedMessages, raw)
 		}
 		go triggerDisplayNameGenerationIfNeeded(projectName, sessionName, minimalMsgs)
+	}
+
+	// Replace original messages with modified messages that include sender metadata
+	if len(modifiedMessages) > 0 {
+		if modifiedJSON, err := json.Marshal(modifiedMessages); err == nil {
+			input.Messages = modifiedJSON
+		}
 	}
 
 	// Emit message_metadata RAW events for hidden messages (e.g. auto-sent

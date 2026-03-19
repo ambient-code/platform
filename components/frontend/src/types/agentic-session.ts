@@ -161,6 +161,11 @@ export type UserMessage = {
 	id?: string;  // Message ID for feedback association
 	content: ContentBlock | string;
 	timestamp: string;
+	metadata?: {
+		senderId?: string;
+		senderDisplayName?: string;
+		[key: string]: unknown;
+	};
 }
 export type AgentMessage = {
 	type: "agent_message";
@@ -168,6 +173,9 @@ export type AgentMessage = {
 	content: ContentBlock;
 	model: string;
 	timestamp: string;
+	metadata?: {
+		[key: string]: unknown;
+	};
 }
 export type SystemMessage = {
 	type: "system_message";

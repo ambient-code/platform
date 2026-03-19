@@ -87,6 +87,10 @@ export const StreamMessage: React.FC<StreamMessageProps> = ({ message, onGoToRes
       const isStreaming = 'streaming' in message && message.streaming;
       const isAgent = m.type === "agent_message";
 
+      // Extract sender attribution from metadata (for multi-user sessions)
+      const senderDisplayName = m.metadata?.senderDisplayName;
+      const senderId = m.metadata?.senderId;
+
       // Get content text for feedback context
       const getContentText = () => {
         if (typeof m.content === "string") return m.content;
@@ -109,11 +113,12 @@ export const StreamMessage: React.FC<StreamMessageProps> = ({ message, onGoToRes
           <Message
             role={isAgent ? "bot" : "user"}
             content={m.content}
-            name={agentName ?? "AI Agent"}
+            name={isAgent ? (agentName ?? "AI Agent") : senderDisplayName}
             borderless={plainCard}
             timestamp={m.timestamp}
             streaming={isStreaming}
             feedbackButtons={feedbackElement}
+            senderAttribution={!isAgent && senderDisplayName ? senderDisplayName : undefined}
           />
         );
       }
@@ -125,11 +130,12 @@ export const StreamMessage: React.FC<StreamMessageProps> = ({ message, onGoToRes
             <Message
               role={isAgent ? "bot" : "user"}
               content={m.content.text}
-              name={agentName ?? "AI Agent"}
+              name={isAgent ? (agentName ?? "AI Agent") : senderDisplayName}
               borderless={plainCard}
               timestamp={m.timestamp}
               streaming={isStreaming}
               feedbackButtons={feedbackElement}
+              senderAttribution={!isAgent && senderDisplayName ? senderDisplayName : undefined}
             />
           );
         case "tool_use_block":
