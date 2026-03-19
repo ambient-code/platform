@@ -50,6 +50,7 @@ IMAGES=(
   "vteam_operator:latest"
   "vteam_claude_runner:latest"
   "vteam_state_sync:latest"
+  "ambient_control_plane:latest"
 )
 
 echo ""

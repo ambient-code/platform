@@ -1,0 +1,16 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ambient-control-plane
+spec:
+  template:
+    spec:
+      containers:
+      - name: ambient-control-plane
+        env:
+        - name: AMBIENT_API_SERVER_URL
+          value: "http://ambient-api-server.ambient-code.svc:8000"
+        - name: AMBIENT_GRPC_USE_TLS
+          value: "false"
+        - name: RUNNER_IMAGE
+          value: "localhost/vteam_claude_runner:latest"

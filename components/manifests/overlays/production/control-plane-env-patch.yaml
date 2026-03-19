@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ambient-control-plane
+spec:
+  template:
+    spec:
+      containers:
+      - name: ambient-control-plane
+        env:
+        - name: AMBIENT_GRPC_SERVER_ADDR
+          value: "ambient-api-server.ambient-code.svc:9000"
+        - name: AMBIENT_GRPC_USE_TLS
+          value: "true"
+        - name: RUNNER_IMAGE
+          value: "quay.io/ambient_code/vteam_claude_runner:latest"
+        - name: RUNNER_IMAGE_NAMESPACE
+          value: "ambient-code"
+        - name: AMBIENT_API_SERVER_URL
+          value: "https://ambient-api-server.ambient-code.svc:8000"
+        - name: BACKEND_API_URL
+          value: "http://backend-service.ambient-code.svc:8080/api"

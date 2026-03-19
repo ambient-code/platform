@@ -1,0 +1,12 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ambient-control-plane
+spec:
+  template:
+    spec:
+      containers:
+      - name: ambient-control-plane
+        env:
+        - name: RUNNER_IMAGE
+          value: "localhost/vteam_claude_runner:latest"

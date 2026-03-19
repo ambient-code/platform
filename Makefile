@@ -1,4 +1,4 @@
-.PHONY: help setup build-all build-frontend build-backend build-operator build-runner build-state-sync build-public-api build-cli deploy clean check-architecture
+.PHONY: help setup build-all build-frontend build-backend build-operator build-runner build-state-sync build-public-api build-control-plane build-cli deploy clean check-architecture deploy-openshift
 .PHONY: local-up local-down local-clean local-status local-rebuild local-reload-backend local-reload-frontend local-reload-operator local-reload-api-server local-sync-version
 .PHONY: local-dev-token
 .PHONY: local-logs local-logs-backend local-logs-frontend local-logs-operator local-shell local-shell-frontend
@@ -65,6 +65,7 @@ RUNNER_IMAGE ?= vteam_claude_runner:$(IMAGE_TAG)
 STATE_SYNC_IMAGE ?= vteam_state_sync:$(IMAGE_TAG)
 PUBLIC_API_IMAGE ?= vteam_public_api:$(IMAGE_TAG)
 API_SERVER_IMAGE ?= vteam_api_server:$(IMAGE_TAG)
+CONTROL_PLANE_IMAGE ?= ambient_control_plane:$(IMAGE_TAG)
 
 # Podman prefixes image names with localhost/ — kind load needs to use the same
 # name so containerd can match the image reference used in the deployment spec
@@ -100,6 +101,7 @@ KIND_HOST ?=
 # Vertex AI Configuration (for LOCAL_VERTEX=true)
 # These inherit from environment if set, or can be overridden on command line
 LOCAL_IMAGES ?= false
+LOCAL_RUNNER ?= false
 LOCAL_VERTEX ?= false
 ANTHROPIC_VERTEX_PROJECT_ID ?= $(shell echo $$ANTHROPIC_VERTEX_PROJECT_ID)
 CLOUD_ML_REGION ?= $(shell echo $$CLOUD_ML_REGION)
@@ -160,7 +162,7 @@ help: ## Display this help message
 
 ##@ Building
 
-build-all: build-frontend build-backend build-operator build-runner build-state-sync build-public-api build-api-server ## Build all container images
+build-all: build-frontend build-backend build-operator build-runner build-state-sync build-public-api build-api-server build-control-plane ## Build all container images
 
 build-frontend: ## Build frontend image
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building frontend with $(CONTAINER_ENGINE)..."
@@ -203,6 +205,14 @@ build-api-server: ## Build ambient API server image
 	@cd components/ambient-api-server && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
 		-t $(API_SERVER_IMAGE) .
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) API server built: $(API_SERVER_IMAGE)"
+
+build-control-plane: ## Build ambient-control-plane image
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building ambient-control-plane with $(CONTAINER_ENGINE)..."
+	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
+		-t $(CONTROL_PLANE_IMAGE) \
+		-f components/ambient-control-plane/Dockerfile \
+		components/
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Control plane built: $(CONTROL_PLANE_IMAGE)"
 
 build-cli: ## Build acpctl CLI binary
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building acpctl CLI..."
@@ -248,12 +258,55 @@ registry-login: ## Login to container registry
 
 push-all: registry-login ## Push all images to registry
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Pushing images to $(REGISTRY)..."
-	@for image in $(FRONTEND_IMAGE) $(BACKEND_IMAGE) $(OPERATOR_IMAGE) $(RUNNER_IMAGE) $(STATE_SYNC_IMAGE) $(PUBLIC_API_IMAGE) $(API_SERVER_IMAGE); do \
+	@for image in $(FRONTEND_IMAGE) $(BACKEND_IMAGE) $(OPERATOR_IMAGE) $(RUNNER_IMAGE) $(STATE_SYNC_IMAGE) $(PUBLIC_API_IMAGE) $(API_SERVER_IMAGE) $(CONTROL_PLANE_IMAGE); do \
 		echo "  Tagging and pushing $$image..."; \
 		$(CONTAINER_ENGINE) tag $$image $(REGISTRY)/$$image && \
 		$(CONTAINER_ENGINE) push $(REGISTRY)/$$image; \
 	done
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) All images pushed"
+
+deploy-openshift: ## Deploy to OpenShift cluster. Use LOCAL_RUNNER=true to build+push runner from source to internal registry.
+	@echo "$(COLOR_BOLD)Deploying to OpenShift cluster$(COLOR_RESET)"
+	@oc whoami >/dev/null 2>&1 || (echo "$(COLOR_RED)✗$(COLOR_RESET) Not logged in to OpenShift. Run: oc login" && exit 1)
+	@command -v ocm >/dev/null 2>&1 || (echo "$(COLOR_RED)✗$(COLOR_RESET) ocm CLI not found. Install from https://console.redhat.com/openshift/downloads and run: ocm login" && exit 1)
+	@ocm token >/dev/null 2>&1 || (echo "$(COLOR_RED)✗$(COLOR_RESET) ocm token unavailable. Run: ocm login" && exit 1)
+	@REGISTRY_HOST=$$(oc get route default-route -n openshift-image-registry --template='{{ .spec.host }}' 2>/dev/null) && \
+	INTERNAL_REG="image-registry.openshift-image-registry.svc:5000/ambient-code" && \
+	INTERNAL_RUNNER="$$INTERNAL_REG/vteam_claude_runner:latest" && \
+	echo "$(COLOR_BLUE)▶$(COLOR_RESET) Registry: $$REGISTRY_HOST" && \
+	oc whoami -t | $(CONTAINER_ENGINE) login --tls-verify=false -u kubeadmin --password-stdin "$$REGISTRY_HOST" && \
+	echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building and pushing control plane..." && \
+	$(MAKE) --no-print-directory build-control-plane && \
+	$(CONTAINER_ENGINE) tag $(CONTROL_PLANE_IMAGE) $$REGISTRY_HOST/ambient-code/$(CONTROL_PLANE_IMAGE) && \
+	$(CONTAINER_ENGINE) push --tls-verify=false $$REGISTRY_HOST/ambient-code/$(CONTROL_PLANE_IMAGE) && \
+	echo "$(COLOR_GREEN)✓$(COLOR_RESET) Pushed $(CONTROL_PLANE_IMAGE)" && \
+	if [ "$(LOCAL_RUNNER)" = "true" ]; then \
+		echo "$(COLOR_BLUE)▶$(COLOR_RESET) LOCAL_RUNNER=true: building and pushing runner from source..." && \
+		$(MAKE) --no-print-directory build-runner && \
+		$(CONTAINER_ENGINE) tag $(RUNNER_IMAGE) $$REGISTRY_HOST/ambient-code/$(RUNNER_IMAGE) && \
+		$(CONTAINER_ENGINE) push --tls-verify=false $$REGISTRY_HOST/ambient-code/$(RUNNER_IMAGE) && \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Pushed $(RUNNER_IMAGE)"; \
+	else \
+		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Using quay.io runner image (pass LOCAL_RUNNER=true to build from source)"; \
+		INTERNAL_RUNNER="quay.io/ambient_code/vteam_claude_runner:latest"; \
+	fi && \
+	echo "$(COLOR_BLUE)▶$(COLOR_RESET) Applying production manifests..." && \
+	kubectl kustomize components/manifests/overlays/production/ | kubectl apply --validate=false -f - && \
+	echo "$(COLOR_BLUE)▶$(COLOR_RESET) Patching runner image to: $$INTERNAL_RUNNER" && \
+	kubectl set env deployment/ambient-control-plane -n ambient-code RUNNER_IMAGE="$$INTERNAL_RUNNER" && \
+	REGISTRY_JSON=$$(oc get configmap ambient-agent-registry -n ambient-code -o jsonpath='{.data.agent-registry\.json}') && \
+	UPDATED_JSON=$$(echo "$$REGISTRY_JSON" | sed "s|quay\.io/ambient_code/vteam_claude_runner:[^\"]*|$$INTERNAL_RUNNER|g") && \
+	kubectl patch configmap ambient-agent-registry -n ambient-code --type=merge \
+		-p "{\"data\":{\"agent-registry.json\":$$(echo "$$UPDATED_JSON" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')}}" && \
+	echo "$(COLOR_GREEN)✓$(COLOR_RESET) Agent registry updated" && \
+	echo "$(COLOR_BLUE)▶$(COLOR_RESET) Provisioning control plane RH SSO token..." && \
+	oc delete secret ambient-control-plane-token -n ambient-code 2>/dev/null || true && \
+	oc create secret generic ambient-control-plane-token -n ambient-code \
+		--from-literal=token="$$(ocm token)" && \
+	echo "$(COLOR_BLUE)▶$(COLOR_RESET) Restarting control-plane deployment..." && \
+	oc rollout restart deployment/ambient-control-plane -n ambient-code && \
+	oc rollout status deployment/ambient-control-plane -n ambient-code --timeout=120s && \
+	echo "$(COLOR_GREEN)✓$(COLOR_RESET) OpenShift deployment complete"
 
 ##@ MinIO S3 Storage
 
@@ -948,7 +1001,7 @@ check-architecture: ## Validate build architecture matches host
 
 _kind-load-images: ## Internal: Load images into kind cluster
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Loading images into kind ($(KIND_CLUSTER_NAME))..."
-	@for img in $(BACKEND_IMAGE) $(FRONTEND_IMAGE) $(OPERATOR_IMAGE) $(RUNNER_IMAGE) $(STATE_SYNC_IMAGE) $(PUBLIC_API_IMAGE) $(API_SERVER_IMAGE); do \
+	@for img in $(BACKEND_IMAGE) $(FRONTEND_IMAGE) $(OPERATOR_IMAGE) $(RUNNER_IMAGE) $(STATE_SYNC_IMAGE) $(PUBLIC_API_IMAGE) $(API_SERVER_IMAGE) $(CONTROL_PLANE_IMAGE); do \
 		echo "  Loading $(KIND_IMAGE_PREFIX)$$img..."; \
 		if [ -n "$(KIND_HOST)" ] || [ "$(CONTAINER_ENGINE)" = "podman" ]; then \
 			$(CONTAINER_ENGINE) save $(KIND_IMAGE_PREFIX)$$img | \

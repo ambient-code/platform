@@ -28,15 +28,3 @@
   value:
   - name: ambient-api-server-db-data
     mountPath: /var/lib/pgsql/data
-- op: replace
-  path: /spec/template/spec/containers/0/readinessProbe/exec/command
-  value:
-  - /bin/sh
-  - -c
-  - pg_isready -U "$POSTGRESQL_USER"
-- op: replace
-  path: /spec/template/spec/containers/0/livenessProbe/exec/command
-  value:
-  - /bin/sh
-  - -c
-  - pg_isready -U "$POSTGRESQL_USER"

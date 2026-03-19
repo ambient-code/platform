@@ -48,11 +48,24 @@ patches:
     group: apps
     version: v1
     kind: Deployment
+    name: ambient-control-plane
+- path: control-plane-env-patch.yaml
+  target:
+    kind: Deployment
+    name: ambient-control-plane
+- path: image-pull-policy-patch.yaml
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
     name: ambient-api-server
 
 # Remap images from Quay.io to locally-built names
 # Podman tags images with localhost/ prefix, which kind preserves when loading
 images:
+- name: quay.io/ambient_code/ambient_control_plane
+  newName: localhost/ambient_control_plane
+  newTag: latest
 - name: quay.io/ambient_code/vteam_backend
   newName: localhost/vteam_backend
   newTag: latest

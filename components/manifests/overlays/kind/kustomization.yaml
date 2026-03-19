@@ -36,10 +36,12 @@ patches:
     kind: Deployment
     name: ambient-api-server-db
     version: v1
-- path: ambient-api-server-jwks-patch.yaml
+- path: backend-ambient-api-patch.yaml
   target:
-    kind: ConfigMap
-    name: ambient-api-server-auth
+    group: apps
+    version: v1
+    kind: Deployment
+    name: backend-api
 - path: namespace-patch.yaml
   target:
     kind: Namespace
@@ -74,6 +76,18 @@ patches:
     kind: PersistentVolumeClaim
     name: postgresql-data
 # JSON patches to set imagePullPolicy for all deployments
+- path: control-plane-env-patch.yaml
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: ambient-control-plane
+- path: local-image-pull-policy-patch.yaml
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: ambient-control-plane
 - path: image-pull-policy-patch.yaml
   target:
     group: apps
@@ -116,4 +130,16 @@ images:
 - name: quay.io/ambient_code/vteam_operator
   newTag: latest
 - name: quay.io/ambient_code/vteam_public_api
+  newTag: latest
+# Remap RHEL registry images to docker hub equivalents available in kind
+- name: registry.redhat.io/rhel9/postgresql-16
+  newName: docker.io/library/postgres
+  newTag: "16"
+# Remap api-server to local image (init container + main container)
+- name: quay.io/ambient_code/vteam_api_server
+  newName: localhost/vteam_api_server
+  newTag: latest
+# Remap control-plane to local image
+- name: quay.io/ambient_code/ambient_control_plane
+  newName: localhost/ambient_control_plane
   newTag: latest
