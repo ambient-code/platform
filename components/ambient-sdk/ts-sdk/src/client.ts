@@ -4,32 +4,24 @@
 // Generated: 2026-03-12T10:28:42Z
 
 import type { AmbientClientConfig } from './base';
-import { AGUIEventAPI } from './a_g_u_i_event_api';
 import { AgentAPI } from './agent_api';
-import { AgentMessageAPI } from './agent_message_api';
 import { ProjectAPI } from './project_api';
-import { ProjectDocumentAPI } from './project_document_api';
 import { ProjectSettingsAPI } from './project_settings_api';
 import { RoleAPI } from './role_api';
 import { RoleBindingAPI } from './role_binding_api';
 import { SessionAPI } from './session_api';
-import { SessionCheckInAPI } from './session_check_in_api';
 import { UserAPI } from './user_api';
 
 
 export class AmbientClient {
   private readonly config: AmbientClientConfig;
 
-  readonly aGUIEvents: AGUIEventAPI;
   readonly agents: AgentAPI;
-  readonly agentMessages: AgentMessageAPI;
   readonly projects: ProjectAPI;
-  readonly projectDocuments: ProjectDocumentAPI;
   readonly projectSettings: ProjectSettingsAPI;
   readonly roles: RoleAPI;
   readonly roleBindings: RoleBindingAPI;
   readonly sessions: SessionAPI;
-  readonly sessionCheckIns: SessionCheckInAPI;
   readonly users: UserAPI;
 
   constructor(config: AmbientClientConfig) {
@@ -62,16 +54,12 @@ export class AmbientClient {
       baseUrl: config.baseUrl.replace(/\/+$/, ''),
     };
 
-    this.aGUIEvents = new AGUIEventAPI(this.config);
     this.agents = new AgentAPI(this.config);
-    this.agentMessages = new AgentMessageAPI(this.config);
     this.projects = new ProjectAPI(this.config);
-    this.projectDocuments = new ProjectDocumentAPI(this.config);
     this.projectSettings = new ProjectSettingsAPI(this.config);
     this.roles = new RoleAPI(this.config);
     this.roleBindings = new RoleBindingAPI(this.config);
     this.sessions = new SessionAPI(this.config);
-    this.sessionCheckIns = new SessionCheckInAPI(this.config);
     this.users = new UserAPI(this.config);
   }
 

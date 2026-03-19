@@ -7,16 +7,12 @@
 
 from .client import AmbientClient
 from ._base import APIError, ListOptions
-from .a_g_u_i_event import AGUIEvent, AGUIEventPatch
 from .agent import Agent, AgentPatch
-from .agent_message import AgentMessage, AgentMessagePatch
 from .project import Project, ProjectPatch
-from .project_document import ProjectDocument, ProjectDocumentPatch
 from .project_settings import ProjectSettings, ProjectSettingsPatch
 from .role import Role, RolePatch
 from .role_binding import RoleBinding, RoleBindingPatch
 from .session import Session, SessionPatch, SessionStatusPatch
-from .session_check_in import SessionCheckIn, SessionCheckInPatch
 from .user import User, UserPatch
 
 __version__ = "1.0.0"
@@ -25,16 +21,10 @@ __all__ = [
     "AmbientClient",
     "APIError",
     "ListOptions",
-    "AGUIEvent",
-    "AGUIEventPatch",
     "Agent",
     "AgentPatch",
-    "AgentMessage",
-    "AgentMessagePatch",
     "Project",
     "ProjectPatch",
-    "ProjectDocument",
-    "ProjectDocumentPatch",
     "ProjectSettings",
     "ProjectSettingsPatch",
     "Role",
@@ -44,8 +34,6 @@ __all__ = [
     "Session",
     "SessionPatch",
     "SessionStatusPatch",
-    "SessionCheckIn",
-    "SessionCheckInPatch",
     "User",
     "UserPatch",
 ]

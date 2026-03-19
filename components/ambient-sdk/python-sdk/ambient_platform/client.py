@@ -16,16 +16,12 @@ import httpx
 from ._base import APIError, ListOptions
 
 if TYPE_CHECKING:
-    from ._a_g_u_i_event_api import AGUIEventAPI
     from ._agent_api import AgentAPI
-    from ._agent_message_api import AgentMessageAPI
     from ._project_api import ProjectAPI
-    from ._project_document_api import ProjectDocumentAPI
     from ._project_settings_api import ProjectSettingsAPI
     from ._role_api import RoleAPI
     from ._role_binding_api import RoleBindingAPI
     from ._session_api import SessionAPI
-    from ._session_check_in_api import SessionCheckInAPI
     from ._user_api import UserAPI
 
 
@@ -60,16 +56,12 @@ class AmbientClient:
         )
 
         # Initialize API interfaces
-        self._a_g_u_i_event_api: Optional[AGUIEventAPI] = None
         self._agent_api: Optional[AgentAPI] = None
-        self._agent_message_api: Optional[AgentMessageAPI] = None
         self._project_api: Optional[ProjectAPI] = None
-        self._project_document_api: Optional[ProjectDocumentAPI] = None
         self._project_settings_api: Optional[ProjectSettingsAPI] = None
         self._role_api: Optional[RoleAPI] = None
         self._role_binding_api: Optional[RoleBindingAPI] = None
         self._session_api: Optional[SessionAPI] = None
-        self._session_check_in_api: Optional[SessionCheckInAPI] = None
         self._user_api: Optional[UserAPI] = None
 
     @classmethod
@@ -184,13 +176,6 @@ class AmbientClient:
     def __exit__(self, *args: Any) -> None:
         self.close()
     @property
-    def a_g_u_i_events(self) -> AGUIEventAPI:
-        """Get the AGUIEvent API interface."""
-        if self._a_g_u_i_event_api is None:
-            from ._a_g_u_i_event_api import AGUIEventAPI
-            self._a_g_u_i_event_api = AGUIEventAPI(self)
-        return self._a_g_u_i_event_api
-    @property
     def agents(self) -> AgentAPI:
         """Get the Agent API interface."""
         if self._agent_api is None:
@@ -198,26 +183,12 @@ class AmbientClient:
             self._agent_api = AgentAPI(self)
         return self._agent_api
     @property
-    def agent_messages(self) -> AgentMessageAPI:
-        """Get the AgentMessage API interface."""
-        if self._agent_message_api is None:
-            from ._agent_message_api import AgentMessageAPI
-            self._agent_message_api = AgentMessageAPI(self)
-        return self._agent_message_api
-    @property
     def projects(self) -> ProjectAPI:
         """Get the Project API interface."""
         if self._project_api is None:
             from ._project_api import ProjectAPI
             self._project_api = ProjectAPI(self)
         return self._project_api
-    @property
-    def project_documents(self) -> ProjectDocumentAPI:
-        """Get the ProjectDocument API interface."""
-        if self._project_document_api is None:
-            from ._project_document_api import ProjectDocumentAPI
-            self._project_document_api = ProjectDocumentAPI(self)
-        return self._project_document_api
     @property
     def project_settings(self) -> ProjectSettingsAPI:
         """Get the ProjectSettings API interface."""
@@ -246,13 +217,6 @@ class AmbientClient:
             from ._session_api import SessionAPI
             self._session_api = SessionAPI(self)
         return self._session_api
-    @property
-    def session_check_ins(self) -> SessionCheckInAPI:
-        """Get the SessionCheckIn API interface."""
-        if self._session_check_in_api is None:
-            from ._session_check_in_api import SessionCheckInAPI
-            self._session_check_in_api = SessionCheckInAPI(self)
-        return self._session_check_in_api
     @property
     def users(self) -> UserAPI:
         """Get the User API interface."""

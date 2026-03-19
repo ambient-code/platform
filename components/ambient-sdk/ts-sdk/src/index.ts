@@ -7,25 +7,13 @@ export { AmbientClient } from './client';
 export type { AmbientClientConfig, ListOptions, RequestOptions, ObjectReference, ListMeta, APIError } from './base';
 export { AmbientAPIError, buildQueryString } from './base';
 
-export type { AGUIEvent, AGUIEventList, AGUIEventCreateRequest, AGUIEventPatchRequest } from './a_g_u_i_event';
-export { AGUIEventBuilder, AGUIEventPatchBuilder } from './a_g_u_i_event';
-export { AGUIEventAPI } from './a_g_u_i_event_api';
-
 export type { Agent, AgentList, AgentCreateRequest, AgentPatchRequest } from './agent';
 export { AgentBuilder, AgentPatchBuilder } from './agent';
 export { AgentAPI } from './agent_api';
 
-export type { AgentMessage, AgentMessageList, AgentMessageCreateRequest, AgentMessagePatchRequest } from './agent_message';
-export { AgentMessageBuilder, AgentMessagePatchBuilder } from './agent_message';
-export { AgentMessageAPI } from './agent_message_api';
-
 export type { Project, ProjectList, ProjectCreateRequest, ProjectPatchRequest } from './project';
 export { ProjectBuilder, ProjectPatchBuilder } from './project';
 export { ProjectAPI } from './project_api';
-
-export type { ProjectDocument, ProjectDocumentList, ProjectDocumentCreateRequest, ProjectDocumentPatchRequest } from './project_document';
-export { ProjectDocumentBuilder, ProjectDocumentPatchBuilder } from './project_document';
-export { ProjectDocumentAPI } from './project_document_api';
 
 export type { ProjectSettings, ProjectSettingsList, ProjectSettingsCreateRequest, ProjectSettingsPatchRequest } from './project_settings';
 export { ProjectSettingsBuilder, ProjectSettingsPatchBuilder } from './project_settings';
@@ -42,10 +30,6 @@ export { RoleBindingAPI } from './role_binding_api';
 export type { Session, SessionList, SessionCreateRequest, SessionPatchRequest, SessionStatusPatchRequest } from './session';
 export { SessionBuilder, SessionPatchBuilder, SessionStatusPatchBuilder } from './session';
 export { SessionAPI } from './session_api';
-
-export type { SessionCheckIn, SessionCheckInList, SessionCheckInCreateRequest, SessionCheckInPatchRequest } from './session_check_in';
-export { SessionCheckInBuilder, SessionCheckInPatchBuilder } from './session_check_in';
-export { SessionCheckInAPI } from './session_check_in_api';
 
 export type { User, UserList, UserCreateRequest, UserPatchRequest } from './user';
 export { UserBuilder, UserPatchBuilder } from './user';

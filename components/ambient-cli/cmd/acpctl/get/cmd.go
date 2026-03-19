@@ -39,7 +39,6 @@ Valid resource types:
   agents              (aliases: agent)
   roles               (aliases: role)
   role-bindings       (aliases: role-binding, rb)
-  project-documents   (aliases: project-document, docs, doc)
 `,
 	Args:    cobra.RangeArgs(1, 2),
 	RunE:    run,
@@ -111,10 +110,8 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 		return getRoles(ctx, client, printer, name)
 	case "role-bindings":
 		return getRoleBindings(ctx, client, printer, name)
-	case "project-documents":
-		return getProjectDocuments(ctx, client, printer, name)
 	default:
-		return fmt.Errorf("unknown resource type: %s\nValid types: sessions, projects, project-settings, users, agents, roles, role-bindings, project-documents", cmdArgs[0])
+		return fmt.Errorf("unknown resource type: %s\nValid types: sessions, projects, project-settings, users, agents, roles, role-bindings", cmdArgs[0])
 	}
 }
 
@@ -134,8 +131,6 @@ func normalizeResource(r string) string {
 		return "roles"
 	case "role-binding", "role-bindings", "rolebinding", "rolebindings", "rb":
 		return "role-bindings"
-	case "project-document", "project-documents", "doc", "docs":
-		return "project-documents"
 	default:
 		return r
 	}
@@ -440,48 +435,6 @@ func printRoleBindingTable(printer *output.Printer, rbs []sdktypes.RoleBinding) 
 	table.WriteHeaders()
 	for _, rb := range rbs {
 		table.WriteRow(rb.ID, rb.UserID, rb.RoleID, rb.Scope, rb.ScopeID)
-	}
-	return nil
-}
-
-func getProjectDocuments(ctx context.Context, client *sdkclient.Client, printer *output.Printer, name string) error {
-	if name != "" {
-		doc, err := client.ProjectDocuments().Get(ctx, name)
-		if err != nil {
-			return fmt.Errorf("get project-document %q: %w", name, err)
-		}
-		if printer.Format() == output.FormatJSON {
-			return printer.PrintJSON(doc)
-		}
-		return printProjectDocumentTable(printer, []sdktypes.ProjectDocument{*doc})
-	}
-	opts := sdktypes.NewListOptions().Size(args.limit).Build()
-	list, err := client.ProjectDocuments().List(ctx, opts)
-	if err != nil {
-		return fmt.Errorf("list project-documents: %w", err)
-	}
-	if printer.Format() == output.FormatJSON {
-		return printer.PrintJSON(list)
-	}
-	return printProjectDocumentTable(printer, list.Items)
-}
-
-func printProjectDocumentTable(printer *output.Printer, docs []sdktypes.ProjectDocument) error {
-	columns := []output.Column{
-		{Name: "ID", Width: 27},
-		{Name: "PROJECT", Width: 20},
-		{Name: "SLUG", Width: 20},
-		{Name: "TITLE", Width: 40},
-		{Name: "AGE", Width: 10},
-	}
-	table := output.NewTable(printer.Writer(), columns)
-	table.WriteHeaders()
-	for _, d := range docs {
-		age := ""
-		if d.CreatedAt != nil {
-			age = output.FormatAge(time.Since(*d.CreatedAt))
-		}
-		table.WriteRow(d.ID, d.ProjectID, d.Slug, d.Title, age)
 	}
 	return nil
 }

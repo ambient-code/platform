@@ -25,7 +25,7 @@ Valid resource types:
   agent             (aliases: agents)
   role
   role-binding      (aliases: rb)
-  project-document  (aliases: doc)`,
+  role-binding      (aliases: rb)`,
 	Args: cobra.ExactArgs(2),
 	RunE: run,
 }
@@ -99,14 +99,7 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 		}
 		return printer.PrintJSON(rb)
 
-	case "project-document", "project-documents", "doc":
-		doc, err := client.ProjectDocuments().Get(ctx, name)
-		if err != nil {
-			return fmt.Errorf("describe project-document %q: %w", name, err)
-		}
-		return printer.PrintJSON(doc)
-
 	default:
-		return fmt.Errorf("unknown resource type: %s\nValid types: session, project, project-settings, user, agent, role, role-binding, project-document", cmdArgs[0])
+		return fmt.Errorf("unknown resource type: %s\nValid types: session, project, project-settings, user, agent, role, role-binding", cmdArgs[0])
 	}
 }

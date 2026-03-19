@@ -5,8 +5,8 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
+	"github.com/ambient-code/platform/components/ambient-cli/pkg/config"
 	"github.com/ambient-code/platform/components/ambient-cli/pkg/connection"
 	"github.com/spf13/cobra"
 )
@@ -27,7 +27,7 @@ Valid resource types:
   agent
   role
   role-binding      (aliases: rolebinding, rb)
-  project-document  (aliases: doc)`,
+  role-binding      (aliases: rolebinding, rb)`,
 	Args: cobra.ExactArgs(2),
 	RunE: run,
 }
@@ -58,7 +58,11 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 		return err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.GetRequestTimeout())
 	defer cancel()
 
 	switch resource {
@@ -104,14 +108,7 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 		fmt.Fprintf(cmd.OutOrStdout(), "role-binding/%s deleted\n", name)
 		return nil
 
-	case "project-document", "project-documents", "doc", "docs":
-		if err := client.ProjectDocuments().Delete(ctx, name); err != nil {
-			return fmt.Errorf("delete project-document %q: %w", name, err)
-		}
-		fmt.Fprintf(cmd.OutOrStdout(), "project-document/%s deleted\n", name)
-		return nil
-
 	default:
-		return fmt.Errorf("unknown or non-deletable resource type: %s\nDeletable types: project, project-settings, session, agent, role, role-binding, project-document", cmdArgs[0])
+		return fmt.Errorf("unknown or non-deletable resource type: %s\nDeletable types: project, project-settings, session, agent, role, role-binding", cmdArgs[0])
 	}
 }
