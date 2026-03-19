@@ -16,6 +16,8 @@ dependencies = [
   "aiohttp>=3.8.0",
   "requests>=2.31.0",
   "pyjwt>=2.8.0",
+  "grpcio>=1.60.0",
+  "protobuf>=4.25.0",
 ]
 
 [project.optional-dependencies]
