@@ -25,6 +25,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -50,6 +51,7 @@ const DEFAULT_MODEL = "";
 
 const formSchema = z.object({
   displayName: z.string().max(50).optional(),
+  initialPrompt: z.string().max(5000).optional(),
   runnerType: z.string().min(1, "Please select a runner type"),
   model: z.string().min(1, "Please select a model"),
   temperature: z.number().min(0).max(2),
@@ -91,6 +93,7 @@ export function CreateSessionDialog({
     resolver: zodResolver(formSchema),
     defaultValues: {
       displayName: "",
+      initialPrompt: "",
       runnerType: DEFAULT_RUNNER_TYPE_ID,
       model: DEFAULT_MODEL,
       temperature: 0.7,
@@ -193,6 +196,10 @@ export function CreateSessionDialog({
     if (trimmedName) {
       request.displayName = trimmedName;
     }
+    const trimmedPrompt = values.initialPrompt?.trim();
+    if (trimmedPrompt) {
+      request.initialPrompt = trimmedPrompt;
+    }
     if (workflowSelection) {
       request.activeWorkflow = workflowSelection;
     }
@@ -258,6 +265,30 @@ export function CreateSessionDialog({
                     </FormControl>
                     <p className="text-xs text-muted-foreground">
                       {(field.value ?? "").length}/50 characters. Optional; you can rename later from the session menu.
+                    </p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Initial message (optional) */}
+              <FormField
+                control={form.control}
+                name="initialPrompt"
+                render={({ field }) => (
+                  <FormItem className="w-full">
+                    <FormLabel>Initial message (optional)</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        {...field}
+                        placeholder="Enter an initial message to send to the agent when the session starts..."
+                        maxLength={5000}
+                        rows={3}
+                        disabled={createSessionMutation.isPending}
+                      />
+                    </FormControl>
+                    <p className="text-xs text-muted-foreground">
+                      {(field.value ?? "").length}/5000 characters. If a workflow is selected, its startup prompt will be sent first, then this message.
                     </p>
                     <FormMessage />
                   </FormItem>
