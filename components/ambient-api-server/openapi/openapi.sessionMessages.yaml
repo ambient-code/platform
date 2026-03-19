@@ -116,149 +116,32 @@ paths:
             application/json:
               schema:
                 $ref: 'openapi.yaml#/components/schemas/Error'
-  /api/ambient/v1/sessions/{id}/ag_ui:
-    get:
-      summary: Stream AG-UI events for a session (SSE)
-      description: |-
-        Always returns a Server-Sent Events stream of all session messages.
-        Unlike `/messages` (which can return JSON or SSE), this endpoint is
-        SSE-only and is the canonical real-time feed for AG-UI frontends.
-        Replays existing messages, then streams new ones live.
-        Keep-alive comments (`: keep-alive`) are sent every 15 seconds.
-      security:
-        - Bearer: []
-      parameters:
-        - $ref: 'openapi.sessions.yaml#/components/parameters/id'
-        - name: after_seq
-          in: query
-          required: false
-          description: Replay only messages with seq greater than this value (default 0 = full history)
-          schema:
-            type: integer
-            format: int64
-            default: 0
-      responses:
-        '200':
-          description: SSE stream of SessionMessage events
-          content:
-            text/event-stream:
-              schema:
-                type: string
-                description: |-
-                  Server-Sent Events. Each event is a JSON-encoded SessionMessage:
-
-                  data: {"id":"...","session_id":"...","seq":1,"event_type":"TEXT_MESSAGE_CONTENT","payload":"..."}
-
-        '401':
-          description: Auth token is invalid
-          content:
-            application/json:
-              schema:
-                $ref: 'openapi.yaml#/components/schemas/Error'
-        '403':
-          description: Unauthorized to perform operation
-          content:
-            application/json:
-              schema:
-                $ref: 'openapi.yaml#/components/schemas/Error'
-        '404':
-          description: No session with specified id exists
-          content:
-            application/json:
-              schema:
-                $ref: 'openapi.yaml#/components/schemas/Error'
-        '500':
-          description: Unexpected error occurred
-          content:
-            application/json:
-              schema:
-                $ref: 'openapi.yaml#/components/schemas/Error'
-    post:
-      summary: Send a user turn to a session
-      description: |-
-        Pushes a user-turn message (`event_type` is always `user`) into the
-        session message log. The runner's `WatchSessionMessages` gRPC stream
-        picks this up and processes it as the next human input.
-        This is the correct write path for human-to-agent communication.
-      security:
-        - Bearer: []
-      parameters:
-        - $ref: 'openapi.sessions.yaml#/components/parameters/id'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AgUIUserTurn'
-      responses:
-        '201':
-          description: User turn pushed successfully
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SessionMessage'
-        '400':
-          description: Invalid request body
-          content:
-            application/json:
-              schema:
-                $ref: 'openapi.yaml#/components/schemas/Error'
-        '401':
-          description: Auth token is invalid
-          content:
-            application/json:
-              schema:
-                $ref: 'openapi.yaml#/components/schemas/Error'
-        '403':
-          description: Unauthorized to perform operation
-          content:
-            application/json:
-              schema:
-                $ref: 'openapi.yaml#/components/schemas/Error'
-        '404':
-          description: No session with specified id exists
-          content:
-            application/json:
-              schema:
-                $ref: 'openapi.yaml#/components/schemas/Error'
-        '500':
-          description: Unexpected error occurred
-          content:
-            application/json:
-              schema:
-                $ref: 'openapi.yaml#/components/schemas/Error'
 components:
   schemas:
     SessionMessage:
-      type: object
-      properties:
-        id:
-          type: string
-          readOnly: true
-          description: Unique message ID (KSUID)
-        session_id:
-          type: string
-          readOnly: true
-          description: ID of the parent session
-        seq:
-          type: integer
-          format: int64
-          readOnly: true
-          description: Monotonically increasing sequence number within the session
-        event_type:
-          type: string
-          description: |-
-            Event type tag. Common values: `user` (human turn),
-            `assistant` (model reply), `tool_use`, `tool_result`,
-            `system`, `error`.
-          default: user
-        payload:
-          type: string
-          description: Message body (plain text or JSON-encoded AG-UI event payload)
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
+      allOf:
+        - $ref: 'openapi.yaml#/components/schemas/ObjectReference'
+        - type: object
+          properties:
+            session_id:
+              type: string
+              readOnly: true
+              description: ID of the parent session
+            seq:
+              type: integer
+              format: int64
+              readOnly: true
+              description: Monotonically increasing sequence number within the session
+            event_type:
+              type: string
+              description: |-
+                Event type tag. Common values: `user` (human turn),
+                `assistant` (model reply), `tool_use`, `tool_result`,
+                `system`, `error`.
+              default: user
+            payload:
+              type: string
+              description: Message body (plain text or JSON-encoded event payload)
     SessionMessageList:
       type: array
       items:
@@ -274,13 +157,3 @@ components:
         payload:
           type: string
           description: Message body
-    AgUIUserTurn:
-      type: object
-      description: |-
-        Payload for POST /sessions/{id}/ag_ui — always creates a `user` event.
-        The runner's WatchSessionMessages gRPC stream picks this up as
-        the next human input turn.
-      properties:
-        payload:
-          type: string
-          description: The user's message text or JSON-encoded AG-UI user event payload

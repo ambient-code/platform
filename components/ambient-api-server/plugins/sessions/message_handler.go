@@ -141,44 +141,6 @@ func (h *messageHandler) ListMessages(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *messageHandler) SendAgUI(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	id := mux.Vars(r)["id"]
-
-	if _, err := h.session.Get(ctx, id); err != nil {
-		http.Error(w, "session not found", http.StatusNotFound)
-		return
-	}
-
-	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
-	if err != nil {
-		http.Error(w, "failed to read request body", http.StatusBadRequest)
-		return
-	}
-
-	if !json.Valid(body) {
-		http.Error(w, "invalid JSON body", http.StatusBadRequest)
-		return
-	}
-
-	msg, err := h.msg.Push(ctx, id, "user", string(body))
-	if err != nil {
-		glog.Errorf("SendAgUI: session %s: %v", id, err)
-		http.Error(w, "failed to push message", http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	if encErr := json.NewEncoder(w).Encode(msg); encErr != nil {
-		glog.Errorf("SendAgUI: encode response: %v", encErr)
-	}
-}
-
-func (h *messageHandler) StreamAgUI(w http.ResponseWriter, r *http.Request) {
-	h.streamMessages(w, r, nil)
-}
-
 func (h *messageHandler) StreamTextMessages(w http.ResponseWriter, r *http.Request) {
 	h.streamMessages(w, r, func(msg *SessionMessage) bool {
 		return strings.HasPrefix(msg.EventType, "TEXT_MESSAGE_")

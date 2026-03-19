@@ -10,9 +10,9 @@ import (
 func migration() *gormigrate.Migration {
 	type RoleBinding struct {
 		db.Model
-		UserId  string  `gorm:"not null;index"`
-		RoleId  string  `gorm:"not null;index"`
-		Scope   string  `gorm:"not null"`
+		UserId  string `gorm:"not null;index"`
+		RoleId  string `gorm:"not null;index"`
+		Scope   string `gorm:"not null"`
 		ScopeId *string
 	}
 

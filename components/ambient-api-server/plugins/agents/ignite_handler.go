@@ -141,20 +141,20 @@ func (h *igniteHandler) IgnitionPreview(w http.ResponseWriter, r *http.Request) 
 func buildIgnitionPrompt(agent *Agent, peers AgentList) string {
 	var sb strings.Builder
 
-	sb.WriteString(fmt.Sprintf("# Agent Ignition: %s\n\n", agent.Name))
+	fmt.Fprintf(&sb, "# Agent Ignition: %s\n\n", agent.Name)
 	if agent.DisplayName != nil {
-		sb.WriteString(fmt.Sprintf("You are **%s**", *agent.DisplayName))
+		fmt.Fprintf(&sb, "You are **%s**", *agent.DisplayName)
 	} else {
-		sb.WriteString(fmt.Sprintf("You are **%s**", agent.Name))
+		fmt.Fprintf(&sb, "You are **%s**", agent.Name)
 	}
-	sb.WriteString(fmt.Sprintf(", working in project **%s**.\n\n", agent.ProjectId))
+	fmt.Fprintf(&sb, ", working in project **%s**.\n\n", agent.ProjectId)
 
 	if agent.Description != nil {
-		sb.WriteString(fmt.Sprintf("## Role\n\n%s\n\n", *agent.Description))
+		fmt.Fprintf(&sb, "## Role\n\n%s\n\n", *agent.Description)
 	}
 
 	if agent.Prompt != nil {
-		sb.WriteString(fmt.Sprintf("## Instructions\n\n%s\n\n", *agent.Prompt))
+		fmt.Fprintf(&sb, "## Instructions\n\n%s\n\n", *agent.Prompt)
 	}
 
 	var peerAgents AgentList
@@ -173,7 +173,7 @@ func buildIgnitionPrompt(agent *Agent, peers AgentList) string {
 			if p.Description != nil {
 				desc = *p.Description
 			}
-			sb.WriteString(fmt.Sprintf("| %s | %s |\n", p.Name, desc))
+			fmt.Fprintf(&sb, "| %s | %s |\n", p.Name, desc)
 		}
 		sb.WriteString("\n")
 	}

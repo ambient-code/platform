@@ -30,7 +30,7 @@ type Session struct {
 	UpdatedAt *time.Time `json:"updated_at,omitempty"`
 	Name      string     `json:"name"`
 	RepoUrl   *string    `json:"repo_url,omitempty"`
-	Prompt    *string `json:"prompt,omitempty"`
+	Prompt    *string    `json:"prompt,omitempty"`
 	// Set from authentication token. Cannot be set or modified via API.
 	CreatedByUserId      *string  `json:"created_by_user_id,omitempty"`
 	AssignedUserId       *string  `json:"assigned_user_id,omitempty"`
