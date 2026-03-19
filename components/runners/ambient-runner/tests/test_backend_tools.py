@@ -156,7 +156,7 @@ class TestBackendAPIClient:
         # Verify the request
         call_args = mock_urlopen.call_args
         request = call_args[0][0]
-        assert "/api/projects/test-project/agentic-sessions" in request.full_url
+        assert "/projects/test-project/agentic-sessions" in request.full_url
         assert request.method == "POST"
 
     @patch("urllib.request.urlopen")
@@ -214,7 +214,7 @@ class TestBackendAPIClient:
         call_args = mock_urlopen.call_args
         request = call_args[0][0]
         assert (
-            "/api/projects/test-project/agentic-sessions/session-1/stop"
+            "/projects/test-project/agentic-sessions/session-1/stop"
             in request.full_url
         )
         assert request.method == "POST"
@@ -242,7 +242,7 @@ class TestBackendAPIClient:
         call_args = mock_urlopen.call_args
         request = call_args[0][0]
         assert (
-            "/api/projects/test-project/agentic-sessions/session-1/agui/run"
+            "/projects/test-project/agentic-sessions/session-1/agui/run"
             in request.full_url
         )
         payload = json.loads(request.data.decode("utf-8"))

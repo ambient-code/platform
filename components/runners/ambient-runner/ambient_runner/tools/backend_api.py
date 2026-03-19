@@ -99,7 +99,7 @@ class BackendAPIClient:
         Returns:
             List of session objects
         """
-        path = f"/api/projects/{self.project_name}/agentic-sessions"
+        path = f"/projects/{self.project_name}/agentic-sessions"
         response = self._make_request("GET", path)
 
         sessions = response.get("sessions", [])
@@ -118,7 +118,7 @@ class BackendAPIClient:
         Returns:
             Session object with full details
         """
-        path = f"/api/projects/{self.project_name}/agentic-sessions/{session_name}"
+        path = f"/projects/{self.project_name}/agentic-sessions/{session_name}"
         return self._make_request("GET", path)
 
     def create_session(
@@ -141,7 +141,7 @@ class BackendAPIClient:
         Returns:
             Created session object
         """
-        path = f"/api/projects/{self.project_name}/agentic-sessions"
+        path = f"/projects/{self.project_name}/agentic-sessions"
 
         payload: Dict[str, Any] = {
             "sessionName": session_name,
@@ -167,7 +167,7 @@ class BackendAPIClient:
         Returns:
             Response from the backend
         """
-        path = f"/api/projects/{self.project_name}/agentic-sessions/{session_name}/stop"
+        path = f"/projects/{self.project_name}/agentic-sessions/{session_name}/stop"
         return self._make_request("POST", path)
 
     def send_message(
@@ -186,7 +186,7 @@ class BackendAPIClient:
         Returns:
             Run metadata (runId, threadId)
         """
-        path = f"/api/projects/{self.project_name}/agentic-sessions/{session_name}/agui/run"
+        path = f"/projects/{self.project_name}/agentic-sessions/{session_name}/agui/run"
 
         payload: Dict[str, Any] = {"messages": [{"role": "user", "content": message}]}
         if thread_id:
@@ -212,7 +212,7 @@ class BackendAPIClient:
         Returns:
             List of event objects
         """
-        path = f"/api/projects/{self.project_name}/agentic-sessions/{session_name}/agui/events"
+        path = f"/projects/{self.project_name}/agentic-sessions/{session_name}/agui/events"
 
         # Note: This endpoint is typically SSE-based for live streaming,
         # but can be called once for historical events

@@ -353,7 +353,7 @@ List all agentic sessions in the project.
 **Example**:
 ```javascript
 const response = await fetch(
-    `${{BASE_URL}}/api/projects/${{PROJECT_NAME}}/agentic-sessions`,
+    `${{BASE_URL}}/projects/${{PROJECT_NAME}}/agentic-sessions`,
     {{ headers }}
 );
 const data = await response.json();
@@ -386,7 +386,7 @@ Get detailed information about a specific session.
 ```javascript
 const sessionName = 'my-session';
 const response = await fetch(
-    `${{BASE_URL}}/api/projects/${{PROJECT_NAME}}/agentic-sessions/${{sessionName}}`,
+    `${{BASE_URL}}/projects/${{PROJECT_NAME}}/agentic-sessions/${{sessionName}}`,
     {{ headers }}
 );
 const session = await response.json();
@@ -450,7 +450,7 @@ const sessionData = {{
 }};
 
 const response = await fetch(
-    `${{BASE_URL}}/api/projects/${{PROJECT_NAME}}/agentic-sessions`,
+    `${{BASE_URL}}/projects/${{PROJECT_NAME}}/agentic-sessions`,
     {{
         method: 'POST',
         headers,
@@ -468,7 +468,7 @@ console.log(`Created session: ${{created.name}}`);
 <script>
 async function createSession() {{
     const response = await fetch(
-        '{backend_url}/api/projects/{project_name}/agentic-sessions',
+        '{backend_url}/projects/{project_name}/agentic-sessions',
         {{
             method: 'POST',
             headers: {{
@@ -509,7 +509,7 @@ Stop a running session.
 ```javascript
 const sessionName = 'my-session';
 const response = await fetch(
-    `${{BASE_URL}}/api/projects/${{PROJECT_NAME}}/agentic-sessions/${{sessionName}}/stop`,
+    `${{BASE_URL}}/projects/${{PROJECT_NAME}}/agentic-sessions/${{sessionName}}/stop`,
     {{
         method: 'POST',
         headers
@@ -550,7 +550,7 @@ Send a message to a running session (asynchronous).
 **Example**:
 ```javascript
 const response = await fetch(
-    `${{BASE_URL}}/api/projects/${{PROJECT_NAME}}/agentic-sessions/${{sessionName}}/agui/run`,
+    `${{BASE_URL}}/projects/${{PROJECT_NAME}}/agentic-sessions/${{sessionName}}/agui/run`,
     {{
         method: 'POST',
         headers,
@@ -593,7 +593,7 @@ fetch('/api/proxy/sessions', {{
 // Your backend proxy adds authentication
 app.post('/api/proxy/sessions', async (req, res) => {{
     const response = await fetch(
-        `${{BACKEND_URL}}/api/projects/${{PROJECT_NAME}}/agentic-sessions`,
+        `${{BACKEND_URL}}/projects/${{PROJECT_NAME}}/agentic-sessions`,
         {{
             method: 'POST',
             headers: {{
@@ -686,7 +686,7 @@ try {{
 
     async function loadSessions() {{
         const data = await API.request(
-            `/api/projects/${{API.project}}/agentic-sessions`
+            `/projects/${{API.project}}/agentic-sessions`
         );
 
         document.getElementById('sessions').innerHTML =
@@ -702,7 +702,7 @@ try {{
     async function createNewSession() {{
         const name = 'session-' + Date.now();
         await API.request(
-            `/api/projects/${{API.project}}/agentic-sessions`,
+            `/projects/${{API.project}}/agentic-sessions`,
             {{
                 method: 'POST',
                 body: JSON.stringify({{
@@ -717,7 +717,7 @@ try {{
 
     async function stopSession(name) {{
         await API.request(
-            `/api/projects/${{API.project}}/agentic-sessions/${{name}}/stop`,
+            `/projects/${{API.project}}/agentic-sessions/${{name}}/stop`,
             {{ method: 'POST' }}
         );
         loadSessions();
@@ -744,12 +744,12 @@ headers = {{
 }}
 
 def list_sessions():
-    url = f'{{BASE_URL}}/api/projects/{{PROJECT}}/agentic-sessions'
+    url = f'{{BASE_URL}}/projects/{{PROJECT}}/agentic-sessions'
     resp = requests.get(url, headers=headers)
     return resp.json()['sessions']
 
 def create_session(name, prompt):
-    url = f'{{BASE_URL}}/api/projects/{{PROJECT}}/agentic-sessions'
+    url = f'{{BASE_URL}}/projects/{{PROJECT}}/agentic-sessions'
     data = {{
         'sessionName': name,
         'initialPrompt': prompt
