@@ -65,9 +65,7 @@ def build_mcp_servers(
         name="session", version="1.0.0", tools=[refresh_creds_tool]
     )
     mcp_servers["session"] = session_server
-    logger.info(
-        "Added session control MCP tools (refresh_credentials)"
-    )
+    logger.info("Added session control MCP tools (refresh_credentials)")
 
     # Rubric evaluation tool
     rubric_content, rubric_config = load_rubric_content(cwd_path)

@@ -5,7 +5,8 @@ Provides session management tools as MCP-compatible SDK tools.
 
 import json
 import logging
-from typing import Any, Callable, List, Optional
+import os
+from typing import Any, Callable, Optional
 
 from ambient_runner.tools.backend_api import BackendAPIClient
 
@@ -15,7 +16,7 @@ logger = logging.getLogger(__name__)
 def create_backend_mcp_tools(
     sdk_tool_decorator: Callable,
     client: Optional[BackendAPIClient] = None,
-) -> List[Any]:
+) -> list[Any]:
     """Create backend API tools for the Claude Agent SDK.
 
     Args:
@@ -34,6 +35,24 @@ def create_backend_mcp_tools(
         return []
 
     tools = []
+
+    def _tool_response(data: dict) -> dict:
+        """Helper to format successful tool response."""
+        return {"content": [{"type": "text", "text": json.dumps(data, indent=2)}]}
+
+    def _tool_error(error: Exception) -> dict:
+        """Helper to format error tool response."""
+        return {
+            "content": [
+                {
+                    "type": "text",
+                    "text": json.dumps(
+                        {"success": False, "error": str(error)}, indent=2
+                    ),
+                }
+            ],
+            "isError": True,
+        }
 
     # Tool 1: List Sessions
     @sdk_tool_decorator(
@@ -59,19 +78,16 @@ def create_backend_mcp_tools(
         try:
             include_completed = args.get("include_completed", False)
             sessions = api_client.list_sessions(include_completed=include_completed)
-            result = json.dumps(
+            return _tool_response(
                 {
                     "success": True,
                     "sessions": sessions,
                     "count": len(sessions),
-                },
-                indent=2,
+                }
             )
-            return {"content": [{"type": "text", "text": result}]}
         except Exception as e:
             logger.error(f"Error listing sessions: {e}", exc_info=True)
-            error = json.dumps({"success": False, "error": str(e)}, indent=2)
-            return {"content": [{"type": "text", "text": error}], "isError": True}
+            return _tool_error(e)
 
     tools.append(acp_list_sessions)
 
@@ -98,12 +114,10 @@ def create_backend_mcp_tools(
         try:
             session_name = args["session_name"]
             session = api_client.get_session(session_name)
-            result = json.dumps({"success": True, "session": session}, indent=2)
-            return {"content": [{"type": "text", "text": result}]}
+            return _tool_response({"success": True, "session": session})
         except Exception as e:
             logger.error(f"Error getting session: {e}", exc_info=True)
-            error = json.dumps({"success": False, "error": str(e)}, indent=2)
-            return {"content": [{"type": "text", "text": error}], "isError": True}
+            return _tool_error(e)
 
     tools.append(acp_get_session)
 
@@ -156,14 +170,7 @@ def create_backend_mcp_tools(
                 try:
                     repos_list = json.loads(repos_str)
                 except json.JSONDecodeError as e:
-                    error = json.dumps(
-                        {"success": False, "error": f"Invalid repos JSON: {e}"},
-                        indent=2,
-                    )
-                    return {
-                        "content": [{"type": "text", "text": error}],
-                        "isError": True,
-                    }
+                    return _tool_error(ValueError(f"Invalid repos JSON: {e}"))
 
             session = api_client.create_session(
                 session_name=session_name,
@@ -172,19 +179,16 @@ def create_backend_mcp_tools(
                 repos=repos_list,
                 model=model,
             )
-            result = json.dumps(
+            return _tool_response(
                 {
                     "success": True,
                     "message": f"Session '{session_name}' created successfully",
                     "session": session,
-                },
-                indent=2,
+                }
             )
-            return {"content": [{"type": "text", "text": result}]}
         except Exception as e:
             logger.error(f"Error creating session: {e}", exc_info=True)
-            error = json.dumps({"success": False, "error": str(e)}, indent=2)
-            return {"content": [{"type": "text", "text": error}], "isError": True}
+            return _tool_error(e)
 
     tools.append(acp_create_session)
 
@@ -211,19 +215,16 @@ def create_backend_mcp_tools(
         try:
             session_name = args["session_name"]
             api_result = api_client.stop_session(session_name)
-            result = json.dumps(
+            return _tool_response(
                 {
                     "success": True,
                     "message": f"Session '{session_name}' stop initiated",
                     "result": api_result,
-                },
-                indent=2,
+                }
             )
-            return {"content": [{"type": "text", "text": result}]}
         except Exception as e:
             logger.error(f"Error stopping session: {e}", exc_info=True)
-            error = json.dumps({"success": False, "error": str(e)}, indent=2)
-            return {"content": [{"type": "text", "text": error}], "isError": True}
+            return _tool_error(e)
 
     tools.append(acp_stop_session)
 
@@ -266,19 +267,16 @@ def create_backend_mcp_tools(
                 message=message,
                 thread_id=thread_id,
             )
-            result = json.dumps(
+            return _tool_response(
                 {
                     "success": True,
                     "message": f"Message sent to session '{session_name}'",
                     "run": api_result,
-                },
-                indent=2,
+                }
             )
-            return {"content": [{"type": "text", "text": result}]}
         except Exception as e:
             logger.error(f"Error sending message: {e}", exc_info=True)
-            error = json.dumps({"success": False, "error": str(e)}, indent=2)
-            return {"content": [{"type": "text", "text": error}], "isError": True}
+            return _tool_error(e)
 
     tools.append(acp_send_message)
 
@@ -300,8 +298,6 @@ def create_backend_mcp_tools(
     )
     async def acp_get_api_reference(args: dict) -> dict:
         """Get comprehensive API reference documentation."""
-        import os
-
         backend_url = os.getenv("BACKEND_API_URL", "http://backend:8080/api")
         project_name = os.getenv("PROJECT_NAME", "your-project-name")
         bot_token = os.getenv("BOT_TOKEN", "your-bot-token")
@@ -817,8 +813,6 @@ def _create_default_client() -> Optional[BackendAPIClient]:
     Returns:
         BackendAPIClient instance, or None if required env vars are missing
     """
-    import os
-
     backend_url = os.getenv("BACKEND_API_URL", "").strip()
     project_name = (
         os.getenv("PROJECT_NAME") or os.getenv("AGENTIC_SESSION_NAMESPACE", "")

@@ -359,7 +359,9 @@ class SessionManager:
             path.parent.mkdir(parents=True, exist_ok=True)
             with open(path, "w") as f:
                 json.dump(self._session_ids, f)
-            logger.info("Persisted %d session ID(s) to %s", len(self._session_ids), path)
+            logger.info(
+                "Persisted %d session ID(s) to %s", len(self._session_ids), path
+            )
         except OSError:
             logger.debug("Could not persist session IDs to %s", path, exc_info=True)
 
