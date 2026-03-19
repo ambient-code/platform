@@ -326,6 +326,12 @@ func HandleAGUIRunProxy(c *gin.Context) {
 		}
 	}
 
+	// Broadcast user messages immediately to all connected clients (for multi-user sessions)
+	// This ensures User B sees User A's message before the agent responds
+	if len(minimalMsgs) > 0 {
+		emitUserMessagesSnapshot(sessionName, runID, threadID, minimalMsgs)
+	}
+
 	// ── Forward to runner in background, return JSON immediately ──
 	bodyBytes, err := json.Marshal(input)
 	if err != nil {
@@ -446,6 +452,22 @@ func emitHiddenMessageMetadata(sessionName, runID, threadID, messageID string) {
 			"messageId": messageID,
 			"hidden":    true,
 		},
+	}
+	persistEvent(sessionName, evt)
+	data, _ := json.Marshal(evt)
+	publishLine(sessionName, fmt.Sprintf("data: %s\n\n", data))
+}
+
+// emitUserMessagesSnapshot broadcasts new user messages immediately to all
+// connected clients. This ensures multi-user sessions see messages in real-time
+// before the agent processes them, instead of waiting for the run to finish.
+func emitUserMessagesSnapshot(sessionName, runID, threadID string, messages []types.Message) {
+	evt := map[string]interface{}{
+		"type":      types.EventTypeMessagesSnapshot,
+		"threadId":  threadID,
+		"runId":     runID,
+		"timestamp": types.AGUITimestampNow(),
+		"messages":  messages,
 	}
 	persistEvent(sessionName, evt)
 	data, _ := json.Marshal(evt)
