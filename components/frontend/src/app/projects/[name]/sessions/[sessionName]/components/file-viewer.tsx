@@ -4,8 +4,9 @@ import { useEffect, useMemo, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Download, AlertCircle } from "lucide-react";
+import { Download, AlertCircle, RefreshCw } from "lucide-react";
 import { useWorkspaceFile } from "@/services/queries/use-workspace";
+import { toast } from "sonner";
 import { triggerDownload } from "@/utils/export-chat";
 import { cn } from "@/lib/utils";
 import hljs from "highlight.js";
@@ -14,6 +15,7 @@ type FileViewerProps = {
   projectName: string;
   sessionName: string;
   filePath: string;
+  sessionPhase?: string;
 };
 
 const EXTENSION_TO_LANGUAGE: Record<string, string> = {
@@ -62,13 +64,21 @@ export function FileViewer({
   projectName,
   sessionName,
   filePath,
+  sessionPhase,
 }: FileViewerProps) {
   const codeRef = useRef<HTMLElement>(null);
   const {
     data: content,
     isLoading,
     error,
-  } = useWorkspaceFile(projectName, sessionName, filePath);
+    refetch,
+  } = useWorkspaceFile(projectName, sessionName, filePath, {
+    // Refetch when tab is first opened
+    refetchOnMount: true,
+    // Only poll while actively viewing this file tab (component is mounted) AND session is running
+    // Automatically stops when switching to another tab (component unmounts)
+    refetchInterval: sessionPhase === "Running" ? 5000 : false,
+  });
 
   const { language, languageLabel } = useMemo(() => {
     const lang = getLanguage(filePath);
@@ -93,6 +103,15 @@ export function FileViewer({
     if (!content) return;
     const fileName = filePath.split("/").pop() ?? "file";
     triggerDownload(content, fileName, "text/plain");
+  };
+
+  const handleRefresh = async () => {
+    try {
+      await refetch();
+      toast.success("File refreshed");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to refresh file");
+    }
   };
 
   if (isLoading) {
@@ -139,15 +158,28 @@ export function FileViewer({
             {languageLabel}
           </Badge>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handleDownload}
-          disabled={!content}
-        >
-          <Download className="w-4 h-4" />
-          <span className="sr-only">Download file</span>
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleRefresh}
+            disabled={isLoading}
+            title="Refresh file"
+          >
+            <RefreshCw className="w-4 h-4" />
+            <span className="sr-only">Refresh file</span>
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleDownload}
+            disabled={!content}
+            title="Download file"
+          >
+            <Download className="w-4 h-4" />
+            <span className="sr-only">Download file</span>
+          </Button>
+        </div>
       </div>
 
       {/* Code content */}
