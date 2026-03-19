@@ -42,6 +42,13 @@ vi.mock("../AttachmentPreview", () => ({
   AttachmentPreview: () => null,
 }));
 
+vi.mock("@/services/queries/use-project-access", () => ({
+  useProjectAccess: () => ({
+    data: { userRole: "edit" },
+    isLoading: false,
+  }),
+}));
+
 function renderInput(overrides: Partial<ChatInputBoxProps> = {}) {
   const defaultProps: ChatInputBoxProps = {
     value: "",
