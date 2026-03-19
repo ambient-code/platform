@@ -18,41 +18,19 @@ resources:
 - public-api-route.yaml
 - unleash-route.yaml
 - operator-config-openshift.yaml
+- ldap-config.yaml
+
+components:
+- ../../components/oauth-proxy
+- ../../components/postgresql-rhel
+- ../../components/ambient-api-server-db
 
 # Patches for production environment
-# Unleash: init container to create database (RHEL doesn't support init scripts)
-# PostgreSQL: use RHEL image with proper env vars and mount paths (JSON patch)
 patches:
 - path: namespace-patch.yaml
   target:
     kind: Namespace
     name: ambient-code
-- path: frontend-oauth-deployment-patch.yaml
-  target:
-    kind: Deployment
-    name: frontend
-- path: frontend-oauth-service-patch.yaml
-  target:
-    kind: Service
-    name: frontend-service
-- path: postgresql-json-patch.yaml
-  target:
-    group: apps
-    kind: Deployment
-    name: postgresql
-    version: v1
-- path: ambient-api-server-db-json-patch.yaml
-  target:
-    group: apps
-    kind: Deployment
-    name: ambient-api-server-db
-    version: v1
-- path: unleash-init-db-patch.yaml
-  target:
-    group: apps
-    kind: Deployment
-    name: unleash
-    version: v1
 - path: ambient-api-server-env-patch.yaml
   target:
     group: apps
@@ -65,49 +43,47 @@ patches:
     kind: Deployment
     name: ambient-api-server
     version: v1
-- path: operator-runner-images-patch.yaml
+- path: ambient-api-server-service-ca-patch.yaml
   target:
-    group: apps
-    kind: Deployment
-    name: agentic-operator
+    kind: Service
+    name: ambient-api-server
     version: v1
 
-# Images: redirect all quay.io builds to internal OpenShift registry
-# Push images with: make build-push-internal (or oc start-build)
+# Production images
 images:
 - name: quay.io/ambient_code/vteam_api_server:latest
-  newName: image-registry.openshift-image-registry.svc:5000/ambient-code/vteam_api_server
+  newName: quay.io/ambient_code/vteam_api_server
   newTag: latest
 - name: quay.io/ambient_code/vteam_backend
-  newName: image-registry.openshift-image-registry.svc:5000/ambient-code/vteam_backend
+  newName: quay.io/ambient_code/vteam_backend
   newTag: latest
 - name: quay.io/ambient_code/vteam_backend:latest
-  newName: image-registry.openshift-image-registry.svc:5000/ambient-code/vteam_backend
+  newName: quay.io/ambient_code/vteam_backend
   newTag: latest
 - name: quay.io/ambient_code/vteam_claude_runner
-  newName: image-registry.openshift-image-registry.svc:5000/ambient-code/vteam_claude_runner
+  newName: quay.io/ambient_code/vteam_claude_runner
   newTag: latest
 - name: quay.io/ambient_code/vteam_claude_runner:latest
-  newName: image-registry.openshift-image-registry.svc:5000/ambient-code/vteam_claude_runner
+  newName: quay.io/ambient_code/vteam_claude_runner
   newTag: latest
 - name: quay.io/ambient_code/vteam_frontend
-  newName: image-registry.openshift-image-registry.svc:5000/ambient-code/vteam_frontend
+  newName: quay.io/ambient_code/vteam_frontend
   newTag: latest
 - name: quay.io/ambient_code/vteam_frontend:latest
-  newName: image-registry.openshift-image-registry.svc:5000/ambient-code/vteam_frontend
+  newName: quay.io/ambient_code/vteam_frontend
   newTag: latest
 - name: quay.io/ambient_code/vteam_operator
-  newName: image-registry.openshift-image-registry.svc:5000/ambient-code/vteam_operator
+  newName: quay.io/ambient_code/vteam_operator
   newTag: latest
 - name: quay.io/ambient_code/vteam_operator:latest
-  newName: image-registry.openshift-image-registry.svc:5000/ambient-code/vteam_operator
+  newName: quay.io/ambient_code/vteam_operator
   newTag: latest
 - name: quay.io/ambient_code/vteam_public_api
-  newName: image-registry.openshift-image-registry.svc:5000/ambient-code/vteam_public_api
+  newName: quay.io/ambient_code/vteam_public_api
   newTag: latest
 - name: quay.io/ambient_code/vteam_public_api:latest
-  newName: image-registry.openshift-image-registry.svc:5000/ambient-code/vteam_public_api
+  newName: quay.io/ambient_code/vteam_public_api
   newTag: latest
 - name: quay.io/ambient_code/vteam_state_sync:latest
-  newName: image-registry.openshift-image-registry.svc:5000/ambient-code/vteam_state_sync
+  newName: quay.io/ambient_code/vteam_state_sync
   newTag: latest
