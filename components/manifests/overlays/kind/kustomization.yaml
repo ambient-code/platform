@@ -24,23 +24,11 @@ patches:
     kind: Deployment
     name: ambient-api-server
     version: v1
-- path: ambient-api-server-notls-patch.yaml
-  target:
-    group: apps
-    kind: Deployment
-    name: ambient-api-server
-    version: v1
 - path: api-server-no-jwt-patch.yaml
   target:
     group: apps
     kind: Deployment
     name: ambient-api-server
-    version: v1
-- path: ambient-api-server-db-notls-patch.yaml
-  target:
-    group: apps
-    kind: Deployment
-    name: ambient-api-server-db
     version: v1
 - path: api-server-db-security-patch.yaml
   target:
