@@ -550,11 +550,19 @@ local-test-dev: ## Run local developer experience tests
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Running local developer experience tests..."
 	@./tests/local-dev-test.sh $(if $(filter true,$(CI_MODE)),--ci,)
 
-local-test-quick: check-kubectl check-minikube ## Quick smoke test of local environment
+local-test-quick: check-kubectl ## Quick smoke test of local environment (kind or minikube)
 	@echo "$(COLOR_BOLD)🧪 Quick Smoke Test$(COLOR_RESET)"
 	@echo ""
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Testing minikube..."
-	@minikube status >/dev/null 2>&1 && echo "$(COLOR_GREEN)✓$(COLOR_RESET) Minikube running" || (echo "$(COLOR_RED)✗$(COLOR_RESET) Minikube not running" && exit 1)
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Detecting cluster type..."
+	@if kind get clusters 2>/dev/null | grep -q .; then \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Kind cluster running"; \
+		CLUSTER_TYPE=kind; \
+	elif command -v minikube >/dev/null 2>&1 && minikube status >/dev/null 2>&1; then \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Minikube running"; \
+		CLUSTER_TYPE=minikube; \
+	else \
+		echo "$(COLOR_RED)✗$(COLOR_RESET) No local cluster found (kind or minikube)"; exit 1; \
+	fi
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Testing namespace..."
 	@kubectl get namespace $(NAMESPACE) >/dev/null 2>&1 && echo "$(COLOR_GREEN)✓$(COLOR_RESET) Namespace exists" || (echo "$(COLOR_RED)✗$(COLOR_RESET) Namespace missing" && exit 1)
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for pods to be ready..."
@@ -562,23 +570,29 @@ local-test-quick: check-kubectl check-minikube ## Quick smoke test of local envi
 	kubectl wait --for=condition=ready pod -l app=frontend -n $(NAMESPACE) --timeout=60s >/dev/null 2>&1 && \
 	echo "$(COLOR_GREEN)✓$(COLOR_RESET) Pods ready" || (echo "$(COLOR_RED)✗$(COLOR_RESET) Pods not ready" && exit 1)
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Testing backend health..."
-	@for i in 1 2 3 4 5; do \
-		curl -sf http://$$(minikube ip):30080/health >/dev/null 2>&1 && { echo "$(COLOR_GREEN)✓$(COLOR_RESET) Backend healthy"; break; } || { \
+	@kubectl port-forward -n $(NAMESPACE) svc/backend-service 18080:8080 >/tmp/pf-smoke-backend.log 2>&1 & PF_PID=$$!; \
+	sleep 2; \
+	for i in 1 2 3 4 5; do \
+		curl -sf http://localhost:18080/health >/dev/null 2>&1 && { echo "$(COLOR_GREEN)✓$(COLOR_RESET) Backend healthy"; break; } || { \
 			if [ $$i -eq 5 ]; then \
-				echo "$(COLOR_RED)✗$(COLOR_RESET) Backend not responding after 5 attempts"; exit 1; \
+				kill $$PF_PID 2>/dev/null; echo "$(COLOR_RED)✗$(COLOR_RESET) Backend not responding after 5 attempts"; exit 1; \
 			fi; \
 			sleep 2; \
 		}; \
-	done
+	done; \
+	kill $$PF_PID 2>/dev/null || true
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Testing frontend..."
-	@for i in 1 2 3 4 5; do \
-		curl -sf http://$$(minikube ip):30030 >/dev/null 2>&1 && { echo "$(COLOR_GREEN)✓$(COLOR_RESET) Frontend accessible"; break; } || { \
+	@kubectl port-forward -n $(NAMESPACE) svc/frontend-service 13030:3000 >/tmp/pf-smoke-frontend.log 2>&1 & PF_PID=$$!; \
+	sleep 2; \
+	for i in 1 2 3 4 5; do \
+		curl -sf http://localhost:13030 >/dev/null 2>&1 && { echo "$(COLOR_GREEN)✓$(COLOR_RESET) Frontend accessible"; break; } || { \
 			if [ $$i -eq 5 ]; then \
-				echo "$(COLOR_RED)✗$(COLOR_RESET) Frontend not responding after 5 attempts"; exit 1; \
+				kill $$PF_PID 2>/dev/null; echo "$(COLOR_RED)✗$(COLOR_RESET) Frontend not responding after 5 attempts"; exit 1; \
 			fi; \
 			sleep 2; \
 		}; \
-	done
+	done; \
+	kill $$PF_PID 2>/dev/null || true
 	@echo ""
 	@echo "$(COLOR_GREEN)✓ Quick smoke test passed!$(COLOR_RESET)"
 
