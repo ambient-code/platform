@@ -126,7 +126,6 @@ export function ArtifactsAccordion({
                 <FileContentViewer
                   fileName={viewingFile.path}
                   content={viewingFile.content}
-                  filePath={currentSubPath ? `artifacts/${currentSubPath}/${viewingFile.path}` : `artifacts/${viewingFile.path}`}
                   onDownload={onDownloadFile}
                 />
               ) : files.length === 0 ? (
