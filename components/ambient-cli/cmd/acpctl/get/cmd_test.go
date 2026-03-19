@@ -10,14 +10,6 @@ import (
 	"github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
 )
 
-func newGetCmd(t *testing.T, serverURL string) *getCmd {
-	t.Helper()
-	testhelper.Configure(t, serverURL)
-	return &getCmd{}
-}
-
-type getCmd struct{}
-
 func makeTime(s string) *time.Time {
 	t, _ := time.Parse(time.RFC3339, s)
 	return &t

@@ -1,3 +1,4 @@
+// Package testhelper provides shared test utilities for CLI integration tests.
 package testhelper
 
 import (

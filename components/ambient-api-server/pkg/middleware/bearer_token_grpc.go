@@ -6,7 +6,6 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/peer"
 )
 
 var grpcBypassMethods = map[string]bool{
@@ -63,9 +62,3 @@ func (s *serviceCallerStream) Context() context.Context {
 	return s.ctx
 }
 
-func grpcPeerAddr(ctx context.Context) string {
-	if p, ok := peer.FromContext(ctx); ok {
-		return p.Addr.String()
-	}
-	return "unknown"
-}

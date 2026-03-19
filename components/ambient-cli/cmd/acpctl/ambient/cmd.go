@@ -1,3 +1,4 @@
+// Package ambient implements the ambient TUI dashboard subcommand.
 package ambient
 
 import (

@@ -62,12 +62,13 @@ func TestRolePost(t *testing.T) {
 	Expect(*roleOutput.Href).To(Equal(fmt.Sprintf("/api/ambient/v1/roles/%s", *roleOutput.Id)))
 
 	jwtToken := ctx.Value(openapi.ContextAccessToken)
-	restyResp, err := resty.R().
+	restyResp, err = resty.R().
 		SetHeader("Content-Type", "application/json").
 		SetHeader("Authorization", fmt.Sprintf("Bearer %s", jwtToken)).
 		SetBody(`{ this is invalid }`).
 		Post(h.RestURL("/roles"))
 
+	Expect(err).NotTo(HaveOccurred())
 	Expect(restyResp.StatusCode()).To(Equal(http.StatusBadRequest))
 }
 
@@ -89,12 +90,13 @@ func TestRolePatch(t *testing.T) {
 	Expect(*roleOutput.Href).To(Equal(fmt.Sprintf("/api/ambient/v1/roles/%s", *roleOutput.Id)))
 
 	jwtToken := ctx.Value(openapi.ContextAccessToken)
-	restyResp, err := resty.R().
+	restyResp, err = resty.R().
 		SetHeader("Content-Type", "application/json").
 		SetHeader("Authorization", fmt.Sprintf("Bearer %s", jwtToken)).
 		SetBody(`{ this is invalid }`).
 		Patch(h.RestURL("/roles/foo"))
 
+	Expect(err).NotTo(HaveOccurred())
 	Expect(restyResp.StatusCode()).To(Equal(http.StatusBadRequest))
 }
 

@@ -75,12 +75,13 @@ func TestAgentPost(t *testing.T) {
 	Expect(*agentOutput.Href).To(Equal(fmt.Sprintf("/api/ambient/v1/agents/%s", *agentOutput.Id)))
 
 	jwtToken := ctx.Value(openapi.ContextAccessToken)
-	restyResp, err := resty.R().
+	restyResp, err = resty.R().
 		SetHeader("Content-Type", "application/json").
 		SetHeader("Authorization", fmt.Sprintf("Bearer %s", jwtToken)).
 		SetBody(`{ this is invalid }`).
 		Post(h.RestURL("/agents"))
 
+	Expect(err).NotTo(HaveOccurred())
 	Expect(restyResp.StatusCode()).To(Equal(http.StatusBadRequest))
 }
 
@@ -102,12 +103,13 @@ func TestAgentPatch(t *testing.T) {
 	Expect(*agentOutput.Href).To(Equal(fmt.Sprintf("/api/ambient/v1/agents/%s", *agentOutput.Id)))
 
 	jwtToken := ctx.Value(openapi.ContextAccessToken)
-	restyResp, err := resty.R().
+	restyResp, err = resty.R().
 		SetHeader("Content-Type", "application/json").
 		SetHeader("Authorization", fmt.Sprintf("Bearer %s", jwtToken)).
 		SetBody(`{ this is invalid }`).
 		Patch(h.RestURL("/agents/foo"))
 
+	Expect(err).NotTo(HaveOccurred())
 	Expect(restyResp.StatusCode()).To(Equal(http.StatusBadRequest))
 }
 

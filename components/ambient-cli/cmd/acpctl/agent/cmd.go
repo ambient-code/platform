@@ -1,3 +1,4 @@
+// Package agent implements subcommands for interacting with agents.
 package agent
 
 import (
