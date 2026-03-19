@@ -18,6 +18,7 @@ describe('ContextTab', () => {
     onUploadFile: vi.fn(),
     onRemoveRepository: vi.fn(),
     onRemoveFile: vi.fn(),
+    canModify: true,
   };
 
   beforeEach(() => {
@@ -61,5 +62,23 @@ describe('ContextTab', () => {
     ];
     render(<ContextTab {...defaultProps} repositories={repos} />);
     expect(screen.getByText('feature-branch')).toBeDefined();
+  });
+
+  it('hides Add Repository button when canModify is false', () => {
+    render(<ContextTab {...defaultProps} canModify={false} />);
+    expect(screen.queryByText('Add')).toBeNull();
+    expect(screen.queryByText('Add Repository')).toBeNull();
+  });
+
+  it('hides Upload File button when canModify is false', () => {
+    render(<ContextTab {...defaultProps} canModify={false} />);
+    expect(screen.queryByText('Upload')).toBeNull();
+    expect(screen.queryByText('Upload File')).toBeNull();
+  });
+
+  it('shows Add and Upload buttons when canModify is true', () => {
+    render(<ContextTab {...defaultProps} canModify={true} />);
+    expect(screen.getByText('Add')).toBeDefined();
+    expect(screen.getByText('Upload')).toBeDefined();
   });
 });
