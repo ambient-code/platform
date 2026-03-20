@@ -899,8 +899,9 @@ export default function ProjectSessionDetailPage({
             },
           });
         }
-      } else if (msg.role === "developer") {
-        // Developer messages carry thinking/reasoning content from MESSAGES_SNAPSHOT
+      } else if (msg.role === "reasoning" || msg.role === "developer") {
+        // ReasoningMessage (role="reasoning") per AG-UI spec carries thinking content.
+        // Also handle legacy DeveloperMessage (role="developer") from older sessions.
         const thinkingText = typeof msg.content === 'string' ? msg.content : '';
         if (thinkingText) {
           result.push({

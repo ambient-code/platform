@@ -808,14 +808,14 @@ class ClaudeAgentAdapter:
                                 thread_id=thread_id, run_id=run_id, timestamp=ts
                             )
 
-                            # Persist thinking content
+                            # Persist thinking content as ReasoningMessage per AG-UI spec
                             if accumulated_thinking_text:
-                                from ag_ui.core import DeveloperMessage
+                                from ag_ui.core import ReasoningMessage
 
                                 upsert_message(
-                                    DeveloperMessage(
+                                    ReasoningMessage(
                                         id=str(uuid.uuid4()),
-                                        role="developer",
+                                        role="reasoning",
                                         content=accumulated_thinking_text,
                                     )
                                 )
