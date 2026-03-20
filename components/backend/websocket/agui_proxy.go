@@ -268,16 +268,55 @@ func HandleAGUIRunProxy(c *gin.Context) {
 	// Resolve and cache the runner port for this session from the registry.
 	cacheSessionPort(projectName, sessionName)
 
-	// Parse messages for display name generation and hidden metadata
+	// Extract sender identity for message attribution
+	senderUserID := c.GetString("userID")
+	senderDisplayName := c.GetString("userName")
+
+	// Parse messages for display name generation, hidden metadata, and sender injection
 	var minimalMsgs []types.Message
+	var modifiedMessages []json.RawMessage
 	if len(rawMessages) > 0 {
 		for _, raw := range rawMessages {
 			var msg types.Message
 			if err := json.Unmarshal(raw, &msg); err == nil {
+				// Inject sender metadata into user messages for multi-user attribution
+				if msg.Role == types.RoleUser && senderUserID != "" {
+					var metadata map[string]interface{}
+					if msg.Metadata != nil {
+						if m, ok := msg.Metadata.(map[string]interface{}); ok {
+							metadata = m
+						}
+					}
+					if metadata == nil {
+						metadata = make(map[string]interface{})
+					}
+					metadata["senderId"] = senderUserID
+					if senderDisplayName != "" {
+						metadata["senderDisplayName"] = senderDisplayName
+					}
+					msg.Metadata = metadata
+
+					// Re-serialize the modified message
+					if modifiedRaw, mErr := json.Marshal(msg); mErr != nil {
+						log.Printf("Failed to re-marshal message with sender metadata for user %s: %v", senderUserID, mErr)
+					} else {
+						raw = modifiedRaw
+					}
+				}
+
+				// Append to minimalMsgs AFTER metadata injection so snapshot includes sender info
 				minimalMsgs = append(minimalMsgs, msg)
 			}
+			modifiedMessages = append(modifiedMessages, raw)
 		}
 		go triggerDisplayNameGenerationIfNeeded(projectName, sessionName, minimalMsgs)
+	}
+
+	// Replace original messages with modified messages that include sender metadata
+	if len(modifiedMessages) > 0 {
+		if modifiedJSON, err := json.Marshal(modifiedMessages); err == nil {
+			input.Messages = modifiedJSON
+		}
 	}
 
 	// Emit message_metadata RAW events for hidden messages (e.g. auto-sent
@@ -288,6 +327,12 @@ func HandleAGUIRunProxy(c *gin.Context) {
 		if isMessageHidden(msg.Metadata) {
 			emitHiddenMessageMetadata(sessionName, runID, threadID, msg.ID)
 		}
+	}
+
+	// Broadcast user messages immediately to all connected clients (for multi-user sessions)
+	// This ensures User B sees User A's message before the agent responds
+	if len(minimalMsgs) > 0 {
+		emitUserMessagesSnapshot(sessionName, runID, threadID, minimalMsgs)
 	}
 
 	// ── Forward to runner in background, return JSON immediately ──
@@ -410,6 +455,22 @@ func emitHiddenMessageMetadata(sessionName, runID, threadID, messageID string) {
 			"messageId": messageID,
 			"hidden":    true,
 		},
+	}
+	persistEvent(sessionName, evt)
+	data, _ := json.Marshal(evt)
+	publishLine(sessionName, fmt.Sprintf("data: %s\n\n", data))
+}
+
+// emitUserMessagesSnapshot broadcasts new user messages immediately to all
+// connected clients. This ensures multi-user sessions see messages in real-time
+// before the agent processes them, instead of waiting for the run to finish.
+func emitUserMessagesSnapshot(sessionName, runID, threadID string, messages []types.Message) {
+	evt := map[string]interface{}{
+		"type":      types.EventTypeMessagesSnapshot,
+		"threadId":  threadID,
+		"runId":     runID,
+		"timestamp": types.AGUITimestampNow(),
+		"messages":  messages,
 	}
 	persistEvent(sessionName, evt)
 	data, _ := json.Marshal(evt)

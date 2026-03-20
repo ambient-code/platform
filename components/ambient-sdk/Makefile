@@ -10,11 +10,11 @@ build-generator:
 	cd $(GENERATOR) && go build -o ../bin/ambient-sdk-generator .
 
 generate-sdk: build-generator
-	./bin/ambient-sdk-generator \
-		-spec $(SPEC_PATH) \
-		-go-out $(GO_OUT) \
-		-python-out $(PYTHON_OUT) \
-		-ts-out $(TS_OUT)
+	cd $(GENERATOR) && ./../bin/ambient-sdk-generator \
+		-spec ../$(SPEC_PATH) \
+		-go-out ../${GO_OUT} \
+		-python-out ../${PYTHON_OUT} \
+		-ts-out ../${TS_OUT}
 	cd $(GO_OUT) && go fmt ./...
 
 verify-sdk: generate-sdk

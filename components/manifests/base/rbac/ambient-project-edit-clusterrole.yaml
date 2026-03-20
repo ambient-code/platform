@@ -22,7 +22,12 @@ rules:
 - apiGroups: [""]
   resources: ["configmaps"]
   verbs: ["get"]
-# Secrets (only for creating runner tokens during session provisioning)
+# Secrets (read ambient-runner-secrets for API key validation during session creation)
+- apiGroups: [""]
+  resources: ["secrets"]
+  resourceNames: ["ambient-runner-secrets"]
+  verbs: ["get"]
+# Secrets (create runner service account tokens during session provisioning)
 - apiGroups: [""]
   resources: ["secrets"]
   verbs: ["create"]

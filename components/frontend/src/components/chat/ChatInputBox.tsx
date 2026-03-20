@@ -29,6 +29,7 @@ import { useAutocomplete } from "@/hooks/use-autocomplete";
 import type { AutocompleteAgent, AutocompleteCommand } from "@/hooks/use-autocomplete";
 import { AutocompletePopover } from "./AutocompletePopover";
 import { AttachmentPreview, type PendingAttachment } from "./AttachmentPreview";
+import { useProjectAccess } from "@/services/queries/use-project-access";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
@@ -56,6 +57,7 @@ export type ChatInputBoxProps = {
   onAddRepository?: () => void;
   onUploadFile?: () => void;
   workflowSlot?: React.ReactNode;
+  projectName?: string;
 };
 
 type HistoryEntry = {
@@ -179,10 +181,15 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
   onAddRepository,
   onUploadFile,
   workflowSlot,
+  projectName,
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { textareaHeight, handleResizeStart } = useResizeTextarea();
+
+  // Check user access level (default-deny until role is resolved)
+  const { data: access } = useProjectAccess(projectName || "");
+  const canInteract = !!access?.userRole && access.userRole !== "view";
 
   // Phase-derived state
   const isTerminalState = ["Completed", "Failed", "Stopped"].includes(sessionPhase);
@@ -221,6 +228,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
 
   // Dynamic placeholder
   const getPlaceholder = () => {
+    if (!canInteract) return "You have view-only access to this session";
     if (placeholder) return placeholder;
     if (isTerminalState) return "Type a message to resume this session...";
     if (isCreating) return "Type a message (will be queued until session starts)...";
@@ -478,7 +486,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
         {isTerminalState && (
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-muted text-xs text-muted-foreground">
             Session has {sessionPhase.toLowerCase()}.
-            {onContinue && (
+            {canInteract && onContinue && (
               <button type="button" onClick={onContinue} className="text-link hover:underline font-medium">
                 Resume session
               </button>
@@ -520,7 +528,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
             <div className="absolute -top-6 left-0 flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
               <Clock className="h-3 w-3" />
               {queuedCount} message{queuedCount > 1 ? "s" : ""} queued
-              {onClearQueue && (
+              {canInteract && onClearQueue && (
                 <button
                   type="button"
                   onClick={onClearQueue}
@@ -543,7 +551,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
             style={{ height: textareaHeight }}
-            disabled={disabled}
+            disabled={!canInteract || disabled}
           />
 
           {/* Autocomplete popup */}
@@ -570,132 +578,140 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
 
           {/* Toolbar — inside the container */}
           <div className="flex items-center justify-between px-2 py-2">
-            <div className="flex items-center gap-2">
-              {/* Add context dropdown */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 w-7 p-0"
-                  >
-                    <Plus className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" side="top">
-                  <DropdownMenuItem onClick={() => onAddRepository?.()}>
-                    <GitBranch className="w-4 h-4 mr-2" />
-                    Add Repository
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => onUploadFile?.()}>
-                    <Upload className="w-4 h-4 mr-2" />
-                    Upload File
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                accept="image/*,.pdf,.txt,.md,.json,.csv,.xml,.yaml,.yml,.log,.py,.js,.ts,.go,.java,.rs,.rb,.sh,.html,.css"
-                className="hidden"
-                onChange={handleFileSelect}
-              />
-
-              <Separator orientation="vertical" className="h-5" />
-
-              {/* Agents popover */}
-              <Popover open={agentsPopoverOpen} onOpenChange={setAgentsPopoverOpen}>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" size="sm" className="h-7 gap-1.5" disabled={agents.length === 0}>
-                    <Users className="h-3.5 w-3.5" />
-                    Agents
-                    {agents.length > 0 && (
-                      <Badge variant="secondary" className="ml-0.5 h-4 px-1.5 text-[10px] font-medium">
-                        {agents.length}
-                      </Badge>
-                    )}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent align="start" side="top" className="w-[500px]">
-                  <ToolbarItemList
-                    items={agents}
-                    type="agent"
-                    onInsertAgent={(name) => {
-                      onChange(value + `@${name} `);
-                      setAgentsPopoverOpen(false);
-                      textareaRef.current?.focus();
-                    }}
+            {canInteract ? (
+              <>
+                <div className="flex items-center gap-2">
+                  {/* Add context dropdown */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0"
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" side="top">
+                      <DropdownMenuItem onClick={() => onAddRepository?.()}>
+                        <GitBranch className="w-4 h-4 mr-2" />
+                        Add Repository
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => onUploadFile?.()}>
+                        <Upload className="w-4 h-4 mr-2" />
+                        Upload File
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    accept="image/*,.pdf,.txt,.md,.json,.csv,.xml,.yaml,.yml,.log,.py,.js,.ts,.go,.java,.rs,.rb,.sh,.html,.css"
+                    className="hidden"
+                    onChange={handleFileSelect}
                   />
-                </PopoverContent>
-              </Popover>
 
-              {/* Commands popover */}
-              <Popover open={commandsPopoverOpen} onOpenChange={setCommandsPopoverOpen}>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" size="sm" className="h-7 gap-1.5" disabled={commands.length === 0}>
-                    <Terminal className="h-3.5 w-3.5" />
-                    Commands
-                    {commands.length > 0 && (
-                      <Badge variant="secondary" className="ml-0.5 h-4 px-1.5 text-[10px] font-medium">
-                        {commands.length}
-                      </Badge>
-                    )}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent align="start" side="top" className="w-[500px]">
-                  <ToolbarItemList
-                    items={commands}
-                    type="command"
-                    onRunCommand={(slashCommand) => {
-                      onCommandClick?.(slashCommand);
-                      setCommandsPopoverOpen(false);
-                    }}
-                  />
-                </PopoverContent>
-              </Popover>
+                  <Separator orientation="vertical" className="h-5" />
 
-            </div>
+                  {/* Agents popover */}
+                  <Popover open={agentsPopoverOpen} onOpenChange={setAgentsPopoverOpen}>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" size="sm" className="h-7 gap-1.5" disabled={agents.length === 0}>
+                        <Users className="h-3.5 w-3.5" />
+                        Agents
+                        {agents.length > 0 && (
+                          <Badge variant="secondary" className="ml-0.5 h-4 px-1.5 text-[10px] font-medium">
+                            {agents.length}
+                          </Badge>
+                        )}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent align="start" side="top" className="w-[500px]">
+                      <ToolbarItemList
+                        items={agents}
+                        type="agent"
+                        onInsertAgent={(name) => {
+                          onChange(value + `@${name} `);
+                          setAgentsPopoverOpen(false);
+                          textareaRef.current?.focus();
+                        }}
+                      />
+                    </PopoverContent>
+                  </Popover>
 
-            {/* Right side: Workflow selector + Send/Stop buttons */}
-            <div className="flex gap-2 items-center">
-              {workflowSlot}
+                  {/* Commands popover */}
+                  <Popover open={commandsPopoverOpen} onOpenChange={setCommandsPopoverOpen}>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" size="sm" className="h-7 gap-1.5" disabled={commands.length === 0}>
+                        <Terminal className="h-3.5 w-3.5" />
+                        Commands
+                        {commands.length > 0 && (
+                          <Badge variant="secondary" className="ml-0.5 h-4 px-1.5 text-[10px] font-medium">
+                            {commands.length}
+                          </Badge>
+                        )}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent align="start" side="top" className="w-[500px]">
+                      <ToolbarItemList
+                        items={commands}
+                        type="command"
+                        onRunCommand={(slashCommand) => {
+                          onCommandClick?.(slashCommand);
+                          setCommandsPopoverOpen(false);
+                        }}
+                      />
+                    </PopoverContent>
+                  </Popover>
 
-              {isRunActive ? (
-                <Button variant="destructive" size="sm" onClick={handleInterrupt} disabled={interrupting}>
-                  {interrupting && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
-                  Stop
-                </Button>
-              ) : editingQueuedId ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={handleSendAsNew}
-                    disabled={!hasContent || isSending}
-                    className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
-                  >
-                    Send as new
-                  </button>
-                  <Button size="sm" onClick={handleSendOrUpdate} disabled={!hasContent || isSending || disabled}>
-                    {isSending && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
-                    Update
-                  </Button>
-                </>
-              ) : (
-                <Button
-                  size="icon"
-                  className="h-8 w-8 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground"
-                  onClick={handleSendOrUpdate}
-                  disabled={!hasContent || isSending || disabled}
-                >
-                  {isSending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                </div>
+
+                {/* Right side: Workflow selector + Send/Stop buttons */}
+                <div className="flex gap-2 items-center">
+                  {workflowSlot}
+
+                  {isRunActive ? (
+                    <Button variant="destructive" size="sm" onClick={handleInterrupt} disabled={interrupting}>
+                      {interrupting && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
+                      Stop
+                    </Button>
+                  ) : editingQueuedId ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={handleSendAsNew}
+                        disabled={!hasContent || isSending}
+                        className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
+                      >
+                        Send as new
+                      </button>
+                      <Button size="sm" onClick={handleSendOrUpdate} disabled={!hasContent || isSending || disabled}>
+                        {isSending && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
+                        Update
+                      </Button>
+                    </>
                   ) : (
-                    <ArrowUp className="h-4 w-4" />
+                    <Button
+                      size="icon"
+                      className="h-8 w-8 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground"
+                      onClick={handleSendOrUpdate}
+                      disabled={!hasContent || isSending || disabled}
+                    >
+                      {isSending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <ArrowUp className="h-4 w-4" />
+                      )}
+                    </Button>
                   )}
-                </Button>
-              )}
-            </div>
+                </div>
+              </>
+            ) : (
+              <div className="flex-1 text-center py-1">
+                <p className="text-xs text-muted-foreground">View-only access - you cannot send messages</p>
+              </div>
+            )}
           </div>
         </div>
       </div>

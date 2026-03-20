@@ -25,6 +25,14 @@ export type MessageProps = {
   streaming?: boolean;
   /** Feedback buttons to show below the message (for bot messages) */
   feedbackButtons?: React.ReactNode;
+  /** Sender display name for multi-user session attribution (user messages only) */
+  senderAttribution?: string;
+  /** Sender user ID for avatar rendering (user messages only) */
+  senderId?: string;
+  /** Sender display name for avatar initials (user messages only) */
+  senderDisplayName?: string;
+  /** Current logged-in user ID for avatar comparison */
+  currentUserId?: string;
 };
 
 const defaultComponents: Components = {
@@ -98,6 +106,18 @@ const defaultComponents: Components = {
     </a>
   ),
 };
+
+/**
+ * Extract initials from a display name (e.g., "John Doe" → "JD", "alice" → "A")
+ */
+function getInitials(name: string | undefined): string {
+  if (!name) return "U";
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) {
+    return parts[0].charAt(0).toUpperCase();
+  }
+  return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+}
 
 /**
  * Parse markdown-style links [text](url) in a string and return React elements
@@ -237,12 +257,18 @@ export const LoadingDots = () => {
 
 export const Message = React.forwardRef<HTMLDivElement, MessageProps>(
   (
-    { role, content, isLoading, className, components, borderless, actions, timestamp, streaming, feedbackButtons, ...props },
+    { role, content, isLoading, className, components, borderless, actions, timestamp, streaming, feedbackButtons, senderAttribution, senderId, senderDisplayName, currentUserId, ...props },
     ref
   ) => {
     const isBot = role === "bot";
+
+    // Avatar logic for user messages:
+    // - If senderId matches currentUserId (or no senderId), show "U" (current user)
+    // - Otherwise, show initials from senderDisplayName (other user)
+    const isCurrentUser = !senderId || senderId === currentUserId;
+    const avatarText = isBot ? "AI" : (isCurrentUser ? "U" : getInitials(senderDisplayName));
     const avatarBg = isBot ? "bg-primary ring-2 ring-background" : "bg-emerald-600 dark:bg-emerald-500 ring-2 ring-background";
-    const avatarText = isBot ? "AI" : "U";
+
     const formattedTime = formatTimestamp(timestamp);
     const isActivelyStreaming = streaming && isBot;
 
@@ -270,10 +296,14 @@ export const Message = React.forwardRef<HTMLDivElement, MessageProps>(
 
           {/* Message Content */}
           <div className={cn("flex-1 min-w-0", !isBot && "max-w-[70%]")}>
-            {/* Timestamp */}
-            {formattedTime && (
+            {/* Timestamp and Sender */}
+            {(formattedTime || senderAttribution) && (
               <div className={cn("text-[10px] text-muted-foreground/60 mb-1", !isBot && "text-right")}>
-                {formattedTime}
+                {senderAttribution && (
+                  <span className="font-medium">{senderAttribution}</span>
+                )}
+                {senderAttribution && formattedTime && <span className="mx-1">•</span>}
+                {formattedTime && <span>{formattedTime}</span>}
               </div>
             )}
             <div className={cn(

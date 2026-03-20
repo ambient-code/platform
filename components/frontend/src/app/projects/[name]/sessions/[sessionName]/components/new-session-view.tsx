@@ -21,6 +21,7 @@ import { RunnerModelSelector, getDefaultModel } from "./runner-model-selector";
 import { WorkflowSelector } from "./workflow-selector";
 import { AddContextModal } from "./modals/add-context-modal";
 import { useRunnerTypes } from "@/services/queries/use-runner-types";
+import { useModels } from "@/services/queries/use-models";
 import { DEFAULT_RUNNER_TYPE_ID } from "@/services/api/runner-types";
 import type { WorkflowConfig } from "../lib/types";
 
@@ -54,18 +55,42 @@ export function NewSessionView({
 
   const [prompt, setPrompt] = useState("");
   const [selectedRunner, setSelectedRunner] = useState<string>(DEFAULT_RUNNER_TYPE_ID);
-  const [selectedModel, setSelectedModel] = useState(() =>
-    getDefaultModel(DEFAULT_RUNNER_TYPE_ID)
+  const [selectedModel, setSelectedModel] = useState<string>("");
+
+  const currentRunner = runnerTypes?.find((r) => r.id === selectedRunner);
+  const currentProvider = currentRunner?.provider;
+
+  // Fetch models for the selected runner's provider.
+  // Only enabled once the provider is known to avoid seeding a model from the wrong provider.
+  const { data: modelsData } = useModels(
+    projectName,
+    !!currentProvider,
+    currentProvider
   );
+
+  // Set default model when models load or runner/provider changes.
+  // Only backfill when the current selection is empty or invalid for the active provider.
+  useEffect(() => {
+    if (!modelsData?.models?.length) return;
+
+    setSelectedModel((prev) => {
+      if (prev && modelsData.models.some((m) => m.id === prev)) {
+        return prev;
+      }
+      return getDefaultModel(
+        modelsData.models.map((m) => ({ id: m.id, name: m.label })),
+        modelsData.defaultModel,
+      );
+    });
+  }, [modelsData]);
 
   // Once runner types load, default to the first available if current selection isn't available
   useEffect(() => {
     if (runnerTypes && runnerTypes.length > 0) {
       const isCurrentAvailable = runnerTypes.some((r) => r.id === selectedRunner);
       if (!isCurrentAvailable) {
-        const firstRunner = runnerTypes[0].id;
-        setSelectedRunner(firstRunner);
-        setSelectedModel(getDefaultModel(firstRunner));
+        setSelectedRunner(runnerTypes[0].id);
+        // Model will be set by the modelsData effect above
       }
     }
   }, [runnerTypes, selectedRunner]);
@@ -86,13 +111,16 @@ export function NewSessionView({
 
   const handleSubmit = useCallback(() => {
     const trimmed = prompt.trim();
-    if (!trimmed) return;
+    const hasWorkflow = selectedWorkflow !== "none";
+
+    // Require either a prompt OR a workflow with startupPrompt
+    if (!trimmed && !hasWorkflow) return;
 
     onCreateSession({
       prompt: trimmed,
       runner: selectedRunner,
       model: selectedModel,
-      workflow: selectedWorkflow !== "none" ? selectedWorkflow : undefined,
+      workflow: hasWorkflow ? selectedWorkflow : undefined,
       repos: pendingRepos.length > 0 ? pendingRepos.map((r) => ({ url: r.url })) : undefined,
     });
   }, [prompt, selectedRunner, selectedModel, selectedWorkflow, pendingRepos, onCreateSession]);
@@ -121,7 +149,7 @@ export function NewSessionView({
             What are you working on?
           </h1>
           <p className="text-muted-foreground">
-            Start a new session by typing a message.
+            Start a new session by typing a message or selecting a workflow.
           </p>
         </div>
 
@@ -173,7 +201,7 @@ export function NewSessionView({
               <Button
                 size="icon"
                 className="h-8 w-8 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground"
-                disabled={!prompt.trim() || isSubmitting}
+                disabled={(!prompt.trim() && selectedWorkflow === "none") || isSubmitting}
                 onClick={handleSubmit}
               >
                 {isSubmitting ? (

@@ -10,6 +10,93 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+func discoverSubSpecs(specDir string) (map[string]string, map[string]string, error) {
+	entries, err := os.ReadDir(specDir)
+	if err != nil {
+		return nil, nil, fmt.Errorf("read spec dir: %w", err)
+	}
+
+	resourceFiles := map[string]string{}
+	pathSegments := map[string]string{}
+
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || name == "openapi.yaml" {
+			continue
+		}
+		if !strings.HasPrefix(name, "openapi.") || !strings.HasSuffix(name, ".yaml") {
+			continue
+		}
+
+		subPath := filepath.Join(specDir, name)
+		data, err := os.ReadFile(subPath)
+		if err != nil {
+			return nil, nil, fmt.Errorf("read %s: %w", name, err)
+		}
+
+		var doc subSpecDoc
+		if err := yaml.Unmarshal(data, &doc); err != nil {
+			return nil, nil, fmt.Errorf("parse %s: %w", name, err)
+		}
+
+		resourceName := inferResourceName(doc.Components.Schemas)
+		if resourceName == "" {
+			continue
+		}
+
+		pathSeg := inferPathSegment(doc.Paths)
+		if pathSeg == "" {
+			continue
+		}
+
+		resourceFiles[resourceName] = name
+		pathSegments[resourceName] = pathSeg
+	}
+
+	return resourceFiles, pathSegments, nil
+}
+
+func inferResourceName(schemas map[string]interface{}) string {
+	var candidates []string
+	for name := range schemas {
+		if strings.HasSuffix(name, "List") ||
+			strings.HasSuffix(name, "PatchRequest") ||
+			strings.HasSuffix(name, "StatusPatchRequest") {
+			continue
+		}
+		candidates = append(candidates, name)
+	}
+	if len(candidates) == 1 {
+		return candidates[0]
+	}
+	sort.Strings(candidates)
+	if len(candidates) > 0 {
+		return candidates[0]
+	}
+	return ""
+}
+
+func inferPathSegment(paths map[string]interface{}) string {
+	basePath := extractBasePath(paths)
+	var segments []string
+	for path := range paths {
+		if !strings.HasPrefix(path, basePath+"/") {
+			continue
+		}
+		rest := strings.TrimPrefix(path, basePath+"/")
+		parts := strings.SplitN(rest, "/", 2)
+		if len(parts) >= 1 && parts[0] != "" {
+			segments = append(segments, parts[0])
+		}
+	}
+	for _, seg := range segments {
+		if !strings.Contains(seg, "{") {
+			return seg
+		}
+	}
+	return ""
+}
+
 type openAPIDoc struct {
 	Paths      map[string]interface{} `yaml:"paths"`
 	Components struct {
@@ -60,18 +147,9 @@ func parseSpec(specPath string) (*Spec, error) {
 
 	specDir := filepath.Dir(specPath)
 
-	resourceFiles := map[string]string{
-		"Session":         "openapi.sessions.yaml",
-		"User":            "openapi.users.yaml",
-		"Project":         "openapi.projects.yaml",
-		"ProjectSettings": "openapi.projectSettings.yaml",
-	}
-
-	pathSegments := map[string]string{
-		"Session":         "sessions",
-		"User":            "users",
-		"Project":         "projects",
-		"ProjectSettings": "project_settings",
+	resourceFiles, pathSegments, err := discoverSubSpecs(specDir)
+	if err != nil {
+		return nil, fmt.Errorf("discover sub-specs: %w", err)
 	}
 
 	var resources []Resource
@@ -168,36 +246,13 @@ func extractResource(name, pathSegment string, doc *subSpecDoc) (*Resource, erro
 }
 
 func resourcePlural(name string) string {
-	switch name {
-	case "Session":
-		return "Sessions"
-	case "Agent":
-		return "Agents"
-	case "Task":
-		return "Tasks"
-	case "Skill":
-		return "Skills"
-	case "Workflow":
-		return "Workflows"
-	case "User":
-		return "Users"
-	case "WorkflowSkill":
-		return "WorkflowSkills"
-	case "WorkflowTask":
-		return "WorkflowTasks"
-	case "Project":
-		return "Projects"
-	case "ProjectSettings":
-		return "ProjectSettings"
-	case "Permission":
-		return "Permissions"
-	case "RepositoryRef":
-		return "RepositoryRefs"
-	case "ProjectKey":
-		return "ProjectKeys"
-	default:
-		return name + "s"
+	alreadyPlural := []string{"Settings", "Data", "Info", "Metadata"}
+	for _, suffix := range alreadyPlural {
+		if strings.HasSuffix(name, suffix) {
+			return name
+		}
 	}
+	return name + "s"
 }
 
 func extractFields(schemaMap map[string]interface{}) ([]Field, []string, error) {

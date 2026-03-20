@@ -18,10 +18,13 @@ var Cmd = &cobra.Command{
 	Long: `Show detailed information about a specific resource.
 
 Valid resource types:
-  session          (aliases: sess)
-  project          (aliases: proj)
-  project-settings (aliases: ps)
-  user             (aliases: usr)`,
+  session           (aliases: sess)
+  project           (aliases: proj)
+  project-settings  (aliases: ps)
+  user              (aliases: usr)
+  agent             (aliases: agents)
+  role
+  role-binding      (aliases: rb)`,
 	Args: cobra.ExactArgs(2),
 	RunE: run,
 }
@@ -43,7 +46,7 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.GetRequestTimeout())
 	defer cancel()
 
-	printer := output.NewPrinter(output.FormatJSON)
+	printer := output.NewPrinter(output.FormatJSON, cmd.OutOrStdout())
 
 	switch resource {
 	case "session", "sessions", "sess":
@@ -74,7 +77,28 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 		}
 		return printer.PrintJSON(user)
 
+	case "agent", "agents":
+		agent, err := client.Agents().Get(ctx, name)
+		if err != nil {
+			return fmt.Errorf("describe agent %q: %w", name, err)
+		}
+		return printer.PrintJSON(agent)
+
+	case "role", "roles":
+		role, err := client.Roles().Get(ctx, name)
+		if err != nil {
+			return fmt.Errorf("describe role %q: %w", name, err)
+		}
+		return printer.PrintJSON(role)
+
+	case "role-binding", "role-bindings", "rolebinding", "rb":
+		rb, err := client.RoleBindings().Get(ctx, name)
+		if err != nil {
+			return fmt.Errorf("describe role-binding %q: %w", name, err)
+		}
+		return printer.PrintJSON(rb)
+
 	default:
-		return fmt.Errorf("unknown resource type: %s\nValid types: session, project, project-settings, user", cmdArgs[0])
+		return fmt.Errorf("unknown resource type: %s\nValid types: session, project, project-settings, user, agent, role, role-binding", cmdArgs[0])
 	}
 }

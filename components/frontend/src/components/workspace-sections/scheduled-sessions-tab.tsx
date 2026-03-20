@@ -11,7 +11,6 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { EmptyState } from "@/components/empty-state";
-import { CreateScheduledSessionDialog } from "./create-scheduled-session-dialog";
 
 import {
   useScheduledSessions,
@@ -28,7 +27,7 @@ type SchedulesSectionProps = {
 };
 
 export function SchedulesSection({ projectName }: SchedulesSectionProps) {
-  const { data: scheduledSessions, isLoading, error, refetch } = useScheduledSessions(projectName);
+  const { data: scheduledSessions, isLoading, isFetching, error, refetch } = useScheduledSessions(projectName);
 
   const deleteMutation = useDeleteScheduledSession();
   const suspendMutation = useSuspendScheduledSession();
@@ -89,16 +88,16 @@ export function SchedulesSection({ projectName }: SchedulesSectionProps) {
             </CardDescription>
           </div>
           <div className="flex gap-2">
-            <CreateScheduledSessionDialog
-              projectName={projectName}
-              onSuccess={() => refetch()}
-              trigger={
-                <Button>
-                  <Plus className="w-4 h-4 mr-2" />
-                  New Scheduled Session
-                </Button>
-              }
-            />
+            <Button variant="outline" onClick={() => refetch()} disabled={isFetching}>
+              <RefreshCw className={`w-4 h-4 mr-2 ${isFetching ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
+            <Button asChild>
+              <Link href={`/projects/${projectName}/scheduled-sessions/new`}>
+                <Plus className="w-4 h-4 mr-2" />
+                New Scheduled Session
+              </Link>
+            </Button>
           </div>
         </div>
       </CardHeader>

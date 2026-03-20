@@ -57,6 +57,7 @@ type CreateAgenticSessionRequest struct {
 	RunnerType           string             `json:"runnerType,omitempty"`
 	LLMSettings          *LLMSettings       `json:"llmSettings,omitempty"`
 	Timeout              *int               `json:"timeout,omitempty"`
+	InactivityTimeout    *int               `json:"inactivityTimeout,omitempty"`
 	ParentSessionID      string             `json:"parent_session_id,omitempty"`
 	Repos                []SimpleRepo       `json:"repos,omitempty"`
 	ActiveWorkflow       *WorkflowSelection `json:"activeWorkflow,omitempty"`

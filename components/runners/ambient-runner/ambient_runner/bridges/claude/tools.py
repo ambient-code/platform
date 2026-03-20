@@ -22,8 +22,6 @@ from ambient_runner.platform.prompts import (
 logger = logging.getLogger(__name__)
 
 
-
-
 # ------------------------------------------------------------------
 # Credential refresh tool
 # ------------------------------------------------------------------

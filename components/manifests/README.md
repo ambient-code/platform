@@ -1,197 +1,147 @@
-# vTeam Manifests - Kustomize Overlays
+# Ambient Platform Manifests
 
-This directory contains Kubernetes/OpenShift manifests organized using **Kustomize overlays** to eliminate duplication across environments.
+Kubernetes/OpenShift manifests organized with **Kustomize** overlays. The base defines a secure,
+production-grade default (TLS everywhere, JWT auth enabled, strict RBAC). Overlays progressively
+relax constraints for development environments.
 
-## Layout
+## Directory Structure
 
-This directory is organized into the following top-level directories:
-
-- **`base/`** — Common resources (deployments, services, CRDs, RBAC) shared across all environments
-- **`overlays/`** — Environment-specific Kustomize overlays (e.g. `production`, `e2e`, `kind`, `kind-local`, `local-dev`)
-- **`observability/`** — Monitoring and observability resources
-
-## Environment Differences
-
-### Production (OpenShift)
-- **Registry**: `quay.io/ambient_code/*`
-- **Networking**: OpenShift Routes
-- **Auth**: OAuth proxy sidecar in frontend
-- **Storage**: Cluster default storage class
-- **Namespace**: `ambient-code` with OpenShift monitoring
-
-**Deploy**:
-```bash
-cd components/manifests
-./deploy.sh
+```
+manifests/
+├── base/                                  # Secure production-grade defaults
+│   ├── kustomization.yaml                 # Delegates to core/, platform/, rbac/
+│   ├── core/                              # Application deployments + config
+│   │   ├── backend-deployment.yaml
+│   │   ├── frontend-deployment.yaml
+│   │   ├── operator-deployment.yaml
+│   │   ├── public-api-deployment.yaml
+│   │   ├── ambient-api-server-service.yml # ambient-api-server Deployment + Service
+│   │   ├── agent-registry-configmap.yaml
+│   │   ├── minio-deployment.yaml
+│   │   ├── postgresql-deployment.yaml
+│   │   ├── unleash-deployment.yaml
+│   │   ├── workspace-pvc.yaml
+│   │   ├── models.json                    # Available LLM models (ConfigMap source)
+│   │   └── flags.json                     # Feature flags (ConfigMap source)
+│   ├── platform/                          # Cluster-level resources
+│   │   ├── namespace.yaml
+│   │   ├── ambient-api-server-db.yml      # ambient-api-server PostgreSQL deployment
+│   │   └── ambient-api-server-secrets.yml # Secret template (values injected per-env)
+│   ├── crds/                              # Custom Resource Definitions
+│   │   ├── agenticsessions-crd.yaml
+│   │   └── projectsettings-crd.yaml
+│   └── rbac/                              # ClusterRoles for backend and operator
+│       ├── backend-clusterrole.yaml
+│       └── operator-clusterrole.yaml
+│
+├── components/                            # Reusable opt-in kustomize components
+│   ├── oauth-proxy/                       # OpenShift OAuth proxy sidecar for frontend
+│   ├── postgresql-rhel/                   # RHEL PostgreSQL image + env var patches
+│   ├── postgresql-init-scripts/           # Init ConfigMap for vanilla postgres DB creation
+│   └── ambient-api-server-db/             # RHEL image patch for ambient-api-server DB
+│
+├── overlays/
+│   ├── production/                        # OpenShift production (ROSA / on-prem)
+│   ├── kind/                              # Local kind cluster (Quay images)
+│   ├── kind-local/                        # Local kind cluster (locally built images)
+│   ├── e2e/                               # Cypress E2E test environment (kind)
+│   └── local-dev/                         # CRC / OpenShift Local developer environment
+│
+└── observability/                         # Grafana dashboards, OTel collector, ServiceMonitors
 ```
 
-### E2E Testing (Kind/K8s)
-- **Registry**: `quay.io/ambient_code/*`
-- **Networking**: K8s Ingress (nginx)
-- **Auth**: Test user with cluster-admin
-- **Storage**: `standard` storage class
-- **Namespace**: `ambient-code`
+## Security Model
 
-**Deploy**:
+The base manifests assume full TLS and JWT authentication. Overlays strip these down as needed:
+
+| Layer | TLS | JWT / JWKS | Auth |
+|---|---|---|---|
+| `base` | enabled (HTTPS + gRPC TLS) | enabled (Red Hat SSO) | enabled |
+| `production` | enabled (OpenShift service-ca) | enabled (Red Hat SSO) | enabled |
+| `local-dev` | enabled (OpenShift service-ca) | enabled | enabled |
+| `kind` | disabled | disabled | disabled |
+| `kind-local` | disabled | disabled | disabled |
+| `e2e` | disabled | disabled | disabled |
+
+## Overlays
+
+### `production/` — OpenShift (ROSA / on-prem)
+- **Images**: `quay.io/ambient_code/*`
+- **Networking**: OpenShift Routes
+- **Auth**: OAuth proxy sidecar (`components/oauth-proxy`), Red Hat SSO JWKS
+- **Database**: RHEL PostgreSQL (`components/postgresql-rhel`, `components/ambient-api-server-db`)
+- **TLS**: Auto-provisioned by OpenShift service-ca
+
 ```bash
-cd e2e
-./scripts/setup-kind.sh
-./scripts/deploy.sh
-./scripts/run-tests.sh
+oc apply -k overlays/production/
 ```
 
-### Local Dev (CRC/OpenShift Local)
-- **Registry**: Internal OpenShift registry (`image-registry.openshift-image-registry.svc:5000/vteam-dev/*`)
-- **Networking**: OpenShift Routes
-- **Auth**: Frontend auth token for local user
-- **Storage**: `crc-csi-hostpath-provisioner`
-- **Namespace**: `vteam-dev`
-- **Build**: Uses BuildConfigs for local image builds
+### `kind/` — Local kind cluster (Quay images)
+- **Images**: `quay.io/ambient_code/*` pulled directly
+- **Networking**: NodePort services
+- **Auth**: JWT disabled, no-TLS patches applied
+- **Database**: Vanilla postgres with init scripts (`components/postgresql-init-scripts`)
 
-**Deploy**:
+```bash
+make kind-up
+kubectl apply -k overlays/kind/
+```
+
+### `kind-local/` — Local kind cluster (locally built images)
+Extends `kind/` — overrides image refs to locally loaded images (`imagePullPolicy: Never`).
+
+```bash
+make local-reload-api-server KIND_CLUSTER_NAME=<cluster>
+```
+
+### `e2e/` — Cypress E2E test environment
+Kind-based environment used by `make test-e2e-local`. Adds test users, ingress, and
+Cypress-compatible service configuration on top of the kind overlay.
+
+```bash
+make test-e2e-local
+```
+
+### `local-dev/` — CRC / OpenShift Local
+- **Images**: Internal OpenShift registry (`image-registry.openshift-image-registry.svc:5000/vteam-dev/*`)
+- **Namespace**: `vteam-dev` (with `namePrefix: vteam-`)
+- **Auth**: OpenShift service-ca TLS, JWKS enabled
+- **Database**: RHEL PostgreSQL with init containers
+
 ```bash
 make local-up
 ```
 
-## How It Works
+## Reusable Components
 
-### Base Resources
-The `base/` directory contains common manifests shared across all environments:
-- Deployments (without environment-specific configuration)
-- Services
-- PVCs (without storageClassName)
-- CRDs
-- Common RBAC
+Components are opt-in kustomize modules included via the `components:` block in an overlay's
+`kustomization.yaml`. They are **not** applied by default.
 
-### Overlays
-Each overlay in `overlays/` extends the base with environment-specific:
-- **Resources**: Additional manifests (Routes, Ingress, Secrets, etc.)
-- **Patches**: Strategic merge or JSON patches to modify base resources
-- **Images**: Override image names/tags
-- **Namespace**: Set target namespace
+| Component | Purpose | Used by |
+|---|---|---|
+| `oauth-proxy` | Adds OpenShift OAuth proxy sidecar to frontend | `production` |
+| `postgresql-rhel` | Patches PostgreSQL to use `registry.redhat.io/rhel10/postgresql-16` | `production`, `local-dev` |
+| `ambient-api-server-db` | Same RHEL patch for the ambient-api-server's dedicated DB | `production`, `local-dev` |
+| `postgresql-init-scripts` | ConfigMap + volume for DB init SQL (vanilla postgres only) | `kind`, `e2e` |
 
-### Example: Adding OAuth to Frontend
+## Building and Validating
 
-**Base** (`base/frontend-deployment.yaml`):
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: frontend
-spec:
-  template:
-    spec:
-      containers:
-      - name: frontend
-        image: quay.io/ambient_code/vteam_frontend:latest
-```
-
-**Production Patch** (`overlays/production/frontend-oauth-deployment-patch.yaml`):
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: frontend
-spec:
-  template:
-    spec:
-      containers:
-      - name: oauth-proxy  # Add OAuth sidecar
-        image: quay.io/openshift/origin-oauth-proxy:4.14
-        # ... OAuth configuration
-```
-
-The patch is applied via the kustomization.yaml:
-```yaml
-patches:
-- path: frontend-oauth-deployment-patch.yaml
-  target:
-    kind: Deployment
-    name: frontend
-```
-
-## Building Manifests
-
-### Test a build without applying:
 ```bash
-# Production
+# Dry-run any overlay
 kustomize build overlays/production/
-
-# E2E
+kustomize build overlays/kind/
 kustomize build overlays/e2e/
 
-# Local dev
-kustomize build overlays/local-dev/
-```
-
-### Apply directly with kubectl/oc:
-```bash
-kubectl apply -k overlays/production/
-# or
+# Apply
+kubectl apply -k overlays/kind/
 oc apply -k overlays/production/
 ```
 
-## Customizing Deployments
+## Adding a New Environment Resource
 
-### Change Namespace
-```bash
-cd overlays/production
-kustomize edit set namespace my-namespace
-kustomize build . | oc apply -f -
-# Restore
-kustomize edit set namespace ambient-code
-```
-
-### Change Images
-```bash
-cd overlays/production
-kustomize edit set image quay.io/ambient_code/vteam_backend:latest=my-registry/backend:v1.0
-kustomize build . | oc apply -f -
-```
-
-### Environment Variables
-Set via `.env` file or environment variables before running `deploy.sh`:
-```bash
-NAMESPACE=my-namespace IMAGE_TAG=v1.0 ./deploy.sh
-```
-
-## Benefits of This Structure
-
-✅ **Single Source of Truth**: Base manifests define common configuration
-✅ **No Duplication**: Environment-specific configs only define differences
-✅ **Easy to Maintain**: Changes to base apply to all environments
-✅ **Clear Differences**: Overlays show exactly what's unique per environment
-✅ **Type-Safe**: Kustomize validates patches against base resources
-
-## Troubleshooting
-
-### Kustomize build fails
-```bash
-# Validate the kustomization.yaml
-kustomize build overlays/production/ --enable-alpha-plugins
-
-# Check for duplicate resources
-kustomize build overlays/production/ 2>&1 | grep -i "conflict"
-```
-
-### Images not updating
-```bash
-# Make sure you're in the overlay directory
-cd overlays/production
-kustomize edit set image quay.io/ambient_code/vteam_backend:latest=...
-```
-
-### Namespace issues
-```bash
-# Check current namespace in kustomization
-grep "namespace:" overlays/production/kustomization.yaml
-
-# Verify resources are in correct namespace after build
-kustomize build overlays/production/ | grep "namespace:"
-```
-
-## Additional Resources
-
-- [Kustomize Documentation](https://kustomize.io/)
-- [OpenShift Kustomize Guide](https://docs.openshift.com/container-platform/latest/applications/working_with_quotas.html)
-- [Kubernetes Kustomize Tutorial](https://kubernetes.io/docs/tasks/manage-kubernetes-objects/kustomization/)
+1. If it belongs in all environments → add to `base/core/` or `base/platform/` and update the
+   relevant `kustomization.yaml`.
+2. If it's environment-specific → add to the overlay directory and reference it in that overlay's
+   `kustomization.yaml`.
+3. If it's a reusable opt-in pattern → create a new `components/<name>/` directory with its own
+   `kustomization.yaml` and include it via `components:` in the overlays that need it.

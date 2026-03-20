@@ -17,6 +17,7 @@ export type StreamMessageProps = {
   plainCard?: boolean;
   isNewest?: boolean;
   agentName?: string;
+  currentUserId?: string;
 };
 
 function isAskUserQuestionTool(name: string): boolean {
@@ -40,7 +41,7 @@ const getRandomAgentMessage = () => {
   return messages[Math.floor(Math.random() * messages.length)];
 };
 
-export const StreamMessage: React.FC<StreamMessageProps> = ({ message, onGoToResults, onSubmitAnswer, plainCard=false, isNewest=false, agentName }) => {
+export const StreamMessage: React.FC<StreamMessageProps> = ({ message, onGoToResults, onSubmitAnswer, plainCard=false, isNewest=false, agentName, currentUserId }) => {
   const isToolUsePair = (m: MessageObject | ToolUseMessages | HierarchicalToolMessage): m is ToolUseMessages | HierarchicalToolMessage =>
     m != null && typeof m === "object" && "toolUseBlock" in m && "resultBlock" in m;
 
@@ -87,6 +88,11 @@ export const StreamMessage: React.FC<StreamMessageProps> = ({ message, onGoToRes
       const isStreaming = 'streaming' in message && message.streaming;
       const isAgent = m.type === "agent_message";
 
+      // Extract sender attribution from metadata (for multi-user sessions)
+      // Fall back to senderId when displayName is absent
+      const senderId = m.metadata?.senderId as string | undefined;
+      const senderDisplayName = (m.metadata?.senderDisplayName ?? senderId) as string | undefined;
+
       // Get content text for feedback context
       const getContentText = () => {
         if (typeof m.content === "string") return m.content;
@@ -109,11 +115,15 @@ export const StreamMessage: React.FC<StreamMessageProps> = ({ message, onGoToRes
           <Message
             role={isAgent ? "bot" : "user"}
             content={m.content}
-            name={agentName ?? "AI Agent"}
+            name={isAgent ? (agentName ?? "AI Agent") : senderDisplayName}
             borderless={plainCard}
             timestamp={m.timestamp}
             streaming={isStreaming}
             feedbackButtons={feedbackElement}
+            senderAttribution={!isAgent && senderDisplayName ? senderDisplayName : undefined}
+            senderId={!isAgent ? senderId : undefined}
+            senderDisplayName={!isAgent ? senderDisplayName : undefined}
+            currentUserId={currentUserId}
           />
         );
       }
@@ -125,11 +135,15 @@ export const StreamMessage: React.FC<StreamMessageProps> = ({ message, onGoToRes
             <Message
               role={isAgent ? "bot" : "user"}
               content={m.content.text}
-              name={agentName ?? "AI Agent"}
+              name={isAgent ? (agentName ?? "AI Agent") : senderDisplayName}
               borderless={plainCard}
               timestamp={m.timestamp}
               streaming={isStreaming}
               feedbackButtons={feedbackElement}
+              senderAttribution={!isAgent && senderDisplayName ? senderDisplayName : undefined}
+              senderId={!isAgent ? senderId : undefined}
+              senderDisplayName={!isAgent ? senderDisplayName : undefined}
+              currentUserId={currentUserId}
             />
           );
         case "tool_use_block":

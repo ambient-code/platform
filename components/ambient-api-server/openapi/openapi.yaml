@@ -38,6 +38,20 @@ paths:
     $ref: 'openapi.users.yaml#/paths/~1api~1ambient~1v1~1users'
   /api/ambient/v1/users/{id}:
     $ref: 'openapi.users.yaml#/paths/~1api~1ambient~1v1~1users~1{id}'
+  /api/ambient/v1/agents:
+    $ref: 'openapi.agents.yaml#/paths/~1api~1ambient~1v1~1agents'
+  /api/ambient/v1/agents/{id}:
+    $ref: 'openapi.agents.yaml#/paths/~1api~1ambient~1v1~1agents~1{id}'
+  /api/ambient/v1/roles:
+    $ref: 'openapi.roles.yaml#/paths/~1api~1ambient~1v1~1roles'
+  /api/ambient/v1/roles/{id}:
+    $ref: 'openapi.roles.yaml#/paths/~1api~1ambient~1v1~1roles~1{id}'
+  /api/ambient/v1/role_bindings:
+    $ref: 'openapi.roleBindings.yaml#/paths/~1api~1ambient~1v1~1role_bindings'
+  /api/ambient/v1/role_bindings/{id}:
+    $ref: 'openapi.roleBindings.yaml#/paths/~1api~1ambient~1v1~1role_bindings~1{id}'
+  /api/ambient/v1/sessions/{id}/messages:
+    $ref: 'openapi.sessionMessages.yaml#/paths/~1api~1ambient~1v1~1sessions~1{id}~1messages'
   # AUTO-ADD NEW PATHS
 components:
   securitySchemes:
@@ -115,6 +129,30 @@ components:
       $ref: 'openapi.users.yaml#/components/schemas/UserList'
     UserPatchRequest:
       $ref: 'openapi.users.yaml#/components/schemas/UserPatchRequest'
+    Agent:
+      $ref: 'openapi.agents.yaml#/components/schemas/Agent'
+    AgentList:
+      $ref: 'openapi.agents.yaml#/components/schemas/AgentList'
+    AgentPatchRequest:
+      $ref: 'openapi.agents.yaml#/components/schemas/AgentPatchRequest'
+    Role:
+      $ref: 'openapi.roles.yaml#/components/schemas/Role'
+    RoleList:
+      $ref: 'openapi.roles.yaml#/components/schemas/RoleList'
+    RolePatchRequest:
+      $ref: 'openapi.roles.yaml#/components/schemas/RolePatchRequest'
+    RoleBinding:
+      $ref: 'openapi.roleBindings.yaml#/components/schemas/RoleBinding'
+    RoleBindingList:
+      $ref: 'openapi.roleBindings.yaml#/components/schemas/RoleBindingList'
+    RoleBindingPatchRequest:
+      $ref: 'openapi.roleBindings.yaml#/components/schemas/RoleBindingPatchRequest'
+    SessionMessage:
+      $ref: 'openapi.sessionMessages.yaml#/components/schemas/SessionMessage'
+    SessionMessageList:
+      $ref: 'openapi.sessionMessages.yaml#/components/schemas/SessionMessageList'
+    SessionMessagePushRequest:
+      $ref: 'openapi.sessionMessages.yaml#/components/schemas/SessionMessagePushRequest'
     # AUTO-ADD NEW SCHEMAS
   parameters:
     id:

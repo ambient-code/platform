@@ -1,0 +1,159 @@
+paths:
+  /api/ambient/v1/sessions/{id}/messages:
+    get:
+      summary: List or stream session messages
+      description: |-
+        Returns messages for a session after the given sequence number.
+        Set `Accept: text/event-stream` to receive a real-time SSE stream
+        instead of a JSON array. The stream replays existing messages first,
+        then pushes new ones as they arrive. Keep-alive comments (`: keep-alive`)
+        are sent every 15 seconds.
+      security:
+        - Bearer: []
+      parameters:
+        - $ref: 'openapi.sessions.yaml#/components/parameters/id'
+        - name: after_seq
+          in: query
+          required: false
+          description: Return only messages with seq greater than this value (default 0 = all messages)
+          schema:
+            type: integer
+            format: int64
+            default: 0
+      responses:
+        '200':
+          description: |-
+            JSON array of messages (default), or SSE stream when
+            `Accept: text/event-stream` is set.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionMessageList'
+            text/event-stream:
+              schema:
+                type: string
+                description: |-
+                  Server-Sent Events stream. Each event is a JSON-encoded
+                  SessionMessage prefixed with `data: ` and terminated by
+                  a blank line. Example:
+
+                  data: {"id":"...","session_id":"...","seq":1,...}
+
+        '401':
+          description: Auth token is invalid
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '403':
+          description: Unauthorized to perform operation
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '404':
+          description: No session with specified id exists
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '500':
+          description: Unexpected error occurred
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+    post:
+      summary: Push a message to a session
+      description: |-
+        Appends a message to the session's message log. The message is
+        assigned a monotonically increasing sequence number. Subscribers
+        on the SSE stream will receive the message immediately.
+      security:
+        - Bearer: []
+      parameters:
+        - $ref: 'openapi.sessions.yaml#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SessionMessagePushRequest'
+      responses:
+        '201':
+          description: Message created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionMessage'
+        '400':
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '401':
+          description: Auth token is invalid
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '403':
+          description: Unauthorized to perform operation
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '404':
+          description: No session with specified id exists
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '500':
+          description: Unexpected error occurred
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+components:
+  schemas:
+    SessionMessage:
+      allOf:
+        - $ref: 'openapi.yaml#/components/schemas/ObjectReference'
+        - type: object
+          properties:
+            session_id:
+              type: string
+              readOnly: true
+              description: ID of the parent session
+            seq:
+              type: integer
+              format: int64
+              readOnly: true
+              description: Monotonically increasing sequence number within the session
+            event_type:
+              type: string
+              description: |-
+                Event type tag. Common values: `user` (human turn),
+                `assistant` (model reply), `tool_use`, `tool_result`,
+                `system`, `error`.
+              default: user
+            payload:
+              type: string
+              description: Message body (plain text or JSON-encoded event payload)
+    SessionMessageList:
+      type: array
+      items:
+        $ref: '#/components/schemas/SessionMessage'
+    SessionMessagePushRequest:
+      type: object
+      properties:
+        event_type:
+          type: string
+          description: |-
+            Event type tag. Defaults to `user` if omitted.
+          default: user
+        payload:
+          type: string
+          description: Message body

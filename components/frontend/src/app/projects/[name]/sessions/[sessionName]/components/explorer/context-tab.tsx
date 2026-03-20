@@ -16,13 +16,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { Repository, UploadedFile } from "../../lib/types";
 
-type ContextTabProps = {
+export type ContextTabProps = {
   repositories?: Repository[];
   uploadedFiles?: UploadedFile[];
   onAddRepository: () => void;
   onUploadFile: () => void;
   onRemoveRepository: (repoName: string) => void;
   onRemoveFile?: (fileName: string) => void;
+  canModify: boolean;
 };
 
 export function ContextTab({
@@ -32,6 +33,7 @@ export function ContextTab({
   onUploadFile,
   onRemoveRepository,
   onRemoveFile,
+  canModify,
 }: ContextTabProps) {
   const [removingRepo, setRemovingRepo] = useState<string | null>(null);
   const [removingFile, setRemovingFile] = useState<string | null>(null);
@@ -71,10 +73,12 @@ export function ContextTab({
               Git repositories cloned into this session.
             </p>
           </div>
-          <Button variant="ghost" size="sm" onClick={onAddRepository} className="h-7">
-            <Plus className="h-3 w-3 mr-1" />
-            Add
-          </Button>
+          {canModify && (
+            <Button variant="ghost" size="sm" onClick={onAddRepository} className="h-7">
+              <Plus className="h-3 w-3 mr-1" />
+              Add
+            </Button>
+          )}
         </div>
 
         <div className="px-3 pb-3">
@@ -86,10 +90,12 @@ export function ContextTab({
               <p className="text-xs text-muted-foreground mb-2">
                 No repositories added
               </p>
-              <Button size="sm" variant="outline" onClick={onAddRepository}>
-                <GitBranch className="mr-1.5 h-3 w-3" />
-                Add Repository
-              </Button>
+              {canModify && (
+                <Button size="sm" variant="outline" onClick={onAddRepository}>
+                  <GitBranch className="mr-1.5 h-3 w-3" />
+                  Add Repository
+                </Button>
+              )}
             </div>
           ) : (
             <div className="space-y-2">
@@ -178,24 +184,26 @@ export function ContextTab({
                           ) : null}
                         </div>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 w-7 p-0 flex-shrink-0"
-                        onClick={() => handleRemoveRepo(repoName)}
-                        disabled={
-                          isRemoving ||
-                          repo.status === "Cloning" ||
-                          repo.status === "Removing"
-                        }
-                        aria-label={`Remove ${repoName}`}
-                      >
-                        {isRemoving ? (
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                        ) : (
-                          <X className="h-3 w-3" />
-                        )}
-                      </Button>
+                      {canModify && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0 flex-shrink-0"
+                          onClick={() => handleRemoveRepo(repoName)}
+                          disabled={
+                            isRemoving ||
+                            repo.status === "Cloning" ||
+                            repo.status === "Removing"
+                          }
+                          aria-label={`Remove ${repoName}`}
+                        >
+                          {isRemoving ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <X className="h-3 w-3" />
+                          )}
+                        </Button>
+                      )}
                     </div>
 
                     {isExpanded && hasBranches && (
@@ -239,10 +247,12 @@ export function ContextTab({
               Files uploaded to the workspace.
             </p>
           </div>
-          <Button variant="ghost" size="sm" onClick={onUploadFile} className="h-7">
-            <Upload className="h-3 w-3 mr-1" />
-            Upload
-          </Button>
+          {canModify && (
+            <Button variant="ghost" size="sm" onClick={onUploadFile} className="h-7">
+              <Upload className="h-3 w-3 mr-1" />
+              Upload
+            </Button>
+          )}
         </div>
 
         <div className="px-3 pb-3">
@@ -254,10 +264,12 @@ export function ContextTab({
               <p className="text-xs text-muted-foreground mb-2">
                 No files uploaded
               </p>
-              <Button size="sm" variant="outline" onClick={onUploadFile}>
-                <Upload className="mr-1.5 h-3 w-3" />
-                Upload File
-              </Button>
+              {canModify && (
+                <Button size="sm" variant="outline" onClick={onUploadFile}>
+                  <Upload className="mr-1.5 h-3 w-3" />
+                  Upload File
+                </Button>
+              )}
             </div>
           ) : (
             <div className="space-y-2">
@@ -283,7 +295,7 @@ export function ContextTab({
                         </div>
                       )}
                     </div>
-                    {onRemoveFile && (
+                    {onRemoveFile && canModify && (
                       <Button
                         variant="ghost"
                         size="sm"

@@ -22,11 +22,10 @@ var httpBypassPaths = map[string]bool{
 func init() {
 	token := os.Getenv(ambientAPITokenEnv)
 	if token == "" {
-		glog.Infof("Bearer token auth disabled: %s not set", ambientAPITokenEnv)
+		glog.Infof("Service token auth disabled: %s not set", ambientAPITokenEnv)
 		return
 	}
-	glog.Infof("Bearer token auth enabled via %s", ambientAPITokenEnv)
-	pkgserver.RegisterPreAuthMiddleware(BearerTokenAuth(token))
+	glog.Infof("Service token auth enabled via %s (gRPC only)", ambientAPITokenEnv)
 	pkgserver.RegisterPreAuthGRPCUnaryInterceptor(bearerTokenGRPCUnaryInterceptor(token))
 	pkgserver.RegisterPreAuthGRPCStreamInterceptor(bearerTokenGRPCStreamInterceptor(token))
 }

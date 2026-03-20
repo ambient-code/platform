@@ -10,12 +10,20 @@ vi.mock('../context-tab', () => ({
   ContextTab: () => <div data-testid="context-tab">Context Content</div>,
 }));
 
+vi.mock('@/services/queries/use-project-access', () => ({
+  useProjectAccess: vi.fn(() => ({
+    data: { userRole: 'edit', allowed: true, project: 'test-project' },
+    isLoading: false,
+  })),
+}));
+
 describe('ExplorerPanel', () => {
   const defaultProps = {
     visible: true,
     activeTab: 'files' as const,
     onTabChange: vi.fn(),
     onClose: vi.fn(),
+    projectName: 'test-project',
     // Files tab props
     directoryOptions: [],
     selectedDirectory: { type: 'artifacts' as const, name: 'Shared Artifacts', path: 'artifacts' },

@@ -19,13 +19,15 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	SessionService_GetSession_FullMethodName          = "/ambient.v1.SessionService/GetSession"
-	SessionService_CreateSession_FullMethodName       = "/ambient.v1.SessionService/CreateSession"
-	SessionService_UpdateSession_FullMethodName       = "/ambient.v1.SessionService/UpdateSession"
-	SessionService_UpdateSessionStatus_FullMethodName = "/ambient.v1.SessionService/UpdateSessionStatus"
-	SessionService_DeleteSession_FullMethodName       = "/ambient.v1.SessionService/DeleteSession"
-	SessionService_ListSessions_FullMethodName        = "/ambient.v1.SessionService/ListSessions"
-	SessionService_WatchSessions_FullMethodName       = "/ambient.v1.SessionService/WatchSessions"
+	SessionService_GetSession_FullMethodName           = "/ambient.v1.SessionService/GetSession"
+	SessionService_CreateSession_FullMethodName        = "/ambient.v1.SessionService/CreateSession"
+	SessionService_UpdateSession_FullMethodName        = "/ambient.v1.SessionService/UpdateSession"
+	SessionService_UpdateSessionStatus_FullMethodName  = "/ambient.v1.SessionService/UpdateSessionStatus"
+	SessionService_DeleteSession_FullMethodName        = "/ambient.v1.SessionService/DeleteSession"
+	SessionService_ListSessions_FullMethodName         = "/ambient.v1.SessionService/ListSessions"
+	SessionService_WatchSessions_FullMethodName        = "/ambient.v1.SessionService/WatchSessions"
+	SessionService_PushSessionMessage_FullMethodName   = "/ambient.v1.SessionService/PushSessionMessage"
+	SessionService_WatchSessionMessages_FullMethodName = "/ambient.v1.SessionService/WatchSessionMessages"
 )
 
 // SessionServiceClient is the client API for SessionService service.
@@ -39,6 +41,8 @@ type SessionServiceClient interface {
 	DeleteSession(ctx context.Context, in *DeleteSessionRequest, opts ...grpc.CallOption) (*DeleteSessionResponse, error)
 	ListSessions(ctx context.Context, in *ListSessionsRequest, opts ...grpc.CallOption) (*ListSessionsResponse, error)
 	WatchSessions(ctx context.Context, in *WatchSessionsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[SessionWatchEvent], error)
+	PushSessionMessage(ctx context.Context, in *PushSessionMessageRequest, opts ...grpc.CallOption) (*SessionMessage, error)
+	WatchSessionMessages(ctx context.Context, in *WatchSessionMessagesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[SessionMessage], error)
 }
 
 type sessionServiceClient struct {
@@ -128,6 +132,35 @@ func (c *sessionServiceClient) WatchSessions(ctx context.Context, in *WatchSessi
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type SessionService_WatchSessionsClient = grpc.ServerStreamingClient[SessionWatchEvent]
 
+func (c *sessionServiceClient) PushSessionMessage(ctx context.Context, in *PushSessionMessageRequest, opts ...grpc.CallOption) (*SessionMessage, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SessionMessage)
+	err := c.cc.Invoke(ctx, SessionService_PushSessionMessage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sessionServiceClient) WatchSessionMessages(ctx context.Context, in *WatchSessionMessagesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[SessionMessage], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &SessionService_ServiceDesc.Streams[1], SessionService_WatchSessionMessages_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[WatchSessionMessagesRequest, SessionMessage]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type SessionService_WatchSessionMessagesClient = grpc.ServerStreamingClient[SessionMessage]
+
 // SessionServiceServer is the server API for SessionService service.
 // All implementations must embed UnimplementedSessionServiceServer
 // for forward compatibility.
@@ -139,6 +172,8 @@ type SessionServiceServer interface {
 	DeleteSession(context.Context, *DeleteSessionRequest) (*DeleteSessionResponse, error)
 	ListSessions(context.Context, *ListSessionsRequest) (*ListSessionsResponse, error)
 	WatchSessions(*WatchSessionsRequest, grpc.ServerStreamingServer[SessionWatchEvent]) error
+	PushSessionMessage(context.Context, *PushSessionMessageRequest) (*SessionMessage, error)
+	WatchSessionMessages(*WatchSessionMessagesRequest, grpc.ServerStreamingServer[SessionMessage]) error
 	mustEmbedUnimplementedSessionServiceServer()
 }
 
@@ -169,6 +204,12 @@ func (UnimplementedSessionServiceServer) ListSessions(context.Context, *ListSess
 }
 func (UnimplementedSessionServiceServer) WatchSessions(*WatchSessionsRequest, grpc.ServerStreamingServer[SessionWatchEvent]) error {
 	return status.Error(codes.Unimplemented, "method WatchSessions not implemented")
+}
+func (UnimplementedSessionServiceServer) PushSessionMessage(context.Context, *PushSessionMessageRequest) (*SessionMessage, error) {
+	return nil, status.Error(codes.Unimplemented, "method PushSessionMessage not implemented")
+}
+func (UnimplementedSessionServiceServer) WatchSessionMessages(*WatchSessionMessagesRequest, grpc.ServerStreamingServer[SessionMessage]) error {
+	return status.Error(codes.Unimplemented, "method WatchSessionMessages not implemented")
 }
 func (UnimplementedSessionServiceServer) mustEmbedUnimplementedSessionServiceServer() {}
 func (UnimplementedSessionServiceServer) testEmbeddedByValue()                        {}
@@ -310,6 +351,35 @@ func _SessionService_WatchSessions_Handler(srv interface{}, stream grpc.ServerSt
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type SessionService_WatchSessionsServer = grpc.ServerStreamingServer[SessionWatchEvent]
 
+func _SessionService_PushSessionMessage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PushSessionMessageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SessionServiceServer).PushSessionMessage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SessionService_PushSessionMessage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SessionServiceServer).PushSessionMessage(ctx, req.(*PushSessionMessageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SessionService_WatchSessionMessages_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(WatchSessionMessagesRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(SessionServiceServer).WatchSessionMessages(m, &grpc.GenericServerStream[WatchSessionMessagesRequest, SessionMessage]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type SessionService_WatchSessionMessagesServer = grpc.ServerStreamingServer[SessionMessage]
+
 // SessionService_ServiceDesc is the grpc.ServiceDesc for SessionService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -341,11 +411,20 @@ var SessionService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "ListSessions",
 			Handler:    _SessionService_ListSessions_Handler,
 		},
+		{
+			MethodName: "PushSessionMessage",
+			Handler:    _SessionService_PushSessionMessage_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
 			StreamName:    "WatchSessions",
 			Handler:       _SessionService_WatchSessions_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "WatchSessionMessages",
+			Handler:       _SessionService_WatchSessionMessages_Handler,
 			ServerStreams: true,
 		},
 	},

@@ -23,6 +23,19 @@ vi.mock('@/services/api/runner-types', () => ({
   DEFAULT_RUNNER_TYPE_ID: 'claude-agent-sdk',
 }));
 
+vi.mock('@/services/queries/use-models', () => ({
+  useModels: () => ({
+    data: {
+      models: [
+        { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5', provider: 'anthropic', isDefault: true },
+        { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6', provider: 'anthropic', isDefault: false },
+      ],
+      defaultModel: 'claude-sonnet-4-5',
+    },
+    isLoading: false,
+  }),
+}));
+
 vi.mock('../workflow-selector', () => ({
   WorkflowSelector: () => <button data-testid="workflow-selector">No workflow</button>,
 }));

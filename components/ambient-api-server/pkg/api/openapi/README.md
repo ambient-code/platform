@@ -78,6 +78,10 @@ All URIs are relative to *http://localhost:8000*
 
 Class | Method | HTTP request | Description
 ------------ | ------------- | ------------- | -------------
+*DefaultAPI* | [**ApiAmbientV1AgentsGet**](docs/DefaultAPI.md#apiambientv1agentsget) | **Get** /api/ambient/v1/agents | Returns a list of agents
+*DefaultAPI* | [**ApiAmbientV1AgentsIdGet**](docs/DefaultAPI.md#apiambientv1agentsidget) | **Get** /api/ambient/v1/agents/{id} | Get an agent by id
+*DefaultAPI* | [**ApiAmbientV1AgentsIdPatch**](docs/DefaultAPI.md#apiambientv1agentsidpatch) | **Patch** /api/ambient/v1/agents/{id} | Update an agent
+*DefaultAPI* | [**ApiAmbientV1AgentsPost**](docs/DefaultAPI.md#apiambientv1agentspost) | **Post** /api/ambient/v1/agents | Create a new agent
 *DefaultAPI* | [**ApiAmbientV1ProjectSettingsGet**](docs/DefaultAPI.md#apiambientv1projectsettingsget) | **Get** /api/ambient/v1/project_settings | Returns a list of project settings
 *DefaultAPI* | [**ApiAmbientV1ProjectSettingsIdDelete**](docs/DefaultAPI.md#apiambientv1projectsettingsiddelete) | **Delete** /api/ambient/v1/project_settings/{id} | Delete a project settings by id
 *DefaultAPI* | [**ApiAmbientV1ProjectSettingsIdGet**](docs/DefaultAPI.md#apiambientv1projectsettingsidget) | **Get** /api/ambient/v1/project_settings/{id} | Get a project settings by id
@@ -88,8 +92,19 @@ Class | Method | HTTP request | Description
 *DefaultAPI* | [**ApiAmbientV1ProjectsIdGet**](docs/DefaultAPI.md#apiambientv1projectsidget) | **Get** /api/ambient/v1/projects/{id} | Get a project by id
 *DefaultAPI* | [**ApiAmbientV1ProjectsIdPatch**](docs/DefaultAPI.md#apiambientv1projectsidpatch) | **Patch** /api/ambient/v1/projects/{id} | Update a project
 *DefaultAPI* | [**ApiAmbientV1ProjectsPost**](docs/DefaultAPI.md#apiambientv1projectspost) | **Post** /api/ambient/v1/projects | Create a new project
+*DefaultAPI* | [**ApiAmbientV1RoleBindingsGet**](docs/DefaultAPI.md#apiambientv1rolebindingsget) | **Get** /api/ambient/v1/role_bindings | Returns a list of roleBindings
+*DefaultAPI* | [**ApiAmbientV1RoleBindingsIdGet**](docs/DefaultAPI.md#apiambientv1rolebindingsidget) | **Get** /api/ambient/v1/role_bindings/{id} | Get an roleBinding by id
+*DefaultAPI* | [**ApiAmbientV1RoleBindingsIdPatch**](docs/DefaultAPI.md#apiambientv1rolebindingsidpatch) | **Patch** /api/ambient/v1/role_bindings/{id} | Update an roleBinding
+*DefaultAPI* | [**ApiAmbientV1RoleBindingsPost**](docs/DefaultAPI.md#apiambientv1rolebindingspost) | **Post** /api/ambient/v1/role_bindings | Create a new roleBinding
+*DefaultAPI* | [**ApiAmbientV1RolesGet**](docs/DefaultAPI.md#apiambientv1rolesget) | **Get** /api/ambient/v1/roles | Returns a list of roles
+*DefaultAPI* | [**ApiAmbientV1RolesIdGet**](docs/DefaultAPI.md#apiambientv1rolesidget) | **Get** /api/ambient/v1/roles/{id} | Get an role by id
+*DefaultAPI* | [**ApiAmbientV1RolesIdPatch**](docs/DefaultAPI.md#apiambientv1rolesidpatch) | **Patch** /api/ambient/v1/roles/{id} | Update an role
+*DefaultAPI* | [**ApiAmbientV1RolesPost**](docs/DefaultAPI.md#apiambientv1rolespost) | **Post** /api/ambient/v1/roles | Create a new role
 *DefaultAPI* | [**ApiAmbientV1SessionsGet**](docs/DefaultAPI.md#apiambientv1sessionsget) | **Get** /api/ambient/v1/sessions | Returns a list of sessions
+*DefaultAPI* | [**ApiAmbientV1SessionsIdDelete**](docs/DefaultAPI.md#apiambientv1sessionsiddelete) | **Delete** /api/ambient/v1/sessions/{id} | Delete a session by id
 *DefaultAPI* | [**ApiAmbientV1SessionsIdGet**](docs/DefaultAPI.md#apiambientv1sessionsidget) | **Get** /api/ambient/v1/sessions/{id} | Get an session by id
+*DefaultAPI* | [**ApiAmbientV1SessionsIdMessagesGet**](docs/DefaultAPI.md#apiambientv1sessionsidmessagesget) | **Get** /api/ambient/v1/sessions/{id}/messages | List or stream session messages
+*DefaultAPI* | [**ApiAmbientV1SessionsIdMessagesPost**](docs/DefaultAPI.md#apiambientv1sessionsidmessagespost) | **Post** /api/ambient/v1/sessions/{id}/messages | Push a message to a session
 *DefaultAPI* | [**ApiAmbientV1SessionsIdPatch**](docs/DefaultAPI.md#apiambientv1sessionsidpatch) | **Patch** /api/ambient/v1/sessions/{id} | Update an session
 *DefaultAPI* | [**ApiAmbientV1SessionsIdStartPost**](docs/DefaultAPI.md#apiambientv1sessionsidstartpost) | **Post** /api/ambient/v1/sessions/{id}/start | Start a session
 *DefaultAPI* | [**ApiAmbientV1SessionsIdStatusPatch**](docs/DefaultAPI.md#apiambientv1sessionsidstatuspatch) | **Patch** /api/ambient/v1/sessions/{id}/status | Update session status fields
@@ -103,6 +118,9 @@ Class | Method | HTTP request | Description
 
 ## Documentation For Models
 
+ - [Agent](docs/Agent.md)
+ - [AgentList](docs/AgentList.md)
+ - [AgentPatchRequest](docs/AgentPatchRequest.md)
  - [Error](docs/Error.md)
  - [List](docs/List.md)
  - [ObjectReference](docs/ObjectReference.md)
@@ -112,8 +130,16 @@ Class | Method | HTTP request | Description
  - [ProjectSettings](docs/ProjectSettings.md)
  - [ProjectSettingsList](docs/ProjectSettingsList.md)
  - [ProjectSettingsPatchRequest](docs/ProjectSettingsPatchRequest.md)
+ - [Role](docs/Role.md)
+ - [RoleBinding](docs/RoleBinding.md)
+ - [RoleBindingList](docs/RoleBindingList.md)
+ - [RoleBindingPatchRequest](docs/RoleBindingPatchRequest.md)
+ - [RoleList](docs/RoleList.md)
+ - [RolePatchRequest](docs/RolePatchRequest.md)
  - [Session](docs/Session.md)
  - [SessionList](docs/SessionList.md)
+ - [SessionMessage](docs/SessionMessage.md)
+ - [SessionMessagePushRequest](docs/SessionMessagePushRequest.md)
  - [SessionPatchRequest](docs/SessionPatchRequest.md)
  - [SessionStatusPatchRequest](docs/SessionStatusPatchRequest.md)
  - [User](docs/User.md)
@@ -156,3 +182,4 @@ Each of these functions takes a value of the given basic type and returns a poin
 ## Author
 
 ambient-code@redhat.com
+

@@ -55,6 +55,7 @@ def build_mcp_servers(
         load_rubric_content,
     )
     from ambient_runner.bridges.claude.corrections import create_correction_mcp_tool
+    from ambient_runner.bridges.claude.backend_tools import create_backend_mcp_tools
 
     mcp_servers = load_mcp_config(context, cwd_path) or {}
 
@@ -64,9 +65,7 @@ def build_mcp_servers(
         name="session", version="1.0.0", tools=[refresh_creds_tool]
     )
     mcp_servers["session"] = session_server
-    logger.info(
-        "Added session control MCP tools (refresh_credentials)"
-    )
+    logger.info("Added session control MCP tools (refresh_credentials)")
 
     # Rubric evaluation tool
     rubric_content, rubric_config = load_rubric_content(cwd_path)
@@ -102,6 +101,19 @@ def build_mcp_servers(
         )
         mcp_servers["corrections"] = correction_server
         logger.info("Added corrections feedback MCP tool (log_correction)")
+
+    # Backend API tools (session management)
+    backend_tools = create_backend_mcp_tools(sdk_tool_decorator=sdk_tool)
+    if backend_tools:
+        backend_server = create_sdk_mcp_server(
+            name="acp", version="1.0.0", tools=backend_tools
+        )
+        mcp_servers["acp"] = backend_server
+        logger.info(
+            f"Added backend API MCP tools ({len(backend_tools)}): "
+            "acp_list_sessions, acp_get_session, acp_create_session, "
+            "acp_stop_session, acp_send_message, acp_get_api_reference"
+        )
 
     return mcp_servers
 

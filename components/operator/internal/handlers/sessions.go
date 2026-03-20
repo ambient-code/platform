@@ -2455,12 +2455,18 @@ func regenerateRunnerToken(sessionNamespace, sessionName string, session *unstru
 			{
 				APIGroups: []string{"vteam.ambient-code"},
 				Resources: []string{"agenticsessions"},
-				Verbs:     []string{"get", "list", "watch", "update", "patch"},
+				Verbs:     []string{"get", "list", "watch", "create", "update", "patch"},
 			},
 			{
 				APIGroups: []string{"authorization.k8s.io"},
 				Resources: []string{"selfsubjectaccessreviews"},
 				Verbs:     []string{"create"},
+			},
+			{
+				// Allow sessions to read runner secrets for backend API validation
+				APIGroups: []string{""},
+				Resources: []string{"secrets"},
+				Verbs:     []string{"get"},
 			},
 		},
 	}

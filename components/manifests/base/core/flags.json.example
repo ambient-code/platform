@@ -1,0 +1,19 @@
+{
+  "flags": [
+    {
+      "name": "framework.example.enabled",
+      "description": "Enable Example framework - available in UI",
+      "tags": [
+        {
+          "type": "scope",
+          "value": "workspace"
+        }
+      ]
+    },
+    {
+      "name": "framework.example-not.enabled",
+      "description": "Enable Example framework - not available in UI",
+      "tags": []
+    }
+  ]
+}

@@ -842,6 +842,7 @@ export default function ProjectSessionDetailPage({
           id: msg.id,  // Preserve message ID for feedback association
           content: { type: "text_block", text: (typeof msg.content === 'string' ? msg.content : '') || "" },
           timestamp,
+          metadata: msg.metadata,
         });
       } else if (msg.role === "assistant") {
         // Check if content is a structured reasoning block
@@ -1480,6 +1481,7 @@ export default function ProjectSessionDetailPage({
           projectName={projectName}
           sessionName={sessionName}
           filePath={fileTabs.activeTab.path}
+          sessionPhase={phase}
         />
       );
     }
@@ -1540,6 +1542,7 @@ export default function ProjectSessionDetailPage({
                 agentName={agentName}
                 onAddRepository={handleOpenContextModal}
                 onUploadFile={handleOpenUploadModal}
+                projectName={projectName}
                 workflowSlot={
                   <WorkflowSelector
                     sessionPhase={session?.status?.phase}
@@ -1649,6 +1652,7 @@ export default function ProjectSessionDetailPage({
               activeTab={explorer.activeTab}
               onTabChange={explorer.setActiveTab}
               onClose={explorer.close}
+              projectName={projectName}
               directoryOptions={directoryOptions}
               selectedDirectory={selectedDirectory}
               onDirectoryChange={setSelectedDirectory}

@@ -2,8 +2,10 @@ package sessions
 
 import (
 	"net/http"
+	"sync"
 
 	pb "github.com/ambient-code/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1"
+	pkgrbac "github.com/ambient-code/platform/components/ambient-api-server/plugins/rbac"
 	"github.com/gorilla/mux"
 	"github.com/openshift-online/rh-trex-ai/pkg/api"
 	"github.com/openshift-online/rh-trex-ai/pkg/api/presenters"
@@ -43,14 +45,50 @@ func Service(s *environments.Services) SessionService {
 	return nil
 }
 
+type MessageServiceLocator func() MessageService
+
+func NewMessageServiceLocator(env *environments.Env) MessageServiceLocator {
+	var (
+		once    sync.Once
+		svcInst MessageService
+	)
+	return func() MessageService {
+		once.Do(func() {
+			svcInst = NewMessageService(NewMessageDao(&env.Database.SessionFactory))
+		})
+		return svcInst
+	}
+}
+
+func MessageSvc(s *environments.Services) MessageService {
+	if s == nil {
+		return nil
+	}
+	if obj := s.GetService("SessionMessages"); obj != nil {
+		locator := obj.(MessageServiceLocator)
+		return locator()
+	}
+	return nil
+}
+
 func init() {
 	registry.RegisterService("Sessions", func(env interface{}) interface{} {
 		return NewServiceLocator(env.(*environments.Env))
 	})
 
+	registry.RegisterService("SessionMessages", func(env interface{}) interface{} {
+		return NewMessageServiceLocator(env.(*environments.Env))
+	})
+
 	pkgserver.RegisterRoutes("sessions", func(apiV1Router *mux.Router, services pkgserver.ServicesInterface, authMiddleware environments.JWTMiddleware, authzMiddleware auth.AuthorizationMiddleware) {
 		envServices := services.(*environments.Services)
-		sessionHandler := NewSessionHandler(Service(envServices), generic.Service(envServices))
+		sessionSvc := Service(envServices)
+		sessionHandler := NewSessionHandler(sessionSvc, MessageSvc(envServices), generic.Service(envServices))
+		msgHandler := NewMessageHandler(sessionSvc, MessageSvc(envServices))
+
+		if dbAuthz := pkgrbac.Middleware(envServices); dbAuthz != nil {
+			authzMiddleware = dbAuthz
+		}
 
 		sessionsRouter := apiV1Router.PathPrefix("/sessions").Subrouter()
 		sessionsRouter.HandleFunc("", sessionHandler.List).Methods(http.MethodGet)
@@ -61,6 +99,8 @@ func init() {
 		sessionsRouter.HandleFunc("/{id}/start", sessionHandler.Start).Methods(http.MethodPost)
 		sessionsRouter.HandleFunc("/{id}/stop", sessionHandler.Stop).Methods(http.MethodPost)
 		sessionsRouter.HandleFunc("/{id}", sessionHandler.Delete).Methods(http.MethodDelete)
+		sessionsRouter.HandleFunc("/{id}/messages", msgHandler.GetMessages).Methods(http.MethodGet)
+		sessionsRouter.HandleFunc("/{id}/messages", msgHandler.PushMessage).Methods(http.MethodPost)
 		sessionsRouter.Use(authMiddleware.AuthenticateAccountJWT)
 		sessionsRouter.Use(authzMiddleware.AuthorizeApi)
 	})
@@ -87,16 +127,19 @@ func init() {
 		envServices := services.(*environments.Services)
 		sessionService := Service(envServices)
 		genericService := generic.Service(envServices)
+		msgService := MessageSvc(envServices)
 		brokerFunc := func() *pkgserver.EventBroker {
 			if obj := envServices.GetService("EventBroker"); obj != nil {
 				return obj.(*pkgserver.EventBroker)
 			}
 			return nil
 		}
-		pb.RegisterSessionServiceServer(grpcServer, NewSessionGRPCHandler(sessionService, genericService, brokerFunc))
+		pb.RegisterSessionServiceServer(grpcServer, NewSessionGRPCHandler(sessionService, genericService, brokerFunc, msgService))
 	})
 
 	db.RegisterMigration(migration())
 	db.RegisterMigration(constraintMigration())
+	db.RegisterMigration(sessionMessagesMigration())
 	db.RegisterMigration(schemaExpansionMigration())
+	db.RegisterMigration(agentIDMigration())
 }

@@ -1,0 +1,24 @@
+{
+  "flags": [
+    {
+      "name": "runner.gemini-cli.enabled",
+      "description": "Enable Gemini CLI runner type for session creation",
+      "tags": [
+        {
+          "type": "scope",
+          "value": "workspace"
+        }
+      ]
+    },
+    {
+      "name": "ldap.autocomplete.enabled",
+      "description": "Enable LDAP user and group autocomplete for workspace sharing",
+      "tags": [
+        {
+          "type": "scope",
+          "value": "workspace"
+        }
+      ]
+    }
+  ]
+}

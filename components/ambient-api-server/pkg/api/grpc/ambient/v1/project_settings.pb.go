@@ -594,7 +594,7 @@ const file_ambient_v1_project_settings_proto_rawDesc = "" +
 	"\x15UpdateProjectSettings\x12(.ambient.v1.UpdateProjectSettingsRequest\x1a\x1b.ambient.v1.ProjectSettings\x12l\n" +
 	"\x15DeleteProjectSettings\x12(.ambient.v1.DeleteProjectSettingsRequest\x1a).ambient.v1.DeleteProjectSettingsResponse\x12f\n" +
 	"\x13ListProjectSettings\x12&.ambient.v1.ListProjectSettingsRequest\x1a'.ambient.v1.ListProjectSettingsResponse\x12h\n" +
-	"\x14WatchProjectSettings\x12'.ambient.v1.WatchProjectSettingsRequest\x1a%.ambient.v1.ProjectSettingsWatchEvent0\x01B^Z\\github.com/ambient/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1;ambient_v1b\x06proto3"
+	"\x14WatchProjectSettings\x12'.ambient.v1.WatchProjectSettingsRequest\x1a%.ambient.v1.ProjectSettingsWatchEvent0\x01BcZagithub.com/ambient-code/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1;ambient_v1b\x06proto3"
 
 var (
 	file_ambient_v1_project_settings_proto_rawDescOnce sync.Once
