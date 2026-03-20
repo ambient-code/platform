@@ -69,7 +69,7 @@ export function ExplorerPanel({
   onRemoveFile,
 }: ExplorerPanelProps) {
   const { data: access } = useProjectAccess(projectName);
-  const canModify = access?.userRole !== 'view';
+  const canModify = !!access?.userRole && access.userRole !== 'view';
 
   return (
     <div className="flex flex-col h-full border-l bg-background overflow-hidden">

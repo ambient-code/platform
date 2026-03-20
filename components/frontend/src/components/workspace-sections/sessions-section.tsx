@@ -79,11 +79,11 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
     setOffset(0);
   }, [debouncedSearch]);
 
-  // Access control
+  // Access control (default-deny until role is resolved)
   const { data: access } = useProjectAccess(projectName);
   const canCreate = access?.userRole === 'edit' || access?.userRole === 'admin';
   const canDelete = access?.userRole === 'admin';
-  const canModify = access?.userRole !== 'view';
+  const canModify = !!access?.userRole && access.userRole !== 'view';
 
   // Runner type lookup for display names
   const { data: runnerTypes } = useRunnerTypes(projectName);
@@ -321,12 +321,10 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
                                       <span>{formatDistanceToNow(new Date(session.metadata.creationTimestamp), { addSuffix: true })}</span>
                                     </div>
                                   )}
-                                  {session.spec.userContext && (
-                                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                      <User className="h-3 w-3" />
-                                      <span>{session.spec.userContext.displayName || session.spec.userContext.userId}</span>
-                                    </div>
-                                  )}
+                                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                    <User className="h-3 w-3" />
+                                    <span>{session.spec.userContext?.displayName || session.spec.userContext?.userId || '—'}</span>
+                                  </div>
                                   {session.spec.initialPrompt && (
                                     <div className="flex items-start gap-1.5 text-xs text-muted-foreground pt-1">
                                       <MessageSquare className="h-3 w-3 mt-0.5 shrink-0" />

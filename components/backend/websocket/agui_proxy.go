@@ -297,7 +297,9 @@ func HandleAGUIRunProxy(c *gin.Context) {
 					msg.Metadata = metadata
 
 					// Re-serialize the modified message
-					if modifiedRaw, err := json.Marshal(msg); err == nil {
+					if modifiedRaw, mErr := json.Marshal(msg); mErr != nil {
+						log.Printf("Failed to re-marshal message with sender metadata for user %s: %v", senderUserID, mErr)
+					} else {
 						raw = modifiedRaw
 					}
 				}

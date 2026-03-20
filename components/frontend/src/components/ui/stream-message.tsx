@@ -89,8 +89,9 @@ export const StreamMessage: React.FC<StreamMessageProps> = ({ message, onGoToRes
       const isAgent = m.type === "agent_message";
 
       // Extract sender attribution from metadata (for multi-user sessions)
-      const senderDisplayName = m.metadata?.senderDisplayName as string | undefined;
+      // Fall back to senderId when displayName is absent
       const senderId = m.metadata?.senderId as string | undefined;
+      const senderDisplayName = (m.metadata?.senderDisplayName ?? senderId) as string | undefined;
 
       // Get content text for feedback context
       const getContentText = () => {

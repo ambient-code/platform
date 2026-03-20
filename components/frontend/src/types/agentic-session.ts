@@ -1,3 +1,5 @@
+import type { MessageMetadata } from "@/types/agui";
+
 export type AgenticSessionPhase = "Pending" | "Creating" | "Running" | "Stopping" | "Stopped" | "Completed" | "Failed";
 
 // Agent status (derived from message stream, distinct from session phase)
@@ -161,11 +163,7 @@ export type UserMessage = {
 	id?: string;  // Message ID for feedback association
 	content: ContentBlock | string;
 	timestamp: string;
-	metadata?: {
-		senderId?: string;
-		senderDisplayName?: string;
-		[key: string]: unknown;
-	};
+	metadata?: MessageMetadata;
 }
 export type AgentMessage = {
 	type: "agent_message";
@@ -173,9 +171,7 @@ export type AgentMessage = {
 	content: ContentBlock;
 	model: string;
 	timestamp: string;
-	metadata?: {
-		[key: string]: unknown;
-	};
+	metadata?: MessageMetadata;
 }
 export type SystemMessage = {
 	type: "system_message";

@@ -187,9 +187,9 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { textareaHeight, handleResizeStart } = useResizeTextarea();
 
-  // Check user access level
+  // Check user access level (default-deny until role is resolved)
   const { data: access } = useProjectAccess(projectName || "");
-  const canInteract = access?.userRole !== "view";
+  const canInteract = !!access?.userRole && access.userRole !== "view";
 
   // Phase-derived state
   const isTerminalState = ["Completed", "Failed", "Stopped"].includes(sessionPhase);
@@ -486,7 +486,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
         {isTerminalState && (
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-muted text-xs text-muted-foreground">
             Session has {sessionPhase.toLowerCase()}.
-            {onContinue && (
+            {canInteract && onContinue && (
               <button type="button" onClick={onContinue} className="text-link hover:underline font-medium">
                 Resume session
               </button>
@@ -528,7 +528,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
             <div className="absolute -top-6 left-0 flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
               <Clock className="h-3 w-3" />
               {queuedCount} message{queuedCount > 1 ? "s" : ""} queued
-              {onClearQueue && (
+              {canInteract && onClearQueue && (
                 <button
                   type="button"
                   onClick={onClearQueue}
