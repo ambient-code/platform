@@ -19,7 +19,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -119,6 +118,28 @@ func subscribeLive(sessionName string) (<-chan string, func()) {
 	}
 }
 
+// ─── Path helpers ────────────────────────────────────────────────────
+
+// sessionEventsPath validates the sessionID and returns the path to the
+// session's JSONL event log.  Returns ("", false) if the ID is invalid.
+func sessionEventsPath(sessionID string) (string, bool) {
+	if !isValidSessionName(sessionID) {
+		return "", false
+	}
+	baseDir := filepath.Clean(StateBaseDir)
+	return filepath.Join(baseDir, "sessions", sessionID, "agui-events.jsonl"), true
+}
+
+// sessionDirPath validates the sessionID and returns the session directory.
+// Returns ("", false) if the ID is invalid.
+func sessionDirPath(sessionID string) (string, bool) {
+	if !isValidSessionName(sessionID) {
+		return "", false
+	}
+	baseDir := filepath.Clean(StateBaseDir)
+	return filepath.Join(baseDir, "sessions", sessionID), true
+}
+
 // ─── Write path ──────────────────────────────────────────────────────
 
 // writeMutexEntry wraps a per-session mutex with a last-used timestamp
@@ -144,15 +165,11 @@ func getWriteMutex(sessionID string) *sync.Mutex {
 // persistEvent appends a single AG-UI event to the session's JSONL log.
 // Writes are serialised per-session via a mutex to prevent interleaving.
 func persistEvent(sessionID string, event map[string]interface{}) {
-	// SECURITY: Validate sessionID to prevent path traversal
-	if !isValidSessionName(sessionID) {
+	dir, ok := sessionDirPath(sessionID)
+	if !ok {
 		log.Printf("AGUI Store: persist rejected - invalid session ID: %s", sessionID)
 		return
 	}
-
-	// Build paths safely using filepath.Join
-	baseDir := filepath.Clean(StateBaseDir)
-	dir := filepath.Join(baseDir, "sessions", sessionID)
 	path := filepath.Join(dir, "agui-events.jsonl")
 	_ = ensureDir(dir)
 
@@ -181,17 +198,17 @@ func persistEvent(sessionID string, event map[string]interface{}) {
 	eventType, _ := event["type"].(string)
 	switch eventType {
 	case types.EventTypeRunFinished, types.EventTypeRunError:
-		// Non-blocking compaction to replace raw events with snapshots
-		// Rate-limited to prevent unbounded goroutine spawning
-		go func() {
-			compactionSem <- struct{}{}
-			defer func() { <-compactionSem }()
-			compactFinishedRun(sessionID)
-		}()
-	case types.EventTypeRunStarted:
-		// New run invalidates any cached compacted file from previous run
-		compactedPath := filepath.Join(dir, "agui-events-compacted.jsonl")
-		_ = os.Remove(compactedPath)
+		// Non-blocking compaction: skip if semaphore is full (compaction
+		// will happen lazily on next read or next RUN_FINISHED).
+		select {
+		case compactionSem <- struct{}{}:
+			go func() {
+				defer func() { <-compactionSem }()
+				compactFinishedRun(sessionID)
+			}()
+		default:
+			log.Printf("AGUI Store: compaction skipped for %s (too many in-flight)", sessionID)
+		}
 	}
 }
 
@@ -202,15 +219,11 @@ func persistEvent(sessionID string, event map[string]interface{}) {
 // Automatically triggers legacy migration if the log doesn't exist but
 // a pre-AG-UI messages.jsonl file does.
 func loadEvents(sessionID string) []map[string]interface{} {
-	// SECURITY: Validate sessionID to prevent path traversal
-	if !isValidSessionName(sessionID) {
+	path, ok := sessionEventsPath(sessionID)
+	if !ok {
 		log.Printf("AGUI Store: load rejected - invalid session ID: %s", sessionID)
 		return nil
 	}
-
-	// Build path safely using filepath.Join
-	baseDir := filepath.Clean(StateBaseDir)
-	path := filepath.Join(baseDir, "sessions", sessionID, "agui-events.jsonl")
 
 	f, err := os.Open(path)
 	if err != nil {
@@ -256,15 +269,10 @@ func loadEvents(sessionID string) []map[string]interface{} {
 //
 // Returns "" if the status cannot be determined (no events, file missing, etc.).
 func DeriveAgentStatus(sessionID string) string {
-	// SECURITY: Validate sessionID to prevent path traversal
-	if !isValidSessionName(sessionID) {
-		log.Printf("AGUI Store: status derivation rejected - invalid session ID: %s", sessionID)
+	path, ok := sessionEventsPath(sessionID)
+	if !ok {
 		return ""
 	}
-
-	// Build path safely using filepath.Join
-	baseDir := filepath.Clean(StateBaseDir)
-	path := filepath.Join(baseDir, "sessions", sessionID, "agui-events.jsonl")
 
 	// Read only the tail of the file to avoid loading entire event log into memory.
 	// Use 2x scannerMaxLineSize to ensure we can read at least one complete max-sized
@@ -364,178 +372,7 @@ func DeriveAgentStatus(sessionID string) string {
 
 // ─── Snapshot compaction (AG-UI serialization spec) ──────────────────
 //
-// compactToSnapshots collapses a finished event stream into MESSAGES_SNAPSHOT
-// events per the AG-UI serialization spec. This is far more aggressive than
-// delta compaction: entire TEXT_MESSAGE and TOOL_CALL sequences become fully
-// assembled Message objects inside a single MESSAGES_SNAPSHOT event.
-//
 // See: https://docs.ag-ui.com/concepts/serialization
-
-// compactToSnapshots converts a finished event stream into snapshot events.
-// It assembles TEXT_MESSAGE and TOOL_CALL sequences into Message objects,
-// emits a MESSAGES_SNAPSHOT, and passes through lifecycle + RAW events.
-func compactToSnapshots(events []map[string]interface{}) []map[string]interface{} {
-	var messages []map[string]interface{}
-	var result []map[string]interface{}
-
-	// Track in-progress text messages and tool calls
-	textContent := make(map[string]*strings.Builder) // messageId → accumulated content
-	textRole := make(map[string]string)              // messageId → role
-	textMeta := make(map[string]interface{})         // messageId → metadata
-	toolArgs := make(map[string]*strings.Builder)    // toolCallId → accumulated args
-	toolName := make(map[string]string)              // toolCallId → tool name
-	toolResult := make(map[string]string)            // toolCallId → result content
-	var messageOrder []string                        // ordered messageIds
-	messageToolCalls := make(map[string][]string)    // messageId → []toolCallId
-
-	for _, evt := range events {
-		eventType, _ := evt["type"].(string)
-		switch eventType {
-		case types.EventTypeTextMessageStart:
-			msgID, _ := evt["messageId"].(string)
-			if msgID == "" {
-				continue
-			}
-			role, _ := evt["role"].(string)
-			textRole[msgID] = role
-			textContent[msgID] = &strings.Builder{}
-			if meta := evt["metadata"]; meta != nil {
-				textMeta[msgID] = meta
-			}
-			messageOrder = append(messageOrder, msgID)
-
-		case types.EventTypeTextMessageContent:
-			msgID, _ := evt["messageId"].(string)
-			if msgID == "" {
-				continue
-			}
-			delta, _ := evt["delta"].(string)
-			if b, ok := textContent[msgID]; ok {
-				b.WriteString(delta)
-			}
-
-		case types.EventTypeTextMessageEnd:
-			// Content is finalized in the message assembly below
-
-		case types.EventTypeToolCallStart:
-			tcID, _ := evt["toolCallId"].(string)
-			if tcID == "" {
-				continue
-			}
-			name, _ := evt["toolCallName"].(string)
-			toolName[tcID] = name
-			toolArgs[tcID] = &strings.Builder{}
-			// Associate tool call with its parent message
-			parentMsgID, _ := evt["messageId"].(string)
-			if parentMsgID != "" {
-				messageToolCalls[parentMsgID] = append(messageToolCalls[parentMsgID], tcID)
-			}
-
-		case types.EventTypeToolCallArgs:
-			tcID, _ := evt["toolCallId"].(string)
-			if tcID == "" {
-				continue
-			}
-			delta, _ := evt["delta"].(string)
-			if b, ok := toolArgs[tcID]; ok {
-				b.WriteString(delta)
-			}
-
-		case types.EventTypeToolCallEnd:
-			tcID, _ := evt["toolCallId"].(string)
-			if tcID == "" {
-				continue
-			}
-			if res, ok := evt["result"].(string); ok && res != "" {
-				toolResult[tcID] = res
-			}
-
-		case types.EventTypeRunStarted, types.EventTypeRunFinished, types.EventTypeRunError,
-			types.EventTypeStepStarted, types.EventTypeStepFinished:
-			// Pass through lifecycle events as-is
-			result = append(result, evt)
-
-		case types.EventTypeRaw:
-			// Pass through RAW events (e.g. hidden message metadata, feedback)
-			result = append(result, evt)
-
-		case types.EventTypeMessagesSnapshot:
-			// If there's already a snapshot in the stream, pass it through
-			result = append(result, evt)
-
-		case types.EventTypeStateSnapshot, types.EventTypeStateDelta:
-			// Pass through state events
-			result = append(result, evt)
-		}
-	}
-
-	// Assemble messages from tracked state
-	for _, msgID := range messageOrder {
-		role := textRole[msgID]
-		content := ""
-		if b, ok := textContent[msgID]; ok {
-			content = b.String()
-		}
-
-		msg := map[string]interface{}{
-			"id":   msgID,
-			"role": role,
-		}
-		if content != "" {
-			msg["content"] = content
-		}
-		if meta, ok := textMeta[msgID]; ok {
-			msg["metadata"] = meta
-		}
-
-		// Attach tool calls if this is an assistant message
-		if tcIDs, ok := messageToolCalls[msgID]; ok && len(tcIDs) > 0 {
-			var toolCalls []map[string]interface{}
-			for _, tcID := range tcIDs {
-				args := ""
-				if b, ok := toolArgs[tcID]; ok {
-					args = b.String()
-				}
-				tc := map[string]interface{}{
-					"id":   tcID,
-					"name": toolName[tcID],
-					"args": args,
-				}
-				toolCalls = append(toolCalls, tc)
-			}
-			msg["toolCalls"] = toolCalls
-		}
-
-		messages = append(messages, msg)
-
-		// Emit tool result messages after the assistant message
-		if tcIDs, ok := messageToolCalls[msgID]; ok {
-			for _, tcID := range tcIDs {
-				if res, ok := toolResult[tcID]; ok {
-					toolMsg := map[string]interface{}{
-						"id":         generateEventID(),
-						"role":       types.RoleTool,
-						"content":    res,
-						"toolCallId": tcID,
-						"name":       toolName[tcID],
-					}
-					messages = append(messages, toolMsg)
-				}
-			}
-		}
-	}
-
-	// Emit MESSAGES_SNAPSHOT if we have messages
-	if len(messages) > 0 {
-		snapshot := map[string]interface{}{
-			"type":     types.EventTypeMessagesSnapshot,
-			"messages": messages,
-		}
-		result = append(result, snapshot)
-	}
-
-	return result
-}
 
 // loadEventsForReplay loads events for SSE replay.
 //
@@ -580,17 +417,18 @@ func loadEventsForReplay(sessionID string) []map[string]interface{} {
 // If no MESSAGES_SNAPSHOT is found, the session is considered corrupted and
 // we keep the raw events as fallback.
 func compactFinishedRun(sessionID string) {
-	// SECURITY: Validate sessionID to prevent path traversal
-	if !isValidSessionName(sessionID) {
+	dir, ok := sessionDirPath(sessionID)
+	if !ok {
 		log.Printf("AGUI Store: compaction rejected - invalid session ID: %s", sessionID)
 		return
 	}
-
-	// Build paths safely using filepath.Join
-	baseDir := filepath.Clean(StateBaseDir)
-	dir := filepath.Join(baseDir, "sessions", sessionID)
 	rawPath := filepath.Join(dir, "agui-events.jsonl")
-	compactedCachePath := filepath.Join(dir, "agui-events-compacted.jsonl")
+
+	// Hold the write mutex for the entire read-filter-rename to prevent
+	// concurrent persistEvent calls from writing events that get overwritten.
+	mu := getWriteMutex(sessionID)
+	mu.Lock()
+	defer mu.Unlock()
 
 	// Read all events
 	events, err := readJSONLFile(rawPath)
@@ -680,9 +518,6 @@ func compactFinishedRun(sessionID string) {
 		_ = os.Remove(tmpPath)
 		return
 	}
-
-	// Remove old compacted cache file (now redundant since raw file IS the compacted version)
-	_ = os.Remove(compactedCachePath)
 
 	log.Printf("AGUI Store: successfully compacted %s to snapshot-only events", sessionID)
 }
