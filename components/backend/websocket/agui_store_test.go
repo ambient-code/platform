@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 )
 
 func TestDeriveAgentStatus(t *testing.T) {
@@ -274,7 +273,7 @@ func TestLoadEventsForReplay(t *testing.T) {
 		compactFinishedRun(sessionID)
 
 		// Wait for async compaction
-		time.Sleep(100 * time.Millisecond)
+
 
 		result := loadEventsForReplay(sessionID)
 
@@ -336,7 +335,7 @@ func TestLoadEventsForReplay(t *testing.T) {
 
 		// Try to compact (should fail gracefully and keep raw events)
 		compactFinishedRun(sessionID)
-		time.Sleep(100 * time.Millisecond)
+
 
 		result := loadEventsForReplay(sessionID)
 
@@ -375,7 +374,7 @@ func TestLoadEventsForReplay(t *testing.T) {
 		})
 
 		compactFinishedRun(sessionID)
-		time.Sleep(100 * time.Millisecond)
+
 
 		result := loadEventsForReplay(sessionID)
 
@@ -413,7 +412,7 @@ func TestLoadEventsForReplay(t *testing.T) {
 		})
 
 		compactFinishedRun(sessionID)
-		time.Sleep(100 * time.Millisecond)
+
 
 		result := loadEventsForReplay(sessionID)
 
