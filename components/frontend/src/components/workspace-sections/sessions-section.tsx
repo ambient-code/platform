@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { formatDistanceToNow } from 'date-fns';
-import { Plus, RefreshCw, MoreVertical, Square, Trash2, ArrowRight, Brain, Search, Pencil, Clock, Cpu, MessageSquare, NotepadText } from 'lucide-react';
+import { Plus, RefreshCw, MoreVertical, Square, Trash2, ArrowRight, Brain, Search, Pencil, Clock, Cpu, MessageSquare, NotepadText, User } from 'lucide-react';
 import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
@@ -30,6 +30,7 @@ import { EditSessionNameDialog } from '@/components/edit-session-name-dialog';
 import { useSessionsPaginated, useStopSession, useDeleteSession, useContinueSession, useUpdateSessionDisplayName, useRunnerTypes } from '@/services/queries';
 import { toast } from 'sonner';
 import { useWorkspaceList } from '@/services/queries/use-workspace';
+import { useProjectAccess } from '@/services/queries/use-project-access';
 import { useDebounce } from '@/hooks/use-debounce';
 import { useMemo } from 'react';
 import { DEFAULT_PAGE_SIZE } from '@/types/api';
@@ -77,6 +78,12 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
   useEffect(() => {
     setOffset(0);
   }, [debouncedSearch]);
+
+  // Access control (default-deny until role is resolved)
+  const { data: access } = useProjectAccess(projectName);
+  const canCreate = access?.userRole === 'edit' || access?.userRole === 'admin';
+  const canDelete = access?.userRole === 'admin';
+  const canModify = !!access?.userRole && access.userRole !== 'view';
 
   // Runner type lookup for display names
   const { data: runnerTypes } = useRunnerTypes(projectName);
@@ -211,12 +218,14 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
             </CardDescription>
           </div>
           <div className="flex gap-2">
-            <Button data-testid="new-session-btn" asChild>
-              <Link href={`/projects/${projectName}/new`}>
-                <Plus className="w-4 h-4 mr-2" />
-                New Session
-              </Link>
-            </Button>
+            {canCreate && (
+              <Button data-testid="new-session-btn" asChild>
+                <Link href={`/projects/${projectName}/new`}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  New Session
+                </Link>
+              </Button>
+            )}
           </div>
         </div>
         {/* Search input */}
@@ -254,7 +263,8 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
                     <TableHead>Status</TableHead>
                     <TableHead className="hidden md:table-cell">Model</TableHead>
                     <TableHead className="hidden lg:table-cell">Created</TableHead>
-                    <TableHead className="hidden xl:table-cell">Artifacts</TableHead>
+                    <TableHead className="hidden xl:table-cell">Creator</TableHead>
+                    <TableHead className="hidden 2xl:table-cell">Artifacts</TableHead>
                     <TableHead className="w-[50px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -311,6 +321,10 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
                                       <span>{formatDistanceToNow(new Date(session.metadata.creationTimestamp), { addSuffix: true })}</span>
                                     </div>
                                   )}
+                                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                    <User className="h-3 w-3" />
+                                    <span>{session.spec.userContext?.displayName || session.spec.userContext?.userId || '—'}</span>
+                                  </div>
                                   {session.spec.initialPrompt && (
                                     <div className="flex items-start gap-1.5 text-xs text-muted-foreground pt-1">
                                       <MessageSquare className="h-3 w-3 mt-0.5 shrink-0" />
@@ -348,6 +362,11 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
                             formatDistanceToNow(new Date(session.metadata.creationTimestamp), { addSuffix: true })}
                         </TableCell>
                         <TableCell className="hidden xl:table-cell">
+                          <div className="text-sm text-muted-foreground truncate max-w-[140px]">
+                            {session.spec.userContext?.displayName || session.spec.userContext?.userId || '—'}
+                          </div>
+                        </TableCell>
+                        <TableCell className="hidden 2xl:table-cell">
                           <ArtifactCountCell projectName={projectName} sessionName={sessionName} />
                         </TableCell>
                         <TableCell>
@@ -364,6 +383,8 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
                               onContinue={handleContinue}
                               onDelete={handleDelete}
                               onEditName={handleEditName}
+                              canDelete={canDelete}
+                              canModify={canModify}
                             />
                           )}
                         </TableCell>
@@ -439,9 +460,11 @@ type SessionActionsProps = {
   onContinue: (sessionName: string) => void;
   onDelete: (sessionName: string) => void;
   onEditName: (sessionName: string, currentDisplayName: string) => void;
+  canDelete: boolean;
+  canModify: boolean;
 };
 
-function SessionActions({ sessionName, displayName, phase, onStop, onContinue, onDelete, onEditName }: SessionActionsProps) {
+function SessionActions({ sessionName, displayName, phase, onStop, onContinue, onDelete, onEditName, canDelete, canModify }: SessionActionsProps) {
   type RowAction = {
     key: string;
     label: string;
@@ -452,15 +475,18 @@ function SessionActions({ sessionName, displayName, phase, onStop, onContinue, o
 
   const actions: RowAction[] = [];
 
-  // Edit name is always available
-  actions.push({
-    key: 'edit',
-    label: 'Edit name',
-    onClick: () => onEditName(sessionName, displayName),
-    icon: <Pencil className="h-4 w-4" />,
-  });
+  // Edit name is available for users who can modify
+  if (canModify) {
+    actions.push({
+      key: 'edit',
+      label: 'Edit name',
+      onClick: () => onEditName(sessionName, displayName),
+      icon: <Pencil className="h-4 w-4" />,
+    });
+  }
 
-  if (phase === 'Pending' || phase === 'Creating' || phase === 'Running') {
+  // Stop is available for users who can modify
+  if (canModify && (phase === 'Pending' || phase === 'Creating' || phase === 'Running')) {
     actions.push({
       key: 'stop',
       label: 'Stop',
@@ -470,7 +496,8 @@ function SessionActions({ sessionName, displayName, phase, onStop, onContinue, o
     });
   }
 
-  if (phase === 'Completed' || phase === 'Failed' || phase === 'Stopped' || phase === 'Error') {
+  // Continue is available for users who can modify
+  if (canModify && (phase === 'Completed' || phase === 'Failed' || phase === 'Stopped' || phase === 'Error')) {
     actions.push({
       key: 'continue',
       label: 'Continue',
@@ -480,7 +507,8 @@ function SessionActions({ sessionName, displayName, phase, onStop, onContinue, o
     });
   }
 
-  if (phase !== 'Creating') {
+  // Delete is only available for admins
+  if (canDelete && phase !== 'Creating') {
     actions.push({
       key: 'delete',
       label: 'Delete',
@@ -490,7 +518,11 @@ function SessionActions({ sessionName, displayName, phase, onStop, onContinue, o
     });
   }
 
-  // Always show dropdown since we now always have at least the edit action
+  // Only show dropdown if there are any actions available
+  if (actions.length === 0) {
+    return null;
+  }
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>

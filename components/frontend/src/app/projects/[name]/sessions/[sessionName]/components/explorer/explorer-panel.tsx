@@ -5,15 +5,17 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { FilesTab } from "./files-tab";
 import { ContextTab } from "./context-tab";
+import { useProjectAccess } from "@/services/queries/use-project-access";
 import type { FileTreeNode } from "@/components/file-tree";
 import type { DirectoryOption, Repository, UploadedFile, GitStatusSummary } from "../../lib/types";
 import type { WorkspaceItem } from "@/services/api/workspace";
 
-type ExplorerPanelProps = {
+export type ExplorerPanelProps = {
   visible?: boolean;
   activeTab: "files" | "context";
   onTabChange: (tab: "files" | "context") => void;
   onClose: () => void;
+  projectName: string;
   // Files tab props
   directoryOptions: DirectoryOption[];
   selectedDirectory: DirectoryOption;
@@ -42,6 +44,7 @@ export function ExplorerPanel({
   activeTab,
   onTabChange,
   onClose,
+  projectName,
   // Files tab
   directoryOptions,
   selectedDirectory,
@@ -65,6 +68,9 @@ export function ExplorerPanel({
   onRemoveRepository,
   onRemoveFile,
 }: ExplorerPanelProps) {
+  const { data: access } = useProjectAccess(projectName);
+  const canModify = !!access?.userRole && access.userRole !== 'view';
+
   return (
     <div className="flex flex-col h-full border-l bg-background overflow-hidden">
       {/* Tab header */}
@@ -126,6 +132,7 @@ export function ExplorerPanel({
             onFileOpen={onFileOpen}
             gitStatus={gitStatus}
             repoBranches={repoBranches}
+            canModify={canModify}
           />
         ) : (
           <ContextTab
@@ -135,6 +142,7 @@ export function ExplorerPanel({
             onUploadFile={onUploadFile}
             onRemoveRepository={onRemoveRepository}
             onRemoveFile={onRemoveFile}
+            canModify={canModify}
           />
         )}
       </div>

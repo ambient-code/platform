@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { FileTree, type FileTreeNode } from "@/components/file-tree";
+import { FileContentViewer } from "@/components/file-content-viewer";
 import type { DirectoryOption, GitStatusSummary } from "../../lib/types";
 import type { WorkspaceItem } from "@/services/api/workspace";
 
@@ -41,6 +42,7 @@ type FilesTabProps = {
   onFileOpen?: (filePath: string) => void;
   gitStatus?: GitStatusSummary;
   repoBranches?: Record<string, string | undefined>;
+  canModify: boolean;
 };
 
 export function FilesTab({
@@ -59,6 +61,7 @@ export function FilesTab({
   onFileOpen,
   gitStatus,
   repoBranches,
+  canModify,
 }: FilesTabProps) {
   const fileNodes = useMemo(
     () =>
@@ -179,15 +182,17 @@ export function FilesTab({
             </Button>
           ) : (
             <>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onUploadFile}
-                className="h-6 px-2 flex-shrink-0"
-                title="Upload file"
-              >
-                <Upload className="h-3 w-3" />
-              </Button>
+              {canModify && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onUploadFile}
+                  className="h-6 px-2 flex-shrink-0"
+                  title="Upload file"
+                >
+                  <Upload className="h-3 w-3" />
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="sm"
@@ -231,11 +236,11 @@ export function FilesTab({
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : viewingFile ? (
-          <div className="text-xs">
-            <pre className="bg-muted/50 p-2 rounded overflow-x-auto">
-              <code>{viewingFile.content}</code>
-            </pre>
-          </div>
+          <FileContentViewer
+            fileName={viewingFile.path.split('/').pop() || 'file'}
+            content={viewingFile.content}
+            onDownload={onDownloadFile}
+          />
         ) : files.length === 0 ? (
           <div className="text-center py-4 text-sm text-muted-foreground">
             <FolderTree className="h-8 w-8 mx-auto mb-2 opacity-30" />

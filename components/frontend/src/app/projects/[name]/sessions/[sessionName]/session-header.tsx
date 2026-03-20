@@ -15,6 +15,7 @@ import type { AgenticSession } from '@/types/agentic-session';
 import { useUpdateSessionDisplayName, useCurrentUser, useSessionExport } from '@/services/queries';
 import { useMcpStatus } from '@/services/queries/use-mcp';
 import { useGoogleStatus } from '@/services/queries/use-google';
+import { useProjectAccess } from '@/services/queries/use-project-access';
 import { toast } from 'sonner';
 import { saveToGoogleDrive } from '@/services/api/sessions';
 import { convertEventsToMarkdown, downloadAsMarkdown, exportAsPdf } from '@/utils/export-chat';
@@ -49,11 +50,16 @@ export function SessionHeader({
   const updateDisplayNameMutation = useUpdateSessionDisplayName();
   const { data: me } = useCurrentUser();
 
+  const { data: access } = useProjectAccess(projectName);
+  const userRole = access?.userRole || 'view';
+
   const phase = session.status?.phase || "Pending";
   const isRunning = phase === "Running";
-  const canStop = isRunning || phase === "Creating";
-  const canResume = phase === "Stopped";
-  const canDelete = phase === "Completed" || phase === "Failed" || phase === "Stopped";
+  const canStop = (isRunning || phase === "Creating") && userRole !== 'view';
+  const canResume = phase === "Stopped" && userRole !== 'view';
+  const canDelete = (phase === "Completed" || phase === "Failed" || phase === "Stopped") && userRole === 'admin';
+  const canEdit = userRole !== 'view';
+  const canClone = userRole !== 'view';
   const stoppedDueToInactivity = phase === "Stopped" && session.status?.stoppedReason === "inactivity";
 
   const { refetch: fetchExportData } = useSessionExport(projectName, session.metadata.name, false);
@@ -197,10 +203,12 @@ export function SessionHeader({
               <Info className="w-4 h-4 mr-2" />
               View details
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setEditNameDialogOpen(true)}>
-              <Pencil className="w-4 h-4 mr-2" />
-              Edit name
-            </DropdownMenuItem>
+            {canEdit && (
+              <DropdownMenuItem onClick={() => setEditNameDialogOpen(true)}>
+                <Pencil className="w-4 h-4 mr-2" />
+                Edit name
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
             {canStop && (
               <DropdownMenuItem
@@ -368,21 +376,25 @@ export function SessionHeader({
                 <Info className="w-4 h-4 mr-2" />
                 View details
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setEditNameDialogOpen(true)}>
-                <Pencil className="w-4 h-4 mr-2" />
-                Edit name
-              </DropdownMenuItem>
+              {canEdit && (
+                <DropdownMenuItem onClick={() => setEditNameDialogOpen(true)}>
+                  <Pencil className="w-4 h-4 mr-2" />
+                  Edit name
+                </DropdownMenuItem>
+              )}
               <DropdownMenuSeparator />
-              <CloneSessionDialog
-                session={session}
-                trigger={
-                  <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
-                    <Copy className="w-4 h-4 mr-2" />
-                    Clone
-                  </DropdownMenuItem>
-                }
-                projectName={projectName}
-              />
+              {canClone && (
+                <CloneSessionDialog
+                  session={session}
+                  trigger={
+                    <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                      <Copy className="w-4 h-4 mr-2" />
+                      Clone
+                    </DropdownMenuItem>
+                  }
+                  projectName={projectName}
+                />
+              )}
               {exportSubMenu}
               {canDelete && (
                 <>

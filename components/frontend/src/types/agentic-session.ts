@@ -1,3 +1,5 @@
+import type { MessageMetadata } from "@/types/agui";
+
 export type AgenticSessionPhase = "Pending" | "Creating" | "Running" | "Stopping" | "Stopped" | "Completed" | "Failed";
 
 // Agent status (derived from message stream, distinct from session phase)
@@ -35,6 +37,13 @@ export type LLMSettings = {
 	maxTokens: number;
 };
 
+// User context captured at session creation time (for authorization and audit)
+export type UserContext = {
+	userId: string;
+	displayName: string;
+	groups: string[];
+};
+
 // Generic repo type used by RFE workflows (retains optional clonePath)
 export type GitRepository = {
     url: string;
@@ -55,6 +64,7 @@ export type AgenticSessionSpec = {
 	inactivityTimeout?: number;
 	displayName?: string;
 	project?: string;
+	userContext?: UserContext;
 	// Runner type (e.g. "claude-agent-sdk", "gemini-cli")
 	environmentVariables?: Record<string, string>;
 	// Multi-repo support
@@ -153,6 +163,7 @@ export type UserMessage = {
 	id?: string;  // Message ID for feedback association
 	content: ContentBlock | string;
 	timestamp: string;
+	metadata?: MessageMetadata;
 }
 export type AgentMessage = {
 	type: "agent_message";
@@ -160,6 +171,7 @@ export type AgentMessage = {
 	content: ContentBlock;
 	model: string;
 	timestamp: string;
+	metadata?: MessageMetadata;
 }
 export type SystemMessage = {
 	type: "system_message";

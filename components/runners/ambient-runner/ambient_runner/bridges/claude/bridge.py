@@ -103,10 +103,9 @@ class ClaudeBridge(PlatformBridge):
         # 4. Get or create session worker for this thread
         thread_id = input_data.thread_id or self._context.session_id
         api_key = os.getenv("ANTHROPIC_API_KEY", "")
-        saved_session_id = (
-            self._saved_session_ids.pop(thread_id, None)
-            or self._session_manager.get_session_id(thread_id)
-        )
+        saved_session_id = self._saved_session_ids.pop(
+            thread_id, None
+        ) or self._session_manager.get_session_id(thread_id)
         sdk_options = self._adapter.build_options(
             input_data, thread_id=thread_id, resume_from=saved_session_id
         )

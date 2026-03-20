@@ -7,6 +7,7 @@ import { LoadingDots } from "@/components/ui/message";
 import { Button } from "@/components/ui/button";
 import { ChatInputBox } from "@/components/chat/ChatInputBox";
 import { QueuedMessageBubble } from "@/components/chat/QueuedMessageBubble";
+import { useCurrentUser } from "@/services/queries/use-auth";
 import type { AgenticSession, MessageObject, ToolUseMessages, HierarchicalToolMessage } from "@/types/agentic-session";
 import type { WorkflowMetadata } from "@/app/projects/[name]/sessions/[sessionName]/lib/types";
 import type { QueuedMessageItem } from "@/hooks/use-session-queue";
@@ -52,13 +53,15 @@ export type MessagesTabProps = {
   onAddRepository?: () => void;
   onUploadFile?: () => void;
   workflowSlot?: React.ReactNode;
+  projectName?: string;
 };
 
 
-const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chatInput, setChatInput, onSendChat, onSendToolAnswer, onInterrupt, onGoToResults, onContinue, workflowMetadata, onCommandClick, isRunActive = false, showWelcomeExperience, welcomeExperienceComponent, activeWorkflow, userHasInteracted = false, queuedMessages = [], hasRealMessages = false, onCancelQueuedMessage, onUpdateQueuedMessage, onPasteImage, onClearQueue, agentName, onAddRepository, onUploadFile, workflowSlot }) => {
+const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chatInput, setChatInput, onSendChat, onSendToolAnswer, onInterrupt, onGoToResults, onContinue, workflowMetadata, onCommandClick, isRunActive = false, showWelcomeExperience, welcomeExperienceComponent, activeWorkflow, userHasInteracted = false, queuedMessages = [], hasRealMessages = false, onCancelQueuedMessage, onUpdateQueuedMessage, onPasteImage, onClearQueue, agentName, onAddRepository, onUploadFile, workflowSlot, projectName }) => {
   const [sendingChat, setSendingChat] = useState(false);
   const showSystemMessages = false;
   const [waitingDotCount, setWaitingDotCount] = useState(0);
+  const { data: currentUser } = useCurrentUser();
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
@@ -217,6 +220,7 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
             onGoToResults={onGoToResults}
             agentName={agentName}
             onSubmitAnswer={onSendToolAnswer}
+            currentUserId={currentUser?.userId}
           />
         ))}
 
@@ -290,6 +294,7 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
         onAddRepository={onAddRepository}
         onUploadFile={onUploadFile}
         workflowSlot={workflowSlot}
+        projectName={projectName}
       />
     </div>
   );

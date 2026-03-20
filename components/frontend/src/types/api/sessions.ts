@@ -3,11 +3,9 @@
  * These types align with the backend Go structs and Kubernetes CRD
  */
 
-export type UserContext = {
-  userId: string;
-  displayName: string;
-  groups: string[];
-};
+// Import from canonical location and re-export to avoid duplicate definitions
+import type { UserContext } from "@/types/agentic-session";
+export type { UserContext };
 
 export type BotAccountRef = {
   name: string;
@@ -52,6 +50,7 @@ export type AgenticSessionSpec = {
   inactivityTimeout?: number;
   displayName?: string;
   project?: string;
+  userContext?: UserContext;
   environmentVariables?: Record<string, string>;
   repos?: SessionRepo[];
   mainRepoIndex?: number;

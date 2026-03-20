@@ -116,32 +116,47 @@ def create_ambient_app(
         if is_resume:
             logger.info("IS_RESUME=true — this is a resumed session")
 
-        # Auto-execute INITIAL_PROMPT when present (skipped only for resumes,
+        # Auto-execute prompts when present (skipped only for resumes,
         # where the conversation is continued rather than re-started).
-        initial_prompt = os.getenv("INITIAL_PROMPT", "").strip()
+        if not is_resume:
+            # Fetch workflow startupPrompt independently
+            workflow_startup_prompt = _get_workflow_startup_prompt()
+            user_initial_prompt = os.getenv("INITIAL_PROMPT", "").strip()
 
-        if initial_prompt and not is_resume:
-            startup_prompt = _get_workflow_startup_prompt()
-            if startup_prompt:
+            # Combine prompts: workflow first, then user initial prompt
+            combined_prompt = ""
+            if workflow_startup_prompt and user_initial_prompt:
                 logger.info(
-                    f"Workflow startupPrompt ({len(startup_prompt)} chars) "
-                    f"will be prepended to INITIAL_PROMPT"
+                    f"Both workflow startupPrompt ({len(workflow_startup_prompt)} chars) "
+                    f"and user INITIAL_PROMPT ({len(user_initial_prompt)} chars) detected"
                 )
-                initial_prompt = f"{startup_prompt}\n\n{initial_prompt}"
+                combined_prompt = f"{workflow_startup_prompt}\n\n{user_initial_prompt}"
+            elif workflow_startup_prompt:
+                logger.info(
+                    f"Workflow startupPrompt ({len(workflow_startup_prompt)} chars) detected"
+                )
+                combined_prompt = workflow_startup_prompt
+            elif user_initial_prompt:
+                logger.info(
+                    f"User INITIAL_PROMPT ({len(user_initial_prompt)} chars) detected"
+                )
+                combined_prompt = user_initial_prompt
 
-            logger.info(
-                f"INITIAL_PROMPT detected ({len(initial_prompt)} chars) "
-                f"— auto-executing"
-            )
-            task = asyncio.create_task(
-                _auto_execute_initial_prompt(initial_prompt, session_id)
-            )
-            task.add_done_callback(_log_auto_exec_failure)
-        elif initial_prompt and is_resume:
-            logger.info(
-                f"INITIAL_PROMPT detected ({len(initial_prompt)} chars) "
-                f"but not auto-executing (resumed session)"
-            )
+            # Auto-execute if we have any prompt
+            if combined_prompt:
+                logger.info(
+                    f"Auto-executing combined prompt ({len(combined_prompt)} chars)"
+                )
+                task = asyncio.create_task(
+                    _auto_execute_initial_prompt(combined_prompt, session_id)
+                )
+                task.add_done_callback(_log_auto_exec_failure)
+        else:
+            # Log but don't execute on resume (avoid filesystem I/O, just check env vars)
+            has_workflow = bool(os.getenv("ACTIVE_WORKFLOW_GIT_URL", "").strip())
+            has_user_prompt = bool(os.getenv("INITIAL_PROMPT", "").strip())
+            if has_workflow or has_user_prompt:
+                logger.info("Prompts detected but not auto-executing (resumed session)")
 
         logger.info(f"AG-UI server ready for session {session_id}")
 
