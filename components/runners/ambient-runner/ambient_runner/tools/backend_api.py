@@ -216,7 +216,9 @@ class BackendAPIClient:
         Returns:
             List of event objects
         """
-        path = f"/projects/{self.project_name}/agentic-sessions/{session_name}/agui/events"
+        path = (
+            f"/projects/{self.project_name}/agentic-sessions/{session_name}/agui/events"
+        )
 
         # Note: This endpoint is typically SSE-based for live streaming,
         # but can be called once for historical events

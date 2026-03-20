@@ -214,8 +214,7 @@ class TestBackendAPIClient:
         call_args = mock_urlopen.call_args
         request = call_args[0][0]
         assert (
-            "/projects/test-project/agentic-sessions/session-1/stop"
-            in request.full_url
+            "/projects/test-project/agentic-sessions/session-1/stop" in request.full_url
         )
         assert request.method == "POST"
 
