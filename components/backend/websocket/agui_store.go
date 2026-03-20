@@ -18,7 +18,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -164,11 +163,16 @@ func persistEvent(sessionID string, event map[string]interface{}) {
 		log.Printf("AGUI Store: failed to write event: %v", err)
 	}
 
-	// Invalidate compacted cache when a new run starts or an error arrives after caching
+	// Compact finished runs immediately to snapshot-only events
 	eventType, _ := event["type"].(string)
-	if eventType == types.EventTypeRunStarted || eventType == types.EventTypeRunError {
+	switch eventType {
+	case types.EventTypeRunFinished, types.EventTypeRunError:
+		// Non-blocking compaction to replace raw events with snapshots
+		go compactFinishedRun(sessionID)
+	case types.EventTypeRunStarted:
+		// New run invalidates any cached compacted file from previous run
 		compactedPath := dir + "/agui-events-compacted.jsonl"
-		_ = os.Remove(compactedPath) // best-effort; ignore errors
+		_ = os.Remove(compactedPath)
 	}
 }
 
@@ -498,89 +502,133 @@ func compactToSnapshots(events []map[string]interface{}) []map[string]interface{
 	return result
 }
 
-// loadEventsForReplay loads events for SSE replay, using cached snapshots
-// for finished sessions. For finished sessions, it writes a compacted snapshot
-// file on first access and serves from it on subsequent reads.
+// loadEventsForReplay loads events for SSE replay.
+//
+// For finished runs, the file is already compacted to snapshot-only events
+// by compactFinishedRun(), so we just read and return.
+//
+// For active runs, the file contains streaming events which are necessary
+// for real-time SSE connections.
 func loadEventsForReplay(sessionID string) []map[string]interface{} {
-	compactedPath := fmt.Sprintf("%s/sessions/%s/agui-events-compacted.jsonl", StateBaseDir, sessionID)
-
-	// Try to serve from cached compacted file first
-	if events, err := readJSONLFile(compactedPath); err == nil && len(events) > 0 {
-		log.Printf("AGUI Events: serving %d cached snapshot events for %s", len(events), sessionID)
-		return events
-	}
-
-	// Load raw events
 	events := loadEvents(sessionID)
-	if len(events) == 0 {
-		return events
+	if len(events) > 0 {
+		// Check if finished or active
+		last := events[len(events)-1]
+		if last != nil {
+			lastType, _ := last["type"].(string)
+			if lastType == types.EventTypeRunFinished || lastType == types.EventTypeRunError {
+				log.Printf("AGUI Events: serving %d snapshot events for %s (finished)", len(events), sessionID)
+			} else {
+				log.Printf("AGUI Events: serving %d streaming events for %s (active)", len(events), sessionID)
+			}
+		}
 	}
-
-	// Check if the last run is finished
-	last := events[len(events)-1]
-	if last == nil {
-		return events
-	}
-	lastType, _ := last["type"].(string)
-	if lastType != types.EventTypeRunFinished && lastType != types.EventTypeRunError {
-		// Active run — return raw events to preserve streaming structure
-		log.Printf("AGUI Events: replaying %d raw events for %s (running)", len(events), sessionID)
-		return events
-	}
-
-	// Finished run — compact to snapshots
-	compacted := compactToSnapshots(events)
-	log.Printf("AGUI Events: %d raw → %d snapshot events for %s (finished)", len(events), len(compacted), sessionID)
-
-	// Persist compacted file for future reads (best-effort, non-blocking)
-	go writeCompactedFile(compactedPath, compacted)
-
-	return compacted
+	return events
 }
 
-// writeCompactedFile writes snapshot events to the compacted JSONL file.
-func writeCompactedFile(path string, events []map[string]interface{}) {
-	f, err := os.CreateTemp(filepath.Dir(path), "compacted-*.tmp")
-	if err != nil {
-		log.Printf("AGUI Store: failed to create compacted temp file: %v", err)
+// compactFinishedRun replaces the raw event log with snapshot-only events.
+//
+// Per AG-UI serialization spec, finished runs should only store:
+//   - MESSAGES_SNAPSHOT (emitted by runner in finally block)
+//   - STATE_SNAPSHOT (emitted when state changes)
+//   - Lifecycle events (RUN_STARTED, RUN_FINISHED, RUN_ERROR, STEP_*)
+//   - RAW events (metadata, feedback)
+//
+// This deletes streaming events (TEXT_MESSAGE_*, TOOL_CALL_*, STATE_DELTA, etc.)
+// to save storage while preserving complete conversation history via snapshots.
+//
+// If no MESSAGES_SNAPSHOT is found, the session is considered corrupted and
+// we keep the raw events as fallback.
+func compactFinishedRun(sessionID string) {
+	dir := fmt.Sprintf("%s/sessions/%s", StateBaseDir, sessionID)
+	rawPath := dir + "/agui-events.jsonl"
+	compactedCachePath := dir + "/agui-events-compacted.jsonl"
+
+	// Read all events
+	events, err := readJSONLFile(rawPath)
+	if err != nil || len(events) == 0 {
+		log.Printf("AGUI Store: failed to read events for compaction (%s): %v", sessionID, err)
 		return
 	}
-	tmpPath := f.Name()
 
-	w := bufio.NewWriter(f)
+	// Filter to snapshot-only events
+	var snapshots []map[string]interface{}
+	hasMessagesSnapshot := false
+
 	for _, evt := range events {
+		eventType, _ := evt["type"].(string)
+		switch eventType {
+		case types.EventTypeMessagesSnapshot:
+			hasMessagesSnapshot = true
+			snapshots = append(snapshots, evt)
+		case types.EventTypeStateSnapshot:
+			snapshots = append(snapshots, evt)
+		case types.EventTypeRunStarted, types.EventTypeRunFinished, types.EventTypeRunError,
+			types.EventTypeStepStarted, types.EventTypeStepFinished:
+			snapshots = append(snapshots, evt)
+		case types.EventTypeRaw:
+			snapshots = append(snapshots, evt)
+		}
+	}
+
+	// If no MESSAGES_SNAPSHOT found, session is corrupted - keep raw events
+	if !hasMessagesSnapshot {
+		log.Printf("AGUI Store: no MESSAGES_SNAPSHOT found for %s - session corrupted, keeping raw events", sessionID)
+		return
+	}
+
+	log.Printf("AGUI Store: compacting %s from %d raw events → %d snapshot events", sessionID, len(events), len(snapshots))
+
+	// Write snapshots atomically to temp file
+	tmpFile, err := os.CreateTemp(dir, "agui-events-*.tmp")
+	if err != nil {
+		log.Printf("AGUI Store: failed to create temp file for compaction: %v", err)
+		return
+	}
+	tmpPath := tmpFile.Name()
+
+	w := bufio.NewWriter(tmpFile)
+	for _, evt := range snapshots {
 		data, err := json.Marshal(evt)
 		if err != nil {
-			_ = f.Close()
+			_ = tmpFile.Close()
 			_ = os.Remove(tmpPath)
+			log.Printf("AGUI Store: failed to marshal event during compaction: %v", err)
 			return
 		}
 		if _, err := w.Write(data); err != nil {
-			_ = f.Close()
+			_ = tmpFile.Close()
 			_ = os.Remove(tmpPath)
 			return
 		}
 		if err := w.WriteByte('\n'); err != nil {
-			_ = f.Close()
+			_ = tmpFile.Close()
 			_ = os.Remove(tmpPath)
 			return
 		}
 	}
+
 	if err := w.Flush(); err != nil {
-		_ = f.Close()
+		_ = tmpFile.Close()
 		_ = os.Remove(tmpPath)
 		return
 	}
-	if err := f.Close(); err != nil {
+	if err := tmpFile.Close(); err != nil {
 		_ = os.Remove(tmpPath)
 		return
 	}
 
-	// Atomic rename
-	if err := os.Rename(tmpPath, path); err != nil {
-		log.Printf("AGUI Store: failed to rename compacted file: %v", err)
+	// Atomically replace raw events file with snapshots
+	if err := os.Rename(tmpPath, rawPath); err != nil {
+		log.Printf("AGUI Store: failed to replace raw events with snapshots: %v", err)
 		_ = os.Remove(tmpPath)
+		return
 	}
+
+	// Remove old compacted cache file (now redundant since raw file IS the compacted version)
+	_ = os.Remove(compactedCachePath)
+
+	log.Printf("AGUI Store: successfully compacted %s to snapshot-only events", sessionID)
 }
 
 // ─── Timestamp sanitization ──────────────────────────────────────────

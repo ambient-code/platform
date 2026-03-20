@@ -455,21 +455,31 @@ func TestLoadEventsForReplay(t *testing.T) {
 		f.Close()
 	}
 
-	t.Run("finished session returns snapshot-compacted events", func(t *testing.T) {
+	t.Run("finished session with MESSAGES_SNAPSHOT gets compacted", func(t *testing.T) {
 		sessionID := "test-replay-finished"
+		// Simulate what the runner sends: streaming events + MESSAGES_SNAPSHOT + RUN_FINISHED
 		writeEvents(sessionID, []map[string]interface{}{
 			{"type": types.EventTypeRunStarted, "runId": "r1"},
 			{"type": types.EventTypeTextMessageStart, "messageId": "msg1", "role": "user"},
 			{"type": types.EventTypeTextMessageContent, "messageId": "msg1", "delta": "Hello"},
 			{"type": types.EventTypeTextMessageEnd, "messageId": "msg1"},
+			{"type": types.EventTypeMessagesSnapshot, "messages": []interface{}{
+				map[string]interface{}{"id": "msg1", "role": "user", "content": "Hello"},
+			}},
 			{"type": types.EventTypeRunFinished, "runId": "r1"},
 		})
+
+		// Manually trigger compaction (in production, persistEvent does this on RUN_FINISHED)
+		compactFinishedRun(sessionID)
+
+		// Wait for async compaction
+		time.Sleep(100 * time.Millisecond)
 
 		result := loadEventsForReplay(sessionID)
 
 		// Should be compacted: RUN_STARTED + MESSAGES_SNAPSHOT + RUN_FINISHED
 		if len(result) != 3 {
-			t.Fatalf("Expected 3 events, got %d", len(result))
+			t.Fatalf("Expected 3 events after compaction, got %d", len(result))
 		}
 
 		hasSnapshot := false
@@ -477,9 +487,16 @@ func TestLoadEventsForReplay(t *testing.T) {
 			if evt["type"] == types.EventTypeMessagesSnapshot {
 				hasSnapshot = true
 			}
+			// Verify streaming events were removed
+			eventType := evt["type"]
+			if eventType == types.EventTypeTextMessageStart ||
+				eventType == types.EventTypeTextMessageContent ||
+				eventType == types.EventTypeTextMessageEnd {
+				t.Errorf("Streaming event %s should have been removed", eventType)
+			}
 		}
 		if !hasSnapshot {
-			t.Error("Expected MESSAGES_SNAPSHOT in replay events")
+			t.Error("Expected MESSAGES_SNAPSHOT in compacted events")
 		}
 	})
 
@@ -505,60 +522,75 @@ func TestLoadEventsForReplay(t *testing.T) {
 		}
 	})
 
-	t.Run("writes and serves from compacted cache", func(t *testing.T) {
-		sessionID := "test-replay-cache"
+	t.Run("corrupted session without MESSAGES_SNAPSHOT keeps raw events", func(t *testing.T) {
+		sessionID := "test-replay-corrupted"
+		// Simulate a corrupted session: has RUN_FINISHED but no MESSAGES_SNAPSHOT
 		writeEvents(sessionID, []map[string]interface{}{
 			{"type": types.EventTypeRunStarted, "runId": "r1"},
 			{"type": types.EventTypeTextMessageStart, "messageId": "msg1", "role": "user"},
-			{"type": types.EventTypeTextMessageContent, "messageId": "msg1", "delta": "cached"},
+			{"type": types.EventTypeTextMessageContent, "messageId": "msg1", "delta": "Hello"},
 			{"type": types.EventTypeTextMessageEnd, "messageId": "msg1"},
 			{"type": types.EventTypeRunFinished, "runId": "r1"},
 		})
 
-		// First call — compacts and writes cache
-		result1 := loadEventsForReplay(sessionID)
-
-		// Wait for async cache write
+		// Try to compact (should fail gracefully and keep raw events)
+		compactFinishedRun(sessionID)
 		time.Sleep(100 * time.Millisecond)
 
-		// Verify compacted file exists
-		compactedPath := filepath.Join(tmpDir, "sessions", sessionID, "agui-events-compacted.jsonl")
-		if _, err := os.Stat(compactedPath); os.IsNotExist(err) {
-			t.Fatal("Expected compacted file to be written")
+		result := loadEventsForReplay(sessionID)
+
+		// Should still have all raw events (compaction failed due to missing MESSAGES_SNAPSHOT)
+		if len(result) != 5 {
+			t.Fatalf("Expected 5 raw events (corruption fallback), got %d", len(result))
 		}
 
-		// Second call — should serve from cache
-		result2 := loadEventsForReplay(sessionID)
-
-		if len(result1) != len(result2) {
-			t.Errorf("Expected same event count from cache: %d vs %d", len(result1), len(result2))
+		// Verify streaming events are still present
+		hasStreamingEvents := false
+		for _, evt := range result {
+			eventType := evt["type"]
+			if eventType == types.EventTypeTextMessageStart ||
+				eventType == types.EventTypeTextMessageContent {
+				hasStreamingEvents = true
+			}
+		}
+		if !hasStreamingEvents {
+			t.Error("Expected streaming events to be preserved for corrupted session")
 		}
 	})
 
-	t.Run("cache invalidated on new RUN_STARTED", func(t *testing.T) {
-		sessionID := "test-replay-invalidate"
+	t.Run("STATE_SNAPSHOT is preserved during compaction", func(t *testing.T) {
+		sessionID := "test-replay-state"
+		// Simulate session with STATE_SNAPSHOT
 		writeEvents(sessionID, []map[string]interface{}{
 			{"type": types.EventTypeRunStarted, "runId": "r1"},
+			{"type": types.EventTypeStateSnapshot, "snapshot": map[string]interface{}{"count": 42}},
+			{"type": types.EventTypeTextMessageStart, "messageId": "msg1", "role": "assistant"},
+			{"type": types.EventTypeTextMessageContent, "messageId": "msg1", "delta": "Done"},
+			{"type": types.EventTypeTextMessageEnd, "messageId": "msg1"},
+			{"type": types.EventTypeMessagesSnapshot, "messages": []interface{}{
+				map[string]interface{}{"id": "msg1", "role": "assistant", "content": "Done"},
+			}},
 			{"type": types.EventTypeRunFinished, "runId": "r1"},
 		})
 
-		// Load to create cache
-		loadEventsForReplay(sessionID)
+		compactFinishedRun(sessionID)
 		time.Sleep(100 * time.Millisecond)
 
-		compactedPath := filepath.Join(tmpDir, "sessions", sessionID, "agui-events-compacted.jsonl")
-		if _, err := os.Stat(compactedPath); os.IsNotExist(err) {
-			t.Fatal("Expected compacted file to exist before invalidation")
+		result := loadEventsForReplay(sessionID)
+
+		// Should have: RUN_STARTED + STATE_SNAPSHOT + MESSAGES_SNAPSHOT + RUN_FINISHED = 4 events
+		if len(result) != 4 {
+			t.Fatalf("Expected 4 events after compaction, got %d", len(result))
 		}
 
-		// Simulate new run starting — persistEvent with RUN_STARTED should remove cache
-		persistEvent(sessionID, map[string]interface{}{
-			"type":  types.EventTypeRunStarted,
-			"runId": "r2",
-		})
-
-		if _, err := os.Stat(compactedPath); !os.IsNotExist(err) {
-			t.Error("Expected compacted file to be removed after RUN_STARTED")
+		hasStateSnapshot := false
+		for _, evt := range result {
+			if evt["type"] == types.EventTypeStateSnapshot {
+				hasStateSnapshot = true
+			}
+		}
+		if !hasStateSnapshot {
+			t.Error("Expected STATE_SNAPSHOT to be preserved during compaction")
 		}
 	})
 }
