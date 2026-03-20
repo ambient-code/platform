@@ -532,10 +532,14 @@ func loadEventsForReplay(sessionID string) []map[string]interface{} {
 //   - MESSAGES_SNAPSHOT (emitted by runner in finally block)
 //   - STATE_SNAPSHOT (emitted when state changes)
 //   - Lifecycle events (RUN_STARTED, RUN_FINISHED, RUN_ERROR, STEP_*)
-//   - RAW events (metadata, feedback)
+//   - Extension events (RAW, CUSTOM, META for user feedback)
+//   - Frontend state (ACTIVITY_SNAPSHOT)
 //
-// This deletes streaming events (TEXT_MESSAGE_*, TOOL_CALL_*, STATE_DELTA, etc.)
-// to save storage while preserving complete conversation history via snapshots.
+// This deletes streaming events that are superseded by snapshots:
+//   - TEXT_MESSAGE_START/CONTENT/END (superseded by MESSAGES_SNAPSHOT)
+//   - TOOL_CALL_START/ARGS/END (superseded by MESSAGES_SNAPSHOT)
+//   - STATE_DELTA (superseded by STATE_SNAPSHOT)
+//   - ACTIVITY_DELTA (superseded by ACTIVITY_SNAPSHOT)
 //
 // If no MESSAGES_SNAPSHOT is found, the session is considered corrupted and
 // we keep the raw events as fallback.
@@ -566,7 +570,11 @@ func compactFinishedRun(sessionID string) {
 		case types.EventTypeRunStarted, types.EventTypeRunFinished, types.EventTypeRunError,
 			types.EventTypeStepStarted, types.EventTypeStepFinished:
 			snapshots = append(snapshots, evt)
-		case types.EventTypeRaw:
+		case types.EventTypeRaw, types.EventTypeCustom, types.EventTypeMeta:
+			// Preserve custom events that aren't included in MESSAGES_SNAPSHOT
+			snapshots = append(snapshots, evt)
+		case types.EventTypeActivitySnapshot:
+			// Preserve frontend durable UI state (ACTIVITY_DELTA can be discarded, snapshot is canonical)
 			snapshots = append(snapshots, evt)
 		}
 	}

@@ -593,4 +593,63 @@ func TestLoadEventsForReplay(t *testing.T) {
 			t.Error("Expected STATE_SNAPSHOT to be preserved during compaction")
 		}
 	})
+
+	t.Run("META and CUSTOM events are preserved during compaction", func(t *testing.T) {
+		sessionID := "test-replay-custom"
+		// Simulate session with user feedback and custom events
+		writeEvents(sessionID, []map[string]interface{}{
+			{"type": types.EventTypeRunStarted, "runId": "r1"},
+			{"type": types.EventTypeTextMessageStart, "messageId": "msg1", "role": "assistant"},
+			{"type": types.EventTypeTextMessageContent, "messageId": "msg1", "delta": "Hello"},
+			{"type": types.EventTypeTextMessageEnd, "messageId": "msg1"},
+			{"type": types.EventTypeMeta, "metaType": "thumbs_up", "payload": map[string]interface{}{"messageId": "msg1"}},
+			{"type": types.EventTypeCustom, "customType": "platform_event", "data": "important"},
+			{"type": types.EventTypeRaw, "event": map[string]interface{}{"type": "message_metadata", "hidden": true}},
+			{"type": types.EventTypeMessagesSnapshot, "messages": []interface{}{
+				map[string]interface{}{"id": "msg1", "role": "assistant", "content": "Hello"},
+			}},
+			{"type": types.EventTypeRunFinished, "runId": "r1"},
+		})
+
+		compactFinishedRun(sessionID)
+		time.Sleep(100 * time.Millisecond)
+
+		result := loadEventsForReplay(sessionID)
+
+		// Should have: RUN_STARTED + META + CUSTOM + RAW + MESSAGES_SNAPSHOT + RUN_FINISHED = 6 events
+		if len(result) != 6 {
+			t.Fatalf("Expected 6 events after compaction, got %d", len(result))
+		}
+
+		hasMeta := false
+		hasCustom := false
+		hasRaw := false
+		for _, evt := range result {
+			eventType := evt["type"]
+			if eventType == types.EventTypeMeta {
+				hasMeta = true
+			}
+			if eventType == types.EventTypeCustom {
+				hasCustom = true
+			}
+			if eventType == types.EventTypeRaw {
+				hasRaw = true
+			}
+			// Verify streaming events were removed
+			if eventType == types.EventTypeTextMessageStart ||
+				eventType == types.EventTypeTextMessageContent ||
+				eventType == types.EventTypeTextMessageEnd {
+				t.Errorf("Streaming event %s should have been removed", eventType)
+			}
+		}
+		if !hasMeta {
+			t.Error("Expected META event to be preserved during compaction")
+		}
+		if !hasCustom {
+			t.Error("Expected CUSTOM event to be preserved during compaction")
+		}
+		if !hasRaw {
+			t.Error("Expected RAW event to be preserved during compaction")
+		}
+	})
 }
