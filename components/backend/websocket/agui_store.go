@@ -168,7 +168,7 @@ func persistEvent(sessionID string, event map[string]interface{}) {
 	eventType, _ := event["type"].(string)
 	if eventType == types.EventTypeRunStarted || eventType == types.EventTypeRunError {
 		compactedPath := dir + "/agui-events-compacted.jsonl"
-		os.Remove(compactedPath) // best-effort; ignore errors
+		_ = os.Remove(compactedPath) // best-effort; ignore errors
 	}
 }
 
@@ -551,24 +551,35 @@ func writeCompactedFile(path string, events []map[string]interface{}) {
 	for _, evt := range events {
 		data, err := json.Marshal(evt)
 		if err != nil {
-			f.Close()
-			os.Remove(tmpPath)
+			_ = f.Close()
+			_ = os.Remove(tmpPath)
 			return
 		}
-		w.Write(data)
-		w.WriteByte('\n')
+		if _, err := w.Write(data); err != nil {
+			_ = f.Close()
+			_ = os.Remove(tmpPath)
+			return
+		}
+		if err := w.WriteByte('\n'); err != nil {
+			_ = f.Close()
+			_ = os.Remove(tmpPath)
+			return
+		}
 	}
 	if err := w.Flush(); err != nil {
-		f.Close()
-		os.Remove(tmpPath)
+		_ = f.Close()
+		_ = os.Remove(tmpPath)
 		return
 	}
-	f.Close()
+	if err := f.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return
+	}
 
 	// Atomic rename
 	if err := os.Rename(tmpPath, path); err != nil {
 		log.Printf("AGUI Store: failed to rename compacted file: %v", err)
-		os.Remove(tmpPath)
+		_ = os.Remove(tmpPath)
 	}
 }
 
