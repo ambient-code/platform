@@ -30,6 +30,11 @@ import (
 
 const writeMutexEvictAge = 30 * time.Minute
 
+// ─── Compaction rate limiting ────────────────────────────────────────
+// compactionSem limits concurrent compaction goroutines to prevent unbounded
+// goroutine spawning on high-volume RUN_FINISHED/RUN_ERROR events.
+var compactionSem = make(chan struct{}, 10) // max 10 concurrent compactions
+
 func init() {
 	go func() {
 		ticker := time.NewTicker(10 * time.Minute)
@@ -168,7 +173,12 @@ func persistEvent(sessionID string, event map[string]interface{}) {
 	switch eventType {
 	case types.EventTypeRunFinished, types.EventTypeRunError:
 		// Non-blocking compaction to replace raw events with snapshots
-		go compactFinishedRun(sessionID)
+		// Rate-limited to prevent unbounded goroutine spawning
+		go func() {
+			compactionSem <- struct{}{}
+			defer func() { <-compactionSem }()
+			compactFinishedRun(sessionID)
+		}()
 	case types.EventTypeRunStarted:
 		// New run invalidates any cached compacted file from previous run
 		compactedPath := dir + "/agui-events-compacted.jsonl"
@@ -607,11 +617,13 @@ func compactFinishedRun(sessionID string) {
 		if _, err := w.Write(data); err != nil {
 			_ = tmpFile.Close()
 			_ = os.Remove(tmpPath)
+			log.Printf("AGUI Store: failed to write event during compaction: %v", err)
 			return
 		}
 		if err := w.WriteByte('\n'); err != nil {
 			_ = tmpFile.Close()
 			_ = os.Remove(tmpPath)
+			log.Printf("AGUI Store: failed to write newline during compaction: %v", err)
 			return
 		}
 	}
@@ -619,10 +631,12 @@ func compactFinishedRun(sessionID string) {
 	if err := w.Flush(); err != nil {
 		_ = tmpFile.Close()
 		_ = os.Remove(tmpPath)
+		log.Printf("AGUI Store: failed to flush buffer during compaction: %v", err)
 		return
 	}
 	if err := tmpFile.Close(); err != nil {
 		_ = os.Remove(tmpPath)
+		log.Printf("AGUI Store: failed to close temp file during compaction: %v", err)
 		return
 	}
 
