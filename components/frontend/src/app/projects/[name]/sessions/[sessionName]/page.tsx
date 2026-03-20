@@ -842,6 +842,7 @@ export default function ProjectSessionDetailPage({
           id: msg.id,  // Preserve message ID for feedback association
           content: { type: "text_block", text: (typeof msg.content === 'string' ? msg.content : '') || "" },
           timestamp,
+          metadata: msg.metadata,
         });
       } else if (msg.role === "assistant") {
         // Check if content is a structured reasoning block
