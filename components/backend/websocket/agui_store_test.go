@@ -274,7 +274,6 @@ func TestLoadEventsForReplay(t *testing.T) {
 
 		// Wait for async compaction
 
-
 		result := loadEventsForReplay(sessionID)
 
 		// Should be compacted: RUN_STARTED + MESSAGES_SNAPSHOT + RUN_FINISHED
@@ -336,7 +335,6 @@ func TestLoadEventsForReplay(t *testing.T) {
 		// Try to compact (should fail gracefully and keep raw events)
 		compactFinishedRun(sessionID)
 
-
 		result := loadEventsForReplay(sessionID)
 
 		// Should still have all raw events (compaction failed due to missing MESSAGES_SNAPSHOT)
@@ -375,7 +373,6 @@ func TestLoadEventsForReplay(t *testing.T) {
 
 		compactFinishedRun(sessionID)
 
-
 		result := loadEventsForReplay(sessionID)
 
 		// Should have: RUN_STARTED + STATE_SNAPSHOT + MESSAGES_SNAPSHOT + RUN_FINISHED = 4 events
@@ -412,7 +409,6 @@ func TestLoadEventsForReplay(t *testing.T) {
 		})
 
 		compactFinishedRun(sessionID)
-
 
 		result := loadEventsForReplay(sessionID)
 
