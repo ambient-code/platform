@@ -622,6 +622,7 @@ class ClaudeAgentAdapter:
         run_messages: List[Any] = []
         pending_msg: Optional[Dict[str, Any]] = None
         accumulated_thinking_text = ""
+        current_reasoning_id: Optional[str] = None
 
         def _get_msg_id(msg):
             """Extract message ID from either a dict or an object."""
@@ -741,6 +742,7 @@ class ClaudeAgentAdapter:
                                 yield ReasoningMessageContentEvent(
                                     thread_id=thread_id,
                                     run_id=run_id,
+                                    message_id=current_reasoning_id,
                                     delta=thinking_chunk,
                                 )
                         elif delta_type == "input_json_delta":
@@ -765,12 +767,15 @@ class ClaudeAgentAdapter:
 
                         if block_type == "thinking":
                             in_thinking_block = True
+                            current_reasoning_id = str(uuid.uuid4())
                             ts = now_ms()
                             yield ReasoningStartEvent(
-                                thread_id=thread_id, run_id=run_id, timestamp=ts
+                                thread_id=thread_id, run_id=run_id,
+                                message_id=current_reasoning_id, timestamp=ts,
                             )
                             yield ReasoningMessageStartEvent(
-                                thread_id=thread_id, run_id=run_id, timestamp=ts
+                                thread_id=thread_id, run_id=run_id,
+                                message_id=current_reasoning_id, timestamp=ts,
                             )
                         elif block_type == "tool_use":
                             # Tool call starting - emit TOOL_CALL_START
@@ -802,19 +807,23 @@ class ClaudeAgentAdapter:
                             in_thinking_block = False
                             ts = now_ms()
                             yield ReasoningMessageEndEvent(
-                                thread_id=thread_id, run_id=run_id, timestamp=ts
+                                thread_id=thread_id, run_id=run_id,
+                                message_id=current_reasoning_id, timestamp=ts,
                             )
                             yield ReasoningEndEvent(
-                                thread_id=thread_id, run_id=run_id, timestamp=ts
+                                thread_id=thread_id, run_id=run_id,
+                                message_id=current_reasoning_id, timestamp=ts,
                             )
 
-                            # Persist thinking content as ReasoningMessage per AG-UI spec
+                            # Persist thinking content as ReasoningMessage per AG-UI spec.
+                            # Use the same ID as the streaming events so the frontend
+                            # merge logic deduplicates on MESSAGES_SNAPSHOT arrival.
                             if accumulated_thinking_text:
                                 from ag_ui.core import ReasoningMessage
 
                                 upsert_message(
                                     ReasoningMessage(
-                                        id=str(uuid.uuid4()),
+                                        id=current_reasoning_id,
                                         role="reasoning",
                                         content=accumulated_thinking_text,
                                     )
