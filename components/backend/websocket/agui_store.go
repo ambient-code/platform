@@ -18,6 +18,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -143,8 +144,16 @@ func getWriteMutex(sessionID string) *sync.Mutex {
 // persistEvent appends a single AG-UI event to the session's JSONL log.
 // Writes are serialised per-session via a mutex to prevent interleaving.
 func persistEvent(sessionID string, event map[string]interface{}) {
-	dir := fmt.Sprintf("%s/sessions/%s", StateBaseDir, sessionID)
-	path := dir + "/agui-events.jsonl"
+	// SECURITY: Validate sessionID to prevent path traversal
+	if !isValidSessionName(sessionID) {
+		log.Printf("AGUI Store: persist rejected - invalid session ID: %s", sessionID)
+		return
+	}
+
+	// Build paths safely using filepath.Join
+	baseDir := filepath.Clean(StateBaseDir)
+	dir := filepath.Join(baseDir, "sessions", sessionID)
+	path := filepath.Join(dir, "agui-events.jsonl")
 	_ = ensureDir(dir)
 
 	data, err := json.Marshal(event)
@@ -181,7 +190,7 @@ func persistEvent(sessionID string, event map[string]interface{}) {
 		}()
 	case types.EventTypeRunStarted:
 		// New run invalidates any cached compacted file from previous run
-		compactedPath := dir + "/agui-events-compacted.jsonl"
+		compactedPath := filepath.Join(dir, "agui-events-compacted.jsonl")
 		_ = os.Remove(compactedPath)
 	}
 }
@@ -193,7 +202,15 @@ func persistEvent(sessionID string, event map[string]interface{}) {
 // Automatically triggers legacy migration if the log doesn't exist but
 // a pre-AG-UI messages.jsonl file does.
 func loadEvents(sessionID string) []map[string]interface{} {
-	path := fmt.Sprintf("%s/sessions/%s/agui-events.jsonl", StateBaseDir, sessionID)
+	// SECURITY: Validate sessionID to prevent path traversal
+	if !isValidSessionName(sessionID) {
+		log.Printf("AGUI Store: load rejected - invalid session ID: %s", sessionID)
+		return nil
+	}
+
+	// Build path safely using filepath.Join
+	baseDir := filepath.Clean(StateBaseDir)
+	path := filepath.Join(baseDir, "sessions", sessionID, "agui-events.jsonl")
 
 	f, err := os.Open(path)
 	if err != nil {
@@ -239,7 +256,15 @@ func loadEvents(sessionID string) []map[string]interface{} {
 //
 // Returns "" if the status cannot be determined (no events, file missing, etc.).
 func DeriveAgentStatus(sessionID string) string {
-	path := fmt.Sprintf("%s/sessions/%s/agui-events.jsonl", StateBaseDir, sessionID)
+	// SECURITY: Validate sessionID to prevent path traversal
+	if !isValidSessionName(sessionID) {
+		log.Printf("AGUI Store: status derivation rejected - invalid session ID: %s", sessionID)
+		return ""
+	}
+
+	// Build path safely using filepath.Join
+	baseDir := filepath.Clean(StateBaseDir)
+	path := filepath.Join(baseDir, "sessions", sessionID, "agui-events.jsonl")
 
 	// Read only the tail of the file to avoid loading entire event log into memory.
 	// Use 2x scannerMaxLineSize to ensure we can read at least one complete max-sized
@@ -554,9 +579,17 @@ func loadEventsForReplay(sessionID string) []map[string]interface{} {
 // If no MESSAGES_SNAPSHOT is found, the session is considered corrupted and
 // we keep the raw events as fallback.
 func compactFinishedRun(sessionID string) {
-	dir := fmt.Sprintf("%s/sessions/%s", StateBaseDir, sessionID)
-	rawPath := dir + "/agui-events.jsonl"
-	compactedCachePath := dir + "/agui-events-compacted.jsonl"
+	// SECURITY: Validate sessionID to prevent path traversal
+	if !isValidSessionName(sessionID) {
+		log.Printf("AGUI Store: compaction rejected - invalid session ID: %s", sessionID)
+		return
+	}
+
+	// Build paths safely using filepath.Join
+	baseDir := filepath.Clean(StateBaseDir)
+	dir := filepath.Join(baseDir, "sessions", sessionID)
+	rawPath := filepath.Join(dir, "agui-events.jsonl")
+	compactedCachePath := filepath.Join(dir, "agui-events-compacted.jsonl")
 
 	// Read all events
 	events, err := readJSONLFile(rawPath)
