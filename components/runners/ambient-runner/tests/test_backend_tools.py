@@ -247,6 +247,8 @@ class TestBackendAPIClient:
         )
         payload = json.loads(request.data.decode("utf-8"))
         assert payload["messages"][0]["content"] == "Hello agent"
+        assert payload["messages"][0]["role"] == "user"
+        assert "id" in payload["messages"][0]  # AG-UI requires message ID
 
     @patch("urllib.request.urlopen")
     def test_send_message_with_thread_id(self, mock_urlopen, monkeypatch):

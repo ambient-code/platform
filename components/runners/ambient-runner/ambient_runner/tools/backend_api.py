@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import urllib.request
+import uuid
 from typing import Any, Dict, List, Optional
 from urllib.error import HTTPError, URLError
 
@@ -188,7 +189,10 @@ class BackendAPIClient:
         """
         path = f"/projects/{self.project_name}/agentic-sessions/{session_name}/agui/run"
 
-        payload: Dict[str, Any] = {"messages": [{"role": "user", "content": message}]}
+        msg_id = str(uuid.uuid4())
+        payload: Dict[str, Any] = {
+            "messages": [{"id": msg_id, "role": "user", "content": message}],
+        }
         if thread_id:
             payload["threadId"] = thread_id
 
