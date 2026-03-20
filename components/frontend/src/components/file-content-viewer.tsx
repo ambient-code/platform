@@ -163,7 +163,7 @@ export function FileContentViewer({ fileName, content, fileUrl, onDownload }: Fi
           <TabsContent value="rendered" className="flex-1 mt-2 min-h-0">
             <div className="bg-muted/50 rounded border overflow-hidden h-full min-h-96">
               <iframe
-                srcDoc={content}
+                {...(fileUrl ? { src: fileUrl } : { srcDoc: content })}
                 className="w-full h-full bg-white"
                 title={fileName}
                 sandbox="allow-scripts"

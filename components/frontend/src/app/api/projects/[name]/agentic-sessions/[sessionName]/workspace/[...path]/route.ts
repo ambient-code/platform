@@ -3,7 +3,7 @@ import { BACKEND_URL } from '@/lib/config';
 
 // Map file extensions to MIME types for inline rendering
 const INLINE_MIME_TYPES: Record<string, string> = {
-  pdf: 'application/pdf',
+  pdf: 'application/pdf', html: 'text/html', htm: 'text/html',
   png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
   gif: 'image/gif', svg: 'image/svg+xml', webp: 'image/webp',
   bmp: 'image/bmp', ico: 'image/x-icon',
