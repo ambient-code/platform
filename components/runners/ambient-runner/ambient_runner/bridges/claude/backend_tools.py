@@ -306,18 +306,30 @@ def create_backend_mcp_tools(
 
 ## Base Configuration
 
-**Base URL**: `{backend_url}`
+**Server-side Base URL**: `{backend_url}` (internal, for tools/scripts)
+**Browser Base URL**: `/api` (relative, for rendered HTML)
 **Project Name**: `{project_name}`
 **Authentication**: Bearer token in `Authorization` header
 
+> **IMPORTANT — Browser-rendered HTML**: When generating HTML that will be
+> rendered in the platform's HTML renderer (srcdoc iframe), you MUST use
+> **relative URLs** (e.g., `/api/projects/...`) instead of absolute backend
+> URLs. The iframe inherits the frontend's origin, so relative paths work
+> automatically through the frontend's proxy. Absolute URLs will fail due
+> to TLS certificate issues (`ERR_CERT_AUTHORITY_INVALID`).
+
 ```javascript
+// For server-side scripts (Python, Node.js, CLI):
 const BASE_URL = '{backend_url}';
-const PROJECT_NAME = '{project_name}';
-const BOT_TOKEN = '{bot_token}';  // From environment or config
+const BOT_TOKEN = '{bot_token}';
+
+// For browser-rendered HTML (dashboards, UIs):
+const BASE_URL = '';  // Use relative URLs
+// Auth is handled by the frontend's session cookie
 
 const headers = {{
     'Content-Type': 'application/json',
-    'Authorization': `Bearer ${{BOT_TOKEN}}`
+    'Authorization': `Bearer ${{BOT_TOKEN}}`  // Server-side only
 }};
 ```
 
@@ -461,20 +473,18 @@ const created = await response.json();
 console.log(`Created session: ${{created.name}}`);
 ```
 
-**HTML Button Example**:
+**HTML Button Example** (for rendered HTML in the platform):
 ```html
 <button onclick="createSession()">Create Session</button>
 
 <script>
 async function createSession() {{
+    // Use relative URL — rendered HTML inherits the frontend's origin
     const response = await fetch(
-        '{backend_url}/projects/{project_name}/agentic-sessions',
+        '/api/projects/{project_name}/agentic-sessions',
         {{
             method: 'POST',
-            headers: {{
-                'Content-Type': 'application/json',
-                'Authorization': 'Bearer {bot_token}'
-            }},
+            headers: {{ 'Content-Type': 'application/json' }},
             body: JSON.stringify({{
                 sessionName: 'web-session-' + Date.now(),
                 displayName: 'Web Dashboard Session',
@@ -570,9 +580,9 @@ console.log(`Message sent, runId: ${{run.runId}}`);
 
 ## Authentication Patterns
 
-### Using Environment Variables
+### Server-side (Scripts, CLI, Tools)
 ```javascript
-// Server-side (Node.js, Python, etc.)
+// Server-side (Node.js, Python, etc.) — use absolute URL + Bearer token
 const BOT_TOKEN = process.env.BOT_TOKEN;
 
 fetch(url, {{
@@ -582,31 +592,19 @@ fetch(url, {{
 }});
 ```
 
-### Frontend with Proxy
+### Browser-rendered HTML (Dashboards, UIs)
 ```javascript
-// Frontend calls your backend proxy (avoids exposing token)
-fetch('/api/proxy/sessions', {{
-    method: 'POST',
-    body: JSON.stringify(sessionData)
-}});
-
-// Your backend proxy adds authentication
-app.post('/api/proxy/sessions', async (req, res) => {{
-    const response = await fetch(
-        `${{BACKEND_URL}}/projects/${{PROJECT_NAME}}/agentic-sessions`,
-        {{
-            method: 'POST',
-            headers: {{
-                'Authorization': `Bearer ${{process.env.BOT_TOKEN}}`,
-                'Content-Type': 'application/json'
-            }},
-            body: JSON.stringify(req.body)
-        }}
-    );
-    const data = await response.json();
-    res.json(data);
-}});
+// Use relative URLs — the frontend proxies /api to the backend
+// Auth is handled automatically by the frontend's session
+fetch('/api/projects/{project_name}/agentic-sessions')
+    .then(res => res.json())
+    .then(data => console.log(data));
 ```
+
+> **Do NOT use absolute backend URLs in rendered HTML.**
+> The HTML renderer runs in an srcdoc iframe that inherits the frontend's
+> origin. Relative `/api/...` paths go through the frontend's proxy
+> automatically, with proper TLS and authentication.
 
 ---
 
@@ -652,7 +650,7 @@ try {{
 
 ## Common Integration Patterns
 
-### Dashboard with Session List
+### Dashboard with Session List (Rendered HTML)
 ```html
 <!DOCTYPE html>
 <html>
@@ -663,23 +661,22 @@ try {{
     <div id="sessions"></div>
 
     <script>
+    // Uses relative URLs — works in platform's HTML renderer
     const API = {{
-        baseUrl: '{backend_url}',
         project: '{project_name}',
-        token: '{bot_token}',
 
         async request(path, options = {{}}) {{
             const response = await fetch(
-                `${{this.baseUrl}}${{path}}`,
+                `/api${{path}}`,
                 {{
                     ...options,
                     headers: {{
                         'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${{this.token}}`,
                         ...options.headers
                     }}
                 }}
             );
+            if (!response.ok) throw new Error(`API error: ${{response.status}}`);
             return response.json();
         }}
     }};
