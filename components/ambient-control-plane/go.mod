@@ -8,8 +8,7 @@ require (
 	github.com/ambient-code/platform/components/ambient-api-server v0.0.0
 	github.com/ambient-code/platform/components/ambient-sdk/go-sdk v0.0.0
 	github.com/rs/zerolog v1.34.0
-	google.golang.org/grpc v1.79.1
-	k8s.io/api v0.34.0
+	google.golang.org/grpc v1.79.3
 	k8s.io/apimachinery v0.34.0
 	k8s.io/client-go v0.34.0
 )
