@@ -616,9 +616,7 @@ func CreateSession(c *gin.Context) {
 
 		// Always verify the runner secrets exist (even if registry is unavailable
 		// and requiredKeys is nil — prevents sessions without any API keys).
-		// Use the backend's own service account (K8sClient) rather than the
-		// caller's token — session ServiceAccounts lack secret-read permission.
-		sec, err := K8sClient.CoreV1().Secrets(project).Get(c.Request.Context(), runnerSecretsName, v1.GetOptions{})
+		sec, err := reqK8s.CoreV1().Secrets(project).Get(c.Request.Context(), runnerSecretsName, v1.GetOptions{})
 		if err != nil {
 			if errors.IsNotFound(err) {
 				log.Printf("Session creation blocked: %s secret missing in project %s", runnerSecretsName, project)
