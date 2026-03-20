@@ -166,7 +166,7 @@ export function FileContentViewer({ fileName, content, fileUrl, onDownload }: Fi
                 {...(fileUrl ? { src: fileUrl } : { srcDoc: content })}
                 className="w-full h-full bg-white"
                 title={fileName}
-                sandbox="allow-scripts"
+                sandbox="allow-scripts allow-same-origin"
               />
             </div>
           </TabsContent>
