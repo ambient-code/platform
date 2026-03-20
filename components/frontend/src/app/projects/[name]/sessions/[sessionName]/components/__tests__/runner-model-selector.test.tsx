@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { RunnerModelSelector, getDefaultModel, getModelsForRunner } from '../runner-model-selector';
+import { RunnerModelSelector, getDefaultModel } from '../runner-model-selector';
 import type { RunnerType } from '@/services/api/runner-types';
+import type { ListModelsResponse } from '@/types/api';
 
 const mockRunnerTypes: RunnerType[] = [
   {
@@ -22,10 +23,26 @@ const mockRunnerTypes: RunnerType[] = [
   },
 ];
 
+const mockAnthropicModels: ListModelsResponse = {
+  models: [
+    { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5', provider: 'anthropic', isDefault: false },
+    { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5', provider: 'anthropic', isDefault: true },
+    { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6', provider: 'anthropic', isDefault: false },
+    { id: 'claude-opus-4-5', label: 'Claude Opus 4.5', provider: 'anthropic', isDefault: false },
+    { id: 'claude-opus-4-6', label: 'Claude Opus 4.6', provider: 'anthropic', isDefault: false },
+  ],
+  defaultModel: 'claude-sonnet-4-5',
+};
+
 const mockUseRunnerTypes = vi.fn(() => ({ data: mockRunnerTypes }));
+const mockUseModels = vi.fn(() => ({ data: mockAnthropicModels }));
 
 vi.mock('@/services/queries/use-runner-types', () => ({
   useRunnerTypes: () => mockUseRunnerTypes(),
+}));
+
+vi.mock('@/services/queries/use-models', () => ({
+  useModels: () => mockUseModels(),
 }));
 
 describe('RunnerModelSelector', () => {
@@ -39,6 +56,7 @@ describe('RunnerModelSelector', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockUseRunnerTypes.mockReturnValue({ data: mockRunnerTypes });
+    mockUseModels.mockReturnValue({ data: mockAnthropicModels });
   });
 
   it('renders trigger button with runner and model name', () => {
@@ -65,43 +83,54 @@ describe('RunnerModelSelector', () => {
     render(<RunnerModelSelector {...defaultProps} />);
     expect(screen.getByRole('button')).toBeDefined();
   });
+
+  it('resolves 4.6 model name from API data in trigger button', () => {
+    render(
+      <RunnerModelSelector
+        {...defaultProps}
+        selectedModel="claude-sonnet-4-6"
+      />
+    );
+    const button = screen.getByRole('button');
+    expect(button.textContent).toContain('Claude Sonnet 4.6');
+  });
+
+  it('resolves 4.6 opus model name from API data in trigger button', () => {
+    render(
+      <RunnerModelSelector
+        {...defaultProps}
+        selectedModel="claude-opus-4-6"
+      />
+    );
+    const button = screen.getByRole('button');
+    expect(button.textContent).toContain('Claude Opus 4.6');
+  });
 });
 
 describe('getDefaultModel', () => {
-  it('returns second model for claude-code', () => {
-    expect(getDefaultModel('claude-code')).toBe('claude-sonnet-4-5');
+  it('returns the API default model when provided', () => {
+    const models = [
+      { id: 'model-1', name: 'Model 1' },
+      { id: 'model-2', name: 'Model 2' },
+    ];
+    expect(getDefaultModel(models, 'model-1')).toBe('model-1');
   });
 
-  it('returns second model for gemini-cli', () => {
-    expect(getDefaultModel('gemini-cli')).toBe('gemini-2.5-pro');
+  it('returns second model when no default specified', () => {
+    const models = [
+      { id: 'model-1', name: 'Model 1' },
+      { id: 'model-2', name: 'Model 2' },
+      { id: 'model-3', name: 'Model 3' },
+    ];
+    expect(getDefaultModel(models)).toBe('model-2');
   });
 
   it('falls back to first model when only one exists', () => {
-    // amp has two models, second is gpt-4o
-    expect(getDefaultModel('amp')).toBe('gpt-4o');
+    const models = [{ id: 'model-1', name: 'Model 1' }];
+    expect(getDefaultModel(models)).toBe('model-1');
   });
 
-  it('returns "default" for unknown runner', () => {
-    expect(getDefaultModel('nonexistent')).toBe('default');
-  });
-});
-
-describe('getModelsForRunner', () => {
-  it('returns claude models for claude-code', () => {
-    const models = getModelsForRunner('claude-code');
-    expect(models).toHaveLength(3);
-    expect(models[0].id).toBe('claude-haiku-4-5');
-  });
-
-  it('returns gemini models for gemini-cli', () => {
-    const models = getModelsForRunner('gemini-cli');
-    expect(models).toHaveLength(2);
-    expect(models[0].id).toBe('gemini-2.0-flash');
-  });
-
-  it('returns fallback for unknown runner', () => {
-    const models = getModelsForRunner('unknown');
-    expect(models).toHaveLength(1);
-    expect(models[0].id).toBe('default');
+  it('returns "default" for empty model list', () => {
+    expect(getDefaultModel([])).toBe('default');
   });
 });

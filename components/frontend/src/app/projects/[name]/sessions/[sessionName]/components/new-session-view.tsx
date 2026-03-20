@@ -21,6 +21,7 @@ import { RunnerModelSelector, getDefaultModel } from "./runner-model-selector";
 import { WorkflowSelector } from "./workflow-selector";
 import { AddContextModal } from "./modals/add-context-modal";
 import { useRunnerTypes } from "@/services/queries/use-runner-types";
+import { useModels } from "@/services/queries/use-models";
 import { DEFAULT_RUNNER_TYPE_ID } from "@/services/api/runner-types";
 import type { WorkflowConfig } from "../lib/types";
 
@@ -54,18 +55,42 @@ export function NewSessionView({
 
   const [prompt, setPrompt] = useState("");
   const [selectedRunner, setSelectedRunner] = useState<string>(DEFAULT_RUNNER_TYPE_ID);
-  const [selectedModel, setSelectedModel] = useState(() =>
-    getDefaultModel(DEFAULT_RUNNER_TYPE_ID)
+  const [selectedModel, setSelectedModel] = useState<string>("");
+
+  const currentRunner = runnerTypes?.find((r) => r.id === selectedRunner);
+  const currentProvider = currentRunner?.provider;
+
+  // Fetch models for the selected runner's provider.
+  // Only enabled once the provider is known to avoid seeding a model from the wrong provider.
+  const { data: modelsData } = useModels(
+    projectName,
+    !!currentProvider,
+    currentProvider
   );
+
+  // Set default model when models load or runner/provider changes.
+  // Only backfill when the current selection is empty or invalid for the active provider.
+  useEffect(() => {
+    if (!modelsData?.models?.length) return;
+
+    setSelectedModel((prev) => {
+      if (prev && modelsData.models.some((m) => m.id === prev)) {
+        return prev;
+      }
+      return getDefaultModel(
+        modelsData.models.map((m) => ({ id: m.id, name: m.label })),
+        modelsData.defaultModel,
+      );
+    });
+  }, [modelsData]);
 
   // Once runner types load, default to the first available if current selection isn't available
   useEffect(() => {
     if (runnerTypes && runnerTypes.length > 0) {
       const isCurrentAvailable = runnerTypes.some((r) => r.id === selectedRunner);
       if (!isCurrentAvailable) {
-        const firstRunner = runnerTypes[0].id;
-        setSelectedRunner(firstRunner);
-        setSelectedModel(getDefaultModel(firstRunner));
+        setSelectedRunner(runnerTypes[0].id);
+        // Model will be set by the modelsData effect above
       }
     }
   }, [runnerTypes, selectedRunner]);
