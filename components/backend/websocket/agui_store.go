@@ -432,6 +432,12 @@ func compactFinishedRun(sessionID string) {
 		case types.EventTypeRunStarted, types.EventTypeRunFinished, types.EventTypeRunError,
 			types.EventTypeStepStarted, types.EventTypeStepFinished:
 			snapshots = append(snapshots, evt)
+		case types.EventTypeToolCallStart:
+			// Preserve AskUserQuestion tool calls — DeriveAgentStatus() needs them
+			// to detect waiting_input status after compaction.
+			if toolName, _ := evt["toolCallName"].(string); isAskUserQuestionToolCall(toolName) {
+				snapshots = append(snapshots, evt)
+			}
 		case types.EventTypeRaw, types.EventTypeCustom, types.EventTypeMeta:
 			// Preserve custom events that aren't included in MESSAGES_SNAPSHOT
 			snapshots = append(snapshots, evt)

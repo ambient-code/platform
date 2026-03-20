@@ -1065,17 +1065,27 @@ export default function ProjectSessionDetailPage({
       }
     }
 
-    // Deduplicate reasoning blocks by content. Old sessions may have both
-    // REASONING_* streaming events (no messageId) and a MESSAGES_SNAPSHOT
-    // developer/reasoning message with a different ID — producing two
-    // identical thinking blocks. Keep only the first occurrence.
-    const seenThinking = new Set<string>();
+    // Deduplicate reasoning blocks. Old sessions may have both REASONING_*
+    // streaming events (no messageId) and a MESSAGES_SNAPSHOT developer/reasoning
+    // message with a different ID — producing two identical thinking blocks.
+    // Use msg.id for keyed messages; fall back to content matching only for
+    // unkeyed (anonymous) duplicates within the same reasoning text.
+    const seenReasoningIds = new Set<string>();
+    const seenAnonThinking = new Set<string>();
     const deduped = result.filter(msg => {
       const content = 'content' in msg && typeof msg.content === 'object' && msg.content !== null ? msg.content : null;
       if (content && 'thinking' in content && content.type === 'reasoning_block') {
-        const key = (content as { thinking: string }).thinking;
-        if (seenThinking.has(key)) return false;
-        seenThinking.add(key);
+        const msgId = 'id' in msg ? (msg as { id: string }).id : '';
+        if (msgId) {
+          // Keyed message — deduplicate by ID
+          if (seenReasoningIds.has(msgId)) return false;
+          seenReasoningIds.add(msgId);
+        } else {
+          // Anonymous legacy message — deduplicate by content
+          const key = (content as { thinking: string }).thinking;
+          if (seenAnonThinking.has(key)) return false;
+          seenAnonThinking.add(key);
+        }
       }
       return true;
     });
