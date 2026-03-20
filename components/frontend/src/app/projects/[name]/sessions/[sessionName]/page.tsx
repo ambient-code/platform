@@ -899,6 +899,22 @@ export default function ProjectSessionDetailPage({
             },
           });
         }
+      } else if (msg.role === "developer") {
+        // Developer messages carry thinking/reasoning content from MESSAGES_SNAPSHOT
+        const thinkingText = typeof msg.content === 'string' ? msg.content : '';
+        if (thinkingText) {
+          result.push({
+            type: "agent_message",
+            id: msg.id,
+            content: {
+              type: "reasoning_block",
+              thinking: thinkingText,
+              signature: "",
+            },
+            model: "claude",
+            timestamp,
+          });
+        }
       } else if (msg.role === "system") {
         result.push({
           type: "system_message",
