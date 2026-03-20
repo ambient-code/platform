@@ -1065,7 +1065,22 @@ export default function ProjectSessionDetailPage({
       }
     }
 
-    return result;
+    // Deduplicate reasoning blocks by content. Old sessions may have both
+    // REASONING_* streaming events (no messageId) and a MESSAGES_SNAPSHOT
+    // developer/reasoning message with a different ID — producing two
+    // identical thinking blocks. Keep only the first occurrence.
+    const seenThinking = new Set<string>();
+    const deduped = result.filter(msg => {
+      const content = 'content' in msg && typeof msg.content === 'object' && msg.content !== null ? msg.content : null;
+      if (content && 'thinking' in content && content.type === 'reasoning_block') {
+        const key = (content as { thinking: string }).thinking;
+        if (seenThinking.has(key)) return false;
+        seenThinking.add(key);
+      }
+      return true;
+    });
+
+    return deduped;
   }, [
     aguiState.messages,
     aguiState.currentToolCall,   // Needed in Phase A to avoid orphaned-child promotion
