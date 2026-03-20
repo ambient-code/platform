@@ -573,6 +573,7 @@ func loadEventsForReplay(sessionID string) []map[string]interface{} {
 // This deletes streaming events that are superseded by snapshots:
 //   - TEXT_MESSAGE_START/CONTENT/END (superseded by MESSAGES_SNAPSHOT)
 //   - TOOL_CALL_START/ARGS/END (superseded by MESSAGES_SNAPSHOT)
+//   - REASONING_START/END, REASONING_MESSAGE_START/CONTENT/END (superseded by MESSAGES_SNAPSHOT)
 //   - STATE_DELTA (superseded by STATE_SNAPSHOT)
 //   - ACTIVITY_DELTA (superseded by ACTIVITY_SNAPSHOT)
 //
