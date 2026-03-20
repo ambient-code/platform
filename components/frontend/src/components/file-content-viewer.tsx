@@ -123,7 +123,12 @@ export function FileContentViewer({ fileName, content, fileUrl, onDownload }: Fi
         </div>
         {fileUrl ? (
           <div className="flex-1 bg-muted/50 rounded border overflow-hidden min-h-96">
-            <iframe src={fileUrl} className="w-full h-full" title={fileName} />
+            <object data={fileUrl} type="application/pdf" className="w-full h-full">
+              <p className="p-4 text-sm text-muted-foreground text-center">
+                PDF cannot be displayed inline.{' '}
+                <a href={fileUrl} target="_blank" rel="noopener noreferrer" className="underline">Open PDF</a>
+              </p>
+            </object>
           </div>
         ) : (
           <div className="bg-muted/50 p-6 rounded border flex flex-col items-center justify-center text-center gap-3">
