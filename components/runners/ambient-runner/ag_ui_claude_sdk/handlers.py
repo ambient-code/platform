@@ -232,15 +232,15 @@ async def handle_thinking_block(
     # Emit standard AG-UI reasoning events
     if thinking_text:
         ts = now_ms()
-        yield ReasoningStartEvent(thread_id=thread_id, run_id=run_id, timestamp=ts)
+        yield ReasoningStartEvent(threadId=thread_id, runId=run_id, timestamp=ts)
         yield ReasoningMessageStartEvent(
-            thread_id=thread_id, run_id=run_id, timestamp=ts
+            threadId=thread_id, runId=run_id, timestamp=ts
         )
         yield ReasoningMessageContentEvent(
-            thread_id=thread_id, run_id=run_id, delta=thinking_text
+            threadId=thread_id, runId=run_id, delta=thinking_text
         )
-        yield ReasoningMessageEndEvent(thread_id=thread_id, run_id=run_id, timestamp=ts)
-        yield ReasoningEndEvent(thread_id=thread_id, run_id=run_id, timestamp=ts)
+        yield ReasoningMessageEndEvent(threadId=thread_id, runId=run_id, timestamp=ts)
+        yield ReasoningEndEvent(threadId=thread_id, runId=run_id, timestamp=ts)
 
     # Also emit signature as custom event if present
     if signature:

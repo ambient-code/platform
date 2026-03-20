@@ -740,9 +740,9 @@ class ClaudeAgentAdapter:
                             if thinking_chunk:
                                 accumulated_thinking_text += thinking_chunk
                                 yield ReasoningMessageContentEvent(
-                                    thread_id=thread_id,
-                                    run_id=run_id,
-                                    message_id=current_reasoning_id,
+                                    threadId=thread_id,
+                                    runId=run_id,
+                                    messageId=current_reasoning_id,
                                     delta=thinking_chunk,
                                 )
                         elif delta_type == "input_json_delta":
@@ -770,12 +770,12 @@ class ClaudeAgentAdapter:
                             current_reasoning_id = str(uuid.uuid4())
                             ts = now_ms()
                             yield ReasoningStartEvent(
-                                thread_id=thread_id, run_id=run_id,
-                                message_id=current_reasoning_id, timestamp=ts,
+                                threadId=thread_id, runId=run_id,
+                                messageId=current_reasoning_id, timestamp=ts,
                             )
                             yield ReasoningMessageStartEvent(
-                                thread_id=thread_id, run_id=run_id,
-                                message_id=current_reasoning_id, timestamp=ts,
+                                threadId=thread_id, runId=run_id,
+                                messageId=current_reasoning_id, timestamp=ts,
                             )
                         elif block_type == "tool_use":
                             # Tool call starting - emit TOOL_CALL_START
@@ -807,12 +807,12 @@ class ClaudeAgentAdapter:
                             in_thinking_block = False
                             ts = now_ms()
                             yield ReasoningMessageEndEvent(
-                                thread_id=thread_id, run_id=run_id,
-                                message_id=current_reasoning_id, timestamp=ts,
+                                threadId=thread_id, runId=run_id,
+                                messageId=current_reasoning_id, timestamp=ts,
                             )
                             yield ReasoningEndEvent(
-                                thread_id=thread_id, run_id=run_id,
-                                message_id=current_reasoning_id, timestamp=ts,
+                                threadId=thread_id, runId=run_id,
+                                messageId=current_reasoning_id, timestamp=ts,
                             )
 
                             # Persist thinking content as ReasoningMessage per AG-UI spec.
@@ -1124,10 +1124,10 @@ class ClaudeAgentAdapter:
                 logger.debug("Cleanup: closing hanging thinking block")
                 ts = now_ms()
                 yield ReasoningMessageEndEvent(
-                    thread_id=thread_id, run_id=run_id, timestamp=ts
+                    threadId=thread_id, runId=run_id, timestamp=ts
                 )
                 yield ReasoningEndEvent(
-                    thread_id=thread_id, run_id=run_id, timestamp=ts
+                    threadId=thread_id, runId=run_id, timestamp=ts
                 )
                 in_thinking_block = False
 
