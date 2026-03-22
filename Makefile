@@ -65,6 +65,7 @@ RUNNER_IMAGE ?= vteam_claude_runner:$(IMAGE_TAG)
 STATE_SYNC_IMAGE ?= vteam_state_sync:$(IMAGE_TAG)
 PUBLIC_API_IMAGE ?= vteam_public_api:$(IMAGE_TAG)
 API_SERVER_IMAGE ?= vteam_api_server:$(IMAGE_TAG)
+CONTROL_PLANE_IMAGE ?= vteam_control_plane:$(IMAGE_TAG)
 
 # Podman prefixes image names with localhost/ — kind load needs to use the same
 # name so containerd can match the image reference used in the deployment spec
@@ -203,6 +204,13 @@ build-api-server: ## Build ambient API server image
 	@cd components/ambient-api-server && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
 		-t $(API_SERVER_IMAGE) .
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) API server built: $(API_SERVER_IMAGE)"
+
+build-control-plane: ## Build ambient-control-plane image
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building ambient-control-plane with $(CONTAINER_ENGINE)..."
+	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
+		-f components/ambient-control-plane/Dockerfile \
+		-t $(CONTROL_PLANE_IMAGE) components
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Control plane built: $(CONTROL_PLANE_IMAGE)"
 
 build-cli: ## Build acpctl CLI binary
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building acpctl CLI..."
@@ -480,6 +488,18 @@ local-reload-api-server: check-local-context ## Rebuild and reload ambient-api-s
 	@kubectl rollout restart deployment/ambient-api-server -n $(NAMESPACE) >/dev/null 2>&1
 	@kubectl rollout status deployment/ambient-api-server -n $(NAMESPACE) --timeout=60s
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) ambient-api-server reloaded"
+
+local-reload-control-plane: check-local-context ## Rebuild and reload ambient-control-plane only
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rebuilding ambient-control-plane..."
+	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) \
+		-f components/ambient-control-plane/Dockerfile \
+		-t $(CONTROL_PLANE_IMAGE) components >/dev/null 2>&1
+	@$(CONTAINER_ENGINE) tag $(CONTROL_PLANE_IMAGE) localhost/$(CONTROL_PLANE_IMAGE) 2>/dev/null || true
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Loading image into kind cluster ($(KIND_CLUSTER_NAME))..."
+	@$(CONTAINER_ENGINE) save localhost/$(CONTROL_PLANE_IMAGE) | \
+		$(CONTAINER_ENGINE) exec -i $(KIND_CLUSTER_NAME)-control-plane \
+		ctr --namespace=k8s.io images import -
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) ambient-control-plane loaded into kind cluster"
 
 ##@ Testing
 

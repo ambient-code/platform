@@ -92,6 +92,8 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 		VertexSecretNamespace: cfg.VertexSecretNamespace,
 		RunnerImageNamespace:  cfg.RunnerImageNamespace,
 		MCPImage:              cfg.MCPImage,
+		MCPAPIServerURL:       cfg.MCPAPIServerURL,
+		RunnerLogLevel:        cfg.RunnerLogLevel,
 	}
 
 	conn, err := grpc.NewClient(cfg.GRPCServerAddr, grpc.WithTransportCredentials(grpcCredentials(cfg.GRPCUseTLS)))

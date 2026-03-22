@@ -2,7 +2,6 @@ package reconciler
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -30,12 +29,13 @@ type KubeReconcilerConfig struct {
 	VertexSecretNamespace string
 	RunnerImageNamespace  string
 	MCPImage              string
+	MCPAPIServerURL       string
+	RunnerLogLevel        string
 }
 
 const (
-	annotationMCPSidecar = "ambient-code.io/mcp-sidecar"
-	mcpSidecarPort       = int64(8090)
-	mcpSidecarURL        = "http://localhost:8090"
+	mcpSidecarPort = int64(8090)
+	mcpSidecarURL  = "http://localhost:8090"
 )
 
 type SimpleKubeReconciler struct {
@@ -366,7 +366,7 @@ func (r *SimpleKubeReconciler) ensurePod(ctx context.Context, namespace string, 
 	}
 
 	labels := sessionLabels(session.ID, session.ProjectID)
-	useMCPSidecar := mcpSidecarEnabled(session) && r.cfg.MCPImage != ""
+	useMCPSidecar := r.cfg.MCPImage != ""
 
 	containers := []interface{}{
 		map[string]interface{}{
@@ -539,6 +539,7 @@ func (r *SimpleKubeReconciler) buildEnv(ctx context.Context, session types.Sessi
 		envVar("AGUI_PORT", "8001"),
 		envVar("USE_AGUI", "true"),
 		envVar("DEBUG", "true"),
+		envVar("LOG_LEVEL", r.cfg.RunnerLogLevel),
 		envVar("BACKEND_API_URL", r.cfg.BackendURL),
 		envVar("USE_VERTEX", useVertex),
 		envVar("CLAUDE_CODE_USE_VERTEX", useVertex),
@@ -745,22 +746,6 @@ func boolToStr(b bool) string {
 	return "false"
 }
 
-func sessionAnnotations(session types.Session) map[string]string {
-	if session.Annotations == "" {
-		return nil
-	}
-	var m map[string]string
-	if err := json.Unmarshal([]byte(session.Annotations), &m); err != nil {
-		return nil
-	}
-	return m
-}
-
-func mcpSidecarEnabled(session types.Session) bool {
-	anns := sessionAnnotations(session)
-	return anns[annotationMCPSidecar] == "true"
-}
-
 func (r *SimpleKubeReconciler) buildMCPSidecar(credSecretName string) interface{} {
 	mcpImage := r.cfg.MCPImage
 	imagePullPolicy := "Always"
@@ -781,7 +766,7 @@ func (r *SimpleKubeReconciler) buildMCPSidecar(credSecretName string) interface{
 		"env": []interface{}{
 			envVar("MCP_TRANSPORT", "sse"),
 			envVar("MCP_BIND_ADDR", fmt.Sprintf(":%d", mcpSidecarPort)),
-			envVar("AMBIENT_API_URL", r.cfg.BackendURL),
+			envVar("AMBIENT_API_URL", r.cfg.MCPAPIServerURL),
 			envVarFromSecret("AMBIENT_TOKEN", credSecretName, "api-token"),
 		},
 		"resources": map[string]interface{}{
