@@ -56,7 +56,6 @@ func TestDescribeProject(t *testing.T) {
 		srv.RespondJSON(t, w, http.StatusOK, &types.Project{
 			ObjectReference: types.ObjectReference{ID: "p1"},
 			Name:            "my-proj",
-			DisplayName:     "My Project",
 			Description:     "A test project",
 		})
 	})

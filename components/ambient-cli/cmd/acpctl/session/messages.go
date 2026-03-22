@@ -88,9 +88,44 @@ func extractField(payload, field string) string {
 	return ""
 }
 
+func extractAGUIText(payload string) string {
+	var envelope struct {
+		Messages []struct {
+			Role    string `json:"role"`
+			Content any    `json:"content"`
+		} `json:"messages"`
+	}
+	if err := json.Unmarshal([]byte(payload), &envelope); err != nil || len(envelope.Messages) == 0 {
+		return ""
+	}
+	var parts []string
+	for _, msg := range envelope.Messages {
+		switch v := msg.Content.(type) {
+		case string:
+			if t := strings.TrimSpace(v); t != "" {
+				parts = append(parts, fmt.Sprintf("[%s] %s", msg.Role, t))
+			}
+		case []any:
+			for _, item := range v {
+				if block, ok := item.(map[string]any); ok {
+					if text, ok := block["text"].(string); ok {
+						if t := strings.TrimSpace(text); t != "" {
+							parts = append(parts, fmt.Sprintf("[%s] %s", msg.Role, t))
+						}
+					}
+				}
+			}
+		}
+	}
+	return strings.Join(parts, "\n")
+}
+
 func displayPayload(eventType, payload string) string {
 	switch eventType {
-	case "user":
+	case "user", "assistant":
+		if text := extractAGUIText(payload); text != "" {
+			return text
+		}
 		return payload
 	case "TEXT_MESSAGE_CONTENT", "REASONING_MESSAGE_CONTENT", "TOOL_CALL_ARGS":
 		if d := extractField(payload, "delta"); d != "" {
@@ -230,17 +265,24 @@ func streamMessages(cmd *cobra.Command, client *sdkclient.Client, sessionID stri
 
 	fmt.Fprintf(cmd.OutOrStdout(), "Streaming messages for session %s (Ctrl+C to stop)...\n\n", sessionID)
 
-	msgs, stop, err := client.Sessions().WatchMessages(ctx, sessionID, msgArgs.afterSeq)
+	watcher, err := client.Sessions().WatchSessionMessages(ctx, sessionID, int64(msgArgs.afterSeq), nil)
 	if err != nil {
 		return fmt.Errorf("watch messages: %w", err)
 	}
-	defer stop()
+	defer watcher.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
-		case msg, ok := <-msgs:
+		case <-watcher.Done():
+			return nil
+		case err, ok := <-watcher.Errors():
+			if !ok {
+				return nil
+			}
+			return fmt.Errorf("stream error: %w", err)
+		case msg, ok := <-watcher.Messages():
 			if !ok {
 				return nil
 			}
