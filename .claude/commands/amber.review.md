@@ -24,9 +24,15 @@ Read all of the following files to build your review context. Do not skip any.
 2. `.claude/context/backend-development.md` (Go backend, Gin, K8s integration)
 3. `.claude/context/frontend-development.md` (NextJS, Shadcn UI, React Query)
 4. `.claude/context/security-standards.md` (auth, RBAC, token handling, container security)
-5. `.claude/patterns/k8s-client-usage.md` (user token vs service account)
-6. `.claude/patterns/error-handling.md` (consistent error patterns)
-7. `.claude/patterns/react-query-usage.md` (data fetching patterns)
+5. `.claude/context/api-server-development.md` (ambient-api-server plugin architecture, gRPC, OpenAPI pipeline)
+6. `.claude/context/sdk-development.md` (Go/Python/TS SDK generator pipeline)
+7. `.claude/context/cli-development.md` (acpctl command structure, session streaming)
+8. `.claude/context/control-plane-development.md` (CP↔runner gRPC contract, fan-out, compatibility)
+9. `.claude/context/ambient-spec-development.md` (Spec as desired state — Kinds, endpoints, CLI, SDK examples)
+10. `.claude/context/ambient-workflow-development.md` (Workflow as transformation policy — propagation order, per-layer rules)
+11. `.claude/patterns/k8s-client-usage.md` (user token vs service account)
+12. `.claude/patterns/error-handling.md` (consistent error patterns)
+13. `.claude/patterns/react-query-usage.md` (data fetching patterns)
 
 ### 2. Identify Changes to Review
 
@@ -43,12 +49,14 @@ Evaluate every changed file against the loaded standards. Apply ALL relevant che
 
 #### Review Axes
 
-1. **Code Quality** — Does it follow CLAUDE.md patterns? Naming conventions? No unnecessary comments?
-2. **Security** — User token auth (`GetK8sClientsForRequest`), RBAC checks before operations, token redaction in logs, input validation, SecurityContext on Job pods, no secrets in code
-3. **Performance** — Unnecessary re-renders, missing query key parameters, N+1 queries, unbounded list operations
-4. **Testing** — Adequate coverage for new functionality? Tests follow existing patterns?
-5. **Architecture** — Follows project structure from memory context? Correct layer separation (api/ vs queries/ in frontend, handlers/ vs types/ in backend)?
-6. **Error Handling** — Follows error handling patterns? No `panic()`, no silent failures, wrapped errors with context, generic user messages with detailed server logs
+1. **Spec alignment** — Does the change match the Spec (`ambient-data-model.md` + `openapi.yaml`)? If code adds something not in the Spec, flag it. If the Spec implies something not in the code, flag it.
+2. **Workflow compliance** — Does the change follow the propagation order? (Spec → API Server → SDK → CLI → Operator/Runner → Frontend). A Layer N+1 change without a corresponding Layer N change is a flag.
+3. **Code Quality** — Does it follow CLAUDE.md patterns? Naming conventions? No unnecessary comments?
+4. **Security** — User token auth (`GetK8sClientsForRequest`), RBAC checks before operations, token redaction in logs, input validation, SecurityContext on Job pods, no secrets in code
+5. **Performance** — Unnecessary re-renders, missing query key parameters, N+1 queries, unbounded list operations
+6. **Testing** — Adequate coverage for new functionality? Tests follow existing patterns?
+7. **Architecture** — Follows project structure from memory context? Correct layer separation (api/ vs queries/ in frontend, handlers/ vs types/ in backend)?
+8. **Error Handling** — Follows error handling patterns? No `panic()`, no silent failures, wrapped errors with context, generic user messages with detailed server logs
 
 #### Backend-Specific Checks (Go)
 
