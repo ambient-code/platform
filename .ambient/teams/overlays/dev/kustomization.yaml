@@ -1,0 +1,14 @@
+# dev overlay — full fleet, all features enabled.
+# All 11 agents. MCP sidecar enabled. Loose feature flags.
+# Target: local kind cluster or shared dev namespace.
+
+kind: Kustomization
+
+bases:
+  - ../../base
+
+patches:
+  - path: project-patch.yaml
+    target:
+      kind: Project
+      name: ambient-platform

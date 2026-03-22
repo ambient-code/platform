@@ -1,0 +1,7 @@
+kind: Project
+name: ambient-platform
+labels:
+  env: dev
+annotations:
+  ambient.io/feature-flags: '{"mcp-sidecar":"enabled","grpc-watch":"enabled"}'
+  work.ambient.io/release-status: in-progress

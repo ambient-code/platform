@@ -1,0 +1,227 @@
+
+kind: Project
+name: ambient-platform
+description: Ambient Code Platform — Kubernetes-native AI automation platform
+prompt: |
+  This workspace builds the Ambient Code Platform: a Kubernetes-native system that
+  orchestrates fleets of AI agents through containerized microservices. The codebase is
+  a Go REST API (ambient-api-server), a Go Kubernetes controller (operator), a NextJS
+  frontend, a Python runner, and a Go CLI (acpctl). All agents operate on the same
+  monorepo at github.com/ambient-code/platform.
+
+  ## MCP Server
+
+  The platform exposes an MCP server at `/api/ambient/v1/mcp/sse` (SSE transport) and
+  `/api/ambient/v1/mcp` (stdio). Use it at session start to read project and agent state.
+
+  Key MCP tools:
+  - `ambient_get_project`           — fetch project record + all annotations
+  - `ambient_update_project`        — write project-level annotation (lead only)
+  - `ambient_get_agent`             — fetch your own agent record + annotations
+  - `ambient_update_agent`          — write your own annotation (roster entry, task state)
+  - `ambient_list_inbox_messages`   — read your inbox
+  - `ambient_send_inbox_message`    — send a message to a peer agent
+  - `ambient_ignite_agent`          — ignite a peer agent (lead only)
+
+  ## Shared Rules
+
+  Every agent must follow these without exception. Full details in annotation
+  `ambient.io/rules`. Summary:
+  - Conventional commits. Squash on merge to main.
+  - All Go: `gofmt`, `go vet`, `golangci-lint` before commit.
+  - All PRs require one approval. No force-push to main.
+  - OpenAPI in `components/ambient-api-server/openapi/` is source of truth. Run
+    `make generate` after any change.
+  - No `panic()` in Go. No `any` in TypeScript.
+  - User API ops use `GetK8sClientsForRequest`. Never the service account.
+  - `OwnerReferences` on all child K8s resources.
+
+  ## Coordination
+
+  Agents communicate via inbox. Read the full coordination protocol from annotation
+  `ambient.io/protocol`. Read contracts from `ambient.io/contracts`. Read the agent
+  roster from `ambient.io/agent-roster`. Read the current epics from
+  `work.ambient.io/epics`.
+
+labels:
+  env: dev
+  team: ambient
+  work.ambient.io/project: PLAT
+
+annotations:
+  ambient.io/mcp-endpoint: /api/ambient/v1/mcp/sse
+
+  ambient.io/rules: |
+    CODING RULES — apply to all agents without exception
+
+    Go:
+      - gofmt + go vet + golangci-lint before every commit
+      - No panic() in production. Return fmt.Errorf("context: %w", err).
+      - User-facing ops: GetK8sClientsForRequest(c). Never the backend service account.
+      - OwnerReferences on all child K8s resources (Jobs, Secrets, PVCs).
+      - Errors surfaced to users are generic. Detailed context goes to server logs.
+
+    TypeScript/React (frontend):
+      - Zero `any` types. Use proper types, unknown, or generics.
+      - Shadcn UI components only. No custom buttons, inputs, dialogs.
+      - React Query for all data. No manual fetch() in components.
+      - `type` over `interface`. Single-use components colocated with their page.
+      - Build must pass: npm run build — 0 errors, 0 warnings.
+
+    OpenAPI:
+      - Edit openapi/*.yaml first, then `make generate`. Never edit pkg/api/openapi/ directly.
+      - After any openapi change: notify sdk via inbox to regenerate SDKs.
+
+    Git:
+      - Branch: feat/<issue-slug>. Worktree: feat-<issue-slug>.
+      - Conventional commits: feat, fix, docs, refactor, test, chore.
+      - All PRs require one approval. No force-push to main.
+      - When PR opens: set issue status to "In Review". On merge: "Done".
+
+    Security:
+      - No tokens or secrets in logs (use len(token) to log length only).
+      - RBAC check before resource access.
+      - Input validated before DB write. Log injection prevention (no raw newlines).
+      - Container SecurityContext: AllowPrivilegeEscalation=false, Drop=ALL.
+
+  ambient.io/protocol: |
+    COORDINATION PROTOCOL v1
+
+    Every agent follows this protocol at every session boundary.
+
+    SESSION START:
+      1. Call ambient_get_project → read annotations: rules, protocol, contracts,
+         agent-roster, epics, blocking-issues, summary.
+      2. Call ambient_get_agent (self) → read: ready, blocked, blocker, current-task,
+         next-tasks, completed-tasks.
+      3. Reconcile: compare self state against project state. Identify any blockers.
+      4. Update own roster entry via ambient_update_agent.
+      5. Proceed with highest-priority next-task, or wait for inbox assignment.
+
+    SESSION END:
+      1. Write work.ambient.io/current-task = "" (cleared).
+      2. Write work.ambient.io/next-tasks (updated queue).
+      3. Write work.ambient.io/completed-tasks (appended).
+      4. Update ambient.io/ready and ambient.io/blocked.
+      5. If handing off: send inbox message to target agent with full context.
+      6. Notify lead of completion or blocker.
+
+    ON INBOX MESSAGE:
+      1. Call ambient_get_project → reconcile state.
+      2. Read the message. Identify the sender and required action.
+      3. Execute. Report status back to sender via inbox.
+
+    BLOCKER:
+      1. Set ambient.io/blocked = "true" on self.
+      2. Write ambient.io/blocker = "<description of block>".
+      3. Send inbox message to the agent that owns the blocking dependency.
+      4. Send inbox message to lead.
+      5. Update roster entry.
+
+    HANDOFF:
+      1. Write work.ambient.io/next-tasks on target agent.
+      2. Send inbox message to target with: task key, files, contracts, done criteria.
+      3. Write ambient.io/last-handoff on self.
+      4. Notify lead.
+
+    ROSTER ENTRY FIELDS:
+      id, name, ready, blocked, blocker, issue, branch, current-task,
+      pr-url, pr-status, last-seen
+
+  ambient.io/contracts: |
+    CONTRACTS v1
+
+    git:
+      base_branch: main
+      branch_convention: feat/<issue-slug>
+      worktree_convention: feat-<issue-slug>
+      commit_convention: conventional-commits
+      pr_required: true
+      review_gate: 1-approval
+
+    api:
+      openapi_source_of_truth: components/ambient-api-server/openapi/
+      no_manual_openapi_edits: true
+      sdk_regenerate_after_openapi_change: true
+      breaking_changes_require_announcement: true
+
+    coordination:
+      blocking_issue_threshold: 2
+      escalate_after_blocked_minutes: 60
+      peer_notification_on_blocker: true
+
+    jira:
+      project_key: PLAT
+      issue_status_on_pr_open: In Review
+      issue_status_on_merge: Done
+
+  ambient.io/agent-roster: "[]"
+
+  ambient.io/fleet: |
+    AGENT FLEET
+
+    lead      | (orchestrator)                        | reads spec, assigns waves, gates progress
+    api       | components/ambient-api-server/        | OpenAPI, plugins, gRPC, migrations
+    public    | components/public-api/                | stateless HTTP gateway to api-server
+    sdk       | components/ambient-sdk/               | Go/Python/TS SDKs + generator
+    be        | components/backend/                   | Gin/K8s backend, runner SSE proxy
+    cp        | components/operator/                  | CRD reconcilers, gRPC watch consumer
+    cli       | components/ambient-cli/               | acpctl commands, TUI
+    runners   | components/runners/ambient-runner/    | Python runner, gRPC push, MCP sidecar
+    fe        | components/frontend/                  | NextJS + Shadcn UI
+    reviewer  | (cross-cutting)                       | /amber.review, test suite quality gate
+    infra     | components/manifests/                 | Kustomize, Kind cluster, container builds
+
+  ambient.io/bookmarks: |
+    KNOWLEDGE BOOKMARKS
+
+    Implementation guide (waves, pipeline, pitfalls, invariants, playbooks):
+      docs/internal/design/ambient-model.guide.md
+
+    Data model spec (entities, fields, API routes, CLI table):
+      docs/internal/design/ambient-model.spec.md
+
+    Run logs (past execution history, gap tables):
+      docs/internal/design/ambient-model.runlog.N.md
+
+    Code review command (loads 13 context files, 8 review axes):
+      .claude/commands/amber.review.md
+
+    MCP server spec:
+      docs/internal/proposals/mcp-server.md
+
+    Agent workflow (image push playbook, port-forward, cluster naming):
+      docs/internal/design/ambient-model.guide.md#mandatory-image-push-playbook
+
+    Build commands per component:
+      docs/internal/design/ambient-model.guide.md#build-and-test-by-component
+
+    CP↔Runner compat contract:
+      docs/internal/design/ambient-model.guide.md#cp--runner-compatibility-contract
+
+    Runner SSE proxy pattern:
+      docs/internal/design/ambient-model.guide.md#runner-pod-addressing
+
+    SDK generator pitfalls:
+      docs/internal/design/ambient-model.guide.md#sdk-generator-pitfalls
+
+    Known code invariants:
+      docs/internal/design/ambient-model.guide.md#known-code-invariants
+
+  ambient.io/summary: |
+    {
+      "as_of": "2026-03-22T00:00:00Z",
+      "release": "v0.4.0",
+      "status": "bootstrapping",
+      "narrative": "Project bootstrapped. SDLC agents initialized. Awaiting first ignition.",
+      "blocked_count": 0,
+      "ready_count": 0,
+      "active_count": 0
+    }
+
+  ambient.io/feature-flags: '{"mcp-sidecar":"disabled","grpc-watch":"enabled"}'
+  work.ambient.io/epics: "[]"
+  work.ambient.io/release: v0.4.0
+  work.ambient.io/release-status: in-progress
+  work.ambient.io/blocking-issues: "[]"
+  github.com/repo: ambient-code/platform

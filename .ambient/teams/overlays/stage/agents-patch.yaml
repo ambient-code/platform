@@ -1,0 +1,5 @@
+# Applied to all Agent resources in this overlay.
+# Pins every agent to the release branch — no main-branch work in staging.
+kind: Agent
+annotations:
+  git.ambient.io/base-branch: release/v0.4.0

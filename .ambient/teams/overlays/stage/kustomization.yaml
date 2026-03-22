@@ -1,0 +1,30 @@
+# stage overlay — delivery fleet. Mirrors prod topology.
+# Excluded: fe, cli, be, public (no developer tooling in stage).
+# Included service agents: api, sdk, cp, runners.
+# Included ops agents: lead, reviewer, infra.
+# All agents pinned to release branch. Strict contracts.
+# Target: staging cluster, production-equivalent config.
+
+kind: Kustomization
+
+bases:
+  - ../../base
+
+resources:
+  - ../../base/project.yaml
+  - ../../base/lead.yaml
+  - ../../base/api.yaml
+  - ../../base/sdk.yaml
+  - ../../base/cp.yaml
+  - ../../base/runners.yaml
+  - ../../base/reviewer.yaml
+  - ../../base/infra.yaml
+
+patches:
+  - path: project-patch.yaml
+    target:
+      kind: Project
+      name: ambient-platform
+  - path: agents-patch.yaml
+    target:
+      kind: Agent

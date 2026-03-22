@@ -1,0 +1,30 @@
+# prod overlay — ops fleet only.
+# Only the three agents needed for production operations:
+#   lead     — orchestrates any operational work (hotfix, rollback, release gate)
+#   reviewer — quality gate; runs /amber.review on any prod change
+#   infra    — builds and deploys containers; owns manifests
+#
+# No feature engineers in production. Feature work happens in dev/int.
+# Any prod change must be a hotfix on a release branch, reviewed and approved
+# before infra deploys it.
+# Target: production cluster.
+
+kind: Kustomization
+
+bases:
+  - ../../base
+
+resources:
+  - ../../base/project.yaml
+  - ../../base/lead.yaml
+  - ../../base/reviewer.yaml
+  - ../../base/infra.yaml
+
+patches:
+  - path: project-patch.yaml
+    target:
+      kind: Project
+      name: ambient-platform
+  - path: agents-patch.yaml
+    target:
+      kind: Agent

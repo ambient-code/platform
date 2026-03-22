@@ -1,0 +1,29 @@
+# int overlay — integration testing fleet. Backend agents only.
+# Excluded: fe (no UI testing here), public (tested via api directly).
+# Focus: API↔SDK↔CP↔Runner integration. Stricter test gates.
+# Target: shared integration namespace against a real cluster.
+
+kind: Kustomization
+
+bases:
+  - ../../base
+
+# Restrict to backend-focused agents only.
+# fe and public are excluded — integration tests target the API layer directly.
+resources:
+  - ../../base/project.yaml
+  - ../../base/lead.yaml
+  - ../../base/api.yaml
+  - ../../base/sdk.yaml
+  - ../../base/be.yaml
+  - ../../base/cp.yaml
+  - ../../base/cli.yaml
+  - ../../base/runners.yaml
+  - ../../base/reviewer.yaml
+  - ../../base/infra.yaml
+
+patches:
+  - path: project-patch.yaml
+    target:
+      kind: Project
+      name: ambient-platform

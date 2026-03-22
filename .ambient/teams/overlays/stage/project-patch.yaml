@@ -1,0 +1,41 @@
+kind: Project
+name: ambient-platform
+labels:
+  env: stage
+annotations:
+  ambient.io/feature-flags: '{"mcp-sidecar":"disabled","grpc-watch":"enabled"}'
+  work.ambient.io/release: v0.4.0
+  work.ambient.io/release-status: release-candidate
+  ambient.io/contracts: |
+    CONTRACTS v1 — staging environment
+
+    git:
+      base_branch: release/v0.4.0
+      branch_convention: fix/<issue-slug>
+      worktree_convention: fix-<issue-slug>
+      commit_convention: conventional-commits
+      pr_required: true
+      review_gate: 2-approval
+
+    api:
+      openapi_source_of_truth: components/ambient-api-server/openapi/
+      no_manual_openapi_edits: true
+      sdk_regenerate_after_openapi_change: true
+      breaking_changes_require_announcement: true
+      no_new_endpoints: true
+
+    coordination:
+      blocking_issue_threshold: 1
+      escalate_after_blocked_minutes: 15
+      peer_notification_on_blocker: true
+
+    testing:
+      integration_tests_required: true
+      coverage_gate: 80
+      e2e_required: true
+      smoke_test_required: true
+
+    jira:
+      project_key: PLAT
+      issue_status_on_pr_open: In Review
+      issue_status_on_merge: Done

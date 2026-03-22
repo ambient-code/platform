@@ -1,0 +1,21 @@
+# Base fleet — all agents, environment-neutral defaults.
+# Overlays select a subset of these resources and patch environment-specific values.
+#
+# Apply via: acpctl kustomize overlays/<env>/ | acpctl apply -f -
+# Or directly: acpctl apply -k overlays/<env>/
+
+kind: Kustomization
+
+resources:
+  - project.yaml
+  - lead.yaml
+  - api.yaml
+  - public.yaml
+  - sdk.yaml
+  - be.yaml
+  - cp.yaml
+  - cli.yaml
+  - runners.yaml
+  - fe.yaml
+  - reviewer.yaml
+  - infra.yaml

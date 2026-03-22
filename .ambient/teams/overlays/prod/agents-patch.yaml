@@ -1,0 +1,5 @@
+# Applied to all Agent resources in this overlay (lead, reviewer, infra).
+# Pins to the release branch. No main-branch work in production.
+kind: Agent
+annotations:
+  git.ambient.io/base-branch: release/v0.4.0
