@@ -44,6 +44,7 @@ func sessionToProto(s *Session) *pb.Session {
 		KubeCrName:           s.KubeCrName,
 		KubeCrUid:            s.KubeCrUid,
 		KubeNamespace:        s.KubeNamespace,
+		AgentId:              s.AgentId,
 	}
 
 	if s.LlmTemperature != nil {

@@ -14,7 +14,6 @@ func ConvertProject(project openapi.Project) *Project {
 		},
 	}
 	c.Name = project.Name
-	c.DisplayName = project.DisplayName
 	c.Description = project.Description
 	c.Labels = project.Labels
 	c.Annotations = project.Annotations
@@ -37,7 +36,6 @@ func PresentProject(project *Project) openapi.Project {
 		CreatedAt:   openapi.PtrTime(project.CreatedAt),
 		UpdatedAt:   openapi.PtrTime(project.UpdatedAt),
 		Name:        project.Name,
-		DisplayName: project.DisplayName,
 		Description: project.Description,
 		Labels:      project.Labels,
 		Annotations: project.Annotations,

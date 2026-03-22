@@ -285,13 +285,15 @@ func (h *sessionGRPCHandler) WatchSessionMessages(req *pb.WatchSessionMessagesRe
 	ctx := stream.Context()
 
 	if !middleware.IsServiceCaller(ctx) {
-		session, svcErr := h.service.Get(ctx, req.GetSessionId())
-		if svcErr != nil {
-			return grpcutil.ServiceErrorToGRPC(svcErr)
-		}
 		username := auth.GetUsernameFromContext(ctx)
-		if session.CreatedByUserId == nil || *session.CreatedByUserId != username {
-			return status.Error(codes.PermissionDenied, "not authorized to watch this session")
+		if username != "" {
+			session, svcErr := h.service.Get(ctx, req.GetSessionId())
+			if svcErr != nil {
+				return grpcutil.ServiceErrorToGRPC(svcErr)
+			}
+			if session.CreatedByUserId == nil || *session.CreatedByUserId != username {
+				return status.Error(codes.PermissionDenied, "not authorized to watch this session")
+			}
 		}
 	}
 

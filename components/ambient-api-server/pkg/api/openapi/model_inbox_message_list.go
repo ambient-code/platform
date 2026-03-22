@@ -17,26 +17,26 @@ import (
 	"fmt"
 )
 
-// checks if the AgentList type satisfies the MappedNullable interface at compile time
-var _ MappedNullable = &AgentList{}
+// checks if the InboxMessageList type satisfies the MappedNullable interface at compile time
+var _ MappedNullable = &InboxMessageList{}
 
-// AgentList struct for AgentList
-type AgentList struct {
-	Kind  string  `json:"kind"`
-	Page  int32   `json:"page"`
-	Size  int32   `json:"size"`
-	Total int32   `json:"total"`
-	Items []Agent `json:"items"`
+// InboxMessageList struct for InboxMessageList
+type InboxMessageList struct {
+	Kind  string         `json:"kind"`
+	Page  int32          `json:"page"`
+	Size  int32          `json:"size"`
+	Total int32          `json:"total"`
+	Items []InboxMessage `json:"items"`
 }
 
-type _AgentList AgentList
+type _InboxMessageList InboxMessageList
 
-// NewAgentList instantiates a new AgentList object
+// NewInboxMessageList instantiates a new InboxMessageList object
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewAgentList(kind string, page int32, size int32, total int32, items []Agent) *AgentList {
-	this := AgentList{}
+func NewInboxMessageList(kind string, page int32, size int32, total int32, items []InboxMessage) *InboxMessageList {
+	this := InboxMessageList{}
 	this.Kind = kind
 	this.Page = page
 	this.Size = size
@@ -45,16 +45,16 @@ func NewAgentList(kind string, page int32, size int32, total int32, items []Agen
 	return &this
 }
 
-// NewAgentListWithDefaults instantiates a new AgentList object
+// NewInboxMessageListWithDefaults instantiates a new InboxMessageList object
 // This constructor will only assign default values to properties that have it defined,
 // but it doesn't guarantee that properties required by API are set
-func NewAgentListWithDefaults() *AgentList {
-	this := AgentList{}
+func NewInboxMessageListWithDefaults() *InboxMessageList {
+	this := InboxMessageList{}
 	return &this
 }
 
 // GetKind returns the Kind field value
-func (o *AgentList) GetKind() string {
+func (o *InboxMessageList) GetKind() string {
 	if o == nil {
 		var ret string
 		return ret
@@ -65,7 +65,7 @@ func (o *AgentList) GetKind() string {
 
 // GetKindOk returns a tuple with the Kind field value
 // and a boolean to check if the value has been set.
-func (o *AgentList) GetKindOk() (*string, bool) {
+func (o *InboxMessageList) GetKindOk() (*string, bool) {
 	if o == nil {
 		return nil, false
 	}
@@ -73,12 +73,12 @@ func (o *AgentList) GetKindOk() (*string, bool) {
 }
 
 // SetKind sets field value
-func (o *AgentList) SetKind(v string) {
+func (o *InboxMessageList) SetKind(v string) {
 	o.Kind = v
 }
 
 // GetPage returns the Page field value
-func (o *AgentList) GetPage() int32 {
+func (o *InboxMessageList) GetPage() int32 {
 	if o == nil {
 		var ret int32
 		return ret
@@ -89,7 +89,7 @@ func (o *AgentList) GetPage() int32 {
 
 // GetPageOk returns a tuple with the Page field value
 // and a boolean to check if the value has been set.
-func (o *AgentList) GetPageOk() (*int32, bool) {
+func (o *InboxMessageList) GetPageOk() (*int32, bool) {
 	if o == nil {
 		return nil, false
 	}
@@ -97,12 +97,12 @@ func (o *AgentList) GetPageOk() (*int32, bool) {
 }
 
 // SetPage sets field value
-func (o *AgentList) SetPage(v int32) {
+func (o *InboxMessageList) SetPage(v int32) {
 	o.Page = v
 }
 
 // GetSize returns the Size field value
-func (o *AgentList) GetSize() int32 {
+func (o *InboxMessageList) GetSize() int32 {
 	if o == nil {
 		var ret int32
 		return ret
@@ -113,7 +113,7 @@ func (o *AgentList) GetSize() int32 {
 
 // GetSizeOk returns a tuple with the Size field value
 // and a boolean to check if the value has been set.
-func (o *AgentList) GetSizeOk() (*int32, bool) {
+func (o *InboxMessageList) GetSizeOk() (*int32, bool) {
 	if o == nil {
 		return nil, false
 	}
@@ -121,12 +121,12 @@ func (o *AgentList) GetSizeOk() (*int32, bool) {
 }
 
 // SetSize sets field value
-func (o *AgentList) SetSize(v int32) {
+func (o *InboxMessageList) SetSize(v int32) {
 	o.Size = v
 }
 
 // GetTotal returns the Total field value
-func (o *AgentList) GetTotal() int32 {
+func (o *InboxMessageList) GetTotal() int32 {
 	if o == nil {
 		var ret int32
 		return ret
@@ -137,7 +137,7 @@ func (o *AgentList) GetTotal() int32 {
 
 // GetTotalOk returns a tuple with the Total field value
 // and a boolean to check if the value has been set.
-func (o *AgentList) GetTotalOk() (*int32, bool) {
+func (o *InboxMessageList) GetTotalOk() (*int32, bool) {
 	if o == nil {
 		return nil, false
 	}
@@ -145,14 +145,14 @@ func (o *AgentList) GetTotalOk() (*int32, bool) {
 }
 
 // SetTotal sets field value
-func (o *AgentList) SetTotal(v int32) {
+func (o *InboxMessageList) SetTotal(v int32) {
 	o.Total = v
 }
 
 // GetItems returns the Items field value
-func (o *AgentList) GetItems() []Agent {
+func (o *InboxMessageList) GetItems() []InboxMessage {
 	if o == nil {
-		var ret []Agent
+		var ret []InboxMessage
 		return ret
 	}
 
@@ -161,7 +161,7 @@ func (o *AgentList) GetItems() []Agent {
 
 // GetItemsOk returns a tuple with the Items field value
 // and a boolean to check if the value has been set.
-func (o *AgentList) GetItemsOk() ([]Agent, bool) {
+func (o *InboxMessageList) GetItemsOk() ([]InboxMessage, bool) {
 	if o == nil {
 		return nil, false
 	}
@@ -169,11 +169,11 @@ func (o *AgentList) GetItemsOk() ([]Agent, bool) {
 }
 
 // SetItems sets field value
-func (o *AgentList) SetItems(v []Agent) {
+func (o *InboxMessageList) SetItems(v []InboxMessage) {
 	o.Items = v
 }
 
-func (o AgentList) MarshalJSON() ([]byte, error) {
+func (o InboxMessageList) MarshalJSON() ([]byte, error) {
 	toSerialize, err := o.ToMap()
 	if err != nil {
 		return []byte{}, err
@@ -181,7 +181,7 @@ func (o AgentList) MarshalJSON() ([]byte, error) {
 	return json.Marshal(toSerialize)
 }
 
-func (o AgentList) ToMap() (map[string]interface{}, error) {
+func (o InboxMessageList) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
 	toSerialize["kind"] = o.Kind
 	toSerialize["page"] = o.Page
@@ -191,7 +191,7 @@ func (o AgentList) ToMap() (map[string]interface{}, error) {
 	return toSerialize, nil
 }
 
-func (o *AgentList) UnmarshalJSON(data []byte) (err error) {
+func (o *InboxMessageList) UnmarshalJSON(data []byte) (err error) {
 	// This validates that all required properties are included in the JSON object
 	// by unmarshalling the object into a generic map with string keys and checking
 	// that every required field exists as a key in the generic map.
@@ -217,53 +217,53 @@ func (o *AgentList) UnmarshalJSON(data []byte) (err error) {
 		}
 	}
 
-	varAgentList := _AgentList{}
+	varInboxMessageList := _InboxMessageList{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
-	err = decoder.Decode(&varAgentList)
+	err = decoder.Decode(&varInboxMessageList)
 
 	if err != nil {
 		return err
 	}
 
-	*o = AgentList(varAgentList)
+	*o = InboxMessageList(varInboxMessageList)
 
 	return err
 }
 
-type NullableAgentList struct {
-	value *AgentList
+type NullableInboxMessageList struct {
+	value *InboxMessageList
 	isSet bool
 }
 
-func (v NullableAgentList) Get() *AgentList {
+func (v NullableInboxMessageList) Get() *InboxMessageList {
 	return v.value
 }
 
-func (v *NullableAgentList) Set(val *AgentList) {
+func (v *NullableInboxMessageList) Set(val *InboxMessageList) {
 	v.value = val
 	v.isSet = true
 }
 
-func (v NullableAgentList) IsSet() bool {
+func (v NullableInboxMessageList) IsSet() bool {
 	return v.isSet
 }
 
-func (v *NullableAgentList) Unset() {
+func (v *NullableInboxMessageList) Unset() {
 	v.value = nil
 	v.isSet = false
 }
 
-func NewNullableAgentList(val *AgentList) *NullableAgentList {
-	return &NullableAgentList{value: val, isSet: true}
+func NewNullableInboxMessageList(val *InboxMessageList) *NullableInboxMessageList {
+	return &NullableInboxMessageList{value: val, isSet: true}
 }
 
-func (v NullableAgentList) MarshalJSON() ([]byte, error) {
+func (v NullableInboxMessageList) MarshalJSON() ([]byte, error) {
 	return json.Marshal(v.value)
 }
 
-func (v *NullableAgentList) UnmarshalJSON(src []byte) error {
+func (v *NullableInboxMessageList) UnmarshalJSON(src []byte) error {
 	v.isSet = true
 	return json.Unmarshal(src, &v.value)
 }
