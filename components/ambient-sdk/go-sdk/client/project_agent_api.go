@@ -2,6 +2,7 @@
 // Source: ../../ambient-api-server/openapi/openapi.yaml
 // Spec SHA256: 9a8e623edcfae33acf56edf974d1859a127c22915d4831cb786daba2b398ca37
 // Generated: 2026-03-21T21:30:53Z
+// NOTE: Paths hand-corrected post-generation — generator cannot infer nested routes.
 
 package client
 
@@ -23,37 +24,91 @@ func (c *Client) ProjectAgents() *ProjectAgentAPI {
 	return &ProjectAgentAPI{client: c}
 }
 
-func (a *ProjectAgentAPI) Create(ctx context.Context, resource *types.ProjectAgent) (*types.ProjectAgent, error) {
+func (a *ProjectAgentAPI) Create(ctx context.Context, projectID string, resource *types.ProjectAgent) (*types.ProjectAgent, error) {
 	body, err := json.Marshal(resource)
 	if err != nil {
 		return nil, fmt.Errorf("marshal project_agent: %w", err)
 	}
 	var result types.ProjectAgent
-	if err := a.client.do(ctx, http.MethodPost, "/projects", body, http.StatusCreated, &result); err != nil {
+	path := "/projects/" + url.PathEscape(projectID) + "/agents"
+	if err := a.client.do(ctx, http.MethodPost, path, body, http.StatusCreated, &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
 }
 
-func (a *ProjectAgentAPI) Get(ctx context.Context, id string) (*types.ProjectAgent, error) {
+func (a *ProjectAgentAPI) Get(ctx context.Context, projectID, paID string) (*types.ProjectAgent, error) {
 	var result types.ProjectAgent
-	if err := a.client.do(ctx, http.MethodGet, "/projects/"+url.PathEscape(id), nil, http.StatusOK, &result); err != nil {
+	path := "/projects/" + url.PathEscape(projectID) + "/agents/" + url.PathEscape(paID)
+	if err := a.client.do(ctx, http.MethodGet, path, nil, http.StatusOK, &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
 }
 
-func (a *ProjectAgentAPI) List(ctx context.Context, opts *types.ListOptions) (*types.ProjectAgentList, error) {
+func (a *ProjectAgentAPI) List(ctx context.Context, projectID string, opts *types.ListOptions) (*types.ProjectAgentList, error) {
 	var result types.ProjectAgentList
-	if err := a.client.doWithQuery(ctx, http.MethodGet, "/projects", nil, http.StatusOK, &result, opts); err != nil {
+	path := "/projects/" + url.PathEscape(projectID) + "/agents"
+	if err := a.client.doWithQuery(ctx, http.MethodGet, path, nil, http.StatusOK, &result, opts); err != nil {
 		return nil, err
 	}
 	return &result, nil
 }
-func (a *ProjectAgentAPI) ListAll(ctx context.Context, opts *types.ListOptions) *Iterator[types.ProjectAgent] {
+
+func (a *ProjectAgentAPI) ListAll(ctx context.Context, projectID string, opts *types.ListOptions) *Iterator[types.ProjectAgent] {
 	return NewIterator(func(page int) (*types.ProjectAgentList, error) {
 		o := *opts
 		o.Page = page
-		return a.List(ctx, &o)
+		return a.List(ctx, projectID, &o)
 	})
+}
+
+func (a *ProjectAgentAPI) Update(ctx context.Context, projectID, paID string, patch map[string]any) (*types.ProjectAgent, error) {
+	body, err := json.Marshal(patch)
+	if err != nil {
+		return nil, fmt.Errorf("marshal patch: %w", err)
+	}
+	var result types.ProjectAgent
+	path := "/projects/" + url.PathEscape(projectID) + "/agents/" + url.PathEscape(paID)
+	if err := a.client.do(ctx, http.MethodPatch, path, body, http.StatusOK, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+func (a *ProjectAgentAPI) Delete(ctx context.Context, projectID, paID string) error {
+	path := "/projects/" + url.PathEscape(projectID) + "/agents/" + url.PathEscape(paID)
+	return a.client.do(ctx, http.MethodDelete, path, nil, http.StatusNoContent, nil)
+}
+
+func (a *ProjectAgentAPI) Ignite(ctx context.Context, projectID, paID, prompt string) (*types.IgniteResponse, error) {
+	req := types.IgniteRequest{Prompt: prompt}
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("marshal ignite request: %w", err)
+	}
+	var result types.IgniteResponse
+	path := "/projects/" + url.PathEscape(projectID) + "/agents/" + url.PathEscape(paID) + "/ignite"
+	if err := a.client.do(ctx, http.MethodPost, path, body, http.StatusCreated, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+func (a *ProjectAgentAPI) GetIgnition(ctx context.Context, projectID, paID string) (*types.IgniteResponse, error) {
+	var result types.IgniteResponse
+	path := "/projects/" + url.PathEscape(projectID) + "/agents/" + url.PathEscape(paID) + "/ignition"
+	if err := a.client.do(ctx, http.MethodGet, path, nil, http.StatusOK, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+func (a *ProjectAgentAPI) Sessions(ctx context.Context, projectID, paID string, opts *types.ListOptions) (*types.SessionList, error) {
+	var result types.SessionList
+	path := "/projects/" + url.PathEscape(projectID) + "/agents/" + url.PathEscape(paID) + "/sessions"
+	if err := a.client.doWithQuery(ctx, http.MethodGet, path, nil, http.StatusOK, &result, opts); err != nil {
+		return nil, err
+	}
+	return &result, nil
 }

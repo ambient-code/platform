@@ -2,6 +2,7 @@
 // Source: ../../ambient-api-server/openapi/openapi.yaml
 // Spec SHA256: 9a8e623edcfae33acf56edf974d1859a127c22915d4831cb786daba2b398ca37
 // Generated: 2026-03-21T21:30:53Z
+// NOTE: Paths hand-corrected post-generation — generator cannot infer nested routes.
 
 package client
 
@@ -23,37 +24,47 @@ func (c *Client) InboxMessages() *InboxMessageAPI {
 	return &InboxMessageAPI{client: c}
 }
 
-func (a *InboxMessageAPI) Create(ctx context.Context, resource *types.InboxMessage) (*types.InboxMessage, error) {
+func (a *InboxMessageAPI) Send(ctx context.Context, projectID, paID string, resource *types.InboxMessage) (*types.InboxMessage, error) {
 	body, err := json.Marshal(resource)
 	if err != nil {
 		return nil, fmt.Errorf("marshal inbox_message: %w", err)
 	}
 	var result types.InboxMessage
-	if err := a.client.do(ctx, http.MethodPost, "/projects", body, http.StatusCreated, &result); err != nil {
+	path := "/projects/" + url.PathEscape(projectID) + "/agents/" + url.PathEscape(paID) + "/inbox"
+	if err := a.client.do(ctx, http.MethodPost, path, body, http.StatusCreated, &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
 }
 
-func (a *InboxMessageAPI) Get(ctx context.Context, id string) (*types.InboxMessage, error) {
-	var result types.InboxMessage
-	if err := a.client.do(ctx, http.MethodGet, "/projects/"+url.PathEscape(id), nil, http.StatusOK, &result); err != nil {
-		return nil, err
-	}
-	return &result, nil
-}
-
-func (a *InboxMessageAPI) List(ctx context.Context, opts *types.ListOptions) (*types.InboxMessageList, error) {
+func (a *InboxMessageAPI) List(ctx context.Context, projectID, paID string, opts *types.ListOptions) (*types.InboxMessageList, error) {
 	var result types.InboxMessageList
-	if err := a.client.doWithQuery(ctx, http.MethodGet, "/projects", nil, http.StatusOK, &result, opts); err != nil {
+	path := "/projects/" + url.PathEscape(projectID) + "/agents/" + url.PathEscape(paID) + "/inbox"
+	if err := a.client.doWithQuery(ctx, http.MethodGet, path, nil, http.StatusOK, &result, opts); err != nil {
 		return nil, err
 	}
 	return &result, nil
 }
-func (a *InboxMessageAPI) ListAll(ctx context.Context, opts *types.ListOptions) *Iterator[types.InboxMessage] {
+
+func (a *InboxMessageAPI) ListAll(ctx context.Context, projectID, paID string, opts *types.ListOptions) *Iterator[types.InboxMessage] {
 	return NewIterator(func(page int) (*types.InboxMessageList, error) {
 		o := *opts
 		o.Page = page
-		return a.List(ctx, &o)
+		return a.List(ctx, projectID, paID, &o)
 	})
+}
+
+func (a *InboxMessageAPI) MarkRead(ctx context.Context, projectID, paID, msgID string) error {
+	patch := map[string]any{"read": true}
+	body, err := json.Marshal(patch)
+	if err != nil {
+		return fmt.Errorf("marshal patch: %w", err)
+	}
+	path := "/projects/" + url.PathEscape(projectID) + "/agents/" + url.PathEscape(paID) + "/inbox/" + url.PathEscape(msgID)
+	return a.client.do(ctx, http.MethodPatch, path, body, http.StatusOK, nil)
+}
+
+func (a *InboxMessageAPI) Delete(ctx context.Context, projectID, paID, msgID string) error {
+	path := "/projects/" + url.PathEscape(projectID) + "/agents/" + url.PathEscape(paID) + "/inbox/" + url.PathEscape(msgID)
+	return a.client.do(ctx, http.MethodDelete, path, nil, http.StatusNoContent, nil)
 }
