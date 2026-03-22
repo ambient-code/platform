@@ -143,6 +143,8 @@ func displayPayload(eventType, payload string) string {
 		return displayRunFinished(payload)
 	case "MESSAGES_SNAPSHOT":
 		return displayMessagesSnapshot(payload)
+	case "assistant":
+		return displayAssistantPayload(payload)
 	case "RUN_ERROR":
 		if msg := extractField(payload, "message"); msg != "" {
 			return msg
@@ -201,6 +203,26 @@ func displayMessagesSnapshot(payload string) string {
 		}
 	}
 	return fmt.Sprintf("(%d messages, no text content)", len(msgs))
+}
+
+func displayAssistantPayload(payload string) string {
+	var data struct {
+		Status   string `json:"status"`
+		Messages []struct {
+			Role    string `json:"role"`
+			Content string `json:"content"`
+		} `json:"messages"`
+	}
+	if err := json.Unmarshal([]byte(payload), &data); err != nil {
+		return fmt.Sprintf("(%d bytes)", len(payload))
+	}
+	for i := len(data.Messages) - 1; i >= 0; i-- {
+		m := data.Messages[i]
+		if m.Role == "assistant" && m.Content != "" {
+			return m.Content
+		}
+	}
+	return fmt.Sprintf("[%s]", data.Status)
 }
 
 func listMessages(ctx context.Context, client *sdkclient.Client, printer *output.Printer, sessionID string) error {
