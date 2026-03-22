@@ -66,6 +66,7 @@ STATE_SYNC_IMAGE ?= vteam_state_sync:$(IMAGE_TAG)
 PUBLIC_API_IMAGE ?= vteam_public_api:$(IMAGE_TAG)
 API_SERVER_IMAGE ?= vteam_api_server:$(IMAGE_TAG)
 CONTROL_PLANE_IMAGE ?= vteam_control_plane:$(IMAGE_TAG)
+MCP_IMAGE        ?= vteam_mcp:$(IMAGE_TAG)
 
 # Podman prefixes image names with localhost/ — kind load needs to use the same
 # name so containerd can match the image reference used in the deployment spec
@@ -161,7 +162,7 @@ help: ## Display this help message
 
 ##@ Building
 
-build-all: build-frontend build-backend build-operator build-runner build-state-sync build-public-api build-api-server ## Build all container images
+build-all: build-frontend build-backend build-operator build-runner build-state-sync build-public-api build-api-server build-mcp ## Build all container images
 
 build-frontend: ## Build frontend image
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building frontend with $(CONTAINER_ENGINE)..."
@@ -212,6 +213,12 @@ build-control-plane: ## Build ambient-control-plane image
 		-t $(CONTROL_PLANE_IMAGE) components
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Control plane built: $(CONTROL_PLANE_IMAGE)"
 
+build-mcp: ## Build ambient-mcp MCP server image
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building ambient-mcp with $(CONTAINER_ENGINE)..."
+	@cd components/ambient-mcp && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
+		-t $(MCP_IMAGE) .
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) MCP server built: $(MCP_IMAGE)"
+
 build-cli: ## Build acpctl CLI binary
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building acpctl CLI..."
 	@cd components/ambient-cli && make build
@@ -256,7 +263,7 @@ registry-login: ## Login to container registry
 
 push-all: registry-login ## Push all images to registry
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Pushing images to $(REGISTRY)..."
-	@for image in $(FRONTEND_IMAGE) $(BACKEND_IMAGE) $(OPERATOR_IMAGE) $(RUNNER_IMAGE) $(STATE_SYNC_IMAGE) $(PUBLIC_API_IMAGE) $(API_SERVER_IMAGE); do \
+	@for image in $(FRONTEND_IMAGE) $(BACKEND_IMAGE) $(OPERATOR_IMAGE) $(RUNNER_IMAGE) $(STATE_SYNC_IMAGE) $(PUBLIC_API_IMAGE) $(API_SERVER_IMAGE) $(MCP_IMAGE); do \
 		echo "  Tagging and pushing $$image..."; \
 		$(CONTAINER_ENGINE) tag $$image $(REGISTRY)/$$image && \
 		$(CONTAINER_ENGINE) push $(REGISTRY)/$$image; \
@@ -968,7 +975,7 @@ check-architecture: ## Validate build architecture matches host
 
 _kind-load-images: ## Internal: Load images into kind cluster
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Loading images into kind ($(KIND_CLUSTER_NAME))..."
-	@for img in $(BACKEND_IMAGE) $(FRONTEND_IMAGE) $(OPERATOR_IMAGE) $(RUNNER_IMAGE) $(STATE_SYNC_IMAGE) $(PUBLIC_API_IMAGE) $(API_SERVER_IMAGE); do \
+	@for img in $(BACKEND_IMAGE) $(FRONTEND_IMAGE) $(OPERATOR_IMAGE) $(RUNNER_IMAGE) $(STATE_SYNC_IMAGE) $(PUBLIC_API_IMAGE) $(API_SERVER_IMAGE) $(MCP_IMAGE); do \
 		echo "  Loading $(KIND_IMAGE_PREFIX)$$img..."; \
 		if [ -n "$(KIND_HOST)" ] || [ "$(CONTAINER_ENGINE)" = "podman" ]; then \
 			$(CONTAINER_ENGINE) save $(KIND_IMAGE_PREFIX)$$img | \
@@ -991,12 +998,15 @@ _build-and-load: ## Internal: Build and load images
 	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) -t $(RUNNER_IMAGE) -f components/runners/ambient-runner/Dockerfile components/runners $(QUIET_REDIRECT)
 	@echo "  Building api-server ($(PLATFORM))..."
 	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) -t $(API_SERVER_IMAGE) components/ambient-api-server $(QUIET_REDIRECT)
+	@echo "  Building mcp ($(PLATFORM))..."
+	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) -t $(MCP_IMAGE) components/ambient-mcp $(QUIET_REDIRECT)
 	@echo "  Tagging images with localhost prefix..."
 	@$(CONTAINER_ENGINE) tag $(BACKEND_IMAGE) localhost/$(BACKEND_IMAGE) 2>/dev/null || true
 	@$(CONTAINER_ENGINE) tag $(FRONTEND_IMAGE) localhost/$(FRONTEND_IMAGE) 2>/dev/null || true
 	@$(CONTAINER_ENGINE) tag $(OPERATOR_IMAGE) localhost/$(OPERATOR_IMAGE) 2>/dev/null || true
 	@$(CONTAINER_ENGINE) tag $(RUNNER_IMAGE) localhost/$(RUNNER_IMAGE) 2>/dev/null || true
 	@$(CONTAINER_ENGINE) tag $(API_SERVER_IMAGE) localhost/$(API_SERVER_IMAGE) 2>/dev/null || true
+	@$(CONTAINER_ENGINE) tag $(MCP_IMAGE) localhost/$(MCP_IMAGE) 2>/dev/null || true
 	@echo "  Loading images into minikube..."
 	@mkdir -p /tmp/minikube-images
 	@$(CONTAINER_ENGINE) save -o /tmp/minikube-images/backend.tar localhost/$(BACKEND_IMAGE)
@@ -1004,11 +1014,13 @@ _build-and-load: ## Internal: Build and load images
 	@$(CONTAINER_ENGINE) save -o /tmp/minikube-images/operator.tar localhost/$(OPERATOR_IMAGE)
 	@$(CONTAINER_ENGINE) save -o /tmp/minikube-images/runner.tar localhost/$(RUNNER_IMAGE)
 	@$(CONTAINER_ENGINE) save -o /tmp/minikube-images/api-server.tar localhost/$(API_SERVER_IMAGE)
+	@$(CONTAINER_ENGINE) save -o /tmp/minikube-images/mcp.tar localhost/$(MCP_IMAGE)
 	@minikube image load /tmp/minikube-images/backend.tar $(QUIET_REDIRECT)
 	@minikube image load /tmp/minikube-images/frontend.tar $(QUIET_REDIRECT)
 	@minikube image load /tmp/minikube-images/operator.tar $(QUIET_REDIRECT)
 	@minikube image load /tmp/minikube-images/runner.tar $(QUIET_REDIRECT)
 	@minikube image load /tmp/minikube-images/api-server.tar $(QUIET_REDIRECT)
+	@minikube image load /tmp/minikube-images/mcp.tar $(QUIET_REDIRECT)
 	@rm -rf /tmp/minikube-images
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Images built and loaded"
 
