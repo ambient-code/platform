@@ -67,7 +67,7 @@ func (a *AgentAPI) Start(ctx context.Context, projectID, agentID, prompt string)
 	}
 	var result types.StartResponse
 	path := "/projects/" + url.PathEscape(projectID) + "/agents/" + url.PathEscape(agentID) + "/start"
-	if err := a.client.doMultiStatus(ctx, http.MethodPost, path, body, &result, http.StatusOK, http.StatusCreated); err != nil {
+	if err := a.client.do(ctx, http.MethodPost, path, body, http.StatusOK, &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
@@ -139,39 +139,3 @@ func (a *AgentAPI) PatchAnnotationsInProject(ctx context.Context, projectID, age
 	return a.UpdateInProject(ctx, projectID, agentID, map[string]any{"annotations": string(b)})
 }
 
-func (a *InboxMessageAPI) Send(ctx context.Context, projectID, agentID string, msg *types.InboxMessage) (*types.InboxMessage, error) {
-	body, err := json.Marshal(msg)
-	if err != nil {
-		return nil, fmt.Errorf("marshal inbox message: %w", err)
-	}
-	var result types.InboxMessage
-	path := "/projects/" + url.PathEscape(projectID) + "/agents/" + url.PathEscape(agentID) + "/inbox"
-	if err := a.client.do(ctx, http.MethodPost, path, body, http.StatusCreated, &result); err != nil {
-		return nil, err
-	}
-	return &result, nil
-}
-
-func (a *InboxMessageAPI) ListByAgent(ctx context.Context, projectID, agentID string, opts *types.ListOptions) (*types.InboxMessageList, error) {
-	var result types.InboxMessageList
-	path := "/projects/" + url.PathEscape(projectID) + "/agents/" + url.PathEscape(agentID) + "/inbox"
-	if err := a.client.doWithQuery(ctx, http.MethodGet, path, nil, http.StatusOK, &result, opts); err != nil {
-		return nil, err
-	}
-	return &result, nil
-}
-
-func (a *InboxMessageAPI) MarkRead(ctx context.Context, projectID, agentID, msgID string) error {
-	patch := map[string]any{"read": true}
-	body, err := json.Marshal(patch)
-	if err != nil {
-		return fmt.Errorf("marshal patch: %w", err)
-	}
-	path := "/projects/" + url.PathEscape(projectID) + "/agents/" + url.PathEscape(agentID) + "/inbox/" + url.PathEscape(msgID)
-	return a.client.do(ctx, http.MethodPatch, path, body, http.StatusOK, nil)
-}
-
-func (a *InboxMessageAPI) DeleteMessage(ctx context.Context, projectID, agentID, msgID string) error {
-	path := "/projects/" + url.PathEscape(projectID) + "/agents/" + url.PathEscape(agentID) + "/inbox/" + url.PathEscape(msgID)
-	return a.client.do(ctx, http.MethodDelete, path, nil, http.StatusNoContent, nil)
-}

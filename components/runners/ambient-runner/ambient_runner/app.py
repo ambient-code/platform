@@ -33,14 +33,16 @@ import aiohttp
 from fastapi import FastAPI
 
 from ambient_runner.bridge import PlatformBridge
+from ambient_runner.bridges.claude.bridge import ClaudeBridge
 from ambient_runner.platform.config import load_ambient_config
 from ambient_runner.platform.context import RunnerContext
 from ambient_runner.platform.utils import parse_owner_repo
 
 # Configure root logger so all ambient_runner.* and ag_ui_* loggers
 # have a handler and respect the LOG_LEVEL env var.
+_log_level_str = os.getenv("LOG_LEVEL", "DEBUG" if os.getenv("DEBUG", "").lower() in ("1", "true") else "INFO").upper()
 logging.basicConfig(
-    level=getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO),
+    level=getattr(logging, _log_level_str, logging.INFO),
     format="%(levelname)s:%(name)s:%(message)s",
 )
 
@@ -111,6 +113,18 @@ def create_ambient_app(
         )
         bridge.set_context(context)
 
+        # Eager gRPC listener setup (ClaudeBridge only).
+        # Must complete before INITIAL_PROMPT is dispatched so the listener
+        # is subscribed before PushSessionMessage fires.
+        grpc_url = os.getenv("AMBIENT_GRPC_URL", "").strip()
+        if grpc_url and isinstance(bridge, ClaudeBridge):
+            await bridge._setup_platform()
+            await bridge._grpc_listener.ready.wait()
+            logger.info(
+                "gRPC listener ready for session %s — proceeding to INITIAL_PROMPT",
+                session_id,
+            )
+
         # Resume detection
         is_resume = os.getenv("IS_RESUME", "").strip().lower() == "true"
         if is_resume:
@@ -148,7 +162,7 @@ def create_ambient_app(
                     f"Auto-executing combined prompt ({len(combined_prompt)} chars)"
                 )
                 task = asyncio.create_task(
-                    _auto_execute_initial_prompt(combined_prompt, session_id)
+                    _auto_execute_initial_prompt(combined_prompt, session_id, grpc_url)
                 )
                 task.add_done_callback(_log_auto_exec_failure)
         else:
@@ -211,6 +225,7 @@ def add_ambient_endpoints(
     app.state.bridge = bridge
 
     # Core endpoints (always registered)
+    from ambient_runner.endpoints.events import router as events_router
     from ambient_runner.endpoints.health import router as health_router
     from ambient_runner.endpoints.interrupt import router as interrupt_router
     from ambient_runner.endpoints.run import router as run_router
@@ -218,6 +233,7 @@ def add_ambient_endpoints(
     app.include_router(run_router)
     app.include_router(interrupt_router)
     app.include_router(health_router)
+    app.include_router(events_router)
 
     # Optional platform endpoints
     if enable_capabilities:
@@ -310,33 +326,78 @@ _AUTO_PROMPT_INITIAL_DELAY = 2.0
 _AUTO_PROMPT_MAX_DELAY = 30.0
 
 
-async def _auto_execute_initial_prompt(prompt: str, session_id: str) -> None:
-    """Auto-execute INITIAL_PROMPT on session startup with retry backoff.
+async def _push_initial_prompt_via_grpc(prompt: str, session_id: str) -> None:
+    """Push INITIAL_PROMPT as a PushSessionMessage so it is durable in DB."""
+    import json as _json
 
-    The runner pod may be ready before the K8s Service DNS propagates,
-    so the first few attempts can fail with "runner not available".
-    Retries with exponential backoff until the backend accepts the request.
+    try:
+        from ambient_runner._grpc_client import AmbientGRPCClient
+
+        client = AmbientGRPCClient.from_env()
+        payload = {
+            "threadId": session_id,
+            "runId": str(uuid.uuid4()),
+            "messages": [
+                {
+                    "id": str(uuid.uuid4()),
+                    "role": "user",
+                    "content": prompt,
+                    "metadata": {
+                        "hidden": True,
+                        "autoSent": True,
+                        "source": "runner_initial_prompt",
+                    },
+                }
+            ],
+        }
+        result = client.session_messages.push(
+            session_id,
+            event_type="user",
+            payload=_json.dumps(payload),
+        )
+        if result is not None:
+            logger.info(
+                "INITIAL_PROMPT pushed via gRPC: session=%s seq=%d",
+                session_id,
+                result.seq,
+            )
+        else:
+            logger.warning(
+                "INITIAL_PROMPT gRPC push returned None: session=%s",
+                session_id,
+            )
+        client.close()
+    except Exception as exc:
+        logger.error(
+            "INITIAL_PROMPT gRPC push failed: session=%s error=%s",
+            session_id,
+            exc,
+            exc_info=True,
+        )
+
+
+async def _auto_execute_initial_prompt(
+    prompt: str, session_id: str, grpc_url: str = ""
+) -> None:
+    """Auto-execute INITIAL_PROMPT on session startup.
+
+    When AMBIENT_GRPC_URL is set, pushes the initial prompt as a DB Message
+    via PushSessionMessage so the GRPCSessionListener picks it up and triggers
+    the run directly.
+
+    When AMBIENT_GRPC_URL is not set, falls back to the original HTTP POST
+    path with exponential-backoff retry (for DNS propagation races).
     """
     delay_seconds = float(os.getenv("INITIAL_PROMPT_DELAY_SECONDS", "2"))
     logger.info(f"Waiting {delay_seconds}s before auto-executing INITIAL_PROMPT...")
     await asyncio.sleep(delay_seconds)
 
-    backend_url = os.getenv("BACKEND_API_URL", "").rstrip("/")
-    project_name = (
-        os.getenv("PROJECT_NAME", "").strip()
-        or os.getenv("AGENTIC_SESSION_NAMESPACE", "").strip()
-    )
-
-    if not backend_url or not project_name:
-        logger.error(
-            "Cannot auto-execute INITIAL_PROMPT: "
-            "BACKEND_API_URL or PROJECT_NAME not set"
-        )
+    if grpc_url:
+        await _push_initial_prompt_via_grpc(prompt, session_id)
         return
 
-    url = (
-        f"{backend_url}/projects/{project_name}/agentic-sessions/{session_id}/agui/run"
-    )
+    agui_port = os.getenv("AGUI_PORT", "8001")
+    url = f"http://localhost:{agui_port}/"
 
     payload = {
         "threadId": session_id,

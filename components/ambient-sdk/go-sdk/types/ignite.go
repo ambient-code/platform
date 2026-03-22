@@ -9,6 +9,10 @@ type IgniteResponse struct {
 	IgnitionContext string   `json:"ignition_context,omitempty"`
 }
 
+type StartRequest = IgniteRequest
+
+type StartResponse = IgniteResponse
+
 type ProjectHome struct {
 	ProjectID string            `json:"project_id,omitempty"`
 	Agents    []ProjectHomeAgent `json:"agents,omitempty"`
