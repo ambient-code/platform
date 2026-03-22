@@ -775,42 +775,75 @@ kind-down: ## Stop and delete kind cluster
 	@cd e2e && KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/cleanup.sh
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Kind cluster '$(KIND_CLUSTER_NAME)' deleted"
 
-kind-login: check-kubectl check-local-context ## Set kubectl context, port-forward services, configure acpctl, print test token
-	@echo "$(COLOR_BOLD)Kind Login: $(KIND_CLUSTER_NAME)$(COLOR_RESET)"
-	@echo ""
-	@if [ "$(CONTAINER_ENGINE)" = "podman" ]; then \
-		echo "using podman due to KIND_EXPERIMENTAL_PROVIDER"; \
-		echo "enabling experimental podman provider"; \
-		KIND_EXPERIMENTAL_PROVIDER=podman kubectl config use-context kind-$(KIND_CLUSTER_NAME) 2>/dev/null || \
-			kubectl config use-context kind-$(KIND_CLUSTER_NAME); \
+kind-login: check-kubectl ## Set kubectl context, port-forward all services (HTTP+gRPC), configure acpctl, print summary
+	@CLUSTER=$$($(CONTAINER_ENGINE) ps --format '{{.Names}}' 2>/dev/null | grep -oE 'ambient-[a-z0-9-]+-control-plane' | sed 's/-control-plane$$//' | head -1); \
+	if [ -z "$$CLUSTER" ]; then \
+		CLUSTER="$(KIND_CLUSTER_NAME)"; \
+		echo "$(COLOR_YELLOW)Warning: no running kind cluster found in $(CONTAINER_ENGINE) — using default: $$CLUSTER$(COLOR_RESET)"; \
+	fi; \
+	echo "$(COLOR_BOLD)Kind Login: $$CLUSTER$(COLOR_RESET)"; \
+	echo ""; \
+	kubectl config use-context kind-$$CLUSTER 2>/dev/null || { \
+		echo "$(COLOR_RED)✗$(COLOR_RESET) Context 'kind-$$CLUSTER' not found in kubeconfig"; \
+		exit 1; \
+	}; \
+	echo "$(COLOR_GREEN)✓$(COLOR_RESET) kubeconfig context → kind-$$CLUSTER"; \
+	echo ""; \
+	echo "$(COLOR_BOLD)Stopping stale port-forwards...$(COLOR_RESET)"; \
+	kill $$(ps -eo pid,comm,args | awk '$$2=="kubectl" && /port-forward/ && /ambient-api-server/ {print $$1}') 2>/dev/null; true; \
+	kill $$(ps -eo pid,comm,args | awk '$$2=="kubectl" && /port-forward/ && /frontend-service/ {print $$1}') 2>/dev/null; true; \
+	sleep 1; \
+	echo "$(COLOR_BOLD)Starting port-forwards...$(COLOR_RESET)"; \
+	mkdir -p /tmp/ambient-pf; \
+	kubectl port-forward -n $(NAMESPACE) svc/ambient-api-server \
+		$(KIND_FWD_API_SERVER_PORT):8000 9000:9000 \
+		>/tmp/ambient-pf/api-server.log 2>&1 & \
+	echo $$! > /tmp/ambient-pf/api-server.pid; \
+	kubectl port-forward -n $(NAMESPACE) svc/frontend-service \
+		$(KIND_FWD_FRONTEND_PORT):3000 \
+		>/tmp/ambient-pf/frontend.log 2>&1 & \
+	echo $$! > /tmp/ambient-pf/frontend.pid; \
+	sleep 2; \
+	API_OK=0; GRPC_OK=0; FE_OK=0; \
+	ps -p $$(cat /tmp/ambient-pf/api-server.pid 2>/dev/null) >/dev/null 2>&1 && API_OK=1; \
+	ps -p $$(cat /tmp/ambient-pf/api-server.pid 2>/dev/null) >/dev/null 2>&1 && GRPC_OK=1; \
+	ps -p $$(cat /tmp/ambient-pf/frontend.pid 2>/dev/null) >/dev/null 2>&1 && FE_OK=1; \
+	if [ "$$API_OK" = "1" ]; then \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) ambient-api-server → http://localhost:$(KIND_FWD_API_SERVER_PORT)  (REST)"; \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) ambient-api-server → grpc://localhost:9000                        (gRPC WatchSessionMessages)"; \
 	else \
-		kubectl config use-context kind-$(KIND_CLUSTER_NAME); \
-	fi
-	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) kubeconfig set to kind-$(KIND_CLUSTER_NAME)"
-	@echo ""
-	@echo "Starting port-forwards..."
-	@pkill -f "port-forward.*ambient-api-server-service" 2>/dev/null || true
-	@pkill -f "port-forward.*frontend-service" 2>/dev/null || true
-	@kubectl port-forward -n $(NAMESPACE) svc/ambient-api-server-service $(KIND_FWD_API_SERVER_PORT):8000 >/tmp/pf-api-server.log 2>&1 & \
-		sleep 1; \
-		echo "$(COLOR_GREEN)✓$(COLOR_RESET) ambient-api-server → http://localhost:$(KIND_FWD_API_SERVER_PORT)"
-	@kubectl port-forward -n $(NAMESPACE) svc/frontend-service $(KIND_FWD_FRONTEND_PORT):3000 >/tmp/pf-frontend.log 2>&1 & \
-		sleep 1; \
-		echo "$(COLOR_GREEN)✓$(COLOR_RESET) frontend          → http://localhost:$(KIND_FWD_FRONTEND_PORT)"
-	@echo ""
-	@echo "Configuring acpctl..."
-	@TOKEN=$$(kubectl get secret test-user-token -n $(NAMESPACE) -o jsonpath='{.data.token}' 2>/dev/null | base64 -d 2>/dev/null); \
+		echo "$(COLOR_RED)✗$(COLOR_RESET) ambient-api-server port-forward failed — check /tmp/ambient-pf/api-server.log"; \
+	fi; \
+	if [ "$$FE_OK" = "1" ]; then \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) frontend           → http://localhost:$(KIND_FWD_FRONTEND_PORT)"; \
+	else \
+		echo "$(COLOR_RED)✗$(COLOR_RESET) frontend port-forward failed — check /tmp/ambient-pf/frontend.log"; \
+	fi; \
+	echo ""; \
+	echo "$(COLOR_BOLD)Configuring acpctl...$(COLOR_RESET)"; \
+	TOKEN=$$(kubectl get secret test-user-token -n $(NAMESPACE) -o jsonpath='{.data.token}' 2>/dev/null | base64 -d 2>/dev/null); \
 	if [ -z "$$TOKEN" ]; then \
-		echo "$(COLOR_YELLOW)Warning: test-user-token not found — acpctl not configured$(COLOR_RESET)"; \
+		echo "$(COLOR_YELLOW)Warning: test-user-token not available — acpctl not configured$(COLOR_RESET)"; \
+		echo "  Run 'make local-dev-token' or wait for the cluster to finish initializing."; \
 	else \
-		components/ambient-cli/acpctl login --url http://localhost:$(KIND_FWD_API_SERVER_PORT) --token "$$TOKEN" 2>/dev/null || \
-			./acpctl login --url http://localhost:$(KIND_FWD_API_SERVER_PORT) --token "$$TOKEN" 2>/dev/null || \
+		ACPCTL=; \
+		if [ -x "components/ambient-cli/acpctl" ]; then ACPCTL="components/ambient-cli/acpctl"; \
+		elif command -v acpctl >/dev/null 2>&1; then ACPCTL="acpctl"; \
+		fi; \
+		if [ -n "$$ACPCTL" ]; then \
+			$$ACPCTL login --url http://localhost:$(KIND_FWD_API_SERVER_PORT) --token "$$TOKEN" 2>/dev/null && \
+				echo "$(COLOR_GREEN)✓$(COLOR_RESET) acpctl configured  → http://localhost:$(KIND_FWD_API_SERVER_PORT)" || \
+				echo "$(COLOR_YELLOW)Warning: acpctl login failed$(COLOR_RESET)"; \
+		else \
 			echo "$(COLOR_YELLOW)Warning: acpctl not built — run 'make build-cli' first$(COLOR_RESET)"; \
-		echo "$(COLOR_GREEN)✓$(COLOR_RESET) acpctl configured: http://localhost:$(KIND_FWD_API_SERVER_PORT)"; \
+		fi; \
 		echo ""; \
-		echo "Test token:"; \
+		echo "$(COLOR_BOLD)Test token:$(COLOR_RESET)"; \
 		echo "$$TOKEN"; \
-	fi
+	fi; \
+	echo ""; \
+	echo "$(COLOR_BOLD)Port-forward logs:$(COLOR_RESET)  /tmp/ambient-pf/"; \
+	echo "$(COLOR_BOLD)Stop with:$(COLOR_RESET)          make local-stop-port-forward"
 
 kind-port-forward: check-kubectl check-local-context ## Port-forward kind services (for remote Podman)
 	@echo "$(COLOR_BOLD)Port forwarding kind services ($(KIND_CLUSTER_NAME))$(COLOR_RESET)"
@@ -1128,17 +1161,21 @@ _auto-port-forward: ## Internal: Auto-start port forwarding on macOS with Podman
 		fi; \
 	fi
 
-local-stop-port-forward: ## Stop background port forwarding
-	@if [ -f /tmp/ambient-code/port-forward-backend.pid ]; then \
-		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Stopping port forwarding..."; \
-		if ps -p $$(cat /tmp/ambient-code/port-forward-backend.pid 2>/dev/null) > /dev/null 2>&1; then \
-			kill $$(cat /tmp/ambient-code/port-forward-backend.pid) 2>/dev/null || true; \
-			echo "  Stopped backend port forward"; \
+local-stop-port-forward: ## Stop background port forwarding (minikube and kind)
+	@STOPPED=0; \
+	for pidfile in /tmp/ambient-pf/*.pid /tmp/ambient-code/port-forward-*.pid; do \
+		[ -f "$$pidfile" ] || continue; \
+		PID=$$(cat "$$pidfile" 2>/dev/null); \
+		[ -z "$$PID" ] && continue; \
+		if ps -p $$PID >/dev/null 2>&1; then \
+			kill $$PID 2>/dev/null || true; \
+			STOPPED=$$((STOPPED+1)); \
 		fi; \
-		if ps -p $$(cat /tmp/ambient-code/port-forward-frontend.pid 2>/dev/null) > /dev/null 2>&1; then \
-			kill $$(cat /tmp/ambient-code/port-forward-frontend.pid) 2>/dev/null || true; \
-			echo "  Stopped frontend port forward"; \
-		fi; \
-		rm -f /tmp/ambient-code/port-forward-*.pid /tmp/ambient-code/port-forward-*.log; \
-		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Port forwarding stopped"; \
+		rm -f "$$pidfile"; \
+	done; \
+	rm -f /tmp/ambient-pf/*.log /tmp/ambient-code/port-forward-*.log 2>/dev/null; \
+	if [ "$$STOPPED" -gt 0 ]; then \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Stopped $$STOPPED port-forward process(es)"; \
+	else \
+		echo "$(COLOR_YELLOW)⚠$(COLOR_RESET)  No active port-forwards found"; \
 	fi
