@@ -27,6 +27,142 @@ const grpcDefaultPort = "9000"
 
 var defaultOpenShiftPatterns = []string{"apps.rosa", "apps.ocp", "apps.openshift"}
 
+// MessageWatcher streams session messages from a single session via gRPC.
+type MessageWatcher struct {
+	conn          *grpc.ClientConn
+	msgs          chan *types.SessionMessage
+	errors        chan error
+	ctx           context.Context
+	cancel        context.CancelFunc
+	timeoutCancel context.CancelFunc
+	done          chan struct{}
+}
+
+// Messages returns a channel of session messages as they arrive.
+func (w *MessageWatcher) Messages() <-chan *types.SessionMessage {
+	return w.msgs
+}
+
+// Errors returns a channel of stream errors.
+func (w *MessageWatcher) Errors() <-chan error {
+	return w.errors
+}
+
+// Done returns a channel closed when the watcher stops.
+func (w *MessageWatcher) Done() <-chan struct{} {
+	return w.done
+}
+
+// Stop closes the watcher and releases resources.
+func (w *MessageWatcher) Stop() {
+	if w.timeoutCancel != nil {
+		w.timeoutCancel()
+	}
+	w.cancel()
+	if w.conn != nil {
+		_ = w.conn.Close()
+	}
+}
+
+func (w *MessageWatcher) receive(stream grpc.ServerStreamingClient[ambient_v1.SessionMessage]) {
+	defer close(w.done)
+	defer close(w.msgs)
+	defer close(w.errors)
+
+	for {
+		select {
+		case <-w.ctx.Done():
+			return
+		default:
+			pbMsg, err := stream.Recv()
+			if err != nil {
+				if err == io.EOF {
+					return
+				}
+				select {
+				case w.errors <- fmt.Errorf("watch stream error: %w", err):
+				case <-w.ctx.Done():
+				}
+				return
+			}
+			msg := protoMsgToSessionMessage(pbMsg)
+			select {
+			case w.msgs <- msg:
+			case <-w.ctx.Done():
+				return
+			}
+		}
+	}
+}
+
+// WatchSessionMessages opens a gRPC stream for real-time session message delivery.
+// afterSeq sets the replay cursor — pass 0 to replay all messages from the beginning.
+// Call Stop() on the returned watcher to cancel and clean up.
+func (a *SessionAPI) WatchSessionMessages(ctx context.Context, sessionID string, afterSeq int64, opts *WatchOptions) (*MessageWatcher, error) {
+	if opts == nil {
+		opts = &WatchOptions{Timeout: 30 * time.Minute}
+	}
+
+	conn, err := a.createGRPCConnection()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create gRPC connection: %w", err)
+	}
+
+	grpcClient := ambient_v1.NewSessionServiceClient(conn)
+
+	md := metadata.New(map[string]string{
+		"authorization":     "Bearer " + a.client.token,
+		"x-ambient-project": a.client.project,
+	})
+
+	watchCtx, watchCancel := context.WithCancel(ctx)
+	watcher := &MessageWatcher{
+		conn:   conn,
+		msgs:   make(chan *types.SessionMessage, 64),
+		errors: make(chan error, 5),
+		ctx:    watchCtx,
+		cancel: watchCancel,
+		done:   make(chan struct{}),
+	}
+
+	streamCtx := metadata.NewOutgoingContext(watchCtx, md)
+	if opts.Timeout > 0 {
+		var timeoutCancel context.CancelFunc
+		streamCtx, timeoutCancel = context.WithTimeout(streamCtx, opts.Timeout)
+		watcher.timeoutCancel = timeoutCancel
+	}
+
+	stream, err := grpcClient.WatchSessionMessages(streamCtx, &ambient_v1.WatchSessionMessagesRequest{
+		SessionId: sessionID,
+		AfterSeq:  afterSeq,
+	})
+	// stream type: grpc.ServerStreamingClient[ambient_v1.SessionMessage]
+	if err != nil {
+		watchCancel()
+		_ = conn.Close()
+		return nil, fmt.Errorf("failed to start WatchSessionMessages stream: %w", err)
+	}
+
+	go watcher.receive(stream)
+
+	return watcher, nil
+}
+
+func protoMsgToSessionMessage(pb *ambient_v1.SessionMessage) *types.SessionMessage {
+	msg := &types.SessionMessage{
+		SessionID: pb.GetSessionId(),
+		Seq:       int(pb.GetSeq()),
+		EventType: pb.GetEventType(),
+		Payload:   pb.GetPayload(),
+	}
+	msg.ID = pb.GetId()
+	if pb.GetCreatedAt() != nil {
+		t := pb.GetCreatedAt().AsTime()
+		msg.CreatedAt = &t
+	}
+	return msg
+}
+
 // SessionWatcher provides real-time session events
 type SessionWatcher struct {
 	stream        ambient_v1.SessionService_WatchSessionsClient

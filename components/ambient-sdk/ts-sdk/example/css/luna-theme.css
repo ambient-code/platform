@@ -1,0 +1,390 @@
+/*
+ * Luna Dark Theme — Agent Boss Mission Control
+ *
+ * Palette extracted from Luna Admin Theme:
+ *   --luna-bg:          #1a1d2e  (page background, deep navy)
+ *   --luna-surface:     #1e2236  (card / panel surface)
+ *   --luna-sidebar:     #151722  (sidebar + topnav)
+ *   --luna-border:      #2a2f4a  (borders, dividers)
+ *   --luna-accent:      #f5a623  (primary amber/gold accent)
+ *   --luna-accent-dim:  #c47f0a  (darker accent for hover)
+ *   --luna-text:        #e8eaf0  (primary text)
+ *   --luna-muted:       #7b849a  (muted/secondary text)
+ *   --luna-success:     #2ecc71  (green)
+ *   --luna-danger:      #e74c3c  (red)
+ *   --luna-warning:     #f5a623  (amber — same as accent)
+ *   --luna-info:        #3498db  (blue)
+ */
+
+:root {
+    --luna-bg:         #1a1d2e;
+    --luna-surface:    #1e2236;
+    --luna-sidebar:    #151722;
+    --luna-border:     #2a2f4a;
+    --luna-accent:     #f5a623;
+    --luna-accent-dim: #c47f0a;
+    --luna-text:       #e8eaf0;
+    --luna-muted:      #7b849a;
+    --luna-success:    #2ecc71;
+    --luna-danger:     #e74c3c;
+    --luna-warning:    #f5a623;
+    --luna-info:       #3498db;
+}
+
+/* ── Page background ─────────────────────────────────────────── */
+body {
+    background-color: var(--luna-bg);
+    color: var(--luna-text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+/* ── Topnav ──────────────────────────────────────────────────── */
+.sb-topnav.navbar-dark.bg-dark {
+    background-color: var(--luna-sidebar) !important;
+    border-bottom: 1px solid var(--luna-border);
+}
+
+.sb-topnav .navbar-brand {
+    color: var(--luna-accent) !important;
+    font-weight: 700;
+    letter-spacing: .03em;
+}
+
+.sb-topnav .nav-link,
+.sb-topnav .btn-link {
+    color: var(--luna-muted) !important;
+}
+
+.sb-topnav .nav-link:hover,
+.sb-topnav .btn-link:hover {
+    color: var(--luna-text) !important;
+}
+
+/* ── Sidebar ─────────────────────────────────────────────────── */
+.sb-sidenav-dark {
+    background-color: var(--luna-sidebar) !important;
+    color: var(--luna-muted);
+    border-right: 1px solid var(--luna-border);
+}
+
+.sb-sidenav-dark .sb-sidenav-menu .sb-sidenav-menu-heading {
+    color: var(--luna-muted);
+    font-size: .7rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    padding: 1rem 1rem .25rem;
+}
+
+.sb-sidenav-dark .sb-sidenav-menu .nav-link {
+    color: var(--luna-muted);
+    border-radius: .375rem;
+    margin: .1rem .5rem;
+    padding: .55rem .75rem;
+    transition: background .15s, color .15s;
+}
+
+.sb-sidenav-dark .sb-sidenav-menu .nav-link .sb-nav-link-icon {
+    color: var(--luna-muted);
+    margin-right: .6rem;
+    width: 1.1rem;
+    text-align: center;
+}
+
+.sb-sidenav-dark .sb-sidenav-menu .nav-link:hover {
+    background-color: rgba(245, 166, 35, 0.1);
+    color: var(--luna-accent);
+}
+
+.sb-sidenav-dark .sb-sidenav-menu .nav-link:hover .sb-nav-link-icon {
+    color: var(--luna-accent);
+}
+
+.sb-sidenav-dark .sb-sidenav-menu .nav-link.active {
+    background-color: rgba(245, 166, 35, 0.15);
+    color: var(--luna-accent);
+    border-left: 3px solid var(--luna-accent);
+}
+
+.sb-sidenav-dark .sb-sidenav-menu .nav-link.active .sb-nav-link-icon {
+    color: var(--luna-accent);
+}
+
+.sb-sidenav-dark .sb-sidenav-footer {
+    background-color: rgba(0,0,0,.2);
+    color: var(--luna-muted);
+    border-top: 1px solid var(--luna-border);
+    font-size: .8rem;
+}
+
+/* ── Main content area ───────────────────────────────────────── */
+#layoutSidenav_content main {
+    background-color: var(--luna-bg);
+}
+
+h1, h2, h3, h4, h5, h6 {
+    color: var(--luna-text);
+}
+
+.breadcrumb-item,
+.breadcrumb-item.active {
+    color: var(--luna-muted);
+}
+
+/* ── Cards ───────────────────────────────────────────────────── */
+.card {
+    background-color: var(--luna-surface);
+    border: 1px solid var(--luna-border);
+    color: var(--luna-text);
+    box-shadow: 0 2px 12px rgba(0,0,0,.3);
+}
+
+.card-header {
+    background-color: rgba(0,0,0,.2);
+    border-bottom: 1px solid var(--luna-border);
+    color: var(--luna-text);
+    font-weight: 600;
+}
+
+/* Summary stat cards */
+.card.bg-primary {
+    background: linear-gradient(135deg, #1b3a6b 0%, #1e4a8a 100%) !important;
+    border-color: #1e4a8a !important;
+}
+
+.card.bg-success {
+    background: linear-gradient(135deg, #1a5c38 0%, #1e7042 100%) !important;
+    border-color: #1e7042 !important;
+}
+
+.card.bg-danger {
+    background: linear-gradient(135deg, #6b1a1a 0%, #8a1e1e 100%) !important;
+    border-color: #8a1e1e !important;
+}
+
+.card.bg-warning {
+    background: linear-gradient(135deg, #7a5010 0%, var(--luna-accent-dim) 100%) !important;
+    border-color: var(--luna-accent-dim) !important;
+}
+
+/* ── Tables ──────────────────────────────────────────────────── */
+.table {
+    color: var(--luna-text);
+    border-color: var(--luna-border);
+}
+
+.table-dark {
+    background-color: var(--luna-sidebar) !important;
+    color: var(--luna-muted) !important;
+}
+
+.table-dark th {
+    border-color: var(--luna-border);
+    font-size: .75rem;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--luna-muted);
+}
+
+.table tbody tr {
+    border-color: var(--luna-border);
+}
+
+.table-hover tbody tr:hover {
+    background-color: rgba(245, 166, 35, 0.06);
+    color: var(--luna-text);
+}
+
+.table tbody td {
+    border-color: var(--luna-border);
+    vertical-align: middle;
+}
+
+.table-bordered {
+    border-color: var(--luna-border);
+}
+
+/* ── Badges ──────────────────────────────────────────────────── */
+.badge.bg-success  { background-color: var(--luna-success) !important; }
+.badge.bg-danger   { background-color: var(--luna-danger)  !important; }
+.badge.bg-warning  { background-color: var(--luna-warning) !important; color: #1a1d2e !important; }
+.badge.bg-info     { background-color: var(--luna-info)    !important; }
+.badge.bg-primary  { background-color: #3b82f6              !important; }
+.badge.bg-secondary{ background-color: #374151              !important; }
+
+/* ── Buttons ─────────────────────────────────────────────────── */
+.btn-primary {
+    background-color: var(--luna-accent);
+    border-color: var(--luna-accent);
+    color: #1a1d2e;
+    font-weight: 600;
+}
+.btn-primary:hover, .btn-primary:focus {
+    background-color: var(--luna-accent-dim);
+    border-color: var(--luna-accent-dim);
+    color: #1a1d2e;
+}
+
+.btn-success {
+    background-color: var(--luna-success);
+    border-color: var(--luna-success);
+    color: #1a1d2e;
+}
+.btn-success:hover {
+    background-color: #27ae60;
+    border-color: #27ae60;
+    color: #1a1d2e;
+}
+
+.btn-danger {
+    background-color: var(--luna-danger);
+    border-color: var(--luna-danger);
+}
+
+.btn-outline-secondary {
+    color: var(--luna-muted);
+    border-color: var(--luna-border);
+}
+.btn-outline-secondary:hover {
+    background-color: var(--luna-border);
+    color: var(--luna-text);
+    border-color: var(--luna-border);
+}
+
+.btn-sm {
+    font-size: .75rem;
+}
+
+/* ── Inbox panel ─────────────────────────────────────────────── */
+.inbox-channel {
+    border-left: 3px solid var(--luna-danger);
+    background: rgba(231, 76, 60, 0.08);
+    border-radius: 0 .375rem .375rem 0;
+    padding: .9rem 1rem;
+    margin-bottom: .75rem;
+}
+
+.inbox-cmd {
+    font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+    font-size: .82rem;
+    background: rgba(0,0,0,.3);
+    border: 1px solid var(--luna-border);
+    border-radius: .25rem;
+    padding: .5rem .75rem;
+    margin: .5rem 0;
+    white-space: pre-wrap;
+    word-break: break-all;
+    color: var(--luna-text);
+}
+
+/* ── Footer ──────────────────────────────────────────────────── */
+footer.bg-light {
+    background-color: var(--luna-sidebar) !important;
+    border-top: 1px solid var(--luna-border);
+    color: var(--luna-muted);
+}
+
+footer .text-muted {
+    color: var(--luna-muted) !important;
+}
+
+/* ── Modals ──────────────────────────────────────────────────── */
+.modal-content {
+    background-color: var(--luna-surface);
+    border: 1px solid var(--luna-border);
+    color: var(--luna-text);
+}
+
+.modal-header {
+    border-bottom: 1px solid var(--luna-border);
+}
+
+.modal-footer {
+    border-top: 1px solid var(--luna-border);
+}
+
+.btn-close {
+    filter: invert(1) grayscale(100%) brightness(200%);
+}
+
+/* ── Form controls ───────────────────────────────────────────── */
+.form-control,
+.form-select {
+    background-color: var(--luna-bg);
+    border: 1px solid var(--luna-border);
+    color: var(--luna-text);
+}
+
+.form-control:focus,
+.form-select:focus {
+    background-color: var(--luna-bg);
+    border-color: var(--luna-accent);
+    color: var(--luna-text);
+    box-shadow: 0 0 0 .2rem rgba(245, 166, 35, 0.2);
+}
+
+.form-label {
+    color: var(--luna-muted);
+    font-size: .85rem;
+    font-weight: 500;
+}
+
+/* ── Dropdown menus ──────────────────────────────────────────── */
+.dropdown-menu {
+    background-color: var(--luna-surface);
+    border: 1px solid var(--luna-border);
+}
+
+.dropdown-item {
+    color: var(--luna-text);
+}
+
+.dropdown-item:hover {
+    background-color: rgba(245, 166, 35, 0.1);
+    color: var(--luna-accent);
+}
+
+.dropdown-divider {
+    border-color: var(--luna-border);
+}
+
+/* ── Breadcrumb ──────────────────────────────────────────────── */
+.breadcrumb {
+    background: transparent;
+}
+
+.breadcrumb-item + .breadcrumb-item::before {
+    color: var(--luna-border);
+}
+
+/* ── SSE status dot ──────────────────────────────────────────── */
+#sseDot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; background: #374151; }
+#sseDot.connected { background: var(--luna-success); box-shadow: 0 0 6px var(--luna-success); }
+#sseDot.error     { background: var(--luna-danger);  box-shadow: 0 0 6px var(--luna-danger); }
+
+/* ── Toast ───────────────────────────────────────────────────── */
+.toast {
+    background-color: var(--luna-surface) !important;
+    border: 1px solid var(--luna-border) !important;
+}
+
+/* ── Text utilities override ─────────────────────────────────── */
+.text-muted { color: var(--luna-muted) !important; }
+.text-white-50 { color: rgba(232, 234, 240, 0.6) !important; }
+
+/* ── Session phase badges ────────────────────────────────────── */
+.badge.phase-running   { background-color: var(--luna-success) !important; }
+.badge.phase-pending   { background-color: var(--luna-warning) !important; color: #1a1d2e !important; }
+.badge.phase-completed { background-color: #374151 !important; }
+.badge.phase-failed    { background-color: var(--luna-danger)  !important; }
+
+/* ── Runtime badges ──────────────────────────────────────────── */
+.badge-runtime-tmux    { background-color: #3b82f6; }
+.badge-runtime-ambient { background-color: #8b5cf6; }
+.badge-runtime-paude   { background-color: var(--luna-accent); color: #1a1d2e; }
+.badge-runtime-runner  { background-color: var(--luna-success); color: #1a1d2e; }
+
+/* ── Scrollbar styling ───────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--luna-sidebar); }
+::-webkit-scrollbar-thumb { background: var(--luna-border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--luna-muted); }
