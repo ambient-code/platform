@@ -116,9 +116,9 @@ class ClaudeBridge(PlatformBridge):
         await populate_mcp_server_credentials(self._context)
         self._last_creds_refresh = time.monotonic()
 
-        # 4. If the caller changed, destroy the existing worker so a new
-        # Claude Code process starts with fresh env vars and MCP servers.
-        # The session ID is preserved so --resume picks up the conversation.
+        # 4. If the caller changed, destroy the existing worker and rebuild
+        # MCP servers so the new Claude Code process starts with the current
+        # user's credentials expanded in .mcp.json env blocks.
         thread_id = input_data.thread_id or self._context.session_id
         user_changed = current_user_id and current_user_id != prev_user and prev_user != ""
         if user_changed and self._session_manager.get_existing(thread_id):
@@ -127,6 +127,8 @@ class ClaudeBridge(PlatformBridge):
                 "restarting Claude client to refresh MCP servers"
             )
             await self._session_manager.destroy(thread_id)
+            # Rebuild MCP server config with current env vars (new user's creds)
+            self._rebuild_mcp_servers()
 
         # 5. Ensure adapter exists
         self._ensure_adapter()
@@ -418,6 +420,23 @@ class ClaudeBridge(PlatformBridge):
         self._mcp_servers = mcp_servers
         self._allowed_tools = allowed_tools
         self._system_prompt = system_prompt
+
+    def _rebuild_mcp_servers(self) -> None:
+        """Rebuild MCP server config with current env vars.
+
+        Called when the user changes so .mcp.json env blocks (e.g.,
+        ${JIRA_API_TOKEN}) are re-expanded with the new user's credentials.
+        """
+        from ambient_runner.bridges.claude.mcp import (
+            build_allowed_tools,
+            build_mcp_servers,
+        )
+
+        self._mcp_servers = build_mcp_servers(
+            self._context, self._cwd_path, self._obs
+        )
+        self._allowed_tools = build_allowed_tools(self._mcp_servers)
+        logger.info("Rebuilt MCP servers with updated credentials")
 
     # ------------------------------------------------------------------
     # Private: adapter lifecycle

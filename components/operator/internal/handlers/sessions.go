@@ -2448,19 +2448,26 @@ func regenerateRunnerToken(sessionNamespace, sessionName string, session *unstru
 		if !errors.IsAlreadyExists(err) {
 			return fmt.Errorf("create SA: %w", err)
 		}
-		log.Printf("[TokenProvision] ServiceAccount %s already exists, updating annotations", saName)
-		// Ensure the annotation is present on pre-existing SAs (e.g., restarts)
+		log.Printf("[TokenProvision] ServiceAccount %s already exists", saName)
+		// Ensure the annotation is present on pre-existing SAs (e.g., restarts).
+		// Skip the update if the annotation is already correct.
 		if len(saAnnotations) > 0 {
 			existingSA, getErr := config.K8sClient.CoreV1().ServiceAccounts(sessionNamespace).Get(context.TODO(), saName, v1.GetOptions{})
 			if getErr == nil {
+				needsUpdate := false
 				if existingSA.Annotations == nil {
 					existingSA.Annotations = make(map[string]string)
 				}
 				for k, v := range saAnnotations {
-					existingSA.Annotations[k] = v
+					if existingSA.Annotations[k] != v {
+						existingSA.Annotations[k] = v
+						needsUpdate = true
+					}
 				}
-				if _, updErr := config.K8sClient.CoreV1().ServiceAccounts(sessionNamespace).Update(context.TODO(), existingSA, v1.UpdateOptions{}); updErr != nil {
-					log.Printf("[TokenProvision] Warning: could not update SA annotations: %v", updErr)
+				if needsUpdate {
+					if _, updErr := config.K8sClient.CoreV1().ServiceAccounts(sessionNamespace).Update(context.TODO(), existingSA, v1.UpdateOptions{}); updErr != nil {
+						log.Printf("[TokenProvision] Warning: could not update SA annotations: %v", updErr)
+					}
 				}
 			}
 		}

@@ -17,6 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -34,38 +35,72 @@ func getEffectiveUserID(c *gin.Context, ownerUserID string) string {
 	return ownerUserID
 }
 
-// checkCredentialRBAC verifies that the authenticated user is authorized to
-// access credentials for the effective user. Returns true if authorized.
-//
-// For BOT_TOKEN callers (session ServiceAccount), only the session owner's
-// credentials are allowed. Per-user credential scoping is handled by
-// forwarding the caller's own bearer token (via X-Caller-Token header)
-// so the runner authenticates as the actual user — no impersonation possible.
-//
-// For direct user callers, the header is validated against their authenticated
-// identity — owner fallback only when no header is present.
-func checkCredentialRBAC(c *gin.Context, reqK8s kubernetes.Interface, ownerUserID, effectiveUserID string) bool {
-	authenticatedUserID := c.GetString("userID")
-
-	// If the middleware didn't resolve the identity (e.g., caller token
-	// forwarded from the runner bypasses the OAuth proxy), resolve it
-	// via SelfSubjectReview using the user-scoped K8s client.
-	if authenticatedUserID == "" && reqK8s != nil {
+// resolveAuthenticatedUser returns the authenticated user ID for the request.
+// Prefers the middleware-resolved userID; falls back to SelfSubjectReview for
+// forwarded caller tokens that bypass the OAuth proxy. Caches the result on
+// the gin context to avoid repeated K8s API calls within the same request.
+func resolveAuthenticatedUser(c *gin.Context, reqK8s kubernetes.Interface) string {
+	if uid := c.GetString("userID"); uid != "" {
+		return uid
+	}
+	// Check cache from a previous call in this request
+	if uid := c.GetString("resolvedUserID"); uid != "" {
+		return uid
+	}
+	if reqK8s != nil {
 		if resolved, err := resolveTokenIdentity(c.Request.Context(), reqK8s); err == nil {
-			authenticatedUserID = strings.ReplaceAll(resolved, ":", "-")
+			uid := strings.ReplaceAll(resolved, ":", "-")
+			c.Set("resolvedUserID", uid)
+			return uid
 		}
 	}
+	return ""
+}
 
+// enforceCredentialRBAC extracts the owner and effective user from the session
+// CR, checks RBAC, and returns the effectiveUserID to use for credential lookup.
+// Returns ("", false) if the request should be rejected.
+func enforceCredentialRBAC(c *gin.Context, reqK8s kubernetes.Interface, reqDyn dynamic.Interface, project, session string) (string, bool) {
+	gvr := GetAgenticSessionV1Alpha1Resource()
+	obj, err := reqDyn.Resource(gvr).Namespace(project).Get(c.Request.Context(), session, v1.GetOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Session not found"})
+		} else {
+			log.Printf("Failed to get session %s/%s: %v", project, session, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get session"})
+		}
+		return "", false
+	}
+
+	ownerUserID, found, err := unstructured.NestedString(obj.Object, "spec", "userContext", "userId")
+	if !found || err != nil || ownerUserID == "" {
+		log.Printf("Failed to extract userID from session %s/%s: found=%v, err=%v", project, session, found, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "User ID not found in session"})
+		return "", false
+	}
+
+	effectiveUserID := getEffectiveUserID(c, ownerUserID)
+	authenticatedUserID := resolveAuthenticatedUser(c, reqK8s)
+
+	// RBAC: BOT_TOKEN → owner only; user → must match effective user
+	allowed := false
 	if authenticatedUserID == "" {
-		// BOT_TOKEN (session ServiceAccount) - only allow owner credentials.
-		return effectiveUserID == ownerUserID
+		allowed = effectiveUserID == ownerUserID
+	} else if effectiveUserID == ownerUserID {
+		allowed = authenticatedUserID == ownerUserID
+	} else {
+		allowed = authenticatedUserID == effectiveUserID
 	}
-	if effectiveUserID == ownerUserID {
-		// No current-user header: owner accessing their own credentials
-		return authenticatedUserID == ownerUserID
+
+	if !allowed {
+		log.Printf("RBAC violation: user %s attempted access (owner=%s, current=%s)", authenticatedUserID, ownerUserID, effectiveUserID)
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return "", false
 	}
-	// Current-user header present: only allow if authenticated as that user
-	return authenticatedUserID == effectiveUserID
+
+	log.Printf("CREDENTIAL_ACCESS: session=%s/%s same_as_owner=%t", project, session, effectiveUserID == ownerUserID)
+	return effectiveUserID, true
 }
 
 // GetGitHubTokenForSession handles GET /api/projects/:project/agentic-sessions/:session/credentials/github
@@ -74,41 +109,14 @@ func GetGitHubTokenForSession(c *gin.Context) {
 	project := c.Param("projectName")
 	session := c.Param("sessionName")
 
-	// Get user-scoped K8s client
 	reqK8s, reqDyn := GetK8sClientsForRequest(c)
 	if reqK8s == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 		return
 	}
 
-	// Get userID from session CR
-	gvr := GetAgenticSessionV1Alpha1Resource()
-	obj, err := reqDyn.Resource(gvr).Namespace(project).Get(c.Request.Context(), session, v1.GetOptions{})
-	if err != nil {
-		if errors.IsNotFound(err) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Session not found"})
-			return
-		}
-		log.Printf("Failed to get session %s/%s: %v", project, session, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get session"})
-		return
-	}
-
-	// Extract userID from spec.userContext using type-safe unstructured helpers
-	ownerUserID, found, err := unstructured.NestedString(obj.Object, "spec", "userContext", "userId")
-	if !found || err != nil || ownerUserID == "" {
-		log.Printf("Failed to extract userID from session %s/%s: found=%v, err=%v", project, session, found, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "User ID not found in session"})
-		return
-	}
-
-	// Determine effective user for credential lookup (supports shared sessions)
-	effectiveUserID := getEffectiveUserID(c, ownerUserID)
-
-	// Verify authenticated user is authorized (RBAC: prevent accessing other users' credentials)
-	if !checkCredentialRBAC(c, reqK8s, ownerUserID, effectiveUserID) {
-		log.Printf("RBAC violation: user %s attempted access (owner=%s, current=%s)", c.GetString("userID"), ownerUserID, effectiveUserID)
-		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+	effectiveUserID, ok := enforceCredentialRBAC(c, reqK8s, reqDyn, project, session)
+	if !ok {
 		return
 	}
 
@@ -127,8 +135,6 @@ func GetGitHubTokenForSession(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
-
-	log.Printf("CREDENTIAL_ACCESS: type=github session=%s/%s same_as_owner=%t", project, session, effectiveUserID == ownerUserID)
 
 	// Fetch user identity from GitHub API for git config
 	// Fix for: GitHub credentials aren't mounted to session - need git identity
@@ -155,41 +161,14 @@ func GetGoogleCredentialsForSession(c *gin.Context) {
 	project := c.Param("projectName")
 	session := c.Param("sessionName")
 
-	// Get user-scoped K8s client
 	reqK8s, reqDyn := GetK8sClientsForRequest(c)
 	if reqK8s == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 		return
 	}
 
-	// Get userID from session CR
-	gvr := GetAgenticSessionV1Alpha1Resource()
-	obj, err := reqDyn.Resource(gvr).Namespace(project).Get(c.Request.Context(), session, v1.GetOptions{})
-	if err != nil {
-		if errors.IsNotFound(err) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Session not found"})
-			return
-		}
-		log.Printf("Failed to get session %s/%s: %v", project, session, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get session"})
-		return
-	}
-
-	// Extract userID from spec.userContext using type-safe unstructured helpers
-	ownerUserID, found, err := unstructured.NestedString(obj.Object, "spec", "userContext", "userId")
-	if !found || err != nil || ownerUserID == "" {
-		log.Printf("Failed to extract userID from session %s/%s: found=%v, err=%v", project, session, found, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "User ID not found in session"})
-		return
-	}
-
-	// Determine effective user for credential lookup (supports shared sessions)
-	effectiveUserID := getEffectiveUserID(c, ownerUserID)
-
-	// Verify authenticated user is authorized (RBAC: prevent accessing other users' credentials)
-	if !checkCredentialRBAC(c, reqK8s, ownerUserID, effectiveUserID) {
-		log.Printf("RBAC violation: user %s attempted access (owner=%s, current=%s)", c.GetString("userID"), ownerUserID, effectiveUserID)
-		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+	effectiveUserID, ok := enforceCredentialRBAC(c, reqK8s, reqDyn, project, session)
+	if !ok {
 		return
 	}
 
@@ -209,8 +188,6 @@ func GetGoogleCredentialsForSession(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Google credentials not configured"})
 		return
 	}
-
-	log.Printf("CREDENTIAL_ACCESS: type=google session=%s/%s same_as_owner=%t", project, session, effectiveUserID == ownerUserID)
 
 	// Check if token needs refresh
 	needsRefresh := time.Now().After(creds.ExpiresAt.Add(-5 * time.Minute)) // Refresh 5min before expiry
@@ -243,41 +220,14 @@ func GetJiraCredentialsForSession(c *gin.Context) {
 	project := c.Param("projectName")
 	session := c.Param("sessionName")
 
-	// Get user-scoped K8s client
 	reqK8s, reqDyn := GetK8sClientsForRequest(c)
 	if reqK8s == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 		return
 	}
 
-	// Get userID from session CR
-	gvr := GetAgenticSessionV1Alpha1Resource()
-	obj, err := reqDyn.Resource(gvr).Namespace(project).Get(c.Request.Context(), session, v1.GetOptions{})
-	if err != nil {
-		if errors.IsNotFound(err) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Session not found"})
-			return
-		}
-		log.Printf("Failed to get session %s/%s: %v", project, session, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get session"})
-		return
-	}
-
-	// Extract userID from spec.userContext using type-safe unstructured helpers
-	ownerUserID, found, err := unstructured.NestedString(obj.Object, "spec", "userContext", "userId")
-	if !found || err != nil || ownerUserID == "" {
-		log.Printf("Failed to extract userID from session %s/%s: found=%v, err=%v", project, session, found, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "User ID not found in session"})
-		return
-	}
-
-	// Determine effective user for credential lookup (supports shared sessions)
-	effectiveUserID := getEffectiveUserID(c, ownerUserID)
-
-	// Verify authenticated user is authorized (RBAC: prevent accessing other users' credentials)
-	if !checkCredentialRBAC(c, reqK8s, ownerUserID, effectiveUserID) {
-		log.Printf("RBAC violation: user %s attempted access (owner=%s, current=%s)", c.GetString("userID"), ownerUserID, effectiveUserID)
-		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+	effectiveUserID, ok := enforceCredentialRBAC(c, reqK8s, reqDyn, project, session)
+	if !ok {
 		return
 	}
 
@@ -294,8 +244,6 @@ func GetJiraCredentialsForSession(c *gin.Context) {
 		return
 	}
 
-	log.Printf("CREDENTIAL_ACCESS: type=jira session=%s/%s same_as_owner=%t", project, session, effectiveUserID == ownerUserID)
-
 	c.JSON(http.StatusOK, gin.H{
 		"url":      creds.URL,
 		"email":    creds.Email,
@@ -309,41 +257,14 @@ func GetGitLabTokenForSession(c *gin.Context) {
 	project := c.Param("projectName")
 	session := c.Param("sessionName")
 
-	// Get user-scoped K8s client
 	reqK8s, reqDyn := GetK8sClientsForRequest(c)
 	if reqK8s == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 		return
 	}
 
-	// Get userID from session CR
-	gvr := GetAgenticSessionV1Alpha1Resource()
-	obj, err := reqDyn.Resource(gvr).Namespace(project).Get(c.Request.Context(), session, v1.GetOptions{})
-	if err != nil {
-		if errors.IsNotFound(err) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Session not found"})
-			return
-		}
-		log.Printf("Failed to get session %s/%s: %v", project, session, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get session"})
-		return
-	}
-
-	// Extract userID from spec.userContext using type-safe unstructured helpers
-	ownerUserID, found, err := unstructured.NestedString(obj.Object, "spec", "userContext", "userId")
-	if !found || err != nil || ownerUserID == "" {
-		log.Printf("Failed to extract userID from session %s/%s: found=%v, err=%v", project, session, found, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "User ID not found in session"})
-		return
-	}
-
-	// Determine effective user for credential lookup (supports shared sessions)
-	effectiveUserID := getEffectiveUserID(c, ownerUserID)
-
-	// Verify authenticated user is authorized (RBAC: prevent accessing other users' credentials)
-	if !checkCredentialRBAC(c, reqK8s, ownerUserID, effectiveUserID) {
-		log.Printf("RBAC violation: user %s attempted access (owner=%s, current=%s)", c.GetString("userID"), ownerUserID, effectiveUserID)
-		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+	effectiveUserID, ok := enforceCredentialRBAC(c, reqK8s, reqDyn, project, session)
+	if !ok {
 		return
 	}
 
@@ -359,8 +280,6 @@ func GetGitLabTokenForSession(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "GitLab credentials not configured"})
 		return
 	}
-
-	log.Printf("CREDENTIAL_ACCESS: type=gitlab session=%s/%s same_as_owner=%t", project, session, effectiveUserID == ownerUserID)
 
 	// Fetch user identity from GitLab API for git config
 	// Fix for: need to distinguish between GitHub and GitLab providers
