@@ -323,6 +323,66 @@ const headers = {{
 
 ---
 
+## URL Patterns: Relative vs Absolute
+
+### When to Use Relative URLs (Browser/Dashboard Context)
+
+When creating HTML dashboards or web pages served from the **same origin** as the API:
+
+```javascript
+// ✅ Use relative URLs - authentication handled automatically
+const apiUrl = '/api/projects/{project_name}/agentic-sessions';
+
+fetch(apiUrl, {{
+    method: 'POST',
+    headers: {{
+        'Content-Type': 'application/json'
+        // ❌ NO Authorization header needed - handled by platform
+    }},
+    body: JSON.stringify(sessionData)
+}});
+```
+
+**Why this works:**
+- Browser automatically includes session cookies
+- Platform's proxy/routing handles authentication
+- No CORS issues
+- No need to expose auth tokens in client-side code
+
+**Use Cases:**
+- HTML dashboards served from Ambient
+- React/Vue apps bundled in the platform
+- Any browser-based UI within the same domain
+
+---
+
+### When to Use Absolute URLs (CLI/Scripts/External)
+
+When calling the API from **outside the browser** or from external tools:
+
+```javascript
+// ✅ Use absolute URLs with explicit authentication
+const apiUrl = '{backend_url}/projects/{project_name}/agentic-sessions';
+
+fetch(apiUrl, {{
+    method: 'POST',
+    headers: {{
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${{BOT_TOKEN}}`  // ✅ Required
+    }},
+    body: JSON.stringify(sessionData)
+}});
+```
+
+**Use Cases:**
+- CLI scripts (bash, python, etc.)
+- MCP servers
+- External integrations
+- Node.js backend services
+- Any non-browser context
+
+---
+
 ## Endpoints
 
 ### 1. List Sessions
@@ -461,19 +521,20 @@ const created = await response.json();
 console.log(`Created session: ${{created.name}}`);
 ```
 
-**HTML Button Example**:
+**HTML Button Example (Browser/Dashboard)**:
 ```html
 <button onclick="createSession()">Create Session</button>
 
 <script>
 async function createSession() {{
+    // ✅ Use relative URL when served from Ambient platform
     const response = await fetch(
-        '{backend_url}/projects/{project_name}/agentic-sessions',
+        '/api/projects/{project_name}/agentic-sessions',
         {{
             method: 'POST',
             headers: {{
-                'Content-Type': 'application/json',
-                'Authorization': 'Bearer {bot_token}'
+                'Content-Type': 'application/json'
+                // ❌ NO Authorization header - handled automatically
             }},
             body: JSON.stringify({{
                 sessionName: 'web-session-' + Date.now(),
@@ -486,6 +547,18 @@ async function createSession() {{
     alert('Created: ' + session.name);
 }}
 </script>
+```
+
+**For External Scripts (use absolute URL)**:
+```bash
+curl -X POST '{backend_url}/projects/{project_name}/agentic-sessions' \\
+  -H 'Content-Type: application/json' \\
+  -H 'Authorization: Bearer {bot_token}' \\
+  -d '{{
+    "sessionName": "cli-session",
+    "displayName": "CLI Session",
+    "initialPrompt": "Analyze the codebase"
+  }}'
 ```
 
 ---
@@ -582,15 +655,29 @@ fetch(url, {{
 }});
 ```
 
-### Frontend with Proxy
+### Frontend Direct (Recommended for Ambient Platform)
 ```javascript
-// Frontend calls your backend proxy (avoids exposing token)
+// ✅ When hosted on Ambient platform, use relative URLs directly
+// No proxy needed - authentication handled automatically
+fetch('/api/projects/{project_name}/agentic-sessions', {{
+    method: 'POST',
+    headers: {{
+        'Content-Type': 'application/json'
+    }},
+    body: JSON.stringify(sessionData)
+}});
+```
+
+### Frontend with Backend Proxy (External Hosting)
+```javascript
+// If hosting outside Ambient, create a backend proxy to avoid exposing tokens
+// Frontend calls your backend proxy (relative URL)
 fetch('/api/proxy/sessions', {{
     method: 'POST',
     body: JSON.stringify(sessionData)
 }});
 
-// Your backend proxy adds authentication
+// Your backend proxy uses absolute URL with authentication
 app.post('/api/proxy/sessions', async (req, res) => {{
     const response = await fetch(
         `${{BACKEND_URL}}/projects/${{PROJECT_NAME}}/agentic-sessions`,
@@ -652,7 +739,7 @@ try {{
 
 ## Common Integration Patterns
 
-### Dashboard with Session List
+### Dashboard with Session List (Browser Context)
 ```html
 <!DOCTYPE html>
 <html>
@@ -664,18 +751,17 @@ try {{
 
     <script>
     const API = {{
-        baseUrl: '{backend_url}',
         project: '{project_name}',
-        token: '{bot_token}',
 
         async request(path, options = {{}}) {{
+            // ✅ Use relative URLs in browser context
             const response = await fetch(
-                `${{this.baseUrl}}${{path}}`,
+                `/api${{path}}`,
                 {{
                     ...options,
                     headers: {{
                         'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${{this.token}}`,
+                        // ❌ NO Authorization header - handled automatically
                         ...options.headers
                     }}
                 }}
