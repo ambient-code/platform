@@ -33,13 +33,14 @@ export function FileViewer({
     refetchInterval: sessionPhase === "Running" ? 5000 : false,
   });
 
+  const fileName = filePath.split("/").pop() ?? "file";
+  const encodedPath = filePath.split('/').map(encodeURIComponent).join('/');
+  const fileUrl = `/api/projects/${encodeURIComponent(projectName)}/agentic-sessions/${encodeURIComponent(sessionName)}/workspace/${encodedPath}`;
+
   const handleDownload = () => {
     if (!content) return;
-    const fileName = filePath.split("/").pop() ?? "file";
-    const encodedPath = filePath.split('/').map(encodeURIComponent).join('/');
-    const downloadUrl = `/api/projects/${encodeURIComponent(projectName)}/agentic-sessions/${encodeURIComponent(sessionName)}/workspace/${encodedPath}`;
     const link = document.createElement('a');
-    link.href = downloadUrl;
+    link.href = fileUrl;
     link.download = fileName;
     document.body.appendChild(link);
     link.click();
@@ -93,12 +94,6 @@ export function FileViewer({
       </div>
     );
   }
-
-  const fileName = filePath.split("/").pop() ?? "file";
-
-  // Build the direct workspace API URL for binary files (images, PDFs)
-  const encodedPath = filePath.split('/').map(encodeURIComponent).join('/');
-  const fileUrl = `/api/projects/${encodeURIComponent(projectName)}/agentic-sessions/${encodeURIComponent(sessionName)}/workspace/${encodedPath}`;
 
   return (
     <div className="flex flex-col h-full">

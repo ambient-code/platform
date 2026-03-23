@@ -10,11 +10,6 @@ vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
 
-const mockTriggerDownload = vi.fn();
-vi.mock('@/utils/export-chat', () => ({
-  triggerDownload: (...args: unknown[]) => mockTriggerDownload(...args),
-}));
-
 import { useWorkspaceFile } from '@/services/queries/use-workspace';
 
 const mockUseWorkspaceFile = vi.mocked(useWorkspaceFile);
@@ -108,8 +103,6 @@ describe('FileViewer', () => {
 
   describe('download uses direct link instead of triggerDownload', () => {
     it('downloads via direct workspace API link, not triggerDownload', () => {
-      mockTriggerDownload.mockClear();
-
       mockUseWorkspaceFile.mockReturnValue({
         data: 'binary-looking-content',
         isLoading: false,
@@ -140,9 +133,6 @@ describe('FileViewer', () => {
       // Click the download button in the header
       const downloadButtons = screen.getAllByRole('button', { name: /download/i });
       fireEvent.click(downloadButtons[0]);
-
-      // Must NOT use triggerDownload (which corrupts binary data)
-      expect(mockTriggerDownload).not.toHaveBeenCalled();
 
       // Must create a direct link to workspace API
       expect(capturedHrefs).toHaveLength(1);

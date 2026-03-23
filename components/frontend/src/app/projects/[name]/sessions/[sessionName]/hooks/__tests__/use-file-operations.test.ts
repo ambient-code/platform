@@ -12,28 +12,19 @@ vi.mock('@/services/api/workspace', () => ({
 
 describe('useFileOperations', () => {
   let capturedHrefs: string[] = [];
-  let capturedDownloads: string[] = [];
   let origCreateElement: typeof document.createElement;
 
   beforeEach(() => {
     capturedHrefs = [];
-    capturedDownloads = [];
     origCreateElement = document.createElement.bind(document);
 
     vi.spyOn(document, 'createElement').mockImplementation((tag: string, options?: ElementCreationOptions) => {
       const el = origCreateElement(tag, options);
       if (tag === 'a') {
-        // Intercept href and download property assignments
         let hrefVal = '';
-        let downloadVal = '';
         Object.defineProperty(el, 'href', {
           get: () => hrefVal,
           set: (v: string) => { hrefVal = v; capturedHrefs.push(v); },
-          configurable: true,
-        });
-        Object.defineProperty(el, 'download', {
-          get: () => downloadVal,
-          set: (v: string) => { downloadVal = v; capturedDownloads.push(v); },
           configurable: true,
         });
         vi.spyOn(el as HTMLAnchorElement, 'click').mockImplementation(() => {});
