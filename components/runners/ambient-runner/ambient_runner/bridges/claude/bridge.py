@@ -96,12 +96,21 @@ class ClaudeBridge(PlatformBridge):
         """Full run lifecycle: lazy setup → adapter → session worker → tracing."""
         # 1. Set user context BEFORE credential population so the caller's
         # token is used for per-user credential scoping.
+        prev_user = self._context.current_user_id if self._context else ""
         if self._context:
             self._context.set_current_user(current_user_id, current_user_name, caller_token)
 
-        # 2. Lazy platform setup (first run) + per-run credential refresh
+        # 2. Lazy platform setup (first run) + per-run credential refresh.
+        # Force refresh when the caller changes (bypass staleness cache)
+        # so each user gets their own credentials immediately.
         await self._ensure_ready()
-        await self._refresh_credentials_if_stale()
+        if current_user_id and current_user_id != prev_user:
+            from ambient_runner.platform.auth import populate_runtime_credentials
+
+            await populate_runtime_credentials(self._context)
+            self._last_creds_refresh = time.monotonic()
+        else:
+            await self._refresh_credentials_if_stale()
 
         # 3. Ensure adapter exists
         self._ensure_adapter()
