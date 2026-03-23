@@ -23,6 +23,29 @@ import (
 // identityAPITimeout is the HTTP client timeout for GitHub/GitLab user identity API calls.
 const identityAPITimeout = 10 * time.Second
 
+// getEffectiveUserID determines which user's credentials should be used.
+// Returns currentUserID from X-Runner-Current-User header if present,
+// otherwise falls back to ownerUserID (session owner).
+func getEffectiveUserID(c *gin.Context, ownerUserID string) string {
+	currentUserID := c.GetHeader("X-Runner-Current-User")
+	if currentUserID != "" {
+		return currentUserID
+	}
+	return ownerUserID
+}
+
+// checkCredentialRBAC verifies that the authenticated user is authorized to
+// access credentials for the effective user. Returns true if authorized.
+func checkCredentialRBAC(c *gin.Context, ownerUserID, effectiveUserID string) bool {
+	authenticatedUserID := c.GetString("userID")
+	if authenticatedUserID == "" {
+		// BOT_TOKEN (session ServiceAccount) - allowed by K8s RBAC
+		return true
+	}
+	// Allow if authenticated user is either the owner or the effective user
+	return authenticatedUserID == ownerUserID || authenticatedUserID == effectiveUserID
+}
+
 // GetGitHubTokenForSession handles GET /api/projects/:project/agentic-sessions/:session/credentials/github
 // Returns PAT (priority 1) or freshly minted GitHub App token (priority 2)
 func GetGitHubTokenForSession(c *gin.Context) {
@@ -50,24 +73,22 @@ func GetGitHubTokenForSession(c *gin.Context) {
 	}
 
 	// Extract userID from spec.userContext using type-safe unstructured helpers
-	userID, found, err := unstructured.NestedString(obj.Object, "spec", "userContext", "userId")
-	if !found || err != nil || userID == "" {
+	ownerUserID, found, err := unstructured.NestedString(obj.Object, "spec", "userContext", "userId")
+	if !found || err != nil || ownerUserID == "" {
 		log.Printf("Failed to extract userID from session %s/%s: found=%v, err=%v", project, session, found, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "User ID not found in session"})
 		return
 	}
 
-	// Verify authenticated user owns this session (RBAC: prevent accessing other users' credentials)
-	// Note: BOT_TOKEN (session ServiceAccount) won't have userID in context, which is fine -
-	// BOT_TOKEN is already scoped to this specific session via RBAC
-	authenticatedUserID := c.GetString("userID")
-	if authenticatedUserID != "" && authenticatedUserID != userID {
-		log.Printf("RBAC violation: user %s attempted to access credentials for session owned by %s", authenticatedUserID, userID)
-		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied: session belongs to different user"})
+	// Determine effective user for credential lookup (supports shared sessions)
+	effectiveUserID := getEffectiveUserID(c, ownerUserID)
+
+	// Verify authenticated user is authorized (RBAC: prevent accessing other users' credentials)
+	if !checkCredentialRBAC(c, ownerUserID, effectiveUserID) {
+		log.Printf("RBAC violation: user %s attempted access (owner=%s, current=%s)", c.GetString("userID"), ownerUserID, effectiveUserID)
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
 		return
 	}
-	// If authenticatedUserID is empty, this is likely BOT_TOKEN (session-scoped ServiceAccount)
-	// which is allowed because it's already restricted to this session via K8s RBAC
 
 	// Try to get GitHub token using standard precedence (PAT > App > project fallback)
 	// Need to convert K8sClient interface to *kubernetes.Clientset for git.GetGitHubToken
@@ -78,12 +99,14 @@ func GetGitHubTokenForSession(c *gin.Context) {
 		return
 	}
 
-	token, expiresAt, err := git.GetGitHubToken(c.Request.Context(), k8sClientset, DynamicClient, project, userID)
+	token, expiresAt, err := git.GetGitHubToken(c.Request.Context(), k8sClientset, DynamicClient, project, effectiveUserID)
 	if err != nil {
-		log.Printf("Failed to get GitHub token for user %s: %v", userID, err)
+		log.Printf("Failed to get GitHub token for user %s: %v", effectiveUserID, err)
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
+
+	log.Printf("CREDENTIAL_ACCESS: type=github user=%s session=%s/%s owner=%s auth_as=%s", effectiveUserID, project, session, ownerUserID, c.GetString("userID"))
 
 	// Fetch user identity from GitHub API for git config
 	// Fix for: GitHub credentials aren't mounted to session - need git identity
@@ -131,33 +154,31 @@ func GetGoogleCredentialsForSession(c *gin.Context) {
 	}
 
 	// Extract userID from spec.userContext using type-safe unstructured helpers
-	userID, found, err := unstructured.NestedString(obj.Object, "spec", "userContext", "userId")
-	if !found || err != nil || userID == "" {
+	ownerUserID, found, err := unstructured.NestedString(obj.Object, "spec", "userContext", "userId")
+	if !found || err != nil || ownerUserID == "" {
 		log.Printf("Failed to extract userID from session %s/%s: found=%v, err=%v", project, session, found, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "User ID not found in session"})
 		return
 	}
 
-	// Verify authenticated user owns this session (RBAC: prevent accessing other users' credentials)
-	// Note: BOT_TOKEN (session ServiceAccount) won't have userID in context, which is fine -
-	// BOT_TOKEN is already scoped to this specific session via RBAC
-	authenticatedUserID := c.GetString("userID")
-	if authenticatedUserID != "" && authenticatedUserID != userID {
-		log.Printf("RBAC violation: user %s attempted to access credentials for session owned by %s", authenticatedUserID, userID)
-		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied: session belongs to different user"})
+	// Determine effective user for credential lookup (supports shared sessions)
+	effectiveUserID := getEffectiveUserID(c, ownerUserID)
+
+	// Verify authenticated user is authorized (RBAC: prevent accessing other users' credentials)
+	if !checkCredentialRBAC(c, ownerUserID, effectiveUserID) {
+		log.Printf("RBAC violation: user %s attempted access (owner=%s, current=%s)", c.GetString("userID"), ownerUserID, effectiveUserID)
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
 		return
 	}
-	// If authenticatedUserID is empty, this is likely BOT_TOKEN (session-scoped ServiceAccount)
-	// which is allowed because it's already restricted to this session via K8s RBAC
 
 	// Get Google credentials from cluster storage
-	creds, err := GetGoogleCredentials(c.Request.Context(), userID)
+	creds, err := GetGoogleCredentials(c.Request.Context(), effectiveUserID)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Google credentials not configured"})
 			return
 		}
-		log.Printf("Failed to get Google credentials for user %s: %v", userID, err)
+		log.Printf("Failed to get Google credentials for user %s: %v", effectiveUserID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get Google credentials"})
 		return
 	}
@@ -167,20 +188,22 @@ func GetGoogleCredentialsForSession(c *gin.Context) {
 		return
 	}
 
+	log.Printf("CREDENTIAL_ACCESS: type=google user=%s session=%s/%s owner=%s auth_as=%s", effectiveUserID, project, session, ownerUserID, c.GetString("userID"))
+
 	// Check if token needs refresh
 	needsRefresh := time.Now().After(creds.ExpiresAt.Add(-5 * time.Minute)) // Refresh 5min before expiry
 
 	if needsRefresh && creds.RefreshToken != "" {
 		// Refresh the token
-		log.Printf("Google token expired for user %s, refreshing...", userID)
+		log.Printf("Google token expired for user %s, refreshing...", effectiveUserID)
 		newCreds, err := refreshGoogleAccessToken(c.Request.Context(), creds)
 		if err != nil {
-			log.Printf("Failed to refresh Google token for user %s: %v", userID, err)
+			log.Printf("Failed to refresh Google token for user %s: %v", effectiveUserID, err)
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Google token expired and refresh failed. Please re-authenticate."})
 			return
 		}
 		creds = newCreds
-		log.Printf("✓ Refreshed Google token for user %s", userID)
+		log.Printf("✓ Refreshed Google token for user %s", effectiveUserID)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -219,29 +242,27 @@ func GetJiraCredentialsForSession(c *gin.Context) {
 	}
 
 	// Extract userID from spec.userContext using type-safe unstructured helpers
-	userID, found, err := unstructured.NestedString(obj.Object, "spec", "userContext", "userId")
-	if !found || err != nil || userID == "" {
+	ownerUserID, found, err := unstructured.NestedString(obj.Object, "spec", "userContext", "userId")
+	if !found || err != nil || ownerUserID == "" {
 		log.Printf("Failed to extract userID from session %s/%s: found=%v, err=%v", project, session, found, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "User ID not found in session"})
 		return
 	}
 
-	// Verify authenticated user owns this session (RBAC: prevent accessing other users' credentials)
-	// Note: BOT_TOKEN (session ServiceAccount) won't have userID in context, which is fine -
-	// BOT_TOKEN is already scoped to this specific session via RBAC
-	authenticatedUserID := c.GetString("userID")
-	if authenticatedUserID != "" && authenticatedUserID != userID {
-		log.Printf("RBAC violation: user %s attempted to access credentials for session owned by %s", authenticatedUserID, userID)
-		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied: session belongs to different user"})
+	// Determine effective user for credential lookup (supports shared sessions)
+	effectiveUserID := getEffectiveUserID(c, ownerUserID)
+
+	// Verify authenticated user is authorized (RBAC: prevent accessing other users' credentials)
+	if !checkCredentialRBAC(c, ownerUserID, effectiveUserID) {
+		log.Printf("RBAC violation: user %s attempted access (owner=%s, current=%s)", c.GetString("userID"), ownerUserID, effectiveUserID)
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
 		return
 	}
-	// If authenticatedUserID is empty, this is likely BOT_TOKEN (session-scoped ServiceAccount)
-	// which is allowed because it's already restricted to this session via K8s RBAC
 
 	// Get Jira credentials
-	creds, err := GetJiraCredentials(c.Request.Context(), userID)
+	creds, err := GetJiraCredentials(c.Request.Context(), effectiveUserID)
 	if err != nil {
-		log.Printf("Failed to get Jira credentials for user %s: %v", userID, err)
+		log.Printf("Failed to get Jira credentials for user %s: %v", effectiveUserID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get Jira credentials"})
 		return
 	}
@@ -250,6 +271,8 @@ func GetJiraCredentialsForSession(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Jira credentials not configured"})
 		return
 	}
+
+	log.Printf("CREDENTIAL_ACCESS: type=jira user=%s session=%s/%s owner=%s auth_as=%s", effectiveUserID, project, session, ownerUserID, c.GetString("userID"))
 
 	c.JSON(http.StatusOK, gin.H{
 		"url":      creds.URL,
@@ -285,29 +308,27 @@ func GetGitLabTokenForSession(c *gin.Context) {
 	}
 
 	// Extract userID from spec.userContext using type-safe unstructured helpers
-	userID, found, err := unstructured.NestedString(obj.Object, "spec", "userContext", "userId")
-	if !found || err != nil || userID == "" {
+	ownerUserID, found, err := unstructured.NestedString(obj.Object, "spec", "userContext", "userId")
+	if !found || err != nil || ownerUserID == "" {
 		log.Printf("Failed to extract userID from session %s/%s: found=%v, err=%v", project, session, found, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "User ID not found in session"})
 		return
 	}
 
-	// Verify authenticated user owns this session (RBAC: prevent accessing other users' credentials)
-	// Note: BOT_TOKEN (session ServiceAccount) won't have userID in context, which is fine -
-	// BOT_TOKEN is already scoped to this specific session via RBAC
-	authenticatedUserID := c.GetString("userID")
-	if authenticatedUserID != "" && authenticatedUserID != userID {
-		log.Printf("RBAC violation: user %s attempted to access credentials for session owned by %s", authenticatedUserID, userID)
-		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied: session belongs to different user"})
+	// Determine effective user for credential lookup (supports shared sessions)
+	effectiveUserID := getEffectiveUserID(c, ownerUserID)
+
+	// Verify authenticated user is authorized (RBAC: prevent accessing other users' credentials)
+	if !checkCredentialRBAC(c, ownerUserID, effectiveUserID) {
+		log.Printf("RBAC violation: user %s attempted access (owner=%s, current=%s)", c.GetString("userID"), ownerUserID, effectiveUserID)
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
 		return
 	}
-	// If authenticatedUserID is empty, this is likely BOT_TOKEN (session-scoped ServiceAccount)
-	// which is allowed because it's already restricted to this session via K8s RBAC
 
 	// Get GitLab credentials
-	creds, err := GetGitLabCredentials(c.Request.Context(), userID)
+	creds, err := GetGitLabCredentials(c.Request.Context(), effectiveUserID)
 	if err != nil {
-		log.Printf("Failed to get GitLab credentials for user %s: %v", userID, err)
+		log.Printf("Failed to get GitLab credentials for user %s: %v", effectiveUserID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get GitLab credentials"})
 		return
 	}
@@ -316,6 +337,8 @@ func GetGitLabTokenForSession(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "GitLab credentials not configured"})
 		return
 	}
+
+	log.Printf("CREDENTIAL_ACCESS: type=gitlab user=%s session=%s/%s owner=%s auth_as=%s", effectiveUserID, project, session, ownerUserID, c.GetString("userID"))
 
 	// Fetch user identity from GitLab API for git config
 	// Fix for: need to distinguish between GitHub and GitLab providers

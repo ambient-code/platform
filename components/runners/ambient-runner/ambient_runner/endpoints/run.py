@@ -60,6 +60,22 @@ async def run_agent(input_data: RunnerInput, request: Request):
     accept_header = request.headers.get("accept", "text/event-stream")
     encoder = EventEncoder(accept=accept_header)
 
+    # Extract per-message user context from headers (set by backend proxy)
+    current_user_id = request.headers.get("x-current-user-id", "")
+    current_user_name = request.headers.get("x-current-user-name", "")
+    if bridge.context:
+        if current_user_id:
+            from ambient_runner.platform.auth import sanitize_user_context
+
+            current_user_id, current_user_name = sanitize_user_context(
+                current_user_id, current_user_name
+            )
+            bridge.context.set_current_user(current_user_id, current_user_name)
+            logger.info(f"Set current user context: {current_user_id}")
+        else:
+            # No user headers — automated session; clear any stale user context
+            bridge.context.set_current_user("", "")
+
     logger.info(
         f"Run: thread_id={run_agent_input.thread_id}, run_id={run_agent_input.run_id}"
     )

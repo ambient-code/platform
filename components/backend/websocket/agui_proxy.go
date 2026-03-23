@@ -329,8 +329,18 @@ func HandleAGUIRunProxy(c *gin.Context) {
 
 	runnerURL := getRunnerEndpoint(projectName, sessionName)
 
+	// Extract current user from gin context (set by forwardedIdentityMiddleware)
+	currentUserID := c.GetString("userID")
+	currentUserName := c.GetString("userName")
+
+	if currentUserID == "" {
+		log.Printf("No userID for %s/%s - will use session owner credentials", projectName, sessionName)
+	} else {
+		log.Printf("Current user for run: %s (%s)", currentUserID, currentUserName)
+	}
+
 	// Start background goroutine to proxy runner SSE → persist + broadcast
-	go proxyRunnerStream(runnerURL, bodyBytes, sessionName, runID, threadID)
+	go proxyRunnerStream(runnerURL, bodyBytes, sessionName, runID, threadID, currentUserID, currentUserName)
 
 	// Return metadata immediately — events arrive via GET /agui/events
 	c.JSON(http.StatusOK, gin.H{
@@ -342,9 +352,14 @@ func HandleAGUIRunProxy(c *gin.Context) {
 // proxyRunnerStream connects to the runner's SSE endpoint, reads events,
 // persists them, and publishes them to the live broadcast pipe.  Runs in
 // a background goroutine so the POST /agui/run handler can return immediately.
-func proxyRunnerStream(runnerURL string, bodyBytes []byte, sessionName, runID, threadID string) {
-	log.Printf("AGUI Proxy: connecting to runner at %s", runnerURL)
-	resp, err := connectToRunner(runnerURL, bodyBytes)
+// If userID is provided, forwards user context headers for credential scoping.
+func proxyRunnerStream(runnerURL string, bodyBytes []byte, sessionName, runID, threadID, userID, userName string) {
+	logSuffix := ""
+	if userID != "" {
+		logSuffix = fmt.Sprintf(" (user=%s)", userID)
+	}
+	log.Printf("AGUI Proxy: connecting to runner at %s%s", runnerURL, logSuffix)
+	resp, err := connectToRunner(runnerURL, bodyBytes, userID, userName)
 	if err != nil {
 		log.Printf("AGUI Proxy: runner unavailable for %s: %v", sessionName, err)
 		// Publish error events so GET /agui/events subscribers see the failure
@@ -385,6 +400,7 @@ func proxyRunnerStream(runnerURL string, bodyBytes []byte, sessionName, runID, t
 
 	log.Printf("AGUI Proxy: run %s stream ended", truncID(runID))
 }
+
 
 // publishAndPersistErrorEvents generates RUN_STARTED + RUN_ERROR events,
 // persists them, and publishes to the live broadcast so subscribers get
@@ -734,12 +750,13 @@ var runnerHTTPClient = &http.Client{
 }
 
 // connectToRunner POSTs to the runner with retry and exponential backoff.
+// If userID is provided, adds X-Current-User-ID header for credential scoping.
 //
 // The runner pod may not be reachable immediately after creation due to
 // container startup time and K8s Service DNS propagation. Retries on
 // "connection refused", "no such host", and "dial tcp" errors with
 // exponential backoff (500ms initial, 1.5x, capped at 5s, 15 attempts).
-func connectToRunner(runnerURL string, bodyBytes []byte) (*http.Response, error) {
+func connectToRunner(runnerURL string, bodyBytes []byte, userID, userName string) (*http.Response, error) {
 	maxAttempts := 15
 	retryDelay := 500 * time.Millisecond
 	maxDelay := 5 * time.Second
@@ -751,6 +768,14 @@ func connectToRunner(runnerURL string, bodyBytes []byte) (*http.Response, error)
 		}
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Accept", "text/event-stream")
+
+		// Add user context headers for credential scoping (if provided)
+		if userID != "" {
+			req.Header.Set("X-Current-User-ID", userID)
+		}
+		if userName != "" {
+			req.Header.Set("X-Current-User-Name", userName)
+		}
 
 		resp, err := runnerHTTPClient.Do(req)
 		if err == nil {
@@ -778,6 +803,7 @@ func connectToRunner(runnerURL string, bodyBytes []byte) (*http.Response, error)
 
 	return nil, fmt.Errorf("runner not available after %d attempts", maxAttempts)
 }
+
 
 // getRunnerEndpoint returns the AG-UI server endpoint for a session.
 // The operator creates a Service named "session-{sessionName}" in the

@@ -109,6 +109,12 @@ async def _fetch_credential(context: RunnerContext, credential_type: str) -> dic
     if bot:
         req.add_header("Authorization", f"Bearer {bot}")
 
+    if context.current_user_id:
+        req.add_header("X-Runner-Current-User", context.current_user_id)
+        logger.debug(f"Fetching {credential_type} for user: {context.current_user_id}")
+    if context.current_user_name:
+        req.add_header("X-Runner-Current-User-Name", context.current_user_name)
+
     loop = asyncio.get_running_loop()
 
     def _do_req():
@@ -319,6 +325,23 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
     await configure_git_identity(git_user_name, git_user_email)
 
     logger.info("Runtime credentials populated successfully")
+
+
+def clear_runtime_credentials() -> None:
+    """Remove sensitive credentials from environment after turn completes."""
+    cleared = []
+    for key in [
+        "GITHUB_TOKEN",
+        "GITLAB_TOKEN",
+        "JIRA_API_TOKEN",
+        "JIRA_URL",
+        "JIRA_EMAIL",
+        "USER_GOOGLE_EMAIL",
+    ]:
+        if os.environ.pop(key, None) is not None:
+            cleared.append(key)
+    if cleared:
+        logger.info(f"Cleared credentials: {', '.join(cleared)}")
 
 
 async def _fetch_mcp_credentials(context: RunnerContext, server_name: str) -> dict:

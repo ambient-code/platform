@@ -151,6 +151,12 @@ class ClaudeBridge(PlatformBridge):
                 # Clear the halt flag for this thread
                 self._halted_by_thread.pop(thread_id, None)
 
+        # Clear credentials after turn completes (shared session security)
+        if (self._context.get_env("KEEP_CREDENTIALS_PERSISTENT") or "").lower() != "true":
+            from ambient_runner.platform.auth import clear_runtime_credentials
+
+            clear_runtime_credentials()
+
         self._first_run = False
 
     async def interrupt(self, thread_id: Optional[str] = None) -> None:
