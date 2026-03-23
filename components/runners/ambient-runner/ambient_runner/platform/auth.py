@@ -328,7 +328,11 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
 
 
 def clear_runtime_credentials() -> None:
-    """Remove sensitive credentials from environment after turn completes."""
+    """Remove sensitive credentials from environment after turn completes.
+
+    Clears fixed credential keys, dynamically-injected MCP_* env vars,
+    and Google Workspace credential files.
+    """
     cleared = []
     for key in [
         "GITHUB_TOKEN",
@@ -340,6 +344,27 @@ def clear_runtime_credentials() -> None:
     ]:
         if os.environ.pop(key, None) is not None:
             cleared.append(key)
+
+    # Clear dynamically-injected MCP_* env vars (set by populate_mcp_server_credentials)
+    mcp_keys = [k for k in os.environ if k.startswith("MCP_")]
+    for key in mcp_keys:
+        os.environ.pop(key, None)
+        cleared.append(key)
+
+    # Remove Google Workspace credential file if present
+    workspace = os.environ.get("WORKSPACE_PATH", "/workspace")
+    google_cred_file = Path(workspace) / ".google_workspace_mcp" / "credentials" / "credentials.json"
+    if google_cred_file.exists():
+        try:
+            google_cred_file.unlink()
+            cleared.append("google_workspace_credentials_file")
+            # Clean up empty parent dirs
+            cred_dir = google_cred_file.parent
+            if cred_dir.exists() and not any(cred_dir.iterdir()):
+                cred_dir.rmdir()
+        except OSError as e:
+            logger.warning(f"Failed to remove Google credential file: {e}")
+
     if cleared:
         logger.info(f"Cleared credentials: {', '.join(cleared)}")
 

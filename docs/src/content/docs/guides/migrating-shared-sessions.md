@@ -50,10 +50,10 @@ Check that the API key creator's credentials are still valid. API keys inherit t
 
 ## Rollback
 
-If you encounter issues, you can revert to the previous behavior (session owner credentials for all messages) by setting the environment variable:
+If you encounter issues with per-message credentials, you can preserve the previous session owner behavior by setting the `KEEP_CREDENTIALS_PERSISTENT` environment variable on the session:
 
-```
-DISABLE_PER_USER_CREDENTIALS=true
+```bash
+KEEP_CREDENTIALS_PERSISTENT=true
 ```
 
-This flag restores legacy behavior where all messages in a shared session use the session owner's credentials.
+This prevents credential cleanup between turns, so the session owner's credentials remain active for all messages.

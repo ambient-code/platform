@@ -86,7 +86,12 @@ class ClaudeBridge(PlatformBridge):
             session_persistence=True,
         )
 
-    async def run(self, input_data: RunAgentInput) -> AsyncIterator[BaseEvent]:
+    async def run(
+        self,
+        input_data: RunAgentInput,
+        current_user_id: str = "",
+        current_user_name: str = "",
+    ) -> AsyncIterator[BaseEvent]:
         """Full run lifecycle: lazy setup → adapter → session worker → tracing."""
         # 1. Lazy platform setup
         await self._ensure_ready()
@@ -116,46 +121,52 @@ class ClaudeBridge(PlatformBridge):
         # 5. Run adapter with message stream, wrapped in tracing
         session_label = self._session_manager.get_session_id(thread_id) or thread_id
         async with self._session_manager.get_lock(thread_id):
-            message_stream = worker.query(user_msg, session_id=session_label)
+            try:
+                # Set per-run user context inside the lock to prevent races
+                if self._context:
+                    self._context.set_current_user(current_user_id, current_user_name)
 
-            from ambient_runner.middleware import tracing_middleware
+                message_stream = worker.query(user_msg, session_id=session_label)
 
-            wrapped_stream = tracing_middleware(
-                self._adapter.run(input_data, message_stream=message_stream),
-                obs=self._obs,
-                model=self._configured_model,
-                prompt=user_msg,
-            )
+                from ambient_runner.middleware import tracing_middleware
 
-            async for event in wrapped_stream:
-                yield event
-
-            # Persist session ID after turn completes (for --resume on pod restart)
-            if worker.session_id:
-                self._session_manager._session_ids[thread_id] = worker.session_id
-                self._session_manager._persist_session_ids()
-
-            # Capture halt state for this thread to avoid race conditions
-            # with concurrent runs modifying the shared adapter's halted flag
-            self._halted_by_thread[thread_id] = self._adapter.halted
-
-            # If the adapter halted (frontend tool or built-in HITL tool like
-            # AskUserQuestion), interrupt the worker to prevent the SDK from
-            # auto-approving the tool call with a placeholder result.
-            if self._halted_by_thread.get(thread_id, False):
-                logger.info(
-                    f"Adapter halted for thread={thread_id}, "
-                    "interrupting worker to await user input"
+                wrapped_stream = tracing_middleware(
+                    self._adapter.run(input_data, message_stream=message_stream),
+                    obs=self._obs,
+                    model=self._configured_model,
+                    prompt=user_msg,
                 )
-                await worker.interrupt()
-                # Clear the halt flag for this thread
-                self._halted_by_thread.pop(thread_id, None)
 
-        # Clear credentials after turn completes (shared session security)
-        if (self._context.get_env("KEEP_CREDENTIALS_PERSISTENT") or "").lower() != "true":
-            from ambient_runner.platform.auth import clear_runtime_credentials
+                async for event in wrapped_stream:
+                    yield event
 
-            clear_runtime_credentials()
+                # Persist session ID after turn completes (for --resume on pod restart)
+                if worker.session_id:
+                    self._session_manager._session_ids[thread_id] = worker.session_id
+                    self._session_manager._persist_session_ids()
+
+                # Capture halt state for this thread to avoid race conditions
+                # with concurrent runs modifying the shared adapter's halted flag
+                self._halted_by_thread[thread_id] = self._adapter.halted
+
+                # If the adapter halted (frontend tool or built-in HITL tool like
+                # AskUserQuestion), interrupt the worker to prevent the SDK from
+                # auto-approving the tool call with a placeholder result.
+                if self._halted_by_thread.get(thread_id, False):
+                    logger.info(
+                        f"Adapter halted for thread={thread_id}, "
+                        "interrupting worker to await user input"
+                    )
+                    await worker.interrupt()
+                    # Clear the halt flag for this thread
+                    self._halted_by_thread.pop(thread_id, None)
+            finally:
+                # Clear credentials after turn completes (shared session security).
+                # In finally to ensure cleanup even on errors/cancellation.
+                if (self._context.get_env("KEEP_CREDENTIALS_PERSISTENT") or "").lower() != "true":
+                    from ambient_runner.platform.auth import clear_runtime_credentials
+
+                    clear_runtime_credentials()
 
         self._first_run = False
 

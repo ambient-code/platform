@@ -71,7 +71,7 @@ class LangGraphBridge(PlatformBridge):
     def set_context(self, context: RunnerContext) -> None:
         self._context = context
 
-    async def run(self, input_data: RunAgentInput) -> AsyncIterator[BaseEvent]:
+    async def run(self, input_data: RunAgentInput, **kwargs) -> AsyncIterator[BaseEvent]:
         """Run the LangGraph adapter and yield AG-UI events.
 
         Lazily creates the adapter on first run.

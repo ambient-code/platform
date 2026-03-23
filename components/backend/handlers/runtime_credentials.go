@@ -36,14 +36,22 @@ func getEffectiveUserID(c *gin.Context, ownerUserID string) string {
 
 // checkCredentialRBAC verifies that the authenticated user is authorized to
 // access credentials for the effective user. Returns true if authorized.
+// When no X-Runner-Current-User header is present (effectiveUserID == ownerUserID),
+// the owner is allowed. When the header IS present, only the effective user
+// themselves may fetch their own credentials — owner fallback is disabled
+// to prevent impersonation.
 func checkCredentialRBAC(c *gin.Context, ownerUserID, effectiveUserID string) bool {
 	authenticatedUserID := c.GetString("userID")
 	if authenticatedUserID == "" {
 		// BOT_TOKEN (session ServiceAccount) - allowed by K8s RBAC
 		return true
 	}
-	// Allow if authenticated user is either the owner or the effective user
-	return authenticatedUserID == ownerUserID || authenticatedUserID == effectiveUserID
+	if effectiveUserID == ownerUserID {
+		// No current-user header: owner accessing their own credentials
+		return authenticatedUserID == ownerUserID
+	}
+	// Current-user header present: only allow if authenticated as that user
+	return authenticatedUserID == effectiveUserID
 }
 
 // GetGitHubTokenForSession handles GET /api/projects/:project/agentic-sessions/:session/credentials/github
@@ -106,7 +114,7 @@ func GetGitHubTokenForSession(c *gin.Context) {
 		return
 	}
 
-	log.Printf("CREDENTIAL_ACCESS: type=github user=%s session=%s/%s owner=%s auth_as=%s", effectiveUserID, project, session, ownerUserID, c.GetString("userID"))
+	log.Printf("CREDENTIAL_ACCESS: type=github session=%s/%s same_as_owner=%t", project, session, effectiveUserID == ownerUserID)
 
 	// Fetch user identity from GitHub API for git config
 	// Fix for: GitHub credentials aren't mounted to session - need git identity
@@ -188,7 +196,7 @@ func GetGoogleCredentialsForSession(c *gin.Context) {
 		return
 	}
 
-	log.Printf("CREDENTIAL_ACCESS: type=google user=%s session=%s/%s owner=%s auth_as=%s", effectiveUserID, project, session, ownerUserID, c.GetString("userID"))
+	log.Printf("CREDENTIAL_ACCESS: type=google session=%s/%s same_as_owner=%t", project, session, effectiveUserID == ownerUserID)
 
 	// Check if token needs refresh
 	needsRefresh := time.Now().After(creds.ExpiresAt.Add(-5 * time.Minute)) // Refresh 5min before expiry
@@ -272,7 +280,7 @@ func GetJiraCredentialsForSession(c *gin.Context) {
 		return
 	}
 
-	log.Printf("CREDENTIAL_ACCESS: type=jira user=%s session=%s/%s owner=%s auth_as=%s", effectiveUserID, project, session, ownerUserID, c.GetString("userID"))
+	log.Printf("CREDENTIAL_ACCESS: type=jira session=%s/%s same_as_owner=%t", project, session, effectiveUserID == ownerUserID)
 
 	c.JSON(http.StatusOK, gin.H{
 		"url":      creds.URL,
@@ -338,7 +346,7 @@ func GetGitLabTokenForSession(c *gin.Context) {
 		return
 	}
 
-	log.Printf("CREDENTIAL_ACCESS: type=gitlab user=%s session=%s/%s owner=%s auth_as=%s", effectiveUserID, project, session, ownerUserID, c.GetString("userID"))
+	log.Printf("CREDENTIAL_ACCESS: type=gitlab session=%s/%s same_as_owner=%t", project, session, effectiveUserID == ownerUserID)
 
 	// Fetch user identity from GitLab API for git config
 	// Fix for: need to distinguish between GitHub and GitLab providers
