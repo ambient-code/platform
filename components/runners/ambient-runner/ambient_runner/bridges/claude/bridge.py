@@ -96,6 +96,7 @@ class ClaudeBridge(PlatformBridge):
         """Full run lifecycle: lazy setup → adapter → session worker → tracing."""
         # 1. Set user context BEFORE credential population so the caller's
         # token is used for per-user credential scoping.
+        prev_user = self._context.current_user_id if self._context else ""
         if self._context:
             self._context.set_current_user(current_user_id, current_user_name, caller_token)
 
@@ -107,22 +108,35 @@ class ClaudeBridge(PlatformBridge):
         from ambient_runner.platform.auth import (
             clear_runtime_credentials,
             populate_runtime_credentials,
+            populate_mcp_server_credentials,
         )
 
         clear_runtime_credentials()
         await populate_runtime_credentials(self._context)
+        await populate_mcp_server_credentials(self._context)
         self._last_creds_refresh = time.monotonic()
 
-        # 3. Ensure adapter exists
+        # 4. If the caller changed, destroy the existing worker so a new
+        # Claude Code process starts with fresh env vars and MCP servers.
+        # The session ID is preserved so --resume picks up the conversation.
+        thread_id = input_data.thread_id or self._context.session_id
+        user_changed = current_user_id and current_user_id != prev_user and prev_user != ""
+        if user_changed and self._session_manager.get_existing(thread_id):
+            logger.info(
+                f"User changed for thread={thread_id}, "
+                "restarting Claude client to refresh MCP servers"
+            )
+            await self._session_manager.destroy(thread_id)
+
+        # 5. Ensure adapter exists
         self._ensure_adapter()
 
-        # 3. Extract user message for worker and observability
+        # 6. Extract user message for worker and observability
         from ag_ui_claude_sdk.utils import process_messages
 
         user_msg, _ = process_messages(input_data)
 
-        # 4. Get or create session worker for this thread
-        thread_id = input_data.thread_id or self._context.session_id
+        # 7. Get or create session worker for this thread
         api_key = os.getenv("ANTHROPIC_API_KEY", "")
         saved_session_id = self._saved_session_ids.pop(
             thread_id, None
