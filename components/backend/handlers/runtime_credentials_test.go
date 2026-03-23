@@ -190,12 +190,8 @@ var _ = Describe("Runtime Credentials - Shared Session User Resolution", Label(t
 			})
 		})
 
-		Context("when BOT_TOKEN calls with X-Runner-Current-User header", func() {
-			It("should use the current user's ID for credential lookup", func() {
-				// Pre-populate active user so RBAC allows this collaborator
-				SetSessionActiveUser(testSession, "collaborator-user-abc")
-				defer ClearSessionActiveUser(testSession)
-
+		Context("when BOT_TOKEN calls with X-Runner-Current-User header for non-owner", func() {
+			It("should reject — BOT_TOKEN can only access owner credentials", func() {
 				c := createCredentialContext("github")
 				c.Set("userID", "")
 				c.Request.Header.Set("X-Runner-Current-User", "collaborator-user-abc")
@@ -203,10 +199,9 @@ var _ = Describe("Runtime Credentials - Shared Session User Resolution", Label(t
 				GetGitHubTokenForSession(c)
 
 				statusCode := httpUtils.GetResponseRecorder().Code
-				// Should NOT be 401 or 403 — BOT_TOKEN is allowed to pass current user
-				Expect(statusCode).NotTo(Equal(http.StatusUnauthorized))
-				Expect(statusCode).NotTo(Equal(http.StatusForbidden))
-				logger.Log("BOT_TOKEN with current user header: status=%d", statusCode)
+				// Per-user scoping uses caller token, not X-Runner-Current-User with BOT_TOKEN
+				Expect(statusCode).To(Equal(http.StatusForbidden))
+				logger.Log("BOT_TOKEN with non-owner current user header: status=%d", statusCode)
 			})
 		})
 
@@ -269,11 +264,8 @@ var _ = Describe("Runtime Credentials - Shared Session User Resolution", Label(t
 			})
 		})
 
-		Context("when BOT_TOKEN calls with X-Runner-Current-User", func() {
-			It("should resolve to current user", func() {
-				SetSessionActiveUser(testSession, "collaborator-jira")
-				defer ClearSessionActiveUser(testSession)
-
+		Context("when BOT_TOKEN calls with X-Runner-Current-User for non-owner", func() {
+			It("should reject — BOT_TOKEN can only access owner credentials", func() {
 				c := createCredentialContext("jira")
 				c.Set("userID", "")
 				c.Request.Header.Set("X-Runner-Current-User", "collaborator-jira")
@@ -281,9 +273,8 @@ var _ = Describe("Runtime Credentials - Shared Session User Resolution", Label(t
 				GetJiraCredentialsForSession(c)
 
 				statusCode := httpUtils.GetResponseRecorder().Code
-				Expect(statusCode).NotTo(Equal(http.StatusUnauthorized))
-				Expect(statusCode).NotTo(Equal(http.StatusForbidden))
-				logger.Log("Jira BOT_TOKEN with current user header: status=%d", statusCode)
+				Expect(statusCode).To(Equal(http.StatusForbidden))
+				logger.Log("Jira BOT_TOKEN with non-owner current user header: status=%d", statusCode)
 			})
 		})
 
@@ -313,11 +304,8 @@ var _ = Describe("Runtime Credentials - Shared Session User Resolution", Label(t
 			})
 		})
 
-		Context("when BOT_TOKEN calls with X-Runner-Current-User", func() {
-			It("should resolve to current user (no 403)", func() {
-				SetSessionActiveUser(testSession, "collaborator-google")
-				defer ClearSessionActiveUser(testSession)
-
+		Context("when BOT_TOKEN calls with X-Runner-Current-User for non-owner", func() {
+			It("should reject — BOT_TOKEN can only access owner credentials", func() {
 				c := createCredentialContext("google")
 				c.Set("userID", "")
 				c.Request.Header.Set("X-Runner-Current-User", "collaborator-google")
@@ -325,9 +313,8 @@ var _ = Describe("Runtime Credentials - Shared Session User Resolution", Label(t
 				GetGoogleCredentialsForSession(c)
 
 				statusCode := httpUtils.GetResponseRecorder().Code
-				Expect(statusCode).NotTo(Equal(http.StatusUnauthorized))
-				Expect(statusCode).NotTo(Equal(http.StatusForbidden))
-				logger.Log("Google BOT_TOKEN with current user header: status=%d", statusCode)
+				Expect(statusCode).To(Equal(http.StatusForbidden))
+				logger.Log("Google BOT_TOKEN with non-owner current user header: status=%d", statusCode)
 			})
 		})
 	})
@@ -345,11 +332,8 @@ var _ = Describe("Runtime Credentials - Shared Session User Resolution", Label(t
 			})
 		})
 
-		Context("when BOT_TOKEN calls with X-Runner-Current-User", func() {
-			It("should resolve to current user (no 403)", func() {
-				SetSessionActiveUser(testSession, "collaborator-gitlab")
-				defer ClearSessionActiveUser(testSession)
-
+		Context("when BOT_TOKEN calls with X-Runner-Current-User for non-owner", func() {
+			It("should reject — BOT_TOKEN can only access owner credentials", func() {
 				c := createCredentialContext("gitlab")
 				c.Set("userID", "")
 				c.Request.Header.Set("X-Runner-Current-User", "collaborator-gitlab")
@@ -357,9 +341,8 @@ var _ = Describe("Runtime Credentials - Shared Session User Resolution", Label(t
 				GetGitLabTokenForSession(c)
 
 				statusCode := httpUtils.GetResponseRecorder().Code
-				Expect(statusCode).NotTo(Equal(http.StatusUnauthorized))
-				Expect(statusCode).NotTo(Equal(http.StatusForbidden))
-				logger.Log("GitLab BOT_TOKEN with current user header: status=%d", statusCode)
+				Expect(statusCode).To(Equal(http.StatusForbidden))
+				logger.Log("GitLab BOT_TOKEN with non-owner current user header: status=%d", statusCode)
 			})
 		})
 	})

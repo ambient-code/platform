@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
 
 	"ambient-code-backend/git"
@@ -23,23 +22,6 @@ import (
 
 // identityAPITimeout is the HTTP client timeout for GitHub/GitLab user identity API calls.
 const identityAPITimeout = 10 * time.Second
-
-// SessionActiveUserMap tracks the authenticated user who initiated the current
-// run for each session. Written by the AG-UI proxy (websocket package) via
-// SetSessionActiveUser, read by checkCredentialRBAC to validate
-// X-Runner-Current-User headers from BOT_TOKEN callers.
-// Key: sessionName, Value: string (userID).
-var SessionActiveUserMap sync.Map
-
-// SetSessionActiveUser records the authenticated user for a session's active run.
-func SetSessionActiveUser(sessionName, userID string) {
-	SessionActiveUserMap.Store(sessionName, userID)
-}
-
-// ClearSessionActiveUser removes the active user entry for a session.
-func ClearSessionActiveUser(sessionName string) {
-	SessionActiveUserMap.Delete(sessionName)
-}
 
 // getEffectiveUserID determines which user's credentials should be used.
 // Returns currentUserID from X-Runner-Current-User header if present,
@@ -55,22 +37,18 @@ func getEffectiveUserID(c *gin.Context, ownerUserID string) string {
 // checkCredentialRBAC verifies that the authenticated user is authorized to
 // access credentials for the effective user. Returns true if authorized.
 //
-// For BOT_TOKEN callers (session ServiceAccount), the requested effectiveUserID
-// must match the active user set by the AG-UI proxy when the run started.
-// This prevents users inside a session from using the BOT_TOKEN to fetch
-// another user's credentials via crafted X-Runner-Current-User headers.
+// For BOT_TOKEN callers (session ServiceAccount), only the session owner's
+// credentials are allowed. Per-user credential scoping is handled by
+// forwarding the caller's own bearer token (via X-Caller-Token header)
+// so the runner authenticates as the actual user — no impersonation possible.
 //
 // For direct user callers, the header is validated against their authenticated
 // identity — owner fallback only when no header is present.
-func checkCredentialRBAC(c *gin.Context, sessionName, ownerUserID, effectiveUserID string) bool {
+func checkCredentialRBAC(c *gin.Context, ownerUserID, effectiveUserID string) bool {
 	authenticatedUserID := c.GetString("userID")
 	if authenticatedUserID == "" {
-		// BOT_TOKEN (session ServiceAccount) - validate against active run user.
-		// If no active user is tracked (e.g. automated/scheduled session),
-		// fall back to allowing owner credentials only.
-		if activeUser, ok := SessionActiveUserMap.Load(sessionName); ok {
-			return effectiveUserID == activeUser.(string)
-		}
+		// BOT_TOKEN (session ServiceAccount) - only allow owner credentials.
+		// Per-user scoping uses the caller's forwarded token instead.
 		return effectiveUserID == ownerUserID
 	}
 	if effectiveUserID == ownerUserID {
@@ -119,7 +97,7 @@ func GetGitHubTokenForSession(c *gin.Context) {
 	effectiveUserID := getEffectiveUserID(c, ownerUserID)
 
 	// Verify authenticated user is authorized (RBAC: prevent accessing other users' credentials)
-	if !checkCredentialRBAC(c, session, ownerUserID, effectiveUserID) {
+	if !checkCredentialRBAC(c, ownerUserID, effectiveUserID) {
 		log.Printf("RBAC violation: user %s attempted access (owner=%s, current=%s)", c.GetString("userID"), ownerUserID, effectiveUserID)
 		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
 		return
@@ -200,7 +178,7 @@ func GetGoogleCredentialsForSession(c *gin.Context) {
 	effectiveUserID := getEffectiveUserID(c, ownerUserID)
 
 	// Verify authenticated user is authorized (RBAC: prevent accessing other users' credentials)
-	if !checkCredentialRBAC(c, session, ownerUserID, effectiveUserID) {
+	if !checkCredentialRBAC(c, ownerUserID, effectiveUserID) {
 		log.Printf("RBAC violation: user %s attempted access (owner=%s, current=%s)", c.GetString("userID"), ownerUserID, effectiveUserID)
 		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
 		return
@@ -288,7 +266,7 @@ func GetJiraCredentialsForSession(c *gin.Context) {
 	effectiveUserID := getEffectiveUserID(c, ownerUserID)
 
 	// Verify authenticated user is authorized (RBAC: prevent accessing other users' credentials)
-	if !checkCredentialRBAC(c, session, ownerUserID, effectiveUserID) {
+	if !checkCredentialRBAC(c, ownerUserID, effectiveUserID) {
 		log.Printf("RBAC violation: user %s attempted access (owner=%s, current=%s)", c.GetString("userID"), ownerUserID, effectiveUserID)
 		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
 		return
@@ -354,7 +332,7 @@ func GetGitLabTokenForSession(c *gin.Context) {
 	effectiveUserID := getEffectiveUserID(c, ownerUserID)
 
 	// Verify authenticated user is authorized (RBAC: prevent accessing other users' credentials)
-	if !checkCredentialRBAC(c, session, ownerUserID, effectiveUserID) {
+	if !checkCredentialRBAC(c, ownerUserID, effectiveUserID) {
 		log.Printf("RBAC violation: user %s attempted access (owner=%s, current=%s)", c.GetString("userID"), ownerUserID, effectiveUserID)
 		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
 		return

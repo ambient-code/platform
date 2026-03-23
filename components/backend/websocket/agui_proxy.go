@@ -97,7 +97,6 @@ func cleanupStaleSessions() {
 				sessionLastSeen.Delete(sessionName)
 				sessionPortMap.Delete(sessionName)
 				sessionProjectMap.Delete(sessionName)
-				handlers.ClearSessionActiveUser(sessionName)
 				// lastActivityUpdateTimes is keyed by "project/session";
 				// remove any entry whose suffix matches this session.
 				lastActivityUpdateTimes.Range(func(k, _ interface{}) bool {
@@ -258,14 +257,6 @@ func HandleAGUIRunProxy(c *gin.Context) {
 	senderUserID := c.GetString("userID")
 	senderDisplayName := c.GetString("userName")
 
-	// Track active user for credential RBAC validation.
-	// Credential endpoints check this to prevent BOT_TOKEN callers
-	// from requesting credentials for a user other than the one
-	// who initiated the current run.
-	if senderUserID != "" {
-		handlers.SetSessionActiveUser(sessionName, senderUserID)
-	}
-
 	// Parse messages for display name generation, hidden metadata, and sender injection
 	var minimalMsgs []types.Message
 	var modifiedMessages []json.RawMessage
@@ -342,6 +333,14 @@ func HandleAGUIRunProxy(c *gin.Context) {
 	currentUserID := c.GetString("userID")
 	currentUserName := c.GetString("userName")
 
+	// Forward the caller's bearer token so the runner can use it for
+	// per-user credential requests instead of the session's BOT_TOKEN.
+	// This ensures users can only access their own credentials.
+	callerToken := ""
+	if auth := c.GetHeader("Authorization"); auth != "" && currentUserID != "" {
+		callerToken = auth
+	}
+
 	if currentUserID == "" {
 		log.Printf("No userID for %s/%s - will use session owner credentials", projectName, sessionName)
 	} else {
@@ -349,7 +348,7 @@ func HandleAGUIRunProxy(c *gin.Context) {
 	}
 
 	// Start background goroutine to proxy runner SSE → persist + broadcast
-	go proxyRunnerStream(runnerURL, bodyBytes, sessionName, runID, threadID, currentUserID, currentUserName)
+	go proxyRunnerStream(runnerURL, bodyBytes, sessionName, runID, threadID, currentUserID, currentUserName, callerToken)
 
 	// Return metadata immediately — events arrive via GET /agui/events
 	c.JSON(http.StatusOK, gin.H{
@@ -362,13 +361,14 @@ func HandleAGUIRunProxy(c *gin.Context) {
 // persists them, and publishes them to the live broadcast pipe.  Runs in
 // a background goroutine so the POST /agui/run handler can return immediately.
 // If userID is provided, forwards user context headers for credential scoping.
-func proxyRunnerStream(runnerURL string, bodyBytes []byte, sessionName, runID, threadID, userID, userName string) {
+// callerToken is the original user's bearer token for per-user credential requests.
+func proxyRunnerStream(runnerURL string, bodyBytes []byte, sessionName, runID, threadID, userID, userName, callerToken string) {
 	logSuffix := ""
 	if userID != "" {
 		logSuffix = fmt.Sprintf(" (user=%s)", userID)
 	}
 	log.Printf("AGUI Proxy: connecting to runner at %s%s", runnerURL, logSuffix)
-	resp, err := connectToRunner(runnerURL, bodyBytes, userID, userName)
+	resp, err := connectToRunner(runnerURL, bodyBytes, userID, userName, callerToken)
 	if err != nil {
 		log.Printf("AGUI Proxy: runner unavailable for %s: %v", sessionName, err)
 		// Publish error events so GET /agui/events subscribers see the failure
@@ -764,7 +764,7 @@ var runnerHTTPClient = &http.Client{
 // container startup time and K8s Service DNS propagation. Retries on
 // "connection refused", "no such host", and "dial tcp" errors with
 // exponential backoff (500ms initial, 1.5x, capped at 5s, 15 attempts).
-func connectToRunner(runnerURL string, bodyBytes []byte, userID, userName string) (*http.Response, error) {
+func connectToRunner(runnerURL string, bodyBytes []byte, userID, userName, callerToken string) (*http.Response, error) {
 	maxAttempts := 15
 	retryDelay := 500 * time.Millisecond
 	maxDelay := 5 * time.Second
@@ -783,6 +783,11 @@ func connectToRunner(runnerURL string, bodyBytes []byte, userID, userName string
 			if userName != "" {
 				req.Header.Set("X-Current-User-Name", userName)
 			}
+		}
+		// Forward the caller's bearer token so the runner can use it
+		// for credential requests with the user's own identity.
+		if callerToken != "" {
+			req.Header.Set("X-Caller-Token", callerToken)
 		}
 
 		resp, err := runnerHTTPClient.Do(req)

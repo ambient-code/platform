@@ -91,6 +91,7 @@ class ClaudeBridge(PlatformBridge):
         input_data: RunAgentInput,
         current_user_id: str = "",
         current_user_name: str = "",
+        caller_token: str = "",
     ) -> AsyncIterator[BaseEvent]:
         """Full run lifecycle: lazy setup → adapter → session worker → tracing."""
         # 1. Lazy platform setup
@@ -124,7 +125,7 @@ class ClaudeBridge(PlatformBridge):
             try:
                 # Set per-run user context inside the lock to prevent races
                 if self._context:
-                    self._context.set_current_user(current_user_id, current_user_name)
+                    self._context.set_current_user(current_user_id, current_user_name, caller_token)
 
                 message_stream = worker.query(user_msg, session_id=session_label)
 
@@ -161,6 +162,10 @@ class ClaudeBridge(PlatformBridge):
                     # Clear the halt flag for this thread
                     self._halted_by_thread.pop(thread_id, None)
             finally:
+                # Clear caller token immediately — never persist between turns.
+                if self._context:
+                    self._context.caller_token = ""
+
                 # Clear credentials after turn completes (shared session security).
                 # In finally to ensure cleanup even on errors/cancellation.
                 if (self._context.get_env("KEEP_CREDENTIALS_PERSISTENT") or "").lower() != "true":

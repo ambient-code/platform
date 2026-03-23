@@ -105,15 +105,21 @@ async def _fetch_credential(context: RunnerContext, credential_type: str) -> dic
     logger.info(f"Fetching fresh {credential_type} credentials from: {url}")
 
     req = _urllib_request.Request(url, method="GET")
-    bot = (os.getenv("BOT_TOKEN") or "").strip()
-    if bot:
-        req.add_header("Authorization", f"Bearer {bot}")
 
-    if context.current_user_id:
-        req.add_header("X-Runner-Current-User", context.current_user_id)
-        logger.debug(f"Fetching {credential_type} for user: {context.current_user_id}")
-    if context.current_user_name:
-        req.add_header("X-Runner-Current-User-Name", context.current_user_name)
+    # Use the caller's own bearer token when available (per-user credential scoping).
+    # This ensures users can only access their own credentials — no BOT_TOKEN
+    # impersonation possible. Falls back to BOT_TOKEN for automated/scheduled sessions.
+    if context.caller_token:
+        req.add_header("Authorization", context.caller_token)
+        logger.debug(f"Using caller token for {credential_type} credentials")
+    else:
+        bot = (os.getenv("BOT_TOKEN") or "").strip()
+        if bot:
+            req.add_header("Authorization", f"Bearer {bot}")
+        if context.current_user_id:
+            req.add_header("X-Runner-Current-User", context.current_user_id)
+        if context.current_user_name:
+            req.add_header("X-Runner-Current-User-Name", context.current_user_name)
 
     loop = asyncio.get_running_loop()
 
