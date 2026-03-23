@@ -401,7 +401,6 @@ func proxyRunnerStream(runnerURL string, bodyBytes []byte, sessionName, runID, t
 	log.Printf("AGUI Proxy: run %s stream ended", truncID(runID))
 }
 
-
 // publishAndPersistErrorEvents generates RUN_STARTED + RUN_ERROR events,
 // persists them, and publishes to the live broadcast so subscribers get
 // notified of runner failures.
@@ -803,7 +802,6 @@ func connectToRunner(runnerURL string, bodyBytes []byte, userID, userName string
 
 	return nil, fmt.Errorf("runner not available after %d attempts", maxAttempts)
 }
-
 
 // getRunnerEndpoint returns the AG-UI server endpoint for a session.
 // The operator creates a Service named "session-{sessionName}" in the
