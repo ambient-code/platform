@@ -44,11 +44,20 @@ func getEffectiveUserID(c *gin.Context, ownerUserID string) string {
 //
 // For direct user callers, the header is validated against their authenticated
 // identity — owner fallback only when no header is present.
-func checkCredentialRBAC(c *gin.Context, ownerUserID, effectiveUserID string) bool {
+func checkCredentialRBAC(c *gin.Context, reqK8s kubernetes.Interface, ownerUserID, effectiveUserID string) bool {
 	authenticatedUserID := c.GetString("userID")
+
+	// If the middleware didn't resolve the identity (e.g., caller token
+	// forwarded from the runner bypasses the OAuth proxy), resolve it
+	// via SelfSubjectReview using the user-scoped K8s client.
+	if authenticatedUserID == "" && reqK8s != nil {
+		if resolved, err := resolveTokenIdentity(c.Request.Context(), reqK8s); err == nil {
+			authenticatedUserID = strings.ReplaceAll(resolved, ":", "-")
+		}
+	}
+
 	if authenticatedUserID == "" {
 		// BOT_TOKEN (session ServiceAccount) - only allow owner credentials.
-		// Per-user scoping uses the caller's forwarded token instead.
 		return effectiveUserID == ownerUserID
 	}
 	if effectiveUserID == ownerUserID {
@@ -97,7 +106,7 @@ func GetGitHubTokenForSession(c *gin.Context) {
 	effectiveUserID := getEffectiveUserID(c, ownerUserID)
 
 	// Verify authenticated user is authorized (RBAC: prevent accessing other users' credentials)
-	if !checkCredentialRBAC(c, ownerUserID, effectiveUserID) {
+	if !checkCredentialRBAC(c, reqK8s, ownerUserID, effectiveUserID) {
 		log.Printf("RBAC violation: user %s attempted access (owner=%s, current=%s)", c.GetString("userID"), ownerUserID, effectiveUserID)
 		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
 		return
@@ -178,7 +187,7 @@ func GetGoogleCredentialsForSession(c *gin.Context) {
 	effectiveUserID := getEffectiveUserID(c, ownerUserID)
 
 	// Verify authenticated user is authorized (RBAC: prevent accessing other users' credentials)
-	if !checkCredentialRBAC(c, ownerUserID, effectiveUserID) {
+	if !checkCredentialRBAC(c, reqK8s, ownerUserID, effectiveUserID) {
 		log.Printf("RBAC violation: user %s attempted access (owner=%s, current=%s)", c.GetString("userID"), ownerUserID, effectiveUserID)
 		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
 		return
@@ -266,7 +275,7 @@ func GetJiraCredentialsForSession(c *gin.Context) {
 	effectiveUserID := getEffectiveUserID(c, ownerUserID)
 
 	// Verify authenticated user is authorized (RBAC: prevent accessing other users' credentials)
-	if !checkCredentialRBAC(c, ownerUserID, effectiveUserID) {
+	if !checkCredentialRBAC(c, reqK8s, ownerUserID, effectiveUserID) {
 		log.Printf("RBAC violation: user %s attempted access (owner=%s, current=%s)", c.GetString("userID"), ownerUserID, effectiveUserID)
 		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
 		return
@@ -332,7 +341,7 @@ func GetGitLabTokenForSession(c *gin.Context) {
 	effectiveUserID := getEffectiveUserID(c, ownerUserID)
 
 	// Verify authenticated user is authorized (RBAC: prevent accessing other users' credentials)
-	if !checkCredentialRBAC(c, ownerUserID, effectiveUserID) {
+	if !checkCredentialRBAC(c, reqK8s, ownerUserID, effectiveUserID) {
 		log.Printf("RBAC violation: user %s attempted access (owner=%s, current=%s)", c.GetString("userID"), ownerUserID, effectiveUserID)
 		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
 		return
