@@ -86,18 +86,18 @@ class TestToolClassification:
 
     def test_mcp_jira(self):
         assert (
-            classify_tool("mcp__mcp-atlassian__jira_get_issue") == ToolCallType.MCP_JIRA
+            classify_tool("mcp__atlassian__jira_get_issue") == ToolCallType.MCP_JIRA
         )
 
     def test_mcp_confluence(self):
         assert (
-            classify_tool("mcp__mcp-atlassian__confluence_search")
+            classify_tool("mcp__atlassian__confluence_search")
             == ToolCallType.MCP_CONFLUENCE
         )
 
     def test_mcp_atlassian_generic(self):
         assert (
-            classify_tool("mcp__mcp-atlassian__some_other_tool")
+            classify_tool("mcp__atlassian__some_other_tool")
             == ToolCallType.MCP_ATLASSIAN
         )
 

@@ -81,7 +81,7 @@ class TestGoogleWorkspaceAuth:
 
 
 class TestJiraAuth:
-    """Test check_mcp_authentication for jira/mcp-atlassian."""
+    """Test check_mcp_authentication for jira/atlassian/mcp-atlassian."""
 
     def test_jira_credentials_present(self, monkeypatch):
         monkeypatch.setenv("JIRA_URL", "https://jira.example.com")
@@ -94,6 +94,7 @@ class TestJiraAuth:
     def test_jira_no_credentials(self, monkeypatch):
         monkeypatch.delenv("JIRA_URL", raising=False)
         monkeypatch.delenv("JIRA_API_TOKEN", raising=False)
+        monkeypatch.delenv("ATLASSIAN_AUTH_HEADER", raising=False)
         monkeypatch.delenv("BACKEND_API_URL", raising=False)
 
         is_auth, msg = check_mcp_authentication("jira")
@@ -106,6 +107,26 @@ class TestJiraAuth:
 
         is_auth, msg = check_mcp_authentication("mcp-atlassian")
         assert is_auth is True
+
+    def test_atlassian_auth_header(self, monkeypatch):
+        """Official Atlassian Remote MCP Server uses ATLASSIAN_AUTH_HEADER."""
+        monkeypatch.delenv("JIRA_URL", raising=False)
+        monkeypatch.delenv("JIRA_API_TOKEN", raising=False)
+        monkeypatch.setenv("ATLASSIAN_AUTH_HEADER", "dXNlckBleC5jb206dG9rZW4=")
+
+        is_auth, msg = check_mcp_authentication("atlassian")
+        assert is_auth is True
+        assert "atlassian" in msg.lower()
+
+    def test_atlassian_no_credentials(self, monkeypatch):
+        monkeypatch.delenv("JIRA_URL", raising=False)
+        monkeypatch.delenv("JIRA_API_TOKEN", raising=False)
+        monkeypatch.delenv("ATLASSIAN_AUTH_HEADER", raising=False)
+        monkeypatch.delenv("BACKEND_API_URL", raising=False)
+
+        is_auth, msg = check_mcp_authentication("atlassian")
+        assert is_auth is False
+        assert "not configured" in msg.lower()
 
 
 class TestUnknownServer:

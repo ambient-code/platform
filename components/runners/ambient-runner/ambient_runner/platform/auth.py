@@ -342,6 +342,9 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
             ).decode()
             os.environ["ATLASSIAN_AUTH_HEADER"] = auth_header
             logger.info("Set ATLASSIAN_AUTH_HEADER for Atlassian Remote MCP Server")
+        else:
+            os.environ.pop("ATLASSIAN_AUTH_HEADER", None)
+            logger.info("Cleared ATLASSIAN_AUTH_HEADER: missing email or apiToken")
 
     # GitLab credentials (with user identity)
     if isinstance(gitlab_creds, Exception):
