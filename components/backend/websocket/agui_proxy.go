@@ -336,7 +336,7 @@ func HandleAGUIRunProxy(c *gin.Context) {
 	if currentUserID == "" {
 		log.Printf("No userID for %s/%s - will use session owner credentials", projectName, sessionName)
 	} else {
-		log.Printf("Current user for run: %s (%s)", currentUserID, currentUserName)
+		log.Printf("Run with per-user credentials for %s/%s", projectName, sessionName)
 	}
 
 	// Start background goroutine to proxy runner SSE → persist + broadcast
@@ -771,9 +771,9 @@ func connectToRunner(runnerURL string, bodyBytes []byte, userID, userName string
 		// Add user context headers for credential scoping (if provided)
 		if userID != "" {
 			req.Header.Set("X-Current-User-ID", userID)
-		}
-		if userName != "" {
-			req.Header.Set("X-Current-User-Name", userName)
+			if userName != "" {
+				req.Header.Set("X-Current-User-Name", userName)
+			}
 		}
 
 		resp, err := runnerHTTPClient.Do(req)

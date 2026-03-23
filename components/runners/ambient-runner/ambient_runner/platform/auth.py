@@ -345,15 +345,15 @@ def clear_runtime_credentials() -> None:
         if os.environ.pop(key, None) is not None:
             cleared.append(key)
 
-    # Clear dynamically-injected MCP_* env vars (set by populate_mcp_server_credentials)
-    mcp_keys = [k for k in os.environ if k.startswith("MCP_")]
-    for key in mcp_keys:
+    # Clear dynamically-injected MCP credential env vars (set by populate_mcp_server_credentials).
+    # Only clear keys matching the MCP_{SERVER}_{FIELD} pattern, not static config like MCP_CONFIG_FILE.
+    mcp_cred_keys = [k for k in os.environ if k.startswith("MCP_") and k.count("_") >= 2 and k != "MCP_CONFIG_FILE"]
+    for key in mcp_cred_keys:
         os.environ.pop(key, None)
         cleared.append(key)
 
-    # Remove Google Workspace credential file if present
-    workspace = os.environ.get("WORKSPACE_PATH", "/workspace")
-    google_cred_file = Path(workspace) / ".google_workspace_mcp" / "credentials" / "credentials.json"
+    # Remove Google Workspace credential file if present (uses same hardcoded path as populate_runtime_credentials)
+    google_cred_file = Path("/workspace/.google_workspace_mcp/credentials/credentials.json")
     if google_cred_file.exists():
         try:
             google_cred_file.unlink()
