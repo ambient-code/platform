@@ -18,6 +18,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -28,6 +29,11 @@ import (
 // to prevent unbounded sync.Map growth on long-running backends.
 
 const writeMutexEvictAge = 30 * time.Minute
+
+// ─── Compaction rate limiting ────────────────────────────────────────
+// compactionSem limits concurrent compaction goroutines to prevent unbounded
+// goroutine spawning on high-volume RUN_FINISHED/RUN_ERROR events.
+var compactionSem = make(chan struct{}, 10) // max 10 concurrent compactions
 
 func init() {
 	go func() {
@@ -112,6 +118,28 @@ func subscribeLive(sessionName string) (<-chan string, func()) {
 	}
 }
 
+// ─── Path helpers ────────────────────────────────────────────────────
+
+// sessionEventsPath validates the sessionID and returns the path to the
+// session's JSONL event log.  Returns ("", false) if the ID is invalid.
+func sessionEventsPath(sessionID string) (string, bool) {
+	if !isValidSessionName(sessionID) {
+		return "", false
+	}
+	baseDir := filepath.Clean(StateBaseDir)
+	return filepath.Join(baseDir, "sessions", sessionID, "agui-events.jsonl"), true
+}
+
+// sessionDirPath validates the sessionID and returns the session directory.
+// Returns ("", false) if the ID is invalid.
+func sessionDirPath(sessionID string) (string, bool) {
+	if !isValidSessionName(sessionID) {
+		return "", false
+	}
+	baseDir := filepath.Clean(StateBaseDir)
+	return filepath.Join(baseDir, "sessions", sessionID), true
+}
+
 // ─── Write path ──────────────────────────────────────────────────────
 
 // writeMutexEntry wraps a per-session mutex with a last-used timestamp
@@ -137,8 +165,12 @@ func getWriteMutex(sessionID string) *sync.Mutex {
 // persistEvent appends a single AG-UI event to the session's JSONL log.
 // Writes are serialised per-session via a mutex to prevent interleaving.
 func persistEvent(sessionID string, event map[string]interface{}) {
-	dir := fmt.Sprintf("%s/sessions/%s", StateBaseDir, sessionID)
-	path := dir + "/agui-events.jsonl"
+	dir, ok := sessionDirPath(sessionID)
+	if !ok {
+		log.Printf("AGUI Store: persist rejected - invalid session ID: %s", sessionID)
+		return
+	}
+	path := filepath.Join(dir, "agui-events.jsonl")
 	_ = ensureDir(dir)
 
 	data, err := json.Marshal(event)
@@ -161,18 +193,38 @@ func persistEvent(sessionID string, event map[string]interface{}) {
 	if _, err := f.Write(append(data, '\n')); err != nil {
 		log.Printf("AGUI Store: failed to write event: %v", err)
 	}
+
+	// Compact finished runs immediately to snapshot-only events
+	eventType, _ := event["type"].(string)
+	switch eventType {
+	case types.EventTypeRunFinished, types.EventTypeRunError:
+		// Non-blocking compaction: skip if semaphore is full.
+		// Uncompacted sessions still serve correctly (raw events).
+		select {
+		case compactionSem <- struct{}{}:
+			go func() {
+				defer func() { <-compactionSem }()
+				compactFinishedRun(sessionID)
+			}()
+		default:
+			log.Printf("AGUI Store: compaction skipped for %s (too many in-flight)", sessionID)
+		}
+	}
 }
 
 // ─── Read path ───────────────────────────────────────────────────────
 
-// loadEvents reads all AG-UI events for a session from the JSONL log
-// using a streaming scanner to avoid loading the entire file into memory.
+// loadEvents reads all AG-UI events for a session from the JSONL log.
 // Automatically triggers legacy migration if the log doesn't exist but
 // a pre-AG-UI messages.jsonl file does.
 func loadEvents(sessionID string) []map[string]interface{} {
-	path := fmt.Sprintf("%s/sessions/%s/agui-events.jsonl", StateBaseDir, sessionID)
+	path, ok := sessionEventsPath(sessionID)
+	if !ok {
+		log.Printf("AGUI Store: load rejected - invalid session ID: %s", sessionID)
+		return nil
+	}
 
-	f, err := os.Open(path)
+	events, err := readJSONLFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			// Attempt legacy migration (messages.jsonl → agui-events.jsonl)
@@ -180,7 +232,7 @@ func loadEvents(sessionID string) []map[string]interface{} {
 				log.Printf("AGUI Store: legacy migration failed for %s: %v", sessionID, mErr)
 			}
 			// Retry after migration
-			f, err = os.Open(path)
+			events, err = readJSONLFile(path)
 			if err != nil {
 				return nil
 			}
@@ -188,25 +240,6 @@ func loadEvents(sessionID string) []map[string]interface{} {
 			log.Printf("AGUI Store: failed to read event log for %s: %v", sessionID, err)
 			return nil
 		}
-	}
-	defer f.Close()
-
-	events := make([]map[string]interface{}, 0, 64)
-	scanner := bufio.NewScanner(f)
-	// Allow lines up to 1MB (default 64KB may truncate large tool outputs)
-	scanner.Buffer(make([]byte, 0, scannerInitialBufferSize), scannerMaxLineSize)
-	for scanner.Scan() {
-		line := scanner.Bytes()
-		if len(line) == 0 {
-			continue
-		}
-		var evt map[string]interface{}
-		if err := json.Unmarshal(line, &evt); err == nil {
-			events = append(events, evt)
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		log.Printf("AGUI Store: error scanning event log for %s: %v", sessionID, err)
 	}
 	return events
 }
@@ -216,7 +249,10 @@ func loadEvents(sessionID string) []map[string]interface{} {
 //
 // Returns "" if the status cannot be determined (no events, file missing, etc.).
 func DeriveAgentStatus(sessionID string) string {
-	path := fmt.Sprintf("%s/sessions/%s/agui-events.jsonl", StateBaseDir, sessionID)
+	path, ok := sessionEventsPath(sessionID)
+	if !ok {
+		return ""
+	}
 
 	// Read only the tail of the file to avoid loading entire event log into memory.
 	// Use 2x scannerMaxLineSize to ensure we can read at least one complete max-sized
@@ -314,185 +350,162 @@ func DeriveAgentStatus(sessionID string) string {
 	return ""
 }
 
-// ─── Compaction ──────────────────────────────────────────────────────
+// ─── Snapshot compaction (AG-UI serialization spec) ──────────────────
 //
-// Go port of @ag-ui/client compactEvents.  Concatenates streaming deltas
-// so reconnect replays are compact and fast.
+// See: https://docs.ag-ui.com/concepts/serialization
 
-type pendingText struct {
-	start       map[string]interface{}
-	deltas      []string
-	end         map[string]interface{}
-	otherEvents []map[string]interface{}
+// loadEventsForReplay loads events for SSE replay.
+//
+// For finished runs, the file is already compacted to snapshot-only events
+// by compactFinishedRun(), so we just read and return.
+//
+// For active runs, the file contains streaming events which are necessary
+// for real-time SSE connections.
+func loadEventsForReplay(sessionID string) []map[string]interface{} {
+	events := loadEvents(sessionID)
+	if len(events) > 0 {
+		// Check if finished or active
+		last := events[len(events)-1]
+		if last != nil {
+			lastType, _ := last["type"].(string)
+			if lastType == types.EventTypeRunFinished || lastType == types.EventTypeRunError {
+				log.Printf("AGUI Events: serving %d snapshot events for %s (finished)", len(events), sessionID)
+			} else {
+				log.Printf("AGUI Events: serving %d streaming events for %s (active)", len(events), sessionID)
+			}
+		}
+	}
+	return events
 }
 
-type pendingTool struct {
-	start       map[string]interface{}
-	deltas      []string
-	end         map[string]interface{}
-	otherEvents []map[string]interface{}
-}
-
-// compactStreamingEvents concatenates TEXT_MESSAGE_CONTENT and TOOL_CALL_ARGS
-// deltas for the same messageId/toolCallId.  All other events pass through.
-func compactStreamingEvents(events []map[string]interface{}) []map[string]interface{} {
-	compacted := make([]map[string]interface{}, 0, len(events)/2)
-
-	textByID := make(map[string]*pendingText)
-	var textOrder []string
-	toolByID := make(map[string]*pendingTool)
-	var toolOrder []string
-
-	getText := func(id string) *pendingText {
-		if p, ok := textByID[id]; ok {
-			return p
-		}
-		p := &pendingText{}
-		textByID[id] = p
-		textOrder = append(textOrder, id)
-		return p
+// compactFinishedRun replaces the raw event log with snapshot-only events.
+//
+// Per AG-UI serialization spec, finished runs should only store:
+//   - MESSAGES_SNAPSHOT (emitted by runner in finally block)
+//   - STATE_SNAPSHOT (emitted when state changes)
+//   - Lifecycle events (RUN_STARTED, RUN_FINISHED, RUN_ERROR, STEP_*)
+//   - Extension events (RAW, CUSTOM, META for user feedback)
+//   - Frontend state (ACTIVITY_SNAPSHOT)
+//
+// This deletes streaming events that are superseded by snapshots:
+//   - TEXT_MESSAGE_START/CONTENT/END (superseded by MESSAGES_SNAPSHOT)
+//   - TOOL_CALL_START/ARGS/END (superseded by MESSAGES_SNAPSHOT)
+//   - REASONING_START/END, REASONING_MESSAGE_START/CONTENT/END (superseded by MESSAGES_SNAPSHOT)
+//   - STATE_DELTA (superseded by STATE_SNAPSHOT)
+//   - ACTIVITY_DELTA (superseded by ACTIVITY_SNAPSHOT)
+//
+// If no MESSAGES_SNAPSHOT is found, the session is considered corrupted and
+// we keep the raw events as fallback.
+func compactFinishedRun(sessionID string) {
+	dir, ok := sessionDirPath(sessionID)
+	if !ok {
+		log.Printf("AGUI Store: compaction rejected - invalid session ID: %s", sessionID)
+		return
 	}
-	getTool := func(id string) *pendingTool {
-		if p, ok := toolByID[id]; ok {
-			return p
-		}
-		p := &pendingTool{}
-		toolByID[id] = p
-		toolOrder = append(toolOrder, id)
-		return p
-	}
+	rawPath := filepath.Join(dir, "agui-events.jsonl")
 
-	flushText := func(id string) {
-		p := textByID[id]
-		if p == nil {
-			return
-		}
-		if p.start != nil {
-			compacted = append(compacted, p.start)
-		}
-		if len(p.deltas) > 0 {
-			combined := ""
-			for _, d := range p.deltas {
-				combined += d
-			}
-			compacted = append(compacted, map[string]interface{}{
-				"type":      types.EventTypeTextMessageContent,
-				"messageId": id,
-				"delta":     combined,
-			})
-		}
-		if p.end != nil {
-			compacted = append(compacted, p.end)
-		}
-		compacted = append(compacted, p.otherEvents...)
-		delete(textByID, id)
+	// Hold the write mutex for the entire read-filter-rename to prevent
+	// concurrent persistEvent calls from writing events that get overwritten.
+	mu := getWriteMutex(sessionID)
+	mu.Lock()
+	defer mu.Unlock()
+
+	// Read all events
+	events, err := readJSONLFile(rawPath)
+	if err != nil || len(events) == 0 {
+		log.Printf("AGUI Store: failed to read events for compaction (%s): %v", sessionID, err)
+		return
 	}
 
-	flushTool := func(id string) {
-		p := toolByID[id]
-		if p == nil {
-			return
-		}
-		if p.start != nil {
-			compacted = append(compacted, p.start)
-		}
-		if len(p.deltas) > 0 {
-			combined := ""
-			for _, d := range p.deltas {
-				combined += d
-			}
-			compacted = append(compacted, map[string]interface{}{
-				"type":       types.EventTypeToolCallArgs,
-				"toolCallId": id,
-				"delta":      combined,
-			})
-		}
-		if p.end != nil {
-			compacted = append(compacted, p.end)
-		}
-		compacted = append(compacted, p.otherEvents...)
-		delete(toolByID, id)
-	}
+	// Filter to snapshot-only events
+	var snapshots []map[string]interface{}
+	hasMessagesSnapshot := false
 
 	for _, evt := range events {
 		eventType, _ := evt["type"].(string)
 		switch eventType {
-		case types.EventTypeTextMessageStart:
-			if id, _ := evt["messageId"].(string); id != "" {
-				getText(id).start = evt
-			} else {
-				compacted = append(compacted, evt)
-			}
-		case types.EventTypeTextMessageContent:
-			if id, _ := evt["messageId"].(string); id != "" {
-				delta, _ := evt["delta"].(string)
-				getText(id).deltas = append(getText(id).deltas, delta)
-			} else {
-				compacted = append(compacted, evt)
-			}
-		case types.EventTypeTextMessageEnd:
-			if id, _ := evt["messageId"].(string); id != "" {
-				getText(id).end = evt
-				flushText(id)
-			} else {
-				compacted = append(compacted, evt)
-			}
+		case types.EventTypeMessagesSnapshot:
+			hasMessagesSnapshot = true
+			snapshots = append(snapshots, evt)
+		case types.EventTypeStateSnapshot:
+			snapshots = append(snapshots, evt)
+		case types.EventTypeRunStarted, types.EventTypeRunFinished, types.EventTypeRunError,
+			types.EventTypeStepStarted, types.EventTypeStepFinished:
+			snapshots = append(snapshots, evt)
 		case types.EventTypeToolCallStart:
-			if id, _ := evt["toolCallId"].(string); id != "" {
-				getTool(id).start = evt
-			} else {
-				compacted = append(compacted, evt)
+			// Preserve AskUserQuestion tool calls — DeriveAgentStatus() needs them
+			// to detect waiting_input status after compaction.
+			if toolName, _ := evt["toolCallName"].(string); isAskUserQuestionToolCall(toolName) {
+				snapshots = append(snapshots, evt)
 			}
-		case types.EventTypeToolCallArgs:
-			if id, _ := evt["toolCallId"].(string); id != "" {
-				delta, _ := evt["delta"].(string)
-				getTool(id).deltas = append(getTool(id).deltas, delta)
-			} else {
-				compacted = append(compacted, evt)
-			}
-		case types.EventTypeToolCallEnd:
-			if id, _ := evt["toolCallId"].(string); id != "" {
-				getTool(id).end = evt
-				flushTool(id)
-			} else {
-				compacted = append(compacted, evt)
-			}
-		default:
-			// Buffer "other" events into ALL currently open (incomplete)
-			// sequences so they replay in the correct position after
-			// compaction.  If no sequences are open, emit directly.
-			buffered := false
-			for _, id := range textOrder {
-				if p := textByID[id]; p != nil && p.start != nil && p.end == nil {
-					p.otherEvents = append(p.otherEvents, evt)
-					buffered = true
-				}
-			}
-			for _, id := range toolOrder {
-				if p := toolByID[id]; p != nil && p.start != nil && p.end == nil {
-					p.otherEvents = append(p.otherEvents, evt)
-					buffered = true
-				}
-			}
-			if !buffered {
-				compacted = append(compacted, evt)
-			}
+		case types.EventTypeRaw, types.EventTypeCustom, types.EventTypeMeta:
+			// Preserve custom events that aren't included in MESSAGES_SNAPSHOT
+			snapshots = append(snapshots, evt)
+		case types.EventTypeActivitySnapshot:
+			// Preserve frontend durable UI state (ACTIVITY_DELTA can be discarded, snapshot is canonical)
+			snapshots = append(snapshots, evt)
 		}
 	}
 
-	// Flush incomplete sequences (mid-run reconnect)
-	for _, id := range textOrder {
-		if textByID[id] != nil {
-			flushText(id)
-		}
+	// If no MESSAGES_SNAPSHOT found, session is corrupted - keep raw events
+	if !hasMessagesSnapshot {
+		log.Printf("AGUI Store: no MESSAGES_SNAPSHOT found for %s - session corrupted, keeping raw events", sessionID)
+		return
 	}
-	for _, id := range toolOrder {
-		if toolByID[id] != nil {
-			flushTool(id)
+
+	log.Printf("AGUI Store: compacting %s from %d raw events → %d snapshot events", sessionID, len(events), len(snapshots))
+
+	// Write snapshots atomically to temp file
+	tmpFile, err := os.CreateTemp(dir, "agui-events-*.tmp")
+	if err != nil {
+		log.Printf("AGUI Store: failed to create temp file for compaction: %v", err)
+		return
+	}
+	tmpPath := tmpFile.Name()
+
+	w := bufio.NewWriter(tmpFile)
+	for _, evt := range snapshots {
+		data, err := json.Marshal(evt)
+		if err != nil {
+			_ = tmpFile.Close()
+			_ = os.Remove(tmpPath)
+			log.Printf("AGUI Store: failed to marshal event during compaction: %v", err)
+			return
+		}
+		if _, err := w.Write(data); err != nil {
+			_ = tmpFile.Close()
+			_ = os.Remove(tmpPath)
+			log.Printf("AGUI Store: failed to write event during compaction: %v", err)
+			return
+		}
+		if err := w.WriteByte('\n'); err != nil {
+			_ = tmpFile.Close()
+			_ = os.Remove(tmpPath)
+			log.Printf("AGUI Store: failed to write newline during compaction: %v", err)
+			return
 		}
 	}
 
-	return compacted
+	if err := w.Flush(); err != nil {
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpPath)
+		log.Printf("AGUI Store: failed to flush buffer during compaction: %v", err)
+		return
+	}
+	if err := tmpFile.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		log.Printf("AGUI Store: failed to close temp file during compaction: %v", err)
+		return
+	}
+
+	// Atomically replace raw events file with snapshots
+	if err := os.Rename(tmpPath, rawPath); err != nil {
+		log.Printf("AGUI Store: failed to replace raw events with snapshots: %v", err)
+		_ = os.Remove(tmpPath)
+		return
+	}
+
+	log.Printf("AGUI Store: successfully compacted %s to snapshot-only events", sessionID)
 }
 
 // ─── Timestamp sanitization ──────────────────────────────────────────

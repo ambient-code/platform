@@ -826,45 +826,71 @@ func CreateSession(c *gin.Context) {
 	}
 
 	// Add userContext from authenticated caller identity.
-	// Prefer forwarded headers (OAuth proxy); fall back to SelfSubjectReview
+	// When a parent session is specified, inherit the parent's userContext so that
+	// child sessions created by a runner service account retain the original user's
+	// identity (and therefore their credentials, e.g. GitHub tokens).
+	// Otherwise, prefer forwarded headers (OAuth proxy); fall back to SelfSubjectReview
 	// for headless/API callers that authenticate directly with a bearer token.
 	{
-		uidVal, _ := c.Get("userID")
-		uid, _ := uidVal.(string)
-		uid = strings.TrimSpace(uid)
+		var parentUserContext map[string]interface{}
 
-		if uid == "" {
-			if resolved, err := resolveTokenIdentity(c.Request.Context(), reqK8s); err == nil {
-				uid = strings.ReplaceAll(resolved, ":", "-")
-				log.Printf("Resolved token identity via SelfSubjectReview: %s", uid)
+		// If this is a child session, fetch the parent's userContext
+		if req.ParentSessionID != "" {
+			gvr := GetAgenticSessionV1Alpha1Resource()
+			parentObj, err := k8sDyn.Resource(gvr).Namespace(project).Get(context.TODO(), req.ParentSessionID, v1.GetOptions{})
+			if err != nil {
+				log.Printf("Warning: could not fetch parent session %s/%s to inherit userContext: %v", project, req.ParentSessionID, err)
 			} else {
-				log.Printf("Could not resolve token identity: %v", err)
+				uc, found, _ := unstructured.NestedMap(parentObj.Object, "spec", "userContext")
+				if found && len(uc) > 0 {
+					parentUserContext = uc
+					log.Printf("Inheriting userContext from parent session %s (userId=%v)", req.ParentSessionID, uc["userId"])
+				}
 			}
 		}
 
-		if uid != "" {
-			displayName := ""
-			if v, ok := c.Get("userName"); ok {
-				if s, ok2 := v.(string); ok2 {
-					displayName = s
+		if parentUserContext != nil {
+			// Use the parent's userContext directly
+			session["spec"].(map[string]interface{})["userContext"] = parentUserContext
+		} else {
+			// No parent — resolve from the caller's identity
+			uidVal, _ := c.Get("userID")
+			uid, _ := uidVal.(string)
+			uid = strings.TrimSpace(uid)
+
+			if uid == "" {
+				if resolved, err := resolveTokenIdentity(c.Request.Context(), reqK8s); err == nil {
+					uid = strings.ReplaceAll(resolved, ":", "-")
+					log.Printf("Resolved token identity via SelfSubjectReview: %s", uid)
+				} else {
+					log.Printf("Could not resolve token identity: %v", err)
 				}
 			}
-			groups := []string{}
-			if v, ok := c.Get("userGroups"); ok {
-				if gg, ok2 := v.([]string); ok2 {
-					groups = gg
+
+			if uid != "" {
+				displayName := ""
+				if v, ok := c.Get("userName"); ok {
+					if s, ok2 := v.(string); ok2 {
+						displayName = s
+					}
 				}
-			}
-			if displayName == "" && req.UserContext != nil {
-				displayName = req.UserContext.DisplayName
-			}
-			if len(groups) == 0 && req.UserContext != nil {
-				groups = req.UserContext.Groups
-			}
-			session["spec"].(map[string]interface{})["userContext"] = map[string]interface{}{
-				"userId":      uid,
-				"displayName": displayName,
-				"groups":      groups,
+				groups := []string{}
+				if v, ok := c.Get("userGroups"); ok {
+					if gg, ok2 := v.([]string); ok2 {
+						groups = gg
+					}
+				}
+				if displayName == "" && req.UserContext != nil {
+					displayName = req.UserContext.DisplayName
+				}
+				if len(groups) == 0 && req.UserContext != nil {
+					groups = req.UserContext.Groups
+				}
+				session["spec"].(map[string]interface{})["userContext"] = map[string]interface{}{
+					"userId":      uid,
+					"displayName": displayName,
+					"groups":      groups,
+				}
 			}
 		}
 	}

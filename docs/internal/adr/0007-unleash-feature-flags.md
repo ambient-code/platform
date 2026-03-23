@@ -1,13 +1,13 @@
-# ADR-0006: Unleash for Feature Flag Management
+# ADR-0007: Unleash for Feature Flag Management
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-02-17
 **Deciders:** Platform Team
-**Technical Story:** Constitution Principle XI requires all new features gated behind feature flags
+**Technical Story:** All new features should be gated behind feature flags
 
 ## Context and Problem Statement
 
-The project constitution (Principle XI: Feature Flag Discipline) mandates that all new features must be gated behind feature flags. We need a feature flag system that supports:
+All new features should be gated behind feature flags. We need a feature flag system that supports:
 
 1. Gradual rollouts and percentage-based targeting
 2. A/B testing and experimentation
@@ -20,7 +20,7 @@ How should we implement feature flag management for the platform?
 
 ## Decision Drivers
 
-* **Constitution compliance:** Principle XI requires feature flags for all new features
+* **Feature flag discipline:** All new features should be gated behind feature flags
 * **Workspace autonomy:** Workspace admins need to control features for their workspace
 * **Platform control:** Platform team needs gradual rollout and A/B testing capabilities
 * **Operational control:** Need to enable/disable features without redeployment
@@ -173,6 +173,43 @@ Chosen option: **"Tag-based filtering"**, because:
 | (not set) | disabled | `false` | Platform team |
 | (not set) | 50% rollout | (evaluated) | Platform team |
 
+### Fail Modes
+
+The backend provides two categories of flag evaluation functions with different default behaviors when Unleash is unavailable or not configured:
+
+| Function | Fail Mode | Default | Rationale |
+|----------|-----------|---------|-----------|
+| `IsEnabled()` | Fail-closed | `false` | General features should be off until explicitly enabled |
+| `IsEnabledWithContext()` | Fail-closed | `false` | Same as above, with user/session/IP context |
+| `IsModelEnabled()` | Fail-open | `true` | Models should remain available; flags only restrict |
+| `IsModelEnabledWithContext()` | Fail-open | `true` | Same as above, with user/session/IP context |
+
+**Handler-level wrappers** (in `handlers/featureflags.go`):
+- `FeatureEnabled(flagName)` — calls `IsEnabled()`, fail-closed
+- `FeatureEnabledForRequest(c, flagName)` — calls `IsEnabledWithContext()`, fail-closed
+
+**Workspace-aware wrappers** (check ConfigMap override first, then Unleash):
+- `isModelEnabledWithOverrides(flagName, overrides)` — falls back to `IsModelEnabled()`, fail-open
+- `isRunnerEnabledWithOverrides(flagName, overrides)` — falls back to `FeatureEnabled()`, fail-closed
+
+See [fail-modes.md](../feature-flags/fail-modes.md) for a full reference.
+
+### Model and Runner Feature Gates
+
+**Model flags** follow the naming pattern `model.<modelId>.enabled` and are auto-generated from `models.json` at startup. Models marked `featureGated: true` require an enabled flag to appear in the model list. Default models (global and per-provider) bypass flag checks entirely.
+
+**Runner flags** follow the naming pattern `runner.<runnerId>.enabled` and are defined in `flags.json` or via the `featureGate` field in the agent registry. Runners with an empty `featureGate` are always enabled. The default runner (`claude-code`) fails open when the agent registry is unavailable.
+
+### Flag Sync at Startup
+
+The backend syncs flag definitions to Unleash on startup (`cmd/sync_flags.go`):
+
+1. **Model flags** — Generated from `models.json` for available, feature-gated, non-default models. Created with `EnabledByDefault: true` (100% rollout, enabled in environment). Tagged `scope:workspace`.
+2. **Generic flags** — Loaded from `flags.json`. Created with `EnabledByDefault: false` (0% rollout) unless specified.
+3. **Stale cleanup** — Flags for models no longer feature-gated are archived in Unleash.
+
+Sync runs asynchronously with 3 retries (10s delay). Requires `UNLEASH_ADMIN_URL` and `UNLEASH_ADMIN_TOKEN`; skips silently if not set.
+
 ### Use Cases
 
 | Scenario | Implementation |
@@ -201,7 +238,7 @@ data:
   frontend.new-chat-ui.enabled: "false"
 ```
 
-### Flag Naming Convention (Constitution Principle XI)
+### Flag Naming Convention
 
 All feature flags MUST follow the naming pattern:
 
@@ -260,27 +297,39 @@ func isWorkspaceConfigurable(tags []Tag) bool {
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/projects/:name/feature-flags` | GET | List all flags with override status |
-| `/projects/:name/feature-flags/evaluate/:flagName` | GET | Evaluate flag for workspace |
-| `/projects/:name/feature-flags/:flagName/override` | PUT | Set workspace override |
-| `/projects/:name/feature-flags/:flagName/override` | DELETE | Remove workspace override |
+| `/projects/:name/feature-flags` | GET | List all workspace-configurable flags with override status |
+| `/projects/:name/feature-flags/evaluate/:flagName` | GET | Evaluate flag for workspace (ConfigMap then Unleash) |
+| `/projects/:name/feature-flags/:flagName` | GET | Get single flag details from Unleash |
+| `/projects/:name/feature-flags/:flagName/override` | PUT | Set workspace override (`{"enabled": bool}`) |
+| `/projects/:name/feature-flags/:flagName/override` | DELETE | Remove workspace override (revert to Unleash) |
+| `/projects/:name/feature-flags/:flagName/enable` | POST | Enable flag (sets ConfigMap override to `"true"`) |
+| `/projects/:name/feature-flags/:flagName/disable` | POST | Disable flag (sets ConfigMap override to `"false"`) |
 
 ### Key Files
 
 **Backend:**
 
-* `handlers/featureflags.go` - Client API proxy for frontend SDK
-* `handlers/featureflags_admin.go` - Flag evaluation, override management
+* `featureflags/featureflags.go` - Unleash SDK init, `IsEnabled`, `IsModelEnabled` (fail-open/closed defaults)
+* `handlers/featureflags.go` - Handler-level wrappers (`FeatureEnabled`, `FeatureEnabledForRequest`)
+* `handlers/featureflags_admin.go` - Flag evaluation, override management, workspace CRUD
+* `handlers/models.go` - Model listing with feature gate checks (`isModelEnabledWithOverrides`)
+* `handlers/runner_types.go` - Runner listing with feature gate checks (`isRunnerEnabledWithOverrides`)
+* `cmd/sync_flags.go` - Flag sync to Unleash at startup (models.json + flags.json)
 * `routes.go` - Route registration
 
 **Frontend:**
 
 * `src/lib/feature-flags.ts` - Re-exports Unleash SDK hooks (`useFlag`, `useVariant`)
 * `src/components/providers/feature-flag-provider.tsx` - Unleash provider with environment context
-* `src/components/workspace-sections/feature-flags-settings.tsx` - Admin UI (in Settings tab) with batch save
+* `src/components/workspace-sections/feature-flags-section.tsx` - Admin UI with batch save
 * `src/services/queries/use-feature-flags-admin.ts` - React Query hooks including `useWorkspaceFlag`
 * `src/services/api/feature-flags-admin.ts` - API service functions
-* `src/app/api/projects/[name]/feature-flags/*` - Next.js proxy routes
+* `src/app/api/feature-flags/route.ts` - Next.js proxy to Unleash Frontend API
+
+**Configuration:**
+
+* `manifests/base/models.json` - Model manifest with `featureGated` flags
+* `manifests/base/flags.json` - Generic feature flag definitions
 
 **Deployment:**
 
@@ -437,5 +486,5 @@ make unleash-port-forward
 * [Unleash React SDK](https://docs.getunleash.io/reference/sdks/react)
 * [Unleash Admin API](https://docs.getunleash.io/reference/api/unleash/admin)
 * [Kubernetes ConfigMaps](https://kubernetes.io/docs/concepts/configuration/configmap/)
-* Constitution Principle XI: Feature Flag Discipline
-* Related: docs/feature-flags/README.md
+* Feature Flag Discipline: All new features gated behind feature flags
+* Related: [Feature Flags Documentation](../feature-flags/README.md)

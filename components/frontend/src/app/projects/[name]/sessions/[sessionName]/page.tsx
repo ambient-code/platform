@@ -899,6 +899,23 @@ export default function ProjectSessionDetailPage({
             },
           });
         }
+      } else if (msg.role === "reasoning" || msg.role === "developer") {
+        // ReasoningMessage (role="reasoning") per AG-UI spec carries thinking content.
+        // Also handle legacy DeveloperMessage (role="developer") from older sessions.
+        const thinkingText = typeof msg.content === 'string' ? msg.content : '';
+        if (thinkingText) {
+          result.push({
+            type: "agent_message",
+            id: msg.id,
+            content: {
+              type: "reasoning_block",
+              thinking: thinkingText,
+              signature: "",
+            },
+            model: "claude",
+            timestamp,
+          });
+        }
       } else if (msg.role === "system") {
         result.push({
           type: "system_message",
@@ -1048,7 +1065,32 @@ export default function ProjectSessionDetailPage({
       }
     }
 
-    return result;
+    // Deduplicate reasoning blocks. Old sessions may have both REASONING_*
+    // streaming events (no messageId) and a MESSAGES_SNAPSHOT developer/reasoning
+    // message with a different ID — producing two identical thinking blocks.
+    // Use msg.id for keyed messages; fall back to content matching only for
+    // unkeyed (anonymous) duplicates within the same reasoning text.
+    const seenReasoningIds = new Set<string>();
+    const seenAnonThinking = new Set<string>();
+    const deduped = result.filter(msg => {
+      const content = 'content' in msg && typeof msg.content === 'object' && msg.content !== null ? msg.content : null;
+      if (content && 'thinking' in content && content.type === 'reasoning_block') {
+        const msgId = 'id' in msg ? (msg as { id: string }).id : '';
+        if (msgId) {
+          // Keyed message — deduplicate by ID
+          if (seenReasoningIds.has(msgId)) return false;
+          seenReasoningIds.add(msgId);
+        } else {
+          // Anonymous legacy message — deduplicate by content
+          const key = (content as { thinking: string }).thinking;
+          if (seenAnonThinking.has(key)) return false;
+          seenAnonThinking.add(key);
+        }
+      }
+      return true;
+    });
+
+    return deduped;
   }, [
     aguiState.messages,
     aguiState.currentToolCall,   // Needed in Phase A to avoid orphaned-child promotion

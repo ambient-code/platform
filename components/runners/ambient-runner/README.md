@@ -4,7 +4,7 @@ The Claude Code Runner is a Python-based component that wraps the Claude Code SD
 
 ## Architecture
 
-The runner follows the [Ambient Runner SDK architecture (ADR-0006)](../../docs/adr/0006-ambient-runner-sdk-architecture.md) with a layered design:
+The runner follows the [Ambient Runner SDK architecture (ADR-0006)](../../../docs/internal/adr/0006-ambient-runner-sdk-architecture.md) with a layered design:
 
 ### Core Modules
 

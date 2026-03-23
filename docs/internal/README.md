@@ -6,7 +6,7 @@ This directory contains internal developer documentation for the Ambient Code Pl
 
 | Directory | Description |
 |-----------|-------------|
-| `adr/` | Architectural Decision Records (ADR-0001 through ADR-0006) |
+| `adr/` | Architectural Decision Records (ADR-0001 through ADR-0007) |
 | `agents/` | AI agent persona definitions used in workflows |
 | `api/` | Internal API reference notes (GitLab endpoints) |
 | `architecture/` | Architecture overviews, Mermaid diagrams, and screenshots |
