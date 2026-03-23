@@ -111,15 +111,18 @@ async def _fetch_credential(context: RunnerContext, credential_type: str) -> dic
     # impersonation possible. Falls back to BOT_TOKEN for automated/scheduled sessions.
     if context.caller_token:
         req.add_header("Authorization", context.caller_token)
+        # Must also set X-Runner-Current-User so getEffectiveUserID returns
+        # the caller's ID (not the owner). RBAC validates that the authenticated
+        # user (from token) matches the effective user — no impersonation possible.
+        if context.current_user_id:
+            req.add_header("X-Runner-Current-User", context.current_user_id)
         logger.debug(f"Using caller token for {credential_type} credentials")
     else:
         bot = (os.getenv("BOT_TOKEN") or "").strip()
         if bot:
             req.add_header("Authorization", f"Bearer {bot}")
-        if context.current_user_id:
-            req.add_header("X-Runner-Current-User", context.current_user_id)
-        if context.current_user_name:
-            req.add_header("X-Runner-Current-User-Name", context.current_user_name)
+        # BOT_TOKEN callers can only access owner credentials (RBAC enforced).
+        # X-Runner-Current-User is not set — defaults to owner in getEffectiveUserID.
 
     loop = asyncio.get_running_loop()
 

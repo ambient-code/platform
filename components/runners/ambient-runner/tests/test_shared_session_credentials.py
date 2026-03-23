@@ -157,7 +157,7 @@ class TestClearRuntimeCredentials:
 class TestFetchCredentialHeaders:
     @pytest.mark.asyncio
     async def test_sends_current_user_header_when_set(self):
-        """Verify _fetch_credential sends X-Runner-Current-User when context has current_user_id."""
+        """Verify _fetch_credential uses caller token and sends X-Runner-Current-User when context has both."""
         server = HTTPServer(("127.0.0.1", 0), _CredentialHandler)
         port = server.server_address[1]
         thread = Thread(target=server.handle_request, daemon=True)
@@ -179,12 +179,14 @@ class TestFetchCredentialHeaders:
                     current_user_id="userB@example.com",
                     current_user_name="User B",
                 )
+                # Set caller token — runner uses this instead of BOT_TOKEN
+                ctx.caller_token = "Bearer userB-oauth-token"
                 result = await _fetch_credential(ctx, "github")
 
             assert result.get("token") == "gh-token-for-userB"
             assert _CredentialHandler.captured_headers.get("X-Runner-Current-User") == "userB@example.com"
-            assert _CredentialHandler.captured_headers.get("X-Runner-Current-User-Name") == "User B"
-            assert "Bearer fake-bot-token" in _CredentialHandler.captured_headers.get("Authorization", "")
+            # Should use caller token, not BOT_TOKEN
+            assert "Bearer userB-oauth-token" in _CredentialHandler.captured_headers.get("Authorization", "")
         finally:
             server.server_close()
             thread.join(timeout=2)
