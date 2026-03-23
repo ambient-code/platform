@@ -94,11 +94,16 @@ class ClaudeBridge(PlatformBridge):
         caller_token: str = "",
     ) -> AsyncIterator[BaseEvent]:
         """Full run lifecycle: lazy setup → adapter → session worker → tracing."""
-        # 1. Lazy platform setup
+        # 1. Set user context BEFORE credential population so the caller's
+        # token is used for per-user credential scoping.
+        if self._context:
+            self._context.set_current_user(current_user_id, current_user_name, caller_token)
+
+        # 2. Lazy platform setup (first run) + per-run credential refresh
         await self._ensure_ready()
         await self._refresh_credentials_if_stale()
 
-        # 2. Ensure adapter exists
+        # 3. Ensure adapter exists
         self._ensure_adapter()
 
         # 3. Extract user message for worker and observability
@@ -123,10 +128,6 @@ class ClaudeBridge(PlatformBridge):
         session_label = self._session_manager.get_session_id(thread_id) or thread_id
         async with self._session_manager.get_lock(thread_id):
             try:
-                # Set per-run user context inside the lock to prevent races
-                if self._context:
-                    self._context.set_current_user(current_user_id, current_user_name, caller_token)
-
                 message_stream = worker.query(user_msg, session_id=session_label)
 
                 from ambient_runner.middleware import tracing_middleware
