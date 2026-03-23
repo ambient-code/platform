@@ -26,12 +26,9 @@ claude = [
 observability = [
   "langfuse>=3.0.0",
 ]
-mcp-atlassian = [
-  "mcp-atlassian>=0.11.9",
-]
 # Install everything for the polymorphic runner
 all = [
-  "ambient-runner[claude,observability,mcp-atlassian]",
+  "ambient-runner[claude,observability]",
 ]
 
 [tool.uv]

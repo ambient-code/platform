@@ -225,7 +225,10 @@ def check_mcp_authentication(server_name: str) -> tuple[bool | None, str | None]
         except KeyError as e:
             return False, f"Google OAuth credentials corrupted: {str(e)}"
 
-    if server_name in ("mcp-atlassian", "jira"):
+    if server_name in ("atlassian", "mcp-atlassian", "jira"):
+        if os.getenv("ATLASSIAN_AUTH_HEADER", "").strip():
+            return True, "Atlassian credentials configured"
+
         jira_url = os.getenv("JIRA_URL", "").strip()
         jira_token = os.getenv("JIRA_API_TOKEN", "").strip()
         if jira_url and jira_token:

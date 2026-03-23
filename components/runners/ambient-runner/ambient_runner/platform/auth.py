@@ -322,7 +322,7 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
         except Exception as e:
             logger.warning(f"Failed to write Google credentials: {e}")
 
-    # Jira credentials
+    # Jira / Atlassian credentials
     if isinstance(jira_creds, Exception):
         logger.warning(f"Failed to refresh Jira credentials: {jira_creds}")
     elif jira_creds.get("apiToken"):
@@ -330,6 +330,18 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
         os.environ["JIRA_API_TOKEN"] = jira_creds.get("apiToken", "")
         os.environ["JIRA_EMAIL"] = jira_creds.get("email", "")
         logger.info("Updated Jira credentials in environment")
+
+        # Build base64 auth header for official Atlassian Remote MCP Server
+        email = jira_creds.get("email", "")
+        api_token = jira_creds["apiToken"]
+        if email and api_token:
+            import base64
+
+            auth_header = base64.b64encode(
+                f"{email}:{api_token}".encode()
+            ).decode()
+            os.environ["ATLASSIAN_AUTH_HEADER"] = auth_header
+            logger.info("Set ATLASSIAN_AUTH_HEADER for Atlassian Remote MCP Server")
 
     # GitLab credentials (with user identity)
     if isinstance(gitlab_creds, Exception):
