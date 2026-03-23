@@ -116,26 +116,20 @@ class ClaudeBridge(PlatformBridge):
         await populate_mcp_server_credentials(self._context)
         self._last_creds_refresh = time.monotonic()
 
-        # If the caller changed, restart the Claude client WITHOUT --resume
-        # so MCP subprocess servers start fresh with the new user's credentials.
-        # --resume would restore the old session's MCP server state.
-        self._user_changed = False
+        # If the caller changed, destroy the worker and rebuild MCP servers +
+        # adapter so the new ClaudeSDKClient gets fresh mcp_servers config.
+        # The session ID is preserved — --resume works because each SDK client
+        # is a new CLI subprocess that spawns fresh MCP servers from os.environ.
         user_changed = current_user_id and current_user_id != prev_user and prev_user != ""
         if user_changed and self._session_manager.get_existing(thread_id):
             logger.info(
-                f"User changed for thread={thread_id}, restarting Claude client (no resume)"
+                f"User changed for thread={thread_id}, "
+                "rebuilding MCP servers and adapter with new credentials"
             )
-            # Destroy worker but discard the session ID so we don't resume
-            worker = self._session_manager.get_existing(thread_id)
-            if worker is not None:
-                await worker.stop()
-            self._session_manager._workers.pop(thread_id, None)
-            self._session_manager._locks.pop(thread_id, None)
-            # Clear any saved session IDs for this thread
-            self._session_manager._session_ids.pop(thread_id, None)
-            self._saved_session_ids.pop(thread_id, None)
+            await self._session_manager.destroy(thread_id)
             self._rebuild_mcp_servers()
-            self._user_changed = True
+            # Force adapter rebuild so ClaudeAgentOptions uses new mcp_servers
+            self._adapter = None
 
         self._ensure_adapter()
 
