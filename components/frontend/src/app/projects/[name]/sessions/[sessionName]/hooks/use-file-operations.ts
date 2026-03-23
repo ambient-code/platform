@@ -60,7 +60,8 @@ export function useFileOperations({
         ? `${basePath}/${currentSubPath}/${viewingFile.path}`
         : `${basePath}/${viewingFile.path}`;
 
-      const downloadUrl = `/api/projects/${encodeURIComponent(projectName)}/agentic-sessions/${encodeURIComponent(sessionName)}/workspace/${encodeURIComponent(fullPath)}`;
+      const encodedPath = fullPath.split('/').map(encodeURIComponent).join('/');
+      const downloadUrl = `/api/projects/${encodeURIComponent(projectName)}/agentic-sessions/${encodeURIComponent(sessionName)}/workspace/${encodedPath}`;
 
       // Create a hidden link and click it to trigger download
       const link = document.createElement('a');

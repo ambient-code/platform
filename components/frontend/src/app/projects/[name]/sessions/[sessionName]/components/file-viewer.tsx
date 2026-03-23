@@ -5,7 +5,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Download, AlertCircle, RefreshCw } from "lucide-react";
 import { useWorkspaceFile } from "@/services/queries/use-workspace";
 import { toast } from "sonner";
-import { triggerDownload } from "@/utils/export-chat";
 import { FileContentViewer } from "@/components/file-content-viewer";
 
 type FileViewerProps = {
@@ -37,7 +36,14 @@ export function FileViewer({
   const handleDownload = () => {
     if (!content) return;
     const fileName = filePath.split("/").pop() ?? "file";
-    triggerDownload(content, fileName, "text/plain");
+    const encodedPath = filePath.split('/').map(encodeURIComponent).join('/');
+    const downloadUrl = `/api/projects/${encodeURIComponent(projectName)}/agentic-sessions/${encodeURIComponent(sessionName)}/workspace/${encodedPath}`;
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const handleRefresh = async () => {
