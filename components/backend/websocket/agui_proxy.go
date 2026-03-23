@@ -97,6 +97,7 @@ func cleanupStaleSessions() {
 				sessionLastSeen.Delete(sessionName)
 				sessionPortMap.Delete(sessionName)
 				sessionProjectMap.Delete(sessionName)
+				handlers.ClearSessionActiveUser(sessionName)
 				// lastActivityUpdateTimes is keyed by "project/session";
 				// remove any entry whose suffix matches this session.
 				lastActivityUpdateTimes.Range(func(k, _ interface{}) bool {
@@ -256,6 +257,14 @@ func HandleAGUIRunProxy(c *gin.Context) {
 	// Extract sender identity for message attribution
 	senderUserID := c.GetString("userID")
 	senderDisplayName := c.GetString("userName")
+
+	// Track active user for credential RBAC validation.
+	// Credential endpoints check this to prevent BOT_TOKEN callers
+	// from requesting credentials for a user other than the one
+	// who initiated the current run.
+	if senderUserID != "" {
+		handlers.SetSessionActiveUser(sessionName, senderUserID)
+	}
 
 	// Parse messages for display name generation, hidden metadata, and sender injection
 	var minimalMsgs []types.Message

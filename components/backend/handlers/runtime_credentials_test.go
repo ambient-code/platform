@@ -192,6 +192,10 @@ var _ = Describe("Runtime Credentials - Shared Session User Resolution", Label(t
 
 		Context("when BOT_TOKEN calls with X-Runner-Current-User header", func() {
 			It("should use the current user's ID for credential lookup", func() {
+				// Pre-populate active user so RBAC allows this collaborator
+				SetSessionActiveUser(testSession, "collaborator-user-abc")
+				defer ClearSessionActiveUser(testSession)
+
 				c := createCredentialContext("github")
 				c.Set("userID", "")
 				c.Request.Header.Set("X-Runner-Current-User", "collaborator-user-abc")
@@ -267,6 +271,9 @@ var _ = Describe("Runtime Credentials - Shared Session User Resolution", Label(t
 
 		Context("when BOT_TOKEN calls with X-Runner-Current-User", func() {
 			It("should resolve to current user", func() {
+				SetSessionActiveUser(testSession, "collaborator-jira")
+				defer ClearSessionActiveUser(testSession)
+
 				c := createCredentialContext("jira")
 				c.Set("userID", "")
 				c.Request.Header.Set("X-Runner-Current-User", "collaborator-jira")
@@ -308,6 +315,9 @@ var _ = Describe("Runtime Credentials - Shared Session User Resolution", Label(t
 
 		Context("when BOT_TOKEN calls with X-Runner-Current-User", func() {
 			It("should resolve to current user (no 403)", func() {
+				SetSessionActiveUser(testSession, "collaborator-google")
+				defer ClearSessionActiveUser(testSession)
+
 				c := createCredentialContext("google")
 				c.Set("userID", "")
 				c.Request.Header.Set("X-Runner-Current-User", "collaborator-google")
@@ -337,6 +347,9 @@ var _ = Describe("Runtime Credentials - Shared Session User Resolution", Label(t
 
 		Context("when BOT_TOKEN calls with X-Runner-Current-User", func() {
 			It("should resolve to current user (no 403)", func() {
+				SetSessionActiveUser(testSession, "collaborator-gitlab")
+				defer ClearSessionActiveUser(testSession)
+
 				c := createCredentialContext("gitlab")
 				c.Set("userID", "")
 				c.Request.Header.Set("X-Runner-Current-User", "collaborator-gitlab")
