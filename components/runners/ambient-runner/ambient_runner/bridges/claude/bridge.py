@@ -86,6 +86,48 @@ class ClaudeBridge(PlatformBridge):
             session_persistence=True,
         )
 
+    async def _initialize_run(
+        self,
+        thread_id: str,
+        current_user_id: str,
+        current_user_name: str,
+        caller_token: str,
+    ) -> None:
+        """Prepare the runtime for a new run.
+
+        Sets user context, refreshes credentials, and restarts the Claude
+        client if the user changed (so MCP servers pick up new creds).
+        """
+        from ambient_runner.platform.auth import (
+            clear_runtime_credentials,
+            populate_mcp_server_credentials,
+            populate_runtime_credentials,
+        )
+
+        prev_user = self._context.current_user_id if self._context else ""
+        if self._context:
+            self._context.set_current_user(current_user_id, current_user_name, caller_token)
+
+        await self._ensure_ready()
+
+        # Fresh credentials for this user on every run
+        clear_runtime_credentials()
+        await populate_runtime_credentials(self._context)
+        await populate_mcp_server_credentials(self._context)
+        self._last_creds_refresh = time.monotonic()
+
+        # If the caller changed, restart the Claude client so MCP servers
+        # re-expand .mcp.json env blocks with the new user's credentials.
+        user_changed = current_user_id and current_user_id != prev_user and prev_user != ""
+        if user_changed and self._session_manager.get_existing(thread_id):
+            logger.info(
+                f"User changed for thread={thread_id}, restarting Claude client"
+            )
+            await self._session_manager.destroy(thread_id)
+            self._rebuild_mcp_servers()
+
+        self._ensure_adapter()
+
     async def run(
         self,
         input_data: RunAgentInput,
@@ -93,52 +135,15 @@ class ClaudeBridge(PlatformBridge):
         current_user_name: str = "",
         caller_token: str = "",
     ) -> AsyncIterator[BaseEvent]:
-        """Full run lifecycle: lazy setup → adapter → session worker → tracing."""
-        # 1. Set user context BEFORE credential population so the caller's
-        # token is used for per-user credential scoping.
-        prev_user = self._context.current_user_id if self._context else ""
-        if self._context:
-            self._context.set_current_user(current_user_id, current_user_name, caller_token)
+        """Full run lifecycle: initialize → session worker → tracing."""
+        thread_id = input_data.thread_id or (self._context.session_id if self._context else "")
 
-        # 2. Lazy platform setup (first run only)
-        await self._ensure_ready()
+        await self._initialize_run(thread_id, current_user_id, current_user_name, caller_token)
 
-        # 3. Clear stale credentials and fetch fresh ones for THIS user.
-        # No caching — each run gets fresh tokens to prevent cross-user leakage.
-        from ambient_runner.platform.auth import (
-            clear_runtime_credentials,
-            populate_runtime_credentials,
-            populate_mcp_server_credentials,
-        )
-
-        clear_runtime_credentials()
-        await populate_runtime_credentials(self._context)
-        await populate_mcp_server_credentials(self._context)
-        self._last_creds_refresh = time.monotonic()
-
-        # 4. If the caller changed, destroy the existing worker and rebuild
-        # MCP servers so the new Claude Code process starts with the current
-        # user's credentials expanded in .mcp.json env blocks.
-        thread_id = input_data.thread_id or self._context.session_id
-        user_changed = current_user_id and current_user_id != prev_user and prev_user != ""
-        if user_changed and self._session_manager.get_existing(thread_id):
-            logger.info(
-                f"User changed for thread={thread_id}, "
-                "restarting Claude client to refresh MCP servers"
-            )
-            await self._session_manager.destroy(thread_id)
-            # Rebuild MCP server config with current env vars (new user's creds)
-            self._rebuild_mcp_servers()
-
-        # 5. Ensure adapter exists
-        self._ensure_adapter()
-
-        # 6. Extract user message for worker and observability
         from ag_ui_claude_sdk.utils import process_messages
 
         user_msg, _ = process_messages(input_data)
 
-        # 7. Get or create session worker for this thread
         api_key = os.getenv("ANTHROPIC_API_KEY", "")
         saved_session_id = self._saved_session_ids.pop(
             thread_id, None
