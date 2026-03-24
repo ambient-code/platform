@@ -541,6 +541,165 @@ describe('markdownToHtml via exportAsPdf', () => {
   });
 });
 
+// ── MESSAGES_SNAPSHOT (compacted sessions) ──
+describe('MESSAGES_SNAPSHOT support (compacted sessions)', () => {
+  beforeEach(() => {
+    vi.stubGlobal('window', {
+      location: { origin: 'https://app.example.com' },
+    });
+  });
+
+  it('renders messages from a MESSAGES_SNAPSHOT event', () => {
+    const events = [
+      { type: 'RUN_STARTED' },
+      {
+        type: 'MESSAGES_SNAPSHOT',
+        messages: [
+          { id: 'm1', role: 'user', content: 'What is 2+2?' },
+          { id: 'm2', role: 'assistant', content: 'The answer is 4.' },
+        ],
+      },
+      { type: 'RUN_FINISHED' },
+    ];
+    const md = convertEventsToMarkdown(makeExport(events), makeSession());
+    expect(md).toContain('What is 2+2?');
+    expect(md).toContain('The answer is 4.');
+    expect(md).toContain('User');
+    expect(md).toContain('Assistant');
+  });
+
+  it('renders tool calls from snapshot assistant messages', () => {
+    const events = [
+      {
+        type: 'MESSAGES_SNAPSHOT',
+        messages: [
+          { id: 'm1', role: 'user', content: 'Read the file' },
+          {
+            id: 'm2', role: 'assistant', content: 'Let me read it.',
+            toolCalls: [
+              {
+                id: 'tc1',
+                function: { name: 'Read', arguments: '{"path":"/foo.ts"}' },
+                result: 'file contents here',
+              },
+            ],
+          },
+          { id: 'm3', role: 'assistant', content: 'Here is the file content.' },
+        ],
+      },
+    ];
+    const md = convertEventsToMarkdown(makeExport(events), makeSession());
+    expect(md).toContain('Read the file');
+    expect(md).toContain('Let me read it.');
+    expect(md).toContain('Read');
+    expect(md).toContain('"path"');
+    expect(md).toContain('file contents here');
+    expect(md).toContain('Here is the file content.');
+  });
+
+  it('renders tool call errors from snapshot', () => {
+    const events = [
+      {
+        type: 'MESSAGES_SNAPSHOT',
+        messages: [
+          {
+            id: 'm1', role: 'assistant', content: 'Running command.',
+            toolCalls: [
+              {
+                id: 'tc1',
+                function: { name: 'Bash', arguments: '{"cmd":"fail"}' },
+                error: 'command not found',
+              },
+            ],
+          },
+        ],
+      },
+    ];
+    const md = convertEventsToMarkdown(makeExport(events), makeSession());
+    expect(md).toContain('**Error:**');
+    expect(md).toContain('command not found');
+  });
+
+  it('prepends initial prompt with snapshot messages', () => {
+    const session = makeSession({
+      spec: {
+        initialPrompt: 'Fix the bug',
+        llmSettings: { model: 'claude-sonnet-4-20250514', temperature: 0, maxTokens: 4096 },
+        timeout: 3600,
+      },
+    });
+    const events = [
+      {
+        type: 'MESSAGES_SNAPSHOT',
+        messages: [
+          { id: 'm1', role: 'assistant', content: 'Done!' },
+        ],
+      },
+    ];
+    const md = convertEventsToMarkdown(makeExport(events), session);
+    const promptIdx = md.indexOf('Fix the bug');
+    const doneIdx = md.indexOf('Done!');
+    expect(promptIdx).toBeGreaterThan(-1);
+    expect(doneIdx).toBeGreaterThan(promptIdx);
+  });
+
+  it('prefers snapshot over streaming events when both present', () => {
+    const events = [
+      // Streaming events (should be ignored when snapshot is present)
+      { type: 'TEXT_MESSAGE_START', role: 'user' },
+      { type: 'TEXT_MESSAGE_CONTENT', delta: 'streaming msg' },
+      { type: 'TEXT_MESSAGE_END' },
+      // Snapshot (canonical source)
+      {
+        type: 'MESSAGES_SNAPSHOT',
+        messages: [
+          { id: 'm1', role: 'user', content: 'snapshot msg' },
+          { id: 'm2', role: 'assistant', content: 'snapshot reply' },
+        ],
+      },
+    ];
+    const md = convertEventsToMarkdown(makeExport(events), makeSession());
+    expect(md).toContain('snapshot msg');
+    expect(md).toContain('snapshot reply');
+    expect(md).not.toContain('streaming msg');
+  });
+
+  it('handles snapshot with empty messages array', () => {
+    const events = [
+      { type: 'MESSAGES_SNAPSHOT', messages: [] },
+    ];
+    const md = convertEventsToMarkdown(makeExport(events), makeSession());
+    expect(md).toContain('*No conversation content found.*');
+  });
+
+  it('handles multi-turn conversation in snapshot', () => {
+    const events = [
+      {
+        type: 'MESSAGES_SNAPSHOT',
+        messages: [
+          { id: 'm1', role: 'user', content: 'Question 1' },
+          { id: 'm2', role: 'assistant', content: 'Answer 1' },
+          { id: 'm3', role: 'user', content: 'Question 2' },
+          { id: 'm4', role: 'assistant', content: 'Answer 2' },
+        ],
+      },
+    ];
+    const md = convertEventsToMarkdown(makeExport(events), makeSession());
+    expect(md).toContain('Question 1');
+    expect(md).toContain('Answer 1');
+    expect(md).toContain('Question 2');
+    expect(md).toContain('Answer 2');
+    // Verify ordering
+    const q1 = md.indexOf('Question 1');
+    const a1 = md.indexOf('Answer 1');
+    const q2 = md.indexOf('Question 2');
+    const a2 = md.indexOf('Answer 2');
+    expect(q1).toBeLessThan(a1);
+    expect(a1).toBeLessThan(q2);
+    expect(q2).toBeLessThan(a2);
+  });
+});
+
 // ── assembleBlocks additional branches ──
 describe('assembleBlocks — TOOL_CALL_END with result and error', () => {
   beforeEach(() => {
