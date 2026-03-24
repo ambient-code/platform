@@ -1794,7 +1794,6 @@ func reconcileActiveWorkflowWithPatch(sessionNamespace, sessionName string, spec
 	return nil
 }
 
-
 // getContainerStatusByName returns the ContainerStatus for a given container name
 func getContainerStatusByName(pod *corev1.Pod, name string) *corev1.ContainerStatus {
 	for i := range pod.Status.ContainerStatuses {
