@@ -802,7 +802,7 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 		},
 		Limits: corev1.ResourceList{
 			corev1.ResourceCPU:    resource.MustParse("2000m"),
-			corev1.ResourceMemory: resource.MustParse("4Gi"),
+			corev1.ResourceMemory: resource.MustParse("8Gi"),
 		},
 	}
 	if runtime != nil && runtime.Container.Resources != nil {

@@ -20,7 +20,7 @@ data:
           },
           "resources": {
             "requests": {"cpu": "500m", "memory": "512Mi"},
-            "limits": {"cpu": "2", "memory": "4Gi"}
+            "limits": {"cpu": "2", "memory": "8Gi"}
           }
         },
         "sandbox": {
