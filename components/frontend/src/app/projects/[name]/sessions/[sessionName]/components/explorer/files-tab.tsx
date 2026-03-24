@@ -45,6 +45,7 @@ type FilesTabProps = {
   canModify: boolean;
 };
 
+/** File browser tab with directory selection, file tree, and inline viewer. */
 export function FilesTab({
   directoryOptions,
   selectedDirectory,

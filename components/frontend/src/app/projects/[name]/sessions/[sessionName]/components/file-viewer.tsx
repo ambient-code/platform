@@ -14,6 +14,7 @@ type FileViewerProps = {
   sessionPhase?: string;
 };
 
+/** Displays a workspace file with download and refresh controls. */
 export function FileViewer({
   projectName,
   sessionName,

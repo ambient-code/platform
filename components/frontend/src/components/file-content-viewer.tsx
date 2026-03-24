@@ -75,6 +75,7 @@ function NumberedCodeBlock({ content, className }: { content: string; className?
   );
 }
 
+/** Renders file content with type-specific viewers (image, PDF, HTML, markdown, binary, text). */
 export function FileContentViewer({ fileName, content, fileUrl, fileSize: fileSizeProp, onDownload }: FileContentViewerProps) {
   const [imageError, setImageError] = useState(false);
 

@@ -26,6 +26,7 @@ type ArtifactsAccordionProps = {
   onNavigateBack: () => void;
 };
 
+/** Accordion section showing AI-generated artifacts with file browsing. */
 export function ArtifactsAccordion({
   files,
   currentSubPath,

@@ -17,6 +17,7 @@ type UseFileOperationsProps = {
   basePath: string;
 };
 
+/** Manages file browsing state: navigation, inline viewing, and download. */
 export function useFileOperations({
   projectName,
   sessionName,
