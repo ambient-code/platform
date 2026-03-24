@@ -1,0 +1,62 @@
+name: Control Plane Unit Tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'components/ambient-control-plane/**'
+      - 'components/ambient-sdk/go-sdk/**'
+      - '.github/workflows/ambient-control-plane-tests.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'components/ambient-control-plane/**'
+      - 'components/ambient-sdk/go-sdk/**'
+      - '.github/workflows/ambient-control-plane-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cp-tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'components/ambient-control-plane/go.mod'
+          cache-dependency-path: 'components/ambient-control-plane/go.sum'
+
+      - name: Run tests
+        working-directory: components/ambient-control-plane
+        run: go test -v -count=1 -race ./...
+
+      - name: Build binary
+        working-directory: components/ambient-control-plane
+        run: go build -o /dev/null ./cmd/ambient-control-plane
+
+      - name: Set up Docker Buildx
+        if: github.event_name == 'pull_request'
+        uses: docker/setup-buildx-action@v3
+
+      # Build validation only — confirms the Dockerfile compiles successfully on PRs.
+      # The actual image push to quay.io is handled by components-build-deploy.yml.
+      - name: Build Docker image (validation only, no push)
+        if: github.event_name == 'pull_request'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./components
+          file: ./components/ambient-control-plane/Dockerfile
+          push: false
+          tags: quay.io/ambient_code/vteam_control_plane:pr-${{ github.event.pull_request.number }}
