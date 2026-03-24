@@ -403,7 +403,7 @@ local-rebuild: check-local-context ## Rebuild and reload all components
 
 local-reload-backend: check-local-context ## Rebuild and reload backend only
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rebuilding backend..."
-	@cd components/backend && $(CONTAINER_ENGINE) build -t $(BACKEND_IMAGE) . >/dev/null 2>&1
+	@cd components/backend && $(CONTAINER_ENGINE) build --build-arg AMBIENT_VERSION=$(shell git describe --tags --always --dirty) -t $(BACKEND_IMAGE) . >/dev/null 2>&1
 	@$(CONTAINER_ENGINE) tag $(BACKEND_IMAGE) localhost/$(BACKEND_IMAGE) 2>/dev/null || true
 	@$(CONTAINER_ENGINE) save -o /tmp/backend-reload.tar localhost/$(BACKEND_IMAGE)
 	@minikube image load /tmp/backend-reload.tar >/dev/null 2>&1
@@ -954,7 +954,7 @@ _kind-load-images: ## Internal: Load images into kind cluster
 
 _build-and-load: ## Internal: Build and load images
 	@echo "  Building backend ($(PLATFORM))..."
-	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) -t $(BACKEND_IMAGE) components/backend $(QUIET_REDIRECT)
+	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) --build-arg AMBIENT_VERSION=$(shell git describe --tags --always --dirty) -t $(BACKEND_IMAGE) components/backend $(QUIET_REDIRECT)
 	@echo "  Building frontend ($(PLATFORM))..."
 	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) -t $(FRONTEND_IMAGE) components/frontend $(QUIET_REDIRECT)
 	@echo "  Building operator ($(PLATFORM))..."
