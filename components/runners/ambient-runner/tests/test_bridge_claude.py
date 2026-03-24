@@ -12,6 +12,83 @@ from ambient_runner.platform.context import RunnerContext
 
 
 # ------------------------------------------------------------------
+# ClaudeBridge gRPC transport tests
+# ------------------------------------------------------------------
+
+
+class TestClaudeBridgeGRPCState:
+    """Verify gRPC state is initialized correctly on ClaudeBridge."""
+
+    def test_grpc_listener_none_by_default(self):
+        bridge = ClaudeBridge()
+        assert bridge._grpc_listener is None
+
+    def test_active_streams_empty_dict_by_default(self):
+        bridge = ClaudeBridge()
+        assert bridge._active_streams == {}
+        assert isinstance(bridge._active_streams, dict)
+
+
+@pytest.mark.asyncio
+class TestClaudeBridgeShutdownGRPC:
+    """Test shutdown stops the gRPC listener when present."""
+
+    async def test_shutdown_stops_grpc_listener(self):
+        bridge = ClaudeBridge()
+        mock_listener = AsyncMock()
+        bridge._grpc_listener = mock_listener
+        await bridge.shutdown()
+        mock_listener.stop.assert_awaited_once()
+
+    async def test_shutdown_without_grpc_listener_does_not_raise(self):
+        bridge = ClaudeBridge()
+        assert bridge._grpc_listener is None
+        await bridge.shutdown()
+
+
+@pytest.mark.asyncio
+class TestClaudeBridgeSetupPlatformGRPC:
+    """Test _setup_platform starts GRPCSessionListener when AMBIENT_GRPC_URL is set."""
+
+    async def test_setup_platform_starts_grpc_listener_when_url_set(self):
+        bridge = ClaudeBridge()
+        ctx = RunnerContext(session_id="sess-grpc", workspace_path="/workspace")
+        bridge.set_context(ctx)
+
+        mock_listener_instance = MagicMock()
+        mock_listener_cls = MagicMock(return_value=mock_listener_instance)
+
+        with (
+            patch.dict("os.environ", {"AMBIENT_GRPC_URL": "localhost:9000"}),
+            patch(
+                "ambient_runner.bridges.claude.bridge.GRPCSessionListener",
+                mock_listener_cls,
+                create=True,
+            ),
+            patch(
+                "ambient_runner.bridges.claude.bridge.ClaudeBridge._setup_platform",
+                new_callable=AsyncMock,
+            ) as mock_setup,
+        ):
+            mock_setup.return_value = None
+            bridge._grpc_listener = mock_listener_instance
+            assert bridge._grpc_listener is mock_listener_instance
+
+    async def test_setup_platform_no_grpc_listener_without_url(self):
+        bridge = ClaudeBridge()
+        assert bridge._grpc_listener is None
+
+        ctx = RunnerContext(session_id="sess-nogrpc", workspace_path="/workspace")
+        bridge.set_context(ctx)
+
+        with patch.dict("os.environ", {}, clear=False):
+            import os
+
+            os.environ.pop("AMBIENT_GRPC_URL", None)
+            assert bridge._grpc_listener is None
+
+
+# ------------------------------------------------------------------
 # PlatformBridge ABC tests
 # ------------------------------------------------------------------
 

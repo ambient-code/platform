@@ -1,0 +1,14 @@
+FROM registry.access.redhat.com/ubi9/ubi-minimal:9.7
+
+RUN microdnf install -y util-linux && microdnf clean all
+
+COPY ambient-control-plane /usr/local/bin/
+
+RUN chmod +x /usr/local/bin/ambient-control-plane
+
+EXPOSE 8080
+
+USER 1001
+
+ENTRYPOINT ["/usr/local/bin/ambient-control-plane"]
+CMD []

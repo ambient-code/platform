@@ -4,9 +4,9 @@ This guide covers deploying the Ambient Code Platform on OpenShift clusters for 
 
 ## Prerequisites
 
-- `oc` CLI installed
+- `oc` CLI installed and logged in (`oc whoami` should succeed)
 - `podman` or `docker` installed
-- Access to an OpenShift cluster
+- Access to an OpenShift cluster with cluster-admin (for OAuthClient and registry setup)
 
 ## OpenShift Cluster Setup
 
@@ -84,55 +84,131 @@ oc create secret generic unleash-credentials -n ambient-code \
   --from-literal=default-admin-password="unleash123"
 ```
 
-## Platform Deployment
+**Control plane API token** (the token the control plane uses to authenticate to the API server):
 
-The production kustomization in `components/manifests/overlays/production/kustomization.yaml` references `quay.io/ambient_code/*` images by default. When deploying to an OpenShift cluster using the internal registry, you must temporarily point the image refs at the internal registry, deploy, then **immediately revert** before committing.
+The API server validates tokens against **Red Hat SSO** (`sso.redhat.com/auth/realms/redhat-external`). `oc whoami -t` cluster tokens use a different signing key and will be rejected. You must use an RH SSO access token.
 
-**⚠️ CRITICAL**: Never commit `kustomization.yaml` while it contains internal registry refs.
+Get a fresh token via the `ocm` CLI:
 
-**Patch kustomization to internal registry, deploy, then revert:**
+```bash
+ocm login  # if not already logged in
+ocm token  # prints a valid RH SSO access token
+```
+
+Create the secret:
+
+```bash
+oc create secret generic ambient-control-plane-token -n ambient-code \
+  --from-literal=token="$(ocm token)"
+```
+
+This secret is mounted by the `ambient-control-plane` deployment. RH SSO access tokens expire after ~15 minutes. To refresh:
+
+```bash
+oc delete secret ambient-control-plane-token -n ambient-code
+oc create secret generic ambient-control-plane-token -n ambient-code \
+  --from-literal=token="$(ocm token)"
+oc rollout restart deployment/ambient-control-plane -n ambient-code
+```
+
+Verify the control plane connected successfully:
+
+```bash
+oc logs deployment/ambient-control-plane -n ambient-code --tail=10
+# Expected: "project watch stream established", "session watch stream established"
+```
+
+## Building and Pushing Images
+
+The production overlay uses `image-registry.openshift-image-registry.svc:5000/ambient-code/*` for images that must be built locally (control plane, runner). Other components pull from `quay.io/ambient_code/*`.
+
+### Quick Deploy (recommended)
+
+Builds the control plane and runner, pushes to the internal registry, and applies production manifests in one step:
+
+```bash
+make deploy-openshift
+```
+
+This target:
+1. Verifies you are logged in (`oc whoami`)
+2. Detects the internal registry hostname
+3. Logs podman into the registry using your current `oc` token
+4. Builds `ambient-control-plane` and `vteam_claude_runner` images
+5. Pushes both to `image-registry.openshift-image-registry.svc:5000/ambient-code/`
+6. Applies `components/manifests/overlays/production/` via `kubectl kustomize | kubectl apply`
+7. Restarts the `ambient-control-plane` deployment and waits for rollout
+
+### Manual Image Build and Push
+
+If you need to build and push images individually:
 
 ```bash
 REGISTRY_HOST=$(oc get route default-route -n openshift-image-registry --template='{{ .spec.host }}')
-INTERNAL_REG="image-registry.openshift-image-registry.svc:5000/ambient-code"
 
-# Temporarily override image refs to internal registry
-cd components/manifests/overlays/production
-sed -i "s#newName: quay.io/ambient_code/#newName: ${INTERNAL_REG}/#g" kustomization.yaml
+# Build
+make build-control-plane
+make build-runner
 
-# Deploy
-cd ../..
-./deploy.sh
+# Push control plane
+podman tag ambient_control_plane:latest ${REGISTRY_HOST}/ambient-code/ambient_control_plane:latest
+podman push --tls-verify=false ${REGISTRY_HOST}/ambient-code/ambient_control_plane:latest
 
-# IMMEDIATELY revert — do not commit with internal registry refs
-cd overlays/production
-git checkout kustomization.yaml
+# Push runner
+podman tag vteam_claude_runner:latest ${REGISTRY_HOST}/ambient-code/vteam_claude_runner:latest
+podman push --tls-verify=false ${REGISTRY_HOST}/ambient-code/vteam_claude_runner:latest
 ```
+
+### Pushing All Images (full rebuild)
+
+If you have built all components from source:
+
+```bash
+REGISTRY_HOST=$(oc get route default-route -n openshift-image-registry --template='{{ .spec.host }}')
+
+make build-all
+
+for img in vteam_frontend vteam_backend vteam_operator vteam_claude_runner vteam_api_server ambient_control_plane; do
+  podman tag ${img}:latest ${REGISTRY_HOST}/ambient-code/${img}:latest
+  podman push --tls-verify=false ${REGISTRY_HOST}/ambient-code/${img}:latest
+done
+
+# Restart deployments to pick up new images
+oc rollout restart deployment ambient-control-plane backend-api frontend public-api agentic-operator -n ambient-code
+```
+
+## Platform Deployment
+
+### Apply Production Manifests
+
+The `production` kustomize overlay references `image-registry.openshift-image-registry.svc:5000/ambient-code/*` for control-plane and runner images (via `control-plane-image-patch.yaml`), and `quay.io/ambient_code/*` for everything else.
+
+```bash
+kubectl kustomize components/manifests/overlays/production/ | kubectl apply --validate=false -f -
+```
+
+Or use `make deploy-openshift` which handles the full build→push→apply flow.
+
+**⚠️ Never commit `kustomization.yaml` while it contains local registry refs** — the production overlay should always use `image-registry.openshift-image-registry.svc:5000` for CP/runner (managed via patch files) and `quay.io/ambient_code` for everything else.
 
 ## Common Deployment Issues and Fixes
 
 ### Issue 1: Images not found (ImagePullBackOff)
 
 ```bash
-# Build and push required images to internal registry
 REGISTRY_HOST=$(oc get route default-route -n openshift-image-registry --template='{{ .spec.host }}')
 
-# Tag and push key images (adjust based on what's available locally)
-podman tag localhost/ambient_control_plane:latest ${REGISTRY_HOST}/ambient-code/ambient_control_plane:latest
-podman tag localhost/vteam_frontend:latest ${REGISTRY_HOST}/ambient-code/vteam_frontend:latest
-podman tag localhost/vteam_api_server:latest ${REGISTRY_HOST}/ambient-code/vteam_api_server:latest
-podman tag localhost/vteam_backend:latest ${REGISTRY_HOST}/ambient-code/vteam_backend:latest
-podman tag localhost/vteam_operator:latest ${REGISTRY_HOST}/ambient-code/vteam_operator:latest
-podman tag localhost/vteam_public_api:latest ${REGISTRY_HOST}/ambient-code/vteam_public_api:latest
-podman tag localhost/vteam_claude_runner:latest ${REGISTRY_HOST}/ambient-code/vteam_claude_runner:latest
+# Rebuild and push missing images
+make build-control-plane build-runner
 
-# Push images
-for img in ambient_control_plane vteam_frontend vteam_api_server vteam_backend vteam_operator vteam_public_api vteam_claude_runner; do
-  podman push ${REGISTRY_HOST}/ambient-code/${img}:latest
-done
+podman tag ambient_control_plane:latest ${REGISTRY_HOST}/ambient-code/ambient_control_plane:latest
+podman push --tls-verify=false ${REGISTRY_HOST}/ambient-code/ambient_control_plane:latest
 
-# Restart deployments to pick up new images
-oc rollout restart deployment ambient-control-plane backend-api frontend public-api agentic-operator -n ambient-code
+podman tag vteam_claude_runner:latest ${REGISTRY_HOST}/ambient-code/vteam_claude_runner:latest
+podman push --tls-verify=false ${REGISTRY_HOST}/ambient-code/vteam_claude_runner:latest
+
+# Restart deployments
+oc rollout restart deployment ambient-control-plane -n ambient-code
 ```
 
 ### Issue 2: API server TLS certificate missing
@@ -148,9 +224,33 @@ sleep 10
 oc rollout restart deployment ambient-api-server -n ambient-code
 ```
 
-### Issue 3: API server HTTPS configuration
+### Issue 3: Control plane token expired or rejected
 
-The ambient-api-server includes TLS support for production deployments. For development clusters, you may need to adjust the configuration:
+The `ambient-control-plane-token` secret must hold a **Red Hat SSO** token (`sso.redhat.com/auth/realms/redhat-external`), not an `oc whoami -t` cluster token. Symptoms:
+
+```
+"unknown kid" — wrong token type (oc whoami -t was used)
+"invalid_grant" — RH SSO token expired
+```
+
+Fix: get a fresh token via `ocm` and re-create the secret:
+
+```bash
+ocm login  # re-authenticate if needed
+oc delete secret ambient-control-plane-token -n ambient-code
+oc create secret generic ambient-control-plane-token -n ambient-code \
+  --from-literal=token="$(ocm token)"
+oc rollout restart deployment/ambient-control-plane -n ambient-code
+```
+
+Verify:
+
+```bash
+oc logs deployment/ambient-control-plane -n ambient-code --tail=10
+# Expected: "project watch stream established", "session watch stream established"
+```
+
+### Issue 4: API server HTTPS configuration
 
 ```bash
 # Check if HTTPS is properly configured in the deployment
@@ -164,7 +264,7 @@ oc describe deployment ambient-api-server -n ambient-code | grep -A10 -B5 tls
 
 ## Cross-Namespace Image Access
 
-The operator creates runner pods in dynamically-created project namespaces (e.g. `hyperfleet-test`). Those pods need to pull images from the `ambient-code` namespace. Grant all service accounts pull access:
+The operator creates runner pods in dynamically-created project namespaces (e.g. `fleet-NNNNN`). Those pods need to pull images from the `ambient-code` namespace. Grant all service accounts pull access:
 
 ```bash
 oc policy add-role-to-group system:image-puller system:serviceaccounts --namespace=ambient-code
@@ -203,11 +303,11 @@ oc exec deployment/ambient-api-server-db -n ambient-code -- psql -U ambient -d a
 
 **Expected:** Should show 6 database tables (events, migrations, project_settings, projects, sessions, users).
 
-### Verify Control Plane TLS Functionality
+### Verify Control Plane gRPC Connectivity
 
 ```bash
 # Check control plane is connecting via TLS gRPC
-oc logs deployment/ambient-control-plane -n ambient-code --tail=10 | grep -i grpc
+oc logs deployment/ambient-control-plane -n ambient-code --tail=20 | grep -i "grpc\|session\|connect"
 
 # Verify API server gRPC streams are active
 oc logs deployment/ambient-api-server -n ambient-code --tail=20 | grep "gRPC stream started"
@@ -228,10 +328,11 @@ oc get route -n ambient-code
 ```
 
 **Main routes:**
-- **Frontend**: https://ambient-code.apps.<cluster-domain>/
-- **Backend API**: https://backend-route-ambient-code.apps.<cluster-domain>/
-- **Public API**: https://public-api-route-ambient-code.apps.<cluster-domain>/
-- **Ambient API Server**: https://ambient-api-server-ambient-code.apps.<cluster-domain>/
+- **Frontend**: `https://ambient-code.apps.<cluster-domain>/`
+- **Backend API**: `https://backend-route-ambient-code.apps.<cluster-domain>/`
+- **Public API**: `https://public-api-route-ambient-code.apps.<cluster-domain>/`
+- **Ambient API Server**: `https://ambient-api-server-ambient-code.apps.<cluster-domain>/`
+- **Ambient API Server gRPC**: `https://ambient-api-server-grpc-ambient-code.apps.<cluster-domain>/`
 
 ### Health Check
 
@@ -288,19 +389,25 @@ acpctl login --url https://ambient-api-server-ambient-code.apps.<cluster-domain>
 
 ### API Token Setup
 
-The control plane authenticates to the API server using a bearer token. By default `deploy.sh` uses `oc whoami -t` (your current cluster token). To use a dedicated long-lived token instead, set it before deploying:
+The control plane authenticates to the API server using a bearer token stored in the `ambient-control-plane-token` secret. The API server validates tokens via Red Hat SSO JWKS — `oc whoami -t` cluster tokens are **not accepted**.
+
+Use `ocm token` to get a valid RH SSO access token:
 
 ```bash
-export AMBIENT_API_TOKEN=<your-token>
+ocm login
+oc delete secret ambient-control-plane-token -n ambient-code
+oc create secret generic ambient-control-plane-token -n ambient-code \
+  --from-literal=token="$(ocm token)"
+oc rollout restart deployment/ambient-control-plane -n ambient-code
 ```
 
-If `AMBIENT_API_TOKEN` is not set, the deploy script automatically creates the secret using your current `oc` session token.
+Note: `ocm token` tokens expire in ~15 minutes. For a longer-lived token, use a service account registered in RH SSO.
 
 ### Vertex AI Integration (Optional)
 
 The `deploy.sh` script reads `ANTHROPIC_VERTEX_PROJECT_ID` from your environment and sets `CLAUDE_CODE_USE_VERTEX=1` in the operator configmap. The operator then **requires** the `ambient-vertex` secret to exist in `ambient-code`.
 
-**Create this secret before running `make deploy` if using Vertex AI:**
+**Create this secret before running `make deploy-openshift` if using Vertex AI:**
 
 First, ensure you have Application Default Credentials:
 
@@ -337,6 +444,8 @@ OAuth configuration requires cluster-admin permissions for creating the OAuthCli
 - ✅ **Applies all CRDs** (Custom Resource Definitions)
 - ✅ **Creates RBAC** roles and service accounts
 - ✅ **Deploys all components** with correct OpenShift-compatible security contexts
+- ✅ **Deploys ambient-control-plane** from locally-built image in internal registry
+- ✅ **Deploys runner** from locally-built image in internal registry
 - ✅ **Configures OAuth** integration automatically (with cluster-admin)
 - ✅ **Creates all routes** for external access
 - ✅ **Database migrations** run automatically with proper permissions
@@ -349,9 +458,8 @@ OAuth configuration requires cluster-admin permissions for creating the OAuthCli
 # Check if public-api is deployed
 oc get route public-api-route -n $AMBIENT_PROJECT
 
-# If missing, deploy public-api component:
-cd components/manifests
-./deploy.sh
+# If missing, re-apply production manifests:
+kubectl kustomize components/manifests/overlays/production/ | kubectl apply --validate=false -f -
 ```
 
 ### Authentication errors
@@ -373,6 +481,19 @@ curl -H "Authorization: Bearer $(oc whoami -t)" \
      "$AMBIENT_API_URL/health"
 ```
 
+### Control plane not connecting to gRPC
+
+```bash
+# Check control plane logs for gRPC errors
+oc logs deployment/ambient-control-plane -n ambient-code --tail=50 | grep -i "grpc\|error\|connect"
+
+# Verify the gRPC route exists
+oc get route ambient-api-server-grpc -n ambient-code
+
+# Check control plane environment
+oc get deployment ambient-control-plane -n ambient-code -o jsonpath='{.spec.template.spec.containers[0].env}' | python3 -m json.tool
+```
+
 ## Next Steps
 
 1. Access the frontend URL (from `oc get route -n ambient-code`)
@@ -380,3 +501,4 @@ curl -H "Authorization: Bearer $(oc whoami -t)" \
 3. Test SDKs using the commands above
 4. Create your first AgenticSession via UI or SDK
 5. Monitor with: `oc get pods -n ambient-code -w`
+6. Monitor control plane session reconciliation: `oc logs -f deployment/ambient-control-plane -n ambient-code`

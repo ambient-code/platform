@@ -60,6 +60,9 @@ class ClaudeBridge(PlatformBridge):
         self._saved_session_ids: dict[str, str] = {}
         # Per-thread halt tracking to avoid race conditions on shared adapter
         self._halted_by_thread: dict[str, bool] = {}
+        # gRPC transport — started lazily in _setup_platform
+        self._grpc_listener: Any = None
+        self._active_streams: dict = {}
 
     # ------------------------------------------------------------------
     # PlatformBridge interface
@@ -238,6 +241,8 @@ class ClaudeBridge(PlatformBridge):
 
     async def shutdown(self) -> None:
         """Graceful shutdown: persist sessions, finalise tracing."""
+        if self._grpc_listener is not None:
+            await self._grpc_listener.stop()
         if self._session_manager:
             await self._session_manager.shutdown()
         if self._obs:
