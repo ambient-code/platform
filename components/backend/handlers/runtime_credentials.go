@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"ambient-code-backend/git"
@@ -23,6 +24,23 @@ import (
 
 // identityAPITimeout is the HTTP client timeout for GitHub/GitLab user identity API calls.
 const identityAPITimeout = 10 * time.Second
+
+// sessionActiveUserMap tracks the authenticated user who initiated the current
+// run for each session. Set by the AG-UI proxy (SetSessionActiveUser), read by
+// enforceCredentialRBAC as a fallback when the caller token has expired but
+// the BOT_TOKEN needs to fetch the non-owner user's credentials.
+// Key: sessionName, Value: string (userID).
+var sessionActiveUserMap sync.Map
+
+// SetSessionActiveUser records the authenticated user for a session's active run.
+func SetSessionActiveUser(sessionName, userID string) {
+	sessionActiveUserMap.Store(sessionName, userID)
+}
+
+// ClearSessionActiveUser removes the active user entry for a session.
+func ClearSessionActiveUser(sessionName string) {
+	sessionActiveUserMap.Delete(sessionName)
+}
 
 // getEffectiveUserID determines which user's credentials should be used.
 // Returns currentUserID from X-Runner-Current-User header if present,
@@ -83,10 +101,17 @@ func enforceCredentialRBAC(c *gin.Context, reqK8s kubernetes.Interface, reqDyn d
 	effectiveUserID := getEffectiveUserID(c, ownerUserID)
 	authenticatedUserID := resolveAuthenticatedUser(c, reqK8s)
 
-	// RBAC: BOT_TOKEN → owner only; user → must match effective user
+	// RBAC: BOT_TOKEN → owner OR active run user; user token → must match effective user
 	allowed := false
 	if authenticatedUserID == "" {
-		allowed = effectiveUserID == ownerUserID
+		// BOT_TOKEN: allow owner creds always. For non-owner, check that the
+		// requested user matches the active user set by the AG-UI proxy.
+		// This supports the fallback when a caller token expires mid-run.
+		if effectiveUserID == ownerUserID {
+			allowed = true
+		} else if activeUser, ok := sessionActiveUserMap.Load(session); ok {
+			allowed = effectiveUserID == activeUser.(string)
+		}
 	} else if effectiveUserID == ownerUserID {
 		allowed = authenticatedUserID == ownerUserID
 	} else {

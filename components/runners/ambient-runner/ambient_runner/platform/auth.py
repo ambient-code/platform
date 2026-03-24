@@ -127,12 +127,16 @@ async def _fetch_credential(context: RunnerContext, credential_type: str) -> dic
                 return resp.read().decode("utf-8", errors="replace")
         except _urllib_request.HTTPError as e:
             if e.code in (401, 403) and use_caller_token:
-                # Caller token expired — fall back to BOT_TOKEN (owner creds only)
+                # Caller token expired — fall back to BOT_TOKEN with current
+                # user header. The backend validates this against the active
+                # user set by the proxy when the run started.
                 logger.info(f"Caller token expired for {credential_type}, falling back to BOT_TOKEN")
                 fallback_req = _urllib_request.Request(url, method="GET")
                 bot = (os.getenv("BOT_TOKEN") or "").strip()
                 if bot:
                     fallback_req.add_header("Authorization", f"Bearer {bot}")
+                if context.current_user_id:
+                    fallback_req.add_header("X-Runner-Current-User", context.current_user_id)
                 try:
                     with _urllib_request.urlopen(fallback_req, timeout=10) as resp:
                         return resp.read().decode("utf-8", errors="replace")
