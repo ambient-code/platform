@@ -185,7 +185,7 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
         }, delay)
       }
     },
-    [projectName, sessionName, processEvent, onConnected, onError, onDisconnected],
+    [projectName, sessionName, onConnected, onError, onDisconnected],
   )
 
   // Disconnect from the event stream
