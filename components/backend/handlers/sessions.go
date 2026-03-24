@@ -24,6 +24,7 @@ import (
 	"ambient-code-backend/types"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	authnv1 "k8s.io/api/authentication/v1"
 	authzv1 "k8s.io/api/authorization/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -695,10 +696,9 @@ func CreateSession(c *gin.Context) {
 		timeout = *req.Timeout
 	}
 
-	// Generate unique name (timestamp-based)
+	// Generate unique name (UUID-based)
 	// Note: Runner will create branch as "ambient/{session-name}"
-	timestamp := time.Now().Unix()
-	name := fmt.Sprintf("session-%d", timestamp)
+	name := fmt.Sprintf("session-%s", uuid.New().String())
 
 	// Create the custom resource
 	// Metadata

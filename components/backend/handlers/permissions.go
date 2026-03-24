@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	authnv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -389,8 +390,8 @@ func CreateProjectKey(c *gin.Context) {
 	}
 
 	// Create a dedicated ServiceAccount per key
-	ts := time.Now().Unix()
-	saName := fmt.Sprintf("ambient-key-%s-%d", sanitizeName(req.Name), ts)
+	uid := uuid.New().String()[:8]
+	saName := fmt.Sprintf("ambient-key-%s-%s", sanitizeName(req.Name), uid)
 	sa := &corev1.ServiceAccount{
 		ObjectMeta: v1.ObjectMeta{
 			Name:      saName,
@@ -412,7 +413,7 @@ func CreateProjectKey(c *gin.Context) {
 	}
 
 	// Bind the SA to the selected role via RoleBinding
-	rbName := fmt.Sprintf("ambient-key-%s-%s-%d", role, sanitizeName(req.Name), ts)
+	rbName := fmt.Sprintf("ambient-key-%s-%s-%s", role, sanitizeName(req.Name), uid)
 	rb := &rbacv1.RoleBinding{
 		ObjectMeta: v1.ObjectMeta{
 			Name:      rbName,

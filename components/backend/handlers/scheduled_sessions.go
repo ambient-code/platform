@@ -13,6 +13,7 @@ import (
 	"ambient-code-backend/types"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	authzv1 "k8s.io/api/authorization/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -141,8 +142,7 @@ func CreateScheduledSession(c *gin.Context) {
 		}
 	}
 
-	timestamp := time.Now().Unix()
-	name := fmt.Sprintf("schedule-%d", timestamp)
+	name := fmt.Sprintf("schedule-%s", uuid.New().String())
 
 	// Inject display name into session template so the trigger can use it for naming
 	if req.DisplayName != "" && req.SessionTemplate.DisplayName == "" {
@@ -431,7 +431,7 @@ func TriggerScheduledSession(c *gin.Context) {
 		return
 	}
 
-	jobName := fmt.Sprintf("%s-manual-%d", name, time.Now().Unix())
+	jobName := fmt.Sprintf("%s-manual-%s", name, uuid.New().String()[:8])
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      jobName,

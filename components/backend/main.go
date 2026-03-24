@@ -63,6 +63,9 @@ func main() {
 		return
 	}
 
+	// Expose build version to handlers package
+	handlers.SetVersion(GitVersion)
+
 	// Log build information
 	logBuildInfo()
 

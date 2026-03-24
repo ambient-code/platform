@@ -29,6 +29,9 @@ _credential_expiry: dict[str, float] = {}
 # How many seconds before expiry to trigger a proactive refresh.
 _EXPIRY_BUFFER_SEC = 5 * 60
 
+# Hardcoded path for Google Workspace MCP credentials (must match populate and clear).
+_GOOGLE_WORKSPACE_CREDS_FILE = Path("/workspace/.google_workspace_mcp/credentials/credentials.json")
+
 
 # ---------------------------------------------------------------------------
 # Vertex AI credential validation (shared across all bridges)
@@ -102,12 +105,33 @@ async def _fetch_credential(context: RunnerContext, credential_type: str) -> dic
         return {}
 
     url = f"{base}/projects/{project}/agentic-sessions/{session_id}/credentials/{credential_type}"
+
+    # Reject non-cluster URLs to prevent token exfiltration via user-overridden env vars
+    parsed = urlparse(base)
+    if parsed.hostname and not (
+        parsed.hostname.endswith(".svc.cluster.local")
+        or parsed.hostname == "localhost"
+        or parsed.hostname == "127.0.0.1"
+    ):
+        logger.error(f"Refusing to send credentials to external host: {parsed.hostname}")
+        return {}
+
     logger.info(f"Fetching fresh {credential_type} credentials from: {url}")
 
     req = _urllib_request.Request(url, method="GET")
-    bot = (os.getenv("BOT_TOKEN") or "").strip()
-    if bot:
-        req.add_header("Authorization", f"Bearer {bot}")
+
+    # Use the caller's own bearer token when available (per-user credential scoping).
+    # Falls back to BOT_TOKEN if the caller token is expired or missing.
+    use_caller_token = bool(context.caller_token)
+    if use_caller_token:
+        req.add_header("Authorization", context.caller_token)
+        if context.current_user_id:
+            req.add_header("X-Runner-Current-User", context.current_user_id)
+        logger.debug(f"Using caller token for {credential_type} credentials")
+    else:
+        bot = (os.getenv("BOT_TOKEN") or "").strip()
+        if bot:
+            req.add_header("Authorization", f"Bearer {bot}")
 
     loop = asyncio.get_running_loop()
 
@@ -115,6 +139,26 @@ async def _fetch_credential(context: RunnerContext, credential_type: str) -> dic
         try:
             with _urllib_request.urlopen(req, timeout=10) as resp:
                 return resp.read().decode("utf-8", errors="replace")
+        except _urllib_request.HTTPError as e:
+            if e.code in (401, 403) and use_caller_token:
+                # Caller token expired — fall back to BOT_TOKEN with current
+                # user header. The backend validates this against the active
+                # user set by the proxy when the run started.
+                logger.info(f"Caller token expired for {credential_type}, falling back to BOT_TOKEN")
+                fallback_req = _urllib_request.Request(url, method="GET")
+                bot = (os.getenv("BOT_TOKEN") or "").strip()
+                if bot:
+                    fallback_req.add_header("Authorization", f"Bearer {bot}")
+                if context.current_user_id:
+                    fallback_req.add_header("X-Runner-Current-User", context.current_user_id)
+                try:
+                    with _urllib_request.urlopen(fallback_req, timeout=10) as resp:
+                        return resp.read().decode("utf-8", errors="replace")
+                except Exception as fallback_err:
+                    logger.warning(f"{credential_type} BOT_TOKEN fallback also failed: {fallback_err}")
+                    return ""
+            logger.warning(f"{credential_type} credential fetch failed: {e}")
+            return ""
         except Exception as e:
             logger.warning(f"{credential_type} credential fetch failed: {e}")
             return ""
@@ -233,92 +277,128 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
     """
     logger.info("Fetching fresh credentials from backend API...")
 
+    # Fetch all credentials concurrently
+    google_creds, jira_creds, gitlab_creds, github_creds = await asyncio.gather(
+        fetch_google_credentials(context),
+        fetch_jira_credentials(context),
+        fetch_gitlab_credentials(context),
+        fetch_github_credentials(context),
+        return_exceptions=True,
+    )
+
     # Track git identity from provider credentials
     git_user_name = ""
     git_user_email = ""
 
     # Google credentials
-    try:
-        google_creds = await fetch_google_credentials(context)
-        if google_creds.get("accessToken"):
-            creds_dir = Path("/workspace/.google_workspace_mcp/credentials")
+    if isinstance(google_creds, Exception):
+        logger.warning(f"Failed to refresh Google credentials: {google_creds}")
+    elif google_creds.get("accessToken"):
+        try:
+            creds_dir = _GOOGLE_WORKSPACE_CREDS_FILE.parent
             creds_dir.mkdir(parents=True, exist_ok=True)
-            creds_file = creds_dir / "credentials.json"
-
-            client_id = os.getenv("GOOGLE_OAUTH_CLIENT_ID", "")
-            client_secret = os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", "")
 
             # The refresh token is written to disk because workspace-mcp
             # runs as a child process and cannot call back to the platform
-            # backend to obtain fresh access tokens on its own.  Without it,
-            # Google API access silently breaks after the ~1h access-token
-            # lifetime.  The file is owner-only (0o600) and lives inside a
-            # short-lived Job pod with no shared volume mounts.
+            # backend to obtain fresh access tokens on its own.
             creds_data = {
                 "token": google_creds.get("accessToken"),
                 "refresh_token": google_creds.get("refreshToken", ""),
                 "token_uri": "https://oauth2.googleapis.com/token",
-                "client_id": client_id,
-                "client_secret": client_secret,
+                "client_id": os.getenv("GOOGLE_OAUTH_CLIENT_ID", ""),
+                "client_secret": os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", ""),
                 "scopes": google_creds.get("scopes", []),
                 "expiry": google_creds.get("expiresAt", ""),
             }
 
-            with open(creds_file, "w") as f:
+            with open(_GOOGLE_WORKSPACE_CREDS_FILE, "w") as f:
                 _json.dump(creds_data, f, indent=2)
-            creds_file.chmod(0o600)
+            _GOOGLE_WORKSPACE_CREDS_FILE.chmod(0o600)
             logger.info("Updated Google credentials file for workspace-mcp")
 
             user_email = google_creds.get("email", "")
             if user_email and user_email != _PLACEHOLDER_EMAIL:
                 os.environ["USER_GOOGLE_EMAIL"] = user_email
-                logger.info(f"Set USER_GOOGLE_EMAIL to {user_email} for workspace-mcp")
-    except Exception as e:
-        logger.warning(f"Failed to refresh Google credentials: {e}")
+        except Exception as e:
+            logger.warning(f"Failed to write Google credentials: {e}")
 
     # Jira credentials
-    try:
-        jira_creds = await fetch_jira_credentials(context)
-        if jira_creds.get("apiToken"):
-            os.environ["JIRA_URL"] = jira_creds.get("url", "")
-            os.environ["JIRA_API_TOKEN"] = jira_creds.get("apiToken", "")
-            os.environ["JIRA_EMAIL"] = jira_creds.get("email", "")
-            logger.info("Updated Jira credentials in environment")
-    except Exception as e:
-        logger.warning(f"Failed to refresh Jira credentials: {e}")
+    if isinstance(jira_creds, Exception):
+        logger.warning(f"Failed to refresh Jira credentials: {jira_creds}")
+    elif jira_creds.get("apiToken"):
+        os.environ["JIRA_URL"] = jira_creds.get("url", "")
+        os.environ["JIRA_API_TOKEN"] = jira_creds.get("apiToken", "")
+        os.environ["JIRA_EMAIL"] = jira_creds.get("email", "")
+        logger.info("Updated Jira credentials in environment")
 
     # GitLab credentials (with user identity)
-    try:
-        gitlab_creds = await fetch_gitlab_credentials(context)
-        if gitlab_creds.get("token"):
-            os.environ["GITLAB_TOKEN"] = gitlab_creds["token"]
-            logger.info("Updated GitLab token in environment")
-            # Use GitLab identity if available (can be overridden by GitHub below)
-            if gitlab_creds.get("userName"):
-                git_user_name = gitlab_creds["userName"]
-            if gitlab_creds.get("email"):
-                git_user_email = gitlab_creds["email"]
-    except Exception as e:
-        logger.warning(f"Failed to refresh GitLab credentials: {e}")
+    if isinstance(gitlab_creds, Exception):
+        logger.warning(f"Failed to refresh GitLab credentials: {gitlab_creds}")
+    elif gitlab_creds.get("token"):
+        os.environ["GITLAB_TOKEN"] = gitlab_creds["token"]
+        logger.info("Updated GitLab token in environment")
+        if gitlab_creds.get("userName"):
+            git_user_name = gitlab_creds["userName"]
+        if gitlab_creds.get("email"):
+            git_user_email = gitlab_creds["email"]
 
     # GitHub credentials (with user identity — takes precedence)
-    try:
-        github_creds = await fetch_github_credentials(context)
-        if github_creds.get("token"):
-            os.environ["GITHUB_TOKEN"] = github_creds["token"]
-            logger.info("Updated GitHub token in environment")
-            # GitHub identity takes precedence over GitLab
-            if github_creds.get("userName"):
-                git_user_name = github_creds["userName"]
-            if github_creds.get("email"):
-                git_user_email = github_creds["email"]
-    except Exception as e:
-        logger.warning(f"Failed to refresh GitHub credentials: {e}")
+    if isinstance(github_creds, Exception):
+        logger.warning(f"Failed to refresh GitHub credentials: {github_creds}")
+    elif github_creds.get("token"):
+        os.environ["GITHUB_TOKEN"] = github_creds["token"]
+        logger.info("Updated GitHub token in environment")
+        if github_creds.get("userName"):
+            git_user_name = github_creds["userName"]
+        if github_creds.get("email"):
+            git_user_email = github_creds["email"]
 
     # Configure git identity from provider credentials
     await configure_git_identity(git_user_name, git_user_email)
 
     logger.info("Runtime credentials populated successfully")
+
+
+def clear_runtime_credentials() -> None:
+    """Remove sensitive credentials from environment after turn completes.
+
+    Clears fixed credential keys, dynamically-injected MCP_* env vars,
+    and Google Workspace credential files.
+    """
+    cleared = []
+    for key in [
+        "GITHUB_TOKEN",
+        "GITLAB_TOKEN",
+        "JIRA_API_TOKEN",
+        "JIRA_URL",
+        "JIRA_EMAIL",
+        "USER_GOOGLE_EMAIL",
+    ]:
+        if os.environ.pop(key, None) is not None:
+            cleared.append(key)
+
+    # Clear dynamically-injected MCP credential env vars (set by populate_mcp_server_credentials).
+    # Only clear keys matching the MCP_{SERVER}_{FIELD} pattern, not static config like MCP_CONFIG_FILE.
+    mcp_cred_keys = [k for k in os.environ if k.startswith("MCP_") and k.count("_") >= 2 and k != "MCP_CONFIG_FILE"]
+    for key in mcp_cred_keys:
+        os.environ.pop(key, None)
+        cleared.append(key)
+
+    # Remove Google Workspace credential file if present (uses same hardcoded path as populate_runtime_credentials)
+    google_cred_file = _GOOGLE_WORKSPACE_CREDS_FILE
+    if google_cred_file.exists():
+        try:
+            google_cred_file.unlink()
+            cleared.append("google_workspace_credentials_file")
+            # Clean up empty parent dirs
+            cred_dir = google_cred_file.parent
+            if cred_dir.exists() and not any(cred_dir.iterdir()):
+                cred_dir.rmdir()
+        except OSError as e:
+            logger.warning(f"Failed to remove Google credential file: {e}")
+
+    if cleared:
+        logger.info(f"Cleared credentials: {', '.join(cleared)}")
 
 
 async def _fetch_mcp_credentials(context: RunnerContext, server_name: str) -> dict:

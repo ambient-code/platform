@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { UserBubble } from "@/components/user-bubble";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { RecentUpdatesDialog } from "@/components/recent-updates-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetClose } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -133,6 +134,7 @@ export function Navigation({ feedbackUrl }: NavigationProps) {
                 Share feedback
               </a>
             )}
+            <RecentUpdatesDialog />
             <ThemeToggle />
             <Button
               variant="ghost"
@@ -157,6 +159,7 @@ export function Navigation({ feedbackUrl }: NavigationProps) {
           </div>
           {/* Mobile: only show theme toggle (user menu items are in the drawer) */}
           <div className="flex md:hidden items-center gap-2">
+            <RecentUpdatesDialog />
             <ThemeToggle />
           </div>
         </div>
