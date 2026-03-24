@@ -7,6 +7,7 @@ import (
 
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
 	"github.com/openshift-online/rh-trex-ai/pkg/api/presenters"
+	"github.com/openshift-online/rh-trex-ai/pkg/auth"
 	"github.com/openshift-online/rh-trex-ai/pkg/errors"
 	"github.com/openshift-online/rh-trex-ai/pkg/handlers"
 	"github.com/openshift-online/rh-trex-ai/pkg/services"
@@ -36,6 +37,9 @@ func (h projectHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Action: func() (interface{}, *errors.ServiceError) {
 			ctx := r.Context()
 			projectModel := ConvertProject(project)
+			if username := auth.GetUsernameFromContext(ctx); username != "" {
+				projectModel.OwnerUserId = username
+			}
 			projectModel, err := h.project.Create(ctx, projectModel)
 			if err != nil {
 				return nil, err

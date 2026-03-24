@@ -7,7 +7,8 @@ import (
 
 type Project struct {
 	api.Meta
-	Name        string  `json:"name" gorm:"uniqueIndex;not null"`
+	OwnerUserId string  `json:"owner_user_id" gorm:"uniqueIndex:idx_owner_name;not null"`
+	Name        string  `json:"name" gorm:"uniqueIndex:idx_owner_name;not null"`
 	DisplayName *string `json:"display_name"`
 	Description *string `json:"description"`
 	Labels      *string `json:"labels"`
@@ -27,7 +28,7 @@ func (l ProjectList) Index() ProjectIndex {
 }
 
 func (d *Project) BeforeCreate(tx *gorm.DB) error {
-	d.ID = d.Name
+	d.ID = api.NewID()
 	return nil
 }
 

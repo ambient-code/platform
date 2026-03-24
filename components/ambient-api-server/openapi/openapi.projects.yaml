@@ -215,6 +215,10 @@ components:
           required:
             - name
           properties:
+            owner_user_id:
+              type: string
+              description: User ID of the project owner (set automatically by the server)
+              readOnly: true
             name:
               type: string
             display_name:
