@@ -8,6 +8,7 @@ import type { FileTreeNode } from "@/components/file-tree";
 type ViewingFile = {
   path: string;
   content: string;
+  size?: number;
 };
 
 type UseFileOperationsProps = {
@@ -41,7 +42,7 @@ export function useFileOperations({
           : `${basePath}/${node.name}`;
 
         const content = await readWorkspaceFile(projectName, sessionName, fullPath);
-        setViewingFile({ path: node.name, content });
+        setViewingFile({ path: node.name, content, size: node.sizeKb ? Math.round(node.sizeKb * 1024) : undefined });
       } catch (error) {
         console.error("Failed to load file:", error);
         toast.error(error instanceof Error ? error.message : 'Failed to load file');

@@ -32,7 +32,7 @@ type FilesTabProps = {
   onDirectoryChange: (option: DirectoryOption) => void;
   files: WorkspaceItem[];
   currentSubPath: string;
-  viewingFile: { path: string; content: string } | null;
+  viewingFile: { path: string; content: string; size?: number } | null;
   isLoadingFile: boolean;
   onFileOrFolderSelect: (node: FileTreeNode) => void;
   onNavigateBack: () => void;
@@ -239,6 +239,7 @@ export function FilesTab({
           <FileContentViewer
             fileName={viewingFile.path.split('/').pop() || 'file'}
             content={viewingFile.content}
+            fileSize={viewingFile.size}
             onDownload={onDownloadFile}
           />
         ) : files.length === 0 ? (

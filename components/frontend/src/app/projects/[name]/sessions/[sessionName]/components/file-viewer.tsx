@@ -38,7 +38,7 @@ export function FileViewer({
   const fileUrl = `/api/projects/${encodeURIComponent(projectName)}/agentic-sessions/${encodeURIComponent(sessionName)}/workspace/${encodedPath}`;
 
   const handleDownload = () => {
-    if (!content) return;
+    if (content == null) return;
     const link = document.createElement('a');
     link.href = fileUrl;
     link.download = fileName;
@@ -86,7 +86,7 @@ export function FileViewer({
     );
   }
 
-  if (!content) {
+  if (content == null) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
         <AlertCircle className="w-8 h-8" />
@@ -119,7 +119,7 @@ export function FileViewer({
             variant="ghost"
             size="sm"
             onClick={handleDownload}
-            disabled={!content}
+            disabled={content == null}
             title="Download file"
           >
             <Download className="w-4 h-4" />

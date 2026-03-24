@@ -101,6 +101,23 @@ describe('FileViewer', () => {
     expect(screen.getByText('No content available')).toBeDefined();
   });
 
+  it('renders and allows download for zero-byte (empty string) content', () => {
+    mockUseWorkspaceFile.mockReturnValue({
+      data: '',
+      isLoading: false,
+      error: null,
+    } as ReturnType<typeof useWorkspaceFile>);
+
+    render(<FileViewer {...defaultProps} />);
+
+    // Should NOT show "No content available"
+    expect(screen.queryByText('No content available')).toBeNull();
+
+    // Download button should be enabled
+    const downloadButtons = screen.getAllByRole('button', { name: /download/i });
+    expect(downloadButtons[0].hasAttribute('disabled')).toBe(false);
+  });
+
   describe('download uses direct link instead of triggerDownload', () => {
     it('downloads via direct workspace API link, not triggerDownload', () => {
       mockUseWorkspaceFile.mockReturnValue({
