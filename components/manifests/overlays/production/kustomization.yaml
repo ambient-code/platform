@@ -31,7 +31,17 @@ patches:
   target:
     kind: Namespace
     name: ambient-code
+- path: control-plane-env-patch.yaml
+  target:
+    kind: Deployment
+    name: ambient-control-plane
 - path: ambient-api-server-env-patch.yaml
+  target:
+    group: apps
+    kind: Deployment
+    name: ambient-api-server
+    version: v1
+- path: ambient-api-server-args-patch.yaml
   target:
     group: apps
     kind: Deployment
@@ -49,8 +59,10 @@ patches:
     name: ambient-api-server
     version: v1
 
-# Production images
+# Production images — all pulled from quay.io; tags set by CI deploy job
 images:
+- name: quay.io/ambient_code/vteam_control_plane
+  newTag: latest
 - name: quay.io/ambient_code/vteam_api_server:latest
   newName: quay.io/ambient_code/vteam_api_server
   newTag: latest

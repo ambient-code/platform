@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ambient-control-plane
+spec:
+  template:
+    spec:
+      containers:
+      - name: ambient-control-plane
+        env:
+        - name: AMBIENT_API_SERVER_URL
+          value: "https://ambient-api-server.vteam-dev.svc:8000"
+        - name: AMBIENT_GRPC_SERVER_ADDR
+          value: "ambient-api-server.vteam-dev.svc:9000"
+        - name: AMBIENT_GRPC_USE_TLS
+          value: "true"
+        - name: RUNNER_IMAGE
+          value: "image-registry.openshift-image-registry.svc:5000/vteam-dev/vteam_claude_runner:latest"
+        - name: RUNNER_IMAGE_NAMESPACE
+          value: "vteam-dev"
+        - name: BACKEND_API_URL
+          value: "http://vteam-backend-service.vteam-dev.svc:8080/api"

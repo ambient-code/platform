@@ -61,6 +61,19 @@ patches:
     version: v1
     kind: Deployment
     name: ambient-api-server-db
+# Control plane: use internal OpenShift registry image
+- path: control-plane-image-patch.yaml
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: ambient-control-plane
+- path: control-plane-env-patch.yaml
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: ambient-control-plane
 
 # Name prefix for local dev resources
 namePrefix: vteam-
@@ -81,5 +94,8 @@ images:
   newTag: latest
 - name: quay.io/ambient_code/vteam_api_server
   newName: quay.io/ambient_code/vteam_api_server
+  newTag: latest
+- name: quay.io/ambient_code/vteam_control_plane
+  newName: image-registry.openshift-image-registry.svc:5000/vteam-dev/vteam_control_plane
   newTag: latest
 # PostgreSQL: RHEL image handled via JSON patch (postgresql-json-patch.yaml)

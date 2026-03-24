@@ -1,0 +1,12 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-api
+spec:
+  template:
+    spec:
+      containers:
+      - name: backend-api
+        env:
+        - name: AMBIENT_API_URL
+          value: "http://ambient-api-server.ambient-code.svc.cluster.local:8000"
