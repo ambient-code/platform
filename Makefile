@@ -171,7 +171,7 @@ build-frontend: ## Build frontend image
 build-backend: ## Build backend image
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building backend with $(CONTAINER_ENGINE)..."
 	@cd components/backend && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
-		--build-arg VERSION=$(shell git describe --tags --always --dirty) \
+		--build-arg AMBIENT_VERSION=$(shell git describe --tags --always --dirty) \
 		-t $(BACKEND_IMAGE) .
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Backend built: $(BACKEND_IMAGE)"
 

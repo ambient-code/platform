@@ -236,7 +236,7 @@ jobs:
           platforms: ${{ matrix.arch.platform }}
           push: true
           tags: ${{ matrix.component.image }}:${{ needs.release.outputs.new_tag }}-${{ matrix.arch.suffix }}
-          build-args: VERSION=${{ needs.release.outputs.new_tag }}
+          build-args: AMBIENT_VERSION=${{ needs.release.outputs.new_tag }}
           cache-from: type=gha,scope=${{ matrix.component.name }}-${{ matrix.arch.suffix }}
           cache-to: type=gha,mode=max,scope=${{ matrix.component.name }}-${{ matrix.arch.suffix }}
 

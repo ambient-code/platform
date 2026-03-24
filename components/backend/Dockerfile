@@ -15,8 +15,8 @@ RUN go mod download
 COPY . .
 
 # Build the application with version embedded via ldflags
-ARG VERSION=dev
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w -X main.GitVersion=${VERSION}" -o main .
+ARG AMBIENT_VERSION=dev
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w -X main.GitVersion=${AMBIENT_VERSION}" -o main .
 
 # Final stage
 FROM registry.access.redhat.com/ubi9/ubi-minimal:latest
