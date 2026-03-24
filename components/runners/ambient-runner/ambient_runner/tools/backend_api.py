@@ -132,6 +132,9 @@ class BackendAPIClient:
     ) -> Dict[str, Any]:
         """Create a new agentic session.
 
+        Automatically sets the current session as the parent so the child
+        inherits the parent's userContext (and therefore credentials).
+
         Args:
             session_name: Unique name for the session (must be DNS-compatible)
             initial_prompt: Optional initial prompt to send to the agent
@@ -147,6 +150,11 @@ class BackendAPIClient:
         payload: Dict[str, Any] = {
             "sessionName": session_name,
         }
+
+        # Set parent session ID so the child inherits the parent's userContext
+        parent_session = os.getenv("AGENTIC_SESSION_NAME", "").strip()
+        if parent_session:
+            payload["parentSessionId"] = parent_session
 
         if initial_prompt:
             payload["initialPrompt"] = initial_prompt

@@ -4,6 +4,9 @@ metadata:
   name: frontend-route
   labels:
     app: frontend
+  annotations:
+    haproxy.router.openshift.io/balance: roundrobin
+    haproxy.router.openshift.io/disable_cookies: "true"
 spec:
   to:
     kind: Service
