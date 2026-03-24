@@ -1132,10 +1132,19 @@ class ClaudeAgentAdapter:
                 logger.debug("Cleanup: closing hanging thinking block")
                 ts = now_ms()
                 yield ReasoningMessageEndEvent(
-                    threadId=thread_id, runId=run_id, timestamp=ts
+                    threadId=thread_id,
+                    runId=run_id,
+                    messageId=current_reasoning_id,
+                    timestamp=ts,
                 )
-                yield ReasoningEndEvent(threadId=thread_id, runId=run_id, timestamp=ts)
+                yield ReasoningEndEvent(
+                    threadId=thread_id,
+                    runId=run_id,
+                    messageId=current_reasoning_id,
+                    timestamp=ts,
+                )
                 in_thinking_block = False
+                current_reasoning_id = None
 
             if has_streamed_text and current_message_id:
                 logger.debug(
