@@ -11,6 +11,7 @@ import urllib.request
 import uuid
 from typing import Any, Dict, List, Optional
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
 
 logger = logging.getLogger(__name__)
 
@@ -91,24 +92,64 @@ class BackendAPIClient:
             logger.error(f"URL error from {url}: {e.reason}")
             raise
 
-    def list_sessions(self, include_completed: bool = False) -> List[Dict[str, Any]]:
-        """List all sessions in the project.
+    def list_sessions(
+        self,
+        include_completed: bool = False,
+        search: Optional[str] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+        phase: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """List sessions in the project with filtering and pagination.
 
         Args:
-            include_completed: Whether to include completed sessions
+            include_completed: Whether to include stopped/completed sessions
+            search: Search term to filter by name or displayName
+            limit: Max number of sessions to return (default 20, max 100)
+            offset: Offset for pagination
+            phase: Filter by phase (Running, Pending, Stopped, Failed, Completed)
 
         Returns:
-            List of session objects
+            Dict with 'items', 'totalCount', 'hasMore', 'nextOffset' keys
         """
         path = f"/projects/{self.project_name}/agentic-sessions"
+
+        query_params: Dict[str, Any] = {}
+        if search:
+            query_params["search"] = search
+        if limit is not None:
+            query_params["limit"] = limit
+        if offset is not None:
+            query_params["offset"] = offset
+        if query_params:
+            path = f"{path}?{urlencode(query_params)}"
+
         response = self._make_request("GET", path)
 
-        sessions = response.get("sessions", [])
-        if not include_completed:
-            # Filter out completed sessions (phase == "Stopped")
-            sessions = [s for s in sessions if s.get("phase") != "Stopped"]
+        items = response.get("items", [])
 
-        return sessions
+        # Client-side phase filtering (backend doesn't support phase query param)
+        if phase:
+            phase_lower = phase.lower()
+            items = [
+                s
+                for s in items
+                if s.get("status", {}).get("phase", "").lower() == phase_lower
+            ]
+        elif not include_completed:
+            items = [
+                s
+                for s in items
+                if s.get("status", {}).get("phase", "").lower()
+                not in ("stopped", "completed", "failed")
+            ]
+
+        return {
+            "items": items,
+            "totalCount": len(items),
+            "hasMore": response.get("hasMore", False),
+            "nextOffset": response.get("nextOffset"),
+        }
 
     def get_session(self, session_name: str) -> Dict[str, Any]:
         """Get details of a specific session.
@@ -129,6 +170,7 @@ class BackendAPIClient:
         display_name: Optional[str] = None,
         repos: Optional[List[Dict[str, str]]] = None,
         model: Optional[str] = None,
+        workflow: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
         """Create a new agentic session.
 
@@ -141,6 +183,7 @@ class BackendAPIClient:
             display_name: Optional human-readable display name
             repos: Optional list of repository configurations [{"url": "...", "branch": "..."}]
             model: Optional LLM model override (e.g., "claude-sonnet-4-5")
+            workflow: Optional workflow config {"gitUrl": "...", "branch": "...", "path": "..."}
 
         Returns:
             Created session object
@@ -164,6 +207,8 @@ class BackendAPIClient:
             payload["repos"] = repos
         if model:
             payload["llmSettings"] = {"model": model}
+        if workflow:
+            payload["activeWorkflow"] = workflow
 
         return self._make_request("POST", path, data=payload)
 
@@ -205,6 +250,29 @@ class BackendAPIClient:
             payload["threadId"] = thread_id
 
         return self._make_request("POST", path, data=payload)
+
+    def start_session(self, session_name: str) -> Dict[str, Any]:
+        """Start a stopped session.
+
+        Args:
+            session_name: Name of the session to start
+
+        Returns:
+            Response from the backend
+        """
+        path = f"/projects/{self.project_name}/agentic-sessions/{session_name}/start"
+        return self._make_request("POST", path)
+
+    def list_workflows(self) -> List[Dict[str, Any]]:
+        """List available out-of-the-box workflows.
+
+        Returns:
+            List of workflow objects with id, name, description, gitUrl, branch, path
+        """
+        path = "/workflows/ootb"
+        query = f"?project={self.project_name}" if self.project_name else ""
+        response = self._make_request("GET", f"{path}{query}")
+        return response.get("workflows", [])
 
     def get_session_events(
         self,
