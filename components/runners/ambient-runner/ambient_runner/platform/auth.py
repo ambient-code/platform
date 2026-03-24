@@ -102,6 +102,17 @@ async def _fetch_credential(context: RunnerContext, credential_type: str) -> dic
         return {}
 
     url = f"{base}/projects/{project}/agentic-sessions/{session_id}/credentials/{credential_type}"
+
+    # Reject non-cluster URLs to prevent token exfiltration via user-overridden env vars
+    parsed = urlparse(base)
+    if parsed.hostname and not (
+        parsed.hostname.endswith(".svc.cluster.local")
+        or parsed.hostname == "localhost"
+        or parsed.hostname == "127.0.0.1"
+    ):
+        logger.error(f"Refusing to send credentials to external host: {parsed.hostname}")
+        return {}
+
     logger.info(f"Fetching fresh {credential_type} credentials from: {url}")
 
     req = _urllib_request.Request(url, method="GET")

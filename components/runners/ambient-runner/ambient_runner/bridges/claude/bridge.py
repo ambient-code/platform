@@ -120,7 +120,7 @@ class ClaudeBridge(PlatformBridge):
         # adapter so the new ClaudeSDKClient gets fresh mcp_servers config.
         # The session ID is preserved — --resume works because each SDK client
         # is a new CLI subprocess that spawns fresh MCP servers from os.environ.
-        user_changed = current_user_id and current_user_id != prev_user and prev_user != ""
+        user_changed = current_user_id != prev_user
         if user_changed and self._session_manager.get_existing(thread_id):
             logger.info(
                 f"User changed for thread={thread_id}, "

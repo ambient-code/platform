@@ -2453,21 +2453,22 @@ func regenerateRunnerToken(sessionNamespace, sessionName string, session *unstru
 		// Skip the update if the annotation is already correct.
 		if len(saAnnotations) > 0 {
 			existingSA, getErr := config.K8sClient.CoreV1().ServiceAccounts(sessionNamespace).Get(context.TODO(), saName, v1.GetOptions{})
-			if getErr == nil {
-				needsUpdate := false
-				if existingSA.Annotations == nil {
-					existingSA.Annotations = make(map[string]string)
+			if getErr != nil {
+				return fmt.Errorf("get SA for annotation update: %w", getErr)
+			}
+			needsUpdate := false
+			if existingSA.Annotations == nil {
+				existingSA.Annotations = make(map[string]string)
+			}
+			for k, v := range saAnnotations {
+				if existingSA.Annotations[k] != v {
+					existingSA.Annotations[k] = v
+					needsUpdate = true
 				}
-				for k, v := range saAnnotations {
-					if existingSA.Annotations[k] != v {
-						existingSA.Annotations[k] = v
-						needsUpdate = true
-					}
-				}
-				if needsUpdate {
-					if _, updErr := config.K8sClient.CoreV1().ServiceAccounts(sessionNamespace).Update(context.TODO(), existingSA, v1.UpdateOptions{}); updErr != nil {
-						log.Printf("[TokenProvision] Warning: could not update SA annotations: %v", updErr)
-					}
+			}
+			if needsUpdate {
+				if _, updErr := config.K8sClient.CoreV1().ServiceAccounts(sessionNamespace).Update(context.TODO(), existingSA, v1.UpdateOptions{}); updErr != nil {
+					return fmt.Errorf("update SA annotations: %w", updErr)
 				}
 			}
 		}

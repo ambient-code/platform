@@ -96,8 +96,10 @@ func cleanupStaleSessions() {
 				sessionName := key.(string)
 				sessionLastSeen.Delete(sessionName)
 				sessionPortMap.Delete(sessionName)
+				if proj, ok := sessionProjectMap.Load(sessionName); ok {
+					handlers.ClearSessionActiveUser(proj.(string), sessionName)
+				}
 				sessionProjectMap.Delete(sessionName)
-				handlers.ClearSessionActiveUser(sessionName)
 				// lastActivityUpdateTimes is keyed by "project/session";
 				// remove any entry whose suffix matches this session.
 				lastActivityUpdateTimes.Range(func(k, _ interface{}) bool {
@@ -261,7 +263,7 @@ func HandleAGUIRunProxy(c *gin.Context) {
 	// Track active user so credential endpoints can validate BOT_TOKEN
 	// fallback requests when the caller token expires during long runs.
 	if senderUserID != "" {
-		handlers.SetSessionActiveUser(sessionName, senderUserID)
+		handlers.SetSessionActiveUser(projectName, sessionName, senderUserID)
 	}
 
 	// Parse messages for display name generation, hidden metadata, and sender injection

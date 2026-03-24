@@ -33,13 +33,14 @@ const identityAPITimeout = 10 * time.Second
 var sessionActiveUserMap sync.Map
 
 // SetSessionActiveUser records the authenticated user for a session's active run.
-func SetSessionActiveUser(sessionName, userID string) {
-	sessionActiveUserMap.Store(sessionName, userID)
+// Key is project/session to avoid cross-namespace collisions.
+func SetSessionActiveUser(project, sessionName, userID string) {
+	sessionActiveUserMap.Store(project+"/"+sessionName, userID)
 }
 
 // ClearSessionActiveUser removes the active user entry for a session.
-func ClearSessionActiveUser(sessionName string) {
-	sessionActiveUserMap.Delete(sessionName)
+func ClearSessionActiveUser(project, sessionName string) {
+	sessionActiveUserMap.Delete(project + "/" + sessionName)
 }
 
 // getEffectiveUserID determines which user's credentials should be used.
@@ -57,22 +58,37 @@ func getEffectiveUserID(c *gin.Context, ownerUserID string) string {
 // Prefers the middleware-resolved userID; falls back to SelfSubjectReview for
 // forwarded caller tokens that bypass the OAuth proxy. Caches the result on
 // the gin context to avoid repeated K8s API calls within the same request.
-func resolveAuthenticatedUser(c *gin.Context, reqK8s kubernetes.Interface) string {
+// Returns (userID, isBotToken). isBotToken is true only when the token is
+// confirmed as a ServiceAccount (not a resolution failure).
+func resolveAuthenticatedUser(c *gin.Context, reqK8s kubernetes.Interface) (string, bool) {
 	if uid := c.GetString("userID"); uid != "" {
-		return uid
+		return uid, false
 	}
-	// Check cache from a previous call in this request
 	if uid := c.GetString("resolvedUserID"); uid != "" {
-		return uid
+		return uid, false
 	}
 	if reqK8s != nil {
-		if resolved, err := resolveTokenIdentity(c.Request.Context(), reqK8s); err == nil {
+		resolved, err := resolveTokenIdentity(c.Request.Context(), reqK8s)
+		if err == nil {
 			uid := strings.ReplaceAll(resolved, ":", "-")
+			if strings.HasPrefix(uid, "system-serviceaccount-") {
+				return "", true // confirmed BOT_TOKEN
+			}
 			c.Set("resolvedUserID", uid)
-			return uid
+			return uid, false
 		}
+		// SelfSubjectReview failed. If no X-Forwarded-User was set by the
+		// OAuth proxy, this is likely a ServiceAccount token in an environment
+		// where SelfSubjectReview isn't available. Treat as BOT_TOKEN to avoid
+		// breaking SA-authenticated callers.
+		if c.GetHeader("X-Forwarded-User") == "" {
+			log.Printf("SelfSubjectReview failed and no X-Forwarded-User — treating as BOT_TOKEN: %v", err)
+			return "", true
+		}
+		log.Printf("SelfSubjectReview failed for user request, denying: %v", err)
+		return "", false
 	}
-	return ""
+	return "", false
 }
 
 // enforceCredentialRBAC extracts the owner and effective user from the session
@@ -99,19 +115,22 @@ func enforceCredentialRBAC(c *gin.Context, reqK8s kubernetes.Interface, reqDyn d
 	}
 
 	effectiveUserID := getEffectiveUserID(c, ownerUserID)
-	authenticatedUserID := resolveAuthenticatedUser(c, reqK8s)
+	authenticatedUserID, isBotToken := resolveAuthenticatedUser(c, reqK8s)
 
 	// RBAC: BOT_TOKEN → owner OR active run user; user token → must match effective user
 	allowed := false
-	if authenticatedUserID == "" {
-		// BOT_TOKEN: allow owner creds always. For non-owner, check that the
-		// requested user matches the active user set by the AG-UI proxy.
-		// This supports the fallback when a caller token expires mid-run.
+	if isBotToken {
+		// Confirmed ServiceAccount: allow owner creds always. For non-owner,
+		// check that the requested user matches the active user set by the
+		// AG-UI proxy (supports fallback when caller token expires mid-run).
 		if effectiveUserID == ownerUserID {
 			allowed = true
-		} else if activeUser, ok := sessionActiveUserMap.Load(session); ok {
+		} else if activeUser, ok := sessionActiveUserMap.Load(project + "/" + session); ok {
 			allowed = effectiveUserID == activeUser.(string)
 		}
+	} else if authenticatedUserID == "" {
+		// Resolution failed (not BOT_TOKEN, not a resolved user) — deny
+		allowed = false
 	} else if effectiveUserID == ownerUserID {
 		allowed = authenticatedUserID == ownerUserID
 	} else {
