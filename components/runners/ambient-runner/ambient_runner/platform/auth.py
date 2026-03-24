@@ -107,13 +107,10 @@ async def _fetch_credential(context: RunnerContext, credential_type: str) -> dic
     req = _urllib_request.Request(url, method="GET")
 
     # Use the caller's own bearer token when available (per-user credential scoping).
-    # This ensures users can only access their own credentials — no BOT_TOKEN
-    # impersonation possible. Falls back to BOT_TOKEN for automated/scheduled sessions.
-    if context.caller_token:
+    # Falls back to BOT_TOKEN if the caller token is expired or missing.
+    use_caller_token = bool(context.caller_token)
+    if use_caller_token:
         req.add_header("Authorization", context.caller_token)
-        # Must also set X-Runner-Current-User so getEffectiveUserID returns
-        # the caller's ID (not the owner). RBAC validates that the authenticated
-        # user (from token) matches the effective user — no impersonation possible.
         if context.current_user_id:
             req.add_header("X-Runner-Current-User", context.current_user_id)
         logger.debug(f"Using caller token for {credential_type} credentials")
@@ -121,8 +118,6 @@ async def _fetch_credential(context: RunnerContext, credential_type: str) -> dic
         bot = (os.getenv("BOT_TOKEN") or "").strip()
         if bot:
             req.add_header("Authorization", f"Bearer {bot}")
-        # BOT_TOKEN callers can only access owner credentials (RBAC enforced).
-        # X-Runner-Current-User is not set — defaults to owner in getEffectiveUserID.
 
     loop = asyncio.get_running_loop()
 
@@ -130,6 +125,22 @@ async def _fetch_credential(context: RunnerContext, credential_type: str) -> dic
         try:
             with _urllib_request.urlopen(req, timeout=10) as resp:
                 return resp.read().decode("utf-8", errors="replace")
+        except _urllib_request.HTTPError as e:
+            if e.code in (401, 403) and use_caller_token:
+                # Caller token expired — fall back to BOT_TOKEN (owner creds only)
+                logger.info(f"Caller token expired for {credential_type}, falling back to BOT_TOKEN")
+                fallback_req = _urllib_request.Request(url, method="GET")
+                bot = (os.getenv("BOT_TOKEN") or "").strip()
+                if bot:
+                    fallback_req.add_header("Authorization", f"Bearer {bot}")
+                try:
+                    with _urllib_request.urlopen(fallback_req, timeout=10) as resp:
+                        return resp.read().decode("utf-8", errors="replace")
+                except Exception as fallback_err:
+                    logger.warning(f"{credential_type} BOT_TOKEN fallback also failed: {fallback_err}")
+                    return ""
+            logger.warning(f"{credential_type} credential fetch failed: {e}")
+            return ""
         except Exception as e:
             logger.warning(f"{credential_type} credential fetch failed: {e}")
             return ""
