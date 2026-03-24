@@ -154,12 +154,49 @@ def regenerate_lockfile(runner_dir: Path) -> bool:
         capture_output=True,
         text=True,
         timeout=120,
+        check=False,
     )
     if result.returncode != 0:
         print(f"  Error: uv lock failed:\n{result.stderr}")
         return False
     print("  Lock file regenerated successfully.")
     return True
+
+
+def _fetch_all_releases(github_repo: str) -> list[dict]:
+    """Fetch all releases from GitHub, paginating if necessary."""
+    releases: list[dict] = []
+    page = 1
+    while True:
+        url = (
+            f"https://api.github.com/repos/{github_repo}"
+            f"/releases?per_page=100&page={page}"
+        )
+        try:
+            req = urllib.request.Request(
+                url,
+                headers={
+                    "Accept": "application/vnd.github+json",
+                    "X-GitHub-Api-Version": "2022-11-28",
+                },
+            )
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                batch = json.loads(resp.read().decode())
+        except Exception as e:
+            print(
+                f"  Warning: Failed to fetch GitHub releases "
+                f"for {github_repo} (page {page}): {e}"
+            )
+            break
+
+        if not batch:
+            break
+        releases.extend(batch)
+        if len(batch) < 100:
+            break
+        page += 1
+
+    return releases
 
 
 def fetch_github_changelog(
@@ -175,20 +212,7 @@ def fetch_github_changelog(
     Returns:
         List of ChangelogEntry objects, newest first.
     """
-    url = f"https://api.github.com/repos/{github_repo}/releases?per_page=100"
-    try:
-        req = urllib.request.Request(
-            url,
-            headers={
-                "Accept": "application/vnd.github+json",
-                "X-GitHub-Api-Version": "2022-11-28",
-            },
-        )
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            releases = json.loads(resp.read().decode())
-    except Exception as e:
-        print(f"  Warning: Failed to fetch GitHub releases for {github_repo}: {e}")
-        return []
+    releases = _fetch_all_releases(github_repo)
 
     entries = []
     from_parts = _version_tuple(from_version)
@@ -211,9 +235,16 @@ def fetch_github_changelog(
 
 
 def _version_tuple(version_str: str) -> tuple[int, ...]:
-    """Parse a version string into a comparable tuple of ints."""
+    """Parse a version string into a comparable tuple of ints.
+
+    Handles pre-release suffixes like '1.0.0rc1' by extracting leading digits.
+    """
     try:
-        return tuple(int(x) for x in version_str.split("."))
+        parts = []
+        for segment in version_str.split("."):
+            match = re.match(r"(\d+)", segment)
+            parts.append(int(match.group(1)) if match else 0)
+        return tuple(parts) if parts else (0,)
     except (ValueError, AttributeError):
         return (0,)
 
@@ -316,6 +347,8 @@ def build_pr_title(versions: list[VersionInfo]) -> str:
         PR title string.
     """
     updates = [v for v in versions if v.needs_update]
+    if not updates:
+        return "deps(runner): no updates"
     parts = []
     for v in updates:
         parts.append(f"{v.pypi_name} {v.latest_version}")

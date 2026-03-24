@@ -94,6 +94,28 @@ INTERNAL_NOISE_PATTERNS = [
 ]
 
 
+def _classify_section_header(header: str) -> str | None:
+    """Classify a markdown section header into a category.
+
+    Returns None for version-like headers that should be skipped.
+    """
+    if re.match(r"\d+\.\d+", header):
+        return None
+    if "feature" in header:
+        return "feature"
+    if "bug fix" in header or "bugfix" in header:
+        return "bugfix"
+    if "break" in header:
+        return "breaking"
+    if "deprecat" in header:
+        return "deprecated"
+    if "behavior" in header or "change" in header:
+        return "behavior_change"
+    if "internal" in header or "other" in header:
+        return "internal"
+    return ""
+
+
 def parse_release_body(version: str, body: str) -> list[Feature]:
     """Parse a single release body into structured features.
 
@@ -129,21 +151,9 @@ def parse_release_body(version: str, body: str) -> list[Feature]:
 
             prefix_len = 4 if stripped.startswith("### ") else 3
             header = stripped[prefix_len:].strip().lower()
-            # Strip version/date suffixes like "## 0.86.0 (2026-03-18)"
-            if re.match(r"\d+\.\d+", header):
-                continue
-            if "feature" in header:
-                current_section = "feature"
-            elif "bug fix" in header or "bugfix" in header:
-                current_section = "bugfix"
-            elif "break" in header:
-                current_section = "breaking"
-            elif "deprecat" in header:
-                current_section = "deprecated"
-            elif "behavior" in header or "change" in header:
-                current_section = "behavior_change"
-            elif "internal" in header or "other" in header:
-                current_section = "internal"
+            classified = _classify_section_header(header)
+            if classified is not None:
+                current_section = classified
             continue
 
         # Skip non-content lines
@@ -280,9 +290,11 @@ def _detect_relevance(text: str) -> RunnerRelevance:
 
     if is_claude and is_gemini:
         return RunnerRelevance.BOTH
+    if is_claude:
+        return RunnerRelevance.CLAUDE
     if is_gemini:
         return RunnerRelevance.GEMINI
-    return RunnerRelevance.CLAUDE
+    return RunnerRelevance.NONE
 
 
 def _detect_status(text: str, section: str) -> FeatureStatus:

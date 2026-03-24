@@ -23,8 +23,12 @@ class TestVersionTuple:
     def test_two_part_version(self):
         assert sdk_version_bump._version_tuple("1.2") == (1, 2)
 
-    def test_pre_release_parts(self):
-        # Only numeric parts are parsed; this tests graceful fallback
+    def test_pre_release_suffix(self):
+        # Pre-release like "1.0.0rc1" should extract leading digits
+        assert sdk_version_bump._version_tuple("1.0.0rc1") == (1, 0, 0)
+        assert sdk_version_bump._version_tuple("2.1.0b3") == (2, 1, 0)
+
+    def test_empty_string(self):
         assert sdk_version_bump._version_tuple("") == (0,)
 
     def test_comparison(self):
@@ -276,4 +280,4 @@ class TestBuildPrTitle:
             ),
         ]
         title = sdk_version_bump.build_pr_title(versions)
-        assert title == "deps(runner): bump "
+        assert title == "deps(runner): no updates"
