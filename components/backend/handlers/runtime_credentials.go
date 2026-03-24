@@ -126,7 +126,9 @@ func enforceCredentialRBAC(c *gin.Context, reqK8s kubernetes.Interface, reqDyn d
 		if effectiveUserID == ownerUserID {
 			allowed = true
 		} else if activeUser, ok := sessionActiveUserMap.Load(project + "/" + session); ok {
-			allowed = effectiveUserID == activeUser.(string)
+			if activeUserStr, ok := activeUser.(string); ok {
+				allowed = effectiveUserID == activeUserStr
+			}
 		}
 	} else if authenticatedUserID == "" {
 		// Resolution failed (not BOT_TOKEN, not a resolved user) — deny
