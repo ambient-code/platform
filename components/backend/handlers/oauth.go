@@ -71,6 +71,7 @@ func getOAuthProvider(provider string) (*OAuthProvider, error) {
 				"https://www.googleapis.com/auth/drive",
 				"https://www.googleapis.com/auth/drive.readonly",
 				"https://www.googleapis.com/auth/drive.file",
+				"https://www.googleapis.com/auth/gmail.send",
 			},
 		}, nil
 
