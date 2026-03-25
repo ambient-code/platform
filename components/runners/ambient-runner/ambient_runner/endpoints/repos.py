@@ -437,6 +437,9 @@ async def clone_repo_at_runtime(
 
         repo_final.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(temp_dir), str(repo_final))
+        # Strip any embedded credentials from the remote URL (e.g. if the
+        # caller passed an already-authenticated URL).
+        await _sanitize_remote_url(repo_final)
         logger.info(f"Repo '{name}' ready at {repo_final} on branch '{branch}'")
         return True, str(repo_final), True
 

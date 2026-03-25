@@ -512,11 +512,18 @@ def install_git_credential_helper() -> None:
         helper_path.write_text(_GIT_CREDENTIAL_HELPER_SCRIPT)
         helper_path.chmod(stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)  # 755
 
-        subprocess.run(
+        result = subprocess.run(
             ["git", "config", "--global", "credential.helper", _GIT_CREDENTIAL_HELPER_PATH],
             capture_output=True,
             timeout=5,
         )
+        if result.returncode != 0:
+            logger.warning(
+                "git config credential.helper failed (rc=%d): %s",
+                result.returncode,
+                result.stderr.decode(errors="replace").strip(),
+            )
+            return
         _credential_helper_installed = True
         logger.info("Installed git credential helper at %s", _GIT_CREDENTIAL_HELPER_PATH)
     except Exception as e:
