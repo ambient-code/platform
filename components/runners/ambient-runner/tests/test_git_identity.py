@@ -452,17 +452,23 @@ class TestInstallGitCredentialHelper:
     def reset_guard(self):
         """Reset the module-level installation guard between tests."""
         import ambient_runner.platform.auth as auth_mod
+
         auth_mod._credential_helper_installed = False
         yield
         auth_mod._credential_helper_installed = False
 
     def test_creates_helper_script_and_configures_git(self):
         """Test that the credential helper script is written and git is configured."""
-        from ambient_runner.platform.auth import install_git_credential_helper, _GIT_CREDENTIAL_HELPER_PATH
+        from ambient_runner.platform.auth import (
+            install_git_credential_helper,
+            _GIT_CREDENTIAL_HELPER_PATH,
+        )
 
-        with patch("subprocess.run") as mock_run, \
-             patch("pathlib.Path.write_text") as mock_write, \
-             patch("pathlib.Path.chmod") as mock_chmod:
+        with (
+            patch("subprocess.run") as mock_run,
+            patch("pathlib.Path.write_text") as mock_write,
+            patch("pathlib.Path.chmod") as mock_chmod,
+        ):
             mock_run.return_value = MagicMock(returncode=0)
 
             install_git_credential_helper()
@@ -486,6 +492,7 @@ class TestInstallGitCredentialHelper:
     def test_skips_when_already_installed(self):
         """Test that repeated calls are no-ops after first install."""
         import ambient_runner.platform.auth as auth_mod
+
         auth_mod._credential_helper_installed = True
 
         with patch("pathlib.Path.write_text") as mock_write:

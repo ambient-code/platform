@@ -114,7 +114,9 @@ async def clone_workflow_at_runtime(
     temp_dir = Path(tempfile.mkdtemp(prefix="workflow-clone-"))
 
     try:
-        ensure_git_auth(github_token=github_token_override, gitlab_token=gitlab_token_override)
+        ensure_git_auth(
+            github_token=github_token_override, gitlab_token=gitlab_token_override
+        )
         clone_url = git_url
 
         process = await asyncio.create_subprocess_exec(
