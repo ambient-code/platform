@@ -1182,13 +1182,30 @@ class ClaudeAgentAdapter:
                 while not self._hook_event_queue.empty():
                     try:
                         hook_event = self._hook_event_queue.get_nowait()
-                        # Capture transcript paths from SubagentStop hooks
-                        if hasattr(hook_event, "name") and hook_event.name == "hook:SubagentStop":
+                        # Capture transcript paths from subagent hooks.
+                        # SubagentStart: construct expected path so transcript
+                        # is readable while the task is still running (JSONL is
+                        # written incrementally by the SDK).
+                        # SubagentStop: use the definitive path from the hook.
+                        if hasattr(hook_event, "name"):
                             val = getattr(hook_event, "value", {}) or {}
                             agent_id = val.get("agent_id")
-                            transcript = val.get("agent_transcript_path")
-                            if agent_id and transcript:
-                                self._task_outputs.setdefault(agent_id, transcript)
+                            if hook_event.name == "hook:SubagentStart" and agent_id:
+                                sid = val.get("session_id", "")
+                                if sid:
+                                    from pathlib import Path
+                                    # Search for the subagents dir to find the
+                                    # incrementally-written transcript JSONL.
+                                    base = Path.home() / ".claude" / "projects"
+                                    if base.exists():
+                                        expected = f"agent-{agent_id}.jsonl"
+                                        for p in base.rglob(expected):
+                                            self._task_outputs.setdefault(agent_id, str(p))
+                                            break
+                            elif hook_event.name == "hook:SubagentStop" and agent_id:
+                                transcript = val.get("agent_transcript_path")
+                                if transcript:
+                                    self._task_outputs[agent_id] = transcript
                         yield hook_event
                     except asyncio.QueueEmpty:
                         break
