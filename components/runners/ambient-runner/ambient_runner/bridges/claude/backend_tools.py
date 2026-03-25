@@ -398,10 +398,8 @@ def create_backend_mcp_tools(
 
             # Try to get recent events for message content
             try:
-                # Fetch a reasonable number of events (not all text events are messages,
-                # so fetch more than max_messages to account for non-text events)
                 events = api_client.get_session_events(
-                    session_name=session_name, limit=max_messages * 10
+                    session_name=session_name,
                 )
                 # Extract text messages from AG-UI events
                 messages = []

@@ -161,7 +161,7 @@ export function NewSessionView({
             onChange={(e) => setPrompt(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Describe what you'd like to work on..."
-            className="min-h-[100px] resize-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0 pb-12"
+            className="min-h-[100px] resize-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0 pb-12 overflow-y-auto"
           />
           <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between px-2 py-2">
             <div className="flex items-center gap-1">

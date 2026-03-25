@@ -13,6 +13,9 @@ from pathlib import Path
 import aiohttp
 from fastapi import APIRouter, HTTPException, Request
 
+from ambient_runner.platform.auth import ensure_git_auth
+from ambient_runner.platform.utils import redact_secrets
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -266,6 +269,37 @@ async def get_default_branch(repo_path: str) -> str:
     return "main"
 
 
+async def _sanitize_remote_url(repo_path: Path) -> None:
+    """Strip embedded credentials from the origin remote URL.
+
+    Repos cloned by older code may have tokens baked into the URL like
+    https://x-access-token:TOKEN@github.com/... — replace with the clean URL
+    so the credential helper is used instead.
+    """
+    try:
+        process = await asyncio.create_subprocess_exec(
+            "git", "-C", str(repo_path),
+            "config", "--get", "remote.origin.url",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, _ = await process.communicate()
+        if process.returncode != 0:
+            return
+        current_url = stdout.decode().strip()
+        clean_url = re.sub(r"https://[^:]+:[^@]+@", "https://", current_url)
+        if clean_url != current_url:
+            await asyncio.create_subprocess_exec(
+                "git", "-C", str(repo_path),
+                "remote", "set-url", "origin", clean_url,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            logger.info(f"Sanitized remote URL for {repo_path.name}")
+    except Exception as e:
+        logger.warning(f"Failed to sanitize remote URL for {repo_path}: {e}")
+
+
 async def clone_repo_at_runtime(
     git_url: str,
     branch: str,
@@ -292,20 +326,16 @@ async def clone_repo_at_runtime(
     repos_dir.mkdir(parents=True, exist_ok=True)
     repo_final = repos_dir / name
 
-    github_token = github_token_override or os.getenv("GITHUB_TOKEN", "").strip()
-    gitlab_token = gitlab_token_override or os.getenv("GITLAB_TOKEN", "").strip()
+    ensure_git_auth(github_token_override, gitlab_token_override)
     clone_url = git_url
-    if github_token and "github" in git_url.lower():
-        clone_url = git_url.replace(
-            "https://", f"https://x-access-token:{github_token}@"
-        )
-    elif gitlab_token and "gitlab" in git_url.lower():
-        clone_url = git_url.replace("https://", f"https://oauth2:{gitlab_token}@")
 
     # Case 1: Repo already exists
     if repo_final.exists():
         logger.info(f"Repo '{name}' already exists, adding branch '{branch}'")
         try:
+            # Clean any previously-embedded tokens from the remote URL
+            await _sanitize_remote_url(repo_final)
+
             await asyncio.create_subprocess_exec(
                 "git",
                 "-C",
@@ -380,11 +410,7 @@ async def clone_repo_at_runtime(
         )
         stdout, stderr = await process.communicate()
         if process.returncode != 0:
-            error_msg = stderr.decode()
-            for tok in (github_token, gitlab_token):
-                if tok:
-                    error_msg = error_msg.replace(tok, "***REDACTED***")
-            logger.error(f"Failed to clone repo: {error_msg}")
+            logger.error(f"Failed to clone repo: {redact_secrets(stderr.decode())}")
             return False, "", False
 
         p = await asyncio.create_subprocess_exec(
@@ -411,6 +437,9 @@ async def clone_repo_at_runtime(
 
         repo_final.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(temp_dir), str(repo_final))
+        # Strip any embedded credentials from the remote URL (e.g. if the
+        # caller passed an already-authenticated URL).
+        await _sanitize_remote_url(repo_final)
         logger.info(f"Repo '{name}' ready at {repo_final} on branch '{branch}'")
         return True, str(repo_final), True
 

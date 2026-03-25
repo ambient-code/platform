@@ -8,6 +8,7 @@ import type { FileTreeNode } from "@/components/file-tree";
 type ViewingFile = {
   path: string;
   content: string;
+  size?: number;
 };
 
 type UseFileOperationsProps = {
@@ -16,6 +17,7 @@ type UseFileOperationsProps = {
   basePath: string;
 };
 
+/** Manages file browsing state: navigation, inline viewing, and download. */
 export function useFileOperations({
   projectName,
   sessionName,
@@ -41,7 +43,7 @@ export function useFileOperations({
           : `${basePath}/${node.name}`;
 
         const content = await readWorkspaceFile(projectName, sessionName, fullPath);
-        setViewingFile({ path: node.name, content });
+        setViewingFile({ path: node.name, content, size: node.sizeKb ? Math.round(node.sizeKb * 1024) : undefined });
       } catch (error) {
         console.error("Failed to load file:", error);
         toast.error(error instanceof Error ? error.message : 'Failed to load file');
@@ -60,7 +62,8 @@ export function useFileOperations({
         ? `${basePath}/${currentSubPath}/${viewingFile.path}`
         : `${basePath}/${viewingFile.path}`;
 
-      const downloadUrl = `/api/projects/${encodeURIComponent(projectName)}/agentic-sessions/${encodeURIComponent(sessionName)}/workspace/${encodeURIComponent(fullPath)}`;
+      const encodedPath = fullPath.split('/').map(encodeURIComponent).join('/');
+      const downloadUrl = `/api/projects/${encodeURIComponent(projectName)}/agentic-sessions/${encodeURIComponent(sessionName)}/workspace/${encodedPath}`;
 
       // Create a hidden link and click it to trigger download
       const link = document.createElement('a');

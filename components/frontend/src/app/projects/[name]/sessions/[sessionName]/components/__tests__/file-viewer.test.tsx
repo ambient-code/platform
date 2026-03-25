@@ -1,9 +1,13 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { FileViewer } from '../file-viewer';
 
 vi.mock('@/services/queries/use-workspace', () => ({
   useWorkspaceFile: vi.fn(),
+}));
+
+vi.mock('sonner', () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
 }));
 
 import { useWorkspaceFile } from '@/services/queries/use-workspace';
@@ -95,5 +99,63 @@ describe('FileViewer', () => {
     render(<FileViewer {...defaultProps} />);
 
     expect(screen.getByText('No content available')).toBeDefined();
+  });
+
+  it('renders and allows download for zero-byte (empty string) content', () => {
+    mockUseWorkspaceFile.mockReturnValue({
+      data: '',
+      isLoading: false,
+      error: null,
+    } as ReturnType<typeof useWorkspaceFile>);
+
+    render(<FileViewer {...defaultProps} />);
+
+    // Should NOT show "No content available"
+    expect(screen.queryByText('No content available')).toBeNull();
+
+    // Download button should be enabled
+    const downloadButtons = screen.getAllByRole('button', { name: /download/i });
+    expect(downloadButtons[0].hasAttribute('disabled')).toBe(false);
+  });
+
+  describe('download uses direct link instead of triggerDownload', () => {
+    it('downloads via direct workspace API link, not triggerDownload', () => {
+      mockUseWorkspaceFile.mockReturnValue({
+        data: 'binary-looking-content',
+        isLoading: false,
+        error: null,
+      } as ReturnType<typeof useWorkspaceFile>);
+
+      render(<FileViewer {...defaultProps} filePath="repos/my-repo/archive.zip" />);
+
+      // Set up spies AFTER render so React's createElement calls are not intercepted
+      const capturedHrefs: string[] = [];
+      const origCreateElement = document.createElement.bind(document);
+      const createSpy = vi.spyOn(document, 'createElement').mockImplementation((tag: string, options?: ElementCreationOptions) => {
+        const el = origCreateElement(tag, options);
+        if (tag === 'a') {
+          let hrefVal = '';
+          Object.defineProperty(el, 'href', {
+            get: () => hrefVal,
+            set: (v: string) => { hrefVal = v; capturedHrefs.push(v); },
+            configurable: true,
+          });
+          vi.spyOn(el as HTMLAnchorElement, 'click').mockImplementation(() => {});
+        }
+        return el;
+      });
+      vi.spyOn(document.body, 'appendChild').mockImplementation((node) => node);
+      vi.spyOn(document.body, 'removeChild').mockImplementation((node) => node);
+
+      // Click the download button in the header
+      const downloadButtons = screen.getAllByRole('button', { name: /download/i });
+      fireEvent.click(downloadButtons[0]);
+
+      // Must create a direct link to workspace API
+      expect(capturedHrefs).toHaveLength(1);
+      expect(capturedHrefs[0]).toContain('/workspace/repos/my-repo/archive.zip');
+
+      createSpy.mockRestore();
+    });
   });
 });
