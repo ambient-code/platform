@@ -1,8 +1,8 @@
 """
-gRPC transport for ClaudeBridge.
+gRPC transport for ClaudeBridge (additive — only active when AMBIENT_GRPC_ENABLED=true).
 
 GRPCSessionListener — pod-lifetime WatchSessionMessages subscriber.
-  Replaces _background_inbound_watcher in app.py.
+  Active alongside the existing HTTP/SSE path when AMBIENT_GRPC_ENABLED=true.
   Calls bridge.run() directly for each inbound user message (no HTTP round-trip).
   Fans out each event to:
     (a) bridge._active_streams[thread_id] queue — feeds the /events SSE tap
@@ -11,6 +11,8 @@ GRPCSessionListener — pod-lifetime WatchSessionMessages subscriber.
 GRPCMessageWriter — per-turn event consumer.
   Accumulates MESSAGES_SNAPSHOT content.
   Pushes one PushSessionMessage(event_type="assistant") on RUN_FINISHED / RUN_ERROR.
+
+When AMBIENT_GRPC_ENABLED is not set, none of this code is instantiated or called.
 """
 
 import asyncio
@@ -19,6 +21,8 @@ import logging
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING, Any, Optional
+
+import grpc
 
 from ag_ui.core import BaseEvent
 
@@ -30,6 +34,46 @@ logger = logging.getLogger(__name__)
 
 _BACKOFF_INITIAL = 1.0
 _BACKOFF_MAX = 30.0
+
+
+def _synthesize_run_error(
+    thread_id: str,
+    error_message: str,
+    active_streams: dict[str, asyncio.Queue],
+    writer: "GRPCMessageWriter",
+) -> None:
+    """Synthesize a terminal RUN_ERROR event when bridge.run() raises.
+
+    Feeds the error event into the SSE tap queue (if registered) and
+    schedules the writer to persist an 'error' status record so neither
+    the SSE consumer nor the DB writer is left hanging.
+    """
+    from ag_ui.core import RunErrorEvent
+
+    try:
+        error_event = RunErrorEvent(message=error_message, code="RUNNER_ERROR")
+    except Exception:
+        error_event = None
+
+    stream_queue = active_streams.get(thread_id)
+    if stream_queue is not None and error_event is not None:
+        try:
+            stream_queue.put_nowait(error_event)
+        except asyncio.QueueFull:
+            logger.warning(
+                "[GRPC LISTENER] SSE tap queue full while synthesising RUN_ERROR: thread=%s",
+                thread_id,
+            )
+
+    task = asyncio.ensure_future(writer._write_message(status="error"))
+
+    def _log_write_error(f: asyncio.Future) -> None:
+        if not f.cancelled() and f.exception() is not None:
+            logger.warning(
+                "[GRPC LISTENER] _write_message(error) failed: %s", f.exception()
+            )
+
+    task.add_done_callback(_log_write_error)
 
 
 class GRPCSessionListener:
@@ -115,11 +159,19 @@ class GRPCSessionListener:
                     msg.event_type,
                 )
                 asyncio.run_coroutine_threadsafe(msg_queue.put(msg), loop)
+        except grpc.RpcError as exc:
+            logger.warning(
+                "[GRPC LISTENER] gRPC stream error: session=%s code=%s details=%s",
+                self._session_id,
+                exc.code(),
+                exc.details(),
+            )
         except Exception as exc:
-            logger.info(
-                "[GRPC LISTENER] Watch stream ended: session=%s reason=%s",
+            logger.error(
+                "[GRPC LISTENER] Unexpected watch error: session=%s error=%s",
                 self._session_id,
                 exc,
+                exc_info=True,
             )
 
     async def _listen_loop(self) -> None:
@@ -129,7 +181,7 @@ class GRPCSessionListener:
         while True:
             msg_queue: asyncio.Queue = asyncio.Queue()
             stop_event = asyncio.Event()
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             executor = ThreadPoolExecutor(max_workers=1)
 
             watch_future = loop.run_in_executor(
@@ -173,6 +225,8 @@ class GRPCSessionListener:
                 logger.info("[GRPC LISTENER] Cancelled: session=%s", self._session_id)
                 raise
             except Exception as exc:
+                stop_event.set()
+                executor.shutdown(wait=False)
                 logger.warning(
                     "[GRPC LISTENER] Error, reconnecting in %.1fs: session=%s error=%s",
                     backoff,
@@ -210,10 +264,9 @@ class GRPCSessionListener:
             input_data = runner_input.to_run_agent_input()
         except Exception as exc:
             logger.warning(
-                "[GRPC LISTENER] Failed to build run agent input: seq=%d error=%s preview=%r",
+                "[GRPC LISTENER] Failed to build run agent input: seq=%d error=%s",
                 msg.seq,
                 exc,
-                (msg.payload or "")[:120],
             )
             return
 
@@ -233,18 +286,11 @@ class GRPCSessionListener:
             run_id,
         )
 
+        active_streams: dict[str, asyncio.Queue] = getattr(self._bridge, "_active_streams", {})
+        run_queue = active_streams.get(thread_id)
+
         try:
             async for event in self._bridge.run(input_data):
-                raw_type = getattr(event, "type", None)
-                event_type_str = raw_type.value if hasattr(raw_type, "value") else str(raw_type)
-                logger.debug(
-                    "[AG-UI EVENT] session=%s thread=%s type=%s event=%r",
-                    self._session_id,
-                    thread_id,
-                    event_type_str,
-                    event,
-                )
-                active_streams: dict = getattr(self._bridge, "_active_streams", {})
                 stream_queue = active_streams.get(thread_id)
                 if stream_queue is not None:
                     try:
@@ -262,9 +308,12 @@ class GRPCSessionListener:
                 exc,
                 exc_info=True,
             )
+            _synthesize_run_error(
+                thread_id, str(exc), active_streams, writer
+            )
         finally:
-            active_streams = getattr(self._bridge, "_active_streams", {})
-            active_streams.pop(thread_id, None)
+            if run_queue is not None and active_streams.get(thread_id) is run_queue:
+                active_streams.pop(thread_id, None)
             logger.info(
                 "[GRPC LISTENER] Turn complete: session=%s thread=%s",
                 self._session_id,
@@ -319,236 +368,44 @@ class GRPCMessageWriter:
     async def _write_message(self, status: str) -> None:
         if self._grpc_client is None:
             logger.warning(
-                "[GRPC WRITER] No gRPC client — cannot push: session=%s",
+                "[GRPC WRITER] No gRPC client — cannot push assembled message: session=%s",
                 self._session_id,
             )
             return
 
-        assistant_text = next(
-            (
-                m.get("content") or ""
-                for m in self._accumulated_messages
-                if m.get("role") == "assistant"
-            ),
-            "",
+        payload = json.dumps(
+            {
+                "run_id": self._run_id,
+                "status": status,
+                "messages": self._accumulated_messages,
+            }
         )
 
-        if not assistant_text:
-            logger.warning(
-                "[GRPC WRITER] No assistant message in snapshot: session=%s run=%s messages=%d",
-                self._session_id,
-                self._run_id,
-                len(self._accumulated_messages),
-            )
-
         logger.info(
-            "[GRPC WRITER] PushSessionMessage: session=%s run=%s status=%s text_len=%d",
+            "[GRPC WRITER] PushSessionMessage: session=%s run=%s status=%s messages=%d payload_len=%d",
             self._session_id,
             self._run_id,
             status,
-            len(assistant_text),
+            len(self._accumulated_messages),
+            len(payload),
         )
 
-        self._grpc_client.session_messages.push(
-            self._session_id,
-            event_type="assistant",
-            payload=assistant_text,
-        )
-<<<<<<< HEAD
-=======
+        client = self._grpc_client
+        session_id = self._session_id
 
+        def _do_push() -> None:
+            client.session_messages.push(
+                session_id,
+                event_type="assistant",
+                payload=payload,
+            )
 
-class GRPCInboxListener:
-    """Pod-lifetime gRPC inbox listener for ClaudeBridge.
-
-    Subscribes to WatchInboxMessages for this agent. For each arriving
-    InboxMessage it pushes a PushSessionMessage(event_type="user") so the
-    existing GRPCSessionListener picks it up on WatchSessionMessages and
-    drives bridge.run() — the inbox message body enters the session as a
-    durable user turn with a stable seq number.
-
-    ready: asyncio.Event — set once the WatchInboxMessages stream is open.
-    """
-
-    def __init__(
-        self,
-        agent_id: str,
-        session_id: str,
-        grpc_url: str,
-    ) -> None:
-        self._agent_id = agent_id
-        self._session_id = session_id
-        self._grpc_url = grpc_url
-        self._grpc_client: Optional["AmbientGRPCClient"] = None
-        self.ready = asyncio.Event()
-        self._task: Optional[asyncio.Task] = None
-
-    def start(self) -> None:
-        from ambient_runner._grpc_client import AmbientGRPCClient
-
-        self._grpc_client = AmbientGRPCClient.from_env()
-        self._task = asyncio.create_task(
-            self._listen_loop(), name="grpc-inbox-listener"
-        )
-        logger.info(
-            "[GRPC INBOX] Started: agent=%s session=%s url=%s",
-            self._agent_id,
-            self._session_id,
-            self._grpc_url,
-        )
-
-    async def stop(self) -> None:
-        if self._task and not self._task.done():
-            self._task.cancel()
-            try:
-                await self._task
-            except asyncio.CancelledError:
-                pass
-        if self._grpc_client:
-            self._grpc_client.close()
-        logger.info(
-            "[GRPC INBOX] Stopped: agent=%s session=%s",
-            self._agent_id,
-            self._session_id,
-        )
-
-    def _watch_in_thread(
-        self,
-        msg_queue: asyncio.Queue,
-        loop: asyncio.AbstractEventLoop,
-        stop_event: asyncio.Event,
-    ) -> None:
-        """Blocking gRPC inbox watch — runs in a ThreadPoolExecutor."""
-        if self._grpc_client is None:
-            return
         try:
-            stream = self._grpc_client.inbox_messages.watch(self._agent_id)
-            loop.call_soon_threadsafe(self.ready.set)
-            logger.info(
-                "[GRPC INBOX] WatchInboxMessages stream open: agent=%s",
-                self._agent_id,
-            )
-            for msg in stream:
-                if loop.is_closed() or stop_event.is_set():
-                    break
-                logger.info(
-                    "[GRPC INBOX] Received: agent=%s inbox_id=%s from=%s",
-                    self._agent_id,
-                    msg.id,
-                    msg.from_name or msg.from_agent_id or "system",
-                )
-                asyncio.run_coroutine_threadsafe(msg_queue.put(msg), loop)
+            await asyncio.get_running_loop().run_in_executor(None, _do_push)
         except Exception as exc:
-            logger.info(
-                "[GRPC INBOX] Watch stream ended: agent=%s reason=%s",
-                self._agent_id,
-                exc,
-            )
-
-    async def _listen_loop(self) -> None:
-        backoff = _BACKOFF_INITIAL
-
-        while True:
-            msg_queue: asyncio.Queue = asyncio.Queue()
-            stop_event = asyncio.Event()
-            loop = asyncio.get_event_loop()
-            executor = ThreadPoolExecutor(max_workers=1)
-
-            watch_future = loop.run_in_executor(
-                executor,
-                self._watch_in_thread,
-                msg_queue,
-                loop,
-                stop_event,
-            )
-
-            try:
-                while True:
-                    try:
-                        msg = await asyncio.wait_for(msg_queue.get(), timeout=30.0)
-                    except asyncio.TimeoutError:
-                        if watch_future.done():
-                            break
-                        continue
-
-                    await self._relay_to_session(msg)
-
-            except asyncio.CancelledError:
-                stop_event.set()
-                executor.shutdown(wait=False)
-                logger.info("[GRPC INBOX] Cancelled: agent=%s", self._agent_id)
-                raise
-            except Exception as exc:
-                logger.warning(
-                    "[GRPC INBOX] Error, reconnecting in %.1fs: agent=%s error=%s",
-                    backoff,
-                    self._agent_id,
-                    exc,
-                )
-                await asyncio.sleep(backoff)
-                backoff = min(backoff * 2, _BACKOFF_MAX)
-                continue
-
-            stop_event.set()
-            executor.shutdown(wait=False)
-            backoff = _BACKOFF_INITIAL
-            logger.info(
-                "[GRPC INBOX] Stream ended cleanly, reconnecting: agent=%s",
-                self._agent_id,
-            )
-
-    async def _relay_to_session(self, msg: Any) -> None:
-        """Push inbox message body as a durable user SessionMessage.
-
-        Constructs a RunnerInput-shaped JSON payload (same format as
-        _push_initial_prompt_via_grpc in app.py) and calls
-        PushSessionMessage(event_type="user"). The existing
-        GRPCSessionListener picks it up on WatchSessionMessages and drives
-        bridge.run() — no direct bridge.run() call here.
-        """
-        if self._grpc_client is None:
-            return
-
-        body = getattr(msg, "body", "") or ""
-        inbox_id = getattr(msg, "id", "") or str(uuid.uuid4())
-        from_label = (
-            getattr(msg, "from_name", None)
-            or getattr(msg, "from_agent_id", None)
-            or "inbox"
-        )
-
-        payload = json.dumps({
-            "threadId": self._session_id,
-            "runId": str(uuid.uuid4()),
-            "messages": [
-                {
-                    "id": inbox_id,
-                    "role": "user",
-                    "content": body,
-                    "metadata": {
-                        "source": "inbox",
-                        "from": from_label,
-                        "inbox_message_id": inbox_id,
-                    },
-                }
-            ],
-        })
-
-        result = self._grpc_client.session_messages.push(
-            self._session_id,
-            event_type="user",
-            payload=payload,
-        )
-        if result is not None:
-            logger.info(
-                "[GRPC INBOX] Relayed inbox→session: agent=%s inbox_id=%s session_seq=%d",
-                self._agent_id,
-                inbox_id,
-                result.seq,
-            )
-        else:
             logger.warning(
-                "[GRPC INBOX] Relay push returned None: agent=%s inbox_id=%s",
-                self._agent_id,
-                inbox_id,
+                "[GRPC WRITER] Push failed: session=%s status=%s error=%s",
+                self._session_id,
+                status,
+                exc,
             )

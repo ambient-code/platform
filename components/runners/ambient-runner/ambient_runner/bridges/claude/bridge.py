@@ -9,6 +9,7 @@ Owns the entire Claude session lifecycle:
 - Interrupt and graceful shutdown
 """
 
+import asyncio
 import logging
 import os
 import time
@@ -60,11 +61,9 @@ class ClaudeBridge(PlatformBridge):
         self._saved_session_ids: dict[str, str] = {}
         # Per-thread halt tracking to avoid race conditions on shared adapter
         self._halted_by_thread: dict[str, bool] = {}
-
-        # gRPC transport (populated by _setup_platform when AMBIENT_GRPC_URL set)
+        # gRPC transport — started lazily in _setup_platform
         self._grpc_listener: Any = None
-        self._inbox_listener: Any = None
-        self._active_streams: dict = {}
+        self._active_streams: dict[str, asyncio.Queue] = {}
 
     # ------------------------------------------------------------------
     # PlatformBridge interface
@@ -91,22 +90,69 @@ class ClaudeBridge(PlatformBridge):
             session_persistence=True,
         )
 
-    async def run(self, input_data: RunAgentInput) -> AsyncIterator[BaseEvent]:
-        """Full run lifecycle: lazy setup → adapter → session worker → tracing."""
-        # 1. Lazy platform setup
-        await self._ensure_ready()
-        await self._refresh_credentials_if_stale()
+    async def _initialize_run(
+        self,
+        thread_id: str,
+        current_user_id: str,
+        current_user_name: str,
+        caller_token: str,
+    ) -> None:
+        """Prepare the runtime for a new run.
 
-        # 2. Ensure adapter exists
+        Sets user context, refreshes credentials, and restarts the Claude
+        client if the user changed (so MCP servers pick up new creds).
+        """
+        from ambient_runner.platform.auth import (
+            clear_runtime_credentials,
+            populate_mcp_server_credentials,
+            populate_runtime_credentials,
+        )
+
+        prev_user = self._context.current_user_id if self._context else ""
+        if self._context:
+            self._context.set_current_user(current_user_id, current_user_name, caller_token)
+
+        await self._ensure_ready()
+
+        # Fresh credentials for this user on every run
+        clear_runtime_credentials()
+        await populate_runtime_credentials(self._context)
+        await populate_mcp_server_credentials(self._context)
+        self._last_creds_refresh = time.monotonic()
+
+        # If the caller changed, destroy the worker and rebuild MCP servers +
+        # adapter so the new ClaudeSDKClient gets fresh mcp_servers config.
+        # The session ID is preserved — --resume works because each SDK client
+        # is a new CLI subprocess that spawns fresh MCP servers from os.environ.
+        user_changed = current_user_id != prev_user
+        if user_changed and self._session_manager.get_existing(thread_id):
+            logger.info(
+                f"User changed for thread={thread_id}, "
+                "rebuilding MCP servers and adapter with new credentials"
+            )
+            await self._session_manager.destroy(thread_id)
+            self._rebuild_mcp_servers()
+            # Force adapter rebuild so ClaudeAgentOptions uses new mcp_servers
+            self._adapter = None
+
         self._ensure_adapter()
 
-        # 3. Extract user message for worker and observability
+    async def run(
+        self,
+        input_data: RunAgentInput,
+        current_user_id: str = "",
+        current_user_name: str = "",
+        caller_token: str = "",
+    ) -> AsyncIterator[BaseEvent]:
+        """Full run lifecycle: initialize → session worker → tracing."""
+        thread_id = input_data.thread_id or (self._context.session_id if self._context else "")
+
+        await self._initialize_run(thread_id, current_user_id, current_user_name, caller_token)
+
         from ag_ui_claude_sdk.utils import process_messages
 
         user_msg, _ = process_messages(input_data)
 
-        # 4. Get or create session worker for this thread
-        thread_id = input_data.thread_id or self._context.session_id
         api_key = os.getenv("ANTHROPIC_API_KEY", "")
         saved_session_id = self._saved_session_ids.pop(
             thread_id, None
@@ -121,40 +167,52 @@ class ClaudeBridge(PlatformBridge):
         # 5. Run adapter with message stream, wrapped in tracing
         session_label = self._session_manager.get_session_id(thread_id) or thread_id
         async with self._session_manager.get_lock(thread_id):
-            message_stream = worker.query(user_msg, session_id=session_label)
+            try:
+                message_stream = worker.query(user_msg, session_id=session_label)
 
-            from ambient_runner.middleware import tracing_middleware
+                from ambient_runner.middleware import tracing_middleware
 
-            wrapped_stream = tracing_middleware(
-                self._adapter.run(input_data, message_stream=message_stream),
-                obs=self._obs,
-                model=self._configured_model,
-                prompt=user_msg,
-            )
-
-            async for event in wrapped_stream:
-                yield event
-
-            # Persist session ID after turn completes (for --resume on pod restart)
-            if worker.session_id:
-                self._session_manager._session_ids[thread_id] = worker.session_id
-                self._session_manager._persist_session_ids()
-
-            # Capture halt state for this thread to avoid race conditions
-            # with concurrent runs modifying the shared adapter's halted flag
-            self._halted_by_thread[thread_id] = self._adapter.halted
-
-            # If the adapter halted (frontend tool or built-in HITL tool like
-            # AskUserQuestion), interrupt the worker to prevent the SDK from
-            # auto-approving the tool call with a placeholder result.
-            if self._halted_by_thread.get(thread_id, False):
-                logger.info(
-                    f"Adapter halted for thread={thread_id}, "
-                    "interrupting worker to await user input"
+                wrapped_stream = tracing_middleware(
+                    self._adapter.run(input_data, message_stream=message_stream),
+                    obs=self._obs,
+                    model=self._configured_model,
+                    prompt=user_msg,
                 )
-                await worker.interrupt()
-                # Clear the halt flag for this thread
-                self._halted_by_thread.pop(thread_id, None)
+
+                async for event in wrapped_stream:
+                    yield event
+
+                # Persist session ID after turn completes (for --resume on pod restart)
+                if worker.session_id:
+                    self._session_manager._session_ids[thread_id] = worker.session_id
+                    self._session_manager._persist_session_ids()
+
+                # Capture halt state for this thread to avoid race conditions
+                # with concurrent runs modifying the shared adapter's halted flag
+                self._halted_by_thread[thread_id] = self._adapter.halted
+
+                # If the adapter halted (frontend tool or built-in HITL tool like
+                # AskUserQuestion), interrupt the worker to prevent the SDK from
+                # auto-approving the tool call with a placeholder result.
+                if self._halted_by_thread.get(thread_id, False):
+                    logger.info(
+                        f"Adapter halted for thread={thread_id}, "
+                        "interrupting worker to await user input"
+                    )
+                    await worker.interrupt()
+                    # Clear the halt flag for this thread
+                    self._halted_by_thread.pop(thread_id, None)
+            finally:
+                # Clear caller token immediately — never persist between turns.
+                if self._context:
+                    self._context.caller_token = ""
+
+                # Clear credentials after turn completes (shared session security).
+                # In finally to ensure cleanup even on errors/cancellation.
+                if (self._context.get_env("KEEP_CREDENTIALS_PERSISTENT") or "").lower() != "true":
+                    from ambient_runner.platform.auth import clear_runtime_credentials
+
+                    clear_runtime_credentials()
 
         self._first_run = False
 
@@ -182,12 +240,38 @@ class ClaudeBridge(PlatformBridge):
     # Lifecycle methods
     # ------------------------------------------------------------------
 
+    async def start_grpc_listener(self, grpc_url: str) -> None:
+        """Start the gRPC session listener for this bridge.
+
+        Separated from _setup_platform so it can be called after platform
+        setup completes, with a bounded timeout for readiness. Only valid
+        when AMBIENT_GRPC_ENABLED=true and AMBIENT_GRPC_URL are both set.
+        """
+        if self._context is None:
+            raise RuntimeError("Cannot start gRPC listener: context not set")
+        if self._grpc_listener is not None:
+            logger.warning("gRPC listener already started — skipping duplicate start")
+            return
+
+        from ambient_runner.bridges.claude.grpc_transport import GRPCSessionListener
+
+        session_id = self._context.session_id
+        self._grpc_listener = GRPCSessionListener(
+            bridge=self,
+            session_id=session_id,
+            grpc_url=grpc_url,
+        )
+        self._grpc_listener.start()
+        logger.info(
+            "gRPC listener started: session=%s url=%s",
+            session_id,
+            grpc_url,
+        )
+
     async def shutdown(self) -> None:
         """Graceful shutdown: persist sessions, finalise tracing."""
-        if self._grpc_listener:
+        if self._grpc_listener is not None:
             await self._grpc_listener.stop()
-        if self._inbox_listener:
-            await self._inbox_listener.stop()
         if self._session_manager:
             await self._session_manager.shutdown()
         if self._obs:
@@ -381,37 +465,22 @@ class ClaudeBridge(PlatformBridge):
         self._allowed_tools = allowed_tools
         self._system_prompt = system_prompt
 
-        # gRPC listener — start eagerly so ready event fires before initial prompt
-        grpc_url = os.getenv("AMBIENT_GRPC_URL", "").strip()
-        if grpc_url and self._grpc_listener is None:
-            from ambient_runner.bridges.claude.grpc_transport import GRPCSessionListener
+    def _rebuild_mcp_servers(self) -> None:
+        """Rebuild MCP server config with current env vars.
 
-            self._grpc_listener = GRPCSessionListener(
-                bridge=self,
-                session_id=self._context.session_id,
-                grpc_url=grpc_url,
-            )
-            self._grpc_listener.start()
-            logger.info(
-                "ClaudeBridge: gRPC listener started for session %s",
-                self._context.session_id,
-            )
+        Called when the user changes so .mcp.json env blocks (e.g.,
+        ${JIRA_API_TOKEN}) are re-expanded with the new user's credentials.
+        """
+        from ambient_runner.bridges.claude.mcp import (
+            build_allowed_tools,
+            build_mcp_servers,
+        )
 
-        agent_id = os.getenv("AGENT_ID", "").strip()
-        if grpc_url and agent_id and self._inbox_listener is None:
-            from ambient_runner.bridges.claude.grpc_transport import GRPCInboxListener
-
-            self._inbox_listener = GRPCInboxListener(
-                agent_id=agent_id,
-                session_id=self._context.session_id,
-                grpc_url=grpc_url,
-            )
-            self._inbox_listener.start()
-            logger.info(
-                "ClaudeBridge: gRPC inbox listener started for agent %s session %s",
-                agent_id,
-                self._context.session_id,
-            )
+        self._mcp_servers = build_mcp_servers(
+            self._context, self._cwd_path, self._obs
+        )
+        self._allowed_tools = build_allowed_tools(self._mcp_servers)
+        logger.info("Rebuilt MCP servers with updated credentials")
 
     # ------------------------------------------------------------------
     # Private: adapter lifecycle
