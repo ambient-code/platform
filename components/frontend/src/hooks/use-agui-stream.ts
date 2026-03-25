@@ -45,6 +45,8 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const reconnectAttemptsRef = useRef(0)
   const mountedRef = useRef(false)
+  // Store latest processEvent to avoid stale closure in EventSource handler
+  const processEventRef = useRef<((event: PlatformEvent) => void) | null>(null)
 
   // Exponential backoff config for reconnection
   const MAX_RECONNECT_DELAY = 30000 // 30 seconds max
@@ -89,6 +91,11 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
     [onEvent, onMessage, onError, onTraceId, handleFrontendToolCall],
   )
 
+  // Keep processEventRef up to date to avoid stale closures in EventSource handler
+  useEffect(() => {
+    processEventRef.current = processEvent
+  }, [processEvent])
+
   // Connect to the AG-UI event stream
   const connect = useCallback(
     (runId?: string) => {
@@ -126,7 +133,8 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
       eventSource.onmessage = (e) => {
         try {
           const event = JSON.parse(e.data) as PlatformEvent
-          processEvent(event)
+          // Use ref to avoid stale closure - ensures we always call the latest processEvent
+          processEventRef.current?.(event)
         } catch (err) {
           console.error('Failed to parse AG-UI event:', err)
         }
@@ -177,7 +185,7 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
         }, delay)
       }
     },
-    [projectName, sessionName, processEvent, onConnected, onError, onDisconnected],
+    [projectName, sessionName, onConnected, onError, onDisconnected],
   )
 
   // Disconnect from the event stream

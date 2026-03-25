@@ -60,13 +60,34 @@ async def run_agent(input_data: RunnerInput, request: Request):
     accept_header = request.headers.get("accept", "text/event-stream")
     encoder = EventEncoder(accept=accept_header)
 
+    # Extract per-message user context from headers (set by backend proxy).
+    # Sanitized here; passed to bridge.run() which sets it inside the lock
+    # to prevent races across concurrent requests.
+    current_user_id = request.headers.get("x-current-user-id", "")
+    current_user_name = request.headers.get("x-current-user-name", "")
+    # The caller's bearer token — used for credential requests so each user
+    # can only access their own credentials (no BOT_TOKEN impersonation).
+    caller_token = request.headers.get("x-caller-token", "")
+    if current_user_id:
+        from ambient_runner.platform.auth import sanitize_user_context
+
+        current_user_id, current_user_name = sanitize_user_context(
+            current_user_id, current_user_name
+        )
+        logger.info(f"Run user context: {current_user_id}")
+
     logger.info(
         f"Run: thread_id={run_agent_input.thread_id}, run_id={run_agent_input.run_id}"
     )
 
     async def event_stream():
         try:
-            async for event in bridge.run(run_agent_input):
+            async for event in bridge.run(
+                run_agent_input,
+                current_user_id=current_user_id,
+                current_user_name=current_user_name,
+                caller_token=caller_token,
+            ):
                 try:
                     yield encoder.encode(event)
                 except Exception as encode_err:

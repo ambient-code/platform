@@ -63,54 +63,125 @@ class TestBackendAPIClient:
 
     @patch("urllib.request.urlopen")
     def test_list_sessions(self, mock_urlopen, monkeypatch):
-        """Test listing sessions."""
+        """Test listing sessions returns paginated response with items key."""
         monkeypatch.setenv("BACKEND_API_URL", "http://backend:8080/api")
         monkeypatch.setenv("PROJECT_NAME", "test-project")
 
         mock_response = MagicMock()
         mock_response.read.return_value = json.dumps(
             {
-                "sessions": [
-                    {"name": "session-1", "phase": "Running"},
-                    {"name": "session-2", "phase": "Stopped"},
-                ]
+                "items": [
+                    {
+                        "metadata": {"name": "session-1"},
+                        "status": {"phase": "Running"},
+                    },
+                    {
+                        "metadata": {"name": "session-2"},
+                        "status": {"phase": "Stopped"},
+                    },
+                ],
+                "totalCount": 2,
+                "hasMore": False,
             }
         ).encode("utf-8")
         mock_response.__enter__.return_value = mock_response
         mock_urlopen.return_value = mock_response
 
         client = BackendAPIClient()
-        sessions = client.list_sessions(include_completed=True)
+        result = client.list_sessions(include_completed=True)
 
-        assert len(sessions) == 2
-        assert sessions[0]["name"] == "session-1"
-        assert sessions[1]["name"] == "session-2"
+        assert len(result["items"]) == 2
+        assert result["items"][0]["metadata"]["name"] == "session-1"
+        assert result["totalCount"] == 2
 
     @patch("urllib.request.urlopen")
     def test_list_sessions_filters_completed(self, mock_urlopen, monkeypatch):
-        """Test that list_sessions filters out stopped sessions by default."""
+        """Test that list_sessions filters out stopped/completed/failed sessions by default."""
         monkeypatch.setenv("BACKEND_API_URL", "http://backend:8080/api")
         monkeypatch.setenv("PROJECT_NAME", "test-project")
 
         mock_response = MagicMock()
         mock_response.read.return_value = json.dumps(
             {
-                "sessions": [
-                    {"name": "session-1", "phase": "Running"},
-                    {"name": "session-2", "phase": "Stopped"},
-                    {"name": "session-3", "phase": "Pending"},
-                ]
+                "items": [
+                    {
+                        "metadata": {"name": "session-1"},
+                        "status": {"phase": "Running"},
+                    },
+                    {
+                        "metadata": {"name": "session-2"},
+                        "status": {"phase": "Stopped"},
+                    },
+                    {
+                        "metadata": {"name": "session-3"},
+                        "status": {"phase": "Pending"},
+                    },
+                ],
+                "totalCount": 3,
+                "hasMore": False,
             }
         ).encode("utf-8")
         mock_response.__enter__.return_value = mock_response
         mock_urlopen.return_value = mock_response
 
         client = BackendAPIClient()
-        sessions = client.list_sessions(include_completed=False)
+        result = client.list_sessions(include_completed=False)
 
-        assert len(sessions) == 2
-        assert sessions[0]["name"] == "session-1"
-        assert sessions[1]["name"] == "session-3"
+        assert len(result["items"]) == 2
+        assert result["items"][0]["metadata"]["name"] == "session-1"
+        assert result["items"][1]["metadata"]["name"] == "session-3"
+
+    @patch("urllib.request.urlopen")
+    def test_list_sessions_filter_by_phase(self, mock_urlopen, monkeypatch):
+        """Test filtering sessions by specific phase."""
+        monkeypatch.setenv("BACKEND_API_URL", "http://backend:8080/api")
+        monkeypatch.setenv("PROJECT_NAME", "test-project")
+
+        mock_response = MagicMock()
+        mock_response.read.return_value = json.dumps(
+            {
+                "items": [
+                    {
+                        "metadata": {"name": "session-1"},
+                        "status": {"phase": "Running"},
+                    },
+                    {
+                        "metadata": {"name": "session-2"},
+                        "status": {"phase": "Stopped"},
+                    },
+                ],
+                "totalCount": 2,
+                "hasMore": False,
+            }
+        ).encode("utf-8")
+        mock_response.__enter__.return_value = mock_response
+        mock_urlopen.return_value = mock_response
+
+        client = BackendAPIClient()
+        result = client.list_sessions(phase="Running")
+
+        assert len(result["items"]) == 1
+        assert result["items"][0]["metadata"]["name"] == "session-1"
+
+    @patch("urllib.request.urlopen")
+    def test_list_sessions_with_search(self, mock_urlopen, monkeypatch):
+        """Test that search param is passed as query parameter."""
+        monkeypatch.setenv("BACKEND_API_URL", "http://backend:8080/api")
+        monkeypatch.setenv("PROJECT_NAME", "test-project")
+
+        mock_response = MagicMock()
+        mock_response.read.return_value = json.dumps(
+            {"items": [], "totalCount": 0, "hasMore": False}
+        ).encode("utf-8")
+        mock_response.__enter__.return_value = mock_response
+        mock_urlopen.return_value = mock_response
+
+        client = BackendAPIClient()
+        client.list_sessions(search="my-task")
+
+        call_args = mock_urlopen.call_args
+        request = call_args[0][0]
+        assert "search=my-task" in request.full_url
 
     @patch("urllib.request.urlopen")
     def test_get_session(self, mock_urlopen, monkeypatch):
@@ -161,7 +232,7 @@ class TestBackendAPIClient:
 
     @patch("urllib.request.urlopen")
     def test_create_session_with_all_params(self, mock_urlopen, monkeypatch):
-        """Test creating a session with all params."""
+        """Test creating a session with all params including workflow."""
         monkeypatch.setenv("BACKEND_API_URL", "http://backend:8080/api")
         monkeypatch.setenv("PROJECT_NAME", "test-project")
 
@@ -174,12 +245,18 @@ class TestBackendAPIClient:
 
         client = BackendAPIClient()
         repos = [{"url": "https://github.com/test/repo", "branch": "main"}]
+        workflow = {
+            "gitUrl": "https://github.com/org/workflows",
+            "branch": "main",
+            "path": "workflows/bugfix",
+        }
         session = client.create_session(
             session_name="new-session",
             initial_prompt="Test prompt",
             display_name="Test Session",
             repos=repos,
             model="claude-sonnet-4-5",
+            workflow=workflow,
         )
 
         assert session["name"] == "new-session"
@@ -193,6 +270,7 @@ class TestBackendAPIClient:
         assert payload["displayName"] == "Test Session"
         assert payload["repos"] == repos
         assert payload["llmSettings"]["model"] == "claude-sonnet-4-5"
+        assert payload["activeWorkflow"] == workflow
 
     @patch("urllib.request.urlopen")
     def test_stop_session(self, mock_urlopen, monkeypatch):
@@ -302,7 +380,9 @@ class TestBackendAPIClient:
         monkeypatch.setenv("BOT_TOKEN", "secret-token")
 
         mock_response = MagicMock()
-        mock_response.read.return_value = json.dumps({"sessions": []}).encode("utf-8")
+        mock_response.read.return_value = json.dumps(
+            {"items": [], "totalCount": 0, "hasMore": False}
+        ).encode("utf-8")
         mock_response.__enter__.return_value = mock_response
         mock_urlopen.return_value = mock_response
 
@@ -322,7 +402,9 @@ class TestBackendAPIClient:
         monkeypatch.delenv("BOT_TOKEN", raising=False)
 
         mock_response = MagicMock()
-        mock_response.read.return_value = json.dumps({"sessions": []}).encode("utf-8")
+        mock_response.read.return_value = json.dumps(
+            {"items": [], "totalCount": 0, "hasMore": False}
+        ).encode("utf-8")
         mock_response.__enter__.return_value = mock_response
         mock_urlopen.return_value = mock_response
 
@@ -362,9 +444,7 @@ class TestBackendMCPTools:
         tools = create_backend_mcp_tools(sdk_tool_decorator=mock_tool, client=client)
 
         assert isinstance(tools, list)
-        assert (
-            len(tools) == 6
-        )  # 6 tools: list, get, create, stop, send_message, get_api_reference
+        assert len(tools) == 9
 
         # Verify tool names
         tool_names = [t._tool_name for t in tools]
@@ -373,6 +453,9 @@ class TestBackendMCPTools:
         assert "acp_create_session" in tool_names
         assert "acp_stop_session" in tool_names
         assert "acp_send_message" in tool_names
+        assert "acp_get_session_status" in tool_names
+        assert "acp_restart_session" in tool_names
+        assert "acp_list_workflows" in tool_names
         assert "acp_get_api_reference" in tool_names
 
     def test_create_backend_tools_returns_empty_when_no_env(self, monkeypatch):
@@ -408,7 +491,20 @@ class TestBackendMCPTools:
 
         mock_response = MagicMock()
         mock_response.read.return_value = json.dumps(
-            {"sessions": [{"name": "session-1"}]}
+            {
+                "items": [
+                    {
+                        "metadata": {
+                            "name": "session-1",
+                            "creationTimestamp": "2026-01-01T00:00:00Z",
+                        },
+                        "spec": {"displayName": "Test Session"},
+                        "status": {"phase": "Running", "agentStatus": "working"},
+                    }
+                ],
+                "totalCount": 1,
+                "hasMore": False,
+            }
         ).encode("utf-8")
         mock_response.__enter__.return_value = mock_response
         mock_urlopen.return_value = mock_response
@@ -441,6 +537,8 @@ class TestBackendMCPTools:
         assert result_data["success"] is True
         assert result_data["count"] == 1
         assert result_data["sessions"][0]["name"] == "session-1"
+        assert result_data["sessions"][0]["phase"] == "Running"
+        assert result_data["sessions"][0]["agentStatus"] == "working"
 
     @pytest.mark.asyncio
     async def test_api_reference_tool(self, monkeypatch):

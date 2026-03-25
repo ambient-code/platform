@@ -22,7 +22,7 @@ export type ExplorerPanelProps = {
   onDirectoryChange: (option: DirectoryOption) => void;
   files: WorkspaceItem[];
   currentSubPath: string;
-  viewingFile: { path: string; content: string } | null;
+  viewingFile: { path: string; content: string; size?: number } | null;
   isLoadingFile: boolean;
   onFileOrFolderSelect: (node: FileTreeNode) => void;
   onNavigateBack: () => void;

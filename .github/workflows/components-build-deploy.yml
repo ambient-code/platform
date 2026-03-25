@@ -196,6 +196,7 @@ jobs:
           platforms: ${{ matrix.arch.platform }}
           push: true
           tags: ${{ matrix.component.image }}:${{ github.sha }}-${{ matrix.arch.suffix }}
+          build-args: AMBIENT_VERSION=${{ github.sha }}
           cache-from: type=gha,scope=${{ matrix.component.name }}-${{ matrix.arch.suffix }}
           cache-to: type=gha,mode=max,scope=${{ matrix.component.name }}-${{ matrix.arch.suffix }}
 
@@ -208,6 +209,7 @@ jobs:
           platforms: ${{ matrix.arch.platform }}
           push: false
           tags: ${{ matrix.component.image }}:pr-${{ github.event.pull_request.number }}-${{ matrix.arch.suffix }}
+          build-args: AMBIENT_VERSION=${{ github.sha }}
           cache-from: type=gha,scope=${{ matrix.component.name }}-${{ matrix.arch.suffix }}
 
   merge-manifests:
@@ -366,7 +368,6 @@ jobs:
         run: |
           oc set env deployment/frontend -n ambient-code -c frontend \
             GITHUB_APP_SLUG="ambient-code-stage" \
-            VTEAM_VERSION="${{ github.sha }}" \
             FEEDBACK_URL="https://forms.gle/7XiWrvo6No922DUz6"
 
       - name: Update operator environment variables
@@ -445,7 +446,6 @@ jobs:
         run: |
           oc set env deployment/frontend -n ambient-code -c frontend \
             GITHUB_APP_SLUG="ambient-code-stage" \
-            VTEAM_VERSION="${{ github.sha }}" \
             FEEDBACK_URL="https://forms.gle/7XiWrvo6No922DUz6"
 
       - name: Determine which components were built

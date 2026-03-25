@@ -53,6 +53,18 @@ export default defineConfig({
           ],
         },
         {
+          label: 'Features',
+          items: [
+            { slug: 'features/session-sharing' },
+          ],
+        },
+        {
+          label: 'Guides',
+          items: [
+            { slug: 'guides/migrating-shared-sessions' },
+          ],
+        },
+        {
           label: 'Extensions',
           items: [
             { slug: 'extensions/github-action' },

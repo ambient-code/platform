@@ -112,7 +112,8 @@ def build_mcp_servers(
         logger.info(
             f"Added backend API MCP tools ({len(backend_tools)}): "
             "acp_list_sessions, acp_get_session, acp_create_session, "
-            "acp_stop_session, acp_send_message, acp_get_api_reference"
+            "acp_stop_session, acp_send_message, acp_get_session_status, "
+            "acp_restart_session, acp_list_workflows, acp_get_api_reference"
         )
 
     return mcp_servers

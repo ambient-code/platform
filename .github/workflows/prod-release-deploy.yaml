@@ -236,6 +236,7 @@ jobs:
           platforms: ${{ matrix.arch.platform }}
           push: true
           tags: ${{ matrix.component.image }}:${{ needs.release.outputs.new_tag }}-${{ matrix.arch.suffix }}
+          build-args: AMBIENT_VERSION=${{ needs.release.outputs.new_tag }}
           cache-from: type=gha,scope=${{ matrix.component.name }}-${{ matrix.arch.suffix }}
           cache-to: type=gha,mode=max,scope=${{ matrix.component.name }}-${{ matrix.arch.suffix }}
 
@@ -381,7 +382,6 @@ jobs:
         run: |
           oc set env deployment/frontend -n ambient-code -c frontend \
             GITHUB_APP_SLUG="ambient-code" \
-            VTEAM_VERSION="${{ needs.release.outputs.new_tag }}" \
             FEEDBACK_URL="https://forms.gle/7XiWrvo6No922DUz6"
 
       - name: Update operator environment variables
