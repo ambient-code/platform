@@ -12,7 +12,7 @@ resources:
 - ambient-api-server-service.yml
 - unleash-deployment.yaml
 - agent-registry-configmap.yaml
-- ../marketplace-sources-configmap.yaml
+- marketplace-sources-configmap.yaml
 
 configMapGenerator:
 - name: ambient-models
