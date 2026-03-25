@@ -249,7 +249,7 @@ class SessionWorker:
         """Stop a background task (subagent) by ID."""
         if self._client is not None:
             try:
-                self._client.stop_task(task_id)
+                await self._client.stop_task(task_id)
             except Exception as exc:
                 logger.warning(f"[SessionWorker] stop_task({task_id}) failed: {exc}")
                 raise

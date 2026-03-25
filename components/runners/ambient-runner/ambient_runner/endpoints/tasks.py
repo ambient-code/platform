@@ -37,16 +37,25 @@ async def stop_task(task_id: str, request: Request):
 
 @router.get("/{task_id}/output")
 async def get_task_output(task_id: str, request: Request):
-    """Get the transcript/output of a completed background task."""
+    """Get the transcript/output of a background task (running or completed)."""
     bridge = request.app.state.bridge
     output_path = bridge.task_outputs.get(task_id)
 
-    # Fallback: search under ~/.claude/projects/ (scoped, not full tree)
+    # Fallback: search known directories where the SDK writes output files.
+    # During execution: /tmp/claude-*/.../{session_id}/tasks/{task_id}.output
+    # After completion: ~/.claude/projects/.../{session_id}/subagents/agent-{task_id}.jsonl
     if not output_path:
-        projects_dir = Path.home() / ".claude" / "projects"
-        if projects_dir.exists():
-            for match in projects_dir.rglob(f"*{task_id}*"):
+        search_dirs = [
+            Path("/tmp"),
+            Path.home() / ".claude" / "projects",
+        ]
+        for search_dir in search_dirs:
+            if not search_dir.exists():
+                continue
+            for match in search_dir.rglob(f"*{task_id}*"):
                 output_path = str(match)
+                break
+            if output_path:
                 break
 
     if not output_path:
@@ -54,9 +63,13 @@ async def get_task_output(task_id: str, request: Request):
             status_code=404, detail=f"No output found for task {task_id}"
         )
 
+    # Allow paths under ~/.claude/ or /tmp/ (SDK writes to both)
     resolved = Path(output_path).resolve()
-    claude_home = (Path.home() / ".claude").resolve()
-    if not resolved.is_relative_to(claude_home):
+    allowed_roots = [
+        (Path.home() / ".claude").resolve(),
+        Path("/tmp").resolve(),
+    ]
+    if not any(resolved.is_relative_to(root) for root in allowed_roots):
         raise HTTPException(status_code=403, detail="Access denied")
 
     if not resolved.exists():

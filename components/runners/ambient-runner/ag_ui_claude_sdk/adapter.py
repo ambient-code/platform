@@ -1182,6 +1182,13 @@ class ClaudeAgentAdapter:
                 while not self._hook_event_queue.empty():
                     try:
                         hook_event = self._hook_event_queue.get_nowait()
+                        # Capture transcript paths from SubagentStop hooks
+                        if hasattr(hook_event, "name") and hook_event.name == "hook:SubagentStop":
+                            val = getattr(hook_event, "value", {}) or {}
+                            agent_id = val.get("agent_id")
+                            transcript = val.get("agent_transcript_path")
+                            if agent_id and transcript:
+                                self._task_outputs.setdefault(agent_id, transcript)
                         yield hook_event
                     except asyncio.QueueEmpty:
                         break
