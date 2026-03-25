@@ -3,9 +3,16 @@ package handlers
 import (
 	"crypto/sha256"
 	"fmt"
+	"os"
 	"sync"
 	"time"
 )
+
+func init() {
+	if os.Getenv("DISABLE_SSAR_CACHE") == "true" {
+		CacheDisabled = true
+	}
+}
 
 // ssarCacheTTL is how long a cached SSAR result is valid.
 // RBAC changes take at most this long to take effect.
@@ -39,8 +46,14 @@ func ssarCacheKey(token, namespace, verb, group, resource string) string {
 	return fmt.Sprintf("%x:%s:%s:%s:%s", h[:8], namespace, verb, group, resource)
 }
 
+// CacheDisabled can be set to true to bypass the cache for A/B benchmarking.
+var CacheDisabled bool
+
 // check returns the cached SSAR result if present and not expired.
 func (c *ssarCache) check(key string) (allowed bool, found bool) {
+	if CacheDisabled {
+		return false, false
+	}
 	c.mu.RLock()
 	entry, ok := c.entries[key]
 	c.mu.RUnlock()
