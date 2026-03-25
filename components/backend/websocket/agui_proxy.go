@@ -1065,7 +1065,7 @@ func isAskUserQuestionToolCall(name string) bool {
 func HandleTaskStop(c *gin.Context) {
 	projectName := c.Param("projectName")
 	sessionName := c.Param("sessionName")
-	taskId := c.Param("taskId")
+	taskID := c.Param("taskId")
 
 	reqK8s, _ := handlers.GetK8sClientsForRequest(c)
 	if reqK8s == nil {
@@ -1080,7 +1080,7 @@ func HandleTaskStop(c *gin.Context) {
 	}
 
 	runnerURL := getRunnerEndpoint(projectName, sessionName)
-	targetURL := strings.TrimSuffix(runnerURL, "/") + "/tasks/" + taskId + "/stop"
+	targetURL := strings.TrimSuffix(runnerURL, "/") + "/tasks/" + taskID + "/stop"
 
 	req, err := http.NewRequest("POST", targetURL, bytes.NewReader([]byte("{}")))
 	if err != nil {
@@ -1109,7 +1109,7 @@ func HandleTaskStop(c *gin.Context) {
 func HandleTaskOutput(c *gin.Context) {
 	projectName := c.Param("projectName")
 	sessionName := c.Param("sessionName")
-	taskId := c.Param("taskId")
+	taskID := c.Param("taskId")
 
 	reqK8s, _ := handlers.GetK8sClientsForRequest(c)
 	if reqK8s == nil {
@@ -1124,7 +1124,7 @@ func HandleTaskOutput(c *gin.Context) {
 	}
 
 	runnerURL := getRunnerEndpoint(projectName, sessionName)
-	targetURL := strings.TrimSuffix(runnerURL, "/") + "/tasks/" + taskId + "/output"
+	targetURL := strings.TrimSuffix(runnerURL, "/") + "/tasks/" + taskID + "/output"
 
 	req, err := http.NewRequest("GET", targetURL, nil)
 	if err != nil {

@@ -46,7 +46,7 @@ import type {
   ReasoningMessageContentEvent,
   ReasoningMessageEndEvent,
 } from '@/types/agui'
-import type { BackgroundTask, BackgroundTaskStatus, BackgroundTaskUsage } from '@/types/background-task'
+import type { BackgroundTaskStatus, BackgroundTaskUsage } from '@/types/background-task'
 import { normalizeSnapshotMessages } from './normalize-snapshot'
 
 /**

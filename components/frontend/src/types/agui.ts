@@ -50,7 +50,6 @@ import { EventType } from '@ag-ui/client'
 import type {
   ToolCall,
   Message,
-  CustomEvent as AGUICustomEvent,
   RunStartedEvent,
   RunFinishedEvent,
   RunErrorEvent,
