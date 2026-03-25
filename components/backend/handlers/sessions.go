@@ -375,9 +375,24 @@ func parseStatus(status map[string]interface{}) *types.AgenticSessionStatus {
 
 // V2 API Handlers - Multi-tenant session management
 
+// agentStatusCache caches DeriveAgentStatus results to avoid scanning the
+// event log file on every list request.  Agent status doesn't change faster
+// than the frontend polling interval (2-15s), so a 5s TTL is safe.
+var agentStatusCache = struct {
+	sync.RWMutex
+	entries map[string]agentStatusCacheEntry
+}{entries: make(map[string]agentStatusCacheEntry)}
+
+type agentStatusCacheEntry struct {
+	status    string
+	expiresAt time.Time
+}
+
+const agentStatusCacheTTL = 5 * time.Second
+
 // enrichAgentStatus derives agentStatus from the persisted event log for
-// Running sessions.  This is the source of truth — it replaces the stale
-// CR-cached value which was subject to goroutine race conditions.
+// Running sessions.  Uses a short TTL cache to avoid redundant file scans
+// when multiple list requests arrive within the same polling interval.
 func enrichAgentStatus(session *types.AgenticSession) {
 	if session.Status == nil || session.Status.Phase != "Running" {
 		return
@@ -389,7 +404,30 @@ func enrichAgentStatus(session *types.AgenticSession) {
 	if name == "" {
 		return
 	}
-	if derived := DeriveAgentStatusFromEvents(name); derived != "" {
+
+	// Check cache
+	agentStatusCache.RLock()
+	if entry, ok := agentStatusCache.entries[name]; ok && time.Now().Before(entry.expiresAt) {
+		agentStatusCache.RUnlock()
+		if entry.status != "" {
+			session.Status.AgentStatus = types.StringPtr(entry.status)
+		}
+		return
+	}
+	agentStatusCache.RUnlock()
+
+	// Cache miss — derive from event log
+	derived := DeriveAgentStatusFromEvents(name)
+
+	// Store in cache
+	agentStatusCache.Lock()
+	agentStatusCache.entries[name] = agentStatusCacheEntry{
+		status:    derived,
+		expiresAt: time.Now().Add(agentStatusCacheTTL),
+	}
+	agentStatusCache.Unlock()
+
+	if derived != "" {
 		session.Status.AgentStatus = types.StringPtr(derived)
 	}
 }
