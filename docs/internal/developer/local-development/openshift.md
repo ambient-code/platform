@@ -135,9 +135,11 @@ podman tag localhost/vteam_operator:latest ${REGISTRY_HOST}/ambient-code/vteam_o
 podman tag localhost/vteam_public_api:latest ${REGISTRY_HOST}/ambient-code/vteam_public_api:latest
 podman tag localhost/vteam_claude_runner:latest ${REGISTRY_HOST}/ambient-code/vteam_claude_runner:latest
 podman tag localhost/vteam_mcp:latest ${REGISTRY_HOST}/ambient-code/vteam_mcp:latest
+# control plane manifest references ambient_control_plane (not vteam_control_plane)
+podman tag localhost/vteam_control_plane:latest ${REGISTRY_HOST}/ambient-code/ambient_control_plane:latest
 
 # Push images
-for img in vteam_control_plane vteam_frontend vteam_api_server vteam_backend vteam_operator vteam_public_api vteam_claude_runner vteam_mcp; do
+for img in vteam_frontend vteam_api_server vteam_backend vteam_operator vteam_public_api vteam_claude_runner vteam_mcp vteam_control_plane ambient_control_plane; do
   podman push --tls-verify=false ${REGISTRY_HOST}/ambient-code/${img}:latest
 done
 
