@@ -66,3 +66,23 @@ A typical workflow looks like this:
 - **Use the right branch.** Point the agent at a feature branch if you do not want changes landing directly on `main`.
 - **Check diffs before pushing.** The file browser shows exactly what changed -- use it.
 - **Combine with workflows.** Workflows like Bugfix or Spec-kit structure the agent's output so artifacts are consistent and easy to review.
+
+## Git operations
+
+After the agent finishes working, you can inspect and manage the resulting Git state directly from the session sidebar. The platform exposes several Git operations that help you review changes, configure remotes, and push code without leaving the UI.
+
+The agent handles most Git work (committing, branching, pulling) during a session. The operations below let you manage what happens *after* the agent is done.
+
+| Operation | What it does |
+|-----------|-------------|
+| **Repository status** | View cloned repositories, their current branch, default branch, and clone state (Cloning, Ready, or Failed). Expand a repository to see all available local branches. |
+| **Git status** | Check whether a repository has uncommitted changes, including counts of added and removed files and total lines changed. |
+| **Configure remote** | Set or change the remote URL for a repository in the session workspace. The branch defaults to `main`. You need write access to the target repository. |
+| **List branches** | View all branches available in a repository's workspace, including branches the agent created during the session. |
+| **Merge status** | Check whether changes can merge cleanly into a target branch. The platform reports conflicting files, local change counts, and whether the remote branch exists. |
+| **Push to remote** | Push the agent's commits to the configured remote repository. If auto-push is off, use this to deliver changes after reviewing them. |
+| **Abandon changes** | Discard all uncommitted changes in a repository, resetting it to the last committed state. This is irreversible. |
+
+:::note
+Some Git operations (push, abandon, create branch) are handled by the agent during the session. The UI operations listed above are available for post-session management and review.
+:::
