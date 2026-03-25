@@ -3,7 +3,9 @@ package sessions
 import (
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"time"
 
 	"github.com/golang/glog"
 	"github.com/gorilla/mux"
@@ -16,6 +18,13 @@ import (
 	"github.com/openshift-online/rh-trex-ai/pkg/handlers"
 	"github.com/openshift-online/rh-trex-ai/pkg/services"
 )
+
+var EventsHTTPClient = &http.Client{
+	Transport: &http.Transport{
+		DialContext:           (&net.Dialer{Timeout: 5 * time.Second}).DialContext,
+		ResponseHeaderTimeout: 5 * time.Second,
+	},
+}
 
 var _ handlers.RestHandler = sessionHandler{}
 
@@ -298,7 +307,7 @@ func (h sessionHandler) StreamRunnerEvents(w http.ResponseWriter, r *http.Reques
 	}
 	req.Header.Set("Accept", "text/event-stream")
 
-	resp, doErr := http.DefaultClient.Do(req)
+	resp, doErr := EventsHTTPClient.Do(req)
 	if doErr != nil {
 		glog.Warningf("StreamRunnerEvents: upstream unreachable for session %s: %v", id, doErr)
 		http.Error(w, "runner not reachable", http.StatusBadGateway)

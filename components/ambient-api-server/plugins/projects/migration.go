@@ -28,3 +28,15 @@ func migration() *gormigrate.Migration {
 		},
 	}
 }
+
+func promptMigration() *gormigrate.Migration {
+	return &gormigrate.Migration{
+		ID: "202603230001",
+		Migrate: func(tx *gorm.DB) error {
+			return tx.Exec(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS prompt TEXT`).Error
+		},
+		Rollback: func(tx *gorm.DB) error {
+			return tx.Exec(`ALTER TABLE projects DROP COLUMN IF EXISTS prompt`).Error
+		},
+	}
+}

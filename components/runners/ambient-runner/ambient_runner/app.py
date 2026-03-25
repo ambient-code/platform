@@ -40,8 +40,9 @@ from ambient_runner.platform.utils import parse_owner_repo
 
 # Configure root logger so all ambient_runner.* and ag_ui_* loggers
 # have a handler and respect the LOG_LEVEL env var.
+_log_level_str = os.getenv("LOG_LEVEL", "DEBUG" if os.getenv("DEBUG", "").lower() in ("1", "true") else "INFO").upper()
 logging.basicConfig(
-    level=getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO),
+    level=getattr(logging, _log_level_str, logging.INFO),
     format="%(levelname)s:%(name)s:%(message)s",
 )
 

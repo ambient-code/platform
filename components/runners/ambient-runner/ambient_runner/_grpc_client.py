@@ -80,6 +80,7 @@ class AmbientGRPCClient:
         self._ca_cert_file = ca_cert_file
         self._channel: Optional[grpc.Channel] = None
         self._session_messages: Optional["SessionMessagesAPI"] = None  # noqa: F821
+        self._inbox_messages: Optional["InboxMessagesAPI"] = None  # noqa: F821
 
     @classmethod
     def from_env(cls) -> AmbientGRPCClient:
@@ -118,6 +119,18 @@ class AmbientGRPCClient:
             )
             logger.info("[GRPC CLIENT] SessionMessagesAPI ready")
         return self._session_messages
+
+    @property
+    def inbox_messages(self) -> "InboxMessagesAPI":  # noqa: F821
+        if self._inbox_messages is None:
+            logger.info("[GRPC CLIENT] Creating InboxMessagesAPI stub")
+            from ._inbox_messages_api import InboxMessagesAPI
+
+            self._inbox_messages = InboxMessagesAPI(
+                self._get_channel(), token=self._token
+            )
+            logger.info("[GRPC CLIENT] InboxMessagesAPI ready")
+        return self._inbox_messages
 
     def close(self) -> None:
         if self._channel is not None:

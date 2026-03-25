@@ -28,7 +28,11 @@ type KubeReconcilerConfig struct {
 	VertexSecretName      string
 	VertexSecretNamespace string
 	RunnerImageNamespace  string
+	MCPImage              string
+	MCPAPIServerURL       string
+	RunnerLogLevel        string
 }
+
 
 type SimpleKubeReconciler struct {
 	factory *SDKClientFactory
@@ -358,6 +362,48 @@ func (r *SimpleKubeReconciler) ensurePod(ctx context.Context, namespace string, 
 	}
 
 	labels := sessionLabels(session.ID, session.ProjectID)
+<<<<<<< HEAD
+=======
+	useMCPSidecar := r.cfg.MCPImage != ""
+
+	containers := []interface{}{
+		map[string]interface{}{
+			"name":            "ambient-code-runner",
+			"image":           runnerImage,
+			"imagePullPolicy": imagePullPolicy,
+			"ports": []interface{}{
+				map[string]interface{}{
+					"name":          "agui",
+					"containerPort": int64(8001),
+					"protocol":      "TCP",
+				},
+			},
+			"volumeMounts": r.buildVolumeMounts(),
+			"env":          r.buildEnv(ctx, session, sdk, secretName, useMCPSidecar),
+			"resources": map[string]interface{}{
+				"requests": map[string]interface{}{
+					"cpu":    "500m",
+					"memory": "512Mi",
+				},
+				"limits": map[string]interface{}{
+					"cpu":    "2000m",
+					"memory": "4Gi",
+				},
+			},
+			"securityContext": map[string]interface{}{
+				"allowPrivilegeEscalation": false,
+				"capabilities": map[string]interface{}{
+					"drop": []interface{}{"ALL"},
+				},
+			},
+		},
+	}
+
+	if useMCPSidecar {
+		containers = append(containers, r.buildMCPSidecar(secretName))
+		r.logger.Info().Str("session_id", session.ID).Msg("MCP sidecar enabled for session")
+	}
+>>>>>>> feat/grpc-python-runner-full
 
 	pod := &unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -378,6 +424,7 @@ func (r *SimpleKubeReconciler) ensurePod(ctx context.Context, namespace string, 
 				"restartPolicy":                 "Never",
 				"terminationGracePeriodSeconds": int64(60),
 				"volumes":                       r.buildVolumes(),
+<<<<<<< HEAD
 				"containers": []interface{}{
 					map[string]interface{}{
 						"name":            "ambient-code-runner",
@@ -410,6 +457,9 @@ func (r *SimpleKubeReconciler) ensurePod(ctx context.Context, namespace string, 
 						},
 					},
 				},
+=======
+				"containers":                    containers,
+>>>>>>> feat/grpc-python-runner-full
 			},
 		},
 	}
@@ -507,7 +557,11 @@ func (r *SimpleKubeReconciler) ensureVertexSecret(ctx context.Context, namespace
 	return nil
 }
 
+<<<<<<< HEAD
 func (r *SimpleKubeReconciler) buildEnv(ctx context.Context, session types.Session, sdk *sdkclient.Client, credSecretName string) []interface{} {
+=======
+func (r *SimpleKubeReconciler) buildEnv(ctx context.Context, session types.Session, sdk *sdkclient.Client, credSecretName string, useMCPSidecar bool) []interface{} {
+>>>>>>> feat/grpc-python-runner-full
 	useVertex := "0"
 	if r.cfg.VertexEnabled {
 		useVertex = "1"
@@ -523,12 +577,20 @@ func (r *SimpleKubeReconciler) buildEnv(ctx context.Context, session types.Sessi
 		envVar("AGUI_PORT", "8001"),
 		envVar("USE_AGUI", "true"),
 		envVar("DEBUG", "true"),
+<<<<<<< HEAD
+=======
+		envVar("LOG_LEVEL", r.cfg.RunnerLogLevel),
+>>>>>>> feat/grpc-python-runner-full
 		envVar("BACKEND_API_URL", r.cfg.BackendURL),
 		envVar("USE_VERTEX", useVertex),
 		envVar("CLAUDE_CODE_USE_VERTEX", useVertex),
 		envVarFromSecret("BOT_TOKEN", credSecretName, "api-token"),
 		envVar("AMBIENT_GRPC_URL", r.cfg.RunnerGRPCURL),
 		envVar("AMBIENT_GRPC_USE_TLS", boolToStr(r.cfg.RunnerGRPCUseTLS)),
+<<<<<<< HEAD
+=======
+		envVar("AGENT_ID", session.AgentID),
+>>>>>>> feat/grpc-python-runner-full
 		envVar("AMBIENT_GRPC_CA_CERT_FILE", "/etc/pki/ca-trust/extracted/pem/service-ca.crt"),
 		envVar("SSL_CERT_FILE", "/etc/pki/ca-trust/extracted/pem/service-ca.crt"),
 		envVar("REQUESTS_CA_BUNDLE", "/etc/pki/ca-trust/extracted/pem/service-ca.crt"),
@@ -538,6 +600,13 @@ func (r *SimpleKubeReconciler) buildEnv(ctx context.Context, session types.Sessi
 		env = append(env, envVar("ANTHROPIC_API_KEY", r.cfg.AnthropicAPIKey))
 	}
 
+<<<<<<< HEAD
+=======
+	if useMCPSidecar {
+		env = append(env, envVar("AMBIENT_MCP_URL", mcpSidecarURL))
+	}
+
+>>>>>>> feat/grpc-python-runner-full
 	if r.cfg.VertexEnabled {
 		env = append(env,
 			envVar("ANTHROPIC_VERTEX_PROJECT_ID", r.cfg.VertexProjectID),
@@ -724,6 +793,51 @@ func boolToStr(b bool) string {
 	return "false"
 }
 
+<<<<<<< HEAD
+=======
+func (r *SimpleKubeReconciler) buildMCPSidecar(credSecretName string) interface{} {
+	mcpImage := r.cfg.MCPImage
+	imagePullPolicy := "Always"
+	if strings.HasPrefix(mcpImage, "localhost/") {
+		imagePullPolicy = "IfNotPresent"
+	}
+	return map[string]interface{}{
+		"name":            "ambient-mcp",
+		"image":           mcpImage,
+		"imagePullPolicy": imagePullPolicy,
+		"ports": []interface{}{
+			map[string]interface{}{
+				"name":          "mcp-sse",
+				"containerPort": mcpSidecarPort,
+				"protocol":      "TCP",
+			},
+		},
+		"env": []interface{}{
+			envVar("MCP_TRANSPORT", "sse"),
+			envVar("MCP_BIND_ADDR", fmt.Sprintf(":%d", mcpSidecarPort)),
+			envVar("AMBIENT_API_URL", r.cfg.MCPAPIServerURL),
+			envVarFromSecret("AMBIENT_TOKEN", credSecretName, "api-token"),
+		},
+		"resources": map[string]interface{}{
+			"requests": map[string]interface{}{
+				"cpu":    "100m",
+				"memory": "128Mi",
+			},
+			"limits": map[string]interface{}{
+				"cpu":    "500m",
+				"memory": "256Mi",
+			},
+		},
+		"securityContext": map[string]interface{}{
+			"allowPrivilegeEscalation": false,
+			"capabilities": map[string]interface{}{
+				"drop": []interface{}{"ALL"},
+			},
+		},
+	}
+}
+
+>>>>>>> feat/grpc-python-runner-full
 func envVarFromSecret(name, secretName, key string) interface{} {
 	return map[string]interface{}{
 		"name": name,

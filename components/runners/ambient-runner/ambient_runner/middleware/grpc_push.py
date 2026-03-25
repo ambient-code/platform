@@ -76,7 +76,9 @@ async def grpc_push_middleware(
 
     sid = session_id or os.environ.get(_ENV_SESSION_ID, "").strip()
     if not sid:
-        logger.warning("grpc_push_middleware: AMBIENT_GRPC_URL set but SESSION_ID missing — push disabled")
+        logger.warning(
+            "grpc_push_middleware: AMBIENT_GRPC_URL set but SESSION_ID missing — push disabled"
+        )
         async for event in event_stream:
             yield event
         return
@@ -84,10 +86,14 @@ async def grpc_push_middleware(
     grpc_client: Optional[object] = None
     try:
         from ambient_platform._grpc_client import AmbientGRPCClient
+
         grpc_client = AmbientGRPCClient.from_env()
         logger.info("grpc_push_middleware: connected to %s (session=%s)", grpc_url, sid)
     except Exception as exc:
-        logger.warning("grpc_push_middleware: failed to create gRPC client (%s) — push disabled", exc)
+        logger.warning(
+            "grpc_push_middleware: failed to create gRPC client (%s) — push disabled",
+            exc,
+        )
         async for event in event_stream:
             yield event
         return
@@ -114,4 +120,8 @@ def _push_event(grpc_client: object, session_id: str, event: BaseEvent) -> None:
             payload=payload,
         )
     except Exception as exc:
-        logger.debug("grpc_push_middleware: push failed (event=%s): %s", _event_type_str(event), exc)
+        logger.debug(
+            "grpc_push_middleware: push failed (event=%s): %s",
+            _event_type_str(event),
+            exc,
+        )

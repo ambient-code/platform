@@ -74,7 +74,9 @@ async def stream_events(thread_id: str, request: Request):
 
                 raw_type = getattr(event, "type", None)
                 if raw_type is not None:
-                    type_str = raw_type.value if hasattr(raw_type, "value") else str(raw_type)
+                    type_str = (
+                        raw_type.value if hasattr(raw_type, "value") else str(raw_type)
+                    )
                     if type_str in ("RUN_FINISHED", "RUN_ERROR"):
                         logger.info(
                             "[SSE TAP] Turn ended (%s): thread=%s", type_str, thread_id

@@ -27,6 +27,9 @@ type ControlPlaneConfig struct {
 	VertexSecretName      string
 	VertexSecretNamespace string
 	RunnerImageNamespace  string
+	MCPImage              string
+	MCPAPIServerURL       string
+	RunnerLogLevel        string
 }
 
 func Load() (*ControlPlaneConfig, error) {
@@ -51,6 +54,9 @@ func Load() (*ControlPlaneConfig, error) {
 		VertexSecretName:      envOrDefault("VERTEX_SECRET_NAME", "ambient-vertex"),
 		VertexSecretNamespace: envOrDefault("VERTEX_SECRET_NAMESPACE", "ambient-code"),
 		RunnerImageNamespace:  os.Getenv("RUNNER_IMAGE_NAMESPACE"),
+		MCPImage:              os.Getenv("MCP_IMAGE"),
+		MCPAPIServerURL:       envOrDefault("MCP_API_SERVER_URL", "http://ambient-api-server.ambient-code.svc:8000"),
+		RunnerLogLevel:        envOrDefault("RUNNER_LOG_LEVEL", "info"),
 	}
 
 	if cfg.APIToken == "" {

@@ -63,6 +63,7 @@ class ClaudeBridge(PlatformBridge):
 
         # gRPC transport (populated by _setup_platform when AMBIENT_GRPC_URL set)
         self._grpc_listener: Any = None
+        self._inbox_listener: Any = None
         self._active_streams: dict = {}
 
     # ------------------------------------------------------------------
@@ -185,6 +186,8 @@ class ClaudeBridge(PlatformBridge):
         """Graceful shutdown: persist sessions, finalise tracing."""
         if self._grpc_listener:
             await self._grpc_listener.stop()
+        if self._inbox_listener:
+            await self._inbox_listener.stop()
         if self._session_manager:
             await self._session_manager.shutdown()
         if self._obs:
@@ -391,6 +394,22 @@ class ClaudeBridge(PlatformBridge):
             self._grpc_listener.start()
             logger.info(
                 "ClaudeBridge: gRPC listener started for session %s",
+                self._context.session_id,
+            )
+
+        agent_id = os.getenv("AGENT_ID", "").strip()
+        if grpc_url and agent_id and self._inbox_listener is None:
+            from ambient_runner.bridges.claude.grpc_transport import GRPCInboxListener
+
+            self._inbox_listener = GRPCInboxListener(
+                agent_id=agent_id,
+                session_id=self._context.session_id,
+                grpc_url=grpc_url,
+            )
+            self._inbox_listener.start()
+            logger.info(
+                "ClaudeBridge: gRPC inbox listener started for agent %s session %s",
+                agent_id,
                 self._context.session_id,
             )
 

@@ -159,7 +159,6 @@ class SessionMessagesAPI:
 # ---------------------------------------------------------------------------
 
 
-
 def _encode_string(field_number: int, value: str) -> bytes:
     encoded = value.encode("utf-8")
     tag = (field_number << 3) | 2
