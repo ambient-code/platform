@@ -1,5 +1,7 @@
 # Specification: Ephemeral Namespace Provisioning for S0.x Instances
 
+> **Operational how-to:** `.claude/skills/ambient-pr-test/SKILL.md` — step-by-step PR test workflow that references this spec.
+
 ## Purpose
 
 This specification defines how Ambient Code creates and destroys ephemeral OpenShift namespaces for S0.x merge queue test instances. Each S0.x instance is a fully independent, shared-nothing installation of Ambient, used for integration testing of a single candidate branch before it merges to `main`.
@@ -213,34 +215,23 @@ e2e harness
 
 ---
 
-## File Layout for `components/pr-test/`
+## File Layout
 
 ```
 components/pr-test/
-├── SPEC.md                 ← this document
+├── README.md               ← this document (spec)
 ├── provision.sh            ← create/destroy TenantNamespace CR
-├── install.sh              ← install Ambient into a provisioned namespace
-├── uninstall.sh            ← remove Ambient from a namespace (pre-destroy)
-└── overlay/                ← kustomize overlay for PR deployments
-    ├── kustomization.yaml
-    ├── namespace-patch.yaml
-    ├── operator-config.yaml
-    ├── operator-env-patch.yaml
-    ├── image-pull-policy-patch.yaml
-    ├── pvc-patch.yaml
-    ├── postgresql-credentials.yaml
-    ├── minio-credentials.yaml
-    ├── unleash-credentials.yaml
-    ├── secrets.yaml
-    ├── frontend-route.yaml
-    ├── backend-route.yaml
-    └── public-api-route.yaml
+└── install.sh              ← install Ambient into a provisioned namespace
 ```
-
-GitHub Actions workflows:
 
 ```
 .github/workflows/
 ├── pr-e2e-openshift.yml       ← build → provision → install → e2e → teardown
-└── pr-namespace-cleanup.yml   ← PR closed → destroy
+└── pr-namespace-cleanup.yml   ← PR closed → destroy (safety net)
+```
+
+```
+.claude/skills/
+├── ambient/SKILL.md           ← how to install Ambient into any OpenShift namespace
+└── ambient-pr-test/SKILL.md   ← how to run the full PR test workflow (references this file)
 ```
