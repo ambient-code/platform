@@ -64,6 +64,7 @@ export type {
   WorkflowConfig,
   WorkflowCommand,
   WorkflowAgent,
+  WorkflowSkill,
   WorkflowMetadata,
   WorkflowSelection,
 } from "@/types/workflow";

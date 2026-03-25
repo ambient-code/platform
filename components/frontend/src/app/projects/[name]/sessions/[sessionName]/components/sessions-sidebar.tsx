@@ -18,6 +18,7 @@ import {
   Calendar,
   Share2,
   Key,
+  Store,
   Settings,
   MoreHorizontal,
   Cpu,
@@ -97,6 +98,11 @@ export function SessionsSidebar({
         label: "Access Keys",
         icon: Key,
         href: `/projects/${projectName}/keys`,
+      },
+      {
+        label: "Marketplace",
+        icon: Store,
+        href: `/projects/${projectName}/marketplace`,
       },
       {
         label: "Workspace Settings",

@@ -67,6 +67,43 @@ spec:
                 minimum: 0
                 default: 86400
                 description: "Default inactivity timeout for sessions in this project (seconds). 0 disables. Overridden by session-level spec.inactivityTimeout."
+              installedItems:
+                type: array
+                description: "Skills, commands, agents, and workflows installed from external sources"
+                items:
+                  type: object
+                  required:
+                  - sourceUrl
+                  - itemId
+                  - itemType
+                  properties:
+                    sourceUrl:
+                      type: string
+                      description: "Git URL of the source repository"
+                    sourceBranch:
+                      type: string
+                      default: "main"
+                      description: "Branch of the source repository"
+                    sourcePath:
+                      type: string
+                      description: "Base path within the repository"
+                    itemId:
+                      type: string
+                      description: "Item identifier"
+                    itemType:
+                      type: string
+                      enum:
+                      - "skill"
+                      - "command"
+                      - "agent"
+                      - "workflow"
+                      description: "Type of the installed item"
+                    itemName:
+                      type: string
+                      description: "Display name of the item"
+                    filePath:
+                      type: string
+                      description: "Path within the repository to the item file or directory"
           status:
             type: object
             properties:

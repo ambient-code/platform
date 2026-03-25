@@ -128,6 +128,27 @@ def setup_multi_repo_paths(context: RunnerContext, repos_cfg: list) -> tuple[str
     return cwd_path, add_dirs
 
 
+def setup_marketplace_dirs(workspace_path: str) -> list[str]:
+    """Scan /workspace/marketplace/ for subdirectories containing .claude/.
+
+    Returns:
+        List of paths to marketplace item directories that have a .claude/ subdirectory.
+    """
+    marketplace_base = Path(workspace_path) / "marketplace"
+    dirs: list[str] = []
+
+    if not marketplace_base.exists() or not marketplace_base.is_dir():
+        return dirs
+
+    for item_dir in sorted(marketplace_base.iterdir()):
+        if not item_dir.is_dir():
+            continue
+        if (item_dir / ".claude").is_dir():
+            dirs.append(str(item_dir))
+
+    return dirs
+
+
 def resolve_workspace_paths(context: RunnerContext) -> tuple[str, list[str]]:
     """Resolve the working directory and additional directories.
 
@@ -153,6 +174,11 @@ def resolve_workspace_paths(context: RunnerContext) -> tuple[str, list[str]]:
         cwd_path, add_dirs = setup_multi_repo_paths(context, repos_cfg)
     else:
         cwd_path = str(Path(context.workspace_path) / "artifacts")
+
+    # Add marketplace directories with .claude/ subdirectories
+    for mp_dir in setup_marketplace_dirs(context.workspace_path):
+        if mp_dir not in add_dirs:
+            add_dirs.append(mp_dir)
 
     cwd_path_obj = Path(cwd_path)
     if not cwd_path_obj.exists():

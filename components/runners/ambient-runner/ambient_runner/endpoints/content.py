@@ -420,9 +420,100 @@ def _parse_ambient_config(workflow_dir: str) -> dict:
         return {"artifactsDir": ""}
 
 
+def _scan_claude_dir(
+    base_path: Path, source_label: str = ""
+) -> tuple[list[dict], list[dict], list[dict]]:
+    """Scan a .claude/ directory for commands, agents, and skills.
+
+    Returns:
+        (commands, agents, skills) lists.
+    """
+    claude_dir = base_path / ".claude"
+    commands: list[dict] = []
+    agents: list[dict] = []
+    skills: list[dict] = []
+
+    # Parse commands from .claude/commands/*.md
+    commands_dir = claude_dir / "commands"
+    if commands_dir.exists():
+        for md_file in sorted(commands_dir.iterdir()):
+            if md_file.is_dir() or not md_file.name.endswith(".md"):
+                continue
+
+            metadata = _parse_frontmatter(md_file)
+            command_name = md_file.stem
+            display_name = metadata.get("displayName") or command_name
+
+            order = 2**31 - 1
+            if "order" in metadata:
+                try:
+                    order = int(metadata["order"])
+                except ValueError:
+                    pass
+
+            cmd = {
+                "id": command_name,
+                "name": display_name,
+                "description": metadata.get("description", ""),
+                "slashCommand": f"/{command_name}",
+                "icon": metadata.get("icon", ""),
+                "order": order,
+            }
+            if source_label:
+                cmd["source"] = source_label
+            commands.append(cmd)
+
+    # Parse agents from .claude/agents/*.md
+    agents_dir = claude_dir / "agents"
+    if agents_dir.exists():
+        for md_file in sorted(agents_dir.iterdir()):
+            if md_file.is_dir() or not md_file.name.endswith(".md"):
+                continue
+
+            metadata = _parse_frontmatter(md_file)
+            agent_id = md_file.stem
+
+            agent = {
+                "id": agent_id,
+                "name": metadata.get("name", ""),
+                "description": metadata.get("description", ""),
+                "tools": metadata.get("tools", ""),
+            }
+            if source_label:
+                agent["source"] = source_label
+            agents.append(agent)
+
+    # Parse skills from .claude/skills/*/SKILL.md
+    skills_dir = claude_dir / "skills"
+    if skills_dir.exists():
+        for skill_entry in sorted(skills_dir.iterdir()):
+            if not skill_entry.is_dir():
+                continue
+
+            skill_file = skill_entry / "SKILL.md"
+            if not skill_file.exists():
+                continue
+
+            metadata = _parse_frontmatter(skill_file)
+            skill_dir_name = skill_entry.name
+
+            skills.append(
+                {
+                    "id": skill_dir_name,
+                    "name": metadata.get("name", skill_dir_name),
+                    "description": metadata.get("description", ""),
+                    "slashCommand": f"/{skill_dir_name}",
+                    "allowedTools": metadata.get("allowed-tools", ""),
+                    "source": source_label,
+                }
+            )
+
+    return commands, agents, skills
+
+
 @router.get("/workflow-metadata")
 async def content_workflow_metadata(session: str = ""):
-    """Read workflow commands/agents from .claude/ and .ambient/ directories.
+    """Read workflow commands/agents/skills from .claude/ and .ambient/ directories.
 
     Mirrors Go ContentWorkflowMetadata.
     """
@@ -434,67 +525,33 @@ async def content_workflow_metadata(session: str = ""):
         return {
             "commands": [],
             "agents": [],
+            "skills": [],
             "config": {"artifactsDir": "artifacts"},
         }
 
     wf_path = Path(workflow_dir)
     ambient_config = _parse_ambient_config(workflow_dir)
 
-    # Parse commands from .claude/commands/*.md
-    commands_dir = wf_path / ".claude" / "commands"
-    commands = []
+    # Scan the workflow's .claude/ directory
+    commands, agents, skills = _scan_claude_dir(wf_path)
 
-    if commands_dir.exists():
-        for md_file in sorted(commands_dir.iterdir()):
-            if md_file.is_dir() or not md_file.name.endswith(".md"):
+    # Scan marketplace directories for additional items
+    marketplace_dir = _get_workspace_path() / "marketplace"
+    if marketplace_dir.exists() and marketplace_dir.is_dir():
+        for item_dir in sorted(marketplace_dir.iterdir()):
+            if not item_dir.is_dir():
                 continue
-
-            metadata = _parse_frontmatter(md_file)
-            command_name = md_file.stem
-
-            display_name = metadata.get("displayName") or command_name
-
-            order = 2**31 - 1  # default large value
-            if "order" in metadata:
-                try:
-                    order = int(metadata["order"])
-                except ValueError:
-                    pass
-
-            commands.append(
-                {
-                    "id": command_name,
-                    "name": display_name,
-                    "description": metadata.get("description", ""),
-                    "slashCommand": f"/{command_name}",
-                    "icon": metadata.get("icon", ""),
-                    "order": order,
-                }
-            )
-
-        # Sort by order, then alphabetically by id
-        commands.sort(key=lambda c: (c["order"], c["id"]))
-
-    # Parse agents from .claude/agents/*.md
-    agents_dir = wf_path / ".claude" / "agents"
-    agents = []
-
-    if agents_dir.exists():
-        for md_file in sorted(agents_dir.iterdir()):
-            if md_file.is_dir() or not md_file.name.endswith(".md"):
+            if not (item_dir / ".claude").is_dir():
                 continue
-
-            metadata = _parse_frontmatter(md_file)
-            agent_id = md_file.stem
-
-            agents.append(
-                {
-                    "id": agent_id,
-                    "name": metadata.get("name", ""),
-                    "description": metadata.get("description", ""),
-                    "tools": metadata.get("tools", ""),
-                }
+            mp_commands, mp_agents, mp_skills = _scan_claude_dir(
+                item_dir, source_label=item_dir.name
             )
+            commands.extend(mp_commands)
+            agents.extend(mp_agents)
+            skills.extend(mp_skills)
+
+    # Sort commands by order, then alphabetically by id
+    commands.sort(key=lambda c: (c["order"], c["id"]))
 
     config_response = {
         "name": ambient_config.get("name", ""),
@@ -505,4 +562,9 @@ async def content_workflow_metadata(session: str = ""):
     if "rubric" in ambient_config and ambient_config["rubric"]:
         config_response["rubric"] = ambient_config["rubric"]
 
-    return {"commands": commands, "agents": agents, "config": config_response}
+    return {
+        "commands": commands,
+        "agents": agents,
+        "skills": skills,
+        "config": config_response,
+    }

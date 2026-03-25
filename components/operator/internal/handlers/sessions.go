@@ -919,6 +919,21 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 						}
 					}
 
+					// Add installed marketplace items from ProjectSettings
+					psGVR := types.GetProjectSettingsResource()
+					psObj, psErr := config.DynamicClient.Resource(psGVR).Namespace(sessionNamespace).Get(context.TODO(), "projectsettings", v1.GetOptions{})
+					if psErr == nil {
+						if items, found, _ := unstructured.NestedSlice(psObj.Object, "spec", "installedItems"); found && len(items) > 0 {
+							if itemsJSON, err := json.Marshal(items); err == nil {
+								base = append(base, corev1.EnvVar{Name: "INSTALLED_ITEMS_JSON", Value: string(itemsJSON)})
+							} else {
+								log.Printf("Warning: failed to serialize installedItems for session %s: %v", name, err)
+							}
+						}
+					} else if !errors.IsNotFound(psErr) {
+						log.Printf("Warning: failed to read ProjectSettings in namespace %s: %v", sessionNamespace, psErr)
+					}
+
 					// Add GitHub token for private repos
 					secretName := ""
 					if meta, ok := currentObj.Object["metadata"].(map[string]interface{}); ok {

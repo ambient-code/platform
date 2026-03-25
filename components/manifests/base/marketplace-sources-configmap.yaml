@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: marketplace-sources
+data:
+  sources.json: |
+    [
+      {
+        "name": "AI Helpers",
+        "url": "https://github.com/opendatahub-io/ai-helpers.git",
+        "branch": "main",
+        "path": "helpers",
+        "catalogUrl": "https://opendatahub-io.github.io/ai-helpers/data.json",
+        "description": "Community skills, commands, and agents for Claude Code"
+      }
+    ]

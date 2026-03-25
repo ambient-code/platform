@@ -30,9 +30,19 @@ export type WorkflowAgent = {
   description?: string;
 };
 
+export type WorkflowSkill = {
+  id: string;
+  name: string;
+  slashCommand: string;
+  description?: string;
+  allowedTools?: string;
+  source?: string;
+};
+
 export type WorkflowMetadata = {
   commands: Array<WorkflowCommand>;
   agents: Array<WorkflowAgent>;
+  skills?: Array<WorkflowSkill>;
 };
 
 /**

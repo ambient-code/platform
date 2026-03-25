@@ -281,7 +281,15 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
         isRunActive={isRunActive}
         isSending={sendingChat}
         agents={workflowMetadata?.agents || []}
-        commands={workflowMetadata?.commands || []}
+        commands={[
+          ...(workflowMetadata?.commands || []),
+          ...(workflowMetadata?.skills ?? []).map(s => ({
+            id: s.id,
+            name: s.name,
+            slashCommand: s.slashCommand,
+            description: s.description,
+          })),
+        ]}
         onCommandClick={onCommandClick}
         queuedCount={pendingQueuedCount}
         sessionPhase={phase}

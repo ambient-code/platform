@@ -16,6 +16,11 @@ func registerRoutes(r *gin.Engine) {
 		// Global runner-types endpoint (no workspace overrides — for admin pages)
 		api.GET("/runner-types", handlers.GetRunnerTypesGlobal)
 
+		// Marketplace endpoints (cluster-scoped, read from backend SA)
+		api.GET("/marketplace/sources", handlers.ListMarketplaceSources)
+		api.GET("/marketplace/sources/:idx/catalog", handlers.GetMarketplaceCatalog)
+		api.POST("/marketplace/scan", handlers.ScanGitSource)
+
 		api.POST("/projects/:projectName/agentic-sessions/:sessionName/github/token", handlers.MintSessionGitHubToken)
 
 		projectGroup := api.Group("/projects/:projectName", handlers.ValidateProjectContext())
@@ -121,6 +126,11 @@ func registerRoutes(r *gin.Engine) {
 			projectGroup.DELETE("/feature-flags/:flagName/override", handlers.DeleteFeatureFlagOverride)
 			projectGroup.POST("/feature-flags/:flagName/enable", handlers.EnableFeatureFlag)
 			projectGroup.POST("/feature-flags/:flagName/disable", handlers.DisableFeatureFlag)
+
+			// Marketplace items (project-scoped, user auth)
+			projectGroup.GET("/marketplace/items", handlers.ListInstalledItems)
+			projectGroup.POST("/marketplace/items", handlers.InstallItems)
+			projectGroup.DELETE("/marketplace/items/:itemId", handlers.UninstallItem)
 
 			// GitLab authentication endpoints (DEPRECATED - moved to cluster-scoped)
 			// Kept for backward compatibility, will be removed in future version

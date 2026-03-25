@@ -44,9 +44,12 @@ export type WorkflowConfig = {
   artifactsDir?: string;
 };
 
+export type { WorkflowSkill } from "@/types/workflow";
+
 export type WorkflowMetadataResponse = {
   commands: WorkflowCommand[];
   agents: WorkflowAgent[];
+  skills?: import("@/types/workflow").WorkflowSkill[];
   config?: WorkflowConfig;
 };
 

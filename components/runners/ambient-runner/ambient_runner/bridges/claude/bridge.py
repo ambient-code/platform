@@ -9,9 +9,13 @@ Owns the entire Claude session lifecycle:
 - Interrupt and graceful shutdown
 """
 
+import asyncio
+import json
 import logging
 import os
 import time
+from collections import defaultdict
+from pathlib import Path
 from typing import Any, AsyncIterator, Optional
 
 from ag_ui.core import BaseEvent, RunAgentInput
@@ -30,6 +34,198 @@ logger = logging.getLogger(__name__)
 
 # Maximum stderr lines kept in ring buffer for error reporting
 _MAX_STDERR_LINES = 50
+
+
+async def _run_git(
+    *args: str, cwd: str | None = None
+) -> tuple[int, str, str]:
+    """Run a git command, returning (returncode, stdout, stderr)."""
+    github_token = os.getenv("GITHUB_TOKEN", "").strip()
+    gitlab_token = os.getenv("GITLAB_TOKEN", "").strip()
+    proc = await asyncio.create_subprocess_exec(
+        "git",
+        *args,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        cwd=cwd,
+    )
+    stdout, stderr = await proc.communicate()
+    stderr_str = stderr.decode()
+    # Redact tokens from error output
+    for tok in (github_token, gitlab_token):
+        if tok:
+            stderr_str = stderr_str.replace(tok, "***REDACTED***")
+    return proc.returncode, stdout.decode(), stderr_str
+
+
+def _inject_token(url: str) -> str:
+    """Inject GITHUB_TOKEN or GITLAB_TOKEN into HTTPS clone URL."""
+    github_token = os.getenv("GITHUB_TOKEN", "").strip()
+    gitlab_token = os.getenv("GITLAB_TOKEN", "").strip()
+    if github_token and "github" in url.lower():
+        return url.replace("https://", f"https://x-access-token:{github_token}@")
+    if gitlab_token and "gitlab" in url.lower():
+        return url.replace("https://", f"https://oauth2:{gitlab_token}@")
+    return url
+
+
+async def _clone_marketplace_items(workspace_path: str) -> None:
+    """Clone installed marketplace items to /workspace/marketplace/.
+
+    Reads INSTALLED_ITEMS_JSON env var, groups items by source repo,
+    and clones them using shallow/sparse checkout as appropriate.
+    """
+    raw = os.getenv("INSTALLED_ITEMS_JSON", "").strip()
+    if not raw:
+        return
+
+    try:
+        items = json.loads(raw)
+    except json.JSONDecodeError as e:
+        logger.warning(f"Failed to parse INSTALLED_ITEMS_JSON: {e}")
+        return
+
+    if not items:
+        return
+
+    marketplace_base = Path(workspace_path) / "marketplace"
+    marketplace_base.mkdir(parents=True, exist_ok=True)
+
+    # Group items by (sourceUrl, sourceBranch)
+    groups: dict[tuple[str, str], list[dict]] = defaultdict(list)
+    for item in items:
+        source_url = item.get("sourceUrl", "").strip()
+        source_branch = item.get("sourceBranch", "main").strip() or "main"
+        if source_url:
+            groups[(source_url, source_branch)].append(item)
+
+    _TYPE_SUBDIRS = {
+        "skill": "skills",
+        "command": "commands",
+        "agent": "agents",
+    }
+
+    async def _clone_source(
+        source_url: str, branch: str, group_items: list[dict],
+    ) -> None:
+        has_workflow = any(
+            it.get("itemType") == "workflow" for it in group_items
+        )
+        repo_name = source_url.split("/")[-1].removesuffix(".git")
+        clone_dir = marketplace_base / repo_name
+        clone_url = _inject_token(source_url)
+
+        if clone_dir.exists():
+            logger.info(f"Marketplace: {repo_name} already exists, skipping")
+            return
+
+        if has_workflow:
+            rc, _, err = await _run_git(
+                "clone", "--depth", "1", "-b", branch,
+                clone_url, str(clone_dir),
+            )
+            if rc != 0:
+                logger.warning(
+                    f"Marketplace: failed to clone {repo_name}: {err}"
+                )
+                return
+        else:
+            rc, _, err = await _run_git(
+                "clone", "--filter=blob:none", "--no-checkout",
+                "--depth", "1", "-b", branch,
+                clone_url, str(clone_dir),
+            )
+            if rc != 0:
+                logger.warning(
+                    f"Marketplace: failed to clone {repo_name}: {err}"
+                )
+                return
+
+            file_paths = [
+                it["filePath"]
+                for it in group_items
+                if it.get("filePath")
+            ]
+            if file_paths:
+                rc, _, err = await _run_git(
+                    "sparse-checkout", "set", *file_paths,
+                    cwd=str(clone_dir),
+                )
+                if rc != 0:
+                    logger.warning(
+                        f"Marketplace: sparse-checkout failed for "
+                        f"{repo_name}: {err}"
+                    )
+
+            rc, _, err = await _run_git(
+                "checkout", cwd=str(clone_dir),
+            )
+            if rc != 0:
+                logger.warning(
+                    f"Marketplace: checkout failed for {repo_name}: {err}"
+                )
+
+        # Build .claude/ directory structure with symlinks
+        claude_dir = clone_dir / ".claude"
+        for item in group_items:
+            item_type = item.get("itemType", "")
+            item_id = item.get("itemId", "")
+            file_path = item.get("filePath", "")
+
+            if item_type == "workflow" or not item_id or not file_path:
+                continue
+
+            subdir_name = _TYPE_SUBDIRS.get(item_type)
+            if not subdir_name:
+                continue
+
+            source_file = clone_dir / file_path
+            if not source_file.exists():
+                logger.warning(
+                    f"Marketplace: source file not found: {source_file}"
+                )
+                continue
+
+            if item_type == "skill":
+                target_dir = claude_dir / subdir_name / item_id
+                target_dir.mkdir(parents=True, exist_ok=True)
+                target = target_dir / "SKILL.md"
+            elif item_type == "command":
+                target_parent = claude_dir / subdir_name
+                target_parent.mkdir(parents=True, exist_ok=True)
+                target = target_parent / f"{item_id}.md"
+            elif item_type == "agent":
+                target_parent = claude_dir / subdir_name
+                target_parent.mkdir(parents=True, exist_ok=True)
+                target = target_parent / f"{item_id}.md"
+            else:
+                continue
+
+            if not target.exists():
+                try:
+                    target.symlink_to(source_file.resolve())
+                except OSError as e:
+                    logger.warning(
+                        f"Marketplace: symlink failed for {item_id}: {e}"
+                    )
+
+        logger.info(
+            f"Marketplace: {repo_name} ready at {clone_dir} "
+            f"({len(group_items)} items)"
+        )
+
+    # Clone all sources in parallel
+    tasks = []
+    for (source_url, branch), group_items in groups.items():
+        tasks.append(_clone_source(source_url, branch, group_items))
+
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    for i, result in enumerate(results):
+        if isinstance(result, Exception):
+            source_url = list(groups.keys())[i][0]
+            logger.warning(
+                f"Marketplace: failed to process {source_url}: {result}"
+            )
 
 
 class ClaudeBridge(PlatformBridge):
@@ -398,6 +594,11 @@ class ClaudeBridge(PlatformBridge):
         await populate_runtime_credentials(self._context)
         await populate_mcp_server_credentials(self._context)
         self._last_creds_refresh = time.monotonic()
+
+        # Clone installed marketplace items before resolving workspace paths
+        await _clone_marketplace_items(
+            os.getenv("WORKSPACE_PATH", "/workspace")
+        )
 
         # Workspace paths
         cwd_path, add_dirs = resolve_workspace_paths(self._context)
