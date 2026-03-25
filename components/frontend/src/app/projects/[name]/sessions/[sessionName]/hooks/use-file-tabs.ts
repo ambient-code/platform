@@ -76,9 +76,13 @@ export function useFileTabs() {
   }, []);
 
   const updateTaskStatus = useCallback((taskId: string, status: BackgroundTaskStatus) => {
-    setOpenTaskTabs((prev) =>
-      prev.map((t) => (t.taskId === taskId ? { ...t, status } : t))
-    );
+    setOpenTaskTabs((prev) => {
+      const idx = prev.findIndex((t) => t.taskId === taskId);
+      if (idx === -1 || prev[idx].status === status) return prev;
+      const next = [...prev];
+      next[idx] = { ...prev[idx], status };
+      return next;
+    });
   }, []);
 
   return {

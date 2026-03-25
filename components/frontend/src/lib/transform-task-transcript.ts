@@ -77,7 +77,7 @@ export function transformTaskTranscript(entries: TaskOutputEntry[]): Message[] {
     if (entryType === "assistant") {
       const contentBlocks = msg?.content as SdkContentBlock[] | undefined
       if (!Array.isArray(contentBlocks)) continue
-      const model = (msg?.model as string) ?? ""
+      const model = (msg?.model as string) || "unknown"
 
       for (const block of contentBlocks) {
         if (block.type === "text" && block.text) {

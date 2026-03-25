@@ -13,6 +13,8 @@ import type { DirectoryOption, Repository, UploadedFile, GitStatusSummary } from
 import type { WorkspaceItem } from "@/services/api/workspace";
 import type { BackgroundTask } from "@/types/background-task";
 
+const noop = () => {};
+
 export type ExplorerPanelProps = {
   visible?: boolean;
   activeTab: "files" | "context" | "tasks";
@@ -171,7 +173,7 @@ export function ExplorerPanel({
             backgroundTasks={backgroundTasks ?? new Map()}
             projectName={projectName}
             sessionName={sessionName}
-            onOpenTranscript={onOpenTranscript ?? (() => {})}
+            onOpenTranscript={onOpenTranscript ?? noop}
           />
         ) : (
           <ContextTab

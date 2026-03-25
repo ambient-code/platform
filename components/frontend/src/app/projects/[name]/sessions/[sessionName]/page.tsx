@@ -1517,12 +1517,11 @@ export default function ProjectSessionDetailPage({
   }
 
   // Keep task tab status badges in sync with live AG-UI state
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally depends on Map reference
   useEffect(() => {
     for (const [taskId, task] of aguiState.backgroundTasks) {
       fileTabs.updateTaskStatus(taskId, task.status);
     }
-  }, [aguiState.backgroundTasks]);
+  }, [aguiState.backgroundTasks, fileTabs.updateTaskStatus]);
 
   // Chat/FileViewer/TaskTranscript content rendering helper
   const renderMainContent = () => {
