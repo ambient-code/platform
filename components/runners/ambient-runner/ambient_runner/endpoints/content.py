@@ -497,16 +497,16 @@ def _scan_claude_dir(
             metadata = _parse_frontmatter(skill_file)
             skill_dir_name = skill_entry.name
 
-            skills.append(
-                {
-                    "id": skill_dir_name,
-                    "name": metadata.get("name", skill_dir_name),
-                    "description": metadata.get("description", ""),
-                    "slashCommand": f"/{skill_dir_name}",
-                    "allowedTools": metadata.get("allowed-tools", ""),
-                    "source": source_label,
-                }
-            )
+            skill = {
+                "id": skill_dir_name,
+                "name": metadata.get("name", skill_dir_name),
+                "description": metadata.get("description", ""),
+                "slashCommand": f"/{skill_dir_name}",
+                "allowedTools": metadata.get("allowed-tools", ""),
+            }
+            if source_label:
+                skill["source"] = source_label
+            skills.append(skill)
 
     return commands, agents, skills
 

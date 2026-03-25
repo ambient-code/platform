@@ -871,6 +871,22 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 		}
 	}
 
+	// Pre-fetch installed marketplace items from ProjectSettings (shared by both init + runner containers)
+	var installedItemsJSON string
+	psGVR := types.GetProjectSettingsResource()
+	psObj, psErr := config.DynamicClient.Resource(psGVR).Namespace(sessionNamespace).Get(context.TODO(), "projectsettings", v1.GetOptions{})
+	if psErr == nil {
+		if items, found, _ := unstructured.NestedSlice(psObj.Object, "spec", "installedItems"); found && len(items) > 0 {
+			if b, err := json.Marshal(items); err == nil {
+				installedItemsJSON = string(b)
+			} else {
+				log.Printf("Warning: failed to serialize installedItems for session %s: %v", name, err)
+			}
+		}
+	} else if !errors.IsNotFound(psErr) {
+		log.Printf("Warning: failed to read ProjectSettings in namespace %s: %v", sessionNamespace, psErr)
+	}
+
 	// InitContainer to hydrate session state from S3 (only if seed config requires it)
 	if needsInitContainer {
 		podSpec.InitContainers = []corev1.Container{
@@ -919,19 +935,8 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 						}
 					}
 
-					// Add installed marketplace items from ProjectSettings
-					psGVR := types.GetProjectSettingsResource()
-					psObj, psErr := config.DynamicClient.Resource(psGVR).Namespace(sessionNamespace).Get(context.TODO(), "projectsettings", v1.GetOptions{})
-					if psErr == nil {
-						if items, found, _ := unstructured.NestedSlice(psObj.Object, "spec", "installedItems"); found && len(items) > 0 {
-							if itemsJSON, err := json.Marshal(items); err == nil {
-								base = append(base, corev1.EnvVar{Name: "INSTALLED_ITEMS_JSON", Value: string(itemsJSON)})
-							} else {
-								log.Printf("Warning: failed to serialize installedItems for session %s: %v", name, err)
-							}
-						}
-					} else if !errors.IsNotFound(psErr) {
-						log.Printf("Warning: failed to read ProjectSettings in namespace %s: %v", sessionNamespace, psErr)
+					if installedItemsJSON != "" {
+						base = append(base, corev1.EnvVar{Name: "INSTALLED_ITEMS_JSON", Value: installedItemsJSON})
 					}
 
 					// Add GitHub token for private repos
@@ -1198,15 +1203,8 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 					}
 				}
 
-				// Add installed marketplace items from ProjectSettings (runner container)
-				psGVR := types.GetProjectSettingsResource()
-				psObj, psErr := config.DynamicClient.Resource(psGVR).Namespace(sessionNamespace).Get(context.TODO(), "projectsettings", v1.GetOptions{})
-				if psErr == nil {
-					if items, found, _ := unstructured.NestedSlice(psObj.Object, "spec", "installedItems"); found && len(items) > 0 {
-						if itemsJSON, err := json.Marshal(items); err == nil {
-							base = append(base, corev1.EnvVar{Name: "INSTALLED_ITEMS_JSON", Value: string(itemsJSON)})
-						}
-					}
+				if installedItemsJSON != "" {
+					base = append(base, corev1.EnvVar{Name: "INSTALLED_ITEMS_JSON", Value: installedItemsJSON})
 				}
 
 				// Inject registry-defined env vars (e.g. RUNNER_TYPE, RUNNER_STATE_DIR)
