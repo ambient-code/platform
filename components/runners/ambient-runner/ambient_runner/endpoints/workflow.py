@@ -11,7 +11,9 @@ from pathlib import Path
 import aiohttp
 from fastapi import APIRouter, HTTPException, Request
 
+from ambient_runner.platform.auth import ensure_git_auth
 from ambient_runner.platform.config import load_ambient_config
+from ambient_runner.platform.utils import redact_secrets
 
 logger = logging.getLogger(__name__)
 
@@ -98,16 +100,8 @@ async def clone_workflow_at_runtime(
     temp_dir = Path(tempfile.mkdtemp(prefix="workflow-clone-"))
 
     try:
-        github_token = os.getenv("GITHUB_TOKEN", "").strip()
-        gitlab_token = os.getenv("GITLAB_TOKEN", "").strip()
-
+        ensure_git_auth()
         clone_url = git_url
-        if github_token and "github" in git_url.lower():
-            clone_url = git_url.replace(
-                "https://", f"https://x-access-token:{github_token}@"
-            )
-        elif gitlab_token and "gitlab" in git_url.lower():
-            clone_url = git_url.replace("https://", f"https://oauth2:{gitlab_token}@")
 
         process = await asyncio.create_subprocess_exec(
             "git",
@@ -125,11 +119,7 @@ async def clone_workflow_at_runtime(
         stdout, stderr = await process.communicate()
 
         if process.returncode != 0:
-            error_msg = stderr.decode()
-            for tok in (github_token, gitlab_token):
-                if tok:
-                    error_msg = error_msg.replace(tok, "***REDACTED***")
-            logger.error(f"Failed to clone workflow: {error_msg}")
+            logger.error(f"Failed to clone workflow: {redact_secrets(stderr.decode())}")
             return False, ""
 
         if subpath:

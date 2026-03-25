@@ -276,6 +276,9 @@ class TestPopulateRuntimeCredentialsGitIdentity:
                 "ambient_runner.platform.auth.configure_git_identity",
                 new_callable=AsyncMock,
             ) as mock_config,
+            patch(
+                "ambient_runner.platform.auth.install_git_credential_helper",
+            ) as mock_cred_helper,
         ):
             mock_google.return_value = {}
             mock_jira.return_value = {}
@@ -286,6 +289,8 @@ class TestPopulateRuntimeCredentialsGitIdentity:
 
             # Verify configure_git_identity was called with GitHub user info
             mock_config.assert_called_once_with("GitHub User", "user@github.com")
+            # Verify credential helper was installed
+            mock_cred_helper.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_git_identity_from_gitlab_when_no_github(self):
@@ -324,6 +329,9 @@ class TestPopulateRuntimeCredentialsGitIdentity:
                 "ambient_runner.platform.auth.configure_git_identity",
                 new_callable=AsyncMock,
             ) as mock_config,
+            patch(
+                "ambient_runner.platform.auth.install_git_credential_helper",
+            ),
         ):
             mock_google.return_value = {}
             mock_jira.return_value = {}
@@ -378,6 +386,9 @@ class TestPopulateRuntimeCredentialsGitIdentity:
                 "ambient_runner.platform.auth.configure_git_identity",
                 new_callable=AsyncMock,
             ) as mock_config,
+            patch(
+                "ambient_runner.platform.auth.install_git_credential_helper",
+            ),
         ):
             mock_google.return_value = {}
             mock_jira.return_value = {}
@@ -419,6 +430,9 @@ class TestPopulateRuntimeCredentialsGitIdentity:
                 "ambient_runner.platform.auth.configure_git_identity",
                 new_callable=AsyncMock,
             ) as mock_config,
+            patch(
+                "ambient_runner.platform.auth.install_git_credential_helper",
+            ),
         ):
             mock_google.return_value = {}
             mock_jira.return_value = {}
@@ -429,6 +443,62 @@ class TestPopulateRuntimeCredentialsGitIdentity:
 
             # Should be called with empty strings (configure_git_identity handles defaults)
             mock_config.assert_called_once_with("", "")
+
+
+class TestInstallGitCredentialHelper:
+    """Test install_git_credential_helper function."""
+
+    @pytest.fixture(autouse=True)
+    def reset_guard(self):
+        """Reset the module-level installation guard between tests."""
+        import ambient_runner.platform.auth as auth_mod
+        auth_mod._credential_helper_installed = False
+        yield
+        auth_mod._credential_helper_installed = False
+
+    def test_creates_helper_script_and_configures_git(self):
+        """Test that the credential helper script is written and git is configured."""
+        from ambient_runner.platform.auth import install_git_credential_helper, _GIT_CREDENTIAL_HELPER_PATH
+
+        with patch("subprocess.run") as mock_run, \
+             patch("pathlib.Path.write_text") as mock_write, \
+             patch("pathlib.Path.chmod") as mock_chmod:
+            mock_run.return_value = MagicMock(returncode=0)
+
+            install_git_credential_helper()
+
+            # Verify script was written
+            mock_write.assert_called_once()
+            script_content = mock_write.call_args[0][0]
+            assert "GITHUB_TOKEN" in script_content
+            assert "GITLAB_TOKEN" in script_content
+            assert "x-access-token" in script_content
+            assert "oauth2" in script_content
+
+            # Verify chmod was called (755)
+            mock_chmod.assert_called_once()
+
+            # Verify git config was called
+            mock_run.assert_called_once()
+            assert "credential.helper" in mock_run.call_args[0][0]
+            assert _GIT_CREDENTIAL_HELPER_PATH in mock_run.call_args[0][0]
+
+    def test_skips_when_already_installed(self):
+        """Test that repeated calls are no-ops after first install."""
+        import ambient_runner.platform.auth as auth_mod
+        auth_mod._credential_helper_installed = True
+
+        with patch("pathlib.Path.write_text") as mock_write:
+            auth_mod.install_git_credential_helper()
+            mock_write.assert_not_called()
+
+    def test_handles_errors_gracefully(self):
+        """Test that errors during installation are caught and logged."""
+        from ambient_runner.platform.auth import install_git_credential_helper
+
+        with patch("pathlib.Path.write_text", side_effect=OSError("permission denied")):
+            # Should not raise
+            install_git_credential_helper()
 
 
 class TestProviderDistinction:

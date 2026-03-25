@@ -16,6 +16,8 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 
+from ambient_runner.platform.auth import ensure_git_auth
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/content")
@@ -298,30 +300,17 @@ async def content_git_configure_remote(request: Request):
             raise HTTPException(status_code=500, detail="failed to initialize git")
         logger.info("Initialized git repository at %s", abs_path)
 
-    # Inject authentication token into URL
-    auth_url = remote_url
-    github_token = (
-        request.headers.get("X-GitHub-Token", "").strip()
-        or os.getenv("GITHUB_TOKEN", "").strip()
+    ensure_git_auth(
+        request.headers.get("X-GitHub-Token", "").strip() or None,
+        request.headers.get("X-GitLab-Token", "").strip() or None,
     )
-    gitlab_token = (
-        request.headers.get("X-GitLab-Token", "").strip()
-        or os.getenv("GITLAB_TOKEN", "").strip()
-    )
-
-    if github_token and "github" in remote_url.lower():
-        auth_url = remote_url.replace(
-            "https://", f"https://x-access-token:{github_token}@"
-        )
-    elif gitlab_token and "gitlab" in remote_url.lower():
-        auth_url = remote_url.replace("https://", f"https://oauth2:{gitlab_token}@")
 
     # Check if remote exists
     rc, _, _ = await _git("remote", "get-url", "origin", cwd=cwd)
     if rc == 0:
-        await _git("remote", "set-url", "origin", auth_url, cwd=cwd)
+        await _git("remote", "set-url", "origin", remote_url, cwd=cwd)
     else:
-        await _git("remote", "add", "origin", auth_url, cwd=cwd)
+        await _git("remote", "add", "origin", remote_url, cwd=cwd)
 
     logger.info("Configured remote for %s: %s", abs_path, remote_url)
 
