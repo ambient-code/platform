@@ -61,30 +61,30 @@ All secrets must exist **before** applying the kustomize overlay. The deployment
 NAMESPACE=<target-namespace>
 
 oc create secret generic minio-credentials -n $NAMESPACE \
-  --from-literal=root-user=admin \
-  --from-literal=root-password=changeme123
+  --from-literal=root-user=<MINIO_ROOT_USER> \
+  --from-literal=root-password=<MINIO_ROOT_PASSWORD>
 
 oc create secret generic postgresql-credentials -n $NAMESPACE \
   --from-literal=db.host=postgresql \
   --from-literal=db.port=5432 \
   --from-literal=db.name=postgres \
   --from-literal=db.user=postgres \
-  --from-literal=db.password=postgres123
+  --from-literal=db.password=<POSTGRES_PASSWORD>
 
 oc create secret generic unleash-credentials -n $NAMESPACE \
-  --from-literal=database-url=postgres://postgres:postgres123@postgresql:5432/unleash \
+  --from-literal=database-url=postgres://postgres:<POSTGRES_PASSWORD>@postgresql:5432/unleash \
   --from-literal=database-ssl=false \
-  --from-literal=admin-api-token='*:*.unleash-admin-token' \
-  --from-literal=client-api-token=default:development.unleash-client-token \
-  --from-literal=frontend-api-token=default:development.unleash-frontend-token \
-  --from-literal=default-admin-password=unleash123
+  --from-literal=admin-api-token='*:*.<UNLEASH_ADMIN_TOKEN>' \
+  --from-literal=client-api-token=default:development.<UNLEASH_CLIENT_TOKEN> \
+  --from-literal=frontend-api-token=default:development.<UNLEASH_FRONTEND_TOKEN> \
+  --from-literal=default-admin-password=<UNLEASH_ADMIN_PASSWORD>
 
 oc create secret generic github-app-secret -n $NAMESPACE \
-  --from-literal=GITHUB_APP_ID="" \
-  --from-literal=GITHUB_PRIVATE_KEY="" \
-  --from-literal=GITHUB_CLIENT_ID="" \
-  --from-literal=GITHUB_CLIENT_SECRET="" \
-  --from-literal=GITHUB_STATE_SECRET=test-state-secret
+  --from-literal=GITHUB_APP_ID="<GITHUB_APP_ID>" \
+  --from-literal=GITHUB_PRIVATE_KEY="<GITHUB_PRIVATE_KEY>" \
+  --from-literal=GITHUB_CLIENT_ID="<GITHUB_CLIENT_ID>" \
+  --from-literal=GITHUB_CLIENT_SECRET="<GITHUB_CLIENT_SECRET>" \
+  --from-literal=GITHUB_STATE_SECRET=<GITHUB_STATE_SECRET>
 ```
 
 Use `--dry-run=client -o yaml | oc apply -f -` to make secret creation idempotent on re-runs.
@@ -200,14 +200,15 @@ oc patch configmap ambient-agent-registry -n $NAMESPACE --type=merge \
 ```bash
 NAMESPACE=<target-namespace>
 
-for deploy in backend-api frontend agentic-operator postgresql minio unleash; do
+for deploy in backend-api frontend agentic-operator postgresql minio unleash public-api; do
   oc rollout status deployment/$deploy -n $NAMESPACE --timeout=300s
 done
 ```
 
-ambient-api-server and ambient-api-server-db may take longer due to DB init:
+`ambient-api-server-db` and `ambient-api-server` may take longer due to DB init:
 
 ```bash
+oc rollout status deployment/ambient-api-server-db -n $NAMESPACE --timeout=300s
 oc rollout status deployment/ambient-api-server -n $NAMESPACE --timeout=300s
 ```
 
@@ -247,7 +248,7 @@ oc get route -n $NAMESPACE
 
 ```bash
 BACKEND_HOST=$(oc get route backend-route -n $NAMESPACE -o jsonpath='{.spec.host}')
-curl -sk https://$BACKEND_HOST/health
+curl -s https://$BACKEND_HOST/health
 ```
 
 Expected: `{"status":"healthy"}`

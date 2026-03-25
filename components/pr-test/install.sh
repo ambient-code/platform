@@ -87,10 +87,13 @@ oc patch configmap ambient-agent-registry -n "$NAMESPACE" --type=merge \
   -p "{\"data\":{\"agent-registry.json\":$(echo "$REGISTRY" | jq -Rs .)}}"
 
 echo "==> Step 6: Waiting for rollouts"
-for deploy in backend-api frontend agentic-operator postgresql minio unleash; do
+for deploy in backend-api frontend agentic-operator postgresql minio unleash public-api; do
   echo "    Waiting for $deploy..."
   oc rollout status deployment/$deploy -n "$NAMESPACE" --timeout=300s
 done
+
+echo "    Waiting for ambient-api-server-db..."
+oc rollout status deployment/ambient-api-server-db -n "$NAMESPACE" --timeout=300s
 
 echo "    Waiting for ambient-api-server..."
 oc rollout status deployment/ambient-api-server -n "$NAMESPACE" --timeout=300s
@@ -100,7 +103,7 @@ BACKEND_HOST=$(oc get route backend-route -n "$NAMESPACE" \
   -o jsonpath='{.spec.host}' 2>/dev/null || true)
 
 if [[ -n "$BACKEND_HOST" ]]; then
-  HEALTH=$(curl -sk "https://${BACKEND_HOST}/health" || true)
+  HEALTH=$(curl -s "https://${BACKEND_HOST}/health" || true)
   echo "    Backend health: $HEALTH"
 fi
 

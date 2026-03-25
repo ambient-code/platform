@@ -8,9 +8,13 @@ jobs:
   cleanup:
     runs-on: ubuntu-latest
     if: github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
     steps:
-      - name: Checkout code
+      - name: Checkout main (trusted scripts only)
         uses: actions/checkout@v6
+        with:
+          ref: main
 
       - name: Derive instance ID
         id: ctx
