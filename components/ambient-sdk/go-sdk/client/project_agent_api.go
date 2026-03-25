@@ -80,35 +80,3 @@ func (a *ProjectAgentAPI) Delete(ctx context.Context, projectID, paID string) er
 	path := "/projects/" + url.PathEscape(projectID) + "/agents/" + url.PathEscape(paID)
 	return a.client.do(ctx, http.MethodDelete, path, nil, http.StatusNoContent, nil)
 }
-
-func (a *ProjectAgentAPI) Ignite(ctx context.Context, projectID, paID, prompt string) (*types.IgniteResponse, error) {
-	req := types.IgniteRequest{Prompt: prompt}
-	body, err := json.Marshal(req)
-	if err != nil {
-		return nil, fmt.Errorf("marshal ignite request: %w", err)
-	}
-	var result types.IgniteResponse
-	path := "/projects/" + url.PathEscape(projectID) + "/agents/" + url.PathEscape(paID) + "/ignite"
-	if err := a.client.do(ctx, http.MethodPost, path, body, http.StatusCreated, &result); err != nil {
-		return nil, err
-	}
-	return &result, nil
-}
-
-func (a *ProjectAgentAPI) GetIgnition(ctx context.Context, projectID, paID string) (*types.IgniteResponse, error) {
-	var result types.IgniteResponse
-	path := "/projects/" + url.PathEscape(projectID) + "/agents/" + url.PathEscape(paID) + "/ignition"
-	if err := a.client.do(ctx, http.MethodGet, path, nil, http.StatusOK, &result); err != nil {
-		return nil, err
-	}
-	return &result, nil
-}
-
-func (a *ProjectAgentAPI) Sessions(ctx context.Context, projectID, paID string, opts *types.ListOptions) (*types.SessionList, error) {
-	var result types.SessionList
-	path := "/projects/" + url.PathEscape(projectID) + "/agents/" + url.PathEscape(paID) + "/sessions"
-	if err := a.client.doWithQuery(ctx, http.MethodGet, path, nil, http.StatusOK, &result, opts); err != nil {
-		return nil, err
-	}
-	return &result, nil
-}

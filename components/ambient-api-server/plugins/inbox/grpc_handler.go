@@ -47,13 +47,13 @@ func (h *inboxGRPCHandler) WatchInboxMessages(req *pb.WatchInboxMessagesRequest,
 func inboxMessageToProto(msg *InboxMessage) *pb.InboxMessage {
 	p := &pb.InboxMessage{
 		Id:        msg.ID,
-		AgentId:   msg.ProjectAgentId,
+		AgentId:   msg.AgentId,
 		Body:      msg.Body,
 		CreatedAt: timestamppb.New(msg.CreatedAt),
 		UpdatedAt: timestamppb.New(msg.UpdatedAt),
 	}
-	if msg.FromProjectAgentId != nil {
-		p.FromAgentId = msg.FromProjectAgentId
+	if msg.FromAgentId != nil {
+		p.FromAgentId = msg.FromAgentId
 	}
 	if msg.FromName != nil {
 		p.FromName = msg.FromName

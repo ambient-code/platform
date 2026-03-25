@@ -100,7 +100,6 @@ func stepCreateProject(ctx context.Context, s *State) error {
 	s.Log("   POST /projects  name=%s", name)
 	proj, err := s.Client.Projects().Create(ctx, &types.Project{
 		Name:        name,
-		DisplayName: "Probe " + runID,
 		Description: "Single-agent API probe",
 	})
 	if err != nil {
@@ -115,10 +114,7 @@ func stepCreateAgent(ctx context.Context, s *State) error {
 	s.Log("   POST /agents  project=%s", s.ProjectResource.Name)
 	a, err := s.Client.Agents().Create(ctx, &types.Agent{
 		Name:        "assistant",
-		DisplayName: "Assistant",
-		Description: "Probe agent — single conversation test",
 		Prompt:      "You are a helpful assistant. Respond concisely.",
-		ProjectID:   s.ProjectResource.Name,
 		OwnerUserID: "dev-user",
 	})
 	if err != nil {
@@ -253,8 +249,11 @@ func printSnapshot(ctx context.Context, s *State, label string) error {
 		phase := "—"
 		summary := "—"
 		if row.CheckIn != nil {
-			phase = row.CheckIn.Phase
-			summary = row.CheckIn.Summary
+			var ci sessionCheckIn
+			if err := json.Unmarshal(row.CheckIn, &ci); err == nil {
+				phase = ci.Phase
+				summary = ci.Summary
+			}
 		}
 		s.Log("   agent=%-12s  phase=%-12s  summary=%s", row.Agent.Name, phase, firstN(summary, 60))
 	}
@@ -330,9 +329,14 @@ func (h *httpClient) ignite(ctx context.Context, agentID string) (*igniteRespons
 	return &result, err
 }
 
+type sessionCheckIn struct {
+	Phase   string `json:"phase"`
+	Summary string `json:"summary"`
+}
+
 type agentCheckInRow struct {
-	Agent   types.Agent           `json:"agent"`
-	CheckIn *types.SessionCheckIn `json:"check_in,omitempty"`
+	Agent   types.Agent     `json:"agent"`
+	CheckIn json.RawMessage `json:"check_in,omitempty"`
 }
 
 type projectSnapshot struct {

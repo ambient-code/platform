@@ -460,7 +460,6 @@ func protoProjectToSDK(p *pb.Project) types.Project {
 	}
 	project := types.Project{
 		Name:        p.GetName(),
-		DisplayName: p.GetDisplayName(),
 		Description: p.GetDescription(),
 		Labels:      p.GetLabels(),
 		Annotations: p.GetAnnotations(),

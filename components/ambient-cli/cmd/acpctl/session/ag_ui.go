@@ -91,7 +91,7 @@ func runAgUISend(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	msg, err := client.Sessions().SendAgUI(ctx, sessionID, payload)
+	msg, err := client.Sessions().PushMessage(ctx, sessionID, payload)
 	if err != nil {
 		return fmt.Errorf("send ag_ui turn: %w", err)
 	}
@@ -100,33 +100,36 @@ func runAgUISend(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func drain(ch <-chan sdktypes.SessionMessage) {
-	for range ch {
-	}
-}
-
 func streamAgUI(cmd *cobra.Command, client *sdkclient.Client, sessionID string) error {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 
 	fmt.Fprintf(cmd.OutOrStdout(), "Streaming AG-UI events for session %s (Ctrl+C to stop)...\n\n", sessionID)
 
-	msgs, errs := client.Sessions().StreamAgUI(ctx, sessionID, agUIStreamArgs.afterSeq)
+	watcher, err := client.Sessions().WatchSessionMessages(ctx, sessionID, agUIStreamArgs.afterSeq, nil)
+	if err != nil {
+		return fmt.Errorf("open stream: %w", err)
+	}
+	defer watcher.Stop()
 
 	var streamErr error
-	for msg := range msgs {
+	for {
 		select {
 		case <-ctx.Done():
-			drain(msgs)
 			return nil
-		default:
+		case msg, ok := <-watcher.Messages():
+			if !ok {
+				return streamErr
+			}
+			if msg != nil {
+				printAgUILine(cmd, *msg)
+			}
+		case err := <-watcher.Errors():
+			if err != nil && ctx.Err() == nil {
+				streamErr = fmt.Errorf("stream error: %w", err)
+			}
 		}
-		printAgUILine(cmd, msg)
 	}
-	if err := <-errs; err != nil && ctx.Err() == nil {
-		streamErr = fmt.Errorf("stream error: %w", err)
-	}
-	return streamErr
 }
 
 func printAgUILine(cmd *cobra.Command, msg sdktypes.SessionMessage) {

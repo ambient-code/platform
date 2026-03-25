@@ -54,8 +54,8 @@ func (s *inboxWatchService) Subscribe(ctx context.Context, agentID string) (<-ch
 
 func (s *inboxWatchService) Notify(msg *InboxMessage) {
 	s.mu.RLock()
-	chans := make([]chan *InboxMessage, len(s.subs[msg.ProjectAgentId]))
-	copy(chans, s.subs[msg.ProjectAgentId])
+	chans := make([]chan *InboxMessage, len(s.subs[msg.AgentId]))
+	copy(chans, s.subs[msg.AgentId])
 	s.mu.RUnlock()
 
 	for _, ch := range chans {

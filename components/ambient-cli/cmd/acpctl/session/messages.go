@@ -143,8 +143,6 @@ func displayPayload(eventType, payload string) string {
 		return displayRunFinished(payload)
 	case "MESSAGES_SNAPSHOT":
 		return displayMessagesSnapshot(payload)
-	case "assistant":
-		return displayAssistantPayload(payload)
 	case "RUN_ERROR":
 		if msg := extractField(payload, "message"); msg != "" {
 			return msg

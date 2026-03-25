@@ -8,8 +8,6 @@ package client
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/url"
 
@@ -22,19 +20,6 @@ type InboxMessageAPI struct {
 
 func (c *Client) InboxMessages() *InboxMessageAPI {
 	return &InboxMessageAPI{client: c}
-}
-
-func (a *InboxMessageAPI) Send(ctx context.Context, projectID, paID string, resource *types.InboxMessage) (*types.InboxMessage, error) {
-	body, err := json.Marshal(resource)
-	if err != nil {
-		return nil, fmt.Errorf("marshal inbox_message: %w", err)
-	}
-	var result types.InboxMessage
-	path := "/projects/" + url.PathEscape(projectID) + "/agents/" + url.PathEscape(paID) + "/inbox"
-	if err := a.client.do(ctx, http.MethodPost, path, body, http.StatusCreated, &result); err != nil {
-		return nil, err
-	}
-	return &result, nil
 }
 
 func (a *InboxMessageAPI) List(ctx context.Context, projectID, paID string, opts *types.ListOptions) (*types.InboxMessageList, error) {
@@ -52,16 +37,6 @@ func (a *InboxMessageAPI) ListAll(ctx context.Context, projectID, paID string, o
 		o.Page = page
 		return a.List(ctx, projectID, paID, &o)
 	})
-}
-
-func (a *InboxMessageAPI) MarkRead(ctx context.Context, projectID, paID, msgID string) error {
-	patch := map[string]any{"read": true}
-	body, err := json.Marshal(patch)
-	if err != nil {
-		return fmt.Errorf("marshal patch: %w", err)
-	}
-	path := "/projects/" + url.PathEscape(projectID) + "/agents/" + url.PathEscape(paID) + "/inbox/" + url.PathEscape(msgID)
-	return a.client.do(ctx, http.MethodPatch, path, body, http.StatusOK, nil)
 }
 
 func (a *InboxMessageAPI) Delete(ctx context.Context, projectID, paID, msgID string) error {

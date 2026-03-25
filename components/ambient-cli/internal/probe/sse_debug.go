@@ -124,7 +124,7 @@ func stepSendAndStream(ctx context.Context, s *State) error {
 
 	helloMsg := "Hello! Please introduce yourself in one sentence."
 	s.Log("   POST /sessions/%s/ag_ui  payload=%q", s.SessionID, helloMsg)
-	if _, err := s.Client.Sessions().SendAgUI(streamCtx, s.SessionID, helloMsg); err != nil {
+	if _, err := s.Client.Sessions().PushMessage(streamCtx, s.SessionID, helloMsg); err != nil {
 		return fmt.Errorf("send message: %w", err)
 	}
 
