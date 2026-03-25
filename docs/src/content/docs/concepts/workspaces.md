@@ -29,10 +29,10 @@ Each workspace carries its own configuration. Open **Settings** from the workspa
 
 ### Storage
 
-Session state is stored using a cluster-wide S3-compatible backend (such as MinIO) configured by the platform administrator.
+Session state is stored using an S3-compatible backend (such as MinIO), typically configured cluster-wide by the platform administrator.
 
 :::note
-Custom S3-compatible storage configuration per workspace is a planned feature. Currently, all workspaces share the cluster-wide storage backend.
+By default, workspaces use the cluster-level storage configuration. Per-project storage overrides are supported via project secrets, with operator defaults as fallback.
 :::
 
 ### Secrets

@@ -41,7 +41,7 @@ Once connected, agents in this workspace can read from and write to the linked s
 1. From your workspace, click **New Session**.
 2. In the create session dialog, configure:
    - **Display name** (optional) -- A human-readable label for the session.
-   - **Model** -- Select the LLM to use from the dropdown. Available models include Claude Sonnet 4.5, Claude Opus 4.5, Claude Haiku 4.5, and Gemini 2.5 Flash (generally available), plus Claude Opus 4.6, Claude Sonnet 4.6, and Gemini 2.5 Pro (feature-gated, when enabled by your administrator).
+   - **Model** -- Select an available LLM from the dropdown. Model availability and feature-gated access depend on your organization's configuration.
    - **Integrations** -- Review the read-only status indicators showing which integrations are connected.
 3. Click **Create Session**.
 
@@ -62,7 +62,7 @@ The session moves through these states:
 | Status | What is happening |
 |---|---|
 | **Pending** | Session is queued and waiting for resources. |
-| **Creating** | Kubernetes is provisioning the agent container. |
+| **Creating** | The platform is provisioning the agent container. |
 | **Running** | The agent is actively working on your task. |
 | **Stopping** | The session is gracefully shutting down. |
 | **Stopped** | The session was manually stopped before completion. |

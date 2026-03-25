@@ -28,7 +28,7 @@ If you use a Kubernetes ServiceAccount token, the gateway can extract the projec
 
 ### List sessions
 
-```
+```http
 GET /v1/sessions
 ```
 
@@ -55,7 +55,7 @@ Returns all sessions in the specified project.
 
 ### Get session details
 
-```
+```http
 GET /v1/sessions/:id
 ```
 
@@ -75,7 +75,7 @@ Returns a single session by ID.
 
 ### Create a session
 
-```
+```http
 POST /v1/sessions
 ```
 
@@ -115,7 +115,7 @@ Creates a new agentic session.
 
 ### Delete a session
 
-```
+```http
 DELETE /v1/sessions/:id
 ```
 
@@ -188,7 +188,7 @@ Configure the gateway with environment variables:
 | `PORT` | `8081` | Port the gateway listens on |
 | `RATE_LIMIT_RPS` | `100` | Maximum requests per second per IP |
 | `RATE_LIMIT_BURST` | `200` | Maximum burst size per IP |
-| `CORS_ALLOWED_ORIGINS` | `http://localhost:3000,http://localhost:8080,https://*.apps-crc.testing` | Comma-separated list of allowed CORS origins |
+| `CORS_ALLOWED_ORIGINS` | `""` (when unset, the gateway defaults to `localhost:3000`, `localhost:8080`, and `*.apps-crc.testing`) | Comma-separated list of allowed CORS origins |
 | `GIN_MODE` | `release` | Gin framework mode (`release`, `debug`, `test`) |
 
 ## Error responses

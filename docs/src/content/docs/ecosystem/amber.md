@@ -2,7 +2,7 @@
 title: "Amber"
 ---
 
-[**Amber**](https://github.com/ambient-code/amber) is the Ambient Code Platform's AI-powered codebase intelligence agent. Amber reads your repositories, understands your project standards, and works alongside you -- from quick consultations to autonomous background maintenance. Amber retains full awareness of every file, runs every lint check, and is always available.
+[**Amber**](https://github.com/ambient-code/amber) is the Ambient Code Platform's AI-powered codebase intelligence agent. Amber reads your attached repositories, understands your project standards, and works alongside you -- from quick consultations to autonomous background maintenance. Amber maintains awareness of session-accessible files, runs configured lint checks, and is available whenever your deployment and integrations are online.
 
 ## What Amber can do
 
