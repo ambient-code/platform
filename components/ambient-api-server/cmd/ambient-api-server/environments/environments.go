@@ -37,6 +37,7 @@ func EnvironmentImpls(env *pkgenv.Env) map[string]pkgenv.EnvironmentImpl {
 		pkgenv.UnitTestingEnv:        &UnitTestingEnvImpl{Env: env},
 		pkgenv.IntegrationTestingEnv: &IntegrationTestingEnvImpl{Env: env},
 		pkgenv.ProductionEnv:         &ProductionEnvImpl{Env: env},
+		OpenShiftDevEnv:              &OpenShiftDevEnvImpl{Env: env},
 	}
 }
 
