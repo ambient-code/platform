@@ -232,6 +232,35 @@ class ClaudeBridge(PlatformBridge):
         if self._obs:
             self._obs.record_interrupt()
 
+    async def stop_task(self, task_id: str, thread_id: Optional[str] = None) -> None:
+        """Stop a background task (subagent) by ID."""
+        if not self._session_manager:
+            raise RuntimeError("No active session manager")
+
+        tid = thread_id or (self._context.session_id if self._context else None)
+        if not tid:
+            raise RuntimeError("No thread_id available")
+
+        worker = self._session_manager.get_existing(tid)
+        if not worker:
+            raise RuntimeError(f"No active session for thread {tid}")
+
+        await worker.stop_task(task_id)
+
+    @property
+    def task_registry(self) -> dict:
+        """Background task metadata tracked by the adapter."""
+        if self._adapter:
+            return getattr(self._adapter, "_task_registry", {})
+        return {}
+
+    @property
+    def task_outputs(self) -> dict:
+        """Background task output file paths tracked by the adapter."""
+        if self._adapter:
+            return getattr(self._adapter, "_task_outputs", {})
+        return {}
+
     # ------------------------------------------------------------------
     # Lifecycle methods
     # ------------------------------------------------------------------

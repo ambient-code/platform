@@ -1058,3 +1058,125 @@ func isAskUserQuestionToolCall(name string) bool {
 	}
 	return clean.String() == "askuserquestion"
 }
+
+// ─── Background Task Proxies ─────────────────────────────────────────
+
+// HandleTaskStop proxies a stop request for a background task to the runner.
+func HandleTaskStop(c *gin.Context) {
+	projectName := c.Param("projectName")
+	sessionName := c.Param("sessionName")
+	taskId := c.Param("taskId")
+
+	reqK8s, _ := handlers.GetK8sClientsForRequest(c)
+	if reqK8s == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
+	if !checkAccess(reqK8s, projectName, sessionName, "update") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Unauthorized"})
+		c.Abort()
+		return
+	}
+
+	runnerURL := getRunnerEndpoint(projectName, sessionName)
+	targetURL := strings.TrimSuffix(runnerURL, "/") + "/tasks/" + taskId + "/stop"
+
+	req, err := http.NewRequest("POST", targetURL, bytes.NewReader([]byte("{}")))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodyBytes))
+		c.JSON(resp.StatusCode, gin.H{"error": string(body)})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Task stop signal sent"})
+}
+
+// HandleTaskOutput proxies a request for background task output to the runner.
+func HandleTaskOutput(c *gin.Context) {
+	projectName := c.Param("projectName")
+	sessionName := c.Param("sessionName")
+	taskId := c.Param("taskId")
+
+	reqK8s, _ := handlers.GetK8sClientsForRequest(c)
+	if reqK8s == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
+	if !checkAccess(reqK8s, projectName, sessionName, "get") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Unauthorized"})
+		c.Abort()
+		return
+	}
+
+	runnerURL := getRunnerEndpoint(projectName, sessionName)
+	targetURL := strings.TrimSuffix(runnerURL, "/") + "/tasks/" + taskId + "/output"
+
+	req, err := http.NewRequest("GET", targetURL, nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		return
+	}
+	defer resp.Body.Close()
+
+	// Transcripts can be large; cap at 10 MB.
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024))
+	c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), body)
+}
+
+// HandleTaskList proxies a request to list background tasks to the runner.
+func HandleTaskList(c *gin.Context) {
+	projectName := c.Param("projectName")
+	sessionName := c.Param("sessionName")
+
+	reqK8s, _ := handlers.GetK8sClientsForRequest(c)
+	if reqK8s == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
+	if !checkAccess(reqK8s, projectName, sessionName, "get") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Unauthorized"})
+		c.Abort()
+		return
+	}
+
+	runnerURL := getRunnerEndpoint(projectName, sessionName)
+	targetURL := strings.TrimSuffix(runnerURL, "/") + "/tasks"
+
+	req, err := http.NewRequest("GET", targetURL, nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		return
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024*1024))
+	c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), body)
+}

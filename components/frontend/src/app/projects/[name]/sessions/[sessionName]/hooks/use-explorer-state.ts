@@ -3,7 +3,7 @@
 import { useCallback } from "react";
 import { useLocalStorage } from "@/hooks/use-local-storage";
 
-type ExplorerTab = "files" | "context";
+type ExplorerTab = "files" | "context" | "tasks";
 
 export function useExplorerState() {
   const [visible, setVisible] = useLocalStorage("session-explorer-visible", false);

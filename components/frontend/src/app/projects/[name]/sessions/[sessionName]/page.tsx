@@ -1695,6 +1695,7 @@ export default function ProjectSessionDetailPage({
               onTabChange={explorer.setActiveTab}
               onClose={explorer.close}
               projectName={projectName}
+              sessionName={sessionName}
               directoryOptions={directoryOptions}
               selectedDirectory={selectedDirectory}
               onDirectoryChange={setSelectedDirectory}
@@ -1715,6 +1716,7 @@ export default function ProjectSessionDetailPage({
               onUploadFile={handleOpenUploadModal}
               onRemoveRepository={handleRemoveRepository}
               onRemoveFile={handleRemoveFile}
+              backgroundTasks={aguiState.backgroundTasks}
             />
           </div>
         </div>

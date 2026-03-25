@@ -5,6 +5,7 @@ This adapter wraps the Claude Agent SDK and produces AG-UI protocol events,
 enabling Claude-powered agents to work with any AG-UI compatible frontend.
 """
 
+import asyncio
 import os
 import logging
 import json
@@ -32,6 +33,7 @@ from ag_ui.core import (
     ToolCallResultEvent,
     StateSnapshotEvent,
     MessagesSnapshotEvent,
+    CustomEvent,
 )
 
 from .reasoning_events import (
@@ -238,6 +240,17 @@ class ClaudeAgentAdapter:
         self._halted: bool = False
         # Tool call ID that caused the halt (so we can emit TOOL_CALL_RESULT on next run)
         self._halted_tool_call_id: Optional[str] = None
+
+        # Hook event queue: hook callbacks push CustomEvents here, the SSE
+        # stream drains them between SDK messages.
+        self._hook_event_queue: asyncio.Queue = asyncio.Queue()
+
+        # Background task registry (task_id -> info dict).
+        # Populated from TaskStarted/TaskProgress/TaskNotification messages.
+        self._task_registry: Dict[str, Dict[str, Any]] = {}
+
+        # task_id -> output file path (from TaskNotificationMessage / SubagentStop hook)
+        self._task_outputs: Dict[str, str] = {}
 
     @property
     def halted(self) -> bool:
@@ -562,6 +575,19 @@ class ClaudeAgentAdapter:
         # NOTE: Session resumption (--resume) is the platform's responsibility.
         # The platform can pass resume=<session_id> via the options dict.
 
+        # Register hook matchers so SDK lifecycle events are forwarded as
+        # AG-UI CustomEvents via the _hook_event_queue.
+        from .hooks import build_hooks_dict
+
+        agui_hooks = build_hooks_dict(self._hook_event_queue)
+        if agui_hooks:
+            existing_hooks = merged_kwargs.get("hooks") or {}
+            # Merge: append our matchers to any pre-existing ones per event.
+            merged = dict(existing_hooks)
+            for event_name, matchers in agui_hooks.items():
+                merged[event_name] = [*merged.get(event_name, []), *matchers]
+            merged_kwargs["hooks"] = merged
+
         # Create the options object
         logger.debug(f"Creating ClaudeAgentOptions with merged kwargs: {merged_kwargs}")
         return ClaudeAgentOptions(**merged_kwargs)
@@ -670,6 +696,9 @@ class ClaudeAgentAdapter:
             ResultMessage,
             ToolUseBlock,
             ToolResultBlock,
+            TaskStartedMessage,
+            TaskProgressMessage,
+            TaskNotificationMessage,
         )
         from claude_agent_sdk.types import StreamEvent
 
@@ -1022,6 +1051,59 @@ class ClaudeAgentAdapter:
                             ):
                                 yield event
 
+                elif isinstance(message, TaskStartedMessage):
+                    task_info = {
+                        "task_id": message.task_id,
+                        "description": getattr(message, "description", ""),
+                        "task_type": getattr(message, "task_type", ""),
+                        "session_id": getattr(message, "session_id", ""),
+                        "status": "running",
+                    }
+                    self._task_registry[message.task_id] = task_info
+                    yield CustomEvent(
+                        type=EventType.CUSTOM,
+                        name="task:started",
+                        value=task_info,
+                    )
+
+                elif isinstance(message, TaskProgressMessage):
+                    usage = getattr(message, "usage", None)
+                    progress_value = {
+                        "task_id": message.task_id,
+                        "description": getattr(message, "description", ""),
+                        "usage": dict(usage) if usage else None,
+                        "last_tool_name": getattr(message, "last_tool_name", None),
+                    }
+                    existing = self._task_registry.get(message.task_id, {})
+                    existing.update(progress_value)
+                    self._task_registry[message.task_id] = existing
+                    yield CustomEvent(
+                        type=EventType.CUSTOM,
+                        name="task:progress",
+                        value=progress_value,
+                    )
+
+                elif isinstance(message, TaskNotificationMessage):
+                    usage = getattr(message, "usage", None)
+                    output_file = getattr(message, "output_file", None)
+                    notification_value = {
+                        "task_id": message.task_id,
+                        "status": getattr(message, "status", "completed"),
+                        "summary": getattr(message, "summary", ""),
+                        "usage": dict(usage) if usage else None,
+                        "output_file": output_file,
+                    }
+                    existing = self._task_registry.get(message.task_id, {})
+                    existing.update(notification_value)
+                    self._task_registry[message.task_id] = existing
+                    if output_file:
+                        self._task_outputs[message.task_id] = output_file
+                    yield CustomEvent(
+                        type=EventType.CUSTOM,
+                        name="task:completed",
+                        value=notification_value,
+                    )
+
                 elif isinstance(message, SystemMessage):
                     data = getattr(message, "data", {}) or {}
 
@@ -1095,6 +1177,14 @@ class ClaudeAgentAdapter:
                                 content=result_text,
                             )
                         )
+
+                # Drain hook event queue (non-blocking) after each SDK message
+                while not self._hook_event_queue.empty():
+                    try:
+                        hook_event = self._hook_event_queue.get_nowait()
+                        yield hook_event
+                    except asyncio.QueueEmpty:
+                        break
 
         except Exception as e:
             # Capture for re-raise after cleanup

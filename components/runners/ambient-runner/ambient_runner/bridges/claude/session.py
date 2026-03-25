@@ -245,6 +245,17 @@ class SessionWorker:
         else:
             logger.warning("[SessionWorker] Interrupt requested but no active client")
 
+    async def stop_task(self, task_id: str) -> None:
+        """Stop a background task (subagent) by ID."""
+        if self._client is not None:
+            try:
+                self._client.stop_task(task_id)
+            except Exception as exc:
+                logger.warning(f"[SessionWorker] stop_task({task_id}) failed: {exc}")
+                raise
+        else:
+            raise RuntimeError("No active client")
+
 
 class SessionManager:
     """Creates, caches, and tears down :class:`SessionWorker` instances.

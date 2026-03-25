@@ -77,6 +77,7 @@ def create_ambient_app(
     enable_mcp_status: bool = True,
     enable_capabilities: bool = True,
     enable_content: bool = True,
+    enable_tasks: bool = True,
 ) -> FastAPI:
     """Create a fully wired FastAPI application for an AG-UI runner.
 
@@ -176,6 +177,7 @@ def create_ambient_app(
         enable_mcp_status=enable_mcp_status,
         enable_capabilities=enable_capabilities,
         enable_content=enable_content,
+        enable_tasks=enable_tasks,
     )
 
     return app
@@ -196,6 +198,7 @@ def add_ambient_endpoints(
     enable_mcp_status: bool = True,
     enable_capabilities: bool = True,
     enable_content: bool = True,
+    enable_tasks: bool = True,
 ) -> None:
     """Register Ambient platform endpoints on an existing FastAPI app.
 
@@ -249,6 +252,11 @@ def add_ambient_endpoints(
         from ambient_runner.endpoints.content import router as content_router
 
         app.include_router(content_router)
+
+    if enable_tasks:
+        from ambient_runner.endpoints.tasks import router as tasks_router
+
+        app.include_router(tasks_router)
 
     caps = bridge.capabilities()
     logger.info(

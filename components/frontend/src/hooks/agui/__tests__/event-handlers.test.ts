@@ -19,6 +19,7 @@ function makeState(overrides: Partial<AGUIClientState> = {}): AGUIClientState {
     messageFeedback: new Map(),
     currentReasoning: null,
     currentThinking: null,
+    backgroundTasks: new Map(),
     ...overrides,
   };
 }
