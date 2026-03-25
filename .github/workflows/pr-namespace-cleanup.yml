@@ -14,19 +14,20 @@ jobs:
 
       - name: Derive instance ID
         id: ctx
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
         run: |
-          PR_NUMBER="${{ github.event.pull_request.number }}"
-          HEAD_BRANCH="${{ github.event.pull_request.head.ref }}"
+          SAFE_BRANCH=$(echo "$HEAD_BRANCH" | tr '[:upper:]' '[:lower:]' \
+            | sed 's/[^a-z0-9]/-/g' | sed 's/-\+/-/g' | sed 's/^-\|-$//g' | cut -c1-64)
 
-          BRANCH_SLUG=$(echo "$HEAD_BRANCH" \
-            | tr '[:upper:]' '[:lower:]' \
-            | sed 's/[^a-z0-9]/-/g' \
-            | sed 's/-\+/-/g' \
-            | sed 's/^-\|-$//g')
+          PR_LEN=${#PR_NUMBER}
+          SLUG_MAX=$(( 63 - 14 - 4 - PR_LEN ))
+          BRANCH_SLUG="${SAFE_BRANCH:0:$SLUG_MAX}"
 
-          INSTANCE_ID="pr-${PR_NUMBER}-${BRANCH_SLUG:0:45}"
-          echo "instance_id=$INSTANCE_ID" >> $GITHUB_OUTPUT
-          echo "Cleaning up instance: $INSTANCE_ID"
+          INSTANCE_ID="pr-${PR_NUMBER}-${BRANCH_SLUG}"
+          echo "instance_id=${INSTANCE_ID}" >> $GITHUB_OUTPUT
+          echo "Cleaning up instance: ${INSTANCE_ID}"
 
       - name: Install oc
         uses: redhat-actions/oc-installer@v1
@@ -35,9 +36,8 @@ jobs:
 
       - name: Log in to OpenShift
         run: |
-          oc login ${{ secrets.TEST_OPENSHIFT_SERVER }} \
-            --token=${{ secrets.TEST_OPENSHIFT_TOKEN }} \
-            --insecure-skip-tls-verify
+          oc login "${{ secrets.TEST_OPENSHIFT_SERVER }}" \
+            --token="${{ secrets.TEST_OPENSHIFT_TOKEN }}"
 
       - name: Destroy namespace
         run: |
