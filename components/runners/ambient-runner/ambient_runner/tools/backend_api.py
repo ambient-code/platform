@@ -277,36 +277,29 @@ class BackendAPIClient:
     def get_session_events(
         self,
         session_name: str,
-        thread_id: Optional[str] = None,
-        limit: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
-        """Get events from a session (AG-UI events endpoint).
+        """Get historical events from a session via the export endpoint.
 
-        Note: This returns historical events only (not a live stream).
+        Uses the /export endpoint which returns a JSON response with all
+        persisted AG-UI events. The /agui/events endpoint is SSE-based
+        and would block indefinitely.
 
         Args:
             session_name: Name of the session
-            thread_id: Optional thread ID filter
-            limit: Optional limit on number of events
 
         Returns:
             List of event objects
         """
-        path = (
-            f"/projects/{self.project_name}/agentic-sessions/{session_name}/agui/events"
-        )
-
-        # Note: This endpoint is typically SSE-based for live streaming,
-        # but can be called once for historical events
-        query_params = []
-        if thread_id:
-            query_params.append(f"threadId={thread_id}")
-        if limit:
-            query_params.append(f"limit={limit}")
-
-        if query_params:
-            path = f"{path}?{'&'.join(query_params)}"
-
-        # For now, we'll just return the raw response
-        # A full implementation would parse SSE stream
-        return self._make_request("GET", path).get("events", [])
+        path = f"/projects/{self.project_name}/agentic-sessions/{session_name}/export"
+        response = self._make_request("GET", path)
+        # Export returns {"aguiEvents": [...], "sessionId": ..., ...}
+        events = response.get("aguiEvents", [])
+        if isinstance(events, list):
+            return events
+        # aguiEvents may be a JSON-encoded string (RawMessage from Go)
+        if isinstance(events, str):
+            try:
+                return json.loads(events)
+            except json.JSONDecodeError:
+                return []
+        return []
