@@ -44,6 +44,7 @@ export type ExplorerPanelProps = {
   onRemoveFile?: (fileName: string) => void;
   // Background tasks tab props
   backgroundTasks?: Map<string, BackgroundTask>;
+  onOpenTranscript?: (task: BackgroundTask) => void;
 };
 
 export function ExplorerPanel({
@@ -76,6 +77,7 @@ export function ExplorerPanel({
   onRemoveFile,
   // Background tasks tab
   backgroundTasks,
+  onOpenTranscript,
 }: ExplorerPanelProps) {
   const { data: access } = useProjectAccess(projectName);
   const canModify = !!access?.userRole && access.userRole !== 'view';
@@ -169,6 +171,7 @@ export function ExplorerPanel({
             backgroundTasks={backgroundTasks ?? new Map()}
             projectName={projectName}
             sessionName={sessionName}
+            onOpenTranscript={onOpenTranscript ?? (() => {})}
           />
         ) : (
           <ContextTab

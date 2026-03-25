@@ -26,6 +26,7 @@ import { ManageRemoteDialog } from "./components/modals/manage-remote-dialog";
 // New layout components
 import { ContentTabs } from "./components/content-tabs";
 import { FileViewer } from "./components/file-viewer";
+import { TaskTranscriptViewer } from "./components/task-transcript-viewer";
 import { ExplorerPanel } from "./components/explorer/explorer-panel";
 import { SessionSettingsModal } from "./components/session-settings-modal";
 import { WorkflowSelector } from "./components/workflow-selector";
@@ -1515,8 +1516,28 @@ export default function ProjectSessionDetailPage({
     );
   }
 
-  // Chat/FileViewer content rendering helper
+  // Keep task tab status badges in sync with live AG-UI state
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally depends on Map reference
+  useEffect(() => {
+    for (const [taskId, task] of aguiState.backgroundTasks) {
+      fileTabs.updateTaskStatus(taskId, task.status);
+    }
+  }, [aguiState.backgroundTasks]);
+
+  // Chat/FileViewer/TaskTranscript content rendering helper
   const renderMainContent = () => {
+    if (fileTabs.activeTab.type === "task") {
+      const task = aguiState.backgroundTasks.get(fileTabs.activeTab.taskId);
+      return (
+        <TaskTranscriptViewer
+          projectName={projectName}
+          sessionName={sessionName}
+          taskId={fileTabs.activeTab.taskId}
+          task={task}
+        />
+      );
+    }
+
     if (fileTabs.activeTab.type === "file") {
       return (
         <FileViewer
@@ -1630,10 +1651,13 @@ export default function ProjectSessionDetailPage({
           {/* Tab bar */}
           <ContentTabs
             openTabs={fileTabs.openTabs}
+            taskTabs={fileTabs.openTaskTabs}
             activeTab={fileTabs.activeTab}
             onSwitchToChat={fileTabs.switchToChat}
             onSwitchToFile={fileTabs.switchToFile}
+            onSwitchToTask={fileTabs.switchToTask}
             onCloseFile={fileTabs.closeFile}
+            onCloseTask={fileTabs.closeTask}
             rightActions={
               <>
                 <Button
@@ -1717,6 +1741,15 @@ export default function ProjectSessionDetailPage({
               onRemoveRepository={handleRemoveRepository}
               onRemoveFile={handleRemoveFile}
               backgroundTasks={aguiState.backgroundTasks}
+              onOpenTranscript={(task) => {
+                fileTabs.openTask({
+                  taskId: task.task_id,
+                  name: task.description.length > 30
+                    ? task.description.slice(0, 30) + "..."
+                    : task.description,
+                  status: task.status,
+                });
+              }}
             />
           </div>
         </div>
