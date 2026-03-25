@@ -274,32 +274,42 @@ class BackendAPIClient:
         response = self._make_request("GET", f"{path}{query}")
         return response.get("workflows", [])
 
+    # Cap exported events to avoid fetching/parsing huge session histories
+    _MAX_EXPORT_EVENTS = 200
+
     def get_session_events(
         self,
         session_name: str,
+        max_events: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
-        """Get historical events from a session via the export endpoint.
+        """Get recent historical events from a session via the export endpoint.
 
-        Uses the /export endpoint which returns a JSON response with all
+        Uses the /export endpoint which returns a JSON response with
         persisted AG-UI events. The /agui/events endpoint is SSE-based
         and would block indefinitely.
 
+        Only the last `max_events` events are returned to avoid
+        transferring/parsing entire session histories for long sessions.
+
         Args:
             session_name: Name of the session
+            max_events: Max events to return (default: _MAX_EXPORT_EVENTS)
 
         Returns:
-            List of event objects
+            List of event objects (tail-sliced)
         """
+        cap = max_events if max_events and max_events > 0 else self._MAX_EXPORT_EVENTS
+
         path = f"/projects/{self.project_name}/agentic-sessions/{session_name}/export"
         response = self._make_request("GET", path)
         # Export returns {"aguiEvents": [...], "sessionId": ..., ...}
         events = response.get("aguiEvents", [])
-        if isinstance(events, list):
-            return events
-        # aguiEvents may be a JSON-encoded string (RawMessage from Go)
         if isinstance(events, str):
+            # aguiEvents may be a JSON-encoded string (RawMessage from Go)
             try:
-                return json.loads(events)
+                events = json.loads(events)
             except json.JSONDecodeError:
                 return []
+        if isinstance(events, list):
+            return events[-cap:]
         return []
