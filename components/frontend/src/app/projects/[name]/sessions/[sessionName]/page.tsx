@@ -1484,6 +1484,13 @@ export default function ProjectSessionDetailPage({
     removeFileMutation.mutate(fileName);
   }, [removeFileMutation]);
 
+  // Keep task tab status badges in sync with live AG-UI state
+  useEffect(() => {
+    for (const [taskId, task] of aguiState.backgroundTasks) {
+      fileTabs.updateTaskStatus(taskId, task.status);
+    }
+  }, [aguiState.backgroundTasks, fileTabs.updateTaskStatus]);
+
   // Loading state
   if (isLoading || !projectName || !sessionName) {
     return (
@@ -1515,13 +1522,6 @@ export default function ProjectSessionDetailPage({
       </div>
     );
   }
-
-  // Keep task tab status badges in sync with live AG-UI state
-  useEffect(() => {
-    for (const [taskId, task] of aguiState.backgroundTasks) {
-      fileTabs.updateTaskStatus(taskId, task.status);
-    }
-  }, [aguiState.backgroundTasks, fileTabs.updateTaskStatus]);
 
   // Chat/FileViewer/TaskTranscript content rendering helper
   const renderMainContent = () => {
