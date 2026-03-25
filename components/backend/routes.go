@@ -19,7 +19,6 @@ func registerRoutes(r *gin.Engine) {
 		// Marketplace endpoints (cluster-scoped, read from backend SA)
 		api.GET("/marketplace/sources", handlers.ListMarketplaceSources)
 		api.GET("/marketplace/sources/:idx/catalog", handlers.GetMarketplaceCatalog)
-		api.POST("/marketplace/scan", handlers.ScanGitSource)
 
 		api.POST("/projects/:projectName/agentic-sessions/:sessionName/github/token", handlers.MintSessionGitHubToken)
 
@@ -127,7 +126,8 @@ func registerRoutes(r *gin.Engine) {
 			projectGroup.POST("/feature-flags/:flagName/enable", handlers.EnableFeatureFlag)
 			projectGroup.POST("/feature-flags/:flagName/disable", handlers.DisableFeatureFlag)
 
-			// Marketplace items (project-scoped, user auth)
+			// Marketplace (project-scoped, user auth)
+			projectGroup.POST("/marketplace/scan", handlers.ScanGitSource)
 			projectGroup.GET("/marketplace/items", handlers.ListInstalledItems)
 			projectGroup.POST("/marketplace/items", handlers.InstallItems)
 			projectGroup.DELETE("/marketplace/items/:itemId", handlers.UninstallItem)

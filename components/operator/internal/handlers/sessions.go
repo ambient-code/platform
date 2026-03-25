@@ -1198,6 +1198,17 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 					}
 				}
 
+				// Add installed marketplace items from ProjectSettings (runner container)
+				psGVR := types.GetProjectSettingsResource()
+				psObj, psErr := config.DynamicClient.Resource(psGVR).Namespace(sessionNamespace).Get(context.TODO(), "projectsettings", v1.GetOptions{})
+				if psErr == nil {
+					if items, found, _ := unstructured.NestedSlice(psObj.Object, "spec", "installedItems"); found && len(items) > 0 {
+						if itemsJSON, err := json.Marshal(items); err == nil {
+							base = append(base, corev1.EnvVar{Name: "INSTALLED_ITEMS_JSON", Value: string(itemsJSON)})
+						}
+					}
+				}
+
 				// Inject registry-defined env vars (e.g. RUNNER_TYPE, RUNNER_STATE_DIR)
 				base = appendNonConflictingEnvVars(base, registryEnvVars)
 

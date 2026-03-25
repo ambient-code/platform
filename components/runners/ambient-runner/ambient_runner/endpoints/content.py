@@ -521,19 +521,16 @@ async def content_workflow_metadata(session: str = ""):
         raise HTTPException(status_code=400, detail="missing session parameter")
 
     workflow_dir = _find_active_workflow_dir()
-    if not workflow_dir:
-        return {
-            "commands": [],
-            "agents": [],
-            "skills": [],
-            "config": {"artifactsDir": "artifacts"},
-        }
 
-    wf_path = Path(workflow_dir)
-    ambient_config = _parse_ambient_config(workflow_dir)
+    commands: list[dict] = []
+    agents: list[dict] = []
+    skills: list[dict] = []
+    ambient_config: dict = {"artifactsDir": "artifacts"}
 
-    # Scan the workflow's .claude/ directory
-    commands, agents, skills = _scan_claude_dir(wf_path)
+    if workflow_dir:
+        wf_path = Path(workflow_dir)
+        ambient_config = _parse_ambient_config(workflow_dir)
+        commands, agents, skills = _scan_claude_dir(wf_path)
 
     # Scan marketplace directories for additional items
     marketplace_dir = _get_workspace_path() / "marketplace"

@@ -68,10 +68,14 @@ export function ImportSourceDialog({
   const handleScan = () => {
     if (!gitUrl.trim()) return;
     scanMutation.mutate(
-      { url: gitUrl.trim(), branch: branch.trim() || "main", path: path.trim() || undefined },
+      { projectName, url: gitUrl.trim(), branch: branch.trim() || "main", path: path.trim() || undefined },
       {
         onSuccess: (data) => {
-          setSelectedIds(new Set(data.items.map((i) => i.id)));
+          if (prefillItems.length > 0) {
+            setSelectedIds(new Set(prefillItems.filter((id) => data.items.some((i) => i.id === id))));
+          } else {
+            setSelectedIds(new Set(data.items.map((i) => i.id)));
+          }
           setImportAsWorkflow(data.isWorkflow);
         },
       }

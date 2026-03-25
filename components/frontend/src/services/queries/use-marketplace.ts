@@ -77,8 +77,8 @@ export function useScanGitSource() {
   return useMutation<
     ScanResult,
     Error,
-    { url: string; branch: string; path?: string }
+    { projectName: string; url: string; branch: string; path?: string }
   >({
-    mutationFn: (request) => marketplaceApi.scanGitSource(request),
+    mutationFn: ({ projectName, ...request }) => marketplaceApi.scanGitSource(projectName, request),
   });
 }

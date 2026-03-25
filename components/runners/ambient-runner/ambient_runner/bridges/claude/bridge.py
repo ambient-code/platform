@@ -36,37 +36,58 @@ logger = logging.getLogger(__name__)
 _MAX_STDERR_LINES = 50
 
 
+def _git_auth_env() -> dict[str, str]:
+    """Build env dict with GIT_ASKPASS credential helper for tokens.
+
+    Uses GIT_ASKPASS to provide credentials without embedding them in URLs
+    or writing them to .git/config on disk.
+    """
+    env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
+    github_token = os.getenv("GITHUB_TOKEN", "").strip()
+    gitlab_token = os.getenv("GITLAB_TOKEN", "").strip()
+    if github_token or gitlab_token:
+        # GIT_ASKPASS script that echoes the token for password prompts
+        token = github_token or gitlab_token
+        env["GIT_ASKPASS"] = "/bin/echo"
+        if github_token:
+            env["GIT_USERNAME"] = "x-access-token"
+            env["GIT_PASSWORD"] = github_token
+            # Configure git to use token via credential helper
+            env["GIT_CONFIG_COUNT"] = "1"
+            env["GIT_CONFIG_KEY_0"] = "credential.helper"
+            env["GIT_CONFIG_VALUE_0"] = (
+                f"!f() {{ echo username=x-access-token; echo password={token}; }}; f"
+            )
+        elif gitlab_token:
+            env["GIT_CONFIG_COUNT"] = "1"
+            env["GIT_CONFIG_KEY_0"] = "credential.helper"
+            env["GIT_CONFIG_VALUE_0"] = (
+                f"!f() {{ echo username=oauth2; echo password={token}; }}; f"
+            )
+    return env
+
+
 async def _run_git(
     *args: str, cwd: str | None = None
 ) -> tuple[int, str, str]:
     """Run a git command, returning (returncode, stdout, stderr)."""
-    github_token = os.getenv("GITHUB_TOKEN", "").strip()
-    gitlab_token = os.getenv("GITLAB_TOKEN", "").strip()
+    env = _git_auth_env()
     proc = await asyncio.create_subprocess_exec(
         "git",
         *args,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
         cwd=cwd,
+        env=env,
     )
     stdout, stderr = await proc.communicate()
     stderr_str = stderr.decode()
     # Redact tokens from error output
-    for tok in (github_token, gitlab_token):
+    for tok_key in ("GITHUB_TOKEN", "GITLAB_TOKEN"):
+        tok = os.getenv(tok_key, "")
         if tok:
             stderr_str = stderr_str.replace(tok, "***REDACTED***")
     return proc.returncode, stdout.decode(), stderr_str
-
-
-def _inject_token(url: str) -> str:
-    """Inject GITHUB_TOKEN or GITLAB_TOKEN into HTTPS clone URL."""
-    github_token = os.getenv("GITHUB_TOKEN", "").strip()
-    gitlab_token = os.getenv("GITLAB_TOKEN", "").strip()
-    if github_token and "github" in url.lower():
-        return url.replace("https://", f"https://x-access-token:{github_token}@")
-    if gitlab_token and "gitlab" in url.lower():
-        return url.replace("https://", f"https://oauth2:{gitlab_token}@")
-    return url
 
 
 async def _clone_marketplace_items(workspace_path: str) -> None:
@@ -112,8 +133,10 @@ async def _clone_marketplace_items(workspace_path: str) -> None:
             it.get("itemType") == "workflow" for it in group_items
         )
         repo_name = source_url.split("/")[-1].removesuffix(".git")
-        clone_dir = marketplace_base / repo_name
-        clone_url = _inject_token(source_url)
+        # Use repo_name + branch to avoid collisions between branches of same repo
+        dir_name = f"{repo_name}-{branch}" if branch != "main" else repo_name
+        clone_dir = marketplace_base / dir_name
+        clone_url = source_url
 
         if clone_dir.exists():
             logger.info(f"Marketplace: {repo_name} already exists, skipping")

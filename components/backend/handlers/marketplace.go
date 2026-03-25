@@ -229,6 +229,18 @@ func ScanGitSource(c *gin.Context) {
 		return
 	}
 
+	// Validate URL scheme (only allow https:// and git:// to prevent SSRF with file://, ftp://, etc.)
+	if !strings.HasPrefix(req.URL, "https://") && !strings.HasPrefix(req.URL, "git@") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Only HTTPS and SSH Git URLs are allowed"})
+		return
+	}
+
+	// Validate path doesn't escape the clone directory
+	if req.Path != "" && (strings.Contains(req.Path, "..") || filepath.IsAbs(req.Path)) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid path: must be relative without parent directory references"})
+		return
+	}
+
 	// Create temp directory
 	tmpDir, err := os.MkdirTemp("", "marketplace-scan-*")
 	if err != nil {
@@ -438,8 +450,22 @@ func InstallItems(c *gin.Context) {
 	// Get existing items
 	existingItems, _, _ := unstructured.NestedSlice(obj.Object, "spec", "installedItems")
 
-	// Convert new items to unstructured and append
+	// Build a set of existing (sourceUrl, itemId) pairs for dedup
+	existingKeys := make(map[string]bool)
+	for _, item := range existingItems {
+		if m, ok := item.(map[string]interface{}); ok {
+			src, _ := m["sourceUrl"].(string)
+			id, _ := m["itemId"].(string)
+			existingKeys[src+"\x00"+id] = true
+		}
+	}
+
+	// Convert new items to unstructured and append (skip duplicates)
 	for _, item := range newItems {
+		key := item.SourceURL + "\x00" + item.ItemID
+		if existingKeys[key] {
+			continue
+		}
 		entry := map[string]interface{}{
 			"sourceUrl": item.SourceURL,
 			"itemId":    item.ItemID,
@@ -458,6 +484,7 @@ func InstallItems(c *gin.Context) {
 			entry["filePath"] = item.FilePath
 		}
 		existingItems = append(existingItems, entry)
+		existingKeys[key] = true
 	}
 
 	if err := unstructured.SetNestedSlice(obj.Object, existingItems, "spec", "installedItems"); err != nil {
@@ -498,7 +525,9 @@ func UninstallItem(c *gin.Context) {
 
 	existingItems, _, _ := unstructured.NestedSlice(obj.Object, "spec", "installedItems")
 
-	// Filter out the item with matching itemId
+	sourceURL := c.Query("sourceUrl")
+
+	// Filter out the item with matching itemId (and sourceUrl if provided)
 	var filtered []interface{}
 	for _, item := range existingItems {
 		itemMap, ok := item.(map[string]interface{})
@@ -506,7 +535,12 @@ func UninstallItem(c *gin.Context) {
 			continue
 		}
 		id, _ := itemMap["itemId"].(string)
-		if id != itemID {
+		src, _ := itemMap["sourceUrl"].(string)
+		match := id == itemID
+		if sourceURL != "" {
+			match = match && src == sourceURL
+		}
+		if !match {
 			filtered = append(filtered, item)
 		}
 	}

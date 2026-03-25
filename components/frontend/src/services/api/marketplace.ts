@@ -38,8 +38,8 @@ export async function getMarketplaceCatalog(
   return response.items;
 }
 
-export async function scanGitSource(request: ScanRequest): Promise<ScanResult> {
-  return apiClient.post<ScanResult, ScanRequest>("/marketplace/scan", request);
+export async function scanGitSource(projectName: string, request: ScanRequest): Promise<ScanResult> {
+  return apiClient.post<ScanResult, ScanRequest>(`/projects/${projectName}/marketplace/scan`, request);
 }
 
 export async function listInstalledItems(
