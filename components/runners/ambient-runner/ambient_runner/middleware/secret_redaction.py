@@ -123,22 +123,21 @@ def _redact_event(event: BaseEvent, secret_values: list[tuple[str, str]]) -> Bas
 
 def _redact_dict(d: dict, secret_values: list[tuple[str, str]]) -> dict:
     """Recursively redact string values in a dict. Returns original if unchanged."""
-    changed = False
-    result = {}
+    result: dict | None = None
     for k, v in d.items():
         if isinstance(v, str):
             redacted = _redact_text(v, secret_values)
             if redacted != v:
-                changed = True
-            result[k] = redacted
+                if result is None:
+                    result = dict(d)
+                result[k] = redacted
         elif isinstance(v, dict):
             redacted_v = _redact_dict(v, secret_values)
-            if redacted_v is not v:
-                changed = True
-            result[k] = redacted_v
-        else:
-            result[k] = v
-    return result if changed else d
+            if redacted_v != v:
+                if result is None:
+                    result = dict(d)
+                result[k] = redacted_v
+    return result if result is not None else d
 
 
 async def secret_redaction_middleware(
