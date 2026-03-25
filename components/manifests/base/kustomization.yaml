@@ -26,5 +26,5 @@ images:
   newTag: latest
 - name: quay.io/ambient_code/vteam_api_server
   newTag: latest
-- name: quay.io/ambient_code/ambient_control_plane
+- name: quay.io/ambient_code/vteam_control_plane
   newTag: latest

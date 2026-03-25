@@ -22,7 +22,7 @@ spec:
           type: RuntimeDefault
       containers:
       - name: ambient-control-plane
-        image: quay.io/ambient_code/ambient_control_plane:latest
+        image: quay.io/ambient_code/vteam_control_plane:latest
         imagePullPolicy: Always
         securityContext:
           allowPrivilegeEscalation: false
