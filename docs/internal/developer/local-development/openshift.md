@@ -111,6 +111,15 @@ git checkout kustomization.yaml
 
 ## Common Deployment Issues and Fixes
 
+### Build All Images First
+
+Before pushing, build all images locally (including `vteam_mcp`):
+
+```bash
+make build-all        # builds frontend, backend, operator, runner, state-sync, public-api, api-server, mcp
+make build-control-plane  # builds vteam_control_plane (not included in build-all)
+```
+
 ### Issue 1: Images not found (ImagePullBackOff)
 
 ```bash
@@ -118,17 +127,18 @@ git checkout kustomization.yaml
 REGISTRY_HOST=$(oc get route default-route -n openshift-image-registry --template='{{ .spec.host }}')
 
 # Tag and push key images (adjust based on what's available locally)
-podman tag localhost/ambient_control_plane:latest ${REGISTRY_HOST}/ambient-code/ambient_control_plane:latest
+podman tag localhost/vteam_control_plane:latest ${REGISTRY_HOST}/ambient-code/vteam_control_plane:latest
 podman tag localhost/vteam_frontend:latest ${REGISTRY_HOST}/ambient-code/vteam_frontend:latest
 podman tag localhost/vteam_api_server:latest ${REGISTRY_HOST}/ambient-code/vteam_api_server:latest
 podman tag localhost/vteam_backend:latest ${REGISTRY_HOST}/ambient-code/vteam_backend:latest
 podman tag localhost/vteam_operator:latest ${REGISTRY_HOST}/ambient-code/vteam_operator:latest
 podman tag localhost/vteam_public_api:latest ${REGISTRY_HOST}/ambient-code/vteam_public_api:latest
 podman tag localhost/vteam_claude_runner:latest ${REGISTRY_HOST}/ambient-code/vteam_claude_runner:latest
+podman tag localhost/vteam_mcp:latest ${REGISTRY_HOST}/ambient-code/vteam_mcp:latest
 
 # Push images
-for img in ambient_control_plane vteam_frontend vteam_api_server vteam_backend vteam_operator vteam_public_api vteam_claude_runner; do
-  podman push ${REGISTRY_HOST}/ambient-code/${img}:latest
+for img in vteam_control_plane vteam_frontend vteam_api_server vteam_backend vteam_operator vteam_public_api vteam_claude_runner vteam_mcp; do
+  podman push --tls-verify=false ${REGISTRY_HOST}/ambient-code/${img}:latest
 done
 
 # Restart deployments to pick up new images

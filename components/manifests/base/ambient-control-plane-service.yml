@@ -1,0 +1,55 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ambient-control-plane
+  labels:
+    app: ambient-control-plane
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ambient-control-plane
+  template:
+    metadata:
+      labels:
+        app: ambient-control-plane
+    spec:
+      serviceAccountName: ambient-control-plane
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: ambient-control-plane
+        image: quay.io/ambient_code/ambient_control_plane:latest
+        imagePullPolicy: Always
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: ["ALL"]
+        env:
+        - name: AMBIENT_API_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: ambient-control-plane-token
+              key: token
+        - name: AMBIENT_API_SERVER_URL
+          value: "https://ambient-api-server.ambient-code.svc:8000"
+        - name: AMBIENT_GRPC_SERVER_ADDR
+          value: "ambient-api-server.ambient-code.svc:9000"
+        - name: AMBIENT_GRPC_USE_TLS
+          value: "true"
+        - name: MODE
+          value: "kube"
+        - name: LOG_LEVEL
+          value: "info"
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+      restartPolicy: Always

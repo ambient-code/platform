@@ -8,6 +8,7 @@ resources:
 - core
 - rbac
 - platform
+- ambient-control-plane-service.yml
 
 # Default images (can be overridden by overlays)
 images:
@@ -24,4 +25,6 @@ images:
 - name: quay.io/ambient_code/vteam_public_api
   newTag: latest
 - name: quay.io/ambient_code/vteam_api_server
+  newTag: latest
+- name: quay.io/ambient_code/ambient_control_plane
   newTag: latest
