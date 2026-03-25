@@ -260,10 +260,9 @@ func loadEvents(sessionID string) []map[string]interface{} {
 
 	fileSize := stat.Size()
 
-	// Small file — read everything (original fast path)
+	// Small file — read from the already-open handle (avoids double-open)
 	if fileSize <= replayMaxTailBytes {
-		events, _ := readJSONLFile(path)
-		return events
+		return scanJSONL(f)
 	}
 
 	// Large file — seek to tail to bound reconnect latency.
@@ -290,9 +289,37 @@ func loadEvents(sessionID string) []map[string]interface{} {
 			continue
 		}
 		var evt map[string]interface{}
-		if err := json.Unmarshal(line, &evt); err == nil {
-			events = append(events, evt)
+		if err := json.Unmarshal(line, &evt); err != nil {
+			log.Printf("AGUI Store: skipping malformed JSON line in tail scan: %v", err)
+			continue
 		}
+		events = append(events, evt)
+	}
+	if err := scanner.Err(); err != nil {
+		log.Printf("AGUI Store: tail scan error for %s: %v", sessionID, err)
+	}
+	return events
+}
+
+// scanJSONL reads all JSONL events from an already-open file handle.
+func scanJSONL(f *os.File) []map[string]interface{} {
+	var events []map[string]interface{}
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 0, scannerInitialBufferSize), scannerMaxLineSize)
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(line) == 0 {
+			continue
+		}
+		var evt map[string]interface{}
+		if err := json.Unmarshal(line, &evt); err != nil {
+			log.Printf("AGUI Store: skipping malformed JSON line: %v", err)
+			continue
+		}
+		events = append(events, evt)
+	}
+	if err := scanner.Err(); err != nil {
+		log.Printf("AGUI Store: scanner error: %v", err)
 	}
 	return events
 }

@@ -388,6 +388,23 @@ type agentStatusCacheEntry struct {
 	expiresAt time.Time
 }
 
+func init() {
+	// Sweep expired entries every 30 seconds to prevent unbounded growth.
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		for range ticker.C {
+			now := time.Now()
+			agentStatusCache.Lock()
+			for k, v := range agentStatusCache.entries {
+				if now.After(v.expiresAt) {
+					delete(agentStatusCache.entries, k)
+				}
+			}
+			agentStatusCache.Unlock()
+		}
+	}()
+}
+
 const agentStatusCacheTTL = 5 * time.Second
 
 // enrichAgentStatus derives agentStatus from the persisted event log for

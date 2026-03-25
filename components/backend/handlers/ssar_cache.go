@@ -62,9 +62,19 @@ func (c *ssarCache) check(key string) (allowed bool, found bool) {
 		return false, false
 	}
 	if time.Now().After(entry.expiresAt) {
-		// Expired — remove lazily
+		// Expired — remove lazily, but re-check under write lock
+		// in case another goroutine refreshed the entry concurrently.
 		c.mu.Lock()
-		delete(c.entries, key)
+		if current, stillExists := c.entries[key]; stillExists {
+			if time.Now().After(current.expiresAt) {
+				delete(c.entries, key)
+				c.mu.Unlock()
+				return false, false
+			}
+			// Entry was refreshed by a concurrent store — use it
+			c.mu.Unlock()
+			return current.allowed, true
+		}
 		c.mu.Unlock()
 		return false, false
 	}
