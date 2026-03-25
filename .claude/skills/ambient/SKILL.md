@@ -109,13 +109,36 @@ If using Vertex, set `USE_VERTEX=1` in the operator ConfigMap (see Step 4).
 
 ## Step 3: Deploy with Kustomize
 
-Use the production overlay, overriding images and namespace at deploy time. Never commit kustomization changes — operate on a temp copy or use `kustomize edit` and revert.
+### Scripted (preferred for ephemeral/PR namespaces)
+
+`components/pr-test/install.sh` encapsulates Steps 2–6 into a single script. It copies secrets from the source namespace, deploys via a temp-dir kustomize overlay (no git working tree mutations), patches configmaps, and waits for rollouts:
+
+```bash
+bash components/pr-test/install.sh <namespace> <image-tag>
+```
+
+### Production deploy (`make deploy`)
+
+For the production namespace (`ambient-code`), use:
+
+```bash
+make deploy
+# calls components/manifests/deploy.sh — handles OAuth, restores kustomization after apply
+```
+
+`deploy.sh` mutates `kustomization.yaml` in-place and restores it post-apply. It also handles the OpenShift OAuth `OAuthClient` (requires cluster-admin). Use `make deploy` only for the canonical production namespace.
+
+### Manual (for debugging or one-off namespaces)
+
+Use a temp dir to avoid modifying the git working tree:
 
 ```bash
 IMAGE_TAG=<tag>   # e.g. latest, pr-42-amd64, abc1234
 NAMESPACE=<target-namespace>
 
-cd components/manifests/overlays/production
+TMPDIR=$(mktemp -d)
+cp -r components/manifests/overlays/production/. "$TMPDIR/"
+pushd "$TMPDIR"
 
 kustomize edit set namespace $NAMESPACE
 
@@ -129,8 +152,8 @@ kustomize edit set image \
   quay.io/ambient_code/vteam_public_api:latest=quay.io/ambient_code/vteam_public_api:$IMAGE_TAG
 
 oc apply -k . -n $NAMESPACE
-
-git checkout kustomization.yaml
+popd
+rm -rf "$TMPDIR"
 ```
 
 ---
