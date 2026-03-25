@@ -1393,6 +1393,11 @@ func UpdateSessionDisplayName(c *gin.Context) {
 func SelectWorkflow(c *gin.Context) {
 	project := c.GetString("project")
 	sessionName := c.Param("sessionName")
+	if !isValidKubernetesName(sessionName) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid session name format"})
+		c.Abort()
+		return
+	}
 	k8sClt, k8sDyn := GetK8sClientsForRequest(c)
 	if k8sDyn == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
