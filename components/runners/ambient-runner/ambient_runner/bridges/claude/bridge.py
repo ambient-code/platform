@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any, AsyncIterator, Optional
 
 from ag_ui.core import BaseEvent, RunAgentInput
+from ambient_runner.platform.auth import ensure_git_auth
 from ag_ui_claude_sdk import ClaudeAgentAdapter
 
 from ambient_runner.bridge import (
@@ -36,53 +37,23 @@ logger = logging.getLogger(__name__)
 _MAX_STDERR_LINES = 50
 
 
-def _git_auth_env() -> dict[str, str]:
-    """Build env dict with GIT_ASKPASS credential helper for tokens.
-
-    Uses GIT_ASKPASS to provide credentials without embedding them in URLs
-    or writing them to .git/config on disk.
-    """
-    env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
-    github_token = os.getenv("GITHUB_TOKEN", "").strip()
-    gitlab_token = os.getenv("GITLAB_TOKEN", "").strip()
-    if github_token or gitlab_token:
-        # GIT_ASKPASS script that echoes the token for password prompts
-        token = github_token or gitlab_token
-        env["GIT_ASKPASS"] = "/bin/echo"
-        if github_token:
-            env["GIT_USERNAME"] = "x-access-token"
-            env["GIT_PASSWORD"] = github_token
-            # Configure git to use token via credential helper
-            env["GIT_CONFIG_COUNT"] = "1"
-            env["GIT_CONFIG_KEY_0"] = "credential.helper"
-            env["GIT_CONFIG_VALUE_0"] = (
-                f"!f() {{ echo username=x-access-token; echo password={token}; }}; f"
-            )
-        elif gitlab_token:
-            env["GIT_CONFIG_COUNT"] = "1"
-            env["GIT_CONFIG_KEY_0"] = "credential.helper"
-            env["GIT_CONFIG_VALUE_0"] = (
-                f"!f() {{ echo username=oauth2; echo password={token}; }}; f"
-            )
-    return env
-
-
 async def _run_git(
     *args: str, cwd: str | None = None
 ) -> tuple[int, str, str]:
-    """Run a git command, returning (returncode, stdout, stderr)."""
-    env = _git_auth_env()
+    """Run a git command, returning (returncode, stdout, stderr).
+
+    Relies on the platform credential helper (auth.py) installed globally
+    via ``ensure_git_auth()`` — no token embedding in URLs.
+    """
     proc = await asyncio.create_subprocess_exec(
         "git",
         *args,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
         cwd=cwd,
-        env=env,
     )
     stdout, stderr = await proc.communicate()
     stderr_str = stderr.decode()
-    # Redact tokens from error output
     for tok_key in ("GITHUB_TOKEN", "GITLAB_TOKEN"):
         tok = os.getenv(tok_key, "")
         if tok:
@@ -99,6 +70,9 @@ async def _clone_marketplace_items(workspace_path: str) -> None:
     raw = os.getenv("INSTALLED_ITEMS_JSON", "").strip()
     if not raw:
         return
+
+    # Ensure the platform credential helper is installed for private repos
+    ensure_git_auth()
 
     try:
         items = json.loads(raw)
