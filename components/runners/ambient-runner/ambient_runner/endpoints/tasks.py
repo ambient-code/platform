@@ -27,6 +27,15 @@ async def stop_task(task_id: str, request: Request):
         pass
 
     logger.info(f"Stop task request: task_id={task_id}")
+
+    # Check if the task already finished before we try to stop it
+    adapter = getattr(bridge, "_adapter", None)
+    if adapter:
+        task_info = adapter._task_registry.get(task_id, {})
+        status = task_info.get("status", "")
+        if status in ("completed", "failed", "stopped"):
+            return {"message": f"Task already {status}"}
+
     try:
         await bridge.stop_task(task_id, thread_id)
 
