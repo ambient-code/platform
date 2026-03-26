@@ -92,6 +92,7 @@ func ValidateJiraToken(ctx context.Context, url, email, apiToken string) (bool, 
 
 	var got401 bool
 	var lastNetErr error
+	var sawHTTPResponse bool
 
 	for _, apiURL := range apiURLs {
 		req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
@@ -108,6 +109,7 @@ func ValidateJiraToken(ctx context.Context, url, email, apiToken string) (bool, 
 			lastNetErr = networkError(err)
 			continue
 		}
+		sawHTTPResponse = true
 		defer resp.Body.Close()
 
 		// 200 = valid, 401 = invalid, 404 = wrong API version (try next)
@@ -126,7 +128,7 @@ func ValidateJiraToken(ctx context.Context, url, email, apiToken string) (bool, 
 	}
 
 	// If all attempts failed with network errors, surface the cause
-	if lastNetErr != nil {
+	if lastNetErr != nil && !sawHTTPResponse {
 		return false, fmt.Errorf("request failed: %w", lastNetErr)
 	}
 
