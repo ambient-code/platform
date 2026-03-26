@@ -273,6 +273,7 @@ class ClaudeBridge(PlatformBridge):
         if not worker:
             return
 
+        import uuid as _uuid
         from claude_agent_sdk import (
             TaskStartedMessage,
             TaskProgressMessage,
@@ -286,25 +287,19 @@ class ClaudeBridge(PlatformBridge):
         # with full text streaming, wrapped in a synthetic AG-UI run.
 
         while True:
-            # Wait for the first message of a between-run turn
             msg = await worker.between_run_queue_get()
             if msg is None:
-                return  # shutdown
+                return
 
-            # Task lifecycle → CUSTOM events, no run needed
+            # Task lifecycle → CUSTOM events, no run envelope needed
             if isinstance(msg, (TaskStartedMessage, TaskProgressMessage, TaskNotificationMessage)):
                 yield self._adapter._emit_task_event(msg)
-                # Drain any hook events too
-                while not self._adapter._hook_event_queue.empty():
-                    try:
-                        yield self._adapter._hook_event_queue.get_nowait()
-                    except asyncio.QueueEmpty:
-                        break
+                for hook_evt in self._adapter.drain_hook_events():
+                    yield hook_evt
                 continue
 
-            # First non-task message — start a synthetic run and pipe
+            # First non-task message — open a synthetic run and pipe
             # this + subsequent messages through _stream_claude_sdk.
-            import uuid as _uuid
             synthetic_run_id = str(_uuid.uuid4())
 
             yield RunStartedEvent(
@@ -315,8 +310,6 @@ class ClaudeBridge(PlatformBridge):
                 parent_run_id=self._adapter._last_run_id,
             )
 
-            # Create an async iterator that yields the first message
-            # plus all subsequent messages until ResultMessage.
             async def _between_run_stream(first_msg):
                 yield first_msg
                 async for m in worker.between_run_events():
@@ -324,24 +317,24 @@ class ClaudeBridge(PlatformBridge):
                     if isinstance(m, ResultMessage):
                         return
 
-            async for event in self._adapter._stream_claude_sdk(
-                prompt="",
-                thread_id=thread_id,
-                run_id=synthetic_run_id,
-                input_data=None,
-                frontend_tool_names=set(),
-                message_stream=_between_run_stream(msg),
-            ):
-                yield event
-
-            self._adapter._last_run_id = synthetic_run_id
-
-            yield RunFinishedEvent(
-                type=EventType.RUN_FINISHED,
-                thread_id=thread_id,
-                run_id=synthetic_run_id,
-                timestamp=now_ms(),
-            )
+            try:
+                async for event in self._adapter._stream_claude_sdk(
+                    prompt="",
+                    thread_id=thread_id,
+                    run_id=synthetic_run_id,
+                    input_data=None,
+                    frontend_tool_names=set(),
+                    message_stream=_between_run_stream(msg),
+                ):
+                    yield event
+            finally:
+                self._adapter._last_run_id = synthetic_run_id
+                yield RunFinishedEvent(
+                    type=EventType.RUN_FINISHED,
+                    thread_id=thread_id,
+                    run_id=synthetic_run_id,
+                    timestamp=now_ms(),
+                )
 
     @property
     def task_registry(self) -> dict:

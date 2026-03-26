@@ -615,6 +615,16 @@ class ClaudeAgentAdapter:
             return self._emit_task_notification(message)
         raise TypeError(f"Not a task message: {type(message).__name__}")
 
+    def drain_hook_events(self) -> list:
+        """Drain all pending hook CustomEvents from the queue."""
+        events = []
+        while not self._hook_event_queue.empty():
+            try:
+                events.append(self._hook_event_queue.get_nowait())
+            except asyncio.QueueEmpty:
+                break
+        return events
+
     def _emit_task_started(self, message: Any) -> "CustomEvent":
         task_info = {
             "task_id": message.task_id,
@@ -661,7 +671,7 @@ class ClaudeAgentAdapter:
         prompt: str,
         thread_id: str,
         run_id: str,
-        input_data: RunAgentInput,
+        input_data: Optional[RunAgentInput],
         frontend_tool_names: set[str],
         message_stream: Any,
     ) -> AsyncIterator[BaseEvent]:
@@ -1115,14 +1125,8 @@ class ClaudeAgentAdapter:
                             ):
                                 yield event
 
-                elif isinstance(message, TaskStartedMessage):
-                    yield self._emit_task_started(message)
-
-                elif isinstance(message, TaskProgressMessage):
-                    yield self._emit_task_progress(message)
-
-                elif isinstance(message, TaskNotificationMessage):
-                    yield self._emit_task_notification(message)
+                elif isinstance(message, (TaskStartedMessage, TaskProgressMessage, TaskNotificationMessage)):
+                    yield self._emit_task_event(message)
 
                 elif isinstance(message, SystemMessage):
                     data = getattr(message, "data", {}) or {}
@@ -1344,102 +1348,3 @@ class ClaudeAgentAdapter:
         if stream_error is not None:
             raise stream_error
 
-    async def process_between_run_message(
-        self, message: Any, thread_id: str
-    ) -> AsyncIterator[BaseEvent]:
-        """Convert a between-run SDK message into AG-UI events.
-
-        CUSTOM events (TaskStarted, TaskProgress, TaskNotification) pass
-        through directly — they don't need a run envelope.
-
-        Text content (AssistantMessage) gets wrapped in a synthetic
-        RUN_STARTED / RUN_FINISHED pair so the frontend treats it as
-        a proper run.
-        """
-        msg_type = type(message).__name__
-        logger.info("[BetweenRun] Processing %s for thread=%s", msg_type, thread_id)
-
-        from claude_agent_sdk import (
-            AssistantMessage,
-            TaskStartedMessage,
-            TaskProgressMessage,
-            TaskNotificationMessage,
-        )
-
-        # --- Drain hook event queue (hooks fire independently) ---
-        while not self._hook_event_queue.empty():
-            try:
-                hook_event = self._hook_event_queue.get_nowait()
-                yield hook_event
-            except asyncio.QueueEmpty:
-                break
-
-        # --- CUSTOM events: task lifecycle (reuses shared helpers) ---
-        if isinstance(message, TaskStartedMessage):
-            yield self._emit_task_started(message)
-            return
-
-        if isinstance(message, TaskProgressMessage):
-            yield self._emit_task_progress(message)
-            return
-
-        if isinstance(message, TaskNotificationMessage):
-            yield self._emit_task_notification(message)
-            return
-
-        # --- Text content: wrap in synthetic run (only if there's text) ---
-        if isinstance(message, AssistantMessage):
-            # Extract text from content blocks first — skip if empty
-            text_parts = []
-            for block in getattr(message, "content", []) or []:
-                text = getattr(block, "text", None)
-                if text:
-                    text_parts.append(text)
-            full_text = "\n".join(text_parts) if text_parts else ""
-
-            if not full_text:
-                return  # No text content — skip (tool-only responses, etc.)
-
-            synthetic_run_id = str(uuid.uuid4())
-            msg_id = str(uuid.uuid4())
-
-            yield RunStartedEvent(
-                type=EventType.RUN_STARTED,
-                thread_id=thread_id,
-                run_id=synthetic_run_id,
-                timestamp=now_ms(),
-                parent_run_id=self._last_run_id,
-            )
-
-            yield TextMessageStartEvent(
-                type=EventType.TEXT_MESSAGE_START,
-                thread_id=thread_id,
-                run_id=synthetic_run_id,
-                message_id=msg_id,
-                role="assistant",
-                timestamp=now_ms(),
-            )
-            yield TextMessageContentEvent(
-                type=EventType.TEXT_MESSAGE_CONTENT,
-                thread_id=thread_id,
-                run_id=synthetic_run_id,
-                message_id=msg_id,
-                delta=full_text,
-            )
-            yield TextMessageEndEvent(
-                type=EventType.TEXT_MESSAGE_END,
-                thread_id=thread_id,
-                run_id=synthetic_run_id,
-                message_id=msg_id,
-                timestamp=now_ms(),
-            )
-
-            self._last_run_id = synthetic_run_id
-
-            yield RunFinishedEvent(
-                type=EventType.RUN_FINISHED,
-                thread_id=thread_id,
-                run_id=synthetic_run_id,
-                timestamp=now_ms(),
-            )
-            return
