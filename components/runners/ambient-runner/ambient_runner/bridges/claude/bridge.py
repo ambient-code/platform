@@ -178,10 +178,21 @@ class ClaudeBridge(PlatformBridge):
                 async for event in wrapped_stream:
                     yield event
 
-                # Persist session ID after turn completes (for --resume on pod restart)
-                if worker.session_id:
-                    self._session_manager._session_ids[thread_id] = worker.session_id
-                    self._session_manager._persist_session_ids()
+                # Detect resume failure (session ID already persisted
+                # eagerly by the _on_session_id callback at init time).
+                if (
+                    saved_session_id
+                    and worker.session_id
+                    and worker.session_id != saved_session_id
+                ):
+                    logger.warning(
+                        "Session resume failed: requested --resume %s "
+                        "but CLI created new session %s. "
+                        "Previous conversation history was lost "
+                        "(likely caused by ungraceful runner shutdown).",
+                        saved_session_id,
+                        worker.session_id,
+                    )
 
                 # Capture halt state for this thread to avoid race conditions
                 # with concurrent runs modifying the shared adapter's halted flag
