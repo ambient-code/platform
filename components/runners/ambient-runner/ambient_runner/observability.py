@@ -158,6 +158,8 @@ class ObservabilityManager:
         self.namespace = ""
         self.langfuse_client = None
         self._propagate_ctx = None
+        self._propagate_args: dict[str, Any] = {}  # Saved for re-entering context
+        self._turn_propagate_ctx = None  # Per-turn propagation context
         self._tool_spans: dict[str, Any] = {}  # Stores span objects directly
         self._current_turn_generation = (
             None  # Track active turn for tool span parenting
@@ -179,6 +181,17 @@ class ObservabilityManager:
         self._metric_total_cost_usd: float = 0.0
         # Track last seen usage to compute deltas (SDK may report cumulative values)
         self._metric_prev_usage: dict[str, int] = {}
+
+    def _exit_turn_propagate_ctx(self) -> None:
+        """Exit and clear the per-turn propagation context if active."""
+        if not self._turn_propagate_ctx:
+            return
+        try:
+            self._turn_propagate_ctx.__exit__(None, None, None)
+        except Exception as e:
+            logging.debug(f"Langfuse: turn propagate context detach failed: {e}")
+        finally:
+            self._turn_propagate_ctx = None
 
     async def initialize(
         self,
@@ -330,14 +343,17 @@ class ObservabilityManager:
 
             # Enter propagate_attributes context - all traces share session_id/user_id/tags/metadata
             # Each turn will be a separate trace, automatically grouped by session_id
+            # Save args so we can re-enter the context per-turn (contextvars are
+            # per-asyncio-task, and each HTTP request runs in a new task).
+            self._propagate_args = {
+                "user_id": self.user_id,
+                "session_id": self.session_id,
+                "tags": tags,
+                "metadata": metadata,
+            }
             # Wrap context creation and __enter__ to ensure proper cleanup on failure
             try:
-                self._propagate_ctx = propagate_attributes(
-                    user_id=self.user_id,
-                    session_id=self.session_id,
-                    tags=tags,
-                    metadata=metadata,
-                )
+                self._propagate_ctx = propagate_attributes(**self._propagate_args)
                 self._propagate_ctx.__enter__()
             except Exception:
                 # Cleanup propagate context if __enter__ failed
@@ -400,6 +416,15 @@ class ObservabilityManager:
             return
 
         try:
+            # Re-enter propagate_attributes for this turn's async context.
+            # The context from initialize() may not be visible here because
+            # each HTTP request runs in a new asyncio task with fresh contextvars.
+            if self._propagate_args:
+                from langfuse import propagate_attributes
+
+                self._turn_propagate_ctx = propagate_attributes(**self._propagate_args)
+                self._turn_propagate_ctx.__enter__()
+
             # Use pending initial prompt for turn 1 if available
             if user_input is None and self._pending_initial_prompt:
                 user_input = self._pending_initial_prompt
@@ -437,6 +462,9 @@ class ObservabilityManager:
             )
 
         except Exception as e:
+            self._current_turn_generation = None
+            self._current_turn_ctx = None
+            self._exit_turn_propagate_ctx()
             logging.error(f"Langfuse: Failed to start turn: {e}", exc_info=True)
 
     def get_current_trace_id(self) -> str | None:
@@ -521,6 +549,8 @@ class ObservabilityManager:
             if self._current_turn_ctx:
                 self._current_turn_ctx.__exit__(None, None, None)
 
+            self._exit_turn_propagate_ctx()
+
             # Clear current turn state
             self._current_turn_generation = None
             self._current_turn_ctx = None
@@ -568,6 +598,7 @@ class ObservabilityManager:
                     logging.warning(
                         f"Langfuse: Cleanup during error failed: {cleanup_error}"
                     )
+            self._exit_turn_propagate_ctx()
             self._current_turn_generation = None
             self._current_turn_ctx = None
 
@@ -1047,6 +1078,7 @@ class ObservabilityManager:
             if self._current_turn_ctx:
                 self._current_turn_ctx.__exit__(None, None, None)
 
+            self._exit_turn_propagate_ctx()
             self._current_turn_generation = None
             self._current_turn_ctx = None
 
@@ -1077,6 +1109,7 @@ class ObservabilityManager:
                     self._current_turn_ctx.__exit__(None, None, None)
                 except Exception:
                     pass
+            self._exit_turn_propagate_ctx()
             self._current_turn_generation = None
             self._current_turn_ctx = None
 
@@ -1099,6 +1132,8 @@ class ObservabilityManager:
                     self._current_turn_generation = None
                     self._current_turn_ctx = None
 
+            self._exit_turn_propagate_ctx()
+
             # Close any open tool spans
             for tool_id, tool_span in list(self._tool_spans.items()):
                 try:
@@ -1108,8 +1143,16 @@ class ObservabilityManager:
                     logging.warning(f"Failed to close tool span {tool_id}: {e}")
             self._tool_spans.clear()
 
-            # Emit session-level summary metrics before closing context
-            self._emit_session_summary()
+            # Emit session-level summary metrics before closing context.
+            # Re-enter propagation so the span gets userId/sessionId/tags
+            # even when finalize() runs in a different async task than initialize().
+            if self._propagate_args:
+                from langfuse import propagate_attributes
+
+                with propagate_attributes(**self._propagate_args):
+                    self._emit_session_summary()
+            else:
+                self._emit_session_summary()
 
             # Exit propagate_attributes context.
             # The context uses OpenTelemetry contextvars internally.  When
@@ -1167,6 +1210,8 @@ class ObservabilityManager:
                 finally:
                     self._current_turn_generation = None
                     self._current_turn_ctx = None
+
+            self._exit_turn_propagate_ctx()
 
             # Close any open tool spans
             for tool_id, tool_span in list(self._tool_spans.items()):

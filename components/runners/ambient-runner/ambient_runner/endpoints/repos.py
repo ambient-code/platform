@@ -278,8 +278,12 @@ async def _sanitize_remote_url(repo_path: Path) -> None:
     """
     try:
         process = await asyncio.create_subprocess_exec(
-            "git", "-C", str(repo_path),
-            "config", "--get", "remote.origin.url",
+            "git",
+            "-C",
+            str(repo_path),
+            "config",
+            "--get",
+            "remote.origin.url",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -290,8 +294,13 @@ async def _sanitize_remote_url(repo_path: Path) -> None:
         clean_url = re.sub(r"https://[^:]+:[^@]+@", "https://", current_url)
         if clean_url != current_url:
             await asyncio.create_subprocess_exec(
-                "git", "-C", str(repo_path),
-                "remote", "set-url", "origin", clean_url,
+                "git",
+                "-C",
+                str(repo_path),
+                "remote",
+                "set-url",
+                "origin",
+                clean_url,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
