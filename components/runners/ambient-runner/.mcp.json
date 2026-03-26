@@ -28,7 +28,8 @@
       "args": [
         "workspace-mcp@1.6.1",
         "--tools",
-        "drive"
+        "drive",
+        "gmail"
       ],
       "env": {
         "GOOGLE_MCP_CREDENTIALS_DIR": "${GOOGLE_MCP_CREDENTIALS_DIR}",
