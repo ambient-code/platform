@@ -1341,6 +1341,9 @@ class ClaudeAgentAdapter:
         RUN_STARTED / RUN_FINISHED pair so the frontend treats it as
         a proper run.
         """
+        msg_type = type(message).__name__
+        logger.info("[BetweenRun] Processing %s for thread=%s", msg_type, thread_id)
+
         from claude_agent_sdk import (
             AssistantMessage,
             TaskStartedMessage,

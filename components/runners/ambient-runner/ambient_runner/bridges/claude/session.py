@@ -243,10 +243,18 @@ class SessionWorker:
 
         try:
             async for msg in client.receive_messages():
+                msg_type = type(msg).__name__
+                subtype = getattr(msg, "subtype", "")
+                route = "run" if self._active_output_queue is not None else "between-run"
+                logger.info(
+                    "[Reader] %s (subtype=%s) → %s queue",
+                    msg_type, subtype, route,
+                )
+
                 # Capture session_id from init message (for resume)
                 if isinstance(msg, SystemMessage):
                     data = getattr(msg, "data", {}) or {}
-                    if getattr(msg, "subtype", "") == "init":
+                    if subtype == "init":
                         sid = data.get("session_id")
                         if sid:
                             self.session_id = sid
@@ -254,6 +262,7 @@ class SessionWorker:
                 if self._active_output_queue is not None:
                     await self._active_output_queue.put(msg)
                     if isinstance(msg, ResultMessage):
+                        logger.info("[Reader] ResultMessage → turn done")
                         self._turn_done.set()
                 else:
                     # Between runs — non-blocking put, drop if full

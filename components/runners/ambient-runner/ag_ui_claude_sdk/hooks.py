@@ -51,6 +51,8 @@ async def _forward_hook_as_custom_event(
     event_name = hook_input.get("hook_event_name", "unknown")
     payload = {k: v for k, v in hook_input.items() if k not in _SANITIZE_KEYS}
 
+    logger.info("[Hook] %s fired (agent_id=%s)", event_name, hook_input.get("agent_id", "n/a"))
+
     await queue.put(
         CustomEvent(
             type=EventType.CUSTOM,
