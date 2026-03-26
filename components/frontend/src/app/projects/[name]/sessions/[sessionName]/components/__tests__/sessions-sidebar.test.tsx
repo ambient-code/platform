@@ -10,10 +10,13 @@ vi.mock('next/navigation', () => ({
 }));
 
 vi.mock('next/link', () => ({
-  default: ({ children, href }: { children: React.ReactNode; href: string }) => (
-    <a href={href}>{children}</a>
+  default: ({ children, href, onClick }: { children: React.ReactNode; href: string; onClick?: () => void }) => (
+    <a href={href} onClick={onClick}>{children}</a>
   ),
 }));
+
+const mockMutate = vi.fn();
+const mockMutation = { mutate: mockMutate, isPending: false };
 
 const mockUseSessionsPaginated = vi.fn((): { data: { items: Partial<AgenticSession>[] } | null; isLoading: boolean } => ({
   data: { items: [] },
@@ -21,6 +24,14 @@ const mockUseSessionsPaginated = vi.fn((): { data: { items: Partial<AgenticSessi
 }));
 vi.mock('@/services/queries/use-sessions', () => ({
   useSessionsPaginated: () => mockUseSessionsPaginated(),
+  useStopSession: () => mockMutation,
+  useDeleteSession: () => mockMutation,
+  useContinueSession: () => mockMutation,
+  useUpdateSessionDisplayName: () => mockMutation,
+}));
+
+vi.mock('@/services/queries/use-project-access', () => ({
+  useProjectAccess: () => ({ data: { userRole: 'admin' } }),
 }));
 
 vi.mock('@/services/queries/use-version', () => ({
@@ -128,14 +139,15 @@ describe('SessionsSidebar', () => {
     expect(screen.getByText('Session 2')).toBeDefined();
   });
 
-  it('clicking session navigates to correct URL', () => {
+  it('session items link to correct URL', () => {
     mockUseSessionsPaginated.mockReturnValue({
       data: { items: makeSessions(2) },
       isLoading: false,
     });
     render(<SessionsSidebar {...defaultProps} />);
-    fireEvent.click(screen.getByText('Session 1'));
-    expect(mockPush).toHaveBeenCalledWith(
+    const link = screen.getByText('Session 1').closest('a');
+    expect(link).toBeDefined();
+    expect(link?.getAttribute('href')).toBe(
       '/projects/test-project/sessions/session-1'
     );
   });

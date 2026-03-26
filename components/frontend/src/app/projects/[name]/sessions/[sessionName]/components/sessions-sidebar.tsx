@@ -18,6 +18,7 @@ import { AgentStatusIndicator, agentStatusLabel } from "@/components/agent-statu
 import { deriveAgentStatusFromPhase } from "@/hooks/use-agent-status";
 import { SessionStatusDot, sessionPhaseLabel } from "@/components/session-status-dot";
 import { EditSessionNameDialog } from "@/components/edit-session-name-dialog";
+import { DestructiveConfirmationDialog } from "@/components/confirmation-dialog";
 import {
   Plus,
   PanelLeftClose,
@@ -102,6 +103,7 @@ export function SessionsSidebar({
   const updateDisplayNameMutation = useUpdateSessionDisplayName();
 
   const [editingSession, setEditingSession] = useState<{ name: string; displayName: string } | null>(null);
+  const [deletingSessionName, setDeletingSessionName] = useState<string | null>(null);
 
   const sessions = useMemo(() => {
     const items = data?.items ?? [];
@@ -177,13 +179,18 @@ export function SessionsSidebar({
   };
 
   const handleDelete = (sessionName: string) => {
-    if (!confirm(`Delete session "${sessionName}"? This action cannot be undone.`)) return;
-    const isCurrentSession = sessionName === currentSessionName;
+    setDeletingSessionName(sessionName);
+  };
+
+  const confirmDelete = () => {
+    if (!deletingSessionName) return;
+    const isCurrentSession = deletingSessionName === currentSessionName;
     deleteMutation.mutate(
-      { projectName, sessionName },
+      { projectName, sessionName: deletingSessionName },
       {
         onSuccess: () => {
           toast.success(`Session deleted`);
+          setDeletingSessionName(null);
           if (isCurrentSession) {
             router.push(`/projects/${projectName}/sessions`);
           }
@@ -441,13 +448,21 @@ export function SessionsSidebar({
           )}
         </div>
       </div>
-      {/* Edit Session Name Dialog */}
       <EditSessionNameDialog
         open={!!editingSession}
         onOpenChange={(open) => !open && setEditingSession(null)}
         currentName={editingSession?.displayName || ""}
         onSave={handleSaveEditName}
         isLoading={updateDisplayNameMutation.isPending}
+      />
+      <DestructiveConfirmationDialog
+        open={!!deletingSessionName}
+        onOpenChange={(open) => !open && setDeletingSessionName(null)}
+        onConfirm={confirmDelete}
+        title="Delete session"
+        description={`Delete session "${deletingSessionName}"? This action cannot be undone.`}
+        confirmText="Delete"
+        loading={deleteMutation.isPending}
       />
     </div>
   );
@@ -532,7 +547,7 @@ function SidebarSessionActions({
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="hidden group-hover:flex items-center justify-center h-6 w-6 rounded-sm flex-shrink-0 mr-1 text-muted-foreground hover:text-foreground hover:bg-accent-foreground/10 transition-colors"
+          className="opacity-0 group-hover:opacity-100 focus:opacity-100 focus-visible:opacity-100 flex items-center justify-center h-6 w-6 rounded-sm flex-shrink-0 mr-1 text-muted-foreground hover:text-foreground hover:bg-accent-foreground/10 transition-colors"
         >
           <MoreVertical className="h-3.5 w-3.5" />
           <span className="sr-only">Session actions</span>
