@@ -356,37 +356,60 @@ func ScanGitSource(c *gin.Context) {
 		}
 	}
 
-	// Scan .claude/skills/*/SKILL.md
-	skillsDir := filepath.Join(scanRoot, ".claude", "skills")
-	if entries, err := os.ReadDir(skillsDir); err == nil {
+	// Track seen IDs to deduplicate across .claude/ and root-level patterns
+	seenIDs := make(map[string]bool)
+
+	// Scan for skills in both {scanRoot}/.claude/skills/ and {scanRoot}/skills/
+	for _, skillsDir := range []string{
+		filepath.Join(scanRoot, ".claude", "skills"),
+		filepath.Join(scanRoot, "skills"),
+	} {
+		entries, err := os.ReadDir(skillsDir)
+		if err != nil {
+			continue
+		}
 		for _, entry := range entries {
 			if !entry.IsDir() {
 				continue
 			}
-			skillMDPath := filepath.Join(skillsDir, entry.Name(), "SKILL.md")
+			id := entry.Name()
+			if seenIDs["skill:"+id] {
+				continue
+			}
+			skillMDPath := filepath.Join(skillsDir, id, "SKILL.md")
 			if name, desc := parseFrontmatter(skillMDPath); name != "" {
 				relPath, _ := filepath.Rel(tmpDir, skillMDPath)
 				result.Items = append(result.Items, DiscoveredItem{
-					ID:          entry.Name(),
+					ID:          id,
 					Name:        name,
 					Description: desc,
 					Type:        "skill",
 					FilePath:    relPath,
 				})
+				seenIDs["skill:"+id] = true
 			}
 		}
 	}
 
-	// Scan .claude/commands/*.md
-	commandsDir := filepath.Join(scanRoot, ".claude", "commands")
-	if entries, err := os.ReadDir(commandsDir); err == nil {
+	// Scan for commands in both {scanRoot}/.claude/commands/ and {scanRoot}/commands/
+	for _, commandsDir := range []string{
+		filepath.Join(scanRoot, ".claude", "commands"),
+		filepath.Join(scanRoot, "commands"),
+	} {
+		entries, err := os.ReadDir(commandsDir)
+		if err != nil {
+			continue
+		}
 		for _, entry := range entries {
 			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
 				continue
 			}
+			id := strings.TrimSuffix(entry.Name(), ".md")
+			if seenIDs["command:"+id] {
+				continue
+			}
 			cmdPath := filepath.Join(commandsDir, entry.Name())
 			name, desc := parseFrontmatter(cmdPath)
-			id := strings.TrimSuffix(entry.Name(), ".md")
 			if name == "" {
 				name = id
 			}
@@ -398,19 +421,29 @@ func ScanGitSource(c *gin.Context) {
 				Type:        "command",
 				FilePath:    relPath,
 			})
+			seenIDs["command:"+id] = true
 		}
 	}
 
-	// Scan .claude/agents/*.md
-	agentsDir := filepath.Join(scanRoot, ".claude", "agents")
-	if entries, err := os.ReadDir(agentsDir); err == nil {
+	// Scan for agents in both {scanRoot}/.claude/agents/ and {scanRoot}/agents/
+	for _, agentsDir := range []string{
+		filepath.Join(scanRoot, ".claude", "agents"),
+		filepath.Join(scanRoot, "agents"),
+	} {
+		entries, err := os.ReadDir(agentsDir)
+		if err != nil {
+			continue
+		}
 		for _, entry := range entries {
 			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
 				continue
 			}
+			id := strings.TrimSuffix(entry.Name(), ".md")
+			if seenIDs["agent:"+id] {
+				continue
+			}
 			agentPath := filepath.Join(agentsDir, entry.Name())
 			name, desc := parseFrontmatter(agentPath)
-			id := strings.TrimSuffix(entry.Name(), ".md")
 			if name == "" {
 				name = id
 			}
@@ -422,6 +455,7 @@ func ScanGitSource(c *gin.Context) {
 				Type:        "agent",
 				FilePath:    relPath,
 			})
+			seenIDs["agent:"+id] = true
 		}
 	}
 

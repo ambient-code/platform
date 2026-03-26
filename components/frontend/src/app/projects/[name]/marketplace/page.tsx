@@ -3,21 +3,21 @@
 import { useState, useMemo } from "react";
 import { useParams } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Download, Plus, Search, Trash2, Loader2 } from "lucide-react";
+import { Check, Loader2, Plus, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   useMarketplaceSources,
   useMarketplaceCatalog,
   useInstalledItems,
+  useInstallItems,
   useUninstallItem,
 } from "@/services/queries/use-marketplace";
 import { ImportSourceDialog } from "@/components/import-source-dialog";
-import type { MarketplaceCatalogItem, MarketplaceSource } from "@/types/marketplace";
+import type { MarketplaceCatalogItem, InstalledItem, MarketplaceSource } from "@/types/marketplace";
 import { MARKETPLACE_CATEGORY_COLORS } from "@/types/marketplace";
 
 type TypeFilter = "all" | "skill" | "command" | "agent";
@@ -27,13 +27,17 @@ function SourceSection({
   sourceIndex,
   searchTerm,
   typeFilter,
-  onImport,
+  installedIds,
+  onDirectInstall,
+  installingId,
 }: {
   source: MarketplaceSource;
   sourceIndex: number;
   searchTerm: string;
   typeFilter: TypeFilter;
-  onImport: (item: MarketplaceCatalogItem, source: MarketplaceSource) => void;
+  installedIds: Set<string>;
+  onDirectInstall: (item: MarketplaceCatalogItem, source: MarketplaceSource) => void;
+  installingId: string | null;
 }) {
   const { data: items, isLoading } = useMarketplaceCatalog(sourceIndex);
 
@@ -56,9 +60,9 @@ function SourceSection({
     return (
       <div className="space-y-3">
         <h3 className="text-lg font-semibold">{source.name}</h3>
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid gap-2 grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-24 w-full rounded-lg" />
+            <Skeleton key={i} className="h-16 w-full rounded-lg" />
           ))}
         </div>
       </div>
@@ -76,35 +80,44 @@ function SourceSection({
           <p className="text-sm text-muted-foreground">{source.description}</p>
         )}
       </div>
-      <div className="grid gap-3 md:grid-cols-2">
-        {filtered.map((item) => (
-          <Card key={item.id} className="flex flex-col">
-            <CardHeader className="pb-2">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <CardTitle className="text-sm">{item.name}</CardTitle>
-                  <CardDescription className="text-xs mt-1 line-clamp-2">
-                    {item.description}
-                  </CardDescription>
+      <div className="grid gap-2 grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+        {filtered.map((item) => {
+          const isInstalled = installedIds.has(item.id);
+          const isInstalling = installingId === item.id;
+          return (
+            <div
+              key={item.id}
+              className="flex items-start gap-2 p-2.5 rounded-lg border"
+            >
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm font-medium truncate">{item.name}</span>
+                  <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 ${MARKETPLACE_CATEGORY_COLORS[item.category]}`}>
+                    {item.category}
+                  </Badge>
                 </div>
-                <Badge variant="secondary" className={MARKETPLACE_CATEGORY_COLORS[item.category]}>
-                  {item.category}
-                </Badge>
+                <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
+                  {item.description}
+                </p>
               </div>
-            </CardHeader>
-            <CardContent className="pt-0 mt-auto">
               <Button
-                variant="outline"
-                size="sm"
-                className="w-full"
-                onClick={() => onImport(item, source)}
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 shrink-0"
+                disabled={isInstalled || isInstalling}
+                onClick={() => onDirectInstall(item, source)}
               >
-                <Download className="w-3.5 h-3.5 mr-1.5" />
-                Import
+                {isInstalling ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : isInstalled ? (
+                  <Check className="w-3.5 h-3.5 text-green-600" />
+                ) : (
+                  <Plus className="w-3.5 h-3.5" />
+                )}
               </Button>
-            </CardContent>
-          </Card>
-        ))}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -117,30 +130,54 @@ export default function MarketplacePage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [importDialogOpen, setImportDialogOpen] = useState(false);
-  const [prefillUrl, setPrefillUrl] = useState("");
-  const [prefillItems, setPrefillItems] = useState<string[]>([]);
+  const [installingId, setInstallingId] = useState<string | null>(null);
 
   const { data: sources, isLoading: sourcesLoading } = useMarketplaceSources();
   const { data: installed, isLoading: installedLoading } = useInstalledItems(projectName);
+  const installMutation = useInstallItems();
   const uninstallMutation = useUninstallItem();
 
-  const installedGrouped = useMemo(() => {
-    if (!installed) return {};
-    const groups: Record<string, typeof installed> = {};
-    for (const item of installed) {
-      const key = item.itemType;
-      (groups[key] ??= []).push(item);
-    }
-    return groups;
+  const installedIds = useMemo(() => {
+    if (!installed) return new Set<string>();
+    return new Set(installed.map((i) => i.itemId));
   }, [installed]);
 
-  const handleImportFromCatalog = (
-    item: MarketplaceCatalogItem,
-    source: MarketplaceSource
-  ) => {
-    setPrefillUrl(source.url);
-    setPrefillItems([item.id]);
-    setImportDialogOpen(true);
+  const filteredInstalled = useMemo(() => {
+    if (!installed) return [];
+    return installed.filter((item) => {
+      if (typeFilter !== "all" && item.itemType !== typeFilter) return false;
+      if (searchTerm) {
+        const term = searchTerm.toLowerCase();
+        return item.itemName.toLowerCase().includes(term);
+      }
+      return true;
+    });
+  }, [installed, typeFilter, searchTerm]);
+
+  const handleDirectInstall = (item: MarketplaceCatalogItem, source: MarketplaceSource) => {
+    setInstallingId(item.id);
+    const installItem: InstalledItem = {
+      sourceUrl: source.url,
+      sourceBranch: source.branch,
+      sourcePath: source.path,
+      itemId: item.id,
+      itemType: item.category,
+      itemName: item.name,
+      filePath: item.file_path,
+    };
+    installMutation.mutate(
+      { projectName, items: [installItem] },
+      {
+        onSuccess: () => {
+          toast.success(`Installed "${item.name}"`);
+          setInstallingId(null);
+        },
+        onError: (error) => {
+          toast.error(error instanceof Error ? error.message : "Install failed");
+          setInstallingId(null);
+        },
+      }
+    );
   };
 
   const handleUninstall = (itemId: string, itemName: string) => {
@@ -206,11 +243,7 @@ export default function MarketplacePage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => {
-                  setPrefillUrl("");
-                  setPrefillItems([]);
-                  setImportDialogOpen(true);
-                }}
+                onClick={() => setImportDialogOpen(true)}
               >
                 <Plus className="w-4 h-4 mr-1" />
                 Import Custom
@@ -222,9 +255,9 @@ export default function MarketplacePage() {
                 {Array.from({ length: 2 }).map((_, i) => (
                   <div key={i} className="space-y-3">
                     <Skeleton className="h-6 w-48" />
-                    <div className="grid gap-3 md:grid-cols-2">
+                    <div className="grid gap-2 grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
                       {Array.from({ length: 4 }).map((_, j) => (
-                        <Skeleton key={j} className="h-24 w-full rounded-lg" />
+                        <Skeleton key={j} className="h-16 w-full rounded-lg" />
                       ))}
                     </div>
                   </div>
@@ -239,7 +272,9 @@ export default function MarketplacePage() {
                     sourceIndex={idx}
                     searchTerm={searchTerm}
                     typeFilter={typeFilter}
-                    onImport={handleImportFromCatalog}
+                    installedIds={installedIds}
+                    onDirectInstall={handleDirectInstall}
+                    installingId={installingId}
                   />
                 ))}
               </div>
@@ -254,15 +289,33 @@ export default function MarketplacePage() {
           </TabsContent>
 
           <TabsContent value="installed" className="space-y-4 mt-4">
-            <div className="flex justify-end">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search installed..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+              <div className="flex gap-1">
+                {(["all", "skill", "command", "agent"] as const).map((t) => (
+                  <Button
+                    key={t}
+                    variant={typeFilter === t ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setTypeFilter(t)}
+                    className="capitalize"
+                  >
+                    {t === "all" ? "All" : `${t}s`}
+                  </Button>
+                ))}
+              </div>
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => {
-                  setPrefillUrl("");
-                  setPrefillItems([]);
-                  setImportDialogOpen(true);
-                }}
+                onClick={() => setImportDialogOpen(true)}
               >
                 <Plus className="w-4 h-4 mr-1" />
                 Import Custom
@@ -270,66 +323,58 @@ export default function MarketplacePage() {
             </div>
 
             {installedLoading ? (
-              <div className="space-y-3">
-                {Array.from({ length: 3 }).map((_, i) => (
+              <div className="grid gap-2 grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+                {Array.from({ length: 4 }).map((_, i) => (
                   <Skeleton key={i} className="h-16 w-full rounded-lg" />
                 ))}
               </div>
-            ) : installed && installed.length > 0 ? (
-              <div className="space-y-4">
-                {(["skill", "command", "agent", "workflow"] as const).map((type) => {
-                  const items = installedGrouped[type];
-                  if (!items || items.length === 0) return null;
+            ) : filteredInstalled.length > 0 ? (
+              <div className="grid gap-2 grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+                {filteredInstalled.map((item) => {
+                  const isRemoving =
+                    uninstallMutation.isPending &&
+                    uninstallMutation.variables?.itemId === item.itemId;
                   return (
-                    <div key={type} className="space-y-2">
-                      <h3 className="text-sm font-medium uppercase tracking-wider text-muted-foreground capitalize">
-                        {type}s ({items.length})
-                      </h3>
-                      {items.map((item) => {
-                        const isRemoving =
-                          uninstallMutation.isPending &&
-                          uninstallMutation.variables?.itemId === item.itemId;
-                        return (
-                          <div
-                            key={item.itemId}
-                            className="flex items-center gap-3 p-3 rounded-lg border"
+                    <div
+                      key={item.itemId}
+                      className="flex items-start gap-2 p-2.5 rounded-lg border"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-sm font-medium truncate">
+                            {item.itemName}
+                          </span>
+                          <Badge
+                            variant="secondary"
+                            className={`text-[10px] px-1.5 py-0 ${MARKETPLACE_CATEGORY_COLORS[item.itemType]}`}
                           >
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <span className="text-sm font-medium">
-                                  {item.itemName}
-                                </span>
-                                <Badge
-                                  variant="secondary"
-                                  className={MARKETPLACE_CATEGORY_COLORS[item.itemType]}
-                                >
-                                  {item.itemType}
-                                </Badge>
-                              </div>
-                              <p className="text-xs text-muted-foreground truncate mt-0.5">
-                                {item.sourceUrl}
-                              </p>
-                            </div>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() =>
-                                handleUninstall(item.itemId, item.itemName)
-                              }
-                              disabled={isRemoving}
-                            >
-                              {isRemoving ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                              ) : (
-                                <Trash2 className="w-4 h-4" />
-                              )}
-                            </Button>
-                          </div>
-                        );
-                      })}
+                            {item.itemType}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground truncate mt-0.5">
+                          {item.sourceUrl}
+                        </p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 shrink-0"
+                        onClick={() => handleUninstall(item.itemId, item.itemName)}
+                        disabled={isRemoving}
+                      >
+                        {isRemoving ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-3.5 h-3.5" />
+                        )}
+                      </Button>
                     </div>
                   );
                 })}
+              </div>
+            ) : installed && installed.length > 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                <p className="text-sm">No items match your filters.</p>
               </div>
             ) : (
               <div className="text-center py-12 text-muted-foreground">
@@ -345,14 +390,8 @@ export default function MarketplacePage() {
 
       <ImportSourceDialog
         projectName={projectName}
-        prefillUrl={prefillUrl}
-        prefillItems={prefillItems}
         open={importDialogOpen}
         onOpenChange={setImportDialogOpen}
-        onImported={() => {
-          setPrefillUrl("");
-          setPrefillItems([]);
-        }}
       />
     </div>
   );
