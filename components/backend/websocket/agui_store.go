@@ -274,18 +274,32 @@ func loadEvents(sessionID string) []map[string]interface{} {
 		return events
 	}
 
+	// Read a single byte at the seek position to check if we landed on a
+	// record boundary ('\n' or start-of-file).  If so, the next scanner
+	// line is a complete record and should not be skipped.
+	var boundary [1]byte
+	onBoundary := false
+	if offset == 0 {
+		onBoundary = true
+	} else if n, err := f.Read(boundary[:]); err == nil && n == 1 && boundary[0] == '\n' {
+		onBoundary = true
+	}
+	// If we read one byte that wasn't '\n', we're mid-record — the
+	// scanner will pick up from this position and the first line will
+	// be partial (skip it below).
+
 	var events []map[string]interface{}
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 0, scannerInitialBufferSize), scannerMaxLineSize)
-	first := true
+	skipFirst := !onBoundary
 	for scanner.Scan() {
 		line := scanner.Bytes()
 		if len(line) == 0 {
 			continue
 		}
-		// Skip the first line — likely partial from the seek
-		if first {
-			first = false
+		// Skip the first line only if the seek landed mid-record
+		if skipFirst {
+			skipFirst = false
 			continue
 		}
 		var evt map[string]interface{}

@@ -83,6 +83,9 @@ func (c *ssarCache) check(key string) (allowed bool, found bool) {
 
 // store saves an SSAR result in the cache with TTL.
 func (c *ssarCache) store(key string, allowed bool) {
+	if CacheDisabled {
+		return
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
