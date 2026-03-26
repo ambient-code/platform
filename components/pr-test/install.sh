@@ -8,6 +8,13 @@ SOURCE_NAMESPACE="${SOURCE_NAMESPACE:-ambient-code--runtime-int}"
 CONFIG_NAMESPACE="${CONFIG_NAMESPACE:-ambient-code--config}"
 ARGOCD_TOKEN_SECRET="${ARGOCD_TOKEN_SECRET:-tenantaccess-argocd-account-token}"
 
+REQUIRED_SOURCE_SECRETS=(
+  ambient-vertex
+  ambient-api-server
+  postgresql-credentials
+  frontend-oauth-config
+)
+
 usage() {
   echo "Usage: $0 <namespace> <image-tag>"
   echo "  namespace:  e.g. ambient-code--pr-42"
@@ -23,9 +30,6 @@ usage() {
 [[ -z "$NAMESPACE" || -z "$IMAGE_TAG" ]] && usage
 
 PR_ID=$(echo "$NAMESPACE" | grep -oE 'pr-[0-9]+')
-CLUSTER_DOMAIN=$(oc get route frontend-route -n "$SOURCE_NAMESPACE" \
-  -o jsonpath='{.spec.host}' 2>/dev/null | sed 's/^[^.]*\.//' \
-  || echo "apps.dev-osd-east-1.mxty.p1.openshiftapps.com")
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -40,7 +44,6 @@ copy_secret() {
 }
 
 echo "==> Installing Ambient into $NAMESPACE with images tagged $IMAGE_TAG"
-echo "    Cluster domain: $CLUSTER_DOMAIN"
 
 echo "==> Step 1: Verifying cluster-scoped resources exist (CRDs, ClusterRoles)"
 FAILED=0
@@ -62,15 +65,29 @@ for cr in agentic-operator ambient-frontend-auth ambient-project-admin ambient-p
 done
 [[ $FAILED -eq 1 ]] && exit 1
 
-echo "==> Step 2: Copying secrets from $SOURCE_NAMESPACE"
-copy_secret ambient-vertex
-copy_secret ambient-api-server
+echo "==> Step 2: Verifying required secrets exist in $SOURCE_NAMESPACE"
+FAILED=0
+for secret in "${REQUIRED_SOURCE_SECRETS[@]}"; do
+  if oc get secret "$secret" -n "$SOURCE_NAMESPACE" &>/dev/null 2>&1; then
+    echo "    Secret OK: $secret"
+  else
+    echo "ERROR: Required secret missing from $SOURCE_NAMESPACE: $secret"
+    echo "       Copy it manually: oc get secret $secret -n <source> -o yaml | oc apply -n $SOURCE_NAMESPACE -f -"
+    FAILED=1
+  fi
+done
+[[ $FAILED -eq 1 ]] && exit 1
 
-echo "==> Step 3: Fetching ArgoCD SA token from $CONFIG_NAMESPACE"
+echo "==> Step 3: Copying secrets from $SOURCE_NAMESPACE"
+for secret in "${REQUIRED_SOURCE_SECRETS[@]}"; do
+  copy_secret "$secret"
+done
+
+echo "==> Step 4: Fetching ArgoCD SA token from $CONFIG_NAMESPACE"
 ARGOCD_TOKEN=$(oc get secret "$ARGOCD_TOKEN_SECRET" -n "$CONFIG_NAMESPACE" \
   -o jsonpath='{.data.token}' | base64 -d)
 
-echo "==> Step 4: Deploying production overlay with image tag $IMAGE_TAG"
+echo "==> Step 5: Deploying production overlay with image tag $IMAGE_TAG"
 TMPDIR=$(mktemp -d)
 cp -r "$MANIFESTS_DIR/." "$TMPDIR/"
 trap "rm -rf $TMPDIR" EXIT
@@ -94,18 +111,8 @@ import sys, re, os
 
 namespace = os.environ['NAMESPACE']
 pr_id = os.environ['PR_ID']
-cluster_domain = os.environ['CLUSTER_DOMAIN']
 
 SKIP_KINDS = {'Namespace'}
-
-ROUTE_HOSTS = {
-    'ambient-api-server-grpc': f'api-grpc-{pr_id}.{cluster_domain}',
-    'ambient-api-server':      f'api-{pr_id}.{cluster_domain}',
-    'frontend-route':          f'frontend-{pr_id}.{cluster_domain}',
-    'backend-route':           f'backend-{pr_id}.{cluster_domain}',
-    'public-api-route':        f'pubapi-{pr_id}.{cluster_domain}',
-    'unleash-route':           f'unleash-{pr_id}.{cluster_domain}',
-}
 
 CRB_NS_RE = re.compile(r'(  namespace:\s*)ambient-code(\s*$)', re.MULTILINE)
 
@@ -119,8 +126,6 @@ for doc in sys.stdin.read().split('\n---\n'):
     kind = kind_m.group(1)
     if kind in SKIP_KINDS:
         continue
-    name_m = re.search(r'^  name:\s*(\S+)', doc, re.MULTILINE)
-    name = name_m.group(1) if name_m else ''
     if kind == 'ClusterRoleBinding':
         doc = CRB_NS_RE.sub(r'\g<1>' + namespace + r'\g<2>', doc)
     if kind == 'PersistentVolumeClaim':
@@ -139,13 +144,13 @@ for doc in sys.stdin.read().split('\n---\n'):
 PYEOF
 
 kustomize build . \
-  | NAMESPACE="$NAMESPACE" PR_ID="$PR_ID" CLUSTER_DOMAIN="$CLUSTER_DOMAIN" \
+  | NAMESPACE="$NAMESPACE" PR_ID="$PR_ID" \
     python3 "$FILTER_SCRIPT" \
   | oc apply --token="$ARGOCD_TOKEN" -n "$NAMESPACE" -f -
 
 popd > /dev/null
 
-echo "==> Step 5: Patching operator ConfigMap with PR image tags"
+echo "==> Step 6: Patching operator ConfigMap with PR image tags"
 SOURCE_OPERATOR_CONFIG=$(oc get configmap operator-config -n "$SOURCE_NAMESPACE" -o json \
   | jq -r '.data | to_entries | map(select(.key | test("VERTEX|CLOUD_ML|ANTHROPIC|GOOGLE"))) | from_entries' \
   2>/dev/null || echo '{}')
@@ -158,7 +163,7 @@ VERTEX_PATCH=$(echo "$SOURCE_OPERATOR_CONFIG" | jq -c \
 oc patch configmap operator-config -n "$NAMESPACE" --type=merge \
   -p "{\"data\": $VERTEX_PATCH}"
 
-echo "==> Step 6: Patching agent registry ConfigMap with PR image tags"
+echo "==> Step 7: Patching agent registry ConfigMap with PR image tags"
 REGISTRY=$(oc get configmap ambient-agent-registry -n "$NAMESPACE" \
   -o jsonpath='{.data.agent-registry\.json}' 2>/dev/null || echo "{}")
 
@@ -170,7 +175,7 @@ REGISTRY=$(echo "$REGISTRY" | sed \
 oc patch configmap ambient-agent-registry -n "$NAMESPACE" --type=merge \
   -p "{\"data\":{\"agent-registry.json\":$(echo "$REGISTRY" | jq -Rs .)}}"
 
-echo "==> Step 7: Waiting for rollouts"
+echo "==> Step 8: Waiting for rollouts"
 for deploy in backend-api frontend agentic-operator postgresql minio unleash public-api; do
   echo "    Waiting for $deploy..."
   oc rollout status deployment/$deploy -n "$NAMESPACE" --timeout=300s
@@ -182,21 +187,13 @@ oc rollout status deployment/ambient-api-server-db -n "$NAMESPACE" --timeout=300
 echo "    Waiting for ambient-api-server..."
 oc rollout status deployment/ambient-api-server -n "$NAMESPACE" --timeout=300s
 
-echo "==> Step 8: Verifying health"
-BACKEND_HOST=$(oc get route backend-route -n "$NAMESPACE" \
-  -o jsonpath='{.spec.host}' 2>/dev/null || true)
-
-if [[ -n "$BACKEND_HOST" ]]; then
-  HEALTH=$(curl -s "https://${BACKEND_HOST}/health" || true)
-  echo "    Backend health: $HEALTH"
-fi
-
+echo "==> Step 9: Verifying health"
 FRONTEND_URL=$(oc get route frontend-route -n "$NAMESPACE" \
   -o jsonpath='https://{.spec.host}' 2>/dev/null || true)
 
 echo ""
 echo "==> Ambient installed successfully in $NAMESPACE"
-echo "    Frontend:  $FRONTEND_URL"
+echo "    Frontend:  ${FRONTEND_URL:-<no route yet>}"
 echo "    Image tag: $IMAGE_TAG"
 
 if [[ -n "${GITHUB_OUTPUT:-}" ]]; then

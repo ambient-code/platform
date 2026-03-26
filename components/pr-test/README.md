@@ -14,6 +14,13 @@ bash components/pr-test/provision.sh destroy <instance-id>
 
 > **Operational how-to:** `.claude/skills/ambient-pr-test/SKILL.md` — step-by-step PR test workflow that references this spec.
 
+## Reference
+
+| Resource | URL |
+|----------|-----|
+| Tenant Operator | https://gitlab.cee.redhat.com/paas/tenant-operator |
+| Tenant Operator Access | https://gitlab.cee.redhat.com/ddis/ai/devops/ddis-ai-gitops |
+
 ## Purpose
 
 This specification defines how Ambient Code creates and destroys ephemeral OpenShift namespaces for S0.x merge queue test instances. Each S0.x instance is a fully independent, shared-nothing installation of Ambient, used for integration testing of a single candidate branch before it merges to `main`.
