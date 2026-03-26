@@ -43,18 +43,32 @@ async def stop_task(task_id: str, request: Request):
         # Treat as success — the task is no longer running either way
         logger.warning(f"stop_task({task_id}) raised: {e}")
 
-    # Emit task:stop_requested event and update registry regardless of
-    # whether stop_task succeeded or the task was already dead.
-    if adapter:
-        from ag_ui.core import CustomEvent, EventType
+    # Emit task:stop_requested event by pushing directly into the
+    # session worker's output queue. The adapter recognizes AG-UI
+    # BaseEvents and yields them immediately (no hook queue delay).
+    from ag_ui.core import CustomEvent, EventType
 
-        adapter._hook_event_queue.put_nowait(
-            CustomEvent(
-                type=EventType.CUSTOM,
-                name="task:stop_requested",
-                value={"task_id": task_id},
-            )
-        )
+    stop_event = CustomEvent(
+        type=EventType.CUSTOM,
+        name="task:stop_requested",
+        value={"task_id": task_id},
+    )
+
+    sm = getattr(bridge, "_session_manager", None)
+    if sm:
+        tid = thread_id or (bridge._context.session_id if bridge._context else None)
+        worker = sm.get_existing(tid) if tid else None
+        if worker:
+            # Push to whichever queue the adapter is reading from
+            if worker._active_output_queue is not None:
+                await worker._active_output_queue.put(stop_event)
+            else:
+                try:
+                    worker._between_run_queue.put_nowait(stop_event)
+                except Exception:
+                    pass
+
+    if adapter:
         existing = adapter._task_registry.get(task_id, {})
         existing["status"] = "stopped"
         adapter._task_registry[task_id] = existing

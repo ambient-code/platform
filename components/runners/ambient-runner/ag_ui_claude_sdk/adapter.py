@@ -808,22 +808,12 @@ class ClaudeAgentAdapter:
         stream_error: Optional[Exception] = None
 
         try:
-            message_iter = message_stream.__aiter__()
-
-            while True:
-                # Race: get next SDK message with a timeout so hooks
-                # drain continuously (every 100ms) even when the SDK
-                # is idle between messages.
-                try:
-                    message = await asyncio.wait_for(
-                        message_iter.__anext__(), timeout=0.1
-                    )
-                except StopAsyncIteration:
-                    break
-                except asyncio.TimeoutError:
-                    # No message — drain hooks and loop
-                    for hook_event in self.drain_hook_events():
-                        yield hook_event
+            async for message in message_stream:
+                # Pass-through: if something pushes an AG-UI event
+                # directly into the message stream (e.g. stop endpoint),
+                # yield it immediately without SDK processing.
+                if isinstance(message, BaseEvent):
+                    yield message
                     continue
 
                 message_count += 1
