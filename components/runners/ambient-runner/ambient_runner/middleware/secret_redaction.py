@@ -98,10 +98,9 @@ def _redact_event(event: BaseEvent, secret_values: list[tuple[str, str]]) -> Bas
             return event.model_copy(update={"delta": redacted})
 
     elif isinstance(event, ToolCallResultEvent):
-        if isinstance(event.content, str):
-            redacted = _redact_text(event.content, secret_values)
-            if redacted != event.content:
-                return event.model_copy(update={"content": redacted})
+        redacted_content = _redact_value(event.content, secret_values)
+        if redacted_content is not event.content:
+            return event.model_copy(update={"content": redacted_content})
 
     elif isinstance(event, RunErrorEvent):
         redacted = _redact_text(event.message, secret_values)
@@ -109,34 +108,43 @@ def _redact_event(event: BaseEvent, secret_values: list[tuple[str, str]]) -> Bas
             return event.model_copy(update={"message": redacted})
 
     elif isinstance(event, CustomEvent):
-        if isinstance(event.value, str):
-            redacted = _redact_text(event.value, secret_values)
-            if redacted != event.value:
-                return event.model_copy(update={"value": redacted})
-        elif isinstance(event.value, dict):
-            redacted_dict = _redact_dict(event.value, secret_values)
-            if redacted_dict != event.value:
-                return event.model_copy(update={"value": redacted_dict})
+        redacted_val = _redact_value(event.value, secret_values)
+        if redacted_val is not event.value:
+            return event.model_copy(update={"value": redacted_val})
 
     return event
+
+
+def _redact_value(value: object, secret_values: list[tuple[str, str]]) -> object:
+    """Recursively redact secrets in str/dict/list structures.
+
+    Returns the original object unchanged when no secrets are found.
+    """
+    if isinstance(value, str):
+        return _redact_text(value, secret_values)
+    if isinstance(value, dict):
+        return _redact_dict(value, secret_values)
+    if isinstance(value, list):
+        result: list | None = None
+        for i, item in enumerate(value):
+            redacted_item = _redact_value(item, secret_values)
+            if redacted_item is not item:
+                if result is None:
+                    result = list(value)
+                result[i] = redacted_item
+        return result if result is not None else value
+    return value
 
 
 def _redact_dict(d: dict, secret_values: list[tuple[str, str]]) -> dict:
     """Recursively redact string values in a dict. Returns original if unchanged."""
     result: dict | None = None
     for k, v in d.items():
-        if isinstance(v, str):
-            redacted = _redact_text(v, secret_values)
-            if redacted != v:
-                if result is None:
-                    result = dict(d)
-                result[k] = redacted
-        elif isinstance(v, dict):
-            redacted_v = _redact_dict(v, secret_values)
-            if redacted_v != v:
-                if result is None:
-                    result = dict(d)
-                result[k] = redacted_v
+        redacted_v = _redact_value(v, secret_values)
+        if redacted_v is not v:
+            if result is None:
+                result = dict(d)
+            result[k] = redacted_v
     return result if result is not None else d
 
 

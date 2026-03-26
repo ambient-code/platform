@@ -22,6 +22,7 @@ from ambient_runner.middleware.secret_redaction import (
     _redact_dict,
     _redact_event,
     _redact_text,
+    _redact_value,
     secret_redaction_middleware,
 )
 
@@ -183,6 +184,16 @@ class TestRedactEvent:
         result = _redact_event(event, self.SECRETS)
         assert "supersecretvalue123" not in result.value["nested"]["key"]
 
+    def test_custom_event_list_value(self):
+        event = CustomEvent(
+            type=EventType.CUSTOM,
+            name="test",
+            value=["clean", "supersecretvalue123", {"k": "supersecretvalue123"}],
+        )
+        result = _redact_event(event, self.SECRETS)
+        assert "supersecretvalue123" not in result.value[1]
+        assert "supersecretvalue123" not in result.value[2]["k"]
+
     def test_passthrough_non_text_events(self):
         event = ToolCallStartEvent(
             type=EventType.TOOL_CALL_START,
@@ -236,6 +247,49 @@ class TestRedactDict:
         d = {"count": 42, "flag": True, "items": [1, 2, 3]}
         result = _redact_dict(d, self.SECRETS)
         assert result is d
+
+    def test_redacts_list_values_in_dict(self):
+        d = {"items": ["clean", "has secret_value_here", "also clean"]}
+        result = _redact_dict(d, self.SECRETS)
+        assert "secret_value_here" not in result["items"][1]
+
+    def test_redacts_nested_dict_in_list(self):
+        d = {"items": [{"key": "secret_value_here"}]}
+        result = _redact_dict(d, self.SECRETS)
+        assert "secret_value_here" not in result["items"][0]["key"]
+
+
+# -- Unit tests for _redact_value --
+
+
+class TestRedactValue:
+    SECRETS = [("MY_KEY", "secret_value_here")]
+
+    def test_redacts_string(self):
+        result = _redact_value("contains secret_value_here", self.SECRETS)
+        assert "secret_value_here" not in result
+
+    def test_redacts_list(self):
+        val = ["clean", "secret_value_here", "also clean"]
+        result = _redact_value(val, self.SECRETS)
+        assert "secret_value_here" not in result[1]
+        assert result[0] == "clean"
+        assert result[2] == "also clean"
+
+    def test_list_passthrough_if_unchanged(self):
+        val = ["clean", "no secrets"]
+        result = _redact_value(val, self.SECRETS)
+        assert result is val
+
+    def test_passthrough_non_redactable(self):
+        assert _redact_value(42, self.SECRETS) == 42
+        assert _redact_value(True, self.SECRETS) is True
+        assert _redact_value(None, self.SECRETS) is None
+
+    def test_nested_list_in_list(self):
+        val = [["secret_value_here"]]
+        result = _redact_value(val, self.SECRETS)
+        assert "secret_value_here" not in result[0][0]
 
 
 # -- Integration test for the full middleware --
