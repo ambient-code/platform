@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"time"
 
+	"ambient-code-backend/httputil"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -15,7 +17,7 @@ func ValidateGitHubToken(ctx context.Context, token string) (bool, error) {
 		return false, fmt.Errorf("token is empty")
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := httputil.NewClient(10 * time.Second)
 	req, err := http.NewRequestWithContext(ctx, "GET", "https://api.github.com/user", nil)
 	if err != nil {
 		return false, fmt.Errorf("failed to create request")
@@ -44,7 +46,7 @@ func ValidateGitLabToken(ctx context.Context, token, instanceURL string) (bool, 
 		instanceURL = "https://gitlab.com"
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := httputil.NewClient(10 * time.Second)
 	apiURL := fmt.Sprintf("%s/api/v4/user", instanceURL)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
@@ -72,7 +74,7 @@ func ValidateJiraToken(ctx context.Context, url, email, apiToken string) (bool, 
 		return false, fmt.Errorf("missing required credentials")
 	}
 
-	client := &http.Client{Timeout: 15 * time.Second}
+	client := httputil.NewClient(15 * time.Second)
 
 	// Try API v3 first (Jira Cloud), fallback to v2 (Jira Server/DC)
 	apiURLs := []string{
@@ -123,7 +125,7 @@ func ValidateGoogleToken(ctx context.Context, accessToken string) (bool, error) 
 		return false, fmt.Errorf("token is empty")
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := httputil.NewClient(10 * time.Second)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", "https://www.googleapis.com/oauth2/v1/userinfo", nil)
 	if err != nil {

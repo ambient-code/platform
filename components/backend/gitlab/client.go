@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"time"
 
+	"ambient-code-backend/httputil"
 	"ambient-code-backend/types"
 	"github.com/google/uuid"
 )
@@ -31,11 +32,9 @@ type Client struct {
 // NewClient creates a new GitLab API client with 15-second timeout
 func NewClient(baseURL, token string) *Client {
 	return &Client{
-		httpClient: &http.Client{
-			Timeout: 15 * time.Second,
-		},
-		baseURL: baseURL,
-		token:   token,
+		httpClient: httputil.NewClient(15 * time.Second),
+		baseURL:    baseURL,
+		token:      token,
 	}
 }
 
