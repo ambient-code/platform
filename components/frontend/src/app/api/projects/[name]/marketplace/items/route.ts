@@ -1,70 +1,49 @@
 import { BACKEND_URL } from "@/lib/config";
-import { NextRequest, NextResponse } from "next/server";
+import { buildForwardHeadersAsync } from "@/lib/auth";
 
 export async function GET(
-  request: NextRequest,
+  request: Request,
   { params }: { params: Promise<{ name: string }> }
 ) {
   try {
     const { name: projectName } = await params;
+    const headers = await buildForwardHeadersAsync(request);
 
     const response = await fetch(
-      `${BACKEND_URL}/projects/${projectName}/marketplace/items`,
-      {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          "X-User-ID": request.headers.get("X-User-ID") || "",
-          "X-User-Groups": request.headers.get("X-User-Groups") || "",
-        },
-      }
+      `${BACKEND_URL}/projects/${encodeURIComponent(projectName)}/marketplace/items`,
+      { headers }
     );
-
     const data = await response.text();
-    return new NextResponse(data, {
+    return new Response(data, {
       status: response.status,
       headers: { "Content-Type": "application/json" },
     });
   } catch (error) {
     console.error("Failed to fetch installed items:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch installed items" },
-      { status: 500 }
-    );
+    return Response.json({ error: "Failed to fetch installed items" }, { status: 500 });
   }
 }
 
 export async function POST(
-  request: NextRequest,
+  request: Request,
   { params }: { params: Promise<{ name: string }> }
 ) {
   try {
     const { name: projectName } = await params;
     const body = await request.text();
+    const headers = await buildForwardHeadersAsync(request);
 
     const response = await fetch(
-      `${BACKEND_URL}/projects/${projectName}/marketplace/items`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-User-ID": request.headers.get("X-User-ID") || "",
-          "X-User-Groups": request.headers.get("X-User-Groups") || "",
-        },
-        body,
-      }
+      `${BACKEND_URL}/projects/${encodeURIComponent(projectName)}/marketplace/items`,
+      { method: "POST", headers, body }
     );
-
     const data = await response.text();
-    return new NextResponse(data, {
+    return new Response(data, {
       status: response.status,
       headers: { "Content-Type": "application/json" },
     });
   } catch (error) {
     console.error("Failed to install items:", error);
-    return NextResponse.json(
-      { error: "Failed to install items" },
-      { status: 500 }
-    );
+    return Response.json({ error: "Failed to install items" }, { status: 500 });
   }
 }

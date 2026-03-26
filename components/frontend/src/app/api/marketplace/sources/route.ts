@@ -1,26 +1,17 @@
 import { BACKEND_URL } from "@/lib/config";
-import { NextRequest, NextResponse } from "next/server";
+import { buildForwardHeadersAsync } from "@/lib/auth";
 
-export async function GET(request: NextRequest) {
+export async function GET(request: Request) {
   try {
-    const response = await fetch(`${BACKEND_URL}/marketplace/sources`, {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: request.headers.get("Authorization") || "",
-      },
-    });
-
+    const headers = await buildForwardHeadersAsync(request);
+    const response = await fetch(`${BACKEND_URL}/marketplace/sources`, { headers });
     const data = await response.text();
-    return new NextResponse(data, {
+    return new Response(data, {
       status: response.status,
       headers: { "Content-Type": "application/json" },
     });
   } catch (error) {
     console.error("Failed to fetch marketplace sources:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch marketplace sources" },
-      { status: 500 }
-    );
+    return Response.json({ error: "Failed to fetch marketplace sources" }, { status: 500 });
   }
 }

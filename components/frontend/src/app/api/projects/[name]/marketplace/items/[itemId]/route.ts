@@ -1,37 +1,27 @@
 import { BACKEND_URL } from "@/lib/config";
-import { NextRequest, NextResponse } from "next/server";
+import { buildForwardHeadersAsync } from "@/lib/auth";
 
 export async function DELETE(
-  request: NextRequest,
+  request: Request,
   { params }: { params: Promise<{ name: string; itemId: string }> }
 ) {
   try {
     const { name: projectName, itemId } = await params;
-    const sourceUrl = request.nextUrl.searchParams.get("sourceUrl") || "";
-    const queryString = sourceUrl ? `?sourceUrl=${encodeURIComponent(sourceUrl)}` : "";
+    const url = new URL(request.url);
+    const queryString = url.search;
+    const headers = await buildForwardHeadersAsync(request);
 
     const response = await fetch(
-      `${BACKEND_URL}/projects/${projectName}/marketplace/items/${itemId}${queryString}`,
-      {
-        method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-          "X-User-ID": request.headers.get("X-User-ID") || "",
-          "X-User-Groups": request.headers.get("X-User-Groups") || "",
-        },
-      }
+      `${BACKEND_URL}/projects/${encodeURIComponent(projectName)}/marketplace/items/${encodeURIComponent(itemId)}${queryString}`,
+      { method: "DELETE", headers }
     );
-
     const data = await response.text();
-    return new NextResponse(data, {
+    return new Response(data, {
       status: response.status,
       headers: { "Content-Type": "application/json" },
     });
   } catch (error) {
     console.error("Failed to uninstall item:", error);
-    return NextResponse.json(
-      { error: "Failed to uninstall item" },
-      { status: 500 }
-    );
+    return Response.json({ error: "Failed to uninstall item" }, { status: 500 });
   }
 }
