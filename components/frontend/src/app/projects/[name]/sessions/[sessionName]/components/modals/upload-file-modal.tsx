@@ -289,14 +289,27 @@ export function UploadFileModal({
 
           <TabsContent value="local" className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="file-upload">Choose File</Label>
-              <Input
+              <input
                 id="file-upload"
                 ref={fileInputRef}
                 type="file"
                 onChange={handleFileSelect}
                 disabled={isLoading || isValidating}
+                className="sr-only"
+                aria-label="Choose File"
               />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isLoading || isValidating}
+                className="w-full border-2 border-dashed border-muted-foreground/25 hover:border-primary/50 rounded-lg p-6 flex flex-col items-center gap-2 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <FileUp className="h-8 w-8 text-muted-foreground/60" />
+                <span className="text-sm font-medium">Click to choose a file</span>
+                <span className="text-xs text-muted-foreground">
+                  Max {formatFileSize(MAX_FILE_SIZE)}
+                </span>
+              </button>
               {selectedFile && !isValidating && (
                 <p className="text-sm text-muted-foreground">
                   Selected: {selectedFile.name} ({(selectedFile.size / 1024).toFixed(1)} KB)
@@ -307,8 +320,7 @@ export function UploadFileModal({
 
           <TabsContent value="folder" className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="folder-upload">Choose Folder</Label>
-              <Input
+              <input
                 id="folder-upload"
                 ref={folderInputRef}
                 type="file"
@@ -317,7 +329,21 @@ export function UploadFileModal({
                 directory=""
                 onChange={handleFolderSelect}
                 disabled={isLoading || isValidating}
+                className="sr-only"
+                aria-label="Choose Folder"
               />
+              <button
+                type="button"
+                onClick={() => folderInputRef.current?.click()}
+                disabled={isLoading || isValidating}
+                className="w-full border-2 border-dashed border-muted-foreground/25 hover:border-primary/50 rounded-lg p-6 flex flex-col items-center gap-2 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <FolderUp className="h-8 w-8 text-muted-foreground/60" />
+                <span className="text-sm font-medium">Click to choose a folder</span>
+                <span className="text-xs text-muted-foreground">
+                  Max {formatFileSize(MAX_FILE_SIZE)} per file, {formatFileSize(MAX_FOLDER_SIZE)} total
+                </span>
+              </button>
               {selectedFolderFiles.length > 0 && !isValidating && (
                 <div className="text-sm text-muted-foreground space-y-1">
                   <p>
@@ -328,7 +354,6 @@ export function UploadFileModal({
               )}
               <p className="text-xs text-muted-foreground">
                 All files in the folder will be uploaded preserving directory structure.
-                Max {formatFileSize(MAX_FILE_SIZE)} per file, {formatFileSize(MAX_FOLDER_SIZE)} total per folder.
               </p>
             </div>
           </TabsContent>
