@@ -258,6 +258,11 @@ def add_ambient_endpoints(
 
         app.include_router(tasks_router)
 
+    # Between-run event stream (always registered)
+    from ambient_runner.endpoints.events import router as events_router
+
+    app.include_router(events_router)
+
     caps = bridge.capabilities()
     logger.info(
         f"Ambient endpoints registered: framework={caps.framework}, "

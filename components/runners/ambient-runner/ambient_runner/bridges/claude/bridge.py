@@ -247,6 +247,23 @@ class ClaudeBridge(PlatformBridge):
 
         await worker.stop_task(task_id)
 
+    async def stream_between_run_events(
+        self, thread_id: str
+    ) -> AsyncIterator[BaseEvent]:
+        """Yield AG-UI events for SDK messages arriving between user runs."""
+        if not self._session_manager or not self._adapter:
+            return
+
+        worker = self._session_manager.get_existing(thread_id)
+        if not worker:
+            return
+
+        async for msg in worker.between_run_events():
+            async for event in self._adapter.process_between_run_message(
+                msg, thread_id
+            ):
+                yield event
+
     @property
     def task_registry(self) -> dict:
         """Background task metadata tracked by the adapter."""

@@ -252,6 +252,9 @@ class ClaudeAgentAdapter:
         # task_id -> output file path (from TaskNotificationMessage / SubagentStop hook)
         self._task_outputs: Dict[str, str] = {}
 
+        # Track last run ID for synthetic between-run parentage
+        self._last_run_id: Optional[str] = None
+
     @property
     def halted(self) -> bool:
         """Whether the last run halted due to a frontend tool.
@@ -399,6 +402,9 @@ class ClaudeAgentAdapter:
                 message_stream,
             ):
                 yield event
+
+            # Track last run ID for between-run synthetic parentage
+            self._last_run_id = run_id
 
             # Emit RUN_FINISHED with result data from ResultMessage
             yield RunFinishedEvent(
@@ -1323,3 +1329,142 @@ class ClaudeAgentAdapter:
         # Re-raise to let run() emit RunErrorEvent
         if stream_error is not None:
             raise stream_error
+
+    async def process_between_run_message(
+        self, message: Any, thread_id: str
+    ) -> AsyncIterator[BaseEvent]:
+        """Convert a between-run SDK message into AG-UI events.
+
+        CUSTOM events (TaskStarted, TaskProgress, TaskNotification) pass
+        through directly — they don't need a run envelope.
+
+        Text content (AssistantMessage) gets wrapped in a synthetic
+        RUN_STARTED / RUN_FINISHED pair so the frontend treats it as
+        a proper run.
+        """
+        from claude_agent_sdk import (
+            AssistantMessage,
+            TaskStartedMessage,
+            TaskProgressMessage,
+            TaskNotificationMessage,
+        )
+
+        # --- Drain hook event queue (hooks fire independently) ---
+        while not self._hook_event_queue.empty():
+            try:
+                hook_event = self._hook_event_queue.get_nowait()
+                yield hook_event
+            except asyncio.QueueEmpty:
+                break
+
+        # --- CUSTOM events: task lifecycle ---
+        if isinstance(message, TaskStartedMessage):
+            task_info = {
+                "task_id": message.task_id,
+                "description": getattr(message, "description", ""),
+                "task_type": getattr(message, "task_type", ""),
+                "session_id": getattr(message, "session_id", ""),
+                "status": "running",
+            }
+            self._task_registry[message.task_id] = task_info
+            yield CustomEvent(
+                type=EventType.CUSTOM,
+                name="task:started",
+                value=task_info,
+            )
+            return
+
+        if isinstance(message, TaskProgressMessage):
+            usage = getattr(message, "usage", None)
+            progress_value = {
+                "task_id": message.task_id,
+                "description": getattr(message, "description", ""),
+                "usage": dict(usage) if usage else None,
+                "last_tool_name": getattr(message, "last_tool_name", None),
+            }
+            existing = self._task_registry.get(message.task_id, {})
+            existing.update(progress_value)
+            self._task_registry[message.task_id] = existing
+            yield CustomEvent(
+                type=EventType.CUSTOM,
+                name="task:progress",
+                value=progress_value,
+            )
+            return
+
+        if isinstance(message, TaskNotificationMessage):
+            usage = getattr(message, "usage", None)
+            output_file = getattr(message, "output_file", None)
+            notification_value = {
+                "task_id": message.task_id,
+                "status": getattr(message, "status", "completed"),
+                "summary": getattr(message, "summary", ""),
+                "usage": dict(usage) if usage else None,
+                "output_file": output_file,
+            }
+            existing = self._task_registry.get(message.task_id, {})
+            existing.update(notification_value)
+            self._task_registry[message.task_id] = existing
+            if output_file:
+                self._task_outputs[message.task_id] = output_file
+            yield CustomEvent(
+                type=EventType.CUSTOM,
+                name="task:completed",
+                value=notification_value,
+            )
+            return
+
+        # --- Text content: wrap in synthetic run ---
+        if isinstance(message, AssistantMessage):
+            synthetic_run_id = str(uuid.uuid4())
+            msg_id = str(uuid.uuid4())
+
+            yield RunStartedEvent(
+                type=EventType.RUN_STARTED,
+                thread_id=thread_id,
+                run_id=synthetic_run_id,
+                timestamp=now_ms(),
+                parent_run_id=self._last_run_id,
+            )
+
+            # Extract text from content blocks
+            text_parts = []
+            for block in getattr(message, "content", []) or []:
+                text = getattr(block, "text", None)
+                if text:
+                    text_parts.append(text)
+            full_text = "\n".join(text_parts) if text_parts else ""
+
+            if full_text:
+                yield TextMessageStartEvent(
+                    type=EventType.TEXT_MESSAGE_START,
+                    thread_id=thread_id,
+                    run_id=synthetic_run_id,
+                    message_id=msg_id,
+                    role="assistant",
+                    timestamp=now_ms(),
+                )
+                yield TextMessageContentEvent(
+                    type=EventType.TEXT_MESSAGE_CONTENT,
+                    thread_id=thread_id,
+                    run_id=synthetic_run_id,
+                    message_id=msg_id,
+                    delta=full_text,
+                )
+                yield TextMessageEndEvent(
+                    type=EventType.TEXT_MESSAGE_END,
+                    thread_id=thread_id,
+                    run_id=synthetic_run_id,
+                    message_id=msg_id,
+                    timestamp=now_ms(),
+                )
+
+            self._last_run_id = synthetic_run_id
+
+            yield RunFinishedEvent(
+                type=EventType.RUN_FINISHED,
+                thread_id=thread_id,
+                run_id=synthetic_run_id,
+                timestamp=now_ms(),
+            )
+            return
