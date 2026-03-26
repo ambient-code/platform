@@ -844,6 +844,17 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 		}
 	}
 
+	// Apply annotation-based override to the runner token secret name if present.
+	// The variable was declared above at first use (line 585); this overrides the
+	// default name when the session CR carries the runner-token-secret annotation.
+	if meta, ok := currentObj.Object["metadata"].(map[string]interface{}); ok {
+		if anns, ok := meta["annotations"].(map[string]interface{}); ok {
+			if v, ok := anns["ambient-code.io/runner-token-secret"].(string); ok && strings.TrimSpace(v) != "" {
+				runnerTokenSecretName = strings.TrimSpace(v)
+			}
+		}
+	}
+
 	// Create the Pod directly (no Job wrapper for faster startup)
 	podSpec := corev1.PodSpec{
 		RestartPolicy:                 corev1.RestartPolicyNever,
@@ -919,22 +930,12 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 						}
 					}
 
-					// Add GitHub token for private repos
-					secretName := ""
-					if meta, ok := currentObj.Object["metadata"].(map[string]interface{}); ok {
-						if anns, ok := meta["annotations"].(map[string]interface{}); ok {
-							if v, ok := anns["ambient-code.io/runner-token-secret"].(string); ok && strings.TrimSpace(v) != "" {
-								secretName = strings.TrimSpace(v)
-							}
-						}
-					}
-					if secretName == "" {
-						secretName = fmt.Sprintf("ambient-runner-token-%s", name)
-					}
+					// Inject BOT_TOKEN for the init container (runs once at pod startup
+					// with a freshly minted token, so env var injection is sufficient here).
 					base = append(base, corev1.EnvVar{
 						Name: "BOT_TOKEN",
 						ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
+							LocalObjectReference: corev1.LocalObjectReference{Name: runnerTokenSecretName},
 							Key:                  "k8s-token",
 						}},
 					})
@@ -1126,25 +1127,6 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 					}
 				}
 
-				// Inject runner token secret
-				secretName := ""
-				if meta, ok := currentObj.Object["metadata"].(map[string]interface{}); ok {
-					if anns, ok := meta["annotations"].(map[string]interface{}); ok {
-						if v, ok := anns["ambient-code.io/runner-token-secret"].(string); ok && strings.TrimSpace(v) != "" {
-							secretName = strings.TrimSpace(v)
-						}
-					}
-				}
-				if secretName == "" {
-					secretName = fmt.Sprintf("ambient-runner-token-%s", name)
-				}
-				base = append(base, corev1.EnvVar{
-					Name: "BOT_TOKEN",
-					ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
-						Key:                  "k8s-token",
-					}},
-				})
 				// Add CR-provided envs last (override base when same key)
 				if spec, ok := currentObj.Object["spec"].(map[string]interface{}); ok {
 					if repos, ok := spec["repos"].([]interface{}); ok && len(repos) > 0 {
@@ -1336,7 +1318,31 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 	// This ensures fresh tokens for long-running sessions and automatic refresh
 	log.Printf("Session %s will fetch credentials at runtime from backend API", name)
 
-	// Do not mount runner Secret volume; runner fetches tokens on demand
+	// Mount the runner-token Secret as a file so kubelet automatically refreshes
+	// it when the Secret is updated (env vars are frozen at pod start and cannot
+	// reflect token rotations for long-running sessions).
+	pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
+		Name: "runner-token",
+		VolumeSource: corev1.VolumeSource{
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: runnerTokenSecretName,
+				Items: []corev1.KeyToPath{
+					{Key: "k8s-token", Path: "bot-token"},
+				},
+			},
+		},
+	})
+	for i := range pod.Spec.Containers {
+		if pod.Spec.Containers[i].Name == "ambient-code-runner" {
+			pod.Spec.Containers[i].VolumeMounts = append(pod.Spec.Containers[i].VolumeMounts, corev1.VolumeMount{
+				Name:      "runner-token",
+				MountPath: "/var/run/secrets/ambient",
+				ReadOnly:  true,
+			})
+			log.Printf("Mounted runner-token secret to /var/run/secrets/ambient in runner container for session %s", name)
+			break
+		}
+	}
 
 	// Create the pod
 	createdPod, err := config.K8sClient.CoreV1().Pods(sessionNamespace).Create(context.TODO(), pod, v1.CreateOptions{})

@@ -11,12 +11,32 @@ import os
 import re
 import warnings
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import urlparse, urlunparse
 
 logger = logging.getLogger(__name__)
 
 _TRUTHY_VALUES = frozenset({"1", "true", "yes"})
+
+# Canonical path where the operator mounts the runner-token Secret as a file.
+# Kubelet automatically refreshes this file when the Secret is updated.
+_BOT_TOKEN_FILE = Path("/var/run/secrets/ambient/bot-token")
+
+
+def get_bot_token() -> str:
+    """Return the current BOT_TOKEN, preferring the file mount over env var.
+
+    The operator mounts the runner-token Secret as a file so kubelet refreshes
+    it automatically when the token is rotated. Falls back to the BOT_TOKEN
+    env var for backward-compatibility with local / non-Kubernetes runs.
+    """
+    try:
+        if _BOT_TOKEN_FILE.exists():
+            return _BOT_TOKEN_FILE.read_text().strip()
+    except OSError:
+        pass
+    return (os.getenv("BOT_TOKEN") or "").strip()
 
 
 def is_env_truthy(value: str) -> bool:

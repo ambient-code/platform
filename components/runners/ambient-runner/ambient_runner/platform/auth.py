@@ -17,6 +17,7 @@ from urllib import request as _urllib_request
 from urllib.parse import urlparse
 
 from ambient_runner.platform.context import RunnerContext
+from ambient_runner.platform.utils import get_bot_token
 
 logger = logging.getLogger(__name__)
 
@@ -133,7 +134,7 @@ async def _fetch_credential(context: RunnerContext, credential_type: str) -> dic
             req.add_header("X-Runner-Current-User", context.current_user_id)
         logger.debug(f"Using caller token for {credential_type} credentials")
     else:
-        bot = (os.getenv("BOT_TOKEN") or "").strip()
+        bot = get_bot_token()
         if bot:
             req.add_header("Authorization", f"Bearer {bot}")
 
@@ -152,7 +153,7 @@ async def _fetch_credential(context: RunnerContext, credential_type: str) -> dic
                     f"Caller token expired for {credential_type}, falling back to BOT_TOKEN"
                 )
                 fallback_req = _urllib_request.Request(url, method="GET")
-                bot = (os.getenv("BOT_TOKEN") or "").strip()
+                bot = get_bot_token()
                 if bot:
                     fallback_req.add_header("Authorization", f"Bearer {bot}")
                 if context.current_user_id:

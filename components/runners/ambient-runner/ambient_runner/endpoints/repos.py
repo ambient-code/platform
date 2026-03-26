@@ -14,7 +14,7 @@ import aiohttp
 from fastapi import APIRouter, HTTPException, Request
 
 from ambient_runner.platform.auth import ensure_git_auth
-from ambient_runner.platform.utils import redact_secrets
+from ambient_runner.platform.utils import get_bot_token, redact_secrets
 
 logger = logging.getLogger(__name__)
 
@@ -490,7 +490,7 @@ async def _trigger_repo_added_notification(repo_name: str, repo_url: str, contex
             ],
         }
 
-        bot_token = os.getenv("BOT_TOKEN", "").strip()
+        bot_token = get_bot_token()
         headers = {"Content-Type": "application/json"}
         if bot_token:
             headers["Authorization"] = f"Bearer {bot_token}"

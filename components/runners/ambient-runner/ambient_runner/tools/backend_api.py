@@ -13,6 +13,8 @@ from typing import Any, Dict, List, Optional
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 
+from ambient_runner.platform.utils import get_bot_token
+
 logger = logging.getLogger(__name__)
 
 
@@ -30,7 +32,8 @@ class BackendAPIClient:
         Args:
             backend_url: Base URL of the backend API (defaults to BACKEND_API_URL env var)
             project_name: Project name (defaults to PROJECT_NAME or AGENTIC_SESSION_NAMESPACE env var)
-            bot_token: Bot authentication token (defaults to BOT_TOKEN env var)
+            bot_token: Bot authentication token (explicit override; if None, reads
+                dynamically from file mount or BOT_TOKEN env var on each request)
         """
         self.backend_url = (backend_url or os.getenv("BACKEND_API_URL", "")).rstrip("/")
         self.project_name = (
@@ -38,7 +41,12 @@ class BackendAPIClient:
             or os.getenv("PROJECT_NAME")
             or os.getenv("AGENTIC_SESSION_NAMESPACE", "")
         ).strip()
-        self.bot_token = (bot_token or os.getenv("BOT_TOKEN", "")).strip()
+        # Store explicit override separately so _make_request can re-read the
+        # token from the file mount on every call (kubelet refreshes the file
+        # when the Secret is rotated, but env vars are frozen at pod start).
+        self._bot_token_override = bot_token
+        # Expose self.bot_token for backward-compatibility with existing callers.
+        self.bot_token = (bot_token if bot_token is not None else get_bot_token()).strip()
 
         if not self.backend_url:
             raise ValueError("BACKEND_API_URL environment variable is required")
@@ -69,8 +77,15 @@ class BackendAPIClient:
         url = f"{self.backend_url}{path}"
         headers = {"Content-Type": "application/json"}
 
-        if self.bot_token:
-            headers["Authorization"] = f"Bearer {self.bot_token}"
+        # Re-read the token on every request so kubelet-refreshed file mounts
+        # are picked up without restarting the process.
+        token = (
+            self._bot_token_override.strip()
+            if self._bot_token_override is not None
+            else get_bot_token()
+        )
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
 
         request_kwargs: Dict[str, Any] = {"method": method, "headers": headers}
         if data is not None:
