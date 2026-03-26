@@ -49,12 +49,6 @@ patches:
     kind: Service
     name: ambient-api-server
     version: v1
-- path: frontend-deployment-patch.yaml
-  target:
-    group: apps
-    kind: Deployment
-    name: frontend
-    version: v1
 
 # Production images
 images:
