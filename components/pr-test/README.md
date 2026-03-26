@@ -281,6 +281,71 @@ IMAGE_TAG="pr-${PR_NUMBER}-amd64"
 
 ---
 
+## MPP Restricted Environment — Resource Inventory
+
+This section documents every resource type that requires special handling, override, or workaround in the MPP restricted environment. Updated from live testing against `dev-spoke-aws-us-east-1`.
+
+### Cluster-side bugs (needs MPP admin — cannot be worked around)
+
+| Resource | Issue |
+|----------|-------|
+| `Route` | Admission webhook `v1.route.openshift.io` panics with nil pointer dereference on all new creates cluster-wide. Existing routes work. |
+| `Service type: LoadBalancer` | AWS ELB provisioning fails: `InvalidSubnet: Not enough IP space available in subnet-0e04e2925720142be. ELB requires at least 8 free IP addresses.` |
+
+Both issues are confirmed cluster-wide, affect all namespaces, and require MPP cluster admin intervention. Workaround for manual testing only: `oc port-forward svc/frontend-service 3000:3000 -n $NAMESPACE`.
+
+### Resources that must be created differently or filtered
+
+| Resource | Issue | Fix |
+|----------|-------|-----|
+| `Namespace` | Cannot create directly — MPP requires `TenantNamespace` CR | Filter skips `Namespace` kind; `provision.sh` applies `TenantNamespace` |
+| `TenantNamespace` | Must be `type: runtime` — `build` type blocks Route admission webhook | `provision.sh` uses `type: runtime` |
+| `ClusterRoleBinding` | Base manifests hardcode `namespace: ambient-code` in subjects | Filter patches all subjects to PR namespace |
+| `PersistentVolumeClaim` | MPP storage webhooks require appcode label, reclaimPolicy annotation, and explicit storageClass | Filter injects all three (see PVC requirements below) |
+| `Route` | Hostname auto-generated from namespace name by OpenShift, resulting in hostnames >63 chars | Filter sets explicit short `spec.host` using `pr-N` prefix |
+
+### PVC MPP admission requirements (all three required)
+
+| Requirement | Type | Value |
+|-------------|------|-------|
+| `paas.redhat.com/appcode: AMBC-001` | **Label** (not annotation) | Required by storage webhook |
+| `kubernetes.io/reclaimPolicy: Delete` | Annotation | Required by storage webhook |
+| `storageClassName: aws-ebs` | Spec field | Required — default storageClass not accepted |
+
+### Secrets — what must be copied from `ambient-code--runtime-int`
+
+Verified against live PR namespace `ambient-code--pr-1005`:
+
+| Secret | Status | Notes |
+|--------|--------|-------|
+| `ambient-vertex` | ✅ Copied by install.sh | Vertex AI credentials |
+| `ambient-api-server` | ✅ Copied by install.sh | API server config |
+| `ambient-api-server-db` | ✅ Copied by install.sh | DB connection for api-server |
+| `postgresql-credentials` | ❌ Not copied — pod fails with `secret "postgresql-credentials" not found` | Exists in runtime-int; add to install.sh |
+| `frontend-oauth-config` | ❌ Not copied — pod stuck with `MountVolume.SetUp failed: secret "frontend-oauth-config" not found` | Exists in runtime-int; add to install.sh |
+| `minio-credentials` | ❌ Not in runtime-int — pod fails with `secret "minio-credentials" not found` | Must be generated or created from known values |
+
+### Images — CI not pushing PR-tagged images
+
+`manifest unknown` errors for all Ambient component images:
+```
+Failed to pull image "quay.io/ambient_code/vteam_operator:pr-1005-amd64": manifest unknown
+```
+
+Root cause: `components-build-deploy.yml` PR build step has `push: false`. Images are built but not pushed to quay. **Fix: change `push: false` → `push: true` in the PR build step.**
+
+### Open items / pending fixes
+
+| Item | Priority | Owner |
+|------|----------|-------|
+| Route webhook panic | Blocker for E2E | MPP cluster admin |
+| LoadBalancer subnet exhaustion | Blocker for E2E | MPP cluster admin |
+| Add `postgresql-credentials` and `frontend-oauth-config` to `install.sh` copy list | High | Platform team |
+| Determine source of `minio-credentials` and add to install.sh | High | Platform team |
+| Change `push: false` → `push: true` in `components-build-deploy.yml` | High | Platform team |
+
+---
+
 ## Kustomize Filter Pipeline
 
 `install.sh` runs:
