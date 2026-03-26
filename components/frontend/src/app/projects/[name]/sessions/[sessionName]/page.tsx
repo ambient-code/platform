@@ -19,7 +19,7 @@ import { SessionHeader } from "./session-header";
 
 // Extracted components
 import { AddContextModal } from "./components/modals/add-context-modal";
-import { UploadFileModal } from "./components/modals/upload-file-modal";
+import { UploadFileModal, type UploadFileSource } from "./components/modals/upload-file-modal";
 import { CustomWorkflowDialog } from "./components/modals/custom-workflow-dialog";
 import { ManageRemoteDialog } from "./components/modals/manage-remote-dialog";
 
@@ -448,12 +448,44 @@ export default function ProjectSessionDetailPage({
 
   // File upload mutation
   const uploadFileMutation = useMutation({
-    mutationFn: async (source: {
-      type: "local" | "url";
-      file?: File;
-      url?: string;
-      filename?: string;
-    }) => {
+    mutationFn: async (source: UploadFileSource) => {
+      if (source.type === "folder" && source.files && source.files.length > 0) {
+        // Upload each file in the folder sequentially, preserving directory structure
+        const results: { filename: string; success: boolean }[] = [];
+        for (const { file, relativePath } of source.files) {
+          // Split relativePath into directory + filename
+          const parts = relativePath.split("/");
+          const filename = parts.pop() || file.name;
+          const subpath = parts.join("/");
+
+          const formData = new FormData();
+          formData.append("type", "local");
+          formData.append("file", file);
+          formData.append("filename", filename);
+          if (subpath) {
+            formData.append("subpath", subpath);
+          }
+
+          const response = await fetch(
+            `/api/projects/${projectName}/agentic-sessions/${sessionName}/workspace/upload`,
+            {
+              method: "POST",
+              body: formData,
+            },
+          );
+
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || `Upload failed for ${relativePath}`);
+          }
+
+          results.push(await response.json() as { filename: string; success: boolean });
+        }
+        // Return summary for folder upload
+        const folderName = source.files[0].relativePath.split("/")[0];
+        return { filename: folderName, fileCount: results.length };
+      }
+
       const formData = new FormData();
       formData.append("type", source.type);
 
@@ -481,8 +513,12 @@ export default function ProjectSessionDetailPage({
       return response.json();
     },
     onSuccess: async (data) => {
-      toast.success(`File "${data.filename}" uploaded successfully`);
-      // Refresh workspace to show uploaded file
+      if (data.fileCount) {
+        toast.success(`Folder "${data.filename}" uploaded (${data.fileCount} files)`);
+      } else {
+        toast.success(`File "${data.filename}" uploaded successfully`);
+      }
+      // Refresh workspace to show uploaded file(s)
       await refetchFileUploadsList();
       await refetchDirectoryFiles();
       await refetchArtifactsFiles();

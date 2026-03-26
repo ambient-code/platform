@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { Loader2, Link, FileUp } from "lucide-react";
+import { Loader2, Link, FileUp, FolderUp } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -20,6 +20,8 @@ import { useInputHistory } from "@/hooks/use-input-history";
 
 // Maximum file size: 10MB for all file types
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB unified limit
+// Maximum total folder size: 100MB
+const MAX_FOLDER_SIZE = 100 * 1024 * 1024;
 
 const formatFileSize = (bytes: number): string => {
   if (bytes < 1024) return `${bytes} B`;
@@ -28,15 +30,18 @@ const formatFileSize = (bytes: number): string => {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 };
 
+export type UploadFileSource = {
+  type: "local" | "url" | "folder";
+  file?: File;
+  files?: { file: File; relativePath: string }[];
+  url?: string;
+  filename?: string;
+};
+
 type UploadFileModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onUploadFile: (source: {
-    type: "local" | "url";
-    file?: File;
-    url?: string;
-    filename?: string;
-  }) => Promise<void>;
+  onUploadFile: (source: UploadFileSource) => Promise<void>;
   isLoading?: boolean;
 };
 
@@ -46,13 +51,16 @@ export function UploadFileModal({
   onUploadFile,
   isLoading = false,
 }: UploadFileModalProps) {
-  const [activeTab, setActiveTab] = useState<"local" | "url">("local");
+  const [activeTab, setActiveTab] = useState<"local" | "folder" | "url">("local");
   const [fileUrl, setFileUrl] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFolderFiles, setSelectedFolderFiles] = useState<{ file: File; relativePath: string }[]>([]);
+  const [folderName, setFolderName] = useState<string | null>(null);
   const [isStartingService, setIsStartingService] = useState(false);
   const [fileSizeError, setFileSizeError] = useState<string | null>(null);
   const [isValidating, setIsValidating] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
   const { addToHistory: addUrlToHistory } = useInputHistory("upload-file:url");
 
   const handleSubmit = async () => {
@@ -63,7 +71,16 @@ export function UploadFileModal({
       try {
         await onUploadFile({ type: "local", file: selectedFile });
       } catch (error) {
-        // Check if error is about content service starting
+        if (error instanceof Error && error.message.includes("starting")) {
+          setIsStartingService(true);
+        }
+        throw error;
+      }
+    } else if (activeTab === "folder") {
+      if (selectedFolderFiles.length === 0) return;
+      try {
+        await onUploadFile({ type: "folder", files: selectedFolderFiles });
+      } catch (error) {
         if (error instanceof Error && error.message.includes("starting")) {
           setIsStartingService(true);
         }
@@ -82,7 +99,6 @@ export function UploadFileModal({
       try {
         await onUploadFile({ type: "url", url: fileUrl.trim(), filename });
       } catch (error) {
-        // Check if error is about content service starting
         if (error instanceof Error && error.message.includes("starting")) {
           setIsStartingService(true);
         }
@@ -93,22 +109,32 @@ export function UploadFileModal({
     // Reset form on success
     setFileUrl("");
     setSelectedFile(null);
+    setSelectedFolderFiles([]);
+    setFolderName(null);
     setIsStartingService(false);
     setFileSizeError(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
+    }
+    if (folderInputRef.current) {
+      folderInputRef.current.value = "";
     }
   };
 
   const handleCancel = () => {
     setFileUrl("");
     setSelectedFile(null);
+    setSelectedFolderFiles([]);
+    setFolderName(null);
     setIsStartingService(false);
     setFileSizeError(null);
     setIsValidating(false);
     setActiveTab("local");
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
+    }
+    if (folderInputRef.current) {
+      folderInputRef.current.value = "";
     }
     onOpenChange(false);
   };
@@ -141,9 +167,64 @@ export function UploadFileModal({
     }, 0);
   };
 
+  const handleFolderSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsValidating(true);
+    setFileSizeError(null);
+    setSelectedFolderFiles([]);
+    setFolderName(null);
+
+    setTimeout(() => {
+      const folderFiles: { file: File; relativePath: string }[] = [];
+      let totalSize = 0;
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const relativePath = (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name;
+
+        if (file.size > MAX_FILE_SIZE) {
+          setFileSizeError(
+            `File "${relativePath}" (${formatFileSize(file.size)}) exceeds the per-file limit of ${formatFileSize(MAX_FILE_SIZE)}`
+          );
+          setSelectedFolderFiles([]);
+          setFolderName(null);
+          if (folderInputRef.current) {
+            folderInputRef.current.value = "";
+          }
+          setIsValidating(false);
+          return;
+        }
+
+        totalSize += file.size;
+        folderFiles.push({ file, relativePath });
+      }
+
+      if (totalSize > MAX_FOLDER_SIZE) {
+        setFileSizeError(
+          `Total folder size (${formatFileSize(totalSize)}) exceeds the maximum allowed size of ${formatFileSize(MAX_FOLDER_SIZE)}`
+        );
+        setSelectedFolderFiles([]);
+        setFolderName(null);
+        if (folderInputRef.current) {
+          folderInputRef.current.value = "";
+        }
+      } else {
+        setFileSizeError(null);
+        setSelectedFolderFiles(folderFiles);
+        const firstPath = folderFiles[0]?.relativePath || "";
+        const topFolder = firstPath.split("/")[0] || "folder";
+        setFolderName(topFolder);
+      }
+      setIsValidating(false);
+    }, 0);
+  };
+
   const isSubmitDisabled = () => {
     if (isLoading || isValidating) return true;
     if (activeTab === "local") return !selectedFile;
+    if (activeTab === "folder") return selectedFolderFiles.length === 0;
     if (activeTab === "url") return !fileUrl.trim();
     return true;
   };
@@ -186,19 +267,23 @@ export function UploadFileModal({
         <Tabs
           value={activeTab}
           onValueChange={(v) => {
-            setActiveTab(v as "local" | "url");
-            setFileSizeError(null); // Clear error when switching tabs
+            setActiveTab(v as "local" | "folder" | "url");
+            setFileSizeError(null);
           }}
           className="w-full"
         >
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="local" disabled={isLoading || isValidating}>
               <FileUp className="h-4 w-4 mr-2" />
-              Local File
+              File
+            </TabsTrigger>
+            <TabsTrigger value="folder" disabled={isLoading || isValidating}>
+              <FolderUp className="h-4 w-4 mr-2" />
+              Folder
             </TabsTrigger>
             <TabsTrigger value="url" disabled={isLoading || isValidating}>
               <Link className="h-4 w-4 mr-2" />
-              From URL
+              URL
             </TabsTrigger>
           </TabsList>
 
@@ -217,6 +302,34 @@ export function UploadFileModal({
                   Selected: {selectedFile.name} ({(selectedFile.size / 1024).toFixed(1)} KB)
                 </p>
               )}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="folder" className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="folder-upload">Choose Folder</Label>
+              <Input
+                id="folder-upload"
+                ref={folderInputRef}
+                type="file"
+                // @ts-expect-error webkitdirectory is not in React's InputHTMLAttributes
+                webkitdirectory=""
+                directory=""
+                onChange={handleFolderSelect}
+                disabled={isLoading || isValidating}
+              />
+              {selectedFolderFiles.length > 0 && !isValidating && (
+                <div className="text-sm text-muted-foreground space-y-1">
+                  <p>
+                    Selected: {folderName}/ — {selectedFolderFiles.length} file(s),{" "}
+                    {formatFileSize(selectedFolderFiles.reduce((sum, f) => sum + f.file.size, 0))} total
+                  </p>
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">
+                All files in the folder will be uploaded preserving directory structure.
+                Max {formatFileSize(MAX_FILE_SIZE)} per file, {formatFileSize(MAX_FOLDER_SIZE)} total per folder.
+              </p>
             </div>
           </TabsContent>
 
