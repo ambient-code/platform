@@ -37,6 +37,21 @@ function sanitizeFilename(filename: string): string {
   return filename.replace(/[\/\\\0]/g, '_').substring(0, 255);
 }
 
+// Sanitize a relative path (e.g. "folder/subfolder/file.txt") for folder uploads.
+// Each segment is sanitized individually, then rejoined.
+// Prevents path traversal while preserving directory structure.
+function sanitizeRelativePath(relativePath: string): string {
+  const MAX_PATH_DEPTH = 20;
+  const segments = relativePath
+    .split('/')
+    .filter(segment => segment && segment !== '..' && segment !== '.')
+    .map(segment => segment.replace(/[\\\0]/g, '_').substring(0, 255));
+  if (segments.length > MAX_PATH_DEPTH) {
+    throw new Error(`Path too deeply nested (max ${MAX_PATH_DEPTH} levels)`);
+  }
+  return segments.join('/');
+}
+
 // Validate URL to prevent SSRF attacks
 // Returns true if URL is safe to fetch, false otherwise
 function isValidUrl(urlString: string): boolean {
@@ -318,14 +333,23 @@ async function uploadFileToWorkspace(
   contentType: string,
   headers: HeadersInit,
   name: string,
-  sessionName: string
+  sessionName: string,
+  subpath?: string
 ): Promise<Response> {
   const maxRetries = 3;
   const retryDelay = 2000; // 2 seconds
 
+  // Build the upload path: file-uploads/[subpath/]filename
+  const pathParts = ['file-uploads'];
+  if (subpath) {
+    pathParts.push(...subpath.split('/').map(s => encodeURIComponent(s)));
+  }
+  pathParts.push(encodeURIComponent(filename));
+  const uploadPath = pathParts.join('/');
+
   for (let retries = 0; retries < maxRetries; retries++) {
     const resp = await fetch(
-      `${BACKEND_URL}/projects/${encodeURIComponent(name)}/agentic-sessions/${encodeURIComponent(sessionName)}/workspace/file-uploads/${encodeURIComponent(filename)}`,
+      `${BACKEND_URL}/projects/${encodeURIComponent(name)}/agentic-sessions/${encodeURIComponent(sessionName)}/workspace/${uploadPath}`,
       {
         method: 'PUT',
         headers: {
@@ -361,6 +385,20 @@ export async function POST(
   try {
     const formData = await request.formData();
     const uploadType = formData.get('type') as string;
+
+    // Optional subpath for folder uploads (preserves directory structure)
+    const rawSubpath = formData.get('subpath') as string | null;
+    let subpath: string | undefined;
+    if (rawSubpath) {
+      try {
+        subpath = sanitizeRelativePath(rawSubpath);
+      } catch {
+        return new Response(JSON.stringify({ error: 'Invalid upload path: too deeply nested' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+    }
 
     if (uploadType === 'local') {
       // Handle local file upload
@@ -416,7 +454,7 @@ export async function POST(
       }
 
       // Upload to workspace with retry logic
-      const resp = await uploadFileToWorkspace(fileBuffer, filename, finalContentType, headers, name, sessionName);
+      const resp = await uploadFileToWorkspace(fileBuffer, filename, finalContentType, headers, name, sessionName, subpath);
 
       if (!resp.ok) {
         const errorText = await resp.text();
@@ -430,7 +468,7 @@ export async function POST(
       return new Response(
         JSON.stringify({
           success: true,
-          filename,
+          filename: subpath ? `${subpath}/${filename}` : filename,
           compressed: compressionInfo.compressed,
           originalSize: compressionInfo.originalSize,
           finalSize: compressionInfo.finalSize,
@@ -518,7 +556,7 @@ export async function POST(
       }
 
       // Upload to workspace with retry logic
-      const resp = await uploadFileToWorkspace(fileBuffer, filename, finalContentType, headers, name, sessionName);
+      const resp = await uploadFileToWorkspace(fileBuffer, filename, finalContentType, headers, name, sessionName, subpath);
 
       if (!resp.ok) {
         const errorText = await resp.text();
@@ -532,7 +570,7 @@ export async function POST(
       return new Response(
         JSON.stringify({
           success: true,
-          filename,
+          filename: subpath ? `${subpath}/${filename}` : filename,
           compressed: compressionInfo.compressed,
           originalSize: compressionInfo.originalSize,
           finalSize: compressionInfo.finalSize,
