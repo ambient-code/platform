@@ -2,14 +2,27 @@ FROM registry.access.redhat.com/ubi10/ubi@sha256:f573194e8e5231f1c9340c497e1f8d9
 
 USER 0
 
+# --- Pinned tool versions (bumped by runner-tool-versions workflow) ---
+ARG GH_VERSION=2.74.0
+ARG GLAB_VERSION=1.52.0
+ARG UV_VERSION=0.7.8
+ARG PRE_COMMIT_VERSION=4.2.0
+ARG GEMINI_CLI_VERSION=0.1.17
+
 # Install Python 3.12 (system default on RHEL 10), pip, and build deps
 RUN dnf install -y python3 python3-pip python3-devel && \
     dnf clean all
 
-# Install git/jq first, then GitHub CLI (gh RPM requires git)
-RUN dnf install -y git jq 'dnf-command(config-manager)' && \
-    dnf config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo && \
-    dnf install -y gh --repo gh-cli && \
+# Install GitHub CLI and GitLab CLI (binary downloads, pinned)
+RUN ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/') && \
+    curl -fsSL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_${ARCH}.tar.gz" \
+    | tar -xz -C /usr/local/bin --strip-components=2 "gh_${GH_VERSION}_linux_${ARCH}/bin/gh" && \
+    curl -fsSL "https://gitlab.com/gitlab-org/cli/-/releases/v${GLAB_VERSION}/downloads/glab_${GLAB_VERSION}_linux_${ARCH}.tar.gz" \
+    | tar -xz -C /usr/local/bin --strip-components=1 bin/glab && \
+    chmod +x /usr/local/bin/gh /usr/local/bin/glab
+
+# Install system packages (versions tied to base image)
+RUN dnf install -y git jq && \
     dnf clean all
 
 # Install Node.js (RHEL 10 ships Node.js directly in AppStream, no modules)
@@ -21,7 +34,7 @@ RUN dnf install -y go-toolset && \
     dnf clean all
 
 # Install uv (provides uvx for package execution) and pre-commit (for repo hooks)
-RUN pip3 install --break-system-packages --no-cache-dir uv pre-commit
+RUN pip3 install --break-system-packages --no-cache-dir uv==${UV_VERSION} pre-commit==${PRE_COMMIT_VERSION}
 
 # Create working directory
 WORKDIR /app
@@ -33,7 +46,7 @@ COPY ambient-runner /app/ambient-runner
 RUN pip3 install --break-system-packages --no-cache-dir '/app/ambient-runner[all]'
 
 # Install Gemini CLI (npm package, Node.js already available)
-RUN npm install -g @google/gemini-cli && \
+RUN npm install -g @google/gemini-cli@${GEMINI_CLI_VERSION} && \
     npm cache clean --force
 
 # Remove build-only dependencies and clean caches
