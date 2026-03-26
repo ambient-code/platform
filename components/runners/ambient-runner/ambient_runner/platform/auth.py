@@ -166,7 +166,17 @@ async def _fetch_credential(context: RunnerContext, credential_type: str) -> dic
                     logger.warning(
                         f"{credential_type} BOT_TOKEN fallback also failed: {fallback_err}"
                     )
-                    return ""
+                    raise PermissionError(
+                        f"{credential_type} authentication failed: caller token expired "
+                        f"and BOT_TOKEN fallback also failed"
+                    ) from fallback_err
+            if e.code in (401, 403):
+                logger.warning(
+                    f"{credential_type} credential fetch failed with HTTP {e.code}: {e}"
+                )
+                raise PermissionError(
+                    f"{credential_type} authentication failed with HTTP {e.code}"
+                ) from e
             logger.warning(f"{credential_type} credential fetch failed: {e}")
             return ""
         except Exception as e:
@@ -299,10 +309,13 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
     # Track git identity from provider credentials
     git_user_name = ""
     git_user_email = ""
+    auth_failures: list[str] = []
 
     # Google credentials
     if isinstance(google_creds, Exception):
         logger.warning(f"Failed to refresh Google credentials: {google_creds}")
+        if isinstance(google_creds, PermissionError):
+            auth_failures.append(str(google_creds))
     elif google_creds.get("accessToken"):
         try:
             creds_dir = _GOOGLE_WORKSPACE_CREDS_FILE.parent
@@ -335,6 +348,8 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
     # Jira credentials
     if isinstance(jira_creds, Exception):
         logger.warning(f"Failed to refresh Jira credentials: {jira_creds}")
+        if isinstance(jira_creds, PermissionError):
+            auth_failures.append(str(jira_creds))
     elif jira_creds.get("apiToken"):
         os.environ["JIRA_URL"] = jira_creds.get("url", "")
         os.environ["JIRA_API_TOKEN"] = jira_creds.get("apiToken", "")
@@ -344,6 +359,8 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
     # GitLab credentials (with user identity)
     if isinstance(gitlab_creds, Exception):
         logger.warning(f"Failed to refresh GitLab credentials: {gitlab_creds}")
+        if isinstance(gitlab_creds, PermissionError):
+            auth_failures.append(str(gitlab_creds))
     elif gitlab_creds.get("token"):
         os.environ["GITLAB_TOKEN"] = gitlab_creds["token"]
         logger.info("Updated GitLab token in environment")
@@ -355,6 +372,8 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
     # GitHub credentials (with user identity — takes precedence)
     if isinstance(github_creds, Exception):
         logger.warning(f"Failed to refresh GitHub credentials: {github_creds}")
+        if isinstance(github_creds, PermissionError):
+            auth_failures.append(str(github_creds))
     elif github_creds.get("token"):
         os.environ["GITHUB_TOKEN"] = github_creds["token"]
         logger.info("Updated GitHub token in environment")
@@ -366,6 +385,12 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
     # Configure git identity and credential helper
     await configure_git_identity(git_user_name, git_user_email)
     install_git_credential_helper()
+
+    if auth_failures:
+        raise PermissionError(
+            "Credential refresh failed due to authentication errors: "
+            + "; ".join(auth_failures)
+        )
 
     logger.info("Runtime credentials populated successfully")
 
