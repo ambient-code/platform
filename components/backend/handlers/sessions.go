@@ -1393,7 +1393,12 @@ func UpdateSessionDisplayName(c *gin.Context) {
 func SelectWorkflow(c *gin.Context) {
 	project := c.GetString("project")
 	sessionName := c.Param("sessionName")
-	_, k8sDyn := GetK8sClientsForRequest(c)
+	if !isValidKubernetesName(sessionName) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid session name format"})
+		c.Abort()
+		return
+	}
+	k8sClt, k8sDyn := GetK8sClientsForRequest(c)
 	if k8sDyn == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 		c.Abort()
@@ -1457,6 +1462,74 @@ func SelectWorkflow(c *gin.Context) {
 	}
 
 	log.Printf("Workflow updated for session %s: %s@%s", sessionName, req.GitURL, branch)
+
+	// If the session is Running, call the runner to clone the workflow immediately
+	status, _ := item.Object["status"].(map[string]interface{})
+	phase, _ := status["phase"].(string)
+	if phase == "Running" && req.GitURL != "" {
+		runnerURL := fmt.Sprintf("http://session-%s.%s.svc.cluster.local:8001/workflow", sessionName, project)
+		runnerReq := map[string]string{
+			"gitUrl": req.GitURL,
+			"branch": branch,
+			"path":   req.Path,
+		}
+		reqBody, _ := json.Marshal(runnerReq)
+
+		log.Printf("Calling runner to clone workflow: %s -> %s", req.GitURL, runnerURL)
+		httpReq, err := http.NewRequestWithContext(c.Request.Context(), "POST", runnerURL, bytes.NewReader(reqBody))
+		if err != nil {
+			log.Printf("Failed to create runner workflow request: %v", err)
+		} else {
+			httpReq.Header.Set("Content-Type", "application/json")
+
+			// Get userID from spec for token retrieval
+			var userID string
+			if specMap, ok := item.Object["spec"].(map[string]interface{}); ok {
+				if uc, ok := specMap["userContext"].(map[string]interface{}); ok {
+					if v, ok := uc["userId"].(string); ok {
+						userID = strings.TrimSpace(v)
+					}
+				}
+			}
+
+			// Attach GitHub or GitLab token for authenticated clone
+			if k8sClt != nil && userID != "" {
+				provider := types.DetectProvider(req.GitURL)
+				switch provider {
+				case types.ProviderGitHub:
+					if GetGitHubToken != nil {
+						if token, err := GetGitHubToken(c.Request.Context(), k8sClt, k8sDyn, project, userID); err == nil && token != "" {
+							httpReq.Header.Set("X-GitHub-Token", token)
+							log.Printf("SelectWorkflow: configured GitHub authentication for project=%s session=%s", project, sessionName)
+						}
+					}
+				case types.ProviderGitLab:
+					if GetGitLabToken != nil {
+						if token, err := GetGitLabToken(c.Request.Context(), k8sClt, project, userID); err == nil && token != "" {
+							httpReq.Header.Set("X-GitLab-Token", token)
+							log.Printf("SelectWorkflow: configured GitLab authentication for project=%s session=%s", project, sessionName)
+						}
+					}
+				default:
+					log.Printf("SelectWorkflow: unknown provider detected, proceeding without authentication")
+				}
+			}
+
+			client := &http.Client{Timeout: 120 * time.Second}
+			resp, err := client.Do(httpReq)
+			if err != nil {
+				log.Printf("Failed to call runner to clone workflow: %v", err)
+			} else {
+				defer resp.Body.Close()
+				if resp.StatusCode != http.StatusOK {
+					body, _ := io.ReadAll(resp.Body)
+					log.Printf("Runner failed to clone workflow (status %d): %s", resp.StatusCode, string(body))
+				} else {
+					log.Printf("Runner successfully cloned workflow %s for session %s", req.GitURL, sessionName)
+				}
+			}
+		}
+	}
 
 	// Respond with updated session summary
 	session := types.AgenticSession{

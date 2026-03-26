@@ -31,7 +31,7 @@ import logging
 import os
 from contextlib import suppress
 from pathlib import Path
-from typing import Any, AsyncIterator, Optional
+from typing import Any, AsyncIterator, Callable, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -72,10 +72,12 @@ class SessionWorker:
         thread_id: str,
         options: Any,
         api_key: str,
+        on_session_id: Optional[Callable[[str, str], None]] = None,
     ):
         self.thread_id = thread_id
         self._options = options
         self._api_key = api_key
+        self._on_session_id = on_session_id
 
         # Inbound: (prompt, session_id, output_queue) | _SHUTDOWN
         self._input_queue: asyncio.Queue = asyncio.Queue()
@@ -258,6 +260,8 @@ class SessionWorker:
                         sid = data.get("session_id")
                         if sid:
                             self.session_id = sid
+                            if self._on_session_id:
+                                self._on_session_id(self.thread_id, sid)
 
                 if self._active_output_queue is not None:
                     await self._active_output_queue.put(msg)
@@ -420,7 +424,9 @@ class SessionManager:
             )
             await self.destroy(thread_id)
 
-        worker = SessionWorker(thread_id, options, api_key)
+        worker = SessionWorker(
+            thread_id, options, api_key, on_session_id=self._on_session_id
+        )
         await worker.start()
         self._workers[thread_id] = worker
         self._locks[thread_id] = asyncio.Lock()
@@ -475,6 +481,15 @@ class SessionManager:
         logger.info("[SessionManager] All workers shut down")
 
     # ── session ID persistence ──
+
+    def _on_session_id(self, thread_id: str, session_id: str) -> None:
+        """Called by workers as soon as the CLI returns a session ID.
+
+        Persists immediately so the mapping survives even if the current
+        turn never completes (e.g. runner OOM during tool execution).
+        """
+        self._session_ids[thread_id] = session_id
+        self._persist_session_ids()
 
     def _session_ids_path(self) -> Path | None:
         if not self._state_dir:

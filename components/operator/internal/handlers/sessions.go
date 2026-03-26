@@ -895,6 +895,9 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 						{Name: "AWS_ACCESS_KEY_ID", Value: s3AccessKey},
 						{Name: "AWS_SECRET_ACCESS_KEY", Value: s3SecretKey},
 						// NOTE: GIT_USER_NAME and GIT_USER_EMAIL removed - auto-derived from GitHub/GitLab token via API
+						// Backend API URL so init container can fetch git tokens for cloning private repos
+						{Name: "BACKEND_API_URL", Value: fmt.Sprintf("http://backend-service.%s.svc.cluster.local:8080/api", appConfig.BackendNamespace)},
+						{Name: "PROJECT_NAME", Value: sessionNamespace},
 					}
 
 					// Add repos JSON if present

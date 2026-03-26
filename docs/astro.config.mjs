@@ -29,6 +29,7 @@ export default defineConfig({
             { slug: 'getting-started' },
             { slug: 'getting-started/quickstart-ui' },
             { slug: 'getting-started/concepts' },
+            { slug: 'getting-started/cli' },
           ],
         },
         {
@@ -39,6 +40,7 @@ export default defineConfig({
             { slug: 'concepts/integrations' },
             { slug: 'concepts/context-and-artifacts' },
             { slug: 'concepts/workflows' },
+            { slug: 'concepts/scheduled-sessions' },
           ],
         },
         {
@@ -69,6 +71,7 @@ export default defineConfig({
           items: [
             { slug: 'extensions/github-action' },
             { slug: 'extensions/mcp-server' },
+            { slug: 'extensions/public-api' },
           ],
         },
         {

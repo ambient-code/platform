@@ -300,6 +300,22 @@ def apply_forwarded_props(
     if not forwarded_props or not isinstance(forwarded_props, dict):
         return merged_kwargs
 
+    # Migrate deprecated max_thinking_tokens → thinking config
+    if (
+        "max_thinking_tokens" in forwarded_props
+        and "thinking" not in forwarded_props
+        and forwarded_props["max_thinking_tokens"] is not None
+    ):
+        from claude_agent_sdk.types import ThinkingConfigEnabled
+
+        budget = forwarded_props.pop("max_thinking_tokens")
+        forwarded_props["thinking"] = ThinkingConfigEnabled(budget_tokens=budget)
+        logger.warning(
+            "max_thinking_tokens is deprecated; converted to "
+            "thinking=ThinkingConfigEnabled(budget_tokens=%d)",
+            budget,
+        )
+
     applied_count = 0
     for key, value in forwarded_props.items():
         # Only apply whitelisted keys

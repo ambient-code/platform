@@ -25,7 +25,7 @@ Sessions have a defined lifecycle:
 
 While running, you can interact with the agent through a chat interface, observe its progress in real time, and browse output artifacts. Sessions are configurable:
 
-- **Model** -- Which LLM powers the agent (Claude Sonnet 4.5, Claude Opus 4.6, Claude Opus 4.5, or Claude Haiku 4.5).
+- **Model** -- Which LLM powers the agent. Available models include Claude Sonnet 4.5, Claude Opus 4.5, Claude Haiku 4.5, and Gemini 2.5 Flash (generally available), plus Claude Opus 4.6, Claude Sonnet 4.6, and Gemini 2.5 Pro (feature-gated, when enabled by your administrator).
 - **Temperature** -- Controls response randomness (default: 0.7).
 - **Max tokens** -- Maximum output tokens per response (default: 4000).
 - **Timeout** -- Maximum execution time in seconds before the session is stopped (default: 300).
@@ -36,14 +36,14 @@ Learn more in [Sessions](../../concepts/sessions/).
 
 ## Integrations
 
-Integrations connect ACP to external services so agents can read from and write to the tools your team already uses. Integrations are configured globally and available across all workspaces.
+Integrations connect ACP to external services so agents can read from and write to the tools your team already uses. Integrations are user-scoped (tied to your SSO identity) and available across all your workspaces.
 
 | Integration | Auth Method | What Agents Can Do |
 |---|---|---|
 | **GitHub** | GitHub App or PAT | Clone repos, open PRs, read/comment on issues |
-| **GitLab** | OAuth | Clone repos, open merge requests, interact with issues |
-| **Jira** | OAuth | Read and update tickets, add comments, transition status |
-| **Google Workspace** | OAuth | Access Drive documents, Calendar events, and Gmail for context |
+| **GitLab** | Personal Access Token (PAT) | Clone repos, open merge requests, interact with issues |
+| **Jira** | API Token (email + token) | Read and update tickets, add comments, transition status |
+| **Google Drive** | OAuth | Access Drive files for context |
 
 Once connected, every session can use them.
 

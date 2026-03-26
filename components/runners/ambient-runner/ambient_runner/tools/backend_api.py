@@ -274,39 +274,42 @@ class BackendAPIClient:
         response = self._make_request("GET", f"{path}{query}")
         return response.get("workflows", [])
 
+    # Cap exported events to avoid fetching/parsing huge session histories
+    _MAX_EXPORT_EVENTS = 200
+
     def get_session_events(
         self,
         session_name: str,
-        thread_id: Optional[str] = None,
-        limit: Optional[int] = None,
+        max_events: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
-        """Get events from a session (AG-UI events endpoint).
+        """Get recent historical events from a session via the export endpoint.
 
-        Note: This returns historical events only (not a live stream).
+        Uses the /export endpoint which returns a JSON response with
+        persisted AG-UI events. The /agui/events endpoint is SSE-based
+        and would block indefinitely.
+
+        Only the last `max_events` events are returned to avoid
+        transferring/parsing entire session histories for long sessions.
 
         Args:
             session_name: Name of the session
-            thread_id: Optional thread ID filter
-            limit: Optional limit on number of events
+            max_events: Max events to return (default: _MAX_EXPORT_EVENTS)
 
         Returns:
-            List of event objects
+            List of event objects (tail-sliced)
         """
-        path = (
-            f"/projects/{self.project_name}/agentic-sessions/{session_name}/agui/events"
-        )
+        cap = max_events if max_events and max_events > 0 else self._MAX_EXPORT_EVENTS
 
-        # Note: This endpoint is typically SSE-based for live streaming,
-        # but can be called once for historical events
-        query_params = []
-        if thread_id:
-            query_params.append(f"threadId={thread_id}")
-        if limit:
-            query_params.append(f"limit={limit}")
-
-        if query_params:
-            path = f"{path}?{'&'.join(query_params)}"
-
-        # For now, we'll just return the raw response
-        # A full implementation would parse SSE stream
-        return self._make_request("GET", path).get("events", [])
+        path = f"/projects/{self.project_name}/agentic-sessions/{session_name}/export"
+        response = self._make_request("GET", path)
+        # Export returns {"aguiEvents": [...], "sessionId": ..., ...}
+        events = response.get("aguiEvents", [])
+        if isinstance(events, str):
+            # aguiEvents may be a JSON-encoded string (RawMessage from Go)
+            try:
+                events = json.loads(events)
+            except json.JSONDecodeError:
+                return []
+        if isinstance(events, list):
+            return events[-cap:]
+        return []

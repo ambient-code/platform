@@ -30,7 +30,9 @@ _credential_expiry: dict[str, float] = {}
 _EXPIRY_BUFFER_SEC = 5 * 60
 
 # Hardcoded path for Google Workspace MCP credentials (must match populate and clear).
-_GOOGLE_WORKSPACE_CREDS_FILE = Path("/workspace/.google_workspace_mcp/credentials/credentials.json")
+_GOOGLE_WORKSPACE_CREDS_FILE = Path(
+    "/workspace/.google_workspace_mcp/credentials/credentials.json"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -113,7 +115,9 @@ async def _fetch_credential(context: RunnerContext, credential_type: str) -> dic
         or parsed.hostname == "localhost"
         or parsed.hostname == "127.0.0.1"
     ):
-        logger.error(f"Refusing to send credentials to external host: {parsed.hostname}")
+        logger.error(
+            f"Refusing to send credentials to external host: {parsed.hostname}"
+        )
         return {}
 
     logger.info(f"Fetching fresh {credential_type} credentials from: {url}")
@@ -144,18 +148,24 @@ async def _fetch_credential(context: RunnerContext, credential_type: str) -> dic
                 # Caller token expired — fall back to BOT_TOKEN with current
                 # user header. The backend validates this against the active
                 # user set by the proxy when the run started.
-                logger.info(f"Caller token expired for {credential_type}, falling back to BOT_TOKEN")
+                logger.info(
+                    f"Caller token expired for {credential_type}, falling back to BOT_TOKEN"
+                )
                 fallback_req = _urllib_request.Request(url, method="GET")
                 bot = (os.getenv("BOT_TOKEN") or "").strip()
                 if bot:
                     fallback_req.add_header("Authorization", f"Bearer {bot}")
                 if context.current_user_id:
-                    fallback_req.add_header("X-Runner-Current-User", context.current_user_id)
+                    fallback_req.add_header(
+                        "X-Runner-Current-User", context.current_user_id
+                    )
                 try:
                     with _urllib_request.urlopen(fallback_req, timeout=10) as resp:
                         return resp.read().decode("utf-8", errors="replace")
                 except Exception as fallback_err:
-                    logger.warning(f"{credential_type} BOT_TOKEN fallback also failed: {fallback_err}")
+                    logger.warning(
+                        f"{credential_type} BOT_TOKEN fallback also failed: {fallback_err}"
+                    )
                     return ""
             logger.warning(f"{credential_type} credential fetch failed: {e}")
             return ""
@@ -353,8 +363,9 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
         if github_creds.get("email"):
             git_user_email = github_creds["email"]
 
-    # Configure git identity from provider credentials
+    # Configure git identity and credential helper
     await configure_git_identity(git_user_name, git_user_email)
+    install_git_credential_helper()
 
     logger.info("Runtime credentials populated successfully")
 
@@ -379,7 +390,11 @@ def clear_runtime_credentials() -> None:
 
     # Clear dynamically-injected MCP credential env vars (set by populate_mcp_server_credentials).
     # Only clear keys matching the MCP_{SERVER}_{FIELD} pattern, not static config like MCP_CONFIG_FILE.
-    mcp_cred_keys = [k for k in os.environ if k.startswith("MCP_") and k.count("_") >= 2 and k != "MCP_CONFIG_FILE"]
+    mcp_cred_keys = [
+        k
+        for k in os.environ
+        if k.startswith("MCP_") and k.count("_") >= 2 and k != "MCP_CONFIG_FILE"
+    ]
     for key in mcp_cred_keys:
         os.environ.pop(key, None)
         cleared.append(key)
@@ -461,6 +476,98 @@ async def populate_mcp_server_credentials(context: RunnerContext) -> None:
                 logger.info(f"Set {env_key} for MCP server {server_name}")
         except Exception as e:
             logger.warning(f"Failed to fetch MCP credentials for {server_name}: {e}")
+
+
+_GIT_CREDENTIAL_HELPER_PATH = "/tmp/git-credential-ambient"
+
+# Injected into git's credential system so clean remote URLs (without embedded
+# tokens) can authenticate.  Reads tokens from the environment at operation
+# time, so refreshes are picked up without mutating .git/config.
+_GIT_CREDENTIAL_HELPER_SCRIPT = """\
+#!/bin/sh
+case "$1" in
+    get)
+        while IFS='=' read -r key value; do
+            case "$key" in
+                host) HOST="$value" ;;
+            esac
+        done
+
+        case "$HOST" in
+            *github*)
+                if [ -n "$GITHUB_TOKEN" ]; then
+                    printf 'protocol=https\\nhost=%s\\nusername=x-access-token\\npassword=%s\\n' "$HOST" "$GITHUB_TOKEN"
+                fi
+                ;;
+            *gitlab*)
+                if [ -n "$GITLAB_TOKEN" ]; then
+                    printf 'protocol=https\\nhost=%s\\nusername=oauth2\\npassword=%s\\n' "$HOST" "$GITLAB_TOKEN"
+                fi
+                ;;
+        esac
+        ;;
+esac
+"""
+
+_credential_helper_installed = False
+
+
+def install_git_credential_helper() -> None:
+    """Write the credential helper script and configure git to use it (once per process)."""
+    global _credential_helper_installed
+    if _credential_helper_installed:
+        return
+
+    import stat
+    import subprocess
+
+    try:
+        helper_path = Path(_GIT_CREDENTIAL_HELPER_PATH)
+        helper_path.write_text(_GIT_CREDENTIAL_HELPER_SCRIPT)
+        helper_path.chmod(
+            stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH
+        )  # 755
+
+        result = subprocess.run(
+            [
+                "git",
+                "config",
+                "--global",
+                "credential.helper",
+                _GIT_CREDENTIAL_HELPER_PATH,
+            ],
+            capture_output=True,
+            timeout=5,
+        )
+        if result.returncode != 0:
+            logger.warning(
+                "git config credential.helper failed (rc=%d): %s",
+                result.returncode,
+                result.stderr.decode(errors="replace").strip(),
+            )
+            return
+        _credential_helper_installed = True
+        logger.info(
+            "Installed git credential helper at %s", _GIT_CREDENTIAL_HELPER_PATH
+        )
+    except Exception as e:
+        logger.warning(f"Failed to install git credential helper: {e}")
+
+
+def ensure_git_auth(
+    github_token: str | None = None,
+    gitlab_token: str | None = None,
+) -> None:
+    """Set token env vars (if provided) and install the credential helper.
+
+    Consolidates the repeated pattern of setting override tokens and
+    calling install_git_credential_helper() used across multiple endpoints.
+    """
+    if github_token:
+        os.environ["GITHUB_TOKEN"] = github_token
+    if gitlab_token:
+        os.environ["GITLAB_TOKEN"] = gitlab_token
+    install_git_credential_helper()
 
 
 async def configure_git_identity(user_name: str, user_email: str) -> None:
