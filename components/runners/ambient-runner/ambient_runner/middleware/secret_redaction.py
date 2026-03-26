@@ -116,7 +116,8 @@ def _redact_value(value: object, secret_values: list[tuple[str, str]]) -> object
     Returns the original object unchanged when no secrets are found.
     """
     if isinstance(value, str):
-        return _redact_text(value, secret_values)
+        redacted = _redact_text(value, secret_values)
+        return redacted if redacted != value else value
     if isinstance(value, dict):
         return _redact_dict(value, secret_values)
     if isinstance(value, list):
@@ -132,14 +133,17 @@ def _redact_value(value: object, secret_values: list[tuple[str, str]]) -> object
 
 
 def _redact_dict(d: dict, secret_values: list[tuple[str, str]]) -> dict:
-    """Recursively redact string values in a dict. Returns original if unchanged."""
+    """Recursively redact keys and values in a dict. Returns original if unchanged."""
     result: dict | None = None
     for k, v in d.items():
+        redacted_k = _redact_value(k, secret_values) if isinstance(k, str) else k
         redacted_v = _redact_value(v, secret_values)
-        if redacted_v is not v:
+        if redacted_k is not k or redacted_v is not v:
             if result is None:
                 result = dict(d)
-            result[k] = redacted_v
+            if redacted_k is not k:
+                del result[k]
+            result[redacted_k] = redacted_v
     return result if result is not None else d
 
 

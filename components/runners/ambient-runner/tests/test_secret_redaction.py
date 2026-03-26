@@ -27,6 +27,16 @@ from ambient_runner.middleware.secret_redaction import (
 )
 
 
+def _fake_github_pat(length: int = 36) -> str:
+    """Build a GitHub-PAT-shaped token at runtime to avoid secret-scanner flags."""
+    return "ghp_" + "a" * length
+
+
+def _fake_anthropic_key(length: int = 36) -> str:
+    """Build an Anthropic-key-shaped token at runtime."""
+    return "sk-" + "ant-" + "a" * length
+
+
 # -- Unit tests for _collect_secret_values --
 
 
@@ -34,7 +44,7 @@ class TestCollectSecretValues:
     def test_collects_from_env(self):
         with patch.dict(
             os.environ,
-            {"GITHUB_TOKEN": "ghp_abc123def456ghi789jkl012mno345pqr678st"},
+            {"GITHUB_TOKEN": _fake_github_pat()},
             clear=False,
         ):
             pairs = _collect_secret_values()
@@ -78,12 +88,14 @@ class TestRedactText:
         assert "[REDACTED_ANTHROPIC_API_KEY]" in result
 
     def test_pattern_based_github_pat(self):
-        text = "Found token ghp_abcdefghijklmnopqrstuvwxyz0123456789 in config"
+        pat = _fake_github_pat()
+        text = f"Found token {pat} in config"
         result = _redact_text(text, [])
         assert "ghp_" not in result or "REDACTED" in result
 
     def test_pattern_based_anthropic_key(self):
-        text = "Key: sk-ant-abcdefghijklmnopqrstuvwxyz012345"
+        key = _fake_anthropic_key()
+        text = f"Key: {key}"
         result = _redact_text(text, [])
         assert "sk-ant-" not in result or "REDACTED" in result
 
@@ -95,10 +107,11 @@ class TestRedactText:
     def test_both_approaches_combined(self):
         secret = "my-custom-secret-value"
         secrets = [("BOT_TOKEN", secret)]
-        text = f"Token {secret} and also ghp_abcdefghijklmnopqrstuvwxyz0123456789"
+        pat = _fake_github_pat()
+        text = f"Token {secret} and also {pat}"
         result = _redact_text(text, secrets)
         assert secret not in result
-        assert "ghp_abcdef" not in result
+        assert pat not in result
 
 
 # -- Unit tests for _redact_event --
@@ -258,6 +271,12 @@ class TestRedactDict:
         result = _redact_dict(d, self.SECRETS)
         assert "secret_value_here" not in result["items"][0]["key"]
 
+    def test_redacts_dict_keys(self):
+        d = {"secret_value_here": "clean_value"}
+        result = _redact_dict(d, self.SECRETS)
+        assert "secret_value_here" not in result
+        assert any("[REDACTED_MY_KEY]" in str(k) for k in result)
+
 
 # -- Unit tests for _redact_value --
 
@@ -299,7 +318,7 @@ class TestSecretRedactionMiddleware:
     @pytest.mark.asyncio
     async def test_full_middleware_pipeline(self):
         """End-to-end test: secrets in env are redacted from events."""
-        secret_token = "ghp_TestToken1234567890abcdefghijklmnopqrs"
+        secret_token = _fake_github_pat()
 
         events = [
             TextMessageContentEvent(
@@ -358,7 +377,7 @@ class TestSecretRedactionMiddleware:
     @pytest.mark.asyncio
     async def test_no_secrets_in_env(self):
         """When no secrets are set, pattern-based redaction still works."""
-        token = "ghp_PatternMatch1234567890abcdefghijklmnop"
+        token = _fake_github_pat()
         events = [
             TextMessageContentEvent(
                 type=EventType.TEXT_MESSAGE_CONTENT,
