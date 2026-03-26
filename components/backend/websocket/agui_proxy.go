@@ -72,8 +72,10 @@ var sessionPortMap sync.Map
 var sessionLastSeen sync.Map
 
 // betweenRunListeners tracks active between-run listener goroutines.
-// Key: "projectName/sessionName", Value: struct{}.
+// Key: "projectName/sessionName", Value: context.CancelFunc.
 // Used to ensure at most one listener goroutine per session.
+// Calling the stored CancelFunc cancels the goroutine's context,
+// closing any open HTTP connection and causing the goroutine to exit.
 var betweenRunListeners sync.Map
 
 // staleSessionThreshold is the duration after which an inactive session's
@@ -103,7 +105,12 @@ func cleanupStaleSessions() {
 				sessionPortMap.Delete(sessionName)
 				if proj, ok := sessionProjectMap.Load(sessionName); ok {
 					handlers.ClearSessionActiveUser(proj.(string), sessionName)
-					betweenRunListeners.Delete(proj.(string) + "/" + sessionName)
+					listenerKey := proj.(string) + "/" + sessionName
+					if cancel, loaded := betweenRunListeners.LoadAndDelete(listenerKey); loaded {
+						if fn, ok := cancel.(context.CancelFunc); ok {
+							fn()
+						}
+					}
 				}
 				sessionProjectMap.Delete(sessionName)
 				// lastActivityUpdateTimes is keyed by "project/session";
@@ -1087,28 +1094,38 @@ const (
 // ensureBetweenRunListener starts a listener goroutine for the session
 // if one isn't already running. The listener connects to the runner's
 // GET /events SSE endpoint to capture events emitted between user runs.
+// The goroutine can be cancelled by calling the stored CancelFunc
+// (e.g., during stale session cleanup).
 func ensureBetweenRunListener(projectName, sessionName string) {
 	key := projectName + "/" + sessionName
-	if _, loaded := betweenRunListeners.LoadOrStore(key, struct{}{}); loaded {
-		return // already running
+	ctx, cancel := context.WithCancel(context.Background())
+	if _, loaded := betweenRunListeners.LoadOrStore(key, cancel); loaded {
+		cancel() // already running, discard the new context
+		return
 	}
 	go func() {
 		defer betweenRunListeners.Delete(key)
-		listenBetweenRunEvents(projectName, sessionName)
+		defer cancel()
+		listenBetweenRunEvents(ctx, projectName, sessionName)
 	}()
 }
 
 // listenBetweenRunEvents connects to the runner's GET /events SSE endpoint
 // and persists + broadcasts each event. Retries with exponential backoff
-// on connection failure.
-func listenBetweenRunEvents(projectName, sessionName string) {
+// on connection failure. Exits when ctx is cancelled.
+func listenBetweenRunEvents(ctx context.Context, projectName, sessionName string) {
 	backoff := betweenRunInitialBackoff
 
 	for attempt := 0; attempt < betweenRunMaxRetries; attempt++ {
+		if ctx.Err() != nil {
+			log.Printf("Between-run listener: cancelled for %s/%s", projectName, sessionName)
+			return
+		}
+
 		runnerURL := getRunnerEndpoint(projectName, sessionName)
 		eventsURL := strings.TrimSuffix(runnerURL, "/") + "/events"
 
-		req, err := http.NewRequest("GET", eventsURL, nil)
+		req, err := http.NewRequestWithContext(ctx, "GET", eventsURL, nil)
 		if err != nil {
 			log.Printf("Between-run listener: failed to create request for %s/%s: %v", projectName, sessionName, err)
 			return
@@ -1117,9 +1134,16 @@ func listenBetweenRunEvents(projectName, sessionName string) {
 
 		resp, err := runnerHTTPClient.Do(req)
 		if err != nil {
+			if ctx.Err() != nil {
+				return // cancelled, don't log as error
+			}
 			log.Printf("Between-run listener: connection failed for %s/%s (attempt %d/%d): %v",
 				projectName, sessionName, attempt+1, betweenRunMaxRetries, err)
-			time.Sleep(backoff)
+			select {
+			case <-time.After(backoff):
+			case <-ctx.Done():
+				return
+			}
 			backoff = time.Duration(float64(backoff) * 1.5)
 			if backoff > betweenRunMaxBackoff {
 				backoff = betweenRunMaxBackoff
@@ -1131,7 +1155,11 @@ func listenBetweenRunEvents(projectName, sessionName string) {
 			resp.Body.Close()
 			log.Printf("Between-run listener: runner returned %d for %s/%s (attempt %d/%d)",
 				resp.StatusCode, projectName, sessionName, attempt+1, betweenRunMaxRetries)
-			time.Sleep(backoff)
+			select {
+			case <-time.After(backoff):
+			case <-ctx.Done():
+				return
+			}
 			backoff = time.Duration(float64(backoff) * 1.5)
 			if backoff > betweenRunMaxBackoff {
 				backoff = betweenRunMaxBackoff
@@ -1140,13 +1168,16 @@ func listenBetweenRunEvents(projectName, sessionName string) {
 		}
 
 		log.Printf("Between-run listener: connected for %s/%s", projectName, sessionName)
-		// Reset backoff on successful connection
 		backoff = betweenRunInitialBackoff
 
 		reader := bufio.NewReader(resp.Body)
 		for {
 			line, readErr := reader.ReadString('\n')
 			if readErr != nil {
+				if ctx.Err() != nil {
+					resp.Body.Close()
+					return
+				}
 				if readErr != io.EOF {
 					log.Printf("Between-run listener: stream read error for %s/%s: %v", projectName, sessionName, readErr)
 				}
@@ -1158,8 +1189,6 @@ func listenBetweenRunEvents(projectName, sessionName string) {
 				jsonData := strings.TrimPrefix(trimmed, "data: ")
 				persistStreamedEvent(sessionName, "", "", jsonData)
 			}
-			// Publish ALL lines (data + empty separators) so the
-			// frontend's EventSource parser sees complete SSE events.
 			publishLine(sessionName, line)
 		}
 		resp.Body.Close()
