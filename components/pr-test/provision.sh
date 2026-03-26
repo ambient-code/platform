@@ -5,6 +5,7 @@ COMMAND="${1:-}"
 INSTANCE_ID="${2:-}"
 
 CONFIG_NAMESPACE="ambient-code--config"
+ARGOCD_NAMESPACE="${ARGOCD_NAMESPACE:-ambient-code--argocd}"
 MAX_S0X_INSTANCES="${MAX_S0X_INSTANCES:-5}"
 READY_TIMEOUT="${READY_TIMEOUT:-60}"
 DELETE_TIMEOUT="${DELETE_TIMEOUT:-120}"
@@ -45,7 +46,7 @@ apiVersion: tenant.paas.redhat.com/v1alpha1
 kind: TenantNamespace
 metadata:
   labels:
-    tenant.paas.redhat.com/namespace-type: build
+    tenant.paas.redhat.com/namespace-type: runtime
     tenant.paas.redhat.com/tenant: ambient-code
     ambient-code/instance-type: s0x
   name: ${INSTANCE_ID}
@@ -53,7 +54,7 @@ metadata:
 spec:
   network:
     security-zone: internal
-  type: build
+  type: runtime
 EOF
 
   echo "==> Waiting for namespace ${NAMESPACE} to become Active (timeout: ${READY_TIMEOUT}s)..."
@@ -75,6 +76,11 @@ EOF
 }
 
 destroy() {
+  APP_NAME="pr-test-${INSTANCE_ID}"
+  echo "==> Deleting ArgoCD Application: $APP_NAME"
+  oc delete application "$APP_NAME" -n "$ARGOCD_NAMESPACE" \
+    --ignore-not-found=true 2>/dev/null || true
+
   echo "==> Deleting TenantNamespace CR: $INSTANCE_ID"
   oc delete tenantnamespace "$INSTANCE_ID" -n "$CONFIG_NAMESPACE" \
     --ignore-not-found=true

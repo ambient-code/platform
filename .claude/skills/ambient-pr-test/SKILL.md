@@ -27,10 +27,22 @@ Scripts in `components/pr-test/` implement all steps below. Prefer them over inl
 - **Cluster:** `dev-spoke-aws-us-east-1`
 - **Config namespace:** `ambient-code--config`
 - **Namespace pattern:** `ambient-code--<instance-id>`
-- **Instance ID pattern:** `pr-<PR_NUMBER>-<branch-slug>`
+- **Instance ID pattern:** `pr-<PR_NUMBER>`
 - **Image tag pattern:** `quay.io/ambient_code/vteam_*:pr-<PR_NUMBER>-amd64`
 
 For naming rules and slug budget, see `components/pr-test/README.md` § Instance Naming Convention.
+
+### Permissions
+
+User tokens (`oc whoami -t`) do **not** have cluster-admin. `install.sh` uses the `tenantaccess-argocd-account-token` from `ambient-code--config` (the ArgoCD SA token) for the kustomize apply — it has cluster-admin and can create ClusterRoleBindings, PVCs, and all namespace-scoped resources.
+
+- `oc get crd` at cluster scope → Forbidden for user token (expected) — `install.sh` probes via `oc get agenticsessions -n $NAMESPACE` instead
+- CRDs and ClusterRoles must already exist — applied once by cluster-admin
+- ClusterRoleBindings are patched by the filter script to point subjects at the PR namespace
+
+### Namespace Type
+
+PR test namespaces must be provisioned as `type: runtime` (not `build`). MPP `build` namespaces cannot create Routes — the route admission webhook panics on all Route creates in `build` namespaces.
 
 ---
 
@@ -70,21 +82,11 @@ Skip this step if CI already pushed images (e.g. the PR's `Build and Push Compon
 ```bash
 PR_URL="https://github.com/ambient-code/platform/pull/1005"
 PR_NUMBER=$(echo "$PR_URL" | grep -oE '[0-9]+$')
-BRANCH=$(gh pr view "$PR_NUMBER" --repo ambient-code/platform --json headRefName -q .headRefName)
 
-SAFE_BRANCH=$(echo "$BRANCH" | tr '[:upper:]' '[:lower:]' \
-  | sed 's/[^a-z0-9]/-/g' | sed 's/-\+/-/g' | sed 's/^-\|-$//g' | cut -c1-64)
-
-PR_LEN=${#PR_NUMBER}
-SLUG_MAX=$(( 63 - 14 - 4 - PR_LEN ))
-BRANCH_SLUG="${SAFE_BRANCH:0:$SLUG_MAX}"
-
-INSTANCE_ID="pr-${PR_NUMBER}-${BRANCH_SLUG}"
+INSTANCE_ID="pr-${PR_NUMBER}"
 NAMESPACE="ambient-code--${INSTANCE_ID}"
 IMAGE_TAG="pr-${PR_NUMBER}-amd64"
 ```
-
-See `components/pr-test/README.md` § Instance Naming Convention for the slug budget formula.
 
 ---
 
@@ -168,6 +170,18 @@ oc get tenantnamespace -n ambient-code--config \
 ---
 
 ## Troubleshooting
+
+### Kustomize "no such file or directory" for `../../base`
+The production overlay uses relative paths (`../../base`). Copying only the overlay directory into a tmpdir breaks these references. `install.sh` copies the entire `components/manifests/` tree into the tmpdir and runs kustomize from `overlays/production/` within it.
+
+### CRD apply fails with Forbidden
+This is expected when running as a user token (not cluster-admin). `install.sh` probes CRD presence via `oc get agenticsessions -n $NAMESPACE`. If that returns an error (not "No resources found"), CRDs are missing — ask a cluster-admin to apply them once.
+
+### Route admission webhook panic
+All Route creates fail with `admission webhook "v1.route.openshift.io" denied the request: panic: runtime error: invalid memory address or nil pointer dereference`. This is a **cluster-side bug** — not a config issue. Affects all namespaces including new ones. The production ArgoCD app has the same error. Report to cluster admins. Existing routes in `runtime-int` continue to work; only new Route creates are broken.
+
+### ClusterRoleBindings — using ArgoCD SA token
+User tokens cannot create ClusterRoleBindings. `install.sh` fetches the `tenantaccess-argocd-account-token` secret from `ambient-code--config` and uses it for the full kustomize apply. This token has cluster-admin level access and can create ClusterRoleBindings. The Python filter script patches ClusterRoleBinding subjects from `ambient-code` to the PR namespace before applying.
 
 ### Build fails
 Check that `docker` (or `podman`) is logged in to `quay.io/ambient_code` before running `build.sh`. Use `docker login quay.io` or set `CONTAINER_ENGINE=podman`.

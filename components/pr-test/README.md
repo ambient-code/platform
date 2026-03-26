@@ -1,4 +1,4 @@
-# Specification: Ephemeral Namespace Provisioning for S0.x Instances
+# Specification: Ephemeral PR Test Environments on MPP
 
 **Interface:**
 ```
@@ -27,10 +27,63 @@ This is an extension of Ambient's own functionality — the provisioner is part 
 - **Platform:** Red Hat OpenShift (MPP — Managed Platform Plus)
 - **Tenant:** `ambient-code`
 - **Config namespace:** `ambient-code--config`
+- **ArgoCD namespace:** `ambient-code--argocd`
+- **Source namespace:** `ambient-code--runtime-int` (secrets and route domain derived from here)
 - **Target cluster:** `dev-spoke-aws-us-east-1` (initially)
 - **Namespace naming convention:** `ambient-code--<instance-id>`
-- **Instance ID format:** derived from PR/branch identifier, e.g. `pr-123-feat-xyz`
-- **Resulting namespace:** `ambient-code--pr-123-feat-xyz`
+- **Instance ID format:** `pr-<PR_NUMBER>` — PR number only, no branch slug
+- **Resulting namespace:** `ambient-code--pr-1005`
+
+---
+
+## MPP Tenant API
+
+The MPP tenant operator exposes these CRDs (`tenant.paas.redhat.com/v1alpha1`):
+
+| CRD | Purpose |
+|-----|---------|
+| `TenantNamespace` | Provision a managed namespace |
+| `TenantServiceAccount` | Create a SA with cluster-linking tokens |
+| `TenantEgress` | Outbound CIDR/DNS egress network policy |
+| `TenantNamespaceEgress` | Pod-level egress NetworkPolicy |
+| `TenantGroup` | Group management |
+| `TenantCredentialManagement` | Cluster credential linking (unstable) |
+| `TenantOperatorConfig` / `TenantOperatorOptIn` | Operator configuration |
+
+There is **no `TenantRoute`**. Routes are standard OpenShift `Route` objects applied into runtime namespaces.
+
+---
+
+## Service Exposure — Known Constraints
+
+External access to PR namespace services is constrained by the following cluster-side limitations (verified on `dev-spoke-aws-us-east-1`):
+
+### Route admission webhook panic
+All new `Route` creates fail cluster-wide:
+```
+admission webhook "v1.route.openshift.io" denied the request:
+panic: runtime error: invalid memory address or nil pointer dereference [recovered]
+```
+- Affects all namespaces including `ambient-code--runtime-int`
+- Existing routes (pre-bug) continue to work
+- Same error visible in production ArgoCD app status
+- **This is a cluster-side bug — report to MPP cluster admins**
+
+### LoadBalancer subnet exhaustion
+`Service type: LoadBalancer` fails with:
+```
+InvalidSubnet: Not enough IP space available in subnet-0e04e2925720142be.
+ELB requires at least 8 free IP addresses in each subnet.
+```
+- AWS ELB provisioning blocked by subnet IP exhaustion
+- **This is a cluster-side infrastructure issue — report to MPP cluster admins**
+
+### Workaround: oc port-forward
+For manual smoke testing only — not suitable for automated E2E:
+```bash
+oc port-forward svc/frontend-service 3000:3000 -n ambient-code--pr-1005 &
+# then: open http://localhost:3000
+```
 
 ---
 
@@ -51,16 +104,18 @@ apiVersion: tenant.paas.redhat.com/v1alpha1
 kind: TenantNamespace
 metadata:
   labels:
-    tenant.paas.redhat.com/namespace-type: build   # always "build" for ephemeral instances
+    tenant.paas.redhat.com/namespace-type: runtime  # must be "runtime" — "build" blocks Route creation
     tenant.paas.redhat.com/tenant: ambient-code
-    ambient-code/instance-type: s0x                # for capacity counting
-  name: <instance-id>                               # e.g. pr-123-feat-xyz
+    ambient-code/instance-type: s0x                 # for capacity counting
+  name: <instance-id>                               # e.g. pr-1005
   namespace: ambient-code--config                   # always this namespace
 spec:
   network:
     security-zone: internal
-  type: build                                       # always "build" for ephemeral instances
+  type: runtime                                     # must be "runtime" — see note below
 ```
+
+> **Important:** Use `type: runtime`, not `type: build`. MPP `build` namespaces block Route creation at the admission webhook. Even with the current cluster-side route webhook panic, future Route creates require `runtime` type.
 
 ### Verified Example
 
@@ -71,17 +126,18 @@ apiVersion: tenant.paas.redhat.com/v1alpha1
 kind: TenantNamespace
 metadata:
   labels:
-    tenant.paas.redhat.com/namespace-type: build
+    tenant.paas.redhat.com/namespace-type: runtime
     tenant.paas.redhat.com/tenant: ambient-code
-  name: pr-123-example
+    ambient-code/instance-type: s0x
+  name: pr-1005
   namespace: ambient-code--config
 spec:
   network:
     security-zone: internal
-  type: build
+  type: runtime
 ```
 
-Resulting namespace `ambient-code--pr-123-example` was `Active` within 11 seconds with the following platform-injected labels:
+Resulting namespace `ambient-code--pr-1005` was `Active` within 11 seconds with the following platform-injected labels:
 
 ```
 tenant.paas.redhat.com/tenant: ambient-code
@@ -155,7 +211,27 @@ These should be configurable via environment variables on the provisioner.
 
 ## Required RBAC
 
-The ServiceAccount running the provisioner needs the following on the `ambient-code--config` namespace:
+### User token limitations
+User tokens (`oc whoami -t`) do **not** have cluster-admin. They cannot:
+- Create `ClusterRoleBinding` objects (escalation prevention)
+- List/get CRDs at cluster scope (`oc get crd` → Forbidden)
+- Get cluster ingress config (`oc get ingresses.config.openshift.io` → Forbidden)
+
+### ArgoCD SA token — cluster-admin
+`install.sh` uses the ArgoCD service account token for the kustomize apply:
+
+```bash
+ARGOCD_TOKEN=$(oc get secret tenantaccess-argocd-account-token \
+  -n ambient-code--config \
+  -o jsonpath='{.data.token}' | base64 -d)
+
+kustomize build . | python3 filter.py | oc apply --token="$ARGOCD_TOKEN" -n "$NAMESPACE" -f -
+```
+
+This token is the `TenantServiceAccount` created for ArgoCD cluster linking (see MPP cluster linking docs). It has cluster-admin and can create ClusterRoleBindings, PVCs, and all namespace-scoped resources.
+
+### Provisioner RBAC (TenantNamespace management)
+The ServiceAccount running `provision.sh` needs:
 
 ```yaml
 rules:
@@ -164,25 +240,75 @@ rules:
     verbs: ["get", "list", "create", "delete", "watch"]
 ```
 
-On `dev-spoke-aws-us-east-1` this is satisfied by a `TenantServiceAccount` with role `tenant-admin`.
+On `dev-spoke-aws-us-east-1` this is satisfied by a `TenantServiceAccount` with role `tenant-admin`. The existing `tenantserviceaccount-argocd.yaml` already carries `tenant-admin`.
 
-The existing `tenantserviceaccount-argocd.yaml` already carries `tenant-admin` — the provisioner should use a **separate** dedicated ServiceAccount, not the ArgoCD one.
+### CRD presence detection
+Because `oc get crd` is Forbidden for user tokens, `install.sh` probes CRD presence via namespace-scoped access:
+```bash
+oc get agenticsessions -n "$NAMESPACE"   # errors if CRD missing
+oc get projectsettings -n "$NAMESPACE"
+```
+
+### Cluster domain derivation
+Because `oc get ingresses.config.openshift.io cluster` is Forbidden, the cluster domain is derived from an existing route in the source namespace:
+```bash
+CLUSTER_DOMAIN=$(oc get route frontend-route -n "$SOURCE_NAMESPACE" \
+  -o jsonpath='{.spec.host}' | sed 's/^[^.]*\.//')
+```
 
 ---
 
 ## Instance Naming Convention
 
-| Input | Instance ID | Resulting Namespace |
-|-------|-------------|---------------------|
-| PR #123, branch `feat-xyz` | `pr-123-feat-xyz` | `ambient-code--pr-123-feat-xyz` |
-| PR #42, branch `fix-auth` | `pr-42-fix-auth` | `ambient-code--pr-42-fix-auth` |
-| PR #7, branch `refactor-db` | `pr-7-refactor-db` | `ambient-code--pr-7-refactor-db` |
+| Input | Instance ID | Resulting Namespace | Image Tag |
+|-------|-------------|---------------------|-----------|
+| PR #1005 | `pr-1005` | `ambient-code--pr-1005` | `pr-1005-amd64` |
+| PR #42 | `pr-42` | `ambient-code--pr-42` | `pr-42-amd64` |
 
 Rules:
-- Lowercase only
-- Hyphens as separators — no underscores, no dots
-- Max length: 63 characters total for the namespace name (Kubernetes limit)
-- Branch name truncated if needed, PR number always preserved
+- Instance ID is **PR number only** — no branch slug (avoids namespace name length issues)
+- Lowercase, hyphens only — no underscores, no dots
+- `ambient-code--pr-N` is well within the 63-character Kubernetes namespace limit
+
+Derivation from PR URL:
+```bash
+PR_URL="https://github.com/ambient-code/platform/pull/1005"
+PR_NUMBER=$(echo "$PR_URL" | grep -oE '[0-9]+$')
+INSTANCE_ID="pr-${PR_NUMBER}"
+NAMESPACE="ambient-code--${INSTANCE_ID}"
+IMAGE_TAG="pr-${PR_NUMBER}-amd64"
+```
+
+---
+
+## Kustomize Filter Pipeline
+
+`install.sh` runs:
+```
+kustomize build overlays/production | python3 filter.py | oc apply --token=$ARGOCD_TOKEN -n $NAMESPACE -f -
+```
+
+The Python filter transforms the kustomize output before applying:
+
+| Kind | Transform |
+|------|-----------|
+| `Namespace` | Skipped — namespace managed by TenantNamespace CR |
+| `ClusterRoleBinding` | Subject namespace patched from `ambient-code` → PR namespace |
+| `PersistentVolumeClaim` | Adds `kubernetes.io/reclaimPolicy: Delete` annotation, `paas.redhat.com/appcode: AMBC-001` label, `storageClassName: aws-ebs` |
+| `Route` | Sets explicit `spec.host` with short PR-id-based hostname |
+
+### PVC MPP Admission Requirements
+MPP storage webhooks require all PVCs to have:
+- **Annotation:** `kubernetes.io/reclaimPolicy: Delete`
+- **Label:** `paas.redhat.com/appcode: AMBC-001` (label, not annotation)
+- **StorageClass:** `storageClassName: aws-ebs`
+
+### ClusterRoleBinding Subject Patching
+The base kustomize manifests hardcode `namespace: ambient-code` in ClusterRoleBinding subjects. The filter patches all subjects to the PR namespace:
+```python
+CRB_NS_RE = re.compile(r'(  namespace:\s*)ambient-code(\s*$)', re.MULTILINE)
+doc = CRB_NS_RE.sub(r'\g<1>' + namespace + r'\g<2>', doc)
+```
 
 ---
 
