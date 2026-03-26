@@ -1157,8 +1157,10 @@ func listenBetweenRunEvents(projectName, sessionName string) {
 			if strings.HasPrefix(trimmed, "data: ") {
 				jsonData := strings.TrimPrefix(trimmed, "data: ")
 				persistStreamedEvent(sessionName, "", "", jsonData)
-				publishLine(sessionName, line)
 			}
+			// Publish ALL lines (data + empty separators) so the
+			// frontend's EventSource parser sees complete SSE events.
+			publishLine(sessionName, line)
 		}
 		resp.Body.Close()
 		log.Printf("Between-run listener: disconnected from %s/%s, reconnecting...", projectName, sessionName)
