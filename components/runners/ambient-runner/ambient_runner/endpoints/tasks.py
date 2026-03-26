@@ -29,6 +29,26 @@ async def stop_task(task_id: str, request: Request):
     logger.info(f"Stop task request: task_id={task_id}")
     try:
         await bridge.stop_task(task_id, thread_id)
+
+        # Emit a task:stop_requested event so the frontend knows
+        # the stop was accepted. This gets persisted via the normal
+        # event pipeline and survives page refresh.
+        adapter = getattr(bridge, "_adapter", None)
+        if adapter:
+            from ag_ui.core import CustomEvent, EventType
+
+            adapter._hook_event_queue.put_nowait(
+                CustomEvent(
+                    type=EventType.CUSTOM,
+                    name="task:stop_requested",
+                    value={"task_id": task_id},
+                )
+            )
+            # Also update the registry so /tasks list reflects it
+            existing = adapter._task_registry.get(task_id, {})
+            existing["status"] = "stopping"
+            adapter._task_registry[task_id] = existing
+
         return {"message": "stop signal sent"}
     except Exception as e:
         logger.error(f"stop_task({task_id}) failed: {e}")
