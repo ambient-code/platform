@@ -33,35 +33,33 @@ async def stop_task(task_id: str, request: Request):
     if adapter:
         task_info = adapter._task_registry.get(task_id, {})
         status = task_info.get("status", "")
-        if status in ("completed", "failed", "stopped"):
+        if status and status != "running":
             return {"message": f"Task already {status}"}
 
     try:
         await bridge.stop_task(task_id, thread_id)
-
-        # Emit a task:stop_requested event so the frontend knows
-        # the stop was accepted. This gets persisted via the normal
-        # event pipeline and survives page refresh.
-        adapter = getattr(bridge, "_adapter", None)
-        if adapter:
-            from ag_ui.core import CustomEvent, EventType
-
-            adapter._hook_event_queue.put_nowait(
-                CustomEvent(
-                    type=EventType.CUSTOM,
-                    name="task:stop_requested",
-                    value={"task_id": task_id},
-                )
-            )
-            # Also update the registry so /tasks list reflects it
-            existing = adapter._task_registry.get(task_id, {})
-            existing["status"] = "stopping"
-            adapter._task_registry[task_id] = existing
-
-        return {"message": "stop signal sent"}
     except Exception as e:
-        logger.error(f"stop_task({task_id}) failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        # SDK may throw if task already finished ("not running", "killed", etc.)
+        # Treat as success — the task is no longer running either way
+        logger.warning(f"stop_task({task_id}) raised: {e}")
+
+    # Emit task:stop_requested event and update registry regardless of
+    # whether stop_task succeeded or the task was already dead.
+    if adapter:
+        from ag_ui.core import CustomEvent, EventType
+
+        adapter._hook_event_queue.put_nowait(
+            CustomEvent(
+                type=EventType.CUSTOM,
+                name="task:stop_requested",
+                value={"task_id": task_id},
+            )
+        )
+        existing = adapter._task_registry.get(task_id, {})
+        existing["status"] = "stopped"
+        adapter._task_registry[task_id] = existing
+
+    return {"message": "stop signal sent"}
 
 
 @router.get("/{task_id}/output")
