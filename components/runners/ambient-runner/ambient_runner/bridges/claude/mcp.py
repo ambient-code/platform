@@ -39,10 +39,13 @@ def generate_gerrit_config(instances: list[dict]) -> None:
 
     Sets GERRIT_CONFIG_PATH env var to point to the generated config.
     """
-    if not instances:
-        return
-
     config_dir = Path("/tmp/gerrit-mcp")
+    if config_dir.exists():
+        import shutil
+        shutil.rmtree(config_dir)
+    if not instances:
+        os.environ.pop("GERRIT_CONFIG_PATH", None)
+        return
     config_dir.mkdir(parents=True, exist_ok=True)
 
     gerrit_hosts = []
@@ -323,10 +326,10 @@ def check_mcp_authentication(server_name: str) -> tuple[bool | None, str | None]
                                 True,
                                 "Jira credentials available (not yet loaded in session)",
                             )
-                except Exception:
-                    pass
-        except Exception:
-            pass
+                except Exception as e:
+                    logger.debug(f"Jira credential probe failed: {e}")
+        except Exception as e:
+            logger.debug(f"Jira credential check setup failed: {e}")
 
         return False, "Jira not configured - connect on Integrations page"
 

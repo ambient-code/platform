@@ -26,9 +26,9 @@ export interface GerritConnectResponse {
 export interface GerritInstanceStatus {
   connected: boolean
   instanceName: string
-  url?: string
-  authMethod?: GerritAuthMethod
-  updatedAt?: string
+  url: string
+  authMethod: GerritAuthMethod
+  updatedAt: string
 }
 
 export interface GerritTestResponse {

@@ -23,7 +23,7 @@ Represents a user's connection to a single Gerrit instance.
 
 **Validation rules**:
 - `url` must be a valid HTTPS URL (HTTP allowed for local development only)
-- `instanceName` must match `^[a-z0-9][a-z0-9-]{0,61}[a-z0-9]$` (lowercase, alphanumeric with hyphens, 1-63 chars)
+- `instanceName` must match `^[a-z0-9][a-z0-9-]{0,61}[a-z0-9]$` (lowercase, alphanumeric with hyphens, 2-63 chars)
 - When `authMethod` is `http_basic`: both `username` and `httpToken` must be non-empty
 - When `authMethod` is `git_cookies`: `gitcookiesContent` must be non-empty and contain at least one cookie line for the target host
 

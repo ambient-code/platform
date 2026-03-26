@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"sort"
 
 	"github.com/gin-gonic/gin"
 )
@@ -140,6 +141,10 @@ func getGerritStatusForUser(ctx context.Context, userID string) gin.H {
 	if err != nil || len(instances) == 0 {
 		return gin.H{"instances": []gin.H{}}
 	}
+
+	sort.Slice(instances, func(i, j int) bool {
+		return instances[i].InstanceName < instances[j].InstanceName
+	})
 
 	result := make([]gin.H, 0, len(instances))
 	for _, creds := range instances {

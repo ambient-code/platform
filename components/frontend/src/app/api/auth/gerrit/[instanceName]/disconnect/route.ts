@@ -6,9 +6,10 @@ export async function DELETE(
   { params }: { params: Promise<{ instanceName: string }> }
 ) {
   const { instanceName } = await params
+  const safeInstanceName = encodeURIComponent(instanceName)
   const headers = await buildForwardHeadersAsync(request)
 
-  const resp = await fetch(`${BACKEND_URL}/auth/gerrit/${instanceName}/disconnect`, {
+  const resp = await fetch(`${BACKEND_URL}/auth/gerrit/${safeInstanceName}/disconnect`, {
     method: 'DELETE',
     headers,
   })

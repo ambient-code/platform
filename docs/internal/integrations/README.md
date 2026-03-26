@@ -63,6 +63,7 @@ Documentation for integrating the Ambient Code Platform with external services.
 - **Instance URL** - Support for self-hosted
 
 ### Gerrit
+
 - **HTTP Basic** - Username + HTTP password
 - **Gitcookies** - Cookie-based authentication
 - **Multi-instance** - Connect multiple Gerrit servers
@@ -92,6 +93,7 @@ All integrations are configured per-project via:
 - [GitLab API Endpoints](../api/gitlab-endpoints.md) - API reference
 
 ### Gerrit
+
 - [Gerrit Integration](gerrit-integration.md) - Setup and usage guide
 
 ### Google Workspace

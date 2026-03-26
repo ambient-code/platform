@@ -12,6 +12,7 @@ func registerRoutes(r *gin.Engine) {
 	api := r.Group("/api")
 	{
 		// Public endpoints (no auth required)
+		api.GET("/version", handlers.GetVersion)
 		api.GET("/workflows/ootb", handlers.ListOOTBWorkflows)
 		// Global runner-types endpoint (no workspace overrides — for admin pages)
 		api.GET("/runner-types", handlers.GetRunnerTypesGlobal)
