@@ -279,6 +279,13 @@ class SessionWorker:
             # Unblock the main loop if it's waiting on a turn
             self._turn_done.set()
 
+    async def between_run_queue_get(self) -> Any:
+        """Get the next message from the between-run queue. Returns None on shutdown."""
+        msg = await self._between_run_queue.get()
+        if msg is _SHUTDOWN:
+            return None
+        return msg
+
     async def between_run_events(self) -> AsyncIterator[Any]:
         """Yield SDK messages arriving outside user-initiated runs."""
         while True:

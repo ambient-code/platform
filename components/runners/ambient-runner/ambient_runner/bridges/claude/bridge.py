@@ -14,8 +14,9 @@ import os
 import time
 from typing import Any, AsyncIterator, Optional
 
-from ag_ui.core import BaseEvent, RunAgentInput
+from ag_ui.core import BaseEvent, EventType, RunAgentInput, RunStartedEvent, RunFinishedEvent
 from ag_ui_claude_sdk import ClaudeAgentAdapter
+from ag_ui_claude_sdk.adapter import now_ms
 
 from ambient_runner.bridge import (
     FrameworkCapabilities,
@@ -272,11 +273,75 @@ class ClaudeBridge(PlatformBridge):
         if not worker:
             return
 
-        async for msg in worker.between_run_events():
-            async for event in self._adapter.process_between_run_message(
-                msg, thread_id
+        from claude_agent_sdk import (
+            TaskStartedMessage,
+            TaskProgressMessage,
+            TaskNotificationMessage,
+            ResultMessage,
+        )
+
+        # Between-run messages form complete SDK turns (init → stream →
+        # assistant → result).  We pipe non-task messages through the
+        # normal _stream_claude_sdk adapter so StreamEvents are processed
+        # with full text streaming, wrapped in a synthetic AG-UI run.
+
+        while True:
+            # Wait for the first message of a between-run turn
+            msg = await worker.between_run_queue_get()
+            if msg is None:
+                return  # shutdown
+
+            # Task lifecycle → CUSTOM events, no run needed
+            if isinstance(msg, (TaskStartedMessage, TaskProgressMessage, TaskNotificationMessage)):
+                yield self._adapter._emit_task_event(msg)
+                # Drain any hook events too
+                while not self._adapter._hook_event_queue.empty():
+                    try:
+                        yield self._adapter._hook_event_queue.get_nowait()
+                    except asyncio.QueueEmpty:
+                        break
+                continue
+
+            # First non-task message — start a synthetic run and pipe
+            # this + subsequent messages through _stream_claude_sdk.
+            import uuid as _uuid
+            synthetic_run_id = str(_uuid.uuid4())
+
+            yield RunStartedEvent(
+                type=EventType.RUN_STARTED,
+                thread_id=thread_id,
+                run_id=synthetic_run_id,
+                timestamp=now_ms(),
+                parent_run_id=self._adapter._last_run_id,
+            )
+
+            # Create an async iterator that yields the first message
+            # plus all subsequent messages until ResultMessage.
+            async def _between_run_stream(first_msg):
+                yield first_msg
+                async for m in worker.between_run_events():
+                    yield m
+                    if isinstance(m, ResultMessage):
+                        return
+
+            async for event in self._adapter._stream_claude_sdk(
+                prompt="",
+                thread_id=thread_id,
+                run_id=synthetic_run_id,
+                input_data=None,
+                frontend_tool_names=set(),
+                message_stream=_between_run_stream(msg),
             ):
                 yield event
+
+            self._adapter._last_run_id = synthetic_run_id
+
+            yield RunFinishedEvent(
+                type=EventType.RUN_FINISHED,
+                thread_id=thread_id,
+                run_id=synthetic_run_id,
+                timestamp=now_ms(),
+            )
 
     @property
     def task_registry(self) -> dict:

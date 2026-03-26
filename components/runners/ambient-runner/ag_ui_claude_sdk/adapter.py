@@ -600,6 +600,21 @@ class ClaudeAgentAdapter:
 
     # ── Shared task event helpers ──
 
+    def _emit_task_event(self, message: Any) -> "CustomEvent":
+        """Dispatch any task message to the appropriate handler."""
+        from claude_agent_sdk import (
+            TaskStartedMessage,
+            TaskProgressMessage,
+            TaskNotificationMessage,
+        )
+        if isinstance(message, TaskStartedMessage):
+            return self._emit_task_started(message)
+        elif isinstance(message, TaskProgressMessage):
+            return self._emit_task_progress(message)
+        elif isinstance(message, TaskNotificationMessage):
+            return self._emit_task_notification(message)
+        raise TypeError(f"Not a task message: {type(message).__name__}")
+
     def _emit_task_started(self, message: Any) -> "CustomEvent":
         task_info = {
             "task_id": message.task_id,
@@ -1301,7 +1316,7 @@ class ClaudeAgentAdapter:
                 else None
             )
             stamped_inputs: List[Any] = []
-            for msg in input_data.messages or []:
+            for msg in (input_data.messages if input_data else None) or []:
                 if hasattr(msg, "model_dump"):
                     d = msg.model_dump(exclude_none=True)
                 elif isinstance(msg, dict):
