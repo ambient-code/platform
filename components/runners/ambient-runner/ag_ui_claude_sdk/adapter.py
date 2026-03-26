@@ -616,11 +616,34 @@ class ClaudeAgentAdapter:
         raise TypeError(f"Not a task message: {type(message).__name__}")
 
     def drain_hook_events(self) -> list:
-        """Drain all pending hook CustomEvents from the queue."""
+        """Drain all pending hook CustomEvents from the queue.
+
+        Also captures transcript paths from SubagentStart/Stop hooks
+        for the /tasks/{id}/output endpoint.
+        """
         events = []
         while not self._hook_event_queue.empty():
             try:
-                events.append(self._hook_event_queue.get_nowait())
+                hook_event = self._hook_event_queue.get_nowait()
+                # Capture transcript paths from subagent hooks
+                if hasattr(hook_event, "name"):
+                    val = getattr(hook_event, "value", {}) or {}
+                    agent_id = val.get("agent_id")
+                    if hook_event.name == "hook:SubagentStart" and agent_id:
+                        sid = val.get("session_id", "")
+                        if sid:
+                            from pathlib import Path
+                            base = Path.home() / ".claude" / "projects"
+                            if base.exists():
+                                expected = f"agent-{agent_id}.jsonl"
+                                for p in base.rglob(expected):
+                                    self._task_outputs.setdefault(agent_id, str(p))
+                                    break
+                    elif hook_event.name == "hook:SubagentStop" and agent_id:
+                        transcript = val.get("agent_transcript_path")
+                        if transcript:
+                            self._task_outputs[agent_id] = transcript
+                events.append(hook_event)
             except asyncio.QueueEmpty:
                 break
         return events
@@ -785,7 +808,24 @@ class ClaudeAgentAdapter:
         stream_error: Optional[Exception] = None
 
         try:
-            async for message in message_stream:
+            message_iter = message_stream.__aiter__()
+
+            while True:
+                # Race: get next SDK message with a timeout so hooks
+                # drain continuously (every 100ms) even when the SDK
+                # is idle between messages.
+                try:
+                    message = await asyncio.wait_for(
+                        message_iter.__anext__(), timeout=0.1
+                    )
+                except StopAsyncIteration:
+                    break
+                except asyncio.TimeoutError:
+                    # No message — drain hooks and loop
+                    for hook_event in self.drain_hook_events():
+                        yield hook_event
+                    continue
+
                 message_count += 1
 
                 # If we've halted due to frontend tool, break out of loop (interrupt already called)
@@ -1211,36 +1251,8 @@ class ClaudeAgentAdapter:
                         )
 
                 # Drain hook event queue (non-blocking) after each SDK message
-                while not self._hook_event_queue.empty():
-                    try:
-                        hook_event = self._hook_event_queue.get_nowait()
-                        # Capture transcript paths from subagent hooks.
-                        # SubagentStart: construct expected path so transcript
-                        # is readable while the task is still running (JSONL is
-                        # written incrementally by the SDK).
-                        # SubagentStop: use the definitive path from the hook.
-                        if hasattr(hook_event, "name"):
-                            val = getattr(hook_event, "value", {}) or {}
-                            agent_id = val.get("agent_id")
-                            if hook_event.name == "hook:SubagentStart" and agent_id:
-                                sid = val.get("session_id", "")
-                                if sid:
-                                    from pathlib import Path
-                                    # Search for the subagents dir to find the
-                                    # incrementally-written transcript JSONL.
-                                    base = Path.home() / ".claude" / "projects"
-                                    if base.exists():
-                                        expected = f"agent-{agent_id}.jsonl"
-                                        for p in base.rglob(expected):
-                                            self._task_outputs.setdefault(agent_id, str(p))
-                                            break
-                            elif hook_event.name == "hook:SubagentStop" and agent_id:
-                                transcript = val.get("agent_transcript_path")
-                                if transcript:
-                                    self._task_outputs[agent_id] = transcript
-                        yield hook_event
-                    except asyncio.QueueEmpty:
-                        break
+                for hook_event in self.drain_hook_events():
+                    yield hook_event
 
         except Exception as e:
             # Capture for re-raise after cleanup

@@ -22,19 +22,13 @@ export function BackgroundTasksTab({
   onOpenTranscript,
 }: BackgroundTasksTabProps) {
   const [stoppingTaskId, setStoppingTaskId] = useState<string | null>(null)
-  const [stoppedTaskIds, setStoppedTaskIds] = useState<Set<string>>(new Set())
 
-  const tasks = Array.from(backgroundTasks.values()).map((task) =>
-    stoppedTaskIds.has(task.task_id) && task.status === "running"
-      ? { ...task, status: "stopped" as const }
-      : task
-  )
+  const tasks = Array.from(backgroundTasks.values())
 
   const handleStop = async (taskId: string) => {
     setStoppingTaskId(taskId)
     try {
       await stopBackgroundTask(projectName, sessionName, taskId)
-      setStoppedTaskIds((prev) => new Set(prev).add(taskId))
     } catch (err) {
       console.error("Failed to stop task:", err)
     } finally {
