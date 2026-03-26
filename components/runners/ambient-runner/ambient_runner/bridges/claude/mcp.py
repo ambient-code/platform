@@ -30,6 +30,73 @@ DEFAULT_ALLOWED_TOOLS = [
 ]
 
 
+def generate_gerrit_config(instances: list[dict]) -> None:
+    """Generate gerrit_config.json and gitcookies file from fetched credentials.
+
+    Creates /tmp/gerrit-mcp/ directory with:
+    - gerrit_config.json: Native Gerrit MCP server config
+    - .gitcookies: Combined gitcookies content (if any instances use git_cookies auth)
+
+    Sets GERRIT_CONFIG_PATH env var to point to the generated config.
+    """
+    if not instances:
+        return
+
+    config_dir = Path("/tmp/gerrit-mcp")
+    config_dir.mkdir(parents=True, exist_ok=True)
+
+    gerrit_hosts = []
+    gitcookies_lines: list[str] = []
+
+    for inst in instances:
+        host_entry: dict = {
+            "name": inst.get("instanceName", ""),
+            "external_url": inst.get("url", ""),
+        }
+
+        auth_method = inst.get("authMethod", "")
+        if auth_method == "http_basic":
+            host_entry["authentication"] = {
+                "type": "http_basic",
+                "username": inst.get("username", ""),
+                "auth_token": inst.get("httpToken", ""),
+            }
+        elif auth_method == "git_cookies":
+            gitcookies_path = str(config_dir / ".gitcookies")
+            content = inst.get("gitcookiesContent", "")
+            if content:
+                gitcookies_lines.append(content.rstrip("\n"))
+            host_entry["authentication"] = {
+                "type": "git_cookies",
+                "gitcookies_path": gitcookies_path,
+            }
+
+        gerrit_hosts.append(host_entry)
+
+    # Write combined gitcookies file if any instances use git_cookies auth
+    if gitcookies_lines:
+        gitcookies_path = config_dir / ".gitcookies"
+        with open(gitcookies_path, "w") as f:
+            f.write("\n".join(gitcookies_lines) + "\n")
+        gitcookies_path.chmod(0o600)
+        logger.info("Wrote combined gitcookies file for Gerrit instances")
+
+    # Build gerrit_config.json
+    gerrit_config: dict = {
+        "gerrit_hosts": gerrit_hosts,
+    }
+    if gerrit_hosts:
+        gerrit_config["default_gerrit_base_url"] = gerrit_hosts[0].get("external_url", "")
+
+    config_path = config_dir / "gerrit_config.json"
+    with open(config_path, "w") as f:
+        json.dump(gerrit_config, f, indent=2)
+    config_path.chmod(0o600)
+
+    os.environ["GERRIT_CONFIG_PATH"] = str(config_path)
+    logger.info(f"Generated Gerrit config with {len(gerrit_hosts)} host(s) at {config_path}")
+
+
 def build_mcp_servers(
     context: RunnerContext,
     cwd_path: str,
@@ -112,8 +179,7 @@ def build_mcp_servers(
         logger.info(
             f"Added backend API MCP tools ({len(backend_tools)}): "
             "acp_list_sessions, acp_get_session, acp_create_session, "
-            "acp_stop_session, acp_send_message, acp_get_session_status, "
-            "acp_restart_session, acp_list_workflows, acp_get_api_reference"
+            "acp_stop_session, acp_send_message, acp_get_api_reference"
         )
 
     return mcp_servers
@@ -146,6 +212,7 @@ def log_auth_status(mcp_servers: dict) -> None:
 def _read_google_credentials(
     workspace_path: Path, secret_path: Path
 ) -> Dict[str, Any] | None:
+    """Read and parse Google OAuth credentials from workspace or secret path."""
     cred_path = workspace_path if workspace_path.exists() else secret_path
     if not cred_path.exists():
         return None
@@ -160,6 +227,7 @@ def _read_google_credentials(
 
 
 def _parse_token_expiry(expiry_str: str) -> datetime | None:
+    """Parse an ISO 8601 token expiry string into a timezone-aware datetime."""
     try:
         expiry_str = expiry_str.replace("Z", "+00:00")
         dt = datetime.fromisoformat(expiry_str)
@@ -174,6 +242,7 @@ def _parse_token_expiry(expiry_str: str) -> datetime | None:
 def _validate_google_token(
     user_creds: Dict[str, Any], user_email: str
 ) -> tuple[bool | None, str]:
+    """Validate Google OAuth token completeness and expiry status."""
     if not user_creds.get("access_token") or not user_creds.get("refresh_token"):
         return False, "Google OAuth credentials incomplete - missing or empty tokens"
 
@@ -260,6 +329,42 @@ def check_mcp_authentication(server_name: str) -> tuple[bool | None, str | None]
             pass
 
         return False, "Jira not configured - connect on Integrations page"
+
+    if server_name == "gerrit":
+        config_path = os.getenv("GERRIT_CONFIG_PATH", "")
+        if config_path and Path(config_path).exists():
+            return True, "Gerrit credentials configured"
+
+        # Fallback: check if backend has credentials available
+        try:
+            import urllib.request as _urllib_request
+
+            base = os.getenv("BACKEND_API_URL", "").rstrip("/")
+            project = os.getenv("PROJECT_NAME") or os.getenv(
+                "AGENTIC_SESSION_NAMESPACE", ""
+            )
+            session_id = os.getenv("SESSION_ID", "")
+
+            if base and project and session_id:
+                url = f"{base}/projects/{project.strip()}/agentic-sessions/{session_id}/credentials/gerrit"
+                req = _urllib_request.Request(url, method="GET")
+                bot = (os.getenv("BOT_TOKEN") or "").strip()
+                if bot:
+                    req.add_header("Authorization", f"Bearer {bot}")
+                try:
+                    with _urllib_request.urlopen(req, timeout=3) as resp:
+                        data = json.loads(resp.read())
+                        if data.get("instances"):
+                            return (
+                                True,
+                                "Gerrit credentials available (not yet loaded in session)",
+                            )
+                except Exception as e:
+                    logger.debug(f"Gerrit credential probe failed: {e}")
+        except Exception as e:
+            logger.debug(f"Gerrit credential check setup failed: {e}")
+
+        return False, "Gerrit not configured - connect on Integrations page"
 
     # Generic fallback: check if MCP_{SERVER_NAME}_* env vars are populated
     sanitized = server_name.upper().replace("-", "_")

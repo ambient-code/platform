@@ -39,6 +39,9 @@ func GetIntegrationsStatus(c *gin.Context) {
 	// GitLab status
 	response["gitlab"] = getGitLabStatusForUser(ctx, userID)
 
+	// Gerrit status
+	response["gerrit"] = getGerritStatusForUser(ctx, userID)
+
 	// MCP server credentials status
 	response["mcpServers"] = getMCPServerStatusForUser(ctx, userID)
 
@@ -47,6 +50,7 @@ func GetIntegrationsStatus(c *gin.Context) {
 
 // Helper functions to get individual integration statuses
 
+// getGitHubStatusForUser returns the GitHub integration status (App + PAT) for a user.
 func getGitHubStatusForUser(ctx context.Context, userID string) gin.H {
 	log.Printf("getGitHubStatusForUser: querying status for user=%s", userID)
 	status := gin.H{
@@ -90,6 +94,7 @@ func getGitHubStatusForUser(ctx context.Context, userID string) gin.H {
 	return status
 }
 
+// getGoogleStatusForUser returns the Google OAuth integration status for a user.
 func getGoogleStatusForUser(ctx context.Context, userID string) gin.H {
 	creds, err := GetGoogleCredentials(ctx, userID)
 	if err != nil || creds == nil {
@@ -108,6 +113,7 @@ func getGoogleStatusForUser(ctx context.Context, userID string) gin.H {
 	}
 }
 
+// getJiraStatusForUser returns the Jira integration status for a user.
 func getJiraStatusForUser(ctx context.Context, userID string) gin.H {
 	creds, err := GetJiraCredentials(ctx, userID)
 	if err != nil || creds == nil {
@@ -128,6 +134,28 @@ func getJiraStatusForUser(ctx context.Context, userID string) gin.H {
 	}
 }
 
+// getGerritStatusForUser returns the Gerrit integration status with all connected instances for a user.
+func getGerritStatusForUser(ctx context.Context, userID string) gin.H {
+	instances, err := listGerritCredentials(ctx, userID)
+	if err != nil || len(instances) == 0 {
+		return gin.H{"instances": []gin.H{}}
+	}
+
+	result := make([]gin.H, 0, len(instances))
+	for _, creds := range instances {
+		result = append(result, gin.H{
+			"connected":    true,
+			"instanceName": creds.InstanceName,
+			"url":          creds.URL,
+			"authMethod":   creds.AuthMethod,
+			"updatedAt":    creds.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		})
+	}
+
+	return gin.H{"instances": result}
+}
+
+// getGitLabStatusForUser returns the GitLab integration status for a user.
 func getGitLabStatusForUser(ctx context.Context, userID string) gin.H {
 	creds, err := GetGitLabCredentials(ctx, userID)
 	if err != nil || creds == nil {

@@ -34,6 +34,15 @@ export type IntegrationsStatus = {
     updatedAt?: string
     valid?: boolean
   }
+  gerrit: {
+    instances: {
+      connected: boolean
+      instanceName: string
+      url: string
+      authMethod: 'http_basic' | 'git_cookies'
+      updatedAt: string
+    }[]
+  }
   mcpServers?: Record<string, { connected: boolean; valid?: boolean }>
 }
 

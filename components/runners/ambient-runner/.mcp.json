@@ -23,6 +23,14 @@
         "READ_ONLY_MODE": "true"
       }
     },
+    "gerrit": {
+      "command": "/opt/gerrit-mcp-server/.venv/bin/python",
+      "args": ["/opt/gerrit-mcp-server/gerrit_mcp_server/main.py", "stdio"],
+      "env": {
+        "PYTHONPATH": "/opt/gerrit-mcp-server/",
+        "GERRIT_CONFIG_PATH": "${GERRIT_CONFIG_PATH}"
+      }
+    },
     "google-workspace": {
       "command": "uvx",
       "args": [

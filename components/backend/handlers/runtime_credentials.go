@@ -481,6 +481,55 @@ func fetchGitHubUserIdentity(ctx context.Context, token string) (userName, email
 	return userName, email
 }
 
+// GetGerritCredentialsForSession handles GET /api/projects/:project/agentic-sessions/:session/credentials/gerrit
+// Returns all Gerrit instances' credentials for the session's user
+func GetGerritCredentialsForSession(c *gin.Context) {
+	project := c.Param("projectName")
+	session := c.Param("sessionName")
+
+	reqK8s, reqDyn := GetK8sClientsForRequest(c)
+	if reqK8s == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		return
+	}
+
+	effectiveUserID, ok := enforceCredentialRBAC(c, reqK8s, reqDyn, project, session)
+	if !ok {
+		return
+	}
+
+	// Get all Gerrit instances for the user
+	instances, err := listGerritCredentials(c.Request.Context(), effectiveUserID)
+	if err != nil {
+		log.Printf("Failed to get Gerrit credentials for user %s: %v", effectiveUserID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get Gerrit credentials"})
+		return
+	}
+
+	if len(instances) == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Gerrit credentials not configured"})
+		return
+	}
+
+	result := make([]gin.H, 0, len(instances))
+	for _, creds := range instances {
+		instance := gin.H{
+			"instanceName": creds.InstanceName,
+			"url":          creds.URL,
+			"authMethod":   creds.AuthMethod,
+		}
+		if creds.AuthMethod == "http_basic" {
+			instance["username"] = creds.Username
+			instance["httpToken"] = creds.HTTPToken
+		} else if creds.AuthMethod == "git_cookies" {
+			instance["gitcookiesContent"] = creds.GitcookiesContent
+		}
+		result = append(result, instance)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"instances": result})
+}
+
 // fetchGitLabUserIdentity fetches user name and email from GitLab API
 // Returns the user's name and email for git config
 func fetchGitLabUserIdentity(ctx context.Context, token, instanceURL string) (userName, email string) {

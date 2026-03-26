@@ -4,6 +4,7 @@ import { GitHubConnectionCard } from '@/components/github-connection-card'
 import { GoogleDriveConnectionCard } from '@/components/google-drive-connection-card'
 import { GitLabConnectionCard } from '@/components/gitlab-connection-card'
 import { JiraConnectionCard } from '@/components/jira-connection-card'
+import { GerritConnectionCard } from '@/components/gerrit-connection-card'
 import { PageHeader } from '@/components/page-header'
 import { useIntegrationsStatus } from '@/services/queries/use-integrations'
 import { Loader2 } from 'lucide-react'
@@ -51,6 +52,10 @@ export default function IntegrationsClient({ appSlug }: Props) {
               />
               <JiraConnectionCard
                 status={integrations?.jira}
+                onRefresh={refetch}
+              />
+              <GerritConnectionCard
+                status={integrations?.gerrit}
                 onRefresh={refetch}
               />
             </div>

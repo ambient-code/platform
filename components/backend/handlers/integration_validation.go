@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -141,6 +143,120 @@ func ValidateGoogleToken(ctx context.Context, accessToken string) (bool, error) 
 
 	// 200 = valid, 401 = invalid/expired
 	return resp.StatusCode == http.StatusOK, nil
+}
+
+// ValidateGerritToken checks if Gerrit credentials are valid
+// Uses /a/accounts/self endpoint which accepts Basic Auth or Cookie-based auth
+// Gerrit REST API responses are prefixed with )]}'  (XSSI protection)
+func ValidateGerritToken(ctx context.Context, gerritURL, authMethod, username, httpToken, gitcookiesContent string) (bool, error) {
+	if gerritURL == "" {
+		return false, fmt.Errorf("Gerrit URL is required")
+	}
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	apiURL := fmt.Sprintf("%s/a/accounts/self", gerritURL)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
+	if err != nil {
+		return false, fmt.Errorf("failed to create request")
+	}
+	req.Header.Set("Accept", "application/json")
+
+	switch authMethod {
+	case "http_basic":
+		if username == "" || httpToken == "" {
+			return false, fmt.Errorf("username and HTTP token are required for HTTP basic auth")
+		}
+		req.SetBasicAuth(username, httpToken)
+
+	case "git_cookies":
+		if gitcookiesContent == "" {
+			return false, fmt.Errorf("gitcookies content is required")
+		}
+		// Parse gitcookies content to extract cookie for the target host
+		cookie := parseGitcookies(gerritURL, gitcookiesContent)
+		if cookie == "" {
+			return false, fmt.Errorf("no matching cookie found for host in gitcookies content")
+		}
+		req.Header.Set("Cookie", cookie)
+
+	default:
+		return false, fmt.Errorf("unsupported auth method: %s", authMethod)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		// Don't wrap error - could leak credentials from request details
+		return false, fmt.Errorf("request failed")
+	}
+	defer resp.Body.Close()
+
+	// 200 = valid, 401/403 = invalid
+	if resp.StatusCode == http.StatusOK {
+		return true, nil
+	}
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return false, nil
+	}
+
+	// Other status codes - can't validate, assume valid to avoid false negatives
+	return true, nil
+}
+
+// parseGitcookies extracts the cookie value for a given Gerrit URL from gitcookies content.
+// Gitcookies format: host\tFALSE\t/\tTRUE\t2147483647\to\tvalue
+func parseGitcookies(gerritURL, content string) string {
+	parsed, err := url.Parse(gerritURL)
+	if err != nil {
+		return ""
+	}
+	host := parsed.Hostname()
+
+	lines := strings.Split(content, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		fields := strings.Split(line, "\t")
+		if len(fields) >= 7 {
+			cookieHost := strings.TrimPrefix(fields[0], ".")
+			if cookieHost == host || strings.HasSuffix(host, "."+cookieHost) {
+				return fields[5] + "=" + fields[6]
+			}
+		}
+	}
+	return ""
+}
+
+// TestGerritConnection handles POST /api/auth/gerrit/test
+// Tests Gerrit credentials without saving them
+func TestGerritConnection(c *gin.Context) {
+	var req struct {
+		URL               string `json:"url" binding:"required"`
+		AuthMethod        string `json:"authMethod" binding:"required"`
+		Username          string `json:"username"`
+		HTTPToken         string `json:"httpToken"`
+		GitcookiesContent string `json:"gitcookiesContent"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	valid, err := ValidateGerritToken(c.Request.Context(), req.URL, req.AuthMethod, req.Username, req.HTTPToken, req.GitcookiesContent)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"valid": false, "error": err.Error()})
+		return
+	}
+
+	if !valid {
+		c.JSON(http.StatusOK, gin.H{"valid": false, "error": "Invalid credentials"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"valid": true, "message": "Gerrit connection successful"})
 }
 
 // TestJiraConnection handles POST /api/auth/jira/test
