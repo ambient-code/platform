@@ -204,15 +204,80 @@ func GetMarketplaceCatalog(c *gin.Context) {
 		return
 	}
 
-	// Update cache
+	// Normalize catalog: ai-helpers uses {tools: {skills: [...], commands: [...], agents: [...]}}
+	// We flatten into a single items array with a "category" field.
+	normalized, err := normalizeCatalog(body)
+	if err != nil {
+		log.Printf("GetMarketplaceCatalog: failed to normalize catalog: %v", err)
+		c.JSON(http.StatusBadGateway, gin.H{"error": "Failed to parse catalog"})
+		return
+	}
+
+	// Update cache with normalized data
 	mktCatalogCache.mu.Lock()
-	mktCatalogCache.data = json.RawMessage(body)
+	mktCatalogCache.data = normalized
 	mktCatalogCache.cachedAt = time.Now()
 	mktCatalogCache.cacheKey = cacheKey
 	mktCatalogCache.mu.Unlock()
 
 	log.Printf("GetMarketplaceCatalog: fetched catalog from %s (cached for %v)", source.CatalogURL, mktCatalogCacheTTL)
-	c.Data(http.StatusOK, "application/json", body)
+	c.Data(http.StatusOK, "application/json", normalized)
+}
+
+// normalizeCatalog converts various catalog formats into a consistent {"items": [...]} response.
+// Supports the ai-helpers format: {"tools": {"skills": [...], "commands": [...], "agents": [...]}}
+// and a flat format: {"items": [...]} or just [...].
+func normalizeCatalog(raw []byte) (json.RawMessage, error) {
+	// Try ai-helpers format: {tools: {skills: [], commands: [], agents: []}}
+	var aiHelpers struct {
+		Tools map[string][]json.RawMessage `json:"tools"`
+	}
+	if err := json.Unmarshal(raw, &aiHelpers); err == nil && aiHelpers.Tools != nil {
+		var items []map[string]interface{}
+		categoryMap := map[string]string{
+			"skills":   "skill",
+			"commands": "command",
+			"agents":   "agent",
+		}
+		for toolType, entries := range aiHelpers.Tools {
+			category, ok := categoryMap[toolType]
+			if !ok {
+				continue // skip unknown types like "gemini"
+			}
+			for _, entry := range entries {
+				var item map[string]interface{}
+				if err := json.Unmarshal(entry, &item); err == nil {
+					item["category"] = category
+					// Ensure id field exists (skills/agents have it, commands may not)
+					if _, hasID := item["id"]; !hasID {
+						if name, ok := item["name"].(string); ok {
+							item["id"] = name
+						}
+					}
+					items = append(items, item)
+				}
+			}
+		}
+		result, err := json.Marshal(gin.H{"items": items})
+		return result, err
+	}
+
+	// Try already-normalized format: {"items": [...]}
+	var wrapped struct {
+		Items json.RawMessage `json:"items"`
+	}
+	if err := json.Unmarshal(raw, &wrapped); err == nil && wrapped.Items != nil {
+		return raw, nil
+	}
+
+	// Try flat array format: [...]
+	var arr []json.RawMessage
+	if err := json.Unmarshal(raw, &arr); err == nil {
+		result, err := json.Marshal(gin.H{"items": arr})
+		return result, err
+	}
+
+	return nil, fmt.Errorf("unrecognized catalog format")
 }
 
 // ScanGitSource clones a git repo and scans for skills, commands, agents, and workflows.

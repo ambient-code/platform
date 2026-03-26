@@ -35,7 +35,7 @@ export async function getMarketplaceCatalog(
   const response = await apiClient.get<CatalogResponse>(
     `/marketplace/sources/${sourceIndex}/catalog`
   );
-  return response.items;
+  return response.items ?? [];
 }
 
 export async function scanGitSource(projectName: string, request: ScanRequest): Promise<ScanResult> {
