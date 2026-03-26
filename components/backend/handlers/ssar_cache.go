@@ -18,7 +18,7 @@ func init() {
 // RBAC changes take at most this long to take effect.
 const ssarCacheTTL = 30 * time.Second
 
-// ssarCacheMaxSize is the maximum number of entries before LRU eviction.
+// ssarCacheMaxSize is the maximum number of entries before random eviction.
 const ssarCacheMaxSize = 10000
 
 // ssarCacheEntry holds a cached SSAR result with expiry.

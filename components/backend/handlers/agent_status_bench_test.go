@@ -141,10 +141,13 @@ func BenchmarkEnrichAgentStatus_Concurrent(b *testing.B) {
 
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
-		i := 0
+		// Each goroutine gets its own session to avoid racing on AgentStatus mutation
+		session := &types.AgenticSession{
+			Metadata: map[string]interface{}{"name": "bench-session"},
+			Status:   &types.AgenticSessionStatus{Phase: "Running"},
+		}
 		for pb.Next() {
-			enrichAgentStatus(sessions[i%20])
-			i++
+			enrichAgentStatus(session)
 		}
 	})
 }
@@ -172,12 +175,12 @@ func BenchmarkEnrichAgentStatus_ListPage(b *testing.B) {
 
 	b.Run("uncached", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			// Clear cache
-			agentStatusCache.Lock()
-			agentStatusCache.entries = make(map[string]agentStatusCacheEntry)
-			agentStatusCache.Unlock()
-
 			for j := range sessions {
+				// Clear cache before each session to force a file scan every time
+				agentStatusCache.Lock()
+				delete(agentStatusCache.entries, "bench-session")
+				agentStatusCache.Unlock()
+
 				enrichAgentStatus(&sessions[j])
 			}
 		}
