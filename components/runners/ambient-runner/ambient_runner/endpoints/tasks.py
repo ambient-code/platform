@@ -27,7 +27,7 @@ async def stop_task(task_id: str, request: Request):
     except Exception:
         pass
 
-    logger.info(f"Stop task request: task_id={task_id}")
+    logger.debug(f"Stop task request: task_id={task_id}")
 
     # Check if the task already finished before we try to stop it
     adapter = getattr(bridge, "_adapter", None)
@@ -44,9 +44,8 @@ async def stop_task(task_id: str, request: Request):
         # Treat as success — the task is no longer running either way
         logger.warning(f"stop_task({task_id}) raised: {e}")
 
-    # Emit task:stop_requested event by pushing directly into the
-    # session worker's output queue. The adapter recognizes AG-UI
-    # BaseEvents and yields them immediately (no hook queue delay).
+    # Emit task:completed with status "stopped" — the SDK doesn't
+    # always emit a TaskNotificationMessage for killed tasks.
     from ag_ui.core import CustomEvent, EventType
 
     # Emit task:completed with status "stopped" — the SDK doesn't

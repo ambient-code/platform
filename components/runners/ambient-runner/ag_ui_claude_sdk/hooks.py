@@ -104,7 +104,7 @@ def build_hooks_dict(queue: asyncio.Queue) -> dict[str, list[Any]]:
         async def _callback(
             hook_input: dict[str, Any],
             tool_use_id: str | None = None,
-            context: Any = None,
+            _context: Any = None,
             _q: asyncio.Queue = queue,
         ) -> dict:
             return await _forward_hook_as_custom_event(

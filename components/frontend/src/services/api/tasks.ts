@@ -1,5 +1,5 @@
 import { apiClient } from './client'
-import type { BackgroundTask, TaskOutputResponse } from '@/types/background-task'
+import type { TaskOutputResponse } from '@/types/background-task'
 
 export async function stopBackgroundTask(
   project: string,
@@ -21,11 +21,3 @@ export async function getTaskOutput(
   )
 }
 
-export async function listBackgroundTasks(
-  project: string,
-  session: string,
-): Promise<{ tasks: BackgroundTask[] }> {
-  return apiClient.get<{ tasks: BackgroundTask[] }>(
-    `/projects/${project}/agentic-sessions/${session}/agui/tasks`,
-  )
-}
