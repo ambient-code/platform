@@ -69,6 +69,17 @@ func main() {
 	}
 }
 
+func buildNamespaceProvisioner(cfg *config.ControlPlaneConfig, kube *kubeclient.KubeClient) kubeclient.NamespaceProvisioner {
+	switch cfg.PlatformMode {
+	case "mpp":
+		log.Info().Str("config_namespace", cfg.MPPConfigNamespace).Msg("using MPP TenantNamespace provisioner")
+		return kubeclient.NewMPPNamespaceProvisioner(kube, cfg.MPPConfigNamespace, log.Logger)
+	default:
+		log.Info().Msg("using standard Kubernetes namespace provisioner")
+		return kubeclient.NewStandardNamespaceProvisioner(kube, log.Logger)
+	}
+}
+
 func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 	log.Info().Msg("starting in Kubernetes mode")
 
@@ -76,6 +87,8 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 	if err != nil {
 		return fmt.Errorf("creating Kubernetes client: %w", err)
 	}
+
+	provisioner := buildNamespaceProvisioner(cfg, kube)
 
 	factory := reconciler.NewSDKClientFactory(cfg.APIServerURL, cfg.APIToken, log.Logger)
 	kubeReconcilerCfg := reconciler.KubeReconcilerConfig{
@@ -118,13 +131,13 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 
 	inf := informer.New(sdk, watchManager, log.Logger)
 
-	projectReconciler := reconciler.NewProjectReconciler(factory, kube, log.Logger)
+	projectReconciler := reconciler.NewProjectReconciler(factory, kube, provisioner, log.Logger)
 	projectSettingsReconciler := reconciler.NewProjectSettingsReconciler(factory, kube, log.Logger)
 
 	inf.RegisterHandler("projects", projectReconciler.Reconcile)
 	inf.RegisterHandler("project_settings", projectSettingsReconciler.Reconcile)
 
-	sessionReconcilers := createSessionReconcilers(cfg.Reconcilers, factory, kube, kubeReconcilerCfg, log.Logger)
+	sessionReconcilers := createSessionReconcilers(cfg.Reconcilers, factory, kube, provisioner, kubeReconcilerCfg, log.Logger)
 	for _, sessionRec := range sessionReconcilers {
 		inf.RegisterHandler("sessions", sessionRec.Reconcile)
 	}
@@ -132,13 +145,13 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 	return inf.Run(ctx)
 }
 
-func createSessionReconcilers(reconcilerTypes []string, factory *reconciler.SDKClientFactory, kube *kubeclient.KubeClient, cfg reconciler.KubeReconcilerConfig, logger zerolog.Logger) []reconciler.Reconciler {
+func createSessionReconcilers(reconcilerTypes []string, factory *reconciler.SDKClientFactory, kube *kubeclient.KubeClient, provisioner kubeclient.NamespaceProvisioner, cfg reconciler.KubeReconcilerConfig, logger zerolog.Logger) []reconciler.Reconciler {
 	var reconcilers []reconciler.Reconciler
 
 	for _, reconcilerType := range reconcilerTypes {
 		switch reconcilerType {
 		case "kube":
-			kubeReconciler := reconciler.NewKubeReconciler(factory, kube, cfg, logger)
+			kubeReconciler := reconciler.NewKubeReconciler(factory, kube, provisioner, cfg, logger)
 			reconcilers = append(reconcilers, kubeReconciler)
 			log.Info().Str("type", "kube").Msg("enabled direct Kubernetes session reconciler")
 		case "tally":

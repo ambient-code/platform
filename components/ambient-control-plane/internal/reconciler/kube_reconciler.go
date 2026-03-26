@@ -40,18 +40,20 @@ type KubeReconcilerConfig struct {
 
 
 type SimpleKubeReconciler struct {
-	factory *SDKClientFactory
-	kube    *kubeclient.KubeClient
-	cfg     KubeReconcilerConfig
-	logger  zerolog.Logger
+	factory     *SDKClientFactory
+	kube        *kubeclient.KubeClient
+	provisioner kubeclient.NamespaceProvisioner
+	cfg         KubeReconcilerConfig
+	logger      zerolog.Logger
 }
 
-func NewKubeReconciler(factory *SDKClientFactory, kube *kubeclient.KubeClient, cfg KubeReconcilerConfig, logger zerolog.Logger) *SimpleKubeReconciler {
+func NewKubeReconciler(factory *SDKClientFactory, kube *kubeclient.KubeClient, provisioner kubeclient.NamespaceProvisioner, cfg KubeReconcilerConfig, logger zerolog.Logger) *SimpleKubeReconciler {
 	return &SimpleKubeReconciler{
-		factory: factory,
-		kube:    kube,
-		cfg:     cfg,
-		logger:  logger.With().Str("reconciler", "kube").Logger(),
+		factory:     factory,
+		kube:        kube,
+		provisioner: provisioner,
+		cfg:         cfg,
+		logger:      logger.With().Str("reconciler", "kube").Logger(),
 	}
 }
 
@@ -173,10 +175,10 @@ func (r *SimpleKubeReconciler) cleanupSession(ctx context.Context, session types
 		r.logger.Warn().Err(err).Msg("deleting services")
 	}
 
-	if err := r.kube.DeleteNamespace(ctx, namespace); err != nil && !k8serrors.IsNotFound(err) {
-		r.logger.Warn().Err(err).Str("namespace", namespace).Msg("deleting namespace")
-	} else if err == nil {
-		r.logger.Info().Str("namespace", namespace).Msg("namespace deleted")
+	if err := r.provisioner.DeprovisionNamespace(ctx, namespace); err != nil {
+		r.logger.Warn().Err(err).Str("namespace", namespace).Msg("deprovisioning namespace")
+	} else {
+		r.logger.Info().Str("namespace", namespace).Msg("namespace deprovisioned")
 	}
 
 	return nil
@@ -224,30 +226,16 @@ func (r *SimpleKubeReconciler) ensureService(ctx context.Context, namespace stri
 }
 
 func (r *SimpleKubeReconciler) ensureNamespaceExists(ctx context.Context, namespace string, session types.Session) error {
-	if _, err := r.kube.GetNamespace(ctx, namespace); err == nil {
-		return nil
+	labels := map[string]string{
+		LabelManaged:   "true",
+		LabelProjectID: session.ProjectID,
+		LabelManagedBy: "ambient-control-plane",
+	}
+	if err := r.provisioner.ProvisionNamespace(ctx, namespace, labels); err != nil {
+		return fmt.Errorf("provisioning namespace %s: %w", namespace, err)
 	}
 
-	ns := &unstructured.Unstructured{
-		Object: map[string]interface{}{
-			"apiVersion": "v1",
-			"kind":       "Namespace",
-			"metadata": map[string]interface{}{
-				"name": namespace,
-				"labels": map[string]interface{}{
-					LabelManaged:   "true",
-					LabelProjectID: session.ProjectID,
-					LabelManagedBy: "ambient-control-plane",
-				},
-			},
-		},
-	}
-
-	if _, err := r.kube.CreateNamespace(ctx, ns); err != nil && !k8serrors.IsAlreadyExists(err) {
-		return fmt.Errorf("creating namespace %s: %w", namespace, err)
-	}
-
-	r.logger.Info().Str("namespace", namespace).Msg("namespace created for session")
+	r.logger.Info().Str("namespace", namespace).Msg("namespace provisioned for session")
 
 	if r.cfg.RunnerImageNamespace != "" {
 		if err := r.ensureImagePullAccess(ctx, namespace); err != nil {

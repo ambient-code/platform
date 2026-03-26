@@ -16,16 +16,18 @@ import (
 )
 
 type ProjectReconciler struct {
-	factory *SDKClientFactory
-	kube    *kubeclient.KubeClient
-	logger  zerolog.Logger
+	factory     *SDKClientFactory
+	kube        *kubeclient.KubeClient
+	provisioner kubeclient.NamespaceProvisioner
+	logger      zerolog.Logger
 }
 
-func NewProjectReconciler(factory *SDKClientFactory, kube *kubeclient.KubeClient, logger zerolog.Logger) *ProjectReconciler {
+func NewProjectReconciler(factory *SDKClientFactory, kube *kubeclient.KubeClient, provisioner kubeclient.NamespaceProvisioner, logger zerolog.Logger) *ProjectReconciler {
 	return &ProjectReconciler{
-		factory: factory,
-		kube:    kube,
-		logger:  logger.With().Str("reconciler", "projects").Logger(),
+		factory:     factory,
+		kube:        kube,
+		provisioner: provisioner,
+		logger:      logger.With().Str("reconciler", "projects").Logger(),
 	}
 }
 
@@ -63,39 +65,15 @@ func (r *ProjectReconciler) Reconcile(ctx context.Context, event informer.Resour
 
 func (r *ProjectReconciler) ensureNamespace(ctx context.Context, project types.Project) error {
 	name := namespaceForProject(project)
-
-	_, err := r.kube.GetNamespace(ctx, name)
-	if err == nil {
-		r.logger.Debug().Str("namespace", name).Msg("namespace already exists")
-		return nil
+	labels := map[string]string{
+		LabelManaged:   "true",
+		LabelProjectID: project.ID,
+		LabelManagedBy: "ambient-control-plane",
 	}
-	if !k8serrors.IsNotFound(err) {
-		return fmt.Errorf("checking namespace %s: %w", name, err)
+	if err := r.provisioner.ProvisionNamespace(ctx, name, labels); err != nil {
+		return fmt.Errorf("provisioning namespace %s: %w", name, err)
 	}
-
-	ns := &unstructured.Unstructured{
-		Object: map[string]interface{}{
-			"apiVersion": "v1",
-			"kind":       "Namespace",
-			"metadata": map[string]interface{}{
-				"name": name,
-				"labels": map[string]interface{}{
-					LabelManaged:   "true",
-					LabelProjectID: project.ID,
-					LabelManagedBy: "ambient-control-plane",
-				},
-				"annotations": map[string]interface{}{
-					"ambient-code.io/project-name": project.Name,
-				},
-			},
-		},
-	}
-
-	if _, err := r.kube.CreateNamespace(ctx, ns); err != nil {
-		return fmt.Errorf("creating namespace %s: %w", name, err)
-	}
-
-	r.logger.Info().Str("namespace", name).Str("project_id", project.ID).Msg("namespace created")
+	r.logger.Info().Str("namespace", name).Str("project_id", project.ID).Msg("namespace provisioned")
 	return nil
 }
 

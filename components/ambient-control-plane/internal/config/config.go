@@ -14,6 +14,8 @@ type ControlPlaneConfig struct {
 	LogLevel              string
 	Kubeconfig            string
 	Mode                  string
+	PlatformMode          string
+	MPPConfigNamespace    string
 	Reconcilers           []string
 	RunnerImage           string
 	RunnerGRPCUseTLS      bool
@@ -41,6 +43,8 @@ func Load() (*ControlPlaneConfig, error) {
 		LogLevel:              envOrDefault("LOG_LEVEL", "info"),
 		Kubeconfig:            os.Getenv("KUBECONFIG"),
 		Mode:                  envOrDefault("MODE", "kube"),
+		PlatformMode:          envOrDefault("PLATFORM_MODE", "standard"),
+		MPPConfigNamespace:    envOrDefault("MPP_CONFIG_NAMESPACE", "ambient-code--config"),
 		Reconcilers:           parseReconcilers(envOrDefault("RECONCILERS", "tally,kube")),
 		RunnerImage:           envOrDefault("RUNNER_IMAGE", "quay.io/ambient_code/vteam_claude_runner:latest"),
 		RunnerGRPCUseTLS:      os.Getenv("AMBIENT_GRPC_USE_TLS") == "true",
@@ -67,6 +71,12 @@ func Load() (*ControlPlaneConfig, error) {
 	case "kube", "test":
 	default:
 		return nil, fmt.Errorf("unknown MODE %q: must be one of kube, test", cfg.Mode)
+	}
+
+	switch cfg.PlatformMode {
+	case "standard", "mpp":
+	default:
+		return nil, fmt.Errorf("unknown PLATFORM_MODE %q: must be one of standard, mpp", cfg.PlatformMode)
 	}
 
 	return cfg, nil
