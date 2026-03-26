@@ -1,3 +1,4 @@
+import React, { createContext, useContext } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { UploadFileModal } from '../upload-file-modal';
@@ -8,6 +9,37 @@ vi.mock('@/hooks/use-input-history', () => ({
     addToHistory: vi.fn(),
     clearHistory: vi.fn(),
   })),
+}));
+
+// Mock Radix Tabs so tab switching works reliably in jsdom
+const TabsContext = createContext({ value: '', onValueChange: (() => {}) as (v: string) => void });
+
+vi.mock('@/components/ui/tabs', () => ({
+  Tabs: ({ children, value, onValueChange, className }: Record<string, unknown>) => (
+    <TabsContext.Provider value={{ value: value as string, onValueChange: onValueChange as (v: string) => void }}>
+      <div className={className as string}>{children as React.ReactNode}</div>
+    </TabsContext.Provider>
+  ),
+  TabsList: ({ children, className }: Record<string, unknown>) => (
+    <div role="tablist" className={className as string}>{children as React.ReactNode}</div>
+  ),
+  TabsTrigger: ({ children, value, disabled }: Record<string, unknown>) => {
+    const ctx = useContext(TabsContext);
+    return (
+      <button
+        role="tab"
+        data-state={ctx.value === value ? 'active' : 'inactive'}
+        disabled={disabled as boolean}
+        onClick={() => ctx.onValueChange(value as string)}
+      >
+        {children as React.ReactNode}
+      </button>
+    );
+  },
+  TabsContent: ({ children, value, className }: Record<string, unknown>) => {
+    const ctx = useContext(TabsContext);
+    return ctx.value === value ? <div role="tabpanel" className={className as string}>{children as React.ReactNode}</div> : null;
+  },
 }));
 
 vi.mock('@/components/input-with-history', () => ({
@@ -138,23 +170,15 @@ describe('UploadFileModal', () => {
     render(<UploadFileModal {...defaultProps} />);
     fireEvent.click(screen.getByText('Folder'));
 
-    await waitFor(() => {
-      const folderLabel = screen.queryByText('Choose Folder');
-      if (folderLabel) {
-        expect(folderLabel).toBeDefined();
-      } else {
-        expect(screen.getByText('Folder')).toBeDefined();
-      }
-    });
+    const folderInput = await screen.findByLabelText('Choose Folder');
+    expect(folderInput).toBeDefined();
   });
 
   it('shows error when folder contains a file exceeding per-file limit', async () => {
     render(<UploadFileModal {...defaultProps} />);
     fireEvent.click(screen.getByText('Folder'));
 
-    // Radix Tabs may not render inactive tab content in jsdom
-    const folderInput = screen.queryByLabelText('Choose Folder');
-    if (!folderInput) return;
+    const folderInput = await screen.findByLabelText('Choose Folder');
 
     const smallFile = new File(['ok'], 'a.txt', { type: 'text/plain' });
     Object.defineProperty(smallFile, 'size', { value: 1024 });
@@ -175,8 +199,7 @@ describe('UploadFileModal', () => {
     render(<UploadFileModal {...defaultProps} />);
     fireEvent.click(screen.getByText('Folder'));
 
-    const folderInput = screen.queryByLabelText('Choose Folder');
-    if (!folderInput) return;
+    const folderInput = await screen.findByLabelText('Choose Folder');
 
     // Create files that together exceed 100MB but individually are under 10MB
     const files = [];
@@ -198,8 +221,7 @@ describe('UploadFileModal', () => {
     render(<UploadFileModal {...defaultProps} />);
     fireEvent.click(screen.getByText('Folder'));
 
-    const folderInput = screen.queryByLabelText('Choose Folder');
-    if (!folderInput) return;
+    const folderInput = await screen.findByLabelText('Choose Folder');
 
     const file1 = new File(['hello'], 'a.txt', { type: 'text/plain' });
     Object.defineProperty(file1, 'size', { value: 512 });

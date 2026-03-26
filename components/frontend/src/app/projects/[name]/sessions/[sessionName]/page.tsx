@@ -451,7 +451,8 @@ export default function ProjectSessionDetailPage({
     mutationFn: async (source: UploadFileSource) => {
       if (source.type === "folder" && source.files && source.files.length > 0) {
         // Upload each file in the folder sequentially, preserving directory structure
-        const results: { filename: string; success: boolean }[] = [];
+        const successes: string[] = [];
+        const failures: string[] = [];
         for (const { file, relativePath } of source.files) {
           // Split relativePath into directory + filename
           const parts = relativePath.split("/");
@@ -466,24 +467,38 @@ export default function ProjectSessionDetailPage({
             formData.append("subpath", subpath);
           }
 
-          const response = await fetch(
-            `/api/projects/${projectName}/agentic-sessions/${sessionName}/workspace/upload`,
-            {
-              method: "POST",
-              body: formData,
-            },
-          );
+          try {
+            const response = await fetch(
+              `/api/projects/${projectName}/agentic-sessions/${sessionName}/workspace/upload`,
+              {
+                method: "POST",
+                body: formData,
+              },
+            );
 
-          if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || `Upload failed for ${relativePath}`);
+            if (!response.ok) {
+              const error = await response.json();
+              failures.push(error.error || relativePath);
+            } else {
+              successes.push(relativePath);
+            }
+          } catch {
+            failures.push(relativePath);
           }
-
-          results.push(await response.json() as { filename: string; success: boolean });
         }
-        // Return summary for folder upload
+
         const folderName = source.files[0].relativePath.split("/")[0];
-        return { filename: folderName, fileCount: results.length };
+
+        if (failures.length > 0 && successes.length === 0) {
+          throw new Error(`All ${failures.length} files failed to upload`);
+        }
+        if (failures.length > 0) {
+          throw new Error(
+            `${successes.length} of ${source.files.length} files uploaded; ${failures.length} failed: ${failures.join(", ")}`,
+          );
+        }
+
+        return { filename: folderName, fileCount: successes.length };
       }
 
       const formData = new FormData();
@@ -524,8 +539,12 @@ export default function ProjectSessionDetailPage({
       await refetchArtifactsFiles();
       setUploadModalOpen(false);
     },
-    onError: (error: Error) => {
+    onError: async (error: Error) => {
       toast.error(error.message || "Failed to upload file");
+      // Refresh workspace so partially uploaded files are visible
+      await refetchFileUploadsList();
+      await refetchDirectoryFiles();
+      await refetchArtifactsFiles();
     },
   });
 
