@@ -170,6 +170,27 @@ jobs:
 
           cat RELEASE_CHANGELOG.md
 
+      - name: Generate Loading Tips
+        run: |
+          LATEST_TAG="${{ steps.get_latest_tag.outputs.latest_tag }}"
+          NEW_TAG="${{ steps.next_version.outputs.new_tag }}"
+          REPO="${{ github.repository }}"
+          OUTPUT="components/frontend/src/lib/loading-tips.ts"
+
+          python3 scripts/generate-loading-tips.py "$NEW_TAG" "$LATEST_TAG" "$REPO" "$OUTPUT"
+
+          # Commit the updated loading tips so the frontend build includes them
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "$OUTPUT"
+          if git diff --cached --quiet; then
+            echo "No loading tips changes to commit"
+          else
+            git commit -m "chore(frontend): update loading tips for ${NEW_TAG}
+
+          Auto-generated release tips highlighting contributors and changes."
+          fi
+
       - name: Create Tag
         id: create_tag
         uses: rickstaa/action-create-tag@v1
