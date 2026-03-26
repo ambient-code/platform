@@ -48,12 +48,12 @@ Read-only projection used for status reporting. Not stored separately.
 | Secret name     | `gerrit-credentials`                         |
 | Namespace       | Platform namespace (same as other creds)     |
 | Labels          | `app: ambient-code`, `ambient-code.io/provider: gerrit` |
-| Data key format | `{instanceName}:{userID}`                    |
+| Data key format | `{instanceName}.{userID}`                    |
 | Data value      | JSON-marshaled `GerritCredentials`           |
 
 **Multi-instance**: A user with two Gerrit instances ("openstack" and "android") has two entries in the same secret:
-- Key: `openstack:user123` → Value: `{"userID":"user123","instanceName":"openstack","url":"https://review.opendev.org",...}`
-- Key: `android:user123` → Value: `{"userID":"user123","instanceName":"android","url":"https://android-review.googlesource.com",...}`
+- Key: `openstack.user123` → Value: `{"userID":"user123","instanceName":"openstack","url":"https://review.opendev.org",...}`
+- Key: `android.user123` → Value: `{"userID":"user123","instanceName":"android","url":"https://android-review.googlesource.com",...}`
 
 ## Runtime Configuration
 

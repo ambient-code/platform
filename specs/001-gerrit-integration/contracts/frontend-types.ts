@@ -7,14 +7,20 @@
 
 export type GerritAuthMethod = 'http_basic' | 'git_cookies'
 
-export interface GerritConnectRequest {
-  instanceName: string
-  url: string
-  authMethod: GerritAuthMethod
-  username?: string       // Required when authMethod is 'http_basic'
-  httpToken?: string      // Required when authMethod is 'http_basic'
-  gitcookiesContent?: string // Required when authMethod is 'git_cookies'
-}
+export type GerritConnectRequest =
+  | {
+      instanceName: string
+      url: string
+      authMethod: 'http_basic'
+      username: string
+      httpToken: string
+    }
+  | {
+      instanceName: string
+      url: string
+      authMethod: 'git_cookies'
+      gitcookiesContent: string
+    }
 
 export interface GerritConnectResponse {
   message: string
@@ -33,6 +39,7 @@ export interface GerritInstanceStatus {
 
 export interface GerritTestResponse {
   valid: boolean
+  message?: string
   error?: string
 }
 
