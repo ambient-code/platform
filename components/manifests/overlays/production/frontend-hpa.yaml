@@ -9,7 +9,7 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: frontend
-  minReplicas: 2
+  minReplicas: 4
   maxReplicas: 10
   metrics:
   # Use ContainerResource to target only the frontend container,
