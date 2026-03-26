@@ -99,6 +99,16 @@ export function NewSessionView({
   const [contextModalOpen, setContextModalOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // Auto-resize the textarea as the user types.
+  // `field-sizing: content` (used by the base Textarea) only works in Chrome;
+  // this JS fallback ensures the same behaviour in Firefox and Safari.
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [prompt]);
+
   const addPendingRepo = (url: string) => {
     if (pendingRepos.some((r) => r.url === url)) return;
     const name = url.replace(/\/+$/, "").split("/").pop()?.replace(/\.git$/, "") || url;
@@ -138,7 +148,7 @@ export function NewSessionView({
   };
 
   return (
-    <div className="h-full flex items-center justify-center p-8">
+    <div className="min-h-full flex items-center justify-center p-8">
       <div className="w-full max-w-2xl space-y-4">
         {/* Header */}
         <div className="text-center space-y-2">
@@ -161,7 +171,7 @@ export function NewSessionView({
             onChange={(e) => setPrompt(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Describe what you'd like to work on..."
-            className="min-h-[100px] resize-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0 pb-12 overflow-y-auto"
+            className="min-h-[100px] resize-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0 pb-12 overflow-y-hidden"
           />
           <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between px-2 py-2">
             <div className="flex items-center gap-1">
