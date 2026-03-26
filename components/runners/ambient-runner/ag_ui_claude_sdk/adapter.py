@@ -598,6 +598,49 @@ class ClaudeAgentAdapter:
         logger.debug(f"Creating ClaudeAgentOptions with merged kwargs: {merged_kwargs}")
         return ClaudeAgentOptions(**merged_kwargs)
 
+    # ── Shared task event helpers ──
+
+    def _emit_task_started(self, message: Any) -> "CustomEvent":
+        task_info = {
+            "task_id": message.task_id,
+            "description": getattr(message, "description", ""),
+            "task_type": getattr(message, "task_type", ""),
+            "session_id": getattr(message, "session_id", ""),
+            "status": "running",
+        }
+        self._task_registry[message.task_id] = task_info
+        return CustomEvent(type=EventType.CUSTOM, name="task:started", value=task_info)
+
+    def _emit_task_progress(self, message: Any) -> "CustomEvent":
+        usage = getattr(message, "usage", None)
+        progress_value = {
+            "task_id": message.task_id,
+            "description": getattr(message, "description", ""),
+            "usage": dict(usage) if usage else None,
+            "last_tool_name": getattr(message, "last_tool_name", None),
+        }
+        existing = self._task_registry.get(message.task_id, {})
+        existing.update(progress_value)
+        self._task_registry[message.task_id] = existing
+        return CustomEvent(type=EventType.CUSTOM, name="task:progress", value=progress_value)
+
+    def _emit_task_notification(self, message: Any) -> "CustomEvent":
+        usage = getattr(message, "usage", None)
+        output_file = getattr(message, "output_file", None)
+        notification_value = {
+            "task_id": message.task_id,
+            "status": getattr(message, "status", "completed"),
+            "summary": getattr(message, "summary", ""),
+            "usage": dict(usage) if usage else None,
+            "output_file": output_file,
+        }
+        existing = self._task_registry.get(message.task_id, {})
+        existing.update(notification_value)
+        self._task_registry[message.task_id] = existing
+        if output_file:
+            self._task_outputs[message.task_id] = output_file
+        return CustomEvent(type=EventType.CUSTOM, name="task:completed", value=notification_value)
+
     async def _stream_claude_sdk(
         self,
         prompt: str,
@@ -1058,57 +1101,13 @@ class ClaudeAgentAdapter:
                                 yield event
 
                 elif isinstance(message, TaskStartedMessage):
-                    task_info = {
-                        "task_id": message.task_id,
-                        "description": getattr(message, "description", ""),
-                        "task_type": getattr(message, "task_type", ""),
-                        "session_id": getattr(message, "session_id", ""),
-                        "status": "running",
-                    }
-                    self._task_registry[message.task_id] = task_info
-                    yield CustomEvent(
-                        type=EventType.CUSTOM,
-                        name="task:started",
-                        value=task_info,
-                    )
+                    yield self._emit_task_started(message)
 
                 elif isinstance(message, TaskProgressMessage):
-                    usage = getattr(message, "usage", None)
-                    progress_value = {
-                        "task_id": message.task_id,
-                        "description": getattr(message, "description", ""),
-                        "usage": dict(usage) if usage else None,
-                        "last_tool_name": getattr(message, "last_tool_name", None),
-                    }
-                    existing = self._task_registry.get(message.task_id, {})
-                    existing.update(progress_value)
-                    self._task_registry[message.task_id] = existing
-                    yield CustomEvent(
-                        type=EventType.CUSTOM,
-                        name="task:progress",
-                        value=progress_value,
-                    )
+                    yield self._emit_task_progress(message)
 
                 elif isinstance(message, TaskNotificationMessage):
-                    usage = getattr(message, "usage", None)
-                    output_file = getattr(message, "output_file", None)
-                    notification_value = {
-                        "task_id": message.task_id,
-                        "status": getattr(message, "status", "completed"),
-                        "summary": getattr(message, "summary", ""),
-                        "usage": dict(usage) if usage else None,
-                        "output_file": output_file,
-                    }
-                    existing = self._task_registry.get(message.task_id, {})
-                    existing.update(notification_value)
-                    self._task_registry[message.task_id] = existing
-                    if output_file:
-                        self._task_outputs[message.task_id] = output_file
-                    yield CustomEvent(
-                        type=EventType.CUSTOM,
-                        name="task:completed",
-                        value=notification_value,
-                    )
+                    yield self._emit_task_notification(message)
 
                 elif isinstance(message, SystemMessage):
                     data = getattr(message, "data", {}) or {}
@@ -1357,61 +1356,17 @@ class ClaudeAgentAdapter:
             except asyncio.QueueEmpty:
                 break
 
-        # --- CUSTOM events: task lifecycle ---
+        # --- CUSTOM events: task lifecycle (reuses shared helpers) ---
         if isinstance(message, TaskStartedMessage):
-            task_info = {
-                "task_id": message.task_id,
-                "description": getattr(message, "description", ""),
-                "task_type": getattr(message, "task_type", ""),
-                "session_id": getattr(message, "session_id", ""),
-                "status": "running",
-            }
-            self._task_registry[message.task_id] = task_info
-            yield CustomEvent(
-                type=EventType.CUSTOM,
-                name="task:started",
-                value=task_info,
-            )
+            yield self._emit_task_started(message)
             return
 
         if isinstance(message, TaskProgressMessage):
-            usage = getattr(message, "usage", None)
-            progress_value = {
-                "task_id": message.task_id,
-                "description": getattr(message, "description", ""),
-                "usage": dict(usage) if usage else None,
-                "last_tool_name": getattr(message, "last_tool_name", None),
-            }
-            existing = self._task_registry.get(message.task_id, {})
-            existing.update(progress_value)
-            self._task_registry[message.task_id] = existing
-            yield CustomEvent(
-                type=EventType.CUSTOM,
-                name="task:progress",
-                value=progress_value,
-            )
+            yield self._emit_task_progress(message)
             return
 
         if isinstance(message, TaskNotificationMessage):
-            usage = getattr(message, "usage", None)
-            output_file = getattr(message, "output_file", None)
-            notification_value = {
-                "task_id": message.task_id,
-                "status": getattr(message, "status", "completed"),
-                "summary": getattr(message, "summary", ""),
-                "usage": dict(usage) if usage else None,
-                "output_file": output_file,
-            }
-            existing = self._task_registry.get(message.task_id, {})
-            existing.update(notification_value)
-            self._task_registry[message.task_id] = existing
-            if output_file:
-                self._task_outputs[message.task_id] = output_file
-            yield CustomEvent(
-                type=EventType.CUSTOM,
-                name="task:completed",
-                value=notification_value,
-            )
+            yield self._emit_task_notification(message)
             return
 
         # --- Text content: wrap in synthetic run ---

@@ -166,8 +166,36 @@ class SessionWorker:
 
                     await client.query(prompt, session_id=session_id)
 
-                    # Wait for reader to signal ResultMessage received
-                    await self._turn_done.wait()
+                    # Wait for reader to signal ResultMessage received,
+                    # but also bail if the reader task dies mid-turn.
+                    reader_done = asyncio.ensure_future(
+                        asyncio.shield(self._reader_task)
+                    ) if self._reader_task else None
+                    turn_wait = asyncio.ensure_future(self._turn_done.wait())
+
+                    waiters = [turn_wait]
+                    if reader_done:
+                        waiters.append(reader_done)
+
+                    done, _ = await asyncio.wait(
+                        waiters, return_when=asyncio.FIRST_COMPLETED
+                    )
+
+                    # Cancel the loser
+                    for fut in waiters:
+                        if fut not in done:
+                            fut.cancel()
+
+                    if reader_done and reader_done in done:
+                        logger.error(
+                            "[SessionWorker] Reader died mid-turn for "
+                            "thread=%s",
+                            self.thread_id,
+                        )
+                        await output_queue.put(WorkerError(
+                            RuntimeError("SDK message reader died")
+                        ))
+                        break
 
                 except Exception as exc:
                     logger.error(
@@ -179,8 +207,9 @@ class SessionWorker:
                     await output_queue.put(WorkerError(exc))
                     break
                 finally:
+                    # Set None BEFORE sentinel so the reader routes any
+                    # trailing messages to the between-run queue.
                     self._active_output_queue = None
-                    # Sentinel: this turn is done (success or error).
                     await output_queue.put(None)
 
         except Exception as exc:
@@ -195,9 +224,13 @@ class SessionWorker:
                 with suppress(asyncio.CancelledError):
                     await self._reader_task
             self._reader_task = None
-            # Signal between-run consumers to stop
-            with suppress(asyncio.QueueFull):
-                self._between_run_queue.put_nowait(_SHUTDOWN)
+            # Drain between-run queue to make room for shutdown sentinel
+            while not self._between_run_queue.empty():
+                try:
+                    self._between_run_queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    break
+            self._between_run_queue.put_nowait(_SHUTDOWN)
             # Graceful shutdown: close stdin so the CLI saves the session
             # to .claude/ before being terminated.  This enables --resume
             # on pod restart.
@@ -208,25 +241,34 @@ class SessionWorker:
         """Persistent reader — routes messages to active run or between-run queue."""
         from claude_agent_sdk import SystemMessage, ResultMessage
 
-        async for msg in client.receive_messages():
-            # Capture session_id from init message (for resume)
-            if isinstance(msg, SystemMessage):
-                data = getattr(msg, "data", {}) or {}
-                if getattr(msg, "subtype", "") == "init":
-                    sid = data.get("session_id")
-                    if sid:
-                        self.session_id = sid
+        try:
+            async for msg in client.receive_messages():
+                # Capture session_id from init message (for resume)
+                if isinstance(msg, SystemMessage):
+                    data = getattr(msg, "data", {}) or {}
+                    if getattr(msg, "subtype", "") == "init":
+                        sid = data.get("session_id")
+                        if sid:
+                            self.session_id = sid
 
-            if self._active_output_queue is not None:
-                await self._active_output_queue.put(msg)
-                if isinstance(msg, ResultMessage):
-                    self._turn_done.set()
-            else:
-                # Between runs — non-blocking put, drop if full
-                try:
-                    self._between_run_queue.put_nowait(msg)
-                except asyncio.QueueFull:
-                    logger.warning("Between-run queue full, dropping event")
+                if self._active_output_queue is not None:
+                    await self._active_output_queue.put(msg)
+                    if isinstance(msg, ResultMessage):
+                        self._turn_done.set()
+                else:
+                    # Between runs — non-blocking put, drop if full
+                    try:
+                        self._between_run_queue.put_nowait(msg)
+                    except asyncio.QueueFull:
+                        logger.warning("Between-run queue full, dropping event")
+        except Exception as exc:
+            logger.error(
+                "[SessionWorker] Reader stream error for thread=%s: %s",
+                self.thread_id,
+                exc,
+            )
+            # Unblock the main loop if it's waiting on a turn
+            self._turn_done.set()
 
     async def between_run_events(self) -> AsyncIterator[Any]:
         """Yield SDK messages arriving outside user-initiated runs."""
