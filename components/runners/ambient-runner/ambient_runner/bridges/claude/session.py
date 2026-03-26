@@ -248,7 +248,7 @@ class SessionWorker:
                 msg_type = type(msg).__name__
                 subtype = getattr(msg, "subtype", "")
                 route = "run" if self._active_output_queue is not None else "between-run"
-                logger.info(
+                logger.debug(
                     "[Reader] %s (subtype=%s) → %s queue",
                     msg_type, subtype, route,
                 )
@@ -266,7 +266,7 @@ class SessionWorker:
                 if self._active_output_queue is not None:
                     await self._active_output_queue.put(msg)
                     if isinstance(msg, ResultMessage):
-                        logger.info("[Reader] ResultMessage → turn done")
+                        logger.debug("[Reader] ResultMessage → turn done")
                         self._turn_done.set()
                 else:
                     # Between runs — non-blocking put, drop if full

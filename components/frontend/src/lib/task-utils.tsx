@@ -1,4 +1,4 @@
-import { Loader2, CheckCircle2, XCircle, Square } from "lucide-react"
+import { Loader2, CheckCircle2, XCircle, Square, StopCircle } from "lucide-react"
 import type { BackgroundTaskStatus } from "@/types/background-task"
 
 export function StatusIcon({ status, className }: { status: BackgroundTaskStatus; className?: string }) {
@@ -6,12 +6,14 @@ export function StatusIcon({ status, className }: { status: BackgroundTaskStatus
   switch (status) {
     case "running":
       return <Loader2 className={`${base} animate-spin text-blue-500`} />
+    case "stopping":
+      return <Loader2 className={`${base} animate-spin text-orange-500`} />
     case "completed":
       return <CheckCircle2 className={`${base} text-green-500`} />
     case "failed":
       return <XCircle className={`${base} text-red-500`} />
     case "stopped":
-      return <Square className={`${base} text-muted-foreground`} />
+      return <StopCircle className={`${base} text-muted-foreground`} />
   }
 }
 

@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
@@ -70,7 +71,7 @@ async def stop_task(task_id: str, request: Request):
 
     if adapter:
         existing = adapter._task_registry.get(task_id, {})
-        existing["status"] = "stopped"
+        existing["status"] = "stopping"
         adapter._task_registry[task_id] = existing
 
     return {"message": "stop signal sent"}
@@ -79,6 +80,10 @@ async def stop_task(task_id: str, request: Request):
 @router.get("/{task_id}/output")
 async def get_task_output(task_id: str, request: Request):
     """Get the transcript/output of a background task (running or completed)."""
+    # Sanitize task_id to prevent glob injection / path traversal
+    if not re.match(r"^[a-zA-Z0-9_-]+$", task_id):
+        raise HTTPException(status_code=400, detail="Invalid task ID")
+
     bridge = request.app.state.bridge
     output_path = bridge.task_outputs.get(task_id)
 

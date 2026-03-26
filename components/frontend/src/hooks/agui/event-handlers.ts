@@ -1066,8 +1066,8 @@ function handleCustomEvent(
     const tasks = new Map(state.backgroundTasks)
     const taskId = value.task_id as string
     const existing = tasks.get(taskId)
-    if (existing) {
-      tasks.set(taskId, { ...existing, status: 'stopped' })
+    if (existing && existing.status === 'running') {
+      tasks.set(taskId, { ...existing, status: 'stopping' })
     }
     return { ...state, backgroundTasks: tasks }
   }
