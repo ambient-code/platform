@@ -1,4 +1,4 @@
-export type BackgroundTaskStatus = "running" | "completed" | "failed" | "stopped" | "stopping"
+export type BackgroundTaskStatus = "running" | "completed" | "failed" | "stopped"
 
 export type BackgroundTaskUsage = {
   total_tokens: number

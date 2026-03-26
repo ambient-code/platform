@@ -49,10 +49,14 @@ async def stop_task(task_id: str, request: Request):
     # BaseEvents and yields them immediately (no hook queue delay).
     from ag_ui.core import CustomEvent, EventType
 
-    stop_event = CustomEvent(
+    # Emit task:completed with status "stopped" — the SDK doesn't
+    # emit a TaskNotificationMessage for killed bash tasks, so we
+    # synthesize one. Push directly to the output queue so the
+    # adapter yields it immediately.
+    completed_event = CustomEvent(
         type=EventType.CUSTOM,
-        name="task:stop_requested",
-        value={"task_id": task_id},
+        name="task:completed",
+        value={"task_id": task_id, "status": "stopped", "summary": "Task stopped by user"},
     )
 
     sm = getattr(bridge, "_session_manager", None)
@@ -60,18 +64,17 @@ async def stop_task(task_id: str, request: Request):
         tid = thread_id or (bridge._context.session_id if bridge._context else None)
         worker = sm.get_existing(tid) if tid else None
         if worker:
-            # Push to whichever queue the adapter is reading from
             if worker._active_output_queue is not None:
-                await worker._active_output_queue.put(stop_event)
+                await worker._active_output_queue.put(completed_event)
             else:
                 try:
-                    worker._between_run_queue.put_nowait(stop_event)
+                    worker._between_run_queue.put_nowait(completed_event)
                 except Exception:
                     pass
 
     if adapter:
         existing = adapter._task_registry.get(task_id, {})
-        existing["status"] = "stopping"
+        existing["status"] = "stopped"
         adapter._task_registry[task_id] = existing
 
     return {"message": "stop signal sent"}

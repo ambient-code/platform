@@ -1062,16 +1062,6 @@ function handleCustomEvent(
     return { ...state, backgroundTasks: tasks }
   }
 
-  if (name === 'task:stop_requested') {
-    const tasks = new Map(state.backgroundTasks)
-    const taskId = value.task_id as string
-    const existing = tasks.get(taskId)
-    if (existing && existing.status === 'running') {
-      tasks.set(taskId, { ...existing, status: 'stopping' })
-    }
-    return { ...state, backgroundTasks: tasks }
-  }
-
   // Other custom events (hooks) — pass through unchanged
   return state
 }
