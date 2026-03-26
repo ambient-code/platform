@@ -30,7 +30,9 @@ _credential_expiry: dict[str, float] = {}
 _EXPIRY_BUFFER_SEC = 5 * 60
 
 # Hardcoded path for Google Workspace MCP credentials (must match populate and clear).
-_GOOGLE_WORKSPACE_CREDS_FILE = Path("/workspace/.google_workspace_mcp/credentials/credentials.json")
+_GOOGLE_WORKSPACE_CREDS_FILE = Path(
+    "/workspace/.google_workspace_mcp/credentials/credentials.json"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -113,7 +115,9 @@ async def _fetch_credential(context: RunnerContext, credential_type: str) -> dic
         or parsed.hostname == "localhost"
         or parsed.hostname == "127.0.0.1"
     ):
-        logger.error(f"Refusing to send credentials to external host: {parsed.hostname}")
+        logger.error(
+            f"Refusing to send credentials to external host: {parsed.hostname}"
+        )
         return {}
 
     logger.info(f"Fetching fresh {credential_type} credentials from: {url}")
@@ -144,18 +148,24 @@ async def _fetch_credential(context: RunnerContext, credential_type: str) -> dic
                 # Caller token expired — fall back to BOT_TOKEN with current
                 # user header. The backend validates this against the active
                 # user set by the proxy when the run started.
-                logger.info(f"Caller token expired for {credential_type}, falling back to BOT_TOKEN")
+                logger.info(
+                    f"Caller token expired for {credential_type}, falling back to BOT_TOKEN"
+                )
                 fallback_req = _urllib_request.Request(url, method="GET")
                 bot = (os.getenv("BOT_TOKEN") or "").strip()
                 if bot:
                     fallback_req.add_header("Authorization", f"Bearer {bot}")
                 if context.current_user_id:
-                    fallback_req.add_header("X-Runner-Current-User", context.current_user_id)
+                    fallback_req.add_header(
+                        "X-Runner-Current-User", context.current_user_id
+                    )
                 try:
                     with _urllib_request.urlopen(fallback_req, timeout=10) as resp:
                         return resp.read().decode("utf-8", errors="replace")
                 except Exception as fallback_err:
-                    logger.warning(f"{credential_type} BOT_TOKEN fallback also failed: {fallback_err}")
+                    logger.warning(
+                        f"{credential_type} BOT_TOKEN fallback also failed: {fallback_err}"
+                    )
                     return ""
             logger.warning(f"{credential_type} credential fetch failed: {e}")
             return ""
@@ -380,7 +390,11 @@ def clear_runtime_credentials() -> None:
 
     # Clear dynamically-injected MCP credential env vars (set by populate_mcp_server_credentials).
     # Only clear keys matching the MCP_{SERVER}_{FIELD} pattern, not static config like MCP_CONFIG_FILE.
-    mcp_cred_keys = [k for k in os.environ if k.startswith("MCP_") and k.count("_") >= 2 and k != "MCP_CONFIG_FILE"]
+    mcp_cred_keys = [
+        k
+        for k in os.environ
+        if k.startswith("MCP_") and k.count("_") >= 2 and k != "MCP_CONFIG_FILE"
+    ]
     for key in mcp_cred_keys:
         os.environ.pop(key, None)
         cleared.append(key)
@@ -510,10 +524,18 @@ def install_git_credential_helper() -> None:
     try:
         helper_path = Path(_GIT_CREDENTIAL_HELPER_PATH)
         helper_path.write_text(_GIT_CREDENTIAL_HELPER_SCRIPT)
-        helper_path.chmod(stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)  # 755
+        helper_path.chmod(
+            stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH
+        )  # 755
 
         result = subprocess.run(
-            ["git", "config", "--global", "credential.helper", _GIT_CREDENTIAL_HELPER_PATH],
+            [
+                "git",
+                "config",
+                "--global",
+                "credential.helper",
+                _GIT_CREDENTIAL_HELPER_PATH,
+            ],
             capture_output=True,
             timeout=5,
         )
@@ -525,7 +547,9 @@ def install_git_credential_helper() -> None:
             )
             return
         _credential_helper_installed = True
-        logger.info("Installed git credential helper at %s", _GIT_CREDENTIAL_HELPER_PATH)
+        logger.info(
+            "Installed git credential helper at %s", _GIT_CREDENTIAL_HELPER_PATH
+        )
     except Exception as e:
         logger.warning(f"Failed to install git credential helper: {e}")
 

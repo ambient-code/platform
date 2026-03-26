@@ -92,23 +92,81 @@ jobs:
           LATEST_TAG="${{ steps.get_latest_tag.outputs.latest_tag }}"
           NEW_TAG="${{ steps.next_version.outputs.new_tag }}"
 
-          echo "# Release $NEW_TAG" > RELEASE_CHANGELOG.md
-          echo "" >> RELEASE_CHANGELOG.md
-          echo "## Changes since $LATEST_TAG" >> RELEASE_CHANGELOG.md
-          echo "" >> RELEASE_CHANGELOG.md
+          # Use Python for reliable changelog generation with author grouping
+          python3 -c "
+          import subprocess, sys
 
-          # Generate changelog from commits
-          if [ "$LATEST_TAG" = "v0.0.0" ]; then
-            # First release - include all commits
-            git log --pretty=format:"- %s (%h)" >> RELEASE_CHANGELOG.md
-          else
-            # Get commits since last tag
-            git log ${LATEST_TAG}..HEAD --pretty=format:"- %s (%h)" >> RELEASE_CHANGELOG.md
-          fi
+          latest_tag = sys.argv[1]
+          new_tag = sys.argv[2]
+          repo = sys.argv[3]
 
-          echo "" >> RELEASE_CHANGELOG.md
-          echo "" >> RELEASE_CHANGELOG.md
-          echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${LATEST_TAG}...${NEW_TAG}" >> RELEASE_CHANGELOG.md
+          commit_range = 'HEAD' if latest_tag == 'v0.0.0' else f'{latest_tag}..HEAD'
+
+          result = subprocess.run(
+              ['git', 'log', commit_range, '--format=%an<<<<DELIM>>>>%s (%h)'],
+              capture_output=True, text=True
+          )
+
+          if result.returncode != 0:
+              print(f'Error: git log failed: {result.stderr}', file=sys.stderr)
+              sys.exit(1)
+
+          commits_by_author = {}
+          count_by_author = {}
+
+          for line in result.stdout.strip().split('\n'):
+              if line and '<<<<DELIM>>>>' in line:
+                  author, commit = line.split('<<<<DELIM>>>>', 1)
+                  if author not in commits_by_author:
+                      commits_by_author[author] = []
+                      count_by_author[author] = 0
+                  commits_by_author[author].append(commit)
+                  count_by_author[author] += 1
+
+          sorted_authors = sorted(count_by_author.items(), key=lambda x: x[1], reverse=True)
+
+          # Detect first-time contributors
+          first_timers = []
+          if latest_tag != 'v0.0.0':
+              # Resolve tag to ISO date — --before requires a date, not a ref name
+              tag_date_result = subprocess.run(
+                  ['git', 'log', '-1', '--format=%ci', latest_tag],
+                  capture_output=True, text=True
+              )
+              tag_date = tag_date_result.stdout.strip()
+              if tag_date_result.returncode == 0 and tag_date:
+                  # Get all unique author names before the tag date in one call
+                  prior = subprocess.run(
+                      ['git', 'log', '--all', f'--before={tag_date}', '--format=%an'],
+                      capture_output=True, text=True
+                  )
+                  prior_authors = set()
+                  if prior.returncode == 0 and prior.stdout.strip():
+                      prior_authors = set(prior.stdout.strip().split('\n'))
+                  for author, _ in sorted_authors:
+                      if author not in prior_authors:
+                          first_timers.append(author)
+
+          print(f'# Release {new_tag}')
+          print()
+          print(f'## Changes since {latest_tag}')
+          print()
+
+          if first_timers:
+              print('## 🎉 First-Time Contributors')
+              print()
+              for author in sorted(first_timers):
+                  print(f'- {author}')
+              print()
+
+          for author, count in sorted_authors:
+              print(f'### {author} ({count})')
+              for commit in commits_by_author[author]:
+                  print(f'- {commit}')
+              print()
+
+          print(f'**Full Changelog**: https://github.com/{repo}/compare/{latest_tag}...{new_tag}')
+          " "$LATEST_TAG" "$NEW_TAG" "${{ github.repository }}" > RELEASE_CHANGELOG.md
 
           cat RELEASE_CHANGELOG.md
 
