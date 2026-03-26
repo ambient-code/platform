@@ -1369,8 +1369,19 @@ class ClaudeAgentAdapter:
             yield self._emit_task_notification(message)
             return
 
-        # --- Text content: wrap in synthetic run ---
+        # --- Text content: wrap in synthetic run (only if there's text) ---
         if isinstance(message, AssistantMessage):
+            # Extract text from content blocks first — skip if empty
+            text_parts = []
+            for block in getattr(message, "content", []) or []:
+                text = getattr(block, "text", None)
+                if text:
+                    text_parts.append(text)
+            full_text = "\n".join(text_parts) if text_parts else ""
+
+            if not full_text:
+                return  # No text content — skip (tool-only responses, etc.)
+
             synthetic_run_id = str(uuid.uuid4())
             msg_id = str(uuid.uuid4())
 
@@ -1382,37 +1393,28 @@ class ClaudeAgentAdapter:
                 parent_run_id=self._last_run_id,
             )
 
-            # Extract text from content blocks
-            text_parts = []
-            for block in getattr(message, "content", []) or []:
-                text = getattr(block, "text", None)
-                if text:
-                    text_parts.append(text)
-            full_text = "\n".join(text_parts) if text_parts else ""
-
-            if full_text:
-                yield TextMessageStartEvent(
-                    type=EventType.TEXT_MESSAGE_START,
-                    thread_id=thread_id,
-                    run_id=synthetic_run_id,
-                    message_id=msg_id,
-                    role="assistant",
-                    timestamp=now_ms(),
-                )
-                yield TextMessageContentEvent(
-                    type=EventType.TEXT_MESSAGE_CONTENT,
-                    thread_id=thread_id,
-                    run_id=synthetic_run_id,
-                    message_id=msg_id,
-                    delta=full_text,
-                )
-                yield TextMessageEndEvent(
-                    type=EventType.TEXT_MESSAGE_END,
-                    thread_id=thread_id,
-                    run_id=synthetic_run_id,
-                    message_id=msg_id,
-                    timestamp=now_ms(),
-                )
+            yield TextMessageStartEvent(
+                type=EventType.TEXT_MESSAGE_START,
+                thread_id=thread_id,
+                run_id=synthetic_run_id,
+                message_id=msg_id,
+                role="assistant",
+                timestamp=now_ms(),
+            )
+            yield TextMessageContentEvent(
+                type=EventType.TEXT_MESSAGE_CONTENT,
+                thread_id=thread_id,
+                run_id=synthetic_run_id,
+                message_id=msg_id,
+                delta=full_text,
+            )
+            yield TextMessageEndEvent(
+                type=EventType.TEXT_MESSAGE_END,
+                thread_id=thread_id,
+                run_id=synthetic_run_id,
+                message_id=msg_id,
+                timestamp=now_ms(),
+            )
 
             self._last_run_id = synthetic_run_id
 

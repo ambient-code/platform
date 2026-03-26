@@ -251,10 +251,24 @@ class ClaudeBridge(PlatformBridge):
         self, thread_id: str
     ) -> AsyncIterator[BaseEvent]:
         """Yield AG-UI events for SDK messages arriving between user runs."""
-        if not self._session_manager or not self._adapter:
+        import asyncio
+
+        # Wait for session manager and adapter to be ready
+        for _ in range(120):  # up to 60 seconds
+            if self._session_manager and self._adapter:
+                break
+            await asyncio.sleep(0.5)
+        else:
             return
 
-        worker = self._session_manager.get_existing(thread_id)
+        # Wait for worker to be created (it's created during the first run)
+        worker = None
+        for _ in range(120):
+            worker = self._session_manager.get_existing(thread_id)
+            if worker:
+                break
+            await asyncio.sleep(0.5)
+
         if not worker:
             return
 

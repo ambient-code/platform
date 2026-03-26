@@ -30,6 +30,23 @@ export function transformTaskTranscript(entries: TaskOutputEntry[]): Message[] {
   const messages: Message[] = []
   const pendingToolUses = new Map<string, ToolUseBlock>()
 
+  // Handle raw bash output (non-JSONL entries like {raw: "..."})
+  // These come from local_bash background tasks where the output is plain text
+  const rawEntries = entries.filter((e) => "raw" in e && Object.keys(e).length === 1)
+  if (rawEntries.length > 0 && rawEntries.length === entries.length) {
+    // All entries are raw text — this is a bash task output
+    const rawText = rawEntries.map((e) => e.raw as string).join("\n")
+    if (rawText.trim()) {
+      messages.push({
+        type: "agent_message",
+        content: { type: "text_block", text: "```\n" + rawText + "\n```" },
+        model: "bash",
+        timestamp: new Date().toISOString(),
+      } satisfies AgentMessage)
+    }
+    return messages
+  }
+
   for (const entry of entries) {
     const entryType = entry.type as string | undefined
     if (!entryType || entryType === "progress") continue
