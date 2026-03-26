@@ -351,6 +351,12 @@ jobs:
             echo "public_api_tag=stage" >> $GITHUB_OUTPUT
           fi
 
+          if [ "${{ needs.detect-changes.outputs.ambient-control-plane }}" == "true" ]; then
+            echo "control_plane_tag=${{ github.sha }}" >> $GITHUB_OUTPUT
+          else
+            echo "control_plane_tag=stage" >> $GITHUB_OUTPUT
+          fi
+
       - name: Update kustomization with image tags
         working-directory: components/manifests/overlays/production
         run: |
@@ -361,6 +367,7 @@ jobs:
           kustomize edit set image quay.io/ambient_code/vteam_state_sync:latest=quay.io/ambient_code/vteam_state_sync:${{ steps.image-tags.outputs.state_sync_tag }}
           kustomize edit set image quay.io/ambient_code/vteam_api_server:latest=quay.io/ambient_code/vteam_api_server:${{ steps.image-tags.outputs.api_server_tag }}
           kustomize edit set image quay.io/ambient_code/vteam_public_api:latest=quay.io/ambient_code/vteam_public_api:${{ steps.image-tags.outputs.public_api_tag }}
+          kustomize edit set image quay.io/ambient_code/vteam_control_plane:latest=quay.io/ambient_code/vteam_control_plane:${{ steps.image-tags.outputs.control_plane_tag }}
 
       - name: Validate kustomization
         working-directory: components/manifests/overlays/production
@@ -440,6 +447,7 @@ jobs:
           kustomize edit set image quay.io/ambient_code/vteam_claude_runner:latest=quay.io/ambient_code/vteam_claude_runner:stage
           kustomize edit set image quay.io/ambient_code/vteam_state_sync:latest=quay.io/ambient_code/vteam_state_sync:stage
           kustomize edit set image quay.io/ambient_code/vteam_api_server:latest=quay.io/ambient_code/vteam_api_server:stage
+          kustomize edit set image quay.io/ambient_code/vteam_control_plane:latest=quay.io/ambient_code/vteam_control_plane:stage
 
       - name: Validate kustomization
         working-directory: components/manifests/overlays/production
