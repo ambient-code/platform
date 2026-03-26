@@ -1,5 +1,17 @@
 # Specification: Ephemeral Namespace Provisioning for S0.x Instances
 
+**Interface:**
+```
+with .claude/skills/ambient-pr-test  https://github.com/ambient-code/platform/pull/1005
+```
+or directly:
+```bash
+bash components/pr-test/build.sh     <pr-url>      # build + push images
+bash components/pr-test/provision.sh create <instance-id>
+bash components/pr-test/install.sh   <namespace> <image-tag>
+bash components/pr-test/provision.sh destroy <instance-id>
+```
+
 > **Operational how-to:** `.claude/skills/ambient-pr-test/SKILL.md` — step-by-step PR test workflow that references this spec.
 
 ## Purpose
@@ -220,6 +232,7 @@ e2e harness
 ```
 components/pr-test/
 ├── README.md               ← this document (spec)
+├── build.sh                ← build and push all images for a PR
 ├── provision.sh            ← create/destroy TenantNamespace CR
 └── install.sh              ← install Ambient into a provisioned namespace
 ```
