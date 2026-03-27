@@ -7,7 +7,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Check, Loader2, Plus, Search, Trash2 } from "lucide-react";
+import { Check, ExternalLink, Loader2, Plus, Search, Trash2 } from "lucide-react";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { toast } from "sonner";
 import {
   useMarketplaceSources,
@@ -22,6 +29,11 @@ import { MARKETPLACE_CATEGORY_COLORS } from "@/types/marketplace";
 
 type TypeFilter = "all" | "skill" | "command" | "agent";
 
+function getSourceFileUrl(source: MarketplaceSource, filePath: string): string {
+  const repoUrl = source.url.replace(/\.git$/, "");
+  return `${repoUrl}/tree/${source.branch}/${filePath}`;
+}
+
 function SourceSection({
   source,
   sourceIndex,
@@ -29,6 +41,7 @@ function SourceSection({
   typeFilter,
   installedIds,
   onDirectInstall,
+  onSelectItem,
   installingId,
 }: {
   source: MarketplaceSource;
@@ -37,6 +50,7 @@ function SourceSection({
   typeFilter: TypeFilter;
   installedIds: Set<string>;
   onDirectInstall: (item: MarketplaceCatalogItem, source: MarketplaceSource) => void;
+  onSelectItem: (item: MarketplaceCatalogItem, source: MarketplaceSource) => void;
   installingId: string | null;
 }) {
   const { data: items, isLoading } = useMarketplaceCatalog(sourceIndex);
@@ -87,7 +101,8 @@ function SourceSection({
           return (
             <div
               key={item.id}
-              className="flex items-start gap-2 p-2.5 rounded-lg border"
+              className="flex items-start gap-2 p-2.5 rounded-lg border hover:bg-accent/50 cursor-pointer transition-colors"
+              onClick={() => onSelectItem(item, source)}
             >
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5">
@@ -105,7 +120,10 @@ function SourceSection({
                 size="icon"
                 className="h-7 w-7 shrink-0"
                 disabled={isInstalled || isInstalling}
-                onClick={() => onDirectInstall(item, source)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDirectInstall(item, source);
+                }}
               >
                 {isInstalling ? (
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -131,6 +149,7 @@ export default function MarketplacePage() {
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [installingId, setInstallingId] = useState<string | null>(null);
+  const [selectedItem, setSelectedItem] = useState<{ item: MarketplaceCatalogItem; source: MarketplaceSource } | null>(null);
 
   const { data: sources, isLoading: sourcesLoading } = useMarketplaceSources();
   const { data: installed, isLoading: installedLoading } = useInstalledItems(projectName);
@@ -274,6 +293,7 @@ export default function MarketplacePage() {
                     typeFilter={typeFilter}
                     installedIds={installedIds}
                     onDirectInstall={handleDirectInstall}
+                    onSelectItem={(item, src) => setSelectedItem({ item, source: src })}
                     installingId={installingId}
                   />
                 ))}
@@ -351,9 +371,16 @@ export default function MarketplacePage() {
                             {item.itemType}
                           </Badge>
                         </div>
-                        <p className="text-xs text-muted-foreground truncate mt-0.5">
-                          {item.sourceUrl}
-                        </p>
+                        <a
+                          href={item.sourceUrl.replace(/\.git$/, "")}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-muted-foreground truncate mt-0.5 hover:text-blue-500 flex items-center gap-1"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {item.sourceUrl.replace(/\.git$/, "").split("/").slice(-2).join("/")}
+                          <ExternalLink className="w-2.5 h-2.5 shrink-0" />
+                        </a>
                       </div>
                       <Button
                         variant="ghost"
@@ -393,6 +420,81 @@ export default function MarketplacePage() {
         open={importDialogOpen}
         onOpenChange={setImportDialogOpen}
       />
+
+      <Sheet open={!!selectedItem} onOpenChange={(open) => !open && setSelectedItem(null)}>
+        <SheetContent className="sm:max-w-md">
+          {selectedItem && (() => {
+            const { item, source } = selectedItem;
+            const isInstalled = installedIds.has(item.id);
+            const isInstalling = installingId === item.id;
+            const fileUrl = getSourceFileUrl(source, item.file_path);
+            return (
+              <>
+                <SheetHeader>
+                  <div className="flex items-center gap-2">
+                    <SheetTitle className="text-lg">{item.name}</SheetTitle>
+                    <Badge variant="secondary" className={MARKETPLACE_CATEGORY_COLORS[item.category]}>
+                      {item.category}
+                    </Badge>
+                  </div>
+                  <SheetDescription>{item.description}</SheetDescription>
+                </SheetHeader>
+                <div className="mt-6 space-y-4">
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-medium">Source</h4>
+                    <a
+                      href={fileUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-blue-500 hover:underline flex items-center gap-1"
+                    >
+                      {item.file_path}
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                    <p className="text-xs text-muted-foreground">{source.name}</p>
+                  </div>
+                  {item.allowed_tools && item.allowed_tools.length > 0 && (
+                    <div className="space-y-2">
+                      <h4 className="text-sm font-medium">Allowed Tools</h4>
+                      <div className="flex flex-wrap gap-1">
+                        {item.allowed_tools.map((tool) => (
+                          <Badge key={tool} variant="outline" className="text-xs">
+                            {tool}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <Button
+                    className="w-full"
+                    disabled={isInstalled || isInstalling}
+                    onClick={() => {
+                      handleDirectInstall(item, source);
+                    }}
+                  >
+                    {isInstalling ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Installing...
+                      </>
+                    ) : isInstalled ? (
+                      <>
+                        <Check className="w-4 h-4 mr-2" />
+                        Installed
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="w-4 h-4 mr-2" />
+                        Install to Workspace
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </>
+            );
+          })()}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
