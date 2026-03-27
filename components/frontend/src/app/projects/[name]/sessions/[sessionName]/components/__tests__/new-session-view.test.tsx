@@ -41,8 +41,8 @@ vi.mock('../workflow-selector', () => ({
 }));
 
 vi.mock('../modals/add-context-modal', () => ({
-  AddContextModal: ({ onAddRepository }: { open: boolean; onAddRepository: (url: string) => void }) => (
-    <span data-testid="add-repo-btn" role="none" onClick={() => onAddRepository('https://github.com/org/platform.git')}>
+  AddContextModal: ({ onAddRepository }: { open: boolean; onAddRepository: (url: string, branch: string, autoPush?: boolean) => Promise<void> }) => (
+    <span data-testid="add-repo-btn" role="none" onClick={() => onAddRepository('https://github.com/org/platform.git', '')}>
       Add repo
     </span>
   ),
