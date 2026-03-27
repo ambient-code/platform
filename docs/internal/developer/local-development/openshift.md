@@ -86,30 +86,77 @@ oc create secret generic unleash-credentials -n ambient-code \
 
 ## Platform Deployment
 
-The production kustomization in `components/manifests/overlays/production/kustomization.yaml` references `quay.io/ambient_code/*` images by default. When deploying to an OpenShift cluster using the internal registry, you must temporarily point the image refs at the internal registry, deploy, then **immediately revert** before committing.
+### Overlay Selection
+
+Two overlays are available for OpenShift:
+
+| Overlay | Auth | Use when |
+|---------|------|----------|
+| `overlays/openshift-dev/` | Bearer token only (`AMBIENT_ENV=openshift-dev`) | Dev/test clusters without Red Hat SSO |
+| `overlays/production/` | JWT via Red Hat SSO + TLS | Production clusters with RHSSO |
+
+**For dev/test clusters (no RHSSO), use `openshift-dev`.**
+
+### Control-Plane Bearer Token Secret
+
+The `openshift-dev` overlay authenticates the control-plane to the API server via a shared bearer token stored in the `ambient-control-plane-token` secret. This secret is created automatically by the RBAC manifests (as a `kubernetes.io/service-account-token` type). If it doesn't exist yet:
+
+```bash
+oc create secret generic ambient-control-plane-token -n ambient-code \
+  --from-literal=token="$(openssl rand -hex 32)"
+```
+
+The API server reads this token via `AMBIENT_API_TOKEN` env var and validates it on every gRPC call from the control-plane.
+
+### Deploy (openshift-dev — no RHSSO)
+
+The kustomization references `quay.io/ambient_code/*` images by default. Temporarily point image refs at the internal registry, deploy, then revert.
 
 **⚠️ CRITICAL**: Never commit `kustomization.yaml` while it contains internal registry refs.
-
-**Patch kustomization to internal registry, deploy, then revert:**
 
 ```bash
 REGISTRY_HOST=$(oc get route default-route -n openshift-image-registry --template='{{ .spec.host }}')
 INTERNAL_REG="image-registry.openshift-image-registry.svc:5000/ambient-code"
 
 # Temporarily override image refs to internal registry
+cd components/manifests/overlays/openshift-dev
+sed -i "s#newName: quay.io/ambient_code/#newName: ${INTERNAL_REG}/#g" kustomization.yaml
+
+# Deploy (run from manifests root)
+cd ../..
+kustomize build overlays/openshift-dev | oc apply -f -
+
+# IMMEDIATELY revert — do not commit with internal registry refs
+cd overlays/openshift-dev
+git checkout kustomization.yaml
+```
+
+### Deploy (production — with RHSSO)
+
+```bash
+REGISTRY_HOST=$(oc get route default-route -n openshift-image-registry --template='{{ .spec.host }}')
+INTERNAL_REG="image-registry.openshift-image-registry.svc:5000/ambient-code"
+
 cd components/manifests/overlays/production
 sed -i "s#newName: quay.io/ambient_code/#newName: ${INTERNAL_REG}/#g" kustomization.yaml
 
-# Deploy
 cd ../..
 ./deploy.sh
 
-# IMMEDIATELY revert — do not commit with internal registry refs
 cd overlays/production
 git checkout kustomization.yaml
 ```
 
 ## Common Deployment Issues and Fixes
+
+### Build All Images First
+
+Before pushing, build all images locally (including `vteam_mcp`):
+
+```bash
+make build-all        # builds frontend, backend, operator, runner, state-sync, public-api, api-server, mcp
+make build-control-plane  # builds vteam_control_plane (not included in build-all)
+```
 
 ### Issue 1: Images not found (ImagePullBackOff)
 
@@ -118,21 +165,27 @@ git checkout kustomization.yaml
 REGISTRY_HOST=$(oc get route default-route -n openshift-image-registry --template='{{ .spec.host }}')
 
 # Tag and push key images (adjust based on what's available locally)
-podman tag localhost/ambient_control_plane:latest ${REGISTRY_HOST}/ambient-code/ambient_control_plane:latest
+podman tag localhost/vteam_control_plane:latest ${REGISTRY_HOST}/ambient-code/vteam_control_plane:latest
 podman tag localhost/vteam_frontend:latest ${REGISTRY_HOST}/ambient-code/vteam_frontend:latest
 podman tag localhost/vteam_api_server:latest ${REGISTRY_HOST}/ambient-code/vteam_api_server:latest
 podman tag localhost/vteam_backend:latest ${REGISTRY_HOST}/ambient-code/vteam_backend:latest
 podman tag localhost/vteam_operator:latest ${REGISTRY_HOST}/ambient-code/vteam_operator:latest
 podman tag localhost/vteam_public_api:latest ${REGISTRY_HOST}/ambient-code/vteam_public_api:latest
 podman tag localhost/vteam_claude_runner:latest ${REGISTRY_HOST}/ambient-code/vteam_claude_runner:latest
+podman tag localhost/vteam_mcp:latest ${REGISTRY_HOST}/ambient-code/vteam_mcp:latest
+podman tag localhost/vteam_control_plane:latest ${REGISTRY_HOST}/ambient-code/vteam_control_plane:latest
 
 # Push images
-for img in ambient_control_plane vteam_frontend vteam_api_server vteam_backend vteam_operator vteam_public_api vteam_claude_runner; do
-  podman push ${REGISTRY_HOST}/ambient-code/${img}:latest
+for img in vteam_frontend vteam_api_server vteam_backend vteam_operator vteam_public_api vteam_claude_runner vteam_mcp vteam_control_plane; do
+  podman push --tls-verify=false ${REGISTRY_HOST}/ambient-code/${img}:latest
 done
 
+# If deployments have imagePullPolicy: IfNotPresent (cached), force Always temporarily
+oc patch deployment ambient-api-server -n ambient-code --type=json \
+  -p='[{"op":"replace","path":"/spec/template/spec/containers/0/imagePullPolicy","value":"Always"}]'
+
 # Restart deployments to pick up new images
-oc rollout restart deployment ambient-control-plane backend-api frontend public-api agentic-operator -n ambient-code
+oc rollout restart deployment ambient-control-plane backend-api frontend public-api agentic-operator ambient-api-server -n ambient-code
 ```
 
 ### Issue 2: API server TLS certificate missing
