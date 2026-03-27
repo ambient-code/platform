@@ -2,7 +2,7 @@ name: Build and Push Component Docker Images
 
 on:
   push:
-    branches: [main]
+    branches: [main, alpha]
     paths:
       - '.github/workflows/components-build-deploy.yml'
       - 'components/manifests/**'
@@ -13,7 +13,7 @@ on:
       - 'components/public-api/**'
       - 'components/ambient-api-server/**'
   pull_request:
-    branches: [main]
+    branches: [main, alpha]
     paths:
       - '.github/workflows/components-build-deploy.yml'
       - 'components/manifests/**'
@@ -25,11 +25,6 @@ on:
       - 'components/ambient-api-server/**'
   workflow_dispatch:
     inputs:
-      force_build_all:
-        description: 'Force rebuild all components'
-        required: false
-        type: boolean
-        default: false
       components:
         description: 'Components to build (comma-separated: frontend,backend,operator,ambient-runner,state-sync,public-api,ambient-api-server) - leave empty for all'
         required: false
@@ -95,39 +90,14 @@ jobs:
             {"name":"ambient-api-server","context":"./components/ambient-api-server","image":"quay.io/ambient_code/vteam_api_server","dockerfile":"./components/ambient-api-server/Dockerfile"}
           ]'
 
-          FORCE_ALL="${{ github.event.inputs.force_build_all }}"
           SELECTED="${{ github.event.inputs.components }}"
-          EVENT="${{ github.event_name }}"
 
-          # Map component names to paths-filter output names
-          # (ambient-runner uses claude-runner filter)
-          declare -A FILTER_MAP=(
-            [frontend]="${{ steps.filter.outputs.frontend }}"
-            [backend]="${{ steps.filter.outputs.backend }}"
-            [operator]="${{ steps.filter.outputs.operator }}"
-            [ambient-runner]="${{ steps.filter.outputs.claude-runner }}"
-            [state-sync]="${{ steps.filter.outputs.state-sync }}"
-            [public-api]="${{ steps.filter.outputs.public-api }}"
-            [ambient-api-server]="${{ steps.filter.outputs.ambient-api-server }}"
-          )
-
-          if [ "$FORCE_ALL" == "true" ]; then
-            # Force build all
-            FILTERED="$ALL_COMPONENTS"
-          elif [ "$EVENT" == "workflow_dispatch" ] && [ -z "$SELECTED" ] && [ "$FORCE_ALL" != "true" ]; then
-            # Dispatch with no selection and no force — build all
-            FILTERED="$ALL_COMPONENTS"
-          elif [ -n "$SELECTED" ]; then
+          if [ -n "$SELECTED" ]; then
             # Dispatch with specific components
             FILTERED=$(echo "$ALL_COMPONENTS" | jq -c --arg sel "$SELECTED" '[.[] | select(.name as $n | $sel | split(",") | map(gsub("^\\s+|\\s+$";"")) | index($n))]')
           else
-            # Push or PR — only changed components
-            FILTERED="[]"
-            for comp in $(echo "$ALL_COMPONENTS" | jq -r '.[].name'); do
-              if [ "${FILTER_MAP[$comp]}" == "true" ]; then
-                FILTERED=$(echo "$FILTERED" | jq -c --arg name "$comp" --argjson all "$ALL_COMPONENTS" '. + [$all[] | select(.name == $name)]')
-              fi
-            done
+            # Build all components — cache makes unchanged components fast
+            FILTERED="$ALL_COMPONENTS"
           fi
 
           # Build matrix includes context/dockerfile; merge matrix only needs name/image
@@ -235,8 +205,8 @@ jobs:
           username: ${{ secrets.QUAY_USERNAME }}
           password: ${{ secrets.QUAY_PASSWORD }}
 
-      - name: Create multi-arch manifest for ${{ matrix.component.name }} (push/dispatch)
-        if: github.event_name != 'pull_request'
+      - name: Create multi-arch manifest for ${{ matrix.component.name }} (main)
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         # Suffixes (-amd64, -arm64) must match the arch matrix in the build job above.
         # Arch-suffixed tags remain in the registry after merging. Clean these up
         # via Quay tag expiration policies or a periodic job.
@@ -245,6 +215,15 @@ jobs:
             -t ${{ matrix.component.image }}:latest \
             -t ${{ matrix.component.image }}:${{ github.sha }} \
             -t ${{ matrix.component.image }}:stage \
+            ${{ matrix.component.image }}:${{ github.sha }}-amd64 \
+            ${{ matrix.component.image }}:${{ github.sha }}-arm64
+
+      - name: Create multi-arch manifest for ${{ matrix.component.name }} (alpha)
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/alpha'
+        run: |
+          docker buildx imagetools create \
+            -t ${{ matrix.component.image }}:alpha \
+            -t ${{ matrix.component.image }}:${{ github.sha }} \
             ${{ matrix.component.image }}:${{ github.sha }}-amd64 \
             ${{ matrix.component.image }}:${{ github.sha }}-arm64
 
