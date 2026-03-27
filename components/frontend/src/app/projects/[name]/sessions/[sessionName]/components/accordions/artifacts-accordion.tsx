@@ -18,7 +18,7 @@ type WorkspaceFile = {
 type ArtifactsAccordionProps = {
   files: WorkspaceFile[];
   currentSubPath: string;
-  viewingFile: { path: string; content: string } | null;
+  viewingFile: { path: string; content: string; size?: number } | null;
   isLoadingFile: boolean;
   onFileOrFolderSelect: (node: FileTreeNode) => void;
   onRefresh: () => void;
@@ -26,6 +26,7 @@ type ArtifactsAccordionProps = {
   onNavigateBack: () => void;
 };
 
+/** Accordion section showing AI-generated artifacts with file browsing. */
 export function ArtifactsAccordion({
   files,
   currentSubPath,
@@ -126,6 +127,7 @@ export function ArtifactsAccordion({
                 <FileContentViewer
                   fileName={viewingFile.path}
                   content={viewingFile.content}
+                  fileSize={viewingFile.size}
                   onDownload={onDownloadFile}
                 />
               ) : files.length === 0 ? (

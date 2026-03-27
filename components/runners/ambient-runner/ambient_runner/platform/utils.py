@@ -11,12 +11,32 @@ import os
 import re
 import warnings
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import urlparse, urlunparse
 
 logger = logging.getLogger(__name__)
 
 _TRUTHY_VALUES = frozenset({"1", "true", "yes"})
+
+# Canonical path where the operator mounts the runner-token Secret as a file.
+# Kubelet automatically refreshes this file when the Secret is updated.
+_BOT_TOKEN_FILE = Path("/var/run/secrets/ambient/bot-token")
+
+
+def get_bot_token() -> str:
+    """Return the current BOT_TOKEN, preferring the file mount over env var.
+
+    The operator mounts the runner-token Secret as a file so kubelet refreshes
+    it automatically when the token is rotated. Falls back to the BOT_TOKEN
+    env var for backward-compatibility with local / non-Kubernetes runs.
+    """
+    try:
+        if _BOT_TOKEN_FILE.exists():
+            return _BOT_TOKEN_FILE.read_text().strip()
+    except OSError:
+        pass
+    return (os.getenv("BOT_TOKEN") or "").strip()
 
 
 def is_env_truthy(value: str) -> bool:
@@ -61,24 +81,31 @@ def timestamp() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+_REDACT_PATTERNS = [
+    (re.compile(r"gh[pousr]_[a-zA-Z0-9]{36,255}"), "gh*_***REDACTED***"),
+    (re.compile(r"sk-ant-[a-zA-Z0-9\-_]{30,200}"), "sk-ant-***REDACTED***"),
+    (re.compile(r"pk-lf-[a-zA-Z0-9\-_]{10,100}"), "pk-lf-***REDACTED***"),
+    (re.compile(r"sk-lf-[a-zA-Z0-9\-_]{10,100}"), "sk-lf-***REDACTED***"),
+    (re.compile(r"x-access-token:[^@\s]+@"), "x-access-token:***REDACTED***@"),
+    (re.compile(r"oauth2:[^@\s]+@"), "oauth2:***REDACTED***@"),
+    (re.compile(r"://[^:@\s]+:[^@\s]+@"), "://***REDACTED***@"),
+    (re.compile(r"AIza[a-zA-Z0-9\-_]{30,}"), "AIza***REDACTED***"),
+    (
+        re.compile(
+            r"(ANTHROPIC_API_KEY|LANGFUSE_SECRET_KEY|LANGFUSE_PUBLIC_KEY|BOT_TOKEN|GIT_TOKEN|GEMINI_API_KEY|GOOGLE_API_KEY)\s*=\s*[^\s\'\"]+",
+        ),
+        r"\1=***REDACTED***",
+    ),
+]
+
+
 def redact_secrets(text: str) -> str:
     """Redact tokens and secrets from text for safe logging."""
     if not text:
         return text
 
-    text = re.sub(r"gh[pousr]_[a-zA-Z0-9]{36,255}", "gh*_***REDACTED***", text)
-    text = re.sub(r"sk-ant-[a-zA-Z0-9\-_]{30,200}", "sk-ant-***REDACTED***", text)
-    text = re.sub(r"pk-lf-[a-zA-Z0-9\-_]{10,100}", "pk-lf-***REDACTED***", text)
-    text = re.sub(r"sk-lf-[a-zA-Z0-9\-_]{10,100}", "sk-lf-***REDACTED***", text)
-    text = re.sub(r"x-access-token:[^@\s]+@", "x-access-token:***REDACTED***@", text)
-    text = re.sub(r"oauth2:[^@\s]+@", "oauth2:***REDACTED***@", text)
-    text = re.sub(r"://[^:@\s]+:[^@\s]+@", "://***REDACTED***@", text)
-    text = re.sub(r"AIza[a-zA-Z0-9\-_]{30,}", "AIza***REDACTED***", text)
-    text = re.sub(
-        r'(ANTHROPIC_API_KEY|LANGFUSE_SECRET_KEY|LANGFUSE_PUBLIC_KEY|BOT_TOKEN|GIT_TOKEN|GEMINI_API_KEY|GOOGLE_API_KEY)\s*=\s*[^\s\'"]+',
-        r"\1=***REDACTED***",
-        text,
-    )
+    for pattern, replacement in _REDACT_PATTERNS:
+        text = pattern.sub(replacement, text)
     return text
 
 

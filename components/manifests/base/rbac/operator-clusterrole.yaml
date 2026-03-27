@@ -60,6 +60,10 @@ rules:
 - apiGroups: ["rbac.authorization.k8s.io"]
   resources: ["rolebindings"]
   verbs: ["get", "create", "delete"]
+# LimitRanges (create per-project resource defaults for CA bin-packing)
+- apiGroups: [""]
+  resources: ["limitranges"]
+  verbs: ["get", "create"]
 # ConfigMaps (agent registry for runner type resolution)
 - apiGroups: [""]
   resources: ["configmaps"]

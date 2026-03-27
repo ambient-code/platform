@@ -1,5 +1,5 @@
 .PHONY: help setup build-all build-frontend build-backend build-operator build-runner build-state-sync build-public-api build-cli deploy clean check-architecture
-.PHONY: local-up local-down local-clean local-status local-rebuild local-reload-backend local-reload-frontend local-reload-operator local-reload-api-server local-sync-version
+.PHONY: local-up local-down local-clean local-status local-rebuild local-reload-backend local-reload-frontend local-reload-operator local-reload-api-server
 .PHONY: local-dev-token
 .PHONY: local-logs local-logs-backend local-logs-frontend local-logs-operator local-shell local-shell-frontend
 .PHONY: local-test local-test-dev local-test-quick test-all local-url local-troubleshoot local-port-forward local-stop-port-forward
@@ -171,6 +171,7 @@ build-frontend: ## Build frontend image
 build-backend: ## Build backend image
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building backend with $(CONTAINER_ENGINE)..."
 	@cd components/backend && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
+		--build-arg AMBIENT_VERSION=$(shell git describe --tags --always --dirty) \
 		-t $(BACKEND_IMAGE) .
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Backend built: $(BACKEND_IMAGE)"
 
@@ -331,7 +332,6 @@ local-up: check-minikube check-kubectl ## Start local development environment (m
 	@kubectl apply -f components/manifests/base/workspace-pvc.yaml -n $(NAMESPACE) $(QUIET_REDIRECT) || true
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 6.5/8: Configuring operator..."
 	@$(MAKE) --no-print-directory _create-operator-config
-	@$(MAKE) --no-print-directory local-sync-version
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 7/8: Deploying services..."
 	@kubectl apply -f components/manifests/minikube/backend-deployment.yaml $(QUIET_REDIRECT)
 	@kubectl apply -f components/manifests/minikube/backend-service.yaml $(QUIET_REDIRECT)
@@ -394,14 +394,6 @@ local-status: check-kubectl ## Show status of local deployment
 		$(MAKE) --no-print-directory _show-access-info; \
 	fi
 
-local-sync-version: ## Sync version from git to local deployment manifests
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Syncing version from git..."
-	@VERSION=$$(git describe --tags --always 2>/dev/null || echo "dev") && \
-	echo "  Using version: $$VERSION" && \
-	sed -i.bak "s|value: \"v.*\"|value: \"$$VERSION\"|" \
-	components/manifests/minikube/frontend-deployment.yaml && \
-	rm -f components/manifests/minikube/frontend-deployment.yaml.bak && \
-	echo "  $(COLOR_GREEN)✓$(COLOR_RESET) Version synced to $$VERSION"
 
 local-rebuild: check-local-context ## Rebuild and reload all components
 	@echo "$(COLOR_BOLD)🔄 Rebuilding all components...$(COLOR_RESET)"
@@ -411,7 +403,7 @@ local-rebuild: check-local-context ## Rebuild and reload all components
 
 local-reload-backend: check-local-context ## Rebuild and reload backend only
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rebuilding backend..."
-	@cd components/backend && $(CONTAINER_ENGINE) build -t $(BACKEND_IMAGE) . >/dev/null 2>&1
+	@cd components/backend && $(CONTAINER_ENGINE) build --build-arg AMBIENT_VERSION=$(shell git describe --tags --always --dirty) -t $(BACKEND_IMAGE) . >/dev/null 2>&1
 	@$(CONTAINER_ENGINE) tag $(BACKEND_IMAGE) localhost/$(BACKEND_IMAGE) 2>/dev/null || true
 	@$(CONTAINER_ENGINE) save -o /tmp/backend-reload.tar localhost/$(BACKEND_IMAGE)
 	@minikube image load /tmp/backend-reload.tar >/dev/null 2>&1
@@ -962,7 +954,7 @@ _kind-load-images: ## Internal: Load images into kind cluster
 
 _build-and-load: ## Internal: Build and load images
 	@echo "  Building backend ($(PLATFORM))..."
-	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) -t $(BACKEND_IMAGE) components/backend $(QUIET_REDIRECT)
+	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) --build-arg AMBIENT_VERSION=$(shell git describe --tags --always --dirty) -t $(BACKEND_IMAGE) components/backend $(QUIET_REDIRECT)
 	@echo "  Building frontend ($(PLATFORM))..."
 	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) -t $(FRONTEND_IMAGE) components/frontend $(QUIET_REDIRECT)
 	@echo "  Building operator ($(PLATFORM))..."

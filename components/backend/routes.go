@@ -72,6 +72,11 @@ func registerRoutes(r *gin.Engine) {
 			projectGroup.POST("/agentic-sessions/:sessionName/agui/interrupt", websocket.HandleAGUIInterrupt)
 			projectGroup.POST("/agentic-sessions/:sessionName/agui/feedback", websocket.HandleAGUIFeedback)
 
+			// Background task proxy endpoints
+			projectGroup.POST("/agentic-sessions/:sessionName/agui/tasks/:taskId/stop", websocket.HandleTaskStop)
+			projectGroup.GET("/agentic-sessions/:sessionName/agui/tasks/:taskId/output", websocket.HandleTaskOutput)
+			projectGroup.GET("/agentic-sessions/:sessionName/agui/tasks", websocket.HandleTaskList)
+
 			// Runner capabilities endpoint
 			projectGroup.GET("/agentic-sessions/:sessionName/agui/capabilities", websocket.HandleCapabilities)
 
@@ -166,6 +171,9 @@ func registerRoutes(r *gin.Engine) {
 
 		// Cluster info endpoint (public, no auth required)
 		api.GET("/cluster-info", handlers.GetClusterInfo)
+
+		// Version endpoint (public, no auth required)
+		api.GET("/version", handlers.GetVersion)
 
 		// LDAP search endpoints (cluster-scoped, auth-required)
 		api.GET("/ldap/users", handlers.SearchLDAPUsers)

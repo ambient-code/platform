@@ -1,4 +1,4 @@
-name: SDK Drift Check
+name: Ambient SDK Drift Check
 
 on:
   pull_request:
@@ -29,7 +29,7 @@ concurrency:
 
 jobs:
   check-drift:
-    name: SDK Generator Drift
+    name: Ambient SDK Generator Drift
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code

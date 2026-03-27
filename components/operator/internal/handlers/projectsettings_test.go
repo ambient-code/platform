@@ -34,6 +34,120 @@ func testProjectSettingsOwner(namespace string) *unstructured.Unstructured {
 	}
 }
 
+func TestEnsureLimitRange_CreatesLimitRange(t *testing.T) {
+	setupProjectSettingsTestClient()
+
+	namespace := "test-namespace"
+
+	err := ensureLimitRange(namespace, testProjectSettingsOwner(namespace))
+	if err != nil {
+		t.Fatalf("ensureLimitRange() returned error: %v", err)
+	}
+
+	ctx := context.Background()
+
+	lr, err := config.K8sClient.CoreV1().LimitRanges(namespace).Get(ctx, "ambient-default-limits", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Failed to get LimitRange: %v", err)
+	}
+	if lr.Name != "ambient-default-limits" {
+		t.Errorf("LimitRange name = %q, want %q", lr.Name, "ambient-default-limits")
+	}
+	if lr.Labels["ambient-code.io/managed"] != "true" {
+		t.Errorf("LimitRange missing managed label")
+	}
+
+	// Verify correct values
+	if len(lr.Spec.Limits) != 1 {
+		t.Fatalf("Expected 1 limit item, got %d", len(lr.Spec.Limits))
+	}
+	item := lr.Spec.Limits[0]
+	if item.Type != corev1.LimitTypeContainer {
+		t.Errorf("Limit type = %q, want %q", item.Type, corev1.LimitTypeContainer)
+	}
+
+	// Check defaultRequest
+	cpuReq := item.DefaultRequest[corev1.ResourceCPU]
+	if cpuReq.String() != "250m" {
+		t.Errorf("DefaultRequest CPU = %q, want %q", cpuReq.String(), "250m")
+	}
+	memReq := item.DefaultRequest[corev1.ResourceMemory]
+	if memReq.String() != "256Mi" {
+		t.Errorf("DefaultRequest Memory = %q, want %q", memReq.String(), "256Mi")
+	}
+
+	// Check default (limits)
+	cpuLim := item.Default[corev1.ResourceCPU]
+	if cpuLim.String() != "2" {
+		t.Errorf("Default CPU = %q, want %q", cpuLim.String(), "2")
+	}
+	memLim := item.Default[corev1.ResourceMemory]
+	if memLim.String() != "4Gi" {
+		t.Errorf("Default Memory = %q, want %q", memLim.String(), "4Gi")
+	}
+
+	// Verify owner reference
+	if len(lr.OwnerReferences) != 1 {
+		t.Fatalf("Expected 1 owner reference, got %d", len(lr.OwnerReferences))
+	}
+	if lr.OwnerReferences[0].Kind != "ProjectSettings" {
+		t.Errorf("OwnerReference Kind = %q, want %q", lr.OwnerReferences[0].Kind, "ProjectSettings")
+	}
+}
+
+func TestEnsureLimitRange_Idempotent(t *testing.T) {
+	setupProjectSettingsTestClient()
+
+	namespace := "test-namespace"
+	owner := testProjectSettingsOwner(namespace)
+
+	// First call
+	err := ensureLimitRange(namespace, owner)
+	if err != nil {
+		t.Fatalf("First ensureLimitRange() returned error: %v", err)
+	}
+
+	// Second call — should not error
+	err = ensureLimitRange(namespace, owner)
+	if err != nil {
+		t.Fatalf("Second ensureLimitRange() returned error: %v", err)
+	}
+
+	ctx := context.Background()
+
+	// Verify LimitRange still exists
+	_, err = config.K8sClient.CoreV1().LimitRanges(namespace).Get(ctx, "ambient-default-limits", metav1.GetOptions{})
+	if err != nil {
+		t.Errorf("LimitRange should still exist: %v", err)
+	}
+}
+
+func TestEnsureLimitRange_MultipleNamespaces(t *testing.T) {
+	setupProjectSettingsTestClient()
+
+	namespaces := []string{"project-alpha", "project-beta"}
+
+	for _, ns := range namespaces {
+		err := ensureLimitRange(ns, testProjectSettingsOwner(ns))
+		if err != nil {
+			t.Fatalf("ensureLimitRange(%q) returned error: %v", ns, err)
+		}
+	}
+
+	ctx := context.Background()
+
+	for _, ns := range namespaces {
+		lr, err := config.K8sClient.CoreV1().LimitRanges(ns).Get(ctx, "ambient-default-limits", metav1.GetOptions{})
+		if err != nil {
+			t.Errorf("LimitRange should exist in namespace %q: %v", ns, err)
+			continue
+		}
+		if len(lr.Spec.Limits) != 1 {
+			t.Errorf("Namespace %q: expected 1 limit item, got %d", ns, len(lr.Spec.Limits))
+		}
+	}
+}
+
 func TestEnsureSessionTriggerRBAC_CreatesAllResources(t *testing.T) {
 	setupProjectSettingsTestClient()
 
