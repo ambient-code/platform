@@ -11,6 +11,8 @@ from urllib.error import HTTPError
 import pytest
 
 from ambient_runner.platform.auth import (
+    _GITHUB_TOKEN_FILE,
+    _GITLAB_TOKEN_FILE,
     _fetch_credential,
     clear_runtime_credentials,
     populate_runtime_credentials,
@@ -149,6 +151,118 @@ class TestClearRuntimeCredentials:
         finally:
             os.environ.pop("PATH_BACKUP_TEST", None)
             os.environ.pop("GITHUB_TOKEN", None)
+
+
+# ---------------------------------------------------------------------------
+# Token file lifecycle (mid-run refresh support)
+# ---------------------------------------------------------------------------
+
+
+class TestTokenFiles:
+    """Token files let the git credential helper pick up mid-run refreshes.
+
+    The CLI subprocess is spawned once and its environment is fixed at that
+    point. Updating os.environ later does not propagate into the subprocess.
+    Writing tokens to files allows the credential helper (which runs fresh for
+    every git operation) to always use the latest token.
+    """
+
+    def _cleanup(self):
+        """Remove token files created during tests."""
+        _GITHUB_TOKEN_FILE.unlink(missing_ok=True)
+        _GITLAB_TOKEN_FILE.unlink(missing_ok=True)
+
+    @pytest.mark.asyncio
+    async def test_populate_writes_github_token_file(self):
+        """populate_runtime_credentials writes GITHUB_TOKEN to the token file."""
+        self._cleanup()
+        try:
+            with patch("ambient_runner.platform.auth._fetch_credential") as mock_fetch:
+
+                async def _creds(ctx, ctype):
+                    if ctype == "github":
+                        return {"token": "gh-mid-run-token", "userName": "user", "email": "u@example.com"}
+                    return {}
+
+                mock_fetch.side_effect = _creds
+                ctx = _make_context()
+                await populate_runtime_credentials(ctx)
+
+            assert _GITHUB_TOKEN_FILE.exists()
+            assert _GITHUB_TOKEN_FILE.read_text() == "gh-mid-run-token"
+        finally:
+            self._cleanup()
+            for key in ["GITHUB_TOKEN", "GIT_USER_NAME", "GIT_USER_EMAIL"]:
+                os.environ.pop(key, None)
+
+    @pytest.mark.asyncio
+    async def test_populate_writes_gitlab_token_file(self):
+        """populate_runtime_credentials writes GITLAB_TOKEN to the token file."""
+        self._cleanup()
+        try:
+            with patch("ambient_runner.platform.auth._fetch_credential") as mock_fetch:
+
+                async def _creds(ctx, ctype):
+                    if ctype == "gitlab":
+                        return {"token": "gl-mid-run-token", "userName": "user", "email": "u@example.com"}
+                    return {}
+
+                mock_fetch.side_effect = _creds
+                ctx = _make_context()
+                await populate_runtime_credentials(ctx)
+
+            assert _GITLAB_TOKEN_FILE.exists()
+            assert _GITLAB_TOKEN_FILE.read_text() == "gl-mid-run-token"
+        finally:
+            self._cleanup()
+            for key in ["GITLAB_TOKEN", "GIT_USER_NAME", "GIT_USER_EMAIL"]:
+                os.environ.pop(key, None)
+
+    def test_clear_removes_token_files(self):
+        """clear_runtime_credentials removes the token files written at populate time."""
+        _GITHUB_TOKEN_FILE.write_text("old-token")
+        _GITLAB_TOKEN_FILE.write_text("old-gl-token")
+        try:
+            clear_runtime_credentials()
+            assert not _GITHUB_TOKEN_FILE.exists(), "GitHub token file should be removed"
+            assert not _GITLAB_TOKEN_FILE.exists(), "GitLab token file should be removed"
+        finally:
+            self._cleanup()
+
+    def test_clear_does_not_crash_when_token_files_absent(self):
+        """clear_runtime_credentials succeeds even if the token files don't exist."""
+        self._cleanup()
+        # Should not raise
+        clear_runtime_credentials()
+
+    @pytest.mark.asyncio
+    async def test_second_populate_overwrites_token_file(self):
+        """A second populate_runtime_credentials call overwrites the stale token file.
+
+        This is the mid-run refresh scenario: the MCP tool calls populate again
+        with a fresh token and the file must reflect the new value.
+        """
+        self._cleanup()
+        try:
+            call_num = [0]
+
+            async def _creds(ctx, ctype):
+                if ctype == "github":
+                    call_num[0] += 1
+                    return {"token": f"gh-token-{call_num[0]}", "userName": "u", "email": "u@e.com"}
+                return {}
+
+            with patch("ambient_runner.platform.auth._fetch_credential", side_effect=_creds):
+                ctx = _make_context()
+                await populate_runtime_credentials(ctx)
+                assert _GITHUB_TOKEN_FILE.read_text() == "gh-token-1"
+
+                await populate_runtime_credentials(ctx)
+                assert _GITHUB_TOKEN_FILE.read_text() == "gh-token-2"
+        finally:
+            self._cleanup()
+            for key in ["GITHUB_TOKEN", "GIT_USER_NAME", "GIT_USER_EMAIL"]:
+                os.environ.pop(key, None)
 
 
 # ---------------------------------------------------------------------------
