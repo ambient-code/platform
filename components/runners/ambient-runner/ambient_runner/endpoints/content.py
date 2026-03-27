@@ -432,81 +432,97 @@ def _scan_claude_dir(
     commands: list[dict] = []
     agents: list[dict] = []
     skills: list[dict] = []
+    seen_cmd_ids: set[str] = set()
+    seen_agent_ids: set[str] = set()
+    seen_skill_ids: set[str] = set()
 
-    # Parse commands from .claude/commands/*.md
-    commands_dir = claude_dir / "commands"
-    if commands_dir.exists():
-        for md_file in sorted(commands_dir.iterdir()):
-            if md_file.is_dir() or not md_file.name.endswith(".md"):
-                continue
+    # Scan .claude/{type}/ first, then {type}/ (for registries like ai-helpers)
+    scan_roots = [claude_dir]
+    if base_path != claude_dir:
+        scan_roots.append(base_path)
 
-            metadata = _parse_frontmatter(md_file)
-            command_name = md_file.stem
-            display_name = metadata.get("displayName") or command_name
+    for root in scan_roots:
+        # Parse commands from commands/*.md
+        commands_dir = root / "commands"
+        if commands_dir.exists():
+            for md_file in sorted(commands_dir.iterdir()):
+                if md_file.is_dir() or not md_file.name.endswith(".md"):
+                    continue
+                command_name = md_file.stem
+                if command_name in seen_cmd_ids:
+                    continue
+                seen_cmd_ids.add(command_name)
 
-            order = 2**31 - 1
-            if "order" in metadata:
-                try:
-                    order = int(metadata["order"])
-                except ValueError:
-                    pass
+                metadata = _parse_frontmatter(md_file)
+                display_name = metadata.get("displayName") or command_name
 
-            cmd = {
-                "id": command_name,
-                "name": display_name,
-                "description": metadata.get("description", ""),
-                "slashCommand": f"/{command_name}",
-                "icon": metadata.get("icon", ""),
-                "order": order,
-            }
-            if source_label:
-                cmd["source"] = source_label
-            commands.append(cmd)
+                order = 2**31 - 1
+                if "order" in metadata:
+                    try:
+                        order = int(metadata["order"])
+                    except ValueError:
+                        pass
 
-    # Parse agents from .claude/agents/*.md
-    agents_dir = claude_dir / "agents"
-    if agents_dir.exists():
-        for md_file in sorted(agents_dir.iterdir()):
-            if md_file.is_dir() or not md_file.name.endswith(".md"):
-                continue
+                cmd = {
+                    "id": command_name,
+                    "name": display_name,
+                    "description": metadata.get("description", ""),
+                    "slashCommand": f"/{command_name}",
+                    "icon": metadata.get("icon", ""),
+                    "order": order,
+                }
+                if source_label:
+                    cmd["source"] = source_label
+                commands.append(cmd)
 
-            metadata = _parse_frontmatter(md_file)
-            agent_id = md_file.stem
+        # Parse agents from agents/*.md
+        agents_dir = root / "agents"
+        if agents_dir.exists():
+            for md_file in sorted(agents_dir.iterdir()):
+                if md_file.is_dir() or not md_file.name.endswith(".md"):
+                    continue
+                agent_id = md_file.stem
+                if agent_id in seen_agent_ids:
+                    continue
+                seen_agent_ids.add(agent_id)
 
-            agent = {
-                "id": agent_id,
-                "name": metadata.get("name", ""),
-                "description": metadata.get("description", ""),
-                "tools": metadata.get("tools", ""),
-            }
-            if source_label:
-                agent["source"] = source_label
-            agents.append(agent)
+                metadata = _parse_frontmatter(md_file)
+                agent = {
+                    "id": agent_id,
+                    "name": metadata.get("name", ""),
+                    "description": metadata.get("description", ""),
+                    "tools": metadata.get("tools", ""),
+                }
+                if source_label:
+                    agent["source"] = source_label
+                agents.append(agent)
 
-    # Parse skills from .claude/skills/*/SKILL.md
-    skills_dir = claude_dir / "skills"
-    if skills_dir.exists():
-        for skill_entry in sorted(skills_dir.iterdir()):
-            if not skill_entry.is_dir():
-                continue
+        # Parse skills from skills/*/SKILL.md
+        skills_dir = root / "skills"
+        if skills_dir.exists():
+            for skill_entry in sorted(skills_dir.iterdir()):
+                if not skill_entry.is_dir():
+                    continue
+                skill_dir_name = skill_entry.name
+                if skill_dir_name in seen_skill_ids:
+                    continue
 
-            skill_file = skill_entry / "SKILL.md"
-            if not skill_file.exists():
-                continue
+                skill_file = skill_entry / "SKILL.md"
+                if not skill_file.exists():
+                    continue
+                seen_skill_ids.add(skill_dir_name)
 
-            metadata = _parse_frontmatter(skill_file)
-            skill_dir_name = skill_entry.name
-
-            skill = {
-                "id": skill_dir_name,
-                "name": metadata.get("name", skill_dir_name),
-                "description": metadata.get("description", ""),
-                "slashCommand": f"/{skill_dir_name}",
-                "allowedTools": metadata.get("allowed-tools", ""),
-            }
-            if source_label:
-                skill["source"] = source_label
-            skills.append(skill)
+                metadata = _parse_frontmatter(skill_file)
+                skill = {
+                    "id": skill_dir_name,
+                    "name": metadata.get("name", skill_dir_name),
+                    "description": metadata.get("description", ""),
+                    "slashCommand": f"/{skill_dir_name}",
+                    "allowedTools": metadata.get("allowed-tools", ""),
+                }
+                if source_label:
+                    skill["source"] = source_label
+                skills.append(skill)
 
     return commands, agents, skills
 
@@ -546,6 +562,19 @@ async def content_workflow_metadata(session: str = ""):
             commands.extend(mp_commands)
             agents.extend(mp_agents)
             skills.extend(mp_skills)
+
+    # Add Claude Code built-in skills (not discoverable from filesystem)
+    _BUILTIN_SKILLS = [
+        {"id": "batch", "name": "batch", "description": "Orchestrate large-scale parallel changes across a codebase", "slashCommand": "/batch", "source": "built-in"},
+        {"id": "simplify", "name": "simplify", "description": "Review changed code for reuse, quality, and efficiency", "slashCommand": "/simplify", "source": "built-in"},
+        {"id": "debug", "name": "debug", "description": "Troubleshoot your current session by reading debug logs", "slashCommand": "/debug", "source": "built-in"},
+        {"id": "claude-api", "name": "claude-api", "description": "Load Claude API reference material for your project", "slashCommand": "/claude-api", "source": "built-in"},
+        {"id": "loop", "name": "loop", "description": "Run a prompt repeatedly on an interval", "slashCommand": "/loop", "source": "built-in"},
+    ]
+    existing_skill_ids = {s["id"] for s in skills}
+    for builtin in _BUILTIN_SKILLS:
+        if builtin["id"] not in existing_skill_ids:
+            skills.append(builtin)
 
     # Sort commands by order, then alphabetically by id
     commands.sort(key=lambda c: (c["order"], c["id"]))

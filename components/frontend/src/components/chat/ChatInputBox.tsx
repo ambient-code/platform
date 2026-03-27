@@ -95,11 +95,11 @@ type ToolbarItemListProps = {
 };
 
 const ToolbarItemList: React.FC<ToolbarItemListProps> = ({ items, type, onInsertAgent, onRunCommand }) => {
-  const heading = type === "agent" ? "Available Agents" : "Available Commands";
+  const heading = type === "agent" ? "Available Agents" : "Available Skills";
   const subtitle = type === "agent"
     ? "Mention agents in your message to collaborate with them"
-    : "Run workflow commands to perform specific actions";
-  const emptyLabel = type === "agent" ? "No agents available" : "No commands available";
+    : "Run skills and commands to perform specific actions";
+  const emptyLabel = type === "agent" ? "No agents available" : "No skills available";
 
   return (
     <div className="space-y-3">
@@ -645,7 +645,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
                     <PopoverTrigger asChild>
                       <Button variant="outline" size="sm" className="h-7 gap-1.5" disabled={commands.length === 0}>
                         <Terminal className="h-3.5 w-3.5" />
-                        Commands
+                        Skills
                         {commands.length > 0 && (
                           <Badge variant="secondary" className="ml-0.5 h-4 px-1.5 text-[10px] font-medium">
                             {commands.length}
