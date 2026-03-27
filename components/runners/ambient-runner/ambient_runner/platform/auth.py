@@ -35,6 +35,13 @@ _GOOGLE_WORKSPACE_CREDS_FILE = Path(
     "/workspace/.google_workspace_mcp/credentials/credentials.json"
 )
 
+# Token files written on every credential refresh so the git credential helper
+# can read the latest token even after the CLI subprocess has already been spawned.
+# The helper runs inside the CLI subprocess's environment (which is fixed at spawn
+# time), so updating os.environ mid-run would not reach it without these files.
+_GITHUB_TOKEN_FILE = Path("/tmp/.ambient_github_token")
+_GITLAB_TOKEN_FILE = Path("/tmp/.ambient_gitlab_token")
+
 
 # ---------------------------------------------------------------------------
 # Vertex AI credential validation (shared across all bridges)
@@ -364,6 +371,13 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
             auth_failures.append(str(gitlab_creds))
     elif gitlab_creds.get("token"):
         os.environ["GITLAB_TOKEN"] = gitlab_creds["token"]
+        # Also write to file so the git credential helper picks up mid-run
+        # refreshes even after the CLI subprocess has been spawned.
+        try:
+            _GITLAB_TOKEN_FILE.write_text(gitlab_creds["token"])
+            _GITLAB_TOKEN_FILE.chmod(0o600)
+        except OSError as e:
+            logger.warning(f"Failed to write GitLab token file: {e}")
         logger.info("Updated GitLab token in environment")
         if gitlab_creds.get("userName"):
             git_user_name = gitlab_creds["userName"]
@@ -377,6 +391,13 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
             auth_failures.append(str(github_creds))
     elif github_creds.get("token"):
         os.environ["GITHUB_TOKEN"] = github_creds["token"]
+        # Also write to file so the git credential helper picks up mid-run
+        # refreshes even after the CLI subprocess has been spawned.
+        try:
+            _GITHUB_TOKEN_FILE.write_text(github_creds["token"])
+            _GITHUB_TOKEN_FILE.chmod(0o600)
+        except OSError as e:
+            logger.warning(f"Failed to write GitHub token file: {e}")
         logger.info("Updated GitHub token in environment")
         if github_creds.get("userName"):
             git_user_name = github_creds["userName"]
@@ -424,6 +445,14 @@ def clear_runtime_credentials() -> None:
     for key in mcp_cred_keys:
         os.environ.pop(key, None)
         cleared.append(key)
+
+    # Remove token files used by the git credential helper.
+    for token_file in (_GITHUB_TOKEN_FILE, _GITLAB_TOKEN_FILE):
+        try:
+            token_file.unlink(missing_ok=True)
+            cleared.append(token_file.name)
+        except OSError as e:
+            logger.warning(f"Failed to remove token file {token_file}: {e}")
 
     # Remove Google Workspace credential file if present (uses same hardcoded path as populate_runtime_credentials)
     google_cred_file = _GOOGLE_WORKSPACE_CREDS_FILE
@@ -511,6 +540,10 @@ _GIT_CREDENTIAL_HELPER_PATH = "/tmp/git-credential-ambient"
 # time, so refreshes are picked up without mutating .git/config.
 _GIT_CREDENTIAL_HELPER_SCRIPT = """\
 #!/bin/sh
+# Ambient git credential helper.
+# Reads tokens from files first so mid-run MCP refreshes are picked up even
+# after the CLI subprocess was already spawned (subprocess env is fixed at
+# creation time; the files are updated by the runner on every refresh).
 case "$1" in
     get)
         while IFS='=' read -r key value; do
@@ -521,13 +554,27 @@ case "$1" in
 
         case "$HOST" in
             *github*)
-                if [ -n "$GITHUB_TOKEN" ]; then
-                    printf 'protocol=https\\nhost=%s\\nusername=x-access-token\\npassword=%s\\n' "$HOST" "$GITHUB_TOKEN"
+                token=""
+                if [ -f "/tmp/.ambient_github_token" ]; then
+                    token=$(cat /tmp/.ambient_github_token 2>/dev/null)
+                fi
+                if [ -z "$token" ]; then
+                    token="$GITHUB_TOKEN"
+                fi
+                if [ -n "$token" ]; then
+                    printf 'protocol=https\\nhost=%s\\nusername=x-access-token\\npassword=%s\\n' "$HOST" "$token"
                 fi
                 ;;
             *gitlab*)
-                if [ -n "$GITLAB_TOKEN" ]; then
-                    printf 'protocol=https\\nhost=%s\\nusername=oauth2\\npassword=%s\\n' "$HOST" "$GITLAB_TOKEN"
+                token=""
+                if [ -f "/tmp/.ambient_gitlab_token" ]; then
+                    token=$(cat /tmp/.ambient_gitlab_token 2>/dev/null)
+                fi
+                if [ -z "$token" ]; then
+                    token="$GITLAB_TOKEN"
+                fi
+                if [ -n "$token" ]; then
+                    printf 'protocol=https\\nhost=%s\\nusername=oauth2\\npassword=%s\\n' "$HOST" "$token"
                 fi
                 ;;
         esac
@@ -535,7 +582,7 @@ case "$1" in
 esac
 """
 
-_credential_helper_installed = False
+_credential_helper_installed = False  # reset on every new process / deployment
 
 
 def install_git_credential_helper() -> None:
