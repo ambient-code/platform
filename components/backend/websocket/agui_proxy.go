@@ -71,6 +71,11 @@ var sessionPortMap sync.Map
 // session-scoped sync.Maps. Key: sessionName, Value: time.Time.
 var sessionLastSeen sync.Map
 
+// betweenRunListeners tracks active between-run listener goroutines.
+// Key: "projectName/sessionName", Value: struct{}.
+// Used to ensure at most one listener goroutine per session.
+var betweenRunListeners sync.Map
+
 // staleSessionThreshold is the duration after which an inactive session's
 // cached data is pruned from the in-memory maps.
 const staleSessionThreshold = 1 * time.Hour
@@ -98,6 +103,7 @@ func cleanupStaleSessions() {
 				sessionPortMap.Delete(sessionName)
 				if proj, ok := sessionProjectMap.Load(sessionName); ok {
 					handlers.ClearSessionActiveUser(proj.(string), sessionName)
+					betweenRunListeners.Delete(proj.(string) + "/" + sessionName)
 				}
 				sessionProjectMap.Delete(sessionName)
 				// lastActivityUpdateTimes is keyed by "project/session";
@@ -255,6 +261,11 @@ func HandleAGUIRunProxy(c *gin.Context) {
 
 	// Resolve and cache the runner port for this session from the registry.
 	cacheSessionPort(projectName, sessionName)
+
+	// Start a between-run listener if one isn't already running for this session.
+	// This connects to the runner's GET /events SSE endpoint to capture events
+	// that arrive outside of user-initiated runs (e.g., background task completions).
+	ensureBetweenRunListener(projectName, sessionName)
 
 	// Extract sender identity for message attribution
 	senderUserID := c.GetString("userID")
@@ -1057,4 +1068,225 @@ func isAskUserQuestionToolCall(name string) bool {
 		}
 	}
 	return clean.String() == "askuserquestion"
+}
+
+// ─── Between-Run Listener ────────────────────────────────────────────
+
+const (
+	// betweenRunMaxRetries is the maximum number of reconnection attempts
+	// for the between-run event listener before giving up.
+	betweenRunMaxRetries = 30
+
+	// betweenRunInitialBackoff is the initial delay between reconnection attempts.
+	betweenRunInitialBackoff = 1 * time.Second
+
+	// betweenRunMaxBackoff caps the exponential backoff delay.
+	betweenRunMaxBackoff = 30 * time.Second
+)
+
+// ensureBetweenRunListener starts a listener goroutine for the session
+// if one isn't already running. The listener connects to the runner's
+// GET /events SSE endpoint to capture events emitted between user runs.
+func ensureBetweenRunListener(projectName, sessionName string) {
+	key := projectName + "/" + sessionName
+	if _, loaded := betweenRunListeners.LoadOrStore(key, struct{}{}); loaded {
+		return // already running
+	}
+	go func() {
+		defer betweenRunListeners.Delete(key)
+		listenBetweenRunEvents(projectName, sessionName)
+	}()
+}
+
+// listenBetweenRunEvents connects to the runner's GET /events SSE endpoint
+// and persists + broadcasts each event. Retries with exponential backoff
+// on connection failure.
+func listenBetweenRunEvents(projectName, sessionName string) {
+	backoff := betweenRunInitialBackoff
+
+	for attempt := 0; attempt < betweenRunMaxRetries; attempt++ {
+		runnerURL := getRunnerEndpoint(projectName, sessionName)
+		eventsURL := strings.TrimSuffix(runnerURL, "/") + "/events"
+
+		req, err := http.NewRequest("GET", eventsURL, nil)
+		if err != nil {
+			log.Printf("Between-run listener: failed to create request for %s/%s: %v", projectName, sessionName, err)
+			return
+		}
+		req.Header.Set("Accept", "text/event-stream")
+
+		resp, err := runnerHTTPClient.Do(req)
+		if err != nil {
+			log.Printf("Between-run listener: connection failed for %s/%s (attempt %d/%d): %v",
+				projectName, sessionName, attempt+1, betweenRunMaxRetries, err)
+			time.Sleep(backoff)
+			backoff = time.Duration(float64(backoff) * 1.5)
+			if backoff > betweenRunMaxBackoff {
+				backoff = betweenRunMaxBackoff
+			}
+			continue
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			log.Printf("Between-run listener: runner returned %d for %s/%s (attempt %d/%d)",
+				resp.StatusCode, projectName, sessionName, attempt+1, betweenRunMaxRetries)
+			time.Sleep(backoff)
+			backoff = time.Duration(float64(backoff) * 1.5)
+			if backoff > betweenRunMaxBackoff {
+				backoff = betweenRunMaxBackoff
+			}
+			continue
+		}
+
+		log.Printf("Between-run listener: connected for %s/%s", projectName, sessionName)
+		// Reset backoff on successful connection
+		backoff = betweenRunInitialBackoff
+
+		reader := bufio.NewReader(resp.Body)
+		for {
+			line, readErr := reader.ReadString('\n')
+			if readErr != nil {
+				if readErr != io.EOF {
+					log.Printf("Between-run listener: stream read error for %s/%s: %v", projectName, sessionName, readErr)
+				}
+				break
+			}
+
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmed, "data: ") {
+				jsonData := strings.TrimPrefix(trimmed, "data: ")
+				persistStreamedEvent(sessionName, "", "", jsonData)
+			}
+			// Publish ALL lines (data + empty separators) so the
+			// frontend's EventSource parser sees complete SSE events.
+			publishLine(sessionName, line)
+		}
+		resp.Body.Close()
+		log.Printf("Between-run listener: disconnected from %s/%s, reconnecting...", projectName, sessionName)
+	}
+
+	log.Printf("Between-run listener: gave up after %d attempts for %s/%s", betweenRunMaxRetries, projectName, sessionName)
+}
+
+// ─── Background Task Proxies ─────────────────────────────────────────
+
+// HandleTaskStop proxies a stop request for a background task to the runner.
+func HandleTaskStop(c *gin.Context) {
+	projectName := c.Param("projectName")
+	sessionName := c.Param("sessionName")
+	taskID := c.Param("taskId")
+
+	reqK8s, _ := handlers.GetK8sClientsForRequest(c)
+	if reqK8s == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
+	if !checkAccess(reqK8s, projectName, sessionName, "update") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Unauthorized"})
+		c.Abort()
+		return
+	}
+
+	runnerURL := getRunnerEndpoint(projectName, sessionName)
+	targetURL := strings.TrimSuffix(runnerURL, "/") + "/tasks/" + taskID + "/stop"
+
+	req, err := http.NewRequest("POST", targetURL, bytes.NewReader([]byte("{}")))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodyBytes))
+		c.JSON(resp.StatusCode, gin.H{"error": string(body)})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Task stop signal sent"})
+}
+
+// HandleTaskOutput proxies a request for background task output to the runner.
+func HandleTaskOutput(c *gin.Context) {
+	projectName := c.Param("projectName")
+	sessionName := c.Param("sessionName")
+	taskID := c.Param("taskId")
+
+	reqK8s, _ := handlers.GetK8sClientsForRequest(c)
+	if reqK8s == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
+	if !checkAccess(reqK8s, projectName, sessionName, "get") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Unauthorized"})
+		c.Abort()
+		return
+	}
+
+	runnerURL := getRunnerEndpoint(projectName, sessionName)
+	targetURL := strings.TrimSuffix(runnerURL, "/") + "/tasks/" + taskID + "/output"
+
+	req, err := http.NewRequest("GET", targetURL, nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		return
+	}
+	defer resp.Body.Close()
+
+	// Transcripts can be large; cap at 10 MB.
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024))
+	c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), body)
+}
+
+// HandleTaskList proxies a request to list background tasks to the runner.
+func HandleTaskList(c *gin.Context) {
+	projectName := c.Param("projectName")
+	sessionName := c.Param("sessionName")
+
+	reqK8s, _ := handlers.GetK8sClientsForRequest(c)
+	if reqK8s == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
+	if !checkAccess(reqK8s, projectName, sessionName, "get") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Unauthorized"})
+		c.Abort()
+		return
+	}
+
+	runnerURL := getRunnerEndpoint(projectName, sessionName)
+	targetURL := strings.TrimSuffix(runnerURL, "/") + "/tasks"
+
+	req, err := http.NewRequest("GET", targetURL, nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		return
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024*1024))
+	c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), body)
 }

@@ -35,7 +35,7 @@ from fastapi import FastAPI
 from ambient_runner.bridge import PlatformBridge
 from ambient_runner.platform.config import load_ambient_config
 from ambient_runner.platform.context import RunnerContext
-from ambient_runner.platform.utils import parse_owner_repo
+from ambient_runner.platform.utils import get_bot_token, parse_owner_repo
 
 # Configure root logger so all ambient_runner.* and ag_ui_* loggers
 # have a handler and respect the LOG_LEVEL env var.
@@ -77,6 +77,7 @@ def create_ambient_app(
     enable_mcp_status: bool = True,
     enable_capabilities: bool = True,
     enable_content: bool = True,
+    enable_tasks: bool = True,
 ) -> FastAPI:
     """Create a fully wired FastAPI application for an AG-UI runner.
 
@@ -176,6 +177,7 @@ def create_ambient_app(
         enable_mcp_status=enable_mcp_status,
         enable_capabilities=enable_capabilities,
         enable_content=enable_content,
+        enable_tasks=enable_tasks,
     )
 
     return app
@@ -196,6 +198,7 @@ def add_ambient_endpoints(
     enable_mcp_status: bool = True,
     enable_capabilities: bool = True,
     enable_content: bool = True,
+    enable_tasks: bool = True,
 ) -> None:
     """Register Ambient platform endpoints on an existing FastAPI app.
 
@@ -249,6 +252,16 @@ def add_ambient_endpoints(
         from ambient_runner.endpoints.content import router as content_router
 
         app.include_router(content_router)
+
+    if enable_tasks:
+        from ambient_runner.endpoints.tasks import router as tasks_router
+
+        app.include_router(tasks_router)
+
+    # Between-run event stream (always registered)
+    from ambient_runner.endpoints.events import router as events_router
+
+    app.include_router(events_router)
 
     caps = bridge.capabilities()
     logger.info(
@@ -355,7 +368,7 @@ async def _auto_execute_initial_prompt(prompt: str, session_id: str) -> None:
         ],
     }
 
-    bot_token = os.getenv("BOT_TOKEN", "").strip()
+    bot_token = get_bot_token()
     headers = {"Content-Type": "application/json"}
     if bot_token:
         headers["Authorization"] = f"Bearer {bot_token}"

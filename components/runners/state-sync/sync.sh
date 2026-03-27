@@ -10,6 +10,7 @@ NAMESPACE="${NAMESPACE:-default}"
 SESSION_NAME="${SESSION_NAME:-unknown}"
 SYNC_INTERVAL="${SYNC_INTERVAL:-60}"
 MAX_SYNC_SIZE="${MAX_SYNC_SIZE:-1073741824}"  # 1GB default
+REPO_BACKUP_INTERVAL="${REPO_BACKUP_INTERVAL:-5}"  # Backup repos every Nth sync cycle
 
 # Sanitize inputs to prevent path traversal
 NAMESPACE="${NAMESPACE//[^a-zA-Z0-9-]/}"
@@ -261,6 +262,7 @@ echo "Session: ${NAMESPACE}/${SESSION_NAME}"
 echo "S3 Endpoint: ${S3_ENDPOINT}"
 echo "S3 Bucket: ${S3_BUCKET}"
 echo "Sync interval: ${SYNC_INTERVAL}s"
+echo "Repo backup every: ${REPO_BACKUP_INTERVAL} sync cycles"
 echo "Max sync size: ${MAX_SYNC_SIZE} bytes"
 echo "========================================="
 
@@ -283,8 +285,15 @@ echo "Waiting 30s for workspace to populate..."
 sleep 30
 
 # Main sync loop
+sync_count=0
 while true; do
     check_size || echo "Size check warning (continuing anyway)"
+    # Periodically backup git repos (every Nth cycle) so repo state
+    # is preserved even if the runner container OOMs without SIGTERM
+    sync_count=$((sync_count + 1))
+    if [ $((sync_count % REPO_BACKUP_INTERVAL)) -eq 0 ]; then
+        backup_git_repos || echo "Repo backup had errors (continuing)"
+    fi
     sync_to_s3 || echo "Sync failed, will retry in ${SYNC_INTERVAL}s..."
     sleep ${SYNC_INTERVAL}
 done

@@ -10,6 +10,7 @@ Fixtures are captured using scripts/capture-fixtures.py with a real key,
 then committed to ambient_runner/bridges/claude/fixtures/.
 """
 
+import asyncio
 import json
 import logging
 import re
@@ -100,6 +101,13 @@ class MockClaudeSDKClient:
             if self._interrupted:
                 return
             yield msg
+
+    async def receive_messages(self) -> AsyncIterator[Any]:
+        """Persistent message stream — replays fixture then blocks forever."""
+        async for msg in self.receive_response():
+            yield msg
+        # Simulate persistent stream: block until cancelled
+        await asyncio.Event().wait()
 
     async def interrupt(self) -> None:
         logger.info("[MockSDK] interrupt()")

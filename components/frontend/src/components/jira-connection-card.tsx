@@ -8,7 +8,6 @@ import { Label } from '@/components/ui/label'
 import { Loader2, Eye, EyeOff } from 'lucide-react'
 import { toast } from 'sonner'
 import { useConnectJira, useDisconnectJira } from '@/services/queries/use-jira'
-import { useCurrentUser } from '@/services/queries/use-auth'
 
 // Default Jira URL for Red Hat (can be changed by user)
 const DEFAULT_JIRA_URL = 'https://redhat.atlassian.net'
@@ -27,7 +26,6 @@ type Props = {
 export function JiraConnectionCard({ status, onRefresh }: Props) {
   const connectMutation = useConnectJira()
   const disconnectMutation = useDisconnectJira()
-  const { data: currentUser } = useCurrentUser()
   const isLoading = !status
 
   const [showForm, setShowForm] = useState(false)
@@ -42,11 +40,9 @@ export function JiraConnectionCard({ status, onRefresh }: Props) {
       if (!url) {
         setUrl(DEFAULT_JIRA_URL)
       }
-      if (!username && currentUser?.email) {
-        setUsername(currentUser.email)
-      }
+
     }
-  }, [showForm, currentUser?.email, url, username])
+  }, [showForm, url])
 
   const handleConnect = async () => {
     if (!url || !username || !apiToken) {
@@ -156,14 +152,14 @@ export function JiraConnectionCard({ status, onRefresh }: Props) {
               <Input
                 id="jira-email"
                 type="email"
-                placeholder="your-email@redhat.com"
+
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 disabled={connectMutation.isPending}
                 className="mt-1"
               />
               <p className="text-xs text-muted-foreground mt-1">
-                Your Jira Cloud login email (e.g., jdoe@redhat.com)
+                Your Jira Cloud login email
               </p>
             </div>
             <div>
