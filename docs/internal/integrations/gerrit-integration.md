@@ -205,8 +205,8 @@ Both instances will be available to the MCP server during AgenticSessions.
 
 ### Credential Storage
 
-- Credentials are stored in a Kubernetes Secret named `gerrit-credentials`
-- Each credential entry uses a compound key: `instanceName.userID`
+- Credentials are stored in per-user Kubernetes Secrets named `gerrit-credentials-{userID}`
+- Each credential entry is keyed by `instanceName` within the per-user Secret
 - Stored in Kubernetes Secrets (encrypted at rest when cluster-level encryption is configured)
 - Credentials are never logged in plaintext
 - Credentials are not exposed in API responses after storage

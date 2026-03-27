@@ -73,7 +73,8 @@ var _ = Describe("Gerrit Auth Handler", Label(test_constants.LabelUnit, test_con
 		validateGerritTokenFn = originalValidateGerritToken
 
 		if k8sUtils != nil {
-			_ = k8sUtils.K8sClient.CoreV1().Secrets(*config.TestNamespace).Delete(context.Background(), gerritSecretName, metav1.DeleteOptions{})
+			// Clean up per-user secrets (best-effort)
+			_ = k8sUtils.K8sClient.CoreV1().Secrets(*config.TestNamespace).Delete(context.Background(), gerritSecretName("test-user"), metav1.DeleteOptions{})
 			_ = k8sUtils.K8sClient.CoreV1().Namespaces().Delete(context.Background(), *config.TestNamespace, metav1.DeleteOptions{})
 		}
 	})
@@ -415,15 +416,16 @@ var _ = Describe("Gerrit Auth Handler", Label(test_constants.LabelUnit, test_con
 		})
 	})
 
-	Context("Secret Key Format", func() {
-		It("Should use dot separator in secret key", func() {
-			key := gerritSecretKey("openstack", "user123")
-			Expect(key).To(Equal("openstack.user123"))
+	Context("Per-User Secret Naming", func() {
+		It("Should derive secret name from user ID", func() {
+			name := gerritSecretName("user123")
+			Expect(name).To(Equal("gerrit-credentials-user123"))
 		})
 
-		It("Should produce valid K8s secret data keys", func() {
-			key := gerritSecretKey("my-instance", "system-serviceaccount-ns-user")
-			Expect(key).To(MatchRegexp(`^[-._a-zA-Z0-9]+$`))
+		It("Should produce valid K8s Secret names", func() {
+			name := gerritSecretName("system-serviceaccount-ns-user")
+			Expect(name).To(HavePrefix("gerrit-credentials-"))
+			Expect(name).To(MatchRegexp(`^[a-z0-9][-a-z0-9.]*[a-z0-9]$`))
 		})
 	})
 

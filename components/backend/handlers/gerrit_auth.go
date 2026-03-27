@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
-	"strings"
+	"sort"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -30,12 +30,7 @@ type GerritCredentials struct {
 	UpdatedAt         time.Time `json:"updatedAt"`
 }
 
-// gerritSecretName is a shared Secret for all Gerrit credentials.
-// NOTE: This uses a single Secret for all users, which may cause contention
-// at scale. If the number of users grows significantly, consider sharding
-// into per-user Secrets (e.g., "gerrit-credentials-{userID}") and using
-// label selectors for listing.
-const gerritSecretName = "gerrit-credentials"
+const gerritSecretPrefix = "gerrit-credentials-"
 
 var validInstanceNameRegex = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,61}[a-z0-9]$`)
 
@@ -43,9 +38,11 @@ var validInstanceNameRegex = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,61}[a-z0-9
 // It is a variable so tests can replace it with a stub.
 var validateGerritTokenFn = ValidateGerritToken
 
-// gerritSecretKey returns the K8s secret data key for a Gerrit instance
-func gerritSecretKey(instanceName, userID string) string {
-	return instanceName + "." + userID
+// gerritSecretName returns the per-user Secret name for Gerrit credentials.
+// Each user gets their own Secret to avoid cross-user contention and
+// unbounded Secret size growth.
+func gerritSecretName(userID string) string {
+	return gerritSecretPrefix + userID
 }
 
 // validateGerritURL validates a Gerrit URL for SSRF protection.
@@ -302,21 +299,21 @@ func ListGerritInstances(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"instances": result})
 }
 
-// storeGerritCredentials stores Gerrit credentials in cluster-level Secret
+// storeGerritCredentials stores Gerrit credentials in a per-user Secret
 func storeGerritCredentials(ctx context.Context, creds *GerritCredentials) error {
 	if creds == nil || creds.UserID == "" || creds.InstanceName == "" {
 		return fmt.Errorf("invalid credentials payload")
 	}
 
-	key := gerritSecretKey(creds.InstanceName, creds.UserID)
+	secretName := gerritSecretName(creds.UserID)
 
 	for i := 0; i < 3; i++ { // retry on conflict
-		secret, err := K8sClient.CoreV1().Secrets(Namespace).Get(ctx, gerritSecretName, v1.GetOptions{})
+		secret, err := K8sClient.CoreV1().Secrets(Namespace).Get(ctx, secretName, v1.GetOptions{})
 		if err != nil {
 			if errors.IsNotFound(err) {
 				secret = &corev1.Secret{
 					ObjectMeta: v1.ObjectMeta{
-						Name:      gerritSecretName,
+						Name:      secretName,
 						Namespace: Namespace,
 						Labels: map[string]string{
 							"app":                      "ambient-code",
@@ -329,7 +326,7 @@ func storeGerritCredentials(ctx context.Context, creds *GerritCredentials) error
 				if _, cerr := K8sClient.CoreV1().Secrets(Namespace).Create(ctx, secret, v1.CreateOptions{}); cerr != nil && !errors.IsAlreadyExists(cerr) {
 					return fmt.Errorf("failed to create Secret: %w", cerr)
 				}
-				secret, err = K8sClient.CoreV1().Secrets(Namespace).Get(ctx, gerritSecretName, v1.GetOptions{})
+				secret, err = K8sClient.CoreV1().Secrets(Namespace).Get(ctx, secretName, v1.GetOptions{})
 				if err != nil {
 					return fmt.Errorf("failed to fetch Secret after create: %w", err)
 				}
@@ -346,7 +343,7 @@ func storeGerritCredentials(ctx context.Context, creds *GerritCredentials) error
 		if err != nil {
 			return fmt.Errorf("failed to marshal credentials: %w", err)
 		}
-		secret.Data[key] = b
+		secret.Data[creds.InstanceName] = b
 
 		if _, uerr := K8sClient.CoreV1().Secrets(Namespace).Update(ctx, secret, v1.UpdateOptions{}); uerr != nil {
 			if errors.IsConflict(uerr) {
@@ -365,31 +362,34 @@ func getGerritCredentials(ctx context.Context, instanceName, userID string) (*Ge
 		return nil, fmt.Errorf("userID and instanceName are required")
 	}
 
-	secret, err := K8sClient.CoreV1().Secrets(Namespace).Get(ctx, gerritSecretName, v1.GetOptions{})
+	secretName := gerritSecretName(userID)
+	secret, err := K8sClient.CoreV1().Secrets(Namespace).Get(ctx, secretName, v1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
 
-	key := gerritSecretKey(instanceName, userID)
-	if secret.Data == nil || len(secret.Data[key]) == 0 {
+	if secret.Data == nil || len(secret.Data[instanceName]) == 0 {
 		return nil, nil
 	}
 
 	var creds GerritCredentials
-	if err := json.Unmarshal(secret.Data[key], &creds); err != nil {
+	if err := json.Unmarshal(secret.Data[instanceName], &creds); err != nil {
 		return nil, fmt.Errorf("failed to parse credentials: %w", err)
 	}
 
 	return &creds, nil
 }
 
-// listGerritCredentials returns all Gerrit instances for a user
+// listGerritCredentials returns all Gerrit instances for a user.
+// Each user has their own Secret, so all entries belong to the user.
+// Results are sorted by instance name for deterministic ordering.
 func listGerritCredentials(ctx context.Context, userID string) ([]*GerritCredentials, error) {
 	if userID == "" {
 		return nil, fmt.Errorf("userID is required")
 	}
 
-	secret, err := K8sClient.CoreV1().Secrets(Namespace).Get(ctx, gerritSecretName, v1.GetOptions{})
+	secretName := gerritSecretName(userID)
+	secret, err := K8sClient.CoreV1().Secrets(Namespace).Get(ctx, secretName, v1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return nil, nil
@@ -397,18 +397,19 @@ func listGerritCredentials(ctx context.Context, userID string) ([]*GerritCredent
 		return nil, err
 	}
 
-	suffix := "." + userID
 	var result []*GerritCredentials
 	for key, val := range secret.Data {
-		if strings.HasSuffix(key, suffix) {
-			var creds GerritCredentials
-			if err := json.Unmarshal(val, &creds); err != nil {
-				log.Printf("Failed to parse Gerrit credentials for key %s: %v", key, err)
-				continue
-			}
-			result = append(result, &creds)
+		var creds GerritCredentials
+		if err := json.Unmarshal(val, &creds); err != nil {
+			log.Printf("Failed to parse Gerrit credentials for key %s: %v", key, err)
+			continue
 		}
+		result = append(result, &creds)
 	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].InstanceName < result[j].InstanceName
+	})
 
 	return result, nil
 }
@@ -419,10 +420,10 @@ func deleteGerritCredentials(ctx context.Context, instanceName, userID string) e
 		return fmt.Errorf("userID and instanceName are required")
 	}
 
-	key := gerritSecretKey(instanceName, userID)
+	secretName := gerritSecretName(userID)
 
 	for i := 0; i < 3; i++ { // retry on conflict
-		secret, err := K8sClient.CoreV1().Secrets(Namespace).Get(ctx, gerritSecretName, v1.GetOptions{})
+		secret, err := K8sClient.CoreV1().Secrets(Namespace).Get(ctx, secretName, v1.GetOptions{})
 		if err != nil {
 			if errors.IsNotFound(err) {
 				return nil
@@ -430,11 +431,11 @@ func deleteGerritCredentials(ctx context.Context, instanceName, userID string) e
 			return fmt.Errorf("failed to get Secret: %w", err)
 		}
 
-		if secret.Data == nil || len(secret.Data[key]) == 0 {
+		if secret.Data == nil || len(secret.Data[instanceName]) == 0 {
 			return nil
 		}
 
-		delete(secret.Data, key)
+		delete(secret.Data, instanceName)
 
 		if _, uerr := K8sClient.CoreV1().Secrets(Namespace).Update(ctx, secret, v1.UpdateOptions{}); uerr != nil {
 			if errors.IsConflict(uerr) {

@@ -41,19 +41,19 @@ Read-only projection used for status reporting. Not stored separately.
 
 ## Storage
 
-### Kubernetes Secret: `gerrit-credentials`
+### Kubernetes Secret: `gerrit-credentials-{userID}` (per-user)
 
 | Aspect          | Value                                        |
 |-----------------|----------------------------------------------|
-| Secret name     | `gerrit-credentials`                         |
+| Secret name     | `gerrit-credentials-{userID}`                |
 | Namespace       | Platform namespace (same as other creds)     |
 | Labels          | `app: ambient-code`, `ambient-code.io/provider: gerrit` |
-| Data key format | `{instanceName}.{userID}`                    |
+| Data key format | `{instanceName}`                             |
 | Data value      | JSON-marshaled `GerritCredentials`           |
 
-**Multi-instance**: A user with two Gerrit instances ("openstack" and "android") has two entries in the same secret:
-- Key: `openstack.user123` → Value: `{"userID":"user123","instanceName":"openstack","url":"https://review.opendev.org",...}`
-- Key: `android.user123` → Value: `{"userID":"user123","instanceName":"android","url":"https://android-review.googlesource.com",...}`
+**Per-user sharding**: Each user gets their own Secret, avoiding cross-user contention and unbounded Secret growth. A user with two Gerrit instances ("openstack" and "android") has two entries in their Secret `gerrit-credentials-user123`:
+- Key: `openstack` → Value: `{"userID":"user123","instanceName":"openstack","url":"https://review.opendev.org",...}`
+- Key: `android` → Value: `{"userID":"user123","instanceName":"android","url":"https://android-review.googlesource.com",...}`
 
 ## Runtime Configuration
 

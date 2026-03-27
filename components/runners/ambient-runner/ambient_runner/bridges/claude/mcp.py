@@ -40,12 +40,17 @@ def generate_gerrit_config(instances: list[dict]) -> None:
     Sets GERRIT_CONFIG_PATH env var to point to the generated config.
     """
     config_dir = Path("/tmp/gerrit-mcp")
+
+    # Always clean up old config to prevent stale credentials
     if config_dir.exists():
         import shutil
+
         shutil.rmtree(config_dir)
+
     if not instances:
         os.environ.pop("GERRIT_CONFIG_PATH", None)
         return
+
     config_dir.mkdir(parents=True, exist_ok=True)
 
     gerrit_hosts = []
@@ -215,7 +220,6 @@ def log_auth_status(mcp_servers: dict) -> None:
 def _read_google_credentials(
     workspace_path: Path, secret_path: Path
 ) -> Dict[str, Any] | None:
-    """Read and parse Google OAuth credentials from workspace or secret path."""
     cred_path = workspace_path if workspace_path.exists() else secret_path
     if not cred_path.exists():
         return None
@@ -230,7 +234,6 @@ def _read_google_credentials(
 
 
 def _parse_token_expiry(expiry_str: str) -> datetime | None:
-    """Parse an ISO 8601 token expiry string into a timezone-aware datetime."""
     try:
         expiry_str = expiry_str.replace("Z", "+00:00")
         dt = datetime.fromisoformat(expiry_str)
@@ -245,7 +248,6 @@ def _parse_token_expiry(expiry_str: str) -> datetime | None:
 def _validate_google_token(
     user_creds: Dict[str, Any], user_email: str
 ) -> tuple[bool | None, str]:
-    """Validate Google OAuth token completeness and expiry status."""
     if not user_creds.get("access_token") or not user_creds.get("refresh_token"):
         return False, "Google OAuth credentials incomplete - missing or empty tokens"
 
@@ -326,10 +328,10 @@ def check_mcp_authentication(server_name: str) -> tuple[bool | None, str | None]
                                 True,
                                 "Jira credentials available (not yet loaded in session)",
                             )
-                except Exception as e:
-                    logger.debug(f"Jira credential probe failed: {e}")
-        except Exception as e:
-            logger.debug(f"Jira credential check setup failed: {e}")
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
         return False, "Jira not configured - connect on Integrations page"
 
