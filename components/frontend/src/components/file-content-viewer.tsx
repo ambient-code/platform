@@ -15,6 +15,8 @@ type FileContentViewerProps = {
   content: string;
   /** Direct URL to the file for binary content (images, PDFs) */
   fileUrl?: string;
+  /** Actual file size in bytes (avoids computing from text-decoded content) */
+  fileSize?: number;
   onDownload?: () => void;
 };
 
@@ -73,11 +75,12 @@ function NumberedCodeBlock({ content, className }: { content: string; className?
   );
 }
 
-export function FileContentViewer({ fileName, content, fileUrl, onDownload }: FileContentViewerProps) {
+/** Renders file content with type-specific viewers (image, PDF, HTML, markdown, binary, text). */
+export function FileContentViewer({ fileName, content, fileUrl, fileSize: fileSizeProp, onDownload }: FileContentViewerProps) {
   const [imageError, setImageError] = useState(false);
 
   const fileInfo = useMemo(() => detectFileType(fileName, content), [fileName, content]);
-  const fileSize = useMemo(() => new Blob([content]).size, [content]);
+  const fileSize = useMemo(() => fileSizeProp ?? new Blob([content]).size, [fileSizeProp, content]);
 
   // Image viewer
   if (fileInfo.type === 'image' && !imageError) {

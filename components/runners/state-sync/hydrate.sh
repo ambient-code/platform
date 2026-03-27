@@ -180,6 +180,72 @@ git config --global user.email "bot@ambient-code.local" || echo "Warning: failed
 # Mark workspace as safe (in case runner needs it)
 git config --global --add safe.directory /workspace 2>/dev/null || true
 
+# Install git credential helper so clones of private repos work automatically.
+# The helper reads GITHUB_TOKEN / GITLAB_TOKEN from env vars (passed by the
+# operator as container env) and returns them in git credential protocol format.
+GIT_CRED_HELPER="/tmp/git-credential-ambient"
+cat > "$GIT_CRED_HELPER" << 'CREDENTIAL_HELPER'
+#!/bin/sh
+case "$1" in
+    get)
+        while IFS='=' read -r key value; do
+            case "$key" in
+                host) HOST="$value" ;;
+            esac
+        done
+        case "$HOST" in
+            *github*)
+                if [ -n "$GITHUB_TOKEN" ]; then
+                    printf 'protocol=https\nhost=%s\nusername=x-access-token\npassword=%s\n' "$HOST" "$GITHUB_TOKEN"
+                fi
+                ;;
+            *gitlab*)
+                if [ -n "$GITLAB_TOKEN" ]; then
+                    printf 'protocol=https\nhost=%s\nusername=oauth2\npassword=%s\n' "$HOST" "$GITLAB_TOKEN"
+                fi
+                ;;
+        esac
+        ;;
+esac
+CREDENTIAL_HELPER
+chmod 755 "$GIT_CRED_HELPER"
+git config --global credential.helper "$GIT_CRED_HELPER" || echo "Warning: failed to set credential helper"
+# Fetch git tokens from the backend API (same endpoint the runner uses at runtime).
+# The init container has BOT_TOKEN, BACKEND_API_URL, PROJECT_NAME, and SESSION_NAME.
+if [ -n "$BACKEND_API_URL" ] && [ -n "$BOT_TOKEN" ]; then
+    CRED_BASE="${BACKEND_API_URL}/projects/${PROJECT_NAME}/agentic-sessions/${SESSION_NAME}/credentials"
+
+    # Fetch GitHub token (only if not already set)
+    if [ -z "$GITHUB_TOKEN" ]; then
+        GH_RESP=$(curl -sf --max-time 10 -H "Authorization: Bearer ${BOT_TOKEN}" "${CRED_BASE}/github" 2>/dev/null || echo "")
+        if [ -n "$GH_RESP" ]; then
+            GH_TOKEN=$(echo "$GH_RESP" | jq -r '.token // empty' 2>/dev/null || echo "")
+            if [ -n "$GH_TOKEN" ]; then
+                export GITHUB_TOKEN="$GH_TOKEN"
+                echo "  Fetched GitHub token from backend"
+            fi
+        fi
+    fi
+
+    # Fetch GitLab token (only if not already set)
+    if [ -z "$GITLAB_TOKEN" ]; then
+        GL_RESP=$(curl -sf --max-time 10 -H "Authorization: Bearer ${BOT_TOKEN}" "${CRED_BASE}/gitlab" 2>/dev/null || echo "")
+        if [ -n "$GL_RESP" ]; then
+            GL_TOKEN=$(echo "$GL_RESP" | jq -r '.token // empty' 2>/dev/null || echo "")
+            if [ -n "$GL_TOKEN" ]; then
+                export GITLAB_TOKEN="$GL_TOKEN"
+                echo "  Fetched GitLab token from backend"
+            fi
+        fi
+    fi
+fi
+
+if [ -n "$GITHUB_TOKEN" ] || [ -n "$GITLAB_TOKEN" ]; then
+    echo "Git credential helper installed (GitHub: $([ -n "$GITHUB_TOKEN" ] && echo 'yes' || echo 'no'), GitLab: $([ -n "$GITLAB_TOKEN" ] && echo 'yes' || echo 'no'))"
+else
+    echo "No git tokens available — private repos may fail to clone"
+fi
+
 # Clone repos from REPOS_JSON
 if [ -n "$REPOS_JSON" ] && [ "$REPOS_JSON" != "null" ] && [ "$REPOS_JSON" != "" ]; then
     echo "Cloning repositories from spec..."

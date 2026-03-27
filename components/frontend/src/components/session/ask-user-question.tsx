@@ -271,6 +271,7 @@ export const AskUserQuestionMessage: React.FC<AskUserQuestionMessageProps> = ({
                 value={otherText[q.question] || ""}
                 onChange={(e) => handleOtherTextChange(q.question, e.target.value)}
                 onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => e.stopPropagation()}
                 disabled={disabled}
                 className="mt-1 h-7 text-sm"
               />

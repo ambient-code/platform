@@ -5,7 +5,6 @@ metadata:
   labels:
     app: frontend
 spec:
-  replicas: 1
   selector:
     matchLabels:
       app: frontend
@@ -29,8 +28,6 @@ spec:
           value: "production"
         - name: GITHUB_APP_SLUG
           value: "ambient-code"
-        - name: VTEAM_VERSION
-          value: "v0.0.7"
         # Note: Langfuse feedback now handled by runner, not frontend
         # Unleash feature flags (optional - proxy routes disabled when not set)
         - name: UNLEASH_URL

@@ -16,7 +16,8 @@ ALLOWED_FORWARDED_PROPS = {
     "fallback_model",  # Fallback if primary fails
     "temperature",  # Sampling temperature
     "max_tokens",  # Response length limit
-    "max_thinking_tokens",  # Reasoning depth limit
+    "max_thinking_tokens",  # Reasoning depth limit (legacy, prefer thinking)
+    "thinking",  # Thinking config: {"type": "adaptive"} | {"type": "enabled", "budget_tokens": N} | {"type": "disabled"}
     "max_turns",  # Conversation turn limit
     "max_budget_usd",  # Cost limit per run
     # Output control

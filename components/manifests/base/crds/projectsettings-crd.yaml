@@ -77,6 +77,11 @@ spec:
               scheduledSessionRBACReady:
                 type: boolean
                 description: "Whether RBAC for scheduled session triggers is provisioned"
+              limitRangeReady:
+                type: boolean
+                description: "Whether the default LimitRange for CA bin-packing is provisioned"
+    subresources:
+      status: {}
     additionalPrinterColumns:
     - name: Age
       type: date

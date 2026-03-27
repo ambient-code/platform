@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 from ambient_runner.platform.context import RunnerContext
+from ambient_runner.platform.utils import get_bot_token
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +113,8 @@ def build_mcp_servers(
         logger.info(
             f"Added backend API MCP tools ({len(backend_tools)}): "
             "acp_list_sessions, acp_get_session, acp_create_session, "
-            "acp_stop_session, acp_send_message, acp_get_api_reference"
+            "acp_stop_session, acp_send_message, acp_get_session_status, "
+            "acp_restart_session, acp_list_workflows, acp_get_api_reference"
         )
 
     return mcp_servers
@@ -242,7 +244,7 @@ def check_mcp_authentication(server_name: str) -> tuple[bool | None, str | None]
             if base and project and session_id:
                 url = f"{base}/projects/{project.strip()}/agentic-sessions/{session_id}/credentials/jira"
                 req = _urllib_request.Request(url, method="GET")
-                bot = (os.getenv("BOT_TOKEN") or "").strip()
+                bot = get_bot_token()
                 if bot:
                     req.add_header("Authorization", f"Bearer {bot}")
                 try:

@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { RecentUpdatesDialog } from "@/components/recent-updates-dialog";
 import { UserBubble } from "@/components/user-bubble";
 import { cn } from "@/lib/utils";
 import { useLocalStorage } from "@/hooks/use-local-storage";
@@ -114,6 +115,7 @@ export default function ProjectLayout({
 
               {/* Right: nav items */}
               <div className="flex items-center gap-3">
+                <RecentUpdatesDialog />
                 <ThemeToggle />
                 <Button
                   variant="ghost"

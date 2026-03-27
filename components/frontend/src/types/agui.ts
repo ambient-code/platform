@@ -43,6 +43,7 @@ export {
   type ReasoningMessageContentEvent,
   type ReasoningMessageEndEvent,
   type ReasoningEndEvent,
+  type CustomEvent as AGUICustomEvent,
 } from '@ag-ui/client'
 
 import { EventType } from '@ag-ui/client'
@@ -220,6 +221,8 @@ export type AGUIClientState = {
     content: string
     timestamp?: string
   } | null
+  // Background tasks tracked from CustomEvent task:* events
+  backgroundTasks: Map<string, import('@/types/background-task').BackgroundTask>
 }
 
 // ── Type Guards ──

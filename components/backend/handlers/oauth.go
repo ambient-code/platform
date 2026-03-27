@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -70,6 +71,7 @@ func getOAuthProvider(provider string) (*OAuthProvider, error) {
 				"https://www.googleapis.com/auth/drive",
 				"https://www.googleapis.com/auth/drive.readonly",
 				"https://www.googleapis.com/auth/drive.file",
+				"https://www.googleapis.com/auth/gmail.send",
 			},
 		}, nil
 
@@ -440,7 +442,7 @@ func exchangeOAuthCode(ctx context.Context, provider *OAuthProvider, code string
 func storeOAuthCallback(ctx context.Context, state string, data *OAuthCallbackData) error {
 	if state == "" {
 		// Generate a default key if no state provided
-		state = fmt.Sprintf("callback_%d", time.Now().Unix())
+		state = fmt.Sprintf("callback_%s", uuid.New().String())
 	}
 
 	const secretName = "oauth-callbacks"

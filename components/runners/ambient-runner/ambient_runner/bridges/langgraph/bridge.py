@@ -71,7 +71,7 @@ class LangGraphBridge(PlatformBridge):
     def set_context(self, context: RunnerContext) -> None:
         self._context = context
 
-    async def run(self, input_data: RunAgentInput) -> AsyncIterator[BaseEvent]:
+    async def run(self, input_data: RunAgentInput, **kwargs) -> AsyncIterator[BaseEvent]:
         """Run the LangGraph adapter and yield AG-UI events.
 
         Lazily creates the adapter on first run.
@@ -79,7 +79,9 @@ class LangGraphBridge(PlatformBridge):
         if self._adapter is None:
             self._create_adapter()
 
-        async for event in self._adapter.run(input_data):
+        from ambient_runner.middleware import secret_redaction_middleware
+
+        async for event in secret_redaction_middleware(self._adapter.run(input_data)):
             yield event
 
     async def interrupt(self, thread_id: Optional[str] = None) -> None:

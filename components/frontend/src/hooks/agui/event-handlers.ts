@@ -21,6 +21,7 @@ import {
 } from '@/types/agui'
 import type {
   AGUIClientState,
+  AGUICustomEvent,
   PlatformEvent,
   PlatformMessage,
   PlatformToolCall,
@@ -45,6 +46,7 @@ import type {
   ReasoningMessageContentEvent,
   ReasoningMessageEndEvent,
 } from '@/types/agui'
+import type { BackgroundTaskStatus, BackgroundTaskUsage } from '@/types/background-task'
 import { normalizeSnapshotMessages } from './normalize-snapshot'
 
 /**
@@ -182,6 +184,10 @@ export function processAGUIEvent(
   if (event.type === EventType.REASONING_END) {
     // Lifecycle bookend -- no-op
     return newState
+  }
+
+  if (event.type === EventType.CUSTOM) {
+    return handleCustomEvent(newState, event as AGUICustomEvent)
   }
 
   if (event.type === EventType.RAW) {
@@ -1004,6 +1010,59 @@ function handleReasoningMessageEnd(
     callbacks.onMessage?.(msg)
   }
   state.currentReasoning = null
+  return state
+}
+
+// ── Custom event handler (background tasks) ──
+
+function handleCustomEvent(
+  state: AGUIClientState,
+  event: AGUICustomEvent,
+): AGUIClientState {
+  const name = event.name
+  const value = event.value as Record<string, unknown> | undefined
+
+  if (!value) return state
+
+  if (name === 'task:started') {
+    const tasks = new Map(state.backgroundTasks)
+    tasks.set(value.task_id as string, {
+      task_id: value.task_id as string,
+      description: value.description as string,
+      task_type: value.task_type as string | undefined,
+      status: 'running',
+    })
+    return { ...state, backgroundTasks: tasks }
+  }
+
+  if (name === 'task:progress') {
+    const tasks = new Map(state.backgroundTasks)
+    const existing = tasks.get(value.task_id as string)
+    if (existing) {
+      tasks.set(value.task_id as string, {
+        ...existing,
+        usage: value.usage as BackgroundTaskUsage | undefined,
+        last_tool_name: value.last_tool_name as string | undefined,
+      })
+    }
+    return { ...state, backgroundTasks: tasks }
+  }
+
+  if (name === 'task:completed') {
+    const tasks = new Map(state.backgroundTasks)
+    const taskId = value.task_id as string
+    const existing = tasks.get(taskId)
+    tasks.set(taskId, {
+      ...(existing ?? { task_id: taskId, description: '' }),
+      status: (value.status as BackgroundTaskStatus) || 'completed',
+      summary: value.summary as string | undefined,
+      usage: value.usage as BackgroundTaskUsage | undefined,
+      output_file: value.output_file as string | undefined,
+    })
+    return { ...state, backgroundTasks: tasks }
+  }
+
+  // Other custom events (hooks) — pass through unchanged
   return state
 }
 

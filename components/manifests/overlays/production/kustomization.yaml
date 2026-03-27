@@ -19,6 +19,7 @@ resources:
 - unleash-route.yaml
 - operator-config-openshift.yaml
 - ldap-config.yaml
+- frontend-hpa.yaml
 
 components:
 - ../../components/oauth-proxy

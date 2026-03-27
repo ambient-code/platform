@@ -3,13 +3,22 @@
 import { useMemo, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { AgentStatusIndicator, agentStatusLabel } from "@/components/agent-status-indicator";
 import { deriveAgentStatusFromPhase } from "@/hooks/use-agent-status";
 import { SessionStatusDot, sessionPhaseLabel } from "@/components/session-status-dot";
+import { EditSessionNameDialog } from "@/components/edit-session-name-dialog";
+import { DestructiveConfirmationDialog } from "@/components/confirmation-dialog";
 import {
   Plus,
   PanelLeftClose,
@@ -20,13 +29,25 @@ import {
   Key,
   Settings,
   MoreHorizontal,
+  MoreVertical,
   Cpu,
   Clock,
   MessageSquare,
   RefreshCw,
+  Pencil,
+  Square,
+  ArrowRight,
+  Trash2,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
-import { useSessionsPaginated } from "@/services/queries/use-sessions";
+import {
+  useSessionsPaginated,
+  useStopSession,
+  useDeleteSession,
+  useContinueSession,
+  useUpdateSessionDisplayName,
+} from "@/services/queries/use-sessions";
+import { useProjectAccess } from "@/services/queries/use-project-access";
 import { useVersion } from "@/services/queries/use-version";
 import { cn } from "@/lib/utils";
 import type { AgenticSession } from "@/types/api";
@@ -48,6 +69,13 @@ type NavItem = {
   href: string;
 };
 
+/** Get the most relevant activity timestamp for sorting (prefer lastActivityTime, fall back to creationTimestamp). */
+function getActivityTime(session: AgenticSession): number {
+  const lastActivity = session.status?.lastActivityTime;
+  if (lastActivity) return new Date(lastActivity).getTime();
+  return new Date(session.metadata.creationTimestamp).getTime();
+}
+
 export function SessionsSidebar({
   projectName,
   currentSessionName,
@@ -65,8 +93,21 @@ export function SessionsSidebar({
     { limit: 20 },
   );
 
+  const { data: access } = useProjectAccess(projectName);
+  const canDelete = access?.userRole === "admin";
+  const canModify = !!access?.userRole && access.userRole !== "view";
+
+  const stopMutation = useStopSession();
+  const deleteMutation = useDeleteSession();
+  const continueMutation = useContinueSession();
+  const updateDisplayNameMutation = useUpdateSessionDisplayName();
+
+  const [editingSession, setEditingSession] = useState<{ name: string; displayName: string } | null>(null);
+  const [deletingSessionName, setDeletingSessionName] = useState<string | null>(null);
+
   const sessions = useMemo(() => {
-    return data?.items ?? [];
+    const items = data?.items ?? [];
+    return [...items].sort((a, b) => getActivityTime(b) - getActivityTime(a));
   }, [data?.items]);
 
   const visibleSessions = useMemo(() => {
@@ -109,11 +150,6 @@ export function SessionsSidebar({
 
   if (collapsed) return null;
 
-  const handleNavigate = (sessionName: string) => {
-    onSessionSelect?.();
-    router.push(`/projects/${projectName}/sessions/${sessionName}`);
-  };
-
   const handleNewSession = () => {
     if (onNewSession) {
       onNewSession();
@@ -121,6 +157,69 @@ export function SessionsSidebar({
       router.push(`/projects/${projectName}/new`);
     }
   };
+
+  const handleStop = (sessionName: string) => {
+    stopMutation.mutate(
+      { projectName, sessionName },
+      {
+        onSuccess: () => toast.success(`Session stopped`),
+        onError: () => toast.error(`Failed to stop session`),
+      },
+    );
+  };
+
+  const handleContinue = (sessionName: string) => {
+    continueMutation.mutate(
+      { projectName, parentSessionName: sessionName },
+      {
+        onSuccess: () => toast.success(`Session restarted`),
+        onError: () => toast.error(`Failed to continue session`),
+      },
+    );
+  };
+
+  const handleDelete = (sessionName: string) => {
+    setDeletingSessionName(sessionName);
+  };
+
+  const confirmDelete = () => {
+    if (!deletingSessionName) return;
+    const isCurrentSession = deletingSessionName === currentSessionName;
+    deleteMutation.mutate(
+      { projectName, sessionName: deletingSessionName },
+      {
+        onSuccess: () => {
+          toast.success(`Session deleted`);
+          setDeletingSessionName(null);
+          if (isCurrentSession) {
+            router.push(`/projects/${projectName}/sessions`);
+          }
+        },
+        onError: () => toast.error(`Failed to delete session`),
+      },
+    );
+  };
+
+  const handleEditName = (sessionName: string, currentDisplayName: string) => {
+    setEditingSession({ name: sessionName, displayName: currentDisplayName });
+  };
+
+  const handleSaveEditName = (newName: string) => {
+    if (!editingSession) return;
+    updateDisplayNameMutation.mutate(
+      { projectName, sessionName: editingSession.name, displayName: newName },
+      {
+        onSuccess: () => {
+          toast.success(`Session renamed`);
+          setEditingSession(null);
+        },
+        onError: () => toast.error(`Failed to rename session`),
+      },
+    );
+  };
+
+  const sessionHref = (sessionName: string) =>
+    `/projects/${projectName}/sessions/${sessionName}`;
 
   return (
     <div className="flex flex-col h-full">
@@ -233,7 +332,7 @@ export function SessionsSidebar({
                   const phase = session.status?.phase || "Pending";
                   const isActive =
                     session.metadata.name === currentSessionName;
-                  const createdAt = session.metadata.creationTimestamp;
+                  const activityTime = session.status?.lastActivityTime || session.metadata.creationTimestamp;
 
                   const borderColor =
                     phase === "Running"
@@ -249,21 +348,9 @@ export function SessionsSidebar({
                   return (
                     <HoverCard key={session.metadata.uid} openDelay={300} closeDelay={100}>
                       <HoverCardTrigger asChild>
-                        {/* div used instead of button to avoid nesting with SessionStatusDot's tooltip button */}
                         <div
-                          role="button"
-                          tabIndex={0}
-                          onClick={() =>
-                            handleNavigate(session.metadata.name)
-                          }
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.preventDefault();
-                              handleNavigate(session.metadata.name);
-                            }
-                          }}
                           className={cn(
-                            "w-full flex items-center gap-2 px-2 py-2 rounded-md text-left text-sm transition-colors cursor-pointer",
+                            "group relative w-full flex items-center gap-2 rounded-md text-left text-sm transition-colors",
                             "border-l-2",
                             borderColor,
                             "hover:bg-accent hover:text-accent-foreground",
@@ -271,20 +358,37 @@ export function SessionsSidebar({
                               "bg-accent text-accent-foreground font-medium"
                           )}
                         >
-                          <AgentStatusIndicator
-                            status={agentStatus}
-                            compact
-                            className="flex-shrink-0"
+                          <Link
+                            href={sessionHref(session.metadata.name)}
+                            onClick={() => onSessionSelect?.()}
+                            className="flex items-center gap-2 flex-1 min-w-0 px-2 py-2"
+                          >
+                            <AgentStatusIndicator
+                              status={agentStatus}
+                              compact
+                              className="flex-shrink-0"
+                            />
+                            <span className="flex-1 truncate">{name}</span>
+                            <span className="text-xs text-muted-foreground flex-shrink-0 group-hover:hidden">
+                              {activityTime
+                                ? formatDistanceToNow(
+                                    new Date(activityTime),
+                                    { addSuffix: false }
+                                  )
+                                : ""}
+                            </span>
+                          </Link>
+                          <SidebarSessionActions
+                            sessionName={session.metadata.name}
+                            displayName={name}
+                            phase={phase}
+                            onStop={handleStop}
+                            onContinue={handleContinue}
+                            onDelete={handleDelete}
+                            onEditName={handleEditName}
+                            canDelete={canDelete}
+                            canModify={canModify}
                           />
-                          <span className="flex-1 truncate">{name}</span>
-                          <span className="text-xs text-muted-foreground flex-shrink-0">
-                            {createdAt
-                              ? formatDistanceToNow(
-                                  new Date(createdAt),
-                                  { addSuffix: false }
-                                )
-                              : ""}
-                          </span>
                         </div>
                       </HoverCardTrigger>
                       <HoverCardContent side="right" align="start" className="w-80">
@@ -311,10 +415,10 @@ export function SessionsSidebar({
                               <Cpu className="h-3 w-3" />
                               <span>{session.spec.llmSettings.model}</span>
                             </div>
-                            {createdAt && (
+                            {activityTime && (
                               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                                 <Clock className="h-3 w-3" />
-                                <span>{formatDistanceToNow(new Date(createdAt), { addSuffix: true })}</span>
+                                <span>{formatDistanceToNow(new Date(activityTime), { addSuffix: true })}</span>
                               </div>
                             )}
                             {session.spec.initialPrompt && (
@@ -344,6 +448,119 @@ export function SessionsSidebar({
           )}
         </div>
       </div>
+      <EditSessionNameDialog
+        open={!!editingSession}
+        onOpenChange={(open) => !open && setEditingSession(null)}
+        currentName={editingSession?.displayName || ""}
+        onSave={handleSaveEditName}
+        isLoading={updateDisplayNameMutation.isPending}
+      />
+      <DestructiveConfirmationDialog
+        open={!!deletingSessionName}
+        onOpenChange={(open) => !open && setDeletingSessionName(null)}
+        onConfirm={confirmDelete}
+        title="Delete session"
+        description={`Delete session "${deletingSessionName}"? This action cannot be undone.`}
+        confirmText="Delete"
+        loading={deleteMutation.isPending}
+      />
     </div>
+  );
+}
+
+type SidebarSessionActionsProps = {
+  sessionName: string;
+  displayName: string;
+  phase: string;
+  onStop: (sessionName: string) => void;
+  onContinue: (sessionName: string) => void;
+  onDelete: (sessionName: string) => void;
+  onEditName: (sessionName: string, currentDisplayName: string) => void;
+  canDelete: boolean;
+  canModify: boolean;
+};
+
+function SidebarSessionActions({
+  sessionName,
+  displayName,
+  phase,
+  onStop,
+  onContinue,
+  onDelete,
+  onEditName,
+  canDelete,
+  canModify,
+}: SidebarSessionActionsProps) {
+  type RowAction = {
+    key: string;
+    label: string;
+    onClick: () => void;
+    icon: React.ReactNode;
+    className?: string;
+  };
+
+  const actions: RowAction[] = [];
+
+  if (canModify) {
+    actions.push({
+      key: "edit",
+      label: "Rename",
+      onClick: () => onEditName(sessionName, displayName),
+      icon: <Pencil className="h-4 w-4" />,
+    });
+  }
+
+  if (canModify && (phase === "Pending" || phase === "Creating" || phase === "Running")) {
+    actions.push({
+      key: "stop",
+      label: "Stop",
+      onClick: () => onStop(sessionName),
+      icon: <Square className="h-4 w-4" />,
+      className: "text-orange-600",
+    });
+  }
+
+  if (canModify && (phase === "Completed" || phase === "Failed" || phase === "Stopped" || phase === "Error")) {
+    actions.push({
+      key: "continue",
+      label: "Continue",
+      onClick: () => onContinue(sessionName),
+      icon: <ArrowRight className="h-4 w-4" />,
+      className: "text-green-600",
+    });
+  }
+
+  if (canDelete && phase !== "Creating") {
+    actions.push({
+      key: "delete",
+      label: "Delete",
+      onClick: () => onDelete(sessionName),
+      icon: <Trash2 className="h-4 w-4" />,
+      className: "text-red-600",
+    });
+  }
+
+  if (actions.length === 0) return null;
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className="opacity-0 group-hover:opacity-100 focus:opacity-100 focus-visible:opacity-100 flex items-center justify-center h-6 w-6 rounded-sm flex-shrink-0 mr-1 text-muted-foreground hover:text-foreground hover:bg-accent-foreground/10 transition-colors"
+        >
+          <MoreVertical className="h-3.5 w-3.5" />
+          <span className="sr-only">Session actions</span>
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" side="right">
+        {actions.map((action) => (
+          <DropdownMenuItem key={action.key} onClick={action.onClick} className={action.className}>
+            <span className="mr-2">{action.icon}</span>
+            {action.label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

@@ -31,6 +31,12 @@ patches:
   target:
     kind: PersistentVolumeClaim
     name: minio-data
+- path: minio-resources-patch.yaml
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: minio
 - path: frontend-test-patch.yaml
   target:
     kind: Deployment
