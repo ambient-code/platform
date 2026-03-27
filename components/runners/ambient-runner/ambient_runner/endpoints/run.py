@@ -11,6 +11,8 @@ from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from ambient_runner.middleware import grpc_push_middleware
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -80,13 +82,18 @@ async def run_agent(input_data: RunnerInput, request: Request):
         f"Run: thread_id={run_agent_input.thread_id}, run_id={run_agent_input.run_id}"
     )
 
+    session_id = run_agent_input.thread_id or ""
+
     async def event_stream():
         try:
-            async for event in bridge.run(
-                run_agent_input,
-                current_user_id=current_user_id,
-                current_user_name=current_user_name,
-                caller_token=caller_token,
+            async for event in grpc_push_middleware(
+                bridge.run(
+                    run_agent_input,
+                    current_user_id=current_user_id,
+                    current_user_name=current_user_name,
+                    caller_token=caller_token,
+                ),
+                session_id=session_id,
             ):
                 try:
                     yield encoder.encode(event)

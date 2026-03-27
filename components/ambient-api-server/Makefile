@@ -29,11 +29,11 @@ run-no-auth: binary
 
 .PHONY: test
 test: install
-	AMBIENT_ENV=integration_testing go test -p 1 -v ./...
+	DOCKER_HOST=unix:///run/user/$(shell id -u)/podman/podman.sock TESTCONTAINERS_RYUK_DISABLED=true AMBIENT_ENV=integration_testing go test -p 1 -v ./...
 
 .PHONY: test-integration
 test-integration: install
-	AMBIENT_ENV=integration_testing go test -p 1 -v ./test/integration/...
+	DOCKER_HOST=unix:///run/user/$(shell id -u)/podman/podman.sock TESTCONTAINERS_RYUK_DISABLED=true AMBIENT_ENV=integration_testing go test -p 1 -v ./test/integration/...
 
 .PHONY: proto
 proto:

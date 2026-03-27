@@ -38,12 +38,17 @@ Output streams line-by-line into the main panel.
 
 Data refreshes automatically every 10 seconds.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		factory, err := connection.NewClientFactory()
+		if err != nil {
+			return fmt.Errorf("connect: %w", err)
+		}
+
 		client, err := connection.NewClientFromConfig()
 		if err != nil {
 			return fmt.Errorf("connect: %w", err)
 		}
 
-		m := tui.NewModel(client)
+		m := tui.NewModel(client, factory)
 		p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 		if _, err := p.Run(); err != nil {
 			fmt.Fprintf(os.Stderr, "TUI error: %v\n", err)

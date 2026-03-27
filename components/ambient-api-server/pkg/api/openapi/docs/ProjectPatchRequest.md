@@ -5,10 +5,10 @@
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **Name** | Pointer to **string** |  | [optional] 
-**DisplayName** | Pointer to **string** |  | [optional] 
 **Description** | Pointer to **string** |  | [optional] 
 **Labels** | Pointer to **string** |  | [optional] 
 **Annotations** | Pointer to **string** |  | [optional] 
+**Prompt** | Pointer to **string** |  | [optional] 
 **Status** | Pointer to **string** |  | [optional] 
 
 ## Methods
@@ -54,31 +54,6 @@ SetName sets Name field to given value.
 `func (o *ProjectPatchRequest) HasName() bool`
 
 HasName returns a boolean if a field has been set.
-
-### GetDisplayName
-
-`func (o *ProjectPatchRequest) GetDisplayName() string`
-
-GetDisplayName returns the DisplayName field if non-nil, zero value otherwise.
-
-### GetDisplayNameOk
-
-`func (o *ProjectPatchRequest) GetDisplayNameOk() (*string, bool)`
-
-GetDisplayNameOk returns a tuple with the DisplayName field if it's non-nil, zero value otherwise
-and a boolean to check if the value has been set.
-
-### SetDisplayName
-
-`func (o *ProjectPatchRequest) SetDisplayName(v string)`
-
-SetDisplayName sets DisplayName field to given value.
-
-### HasDisplayName
-
-`func (o *ProjectPatchRequest) HasDisplayName() bool`
-
-HasDisplayName returns a boolean if a field has been set.
 
 ### GetDescription
 
@@ -154,6 +129,31 @@ SetAnnotations sets Annotations field to given value.
 `func (o *ProjectPatchRequest) HasAnnotations() bool`
 
 HasAnnotations returns a boolean if a field has been set.
+
+### GetPrompt
+
+`func (o *ProjectPatchRequest) GetPrompt() string`
+
+GetPrompt returns the Prompt field if non-nil, zero value otherwise.
+
+### GetPromptOk
+
+`func (o *ProjectPatchRequest) GetPromptOk() (*string, bool)`
+
+GetPromptOk returns a tuple with the Prompt field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetPrompt
+
+`func (o *ProjectPatchRequest) SetPrompt(v string)`
+
+SetPrompt sets Prompt field to given value.
+
+### HasPrompt
+
+`func (o *ProjectPatchRequest) HasPrompt() bool`
+
+HasPrompt returns a boolean if a field has been set.
 
 ### GetStatus
 

@@ -6,6 +6,8 @@ import (
 
 	"github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/agent"
 	"github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/ambient"
+	"github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/apply"
+	"github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/inbox"
 	"github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/completion"
 	"github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/config"
 	"github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/create"
@@ -52,6 +54,7 @@ func init() {
 	root.AddCommand(project.Cmd)
 	root.AddCommand(session.Cmd)
 	root.AddCommand(agent.Cmd)
+	root.AddCommand(inbox.Cmd)
 	root.AddCommand(get.Cmd)
 	root.AddCommand(create.Cmd)
 	root.AddCommand(delete.Cmd)
@@ -60,6 +63,7 @@ func init() {
 	root.AddCommand(stop.Cmd)
 	root.AddCommand(completion.Cmd)
 	root.AddCommand(ambient.Cmd)
+	root.AddCommand(apply.Cmd)
 }
 
 func main() {

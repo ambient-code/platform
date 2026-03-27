@@ -20,7 +20,7 @@ func (e *DevEnvImpl) OverrideDatabase(c *pkgenv.Database) error {
 func (e *DevEnvImpl) OverrideConfig(c *config.ApplicationConfig) error {
 	c.Server.CORSAllowedHeaders = []string{"X-Ambient-Project"}
 	c.Auth.JwkCertFile = "secrets/kind-jwks.json"
-	c.Auth.JwkCertURL = ""
+	c.Auth.JwkCertURLs = []string{}
 	c.Auth.EnableJWT = false
 	return nil
 }

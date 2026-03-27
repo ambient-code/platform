@@ -2,6 +2,7 @@ package sessions
 
 import (
 	"net/http"
+	"os"
 	"sync"
 
 	pb "github.com/ambient-code/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1"
@@ -98,7 +99,9 @@ func init() {
 		sessionsRouter.HandleFunc("/{id}/status", sessionHandler.PatchStatus).Methods(http.MethodPatch)
 		sessionsRouter.HandleFunc("/{id}/start", sessionHandler.Start).Methods(http.MethodPost)
 		sessionsRouter.HandleFunc("/{id}/stop", sessionHandler.Stop).Methods(http.MethodPost)
+		sessionsRouter.HandleFunc("/{id}/events", sessionHandler.StreamRunnerEvents).Methods(http.MethodGet)
 		sessionsRouter.HandleFunc("/{id}", sessionHandler.Delete).Methods(http.MethodDelete)
+		sessionsRouter.HandleFunc("/{id}/events", sessionHandler.StreamRunnerEvents).Methods(http.MethodGet)
 		sessionsRouter.HandleFunc("/{id}/messages", msgHandler.GetMessages).Methods(http.MethodGet)
 		sessionsRouter.HandleFunc("/{id}/messages", msgHandler.PushMessage).Methods(http.MethodPost)
 		sessionsRouter.Use(authMiddleware.AuthenticateAccountJWT)
@@ -134,7 +137,8 @@ func init() {
 			}
 			return nil
 		}
-		pb.RegisterSessionServiceServer(grpcServer, NewSessionGRPCHandler(sessionService, genericService, brokerFunc, msgService))
+		serviceAccountName := os.Getenv("GRPC_SERVICE_ACCOUNT")
+		pb.RegisterSessionServiceServer(grpcServer, NewSessionGRPCHandler(sessionService, genericService, brokerFunc, msgService, serviceAccountName))
 	})
 
 	db.RegisterMigration(migration())

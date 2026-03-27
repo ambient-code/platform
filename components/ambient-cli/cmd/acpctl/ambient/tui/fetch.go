@@ -9,12 +9,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ambient-code/platform/components/ambient-cli/pkg/connection"
 	sdkclient "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/client"
 	sdktypes "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-func fetchAll(client *sdkclient.Client, msgCh chan tea.Msg) tea.Cmd {
+func fetchAll(client *sdkclient.Client, factory *connection.ClientFactory, msgCh chan tea.Msg) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
@@ -45,30 +46,83 @@ func fetchAll(client *sdkclient.Client, msgCh chan tea.Msg) tea.Cmd {
 			mu.Unlock()
 		}()
 
+		var projects []sdktypes.Project
+		var projectErr string
+
+		projectsDone := make(chan struct{})
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			defer close(projectsDone)
 			list, err := client.Projects().List(ctx, &sdktypes.ListOptions{Page: 1, Size: 200})
 			mu.Lock()
 			defer mu.Unlock()
 			if err != nil {
-				appendErr(&data, "projects: "+err.Error())
+				projectErr = "projects: " + err.Error()
 				return
 			}
 			data.Projects = list.Items
+			projects = list.Items
 		}()
 
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			list, err := client.Sessions().List(ctx, &sdktypes.ListOptions{Page: 1, Size: 200})
+			<-projectsDone
 			mu.Lock()
-			defer mu.Unlock()
-			if err != nil {
-				appendErr(&data, "sessions: "+err.Error())
+			if projectErr != "" {
+				appendErr(&data, projectErr)
+				mu.Unlock()
 				return
 			}
-			data.Sessions = list.Items
+			projs := make([]sdktypes.Project, len(projects))
+			copy(projs, projects)
+			mu.Unlock()
+
+			var allSessions []sdktypes.Session
+			var sessWg sync.WaitGroup
+			var sessMu sync.Mutex
+			var sessErr string
+
+			for _, proj := range projs {
+				proj := proj
+				sessWg.Add(1)
+				go func() {
+					defer sessWg.Done()
+					if factory == nil {
+						return
+					}
+					projClient, err := factory.ForProject(proj.Name)
+					if err != nil {
+						sessMu.Lock()
+						if sessErr == "" {
+							sessErr = "session client for " + proj.Name + ": " + err.Error()
+						}
+						sessMu.Unlock()
+						return
+					}
+					list, err := projClient.Sessions().List(ctx, &sdktypes.ListOptions{Page: 1, Size: 200})
+					if err != nil {
+						sessMu.Lock()
+						if sessErr == "" {
+							sessErr = "sessions[" + proj.Name + "]: " + err.Error()
+						}
+						sessMu.Unlock()
+						return
+					}
+					sessMu.Lock()
+					allSessions = append(allSessions, list.Items...)
+					sessMu.Unlock()
+				}()
+			}
+			sessWg.Wait()
+
+			mu.Lock()
+			defer mu.Unlock()
+			if sessErr != "" {
+				appendErr(&data, sessErr)
+			}
+			data.Sessions = allSessions
 		}()
 
 		wg.Add(1)

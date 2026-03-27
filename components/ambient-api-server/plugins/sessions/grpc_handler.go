@@ -12,7 +12,6 @@ import (
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api"
 	localgrpc "github.com/ambient-code/platform/components/ambient-api-server/pkg/api/grpc"
 	pb "github.com/ambient-code/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1"
-	"github.com/ambient-code/platform/components/ambient-api-server/pkg/middleware"
 	"github.com/openshift-online/rh-trex-ai/pkg/auth"
 	"github.com/openshift-online/rh-trex-ai/pkg/server"
 	"github.com/openshift-online/rh-trex-ai/pkg/server/grpcutil"
@@ -21,19 +20,28 @@ import (
 
 type sessionGRPCHandler struct {
 	pb.UnimplementedSessionServiceServer
-	service    SessionService
-	generic    services.GenericService
-	brokerFunc func() *server.EventBroker
-	msgService MessageService
+	service            SessionService
+	generic            services.GenericService
+	brokerFunc         func() *server.EventBroker
+	msgService         MessageService
+	serviceAccountName string
 }
 
-func NewSessionGRPCHandler(service SessionService, generic services.GenericService, brokerFunc func() *server.EventBroker, msgService MessageService) pb.SessionServiceServer {
+func NewSessionGRPCHandler(service SessionService, generic services.GenericService, brokerFunc func() *server.EventBroker, msgService MessageService, serviceAccountName string) pb.SessionServiceServer {
 	return &sessionGRPCHandler{
-		service:    service,
-		generic:    generic,
-		brokerFunc: brokerFunc,
-		msgService: msgService,
+		service:            service,
+		generic:            generic,
+		brokerFunc:         brokerFunc,
+		msgService:         msgService,
+		serviceAccountName: serviceAccountName,
 	}
+}
+
+func (h *sessionGRPCHandler) isServiceCaller(ctx context.Context) bool {
+	if h.serviceAccountName == "" {
+		return false
+	}
+	return auth.GetUsernameFromContext(ctx) == h.serviceAccountName
 }
 
 func (h *sessionGRPCHandler) GetSession(ctx context.Context, req *pb.GetSessionRequest) (*pb.Session, error) {
@@ -266,8 +274,8 @@ func (h *sessionGRPCHandler) PushSessionMessage(ctx context.Context, req *pb.Pus
 	if req.GetEventType() == "" {
 		return nil, status.Error(codes.InvalidArgument, "event_type is required")
 	}
-	if middleware.IsServiceCaller(ctx) && req.GetEventType() == "user" {
-		return nil, status.Error(codes.PermissionDenied, "service token may not push event_type=user")
+	if h.isServiceCaller(ctx) && req.GetEventType() == "user" {
+		return nil, status.Error(codes.PermissionDenied, "service account may not push event_type=user")
 	}
 
 	msg, err := h.msgService.Push(ctx, req.GetSessionId(), req.GetEventType(), req.GetPayload())
@@ -284,14 +292,16 @@ func (h *sessionGRPCHandler) WatchSessionMessages(req *pb.WatchSessionMessagesRe
 
 	ctx := stream.Context()
 
-	if !middleware.IsServiceCaller(ctx) {
-		session, svcErr := h.service.Get(ctx, req.GetSessionId())
-		if svcErr != nil {
-			return grpcutil.ServiceErrorToGRPC(svcErr)
-		}
+	if !h.isServiceCaller(ctx) {
 		username := auth.GetUsernameFromContext(ctx)
-		if session.CreatedByUserId == nil || *session.CreatedByUserId != username {
-			return status.Error(codes.PermissionDenied, "not authorized to watch this session")
+		if username != "" {
+			session, svcErr := h.service.Get(ctx, req.GetSessionId())
+			if svcErr != nil {
+				return grpcutil.ServiceErrorToGRPC(svcErr)
+			}
+			if session.CreatedByUserId == nil || *session.CreatedByUserId != username {
+				return status.Error(codes.PermissionDenied, "not authorized to watch this session")
+			}
 		}
 	}
 
