@@ -234,10 +234,17 @@ export function NewSessionView({
                     <Badge variant="secondary" className="gap-1">
                       <GitBranch className="h-3 w-3" />
                       {repo.name}
-                      <X
-                        className="h-3 w-3 cursor-pointer"
-                        onClick={() => removePendingRepo(repo.url)}
-                      />
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removePendingRepo(repo.url);
+                        }}
+                        aria-label={`Remove ${repo.name}`}
+                        className="cursor-pointer"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
                     </Badge>
                   </TooltipTrigger>
                   <TooltipContent>{repo.url}</TooltipContent>
