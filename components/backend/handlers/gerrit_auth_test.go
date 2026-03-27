@@ -176,9 +176,9 @@ var _ = Describe("Gerrit Auth Handler", Label(test_constants.LabelUnit, test_con
 
 		It("Should reject invalid instance names", func() {
 			invalidNames := []string{
-				"a",        // too short (single char)
-				"INVALID",  // uppercase
-				"my@name",  // special characters
+				"a",       // too short (single char)
+				"INVALID", // uppercase
+				"my@name", // special characters
 			}
 
 			for _, name := range invalidNames {

@@ -385,4 +385,3 @@ func deleteGerritCredentials(ctx context.Context, instanceName, userID string) e
 	}
 	return fmt.Errorf("failed to update Secret after retries")
 }
-
