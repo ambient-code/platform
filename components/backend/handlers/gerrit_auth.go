@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -28,13 +30,58 @@ type GerritCredentials struct {
 	UpdatedAt         time.Time `json:"updatedAt"`
 }
 
+// gerritSecretName is a shared Secret for all Gerrit credentials.
+// NOTE: This uses a single Secret for all users, which may cause contention
+// at scale. If the number of users grows significantly, consider sharding
+// into per-user Secrets (e.g., "gerrit-credentials-{userID}") and using
+// label selectors for listing.
 const gerritSecretName = "gerrit-credentials"
 
 var validInstanceNameRegex = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,61}[a-z0-9]$`)
 
+// validateGerritTokenFn is the function used to validate Gerrit credentials.
+// It is a variable so tests can replace it with a stub.
+var validateGerritTokenFn = ValidateGerritToken
+
 // gerritSecretKey returns the K8s secret data key for a Gerrit instance
 func gerritSecretKey(instanceName, userID string) string {
 	return instanceName + "." + userID
+}
+
+// validateGerritURL validates a Gerrit URL for SSRF protection.
+// It ensures the scheme is HTTPS and the host does not resolve to
+// loopback, private, link-local, or metadata-service addresses.
+func validateGerritURL(rawURL string) error {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid URL: %w", err)
+	}
+	if parsed.Scheme != "https" {
+		return fmt.Errorf("URL must use HTTPS scheme")
+	}
+	host := parsed.Hostname()
+	if host == "" {
+		return fmt.Errorf("URL must include a hostname")
+	}
+
+	ips, err := net.LookupHost(host)
+	if err != nil {
+		return fmt.Errorf("cannot resolve host %q: %w", host, err)
+	}
+	for _, ipStr := range ips {
+		ip := net.ParseIP(ipStr)
+		if ip == nil {
+			continue
+		}
+		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+			return fmt.Errorf("URL must not resolve to a private or loopback address")
+		}
+		// Block cloud metadata endpoints (169.254.169.254)
+		if ip.Equal(net.ParseIP("169.254.169.254")) {
+			return fmt.Errorf("URL must not resolve to a metadata service address")
+		}
+	}
+	return nil
 }
 
 // ConnectGerrit handles POST /api/auth/gerrit/connect
@@ -76,16 +123,30 @@ func ConnectGerrit(c *gin.Context) {
 		return
 	}
 
-	// Validate auth method and required fields
+	// Validate URL (SSRF protection)
+	if err := validateGerritURL(req.URL); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Invalid Gerrit URL: %s", err.Error())})
+		return
+	}
+
+	// Validate auth method, required fields, and reject mixed credentials
 	switch req.AuthMethod {
 	case "http_basic":
 		if req.Username == "" || req.HTTPToken == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Username and HTTP token are required for HTTP basic auth"})
 			return
 		}
+		if req.GitcookiesContent != "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "gitcookiesContent must not be provided with http_basic auth"})
+			return
+		}
 	case "git_cookies":
 		if req.GitcookiesContent == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Gitcookies content is required for git_cookies auth"})
+			return
+		}
+		if req.Username != "" || req.HTTPToken != "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "username and httpToken must not be provided with git_cookies auth"})
 			return
 		}
 	default:
@@ -94,7 +155,7 @@ func ConnectGerrit(c *gin.Context) {
 	}
 
 	// Validate credentials against the Gerrit instance
-	valid, err := ValidateGerritToken(c.Request.Context(), req.URL, req.AuthMethod, req.Username, req.HTTPToken, req.GitcookiesContent)
+	valid, err := validateGerritTokenFn(c.Request.Context(), req.URL, req.AuthMethod, req.Username, req.HTTPToken, req.GitcookiesContent)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Validation failed: %s", err.Error())})
 		return

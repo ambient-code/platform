@@ -245,7 +245,13 @@ func TestGerritConnection(c *gin.Context) {
 		return
 	}
 
-	valid, err := ValidateGerritToken(c.Request.Context(), req.URL, req.AuthMethod, req.Username, req.HTTPToken, req.GitcookiesContent)
+	// Validate URL (SSRF protection)
+	if err := validateGerritURL(req.URL); err != nil {
+		c.JSON(http.StatusOK, gin.H{"valid": false, "error": fmt.Sprintf("Invalid Gerrit URL: %s", err.Error())})
+		return
+	}
+
+	valid, err := validateGerritTokenFn(c.Request.Context(), req.URL, req.AuthMethod, req.Username, req.HTTPToken, req.GitcookiesContent)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"valid": false, "error": err.Error()})
 		return

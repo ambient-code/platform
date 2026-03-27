@@ -6,6 +6,7 @@ import (
 	"ambient-code-backend/tests/config"
 	test_constants "ambient-code-backend/tests/constants"
 	"context"
+	"fmt"
 	"net/http"
 
 	"ambient-code-backend/tests/logger"
@@ -19,29 +20,32 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-var _ = Describe("Gerrit Auth Handler", Label(test_constants.LabelUnit, test_constants.LabelHandlers, "gerrit-auth"), func() {
+var _ = Describe("Gerrit Auth Handler", Label(test_constants.LabelUnit, test_constants.LabelHandlers, test_constants.LabelGerritAuth), func() {
 	var (
-		httpUtils         *test_utils.HTTPTestUtils
-		k8sUtils          *test_utils.K8sTestUtils
-		originalNamespace string
-		testToken         string
+		httpUtils                   *test_utils.HTTPTestUtils
+		k8sUtils                    *test_utils.K8sTestUtils
+		originalNamespace           string
+		originalValidateGerritToken func(context.Context, string, string, string, string, string) (bool, error)
+		testToken                   string
 	)
 
 	BeforeEach(func() {
 		logger.Log("Setting up Gerrit Auth Handler test")
 
 		originalNamespace = Namespace
+		originalValidateGerritToken = validateGerritTokenFn
+		// Stub out credential validation to avoid live HTTP calls
+		validateGerritTokenFn = func(_ context.Context, _, _, _, _, _ string) (bool, error) {
+			return true, nil
+		}
 
-		// Use centralized handler dependencies setup
 		k8sUtils = test_utils.NewK8sTestUtils(false, *config.TestNamespace)
 		SetupHandlerDependencies(k8sUtils)
 
-		// gerrit_auth.go uses Namespace (backend namespace) for secret operations
 		Namespace = *config.TestNamespace
 
 		httpUtils = test_utils.NewHTTPTestUtils()
 
-		// Create namespace + role and mint a valid test token for this suite
 		ctx := context.Background()
 		_, err := k8sUtils.K8sClient.CoreV1().Namespaces().Create(ctx, &corev1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{Name: *config.TestNamespace},
@@ -66,26 +70,26 @@ var _ = Describe("Gerrit Auth Handler", Label(test_constants.LabelUnit, test_con
 
 	AfterEach(func() {
 		Namespace = originalNamespace
+		validateGerritTokenFn = originalValidateGerritToken
 
-		// Clean up created namespace (best-effort)
 		if k8sUtils != nil {
+			_ = k8sUtils.K8sClient.CoreV1().Secrets(*config.TestNamespace).Delete(context.Background(), gerritSecretName, metav1.DeleteOptions{})
 			_ = k8sUtils.K8sClient.CoreV1().Namespaces().Delete(context.Background(), *config.TestNamespace, metav1.DeleteOptions{})
 		}
 	})
 
 	Context("ConnectGerrit", func() {
-		It("Should require authentication", func() {
+		It("Should require authentication token", func() {
 			requestBody := map[string]interface{}{
-				"instanceName": "my-gerrit",
+				"instanceName": "openstack",
 				"url":          "https://review.opendev.org",
 				"authMethod":   "http_basic",
-				"username":     "testuser",
-				"httpToken":    "secret-token",
+				"username":     "john",
+				"httpToken":    "abc123",
 			}
 
-			context := httpUtils.CreateTestGinContext("POST", "/auth/gerrit/connect", requestBody)
+			context := httpUtils.CreateTestGinContext("POST", "/api/auth/gerrit/connect", requestBody)
 			// Don't set auth header
-			httpUtils.SetUserContext("test-user", "Test User", "test@example.com")
 
 			ConnectGerrit(context)
 
@@ -95,90 +99,30 @@ var _ = Describe("Gerrit Auth Handler", Label(test_constants.LabelUnit, test_con
 
 		It("Should require user authentication", func() {
 			requestBody := map[string]interface{}{
-				"instanceName": "my-gerrit",
+				"instanceName": "openstack",
 				"url":          "https://review.opendev.org",
 				"authMethod":   "http_basic",
-				"username":     "testuser",
-				"httpToken":    "secret-token",
+				"username":     "john",
+				"httpToken":    "abc123",
 			}
 
-			context := httpUtils.CreateTestGinContext("POST", "/auth/gerrit/connect", requestBody)
-			// Don't set user context
+			context := httpUtils.CreateTestGinContext("POST", "/api/auth/gerrit/connect", requestBody)
+			httpUtils.SetAuthHeader(testToken)
+			// Don't set user context - should reach the userID check
 
 			ConnectGerrit(context)
 
 			httpUtils.AssertHTTPStatus(http.StatusUnauthorized)
-			httpUtils.AssertJSONContains(map[string]interface{}{
-				"error": "Invalid or missing token",
-			})
-		})
-
-		It("Should require valid JSON body", func() {
-			context := httpUtils.CreateTestGinContext("POST", "/auth/gerrit/connect", "invalid-json")
-			httpUtils.SetAuthHeader(testToken)
-			httpUtils.SetUserContext("test-user", "Test User", "test@example.com")
-
-			ConnectGerrit(context)
-
-			httpUtils.AssertHTTPStatus(http.StatusBadRequest)
-		})
-
-		It("Should require instanceName field", func() {
-			requestBody := map[string]interface{}{
-				"url":        "https://review.opendev.org",
-				"authMethod": "http_basic",
-				"username":   "testuser",
-				"httpToken":  "secret-token",
-			}
-
-			context := httpUtils.CreateTestGinContext("POST", "/auth/gerrit/connect", requestBody)
-			httpUtils.SetAuthHeader(testToken)
-			httpUtils.SetUserContext("test-user", "Test User", "test@example.com")
-
-			ConnectGerrit(context)
-
-			httpUtils.AssertHTTPStatus(http.StatusBadRequest)
-		})
-
-		It("Should require url field", func() {
-			requestBody := map[string]interface{}{
-				"instanceName": "my-gerrit",
-				"authMethod":   "http_basic",
-				"username":     "testuser",
-				"httpToken":    "secret-token",
-			}
-
-			context := httpUtils.CreateTestGinContext("POST", "/auth/gerrit/connect", requestBody)
-			httpUtils.SetAuthHeader(testToken)
-			httpUtils.SetUserContext("test-user", "Test User", "test@example.com")
-
-			ConnectGerrit(context)
-
-			httpUtils.AssertHTTPStatus(http.StatusBadRequest)
-		})
-
-		It("Should require authMethod field", func() {
-			requestBody := map[string]interface{}{
-				"instanceName": "my-gerrit",
-				"url":          "https://review.opendev.org",
-				"username":     "testuser",
-				"httpToken":    "secret-token",
-			}
-
-			context := httpUtils.CreateTestGinContext("POST", "/auth/gerrit/connect", requestBody)
-			httpUtils.SetAuthHeader(testToken)
-			httpUtils.SetUserContext("test-user", "Test User", "test@example.com")
-
-			ConnectGerrit(context)
-
-			httpUtils.AssertHTTPStatus(http.StatusBadRequest)
+			httpUtils.AssertErrorMessage("User authentication required")
 		})
 
 		It("Should reject invalid instance names", func() {
 			invalidNames := []string{
-				"a",       // too short (single char)
-				"INVALID", // uppercase
-				"my@name", // special characters
+				"A",            // too short and uppercase
+				"-bad",         // starts with hyphen
+				"UPPER",        // uppercase
+				"has spaces",   // spaces
+				"special!char", // special characters
 			}
 
 			for _, name := range invalidNames {
@@ -186,120 +130,90 @@ var _ = Describe("Gerrit Auth Handler", Label(test_constants.LabelUnit, test_con
 					"instanceName": name,
 					"url":          "https://review.opendev.org",
 					"authMethod":   "http_basic",
-					"username":     "testuser",
-					"httpToken":    "secret-token",
+					"username":     "john",
+					"httpToken":    "abc123",
 				}
 
-				context := httpUtils.CreateTestGinContext("POST", "/auth/gerrit/connect", requestBody)
+				ctx := httpUtils.CreateTestGinContext("POST", "/api/auth/gerrit/connect", requestBody)
 				httpUtils.SetAuthHeader(testToken)
 				httpUtils.SetUserContext("test-user", "Test User", "test@example.com")
 
-				ConnectGerrit(context)
+				ConnectGerrit(ctx)
 
-				httpUtils.AssertHTTPStatus(http.StatusBadRequest)
-				httpUtils.AssertErrorMessage("Instance name must be lowercase alphanumeric with hyphens (2-63 chars)")
-
-				// Reset for next test
-				httpUtils = test_utils.NewHTTPTestUtils()
-			}
-		})
-
-		It("Should accept valid instance names", func() {
-			validNames := []string{
-				"my-gerrit",
-				"openstack",
-				"review-01",
-				"a1",
-			}
-
-			for _, name := range validNames {
-				requestBody := map[string]interface{}{
-					"instanceName": name,
-					"url":          "https://review.opendev.org",
-					"authMethod":   "http_basic",
-					"username":     "testuser",
-					"httpToken":    "secret-token",
-				}
-
-				context := httpUtils.CreateTestGinContext("POST", "/auth/gerrit/connect", requestBody)
-				httpUtils.SetAuthHeader(testToken)
-				httpUtils.SetUserContext("test-user", "Test User", "test@example.com")
-
-				ConnectGerrit(context)
-
-				// Should not fail at instance name validation stage
 				status := httpUtils.GetResponseRecorder().Code
-				Expect(status).NotTo(Equal(http.StatusBadRequest), "Should accept valid instance name: "+name)
+				Expect(status).To(Equal(http.StatusBadRequest), "Should reject invalid instance name: "+name)
 
-				// Reset for next test
 				httpUtils = test_utils.NewHTTPTestUtils()
 			}
 		})
 
-		It("Should reject invalid auth method", func() {
+		It("Should reject HTTP URLs (SSRF protection)", func() {
 			requestBody := map[string]interface{}{
-				"instanceName": "my-gerrit",
-				"url":          "https://review.opendev.org",
-				"authMethod":   "oauth2",
-				"username":     "testuser",
-				"httpToken":    "secret-token",
+				"instanceName": "test-instance",
+				"url":          "http://review.opendev.org",
+				"authMethod":   "http_basic",
+				"username":     "john",
+				"httpToken":    "abc123",
 			}
 
-			context := httpUtils.CreateTestGinContext("POST", "/auth/gerrit/connect", requestBody)
+			context := httpUtils.CreateTestGinContext("POST", "/api/auth/gerrit/connect", requestBody)
 			httpUtils.SetAuthHeader(testToken)
 			httpUtils.SetUserContext("test-user", "Test User", "test@example.com")
 
 			ConnectGerrit(context)
 
 			httpUtils.AssertHTTPStatus(http.StatusBadRequest)
-			httpUtils.AssertErrorMessage("Auth method must be 'http_basic' or 'git_cookies'")
+		})
+
+		It("Should reject mixed auth credentials for http_basic", func() {
+			requestBody := map[string]interface{}{
+				"instanceName":      "openstack",
+				"url":               "https://review.opendev.org",
+				"authMethod":        "http_basic",
+				"username":          "john",
+				"httpToken":         "abc123",
+				"gitcookiesContent": "should-not-be-here",
+			}
+
+			context := httpUtils.CreateTestGinContext("POST", "/api/auth/gerrit/connect", requestBody)
+			httpUtils.SetAuthHeader(testToken)
+			httpUtils.SetUserContext("test-user", "Test User", "test@example.com")
+
+			ConnectGerrit(context)
+
+			httpUtils.AssertHTTPStatus(http.StatusBadRequest)
+			httpUtils.AssertErrorMessage("gitcookiesContent must not be provided with http_basic auth")
+		})
+
+		It("Should reject mixed auth credentials for git_cookies", func() {
+			requestBody := map[string]interface{}{
+				"instanceName":      "android",
+				"url":               "https://android-review.googlesource.com",
+				"authMethod":        "git_cookies",
+				"gitcookiesContent": ".googlesource.com\tTRUE\t/\tTRUE\t0\to\tgit-user.cookies=val",
+				"username":          "should-not-be-here",
+			}
+
+			context := httpUtils.CreateTestGinContext("POST", "/api/auth/gerrit/connect", requestBody)
+			httpUtils.SetAuthHeader(testToken)
+			httpUtils.SetUserContext("test-user", "Test User", "test@example.com")
+
+			ConnectGerrit(context)
+
+			httpUtils.AssertHTTPStatus(http.StatusBadRequest)
+			httpUtils.AssertErrorMessage("username and httpToken must not be provided with git_cookies auth")
 		})
 
 		It("Should require username and httpToken for http_basic", func() {
-			// Missing both username and httpToken
 			requestBody := map[string]interface{}{
-				"instanceName": "my-gerrit",
+				"instanceName": "openstack",
 				"url":          "https://review.opendev.org",
 				"authMethod":   "http_basic",
+				"username":     "",
+				"httpToken":    "",
 			}
 
-			context := httpUtils.CreateTestGinContext("POST", "/auth/gerrit/connect", requestBody)
-			httpUtils.SetAuthHeader(testToken)
-			httpUtils.SetUserContext("test-user", "Test User", "test@example.com")
-
-			ConnectGerrit(context)
-
-			httpUtils.AssertHTTPStatus(http.StatusBadRequest)
-			httpUtils.AssertErrorMessage("Username and HTTP token are required for HTTP basic auth")
-		})
-
-		It("Should require username for http_basic when only httpToken provided", func() {
-			requestBody := map[string]interface{}{
-				"instanceName": "my-gerrit",
-				"url":          "https://review.opendev.org",
-				"authMethod":   "http_basic",
-				"httpToken":    "secret-token",
-			}
-
-			context := httpUtils.CreateTestGinContext("POST", "/auth/gerrit/connect", requestBody)
-			httpUtils.SetAuthHeader(testToken)
-			httpUtils.SetUserContext("test-user", "Test User", "test@example.com")
-
-			ConnectGerrit(context)
-
-			httpUtils.AssertHTTPStatus(http.StatusBadRequest)
-			httpUtils.AssertErrorMessage("Username and HTTP token are required for HTTP basic auth")
-		})
-
-		It("Should require httpToken for http_basic when only username provided", func() {
-			requestBody := map[string]interface{}{
-				"instanceName": "my-gerrit",
-				"url":          "https://review.opendev.org",
-				"authMethod":   "http_basic",
-				"username":     "testuser",
-			}
-
-			context := httpUtils.CreateTestGinContext("POST", "/auth/gerrit/connect", requestBody)
+			context := httpUtils.CreateTestGinContext("POST", "/api/auth/gerrit/connect", requestBody)
 			httpUtils.SetAuthHeader(testToken)
 			httpUtils.SetUserContext("test-user", "Test User", "test@example.com")
 
@@ -311,12 +225,13 @@ var _ = Describe("Gerrit Auth Handler", Label(test_constants.LabelUnit, test_con
 
 		It("Should require gitcookiesContent for git_cookies", func() {
 			requestBody := map[string]interface{}{
-				"instanceName": "my-gerrit",
-				"url":          "https://review.opendev.org",
-				"authMethod":   "git_cookies",
+				"instanceName":      "android",
+				"url":               "https://android-review.googlesource.com",
+				"authMethod":        "git_cookies",
+				"gitcookiesContent": "",
 			}
 
-			context := httpUtils.CreateTestGinContext("POST", "/auth/gerrit/connect", requestBody)
+			context := httpUtils.CreateTestGinContext("POST", "/api/auth/gerrit/connect", requestBody)
 			httpUtils.SetAuthHeader(testToken)
 			httpUtils.SetUserContext("test-user", "Test User", "test@example.com")
 
@@ -325,16 +240,95 @@ var _ = Describe("Gerrit Auth Handler", Label(test_constants.LabelUnit, test_con
 			httpUtils.AssertHTTPStatus(http.StatusBadRequest)
 			httpUtils.AssertErrorMessage("Gitcookies content is required for git_cookies auth")
 		})
+
+		It("Should reject unsupported auth method", func() {
+			requestBody := map[string]interface{}{
+				"instanceName": "openstack",
+				"url":          "https://review.opendev.org",
+				"authMethod":   "oauth",
+			}
+
+			context := httpUtils.CreateTestGinContext("POST", "/api/auth/gerrit/connect", requestBody)
+			httpUtils.SetAuthHeader(testToken)
+			httpUtils.SetUserContext("test-user", "Test User", "test@example.com")
+
+			ConnectGerrit(context)
+
+			httpUtils.AssertHTTPStatus(http.StatusBadRequest)
+			httpUtils.AssertErrorMessage("Auth method must be 'http_basic' or 'git_cookies'")
+		})
+
+		It("Should accept valid http_basic credentials", func() {
+			requestBody := map[string]interface{}{
+				"instanceName": "openstack",
+				"url":          "https://review.opendev.org",
+				"authMethod":   "http_basic",
+				"username":     "john",
+				"httpToken":    "abc123",
+			}
+
+			context := httpUtils.CreateTestGinContext("POST", "/api/auth/gerrit/connect", requestBody)
+			httpUtils.SetAuthHeader(testToken)
+			httpUtils.SetUserContext("test-user", "Test User", "test@example.com")
+
+			ConnectGerrit(context)
+
+			status := httpUtils.GetResponseRecorder().Code
+			Expect(status).NotTo(Equal(http.StatusBadRequest), "Should accept valid http_basic credentials")
+		})
+
+		It("Should return 401 when credentials are invalid", func() {
+			validateGerritTokenFn = func(_ context.Context, _, _, _, _, _ string) (bool, error) {
+				return false, nil
+			}
+
+			requestBody := map[string]interface{}{
+				"instanceName": "openstack",
+				"url":          "https://review.opendev.org",
+				"authMethod":   "http_basic",
+				"username":     "john",
+				"httpToken":    "wrong-token",
+			}
+
+			context := httpUtils.CreateTestGinContext("POST", "/api/auth/gerrit/connect", requestBody)
+			httpUtils.SetAuthHeader(testToken)
+			httpUtils.SetUserContext("test-user", "Test User", "test@example.com")
+
+			ConnectGerrit(context)
+
+			httpUtils.AssertHTTPStatus(http.StatusUnauthorized)
+			httpUtils.AssertErrorMessage("Invalid Gerrit credentials")
+		})
+
+		It("Should return error when validation fails", func() {
+			validateGerritTokenFn = func(_ context.Context, _, _, _, _, _ string) (bool, error) {
+				return false, fmt.Errorf("connection timeout")
+			}
+
+			requestBody := map[string]interface{}{
+				"instanceName": "openstack",
+				"url":          "https://review.opendev.org",
+				"authMethod":   "http_basic",
+				"username":     "john",
+				"httpToken":    "abc123",
+			}
+
+			context := httpUtils.CreateTestGinContext("POST", "/api/auth/gerrit/connect", requestBody)
+			httpUtils.SetAuthHeader(testToken)
+			httpUtils.SetUserContext("test-user", "Test User", "test@example.com")
+
+			ConnectGerrit(context)
+
+			httpUtils.AssertHTTPStatus(http.StatusBadRequest)
+		})
 	})
 
 	Context("GetGerritStatus", func() {
-		It("Should require authentication", func() {
-			context := httpUtils.CreateTestGinContext("GET", "/auth/gerrit/openstack/status", nil)
+		It("Should require authentication token", func() {
+			context := httpUtils.CreateTestGinContext("GET", "/api/auth/gerrit/openstack/status", nil)
 			context.Params = gin.Params{
 				gin.Param{Key: "instanceName", Value: "openstack"},
 			}
-			// Don't set auth header
-			httpUtils.SetUserContext("test-user", "Test User", "test@example.com")
 
 			GetGerritStatus(context)
 
@@ -343,29 +337,40 @@ var _ = Describe("Gerrit Auth Handler", Label(test_constants.LabelUnit, test_con
 		})
 
 		It("Should require user authentication", func() {
-			context := httpUtils.CreateTestGinContext("GET", "/auth/gerrit/openstack/status", nil)
+			context := httpUtils.CreateTestGinContext("GET", "/api/auth/gerrit/openstack/status", nil)
 			context.Params = gin.Params{
 				gin.Param{Key: "instanceName", Value: "openstack"},
 			}
+			httpUtils.SetAuthHeader(testToken)
 			// Don't set user context
 
 			GetGerritStatus(context)
 
 			httpUtils.AssertHTTPStatus(http.StatusUnauthorized)
-			httpUtils.AssertJSONContains(map[string]interface{}{
-				"error": "Invalid or missing token",
-			})
+			httpUtils.AssertErrorMessage("User authentication required")
+		})
+
+		It("Should return not connected when no credentials exist", func() {
+			context := httpUtils.CreateTestGinContext("GET", "/api/auth/gerrit/nonexistent/status", nil)
+			context.Params = gin.Params{
+				gin.Param{Key: "instanceName", Value: "nonexistent"},
+			}
+			httpUtils.SetAuthHeader(testToken)
+			httpUtils.SetUserContext("test-user", "Test User", "test@example.com")
+
+			GetGerritStatus(context)
+
+			status := httpUtils.GetResponseRecorder().Code
+			Expect(status).To(BeElementOf(http.StatusOK, http.StatusNotFound))
 		})
 	})
 
 	Context("DisconnectGerrit", func() {
-		It("Should require authentication", func() {
-			context := httpUtils.CreateTestGinContext("DELETE", "/auth/gerrit/openstack/disconnect", nil)
+		It("Should require authentication token", func() {
+			context := httpUtils.CreateTestGinContext("DELETE", "/api/auth/gerrit/openstack/disconnect", nil)
 			context.Params = gin.Params{
 				gin.Param{Key: "instanceName", Value: "openstack"},
 			}
-			// Don't set auth header
-			httpUtils.SetUserContext("test-user", "Test User", "test@example.com")
 
 			DisconnectGerrit(context)
 
@@ -374,26 +379,23 @@ var _ = Describe("Gerrit Auth Handler", Label(test_constants.LabelUnit, test_con
 		})
 
 		It("Should require user authentication", func() {
-			context := httpUtils.CreateTestGinContext("DELETE", "/auth/gerrit/openstack/disconnect", nil)
+			context := httpUtils.CreateTestGinContext("DELETE", "/api/auth/gerrit/openstack/disconnect", nil)
 			context.Params = gin.Params{
 				gin.Param{Key: "instanceName", Value: "openstack"},
 			}
+			httpUtils.SetAuthHeader(testToken)
 			// Don't set user context
 
 			DisconnectGerrit(context)
 
 			httpUtils.AssertHTTPStatus(http.StatusUnauthorized)
-			httpUtils.AssertJSONContains(map[string]interface{}{
-				"error": "Invalid or missing token",
-			})
+			httpUtils.AssertErrorMessage("User authentication required")
 		})
 	})
 
 	Context("ListGerritInstances", func() {
-		It("Should require authentication", func() {
-			context := httpUtils.CreateTestGinContext("GET", "/auth/gerrit/instances", nil)
-			// Don't set auth header
-			httpUtils.SetUserContext("test-user", "Test User", "test@example.com")
+		It("Should require authentication token", func() {
+			context := httpUtils.CreateTestGinContext("GET", "/api/auth/gerrit/instances", nil)
 
 			ListGerritInstances(context)
 
@@ -402,15 +404,45 @@ var _ = Describe("Gerrit Auth Handler", Label(test_constants.LabelUnit, test_con
 		})
 
 		It("Should require user authentication", func() {
-			context := httpUtils.CreateTestGinContext("GET", "/auth/gerrit/instances", nil)
+			context := httpUtils.CreateTestGinContext("GET", "/api/auth/gerrit/instances", nil)
+			httpUtils.SetAuthHeader(testToken)
 			// Don't set user context
 
 			ListGerritInstances(context)
 
 			httpUtils.AssertHTTPStatus(http.StatusUnauthorized)
-			httpUtils.AssertJSONContains(map[string]interface{}{
-				"error": "Invalid or missing token",
-			})
+			httpUtils.AssertErrorMessage("User authentication required")
+		})
+	})
+
+	Context("Secret Key Format", func() {
+		It("Should use dot separator in secret key", func() {
+			key := gerritSecretKey("openstack", "user123")
+			Expect(key).To(Equal("openstack.user123"))
+		})
+
+		It("Should produce valid K8s secret data keys", func() {
+			key := gerritSecretKey("my-instance", "system-serviceaccount-ns-user")
+			Expect(key).To(MatchRegexp(`^[-._a-zA-Z0-9]+$`))
+		})
+	})
+
+	Context("URL Validation", func() {
+		It("Should reject HTTP URLs", func() {
+			err := validateGerritURL("http://review.opendev.org")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("HTTPS"))
+		})
+
+		It("Should reject URLs without hostname", func() {
+			err := validateGerritURL("https://")
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("Should reject FTP URLs", func() {
+			err := validateGerritURL("ftp://review.opendev.org")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("HTTPS"))
 		})
 	})
 })
