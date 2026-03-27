@@ -69,8 +69,10 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" == "pull_request" ]; then
             # PR: use the merge base with the target branch
+            # Deepen the shallow clone so git merge-base can find a common ancestor
             BASE_REF="${{ github.event.pull_request.base.ref }}"
-            git fetch origin "${BASE_REF}" --depth=50
+            git fetch --deepen=100
+            git fetch origin "${BASE_REF}" --depth=100
             SHA=$(git merge-base "origin/${BASE_REF}" ${{ github.event.pull_request.head.sha }})
             echo "sha=$SHA" >> $GITHUB_OUTPUT
             echo "Merge base (against ${BASE_REF}): $SHA"
@@ -78,7 +80,8 @@ jobs:
             # Push: use the previous commit on the branch
             BEFORE="${{ github.event.before }}"
             if [ "$BEFORE" == "0000000000000000000000000000000000000000" ]; then
-              # First push to branch — use parent of HEAD
+              # First push to branch — deepen and use parent of HEAD
+              git fetch --deepen=1
               SHA=$(git rev-parse HEAD~1)
             else
               SHA="$BEFORE"
