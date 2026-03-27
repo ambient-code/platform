@@ -62,6 +62,31 @@ RUN dnf install -y go-toolset && \
 # Install uv (provides uvx for package execution) and pre-commit (for repo hooks)
 RUN pip install --no-cache-dir uv pre-commit
 
+# Install Python 3.12 for Gerrit MCP server (requires >=3.12, runner uses 3.11)
+RUN dnf install -y python3.12 python3.12-pip && \
+    dnf clean all
+
+# Install Gerrit MCP server (code review integration for Gerrit-based communities)
+# Pinned to specific commit for reproducibility
+# Uses python3.12 for the venv since gerrit-mcp-server requires Python >=3.12
+RUN set -o pipefail && \
+    git clone https://gerrit.googlesource.com/gerrit-mcp-server /opt/gerrit-mcp-server && \
+    cd /opt/gerrit-mcp-server && \
+    git checkout 5666642afe1a5217e2529225d4bd9c9df6310bd6 && \
+    python3.12 -m venv .venv && \
+    . .venv/bin/activate && \
+    pip install --no-cache-dir --index-url https://pypi.org/simple -r uv-requirements.txt --require-hashes && \
+    uv pip compile pyproject.toml --generate-hashes --output-file requirements.txt --extra dev --extra-index-url https://pypi.org/simple && \
+    uv pip sync requirements.txt && \
+    uv build && \
+    WHEEL_FILE=$(find dist -maxdepth 1 -name '*.whl' -print -quit) && \
+    WHEEL_HASH=$(sha256sum "${WHEEL_FILE}" | awk '{print $1}') && \
+    echo "${WHEEL_FILE} --hash=sha256:${WHEEL_HASH}" > local-requirements.txt && \
+    uv pip install -r local-requirements.txt --no-deps --require-hashes && \
+    rm -f local-requirements.txt && \
+    chown -R 1001:0 /opt/gerrit-mcp-server && \
+    chmod -R g=u /opt/gerrit-mcp-server
+
 # Create working directory
 WORKDIR /app
 

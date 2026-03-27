@@ -18,10 +18,19 @@ Documentation for integrating the Ambient Code Platform with external services.
 - Clone, commit, and push operations
 - Multi-provider projects (mix GitHub and GitLab)
 
+### Code Review
+
+**[Gerrit Integration](gerrit-integration.md)**
+- Multi-instance support (e.g., OpenStack, Android)
+- HTTP basic and gitcookies authentication
+- MCP server with 21 code review tools
+- Session-scoped credential injection
+
 **Getting Started:**
 - [GitHub Setup Guide](../GITHUB_APP_SETUP.md)
 - [GitLab Token Setup](../gitlab-token-setup.md)
 - [GitLab Self-Hosted Configuration](../gitlab-self-hosted.md)
+- [Gerrit Integration Guide](gerrit-integration.md)
 
 ---
 
@@ -53,6 +62,12 @@ Documentation for integrating the Ambient Code Platform with external services.
 - **Personal Access Tokens** - Primary method
 - **Instance URL** - Support for self-hosted
 
+### Gerrit
+
+- **HTTP Basic** - Username + HTTP password
+- **Gitcookies** - Cookie-based authentication
+- **Multi-instance** - Connect multiple Gerrit servers
+
 ### Google Workspace
 - **OAuth 2.0** - User authorization
 - **Session-scoped** - Credentials auto-removed after session
@@ -76,6 +91,10 @@ All integrations are configured per-project via:
 - [Self-Hosted GitLab](../gitlab-self-hosted.md) - Enterprise setup
 - [GitLab Testing](../gitlab-testing-procedures.md) - Test procedures
 - [GitLab API Endpoints](../api/gitlab-endpoints.md) - API reference
+
+### Gerrit
+
+- [Gerrit Integration](gerrit-integration.md) - Setup and usage guide
 
 ### Google Workspace
 - [Google Workspace Integration](google-workspace.md) - Setup and usage
@@ -103,3 +122,4 @@ See [Contributing Guide](../../CONTRIBUTING.md) for development workflow.
 ---
 
 **Questions?** Open a [GitHub Discussion](https://github.com/ambient-code/vTeam/discussions)
+

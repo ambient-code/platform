@@ -19,6 +19,8 @@ export function IntegrationsPanel() {
   const gitlabConfigured = integrationsStatus?.gitlab?.connected ?? false;
   const jiraConfigured = integrationsStatus?.jira?.connected ?? false;
   const googleConfigured = integrationsStatus?.google?.connected ?? false;
+  const gerritConfigured = (integrationsStatus?.gerrit?.instances?.length ?? 0) > 0;
+  const gerritUrls = integrationsStatus?.gerrit?.instances?.map((i) => i.url).join(", ");
 
   const integrations = [
     {
@@ -47,6 +49,14 @@ export function IntegrationsPanel() {
       name: "Jira",
       configured: jiraConfigured,
       configuredMessage: "Authenticated. Issue and project access enabled.",
+    },
+    {
+      key: "gerrit",
+      name: "Gerrit",
+      configured: gerritConfigured,
+      configuredMessage: gerritConfigured
+        ? `Connected to ${gerritUrls}. Code review access enabled.`
+        : "",
     },
   ].sort((a, b) => a.name.localeCompare(b.name));
 

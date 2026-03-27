@@ -20,6 +20,7 @@ const (
 	LabelPermissions  = "permissions"
 	LabelProjects     = "projects"
 	LabelGitHubAuth   = "github-auth"
+	LabelGerritAuth   = "gerrit-auth"
 	LabelGitLabAuth   = "gitlab-auth"
 	LabelSessions     = "sessions"
 	LabelContent      = "content"

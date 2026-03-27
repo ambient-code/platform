@@ -1,0 +1,266 @@
+openapi: 3.0.3
+info:
+  title: Gerrit Integration API
+  description: API endpoints for the Gerrit integration connector in Ambient Code Platform
+  version: 1.0.0
+
+security:
+  - bearerAuth: []
+
+paths:
+  /api/auth/gerrit/connect:
+    post:
+      summary: Connect a Gerrit instance
+      description: >
+        Validates and stores Gerrit credentials for the authenticated user.
+        Supports both HTTP basic auth and gitcookies authentication methods.
+      operationId: connectGerrit
+      tags: [Gerrit Integration]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GerritConnectRequest'
+      responses:
+        '200':
+          description: Successfully connected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GerritConnectResponse'
+        '400':
+          description: Invalid request (missing fields, invalid URL, etc.)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Gerrit credentials are invalid (validation failed)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/auth/gerrit/{instanceName}/status:
+    get:
+      summary: Get Gerrit instance connection status
+      operationId: getGerritStatus
+      tags: [Gerrit Integration]
+      parameters:
+        - name: instanceName
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[a-z0-9][a-z0-9-]{0,61}[a-z0-9]$'
+      responses:
+        '200':
+          description: Connection status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GerritStatusResponse'
+
+  /api/auth/gerrit/{instanceName}/disconnect:
+    delete:
+      summary: Disconnect a Gerrit instance
+      operationId: disconnectGerrit
+      tags: [Gerrit Integration]
+      parameters:
+        - name: instanceName
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successfully disconnected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '404':
+          description: Instance not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/auth/gerrit/test:
+    post:
+      summary: Test Gerrit credentials without storing
+      operationId: testGerritConnection
+      tags: [Gerrit Integration]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GerritConnectRequest'
+      responses:
+        '200':
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GerritTestResponse'
+
+  /api/auth/gerrit/instances:
+    get:
+      summary: List all connected Gerrit instances for the user
+      operationId: listGerritInstances
+      tags: [Gerrit Integration]
+      responses:
+        '200':
+          description: List of connected instances
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GerritInstancesListResponse'
+
+  /api/projects/{projectName}/agentic-sessions/{sessionName}/credentials/gerrit:
+    get:
+      summary: Fetch Gerrit credentials for a session (runner use)
+      description: >
+        Returns all Gerrit credentials for the session owner. Used by the runner
+        at session startup to generate the gerrit_config.json file.
+      operationId: getGerritCredentialsForSession
+      tags: [Session Credentials]
+      parameters:
+        - name: projectName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: sessionName
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Gerrit credentials for the session user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GerritSessionCredentialsResponse'
+        '403':
+          description: Access denied (RBAC check failed)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: JWT bearer token from platform authentication
+  schemas:
+    GerritConnectRequest:
+      type: object
+      required: [instanceName, url, authMethod]
+      properties:
+        instanceName:
+          type: string
+          description: User-assigned name for this instance
+          pattern: '^[a-z0-9][a-z0-9-]{0,61}[a-z0-9]$'
+          example: openstack
+        url:
+          type: string
+          format: uri
+          description: Gerrit instance base URL
+          example: https://review.opendev.org
+        authMethod:
+          type: string
+          enum: [http_basic, git_cookies]
+          description: Authentication method
+        username:
+          type: string
+          description: Gerrit username (required for http_basic)
+        httpToken:
+          type: string
+          description: HTTP password/access token (required for http_basic)
+        gitcookiesContent:
+          type: string
+          description: Raw gitcookies file content (required for git_cookies)
+
+    GerritConnectResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: Gerrit instance 'openstack' connected successfully
+        instanceName:
+          type: string
+        url:
+          type: string
+        authMethod:
+          type: string
+
+    GerritStatusResponse:
+      type: object
+      properties:
+        connected:
+          type: boolean
+        instanceName:
+          type: string
+        url:
+          type: string
+        authMethod:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+
+    GerritTestResponse:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        error:
+          type: string
+          description: Error message if validation failed
+
+    GerritInstancesListResponse:
+      type: object
+      properties:
+        instances:
+          type: array
+          items:
+            $ref: '#/components/schemas/GerritStatusResponse'
+
+    GerritSessionCredentialsResponse:
+      type: object
+      properties:
+        instances:
+          type: array
+          items:
+            type: object
+            properties:
+              instanceName:
+                type: string
+              url:
+                type: string
+              authMethod:
+                type: string
+              username:
+                type: string
+              httpToken:
+                type: string
+              gitcookiesContent:
+                type: string
+
+    MessageResponse:
+      type: object
+      properties:
+        message:
+          type: string
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
