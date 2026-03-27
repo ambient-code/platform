@@ -370,7 +370,15 @@ async def _auto_execute_initial_prompt(
     await asyncio.sleep(delay_seconds)
 
     if grpc_url:
-        await _push_initial_prompt_via_grpc(prompt, session_id)
+        # gRPC mode: the initial prompt was already stored in the DB when the session
+        # was created via the HTTP API (acpctl create session). The GRPCSessionListener's
+        # WatchSessionMessages stream will deliver it to the runner automatically.
+        # Pushing here would use the SA token which cannot push event_type=user,
+        # causing a harmless but noisy PERMISSION_DENIED warning. Skip it.
+        logger.debug(
+            "gRPC mode: skipping INITIAL_PROMPT push — message already in DB via session creation: session=%s",
+            session_id,
+        )
     else:
         await _push_initial_prompt_via_http(prompt, session_id)
 

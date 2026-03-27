@@ -26,6 +26,15 @@ class RunnerContext:
     workspace_path: str
     environment: Dict[str, str] = field(default_factory=dict)
     metadata: Dict[str, Any] = field(default_factory=dict)
+    current_user_id: str = ""
+    current_user_name: str = ""
+    caller_token: str = ""
+
+    def set_current_user(self, user_id: str, user_name: str, caller_token: str) -> None:
+        """Update the active user context for the current run."""
+        self.current_user_id = user_id
+        self.current_user_name = user_name
+        self.caller_token = caller_token
 
     def __post_init__(self) -> None:
         """Store explicit overrides for precedence in get_env(); keep environment populated for backward compatibility."""

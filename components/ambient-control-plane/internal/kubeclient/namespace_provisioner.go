@@ -3,6 +3,7 @@ package kubeclient
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -19,6 +20,7 @@ var tenantNamespaceGVR = schema.GroupVersionResource{
 }
 
 type NamespaceProvisioner interface {
+	NamespaceName(projectID string) string
 	ProvisionNamespace(ctx context.Context, name string, labels map[string]string) error
 	DeprovisionNamespace(ctx context.Context, name string) error
 }
@@ -26,6 +28,10 @@ type NamespaceProvisioner interface {
 type StandardNamespaceProvisioner struct {
 	kube   *KubeClient
 	logger zerolog.Logger
+}
+
+func (p *StandardNamespaceProvisioner) NamespaceName(projectID string) string {
+	return strings.ToLower(projectID)
 }
 
 func NewStandardNamespaceProvisioner(kube *KubeClient, logger zerolog.Logger) *StandardNamespaceProvisioner {
@@ -91,23 +97,33 @@ func NewMPPNamespaceProvisioner(kube *KubeClient, configNamespace string, logger
 	}
 }
 
+const mppNamespacePrefix = "ambient-code--"
+
 func (p *MPPNamespaceProvisioner) instanceID(namespaceName string) string {
-	const prefix = "ambient-code--"
-	if len(namespaceName) > len(prefix) {
-		return namespaceName[len(prefix):]
+	if len(namespaceName) > len(mppNamespacePrefix) && namespaceName[:len(mppNamespacePrefix)] == mppNamespacePrefix {
+		return namespaceName[len(mppNamespacePrefix):]
 	}
 	return namespaceName
 }
 
+func (p *MPPNamespaceProvisioner) namespaceName(instanceID string) string {
+	return mppNamespacePrefix + instanceID
+}
+
+func (p *MPPNamespaceProvisioner) NamespaceName(projectID string) string {
+	return mppNamespacePrefix + strings.ToLower(projectID)
+}
+
 func (p *MPPNamespaceProvisioner) ProvisionNamespace(ctx context.Context, name string, _ map[string]string) error {
 	instanceID := p.instanceID(name)
+	fullNamespace := p.namespaceName(instanceID)
 
 	existing, err := p.kube.dynamic.Resource(tenantNamespaceGVR).Namespace(p.configNamespace).Get(ctx, instanceID, metav1.GetOptions{})
 	if err == nil {
-		p.logger.Debug().Str("instance_id", instanceID).Str("namespace", name).
+		p.logger.Debug().Str("instance_id", instanceID).Str("namespace", fullNamespace).
 			Str("resource_version", existing.GetResourceVersion()).
 			Msg("TenantNamespace already exists")
-		return p.waitForNamespaceActive(ctx, name)
+		return p.waitForNamespaceActive(ctx, fullNamespace)
 	}
 	if !k8serrors.IsNotFound(err) {
 		return fmt.Errorf("checking TenantNamespace %s: %w", instanceID, err)
@@ -138,8 +154,8 @@ func (p *MPPNamespaceProvisioner) ProvisionNamespace(ctx context.Context, name s
 		return fmt.Errorf("creating TenantNamespace %s in %s: %w", instanceID, p.configNamespace, err)
 	}
 
-	p.logger.Info().Str("instance_id", instanceID).Str("namespace", name).Msg("TenantNamespace created")
-	return p.waitForNamespaceActive(ctx, name)
+	p.logger.Info().Str("instance_id", instanceID).Str("namespace", fullNamespace).Msg("TenantNamespace created")
+	return p.waitForNamespaceActive(ctx, fullNamespace)
 }
 
 func (p *MPPNamespaceProvisioner) waitForNamespaceActive(ctx context.Context, name string) error {

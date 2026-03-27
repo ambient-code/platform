@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/ambient-code/platform/components/ambient-control-plane/internal/auth"
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/config"
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/informer"
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/kubeclient"
@@ -69,6 +70,18 @@ func main() {
 	}
 }
 
+func buildTokenProvider(cfg *config.ControlPlaneConfig, logger zerolog.Logger) auth.TokenProvider {
+	if cfg.OIDCClientID != "" && cfg.OIDCClientSecret != "" {
+		logger.Info().
+			Str("token_url", cfg.OIDCTokenURL).
+			Str("client_id", cfg.OIDCClientID).
+			Msg("using OIDC client credentials token provider")
+		return auth.NewOIDCTokenProvider(cfg.OIDCTokenURL, cfg.OIDCClientID, cfg.OIDCClientSecret, logger)
+	}
+	logger.Info().Msg("using static token provider")
+	return auth.NewStaticTokenProvider(cfg.APIToken)
+}
+
 func buildNamespaceProvisioner(cfg *config.ControlPlaneConfig, kube *kubeclient.KubeClient) kubeclient.NamespaceProvisioner {
 	switch cfg.PlatformMode {
 	case "mpp":
@@ -88,9 +101,20 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 		return fmt.Errorf("creating Kubernetes client: %w", err)
 	}
 
-	provisioner := buildNamespaceProvisioner(cfg, kube)
+	var projectKube *kubeclient.KubeClient
+	if cfg.ProjectKubeTokenFile != "" {
+		pk, err := kubeclient.NewFromTokenFile(cfg.ProjectKubeTokenFile, log.Logger)
+		if err != nil {
+			return fmt.Errorf("creating project Kubernetes client from token file: %w", err)
+		}
+		projectKube = pk
+		log.Info().Str("token_file", cfg.ProjectKubeTokenFile).Msg("using separate project kube client")
+	}
 
-	factory := reconciler.NewSDKClientFactory(cfg.APIServerURL, cfg.APIToken, log.Logger)
+	provisioner := buildNamespaceProvisioner(cfg, kube)
+	tokenProvider := buildTokenProvider(cfg, log.Logger)
+
+	factory := reconciler.NewSDKClientFactory(cfg.APIServerURL, tokenProvider, log.Logger)
 	kubeReconcilerCfg := reconciler.KubeReconcilerConfig{
 		RunnerImage:           cfg.RunnerImage,
 		BackendURL:            cfg.BackendURL,
@@ -107,6 +131,7 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 		MCPImage:              cfg.MCPImage,
 		MCPAPIServerURL:       cfg.MCPAPIServerURL,
 		RunnerLogLevel:        cfg.RunnerLogLevel,
+		CPRuntimeNamespace:    cfg.CPRuntimeNamespace,
 	}
 
 	conn, err := grpc.NewClient(cfg.GRPCServerAddr, grpc.WithTransportCredentials(grpcCredentials(cfg.GRPCUseTLS)))
@@ -122,22 +147,27 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 		}
 	}()
 
-	watchManager := watcher.NewWatchManager(conn, cfg.APIToken, log.Logger)
+	watchManager := watcher.NewWatchManager(conn, tokenProvider, log.Logger)
 
-	sdk, err := sdkclient.NewClient(cfg.APIServerURL, cfg.APIToken, "default")
+	initToken, err := tokenProvider.Token(ctx)
+	if err != nil {
+		return fmt.Errorf("resolving initial API token: %w", err)
+	}
+
+	sdk, err := sdkclient.NewClient(cfg.APIServerURL, initToken, "default")
 	if err != nil {
 		return fmt.Errorf("creating SDK client: %w", err)
 	}
 
 	inf := informer.New(sdk, watchManager, log.Logger)
 
-	projectReconciler := reconciler.NewProjectReconciler(factory, kube, provisioner, log.Logger)
+	projectReconciler := reconciler.NewProjectReconciler(factory, kube, projectKube, provisioner, cfg.CPRuntimeNamespace, log.Logger)
 	projectSettingsReconciler := reconciler.NewProjectSettingsReconciler(factory, kube, log.Logger)
 
 	inf.RegisterHandler("projects", projectReconciler.Reconcile)
 	inf.RegisterHandler("project_settings", projectSettingsReconciler.Reconcile)
 
-	sessionReconcilers := createSessionReconcilers(cfg.Reconcilers, factory, kube, provisioner, kubeReconcilerCfg, log.Logger)
+	sessionReconcilers := createSessionReconcilers(cfg.Reconcilers, factory, kube, projectKube, provisioner, kubeReconcilerCfg, log.Logger)
 	for _, sessionRec := range sessionReconcilers {
 		inf.RegisterHandler("sessions", sessionRec.Reconcile)
 	}
@@ -145,13 +175,13 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 	return inf.Run(ctx)
 }
 
-func createSessionReconcilers(reconcilerTypes []string, factory *reconciler.SDKClientFactory, kube *kubeclient.KubeClient, provisioner kubeclient.NamespaceProvisioner, cfg reconciler.KubeReconcilerConfig, logger zerolog.Logger) []reconciler.Reconciler {
+func createSessionReconcilers(reconcilerTypes []string, factory *reconciler.SDKClientFactory, kube *kubeclient.KubeClient, projectKube *kubeclient.KubeClient, provisioner kubeclient.NamespaceProvisioner, cfg reconciler.KubeReconcilerConfig, logger zerolog.Logger) []reconciler.Reconciler {
 	var reconcilers []reconciler.Reconciler
 
 	for _, reconcilerType := range reconcilerTypes {
 		switch reconcilerType {
 		case "kube":
-			kubeReconciler := reconciler.NewKubeReconciler(factory, kube, provisioner, cfg, logger)
+			kubeReconciler := reconciler.NewKubeReconciler(factory, kube, projectKube, provisioner, cfg, logger)
 			reconcilers = append(reconcilers, kubeReconciler)
 			log.Info().Str("type", "kube").Msg("enabled direct Kubernetes session reconciler")
 		case "tally":
@@ -206,7 +236,13 @@ func grpcCredentials(useTLS bool) credentials.TransportCredentials {
 func runTestMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 	log.Info().Msg("starting in test mode")
 
-	sdk, err := sdkclient.NewClient(cfg.APIServerURL, cfg.APIToken, "default")
+	tokenProvider := buildTokenProvider(cfg, log.Logger)
+	initToken, err := tokenProvider.Token(ctx)
+	if err != nil {
+		return fmt.Errorf("resolving API token: %w", err)
+	}
+
+	sdk, err := sdkclient.NewClient(cfg.APIServerURL, initToken, "default")
 	if err != nil {
 		return fmt.Errorf("creating SDK client: %w", err)
 	}
@@ -224,7 +260,7 @@ func runTestMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 		}
 	}()
 
-	watchManager := watcher.NewWatchManager(conn, cfg.APIToken, log.Logger)
+	watchManager := watcher.NewWatchManager(conn, tokenProvider, log.Logger)
 	inf := informer.New(sdk, watchManager, log.Logger)
 
 	tallyReconciler := reconciler.NewTallyReconciler("sessions", sdk, log.Logger)

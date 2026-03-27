@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/rs/zerolog"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -97,6 +98,37 @@ func buildRestConfig(kubeconfig string) (*rest.Config, error) {
 	}
 
 	return rest.InClusterConfig()
+}
+
+func NewFromTokenFile(tokenFile string, logger zerolog.Logger) (*KubeClient, error) {
+	cfg, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, fmt.Errorf("building in-cluster config for token file client: %w", err)
+	}
+
+	tokenBytes, err := os.ReadFile(tokenFile)
+	if err != nil {
+		return nil, fmt.Errorf("reading token file %s: %w", tokenFile, err)
+	}
+
+	cfg.BearerToken = strings.TrimSpace(string(tokenBytes))
+	cfg.BearerTokenFile = ""
+	cfg.QPS = 50
+	cfg.Burst = 100
+
+	dynClient, err := dynamic.NewForConfig(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("creating dynamic client from token file: %w", err)
+	}
+
+	kc := &KubeClient{
+		dynamic: dynClient,
+		logger:  logger.With().Str("component", "kubeclient-project").Logger(),
+	}
+
+	kc.logger.Info().Str("token_file", tokenFile).Msg("project kubernetes client initialized")
+
+	return kc, nil
 }
 
 func NewFromDynamic(dynClient dynamic.Interface, logger zerolog.Logger) *KubeClient {

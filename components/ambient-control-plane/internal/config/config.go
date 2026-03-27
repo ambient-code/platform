@@ -16,6 +16,10 @@ type ControlPlaneConfig struct {
 	Mode                  string
 	PlatformMode          string
 	MPPConfigNamespace    string
+	CPRuntimeNamespace    string
+	OIDCTokenURL          string
+	OIDCClientID          string
+	OIDCClientSecret      string
 	Reconcilers           []string
 	RunnerImage           string
 	RunnerGRPCUseTLS      bool
@@ -32,6 +36,7 @@ type ControlPlaneConfig struct {
 	MCPImage              string
 	MCPAPIServerURL       string
 	RunnerLogLevel        string
+	ProjectKubeTokenFile string
 }
 
 func Load() (*ControlPlaneConfig, error) {
@@ -45,6 +50,10 @@ func Load() (*ControlPlaneConfig, error) {
 		Mode:                  envOrDefault("MODE", "kube"),
 		PlatformMode:          envOrDefault("PLATFORM_MODE", "standard"),
 		MPPConfigNamespace:    envOrDefault("MPP_CONFIG_NAMESPACE", "ambient-code--config"),
+		CPRuntimeNamespace:    envOrDefault("CP_RUNTIME_NAMESPACE", "ambient-code--runtime-int"),
+		OIDCTokenURL:          envOrDefault("OIDC_TOKEN_URL", "https://sso.redhat.com/auth/realms/redhat-external/protocol/openid-connect/token"),
+		OIDCClientID:          os.Getenv("OIDC_CLIENT_ID"),
+		OIDCClientSecret:      os.Getenv("OIDC_CLIENT_SECRET"),
 		Reconcilers:           parseReconcilers(envOrDefault("RECONCILERS", "tally,kube")),
 		RunnerImage:           envOrDefault("RUNNER_IMAGE", "quay.io/ambient_code/vteam_claude_runner:latest"),
 		RunnerGRPCUseTLS:      os.Getenv("AMBIENT_GRPC_USE_TLS") == "true",
@@ -61,10 +70,11 @@ func Load() (*ControlPlaneConfig, error) {
 		MCPImage:              os.Getenv("MCP_IMAGE"),
 		MCPAPIServerURL:       envOrDefault("MCP_API_SERVER_URL", "http://ambient-api-server.ambient-code.svc:8000"),
 		RunnerLogLevel:        envOrDefault("RUNNER_LOG_LEVEL", "info"),
+		ProjectKubeTokenFile: os.Getenv("PROJECT_KUBE_TOKEN_FILE"),
 	}
 
-	if cfg.APIToken == "" {
-		return nil, fmt.Errorf("AMBIENT_API_TOKEN environment variable is required")
+	if cfg.APIToken == "" && (cfg.OIDCClientID == "" || cfg.OIDCClientSecret == "") {
+		return nil, fmt.Errorf("either AMBIENT_API_TOKEN or both OIDC_CLIENT_ID and OIDC_CLIENT_SECRET must be set; set AMBIENT_API_TOKEN for k8s SA token auth or OIDC_CLIENT_ID+OIDC_CLIENT_SECRET for OIDC")
 	}
 
 	switch cfg.Mode {

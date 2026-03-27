@@ -16,7 +16,6 @@ When AMBIENT_GRPC_ENABLED is not set, none of this code is instantiated or calle
 """
 
 import asyncio
-import json
 import logging
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -373,21 +372,29 @@ class GRPCMessageWriter:
             )
             return
 
-        payload = json.dumps(
-            {
-                "run_id": self._run_id,
-                "status": status,
-                "messages": self._accumulated_messages,
-            }
+        assistant_text = next(
+            (
+                m.get("content", "")
+                for m in self._accumulated_messages
+                if m.get("role") == "assistant"
+            ),
+            "",
         )
 
+        if not assistant_text:
+            logger.warning(
+                "[GRPC WRITER] No assistant message in snapshot: session=%s run=%s messages=%d",
+                self._session_id,
+                self._run_id,
+                len(self._accumulated_messages),
+            )
+
         logger.info(
-            "[GRPC WRITER] PushSessionMessage: session=%s run=%s status=%s messages=%d payload_len=%d",
+            "[GRPC WRITER] PushSessionMessage: session=%s run=%s status=%s text_len=%d",
             self._session_id,
             self._run_id,
             status,
-            len(self._accumulated_messages),
-            len(payload),
+            len(assistant_text),
         )
 
         client = self._grpc_client
@@ -397,7 +404,7 @@ class GRPCMessageWriter:
             client.session_messages.push(
                 session_id,
                 event_type="assistant",
-                payload=payload,
+                payload=assistant_text,
             )
 
         try:

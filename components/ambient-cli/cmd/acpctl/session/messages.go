@@ -285,28 +285,35 @@ func streamMessages(cmd *cobra.Command, client *sdkclient.Client, sessionID stri
 
 	fmt.Fprintf(cmd.OutOrStdout(), "Streaming messages for session %s (Ctrl+C to stop)...\n\n", sessionID)
 
-	watcher, err := client.Sessions().WatchSessionMessages(ctx, sessionID, int64(msgArgs.afterSeq), nil)
-	if err != nil {
-		return fmt.Errorf("watch messages: %w", err)
-	}
-	defer watcher.Stop()
+	afterSeq := msgArgs.afterSeq
+	pollInterval := 2 * time.Second
 
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
-		case <-watcher.Done():
+		default:
+		}
+
+		msgs, err := client.Sessions().ListMessages(ctx, sessionID, afterSeq)
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil
+			}
+			return fmt.Errorf("poll messages: %w", err)
+		}
+
+		for _, msg := range msgs {
+			printStreamLine(cmd, msg)
+			if msg.Seq > afterSeq {
+				afterSeq = msg.Seq
+			}
+		}
+
+		select {
+		case <-ctx.Done():
 			return nil
-		case err, ok := <-watcher.Errors():
-			if !ok {
-				return nil
-			}
-			return fmt.Errorf("stream error: %w", err)
-		case msg, ok := <-watcher.Messages():
-			if !ok {
-				return nil
-			}
-			printStreamLine(cmd, *msg)
+		case <-time.After(pollInterval):
 		}
 	}
 }

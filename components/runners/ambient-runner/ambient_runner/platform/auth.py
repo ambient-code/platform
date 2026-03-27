@@ -225,6 +225,17 @@ async def fetch_token_for_url(context: RunnerContext, url: str) -> str:
         return os.getenv("GITHUB_TOKEN") or await fetch_github_token(context)
 
 
+def clear_runtime_credentials() -> None:
+    """Clear all runtime credentials from environment before repopulating."""
+    for key in ("JIRA_URL", "JIRA_API_TOKEN", "JIRA_EMAIL",
+                "GITLAB_TOKEN", "GITHUB_TOKEN", "USER_GOOGLE_EMAIL"):
+        os.environ.pop(key, None)
+
+    creds_file = Path("/workspace/.google_workspace_mcp/credentials/credentials.json")
+    if creds_file.exists():
+        creds_file.unlink()
+
+
 async def populate_runtime_credentials(context: RunnerContext) -> None:
     """Fetch all credentials from backend and populate environment variables.
 

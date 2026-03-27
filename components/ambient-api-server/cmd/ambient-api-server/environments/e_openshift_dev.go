@@ -22,7 +22,7 @@ func (e *OpenShiftDevEnvImpl) OverrideDatabase(c *pkgenv.Database) error {
 func (e *OpenShiftDevEnvImpl) OverrideConfig(c *config.ApplicationConfig) error {
 	c.Server.CORSAllowedHeaders = []string{"X-Ambient-Project"}
 	c.Auth.EnableJWT = false
-	c.Auth.JwkCertURL = ""
+	c.Auth.JwkCertURLs = []string{}
 	c.Auth.JwkCertFile = ""
 	return nil
 }

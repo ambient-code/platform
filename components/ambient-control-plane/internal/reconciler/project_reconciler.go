@@ -16,18 +16,29 @@ import (
 )
 
 type ProjectReconciler struct {
-	factory     *SDKClientFactory
-	kube        *kubeclient.KubeClient
-	provisioner kubeclient.NamespaceProvisioner
-	logger      zerolog.Logger
+	factory            *SDKClientFactory
+	kube               *kubeclient.KubeClient
+	projectKube        *kubeclient.KubeClient
+	provisioner        kubeclient.NamespaceProvisioner
+	cpRuntimeNamespace string
+	logger             zerolog.Logger
 }
 
-func NewProjectReconciler(factory *SDKClientFactory, kube *kubeclient.KubeClient, provisioner kubeclient.NamespaceProvisioner, logger zerolog.Logger) *ProjectReconciler {
+func (r *ProjectReconciler) nsKube() *kubeclient.KubeClient {
+	if r.projectKube != nil {
+		return r.projectKube
+	}
+	return r.kube
+}
+
+func NewProjectReconciler(factory *SDKClientFactory, kube *kubeclient.KubeClient, projectKube *kubeclient.KubeClient, provisioner kubeclient.NamespaceProvisioner, cpRuntimeNamespace string, logger zerolog.Logger) *ProjectReconciler {
 	return &ProjectReconciler{
-		factory:     factory,
-		kube:        kube,
-		provisioner: provisioner,
-		logger:      logger.With().Str("reconciler", "projects").Logger(),
+		factory:            factory,
+		kube:               kube,
+		projectKube:        projectKube,
+		provisioner:        provisioner,
+		cpRuntimeNamespace: cpRuntimeNamespace,
+		logger:             logger.With().Str("reconciler", "projects").Logger(),
 	}
 }
 
@@ -56,6 +67,9 @@ func (r *ProjectReconciler) Reconcile(ctx context.Context, event informer.Resour
 		if err := r.ensureRunnerSecrets(ctx, project); err != nil {
 			return err
 		}
+		if err := r.ensureControlPlaneRBAC(ctx, project); err != nil {
+			return err
+		}
 		return r.ensureCreatorRoleBinding(ctx, project)
 	case informer.EventDeleted:
 		r.logger.Info().Str("project_id", project.ID).Msg("project deleted — namespace retained for safety")
@@ -64,7 +78,7 @@ func (r *ProjectReconciler) Reconcile(ctx context.Context, event informer.Resour
 }
 
 func (r *ProjectReconciler) ensureNamespace(ctx context.Context, project types.Project) error {
-	name := namespaceForProject(project)
+	name := r.provisioner.NamespaceName(project.ID)
 	labels := map[string]string{
 		LabelManaged:   "true",
 		LabelProjectID: project.ID,
@@ -104,10 +118,10 @@ func (r *ProjectReconciler) ensureCreatorRoleBinding(ctx context.Context, projec
 		return nil
 	}
 
-	namespace := namespaceForProject(project)
+	namespace := r.provisioner.NamespaceName(project.ID)
 	rbName := creatorRoleBindingName(createdBy)
 
-	if _, err := r.kube.GetRoleBinding(ctx, namespace, rbName); err == nil {
+	if _, err := r.nsKube().GetRoleBinding(ctx, namespace, rbName); err == nil {
 		r.logger.Debug().Str("namespace", namespace).Str("rolebinding", rbName).Msg("creator RoleBinding already exists")
 		return nil
 	} else if !k8serrors.IsNotFound(err) {
@@ -158,7 +172,7 @@ func (r *ProjectReconciler) ensureCreatorRoleBinding(ctx context.Context, projec
 		},
 	}
 
-	if _, err := r.kube.CreateRoleBinding(ctx, namespace, rb); err != nil {
+	if _, err := r.nsKube().CreateRoleBinding(ctx, namespace, rb); err != nil {
 		if k8serrors.IsAlreadyExists(err) {
 			return nil
 		}
@@ -169,11 +183,84 @@ func (r *ProjectReconciler) ensureCreatorRoleBinding(ctx context.Context, projec
 	return nil
 }
 
+func (r *ProjectReconciler) ensureControlPlaneRBAC(ctx context.Context, project types.Project) error {
+	namespace := r.provisioner.NamespaceName(project.ID)
+	const roleName = "ambient-control-plane-project-manager"
+
+	if _, err := r.nsKube().GetRole(ctx, namespace, roleName); err == nil {
+		return nil
+	} else if !k8serrors.IsNotFound(err) {
+		return fmt.Errorf("checking Role %s/%s: %w", namespace, roleName, err)
+	}
+
+	role := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "rbac.authorization.k8s.io/v1",
+			"kind":       "Role",
+			"metadata": map[string]interface{}{
+				"name":      roleName,
+				"namespace": namespace,
+			},
+			"rules": []interface{}{
+				map[string]interface{}{
+					"apiGroups": []interface{}{""},
+					"resources": []interface{}{"secrets", "serviceaccounts", "services"},
+					"verbs":     []interface{}{"get", "list", "watch", "create", "delete", "deletecollection"},
+				},
+				map[string]interface{}{
+					"apiGroups": []interface{}{""},
+					"resources": []interface{}{"pods"},
+					"verbs":     []interface{}{"get", "list", "watch", "create", "delete", "deletecollection"},
+				},
+				map[string]interface{}{
+					"apiGroups": []interface{}{"rbac.authorization.k8s.io"},
+					"resources": []interface{}{"rolebindings"},
+					"verbs":     []interface{}{"get", "list", "watch", "create", "delete"},
+				},
+			},
+		},
+	}
+
+	if _, err := r.nsKube().CreateRole(ctx, role); err != nil && !k8serrors.IsAlreadyExists(err) {
+		return fmt.Errorf("creating Role %s/%s: %w", namespace, roleName, err)
+	}
+
+	rb := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "rbac.authorization.k8s.io/v1",
+			"kind":       "RoleBinding",
+			"metadata": map[string]interface{}{
+				"name":      roleName,
+				"namespace": namespace,
+			},
+			"roleRef": map[string]interface{}{
+				"apiGroup": "rbac.authorization.k8s.io",
+				"kind":     "Role",
+				"name":     roleName,
+			},
+			"subjects": []interface{}{
+				map[string]interface{}{
+					"kind":      "ServiceAccount",
+					"name":      "ambient-control-plane",
+					"namespace": r.cpRuntimeNamespace,
+				},
+			},
+		},
+	}
+
+	if _, err := r.nsKube().CreateRoleBinding(ctx, namespace, rb); err != nil && !k8serrors.IsAlreadyExists(err) {
+		return fmt.Errorf("creating RoleBinding %s/%s: %w", namespace, roleName, err)
+	}
+
+	r.logger.Info().Str("namespace", namespace).Msg("control-plane RBAC created")
+	return nil
+}
+
 func (r *ProjectReconciler) ensureRunnerSecrets(ctx context.Context, project types.Project) error {
-	namespace := namespaceForProject(project)
+	namespace := r.provisioner.NamespaceName(project.ID)
 	const secretName = "ambient-runner-secrets"
 
-	if _, err := r.kube.GetSecret(ctx, namespace, secretName); err == nil {
+	if _, err := r.nsKube().GetSecret(ctx, namespace, secretName); err == nil {
 		r.logger.Debug().Str("namespace", namespace).Msg("ambient-runner-secrets already exists")
 		return nil
 	} else if !k8serrors.IsNotFound(err) {
@@ -201,7 +288,7 @@ func (r *ProjectReconciler) ensureRunnerSecrets(ctx context.Context, project typ
 		},
 	}
 
-	if _, err := r.kube.CreateSecret(ctx, secret); err != nil {
+	if _, err := r.nsKube().CreateSecret(ctx, secret); err != nil {
 		if k8serrors.IsAlreadyExists(err) {
 			return nil
 		}
@@ -212,6 +299,3 @@ func (r *ProjectReconciler) ensureRunnerSecrets(ctx context.Context, project typ
 	return nil
 }
 
-func namespaceForProject(project types.Project) string {
-	return strings.ToLower(project.ID)
-}

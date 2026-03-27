@@ -8,6 +8,7 @@ require (
 	github.com/ambient-code/platform/components/ambient-api-server v0.0.0
 	github.com/ambient-code/platform/components/ambient-sdk/go-sdk v0.0.0
 	github.com/rs/zerolog v1.34.0
+	golang.org/x/oauth2 v0.34.0
 	google.golang.org/grpc v1.79.1
 	k8s.io/apimachinery v0.34.0
 	k8s.io/client-go v0.34.0
@@ -29,7 +30,6 @@ require (
 	github.com/x448/float16 v0.8.4 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
 	golang.org/x/net v0.48.0 // indirect
-	golang.org/x/oauth2 v0.34.0 // indirect
 	golang.org/x/sys v0.40.0 // indirect
 	golang.org/x/term v0.38.0 // indirect
 	golang.org/x/text v0.32.0 // indirect

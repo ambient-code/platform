@@ -51,6 +51,7 @@ func runEvents(cmd *cobra.Command, args []string) error {
 	}
 	req.Header.Set("Accept", "text/event-stream")
 	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("X-Ambient-Project", cfg.GetProject())
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

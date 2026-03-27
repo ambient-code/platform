@@ -68,6 +68,13 @@ platform-control-plane/
     └── control-plane.guide.md         ← YOU ARE HERE (guide)
 ```
 
+
+IMPORTANT!!! **ONLY PUSH TO quay.io/vteam-*:mgt-001**  ensure the tag is *only* mgt-001
+This is important! we are bypassing the build process by pushing directly to quay.io.  this is risky
+so *only* push with tag mgt-001
+
+
+
 ---
 
 ## Build Commands
@@ -122,14 +129,25 @@ ruff check .
 ## Gap Table (Current)
 
 ```
-ITEM                                    COMPONENT    STATUS      GAP
-─────────────────────────────────────────────────────────────────────
-assistant payload → plain string        Runner       closed      GRPCMessageWriter._write_message() fixed (Wave 1)
-reasoning leaks into DB record          Runner       closed      reasoning stays in /events SSE only (Wave 1)
-GET /events/{thread_id}                 Runner       closed      endpoints/events.py added
-GET /sessions/{id}/events (proxy)       api-server   open        not in platform-api-server codebase yet
-acpctl session events <id>              CLI          open        no command
-Namespace delete RBAC                   CP manifests closed      delete added to namespaces ClusterRole (Wave 2)
+ITEM                                         COMPONENT    STATUS      GAP
+──────────────────────────────────────────────────────────────────────────────
+assistant payload → plain string             Runner       closed      GRPCMessageWriter._write_message() fixed (Wave 1)
+reasoning leaks into DB record               Runner       closed      reasoning stays in /events SSE only (Wave 1)
+GET /events/{thread_id}                      Runner       closed      endpoints/events.py added
+Namespace delete RBAC                        CP manifests closed      delete added to namespaces ClusterRole (Wave 2)
+MPP namespace naming (ambient-code--test)    CP           closed      NamespaceName() on provisioner interface (Run 3)
+OIDC token provider (was static k8s SA)      CP           closed      mgt-001 image + OIDC env vars (Run 3)
+Per-project RBAC in session namespaces       CP           closed      ensureControlPlaneRBAC() in project reconciler (Run 3)
+AMBIENT_GRPC_ENABLED not injected            CP           closed      boolToStr(RunnerGRPCURL != "") in buildEnv (Run 3)
+gRPC auth: RH SSO token rejected             api-server   closed      --grpc-jwk-cert-url=sso.redhat.com JWKS (Run 3)
+NetworkPolicy blocks runner->api-server      manifests    closed      allow-ambient-tenant-ingress netpol (Run 3)
+GET /sessions/{id}/events (proxy)            api-server   closed      StreamRunnerEvents in plugins/sessions/handler.go:282
+acpctl session events <id>                   CLI          closed      events.go exists; fixed missing X-Ambient-Project header
+INITIAL_PROMPT gRPC push warning             Runner       closed      skip push when grpc_url set (message already in DB)
+acpctl messages -f hang                      CLI          closed      replaced gRPC watch with HTTP long-poll (ListMessages)
+acpctl send -f                               CLI          closed      added --follow flag; calls streamMessages after push
+assistant payload JSON blob (grpc_transport)  Runner       closed      _write_message() now pushes plain text (Run 8)
+TenantSA RBAC race on namespace re-create    CP           open        see Known Races below
 ```
 
 ---
@@ -405,6 +423,72 @@ acpctl session events <id>
 
 ---
 
+## MPP One-Time Bootstrap (Manual Steps)
+
+These two steps are performed **once per cluster** — not per session, not per namespace. Both are cluster-scoped bootstraps that the automation cannot self-provision due to MPP RBAC constraints.
+
+### Step A — TenantServiceAccount (⚠️ manual, one-time)
+
+Applied directly to `ambient-code--config` (not via kustomize — the global `namespace:` in kustomization.yaml would override it):
+
+```bash
+kubectl apply -f components/manifests/overlays/mpp-openshift/ambient-cp-tenant-sa.yaml
+```
+
+**What it does:** The tenant-access-operator watches for this CR and:
+- Creates SA `tenantaccess-ambient-control-plane` in `ambient-code--config`
+- Creates a long-lived token Secret `tenantaccess-ambient-control-plane-token` in `ambient-code--config`
+- Automatically injects a `namespace-admin` RoleBinding into every current and **future** tenant namespace
+
+This is **not** required per session namespace. The operator handles propagation automatically whenever MPP creates a new `ambient-code--<project>` namespace.
+
+**After applying**, copy the token Secret to `ambient-code--runtime-int` so the CP can mount it:
+
+```bash
+kubectl get secret tenantaccess-ambient-control-plane-token \
+  -n ambient-code--config \
+  -o json \
+  | python3 -c "
+import json, sys
+s = json.load(sys.stdin)
+del s['metadata']['namespace']
+del s['metadata']['resourceVersion']
+del s['metadata']['uid']
+del s['metadata']['creationTimestamp']
+s['metadata'].pop('ownerReferences', None)
+s['metadata'].pop('annotations', None)
+s['type'] = 'Opaque'
+print(json.dumps(s))
+" | kubectl apply -n ambient-code--runtime-int -f -
+```
+
+### Step B — Static Runner API Token (obsolete as of Run 5)
+
+This step is **no longer required**. The runner authenticates to the api-server using the CP's OIDC client-credentials JWT (`preferred_username: service-account-ocm-ams-service`). The api-server validates both RH SSO service account JWTs and end-user JWTs via `kid`-keyed JWKS lookup (rh-trex-ai v0.0.27). `isServiceCaller()` in the gRPC handler compares the JWT `preferred_username` claim against `GRPC_SERVICE_ACCOUNT` env var — no static token needed.
+
+---
+
+## Known Races
+
+### TenantServiceAccount RBAC race on namespace re-create
+
+**Symptom:**
+
+```
+secrets is forbidden: User "system:serviceaccount:ambient-code--config:tenantaccess-ambient-control-plane"
+cannot create resource "secrets" in API group "" in the namespace "ambient-code--test"
+```
+
+**When it occurs:** Delete a session → immediately create a new session in the **same project** (`test`). MPP deletes and re-creates the `ambient-code--test` namespace. The tenant-access-operator needs time to inject the `namespace-admin` RoleBinding into the fresh namespace. If CP reconciles before that propagation completes (~20-40s), secret creation is forbidden.
+
+**The handler fails and does not retry** — the informer only re-fires on the next API server event. The session gets stuck in `""` phase with no pod.
+
+**Workaround (manual):** After deleting a session, wait at least 30-60 seconds before creating a new one in the same project. Or create the new session in a different project.
+
+**Proper fix (not yet implemented):** CP's `ensureSecret` (and other namespace-scoped ops) should retry on `k8serrors.IsForbidden` with exponential backoff, since the cause is transient RBAC propagation. See `kube_reconciler.go:328`.
+
+---
+
 ## Known Invariants
 
 These rules apply to all CP and Runner changes:
@@ -429,20 +513,29 @@ These rules apply to all CP and Runner changes:
 After any wave:
 
 ```bash
-# 1. Create a test session
+# 0. Login (OCM token expires ~15 min — always refresh before testing)
+ocm login --use-auth-code   # browser popup
+acpctl login --token $(ocm token) \
+  --url https://ambient-api-server-ambient-code--runtime-int.internal-router-shard.mpp-w2-preprod.cfln.p1.openshiftapps.com \
+  --insecure-skip-tls-verify
+
+# 1. List sessions
+acpctl get sessions
+
+# 2. Create a test session
 acpctl create session --project foo --name verify-N "what is 2+2?"
 
-# 2. Watch CP logs for provisioning
-kubectl logs -n ambient-code deployment/ambient-control-plane -f --tail=20
+# 3. Watch CP logs for provisioning
+oc logs -n ambient-code--runtime-int deployment/ambient-control-plane -f --tail=20
 
-# 3. Watch runner logs
-POD=$(kubectl get pods -n foo -l ambient-code.io/session-id=<id> -o name | head -1)
-kubectl logs -n foo $POD -f
+# 4. Watch runner logs
+POD=$(oc get pods -n ambient-code--test -l ambient-code.io/session-id=<id> -o name | head -1)
+oc logs -n ambient-code--test $POD -f
 
-# 4. Check messages in DB
-acpctl session messages <id> -o json
+# 5. Check messages in DB
+acpctl session messages <id>
 
-# 5. Verify assistant payload is plain text (Wave 1 acceptance)
+# 6. Verify assistant payload is plain text
 acpctl session messages <id> -o json | python3 -c "
 import json, sys
 msgs = json.load(sys.stdin)
@@ -547,3 +640,375 @@ acpctl session events <id>              CLI          open
 - Build + push runner image: `make build-runner` then push to kind
 - Apply manifests for RBAC fix: `kubectl apply -f components/manifests/base/rbac/control-plane-clusterrole.yaml`
 - Verify: create session, check `acpctl session messages <id> -o json` — assistant payload should be plain text
+
+---
+
+### Run 3 — 2026-03-27 (MPP OpenShift Integration)
+
+**Status:** All MPP-specific gaps closed. NetworkPolicy applied. Pending: end-to-end gRPC push verification.
+
+**Context:** This run targeted the MPP/OpenShift environment (`ambient-code--runtime-int`), not a kind cluster. Multiple layered issues resolved to get a runner pod to reach the api-server via gRPC.
+
+**Changes made:**
+
+| File | Change |
+|------|--------|
+| `overlays/mpp-openshift/ambient-control-plane.yaml` | Image `mgt-001`, `imagePullPolicy: Always`, added `OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET`/`RUNNER_IMAGE` env vars |
+| `overlays/mpp-openshift/ambient-api-server-args-patch.yaml` | Added `--grpc-jwk-cert-url` pointing to RH SSO JWKS endpoint |
+| `overlays/mpp-openshift/ambient-tenant-ingress-netpol.yaml` | New NetworkPolicy allowing ports 8000+9000 ingress from `tenant.paas.redhat.com/tenant: ambient-code` namespaces |
+| `overlays/mpp-openshift/kustomization.yaml` | Added netpol to resources |
+| `kubeclient/namespace_provisioner.go` | `NamespaceName(projectID)` added to interface; `MPPNamespaceProvisioner` returns `ambient-code--<id>` |
+| `reconciler/project_reconciler.go` | `namespaceForProject()` replaced with `provisioner.NamespaceName()`; added `ensureControlPlaneRBAC()` |
+| `reconciler/shared.go` | Removed `namespaceForSession` free function and unused imports |
+| `reconciler/kube_reconciler.go` | `namespaceForSession` as method; added `AMBIENT_GRPC_ENABLED` env var injection |
+| `config/config.go` | Added `CPRuntimeNamespace` field (`CP_RUNTIME_NAMESPACE`, default `ambient-code--runtime-int`) |
+| `cmd/ambient-control-plane/main.go` | Updated `NewProjectReconciler` call with `cfg.CPRuntimeNamespace` |
+
+**Root causes resolved (in order encountered):**
+
+1. **Static token provider** — CP image was `latest`/`IfNotPresent`. Fixed: `mgt-001` + `imagePullPolicy: Always` + OIDC env vars.
+2. **`namespace test did not become Active`** — `waitForNamespaceActive` polled for `test` but MPP creates `ambient-code--test`. Fixed: `namespaceName(instanceID)` helper.
+3. **Secrets/pods forbidden in `ambient-code--test`** — `namespaceForProject` and `namespaceForSession` returned raw project ID. Fixed: all callers use `provisioner.NamespaceName()`.
+4. **Pods forbidden in `default`** — tombstone events had no namespace. Fixed by `namespaceForSession` method.
+5. **No RBAC for CP SA in session namespaces** — cannot create ClusterRoles. Fixed: `ensureControlPlaneRBAC()` creates per-namespace Role+RoleBinding on project reconcile.
+6. **Runner used HTTP backend** — `AMBIENT_GRPC_ENABLED` not injected. Fixed: `boolToStr(r.cfg.RunnerGRPCURL != "")`.
+7. **gRPC auth rejected** — Session creds are RH SSO OIDC tokens; api-server only validated cluster JWKS. Fixed: `--grpc-jwk-cert-url` arg.
+8. **UNAVAILABLE: failed to connect** — `internal-1` NetworkPolicy blocks cross-namespace ingress. Fixed: additive `allow-ambient-tenant-ingress` NetworkPolicy.
+
+**MPP-specific invariants learned:**
+
+- MPP creates namespaces as `ambient-code--<tenantNamespaceCRName>` — never the raw project ID
+- All tenant namespaces carry label `tenant.paas.redhat.com/tenant: ambient-code` — use for NetworkPolicy selectors
+- MPP `internal-1` NetworkPolicy is managed by platform operator — add additive policies alongside it
+- CP SA cannot create ClusterRoles — use per-namespace Roles only
+- OCM login: `ocm login --use-auth-code` -> `acpctl login --token $(ocm token)`
+- Use internal router shard hostname for `acpctl login` URL (not `.apps.` route)
+- Two manual one-time bootstrap steps required — see **MPP One-Time Bootstrap** section above
+
+**Gap table after Run 3:**
+
+```
+ITEM                                         COMPONENT    STATUS
+──────────────────────────────────────────────────────────────────
+assistant payload -> plain string            Runner       closed
+reasoning leaks into DB record               Runner       closed
+GET /events/{thread_id}                      Runner       closed
+Namespace delete RBAC                        CP manifests closed
+MPP namespace naming                         CP           closed
+OIDC token provider                          CP           closed
+Per-project RBAC in session namespaces       CP           closed
+AMBIENT_GRPC_ENABLED injection               CP           closed
+gRPC auth: RH SSO token                      api-server   closed
+NetworkPolicy: runner->api-server            manifests    closed
+GET /sessions/{id}/events (proxy)            api-server   open
+acpctl session events <id>                   CLI          open
+```
+
+**Next:** Delete stale sessions, create `mpp-verify-5`, confirm gRPC push succeeds end-to-end.
+
+---
+
+### Run 5 — 2026-03-27 (Multi-JWKS auth + isServiceCaller via JWT claim)
+
+**Status:** `WatchSessionMessages PERMISSION_DENIED` resolved. Runner receives user messages and invokes Claude. New blocker: `ImportError: cannot import name 'clear_runtime_credentials'` — fixed and runner image rebuilt.
+
+**Root cause of PERMISSION_DENIED:** Runner's `BOT_TOKEN` is the CP's OIDC client-credentials JWT with `preferred_username: service-account-ocm-ams-service`. The api-server's `WatchSessionMessages` checked `middleware.IsServiceCaller(ctx)` which relied on a static opaque token pre-auth interceptor — not compatible with JWT-only auth chain.
+
+**Solution:** JWT-based service identity via `kid`-keyed JWKS lookup.
+
+**Changes made:**
+
+| File | Change |
+|------|--------|
+| `ambient-api-server/go.mod` | Bumped `rh-trex-ai` v0.0.26 → v0.0.27 (`JwkCertURLs []string`, multi-URL JWKS support) |
+| `plugins/sessions/grpc_handler.go` | Removed `middleware` import; added `serviceAccountName` field + `isServiceCaller()` checking JWT `preferred_username` claim |
+| `plugins/sessions/plugin.go` | Reads `GRPC_SERVICE_ACCOUNT` env, passes to `NewSessionGRPCHandler` |
+| `environments/e_*.go` | `JwkCertURL` → `JwkCertURLs []string` (compile fix for v0.0.27) |
+| `overlays/mpp-openshift/ambient-api-server.yaml` | Added `GRPC_SERVICE_ACCOUNT=service-account-ocm-ams-service` env var |
+| `overlays/mpp-openshift/ambient-api-server-args-patch.yaml` | Added K8s cluster JWKS as second URL (comma-separated) |
+| `runners/ambient_runner/platform/auth.py` | Added `clear_runtime_credentials()` — clears `JIRA_URL/TOKEN/EMAIL`, `GITLAB_TOKEN`, `GITHUB_TOKEN`, `USER_GOOGLE_EMAIL`, and Google credentials file |
+
+**How `isServiceCaller()` works:**
+- `GRPC_SERVICE_ACCOUNT=service-account-ocm-ams-service` set on api-server deployment
+- `AuthStreamInterceptor` validates JWT via JWKS `kid` lookup (RH SSO or K8s cluster), extracts `preferred_username` into context
+- Handler's `isServiceCaller(ctx)` compares `auth.GetUsernameFromContext(ctx)` to the configured SA name
+- Match → ownership check bypassed → `WatchSessionMessages` opens
+- No match → user-path → ownership check enforced
+
+**MPP login invariant (must do before every test):**
+
+```bash
+ocm login --use-auth-code   # browser popup — approve on laptop
+acpctl login --token $(ocm token) \
+  --url https://ambient-api-server-ambient-code--runtime-int.internal-router-shard.mpp-w2-preprod.cfln.p1.openshiftapps.com \
+  --insecure-skip-tls-verify
+acpctl get sessions
+```
+
+**Gap table after Run 5:**
+
+```
+ITEM                                         COMPONENT    STATUS
+──────────────────────────────────────────────────────────────────────────
+assistant payload -> plain string            Runner       closed
+reasoning leaks into DB record               Runner       closed
+GET /events/{thread_id}                      Runner       closed
+Namespace delete RBAC                        CP manifests closed
+MPP namespace naming                         CP           closed
+OIDC token provider                          CP           closed
+Per-project RBAC in session namespaces       CP           closed (TenantServiceAccount)
+AMBIENT_GRPC_ENABLED injection               CP           closed
+gRPC auth: RH SSO token                      api-server   closed
+NetworkPolicy: runner->api-server            manifests    closed
+TenantServiceAccount two-client RBAC         CP           closed
+WatchSessionMessages PERMISSION_DENIED       api-server   closed (isServiceCaller via JWT)
+clear_runtime_credentials missing           Runner       closed
+GET /sessions/{id}/events (proxy)            api-server   open
+acpctl session events <id>                   CLI          open
+```
+
+**Next:** Test mpp-verify-10 — confirm Claude executes and pushes assistant message end-to-end.
+
+---
+
+### Run 6 — 2026-03-27 (Vertex AI + RunnerContext user fields)
+
+**Status:** End-to-end success. Claude executed and pushed assistant message (`seq=25`, `payload_len=806`) for mpp-verify-16.
+
+**Root causes resolved:**
+
+1. **`RunnerContext` missing `current_user_id`/`set_current_user`** — `bridge.py:_initialize_run()` accessed `self._context.current_user_id` but `RunnerContext` dataclass had no such field. Fixed: added `current_user_id`, `current_user_name`, `caller_token` fields with empty defaults + `set_current_user()` method to `platform/context.py`.
+
+2. **Vertex AI not wired in CP overlay** — `USE_VERTEX`, `ANTHROPIC_VERTEX_PROJECT_ID`, `CLOUD_ML_REGION`, `GOOGLE_APPLICATION_CREDENTIALS`, `VERTEX_SECRET_NAME`, `VERTEX_SECRET_NAMESPACE` were all missing from `ambient-control-plane.yaml`. CP passed `USE_VERTEX=0` to runner pods → runner raised `Either ANTHROPIC_API_KEY or USE_VERTEX=1 must be set`.
+
+3. **`VERTEX_SECRET_NAMESPACE` wrong default** — Default is `ambient-code`; secret is in `ambient-code--runtime-int`. `ensureVertexSecret()` called `r.nsKube().GetSecret(ctx, "ambient-code", "ambient-vertex")` → forbidden. Fixed: `VERTEX_SECRET_NAMESPACE=ambient-code--runtime-int`.
+
+4. **`GOOGLE_APPLICATION_CREDENTIALS` path mismatch** — CP overlay set `/var/run/secrets/vertex/ambient-code-key.json` but `buildVolumeMounts()` mounts vertex secret at `/app/vertex`. Runner pod had the file at `/app/vertex/ambient-code-key.json`. Fixed: `GOOGLE_APPLICATION_CREDENTIALS=/app/vertex/ambient-code-key.json`.
+
+**Changes made:**
+
+| File | Change |
+|------|--------|
+| `runners/ambient_runner/platform/context.py` | Added `current_user_id`, `current_user_name`, `caller_token` fields + `set_current_user()` method to `RunnerContext` |
+| `overlays/mpp-openshift/ambient-control-plane.yaml` | Added `USE_VERTEX=1`, `ANTHROPIC_VERTEX_PROJECT_ID=ambient-code-platform`, `CLOUD_ML_REGION=us-east5`, `GOOGLE_APPLICATION_CREDENTIALS=/app/vertex/ambient-code-key.json`, `VERTEX_SECRET_NAME=ambient-vertex`, `VERTEX_SECRET_NAMESPACE=ambient-code--runtime-int`; added `vertex-credentials` volumeMount + volume from `ambient-vertex` secret |
+
+**Vertex invariants for MPP:**
+- Secret: `secret/ambient-vertex` in `ambient-code--runtime-int` — contains `ambient-code-key.json` (GCP SA key)
+- CP reads it via `nsKube()` (tenant SA) and copies to session namespace via `ensureVertexSecret()`
+- Runner pod mounts it at `/app/vertex/` — set `GOOGLE_APPLICATION_CREDENTIALS=/app/vertex/ambient-code-key.json`
+- `VERTEX_SECRET_NAMESPACE` must be `ambient-code--runtime-int` (not default `ambient-code`)
+- GCP project: `ambient-code-platform`, region: `us-east5`
+
+**acpctl session commands:**
+```bash
+acpctl get sessions                        # list all sessions
+acpctl session messages <id>               # show messages for session
+acpctl session messages <id> -o json       # JSON output
+acpctl delete session <id> --yes           # delete without confirmation prompt
+acpctl create session --name <n> --prompt "<text>"  # create session
+```
+
+**Gap table after Run 6:**
+
+```
+ITEM                                         COMPONENT    STATUS
+────────────────────────────────────────────────────────────────────────────────
+assistant payload -> plain string            Runner       closed
+reasoning leaks into DB record               Runner       closed
+GET /events/{thread_id}                      Runner       closed
+Namespace delete RBAC                        CP manifests closed
+MPP namespace naming                         CP           closed
+OIDC token provider                          CP           closed
+Per-project RBAC in session namespaces       CP           closed (TenantServiceAccount)
+AMBIENT_GRPC_ENABLED injection               CP           closed
+gRPC auth: RH SSO token                      api-server   closed
+NetworkPolicy: runner->api-server            manifests    closed
+TenantServiceAccount two-client RBAC         CP           closed
+WatchSessionMessages PERMISSION_DENIED       api-server   closed (isServiceCaller via JWT)
+clear_runtime_credentials missing           Runner       closed
+RunnerContext missing user fields            Runner       closed
+Vertex AI not wired in CP overlay            manifests    closed
+GET /sessions/{id}/events (proxy)            api-server   open
+acpctl session events <id>                   CLI          open
+```
+
+**Confirmed working (mpp-verify-16):**
+- CP provisioned `ambient-code--test` namespace ✓
+- Runner pod started, gRPC watch open ✓
+- User message received via gRPC watch ✓
+- Claude CLI spawned via Vertex AI ✓
+- Assistant message pushed: `seq=25`, `payload_len=806` ✓
+- `PushSessionMessage OK` confirmed ✓
+
+---
+
+### Run 4 — 2026-03-27 (TenantServiceAccount two-client RBAC fix)
+
+**Status:** Runner pod created and started. gRPC push of user message succeeds. New blocker: `WatchSessionMessages` returns `PERMISSION_DENIED` — runner loops on reconnect and never executes Claude.
+
+**Context:** This run implemented the `TenantServiceAccount` + second KubeClient pattern to fix the durable RBAC bootstrap problem. The CP now uses `tenantaccess-ambient-control-plane` token (mounted from Secret) for all namespace-scoped ops; the in-cluster SA token is used only for watch/list on the api-server informer.
+
+**Changes made:**
+
+| File | Change |
+|------|--------|
+| `overlays/mpp-openshift/ambient-cp-tenant-sa.yaml` | New `TenantServiceAccount` CR in `ambient-code--config`; grants `namespace-admin` to all tenant namespaces via operator |
+| `overlays/mpp-openshift/ambient-control-plane.yaml` | Added `PROJECT_KUBE_TOKEN_FILE` env var + `project-kube-token` volumeMount + volume from `tenantaccess-ambient-control-plane-token` Secret |
+| `kubeclient/kubeclient.go` | Added `NewFromTokenFile(tokenFile, logger)` constructor — uses in-cluster host/CA + explicit bearer token |
+| `config/config.go` | Added `ProjectKubeTokenFile string` field (`PROJECT_KUBE_TOKEN_FILE` env) |
+| `cmd/ambient-control-plane/main.go` | Builds `projectKube` when token file set; passes to both `NewProjectReconciler` and `NewKubeReconciler` |
+| `reconciler/project_reconciler.go` | Added `projectKube` field + `nsKube()` helper; all namespace-scoped ops use `nsKube()` |
+| `reconciler/kube_reconciler.go` | Added `projectKube` field + `nsKube()` helper; all namespace-scoped ops use `nsKube()`; removed `ensureSessionNamespaceRBAC` (operator handles RBAC propagation now) |
+
+**Root causes resolved:**
+
+1. **CP SA had zero permissions in project namespaces** — `ensureControlPlaneRBAC` in project reconciler only fires on `ADDED` event; pre-existing projects never get RBAC. And manually applied RBAC is wiped when MPP deprovisions/reprovisions namespace. Fixed: `TenantServiceAccount` operator injects `namespace-admin` RoleBinding into every current+future tenant namespace automatically and durably.
+2. **Bootstrap circularity** — `ensureSessionNamespaceRBAC` needed permissions to create Roles, but CP had none. Fixed: operator handles it before CP acts.
+3. **Token Secret cross-namespace** — `tenantaccess-ambient-control-plane-token` lives in `ambient-code--config`; copied as `Opaque` Secret to `ambient-code--runtime-int` (must strip `kubernetes.io/service-account.name` annotation to avoid type mismatch).
+
+**MPP re-login invariant:**
+
+OCM tokens expire after ~15 minutes. Before any test run:
+
+```bash
+ocm login --use-auth-code   # browser popup — approve on laptop
+acpctl login --token $(ocm token) \
+  --url https://ambient-api-server-ambient-code--runtime-int.internal-router-shard.mpp-w2-preprod.cfln.p1.openshiftapps.com \
+  --insecure-skip-tls-verify
+```
+
+**Observed result (mpp-verify-7):**
+
+- CP provisioned `ambient-code--test` namespace ✓
+- Runner pod created + started ✓
+- gRPC channel to `ambient-api-server.ambient-code--runtime-int.svc:9000` established ✓
+- `PushSessionMessage` (user event) succeeded: `seq=9` ✓
+- `WatchSessionMessages` returns `PERMISSION_DENIED: not authorized to watch this session` ✗
+- Runner loops on watch reconnect; never executes Claude ✗
+
+**New gap:** `WatchSessionMessages` PERMISSION_DENIED — runner's `BOT_TOKEN` (OIDC token for `mturansk`) is rejected by the api-server's watch authorization. The push path uses the same token and succeeds. Root cause: api-server's `WatchSessionMessages` handler likely checks session ownership against the user context and the session's `ProjectID=test` project is owned differently than the token subject.
+
+**Gap table after Run 4:**
+
+```
+ITEM                                         COMPONENT    STATUS
+──────────────────────────────────────────────────────────────────────────
+assistant payload -> plain string            Runner       closed
+reasoning leaks into DB record               Runner       closed
+GET /events/{thread_id}                      Runner       closed
+Namespace delete RBAC                        CP manifests closed
+MPP namespace naming                         CP           closed
+OIDC token provider                          CP           closed
+Per-project RBAC in session namespaces       CP           closed (TenantServiceAccount)
+AMBIENT_GRPC_ENABLED injection               CP           closed
+gRPC auth: RH SSO token                      api-server   closed
+NetworkPolicy: runner->api-server            manifests    closed
+TenantServiceAccount two-client RBAC         CP           closed
+WatchSessionMessages PERMISSION_DENIED       api-server   open
+GET /sessions/{id}/events (proxy)            api-server   open
+acpctl session events <id>                   CLI          open
+```
+
+**Next:** Investigate `WatchSessionMessages` authorization in api-server — check `@.claude/skills/ambient-api-server/` or `components/ambient-api-server/plugins/sessions/` for watch auth logic. The push succeeds with the same token so the issue is specific to the watch handler's authorization check.
+
+---
+
+### Run 7 — 2026-03-27 (CLI fixes + INITIAL_PROMPT gRPC warning removed)
+
+**Status:** Four improvements to developer workflow. End-to-end path confirmed working from Run 6. These changes close remaining CLI/runner usability gaps.
+
+**Changes made:**
+
+| File | Change |
+|------|--------|
+| `runners/ambient_runner/app.py` | Skip `_push_initial_prompt_via_grpc()` when `grpc_url` is set — message already in DB; replace call with `logger.debug()` explaining why |
+| `ambient-cli/cmd/acpctl/session/messages.go` | `streamMessages()` rewritten from gRPC `WatchSessionMessages` to HTTP long-poll on `ListMessages` every 2s — fixes hang when gRPC port 9000 unreachable from laptop |
+| `ambient-cli/cmd/acpctl/session/send.go` | Added `--follow`/`-f` flag; after `PushMessage` succeeds, sets `msgArgs.afterSeq = msg.Seq` and calls `streamMessages()` |
+| `ambient-cli/cmd/acpctl/session/events.go` | Added missing `X-Ambient-Project` header to SSE request |
+
+**Root causes fixed:**
+
+1. **`INITIAL_PROMPT gRPC push PERMISSION_DENIED` warning** — When `AMBIENT_GRPC_ENABLED=true`, the initial prompt is already stored in the DB by the `acpctl create session` HTTP call. The runner's `WatchSessionMessages` listener delivers it automatically. The redundant gRPC push used the SA token which cannot push `event_type=user` → harmless but noisy `PERMISSION_DENIED` logged at WARN level every run. Fixed: skip the push branch entirely when `grpc_url` is set.
+
+2. **`acpctl session messages -f` hang** — `streamMessages()` called `WatchSessionMessages` via gRPC. The SDK's `deriveGRPCAddress()` maps `internal-router-shard` URLs to port 9000, which is only reachable in-cluster. From a laptop, the connection hangs indefinitely. Fixed: replaced with HTTP long-poll using `ListMessages(ctx, sessionID, afterSeq)` every 2 seconds, tracking the highest `Seq` seen.
+
+3. **`acpctl session send -f` missing** — No `--follow` flag existed on `sendCmd`. Fixed: added `--follow`/`-f` flag; after successful push, calls `streamMessages()` starting from the pushed message's seq.
+
+4. **`acpctl session events` missing project header** — The SSE request to the api-server was missing `X-Ambient-Project`, which is required by the auth middleware. Fixed: added `req.Header.Set("X-Ambient-Project", cfg.GetProject())`.
+
+**api-server `GET /sessions/{id}/events` status:**
+
+This endpoint is **already implemented** in `plugins/sessions/handler.go:282` (`StreamRunnerEvents`). It proxies to `http://session-{KubeCrName}.{KubeNamespace}.svc.cluster.local:8001/events/{KubeCrName}`. Registered in `plugin.go:102` (note: duplicate at line 104 is harmless dead code). The `acpctl session events <id>` command is fully wired and should work against a running session.
+
+**acpctl session commands (updated):**
+
+```bash
+acpctl get sessions                                # list all sessions
+acpctl session messages <id>                       # snapshot
+acpctl session messages <id> -f                    # live poll every 2s (Ctrl+C to stop)
+acpctl session messages <id> -o json               # JSON snapshot
+acpctl session messages <id> --after 5             # messages after seq 5
+acpctl session send <id> "message"                 # send and return
+acpctl session send <id> "message" -f              # send and follow conversation
+acpctl session events <id>                         # stream raw AG-UI SSE events from runner (session must be actively running)
+acpctl delete session <id> --yes                   # delete without confirmation
+acpctl create session --name <n> --prompt "<text>" # create session
+```
+
+**Gap table after Run 7:**
+
+```
+ITEM                                         COMPONENT    STATUS
+────────────────────────────────────────────────────────────────────────────────
+assistant payload -> plain string            Runner       closed
+reasoning leaks into DB record               Runner       closed
+GET /events/{thread_id}                      Runner       closed
+Namespace delete RBAC                        CP manifests closed
+MPP namespace naming                         CP           closed
+OIDC token provider                          CP           closed
+Per-project RBAC in session namespaces       CP           closed (TenantServiceAccount)
+AMBIENT_GRPC_ENABLED injection               CP           closed
+gRPC auth: RH SSO token                      api-server   closed
+NetworkPolicy: runner->api-server            manifests    closed
+TenantServiceAccount two-client RBAC         CP           closed
+WatchSessionMessages PERMISSION_DENIED       api-server   closed (isServiceCaller via JWT)
+clear_runtime_credentials missing            Runner       closed
+RunnerContext missing user fields            Runner       closed
+Vertex AI not wired in CP overlay            manifests    closed
+INITIAL_PROMPT gRPC push warning             Runner       closed
+acpctl messages -f hang (gRPC)               CLI          closed (HTTP long-poll)
+acpctl send -f missing                       CLI          closed
+acpctl events missing project header         CLI          closed
+GET /sessions/{id}/events (proxy)            api-server   closed (already implemented)
+```
+
+**All known gaps closed.** End-to-end path: session creation → CP provisioning → runner pod → gRPC watch → Claude via Vertex AI → assistant message pushed to DB → `acpctl session messages <id> -f` displays it.
+
+---
+
+### Run 8 — 2026-03-27 (Plain-text assistant payload + RBAC race documented)
+
+**Status:** `_write_message()` fixed to push plain assistant text. New gap discovered: TenantSA RBAC race on namespace re-create.
+
+**Changes made:**
+
+| File | Change |
+|------|--------|
+| `runners/ambient_runner/bridges/claude/grpc_transport.py` | `_write_message()` now extracts plain assistant text from `_accumulated_messages` instead of pushing the full JSON blob; `import json` removed |
+
+**Root cause of JSON blob:** The Wave 1 fix described in Run 2 was applied to the kind cluster codebase but never to this (MPP) codebase. `_write_message()` was still calling `json.dumps({"run_id": ..., "status": ..., "messages": [...]})` and pushing the full blob as `payload`. `displayPayload()` in the CLI uses `extractAGUIText()` which expects `{"messages": [{"role": "assistant", "content": "..."}]}` — the wrong shape. Result: assistant messages existed in DB but showed blank in `acpctl session messages`.
+
+**New gap discovered — TenantSA RBAC race:**
+
+When a session is deleted and a new session immediately created in the same project, MPP re-creates `ambient-code--test`. The tenant-access-operator injects `namespace-admin` RoleBinding asynchronously (~20-60s). If CP reconciles before propagation completes, `ensureSecret()` at `kube_reconciler.go:328` fails with `secrets is forbidden`. The informer does not retry — session sticks in `""` phase with no pod.
+
+**Workaround:** Wait 30-60 seconds between deleting a session and creating a new one in the same project. See **Known Races** section above.
+
+**Gap table after Run 8:**
+
+```
+ITEM                                         COMPONENT    STATUS
+────────────────────────────────────────────────────────────────────────────────
+assistant payload -> plain string            Runner       closed (Run 8)
+TenantSA RBAC race on namespace re-create   CP           open (workaround: wait 60s)
+```

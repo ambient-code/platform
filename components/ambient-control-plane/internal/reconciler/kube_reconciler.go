@@ -36,25 +36,45 @@ type KubeReconcilerConfig struct {
 	MCPImage              string
 	MCPAPIServerURL       string
 	RunnerLogLevel        string
+	CPRuntimeNamespace    string
 }
 
 
 type SimpleKubeReconciler struct {
 	factory     *SDKClientFactory
 	kube        *kubeclient.KubeClient
+	projectKube *kubeclient.KubeClient
 	provisioner kubeclient.NamespaceProvisioner
 	cfg         KubeReconcilerConfig
 	logger      zerolog.Logger
 }
 
-func NewKubeReconciler(factory *SDKClientFactory, kube *kubeclient.KubeClient, provisioner kubeclient.NamespaceProvisioner, cfg KubeReconcilerConfig, logger zerolog.Logger) *SimpleKubeReconciler {
+func (r *SimpleKubeReconciler) nsKube() *kubeclient.KubeClient {
+	if r.projectKube != nil {
+		return r.projectKube
+	}
+	return r.kube
+}
+
+func NewKubeReconciler(factory *SDKClientFactory, kube *kubeclient.KubeClient, projectKube *kubeclient.KubeClient, provisioner kubeclient.NamespaceProvisioner, cfg KubeReconcilerConfig, logger zerolog.Logger) *SimpleKubeReconciler {
 	return &SimpleKubeReconciler{
 		factory:     factory,
 		kube:        kube,
+		projectKube: projectKube,
 		provisioner: provisioner,
 		cfg:         cfg,
 		logger:      logger.With().Str("reconciler", "kube").Logger(),
 	}
+}
+
+func (r *SimpleKubeReconciler) namespaceForSession(session types.Session) string {
+	if session.ProjectID != "" {
+		return r.provisioner.NamespaceName(session.ProjectID)
+	}
+	if session.KubeNamespace != "" {
+		return session.KubeNamespace
+	}
+	return "default"
 }
 
 func (r *SimpleKubeReconciler) Resource() string {
@@ -98,7 +118,7 @@ func (r *SimpleKubeReconciler) provisionSession(ctx context.Context, session typ
 		return fmt.Errorf("session %s has no project_id; refusing to provision", session.ID)
 	}
 
-	sdk, err := r.factory.ForProject(session.ProjectID)
+	sdk, err := r.factory.ForProject(ctx, session.ProjectID)
 	if err != nil {
 		return fmt.Errorf("session %s: creating SDK client for project %s: %w", session.ID, session.ProjectID, err)
 	}
@@ -106,7 +126,7 @@ func (r *SimpleKubeReconciler) provisionSession(ctx context.Context, session typ
 		return fmt.Errorf("session %s: project %s not found in API server; refusing to provision: %w", session.ID, session.ProjectID, err)
 	}
 
-	namespace := namespaceForSession(session)
+	namespace := r.namespaceForSession(session)
 
 	r.logger.Info().Str("session_id", session.ID).Str("namespace", namespace).Msg("provisioning session")
 
@@ -143,12 +163,12 @@ func (r *SimpleKubeReconciler) provisionSession(ctx context.Context, session typ
 }
 
 func (r *SimpleKubeReconciler) deprovisionSession(ctx context.Context, session types.Session, nextPhase string) error {
-	namespace := namespaceForSession(session)
+	namespace := r.namespaceForSession(session)
 	selector := sessionLabelSelector(session.ID)
 
 	r.logger.Info().Str("session_id", session.ID).Str("namespace", namespace).Msg("deprovisioning session")
 
-	if err := r.kube.DeletePodsByLabel(ctx, namespace, selector); err != nil && !k8serrors.IsNotFound(err) {
+	if err := r.nsKube().DeletePodsByLabel(ctx, namespace, selector); err != nil && !k8serrors.IsNotFound(err) {
 		r.logger.Warn().Err(err).Msg("deleting pods")
 	}
 
@@ -157,21 +177,21 @@ func (r *SimpleKubeReconciler) deprovisionSession(ctx context.Context, session t
 }
 
 func (r *SimpleKubeReconciler) cleanupSession(ctx context.Context, session types.Session) error {
-	namespace := namespaceForSession(session)
+	namespace := r.namespaceForSession(session)
 	selector := sessionLabelSelector(session.ID)
 
 	r.logger.Info().Str("session_id", session.ID).Str("namespace", namespace).Msg("cleaning up session resources")
 
-	if err := r.kube.DeletePodsByLabel(ctx, namespace, selector); err != nil && !k8serrors.IsNotFound(err) {
+	if err := r.nsKube().DeletePodsByLabel(ctx, namespace, selector); err != nil && !k8serrors.IsNotFound(err) {
 		r.logger.Warn().Err(err).Msg("deleting pods")
 	}
-	if err := r.kube.DeleteSecretsByLabel(ctx, namespace, selector); err != nil && !k8serrors.IsNotFound(err) {
+	if err := r.nsKube().DeleteSecretsByLabel(ctx, namespace, selector); err != nil && !k8serrors.IsNotFound(err) {
 		r.logger.Warn().Err(err).Msg("deleting secrets")
 	}
-	if err := r.kube.DeleteServiceAccountsByLabel(ctx, namespace, selector); err != nil && !k8serrors.IsNotFound(err) {
+	if err := r.nsKube().DeleteServiceAccountsByLabel(ctx, namespace, selector); err != nil && !k8serrors.IsNotFound(err) {
 		r.logger.Warn().Err(err).Msg("deleting service accounts")
 	}
-	if err := r.kube.DeleteServicesByLabel(ctx, namespace, selector); err != nil && !k8serrors.IsNotFound(err) {
+	if err := r.nsKube().DeleteServicesByLabel(ctx, namespace, selector); err != nil && !k8serrors.IsNotFound(err) {
 		r.logger.Warn().Err(err).Msg("deleting services")
 	}
 
@@ -184,10 +204,11 @@ func (r *SimpleKubeReconciler) cleanupSession(ctx context.Context, session types
 	return nil
 }
 
+
 func (r *SimpleKubeReconciler) ensureService(ctx context.Context, namespace string, session types.Session, labelSelector string) error {
 	name := serviceName(session.ID)
 
-	if _, err := r.kube.GetService(ctx, namespace, name); err == nil {
+	if _, err := r.nsKube().GetService(ctx, namespace, name); err == nil {
 		return nil
 	}
 
@@ -217,7 +238,7 @@ func (r *SimpleKubeReconciler) ensureService(ctx context.Context, namespace stri
 		},
 	}
 
-	if _, err := r.kube.CreateService(ctx, svc); err != nil && !k8serrors.IsAlreadyExists(err) {
+	if _, err := r.nsKube().CreateService(ctx, svc); err != nil && !k8serrors.IsAlreadyExists(err) {
 		return fmt.Errorf("creating service %s: %w", name, err)
 	}
 
@@ -270,7 +291,7 @@ func (r *SimpleKubeReconciler) ensureImagePullAccess(ctx context.Context, namesp
 			},
 		},
 	}
-	if _, err := r.kube.CreateRoleBinding(ctx, r.cfg.RunnerImageNamespace, rb); err != nil && !k8serrors.IsAlreadyExists(err) {
+	if _, err := r.nsKube().CreateRoleBinding(ctx, r.cfg.RunnerImageNamespace, rb); err != nil && !k8serrors.IsAlreadyExists(err) {
 		return fmt.Errorf("creating image-puller rolebinding in %s for %s: %w", r.cfg.RunnerImageNamespace, namespace, err)
 	}
 	r.logger.Debug().Str("namespace", namespace).Str("image_namespace", r.cfg.RunnerImageNamespace).Msg("image pull access granted")
@@ -280,11 +301,14 @@ func (r *SimpleKubeReconciler) ensureImagePullAccess(ctx context.Context, namesp
 func (r *SimpleKubeReconciler) ensureSecret(ctx context.Context, namespace string, session types.Session, labelSelector string) error {
 	name := secretName(session.ID)
 
-	if _, err := r.kube.GetSecret(ctx, namespace, name); err == nil {
+	if _, err := r.nsKube().GetSecret(ctx, namespace, name); err == nil {
 		return nil
 	}
 
-	token := r.factory.Token()
+	token, err := r.factory.Token(ctx)
+	if err != nil {
+		return fmt.Errorf("resolving API token: %w", err)
+	}
 
 	secret := &unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -301,7 +325,7 @@ func (r *SimpleKubeReconciler) ensureSecret(ctx context.Context, namespace strin
 		},
 	}
 
-	if _, err := r.kube.CreateSecret(ctx, secret); err != nil && !k8serrors.IsAlreadyExists(err) {
+	if _, err := r.nsKube().CreateSecret(ctx, secret); err != nil && !k8serrors.IsAlreadyExists(err) {
 		return fmt.Errorf("creating secret %s: %w", name, err)
 	}
 
@@ -312,7 +336,7 @@ func (r *SimpleKubeReconciler) ensureSecret(ctx context.Context, namespace strin
 func (r *SimpleKubeReconciler) ensureServiceAccount(ctx context.Context, namespace string, session types.Session, labelSelector string) error {
 	name := serviceAccountName(session.ID)
 
-	if _, err := r.kube.GetServiceAccount(ctx, namespace, name); err == nil {
+	if _, err := r.nsKube().GetServiceAccount(ctx, namespace, name); err == nil {
 		return nil
 	}
 
@@ -329,7 +353,7 @@ func (r *SimpleKubeReconciler) ensureServiceAccount(ctx context.Context, namespa
 		},
 	}
 
-	if _, err := r.kube.CreateServiceAccount(ctx, sa); err != nil && !k8serrors.IsAlreadyExists(err) {
+	if _, err := r.nsKube().CreateServiceAccount(ctx, sa); err != nil && !k8serrors.IsAlreadyExists(err) {
 		return fmt.Errorf("creating service account %s: %w", name, err)
 	}
 
@@ -340,7 +364,7 @@ func (r *SimpleKubeReconciler) ensureServiceAccount(ctx context.Context, namespa
 func (r *SimpleKubeReconciler) ensurePod(ctx context.Context, namespace string, session types.Session, labelSelector string, sdk *sdkclient.Client) error {
 	name := podName(session.ID)
 
-	if _, err := r.kube.GetPod(ctx, namespace, name); err == nil {
+	if _, err := r.nsKube().GetPod(ctx, namespace, name); err == nil {
 		r.logger.Debug().Str("pod", name).Msg("pod already exists")
 		return nil
 	}
@@ -419,7 +443,7 @@ func (r *SimpleKubeReconciler) ensurePod(ctx context.Context, namespace string, 
 		},
 	}
 
-	if _, err := r.kube.CreatePod(ctx, pod); err != nil && !k8serrors.IsAlreadyExists(err) {
+	if _, err := r.nsKube().CreatePod(ctx, pod); err != nil && !k8serrors.IsAlreadyExists(err) {
 		return fmt.Errorf("creating pod %s: %w", name, err)
 	}
 
@@ -476,12 +500,12 @@ func (r *SimpleKubeReconciler) buildVolumeMounts() []interface{} {
 }
 
 func (r *SimpleKubeReconciler) ensureVertexSecret(ctx context.Context, namespace string) error {
-	src, err := r.kube.GetSecret(ctx, r.cfg.VertexSecretNamespace, r.cfg.VertexSecretName)
+	src, err := r.nsKube().GetSecret(ctx, r.cfg.VertexSecretNamespace, r.cfg.VertexSecretName)
 	if err != nil {
 		return fmt.Errorf("reading vertex secret %s/%s: %w", r.cfg.VertexSecretNamespace, r.cfg.VertexSecretName, err)
 	}
 
-	if _, err := r.kube.GetSecret(ctx, namespace, r.cfg.VertexSecretName); err == nil {
+	if _, err := r.nsKube().GetSecret(ctx, namespace, r.cfg.VertexSecretName); err == nil {
 		return nil
 	}
 
@@ -504,7 +528,7 @@ func (r *SimpleKubeReconciler) ensureVertexSecret(ctx context.Context, namespace
 		},
 	}
 
-	if _, err := r.kube.CreateSecret(ctx, dst); err != nil && !k8serrors.IsAlreadyExists(err) {
+	if _, err := r.nsKube().CreateSecret(ctx, dst); err != nil && !k8serrors.IsAlreadyExists(err) {
 		return fmt.Errorf("copying vertex secret to %s: %w", namespace, err)
 	}
 
@@ -521,7 +545,7 @@ func (r *SimpleKubeReconciler) buildEnv(ctx context.Context, session types.Sessi
 	env := []interface{}{
 		envVar("SESSION_ID", session.ID),
 		envVar("AGENTIC_SESSION_NAME", session.Name),
-		envVar("AGENTIC_SESSION_NAMESPACE", namespaceForSession(session)),
+		envVar("AGENTIC_SESSION_NAMESPACE", r.namespaceForSession(session)),
 		envVar("PROJECT_NAME", session.ProjectID),
 		envVar("WORKSPACE_PATH", "/workspace"),
 		envVar("ARTIFACTS_DIR", "artifacts"),
@@ -534,6 +558,7 @@ func (r *SimpleKubeReconciler) buildEnv(ctx context.Context, session types.Sessi
 		envVar("CLAUDE_CODE_USE_VERTEX", useVertex),
 		envVarFromSecret("BOT_TOKEN", credSecretName, "api-token"),
 		envVar("AMBIENT_GRPC_URL", r.cfg.RunnerGRPCURL),
+		envVar("AMBIENT_GRPC_ENABLED", boolToStr(r.cfg.RunnerGRPCURL != "")),
 		envVar("AMBIENT_GRPC_USE_TLS", boolToStr(r.cfg.RunnerGRPCUseTLS)),
 		envVar("AGENT_ID", session.AgentID),
 		envVar("AMBIENT_GRPC_CA_CERT_FILE", "/etc/pki/ca-trust/extracted/pem/service-ca.crt"),
@@ -627,7 +652,7 @@ func (r *SimpleKubeReconciler) updateSessionPhaseWithNamespace(ctx context.Conte
 		return
 	}
 
-	sdk, err := r.factory.ForProject(session.ProjectID)
+	sdk, err := r.factory.ForProject(ctx, session.ProjectID)
 	if err != nil {
 		r.logger.Warn().Err(err).Str("session_id", session.ID).Msg("failed to get SDK client for phase update")
 		return
@@ -662,7 +687,7 @@ func (r *SimpleKubeReconciler) updateSessionPhase(ctx context.Context, session t
 		return
 	}
 
-	sdk, err := r.factory.ForProject(session.ProjectID)
+	sdk, err := r.factory.ForProject(ctx, session.ProjectID)
 	if err != nil {
 		r.logger.Warn().Err(err).Str("session_id", session.ID).Msg("failed to get SDK client for phase update")
 		return

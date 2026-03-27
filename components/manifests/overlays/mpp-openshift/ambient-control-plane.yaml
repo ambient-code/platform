@@ -21,8 +21,8 @@ spec:
           type: RuntimeDefault
       containers:
         - name: ambient-control-plane
-          image: quay.io/ambient_code/vteam_control_plane:latest
-          imagePullPolicy: IfNotPresent
+          image: quay.io/ambient_code/vteam_control_plane:mgt-001
+          imagePullPolicy: Always
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -49,6 +49,39 @@ spec:
               value: "ambient-code--config"
             - name: LOG_LEVEL
               value: "info"
+            - name: RUNNER_IMAGE
+              value: "quay.io/ambient_code/vteam_claude_runner:mgt-001"
+            - name: OIDC_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: ambient-api-server
+                  key: clientId
+            - name: OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: ambient-api-server
+                  key: clientSecret
+            - name: PROJECT_KUBE_TOKEN_FILE
+              value: "/var/run/secrets/project-kube/token"
+            - name: USE_VERTEX
+              value: "1"
+            - name: ANTHROPIC_VERTEX_PROJECT_ID
+              value: "ambient-code-platform"
+            - name: CLOUD_ML_REGION
+              value: "us-east5"
+            - name: GOOGLE_APPLICATION_CREDENTIALS
+              value: "/app/vertex/ambient-code-key.json"
+            - name: VERTEX_SECRET_NAME
+              value: "ambient-vertex"
+            - name: VERTEX_SECRET_NAMESPACE
+              value: "ambient-code--runtime-int"
+          volumeMounts:
+            - name: project-kube-token
+              mountPath: /var/run/secrets/project-kube
+              readOnly: true
+            - name: vertex-credentials
+              mountPath: /app/vertex
+              readOnly: true
           resources:
             requests:
               cpu: 50m
@@ -56,4 +89,11 @@ spec:
             limits:
               cpu: 200m
               memory: 256Mi
+      volumes:
+        - name: project-kube-token
+          secret:
+            secretName: tenantaccess-ambient-control-plane-token
+        - name: vertex-credentials
+          secret:
+            secretName: ambient-vertex
       restartPolicy: Always

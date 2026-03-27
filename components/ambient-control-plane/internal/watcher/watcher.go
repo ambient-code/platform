@@ -10,6 +10,7 @@ import (
 	"time"
 
 	pb "github.com/ambient-code/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1"
+	"github.com/ambient-code/platform/components/ambient-control-plane/internal/auth"
 	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
@@ -47,7 +48,7 @@ type ProjectSettingsEventHandler func(ctx context.Context, event ProjectSettings
 
 type WatchManager struct {
 	conn                    *grpc.ClientConn
-	token                   string
+	provider                auth.TokenProvider
 	sessionHandlers         []SessionEventHandler
 	projectHandlers         []ProjectEventHandler
 	projectSettingsHandlers []ProjectSettingsEventHandler
@@ -55,19 +56,23 @@ type WatchManager struct {
 	logger                  zerolog.Logger
 }
 
-func NewWatchManager(conn *grpc.ClientConn, token string, logger zerolog.Logger) *WatchManager {
+func NewWatchManager(conn *grpc.ClientConn, provider auth.TokenProvider, logger zerolog.Logger) *WatchManager {
 	return &WatchManager{
-		conn:   conn,
-		token:  token,
-		logger: logger.With().Str("component", "watcher").Logger(),
+		conn:     conn,
+		provider: provider,
+		logger:   logger.With().Str("component", "watcher").Logger(),
 	}
 }
 
-func (wm *WatchManager) authContext(ctx context.Context) context.Context {
-	if wm.token == "" {
-		return ctx
+func (wm *WatchManager) authContext(ctx context.Context) (context.Context, error) {
+	token, err := wm.provider.Token(ctx)
+	if err != nil {
+		return ctx, fmt.Errorf("resolving auth token: %w", err)
 	}
-	return metadata.NewOutgoingContext(ctx, metadata.Pairs("authorization", "Bearer "+wm.token))
+	if token == "" {
+		return ctx, nil
+	}
+	return metadata.NewOutgoingContext(ctx, metadata.Pairs("authorization", "Bearer "+token)), nil
 }
 
 func (wm *WatchManager) RegisterSessionHandler(handler SessionEventHandler) {
@@ -166,8 +171,12 @@ func (wm *WatchManager) watchOnce(ctx context.Context, resource string) error {
 }
 
 func (wm *WatchManager) watchSessions(ctx context.Context) error {
+	authCtx, err := wm.authContext(ctx)
+	if err != nil {
+		return err
+	}
 	client := pb.NewSessionServiceClient(wm.conn)
-	stream, err := client.WatchSessions(wm.authContext(ctx), &pb.WatchSessionsRequest{})
+	stream, err := client.WatchSessions(authCtx, &pb.WatchSessionsRequest{})
 	if err != nil {
 		return err
 	}
@@ -192,8 +201,12 @@ func (wm *WatchManager) watchSessions(ctx context.Context) error {
 }
 
 func (wm *WatchManager) watchProjects(ctx context.Context) error {
+	authCtx, err := wm.authContext(ctx)
+	if err != nil {
+		return err
+	}
 	client := pb.NewProjectServiceClient(wm.conn)
-	stream, err := client.WatchProjects(wm.authContext(ctx), &pb.WatchProjectsRequest{})
+	stream, err := client.WatchProjects(authCtx, &pb.WatchProjectsRequest{})
 	if err != nil {
 		return err
 	}
@@ -218,8 +231,12 @@ func (wm *WatchManager) watchProjects(ctx context.Context) error {
 }
 
 func (wm *WatchManager) watchProjectSettings(ctx context.Context) error {
+	authCtx, err := wm.authContext(ctx)
+	if err != nil {
+		return err
+	}
 	client := pb.NewProjectSettingsServiceClient(wm.conn)
-	stream, err := client.WatchProjectSettings(wm.authContext(ctx), &pb.WatchProjectSettingsRequest{})
+	stream, err := client.WatchProjectSettings(authCtx, &pb.WatchProjectSettingsRequest{})
 	if err != nil {
 		return err
 	}

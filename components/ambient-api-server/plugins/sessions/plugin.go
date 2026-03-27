@@ -2,6 +2,7 @@ package sessions
 
 import (
 	"net/http"
+	"os"
 	"sync"
 
 	pb "github.com/ambient-code/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1"
@@ -136,7 +137,8 @@ func init() {
 			}
 			return nil
 		}
-		pb.RegisterSessionServiceServer(grpcServer, NewSessionGRPCHandler(sessionService, genericService, brokerFunc, msgService))
+		serviceAccountName := os.Getenv("GRPC_SERVICE_ACCOUNT")
+		pb.RegisterSessionServiceServer(grpcServer, NewSessionGRPCHandler(sessionService, genericService, brokerFunc, msgService, serviceAccountName))
 	})
 
 	db.RegisterMigration(migration())
