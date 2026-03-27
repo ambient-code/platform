@@ -2,7 +2,7 @@ name: Build and Push Component Docker Images
 
 on:
   push:
-    branches: [main]
+    branches: [main, alpha]
     paths:
       - '.github/workflows/components-build-deploy.yml'
       - 'components/manifests/**'
@@ -13,7 +13,7 @@ on:
       - 'components/public-api/**'
       - 'components/ambient-api-server/**'
   pull_request:
-    branches: [main]
+    branches: [main, alpha]
     paths:
       - '.github/workflows/components-build-deploy.yml'
       - 'components/manifests/**'
@@ -47,7 +47,10 @@ jobs:
     outputs:
       build-matrix: ${{ steps.matrix.outputs.build-matrix }}
       merge-matrix: ${{ steps.matrix.outputs.merge-matrix }}
+      unchanged-matrix: ${{ steps.matrix.outputs.unchanged-matrix }}
       has-builds: ${{ steps.matrix.outputs.has-builds }}
+      has-unchanged: ${{ steps.matrix.outputs.has-unchanged }}
+      merge-base-sha: ${{ steps.merge-base.outputs.sha }}
       frontend: ${{ steps.filter.outputs.frontend }}
       backend: ${{ steps.filter.outputs.backend }}
       operator: ${{ steps.filter.outputs.operator }}
@@ -60,6 +63,16 @@ jobs:
         uses: actions/checkout@v6
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Determine merge base for PR
+        id: merge-base
+        if: github.event_name == 'pull_request'
+        run: |
+          BASE_REF="${{ github.event.pull_request.base.ref }}"
+          git fetch origin "${BASE_REF}" --depth=50
+          SHA=$(git merge-base "origin/${BASE_REF}" ${{ github.event.pull_request.head.sha }})
+          echo "sha=$SHA" >> $GITHUB_OUTPUT
+          echo "Merge base (against ${BASE_REF}): $SHA"
 
       - name: Check for component changes
         uses: dorny/paths-filter@v4
@@ -135,12 +148,21 @@ jobs:
           MERGE_MATRIX=$(echo "$FILTERED" | jq -c '[.[] | {name, image}]')
           HAS_BUILDS=$(echo "$FILTERED" | jq -c 'length > 0')
 
+          # Unchanged components = ALL minus FILTERED (for PR image aliasing)
+          UNCHANGED=$(jq -c -n --argjson all "$ALL_COMPONENTS" --argjson built "$FILTERED" \
+            '[$all[] | select(.name as $n | [$built[].name] | index($n) | not)] | [.[] | {name, image}]')
+          HAS_UNCHANGED=$(echo "$UNCHANGED" | jq -c 'length > 0')
+
           echo "build-matrix=$BUILD_MATRIX" >> $GITHUB_OUTPUT
           echo "merge-matrix=$MERGE_MATRIX" >> $GITHUB_OUTPUT
+          echo "unchanged-matrix=$UNCHANGED" >> $GITHUB_OUTPUT
           echo "has-builds=$HAS_BUILDS" >> $GITHUB_OUTPUT
+          echo "has-unchanged=$HAS_UNCHANGED" >> $GITHUB_OUTPUT
 
           echo "Components to build:"
           echo "$FILTERED" | jq -r '.[].name'
+          echo "Unchanged components:"
+          echo "$UNCHANGED" | jq -r '.[].name'
 
   build:
     needs: detect-changes
@@ -255,6 +277,39 @@ jobs:
             -t ${{ matrix.component.image }}:pr-${{ github.event.pull_request.number }} \
             ${{ matrix.component.image }}:pr-${{ github.event.pull_request.number }}-amd64 \
             ${{ matrix.component.image }}:pr-${{ github.event.pull_request.number }}-arm64
+
+  tag-unchanged-for-pr:
+    needs: [detect-changes]
+    if: github.event_name == 'pull_request' && needs.detect-changes.outputs.has-unchanged == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        component: ${{ fromJSON(needs.detect-changes.outputs.unchanged-matrix) }}
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Quay.io
+        uses: docker/login-action@v3
+        with:
+          registry: quay.io
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_PASSWORD }}
+
+      - name: Tag ${{ matrix.component.name }} from merge base as pr-${{ github.event.pull_request.number }}
+        run: |
+          MERGE_BASE="${{ needs.detect-changes.outputs.merge-base-sha }}"
+          PR_TAG="pr-${{ github.event.pull_request.number }}"
+          IMAGE="${{ matrix.component.image }}"
+
+          echo "Aliasing ${IMAGE}:${MERGE_BASE} → ${IMAGE}:${PR_TAG}"
+          docker buildx imagetools create \
+            -t "${IMAGE}:${PR_TAG}" \
+            "${IMAGE}:${MERGE_BASE}"
 
   update-rbac-and-crd:
     runs-on: ubuntu-latest
