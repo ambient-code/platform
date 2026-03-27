@@ -25,11 +25,6 @@ on:
       - 'components/ambient-api-server/**'
   workflow_dispatch:
     inputs:
-      force_build_all:
-        description: 'Force rebuild all components'
-        required: false
-        type: boolean
-        default: false
       components:
         description: 'Components to build (comma-separated: frontend,backend,operator,ambient-runner,state-sync,public-api,ambient-api-server) - leave empty for all'
         required: false
@@ -95,45 +90,14 @@ jobs:
             {"name":"ambient-api-server","context":"./components/ambient-api-server","image":"quay.io/ambient_code/vteam_api_server","dockerfile":"./components/ambient-api-server/Dockerfile"}
           ]'
 
-          FORCE_ALL="${{ github.event.inputs.force_build_all }}"
           SELECTED="${{ github.event.inputs.components }}"
-          EVENT="${{ github.event_name }}"
 
-          # Map component names to paths-filter output names
-          # (ambient-runner uses claude-runner filter)
-          declare -A FILTER_MAP=(
-            [frontend]="${{ steps.filter.outputs.frontend }}"
-            [backend]="${{ steps.filter.outputs.backend }}"
-            [operator]="${{ steps.filter.outputs.operator }}"
-            [ambient-runner]="${{ steps.filter.outputs.claude-runner }}"
-            [state-sync]="${{ steps.filter.outputs.state-sync }}"
-            [public-api]="${{ steps.filter.outputs.public-api }}"
-            [ambient-api-server]="${{ steps.filter.outputs.ambient-api-server }}"
-          )
-
-          if [ "$EVENT" == "pull_request" ]; then
-            # PR — build all components so every image gets a pr-{number} tag
-            FILTERED="$ALL_COMPONENTS"
-          elif [ "$EVENT" == "push" ] && [ "${{ github.ref }}" == "refs/heads/alpha" ]; then
-            # Alpha push — build all components so every image gets an alpha tag
-            FILTERED="$ALL_COMPONENTS"
-          elif [ "$FORCE_ALL" == "true" ]; then
-            # Force build all
-            FILTERED="$ALL_COMPONENTS"
-          elif [ "$EVENT" == "workflow_dispatch" ] && [ -z "$SELECTED" ] && [ "$FORCE_ALL" != "true" ]; then
-            # Dispatch with no selection and no force — build all
-            FILTERED="$ALL_COMPONENTS"
-          elif [ -n "$SELECTED" ]; then
+          if [ -n "$SELECTED" ]; then
             # Dispatch with specific components
             FILTERED=$(echo "$ALL_COMPONENTS" | jq -c --arg sel "$SELECTED" '[.[] | select(.name as $n | $sel | split(",") | map(gsub("^\\s+|\\s+$";"")) | index($n))]')
           else
-            # Push to main — only changed components
-            FILTERED="[]"
-            for comp in $(echo "$ALL_COMPONENTS" | jq -r '.[].name'); do
-              if [ "${FILTER_MAP[$comp]}" == "true" ]; then
-                FILTERED=$(echo "$FILTERED" | jq -c --arg name "$comp" --argjson all "$ALL_COMPONENTS" '. + [$all[] | select(.name == $name)]')
-              fi
-            done
+            # Build all components — cache makes unchanged components fast
+            FILTERED="$ALL_COMPONENTS"
           fi
 
           # Build matrix includes context/dockerfile; merge matrix only needs name/image
