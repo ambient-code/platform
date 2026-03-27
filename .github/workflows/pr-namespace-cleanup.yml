@@ -1,0 +1,49 @@
+name: PR Namespace Cleanup
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout main (trusted scripts only)
+        uses: actions/checkout@v6
+        with:
+          ref: main
+
+      - name: Derive instance ID
+        id: ctx
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          SAFE_BRANCH=$(echo "$HEAD_BRANCH" | tr '[:upper:]' '[:lower:]' \
+            | sed 's/[^a-z0-9]/-/g' | sed 's/-\+/-/g' | sed 's/^-\|-$//g' | cut -c1-64)
+
+          PR_LEN=${#PR_NUMBER}
+          SLUG_MAX=$(( 63 - 14 - 4 - PR_LEN ))
+          BRANCH_SLUG="${SAFE_BRANCH:0:$SLUG_MAX}"
+
+          INSTANCE_ID="pr-${PR_NUMBER}-${BRANCH_SLUG}"
+          echo "instance_id=${INSTANCE_ID}" >> $GITHUB_OUTPUT
+          echo "Cleaning up instance: ${INSTANCE_ID}"
+
+      - name: Install oc
+        uses: redhat-actions/oc-installer@v1
+        with:
+          oc_version: 'latest'
+
+      - name: Log in to OpenShift
+        run: |
+          oc login "${{ secrets.TEST_OPENSHIFT_SERVER }}" \
+            --token="${{ secrets.TEST_OPENSHIFT_TOKEN }}"
+
+      - name: Destroy namespace
+        run: |
+          bash components/pr-test/provision.sh destroy \
+            "${{ steps.ctx.outputs.instance_id }}"

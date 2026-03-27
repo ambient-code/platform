@@ -1,0 +1,183 @@
+name: PR E2E on OpenShift
+
+on:
+  workflow_run:
+    workflows: ["Build and Push Component Docker Images"]
+    types: [completed]
+
+concurrency:
+  group: pr-e2e-openshift-${{ github.event.workflow_run.pull_requests[0].number }}
+  cancel-in-progress: true
+
+jobs:
+  setup:
+    if: >
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.pull_requests[0] != null
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      pr_number: ${{ steps.ctx.outputs.pr_number }}
+      instance_id: ${{ steps.ctx.outputs.instance_id }}
+      namespace: ${{ steps.ctx.outputs.namespace }}
+      image_tag: ${{ steps.ctx.outputs.image_tag }}
+    steps:
+      - name: Derive PR context
+        id: ctx
+        env:
+          PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          # Sanitize branch name — allow only alphanumeric and separators
+          SAFE_BRANCH=$(echo "$HEAD_BRANCH" | tr '[:upper:]' '[:lower:]' \
+            | sed 's/[^a-z0-9]/-/g' | sed 's/-\+/-/g' | sed 's/^-\|-$//g' | cut -c1-64)
+
+          # Budget: "ambient-code--" (14) + "pr-${PR_NUMBER}-" (4+digits) + slug
+          # Max namespace = 63. Slug budget = 63 - 14 - 4 - ${#PR_NUMBER}
+          PR_LEN=${#PR_NUMBER}
+          SLUG_MAX=$(( 63 - 14 - 4 - PR_LEN ))
+          BRANCH_SLUG="${SAFE_BRANCH:0:$SLUG_MAX}"
+
+          INSTANCE_ID="pr-${PR_NUMBER}-${BRANCH_SLUG}"
+          NAMESPACE="ambient-code--${INSTANCE_ID}"
+          IMAGE_TAG="pr-${PR_NUMBER}-amd64"
+
+          echo "pr_number=${PR_NUMBER}"     >> $GITHUB_OUTPUT
+          echo "instance_id=${INSTANCE_ID}" >> $GITHUB_OUTPUT
+          echo "namespace=${NAMESPACE}"     >> $GITHUB_OUTPUT
+          echo "image_tag=${IMAGE_TAG}"     >> $GITHUB_OUTPUT
+
+          echo "PR:        ${PR_NUMBER}"
+          echo "Instance:  ${INSTANCE_ID}"
+          echo "Namespace: ${NAMESPACE}"
+          echo "Image tag: ${IMAGE_TAG}"
+          echo "NS length: ${#NAMESPACE}"
+
+  provision:
+    needs: setup
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout main (trusted scripts only)
+        uses: actions/checkout@v6
+        with:
+          ref: main
+
+      - name: Install oc
+        uses: redhat-actions/oc-installer@v1
+        with:
+          oc_version: 'latest'
+
+      - name: Log in to OpenShift
+        run: |
+          oc login "${{ secrets.TEST_OPENSHIFT_SERVER }}" \
+            --token="${{ secrets.TEST_OPENSHIFT_TOKEN }}"
+
+      - name: Provision namespace
+        env:
+          INSTANCE_ID: ${{ needs.setup.outputs.instance_id }}
+        run: bash components/pr-test/provision.sh create "$INSTANCE_ID"
+
+  install:
+    needs: [setup, provision]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      frontend_url: ${{ steps.install.outputs.frontend_url }}
+    steps:
+      - name: Checkout main (trusted scripts only)
+        uses: actions/checkout@v6
+        with:
+          ref: main
+
+      - name: Install oc
+        uses: redhat-actions/oc-installer@v1
+        with:
+          oc_version: 'latest'
+
+      - name: Log in to OpenShift
+        run: |
+          oc login "${{ secrets.TEST_OPENSHIFT_SERVER }}" \
+            --token="${{ secrets.TEST_OPENSHIFT_TOKEN }}"
+
+      - name: Install Ambient
+        id: install
+        env:
+          NAMESPACE: ${{ needs.setup.outputs.namespace }}
+          IMAGE_TAG: ${{ needs.setup.outputs.image_tag }}
+        run: bash components/pr-test/install.sh "$NAMESPACE" "$IMAGE_TAG"
+
+  e2e:
+    needs: [setup, install]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout main (trusted test harness only)
+        uses: actions/checkout@v6
+        with:
+          ref: main
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: e2e/package-lock.json
+
+      - name: Install e2e dependencies
+        run: cd e2e && npm ci
+
+      - name: Run Cypress E2E tests
+        env:
+          CYPRESS_BASE_URL: ${{ needs.install.outputs.frontend_url }}
+          CYPRESS_ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: cd e2e && npx cypress run --browser chrome
+
+      - name: Upload screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-screenshots-pr-${{ needs.setup.outputs.pr_number }}
+          path: e2e/cypress/screenshots
+          if-no-files-found: ignore
+
+      - name: Upload videos on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-videos-pr-${{ needs.setup.outputs.pr_number }}
+          path: e2e/cypress/videos
+          if-no-files-found: ignore
+
+  teardown:
+    needs: [setup, provision, e2e]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout main (trusted scripts only)
+        uses: actions/checkout@v6
+        with:
+          ref: main
+
+      - name: Install oc
+        uses: redhat-actions/oc-installer@v1
+        with:
+          oc_version: 'latest'
+
+      - name: Log in to OpenShift
+        run: |
+          oc login "${{ secrets.TEST_OPENSHIFT_SERVER }}" \
+            --token="${{ secrets.TEST_OPENSHIFT_TOKEN }}"
+
+      - name: Destroy namespace
+        env:
+          INSTANCE_ID: ${{ needs.setup.outputs.instance_id }}
+        run: bash components/pr-test/provision.sh destroy "$INSTANCE_ID"
