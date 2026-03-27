@@ -96,17 +96,31 @@ export function ImportSourceDialog({
 
   const handleImport = () => {
     const selected = scannedItems.filter((i) => selectedIds.has(i.id));
-    if (selected.length === 0) return;
 
-    const items: InstalledItem[] = selected.map((item) => ({
-      sourceUrl: gitUrl.trim(),
-      sourceBranch: branch.trim() || "main",
-      sourcePath: path.trim() || undefined,
-      itemId: item.id,
-      itemType: importAsWorkflow ? "workflow" : item.type,
-      itemName: item.name,
-      filePath: item.filePath,
-    }));
+    let items: InstalledItem[];
+    if (importAsWorkflow && selected.length === 0) {
+      items = [{
+        sourceUrl: gitUrl.trim(),
+        sourceBranch: branch.trim() || "main",
+        sourcePath: path.trim() || undefined,
+        itemId: scanMutation.data?.workflowName || "workflow",
+        itemType: "workflow",
+        itemName: scanMutation.data?.workflowName || gitUrl.trim().split("/").pop()?.replace(".git", "") || "workflow",
+        filePath: path.trim() || ".",
+      }];
+    } else if (selected.length === 0) {
+      return;
+    } else {
+      items = selected.map((item) => ({
+        sourceUrl: gitUrl.trim(),
+        sourceBranch: branch.trim() || "main",
+        sourcePath: path.trim() || undefined,
+        itemId: item.id,
+        itemType: importAsWorkflow ? "workflow" : item.type,
+        itemName: item.name,
+        filePath: item.filePath,
+      }));
+    }
 
     installMutation.mutate(
       { projectName, items },
@@ -304,7 +318,7 @@ export function ImportSourceDialog({
           <Button
             onClick={handleImport}
             disabled={
-              selectedIds.size === 0 ||
+              (selectedIds.size === 0 && !importAsWorkflow) ||
               installMutation.isPending ||
               !scanMutation.isSuccess
             }
@@ -315,7 +329,9 @@ export function ImportSourceDialog({
                 Importing...
               </>
             ) : (
-              `Import ${selectedIds.size} Item${selectedIds.size !== 1 ? "s" : ""}`
+              importAsWorkflow && selectedIds.size === 0
+                ? "Import as Workflow"
+                : `Import ${selectedIds.size} Item${selectedIds.size !== 1 ? "s" : ""}`
             )}
           </Button>
         </DialogFooter>
