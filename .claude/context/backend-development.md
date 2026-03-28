@@ -1,6 +1,8 @@
 # Backend Development Context
 
-**When to load:** Working on Go backend API, handlers, or Kubernetes integration
+**When to load:** Working on `components/backend/` — the original Gin/K8s backend (V1). This is NOT the ambient-api-server (rh-trex-ai plugin architecture) and NOT the operator/control-plane. See `api-server-development.md` for the API server and `operator-development.md` for the Kubernetes operator.
+
+**V1 backend scope:** Manages AgenticSession custom resources directly via Kubernetes API, proxies AG-UI websocket connections to runner pods, owns multi-tenant project isolation via K8s namespaces. It is NOT being replaced — new features for the Ambient data model go to the API server, but session/runner management remains here.
 
 ## Quick Reference
 

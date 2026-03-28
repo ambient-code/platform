@@ -18,6 +18,10 @@ logger = logging.getLogger(__name__)
 # Prompt constants
 # ---------------------------------------------------------------------------
 
+DEFAULT_AGENT_PREAMBLE = os.getenv(
+    "AGENT_PREAMBLE", "You are a helpful AI agent. Be kind."
+)
+
 WORKSPACE_STRUCTURE_HEADER = "# Workspace Structure\n\n"
 
 WORKSPACE_FIXED_PATHS_PROMPT = (

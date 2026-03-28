@@ -88,3 +88,6 @@ images:
 - name: quay.io/ambient_code/vteam_state_sync:latest
   newName: quay.io/ambient_code/vteam_state_sync
   newTag: latest
+- name: quay.io/ambient_code/vteam_control_plane:latest
+  newName: quay.io/ambient_code/vteam_control_plane
+  newTag: latest

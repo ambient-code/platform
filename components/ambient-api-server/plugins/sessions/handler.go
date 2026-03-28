@@ -1,7 +1,11 @@
 package sessions
 
 import (
+	"fmt"
+	"io"
+	"net"
 	"net/http"
+	"time"
 
 	"github.com/golang/glog"
 	"github.com/gorilla/mux"
@@ -14,6 +18,13 @@ import (
 	"github.com/openshift-online/rh-trex-ai/pkg/handlers"
 	"github.com/openshift-online/rh-trex-ai/pkg/services"
 )
+
+var EventsHTTPClient = &http.Client{
+	Transport: &http.Transport{
+		DialContext:           (&net.Dialer{Timeout: 5 * time.Second}).DialContext,
+		ResponseHeaderTimeout: 5 * time.Second,
+	},
+}
 
 var _ handlers.RestHandler = sessionHandler{}
 
@@ -266,4 +277,57 @@ func (h sessionHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 	handlers.HandleDelete(w, r, cfg, http.StatusNoContent)
+}
+
+func (h sessionHandler) StreamRunnerEvents(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	id := mux.Vars(r)["id"]
+
+	session, err := h.session.Get(ctx, id)
+	if err != nil {
+		http.Error(w, "session not found", http.StatusNotFound)
+		return
+	}
+
+	if session.KubeCrName == nil || session.KubeNamespace == nil {
+		http.Error(w, "session has no associated runner pod", http.StatusNotFound)
+		return
+	}
+
+	runnerURL := fmt.Sprintf(
+		"http://session-%s.%s.svc.cluster.local:8001/events/%s",
+		*session.KubeCrName, *session.KubeNamespace, *session.KubeCrName,
+	)
+
+	req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, runnerURL, nil)
+	if reqErr != nil {
+		glog.Errorf("StreamRunnerEvents: build request for session %s: %v", id, reqErr)
+		http.Error(w, "failed to build upstream request", http.StatusInternalServerError)
+		return
+	}
+	req.Header.Set("Accept", "text/event-stream")
+
+	resp, doErr := EventsHTTPClient.Do(req)
+	if doErr != nil {
+		glog.Warningf("StreamRunnerEvents: upstream unreachable for session %s: %v", id, doErr)
+		http.Error(w, "runner not reachable", http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+	if f, ok := w.(http.Flusher); ok {
+		f.Flush()
+	}
+
+	if _, copyErr := io.Copy(w, resp.Body); copyErr != nil {
+		glog.V(4).Infof("StreamRunnerEvents: stream ended for session %s: %v", id, copyErr)
+	}
+	if f, ok := w.(http.Flusher); ok {
+		f.Flush()
+	}
 }

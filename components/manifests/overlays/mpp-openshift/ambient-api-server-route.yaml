@@ -1,0 +1,18 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: ambient-api-server
+  labels:
+    app: ambient-api-server
+    component: api
+    shard: internal
+spec:
+  host: ambient-api-server-ambient-code--runtime-int.internal-router-shard.mpp-w2-preprod.cfln.p1.openshiftapps.com
+  to:
+    kind: Service
+    name: ambient-api-server
+  port:
+    targetPort: api
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

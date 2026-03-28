@@ -9,6 +9,7 @@ Owns the entire Claude session lifecycle:
 - Interrupt and graceful shutdown
 """
 
+import asyncio
 import logging
 import os
 import time
@@ -61,6 +62,9 @@ class ClaudeBridge(PlatformBridge):
         self._saved_session_ids: dict[str, str] = {}
         # Per-thread halt tracking to avoid race conditions on shared adapter
         self._halted_by_thread: dict[str, bool] = {}
+        # gRPC transport — started lazily in _setup_platform
+        self._grpc_listener: Any = None
+        self._active_streams: dict[str, asyncio.Queue] = {}
 
     # ------------------------------------------------------------------
     # PlatformBridge interface
@@ -370,8 +374,38 @@ class ClaudeBridge(PlatformBridge):
     # Lifecycle methods
     # ------------------------------------------------------------------
 
+    async def start_grpc_listener(self, grpc_url: str) -> None:
+        """Start the gRPC session listener for this bridge.
+
+        Separated from _setup_platform so it can be called after platform
+        setup completes, with a bounded timeout for readiness. Only valid
+        when AMBIENT_GRPC_ENABLED=true and AMBIENT_GRPC_URL are both set.
+        """
+        if self._context is None:
+            raise RuntimeError("Cannot start gRPC listener: context not set")
+        if self._grpc_listener is not None:
+            logger.warning("gRPC listener already started — skipping duplicate start")
+            return
+
+        from ambient_runner.bridges.claude.grpc_transport import GRPCSessionListener
+
+        session_id = self._context.session_id
+        self._grpc_listener = GRPCSessionListener(
+            bridge=self,
+            session_id=session_id,
+            grpc_url=grpc_url,
+        )
+        self._grpc_listener.start()
+        logger.info(
+            "gRPC listener started: session=%s url=%s",
+            session_id,
+            grpc_url,
+        )
+
     async def shutdown(self) -> None:
         """Graceful shutdown: persist sessions, finalise tracing."""
+        if self._grpc_listener is not None:
+            await self._grpc_listener.stop()
         if self._session_manager:
             await self._session_manager.shutdown()
         if self._obs:

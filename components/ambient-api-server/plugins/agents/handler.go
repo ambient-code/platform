@@ -27,7 +27,7 @@ func NewAgentHandler(agent AgentService, generic services.GenericService) *agent
 }
 
 func (h agentHandler) Create(w http.ResponseWriter, r *http.Request) {
-	var agent openapi.Agent
+	var agent openapi.ProjectAgent
 	cfg := &handlers.HandlerConfig{
 		Body: &agent,
 		Validators: []handlers.Validate{
@@ -35,7 +35,9 @@ func (h agentHandler) Create(w http.ResponseWriter, r *http.Request) {
 		},
 		Action: func() (interface{}, *errors.ServiceError) {
 			ctx := r.Context()
+			projectID := mux.Vars(r)["id"]
 			agentModel := ConvertAgent(agent)
+			agentModel.ProjectId = projectID
 			agentModel, err := h.agent.Create(ctx, agentModel)
 			if err != nil {
 				return nil, err
@@ -49,63 +51,30 @@ func (h agentHandler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h agentHandler) Patch(w http.ResponseWriter, r *http.Request) {
-	var patch openapi.AgentPatchRequest
+	var patch openapi.ProjectAgentPatchRequest
 
 	cfg := &handlers.HandlerConfig{
 		Body:       &patch,
 		Validators: []handlers.Validate{},
 		Action: func() (interface{}, *errors.ServiceError) {
 			ctx := r.Context()
-			id := mux.Vars(r)["id"]
+			id := mux.Vars(r)["pa_id"]
 			found, err := h.agent.Get(ctx, id)
 			if err != nil {
 				return nil, err
 			}
 
-			if patch.ParentAgentId != nil {
-				found.ParentAgentId = patch.ParentAgentId
-			}
-			if patch.DisplayName != nil {
-				found.DisplayName = patch.DisplayName
-			}
-			if patch.Description != nil {
-				found.Description = patch.Description
+			if patch.Name != nil {
+				found.Name = *patch.Name
 			}
 			if patch.Prompt != nil {
 				found.Prompt = patch.Prompt
-			}
-			if patch.RepoUrl != nil {
-				found.RepoUrl = patch.RepoUrl
-			}
-			if patch.WorkflowId != nil {
-				found.WorkflowId = patch.WorkflowId
-			}
-			if patch.LlmModel != nil {
-				found.LlmModel = *patch.LlmModel
-			}
-			if patch.LlmTemperature != nil {
-				found.LlmTemperature = *patch.LlmTemperature
-			}
-			if patch.LlmMaxTokens != nil {
-				found.LlmMaxTokens = *patch.LlmMaxTokens
-			}
-			if patch.BotAccountName != nil {
-				found.BotAccountName = patch.BotAccountName
-			}
-			if patch.ResourceOverrides != nil {
-				found.ResourceOverrides = patch.ResourceOverrides
-			}
-			if patch.EnvironmentVariables != nil {
-				found.EnvironmentVariables = patch.EnvironmentVariables
 			}
 			if patch.Labels != nil {
 				found.Labels = patch.Labels
 			}
 			if patch.Annotations != nil {
 				found.Annotations = patch.Annotations
-			}
-			if patch.CurrentSessionId != nil {
-				found.CurrentSessionId = patch.CurrentSessionId
 			}
 
 			agentModel, err := h.agent.Replace(ctx, found)
@@ -124,19 +93,27 @@ func (h agentHandler) List(w http.ResponseWriter, r *http.Request) {
 	cfg := &handlers.HandlerConfig{
 		Action: func() (interface{}, *errors.ServiceError) {
 			ctx := r.Context()
+			projectID := mux.Vars(r)["id"]
 
 			listArgs := services.NewListArguments(r.URL.Query())
+			projectFilter := "project_id = '" + projectID + "'"
+			if listArgs.Search != "" {
+				listArgs.Search = projectFilter + " and (" + listArgs.Search + ")"
+			} else {
+				listArgs.Search = projectFilter
+			}
+
 			var agents []Agent
 			paging, err := h.generic.List(ctx, "id", listArgs, &agents)
 			if err != nil {
 				return nil, err
 			}
-			agentList := openapi.AgentList{
-				Kind:  "AgentList",
+			agentList := openapi.ProjectAgentList{
+				Kind:  "ProjectAgentList",
 				Page:  int32(paging.Page),
 				Size:  int32(paging.Size),
 				Total: int32(paging.Total),
-				Items: []openapi.Agent{},
+				Items: []openapi.ProjectAgent{},
 			}
 
 			for _, agent := range agents {
@@ -160,7 +137,7 @@ func (h agentHandler) List(w http.ResponseWriter, r *http.Request) {
 func (h agentHandler) Get(w http.ResponseWriter, r *http.Request) {
 	cfg := &handlers.HandlerConfig{
 		Action: func() (interface{}, *errors.ServiceError) {
-			id := mux.Vars(r)["id"]
+			id := mux.Vars(r)["pa_id"]
 			ctx := r.Context()
 			agent, err := h.agent.Get(ctx, id)
 			if err != nil {
@@ -177,7 +154,7 @@ func (h agentHandler) Get(w http.ResponseWriter, r *http.Request) {
 func (h agentHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	cfg := &handlers.HandlerConfig{
 		Action: func() (interface{}, *errors.ServiceError) {
-			id := mux.Vars(r)["id"]
+			id := mux.Vars(r)["pa_id"]
 			ctx := r.Context()
 			err := h.agent.Delete(ctx, id)
 			if err != nil {

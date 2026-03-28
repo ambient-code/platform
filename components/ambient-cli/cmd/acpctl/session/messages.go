@@ -88,9 +88,44 @@ func extractField(payload, field string) string {
 	return ""
 }
 
+func extractAGUIText(payload string) string {
+	var envelope struct {
+		Messages []struct {
+			Role    string `json:"role"`
+			Content any    `json:"content"`
+		} `json:"messages"`
+	}
+	if err := json.Unmarshal([]byte(payload), &envelope); err != nil || len(envelope.Messages) == 0 {
+		return ""
+	}
+	var parts []string
+	for _, msg := range envelope.Messages {
+		switch v := msg.Content.(type) {
+		case string:
+			if t := strings.TrimSpace(v); t != "" {
+				parts = append(parts, fmt.Sprintf("[%s] %s", msg.Role, t))
+			}
+		case []any:
+			for _, item := range v {
+				if block, ok := item.(map[string]any); ok {
+					if text, ok := block["text"].(string); ok {
+						if t := strings.TrimSpace(text); t != "" {
+							parts = append(parts, fmt.Sprintf("[%s] %s", msg.Role, t))
+						}
+					}
+				}
+			}
+		}
+	}
+	return strings.Join(parts, "\n")
+}
+
 func displayPayload(eventType, payload string) string {
 	switch eventType {
-	case "user":
+	case "user", "assistant":
+		if text := extractAGUIText(payload); text != "" {
+			return text
+		}
 		return payload
 	case "TEXT_MESSAGE_CONTENT", "REASONING_MESSAGE_CONTENT", "TOOL_CALL_ARGS":
 		if d := extractField(payload, "delta"); d != "" {
@@ -168,6 +203,26 @@ func displayMessagesSnapshot(payload string) string {
 	return fmt.Sprintf("(%d messages, no text content)", len(msgs))
 }
 
+func displayAssistantPayload(payload string) string {
+	var data struct {
+		Status   string `json:"status"`
+		Messages []struct {
+			Role    string `json:"role"`
+			Content string `json:"content"`
+		} `json:"messages"`
+	}
+	if err := json.Unmarshal([]byte(payload), &data); err != nil {
+		return fmt.Sprintf("(%d bytes)", len(payload))
+	}
+	for i := len(data.Messages) - 1; i >= 0; i-- {
+		m := data.Messages[i]
+		if m.Role == "assistant" && m.Content != "" {
+			return m.Content
+		}
+	}
+	return fmt.Sprintf("[%s]", data.Status)
+}
+
 func listMessages(ctx context.Context, client *sdkclient.Client, printer *output.Printer, sessionID string) error {
 	msgs, err := client.Sessions().ListMessages(ctx, sessionID, msgArgs.afterSeq)
 	if err != nil {
@@ -230,21 +285,35 @@ func streamMessages(cmd *cobra.Command, client *sdkclient.Client, sessionID stri
 
 	fmt.Fprintf(cmd.OutOrStdout(), "Streaming messages for session %s (Ctrl+C to stop)...\n\n", sessionID)
 
-	msgs, stop, err := client.Sessions().WatchMessages(ctx, sessionID, msgArgs.afterSeq)
-	if err != nil {
-		return fmt.Errorf("watch messages: %w", err)
-	}
-	defer stop()
+	afterSeq := msgArgs.afterSeq
+	pollInterval := 2 * time.Second
 
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
-		case msg, ok := <-msgs:
-			if !ok {
+		default:
+		}
+
+		msgs, err := client.Sessions().ListMessages(ctx, sessionID, afterSeq)
+		if err != nil {
+			if ctx.Err() != nil {
 				return nil
 			}
-			printStreamLine(cmd, *msg)
+			return fmt.Errorf("poll messages: %w", err)
+		}
+
+		for _, msg := range msgs {
+			printStreamLine(cmd, msg)
+			if msg.Seq > afterSeq {
+				afterSeq = msg.Seq
+			}
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(pollInterval):
 		}
 	}
 }

@@ -72,8 +72,8 @@ export function getK8sResourceStatusColor(status: string): string {
     return STATUS_COLORS.success;
   }
 
-  // Error states
-  if (lower.includes('failed') || lower.includes('error')) {
+  // Error states — includes Init:* (ImagePullBackOff, ErrImagePull, CrashLoopBackOff, etc.)
+  if (lower.includes('failed') || lower.includes('error') || lower.startsWith('init:')) {
     return STATUS_COLORS.error;
   }
 
@@ -92,6 +92,6 @@ export function getK8sResourceStatusColor(status: string): string {
     return STATUS_COLORS.warning;
   }
 
-  // Default
-  return STATUS_COLORS.default;
+  // Default — anything unrecognised is not healthy
+  return STATUS_COLORS.error;
 }

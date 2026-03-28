@@ -10,6 +10,7 @@ type Project struct {
 	Name        string  `json:"name" gorm:"uniqueIndex;not null"`
 	DisplayName *string `json:"display_name"`
 	Description *string `json:"description"`
+	Prompt      *string `json:"prompt" gorm:"type:text"`
 	Labels      *string `json:"labels"`
 	Annotations *string `json:"annotations"`
 	Status      *string `json:"status"`

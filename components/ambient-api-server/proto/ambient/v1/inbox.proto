@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package ambient.v1;
+
+option go_package = "github.com/ambient-code/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1;ambient_v1";
+
+import "google/protobuf/timestamp.proto";
+
+message InboxMessage {
+  string id = 1;
+  string agent_id = 2;
+  optional string from_agent_id = 3;
+  optional string from_name = 4;
+  string body = 5;
+  optional bool read = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
+}
+
+message WatchInboxMessagesRequest {
+  string agent_id = 1;
+}
+
+service InboxService {
+  rpc WatchInboxMessages(WatchInboxMessagesRequest) returns (stream InboxMessage);
+}

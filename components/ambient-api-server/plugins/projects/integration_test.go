@@ -50,7 +50,6 @@ func TestProjectPost(t *testing.T) {
 
 	projectInput := openapi.Project{
 		Name:        "test-project",
-		DisplayName: openapi.PtrString("Test Project"),
 		Description: openapi.PtrString("test-description"),
 		Status:      openapi.PtrString("active"),
 	}

@@ -21,6 +21,7 @@ from pydantic import BaseModel, ConfigDict
 
 class _ReasoningBase(BaseModel):
     """Base with camelCase serialization to match AG-UI wire format."""
+
     model_config = ConfigDict(populate_by_name=True)
 
     def model_dump(self, **kwargs):

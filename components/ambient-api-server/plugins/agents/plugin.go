@@ -4,7 +4,6 @@ import (
 	"net/http"
 
 	pkgrbac "github.com/ambient-code/platform/components/ambient-api-server/plugins/rbac"
-	"github.com/ambient-code/platform/components/ambient-api-server/plugins/sessions"
 	"github.com/gorilla/mux"
 	"github.com/openshift-online/rh-trex-ai/pkg/api"
 	"github.com/openshift-online/rh-trex-ai/pkg/api/presenters"
@@ -16,6 +15,9 @@ import (
 	pkgserver "github.com/openshift-online/rh-trex-ai/pkg/server"
 	"github.com/openshift-online/rh-trex-ai/plugins/events"
 	"github.com/openshift-online/rh-trex-ai/plugins/generic"
+
+	"github.com/ambient-code/platform/components/ambient-api-server/plugins/inbox"
+	"github.com/ambient-code/platform/components/ambient-api-server/plugins/sessions"
 )
 
 type ServiceLocator func() AgentService
@@ -41,6 +43,12 @@ func Service(s *environments.Services) AgentService {
 	return nil
 }
 
+func notImplemented(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusNotImplemented)
+	_, _ = w.Write([]byte(`{"code":"NOT_IMPLEMENTED","reason":"not yet implemented"}`))
+}
+
 func init() {
 	registry.RegisterService("Agents", func(env interface{}) interface{} {
 		return NewServiceLocator(env.(*environments.Env))
@@ -53,20 +61,21 @@ func init() {
 		}
 		agentSvc := Service(envServices)
 		agentHandler := NewAgentHandler(agentSvc, generic.Service(envServices))
-		igniteHandler := NewIgniteHandler(agentSvc, sessions.Service(envServices), sessions.MessageSvc(envServices))
+		igniteHandler := NewIgniteHandler(agentSvc, inbox.Service(envServices), sessions.Service(envServices), sessions.MessageSvc(envServices))
 		subHandler := NewAgentSubresourceHandler(agentSvc, sessions.Service(envServices), generic.Service(envServices))
 
-		agentsRouter := apiV1Router.PathPrefix("/agents").Subrouter()
-		agentsRouter.HandleFunc("", agentHandler.List).Methods(http.MethodGet)
-		agentsRouter.HandleFunc("/{id}", agentHandler.Get).Methods(http.MethodGet)
-		agentsRouter.HandleFunc("", agentHandler.Create).Methods(http.MethodPost)
-		agentsRouter.HandleFunc("/{id}", agentHandler.Patch).Methods(http.MethodPatch)
-		agentsRouter.HandleFunc("/{id}", agentHandler.Delete).Methods(http.MethodDelete)
-		agentsRouter.HandleFunc("/{id}/ignite", igniteHandler.Ignite).Methods(http.MethodPost)
-		agentsRouter.HandleFunc("/{id}/ignition", igniteHandler.IgnitionPreview).Methods(http.MethodGet)
-		agentsRouter.HandleFunc("/{id}/sessions", subHandler.ListSessions).Methods(http.MethodGet)
-		agentsRouter.Use(authMiddleware.AuthenticateAccountJWT)
-		agentsRouter.Use(authzMiddleware.AuthorizeApi)
+		projectsRouter := apiV1Router.PathPrefix("/projects").Subrouter()
+		projectsRouter.HandleFunc("/{id}/agents", agentHandler.List).Methods(http.MethodGet)
+		projectsRouter.HandleFunc("/{id}/agents", agentHandler.Create).Methods(http.MethodPost)
+		projectsRouter.HandleFunc("/{id}/agents/{pa_id}", agentHandler.Get).Methods(http.MethodGet)
+		projectsRouter.HandleFunc("/{id}/agents/{pa_id}", agentHandler.Patch).Methods(http.MethodPatch)
+		projectsRouter.HandleFunc("/{id}/agents/{pa_id}", agentHandler.Delete).Methods(http.MethodDelete)
+		projectsRouter.HandleFunc("/{id}/agents/{pa_id}/ignite", igniteHandler.Ignite).Methods(http.MethodPost)
+		projectsRouter.HandleFunc("/{id}/agents/{pa_id}/ignition", igniteHandler.IgnitionPreview).Methods(http.MethodGet)
+		projectsRouter.HandleFunc("/{id}/agents/{pa_id}/sessions", subHandler.ListSessions).Methods(http.MethodGet)
+		projectsRouter.HandleFunc("/{id}/home", notImplemented).Methods(http.MethodGet)
+		projectsRouter.Use(authMiddleware.AuthenticateAccountJWT)
+		projectsRouter.Use(authzMiddleware.AuthorizeApi)
 	})
 
 	pkgserver.RegisterController("Agents", func(manager *controllers.KindControllerManager, services pkgserver.ServicesInterface) {

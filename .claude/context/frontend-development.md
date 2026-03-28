@@ -155,11 +155,57 @@ export function useCreateSession(projectName: string) {
 }
 ```
 
+## Session Stream — `use-agui-stream.ts`
+
+The canonical hook for consuming AG-UI protocol events from a running session. Do not implement a new SSE consumer — always use this hook.
+
+**File:** `src/hooks/use-agui-stream.ts`
+
+**What it does:**
+- Opens an `EventSource` to `/api/projects/{project}/agentic-sessions/{session}/agui/events`
+- Processes AG-UI events via `processAGUIEvent` (`hooks/agui/event-handlers.ts`)
+- Implements exponential backoff reconnect (1s base, 30s max)
+- Manages optimistic user message state on `sendMessage`
+- Supports `interrupt()` to stop a running Claude session
+
+**Return shape:**
+```ts
+{
+  state,          // Full stream state: status, messages, currentMessage, etc.
+  connect,        // Open SSE connection (call with optional runId)
+  disconnect,     // Close connection, reset to idle
+  sendMessage,    // POST to /agui/run + optimistic state update
+  interrupt,      // POST to /agui/interrupt with current runId
+  isConnected,    // state.status === 'connected'
+  isStreaming,    // currentMessage / currentToolCall / currentReasoning active
+  isRunActive,    // bool — run in progress
+}
+```
+
+**Related files:**
+- `hooks/agui/event-handlers.ts` — `processAGUIEvent`, `EventHandlerCallbacks`
+- `hooks/agui/types.ts` — `initialState`, `UseAGUIStreamOptions`, `UseAGUIStreamReturn`
+- `lib/frontend-tools.ts` — `frontendTools`, `executeFrontendTool`
+
+**Usage pattern:**
+```tsx
+const { state, connect, sendMessage, isStreaming } = useAGUIStream({
+  project: params.projectName,
+  session: params.sessionName,
+  autoConnect: true,
+})
+```
+
+**Rule:** Never open a raw `EventSource` or manual `fetch` to an SSE endpoint in a component. All AG-UI streaming goes through this hook. If you need a new streaming capability, extend `event-handlers.ts`.
+
+---
+
 ## Pre-Commit Checklist
 
 - [ ] Zero `any` types (or justified with eslint-disable)
 - [ ] All UI uses Shadcn components
 - [ ] All data operations use React Query
+- [ ] Session stream uses `use-agui-stream.ts` — no raw `EventSource` in components
 - [ ] Components under 200 lines
 - [ ] Single-use components colocated
 - [ ] All buttons have loading states
@@ -175,9 +221,5 @@ export function useCreateSession(projectName: string) {
 - `src/components/ui/` - Shadcn UI components
 - `src/services/queries/` - React Query hooks
 - `src/services/api/` - API client layer
-
-## Recent Issues & Learnings
-
-- **2024-11-18:** Migrated all data fetching to React Query - no more manual fetch calls
-- **2024-11-15:** Enforced Shadcn UI only - removed custom button components
-- **2024-11-10:** Added breadcrumb pattern for nested pages
+- `src/hooks/use-agui-stream.ts` - Session AG-UI stream hook
+- `src/hooks/agui/event-handlers.ts` - AG-UI event processing logic
