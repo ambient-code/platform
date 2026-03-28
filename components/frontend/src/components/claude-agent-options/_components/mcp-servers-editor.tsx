@@ -83,7 +83,7 @@ export function McpServersEditor({ value, onChange }: { value: Record<string, Mc
                 <SelectItem value="http">HTTP</SelectItem>
               </SelectContent>
             </Select>
-            <Button type="button" variant="ghost" size="icon" className="ml-auto h-8 w-8" onClick={() => removeServer(i)}>
+            <Button type="button" variant="ghost" size="icon" className="ml-auto h-8 w-8" aria-label={`Remove ${name}`} onClick={() => removeServer(i)}>
               <Trash2 className="h-3 w-3" />
             </Button>
           </div>

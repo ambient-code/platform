@@ -138,7 +138,7 @@ class TestSetupGeminiCliAuth:
         monkeypatch.delenv("GEMINI_API_KEY", raising=False)
         monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
 
-ctx = _make_context(
+        ctx = _make_context(
             USE_VERTEX="1",
             GOOGLE_APPLICATION_CREDENTIALS=str(creds_file),
         )
@@ -156,8 +156,6 @@ ctx = _make_context(
         monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", str(creds_file))
         monkeypatch.delenv("GEMINI_USE_VERTEX", raising=False)
 
-        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
-            cred_path = f.name
         ctx = _make_context(
             USE_VERTEX="1",
             GEMINI_API_KEY="should-be-ignored",
@@ -223,10 +221,9 @@ ctx = _make_context(
             cred_path = f.name
         ctx = _make_context(
             USE_VERTEX="1",
-            GOOGLE_APPLICATION_CREDENTIALS=str(creds_file),
+            GOOGLE_APPLICATION_CREDENTIALS=cred_path,
             GOOGLE_CLOUD_PROJECT="my-project",
             GOOGLE_CLOUD_LOCATION="us-central1",
-            GOOGLE_APPLICATION_CREDENTIALS=cred_path,
         )
 
         import logging

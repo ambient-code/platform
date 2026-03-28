@@ -50,6 +50,7 @@ export function StringListEditor({
             variant="ghost"
             size="icon"
             className="h-8 w-8 shrink-0"
+            aria-label={`Remove item ${i + 1}`}
             onClick={() => removeItem(i)}
           >
             <Trash2 className="h-3 w-3" />

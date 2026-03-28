@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
   FormControl,
@@ -23,6 +23,14 @@ export function OutputFormatField({
   const [rawJson, setRawJson] = useState(value ? JSON.stringify(value, null, 2) : "");
   const [jsonError, setJsonError] = useState<string | null>(null);
 
+  // Sync rawJson when value changes externally (e.g. form reset)
+  useEffect(() => {
+    const external = value ? JSON.stringify(value, null, 2) : "";
+    if (external !== rawJson) setRawJson(external);
+    // Only react to value changes, not rawJson
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
+
   const handleChange = (text: string) => {
     setRawJson(text);
     if (!text.trim()) {
@@ -35,6 +43,7 @@ export function OutputFormatField({
       setJsonError(null);
     } catch (e) {
       setJsonError(e instanceof Error ? e.message : "Invalid JSON");
+      onChange(undefined);
     }
   };
 
