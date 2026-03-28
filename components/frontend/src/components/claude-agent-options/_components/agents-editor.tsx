@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import type { z } from "zod";
 
@@ -21,16 +22,35 @@ import { StringListEditor } from "./string-list-editor";
 type AgentDef = z.infer<typeof agentDefinitionSchema>;
 
 export function AgentsEditor({ value, onChange }: { value: Record<string, AgentDef>; onChange: (v: Record<string, AgentDef>) => void }) {
+  const nextId = useRef(0);
+  const ids = useRef<number[]>([]);
+
   const entries = Object.entries(value);
+
+  // Sync IDs with entries length (handles external resets)
+  while (ids.current.length < entries.length) {
+    ids.current.push(nextId.current++);
+  }
+  ids.current.length = entries.length;
+
   const addAgent = () => {
     let i = 1;
     while (`agent-${i}` in value) i++;
+    ids.current.push(nextId.current++);
     onChange({ ...value, [`agent-${i}`]: { description: "", prompt: "" } });
   };
-  const removeAgent = (name: string) => { const next = { ...value }; delete next[name]; onChange(next); };
-  const updateAgentName = (oldName: string, newName: string) => {
+  const removeAgent = (index: number) => {
+    const name = entries[index][0];
+    ids.current.splice(index, 1);
+    const next = { ...value };
+    delete next[name];
+    onChange(next);
+  };
+  const updateAgentName = (index: number, newName: string) => {
     const next: Record<string, AgentDef> = {};
-    for (const [k, v] of Object.entries(value)) next[k === oldName ? newName : k] = v;
+    for (let i = 0; i < entries.length; i++) {
+      next[i === index ? newName : entries[i][0]] = entries[i][1];
+    }
     onChange(next);
   };
   const updateAgent = (name: string, agent: AgentDef) => onChange({ ...value, [name]: agent });
@@ -38,10 +58,10 @@ export function AgentsEditor({ value, onChange }: { value: Record<string, AgentD
   return (
     <div className="space-y-3">
       <p className="text-xs text-muted-foreground">Define custom sub-agents with their own prompt, tools, and model.</p>
-      {entries.map(([name, agent]) => (
-        <div key={name} className="border rounded-md p-3 space-y-3">
+      {entries.map(([name, agent], i) => (
+        <div key={ids.current[i]} className="border rounded-md p-3 space-y-3">
           <div className="flex items-center gap-2">
-            <Input className="font-mono text-xs w-1/3" value={name} placeholder="agent-name" onChange={(e) => updateAgentName(name, e.target.value)} />
+            <Input className="font-mono text-xs w-1/3" value={name} placeholder="agent-name" onChange={(e) => updateAgentName(i, e.target.value)} />
             <Select value={agent.model ?? "inherit"} onValueChange={(m) => updateAgent(name, { ...agent, model: m === "inherit" ? null : m as AgentDef["model"] })}>
               <SelectTrigger className="w-32"><SelectValue placeholder="Model" /></SelectTrigger>
               <SelectContent>
@@ -51,7 +71,7 @@ export function AgentsEditor({ value, onChange }: { value: Record<string, AgentD
                 <SelectItem value="haiku">Haiku</SelectItem>
               </SelectContent>
             </Select>
-            <Button type="button" variant="ghost" size="icon" className="ml-auto h-8 w-8" aria-label={`Remove ${name}`} onClick={() => removeAgent(name)}><Trash2 className="h-3 w-3" /></Button>
+            <Button type="button" variant="ghost" size="icon" className="ml-auto h-8 w-8" aria-label={`Remove ${name}`} onClick={() => removeAgent(i)}><Trash2 className="h-3 w-3" /></Button>
           </div>
           <Input className="text-xs" placeholder="Description" value={agent.description} onChange={(e) => updateAgent(name, { ...agent, description: e.target.value })} />
           <Textarea className="font-mono text-xs" placeholder="Agent prompt..." rows={3} value={agent.prompt} onChange={(e) => updateAgent(name, { ...agent, prompt: e.target.value })} />
