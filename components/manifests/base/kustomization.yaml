@@ -28,3 +28,5 @@ images:
   newTag: latest
 - name: quay.io/ambient_code/vteam_control_plane
   newTag: latest
+- name: quay.io/ambient_code/vteam_mcp
+  newTag: latest
