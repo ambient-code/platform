@@ -1,0 +1,166 @@
+name: SDD Preflight
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  check-managed-paths:
+    name: SDD boundary check
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    # Skip entirely if PR has sdd-exempt label
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'sdd-exempt') }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Check SDD boundaries
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+
+          MANIFEST=".specify/sdd-manifest.yaml"
+          if [ ! -f "$MANIFEST" ]; then
+            echo "No SDD manifest found, skipping"
+            echo "violation=false" >> "$GITHUB_OUTPUT"
+            echo "has_findings=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Get changed files in this PR
+          CHANGED_FILES=$(gh pr diff "$PR_NUMBER" --name-only)
+          if [ -z "$CHANGED_FILES" ]; then
+            echo "No changed files, skipping"
+            echo "violation=false" >> "$GITHUB_OUTPUT"
+            echo "has_findings=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Parse all managed components in a single yq call:
+          # Output format: component<TAB>mode<TAB>path (one line per path)
+          DEFAULT_MODE=$(yq '.default-mode // "warn"' "$MANIFEST")
+          COMPONENT_PATHS=$(yq -r '
+            .managed-components | to_entries[] |
+            .key as $comp |
+            (.value.mode // "'"$DEFAULT_MODE"'") as $mode |
+            .value.paths[] |
+            $comp + "\t" + $mode + "\t" + .
+          ' "$MANIFEST")
+
+          if [ -z "$COMPONENT_PATHS" ]; then
+            echo "No managed paths defined, skipping"
+            echo "violation=false" >> "$GITHUB_OUTPUT"
+            echo "has_findings=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Convert glob patterns to grep regexes and build a lookup file
+          # Format: regex<TAB>component<TAB>mode
+          PATTERN_FILE=$(mktemp)
+          while IFS=$'\t' read -r comp mode pattern; do
+            # Escape regex special chars in the pattern, then convert globs
+            regex=$(printf '%s' "$pattern" \
+              | sed 's/[.+^${}()|[\]]/\\&/g' \
+              | sed 's/\*\*/.*/g' \
+              | sed 's/\*/[^\/]*/g')
+            printf '%s\t%s\t%s\n' "$regex" "$comp" "$mode" >> "$PATTERN_FILE"
+          done <<< "$COMPONENT_PATHS"
+
+          # Match changed files against patterns
+          VIOLATIONS=""
+          WARNINGS=""
+
+          while IFS= read -r changed_file; do
+            [ -z "$changed_file" ] && continue
+            while IFS=$'\t' read -r regex comp mode; do
+              if printf '%s' "$changed_file" | grep -qE "^${regex}$"; then
+                row="| \`${changed_file}\` | **${comp}** | ${mode} |"
+                if [ "$mode" = "enforce" ]; then
+                  VIOLATIONS="${VIOLATIONS}${row}"$'\n'
+                else
+                  WARNINGS="${WARNINGS}${row}"$'\n'
+                fi
+                break
+              fi
+            done < "$PATTERN_FILE"
+          done <<< "$CHANGED_FILES"
+
+          rm -f "$PATTERN_FILE"
+
+          # Determine result
+          if [ -n "$VIOLATIONS" ]; then
+            echo "violation=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "violation=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if [ -n "$WARNINGS" ] || [ -n "$VIOLATIONS" ]; then
+            echo "has_findings=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_findings=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Build comment body and write to a file (avoids shell injection)
+          BODY_FILE=$(mktemp)
+          if [ -n "$VIOLATIONS" ]; then
+            cat > "$BODY_FILE" <<COMMENTEOF
+          <!-- sdd-preflight -->
+          ## ⛔ SDD Preflight — Boundary Violation
+
+          This PR modifies files in SDD-managed component(s) that require changes to go through the designated agent workflow.
+
+          | File | Component | Mode |
+          |------|-----------|------|
+          ${VIOLATIONS}
+          **Action required**: These components are in \`enforce\` mode. Please use the component's agent workflow to make these changes, or request an exemption by adding the \`sdd-exempt\` label.
+
+          📖 See [SDD Manifest](.specify/sdd-manifest.yaml) for details.
+          COMMENTEOF
+          elif [ -n "$WARNINGS" ]; then
+            cat > "$BODY_FILE" <<COMMENTEOF
+          <!-- sdd-preflight -->
+          ## ⚠️ SDD Preflight — Managed Paths Modified
+
+          This PR modifies files in SDD-managed component(s). These components are migrating to Spec-Driven Development.
+
+          | File | Component | Mode |
+          |------|-----------|------|
+          ${WARNINGS}
+          **No action required** — these components are in \`warn\` mode. Consider using the component's agent workflow for future changes.
+
+          📖 Specs: [Runner Spec](.specify/specs/runner.md) · [Runner Constitution](.specify/constitutions/runner.md)
+          COMMENTEOF
+          fi
+
+          echo "body_file=$BODY_FILE" >> "$GITHUB_OUTPUT"
+
+      - name: Comment on PR
+        if: steps.check.outputs.has_findings == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          # Delete previous SDD preflight comments (identified by HTML marker)
+          gh api --paginate "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
+            --jq '.[] | select(.body | contains("<!-- sdd-preflight -->")) | .id' \
+            | while read -r comment_id; do
+                gh api -X DELETE "repos/${{ github.repository }}/issues/comments/${comment_id}" 2>/dev/null || true
+              done
+
+          gh pr comment "$PR_NUMBER" --body-file "${{ steps.check.outputs.body_file }}"
+
+      - name: Enforce SDD boundaries
+        if: steps.check.outputs.violation == 'true'
+        run: |
+          echo "::error::SDD boundary violation detected. See PR comment for details."
+          echo "::error::Add the 'sdd-exempt' label to bypass this check."
+          exit 1
