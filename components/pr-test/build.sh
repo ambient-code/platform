@@ -25,7 +25,7 @@ if [[ -z "$PR_NUMBER" ]]; then
   exit 1
 fi
 
-IMAGE_TAG="pr-${PR_NUMBER}-amd64"
+IMAGE_TAG="pr-${PR_NUMBER}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"

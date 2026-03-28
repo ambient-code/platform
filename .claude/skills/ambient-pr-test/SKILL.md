@@ -15,6 +15,11 @@ You are an expert in running ephemeral PR validation environments on the Ambient
 with .claude/skills/ambient-pr-test  https://github.com/ambient-code/platform/pull/1005
 ```
 
+Optional modifiers the user may specify:
+- **`--force-build`** — rebuild and push images even if CI already pushed them
+- **`--keep-alive`** — do not tear down after the workflow; leave the instance online for human access
+- **`provision-only`** / **`deploy-only`** / **`teardown-only`** — run a single phase instead of the full workflow
+
 > **Overlay:** `components/manifests/overlays/mpp-openshift/` — api-server, control-plane, PostgreSQL only. No frontend, backend, operator, public-api, or CRDs.
 > **Spec:** `components/manifests/overlays/mpp-openshift/README.md` — bootstrap steps, secret requirements, architecture.
 
@@ -28,7 +33,7 @@ Scripts in `components/pr-test/` implement all steps. Prefer them over inline co
 - **Config namespace:** `ambient-code--config`
 - **Namespace pattern:** `ambient-code--<instance-id>`
 - **Instance ID pattern:** `pr-<PR_NUMBER>`
-- **Image tag pattern:** `quay.io/ambient_code/vteam_*:pr-<PR_NUMBER>-amd64`
+- **Image tag pattern:** `quay.io/ambient_code/vteam_*:pr-<PR_NUMBER>`
 
 ### Permissions
 
@@ -51,23 +56,35 @@ This cluster's tenant operator does not emit `Ready` conditions on `TenantNamesp
 ## Full Workflow
 
 ```
-0. Check CI: skip build if images already pushed by CI
+0. Build: skip if CI pushed images (or --force-build to always rebuild)
 1. Derive instance-id from PR number
-2. Provision namespace: bash components/pr-test/provision.sh create <instance-id>
-3. Deploy Ambient: bash components/pr-test/install.sh <namespace> <image-tag>
-4. Teardown: bash components/pr-test/provision.sh destroy <instance-id>
+2. Provision: bash components/pr-test/provision.sh create <instance-id>
+3. Deploy:    bash components/pr-test/install.sh <namespace> <image-tag>
+4. Teardown:  bash components/pr-test/provision.sh destroy <instance-id>
+             (skip if --keep-alive)
 ```
+
+Phases can be run individually — see **Individual Phases** below.
 
 ---
 
 ## Step 0: Build and Push Images
 
-Skip if CI already pushed images (check Actions → `Build and Push Component Docker Images` for the PR — look for `success` status).
+Check CI first:
+```bash
+gh run list --repo ambient-code/platform \
+  --workflow "Build and Push Component Docker Images" \
+  --branch <head-branch> --limit 1
+```
 
-If images are missing:
+**Skip** if the latest run shows `completed / success`. Otherwise build:
 ```bash
 bash components/pr-test/build.sh https://github.com/ambient-code/platform/pull/1005
 ```
+
+**`--force-build`**: skip the CI check and always run `build.sh` regardless. Use when:
+- Images exist but were built from a different commit (e.g. after a force-push)
+- CI built images but from a stale SHA
 
 Builds 3 images: `vteam_api_server`, `vteam_control_plane`, `vteam_claude_runner`.
 
@@ -87,7 +104,7 @@ PR_NUMBER=$(echo "$PR_URL" | grep -oE '[0-9]+$')
 
 INSTANCE_ID="pr-${PR_NUMBER}"
 NAMESPACE="ambient-code--${INSTANCE_ID}"
-IMAGE_TAG="pr-${PR_NUMBER}-amd64"
+IMAGE_TAG="pr-${PR_NUMBER}"
 ```
 
 ---
@@ -124,13 +141,51 @@ Deployed components:
 
 ## Step 4: Teardown
 
-Always run teardown, even on failure.
+Always run teardown after automated workflows, even on failure.
 
 ```bash
 bash components/pr-test/provision.sh destroy "$INSTANCE_ID"
 ```
 
 Deletes the `TenantNamespace` CR and waits for the namespace to be gone. Do not `oc delete namespace` directly — the tenant operator handles deletion via finalizers.
+
+**`--keep-alive`**: skip teardown and leave the instance running. Use when:
+- A human needs to log in and manually test the deployment
+- Debugging a failure and the environment needs to stay up
+
+When `--keep-alive` is set, print the API server URL prominently and remind the user to tear down manually:
+```bash
+echo "Instance is LIVE — tear down when finished:"
+echo "  bash components/pr-test/provision.sh destroy $INSTANCE_ID"
+```
+
+---
+
+## Individual Phases
+
+When the user specifies a single phase, run only that step (always derive instance ID first).
+
+**`provision-only`**
+```bash
+bash components/pr-test/provision.sh create "$INSTANCE_ID"
+```
+Use when: pre-provisioning before a delayed deploy, or re-provisioning after the namespace was manually deleted.
+
+**`deploy-only`**
+```bash
+bash components/pr-test/install.sh "$NAMESPACE" "$IMAGE_TAG"
+```
+Confirm the namespace exists before running:
+```bash
+oc get namespace "$NAMESPACE" 2>/dev/null || echo "ERROR: namespace not found — provision first"
+```
+Use when: namespace already exists and you want to (re-)deploy without reprovisioning.
+
+**`teardown-only`**
+```bash
+bash components/pr-test/provision.sh destroy "$INSTANCE_ID"
+```
+Use when: cleaning up a `--keep-alive` instance, or destroying after a failed deploy.
 
 ---
 

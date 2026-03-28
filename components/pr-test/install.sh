@@ -17,7 +17,7 @@ REQUIRED_SOURCE_SECRETS=(
 usage() {
   echo "Usage: $0 <namespace> <image-tag>"
   echo "  namespace:  e.g. ambient-code--pr-42"
-  echo "  image-tag:  e.g. pr-42-amd64"
+  echo "  image-tag:  e.g. pr-42"
   echo ""
   echo "Optional environment variables:"
   echo "  SOURCE_NAMESPACE   Namespace to copy secrets from (default: ambient-code--runtime-int)"
@@ -140,7 +140,8 @@ popd > /dev/null
 echo "==> Step 4: Patching control-plane service URLs and kubeconfig"
 oc set env deployment/ambient-control-plane -n "$NAMESPACE" \
   AMBIENT_API_SERVER_URL="http://ambient-api-server.${NAMESPACE}.svc:8000" \
-  AMBIENT_GRPC_SERVER_ADDR="ambient-api-server.${NAMESPACE}.svc:9000"
+  AMBIENT_GRPC_SERVER_ADDR="ambient-api-server.${NAMESPACE}.svc:9000" \
+  CP_RUNTIME_NAMESPACE="$NAMESPACE"
 
 KUBE_HOST=$(oc whoami --show-server)
 KUBE_CA=$(oc get secret tenantaccess-ambient-control-plane-token -n "$NAMESPACE" \
