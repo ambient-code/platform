@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef } from "react";
 import { Plus, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -28,29 +29,49 @@ export type McpFormServer = {
 };
 
 export function McpServersEditor({ value, onChange }: { value: Record<string, McpFormServer>; onChange: (v: Record<string, McpFormServer>) => void }) {
+  const nextId = useRef(0);
+  const ids = useRef<number[]>([]);
+  const serverCounter = useRef(0);
+
   const entries = Object.entries(value);
 
+  // Sync IDs with entries length (handles external resets)
+  while (ids.current.length < entries.length) {
+    ids.current.push(nextId.current++);
+  }
+  ids.current.length = entries.length;
+
   const addServer = () => {
-    onChange({ ...value, [`server-${entries.length + 1}`]: { type: "stdio", command: "", args: [], env: {} } });
+    let name: string;
+    do {
+      serverCounter.current++;
+      name = `server-${serverCounter.current}`;
+    } while (name in value);
+    ids.current.push(nextId.current++);
+    onChange({ ...value, [name]: { type: "stdio", command: "", args: [], env: {} } });
   };
-  const removeServer = (name: string) => {
+  const removeServer = (index: number) => {
+    const name = entries[index][0];
+    ids.current.splice(index, 1);
     const next = { ...value };
     delete next[name];
     onChange(next);
   };
-  const updateServerName = (oldName: string, newName: string) => {
+  const updateServerName = (index: number, newName: string) => {
     const next: Record<string, McpFormServer> = {};
-    for (const [k, v] of Object.entries(value)) next[k === oldName ? newName : k] = v;
+    for (let i = 0; i < entries.length; i++) {
+      next[i === index ? newName : entries[i][0]] = entries[i][1];
+    }
     onChange(next);
   };
   const updateServer = (name: string, server: McpFormServer) => onChange({ ...value, [name]: server });
 
   return (
     <div className="space-y-3">
-      {entries.map(([name, server]) => (
-        <div key={name} className="border rounded-md p-3 space-y-3">
+      {entries.map(([name, server], i) => (
+        <div key={ids.current[i]} className="border rounded-md p-3 space-y-3">
           <div className="flex items-center gap-2">
-            <Input className="font-mono text-xs w-1/3" value={name} placeholder="server-name" onChange={(e) => updateServerName(name, e.target.value)} />
+            <Input className="font-mono text-xs w-1/3" value={name} placeholder="server-name" onChange={(e) => updateServerName(i, e.target.value)} />
             <Select value={server.type ?? "stdio"} onValueChange={(t) => {
               if (t === "stdio") updateServer(name, { type: "stdio", command: "", args: [], env: {} });
               else updateServer(name, { type: t as "sse" | "http", url: "", headers: {} });
@@ -62,7 +83,7 @@ export function McpServersEditor({ value, onChange }: { value: Record<string, Mc
                 <SelectItem value="http">HTTP</SelectItem>
               </SelectContent>
             </Select>
-            <Button type="button" variant="ghost" size="icon" className="ml-auto h-8 w-8" onClick={() => removeServer(name)}>
+            <Button type="button" variant="ghost" size="icon" className="ml-auto h-8 w-8" onClick={() => removeServer(i)}>
               <Trash2 className="h-3 w-3" />
             </Button>
           </div>

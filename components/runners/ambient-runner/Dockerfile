@@ -9,8 +9,9 @@ ARG UV_VERSION=0.7.8
 ARG PRE_COMMIT_VERSION=4.2.0
 ARG GEMINI_CLI_VERSION=0.1.17
 
-# Install Python 3.12 (system default on RHEL 10), pip, and build deps
-RUN dnf install -y python3 python3-pip python3-devel && \
+# Install system packages: Python 3.12, git, jq, Node.js, Go
+RUN dnf install -y python3 python3-pip python3-devel \
+    git jq nodejs npm go-toolset && \
     dnf clean all
 
 # Install GitHub CLI and GitLab CLI (binary downloads, pinned)
@@ -21,18 +22,6 @@ RUN ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/') && \
     | tar -xz -C /usr/local/bin --strip-components=1 bin/glab && \
     chmod +x /usr/local/bin/gh /usr/local/bin/glab
 
-# Install system packages (versions tied to base image)
-RUN dnf install -y git jq && \
-    dnf clean all
-
-# Install Node.js (RHEL 10 ships Node.js directly in AppStream, no modules)
-RUN dnf install -y nodejs npm && \
-    dnf clean all
-
-# Install Go
-RUN dnf install -y go-toolset && \
-    dnf clean all
-
 # Install uv (provides uvx for package execution) and pre-commit (for repo hooks)
 RUN pip3 install --break-system-packages --no-cache-dir uv==${UV_VERSION} pre-commit==${PRE_COMMIT_VERSION}
 
@@ -42,17 +31,15 @@ WORKDIR /app
 # Copy ambient-runner package
 COPY ambient-runner /app/ambient-runner
 
-# Install runner as a package (pulls dependencies including AG-UI SDK)
-RUN pip3 install --break-system-packages --no-cache-dir '/app/ambient-runner[all]'
+# Install runner as a package, then remove build-only deps in same layer
+RUN pip3 install --break-system-packages --no-cache-dir '/app/ambient-runner[all]' && \
+    dnf remove -y python3-devel && \
+    dnf clean all && \
+    rm -rf /var/cache/dnf /var/lib/dnf
 
 # Install Gemini CLI (npm package, Node.js already available)
 RUN npm install -g @google/gemini-cli@${GEMINI_CLI_VERSION} && \
     npm cache clean --force
-
-# Remove build-only dependencies and clean caches
-RUN dnf remove -y python3-devel && \
-    dnf clean all && \
-    rm -rf /var/cache/dnf /var/lib/dnf
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
