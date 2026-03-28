@@ -1,6 +1,6 @@
 FROM alpine:3.21
 
-RUN apk add --no-cache rclone git jq
+RUN apk add --no-cache rclone git jq bash sqlite
 
 # Copy scripts
 COPY hydrate.sh /usr/local/bin/hydrate.sh
