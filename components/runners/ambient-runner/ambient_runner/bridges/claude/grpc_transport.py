@@ -165,6 +165,12 @@ class GRPCSessionListener:
                 exc.code(),
                 exc.details(),
             )
+            if exc.code() == grpc.StatusCode.UNAUTHENTICATED and self._grpc_client is not None:
+                logger.warning(
+                    "[GRPC LISTENER] UNAUTHENTICATED — reconnecting with fresh token: session=%s",
+                    self._session_id,
+                )
+                self._grpc_client.reconnect()
         except Exception as exc:
             logger.error(
                 "[GRPC LISTENER] Unexpected watch error: session=%s error=%s",
