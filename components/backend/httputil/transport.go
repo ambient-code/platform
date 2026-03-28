@@ -1,3 +1,4 @@
+// Package httputil provides a shared HTTP transport with custom CA support.
 package httputil
 
 import (
