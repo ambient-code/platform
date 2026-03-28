@@ -121,7 +121,10 @@ export function AgentOptionsFields({ form, disabled }: AgentOptionsFieldsProps) 
                     placeholder="Unlimited"
                     disabled={disabled}
                     value={field.value ?? ""}
-                    onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
+                    onChange={(e) => {
+                      const v = e.target.valueAsNumber;
+                      field.onChange(Number.isNaN(v) ? undefined : v);
+                    }}
                   />
                 </FormControl>
                 <FormMessage />
@@ -141,7 +144,10 @@ export function AgentOptionsFields({ form, disabled }: AgentOptionsFieldsProps) 
                     placeholder="No limit"
                     disabled={disabled}
                     value={field.value ?? ""}
-                    onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
+                    onChange={(e) => {
+                      const v = e.target.valueAsNumber;
+                      field.onChange(Number.isNaN(v) ? undefined : v);
+                    }}
                   />
                 </FormControl>
                 <FormMessage />
@@ -426,7 +432,10 @@ export function AgentOptionsFields({ form, disabled }: AgentOptionsFieldsProps) 
                   placeholder="Default"
                   disabled={disabled}
                   value={field.value ?? ""}
-                  onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
+                  onChange={(e) => {
+                    const v = e.target.valueAsNumber;
+                    field.onChange(Number.isNaN(v) ? undefined : v);
+                  }}
                 />
               </FormControl>
               <FormDescription>Max bytes for CLI stdout buffer (min 1024)</FormDescription>

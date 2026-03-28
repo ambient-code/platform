@@ -22,7 +22,11 @@ type AgentDef = z.infer<typeof agentDefinitionSchema>;
 
 export function AgentsEditor({ value, onChange }: { value: Record<string, AgentDef>; onChange: (v: Record<string, AgentDef>) => void }) {
   const entries = Object.entries(value);
-  const addAgent = () => onChange({ ...value, [`agent-${entries.length + 1}`]: { description: "", prompt: "" } });
+  const addAgent = () => {
+    let i = 1;
+    while (`agent-${i}` in value) i++;
+    onChange({ ...value, [`agent-${i}`]: { description: "", prompt: "" } });
+  };
   const removeAgent = (name: string) => { const next = { ...value }; delete next[name]; onChange(next); };
   const updateAgentName = (oldName: string, newName: string) => {
     const next: Record<string, AgentDef> = {};
@@ -47,7 +51,7 @@ export function AgentsEditor({ value, onChange }: { value: Record<string, AgentD
                 <SelectItem value="haiku">Haiku</SelectItem>
               </SelectContent>
             </Select>
-            <Button type="button" variant="ghost" size="icon" className="ml-auto h-8 w-8" onClick={() => removeAgent(name)}><Trash2 className="h-3 w-3" /></Button>
+            <Button type="button" variant="ghost" size="icon" className="ml-auto h-8 w-8" aria-label={`Remove ${name}`} onClick={() => removeAgent(name)}><Trash2 className="h-3 w-3" /></Button>
           </div>
           <Input className="text-xs" placeholder="Description" value={agent.description} onChange={(e) => updateAgent(name, { ...agent, description: e.target.value })} />
           <Textarea className="font-mono text-xs" placeholder="Agent prompt..." rows={3} value={agent.prompt} onChange={(e) => updateAgent(name, { ...agent, prompt: e.target.value })} />

@@ -72,13 +72,14 @@ export function KeyValueEditor({
             className="font-mono text-xs flex-1"
             placeholder={valuePlaceholder}
             value={v ?? ""}
-            onChange={(e) => updateEntry(i, k, e.target.value || null)}
+            onChange={(e) => updateEntry(i, k, e.target.value)}
           />
           <Button
             type="button"
             variant="ghost"
             size="icon"
             className="h-8 w-8 shrink-0"
+            aria-label={`Remove ${k || "new"} entry`}
             onClick={() => removeEntry(i)}
           >
             <Trash2 className="h-3 w-3" />

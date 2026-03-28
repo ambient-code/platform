@@ -147,8 +147,8 @@ export const sdkPluginConfigSchema = z.object({
 // OutputFormat
 // ---------------------------------------------------------------------------
 export const outputFormatSchema = z.object({
-  type: z.literal("json_schema").optional(),
-  schema: z.record(z.unknown()).optional(),
+  type: z.literal("json_schema"),
+  schema: z.record(z.unknown()),
 });
 
 // ---------------------------------------------------------------------------

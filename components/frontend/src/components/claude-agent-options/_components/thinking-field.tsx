@@ -54,7 +54,10 @@ export function ThinkingField({
             max={128000}
             disabled={disabled}
             value={"budget_tokens" in current ? current.budget_tokens : 10000}
-            onChange={(e) => onChange({ type: "enabled", budget_tokens: Number(e.target.value) || 10000 })}
+            onChange={(e) => {
+              const n = e.target.valueAsNumber;
+              onChange({ type: "enabled", budget_tokens: Number.isNaN(n) ? 1024 : n });
+            }}
           />
           <p className="text-xs text-muted-foreground mt-1">Token budget for extended thinking (1,024 — 128,000)</p>
         </div>
