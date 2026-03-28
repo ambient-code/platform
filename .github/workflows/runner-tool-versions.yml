@@ -175,12 +175,18 @@ jobs:
           UPD_PC: ${{ steps.diff.outputs.pc }}
           UPD_GEM: ${{ steps.diff.outputs.gem }}
         run: |
-          [ "$UPD_BASE" = "true" ] && sed -i "s|ubi@sha256:${CUR_BASE}|ubi@sha256:${LAT_BASE}|" "$DOCKERFILE"
-          [ "$UPD_GH" = "true" ] && sed -i "s/ARG GH_VERSION=${CUR_GH}/ARG GH_VERSION=${LAT_GH}/" "$DOCKERFILE"
-          [ "$UPD_GLAB" = "true" ] && sed -i "s/ARG GLAB_VERSION=${CUR_GLAB}/ARG GLAB_VERSION=${LAT_GLAB}/" "$DOCKERFILE"
-          [ "$UPD_UV" = "true" ] && sed -i "s/ARG UV_VERSION=${CUR_UV}/ARG UV_VERSION=${LAT_UV}/" "$DOCKERFILE"
-          [ "$UPD_PC" = "true" ] && sed -i "s/ARG PRE_COMMIT_VERSION=${CUR_PC}/ARG PRE_COMMIT_VERSION=${LAT_PC}/" "$DOCKERFILE"
-          [ "$UPD_GEM" = "true" ] && sed -i "s/ARG GEMINI_CLI_VERSION=${CUR_GEM}/ARG GEMINI_CLI_VERSION=${LAT_GEM}/" "$DOCKERFILE"
+          # Build sed expressions for all components that need updating
+          SED_ARGS=()
+          [ "$UPD_BASE" = "true" ] && SED_ARGS+=(-e "s|ubi@sha256:${CUR_BASE}|ubi@sha256:${LAT_BASE}|")
+          [ "$UPD_GH" = "true" ] && SED_ARGS+=(-e "s/ARG GH_VERSION=${CUR_GH}/ARG GH_VERSION=${LAT_GH}/")
+          [ "$UPD_GLAB" = "true" ] && SED_ARGS+=(-e "s/ARG GLAB_VERSION=${CUR_GLAB}/ARG GLAB_VERSION=${LAT_GLAB}/")
+          [ "$UPD_UV" = "true" ] && SED_ARGS+=(-e "s/ARG UV_VERSION=${CUR_UV}/ARG UV_VERSION=${LAT_UV}/")
+          [ "$UPD_PC" = "true" ] && SED_ARGS+=(-e "s/ARG PRE_COMMIT_VERSION=${CUR_PC}/ARG PRE_COMMIT_VERSION=${LAT_PC}/")
+          [ "$UPD_GEM" = "true" ] && SED_ARGS+=(-e "s/ARG GEMINI_CLI_VERSION=${CUR_GEM}/ARG GEMINI_CLI_VERSION=${LAT_GEM}/")
+
+          if [ ${#SED_ARGS[@]} -gt 0 ]; then
+            sed -i "${SED_ARGS[@]}" "$DOCKERFILE"
+          fi
 
           # Sanity check: all ARGs still present and non-empty
           for arg in GH_VERSION GLAB_VERSION UV_VERSION PRE_COMMIT_VERSION GEMINI_CLI_VERSION; do
