@@ -1,0 +1,17 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ambient-api-server
+spec:
+  template:
+    spec:
+      containers:
+        - name: api-server
+          env:
+            - name: AMBIENT_ENV
+              value: openshift-dev
+            - name: AMBIENT_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: ambient-control-plane-token
+                  key: token

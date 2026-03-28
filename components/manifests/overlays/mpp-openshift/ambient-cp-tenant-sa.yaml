@@ -1,0 +1,9 @@
+apiVersion: tenantaccess.paas.redhat.com/v1beta1
+kind: TenantServiceAccount
+metadata:
+  name: ambient-control-plane
+  namespace: ambient-code--config
+spec:
+  create-permanent-token: true
+  roles:
+    - namespace-admin
