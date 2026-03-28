@@ -132,8 +132,11 @@ jobs:
           elif [ -n "$SELECTED" ]; then
             # Dispatch with specific components
             FILTERED=$(echo "$ALL_COMPONENTS" | jq -c --arg sel "$SELECTED" '[.[] | select(.name as $n | $sel | split(",") | map(gsub("^\\s+|\\s+$";"")) | index($n))]')
+          elif [ "$EVENT" == "pull_request" ]; then
+            # PR — always build all components so every PR image is in quay for deployment
+            FILTERED="$ALL_COMPONENTS"
           else
-            # Push or PR — only changed components
+            # Push to main — only changed components
             FILTERED="[]"
             for comp in $(echo "$ALL_COMPONENTS" | jq -r '.[].name'); do
               if [ "${FILTER_MAP[$comp]}" == "true" ]; then
@@ -219,8 +222,10 @@ jobs:
           context: ${{ matrix.component.context }}
           file: ${{ matrix.component.dockerfile }}
           platforms: ${{ matrix.arch.platform }}
-          push: false
-          tags: ${{ matrix.component.image }}:pr-${{ github.event.pull_request.number }}-${{ matrix.arch.suffix }}
+          push: true
+          tags: |
+            ${{ matrix.component.image }}:pr-${{ github.event.pull_request.number }}-${{ matrix.arch.suffix }}
+            ${{ matrix.component.image }}:pr-${{ github.event.pull_request.number }}-${{ github.sha }}-${{ matrix.arch.suffix }}
           build-args: AMBIENT_VERSION=${{ github.sha }}
           cache-from: type=gha,scope=${{ matrix.component.name }}-${{ matrix.arch.suffix }}
 
