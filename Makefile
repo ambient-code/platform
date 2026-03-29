@@ -162,7 +162,7 @@ help: ## Display this help message
 
 ##@ Building
 
-build-all: build-frontend build-backend build-operator build-runner build-state-sync build-public-api build-api-server build-mcp ## Build all container images
+build-all: build-frontend build-backend build-operator build-runner build-state-sync build-public-api build-api-server build-control-plane build-mcp ## Build all container images
 
 build-frontend: ## Build frontend image
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building frontend with $(CONTAINER_ENGINE)..."
