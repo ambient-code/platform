@@ -206,7 +206,7 @@ func (h *DriveIntegrationHandler) HandlePickerToken(c *gin.Context) {
 		// Update stored tokens
 		_ = h.storage.SaveTokens(c.Request.Context(), &models.DriveIntegration{
 			ProjectName: projectName,
-			ID:          userID,
+			UserID:      userID,
 		}, newToken.AccessToken, newToken.RefreshToken, newToken.Expiry)
 
 		expiresAt = newToken.Expiry
@@ -274,10 +274,6 @@ func (h *DriveIntegrationHandler) HandleDisconnectDriveIntegration(c *gin.Contex
 
 	// Delete tokens
 	_ = h.storage.DeleteTokens(c.Request.Context(), projectName, userID)
-
-	// Update integration status
-	integration.Disconnect()
-	_ = h.storage.SaveIntegration(c.Request.Context(), integration)
 
 	// Delete the integration record
 	_ = h.storage.DeleteIntegration(c.Request.Context(), projectName, userID)

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -59,7 +60,10 @@ func (h *DriveFileGrantsHandler) HandleUpdateFileGrants(c *gin.Context) {
 	}
 
 	// Get existing file grants for comparison
-	existingGrants, _ := h.storage.ListFileGrants(c.Request.Context(), integration.ID)
+	existingGrants, err := h.storage.ListFileGrants(c.Request.Context(), integration.ID)
+	if err != nil {
+		log.Printf("warning: failed to list existing file grants for integration %s: %v", integration.ID, err)
+	}
 	existingByFileID := make(map[string]models.FileGrant)
 	for _, g := range existingGrants {
 		existingByFileID[g.GoogleFileID] = g

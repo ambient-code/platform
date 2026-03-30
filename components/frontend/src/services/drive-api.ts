@@ -249,7 +249,24 @@ export async function disconnectDriveIntegration(
     method: "DELETE",
   });
 
-  return handleResponse<DisconnectDriveResponse>(response);
+  if (!response.ok) {
+    let body: unknown;
+    try {
+      body = await response.json();
+    } catch {
+      // Response body may not be JSON; that is fine.
+    }
+
+    const message =
+      typeof body === "object" && body !== null && "message" in body
+        ? String((body as Record<string, unknown>).message)
+        : `Request failed with status ${response.status}`;
+
+    throw new ApiError(message, response.status, body);
+  }
+
+  // Backend returns 204 No Content — no body to parse
+  return { success: true };
 }
 
 // ---------------------------------------------------------------------------

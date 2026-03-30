@@ -63,6 +63,8 @@ export default function GoogleDriveSetupPage({
         {
           onSuccess: () => {
             setStep("authenticated");
+            // Clear OAuth params from URL to prevent re-submission on refresh
+            window.history.replaceState({}, '', window.location.pathname);
           },
           onError: (err) => {
             setError(

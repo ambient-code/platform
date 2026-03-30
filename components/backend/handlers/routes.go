@@ -31,8 +31,9 @@ func InitDriveIntegration(api *gin.RouterGroup) {
 	if len(hmacSecret) == 0 {
 		hmacSecret = make([]byte, 32)
 		if _, err := rand.Read(hmacSecret); err != nil {
-			log.Printf("WARNING: failed to generate HMAC secret for Drive integration: %v", err)
+			log.Fatalf("FATAL: failed to generate HMAC secret for Drive integration: %v", err)
 		}
+		log.Printf("WARNING: No DRIVE_HMAC_SECRET or OAUTH_STATE_SECRET configured. Using random secret - OAuth state will not verify across replicas.")
 	}
 
 	storage := NewDriveStorage(K8sClient, Namespace)

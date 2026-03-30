@@ -2,12 +2,21 @@ import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { FileSelectionSummary } from '../file-selection-summary';
 
-function makeFile(overrides: Record<string, unknown> = {}) {
+interface FileItem {
+  id: string;
+  name: string;
+  mimeType: string;
+  sizeBytes?: number | null;
+  isFolder?: boolean;
+  status?: "active" | "unavailable" | "revoked";
+}
+
+function makeFile(overrides: Partial<FileItem> = {}): FileItem {
   return {
     id: 'f1',
     name: 'document.pdf',
     mimeType: 'application/pdf',
-    sizeBytes: null as number | null,
+    sizeBytes: null,
     isFolder: false,
     status: 'active',
     ...overrides,

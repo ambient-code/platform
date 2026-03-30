@@ -92,7 +92,7 @@ export function GooglePicker({
               name: doc.name,
               mimeType: doc.mimeType,
               url: doc.url,
-              sizeBytes: doc.sizeBytes || null,
+              sizeBytes: doc.sizeBytes ?? null,
               isFolder: doc.type === "folder",
             }));
 

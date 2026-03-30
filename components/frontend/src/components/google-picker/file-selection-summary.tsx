@@ -24,7 +24,7 @@ interface FileItem {
   mimeType: string;
   sizeBytes?: number | null;
   isFolder?: boolean;
-  status?: string;
+  status?: "active" | "unavailable" | "revoked";
 }
 
 interface FileSelectionSummaryProps {
@@ -99,9 +99,9 @@ export function FileSelectionSummary({
             >
               {getFileIcon(file.mimeType, file.isFolder)}
               <span className="flex-1 text-sm truncate">{file.name}</span>
-              {file.status === "unavailable" && (
+              {file.status && file.status !== "active" && (
                 <Badge variant="destructive" className="text-xs">
-                  Unavailable
+                  {file.status === "revoked" ? "Revoked" : "Unavailable"}
                 </Badge>
               )}
               {file.sizeBytes != null && file.sizeBytes > 0 && (
