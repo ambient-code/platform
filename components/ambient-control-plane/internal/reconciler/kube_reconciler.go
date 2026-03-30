@@ -624,7 +624,7 @@ func (r *SimpleKubeReconciler) assembleInitialPrompt(ctx context.Context, sessio
 			parts = append(parts, agent.Prompt)
 		}
 
-		msgs, err := sdk.InboxMessages().List(ctx, session.ProjectID, session.AgentID, &types.ListOptions{Size: 100})
+		msgs, err := sdk.InboxMessages().List(ctx, &types.ListOptions{Size: 100, Search: fmt.Sprintf("project_id = '%s' and agent_id = '%s'", session.ProjectID, session.AgentID)})
 		if err != nil {
 			r.logger.Warn().Err(err).Str("agent_id", session.AgentID).Msg("assembleInitialPrompt: failed to fetch inbox messages")
 		} else {

@@ -64,8 +64,8 @@ describe('getK8sResourceStatusColor', () => {
     expect(getK8sResourceStatusColor('Not Found')).toBe(STATUS_COLORS.warning);
   });
 
-  it('returns default for unrecognized status', () => {
-    expect(getK8sResourceStatusColor('SomethingElse')).toBe(STATUS_COLORS.default);
+  it('returns error for unrecognized status', () => {
+    expect(getK8sResourceStatusColor('SomethingElse')).toBe(STATUS_COLORS.error);
   });
 });
 

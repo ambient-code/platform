@@ -380,7 +380,7 @@ class GRPCMessageWriter:
 
         assistant_text = next(
             (
-                m.get("content", "")
+                m.get("content") or ""
                 for m in self._accumulated_messages
                 if m.get("role") == "assistant"
             ),

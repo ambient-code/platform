@@ -522,18 +522,14 @@ class TestGRPCMessageWriterConsume:
         call = client.session_messages.push.call_args
         assert call[0][0] == "s-1"
         assert call[1]["event_type"] == "assistant"
-        payload = json.loads(call[1]["payload"])
-        assert payload["status"] == "completed"
-        assert payload["run_id"] == "r-1"
-        assert len(payload["messages"]) == 1
+        assert call[1]["payload"] == "done"
 
     async def test_run_error_pushes_error_status(self):
         writer, client = self._writer()
         await writer.consume(self._make_run_error_event())
 
         client.session_messages.push.assert_called_once()
-        payload = json.loads(client.session_messages.push.call_args[1]["payload"])
-        assert payload["status"] == "error"
+        assert client.session_messages.push.call_args[1]["event_type"] == "assistant"
 
     async def test_non_terminal_events_do_not_push(self):
         writer, client = self._writer()
@@ -550,16 +546,15 @@ class TestGRPCMessageWriterConsume:
     async def test_latest_snapshot_replaces_previous(self):
         writer, client = self._writer()
         msg1 = MagicMock()
-        msg1.model_dump.return_value = {"content": "first"}
+        msg1.model_dump.return_value = {"role": "assistant", "content": "first"}
         msg2 = MagicMock()
-        msg2.model_dump.return_value = {"content": "second"}
+        msg2.model_dump.return_value = {"role": "assistant", "content": "second"}
 
         await writer.consume(self._make_messages_snapshot([msg1]))
         await writer.consume(self._make_messages_snapshot([msg2]))
         await writer.consume(self._make_run_finished_event())
 
-        payload = json.loads(client.session_messages.push.call_args[1]["payload"])
-        assert payload["messages"][0]["content"] == "second"
+        assert client.session_messages.push.call_args[1]["payload"] == "second"
 
     async def test_no_grpc_client_write_skipped(self):
         writer = GRPCMessageWriter(session_id="s-1", run_id="r-1", grpc_client=None)
