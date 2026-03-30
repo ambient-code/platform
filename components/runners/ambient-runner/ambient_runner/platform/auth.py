@@ -288,12 +288,21 @@ async def fetch_gerrit_credentials(context: RunnerContext) -> list[dict]:
     """Fetch all Gerrit instance credentials from backend API.
 
     Returns list of instance dicts with: instanceName, url, authMethod,
-    username, httpToken, gitcookiesContent
+    username, httpToken, gitcookiesContent.
+
+    Raises RuntimeError when the backend request fails (as opposed to
+    returning an empty list, which means "no Gerrit instances configured").
     """
     data = await _fetch_credential(context, "gerrit")
+    # _fetch_credential returns {} on network/HTTP failures.  A valid
+    # backend response always contains the "instances" key (even if the
+    # list is empty).  Distinguish the two so callers don't accidentally
+    # clear Gerrit config when the backend is simply unreachable.
+    if not data:
+        raise RuntimeError("Failed to fetch Gerrit credentials from backend")
     instances = data.get("instances", [])
     if instances:
-        logger.info(f"Fetched Gerrit credentials for {len(instances)} instance(s)")
+        logger.info("Fetched Gerrit credentials for %d instance(s)", len(instances))
     return instances
 
 
@@ -422,9 +431,13 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
     # Always call generate_gerrit_config (even with empty list) so stale
     # config from a previous refresh is cleaned up when all instances are removed.
     if isinstance(gerrit_instances, Exception):
-        logger.warning(f"Failed to fetch Gerrit credentials: {gerrit_instances}")
+        logger.warning("Failed to fetch Gerrit credentials: %s", gerrit_instances)
         if isinstance(gerrit_instances, PermissionError):
             auth_failures.append(str(gerrit_instances))
+        else:
+            # Non-auth failure (network/timeout) — do NOT clear existing
+            # Gerrit config, as the backend may just be temporarily unreachable.
+            logger.info("Keeping existing Gerrit config (backend fetch failed)")
     else:
         try:
             from ambient_runner.bridges.claude.mcp import generate_gerrit_config
@@ -434,8 +447,9 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
                 logger.info("Generated Gerrit MCP config from backend credentials")
             else:
                 logger.info("Cleared stale Gerrit MCP config (no instances)")
-        except Exception as e:
-            logger.warning(f"Failed to generate Gerrit config: {e}")
+        except (OSError, ValueError) as e:
+            logger.warning("Failed to generate Gerrit config: %s", e)
+            auth_failures.append(f"Gerrit config generation failed: {e}")
 
     # Configure git identity and credential helper
     await configure_git_identity(git_user_name, git_user_email)

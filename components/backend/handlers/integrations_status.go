@@ -138,7 +138,11 @@ func getJiraStatusForUser(ctx context.Context, userID string) gin.H {
 // getGerritStatusForUser returns the Gerrit integration status with all connected instances for a user.
 func getGerritStatusForUser(ctx context.Context, userID string) gin.H {
 	instances, err := listGerritCredentials(ctx, userID)
-	if err != nil || len(instances) == 0 {
+	if err != nil {
+		log.Printf("Failed to list Gerrit instances for user %s: %v", userID, err)
+		return gin.H{"instances": []gin.H{}}
+	}
+	if len(instances) == 0 {
 		return gin.H{"instances": []gin.H{}}
 	}
 

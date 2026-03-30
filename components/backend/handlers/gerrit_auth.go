@@ -467,6 +467,9 @@ func getGerritCredentials(ctx context.Context, instanceName, userID string) (*Ge
 // listGerritCredentials returns all Gerrit instances for a user.
 // Each user has their own Secret, so all entries belong to the user.
 // Results are sorted by instance name for deterministic ordering.
+//
+// Returns (nil, nil) when the user has no Gerrit Secret (i.e. never connected).
+// Callers must treat (nil, nil) as "no instances configured" rather than an error.
 func listGerritCredentials(ctx context.Context, userID string) ([]*GerritCredentials, error) {
 	if userID == "" {
 		return nil, fmt.Errorf("userID is required")

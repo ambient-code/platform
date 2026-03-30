@@ -1,14 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { IntegrationsPanel } from '../integrations-panel';
+import type { IntegrationsStatus } from '@/services/api/integrations';
 
-type IntegrationsData = {
-  github: { active: string | null };
-  gitlab: { connected: boolean };
-  jira: { connected: boolean };
-  google: { connected: boolean };
-  gerrit: { instances: Array<{ connected: boolean; instanceName: string }> };
-} | null;
+type IntegrationsData = IntegrationsStatus | null;
+
+function makeStatus(overrides: Partial<IntegrationsStatus> = {}): IntegrationsStatus {
+  return {
+    github: { installed: false, pat: { configured: false } },
+    gitlab: { connected: false },
+    jira: { connected: false },
+    google: { connected: false },
+    gerrit: { instances: [] },
+    ...overrides,
+  }
+}
 
 const mockUseIntegrationsStatus = vi.fn((): { data: IntegrationsData; isPending: boolean } => ({
   data: null,
@@ -39,13 +45,7 @@ describe('IntegrationsPanel', () => {
 
   it('renders integration cards (GitHub, GitLab, Google Workspace, Jira, Gerrit)', () => {
     mockUseIntegrationsStatus.mockReturnValue({
-      data: {
-        github: { active: null },
-        gitlab: { connected: false },
-        jira: { connected: false },
-        google: { connected: false },
-        gerrit: { instances: [] },
-      },
+      data: makeStatus(),
       isPending: false,
     });
     render(<IntegrationsPanel />);
@@ -58,13 +58,13 @@ describe('IntegrationsPanel', () => {
 
   it('shows connected status for configured integrations', () => {
     mockUseIntegrationsStatus.mockReturnValue({
-      data: {
-        github: { active: 'some-user' },
+      data: makeStatus({
+        github: { installed: false, pat: { configured: true, valid: true }, active: 'pat' },
         gitlab: { connected: true },
         jira: { connected: true },
         google: { connected: false },
         gerrit: { instances: [] },
-      },
+      }),
       isPending: false,
     });
     render(<IntegrationsPanel />);

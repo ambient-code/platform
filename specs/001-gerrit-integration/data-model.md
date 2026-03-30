@@ -90,7 +90,7 @@ For `git_cookies` auth, the runner also writes the gitcookies content to a tempo
 
 ## State Transitions
 
-```
+```text
 [Not Connected] --connect()--> [Connected]
 [Connected]     --disconnect()--> [Not Connected]
 [Connected]     --connect() with same instanceName--> [Connected] (credentials updated)
@@ -100,7 +100,7 @@ No intermediate states. Connection is synchronous (validate + store).
 
 ## Relationships
 
-```
+```text
 User (1) ---has many---> GerritCredentials (N)
 GerritCredentials (N) ---generates at runtime---> gerrit_config.json (1 per session)
 gerrit_config.json (1) ---consumed by---> Gerrit MCP Server (1 per session)
