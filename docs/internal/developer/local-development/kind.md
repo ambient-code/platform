@@ -374,8 +374,8 @@ lsof -i:8080  # Find what's using the port
 **Fix:**
 ```bash
 # Auto-detect and use native architecture
-make local-clean
-make local-up
+make kind-down
+make kind-up
 ```
 
 **Diagnosis:** Run `make check-architecture` to verify native builds are enabled.
