@@ -79,6 +79,8 @@ Thumbs.db
 # IDE / AI assistant configuration
 .cursor/
 .tessl/
+.idea/
+
 
 # mypy
 .mypy_cache/

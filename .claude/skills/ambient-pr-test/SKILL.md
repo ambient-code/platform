@@ -16,7 +16,6 @@ with .claude/skills/ambient-pr-test  https://github.com/ambient-code/platform/pu
 ```
 
 Optional modifiers the user may specify:
-- **`--force-build`** — rebuild and push images even if CI already pushed them
 - **`--keep-alive`** — do not tear down after the workflow; leave the instance online for human access
 - **`provision-only`** / **`deploy-only`** / **`teardown-only`** — run a single phase instead of the full workflow
 
@@ -56,7 +55,7 @@ This cluster's tenant operator does not emit `Ready` conditions on `TenantNamesp
 ## Full Workflow
 
 ```
-0. Build: skip if CI pushed images (or --force-build to always rebuild)
+0. Build: always run build.sh to build and push images tagged pr-<PR_NUMBER>
 1. Derive instance-id from PR number
 2. Provision: bash components/pr-test/provision.sh create <instance-id>
 3. Deploy:    bash components/pr-test/install.sh <namespace> <image-tag>
@@ -70,21 +69,15 @@ Phases can be run individually — see **Individual Phases** below.
 
 ## Step 0: Build and Push Images
 
-Check CI first:
-```bash
-gh run list --repo ambient-code/platform \
-  --workflow "Build and Push Component Docker Images" \
-  --branch <head-branch> --limit 1
-```
-
-**Skip** if the latest run shows `completed / success`. Otherwise build:
+Always run `build.sh` — CI may skip builds when no component source files changed (e.g. sync/merge branches), so never rely on CI to have pushed images:
 ```bash
 bash components/pr-test/build.sh https://github.com/ambient-code/platform/pull/1005
 ```
 
-**`--force-build`**: skip the CI check and always run `build.sh` regardless. Use when:
-- Images exist but were built from a different commit (e.g. after a force-push)
-- CI built images but from a stale SHA
+This builds and pushes 3 images tagged `pr-<PR_NUMBER>`:
+- `quay.io/ambient_code/vteam_api_server:pr-<PR_NUMBER>`
+- `quay.io/ambient_code/vteam_control_plane:pr-<PR_NUMBER>`
+- `quay.io/ambient_code/vteam_claude_runner:pr-<PR_NUMBER>`
 
 Builds 3 images: `vteam_api_server`, `vteam_control_plane`, `vteam_claude_runner`.
 

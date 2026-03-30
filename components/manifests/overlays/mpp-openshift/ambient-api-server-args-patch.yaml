@@ -31,7 +31,5 @@ spec:
             - --jwk-cert-file=/configs/authentication/jwks.json
             - --enable-grpc=true
             - --grpc-server-bindaddress=:9000
-            - --grpc-jwk-cert-file=/configs/authentication/jwks.json
-            - --grpc-jwk-cert-url=https://sso.redhat.com/auth/realms/redhat-external/protocol/openid-connect/certs,https://kubernetes.default.svc/openid/v1/jwks
             - --alsologtostderr
             - -v=4

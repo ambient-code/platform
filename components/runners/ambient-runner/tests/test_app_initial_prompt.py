@@ -338,7 +338,7 @@ class TestPushInitialPromptViaHTTP:
 
 @pytest.mark.asyncio
 class TestAutoExecuteInitialPrompt:
-    async def test_routes_to_grpc_when_url_set(self):
+    async def test_skips_push_when_grpc_url_set(self):
         with (
             patch(
                 "ambient_runner.app._push_initial_prompt_via_grpc",
@@ -354,7 +354,7 @@ class TestAutoExecuteInitialPrompt:
                 "hello", "sess-1", grpc_url="localhost:9000"
             )
 
-        mock_grpc.assert_awaited_once_with("hello", "sess-1")
+        mock_grpc.assert_not_awaited()
         mock_http.assert_not_awaited()
 
     async def test_routes_to_http_when_no_grpc_url(self):
