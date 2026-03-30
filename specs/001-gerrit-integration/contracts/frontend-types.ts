@@ -56,7 +56,7 @@ export interface GerritTestResponse {
   error?: string
 }
 
-export interface GerritInstancesListResponse {
+export interface GerritInstancesResponse {
   instances: GerritInstanceStatus[]
 }
 

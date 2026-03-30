@@ -117,7 +117,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GerritInstancesListResponse'
+                $ref: '#/components/schemas/GerritInstancesResponse'
 
   /api/projects/{projectName}/agentic-sessions/{sessionName}/credentials/gerrit:
     get:
@@ -177,6 +177,8 @@ components:
           type: string
           enum: [http_basic, git_cookies]
           description: Authentication method
+      discriminator:
+        propertyName: authMethod
       oneOf:
         - properties:
             authMethod:
@@ -207,6 +209,8 @@ components:
           type: string
           enum: [http_basic, git_cookies]
           description: Authentication method
+      discriminator:
+        propertyName: authMethod
       oneOf:
         - properties:
             authMethod:
@@ -260,7 +264,7 @@ components:
           type: string
           description: Error message if validation failed
 
-    GerritInstancesListResponse:
+    GerritInstancesResponse:
       type: object
       properties:
         instances:

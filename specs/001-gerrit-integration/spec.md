@@ -122,7 +122,7 @@ A platform user who contributes to multiple Gerrit-hosted projects (e.g., OpenSt
 - The open-source Gerrit MCP server from `gerrit.googlesource.com/gerrit-mcp-server` is suitable for bundling into the platform's runner environment.
 - Two authentication methods are supported: HTTP credentials (username + HTTP password/access token) and gitcookies file content. Both are widely used across Gerrit deployments.
 - The Gerrit MCP server will be run in STDIO mode within the runner pod, consistent with how other MCP servers (e.g., mcp-atlassian, google-workspace) are launched.
-- The platform's existing generic MCP server credential storage pattern (`mcp-server-credentials` secret with `serverName:userID` keying) can be extended to support Gerrit.
+- Gerrit credentials are stored in per-user Kubernetes Secrets named `gerrit-credentials-{userID}` with `instanceName` keys, providing user isolation and avoiding unbounded Secret growth.
 - Users are responsible for obtaining their own credentials: either generating an HTTP password from their Gerrit instance's Settings page, or obtaining their gitcookies file content.
 
 ## Dependencies

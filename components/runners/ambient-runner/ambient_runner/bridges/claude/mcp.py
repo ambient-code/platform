@@ -12,6 +12,7 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict
+from urllib.parse import urlparse
 
 from ambient_runner.platform.context import RunnerContext
 from ambient_runner.platform.utils import get_bot_token
@@ -358,6 +359,18 @@ def check_mcp_authentication(server_name: str) -> tuple[bool | None, str | None]
             session_id = os.getenv("SESSION_ID", "")
 
             if base and project and session_id:
+                # Reject non-cluster URLs to prevent token exfiltration
+                parsed_base = urlparse(base)
+                if parsed_base.hostname and not (
+                    parsed_base.hostname.endswith(".svc.cluster.local")
+                    or parsed_base.hostname == "localhost"
+                    or parsed_base.hostname == "127.0.0.1"
+                ):
+                    logger.error(
+                        f"Refusing to send credentials to external host: {parsed_base.hostname}"
+                    )
+                    return False, "Gerrit not configured - connect on Integrations page"
+
                 url = f"{base}/projects/{project.strip()}/agentic-sessions/{session_id}/credentials/gerrit"
                 req = _urllib_request.Request(url, method="GET")
                 bot = (os.getenv("BOT_TOKEN") or "").strip()

@@ -224,7 +224,9 @@ func ValidateGerritToken(ctx context.Context, gerritURL, authMethod, username, h
 }
 
 // parseGitcookies extracts the cookie value for a given Gerrit URL from gitcookies content.
-// Gitcookies format: host\tFALSE\t/\tTRUE\t2147483647\to\tvalue
+// Gitcookies format: host\tsubdomain_flag\t/\tTRUE\t2147483647\to\tvalue
+// The subdomain flag (column 2) controls whether subdomains are allowed:
+// "TRUE" means any subdomain matches; "FALSE" means exact host match only.
 func parseGitcookies(gerritURL, content string) string {
 	parsed, err := url.Parse(gerritURL)
 	if err != nil {
@@ -241,7 +243,13 @@ func parseGitcookies(gerritURL, content string) string {
 		fields := strings.Split(line, "\t")
 		if len(fields) >= 7 {
 			cookieHost := strings.TrimPrefix(fields[0], ".")
-			if cookieHost == host || strings.HasSuffix(host, "."+cookieHost) {
+			subdomainFlag := strings.ToUpper(strings.TrimSpace(fields[1]))
+
+			if cookieHost == host {
+				return fields[5] + "=" + fields[6]
+			}
+			// Only allow subdomain matching when the flag is TRUE
+			if subdomainFlag == "TRUE" && strings.HasSuffix(host, "."+cookieHost) {
 				return fields[5] + "=" + fields[6]
 			}
 		}

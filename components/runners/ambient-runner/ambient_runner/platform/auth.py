@@ -423,6 +423,8 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
     # config from a previous refresh is cleaned up when all instances are removed.
     if isinstance(gerrit_instances, Exception):
         logger.warning(f"Failed to fetch Gerrit credentials: {gerrit_instances}")
+        if isinstance(gerrit_instances, PermissionError):
+            auth_failures.append(str(gerrit_instances))
     else:
         try:
             from ambient_runner.bridges.claude.mcp import generate_gerrit_config
