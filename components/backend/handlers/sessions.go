@@ -12,7 +12,9 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -4098,6 +4100,613 @@ func GitListBranchesSession(c *gin.Context) {
 		return
 	}
 	c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), bodyBytes)
+}
+
+// ---------------------------------------------------------------------------
+// Skill / Command / Agent import from Git sources
+// ---------------------------------------------------------------------------
+
+// skillItem represents a discovered skill, command, or agent from a Git source.
+type skillItem struct {
+	ID          string `json:"id"`
+	Type        string `json:"type"` // "skill", "command", or "agent"
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+// parseFrontmatter extracts key:value pairs from YAML frontmatter in a markdown file.
+func parseFrontmatter(content string) map[string]string {
+	result := make(map[string]string)
+	if !strings.HasPrefix(content, "---\n") {
+		return result
+	}
+	endIdx := strings.Index(content[4:], "\n---")
+	if endIdx == -1 {
+		return result
+	}
+	frontmatter := content[4 : 4+endIdx]
+	for _, line := range strings.Split(frontmatter, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, ":", 2)
+		if len(parts) == 2 {
+			key := strings.TrimSpace(parts[0])
+			value := strings.TrimSpace(parts[1])
+			value = strings.Trim(value, "\"'")
+			result[key] = value
+		}
+	}
+	return result
+}
+
+// writeFileToRunner sends a file to the runner's content/write endpoint.
+func writeFileToRunner(ctx context.Context, runnerBase, relativePath, content string) error {
+	wreq := struct {
+		Path    string `json:"path"`
+		Content string `json:"content"`
+	}{
+		Path:    relativePath,
+		Content: content,
+	}
+	b, err := json.Marshal(wreq)
+	if err != nil {
+		return fmt.Errorf("marshal write request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, runnerBase+"/content/write", bytes.NewReader(b))
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("runner request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("runner returned %d: %s", resp.StatusCode, string(body))
+	}
+	return nil
+}
+
+// deletePathFromRunner deletes a file or directory from the runner's content/delete endpoint.
+func deletePathFromRunner(ctx context.Context, runnerBase, relativePath string) error {
+	wreq := struct {
+		Path string `json:"path"`
+	}{Path: relativePath}
+	b, err := json.Marshal(wreq)
+	if err != nil {
+		return fmt.Errorf("marshal delete request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, runnerBase+"/content/delete", bytes.NewReader(b))
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("runner request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 && resp.StatusCode != http.StatusNotFound {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("runner returned %d: %s", resp.StatusCode, string(body))
+	}
+	return nil
+}
+
+// validSkillURLScheme checks that a URL uses https:// or git@ scheme.
+var validSkillURLScheme = regexp.MustCompile(`^(https://|git@)`)
+
+// ImportSkillSource clones a Git repo, discovers skills/commands/agents, and writes them
+// into the session's file-uploads/.claude/ directory via the runner's content/write endpoint.
+// POST /api/projects/:projectName/agentic-sessions/:sessionName/skills/import
+func ImportSkillSource(c *gin.Context) {
+	project := c.GetString("project")
+	sessionName := c.Param("sessionName")
+	k8sClt, k8sDyn := GetK8sClientsForRequest(c)
+	if k8sClt == nil || k8sDyn == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
+
+	var req struct {
+		URL    string `json:"url" binding:"required"`
+		Branch string `json:"branch"`
+		Path   string `json:"path"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if req.Branch == "" {
+		req.Branch = "main"
+	}
+
+	// Validate URL scheme
+	if !validSkillURLScheme.MatchString(req.URL) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "URL must use https:// or git@ scheme"})
+		return
+	}
+
+	// Validate path has no traversal
+	if strings.Contains(req.Path, "..") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Path must not contain '..'"})
+		return
+	}
+
+	// Validate session exists and is running
+	gvr := GetAgenticSessionV1Alpha1Resource()
+	item, err := k8sDyn.Resource(gvr).Namespace(project).Get(context.TODO(), sessionName, v1.GetOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Session not found"})
+			return
+		}
+		log.Printf("ImportSkillSource: failed to get session %s in project %s: %v", sessionName, project, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get session"})
+		return
+	}
+
+	if err := ensureRuntimeMutationAllowed(item); err != nil {
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Clone to temp dir
+	tmpDir, err := os.MkdirTemp("", "skill-import-*")
+	if err != nil {
+		log.Printf("ImportSkillSource: failed to create temp dir: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create temporary directory"})
+		return
+	}
+	defer os.RemoveAll(tmpDir)
+
+	cmd := exec.CommandContext(c.Request.Context(), "git", "clone", "--depth", "1", "-b", req.Branch, req.URL, tmpDir)
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		log.Printf("ImportSkillSource: git clone failed: %v, output: %s", err, string(output))
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Failed to clone repository: %s", string(output))})
+		return
+	}
+
+	// Determine scan root
+	scanRoot := tmpDir
+	if req.Path != "" {
+		scanRoot = filepath.Join(tmpDir, req.Path)
+	}
+
+	// Verify scan root exists
+	if fi, err := os.Stat(scanRoot); err != nil || !fi.IsDir() {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Path %q not found in repository", req.Path)})
+		return
+	}
+
+	runnerBase := fmt.Sprintf("http://session-%s.%s.svc.cluster.local:8001", sessionName, project)
+
+	var imported []skillItem
+
+	// Scan for skills: both .claude/skills/*/SKILL.md and skills/*/SKILL.md
+	for _, prefix := range []string{".claude", ""} {
+		skillsDir := filepath.Join(scanRoot, prefix, "skills")
+		entries, err := os.ReadDir(skillsDir)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				continue
+			}
+			skillName := entry.Name()
+			skillDir := filepath.Join(skillsDir, skillName)
+
+			// Walk all files in the skill directory
+			err := filepath.Walk(skillDir, func(path string, info os.FileInfo, err error) error {
+				if err != nil || info.IsDir() {
+					return err
+				}
+				relToSkillDir, _ := filepath.Rel(skillDir, path)
+				destPath := filepath.ToSlash(filepath.Join("file-uploads", ".claude", "skills", skillName, relToSkillDir))
+				content, readErr := os.ReadFile(path)
+				if readErr != nil {
+					log.Printf("ImportSkillSource: failed to read %s: %v", path, readErr)
+					return nil // skip unreadable files
+				}
+				if writeErr := writeFileToRunner(c.Request.Context(), runnerBase, destPath, string(content)); writeErr != nil {
+					log.Printf("ImportSkillSource: failed to write %s to runner: %v", destPath, writeErr)
+					return fmt.Errorf("write %s: %w", destPath, writeErr)
+				}
+				return nil
+			})
+			if err != nil {
+				log.Printf("ImportSkillSource: failed to walk skill dir %s: %v", skillDir, err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to import skill %s: %v", skillName, err)})
+				return
+			}
+
+			// Parse frontmatter from SKILL.md for metadata
+			skillMDPath := filepath.Join(skillDir, "SKILL.md")
+			desc := ""
+			displayName := skillName
+			if mdContent, err := os.ReadFile(skillMDPath); err == nil {
+				fm := parseFrontmatter(string(mdContent))
+				if v, ok := fm["description"]; ok {
+					desc = v
+				}
+				if v, ok := fm["name"]; ok {
+					displayName = v
+				}
+			}
+
+			imported = append(imported, skillItem{
+				ID:          skillName,
+				Type:        "skill",
+				Name:        displayName,
+				Description: desc,
+			})
+		}
+	}
+
+	// Scan for commands: both .claude/commands/*.md and commands/*.md
+	for _, prefix := range []string{".claude", ""} {
+		cmdsDir := filepath.Join(scanRoot, prefix, "commands")
+		entries, err := os.ReadDir(cmdsDir)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
+				continue
+			}
+			cmdName := strings.TrimSuffix(entry.Name(), ".md")
+			srcPath := filepath.Join(cmdsDir, entry.Name())
+			content, err := os.ReadFile(srcPath)
+			if err != nil {
+				log.Printf("ImportSkillSource: failed to read command %s: %v", srcPath, err)
+				continue
+			}
+			destPath := filepath.ToSlash(filepath.Join("file-uploads", ".claude", "commands", entry.Name()))
+			if err := writeFileToRunner(c.Request.Context(), runnerBase, destPath, string(content)); err != nil {
+				log.Printf("ImportSkillSource: failed to write command %s: %v", destPath, err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to import command %s: %v", cmdName, err)})
+				return
+			}
+			fm := parseFrontmatter(string(content))
+			desc := fm["description"]
+			displayName := cmdName
+			if v, ok := fm["name"]; ok {
+				displayName = v
+			}
+			imported = append(imported, skillItem{
+				ID:          cmdName,
+				Type:        "command",
+				Name:        displayName,
+				Description: desc,
+			})
+		}
+	}
+
+	// Scan for agents: both .claude/agents/*.md and agents/*.md
+	for _, prefix := range []string{".claude", ""} {
+		agentsDir := filepath.Join(scanRoot, prefix, "agents")
+		entries, err := os.ReadDir(agentsDir)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
+				continue
+			}
+			agentName := strings.TrimSuffix(entry.Name(), ".md")
+			srcPath := filepath.Join(agentsDir, entry.Name())
+			content, err := os.ReadFile(srcPath)
+			if err != nil {
+				log.Printf("ImportSkillSource: failed to read agent %s: %v", srcPath, err)
+				continue
+			}
+			destPath := filepath.ToSlash(filepath.Join("file-uploads", ".claude", "agents", entry.Name()))
+			if err := writeFileToRunner(c.Request.Context(), runnerBase, destPath, string(content)); err != nil {
+				log.Printf("ImportSkillSource: failed to write agent %s: %v", destPath, err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to import agent %s: %v", agentName, err)})
+				return
+			}
+			fm := parseFrontmatter(string(content))
+			desc := fm["description"]
+			displayName := agentName
+			if v, ok := fm["name"]; ok {
+				displayName = v
+			}
+			imported = append(imported, skillItem{
+				ID:          agentName,
+				Type:        "agent",
+				Name:        displayName,
+				Description: desc,
+			})
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"imported": imported,
+		"count":    len(imported),
+	})
+}
+
+// ListImportedSkills lists skills, commands, and agents imported into a session's workspace.
+// GET /api/projects/:projectName/agentic-sessions/:sessionName/skills
+func ListImportedSkills(c *gin.Context) {
+	project := c.GetString("project")
+	if project == "" {
+		project = c.Param("projectName")
+	}
+	sessionName := c.Param("sessionName")
+
+	k8sClt, _ := GetK8sClientsForRequest(c)
+	if k8sClt == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
+
+	runnerBase := fmt.Sprintf("http://session-%s.%s.svc.cluster.local:8001", sessionName, project)
+	client := &http.Client{Timeout: 10 * time.Second}
+
+	var items []skillItem
+
+	// List each type: skills, commands, agents
+	for _, itemType := range []string{"skills", "commands", "agents"} {
+		listPath := fmt.Sprintf("file-uploads/.claude/%s", itemType)
+		listURL := fmt.Sprintf("%s/content/list?path=%s", runnerBase, url.QueryEscape(listPath))
+
+		req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, listURL, nil)
+		if err != nil {
+			log.Printf("ListImportedSkills: failed to create request for %s: %v", itemType, err)
+			continue
+		}
+
+		resp, err := client.Do(req)
+		if err != nil {
+			log.Printf("ListImportedSkills: runner request failed for %s: %v", itemType, err)
+			continue
+		}
+
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+
+		if resp.StatusCode == http.StatusNotFound {
+			continue
+		}
+		if resp.StatusCode >= 400 {
+			log.Printf("ListImportedSkills: runner returned %d for %s: %s", resp.StatusCode, itemType, string(body))
+			continue
+		}
+
+		var listResp struct {
+			Items []struct {
+				Name  string `json:"name"`
+				IsDir bool   `json:"isDir"`
+			} `json:"items"`
+		}
+		if err := json.Unmarshal(body, &listResp); err != nil {
+			log.Printf("ListImportedSkills: failed to parse response for %s: %v", itemType, err)
+			continue
+		}
+
+		// Determine singular type name for response
+		singularType := strings.TrimSuffix(itemType, "s")
+
+		for _, entry := range listResp.Items {
+			name := entry.Name
+			if itemType == "skills" {
+				// Skills are directories; use dir name as ID
+				if !entry.IsDir {
+					continue
+				}
+				// Try to read SKILL.md for metadata
+				skillMDPath := fmt.Sprintf("file-uploads/.claude/skills/%s/SKILL.md", name)
+				mdURL := fmt.Sprintf("%s/content/file?path=%s", runnerBase, url.QueryEscape(skillMDPath))
+				mdReq, err := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, mdURL, nil)
+				if err == nil {
+					mdResp, err := client.Do(mdReq)
+					if err == nil {
+						mdBody, _ := io.ReadAll(mdResp.Body)
+						mdResp.Body.Close()
+						if mdResp.StatusCode == http.StatusOK {
+							fm := parseFrontmatter(string(mdBody))
+							displayName := name
+							if v, ok := fm["name"]; ok {
+								displayName = v
+							}
+							items = append(items, skillItem{
+								ID:          name,
+								Type:        singularType,
+								Name:        displayName,
+								Description: fm["description"],
+							})
+							continue
+						}
+					}
+				}
+				items = append(items, skillItem{
+					ID:   name,
+					Type: singularType,
+					Name: name,
+				})
+			} else {
+				// Commands and agents are .md files
+				if !strings.HasSuffix(name, ".md") {
+					continue
+				}
+				id := strings.TrimSuffix(name, ".md")
+
+				// Read file for metadata
+				filePath := fmt.Sprintf("file-uploads/.claude/%s/%s", itemType, name)
+				fileURL := fmt.Sprintf("%s/content/file?path=%s", runnerBase, url.QueryEscape(filePath))
+				fileReq, err := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, fileURL, nil)
+				if err == nil {
+					fileResp, err := client.Do(fileReq)
+					if err == nil {
+						fileBody, _ := io.ReadAll(fileResp.Body)
+						fileResp.Body.Close()
+						if fileResp.StatusCode == http.StatusOK {
+							fm := parseFrontmatter(string(fileBody))
+							displayName := id
+							if v, ok := fm["name"]; ok {
+								displayName = v
+							}
+							items = append(items, skillItem{
+								ID:          id,
+								Type:        singularType,
+								Name:        displayName,
+								Description: fm["description"],
+							})
+							continue
+						}
+					}
+				}
+				items = append(items, skillItem{
+					ID:   id,
+					Type: singularType,
+					Name: id,
+				})
+			}
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"items": items,
+		"count": len(items),
+	})
+}
+
+// RemoveImportedSkill deletes an imported skill, command, or agent from the session workspace.
+// DELETE /api/projects/:projectName/agentic-sessions/:sessionName/skills/:type/:skillId
+func RemoveImportedSkill(c *gin.Context) {
+	project := c.GetString("project")
+	if project == "" {
+		project = c.Param("projectName")
+	}
+	sessionName := c.Param("sessionName")
+	itemType := c.Param("type")
+	skillID := c.Param("skillId")
+
+	k8sClt, k8sDyn := GetK8sClientsForRequest(c)
+	if k8sClt == nil || k8sDyn == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
+
+	// Validate type
+	if itemType != "skills" && itemType != "commands" && itemType != "agents" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Type must be 'skills', 'commands', or 'agents'"})
+		return
+	}
+
+	// Validate skillID has no traversal
+	if strings.Contains(skillID, "..") || strings.Contains(skillID, "/") || strings.Contains(skillID, "\\") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid skill ID"})
+		return
+	}
+
+	// Verify session exists
+	gvr := GetAgenticSessionV1Alpha1Resource()
+	item, err := k8sDyn.Resource(gvr).Namespace(project).Get(context.TODO(), sessionName, v1.GetOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Session not found"})
+			return
+		}
+		log.Printf("RemoveImportedSkill: failed to get session %s: %v", sessionName, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get session"})
+		return
+	}
+
+	if err := ensureRuntimeMutationAllowed(item); err != nil {
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		return
+	}
+
+	runnerBase := fmt.Sprintf("http://session-%s.%s.svc.cluster.local:8001", sessionName, project)
+
+	switch itemType {
+	case "skills":
+		// Skills are directories — list and delete all files, then the dir itself
+		listPath := fmt.Sprintf("file-uploads/.claude/skills/%s", skillID)
+		listURL := fmt.Sprintf("%s/content/list?path=%s", runnerBase, url.QueryEscape(listPath))
+
+		req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, listURL, nil)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create request"})
+			return
+		}
+		client := &http.Client{Timeout: 10 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Runner not reachable"})
+			return
+		}
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+
+		if resp.StatusCode == http.StatusNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Skill not found"})
+			return
+		}
+
+		var listResp struct {
+			Items []struct {
+				Name  string `json:"name"`
+				Path  string `json:"path"`
+				IsDir bool   `json:"isDir"`
+			} `json:"items"`
+		}
+		if err := json.Unmarshal(body, &listResp); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse runner response"})
+			return
+		}
+
+		// Delete each file in the skill directory
+		for _, f := range listResp.Items {
+			if f.IsDir {
+				continue
+			}
+			// Path from runner is absolute like /file-uploads/.claude/skills/foo/SKILL.md
+			// content/delete expects relative path
+			relPath := strings.TrimPrefix(f.Path, "/")
+			if err := deletePathFromRunner(c.Request.Context(), runnerBase, relPath); err != nil {
+				log.Printf("RemoveImportedSkill: failed to delete %s: %v", relPath, err)
+			}
+		}
+
+	case "commands":
+		deletePath := fmt.Sprintf("file-uploads/.claude/commands/%s.md", skillID)
+		if err := deletePathFromRunner(c.Request.Context(), runnerBase, deletePath); err != nil {
+			log.Printf("RemoveImportedSkill: failed to delete command %s: %v", skillID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to delete command: %v", err)})
+			return
+		}
+
+	case "agents":
+		deletePath := fmt.Sprintf("file-uploads/.claude/agents/%s.md", skillID)
+		if err := deletePathFromRunner(c.Request.Context(), runnerBase, deletePath); err != nil {
+			log.Printf("RemoveImportedSkill: failed to delete agent %s: %v", skillID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to delete agent: %v", err)})
+			return
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("Removed %s %s", strings.TrimSuffix(itemType, "s"), skillID)})
 }
 
 // NOTE: autoTriggerInitialPrompt removed - runner handles INITIAL_PROMPT auto-execution

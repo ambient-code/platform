@@ -20,6 +20,7 @@ import { SessionHeader } from "./session-header";
 // Extracted components
 import { AddContextModal } from "./components/modals/add-context-modal";
 import { UploadFileModal, type UploadFileSource } from "./components/modals/upload-file-modal";
+import { ImportSkillsModal } from "./components/modals/import-skills-modal";
 import { CustomWorkflowDialog } from "./components/modals/custom-workflow-dialog";
 import { ManageRemoteDialog } from "./components/modals/manage-remote-dialog";
 
@@ -118,6 +119,7 @@ export default function ProjectSessionDetailPage({
   const [backHref, setBackHref] = useState<string | null>(null);
   const [contextModalOpen, setContextModalOpen] = useState(false);
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
+  const [importSkillsModalOpen, setImportSkillsModalOpen] = useState(false);
   const [repoChanging, setRepoChanging] = useState(false);
   const [pendingRepo, setPendingRepo] = useState<{ url: string; branch: string; status: "Cloning" } | null>(null);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
@@ -574,6 +576,30 @@ export default function ProjectSessionDetailPage({
     },
     onError: (error: Error) => {
       toast.error(error.message || "Failed to remove file");
+    },
+  });
+
+  // Import skills mutation
+  const importSkillsMutation = useMutation({
+    mutationFn: async (source: { url: string; branch: string; path?: string }) => {
+      const response = await fetch(
+        `/api/projects/${projectName}/agentic-sessions/${sessionName}/skills/import`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(source),
+        }
+      );
+      if (!response.ok) throw new Error("Import failed");
+      return response.json() as Promise<{ count: number }>;
+    },
+    onSuccess: (data) => {
+      toast.success(`Imported ${data.count} items`);
+      queryClient.invalidateQueries({ queryKey: ["skills", projectName, sessionName] });
+      setImportSkillsModalOpen(false);
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Failed to import skills");
     },
   });
 
@@ -1531,6 +1557,10 @@ export default function ProjectSessionDetailPage({
     setContextModalOpen(true);
   }, []);
 
+  const handleOpenImportSkillsModal = useCallback(() => {
+    setImportSkillsModalOpen(true);
+  }, []);
+
   const handleRemoveRepository = useCallback((repoName: string) => {
     removeRepoMutation.mutate(repoName);
   }, [removeRepoMutation]);
@@ -1792,6 +1822,7 @@ export default function ProjectSessionDetailPage({
               uploadedFiles={explorerUploadedFiles}
               onAddRepository={handleOpenContextModal}
               onUploadFile={handleOpenUploadModal}
+              onImportSkills={handleOpenImportSkillsModal}
               onRemoveRepository={handleRemoveRepository}
               onRemoveFile={handleRemoveFile}
               backgroundTasks={aguiState.backgroundTasks}
@@ -1835,6 +1866,15 @@ export default function ProjectSessionDetailPage({
           await uploadFileMutation.mutateAsync(source);
         }}
         isLoading={uploadFileMutation.isPending}
+      />
+
+      <ImportSkillsModal
+        open={importSkillsModalOpen}
+        onOpenChange={setImportSkillsModalOpen}
+        onImportSkills={async (source) => {
+          await importSkillsMutation.mutateAsync(source);
+        }}
+        isLoading={importSkillsMutation.isPending}
       />
 
       <CustomWorkflowDialog

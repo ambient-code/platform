@@ -42,6 +42,7 @@ describe('ExplorerPanel', () => {
     repositories: [],
     uploadedFiles: [],
     onAddRepository: vi.fn(),
+    onImportSkills: vi.fn(),
     onRemoveRepository: vi.fn(),
     onRemoveFile: vi.fn(),
   };

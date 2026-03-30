@@ -42,6 +42,7 @@ export type ExplorerPanelProps = {
   repositories?: Repository[];
   uploadedFiles?: UploadedFile[];
   onAddRepository: () => void;
+  onImportSkills: () => void;
   onRemoveRepository: (repoName: string) => void;
   onRemoveFile?: (fileName: string) => void;
   // Background tasks tab props
@@ -75,6 +76,7 @@ export function ExplorerPanel({
   repositories,
   uploadedFiles,
   onAddRepository,
+  onImportSkills,
   onRemoveRepository,
   onRemoveFile,
   // Background tasks tab
@@ -181,9 +183,12 @@ export function ExplorerPanel({
             uploadedFiles={uploadedFiles}
             onAddRepository={onAddRepository}
             onUploadFile={onUploadFile}
+            onImportSkills={onImportSkills}
             onRemoveRepository={onRemoveRepository}
             onRemoveFile={onRemoveFile}
             canModify={canModify}
+            projectName={projectName}
+            sessionName={sessionName}
           />
         )}
       </div>

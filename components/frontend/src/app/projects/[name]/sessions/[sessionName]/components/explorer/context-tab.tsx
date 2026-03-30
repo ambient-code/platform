@@ -11,19 +11,31 @@ import {
   AlertTriangle,
   Plus,
   Upload,
+  Sparkles,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import type { Repository, UploadedFile } from "../../lib/types";
+
+export type SkillItem = {
+  id: string;
+  name: string;
+  type: "skill" | "command" | "agent";
+};
 
 export type ContextTabProps = {
   repositories?: Repository[];
   uploadedFiles?: UploadedFile[];
   onAddRepository: () => void;
   onUploadFile: () => void;
+  onImportSkills: () => void;
   onRemoveRepository: (repoName: string) => void;
   onRemoveFile?: (fileName: string) => void;
   canModify: boolean;
+  projectName: string;
+  sessionName: string;
 };
 
 export function ContextTab({
@@ -31,13 +43,55 @@ export function ContextTab({
   uploadedFiles = [],
   onAddRepository,
   onUploadFile,
+  onImportSkills,
   onRemoveRepository,
   onRemoveFile,
   canModify,
+  projectName,
+  sessionName,
 }: ContextTabProps) {
   const [removingRepo, setRemovingRepo] = useState<string | null>(null);
   const [removingFile, setRemovingFile] = useState<string | null>(null);
+  const [removingSkill, setRemovingSkill] = useState<string | null>(null);
   const [expandedRepos, setExpandedRepos] = useState<Set<string>>(new Set());
+  const queryClient = useQueryClient();
+
+  // Fetch imported skills
+  const { data: skills = [] } = useQuery<SkillItem[]>({
+    queryKey: ["skills", projectName, sessionName],
+    queryFn: async () => {
+      const response = await fetch(
+        `/api/projects/${projectName}/agentic-sessions/${sessionName}/skills`
+      );
+      if (!response.ok) return [];
+      const data: unknown = await response.json();
+      if (Array.isArray(data)) return data as SkillItem[];
+      if (data && typeof data === "object" && "items" in data && Array.isArray((data as { items: unknown }).items)) {
+        return (data as { items: SkillItem[] }).items;
+      }
+      return [];
+    },
+    enabled: !!projectName && !!sessionName,
+  });
+
+  // Remove skill mutation
+  const removeSkillMutation = useMutation({
+    mutationFn: async ({ type, id }: { type: string; id: string }) => {
+      const response = await fetch(
+        `/api/projects/${projectName}/agentic-sessions/${sessionName}/skills/${type}/${id}`,
+        { method: "DELETE" }
+      );
+      if (!response.ok) throw new Error("Failed to remove skill");
+      return response.json();
+    },
+    onSuccess: () => {
+      toast.success("Skill removed");
+      queryClient.invalidateQueries({ queryKey: ["skills", projectName, sessionName] });
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Failed to remove skill");
+    },
+  });
 
   const handleRemoveRepo = async (repoName: string) => {
     if (confirm(`Remove repository ${repoName}?`)) {
@@ -59,6 +113,30 @@ export function ContextTab({
       } finally {
         setRemovingFile(null);
       }
+    }
+  };
+
+  const handleRemoveSkill = async (skill: SkillItem) => {
+    if (confirm(`Remove ${skill.type} "${skill.name}"?`)) {
+      setRemovingSkill(skill.id);
+      try {
+        await removeSkillMutation.mutateAsync({ type: skill.type, id: skill.id });
+      } finally {
+        setRemovingSkill(null);
+      }
+    }
+  };
+
+  const skillTypeBadgeClass = (type: string) => {
+    switch (type) {
+      case "skill":
+        return "bg-purple-50 dark:bg-purple-950 border-purple-300 dark:border-purple-800 text-purple-700 dark:text-purple-400";
+      case "command":
+        return "bg-blue-50 dark:bg-blue-950 border-blue-300 dark:border-blue-800 text-blue-700 dark:text-blue-400";
+      case "agent":
+        return "bg-green-50 dark:bg-green-950 border-green-300 dark:border-green-800 text-green-700 dark:text-green-400";
+      default:
+        return "";
     }
   };
 
@@ -239,7 +317,7 @@ export function ContextTab({
       </div>
 
       {/* Uploads section */}
-      <div>
+      <div className="border-b">
         <div className="px-3 py-2 flex items-center justify-between">
           <div>
             <h4 className="text-sm font-medium">Uploads</h4>
@@ -303,6 +381,87 @@ export function ContextTab({
                         onClick={() => handleRemoveFile(file.name)}
                         disabled={isRemoving}
                         aria-label={`Remove ${file.name}`}
+                      >
+                        {isRemoving ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                          <X className="h-3 w-3" />
+                        )}
+                      </Button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Skills section */}
+      <div>
+        <div className="px-3 py-2 flex items-center justify-between">
+          <div>
+            <h4 className="text-sm font-medium">Skills</h4>
+            <p className="text-xs text-muted-foreground">
+              Imported skills, commands, and agents.
+            </p>
+          </div>
+          {canModify && (
+            <Button variant="ghost" size="sm" onClick={onImportSkills} className="h-7">
+              <Sparkles className="h-3 w-3 mr-1" />
+              Import
+            </Button>
+          )}
+        </div>
+
+        <div className="px-3 pb-3">
+          {skills.length === 0 ? (
+            <div className="text-center py-4">
+              <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-muted mb-2">
+                <Sparkles className="h-4 w-4 text-muted-foreground/60" />
+              </div>
+              <p className="text-xs text-muted-foreground mb-2">
+                No skills imported
+              </p>
+              {canModify && (
+                <Button size="sm" variant="outline" onClick={onImportSkills}>
+                  <Sparkles className="mr-1.5 h-3 w-3" />
+                  Import Skills
+                </Button>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {skills.map((skill) => {
+                const isRemoving = removingSkill === skill.id;
+
+                return (
+                  <div
+                    key={`${skill.type}-${skill.id}`}
+                    className="flex items-center gap-2 p-2 border rounded bg-muted/30 hover:bg-muted/50 transition-colors"
+                  >
+                    <Sparkles className="h-4 w-4 text-purple-500 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium truncate">
+                          {skill.name}
+                        </span>
+                        <Badge
+                          variant="outline"
+                          className={`text-xs px-1.5 py-0.5 ${skillTypeBadgeClass(skill.type)}`}
+                        >
+                          {skill.type}
+                        </Badge>
+                      </div>
+                    </div>
+                    {canModify && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0 flex-shrink-0"
+                        onClick={() => handleRemoveSkill(skill)}
+                        disabled={isRemoving}
+                        aria-label={`Remove ${skill.name}`}
                       >
                         {isRemoving ? (
                           <Loader2 className="h-3 w-3 animate-spin" />

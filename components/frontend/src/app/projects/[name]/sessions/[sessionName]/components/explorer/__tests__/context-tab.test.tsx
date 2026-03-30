@@ -16,9 +16,12 @@ describe('ContextTab', () => {
     uploadedFiles: [] as { name: string; path: string; size?: number }[],
     onAddRepository: vi.fn(),
     onUploadFile: vi.fn(),
+    onImportSkills: vi.fn(),
     onRemoveRepository: vi.fn(),
     onRemoveFile: vi.fn(),
     canModify: true,
+    projectName: 'test-project',
+    sessionName: 'test-session',
   };
 
   beforeEach(() => {
