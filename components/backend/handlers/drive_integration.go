@@ -15,6 +15,15 @@ import (
 	"golang.org/x/oauth2/google"
 )
 
+// getUserID extracts the userID from the Gin context, falling back to
+// "default-user" for development environments without auth middleware.
+func getUserID(c *gin.Context) string {
+	if userID := c.GetString("userID"); userID != "" {
+		return userID
+	}
+	return "default-user"
+}
+
 // DriveIntegrationHandler handles Google Drive integration endpoints.
 type DriveIntegrationHandler struct {
 	storage      *DriveStorage
@@ -165,10 +174,7 @@ func (h *DriveIntegrationHandler) HandleDriveCallback(c *gin.Context) {
 // GET /api/projects/:projectName/integrations/google-drive/picker-token
 func (h *DriveIntegrationHandler) HandlePickerToken(c *gin.Context) {
 	projectName := c.Param("projectName")
-	userID := c.GetString("userID")
-	if userID == "" {
-		userID = "default-user"
-	}
+	userID := getUserID(c)
 
 	// Get stored tokens
 	accessToken, refreshToken, expiresAt, err := h.storage.GetTokens(c.Request.Context(), projectName, userID)
@@ -227,10 +233,7 @@ func (h *DriveIntegrationHandler) HandlePickerToken(c *gin.Context) {
 // GET /api/projects/:projectName/integrations/google-drive
 func (h *DriveIntegrationHandler) HandleGetDriveIntegration(c *gin.Context) {
 	projectName := c.Param("projectName")
-	userID := c.GetString("userID")
-	if userID == "" {
-		userID = "default-user"
-	}
+	userID := getUserID(c)
 
 	integration, err := h.storage.GetIntegration(c.Request.Context(), projectName, userID)
 	if err != nil || integration == nil {
@@ -247,10 +250,7 @@ func (h *DriveIntegrationHandler) HandleGetDriveIntegration(c *gin.Context) {
 // DELETE /api/projects/:projectName/integrations/google-drive
 func (h *DriveIntegrationHandler) HandleDisconnectDriveIntegration(c *gin.Context) {
 	projectName := c.Param("projectName")
-	userID := c.GetString("userID")
-	if userID == "" {
-		userID = "default-user"
-	}
+	userID := getUserID(c)
 
 	// Get the integration to check it exists
 	integration, err := h.storage.GetIntegration(c.Request.Context(), projectName, userID)

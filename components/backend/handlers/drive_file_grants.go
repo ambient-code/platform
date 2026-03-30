@@ -28,10 +28,7 @@ func NewDriveFileGrantsHandler(storage *DriveStorage, oauthConfig *oauth2.Config
 // PUT /api/projects/:projectName/integrations/google-drive/files
 func (h *DriveFileGrantsHandler) HandleUpdateFileGrants(c *gin.Context) {
 	projectName := c.Param("projectName")
-	userID := c.GetString("userID")
-	if userID == "" {
-		userID = "default-user"
-	}
+	userID := getUserID(c)
 
 	var req models.UpdateFileGrantsRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -128,10 +125,7 @@ func (h *DriveFileGrantsHandler) HandleUpdateFileGrants(c *gin.Context) {
 // GET /api/projects/:projectName/integrations/google-drive/files
 func (h *DriveFileGrantsHandler) HandleListFileGrants(c *gin.Context) {
 	projectName := c.Param("projectName")
-	userID := c.GetString("userID")
-	if userID == "" {
-		userID = "default-user"
-	}
+	userID := getUserID(c)
 
 	integration, err := h.storage.GetIntegration(c.Request.Context(), projectName, userID)
 	if err != nil || integration == nil {
@@ -169,10 +163,7 @@ func (h *DriveFileGrantsHandler) verifyFileAvailability(
 	integration *models.DriveIntegration,
 	grants []models.FileGrant,
 ) []models.FileGrant {
-	userID := c.GetString("userID")
-	if userID == "" {
-		userID = "default-user"
-	}
+	userID := getUserID(c)
 
 	accessToken, refreshToken, expiresAt, err := h.storage.GetTokens(
 		c.Request.Context(), integration.ProjectName, userID,

@@ -35,6 +35,7 @@ import {
   useFileGrants,
   useUpdateFileGrants,
   useDisconnectDriveIntegration,
+  type IntegrationStatus,
 } from "@/services/drive-api";
 import {
   GooglePicker,
@@ -48,7 +49,7 @@ interface GoogleDriveSettingsPageProps {
   googleAppId: string;
 }
 
-const statusLabels: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
+const statusLabels: Record<IntegrationStatus, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
   active: { label: "Active", variant: "default" },
   disconnected: { label: "Disconnected", variant: "destructive" },
   expired: { label: "Expired", variant: "destructive" },
