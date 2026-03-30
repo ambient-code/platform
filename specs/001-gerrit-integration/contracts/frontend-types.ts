@@ -22,6 +22,19 @@ export type GerritConnectRequest =
       gitcookiesContent: string
     }
 
+export type GerritTestRequest =
+  | {
+      url: string
+      authMethod: 'http_basic'
+      username: string
+      httpToken: string
+    }
+  | {
+      url: string
+      authMethod: 'git_cookies'
+      gitcookiesContent: string
+    }
+
 export interface GerritConnectResponse {
   message: string
   instanceName: string

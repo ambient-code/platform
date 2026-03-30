@@ -104,9 +104,9 @@ components/runners/ambient-runner/
 
 ### D3: Multi-Instance Secret Key Format
 
-**Chosen**: `{instanceName}:{userID}` keys within a single `gerrit-credentials` secret.
+**Chosen**: Per-user Secrets named `gerrit-credentials-{userID}` with `instanceName` keys.
 
-**Why**: Consistent with the MCP credentials pattern (`serverName:userID`). Allows listing all instances for a user by scanning keys ending with `:userID`. Single secret simplifies cleanup and backup.
+**Why**: Each user gets their own Secret, avoiding cross-user contention and unbounded Secret size growth. Listing all instances for a user requires reading only their own Secret. Instance names serve as data keys within the per-user Secret.
 
 ### D4: Credential Validation Endpoint
 
@@ -127,7 +127,7 @@ components/runners/ambient-runner/
          → POST /api/auth/gerrit/connect
          → [Backend: ConnectGerrit handler]
             → ValidateGerritToken (GET /a/accounts/self on Gerrit instance)
-            → Store in K8s Secret (gerrit-credentials)
+            → Store in K8s Secret (gerrit-credentials-{userID})
             → Return success
 
 [User creates session] → [Operator creates Job]

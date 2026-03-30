@@ -35,9 +35,9 @@ npm run dev  # http://localhost:3000
 cd components/runners/ambient-runner
 uv venv && uv pip install -e .
 
-# Clone and build Gerrit MCP server locally for testing:
+# Clone and build Gerrit MCP server locally for testing (pinned revision):
 git clone https://gerrit.googlesource.com/gerrit-mcp-server /tmp/gerrit-mcp-server
-cd /tmp/gerrit-mcp-server && ./build-gerrit.sh
+cd /tmp/gerrit-mcp-server && git checkout 5666642afe1a5217e2529225d4bd9c9df6310bd6 && ./build-gerrit.sh
 ```
 
 ## Key Files to Modify

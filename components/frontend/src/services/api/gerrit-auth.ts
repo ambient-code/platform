@@ -2,22 +2,25 @@ import { apiClient } from './client'
 
 export type GerritAuthMethod = 'http_basic' | 'git_cookies'
 
+type GerritHttpBasicFields = {
+  authMethod: 'http_basic'
+  username: string
+  httpToken: string
+}
+
+type GerritGitCookiesFields = {
+  authMethod: 'git_cookies'
+  gitcookiesContent: string
+}
+
 export type GerritConnectRequest = {
   instanceName: string
   url: string
-  authMethod: GerritAuthMethod
-  username?: string
-  httpToken?: string
-  gitcookiesContent?: string
-}
+} & (GerritHttpBasicFields | GerritGitCookiesFields)
 
 export type GerritTestRequest = {
   url: string
-  authMethod: GerritAuthMethod
-  username?: string
-  httpToken?: string
-  gitcookiesContent?: string
-}
+} & (GerritHttpBasicFields | GerritGitCookiesFields)
 
 export type GerritTestResponse = {
   valid: boolean

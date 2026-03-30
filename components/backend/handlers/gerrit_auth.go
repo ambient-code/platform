@@ -45,6 +45,14 @@ func gerritSecretName(userID string) string {
 	return gerritSecretPrefix + userID
 }
 
+// isPrivateOrBlocked returns true if the IP is loopback, private,
+// link-local, or a cloud metadata address.
+func isPrivateOrBlocked(ip net.IP) bool {
+	return ip.IsLoopback() || ip.IsPrivate() ||
+		ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
+		ip.Equal(net.ParseIP("169.254.169.254"))
+}
+
 // validateGerritURL validates a Gerrit URL for SSRF protection.
 // It ensures the scheme is HTTPS and the host does not resolve to
 // loopback, private, link-local, or metadata-service addresses.
@@ -70,15 +78,46 @@ func validateGerritURL(rawURL string) error {
 		if ip == nil {
 			continue
 		}
-		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+		if isPrivateOrBlocked(ip) {
 			return fmt.Errorf("URL must not resolve to a private or loopback address")
-		}
-		// Block cloud metadata endpoints (169.254.169.254)
-		if ip.Equal(net.ParseIP("169.254.169.254")) {
-			return fmt.Errorf("URL must not resolve to a metadata service address")
 		}
 	}
 	return nil
+}
+
+// ssrfSafeTransport returns an *http.Transport with a custom dialer that
+// rejects connections to private/loopback/metadata IPs. This prevents DNS
+// rebinding attacks where a hostname resolves to a public IP during
+// validateGerritURL but to a private IP when the HTTP request is made.
+func ssrfSafeTransport() *http.Transport {
+	return &http.Transport{
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			host, port, err := net.SplitHostPort(addr)
+			if err != nil {
+				return nil, fmt.Errorf("invalid address: %w", err)
+			}
+			ips, err := net.DefaultResolver.LookupHost(ctx, host)
+			if err != nil {
+				return nil, fmt.Errorf("cannot resolve host: %w", err)
+			}
+			for _, ipStr := range ips {
+				ip := net.ParseIP(ipStr)
+				if ip != nil && isPrivateOrBlocked(ip) {
+					return nil, fmt.Errorf("connection to private/loopback address blocked")
+				}
+			}
+			// Dial using the resolved IPs to prevent rebinding
+			var dialer net.Dialer
+			for _, ipStr := range ips {
+				conn, dialErr := dialer.DialContext(ctx, network, net.JoinHostPort(ipStr, port))
+				if dialErr == nil {
+					return conn, nil
+				}
+				err = dialErr
+			}
+			return nil, err
+		},
+	}
 }
 
 // ConnectGerrit handles POST /api/auth/gerrit/connect
@@ -201,6 +240,10 @@ func GetGerritStatus(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User authentication required"})
 		return
 	}
+	if !isValidUserID(userID) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user identifier"})
+		return
+	}
 
 	instanceName := c.Param("instanceName")
 	if instanceName == "" {
@@ -246,6 +289,10 @@ func DisconnectGerrit(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User authentication required"})
 		return
 	}
+	if !isValidUserID(userID) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user identifier"})
+		return
+	}
 
 	instanceName := c.Param("instanceName")
 	if instanceName == "" {
@@ -275,6 +322,10 @@ func ListGerritInstances(c *gin.Context) {
 	userID := c.GetString("userID")
 	if userID == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User authentication required"})
+		return
+	}
+	if !isValidUserID(userID) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user identifier"})
 		return
 	}
 

@@ -439,7 +439,7 @@ A: Use the `/api/auth/gerrit/test` endpoint. It validates credentials against th
 A: The instance name is a user-chosen identifier that distinguishes between multiple Gerrit instances. It is used in API paths (e.g., `/api/auth/gerrit/openstack/status`) and as part of the credential storage key.
 
 **Q: Can two users connect the same Gerrit instance with the same instance name?**
-A: Yes. Instance names are scoped per user. Two different users can both have an instance named "openstack" without conflict, as credentials are stored with a compound key of `instanceName.userID`.
+A: Yes. Instance names are scoped per user. Each user has their own Kubernetes Secret (`gerrit-credentials-{userID}`), so two different users can both have an instance named "openstack" without conflict.
 
 ---
 

@@ -97,7 +97,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/GerritConnectRequest'
+              $ref: '#/components/schemas/GerritTestRequest'
       responses:
         '200':
           description: Validation result
@@ -177,15 +177,51 @@ components:
           type: string
           enum: [http_basic, git_cookies]
           description: Authentication method
-        username:
+      oneOf:
+        - properties:
+            authMethod:
+              const: http_basic
+            username:
+              type: string
+            httpToken:
+              type: string
+          required: [username, httpToken]
+        - properties:
+            authMethod:
+              const: git_cookies
+            gitcookiesContent:
+              type: string
+          required: [gitcookiesContent]
+
+    GerritTestRequest:
+      description: Test Gerrit credentials without storing (no instanceName required)
+      type: object
+      required: [url, authMethod]
+      properties:
+        url:
           type: string
-          description: Gerrit username (required for http_basic)
-        httpToken:
+          format: uri
+          description: Gerrit instance base URL
+          example: https://review.opendev.org
+        authMethod:
           type: string
-          description: HTTP password/access token (required for http_basic)
-        gitcookiesContent:
-          type: string
-          description: Raw gitcookies file content (required for git_cookies)
+          enum: [http_basic, git_cookies]
+          description: Authentication method
+      oneOf:
+        - properties:
+            authMethod:
+              const: http_basic
+            username:
+              type: string
+            httpToken:
+              type: string
+          required: [username, httpToken]
+        - properties:
+            authMethod:
+              const: git_cookies
+            gitcookiesContent:
+              type: string
+          required: [gitcookiesContent]
 
     GerritConnectResponse:
       type: object

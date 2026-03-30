@@ -39,6 +39,12 @@ def generate_gerrit_config(instances: list[dict]) -> None:
     - .gitcookies: Combined gitcookies content (if any instances use git_cookies auth)
 
     Sets GERRIT_CONFIG_PATH env var to point to the generated config.
+
+    This is called by populate_runtime_credentials() before each SDK run,
+    so the config is always written before the CLI subprocess (and its MCP
+    servers) are spawned. On credential refresh the config files on disk
+    are regenerated; the Gerrit MCP server re-reads the config from disk
+    on each request, so changes take effect without restarting it.
     """
     config_dir = Path("/tmp/gerrit-mcp")
 

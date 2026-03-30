@@ -66,7 +66,7 @@ A platform user viewing an active session can see whether the Gerrit integration
 
 ### User Story 4 - Connect Multiple Gerrit Instances (Priority: P3)
 
-A platform user who contributes to multiple Gerrit-hosted projects (e.g., OpenStack on review.opendev.org and Android on android-review.googlesource.com) can connect multiple Gerrit instances and specify which one to use in their sessions.
+A platform user who contributes to multiple Gerrit-hosted projects (e.g., OpenStack on review.opendev.org and Android on android-review.googlesource.com) can connect multiple Gerrit instances. All connected instances are automatically available in every session.
 
 **Why this priority**: Valuable for power users contributing to multiple communities, but the majority of users will work with a single Gerrit instance.
 

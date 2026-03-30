@@ -274,8 +274,7 @@ var _ = Describe("Gerrit Auth Handler", Label(test_constants.LabelUnit, test_con
 
 			ConnectGerrit(context)
 
-			status := httpUtils.GetResponseRecorder().Code
-			Expect(status).NotTo(Equal(http.StatusBadRequest), "Should accept valid http_basic credentials")
+			httpUtils.AssertHTTPStatus(http.StatusOK)
 		})
 
 		It("Should return 401 when credentials are invalid", func() {
@@ -361,8 +360,7 @@ var _ = Describe("Gerrit Auth Handler", Label(test_constants.LabelUnit, test_con
 
 			GetGerritStatus(context)
 
-			status := httpUtils.GetResponseRecorder().Code
-			Expect(status).To(BeElementOf(http.StatusOK, http.StatusNotFound))
+			httpUtils.AssertHTTPStatus(http.StatusOK)
 		})
 	})
 

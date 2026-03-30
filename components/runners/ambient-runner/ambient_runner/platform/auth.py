@@ -419,14 +419,19 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
             git_user_email = github_creds["email"]
 
     # Gerrit credentials (generate config file for MCP server)
+    # Always call generate_gerrit_config (even with empty list) so stale
+    # config from a previous refresh is cleaned up when all instances are removed.
     if isinstance(gerrit_instances, Exception):
         logger.warning(f"Failed to fetch Gerrit credentials: {gerrit_instances}")
-    elif gerrit_instances:
+    else:
         try:
             from ambient_runner.bridges.claude.mcp import generate_gerrit_config
 
-            generate_gerrit_config(gerrit_instances)
-            logger.info("Generated Gerrit MCP config from backend credentials")
+            generate_gerrit_config(gerrit_instances if gerrit_instances else [])
+            if gerrit_instances:
+                logger.info("Generated Gerrit MCP config from backend credentials")
+            else:
+                logger.info("Cleared stale Gerrit MCP config (no instances)")
         except Exception as e:
             logger.warning(f"Failed to generate Gerrit config: {e}")
 

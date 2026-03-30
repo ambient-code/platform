@@ -170,7 +170,10 @@ func ValidateGerritToken(ctx context.Context, gerritURL, authMethod, username, h
 		return false, fmt.Errorf("Gerrit URL is required")
 	}
 
-	client := &http.Client{Timeout: 15 * time.Second}
+	client := &http.Client{
+		Timeout:   15 * time.Second,
+		Transport: ssrfSafeTransport(),
+	}
 	apiURL := fmt.Sprintf("%s/a/accounts/self", gerritURL)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
@@ -208,7 +211,8 @@ func ValidateGerritToken(ctx context.Context, gerritURL, authMethod, username, h
 	}
 	defer resp.Body.Close()
 
-	// 200 = valid, 401/403 = invalid
+	// 200 = valid credentials; anything else (including 5xx, redirects,
+	// wrong base URL) is treated as invalid to fail closed.
 	if resp.StatusCode == http.StatusOK {
 		return true, nil
 	}
@@ -216,8 +220,7 @@ func ValidateGerritToken(ctx context.Context, gerritURL, authMethod, username, h
 		return false, nil
 	}
 
-	// Other status codes - can't validate, assume valid to avoid false negatives
-	return true, nil
+	return false, fmt.Errorf("unexpected status %d from Gerrit /a/accounts/self", resp.StatusCode)
 }
 
 // parseGitcookies extracts the cookie value for a given Gerrit URL from gitcookies content.
