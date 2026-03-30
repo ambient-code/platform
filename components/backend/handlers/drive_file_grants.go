@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -59,7 +58,11 @@ func (h *DriveFileGrantsHandler) HandleUpdateFileGrants(c *gin.Context) {
 	// Get existing file grants for comparison
 	existingGrants, err := h.storage.ListFileGrants(c.Request.Context(), integration.ID)
 	if err != nil {
-		log.Printf("warning: failed to list existing file grants for integration %s: %v", integration.ID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "failed to list existing file grants",
+			"details": err.Error(),
+		})
+		return
 	}
 	existingByFileID := make(map[string]models.FileGrant)
 	for _, g := range existingGrants {
