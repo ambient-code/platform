@@ -99,19 +99,25 @@ jobs:
             git rebase --abort 2>/dev/null || true
 
             echo "Rebase had conflicts — falling back to merge"
-            git merge --no-ff --allow-unrelated-histories origin/main \
-              -m "chore: merge main into alpha (conflict resolution required)
+            MERGE_MSG=$(cat <<'MSG'
+chore: merge main into alpha (conflict resolution required)
 
 Automated merge of origin/main into origin/alpha.
 Rebase encountered conflicts; falling back to merge.
-A human must resolve conflict markers before merging this PR." || {
+A human must resolve conflict markers before merging this PR.
+MSG
+)
+            git merge --no-ff --allow-unrelated-histories origin/main -m "${MERGE_MSG}" || {
               git add -A
-              git commit --no-verify \
-                -m "chore: best-effort merge main into alpha (conflicts present)
+              CONFLICT_MSG=$(cat <<'MSG'
+chore: best-effort merge main into alpha (conflicts present)
 
 Automated merge of origin/main into origin/alpha.
 Both rebase and merge encountered conflicts. Conflict markers
-are present and must be resolved before this PR can be merged."
+are present and must be resolved before this PR can be merged.
+MSG
+)
+              git commit --no-verify -m "${CONFLICT_MSG}"
             }
           }
 

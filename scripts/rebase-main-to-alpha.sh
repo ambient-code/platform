@@ -58,7 +58,7 @@ git checkout -b "${WORK_BRANCH}" "${UPSTREAM}/${ALPHA_BRANCH}"
 # Attempt rebase of main onto the work branch (best-effort)
 log "Rebasing ${UPSTREAM}/${MAIN_BRANCH} onto ${WORK_BRANCH} (best-effort)..."
 REBASE_EXIT=0
-git rebase "${UPSTREAM}/${MAIN_BRANCH}" --onto "${WORK_BRANCH}" "${MERGE_BASE}" || REBASE_EXIT=$?
+git rebase --onto "${WORK_BRANCH}" "${MERGE_BASE}" "${UPSTREAM}/${MAIN_BRANCH}" || REBASE_EXIT=$?
 
 if [ "${REBASE_EXIT}" -ne 0 ]; then
   log "Rebase encountered conflicts. Collecting conflict state..."
