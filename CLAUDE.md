@@ -42,6 +42,7 @@ make test                     # Run tests
 make lint                     # Lint code
 make kind-up                  # Start local Kind cluster
 make test-e2e-local           # Run E2E tests against Kind
+make benchmark                # Run component benchmark harness
 ```
 
 ### Per-Component
@@ -60,6 +61,26 @@ cd components/runners/ambient-runner && uv venv && uv pip install -e .
 # Docs
 cd docs && npm run dev  # http://localhost:4321
 ```
+
+### Benchmarking
+
+```shell
+# Human-friendly summary
+make benchmark
+
+# Agent / automation friendly output
+make benchmark FORMAT=tsv
+
+# Single component
+make benchmark COMPONENT=frontend MODE=cold
+```
+
+Benchmark notes:
+
+- `frontend` requires **Node.js 20+**
+- `FORMAT=tsv` is preferred for agents to minimize token usage
+- `warm` measures rebuild proxies, not browser-observed hot reload latency
+- See `scripts/benchmarks/README.md` for semantics and caveats
 
 ## Critical Context
 
