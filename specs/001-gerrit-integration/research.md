@@ -127,7 +127,7 @@ In the runner Dockerfile:
 
 ## R5: Multi-Instance Support
 
-**Decision**: Store each Gerrit instance as a separate entry in the `gerrit-credentials` K8s secret, keyed by `instanceName:userID`.
+**Decision**: Store each Gerrit instance as a separate entry in a per-user K8s Secret named `gerrit-credentials-{userID}`, keyed by `instanceName`.
 
 **Rationale**: Consistent with how the platform handles multi-value secrets. At runtime, the runner fetches all Gerrit credentials for the user and generates a single `gerrit_config.json` with multiple `gerrit_hosts` entries — leveraging the Gerrit MCP server's native multi-host support.
 

@@ -55,12 +55,9 @@ export function GerritConnectionCard({ status, onRefresh }: Props) {
     setShowForm(false)
   }
 
-  const buildRequest = () => ({
-    instanceName,
-    url,
-    authMethod,
-    ...(authMethod === 'http_basic' ? { username, httpToken } : { gitcookiesContent }),
-  })
+  const buildRequest = () => authMethod === 'http_basic'
+    ? { instanceName, url, authMethod: 'http_basic' as const, username, httpToken }
+    : { instanceName, url, authMethod: 'git_cookies' as const, gitcookiesContent }
 
   const isFormValid = () => {
     if (!instanceName || instanceName.length < 2 || !url) return false
@@ -69,8 +66,11 @@ export function GerritConnectionCard({ status, onRefresh }: Props) {
   }
 
   const handleTest = () => {
+    const testReq = authMethod === 'http_basic'
+      ? { url, authMethod: 'http_basic' as const, username, httpToken }
+      : { url, authMethod: 'git_cookies' as const, gitcookiesContent }
     testMutation.mutate(
-      { url, authMethod, ...(authMethod === 'http_basic' ? { username, httpToken } : { gitcookiesContent }) },
+      testReq,
       {
         onSuccess: (result) => {
           if (result.valid) {
@@ -259,6 +259,7 @@ export function GerritConnectionCard({ status, onRefresh }: Props) {
                       size="sm"
                       onClick={() => setShowToken(!showToken)}
                       disabled={connectMutation.isPending}
+                      aria-label={showToken ? 'Hide password' : 'Show password'}
                     >
                       {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </Button>

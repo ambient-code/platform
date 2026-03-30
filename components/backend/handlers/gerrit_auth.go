@@ -45,12 +45,45 @@ func gerritSecretName(userID string) string {
 	return gerritSecretPrefix + userID
 }
 
+// IANA special-use CIDRs not covered by net.IP.IsPrivate/IsLoopback/IsLinkLocal.
+var extraBlockedCIDRs = func() []*net.IPNet {
+	cidrs := []string{
+		"100.64.0.0/10",   // CGNAT (RFC 6598)
+		"192.0.0.0/24",    // IETF Protocol Assignments (RFC 6890)
+		"192.0.2.0/24",    // Documentation TEST-NET-1 (RFC 5737)
+		"198.18.0.0/15",   // Benchmarking (RFC 2544)
+		"198.51.100.0/24", // Documentation TEST-NET-2 (RFC 5737)
+		"203.0.113.0/24",  // Documentation TEST-NET-3 (RFC 5737)
+		"224.0.0.0/4",     // Multicast (RFC 5771)
+		"240.0.0.0/4",     // Reserved for future use (RFC 1112)
+	}
+	nets := make([]*net.IPNet, 0, len(cidrs))
+	for _, cidr := range cidrs {
+		_, n, _ := net.ParseCIDR(cidr)
+		nets = append(nets, n)
+	}
+	return nets
+}()
+
 // isPrivateOrBlocked returns true if the IP is loopback, private,
-// link-local, or a cloud metadata address.
+// link-local, a cloud metadata address, or belongs to any other
+// IANA special-use range (CGNAT, benchmarking, documentation, multicast, etc.).
 func isPrivateOrBlocked(ip net.IP) bool {
-	return ip.IsLoopback() || ip.IsPrivate() ||
+	if ip.IsLoopback() || ip.IsPrivate() ||
 		ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
-		ip.Equal(net.ParseIP("169.254.169.254"))
+		ip.IsUnspecified() || ip.IsMulticast() {
+		return true
+	}
+	// Cloud metadata service
+	if ip.Equal(net.ParseIP("169.254.169.254")) {
+		return true
+	}
+	for _, n := range extraBlockedCIDRs {
+		if n.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }
 
 // validateGerritURL validates a Gerrit URL for SSRF protection.

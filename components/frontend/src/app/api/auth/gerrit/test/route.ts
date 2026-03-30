@@ -15,9 +15,8 @@ export async function POST(request: Request) {
 
     const data = await resp.text()
     return new Response(data, { status: resp.status, headers: { 'Content-Type': 'application/json' } })
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Backend request failed'
-    return new Response(JSON.stringify({ valid: false, error: message }), {
+  } catch {
+    return new Response(JSON.stringify({ valid: false, error: 'Unable to reach backend service' }), {
       status: 502,
       headers: { 'Content-Type': 'application/json' },
     })
