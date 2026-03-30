@@ -1,5 +1,8 @@
 name: Component Benchmarks
 
+permissions:
+  contents: read
+
 on:
   workflow_dispatch:
     inputs:
