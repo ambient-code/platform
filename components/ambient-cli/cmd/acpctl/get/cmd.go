@@ -108,7 +108,7 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 			if projectAgentArgs.projectID == "" {
 				return fmt.Errorf("--project-id is required when using --project-agent")
 			}
-			return getSessionsByProjectAgent(ctx, client, printer, projectAgentArgs.projectID, projectAgentArgs.paID)
+			return getSessionsByAgent(ctx, client, printer, projectAgentArgs.projectID, projectAgentArgs.paID)
 		}
 		return getSessions(ctx, client, printer, name)
 	case "projects":
@@ -117,7 +117,7 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 		if projectAgentArgs.projectID == "" {
 			return fmt.Errorf("--project-id is required for project-agents")
 		}
-		return getProjectAgents(ctx, client, printer, projectAgentArgs.projectID, name)
+		return getAgentsByProject(ctx, client, printer, projectAgentArgs.projectID, name)
 	case "project-settings":
 		return getProjectSettings(ctx, client, printer, name)
 	case "users":
@@ -130,7 +130,7 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 		if pid == "" {
 			return fmt.Errorf("no project set; use --project-id or run 'acpctl config set project <name>'")
 		}
-		return getProjectAgents(ctx, client, printer, pid, name)
+		return getAgentsByProject(ctx, client, printer, pid, name)
 	case "roles":
 		return getRoles(ctx, client, printer, name)
 	case "role-bindings":
@@ -163,20 +163,20 @@ func normalizeResource(r string) string {
 	}
 }
 
-func getProjectAgents(ctx context.Context, client *sdkclient.Client, printer *output.Printer, projectID, name string) error {
+func getAgentsByProject(ctx context.Context, client *sdkclient.Client, printer *output.Printer, projectID, name string) error {
 	if name != "" {
-		pa, err := client.ProjectAgents().GetByProject(ctx, projectID, name)
+		pa, err := client.Agents().GetByProject(ctx, projectID, name)
 		if err != nil {
 			return fmt.Errorf("get agent %q: %w", name, err)
 		}
 		if printer.Format() == output.FormatJSON {
 			return printer.PrintJSON(pa)
 		}
-		return printProjectAgentTable(printer, []sdktypes.ProjectAgent{*pa})
+		return printAgentByProjectTable(printer, []sdktypes.Agent{*pa})
 	}
 
 	opts := sdktypes.NewListOptions().Size(args.limit).Build()
-	list, err := client.ProjectAgents().ListByProject(ctx, projectID, opts)
+	list, err := client.Agents().ListByProject(ctx, projectID, opts)
 	if err != nil {
 		return fmt.Errorf("list agents: %w", err)
 	}
@@ -185,10 +185,10 @@ func getProjectAgents(ctx context.Context, client *sdkclient.Client, printer *ou
 		return printer.PrintJSON(list)
 	}
 
-	return printProjectAgentTable(printer, list.Items)
+	return printAgentByProjectTable(printer, list.Items)
 }
 
-func printProjectAgentTable(printer *output.Printer, pas []sdktypes.ProjectAgent) error {
+func printAgentByProjectTable(printer *output.Printer, pas []sdktypes.Agent) error {
 	columns := []output.Column{
 		{Name: "ID", Width: 27},
 		{Name: "NAME", Width: 24},
@@ -210,9 +210,9 @@ func printProjectAgentTable(printer *output.Printer, pas []sdktypes.ProjectAgent
 	return nil
 }
 
-func getSessionsByProjectAgent(ctx context.Context, client *sdkclient.Client, printer *output.Printer, projectID, paID string) error {
+func getSessionsByAgent(ctx context.Context, client *sdkclient.Client, printer *output.Printer, projectID, paID string) error {
 	opts := sdktypes.NewListOptions().Size(args.limit).Build()
-	list, err := client.ProjectAgents().Sessions(ctx, projectID, paID, opts)
+	list, err := client.Agents().Sessions(ctx, projectID, paID, opts)
 	if err != nil {
 		return fmt.Errorf("list sessions for agent %q: %w", paID, err)
 	}

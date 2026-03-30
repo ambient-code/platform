@@ -19,14 +19,17 @@ import (
 	"github.com/openshift-online/rh-trex-ai/pkg/services"
 )
 
+var _ handlers.RestHandler = sessionHandler{}
+
+// EventsHTTPClient is used to proxy SSE streams from runner pods.
+// Replaceable in tests to simulate runner behavior without a live cluster.
+// ResponseHeaderTimeout times out only the header phase; body streaming is unlimited.
 var EventsHTTPClient = &http.Client{
 	Transport: &http.Transport{
 		DialContext:           (&net.Dialer{Timeout: 5 * time.Second}).DialContext,
 		ResponseHeaderTimeout: 5 * time.Second,
 	},
 }
-
-var _ handlers.RestHandler = sessionHandler{}
 
 type sessionHandler struct {
 	session SessionService

@@ -6,10 +6,14 @@
 import type { ObjectReference, ListMeta } from './base';
 
 export type Agent = ObjectReference & {
+  annotations?: string;
+  current_session_id?: string;
+  labels?: string;
   name: string;
-  owner_user_id: string;
-  prompt: string;
-  version: number;
+  owner_user_id?: string;
+  project_id?: string;
+  prompt?: string;
+  version?: number;
 };
 
 export type AgentList = ListMeta & {
@@ -17,18 +21,33 @@ export type AgentList = ListMeta & {
 };
 
 export type AgentCreateRequest = {
+  annotations?: string;
+  labels?: string;
   name: string;
-  owner_user_id: string;
+  owner_user_id?: string;
+  project_id?: string;
   prompt?: string;
 };
 
 export type AgentPatchRequest = {
+  annotations?: string;
+  labels?: string;
+  name?: string;
   prompt?: string;
 };
 
 export class AgentBuilder {
   private data: Record<string, unknown> = {};
 
+  annotations(value: string): this {
+    this.data['annotations'] = value;
+    return this;
+  }
+
+  labels(value: string): this {
+    this.data['labels'] = value;
+    return this;
+  }
 
   name(value: string): this {
     this.data['name'] = value;
@@ -37,6 +56,11 @@ export class AgentBuilder {
 
   ownerUserId(value: string): this {
     this.data['owner_user_id'] = value;
+    return this;
+  }
+
+  projectId(value: string): this {
+    this.data['project_id'] = value;
     return this;
   }
 
@@ -49,9 +73,6 @@ export class AgentBuilder {
     if (!this.data['name']) {
       throw new Error('name is required');
     }
-    if (!this.data['owner_user_id']) {
-      throw new Error('owner_user_id is required');
-    }
     return this.data as AgentCreateRequest;
   }
 }
@@ -59,6 +80,20 @@ export class AgentBuilder {
 export class AgentPatchBuilder {
   private data: Record<string, unknown> = {};
 
+  annotations(value: string): this {
+    this.data['annotations'] = value;
+    return this;
+  }
+
+  labels(value: string): this {
+    this.data['labels'] = value;
+    return this;
+  }
+
+  name(value: string): this {
+    this.data['name'] = value;
+    return this;
+  }
 
   prompt(value: string): this {
     this.data['prompt'] = value;

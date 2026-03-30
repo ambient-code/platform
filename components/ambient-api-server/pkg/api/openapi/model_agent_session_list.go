@@ -17,11 +17,11 @@ import (
 	"fmt"
 )
 
-// checks if the ProjectAgentSessionList type satisfies the MappedNullable interface at compile time
-var _ MappedNullable = &ProjectAgentSessionList{}
+// checks if the AgentSessionList type satisfies the MappedNullable interface at compile time
+var _ MappedNullable = &AgentSessionList{}
 
-// ProjectAgentSessionList struct for ProjectAgentSessionList
-type ProjectAgentSessionList struct {
+// AgentSessionList struct for AgentSessionList
+type AgentSessionList struct {
 	Kind  string    `json:"kind"`
 	Page  int32     `json:"page"`
 	Size  int32     `json:"size"`
@@ -29,14 +29,14 @@ type ProjectAgentSessionList struct {
 	Items []Session `json:"items"`
 }
 
-type _ProjectAgentSessionList ProjectAgentSessionList
+type _AgentSessionList AgentSessionList
 
-// NewProjectAgentSessionList instantiates a new ProjectAgentSessionList object
+// NewAgentSessionList instantiates a new AgentSessionList object
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewProjectAgentSessionList(kind string, page int32, size int32, total int32, items []Session) *ProjectAgentSessionList {
-	this := ProjectAgentSessionList{}
+func NewAgentSessionList(kind string, page int32, size int32, total int32, items []Session) *AgentSessionList {
+	this := AgentSessionList{}
 	this.Kind = kind
 	this.Page = page
 	this.Size = size
@@ -45,16 +45,16 @@ func NewProjectAgentSessionList(kind string, page int32, size int32, total int32
 	return &this
 }
 
-// NewProjectAgentSessionListWithDefaults instantiates a new ProjectAgentSessionList object
+// NewAgentSessionListWithDefaults instantiates a new AgentSessionList object
 // This constructor will only assign default values to properties that have it defined,
 // but it doesn't guarantee that properties required by API are set
-func NewProjectAgentSessionListWithDefaults() *ProjectAgentSessionList {
-	this := ProjectAgentSessionList{}
+func NewAgentSessionListWithDefaults() *AgentSessionList {
+	this := AgentSessionList{}
 	return &this
 }
 
 // GetKind returns the Kind field value
-func (o *ProjectAgentSessionList) GetKind() string {
+func (o *AgentSessionList) GetKind() string {
 	if o == nil {
 		var ret string
 		return ret
@@ -65,7 +65,7 @@ func (o *ProjectAgentSessionList) GetKind() string {
 
 // GetKindOk returns a tuple with the Kind field value
 // and a boolean to check if the value has been set.
-func (o *ProjectAgentSessionList) GetKindOk() (*string, bool) {
+func (o *AgentSessionList) GetKindOk() (*string, bool) {
 	if o == nil {
 		return nil, false
 	}
@@ -73,12 +73,12 @@ func (o *ProjectAgentSessionList) GetKindOk() (*string, bool) {
 }
 
 // SetKind sets field value
-func (o *ProjectAgentSessionList) SetKind(v string) {
+func (o *AgentSessionList) SetKind(v string) {
 	o.Kind = v
 }
 
 // GetPage returns the Page field value
-func (o *ProjectAgentSessionList) GetPage() int32 {
+func (o *AgentSessionList) GetPage() int32 {
 	if o == nil {
 		var ret int32
 		return ret
@@ -89,7 +89,7 @@ func (o *ProjectAgentSessionList) GetPage() int32 {
 
 // GetPageOk returns a tuple with the Page field value
 // and a boolean to check if the value has been set.
-func (o *ProjectAgentSessionList) GetPageOk() (*int32, bool) {
+func (o *AgentSessionList) GetPageOk() (*int32, bool) {
 	if o == nil {
 		return nil, false
 	}
@@ -97,12 +97,12 @@ func (o *ProjectAgentSessionList) GetPageOk() (*int32, bool) {
 }
 
 // SetPage sets field value
-func (o *ProjectAgentSessionList) SetPage(v int32) {
+func (o *AgentSessionList) SetPage(v int32) {
 	o.Page = v
 }
 
 // GetSize returns the Size field value
-func (o *ProjectAgentSessionList) GetSize() int32 {
+func (o *AgentSessionList) GetSize() int32 {
 	if o == nil {
 		var ret int32
 		return ret
@@ -113,7 +113,7 @@ func (o *ProjectAgentSessionList) GetSize() int32 {
 
 // GetSizeOk returns a tuple with the Size field value
 // and a boolean to check if the value has been set.
-func (o *ProjectAgentSessionList) GetSizeOk() (*int32, bool) {
+func (o *AgentSessionList) GetSizeOk() (*int32, bool) {
 	if o == nil {
 		return nil, false
 	}
@@ -121,12 +121,12 @@ func (o *ProjectAgentSessionList) GetSizeOk() (*int32, bool) {
 }
 
 // SetSize sets field value
-func (o *ProjectAgentSessionList) SetSize(v int32) {
+func (o *AgentSessionList) SetSize(v int32) {
 	o.Size = v
 }
 
 // GetTotal returns the Total field value
-func (o *ProjectAgentSessionList) GetTotal() int32 {
+func (o *AgentSessionList) GetTotal() int32 {
 	if o == nil {
 		var ret int32
 		return ret
@@ -137,7 +137,7 @@ func (o *ProjectAgentSessionList) GetTotal() int32 {
 
 // GetTotalOk returns a tuple with the Total field value
 // and a boolean to check if the value has been set.
-func (o *ProjectAgentSessionList) GetTotalOk() (*int32, bool) {
+func (o *AgentSessionList) GetTotalOk() (*int32, bool) {
 	if o == nil {
 		return nil, false
 	}
@@ -145,12 +145,12 @@ func (o *ProjectAgentSessionList) GetTotalOk() (*int32, bool) {
 }
 
 // SetTotal sets field value
-func (o *ProjectAgentSessionList) SetTotal(v int32) {
+func (o *AgentSessionList) SetTotal(v int32) {
 	o.Total = v
 }
 
 // GetItems returns the Items field value
-func (o *ProjectAgentSessionList) GetItems() []Session {
+func (o *AgentSessionList) GetItems() []Session {
 	if o == nil {
 		var ret []Session
 		return ret
@@ -161,7 +161,7 @@ func (o *ProjectAgentSessionList) GetItems() []Session {
 
 // GetItemsOk returns a tuple with the Items field value
 // and a boolean to check if the value has been set.
-func (o *ProjectAgentSessionList) GetItemsOk() ([]Session, bool) {
+func (o *AgentSessionList) GetItemsOk() ([]Session, bool) {
 	if o == nil {
 		return nil, false
 	}
@@ -169,11 +169,11 @@ func (o *ProjectAgentSessionList) GetItemsOk() ([]Session, bool) {
 }
 
 // SetItems sets field value
-func (o *ProjectAgentSessionList) SetItems(v []Session) {
+func (o *AgentSessionList) SetItems(v []Session) {
 	o.Items = v
 }
 
-func (o ProjectAgentSessionList) MarshalJSON() ([]byte, error) {
+func (o AgentSessionList) MarshalJSON() ([]byte, error) {
 	toSerialize, err := o.ToMap()
 	if err != nil {
 		return []byte{}, err
@@ -181,7 +181,7 @@ func (o ProjectAgentSessionList) MarshalJSON() ([]byte, error) {
 	return json.Marshal(toSerialize)
 }
 
-func (o ProjectAgentSessionList) ToMap() (map[string]interface{}, error) {
+func (o AgentSessionList) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
 	toSerialize["kind"] = o.Kind
 	toSerialize["page"] = o.Page
@@ -191,7 +191,7 @@ func (o ProjectAgentSessionList) ToMap() (map[string]interface{}, error) {
 	return toSerialize, nil
 }
 
-func (o *ProjectAgentSessionList) UnmarshalJSON(data []byte) (err error) {
+func (o *AgentSessionList) UnmarshalJSON(data []byte) (err error) {
 	// This validates that all required properties are included in the JSON object
 	// by unmarshalling the object into a generic map with string keys and checking
 	// that every required field exists as a key in the generic map.
@@ -217,53 +217,53 @@ func (o *ProjectAgentSessionList) UnmarshalJSON(data []byte) (err error) {
 		}
 	}
 
-	varProjectAgentSessionList := _ProjectAgentSessionList{}
+	varAgentSessionList := _AgentSessionList{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
-	err = decoder.Decode(&varProjectAgentSessionList)
+	err = decoder.Decode(&varAgentSessionList)
 
 	if err != nil {
 		return err
 	}
 
-	*o = ProjectAgentSessionList(varProjectAgentSessionList)
+	*o = AgentSessionList(varAgentSessionList)
 
 	return err
 }
 
-type NullableProjectAgentSessionList struct {
-	value *ProjectAgentSessionList
+type NullableAgentSessionList struct {
+	value *AgentSessionList
 	isSet bool
 }
 
-func (v NullableProjectAgentSessionList) Get() *ProjectAgentSessionList {
+func (v NullableAgentSessionList) Get() *AgentSessionList {
 	return v.value
 }
 
-func (v *NullableProjectAgentSessionList) Set(val *ProjectAgentSessionList) {
+func (v *NullableAgentSessionList) Set(val *AgentSessionList) {
 	v.value = val
 	v.isSet = true
 }
 
-func (v NullableProjectAgentSessionList) IsSet() bool {
+func (v NullableAgentSessionList) IsSet() bool {
 	return v.isSet
 }
 
-func (v *NullableProjectAgentSessionList) Unset() {
+func (v *NullableAgentSessionList) Unset() {
 	v.value = nil
 	v.isSet = false
 }
 
-func NewNullableProjectAgentSessionList(val *ProjectAgentSessionList) *NullableProjectAgentSessionList {
-	return &NullableProjectAgentSessionList{value: val, isSet: true}
+func NewNullableAgentSessionList(val *AgentSessionList) *NullableAgentSessionList {
+	return &NullableAgentSessionList{value: val, isSet: true}
 }
 
-func (v NullableProjectAgentSessionList) MarshalJSON() ([]byte, error) {
+func (v NullableAgentSessionList) MarshalJSON() ([]byte, error) {
 	return json.Marshal(v.value)
 }
 
-func (v *NullableProjectAgentSessionList) UnmarshalJSON(src []byte) error {
+func (v *NullableAgentSessionList) UnmarshalJSON(src []byte) error {
 	v.isSet = true
 	return json.Unmarshal(src, &v.value)
 }

@@ -68,7 +68,7 @@ func TestCreateAgent_Success(t *testing.T) {
 		if r.Method != http.MethodPost {
 			t.Errorf("expected POST, got %s", r.Method)
 		}
-		srv.RespondJSON(t, w, http.StatusCreated, &types.ProjectAgent{
+		srv.RespondJSON(t, w, http.StatusCreated, &types.Agent{
 			ObjectReference: types.ObjectReference{ID: "a-new"},
 			Name:            "overlord",
 			ProjectID:       "my-project",

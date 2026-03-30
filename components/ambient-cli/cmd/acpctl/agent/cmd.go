@@ -24,8 +24,8 @@ Subcommands:
   create      Create an agent in a project
   update      Update an agent's name, prompt, labels, or annotations
   delete      Delete an agent
-  ignite      Start a new session for an agent
-  ignition    Preview ignition context (dry run)`,
+  start       Start a new session for an agent
+  start-preview  Preview start context (dry run)`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return cmd.Help()
 	},
@@ -50,9 +50,9 @@ func resolveAgent(ctx context.Context, client *sdkclient.Client, projectID, agen
 	if agentArg == "" {
 		return "", fmt.Errorf("agent name or ID is required")
 	}
-	pa, err := client.ProjectAgents().GetInProject(ctx, projectID, agentArg)
+	pa, err := client.Agents().GetInProject(ctx, projectID, agentArg)
 	if err != nil {
-		pa2, err2 := client.ProjectAgents().GetByProject(ctx, projectID, agentArg)
+		pa2, err2 := client.Agents().GetByProject(ctx, projectID, agentArg)
 		if err2 != nil {
 			return "", fmt.Errorf("agent %q not found in project %q", agentArg, projectID)
 		}
@@ -98,7 +98,7 @@ var listCmd = &cobra.Command{
 		printer := output.NewPrinter(format, cmd.OutOrStdout())
 
 		opts := sdktypes.NewListOptions().Size(listArgs.limit).Build()
-		list, err := client.ProjectAgents().ListByProject(ctx, projectID, opts)
+		list, err := client.Agents().ListByProject(ctx, projectID, opts)
 		if err != nil {
 			return fmt.Errorf("list agents: %w", err)
 		}
@@ -142,9 +142,9 @@ var getCmd = &cobra.Command{
 		ctx, cancel := context.WithTimeout(context.Background(), cfg.GetRequestTimeout())
 		defer cancel()
 
-		pa, err := client.ProjectAgents().GetInProject(ctx, projectID, args[0])
+		pa, err := client.Agents().GetInProject(ctx, projectID, args[0])
 		if err != nil {
-			pa, err = client.ProjectAgents().GetByProject(ctx, projectID, args[0])
+			pa, err = client.Agents().GetByProject(ctx, projectID, args[0])
 			if err != nil {
 				return fmt.Errorf("get agent %q: %w", args[0], err)
 			}
@@ -159,7 +159,7 @@ var getCmd = &cobra.Command{
 		if printer.Format() == output.FormatJSON {
 			return printer.PrintJSON(pa)
 		}
-		return printAgentTable(printer, []sdktypes.ProjectAgent{*pa})
+		return printAgentTable(printer, []sdktypes.Agent{*pa})
 	},
 }
 
@@ -200,7 +200,7 @@ var createCmd = &cobra.Command{
 		ctx, cancel := context.WithTimeout(context.Background(), cfg.GetRequestTimeout())
 		defer cancel()
 
-		builder := sdktypes.NewProjectAgentBuilder().
+		builder := sdktypes.NewAgentBuilder().
 			ProjectID(projectID).
 			Name(createArgs.name)
 
@@ -219,7 +219,7 @@ var createCmd = &cobra.Command{
 			return fmt.Errorf("build agent: %w", err)
 		}
 
-		created, err := client.ProjectAgents().CreateInProject(ctx, projectID, agent)
+		created, err := client.Agents().CreateInProject(ctx, projectID, agent)
 		if err != nil {
 			return fmt.Errorf("create agent: %w", err)
 		}
@@ -277,7 +277,7 @@ var updateCmd = &cobra.Command{
 			return err
 		}
 
-		patch := sdktypes.NewProjectAgentPatchBuilder()
+		patch := sdktypes.NewAgentPatchBuilder()
 		if cmd.Flags().Changed("name") {
 			patch = patch.Name(updateArgs.name)
 		}
@@ -291,7 +291,7 @@ var updateCmd = &cobra.Command{
 			patch = patch.Annotations(updateArgs.annotations)
 		}
 
-		updated, err := client.ProjectAgents().UpdateInProject(ctx, projectID, agentID, patch.Build())
+		updated, err := client.Agents().UpdateInProject(ctx, projectID, agentID, patch.Build())
 		if err != nil {
 			return fmt.Errorf("update agent: %w", err)
 		}
@@ -339,7 +339,7 @@ var deleteCmd = &cobra.Command{
 			return err
 		}
 
-		if err := client.ProjectAgents().DeleteInProject(ctx, projectID, agentID); err != nil {
+		if err := client.Agents().DeleteInProject(ctx, projectID, agentID); err != nil {
 			return fmt.Errorf("delete agent: %w", err)
 		}
 
@@ -348,20 +348,20 @@ var deleteCmd = &cobra.Command{
 	},
 }
 
-var igniteArgs struct {
+var agentStartArgs struct {
 	projectID string
 	prompt    string
 }
 
-var igniteCmd = &cobra.Command{
-	Use:   "ignite <name-or-id>",
+var agentStartCmd = &cobra.Command{
+	Use:   "start <name-or-id>",
 	Short: "Start a new session for an agent",
 	Args:  cobra.ExactArgs(1),
-	Example: `  acpctl agent ignite api
-  acpctl agent ignite api --prompt "fix the bug"
-  acpctl agent ignite <id> --project-id <id>`,
+	Example: `  acpctl agent start api
+  acpctl agent start api --prompt "fix the bug"
+  acpctl agent start <id> --project-id <id>`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		projectID, err := resolveProject(igniteArgs.projectID)
+		projectID, err := resolveProject(agentStartArgs.projectID)
 		if err != nil {
 			return err
 		}
@@ -384,15 +384,15 @@ var igniteCmd = &cobra.Command{
 			return err
 		}
 
-		resp, err := client.ProjectAgents().Ignite(ctx, projectID, agentID, igniteArgs.prompt)
+		resp, err := client.Agents().Start(ctx, projectID, agentID, agentStartArgs.prompt)
 		if err != nil {
-			return fmt.Errorf("ignite agent: %w", err)
+			return fmt.Errorf("start agent: %w", err)
 		}
 
 		if resp.Session != nil {
 			fmt.Fprintf(cmd.OutOrStdout(), "session/%s started (phase: %s)\n", resp.Session.ID, resp.Session.Phase)
 		} else {
-			fmt.Fprintf(cmd.OutOrStdout(), "agent/%s ignited\n", args[0])
+			fmt.Fprintf(cmd.OutOrStdout(), "agent/%s started\n", args[0])
 		}
 		return nil
 	},
@@ -403,11 +403,11 @@ var ignitionArgs struct {
 }
 
 var ignitionCmd = &cobra.Command{
-	Use:   "ignition <name-or-id>",
-	Short: "Preview ignition context for an agent (dry run)",
+	Use:   "start-preview <name-or-id>",
+	Short: "Preview start context for an agent (dry run)",
 	Args:  cobra.ExactArgs(1),
-	Example: `  acpctl agent ignition api
-  acpctl agent ignition <id> --project-id <id>`,
+	Example: `  acpctl agent start-preview api
+  acpctl agent start-preview <id> --project-id <id>`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectID, err := resolveProject(ignitionArgs.projectID)
 		if err != nil {
@@ -432,12 +432,12 @@ var ignitionCmd = &cobra.Command{
 			return err
 		}
 
-		resp, err := client.ProjectAgents().GetIgnition(ctx, projectID, agentID)
+		resp, err := client.Agents().GetStartPreview(ctx, projectID, agentID)
 		if err != nil {
-			return fmt.Errorf("get ignition for agent %q: %w", args[0], err)
+			return fmt.Errorf("get start preview for agent %q: %w", args[0], err)
 		}
 
-		fmt.Fprintln(cmd.OutOrStdout(), resp.IgnitionContext)
+		fmt.Fprintln(cmd.OutOrStdout(), resp.StartingPrompt)
 		return nil
 	},
 }
@@ -479,7 +479,7 @@ var sessionsCmd = &cobra.Command{
 		}
 
 		opts := sdktypes.NewListOptions().Size(sessionsArgs.limit).Build()
-		list, err := client.ProjectAgents().Sessions(ctx, projectID, agentID, opts)
+		list, err := client.Agents().Sessions(ctx, projectID, agentID, opts)
 		if err != nil {
 			return fmt.Errorf("list sessions for agent %q: %w", args[0], err)
 		}
@@ -504,7 +504,7 @@ func init() {
 	Cmd.AddCommand(createCmd)
 	Cmd.AddCommand(updateCmd)
 	Cmd.AddCommand(deleteCmd)
-	Cmd.AddCommand(igniteCmd)
+	Cmd.AddCommand(agentStartCmd)
 	Cmd.AddCommand(ignitionCmd)
 	Cmd.AddCommand(sessionsCmd)
 
@@ -531,8 +531,8 @@ func init() {
 	deleteCmd.Flags().StringVar(&deleteArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
 	deleteCmd.Flags().BoolVar(&deleteArgs.confirm, "confirm", false, "Confirm deletion")
 
-	igniteCmd.Flags().StringVar(&igniteArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
-	igniteCmd.Flags().StringVar(&igniteArgs.prompt, "prompt", "", "Task prompt for this run")
+	agentStartCmd.Flags().StringVar(&agentStartArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
+	agentStartCmd.Flags().StringVar(&agentStartArgs.prompt, "prompt", "", "Task prompt for this run")
 
 	ignitionCmd.Flags().StringVar(&ignitionArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
 
@@ -541,7 +541,7 @@ func init() {
 	sessionsCmd.Flags().IntVar(&sessionsArgs.limit, "limit", 100, "Maximum number of items to return")
 }
 
-func printAgentTable(printer *output.Printer, agents []sdktypes.ProjectAgent) error {
+func printAgentTable(printer *output.Printer, agents []sdktypes.Agent) error {
 	columns := []output.Column{
 		{Name: "ID", Width: 27},
 		{Name: "NAME", Width: 24},

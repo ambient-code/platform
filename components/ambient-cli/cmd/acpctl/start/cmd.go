@@ -1,4 +1,4 @@
-// Package start implements the start subcommand for igniting a project-agent session.
+// Package start implements the start subcommand for starting a project-agent session.
 package start
 
 import (
@@ -17,12 +17,12 @@ var startArgs struct {
 
 var Cmd = &cobra.Command{
 	Use:   "start <project-agent-id>",
-	Short: "Ignite a session for a project-agent (idempotent)",
-	Long: `Ignite a session for a project-agent.
+	Short: "Start a session for a project-agent (idempotent)",
+	Long: `Start a session for a project-agent.
 
 If an active session already exists for this project-agent, it is returned.
 If not, a new session is created. Unread inbox messages are drained and
-injected into the ignition context.`,
+injected into the start context.`,
 	Args:    cobra.ExactArgs(1),
 	RunE:    run,
 	Example: "  acpctl start <pa-id> --project-id <project-id>\n  acpctl start <pa-id> --project-id <project-id> --prompt \"fix the RBAC middleware\"",
@@ -48,15 +48,15 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	resp, err := client.ProjectAgents().Ignite(ctx, startArgs.projectID, paID, startArgs.prompt)
+	resp, err := client.Agents().Start(ctx, startArgs.projectID, paID, startArgs.prompt)
 	if err != nil {
-		return fmt.Errorf("ignite agent %q: %w", paID, err)
+		return fmt.Errorf("start agent %q: %w", paID, err)
 	}
 
 	if resp.Session != nil {
 		fmt.Fprintf(cmd.OutOrStdout(), "session/%s started (phase: %s)\n", resp.Session.ID, resp.Session.Phase)
 	} else {
-		fmt.Fprintf(cmd.OutOrStdout(), "project-agent/%s ignited\n", paID)
+		fmt.Fprintf(cmd.OutOrStdout(), "project-agent/%s started\n", paID)
 	}
 	return nil
 }

@@ -6,7 +6,7 @@
 import type { AmbientClientConfig } from './base';
 import { InboxMessageAPI } from './inbox_message_api';
 import { ProjectAPI } from './project_api';
-import { ProjectAgentAPI } from './project_agent_api';
+import { AgentAPI } from './agent_api';
 import { ProjectSettingsAPI } from './project_settings_api';
 import { RoleAPI } from './role_api';
 import { RoleBindingAPI } from './role_binding_api';
@@ -20,7 +20,7 @@ export class AmbientClient {
 
   readonly inboxMessages: InboxMessageAPI;
   readonly projects: ProjectAPI;
-  readonly projectAgents: ProjectAgentAPI;
+  readonly agents: AgentAPI;
   readonly projectSettings: ProjectSettingsAPI;
   readonly roles: RoleAPI;
   readonly roleBindings: RoleBindingAPI;
@@ -57,7 +57,7 @@ export class AmbientClient {
 
     this.inboxMessages = new InboxMessageAPI(this.config);
     this.projects = new ProjectAPI(this.config);
-    this.projectAgents = new ProjectAgentAPI(this.config);
+    this.agents = new AgentAPI(this.config);
     this.projectSettings = new ProjectSettingsAPI(this.config);
     this.roles = new RoleAPI(this.config);
     this.roleBindings = new RoleBindingAPI(this.config);

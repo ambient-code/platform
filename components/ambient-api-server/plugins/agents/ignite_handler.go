@@ -1,6 +1,7 @@
 package agents
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -18,32 +19,38 @@ import (
 	"github.com/openshift-online/rh-trex-ai/pkg/handlers"
 )
 
-type IgniteResponse struct {
+type StartResponse struct {
 	Session        openapi.Session `json:"session"`
-	IgnitionPrompt string          `json:"ignition_prompt"`
+	StartingPrompt string          `json:"starting_prompt"`
 }
 
-type igniteHandler struct {
+type ProjectPromptFetcher interface {
+	GetPrompt(ctx context.Context, projectID string) (*string, error)
+}
+
+type startHandler struct {
 	agent   AgentService
 	inbox   inbox.InboxMessageService
 	session sessions.SessionService
 	msg     sessions.MessageService
+	project ProjectPromptFetcher
 }
 
-func NewIgniteHandler(agent AgentService, inboxSvc inbox.InboxMessageService, session sessions.SessionService, msg sessions.MessageService) *igniteHandler {
-	return &igniteHandler{
+func NewStartHandler(agent AgentService, inboxSvc inbox.InboxMessageService, session sessions.SessionService, msg sessions.MessageService, project ProjectPromptFetcher) *startHandler {
+	return &startHandler{
 		agent:   agent,
 		inbox:   inboxSvc,
 		session: session,
 		msg:     msg,
+		project: project,
 	}
 }
 
-func (h *igniteHandler) Ignite(w http.ResponseWriter, r *http.Request) {
+func (h *startHandler) Start(w http.ResponseWriter, r *http.Request) {
 	cfg := &handlers.HandlerConfig{
 		Action: func() (interface{}, *pkgerrors.ServiceError) {
 			ctx := r.Context()
-			agentID := mux.Vars(r)["pa_id"]
+			agentID := mux.Vars(r)["agent_id"]
 
 			agent, err := h.agent.Get(ctx, agentID)
 			if err != nil {
@@ -87,7 +94,7 @@ func (h *igniteHandler) Ignite(w http.ResponseWriter, r *http.Request) {
 				msgCopy := *msg
 				msgCopy.Read = &read
 				if _, replErr := h.inbox.Replace(ctx, &msgCopy); replErr != nil {
-					glog.Warningf("Ignite agent %s: mark inbox message %s read: %v", agentID, msg.ID, replErr)
+					glog.Warningf("Start agent %s: mark inbox message %s read: %v", agentID, msg.ID, replErr)
 				}
 			}
 
@@ -96,11 +103,18 @@ func (h *igniteHandler) Ignite(w http.ResponseWriter, r *http.Request) {
 				return nil, peersErr
 			}
 
-			prompt := buildIgnitionPrompt(agent, peers, unread, requestPrompt)
+			var projectPrompt *string
+			if h.project != nil {
+				if pp, ppErr := h.project.GetPrompt(ctx, agent.ProjectId); ppErr == nil {
+					projectPrompt = pp
+				}
+			}
+
+			prompt := buildStartPrompt(agent, peers, unread, projectPrompt, requestPrompt)
 
 			if prompt != "" {
 				if _, pushErr := h.msg.Push(ctx, created.ID, "user", prompt); pushErr != nil {
-					glog.Errorf("Ignite agent %s: store ignition prompt for session %s: %v", agentID, created.ID, pushErr)
+					glog.Errorf("Start agent %s: store start prompt for session %s: %v", agentID, created.ID, pushErr)
 				}
 			}
 
@@ -114,9 +128,9 @@ func (h *igniteHandler) Ignite(w http.ResponseWriter, r *http.Request) {
 				return nil, startErr
 			}
 
-			return &IgniteResponse{
+			return &StartResponse{
 				Session:        sessions.PresentSession(created),
-				IgnitionPrompt: prompt,
+				StartingPrompt: prompt,
 			}, nil
 		},
 		ErrorHandler: handlers.HandleError,
@@ -124,11 +138,11 @@ func (h *igniteHandler) Ignite(w http.ResponseWriter, r *http.Request) {
 	handlers.Handle(w, r, cfg, http.StatusCreated)
 }
 
-func (h *igniteHandler) IgnitionPreview(w http.ResponseWriter, r *http.Request) {
+func (h *startHandler) StartPreview(w http.ResponseWriter, r *http.Request) {
 	cfg := &handlers.HandlerConfig{
 		Action: func() (interface{}, *pkgerrors.ServiceError) {
 			ctx := r.Context()
-			agentID := mux.Vars(r)["pa_id"]
+			agentID := mux.Vars(r)["agent_id"]
 
 			agent, err := h.agent.Get(ctx, agentID)
 			if err != nil {
@@ -145,7 +159,14 @@ func (h *igniteHandler) IgnitionPreview(w http.ResponseWriter, r *http.Request) 
 				return nil, peersErr
 			}
 
-			prompt := buildIgnitionPrompt(agent, peers, unread, nil)
+			var projectPrompt *string
+			if h.project != nil {
+				if pp, ppErr := h.project.GetPrompt(ctx, agent.ProjectId); ppErr == nil {
+					projectPrompt = pp
+				}
+			}
+
+			prompt := buildStartPrompt(agent, peers, unread, projectPrompt, nil)
 
 			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 			w.WriteHeader(http.StatusOK)
@@ -160,11 +181,15 @@ func (h *igniteHandler) IgnitionPreview(w http.ResponseWriter, r *http.Request) 
 	handlers.Handle(w, r, cfg, http.StatusOK)
 }
 
-func buildIgnitionPrompt(agent *Agent, peers AgentList, unread inbox.InboxMessageList, requestPrompt *string) string {
+func buildStartPrompt(agent *Agent, peers AgentList, unread inbox.InboxMessageList, projectPrompt *string, requestPrompt *string) string {
 	var sb strings.Builder
 
-	fmt.Fprintf(&sb, "# Agent Ignition: %s\n\n", agent.Name)
+	fmt.Fprintf(&sb, "# Agent Start: %s\n\n", agent.Name)
 	fmt.Fprintf(&sb, "You are **%s**, working in project **%s**.\n\n", agent.Name, agent.ProjectId)
+
+	if projectPrompt != nil && *projectPrompt != "" {
+		fmt.Fprintf(&sb, "## Workspace Context\n\n%s\n\n", *projectPrompt)
+	}
 
 	if agent.Prompt != nil && *agent.Prompt != "" {
 		fmt.Fprintf(&sb, "## Standing Instructions\n\n%s\n\n", *agent.Prompt)
@@ -188,7 +213,7 @@ func buildIgnitionPrompt(agent *Agent, peers AgentList, unread inbox.InboxMessag
 	}
 
 	if len(unread) > 0 {
-		sb.WriteString("## Inbox Messages (unread at ignition)\n\n")
+		sb.WriteString("## Inbox Messages (unread at start)\n\n")
 		for _, m := range unread {
 			from := "system"
 			if m.FromName != nil && *m.FromName != "" {

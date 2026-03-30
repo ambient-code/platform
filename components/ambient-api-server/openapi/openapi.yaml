@@ -49,17 +49,17 @@ paths:
   /api/ambient/v1/sessions/{id}/messages:
     $ref: 'openapi.sessionMessages.yaml#/paths/~1api~1ambient~1v1~1sessions~1{id}~1messages'
   /api/ambient/v1/projects/{id}/agents:
-    $ref: 'openapi.projectAgents.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1agents'
+    $ref: 'openapi.agents.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1agents'
   /api/ambient/v1/projects/{id}/agents/{pa_id}:
-    $ref: 'openapi.projectAgents.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1agents~1{pa_id}'
-  /api/ambient/v1/projects/{id}/agents/{pa_id}/ignite:
-    $ref: 'openapi.projectAgents.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1agents~1{pa_id}~1ignite'
+    $ref: 'openapi.agents.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1agents~1{pa_id}'
+  /api/ambient/v1/projects/{id}/agents/{pa_id}/start:
+    $ref: 'openapi.agents.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1agents~1{pa_id}~1start'
   /api/ambient/v1/projects/{id}/agents/{pa_id}/ignition:
-    $ref: 'openapi.projectAgents.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1agents~1{pa_id}~1ignition'
+    $ref: 'openapi.agents.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1agents~1{pa_id}~1ignition'
   /api/ambient/v1/projects/{id}/agents/{pa_id}/sessions:
-    $ref: 'openapi.projectAgents.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1agents~1{pa_id}~1sessions'
+    $ref: 'openapi.agents.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1agents~1{pa_id}~1sessions'
   /api/ambient/v1/projects/{id}/home:
-    $ref: 'openapi.projectAgents.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1home'
+    $ref: 'openapi.agents.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1home'
   /api/ambient/v1/projects/{id}/agents/{pa_id}/inbox:
     $ref: 'openapi.inbox.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1agents~1{pa_id}~1inbox'
   /api/ambient/v1/projects/{id}/agents/{pa_id}/inbox/{msg_id}:
@@ -159,26 +159,28 @@ components:
       $ref: 'openapi.sessionMessages.yaml#/components/schemas/SessionMessageList'
     SessionMessagePushRequest:
       $ref: 'openapi.sessionMessages.yaml#/components/schemas/SessionMessagePushRequest'
-    ProjectAgent:
-      $ref: 'openapi.projectAgents.yaml#/components/schemas/ProjectAgent'
-    ProjectAgentList:
-      $ref: 'openapi.projectAgents.yaml#/components/schemas/ProjectAgentList'
-    ProjectAgentPatchRequest:
-      $ref: 'openapi.projectAgents.yaml#/components/schemas/ProjectAgentPatchRequest'
-    IgniteRequest:
+    Agent:
+      $ref: 'openapi.agents.yaml#/components/schemas/Agent'
+    AgentList:
+      $ref: 'openapi.agents.yaml#/components/schemas/AgentList'
+    AgentPatchRequest:
+      $ref: 'openapi.agents.yaml#/components/schemas/AgentPatchRequest'
+    AgentSessionList:
+      $ref: 'openapi.agents.yaml#/components/schemas/AgentSessionList'
+    StartRequest:
       type: object
       properties:
         prompt:
           type: string
           description: Task scope for this specific run (Session.prompt)
-    IgniteResponse:
+    StartResponse:
       type: object
       properties:
         session:
           $ref: 'openapi.sessions.yaml#/components/schemas/Session'
         ignition_prompt:
           type: string
-          description: Assembled ignition prompt — Agent.prompt + Inbox + Session.prompt + peer roster
+          description: Assembled start prompt — Agent.prompt + Inbox + Session.prompt + peer roster
     ProjectHome:
       type: object
       properties:

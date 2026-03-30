@@ -10,8 +10,8 @@ import (
 	"github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
 )
 
-func (a *ProjectAgentAPI) ListByProject(ctx context.Context, projectID string, opts *types.ListOptions) (*types.ProjectAgentList, error) {
-	var result types.ProjectAgentList
+func (a *AgentAPI) ListByProject(ctx context.Context, projectID string, opts *types.ListOptions) (*types.AgentList, error) {
+	var result types.AgentList
 	path := "/projects/" + url.PathEscape(projectID) + "/agents"
 	if err := a.client.doWithQuery(ctx, http.MethodGet, path, nil, http.StatusOK, &result, opts); err != nil {
 		return nil, err
@@ -19,8 +19,8 @@ func (a *ProjectAgentAPI) ListByProject(ctx context.Context, projectID string, o
 	return &result, nil
 }
 
-func (a *ProjectAgentAPI) GetByProject(ctx context.Context, projectID, agentID string) (*types.ProjectAgent, error) {
-	var result types.ProjectAgent
+func (a *AgentAPI) GetByProject(ctx context.Context, projectID, agentID string) (*types.Agent, error) {
+	var result types.Agent
 	path := "/projects/" + url.PathEscape(projectID) + "/agents/" + url.PathEscape(agentID)
 	if err := a.client.do(ctx, http.MethodGet, path, nil, http.StatusOK, &result); err != nil {
 		return nil, err
@@ -28,12 +28,12 @@ func (a *ProjectAgentAPI) GetByProject(ctx context.Context, projectID, agentID s
 	return &result, nil
 }
 
-func (a *ProjectAgentAPI) CreateInProject(ctx context.Context, projectID string, resource *types.ProjectAgent) (*types.ProjectAgent, error) {
+func (a *AgentAPI) CreateInProject(ctx context.Context, projectID string, resource *types.Agent) (*types.Agent, error) {
 	body, err := json.Marshal(resource)
 	if err != nil {
-		return nil, fmt.Errorf("marshal project_agent: %w", err)
+		return nil, fmt.Errorf("marshal agent: %w", err)
 	}
-	var result types.ProjectAgent
+	var result types.Agent
 	path := "/projects/" + url.PathEscape(projectID) + "/agents"
 	if err := a.client.do(ctx, http.MethodPost, path, body, http.StatusCreated, &result); err != nil {
 		return nil, err
@@ -41,12 +41,12 @@ func (a *ProjectAgentAPI) CreateInProject(ctx context.Context, projectID string,
 	return &result, nil
 }
 
-func (a *ProjectAgentAPI) UpdateInProject(ctx context.Context, projectID, agentID string, patch map[string]any) (*types.ProjectAgent, error) {
+func (a *AgentAPI) UpdateInProject(ctx context.Context, projectID, agentID string, patch map[string]any) (*types.Agent, error) {
 	body, err := json.Marshal(patch)
 	if err != nil {
 		return nil, fmt.Errorf("marshal patch: %w", err)
 	}
-	var result types.ProjectAgent
+	var result types.Agent
 	path := "/projects/" + url.PathEscape(projectID) + "/agents/" + url.PathEscape(agentID)
 	if err := a.client.do(ctx, http.MethodPatch, path, body, http.StatusOK, &result); err != nil {
 		return nil, err
@@ -54,35 +54,44 @@ func (a *ProjectAgentAPI) UpdateInProject(ctx context.Context, projectID, agentI
 	return &result, nil
 }
 
-func (a *ProjectAgentAPI) DeleteInProject(ctx context.Context, projectID, agentID string) error {
+func (a *AgentAPI) DeleteInProject(ctx context.Context, projectID, agentID string) error {
 	path := "/projects/" + url.PathEscape(projectID) + "/agents/" + url.PathEscape(agentID)
 	return a.client.do(ctx, http.MethodDelete, path, nil, http.StatusNoContent, nil)
 }
 
-func (a *ProjectAgentAPI) Ignite(ctx context.Context, projectID, agentID, prompt string) (*types.IgniteResponse, error) {
-	req := types.IgniteRequest{Prompt: prompt}
+func (a *AgentAPI) Start(ctx context.Context, projectID, agentID, prompt string) (*types.StartResponse, error) {
+	req := types.StartRequest{Prompt: prompt}
 	body, err := json.Marshal(req)
 	if err != nil {
-		return nil, fmt.Errorf("marshal ignite request: %w", err)
+		return nil, fmt.Errorf("marshal start request: %w", err)
 	}
-	var result types.IgniteResponse
-	path := "/projects/" + url.PathEscape(projectID) + "/agents/" + url.PathEscape(agentID) + "/ignite"
+	var result types.StartResponse
+	path := "/projects/" + url.PathEscape(projectID) + "/agents/" + url.PathEscape(agentID) + "/start"
 	if err := a.client.doMultiStatus(ctx, http.MethodPost, path, body, &result, http.StatusOK, http.StatusCreated); err != nil {
 		return nil, err
 	}
 	return &result, nil
 }
 
-func (a *ProjectAgentAPI) GetIgnition(ctx context.Context, projectID, agentID string) (*types.IgniteResponse, error) {
-	var result types.IgniteResponse
-	path := "/projects/" + url.PathEscape(projectID) + "/agents/" + url.PathEscape(agentID) + "/ignition"
+func (a *AgentAPI) GetStartPreview(ctx context.Context, projectID, agentID string) (*types.StartResponse, error) {
+	var result types.StartResponse
+	path := "/projects/" + url.PathEscape(projectID) + "/agents/" + url.PathEscape(agentID) + "/start"
 	if err := a.client.do(ctx, http.MethodGet, path, nil, http.StatusOK, &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
 }
 
-func (a *ProjectAgentAPI) Sessions(ctx context.Context, projectID, agentID string, opts *types.ListOptions) (*types.SessionList, error) {
+func (a *AgentAPI) ListRoleBindingsByAgent(ctx context.Context, projectID, agentID string, opts *types.ListOptions) (*types.RoleBindingList, error) {
+	var result types.RoleBindingList
+	path := "/projects/" + url.PathEscape(projectID) + "/agents/" + url.PathEscape(agentID) + "/role_bindings"
+	if err := a.client.doWithQuery(ctx, http.MethodGet, path, nil, http.StatusOK, &result, opts); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+func (a *AgentAPI) Sessions(ctx context.Context, projectID, agentID string, opts *types.ListOptions) (*types.SessionList, error) {
 	var result types.SessionList
 	path := "/projects/" + url.PathEscape(projectID) + "/agents/" + url.PathEscape(agentID) + "/sessions"
 	if err := a.client.doWithQuery(ctx, http.MethodGet, path, nil, http.StatusOK, &result, opts); err != nil {
@@ -91,7 +100,7 @@ func (a *ProjectAgentAPI) Sessions(ctx context.Context, projectID, agentID strin
 	return &result, nil
 }
 
-func (a *ProjectAgentAPI) GetInProject(ctx context.Context, projectID, agentName string) (*types.ProjectAgent, error) {
+func (a *AgentAPI) GetInProject(ctx context.Context, projectID, agentName string) (*types.Agent, error) {
 	list, err := a.ListByProject(ctx, projectID, &types.ListOptions{Search: "name = '" + agentName + "'"})
 	if err != nil {
 		return nil, err
@@ -104,7 +113,7 @@ func (a *ProjectAgentAPI) GetInProject(ctx context.Context, projectID, agentName
 	return nil, fmt.Errorf("agent %q not found in project %q", agentName, projectID)
 }
 
-func (a *ProjectAgentAPI) ListInboxInProject(ctx context.Context, projectID, agentID string) ([]types.InboxMessage, error) {
+func (a *AgentAPI) ListInboxInProject(ctx context.Context, projectID, agentID string) ([]types.InboxMessage, error) {
 	var result types.InboxMessageList
 	path := "/projects/" + url.PathEscape(projectID) + "/agents/" + url.PathEscape(agentID) + "/inbox"
 	if err := a.client.do(ctx, http.MethodGet, path, nil, http.StatusOK, &result); err != nil {
@@ -113,7 +122,7 @@ func (a *ProjectAgentAPI) ListInboxInProject(ctx context.Context, projectID, age
 	return result.Items, nil
 }
 
-func (a *ProjectAgentAPI) SendInboxInProject(ctx context.Context, projectID, agentID, fromName, body string) error {
+func (a *AgentAPI) SendInboxInProject(ctx context.Context, projectID, agentID, fromName, body string) error {
 	msg := types.InboxMessage{FromName: fromName, Body: body}
 	payload, err := json.Marshal(msg)
 	if err != nil {
@@ -121,6 +130,22 @@ func (a *ProjectAgentAPI) SendInboxInProject(ctx context.Context, projectID, age
 	}
 	path := "/projects/" + url.PathEscape(projectID) + "/agents/" + url.PathEscape(agentID) + "/inbox"
 	return a.client.do(ctx, http.MethodPost, path, payload, http.StatusCreated, nil)
+}
+
+func (a *AgentAPI) PatchLabelsInProject(ctx context.Context, projectID, agentID string, labels map[string]string) (*types.Agent, error) {
+	b, err := json.Marshal(labels)
+	if err != nil {
+		return nil, fmt.Errorf("marshal labels: %w", err)
+	}
+	return a.UpdateInProject(ctx, projectID, agentID, map[string]any{"labels": string(b)})
+}
+
+func (a *AgentAPI) PatchAnnotationsInProject(ctx context.Context, projectID, agentID string, annotations map[string]string) (*types.Agent, error) {
+	b, err := json.Marshal(annotations)
+	if err != nil {
+		return nil, fmt.Errorf("marshal annotations: %w", err)
+	}
+	return a.UpdateInProject(ctx, projectID, agentID, map[string]any{"annotations": string(b)})
 }
 
 func (a *InboxMessageAPI) Send(ctx context.Context, projectID, agentID string, msg *types.InboxMessage) (*types.InboxMessage, error) {
