@@ -2,12 +2,24 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/gin-gonic/gin"
 )
+
+// networkError extracts the inner error from a *url.Error, stripping the
+// URL and HTTP method so they cannot leak into user-facing messages.
+func networkError(err error) error {
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		return urlErr.Err
+	}
+	return err
+}
 
 // ValidateGitHubToken checks if a GitHub token is valid by calling the GitHub API
 func ValidateGitHubToken(ctx context.Context, token string) (bool, error) {
@@ -26,8 +38,7 @@ func ValidateGitHubToken(ctx context.Context, token string) (bool, error) {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		// Don't wrap error - could leak token from request details
-		return false, fmt.Errorf("request failed")
+		return false, fmt.Errorf("request failed: %w", networkError(err))
 	}
 	defer resp.Body.Close()
 
@@ -56,8 +67,7 @@ func ValidateGitLabToken(ctx context.Context, token, instanceURL string) (bool, 
 
 	resp, err := client.Do(req)
 	if err != nil {
-		// Don't wrap error - could leak token from request details
-		return false, fmt.Errorf("request failed")
+		return false, fmt.Errorf("request failed: %w", networkError(err))
 	}
 	defer resp.Body.Close()
 
@@ -81,6 +91,8 @@ func ValidateJiraToken(ctx context.Context, url, email, apiToken string) (bool, 
 	}
 
 	var got401 bool
+	var lastNetErr error
+	var sawHTTPResponse bool
 
 	for _, apiURL := range apiURLs {
 		req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
@@ -94,8 +106,10 @@ func ValidateJiraToken(ctx context.Context, url, email, apiToken string) (bool, 
 
 		resp, err := client.Do(req)
 		if err != nil {
+			lastNetErr = networkError(err)
 			continue
 		}
+		sawHTTPResponse = true
 		defer resp.Body.Close()
 
 		// 200 = valid, 401 = invalid, 404 = wrong API version (try next)
@@ -111,6 +125,11 @@ func ValidateJiraToken(ctx context.Context, url, email, apiToken string) (bool, 
 	// If got 401 on any attempt, credentials are definitely invalid
 	if got401 {
 		return false, nil
+	}
+
+	// If all attempts failed with network errors, surface the cause
+	if lastNetErr != nil && !sawHTTPResponse {
+		return false, fmt.Errorf("request failed: %w", lastNetErr)
 	}
 
 	// Couldn't validate - assume valid to avoid false negatives
@@ -134,8 +153,7 @@ func ValidateGoogleToken(ctx context.Context, accessToken string) (bool, error) 
 
 	resp, err := client.Do(req)
 	if err != nil {
-		// Don't wrap error - could leak token from request details
-		return false, fmt.Errorf("request failed")
+		return false, fmt.Errorf("request failed: %w", networkError(err))
 	}
 	defer resp.Body.Close()
 

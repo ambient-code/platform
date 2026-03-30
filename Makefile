@@ -1,14 +1,14 @@
 .PHONY: help setup build-all build-frontend build-backend build-operator build-runner build-state-sync build-public-api build-cli deploy clean check-architecture
-.PHONY: local-up local-down local-clean local-status local-rebuild local-reload-backend local-reload-frontend local-reload-operator local-reload-api-server
+.PHONY: local-down local-status local-reload-api-server local-up local-clean local-rebuild local-reload-backend local-reload-frontend local-reload-operator
 .PHONY: local-dev-token
 .PHONY: local-logs local-logs-backend local-logs-frontend local-logs-operator local-shell local-shell-frontend
-.PHONY: local-test local-test-dev local-test-quick test-all local-url local-troubleshoot local-port-forward local-stop-port-forward
-.PHONY: push-all registry-login setup-hooks remove-hooks lint check-minikube check-kind check-kubectl check-local-context dev-bootstrap kind-rebuild kind-status kind-login
+.PHONY: local-test local-test-dev local-test-quick test-all local-troubleshoot local-port-forward local-stop-port-forward
+.PHONY: push-all registry-login setup-hooks remove-hooks lint check-kind check-kubectl check-local-context dev-bootstrap kind-rebuild kind-reload-backend kind-reload-frontend kind-reload-operator kind-status kind-login
 .PHONY: e2e-test e2e-setup e2e-clean deploy-langfuse-openshift
 .PHONY: unleash-port-forward unleash-status
 .PHONY: setup-minio minio-console minio-logs minio-status
 .PHONY: validate-makefile lint-makefile check-shell makefile-health
-.PHONY: _create-operator-config _auto-port-forward _show-access-info _build-and-load _kind-load-images
+.PHONY: _create-operator-config _auto-port-forward _show-access-info _kind-load-images
 
 # Default target
 .DEFAULT_GOAL := help
@@ -129,7 +129,7 @@ help: ## Display this help message
 	@echo '$(COLOR_BOLD)Ambient Code Platform - Development Makefile$(COLOR_RESET)'
 	@echo ''
 	@echo '$(COLOR_BOLD)Quick Start:$(COLOR_RESET)'
-	@echo '  $(COLOR_GREEN)make local-up$(COLOR_RESET)            Start local development environment'
+	@echo '  $(COLOR_GREEN)make kind-up$(COLOR_RESET)             Start local development environment'
 	@echo '  $(COLOR_GREEN)make local-status$(COLOR_RESET)        Check status of local environment'
 	@echo '  $(COLOR_GREEN)make local-logs$(COLOR_RESET)          View logs from all components'
 	@echo '  $(COLOR_GREEN)make local-down$(COLOR_RESET)          Stop local environment'
@@ -154,8 +154,8 @@ help: ## Display this help message
 	@echo '  make kind-up LOCAL_IMAGES=true    Build from source and deploy to kind (requires podman)'
 	@echo '  make kind-rebuild                 Rebuild and reload all components in kind'
 	@echo '  make kind-status                  Show all kind clusters and their ports'
-	@echo '  make local-up CONTAINER_ENGINE=docker'
-	@echo '  make local-reload-backend'
+	@echo '  make kind-up CONTAINER_ENGINE=docker'
+	@echo '  make kind-rebuild'
 	@echo '  make build-all PLATFORM=linux/arm64'
 
 ##@ Building
@@ -302,69 +302,14 @@ grafana-dashboard: ## Open Grafana (create route first)
 	@echo "  URL: https://$$(oc get route grafana -n $(NAMESPACE) -o jsonpath='{.spec.host}')"
 	@echo "  Login: admin/admin"
 
-##@ Local Development (Minikube)
+##@ Local Development
 
-local-up: check-minikube check-kubectl ## Start local development environment (minikube)
-	@echo "$(COLOR_BOLD)🚀 Starting Ambient Code Platform Local Environment$(COLOR_RESET)"
-	@echo ""
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 1/8: Starting minikube..."
-	@if [ "$(CONTAINER_ENGINE)" = "docker" ]; then \
-		minikube start --driver=docker --memory=4096 --cpus=2 $(QUIET_REDIRECT) || \
-			(minikube status >/dev/null 2>&1 && echo "$(COLOR_GREEN)✓$(COLOR_RESET) Minikube already running") || \
-			(echo "$(COLOR_RED)✗$(COLOR_RESET) Failed to start minikube" && exit 1); \
-	else \
-		minikube start --driver=podman --memory=4096 --cpus=2 --kubernetes-version=v1.35.0 --container-runtime=cri-o $(QUIET_REDIRECT) || \
-			(minikube status >/dev/null 2>&1 && echo "$(COLOR_GREEN)✓$(COLOR_RESET) Minikube already running") || \
-			(echo "$(COLOR_RED)✗$(COLOR_RESET) Failed to start minikube" && exit 1); \
-	fi
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 2/8: Enabling addons..."
-	@minikube addons enable ingress $(QUIET_REDIRECT) || true
-	@minikube addons enable storage-provisioner $(QUIET_REDIRECT) || true
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 3/8: Building images..."
-	@$(MAKE) --no-print-directory _build-and-load
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 4/8: Creating namespace..."
-	@kubectl create namespace $(NAMESPACE) --dry-run=client -o yaml | kubectl apply -f - $(QUIET_REDIRECT)
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 5/8: Applying CRDs and RBAC..."
-	@kubectl apply -f components/manifests/base/crds/ $(QUIET_REDIRECT) || true
-	@kubectl apply -f components/manifests/base/rbac/ $(QUIET_REDIRECT) || true
-	@kubectl apply -f components/manifests/minikube/local-dev-rbac.yaml $(QUIET_REDIRECT) || true
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 6/8: Creating storage..."
-	@kubectl apply -f components/manifests/base/workspace-pvc.yaml -n $(NAMESPACE) $(QUIET_REDIRECT) || true
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 6.5/8: Configuring operator..."
-	@$(MAKE) --no-print-directory _create-operator-config
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 7/8: Deploying services..."
-	@kubectl apply -f components/manifests/minikube/backend-deployment.yaml $(QUIET_REDIRECT)
-	@kubectl apply -f components/manifests/minikube/backend-service.yaml $(QUIET_REDIRECT)
-	@kubectl apply -f components/manifests/minikube/frontend-deployment.yaml $(QUIET_REDIRECT)
-	@kubectl apply -f components/manifests/minikube/frontend-service.yaml $(QUIET_REDIRECT)
-	@kubectl apply -f components/manifests/minikube/operator-deployment.yaml $(QUIET_REDIRECT)
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Step 8/8: Setting up ingress..."
-	@kubectl wait --namespace ingress-nginx --for=condition=ready pod \
-		--selector=app.kubernetes.io/component=controller --timeout=90s >/dev/null 2>&1 || true
-	@kubectl apply -f components/manifests/minikube/ingress.yaml $(QUIET_REDIRECT) || true
-	@echo ""
-	@echo "$(COLOR_GREEN)✓ Ambient Code Platform is starting up!$(COLOR_RESET)"
-	@echo ""
-	@$(MAKE) --no-print-directory _show-access-info
-	@$(MAKE) --no-print-directory _auto-port-forward
-	@echo ""
-	@echo "$(COLOR_YELLOW)⚠  Next steps:$(COLOR_RESET)"
-	@echo "  • Wait ~30s for pods to be ready"
-	@echo "  • Run: $(COLOR_BOLD)make local-status$(COLOR_RESET) to check deployment"
-	@echo "  • Run: $(COLOR_BOLD)make local-logs$(COLOR_RESET) to view logs"
-
-local-down: check-kubectl check-local-context ## Stop Ambient Code Platform (keep minikube running)
+local-down: check-kubectl check-local-context ## Stop Ambient Code Platform (keep cluster running)
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Stopping Ambient Code Platform..."
 	@$(MAKE) --no-print-directory local-stop-port-forward
 	@kubectl delete namespace $(NAMESPACE) --ignore-not-found=true --timeout=60s
-	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Ambient Code Platform stopped (minikube still running)"
-	@echo "  To stop minikube: $(COLOR_BOLD)make local-clean$(COLOR_RESET)"
-
-local-clean: check-minikube ## Delete minikube cluster completely
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Deleting minikube cluster..."
-	@$(MAKE) --no-print-directory local-stop-port-forward
-	@minikube delete
-	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Minikube cluster deleted"
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Ambient Code Platform stopped (cluster still running)"
+	@echo "  To delete kind cluster: $(COLOR_BOLD)make kind-down$(COLOR_RESET)"
 
 local-status: check-kubectl ## Show status of local deployment
 	@echo "$(COLOR_BOLD)📊 Ambient Code Platform Status$(COLOR_RESET)"
@@ -372,11 +317,8 @@ local-status: check-kubectl ## Show status of local deployment
 	@if $(if $(filter podman,$(CONTAINER_ENGINE)),KIND_EXPERIMENTAL_PROVIDER=podman) kind get clusters 2>/dev/null | grep -q '^$(KIND_CLUSTER_NAME)$$'; then \
 		echo "$(COLOR_BOLD)Kind:$(COLOR_RESET)"; \
 		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Cluster '$(KIND_CLUSTER_NAME)' running"; \
-	elif command -v minikube >/dev/null 2>&1; then \
-		echo "$(COLOR_BOLD)Minikube:$(COLOR_RESET)"; \
-		minikube status 2>/dev/null || echo "$(COLOR_RED)✗$(COLOR_RESET) Minikube not running"; \
 	else \
-		echo "$(COLOR_RED)✗$(COLOR_RESET) No local cluster found (kind or minikube)"; \
+		echo "$(COLOR_RED)✗$(COLOR_RESET) No kind cluster found. Run 'make kind-up' first."; \
 	fi
 	@echo ""
 	@echo "$(COLOR_BOLD)Pods:$(COLOR_RESET)"
@@ -390,75 +332,7 @@ local-status: check-kubectl ## Show status of local deployment
 		echo "  Run in another terminal: $(COLOR_BLUE)make kind-port-forward$(COLOR_RESET)"; \
 		echo "  Frontend: $(COLOR_BLUE)http://localhost:$(KIND_FWD_FRONTEND_PORT)$(COLOR_RESET)"; \
 		echo "  Backend:  $(COLOR_BLUE)http://localhost:$(KIND_FWD_BACKEND_PORT)$(COLOR_RESET)"; \
-	else \
-		$(MAKE) --no-print-directory _show-access-info; \
 	fi
-
-
-local-rebuild: check-local-context ## Rebuild and reload all components
-	@echo "$(COLOR_BOLD)🔄 Rebuilding all components...$(COLOR_RESET)"
-	@$(MAKE) --no-print-directory _build-and-load
-	@$(MAKE) --no-print-directory _restart-all
-	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) All components rebuilt and reloaded"
-
-local-reload-backend: check-local-context ## Rebuild and reload backend only
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rebuilding backend..."
-	@cd components/backend && $(CONTAINER_ENGINE) build --build-arg AMBIENT_VERSION=$(shell git describe --tags --always --dirty) -t $(BACKEND_IMAGE) . >/dev/null 2>&1
-	@$(CONTAINER_ENGINE) tag $(BACKEND_IMAGE) localhost/$(BACKEND_IMAGE) 2>/dev/null || true
-	@$(CONTAINER_ENGINE) save -o /tmp/backend-reload.tar localhost/$(BACKEND_IMAGE)
-	@minikube image load /tmp/backend-reload.tar >/dev/null 2>&1
-	@rm -f /tmp/backend-reload.tar
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Restarting backend..."
-	@kubectl rollout restart deployment/backend-api -n $(NAMESPACE) >/dev/null 2>&1
-	@kubectl rollout status deployment/backend-api -n $(NAMESPACE) --timeout=60s
-	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Backend reloaded"
-	@OS=$$(uname -s); \
-	if [ "$$OS" = "Darwin" ] && [ "$(CONTAINER_ENGINE)" = "podman" ]; then \
-		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Restarting backend port forward..."; \
-		if [ -f /tmp/ambient-code/port-forward-backend.pid ]; then \
-			kill $$(cat /tmp/ambient-code/port-forward-backend.pid) 2>/dev/null || true; \
-		fi; \
-		kubectl port-forward -n $(NAMESPACE) svc/backend-service 8080:8080 > /tmp/ambient-code/port-forward-backend.log 2>&1 & \
-		echo $$! > /tmp/ambient-code/port-forward-backend.pid; \
-		sleep 2; \
-		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Backend port forward restarted"; \
-	fi
-
-local-reload-frontend: check-local-context ## Rebuild and reload frontend only
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rebuilding frontend..."
-	@cd components/frontend && $(CONTAINER_ENGINE) build -t $(FRONTEND_IMAGE) . >/dev/null 2>&1
-	@$(CONTAINER_ENGINE) tag $(FRONTEND_IMAGE) localhost/$(FRONTEND_IMAGE) 2>/dev/null || true
-	@$(CONTAINER_ENGINE) save -o /tmp/frontend-reload.tar localhost/$(FRONTEND_IMAGE)
-	@minikube image load /tmp/frontend-reload.tar >/dev/null 2>&1
-	@rm -f /tmp/frontend-reload.tar
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Restarting frontend..."
-	@kubectl rollout restart deployment/frontend -n $(NAMESPACE) >/dev/null 2>&1
-	@kubectl rollout status deployment/frontend -n $(NAMESPACE) --timeout=60s
-	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Frontend reloaded"
-	@OS=$$(uname -s); \
-	if [ "$$OS" = "Darwin" ] && [ "$(CONTAINER_ENGINE)" = "podman" ]; then \
-		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Restarting frontend port forward..."; \
-		if [ -f /tmp/ambient-code/port-forward-frontend.pid ]; then \
-			kill $$(cat /tmp/ambient-code/port-forward-frontend.pid) 2>/dev/null || true; \
-		fi; \
-		kubectl port-forward -n $(NAMESPACE) svc/frontend-service 3000:3000 > /tmp/ambient-code/port-forward-frontend.log 2>&1 & \
-		echo $$! > /tmp/ambient-code/port-forward-frontend.pid; \
-		sleep 2; \
-		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Frontend port forward restarted"; \
-	fi
-
-
-local-reload-operator: check-local-context ## Rebuild and reload operator only
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rebuilding operator..."
-	@cd components/operator && $(CONTAINER_ENGINE) build -t $(OPERATOR_IMAGE) . >/dev/null 2>&1
-	@$(CONTAINER_ENGINE) tag $(OPERATOR_IMAGE) localhost/$(OPERATOR_IMAGE) 2>/dev/null || true
-	@$(CONTAINER_ENGINE) save -o /tmp/operator-reload.tar localhost/$(OPERATOR_IMAGE)
-	@minikube image load /tmp/operator-reload.tar >/dev/null 2>&1
-	@rm -f /tmp/operator-reload.tar
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Restarting operator..."
-	@kubectl rollout restart deployment/agentic-operator -n $(NAMESPACE) >/dev/null 2>&1
-	@kubectl rollout status deployment/agentic-operator -n $(NAMESPACE) --timeout=60s
-	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Operator reloaded"
 
 local-reload-api-server: check-local-context ## Rebuild and reload ambient-api-server only
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rebuilding ambient-api-server..."
@@ -521,11 +395,11 @@ check-shell: ## Validate shell scripts with shellcheck (if available)
 		echo "  Install with: brew install shellcheck (macOS) or apt-get install shellcheck (Linux)"; \
 	fi
 
-makefile-health: check-minikube check-kubectl ## Run comprehensive Makefile health check
+makefile-health: check-kind check-kubectl ## Run comprehensive Makefile health check
 	@echo "$(COLOR_BOLD)🏥 Makefile Health Check$(COLOR_RESET)"
 	@echo ""
 	@echo "$(COLOR_BOLD)Prerequisites:$(COLOR_RESET)"
-	@minikube version >/dev/null 2>&1 && echo "$(COLOR_GREEN)✓$(COLOR_RESET) minikube available" || echo "$(COLOR_RED)✗$(COLOR_RESET) minikube missing"
+	@kind version >/dev/null 2>&1 && echo "$(COLOR_GREEN)✓$(COLOR_RESET) kind available" || echo "$(COLOR_RED)✗$(COLOR_RESET) kind missing"
 	@kubectl version --client >/dev/null 2>&1 && echo "$(COLOR_GREEN)✓$(COLOR_RESET) kubectl available" || echo "$(COLOR_RED)✗$(COLOR_RESET) kubectl missing"
 	@command -v $(CONTAINER_ENGINE) >/dev/null 2>&1 && echo "$(COLOR_GREEN)✓$(COLOR_RESET) $(CONTAINER_ENGINE) available" || echo "$(COLOR_RED)✗$(COLOR_RESET) $(CONTAINER_ENGINE) missing"
 	@echo ""
@@ -542,18 +416,14 @@ local-test-dev: ## Run local developer experience tests
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Running local developer experience tests..."
 	@./tests/local-dev-test.sh $(if $(filter true,$(CI_MODE)),--ci,)
 
-local-test-quick: check-kubectl ## Quick smoke test of local environment (kind or minikube)
+local-test-quick: check-kubectl ## Quick smoke test of local environment
 	@echo "$(COLOR_BOLD)🧪 Quick Smoke Test$(COLOR_RESET)"
 	@echo ""
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Detecting cluster type..."
 	@if kind get clusters 2>/dev/null | grep -q .; then \
 		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Kind cluster running"; \
-		CLUSTER_TYPE=kind; \
-	elif command -v minikube >/dev/null 2>&1 && minikube status >/dev/null 2>&1; then \
-		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Minikube running"; \
-		CLUSTER_TYPE=minikube; \
 	else \
-		echo "$(COLOR_RED)✗$(COLOR_RESET) No local cluster found (kind or minikube)"; exit 1; \
+		echo "$(COLOR_RED)✗$(COLOR_RESET) No kind cluster found. Run 'make kind-up' first."; exit 1; \
 	fi
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Testing namespace..."
 	@kubectl get namespace $(NAMESPACE) >/dev/null 2>&1 && echo "$(COLOR_GREEN)✓$(COLOR_RESET) Namespace exists" || (echo "$(COLOR_RED)✗$(COLOR_RESET) Namespace missing" && exit 1)
@@ -619,9 +489,6 @@ local-shell-frontend: check-kubectl ## Open shell in frontend pod
 		echo "$(COLOR_RED)✗$(COLOR_RESET) Frontend pod not found or not ready"
 
 local-test: local-test-quick ## Alias for local-test-quick (backward compatibility)
-
-local-url: check-minikube ## Display access URLs
-	@$(MAKE) --no-print-directory _show-access-info
 
 local-port-forward: check-kubectl ## Port-forward for direct access (8080→backend, 3000→frontend)
 	@echo "$(COLOR_BOLD)🔌 Setting up port forwarding$(COLOR_RESET)"
@@ -839,6 +706,49 @@ kind-rebuild: check-kind check-kubectl check-local-context build-all ## Rebuild,
 	@kubectl rollout status deployment -n $(NAMESPACE) --timeout=120s $(QUIET_REDIRECT)
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) All components rebuilt and restarted"
 
+kind-reload-backend: check-kind check-kubectl check-local-context ## Rebuild and reload backend only (kind)
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rebuilding backend..."
+	@cd components/backend && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) \
+		--build-arg AMBIENT_VERSION=$(shell git describe --tags --always --dirty) \
+		-t $(BACKEND_IMAGE) . $(QUIET_REDIRECT)
+	@$(CONTAINER_ENGINE) tag $(BACKEND_IMAGE) localhost/$(BACKEND_IMAGE) 2>/dev/null || true
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Loading image into kind cluster ($(KIND_CLUSTER_NAME))..."
+	@$(CONTAINER_ENGINE) save localhost/$(BACKEND_IMAGE) | \
+		$(CONTAINER_ENGINE) exec -i $(KIND_CLUSTER_NAME)-control-plane \
+		ctr --namespace=k8s.io images import -
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Restarting backend..."
+	@kubectl rollout restart deployment/backend-api -n $(NAMESPACE) $(QUIET_REDIRECT)
+	@kubectl rollout status deployment/backend-api -n $(NAMESPACE) --timeout=60s
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Backend reloaded"
+
+kind-reload-frontend: check-kind check-kubectl check-local-context ## Rebuild and reload frontend only (kind)
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rebuilding frontend..."
+	@cd components/frontend && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) \
+		-t $(FRONTEND_IMAGE) . $(QUIET_REDIRECT)
+	@$(CONTAINER_ENGINE) tag $(FRONTEND_IMAGE) localhost/$(FRONTEND_IMAGE) 2>/dev/null || true
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Loading image into kind cluster ($(KIND_CLUSTER_NAME))..."
+	@$(CONTAINER_ENGINE) save localhost/$(FRONTEND_IMAGE) | \
+		$(CONTAINER_ENGINE) exec -i $(KIND_CLUSTER_NAME)-control-plane \
+		ctr --namespace=k8s.io images import -
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Restarting frontend..."
+	@kubectl rollout restart deployment/frontend -n $(NAMESPACE) $(QUIET_REDIRECT)
+	@kubectl rollout status deployment/frontend -n $(NAMESPACE) --timeout=60s
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Frontend reloaded"
+
+kind-reload-operator: check-kind check-kubectl check-local-context ## Rebuild and reload operator only (kind)
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rebuilding operator..."
+	@cd components/operator && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) \
+		-t $(OPERATOR_IMAGE) . $(QUIET_REDIRECT)
+	@$(CONTAINER_ENGINE) tag $(OPERATOR_IMAGE) localhost/$(OPERATOR_IMAGE) 2>/dev/null || true
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Loading image into kind cluster ($(KIND_CLUSTER_NAME))..."
+	@$(CONTAINER_ENGINE) save localhost/$(OPERATOR_IMAGE) | \
+		$(CONTAINER_ENGINE) exec -i $(KIND_CLUSTER_NAME)-control-plane \
+		ctr --namespace=k8s.io images import -
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Restarting operator..."
+	@kubectl rollout restart deployment/agentic-operator -n $(NAMESPACE) $(QUIET_REDIRECT)
+	@kubectl rollout status deployment/agentic-operator -n $(NAMESPACE) --timeout=60s
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Operator reloaded"
+
 kind-status: ## Show all kind clusters and their port assignments
 	@echo "$(COLOR_BOLD)Kind Cluster Status$(COLOR_RESET)"
 	@echo ""
@@ -892,11 +802,37 @@ unleash-status: check-kubectl ## Show Unleash deployment status
 	@kubectl get deployment,pod,svc -l 'app.kubernetes.io/name in (unleash,postgresql)' -n $${NAMESPACE:-ambient-code} 2>/dev/null || \
 		echo "$(COLOR_RED)✗$(COLOR_RESET) Unleash not found. Run 'make deploy' first."
 
-##@ Internal Helpers (do not call directly)
+##@ Deprecated Aliases
+# These targets preserve backward compatibility with the old minikube-based
+# workflow.  Each prints a deprecation notice and delegates to the kind
+# equivalent.  A follow-up issue tracks updating docs that still reference
+# the old names.
 
-check-minikube: ## Check if minikube is installed
-	@command -v minikube >/dev/null 2>&1 || \
-		(echo "$(COLOR_RED)✗$(COLOR_RESET) minikube not found. Install: https://minikube.sigs.k8s.io/docs/start/" && exit 1)
+local-up: ## Deprecated: use kind-up
+	@echo "$(COLOR_YELLOW)Warning:$(COLOR_RESET) '$@' is deprecated. Use 'make kind-up' instead."
+	@$(MAKE) --no-print-directory kind-up
+
+local-clean: ## Deprecated: use kind-down
+	@echo "$(COLOR_YELLOW)Warning:$(COLOR_RESET) '$@' is deprecated. Use 'make kind-down' instead."
+	@$(MAKE) --no-print-directory kind-down
+
+local-rebuild: ## Deprecated: use kind-rebuild
+	@echo "$(COLOR_YELLOW)Warning:$(COLOR_RESET) '$@' is deprecated. Use 'make kind-rebuild' instead."
+	@$(MAKE) --no-print-directory kind-rebuild
+
+local-reload-backend: ## Deprecated: use kind-reload-backend
+	@echo "$(COLOR_YELLOW)Warning:$(COLOR_RESET) '$@' is deprecated. Use 'make kind-reload-backend' instead."
+	@$(MAKE) --no-print-directory kind-reload-backend
+
+local-reload-frontend: ## Deprecated: use kind-reload-frontend
+	@echo "$(COLOR_YELLOW)Warning:$(COLOR_RESET) '$@' is deprecated. Use 'make kind-reload-frontend' instead."
+	@$(MAKE) --no-print-directory kind-reload-frontend
+
+local-reload-operator: ## Deprecated: use kind-reload-operator
+	@echo "$(COLOR_YELLOW)Warning:$(COLOR_RESET) '$@' is deprecated. Use 'make kind-reload-operator' instead."
+	@$(MAKE) --no-print-directory kind-reload-operator
+
+##@ Internal Helpers (do not call directly)
 
 check-kind: ## Check if kind is installed
 	@command -v kind >/dev/null 2>&1 || \
@@ -906,14 +842,14 @@ check-kubectl: ## Check if kubectl is installed
 	@command -v kubectl >/dev/null 2>&1 || \
 		(echo "$(COLOR_RED)✗$(COLOR_RESET) kubectl not found. Install: https://kubernetes.io/docs/tasks/tools/" && exit 1)
 
-check-local-context: ## Verify kubectl context points to a local cluster (kind or minikube)
+check-local-context: ## Verify kubectl context points to a local kind cluster
 ifneq ($(SKIP_CONTEXT_CHECK),true)
 	@ctx=$$(kubectl config current-context 2>/dev/null || echo ""); \
-	if echo "$$ctx" | grep -qE '^(kind-|minikube$$)'; then \
+	if echo "$$ctx" | grep -qE '^kind-'; then \
 		: ; \
 	else \
 		echo "$(COLOR_RED)✗$(COLOR_RESET) Current kubectl context '$$ctx' does not look like a local cluster."; \
-		echo "  Expected a context starting with 'kind-' or named 'minikube'."; \
+		echo "  Expected a context starting with 'kind-'."; \
 		echo "  Switch context first, e.g.: kubectl config use-context kind-ambient-local"; \
 		echo ""; \
 		echo "  To bypass this check: make <target> SKIP_CONTEXT_CHECK=true"; \
@@ -952,38 +888,6 @@ _kind-load-images: ## Internal: Load images into kind cluster
 	done
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Images loaded"
 
-_build-and-load: ## Internal: Build and load images
-	@echo "  Building backend ($(PLATFORM))..."
-	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) --build-arg AMBIENT_VERSION=$(shell git describe --tags --always --dirty) -t $(BACKEND_IMAGE) components/backend $(QUIET_REDIRECT)
-	@echo "  Building frontend ($(PLATFORM))..."
-	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) -t $(FRONTEND_IMAGE) components/frontend $(QUIET_REDIRECT)
-	@echo "  Building operator ($(PLATFORM))..."
-	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) -t $(OPERATOR_IMAGE) components/operator $(QUIET_REDIRECT)
-	@echo "  Building runner ($(PLATFORM))..."
-	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) -t $(RUNNER_IMAGE) -f components/runners/ambient-runner/Dockerfile components/runners $(QUIET_REDIRECT)
-	@echo "  Building api-server ($(PLATFORM))..."
-	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) -t $(API_SERVER_IMAGE) components/ambient-api-server $(QUIET_REDIRECT)
-	@echo "  Tagging images with localhost prefix..."
-	@$(CONTAINER_ENGINE) tag $(BACKEND_IMAGE) localhost/$(BACKEND_IMAGE) 2>/dev/null || true
-	@$(CONTAINER_ENGINE) tag $(FRONTEND_IMAGE) localhost/$(FRONTEND_IMAGE) 2>/dev/null || true
-	@$(CONTAINER_ENGINE) tag $(OPERATOR_IMAGE) localhost/$(OPERATOR_IMAGE) 2>/dev/null || true
-	@$(CONTAINER_ENGINE) tag $(RUNNER_IMAGE) localhost/$(RUNNER_IMAGE) 2>/dev/null || true
-	@$(CONTAINER_ENGINE) tag $(API_SERVER_IMAGE) localhost/$(API_SERVER_IMAGE) 2>/dev/null || true
-	@echo "  Loading images into minikube..."
-	@mkdir -p /tmp/minikube-images
-	@$(CONTAINER_ENGINE) save -o /tmp/minikube-images/backend.tar localhost/$(BACKEND_IMAGE)
-	@$(CONTAINER_ENGINE) save -o /tmp/minikube-images/frontend.tar localhost/$(FRONTEND_IMAGE)
-	@$(CONTAINER_ENGINE) save -o /tmp/minikube-images/operator.tar localhost/$(OPERATOR_IMAGE)
-	@$(CONTAINER_ENGINE) save -o /tmp/minikube-images/runner.tar localhost/$(RUNNER_IMAGE)
-	@$(CONTAINER_ENGINE) save -o /tmp/minikube-images/api-server.tar localhost/$(API_SERVER_IMAGE)
-	@minikube image load /tmp/minikube-images/backend.tar $(QUIET_REDIRECT)
-	@minikube image load /tmp/minikube-images/frontend.tar $(QUIET_REDIRECT)
-	@minikube image load /tmp/minikube-images/operator.tar $(QUIET_REDIRECT)
-	@minikube image load /tmp/minikube-images/runner.tar $(QUIET_REDIRECT)
-	@minikube image load /tmp/minikube-images/api-server.tar $(QUIET_REDIRECT)
-	@rm -rf /tmp/minikube-images
-	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Images built and loaded"
-
 _restart-all: ## Internal: Restart all deployments
 	@kubectl rollout restart deployment -n $(NAMESPACE) >/dev/null 2>&1
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for deployments to be ready..."
@@ -991,34 +895,16 @@ _restart-all: ## Internal: Restart all deployments
 
 _show-access-info: ## Internal: Show access information
 	@echo "$(COLOR_BOLD)🌐 Access URLs:$(COLOR_RESET)"
-	@OS=$$(uname -s); \
-	if [ "$$OS" = "Darwin" ] && [ "$(CONTAINER_ENGINE)" = "podman" ]; then \
-		echo "  $(COLOR_YELLOW)Note:$(COLOR_RESET) Port forwarding will start automatically"; \
-		echo "  Once pods are ready, access at:"; \
-		echo "     Frontend: $(COLOR_BLUE)http://localhost:3000$(COLOR_RESET)"; \
-		echo "     Backend:  $(COLOR_BLUE)http://localhost:8080$(COLOR_RESET)"; \
-		echo ""; \
-		echo "  $(COLOR_BOLD)To manage port forwarding:$(COLOR_RESET)"; \
-		echo "    Stop:    $(COLOR_BOLD)make local-stop-port-forward$(COLOR_RESET)"; \
-		echo "    Restart: $(COLOR_BOLD)make local-port-forward$(COLOR_RESET)"; \
-	else \
-		MINIKUBE_IP=$$(minikube ip 2>/dev/null) && \
-			echo "  Frontend: $(COLOR_BLUE)http://$$MINIKUBE_IP:30030$(COLOR_RESET)" && \
-			echo "  Backend:  $(COLOR_BLUE)http://$$MINIKUBE_IP:30080$(COLOR_RESET)" || \
-			echo "  $(COLOR_RED)✗$(COLOR_RESET) Cannot get minikube IP"; \
-		echo ""; \
-		echo "$(COLOR_BOLD)Alternative:$(COLOR_RESET) Port forward for localhost access"; \
-		echo "  Run: $(COLOR_BOLD)make local-port-forward$(COLOR_RESET)"; \
-		echo "  Then access:"; \
-		echo "    Frontend: $(COLOR_BLUE)http://localhost:3000$(COLOR_RESET)"; \
-		echo "    Backend:  $(COLOR_BLUE)http://localhost:8080$(COLOR_RESET)"; \
-	fi
+	@echo "  Run: $(COLOR_BOLD)make kind-port-forward$(COLOR_RESET)"
+	@echo "  Then access:"
+	@echo "    Frontend: $(COLOR_BLUE)http://localhost:$(KIND_FWD_FRONTEND_PORT)$(COLOR_RESET)"
+	@echo "    Backend:  $(COLOR_BLUE)http://localhost:$(KIND_FWD_BACKEND_PORT)$(COLOR_RESET)"
 	@echo ""
 	@echo "$(COLOR_YELLOW)⚠  SECURITY NOTE:$(COLOR_RESET) Authentication is DISABLED for local development."
 
 local-dev-token: check-kubectl ## Print a TokenRequest token for local-dev-user (for local dev API calls)
 	@kubectl get serviceaccount local-dev-user -n $(NAMESPACE) >/dev/null 2>&1 || \
-		(echo "$(COLOR_RED)✗$(COLOR_RESET) local-dev-user ServiceAccount not found in namespace $(NAMESPACE). Run 'make local-up' first." && exit 1)
+		(echo "$(COLOR_RED)✗$(COLOR_RESET) local-dev-user ServiceAccount not found in namespace $(NAMESPACE). Run 'make kind-up' first." && exit 1)
 	@TOKEN=$$(kubectl -n $(NAMESPACE) create token local-dev-user 2>/dev/null); \
 	if [ -z "$$TOKEN" ]; then \
 		echo "$(COLOR_RED)✗$(COLOR_RESET) Failed to mint token (kubectl create token). Ensure TokenRequest is supported and kubectl is v1.24+"; \
