@@ -59,9 +59,11 @@ fi
 echo "Setting bucket policy..."
 kubectl exec -n "${NAMESPACE}" "${MINIO_POD}" -- mc anonymous set none "local/${BUCKET_NAME}"
 
-# Enable versioning (optional - helps with recovery)
-echo "Enabling versioning..."
-kubectl exec -n "${NAMESPACE}" "${MINIO_POD}" -- mc version enable "local/${BUCKET_NAME}"
+# Versioning is intentionally disabled — the state-sync sidecar overwrites
+# the same objects every 60s, causing massive version accumulation with no
+# practical recovery benefit. Suspend versioning to prevent unbounded growth.
+echo "Suspending versioning..."
+kubectl exec -n "${NAMESPACE}" "${MINIO_POD}" -- mc version suspend "local/${BUCKET_NAME}"
 
 # Show bucket info
 echo ""
