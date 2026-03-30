@@ -35,7 +35,7 @@ func (h inboxMessageHandler) Create(w http.ResponseWriter, r *http.Request) {
 		},
 		Action: func() (interface{}, *errors.ServiceError) {
 			ctx := r.Context()
-			inboxMessage.AgentId = mux.Vars(r)["pa_id"]
+			inboxMessage.AgentId = mux.Vars(r)["agent_id"]
 			inboxMessageModel := ConvertInboxMessage(inboxMessage)
 			inboxMessageModel, err := h.inboxMessage.Create(ctx, inboxMessageModel)
 			if err != nil {
@@ -83,7 +83,7 @@ func (h inboxMessageHandler) List(w http.ResponseWriter, r *http.Request) {
 	cfg := &handlers.HandlerConfig{
 		Action: func() (interface{}, *errors.ServiceError) {
 			ctx := r.Context()
-			agentID := mux.Vars(r)["pa_id"]
+			agentID := mux.Vars(r)["agent_id"]
 
 			listArgs := services.NewListArguments(r.URL.Query())
 			if agentID != "" {

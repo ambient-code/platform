@@ -23,7 +23,7 @@ const (
 	ActionDelete  Action = "delete"
 	ActionList    Action = "list"
 	ActionWatch   Action = "watch"
-	ActionIgnite  Action = "ignite"
+	ActionStart   Action = "start"
 	ActionCheckin Action = "checkin"
 	ActionMessage Action = "message"
 )
@@ -71,7 +71,7 @@ var (
 	PermAgentUpdate = Permission{ResourceAgent, ActionUpdate}
 	PermAgentDelete = Permission{ResourceAgent, ActionDelete}
 	PermAgentList   = Permission{ResourceAgent, ActionList}
-	PermAgentIgnite = Permission{ResourceAgent, ActionIgnite}
+	PermAgentStart = Permission{ResourceAgent, ActionStart}
 
 	PermSessionRead   = Permission{ResourceSession, ActionRead}
 	PermSessionList   = Permission{ResourceSession, ActionList}

@@ -12,6 +12,7 @@ import (
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api"
 	localgrpc "github.com/ambient-code/platform/components/ambient-api-server/pkg/api/grpc"
 	pb "github.com/ambient-code/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1"
+	"github.com/ambient-code/platform/components/ambient-api-server/pkg/middleware"
 	"github.com/openshift-online/rh-trex-ai/pkg/auth"
 	"github.com/openshift-online/rh-trex-ai/pkg/server"
 	"github.com/openshift-online/rh-trex-ai/pkg/server/grpcutil"
@@ -20,28 +21,19 @@ import (
 
 type sessionGRPCHandler struct {
 	pb.UnimplementedSessionServiceServer
-	service            SessionService
-	generic            services.GenericService
-	brokerFunc         func() *server.EventBroker
-	msgService         MessageService
-	serviceAccountName string
+	service    SessionService
+	generic    services.GenericService
+	brokerFunc func() *server.EventBroker
+	msgService MessageService
 }
 
-func NewSessionGRPCHandler(service SessionService, generic services.GenericService, brokerFunc func() *server.EventBroker, msgService MessageService, serviceAccountName string) pb.SessionServiceServer {
+func NewSessionGRPCHandler(service SessionService, generic services.GenericService, brokerFunc func() *server.EventBroker, msgService MessageService) pb.SessionServiceServer {
 	return &sessionGRPCHandler{
-		service:            service,
-		generic:            generic,
-		brokerFunc:         brokerFunc,
-		msgService:         msgService,
-		serviceAccountName: serviceAccountName,
+		service:    service,
+		generic:    generic,
+		brokerFunc: brokerFunc,
+		msgService: msgService,
 	}
-}
-
-func (h *sessionGRPCHandler) isServiceCaller(ctx context.Context) bool {
-	if h.serviceAccountName == "" {
-		return false
-	}
-	return auth.GetUsernameFromContext(ctx) == h.serviceAccountName
 }
 
 func (h *sessionGRPCHandler) GetSession(ctx context.Context, req *pb.GetSessionRequest) (*pb.Session, error) {
@@ -274,8 +266,8 @@ func (h *sessionGRPCHandler) PushSessionMessage(ctx context.Context, req *pb.Pus
 	if req.GetEventType() == "" {
 		return nil, status.Error(codes.InvalidArgument, "event_type is required")
 	}
-	if h.isServiceCaller(ctx) && req.GetEventType() == "user" {
-		return nil, status.Error(codes.PermissionDenied, "service account may not push event_type=user")
+	if middleware.IsServiceCaller(ctx) && req.GetEventType() == "user" {
+		return nil, status.Error(codes.PermissionDenied, "service token may not push event_type=user")
 	}
 
 	msg, err := h.msgService.Push(ctx, req.GetSessionId(), req.GetEventType(), req.GetPayload())
@@ -292,7 +284,7 @@ func (h *sessionGRPCHandler) WatchSessionMessages(req *pb.WatchSessionMessagesRe
 
 	ctx := stream.Context()
 
-	if !h.isServiceCaller(ctx) {
+	if !middleware.IsServiceCaller(ctx) {
 		username := auth.GetUsernameFromContext(ctx)
 		if username != "" {
 			session, svcErr := h.service.Get(ctx, req.GetSessionId())

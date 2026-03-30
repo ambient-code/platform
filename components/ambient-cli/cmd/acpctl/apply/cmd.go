@@ -264,9 +264,9 @@ func applyAgent(ctx context.Context, client *sdkclient.Client, doc resource, pro
 		return applyResult{}, fmt.Errorf("project %q not found: %w", projectName, err)
 	}
 
-	existing, err := projClient.ProjectAgents().GetInProject(ctx, project.ID, doc.Name)
+	existing, err := projClient.Agents().GetInProject(ctx, project.ID, doc.Name)
 	if err != nil {
-		builder := sdktypes.NewProjectAgentBuilder().
+		builder := sdktypes.NewAgentBuilder().
 			ProjectID(project.ID).
 			Name(doc.Name)
 		if doc.Prompt != "" {
@@ -276,7 +276,7 @@ func applyAgent(ctx context.Context, client *sdkclient.Client, doc resource, pro
 		if buildErr != nil {
 			return applyResult{}, buildErr
 		}
-		created, createErr := projClient.ProjectAgents().CreateInProject(ctx, project.ID, pa)
+		created, createErr := projClient.Agents().CreateInProject(ctx, project.ID, pa)
 		if createErr != nil {
 			return applyResult{}, createErr
 		}
@@ -288,7 +288,7 @@ func applyAgent(ctx context.Context, client *sdkclient.Client, doc resource, pro
 			if len(doc.Annotations) > 0 {
 				patch["annotations"] = marshalStringMap(doc.Annotations)
 			}
-			if _, patchErr := projClient.ProjectAgents().UpdateInProject(ctx, project.ID, created.ID, patch); patchErr != nil {
+			if _, patchErr := projClient.Agents().UpdateInProject(ctx, project.ID, created.ID, patch); patchErr != nil {
 				return applyResult{}, patchErr
 			}
 		}
@@ -301,7 +301,7 @@ func applyAgent(ctx context.Context, client *sdkclient.Client, doc resource, pro
 	patch := buildAgentPatch(existing, doc)
 	status := "unchanged"
 	if len(patch) > 0 {
-		if _, err = projClient.ProjectAgents().UpdateInProject(ctx, project.ID, existing.ID, patch); err != nil {
+		if _, err = projClient.Agents().UpdateInProject(ctx, project.ID, existing.ID, patch); err != nil {
 			return applyResult{}, err
 		}
 		status = "configured"
@@ -312,7 +312,7 @@ func applyAgent(ctx context.Context, client *sdkclient.Client, doc resource, pro
 	return applyResult{Kind: "Agent", Name: doc.Name, Status: status}, nil
 }
 
-func buildAgentPatch(existing *sdktypes.ProjectAgent, doc resource) map[string]any {
+func buildAgentPatch(existing *sdktypes.Agent, doc resource) map[string]any {
 	patch := map[string]any{}
 	if doc.Prompt != "" && doc.Prompt != existing.Prompt {
 		patch["prompt"] = doc.Prompt
@@ -330,7 +330,7 @@ func seedInbox(ctx context.Context, client *sdkclient.Client, projectID, agentID
 	if len(seeds) == 0 {
 		return nil
 	}
-	existing, err := client.ProjectAgents().ListInboxInProject(ctx, projectID, agentID)
+	existing, err := client.Agents().ListInboxInProject(ctx, projectID, agentID)
 	if err != nil {
 		return nil
 	}
@@ -343,7 +343,7 @@ func seedInbox(ctx context.Context, client *sdkclient.Client, projectID, agentID
 		if existingSet[key] {
 			continue
 		}
-		if err := client.ProjectAgents().SendInboxInProject(ctx, projectID, agentID, seed.FromName, seed.Body); err != nil {
+		if err := client.Agents().SendInboxInProject(ctx, projectID, agentID, seed.FromName, seed.Body); err != nil {
 			return err
 		}
 	}

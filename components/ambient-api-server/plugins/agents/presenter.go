@@ -7,7 +7,7 @@ import (
 	"github.com/openshift-online/rh-trex-ai/pkg/util"
 )
 
-func ConvertAgent(agent openapi.ProjectAgent) *Agent {
+func ConvertAgent(agent openapi.Agent) *Agent {
 	c := &Agent{
 		Meta: api.Meta{
 			ID: util.NilToEmptyString(agent.Id),
@@ -29,9 +29,9 @@ func ConvertAgent(agent openapi.ProjectAgent) *Agent {
 	return c
 }
 
-func PresentAgent(agent *Agent) openapi.ProjectAgent {
+func PresentAgent(agent *Agent) openapi.Agent {
 	reference := presenters.PresentReference(agent.ID, agent)
-	return openapi.ProjectAgent{
+	return openapi.Agent{
 		Id:               reference.Id,
 		Kind:             reference.Kind,
 		Href:             reference.Href,

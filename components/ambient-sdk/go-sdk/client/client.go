@@ -25,7 +25,7 @@ import (
 
 type Client struct {
 	httpClient         *http.Client
-	sseClient          *http.Client
+	streamingClient    *http.Client
 	baseURL            string
 	token              string
 	project            string
@@ -45,9 +45,8 @@ func WithTimeout(timeout time.Duration) ClientOption {
 func WithInsecureSkipVerify() ClientOption {
 	return func(c *Client) {
 		c.insecureSkipVerify = true
-
-		applyInsecureTLS := func(client *http.Client) {
-			t, ok := client.Transport.(*http.Transport)
+		applyInsecure := func(hc *http.Client) {
+			t, ok := hc.Transport.(*http.Transport)
 			if !ok || t == nil {
 				t = http.DefaultTransport.(*http.Transport).Clone()
 			} else {
@@ -57,11 +56,10 @@ func WithInsecureSkipVerify() ClientOption {
 				t.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
 			}
 			t.TLSClientConfig.InsecureSkipVerify = true //nolint:gosec
-			client.Transport = t
+			hc.Transport = t
 		}
-
-		applyInsecureTLS(c.httpClient)
-		applyInsecureTLS(c.sseClient)
+		applyInsecure(c.httpClient)
+		applyInsecure(c.streamingClient)
 	}
 }
 
@@ -106,15 +104,12 @@ func NewClient(baseURL, token, project string, opts ...ClientOption) (*Client, e
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
-		sseClient: &http.Client{
-			Timeout:   0,
-			Transport: &http.Transport{DisableCompression: true},
-		},
-		baseURL:   strings.TrimSuffix(baseURL, "/"),
-		token:     token,
-		project:   project,
-		logger:    slog.Default(),
-		userAgent: "ambient-go-sdk/1.0.0",
+		streamingClient: &http.Client{},
+		baseURL:         strings.TrimSuffix(baseURL, "/"),
+		token:           token,
+		project:         project,
+		logger:          slog.Default(),
+		userAgent:       "ambient-go-sdk/1.0.0",
 	}
 
 	for _, opt := range opts {

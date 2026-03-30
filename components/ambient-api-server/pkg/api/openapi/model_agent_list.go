@@ -17,26 +17,26 @@ import (
 	"fmt"
 )
 
-// checks if the ProjectAgentList type satisfies the MappedNullable interface at compile time
-var _ MappedNullable = &ProjectAgentList{}
+// checks if the AgentList type satisfies the MappedNullable interface at compile time
+var _ MappedNullable = &AgentList{}
 
-// ProjectAgentList struct for ProjectAgentList
-type ProjectAgentList struct {
+// AgentList struct for AgentList
+type AgentList struct {
 	Kind  string         `json:"kind"`
 	Page  int32          `json:"page"`
 	Size  int32          `json:"size"`
 	Total int32          `json:"total"`
-	Items []ProjectAgent `json:"items"`
+	Items []Agent `json:"items"`
 }
 
-type _ProjectAgentList ProjectAgentList
+type _AgentList AgentList
 
-// NewProjectAgentList instantiates a new ProjectAgentList object
+// NewAgentList instantiates a new AgentList object
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewProjectAgentList(kind string, page int32, size int32, total int32, items []ProjectAgent) *ProjectAgentList {
-	this := ProjectAgentList{}
+func NewAgentList(kind string, page int32, size int32, total int32, items []Agent) *AgentList {
+	this := AgentList{}
 	this.Kind = kind
 	this.Page = page
 	this.Size = size
@@ -45,16 +45,16 @@ func NewProjectAgentList(kind string, page int32, size int32, total int32, items
 	return &this
 }
 
-// NewProjectAgentListWithDefaults instantiates a new ProjectAgentList object
+// NewAgentListWithDefaults instantiates a new AgentList object
 // This constructor will only assign default values to properties that have it defined,
 // but it doesn't guarantee that properties required by API are set
-func NewProjectAgentListWithDefaults() *ProjectAgentList {
-	this := ProjectAgentList{}
+func NewAgentListWithDefaults() *AgentList {
+	this := AgentList{}
 	return &this
 }
 
 // GetKind returns the Kind field value
-func (o *ProjectAgentList) GetKind() string {
+func (o *AgentList) GetKind() string {
 	if o == nil {
 		var ret string
 		return ret
@@ -65,7 +65,7 @@ func (o *ProjectAgentList) GetKind() string {
 
 // GetKindOk returns a tuple with the Kind field value
 // and a boolean to check if the value has been set.
-func (o *ProjectAgentList) GetKindOk() (*string, bool) {
+func (o *AgentList) GetKindOk() (*string, bool) {
 	if o == nil {
 		return nil, false
 	}
@@ -73,12 +73,12 @@ func (o *ProjectAgentList) GetKindOk() (*string, bool) {
 }
 
 // SetKind sets field value
-func (o *ProjectAgentList) SetKind(v string) {
+func (o *AgentList) SetKind(v string) {
 	o.Kind = v
 }
 
 // GetPage returns the Page field value
-func (o *ProjectAgentList) GetPage() int32 {
+func (o *AgentList) GetPage() int32 {
 	if o == nil {
 		var ret int32
 		return ret
@@ -89,7 +89,7 @@ func (o *ProjectAgentList) GetPage() int32 {
 
 // GetPageOk returns a tuple with the Page field value
 // and a boolean to check if the value has been set.
-func (o *ProjectAgentList) GetPageOk() (*int32, bool) {
+func (o *AgentList) GetPageOk() (*int32, bool) {
 	if o == nil {
 		return nil, false
 	}
@@ -97,12 +97,12 @@ func (o *ProjectAgentList) GetPageOk() (*int32, bool) {
 }
 
 // SetPage sets field value
-func (o *ProjectAgentList) SetPage(v int32) {
+func (o *AgentList) SetPage(v int32) {
 	o.Page = v
 }
 
 // GetSize returns the Size field value
-func (o *ProjectAgentList) GetSize() int32 {
+func (o *AgentList) GetSize() int32 {
 	if o == nil {
 		var ret int32
 		return ret
@@ -113,7 +113,7 @@ func (o *ProjectAgentList) GetSize() int32 {
 
 // GetSizeOk returns a tuple with the Size field value
 // and a boolean to check if the value has been set.
-func (o *ProjectAgentList) GetSizeOk() (*int32, bool) {
+func (o *AgentList) GetSizeOk() (*int32, bool) {
 	if o == nil {
 		return nil, false
 	}
@@ -121,12 +121,12 @@ func (o *ProjectAgentList) GetSizeOk() (*int32, bool) {
 }
 
 // SetSize sets field value
-func (o *ProjectAgentList) SetSize(v int32) {
+func (o *AgentList) SetSize(v int32) {
 	o.Size = v
 }
 
 // GetTotal returns the Total field value
-func (o *ProjectAgentList) GetTotal() int32 {
+func (o *AgentList) GetTotal() int32 {
 	if o == nil {
 		var ret int32
 		return ret
@@ -137,7 +137,7 @@ func (o *ProjectAgentList) GetTotal() int32 {
 
 // GetTotalOk returns a tuple with the Total field value
 // and a boolean to check if the value has been set.
-func (o *ProjectAgentList) GetTotalOk() (*int32, bool) {
+func (o *AgentList) GetTotalOk() (*int32, bool) {
 	if o == nil {
 		return nil, false
 	}
@@ -145,14 +145,14 @@ func (o *ProjectAgentList) GetTotalOk() (*int32, bool) {
 }
 
 // SetTotal sets field value
-func (o *ProjectAgentList) SetTotal(v int32) {
+func (o *AgentList) SetTotal(v int32) {
 	o.Total = v
 }
 
 // GetItems returns the Items field value
-func (o *ProjectAgentList) GetItems() []ProjectAgent {
+func (o *AgentList) GetItems() []Agent {
 	if o == nil {
-		var ret []ProjectAgent
+		var ret []Agent
 		return ret
 	}
 
@@ -161,7 +161,7 @@ func (o *ProjectAgentList) GetItems() []ProjectAgent {
 
 // GetItemsOk returns a tuple with the Items field value
 // and a boolean to check if the value has been set.
-func (o *ProjectAgentList) GetItemsOk() ([]ProjectAgent, bool) {
+func (o *AgentList) GetItemsOk() ([]Agent, bool) {
 	if o == nil {
 		return nil, false
 	}
@@ -169,11 +169,11 @@ func (o *ProjectAgentList) GetItemsOk() ([]ProjectAgent, bool) {
 }
 
 // SetItems sets field value
-func (o *ProjectAgentList) SetItems(v []ProjectAgent) {
+func (o *AgentList) SetItems(v []Agent) {
 	o.Items = v
 }
 
-func (o ProjectAgentList) MarshalJSON() ([]byte, error) {
+func (o AgentList) MarshalJSON() ([]byte, error) {
 	toSerialize, err := o.ToMap()
 	if err != nil {
 		return []byte{}, err
@@ -181,7 +181,7 @@ func (o ProjectAgentList) MarshalJSON() ([]byte, error) {
 	return json.Marshal(toSerialize)
 }
 
-func (o ProjectAgentList) ToMap() (map[string]interface{}, error) {
+func (o AgentList) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
 	toSerialize["kind"] = o.Kind
 	toSerialize["page"] = o.Page
@@ -191,7 +191,7 @@ func (o ProjectAgentList) ToMap() (map[string]interface{}, error) {
 	return toSerialize, nil
 }
 
-func (o *ProjectAgentList) UnmarshalJSON(data []byte) (err error) {
+func (o *AgentList) UnmarshalJSON(data []byte) (err error) {
 	// This validates that all required properties are included in the JSON object
 	// by unmarshalling the object into a generic map with string keys and checking
 	// that every required field exists as a key in the generic map.
@@ -217,53 +217,53 @@ func (o *ProjectAgentList) UnmarshalJSON(data []byte) (err error) {
 		}
 	}
 
-	varProjectAgentList := _ProjectAgentList{}
+	varAgentList := _AgentList{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
-	err = decoder.Decode(&varProjectAgentList)
+	err = decoder.Decode(&varAgentList)
 
 	if err != nil {
 		return err
 	}
 
-	*o = ProjectAgentList(varProjectAgentList)
+	*o = AgentList(varAgentList)
 
 	return err
 }
 
-type NullableProjectAgentList struct {
-	value *ProjectAgentList
+type NullableAgentList struct {
+	value *AgentList
 	isSet bool
 }
 
-func (v NullableProjectAgentList) Get() *ProjectAgentList {
+func (v NullableAgentList) Get() *AgentList {
 	return v.value
 }
 
-func (v *NullableProjectAgentList) Set(val *ProjectAgentList) {
+func (v *NullableAgentList) Set(val *AgentList) {
 	v.value = val
 	v.isSet = true
 }
 
-func (v NullableProjectAgentList) IsSet() bool {
+func (v NullableAgentList) IsSet() bool {
 	return v.isSet
 }
 
-func (v *NullableProjectAgentList) Unset() {
+func (v *NullableAgentList) Unset() {
 	v.value = nil
 	v.isSet = false
 }
 
-func NewNullableProjectAgentList(val *ProjectAgentList) *NullableProjectAgentList {
-	return &NullableProjectAgentList{value: val, isSet: true}
+func NewNullableAgentList(val *AgentList) *NullableAgentList {
+	return &NullableAgentList{value: val, isSet: true}
 }
 
-func (v NullableProjectAgentList) MarshalJSON() ([]byte, error) {
+func (v NullableAgentList) MarshalJSON() ([]byte, error) {
 	return json.Marshal(v.value)
 }
 
-func (v *NullableProjectAgentList) UnmarshalJSON(src []byte) error {
+func (v *NullableAgentList) UnmarshalJSON(src []byte) error {
 	v.isSet = true
 	return json.Unmarshal(src, &v.value)
 }

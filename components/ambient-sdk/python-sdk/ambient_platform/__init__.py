@@ -9,7 +9,7 @@ from .client import AmbientClient
 from ._base import APIError, ListOptions
 from .inbox_message import InboxMessage
 from .project import Project, ProjectPatch
-from .project_agent import ProjectAgent
+from .agent import Agent
 from .project_settings import ProjectSettings, ProjectSettingsPatch
 from .role import Role, RolePatch
 from .role_binding import RoleBinding, RoleBindingPatch
@@ -26,7 +26,7 @@ __all__ = [
     "InboxMessage",
     "Project",
     "ProjectPatch",
-    "ProjectAgent",
+    "Agent",
     "ProjectSettings",
     "ProjectSettingsPatch",
     "Role",

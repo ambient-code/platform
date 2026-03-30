@@ -8,12 +8,12 @@ import (
 	"github.com/openshift-online/rh-trex-ai/pkg/environments"
 )
 
-func newInboxMessage(id string) (*inbox.InboxMessage, error) {
+func newInboxMessage(id string) (*inbox.InboxMessage, error) { //nolint:unused
 	inboxMessageService := inbox.Service(&environments.Environment().Services)
 
 	inboxMessage := &inbox.InboxMessage{
 		AgentId: "test-agent_id",
-		Body:           "test-body",
+		Body:    "test-body",
 	}
 
 	sub, err := inboxMessageService.Create(context.Background(), inboxMessage)
@@ -24,7 +24,7 @@ func newInboxMessage(id string) (*inbox.InboxMessage, error) {
 	return sub, nil
 }
 
-func newInboxMessageList(namePrefix string, count int) ([]*inbox.InboxMessage, error) {
+func newInboxMessageList(namePrefix string, count int) ([]*inbox.InboxMessage, error) { //nolint:unused
 	var items []*inbox.InboxMessage
 	for i := 1; i <= count; i++ {
 		name := fmt.Sprintf("%s_%d", namePrefix, i)

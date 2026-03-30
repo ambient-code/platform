@@ -31,11 +31,12 @@ type InboxMessageService interface {
 	OnDelete(ctx context.Context, id string) error
 }
 
-func NewInboxMessageService(lockFactory db.LockFactory, inboxMessageDao InboxMessageDao, events services.EventService) InboxMessageService {
+func NewInboxMessageService(lockFactory db.LockFactory, inboxMessageDao InboxMessageDao, events services.EventService, watchSvc InboxWatchService) InboxMessageService {
 	return &sqlInboxMessageService{
 		lockFactory:     lockFactory,
 		inboxMessageDao: inboxMessageDao,
 		events:          events,
+		watchSvc:        watchSvc,
 	}
 }
 
@@ -45,6 +46,7 @@ type sqlInboxMessageService struct {
 	lockFactory     db.LockFactory
 	inboxMessageDao InboxMessageDao
 	events          services.EventService
+	watchSvc        InboxWatchService
 }
 
 func (s *sqlInboxMessageService) OnUpsert(ctx context.Context, id string) error {
@@ -87,6 +89,10 @@ func (s *sqlInboxMessageService) Create(ctx context.Context, inboxMessage *Inbox
 	})
 	if evErr != nil {
 		return nil, services.HandleCreateError("InboxMessage", evErr)
+	}
+
+	if s.watchSvc != nil {
+		s.watchSvc.Notify(inboxMessage)
 	}
 
 	return inboxMessage, nil

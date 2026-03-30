@@ -13,10 +13,14 @@ import (
 type Agent struct {
 	ObjectReference
 
-	Name        string `json:"name"`
-	OwnerUserID string `json:"owner_user_id"`
-	Prompt      string `json:"prompt,omitempty"`
-	Version     int    `json:"version,omitempty"`
+	Annotations      string `json:"annotations,omitempty"`
+	CurrentSessionID string `json:"current_session_id,omitempty"`
+	Labels           string `json:"labels,omitempty"`
+	Name             string `json:"name"`
+	OwnerUserID      string `json:"owner_user_id,omitempty"`
+	ProjectID        string `json:"project_id,omitempty"`
+	Prompt           string `json:"prompt,omitempty"`
+	Version          int    `json:"version,omitempty"`
 }
 
 type AgentList struct {
@@ -38,6 +42,16 @@ func NewAgentBuilder() *AgentBuilder {
 	return &AgentBuilder{}
 }
 
+func (b *AgentBuilder) Annotations(v string) *AgentBuilder {
+	b.resource.Annotations = v
+	return b
+}
+
+func (b *AgentBuilder) Labels(v string) *AgentBuilder {
+	b.resource.Labels = v
+	return b
+}
+
 func (b *AgentBuilder) Name(v string) *AgentBuilder {
 	b.resource.Name = v
 	return b
@@ -45,6 +59,11 @@ func (b *AgentBuilder) Name(v string) *AgentBuilder {
 
 func (b *AgentBuilder) OwnerUserID(v string) *AgentBuilder {
 	b.resource.OwnerUserID = v
+	return b
+}
+
+func (b *AgentBuilder) ProjectID(v string) *AgentBuilder {
+	b.resource.ProjectID = v
 	return b
 }
 
@@ -56,9 +75,6 @@ func (b *AgentBuilder) Prompt(v string) *AgentBuilder {
 func (b *AgentBuilder) Build() (*Agent, error) {
 	if b.resource.Name == "" {
 		b.errors = append(b.errors, fmt.Errorf("name is required"))
-	}
-	if b.resource.OwnerUserID == "" {
-		b.errors = append(b.errors, fmt.Errorf("owner_user_id is required"))
 	}
 	if len(b.errors) > 0 {
 		return nil, fmt.Errorf("validation failed: %w", errors.Join(b.errors...))
@@ -72,6 +88,21 @@ type AgentPatchBuilder struct {
 
 func NewAgentPatchBuilder() *AgentPatchBuilder {
 	return &AgentPatchBuilder{patch: make(map[string]any)}
+}
+
+func (b *AgentPatchBuilder) Annotations(v string) *AgentPatchBuilder {
+	b.patch["annotations"] = v
+	return b
+}
+
+func (b *AgentPatchBuilder) Labels(v string) *AgentPatchBuilder {
+	b.patch["labels"] = v
+	return b
+}
+
+func (b *AgentPatchBuilder) Name(v string) *AgentPatchBuilder {
+	b.patch["name"] = v
+	return b
 }
 
 func (b *AgentPatchBuilder) Prompt(v string) *AgentPatchBuilder {

@@ -30,12 +30,12 @@ func (h *homeHandler) ListAgents(w http.ResponseWriter, r *http.Request) {
 				return nil, err
 			}
 
-			result := openapi.ProjectAgentList{
-				Kind:  "ProjectAgentList",
+			result := openapi.AgentList{
+				Kind:  "AgentList",
 				Page:  1,
 				Size:  int32(len(agentList)),
 				Total: int32(len(agentList)),
-				Items: []openapi.ProjectAgent{},
+				Items: []openapi.Agent{},
 			}
 			for _, a := range agentList {
 				result.Items = append(result.Items, agents.PresentAgent(a))

@@ -1,6 +1,6 @@
 paths:
   # NEW ENDPOINT START
-  /api/ambient/v1/projects/{id}/agents/{pa_id}/inbox:
+  /api/ambient/v1/projects/{id}/agents/{agent_id}/inbox:
   # NEW ENDPOINT END
     get:
       summary: Read inbox messages for an agent (unread first)
@@ -90,14 +90,14 @@ paths:
                 $ref: 'openapi.yaml#/components/schemas/Error'
     parameters:
       - $ref: '#/components/parameters/id'
-      - name: pa_id
+      - name: agent_id
         in: path
         description: The id of the agent
         required: true
         schema:
           type: string
   # NEW ENDPOINT START
-  /api/ambient/v1/projects/{id}/agents/{pa_id}/inbox/{msg_id}:
+  /api/ambient/v1/projects/{id}/agents/{agent_id}/inbox/{msg_id}:
   # NEW ENDPOINT END
     patch:
       summary: Mark an inbox message as read
@@ -174,7 +174,7 @@ paths:
                 $ref: 'openapi.yaml#/components/schemas/Error'
     parameters:
       - $ref: '#/components/parameters/id'
-      - name: pa_id
+      - name: agent_id
         in: path
         description: The id of the agent
         required: true

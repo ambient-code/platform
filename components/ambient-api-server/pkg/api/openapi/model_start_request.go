@@ -15,34 +15,34 @@ import (
 	"encoding/json"
 )
 
-// checks if the IgniteRequest type satisfies the MappedNullable interface at compile time
-var _ MappedNullable = &IgniteRequest{}
+// checks if the StartRequest type satisfies the MappedNullable interface at compile time
+var _ MappedNullable = &StartRequest{}
 
-// IgniteRequest struct for IgniteRequest
-type IgniteRequest struct {
+// StartRequest struct for StartRequest
+type StartRequest struct {
 	// Task scope for this specific run (Session.prompt)
 	Prompt *string `json:"prompt,omitempty"`
 }
 
-// NewIgniteRequest instantiates a new IgniteRequest object
+// NewStartRequest instantiates a new StartRequest object
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewIgniteRequest() *IgniteRequest {
-	this := IgniteRequest{}
+func NewStartRequest() *StartRequest {
+	this := StartRequest{}
 	return &this
 }
 
-// NewIgniteRequestWithDefaults instantiates a new IgniteRequest object
+// NewStartRequestWithDefaults instantiates a new StartRequest object
 // This constructor will only assign default values to properties that have it defined,
 // but it doesn't guarantee that properties required by API are set
-func NewIgniteRequestWithDefaults() *IgniteRequest {
-	this := IgniteRequest{}
+func NewStartRequestWithDefaults() *StartRequest {
+	this := StartRequest{}
 	return &this
 }
 
 // GetPrompt returns the Prompt field value if set, zero value otherwise.
-func (o *IgniteRequest) GetPrompt() string {
+func (o *StartRequest) GetPrompt() string {
 	if o == nil || IsNil(o.Prompt) {
 		var ret string
 		return ret
@@ -52,7 +52,7 @@ func (o *IgniteRequest) GetPrompt() string {
 
 // GetPromptOk returns a tuple with the Prompt field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-func (o *IgniteRequest) GetPromptOk() (*string, bool) {
+func (o *StartRequest) GetPromptOk() (*string, bool) {
 	if o == nil || IsNil(o.Prompt) {
 		return nil, false
 	}
@@ -60,7 +60,7 @@ func (o *IgniteRequest) GetPromptOk() (*string, bool) {
 }
 
 // HasPrompt returns a boolean if a field has been set.
-func (o *IgniteRequest) HasPrompt() bool {
+func (o *StartRequest) HasPrompt() bool {
 	if o != nil && !IsNil(o.Prompt) {
 		return true
 	}
@@ -69,11 +69,11 @@ func (o *IgniteRequest) HasPrompt() bool {
 }
 
 // SetPrompt gets a reference to the given string and assigns it to the Prompt field.
-func (o *IgniteRequest) SetPrompt(v string) {
+func (o *StartRequest) SetPrompt(v string) {
 	o.Prompt = &v
 }
 
-func (o IgniteRequest) MarshalJSON() ([]byte, error) {
+func (o StartRequest) MarshalJSON() ([]byte, error) {
 	toSerialize, err := o.ToMap()
 	if err != nil {
 		return []byte{}, err
@@ -81,7 +81,7 @@ func (o IgniteRequest) MarshalJSON() ([]byte, error) {
 	return json.Marshal(toSerialize)
 }
 
-func (o IgniteRequest) ToMap() (map[string]interface{}, error) {
+func (o StartRequest) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
 	if !IsNil(o.Prompt) {
 		toSerialize["prompt"] = o.Prompt
@@ -89,38 +89,38 @@ func (o IgniteRequest) ToMap() (map[string]interface{}, error) {
 	return toSerialize, nil
 }
 
-type NullableIgniteRequest struct {
-	value *IgniteRequest
+type NullableStartRequest struct {
+	value *StartRequest
 	isSet bool
 }
 
-func (v NullableIgniteRequest) Get() *IgniteRequest {
+func (v NullableStartRequest) Get() *StartRequest {
 	return v.value
 }
 
-func (v *NullableIgniteRequest) Set(val *IgniteRequest) {
+func (v *NullableStartRequest) Set(val *StartRequest) {
 	v.value = val
 	v.isSet = true
 }
 
-func (v NullableIgniteRequest) IsSet() bool {
+func (v NullableStartRequest) IsSet() bool {
 	return v.isSet
 }
 
-func (v *NullableIgniteRequest) Unset() {
+func (v *NullableStartRequest) Unset() {
 	v.value = nil
 	v.isSet = false
 }
 
-func NewNullableIgniteRequest(val *IgniteRequest) *NullableIgniteRequest {
-	return &NullableIgniteRequest{value: val, isSet: true}
+func NewNullableStartRequest(val *StartRequest) *NullableStartRequest {
+	return &NullableStartRequest{value: val, isSet: true}
 }
 
-func (v NullableIgniteRequest) MarshalJSON() ([]byte, error) {
+func (v NullableStartRequest) MarshalJSON() ([]byte, error) {
 	return json.Marshal(v.value)
 }
 
-func (v *NullableIgniteRequest) UnmarshalJSON(src []byte) error {
+func (v *NullableStartRequest) UnmarshalJSON(src []byte) error {
 	v.isSet = true
 	return json.Unmarshal(src, &v.value)
 }

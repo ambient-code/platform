@@ -1,12 +1,12 @@
 package types
 
-type IgniteRequest struct {
+type StartRequest struct {
 	Prompt string `json:"prompt,omitempty"`
 }
 
-type IgniteResponse struct {
-	Session         *Session `json:"session,omitempty"`
-	IgnitionContext string   `json:"ignition_prompt,omitempty"`
+type StartResponse struct {
+	Session        *Session `json:"session,omitempty"`
+	StartingPrompt string   `json:"starting_prompt,omitempty"`
 }
 
 type ProjectHome struct {

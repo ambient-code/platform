@@ -436,8 +436,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if n := len(m.sessionMsgs[msg.sessionID]); n > maxPerSession {
 			m.sessionMsgs[msg.sessionID] = m.sessionMsgs[msg.sessionID][n-maxPerSession:]
 		}
-		if m.nav == NavSessions && !m.detailMode {
-			m.updateSessionTileContent(msg.sessionID)
+		if m.nav == NavSessions {
+			m.rebuildMain()
 		}
 		return m, m.listenForMsgs()
 
@@ -1267,27 +1267,46 @@ func (m *Model) restartSessionPoll() {
 		}
 
 		go func() {
-			watcher, err := watchClient.Sessions().WatchSessionMessages(ctx, sessID, 0, nil)
-			if err != nil {
-				return
-			}
-			defer watcher.Stop()
 			for {
 				select {
 				case <-ctx.Done():
 					return
-				case <-watcher.Done():
-					return
-				case _, ok := <-watcher.Errors():
-					if !ok {
+				default:
+				}
+				watcher, err := watchClient.Sessions().WatchSessionMessages(ctx, sessID, 0, nil)
+				if err != nil {
+					select {
+					case <-ctx.Done():
 						return
+					case <-time.After(3 * time.Second):
+						continue
 					}
-					return
-				case msg, ok := <-watcher.Messages():
-					if !ok {
+				}
+				done := false
+				for !done {
+					select {
+					case <-ctx.Done():
+						watcher.Stop()
 						return
+					case <-watcher.Done():
+						done = true
+					case _, ok := <-watcher.Errors():
+						if !ok {
+							done = true
+						}
+					case msg, ok := <-watcher.Messages():
+						if !ok {
+							done = true
+							break
+						}
+						msgCh <- sessionMsgsMsg{sessionID: sessID, msg: *msg}
 					}
-					msgCh <- sessionMsgsMsg{sessionID: sessID, msg: *msg}
+				}
+				watcher.Stop()
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(2 * time.Second):
 				}
 			}
 		}()

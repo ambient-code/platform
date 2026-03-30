@@ -98,7 +98,7 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 	case "project", "proj":
 		return createProject(cmd, ctx, client)
 	case "project-agent", "pa":
-		return createProjectAgent(cmd, ctx, client)
+		return createAgent(cmd, ctx, client)
 	case "agent":
 		return createAgent(cmd, ctx, client)
 	case "role":
@@ -217,7 +217,7 @@ func createProject(cmd *cobra.Command, ctx context.Context, client *sdkclient.Cl
 	return printCreated(cmd, "project", created.ID, created)
 }
 
-func createProjectAgent(cmd *cobra.Command, ctx context.Context, client *sdkclient.Client) error {
+func createAgent(cmd *cobra.Command, ctx context.Context, client *sdkclient.Client) error {
 	warnUnusedFlags(cmd, "repo-url", "model", "max-tokens", "temperature", "timeout", "display-name", "description", "owner-user-id", "permissions", "user-id", "role-id", "scope", "scope-id")
 
 	if createArgs.projectID == "" {
@@ -227,7 +227,7 @@ func createProjectAgent(cmd *cobra.Command, ctx context.Context, client *sdkclie
 		return fmt.Errorf("--name is required")
 	}
 
-	builder := sdktypes.NewProjectAgentBuilder().
+	builder := sdktypes.NewAgentBuilder().
 		ProjectID(createArgs.projectID).
 		Name(createArgs.name)
 
@@ -240,16 +240,12 @@ func createProjectAgent(cmd *cobra.Command, ctx context.Context, client *sdkclie
 		return fmt.Errorf("build agent: %w", err)
 	}
 
-	created, err := client.ProjectAgents().CreateInProject(ctx, createArgs.projectID, pa)
+	created, err := client.Agents().CreateInProject(ctx, createArgs.projectID, pa)
 	if err != nil {
 		return fmt.Errorf("create agent: %w", err)
 	}
 
 	return printCreated(cmd, "agent", created.ID, created)
-}
-
-func createAgent(cmd *cobra.Command, ctx context.Context, client *sdkclient.Client) error {
-	return createProjectAgent(cmd, ctx, client)
 }
 
 func createRole(cmd *cobra.Command, ctx context.Context, client *sdkclient.Client) error {

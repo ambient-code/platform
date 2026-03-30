@@ -132,13 +132,9 @@ func displayPayload(eventType, payload string) string {
 			return d
 		}
 	case "TOOL_CALL_START":
-		if name := extractField(payload, "tool_call_name"); name != "" {
-			return name
-		}
+		return displayToolCallStart(payload)
 	case "TOOL_CALL_RESULT":
-		if c := extractField(payload, "content"); c != "" {
-			return c
-		}
+		return displayToolCallResult(payload)
 	case "RUN_FINISHED":
 		return displayRunFinished(payload)
 	case "MESSAGES_SNAPSHOT":
@@ -149,6 +145,76 @@ func displayPayload(eventType, payload string) string {
 		}
 	}
 	return ""
+}
+
+func displayToolCallStart(payload string) string {
+	var raw string
+	if err := json.Unmarshal([]byte(payload), &raw); err == nil {
+		payload = raw
+	}
+	var data struct {
+		ToolCallName string          `json:"tool_call_name"`
+		ToolCallID   string          `json:"tool_call_id"`
+		Input        json.RawMessage `json:"input"`
+	}
+	if err := json.Unmarshal([]byte(payload), &data); err != nil || data.ToolCallName == "" {
+		if name := extractField(payload, "tool_call_name"); name != "" {
+			return name
+		}
+		return ""
+	}
+	if len(data.Input) == 0 || string(data.Input) == "null" || string(data.Input) == "{}" {
+		return data.ToolCallName
+	}
+	var pretty map[string]any
+	if err := json.Unmarshal(data.Input, &pretty); err != nil {
+		return data.ToolCallName
+	}
+	var parts []string
+	for k, v := range pretty {
+		s := fmt.Sprintf("%v", v)
+		if len(s) > 60 {
+			s = s[:57] + "..."
+		}
+		parts = append(parts, k+"="+s)
+	}
+	return data.ToolCallName + "  " + strings.Join(parts, "  ")
+}
+
+func displayToolCallResult(payload string) string {
+	var raw string
+	if err := json.Unmarshal([]byte(payload), &raw); err == nil {
+		payload = raw
+	}
+	var data struct {
+		ToolCallID string          `json:"tool_call_id"`
+		Content    json.RawMessage `json:"content"`
+	}
+	if err := json.Unmarshal([]byte(payload), &data); err != nil || len(data.Content) == 0 {
+		if c := extractField(payload, "content"); c != "" {
+			return c
+		}
+		return ""
+	}
+	var contentStr string
+	if err := json.Unmarshal(data.Content, &contentStr); err == nil {
+		return strings.TrimSpace(contentStr)
+	}
+	var contentArr []struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	}
+	if err := json.Unmarshal(data.Content, &contentArr); err == nil {
+		var parts []string
+		for _, c := range contentArr {
+			if c.Text != "" {
+				parts = append(parts, strings.TrimSpace(c.Text))
+			}
+		}
+		return strings.Join(parts, "\n")
+	}
+	b, _ := json.MarshalIndent(json.RawMessage(data.Content), "", "  ")
+	return string(b)
 }
 
 func displayRunFinished(payload string) string {
@@ -183,44 +249,92 @@ func displayMessagesSnapshot(payload string) string {
 	if err := json.Unmarshal([]byte(payload), &raw); err == nil {
 		payload = raw
 	}
+
 	var msgs []struct {
-		Role    string `json:"role"`
-		Content string `json:"content"`
+		Role    string          `json:"role"`
+		Content json.RawMessage `json:"content"`
 	}
 	if err := json.Unmarshal([]byte(payload), &msgs); err != nil {
 		return fmt.Sprintf("(%d bytes)", len(payload))
 	}
-	for i := len(msgs) - 1; i >= 0; i-- {
-		if msgs[i].Role == "assistant" && msgs[i].Content != "" {
-			return msgs[i].Content
-		}
-	}
-	for i := len(msgs) - 1; i >= 0; i-- {
-		if msgs[i].Content != "" {
-			return fmt.Sprintf("[%s] %s", msgs[i].Role, msgs[i].Content)
-		}
-	}
-	return fmt.Sprintf("(%d messages, no text content)", len(msgs))
-}
 
-func displayAssistantPayload(payload string) string {
-	var data struct {
-		Status   string `json:"status"`
-		Messages []struct {
-			Role    string `json:"role"`
-			Content string `json:"content"`
-		} `json:"messages"`
-	}
-	if err := json.Unmarshal([]byte(payload), &data); err != nil {
-		return fmt.Sprintf("(%d bytes)", len(payload))
-	}
-	for i := len(data.Messages) - 1; i >= 0; i-- {
-		m := data.Messages[i]
-		if m.Role == "assistant" && m.Content != "" {
-			return m.Content
+	var lines []string
+	for _, msg := range msgs {
+		if msg.Role == "user" || len(msg.Content) == 0 {
+			continue
+		}
+		var contentStr string
+		if err := json.Unmarshal(msg.Content, &contentStr); err == nil {
+			if t := strings.TrimSpace(contentStr); t != "" {
+				lines = append(lines, fmt.Sprintf("[%s] %s", msg.Role, t))
+			}
+			continue
+		}
+		var blocks []struct {
+			Type    string          `json:"type"`
+			Text    string          `json:"text"`
+			Name    string          `json:"name"`
+			ID      string          `json:"id"`
+			Input   json.RawMessage `json:"input"`
+			Content json.RawMessage `json:"content"`
+		}
+		if err := json.Unmarshal(msg.Content, &blocks); err != nil {
+			continue
+		}
+		for _, b := range blocks {
+			switch b.Type {
+			case "text":
+				if t := strings.TrimSpace(b.Text); t != "" {
+					lines = append(lines, fmt.Sprintf("[%s] %s", msg.Role, t))
+				}
+			case "tool_use":
+				var inputMap map[string]any
+				inputSummary := ""
+				if len(b.Input) > 0 && json.Unmarshal(b.Input, &inputMap) == nil {
+					var kv []string
+					for k, v := range inputMap {
+						s := fmt.Sprintf("%v", v)
+						if len(s) > 60 {
+							s = s[:57] + "..."
+						}
+						kv = append(kv, k+"="+s)
+					}
+					inputSummary = "  " + strings.Join(kv, "  ")
+				}
+				lines = append(lines, fmt.Sprintf("[tool_use] %s%s", b.Name, inputSummary))
+			case "tool_result":
+				var resultText string
+				if len(b.Content) > 0 {
+					var s string
+					if json.Unmarshal(b.Content, &s) == nil {
+						resultText = strings.TrimSpace(s)
+					} else {
+						var arr []struct {
+							Type string `json:"type"`
+							Text string `json:"text"`
+						}
+						if json.Unmarshal(b.Content, &arr) == nil {
+							var parts []string
+							for _, c := range arr {
+								if t := strings.TrimSpace(c.Text); t != "" {
+									parts = append(parts, t)
+								}
+							}
+							resultText = strings.Join(parts, " | ")
+						}
+					}
+				}
+				if len(resultText) > 200 {
+					resultText = resultText[:197] + "..."
+				}
+				lines = append(lines, fmt.Sprintf("[tool_result] %s", resultText))
+			}
 		}
 	}
-	return fmt.Sprintf("[%s]", data.Status)
+	if len(lines) == 0 {
+		return fmt.Sprintf("(%d messages, no displayable content)", len(msgs))
+	}
+	return strings.Join(lines, "\n")
 }
 
 func listMessages(ctx context.Context, client *sdkclient.Client, printer *output.Printer, sessionID string) error {
@@ -285,35 +399,28 @@ func streamMessages(cmd *cobra.Command, client *sdkclient.Client, sessionID stri
 
 	fmt.Fprintf(cmd.OutOrStdout(), "Streaming messages for session %s (Ctrl+C to stop)...\n\n", sessionID)
 
-	afterSeq := msgArgs.afterSeq
-	pollInterval := 2 * time.Second
+	watcher, err := client.Sessions().WatchSessionMessages(ctx, sessionID, int64(msgArgs.afterSeq), nil)
+	if err != nil {
+		return fmt.Errorf("watch messages: %w", err)
+	}
+	defer watcher.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
-		default:
-		}
-
-		msgs, err := client.Sessions().ListMessages(ctx, sessionID, afterSeq)
-		if err != nil {
-			if ctx.Err() != nil {
+		case <-watcher.Done():
+			return nil
+		case err, ok := <-watcher.Errors():
+			if !ok {
 				return nil
 			}
-			return fmt.Errorf("poll messages: %w", err)
-		}
-
-		for _, msg := range msgs {
-			printStreamLine(cmd, msg)
-			if msg.Seq > afterSeq {
-				afterSeq = msg.Seq
+			return fmt.Errorf("stream error: %w", err)
+		case msg, ok := <-watcher.Messages():
+			if !ok {
+				return nil
 			}
-		}
-
-		select {
-		case <-ctx.Done():
-			return nil
-		case <-time.After(pollInterval):
+			printStreamLine(cmd, *msg)
 		}
 	}
 }

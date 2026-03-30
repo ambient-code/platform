@@ -18,7 +18,7 @@ from ._base import APIError, ListOptions
 if TYPE_CHECKING:
     from ._inbox_message_api import InboxMessageAPI
     from ._project_api import ProjectAPI
-    from ._project_agent_api import ProjectAgentAPI
+    from ._agent_api import AgentAPI
     from ._project_settings_api import ProjectSettingsAPI
     from ._role_api import RoleAPI
     from ._role_binding_api import RoleBindingAPI
@@ -60,7 +60,7 @@ class AmbientClient:
         # Initialize API interfaces
         self._inbox_message_api: Optional[InboxMessageAPI] = None
         self._project_api: Optional[ProjectAPI] = None
-        self._project_agent_api: Optional[ProjectAgentAPI] = None
+        self._agent_api: Optional[AgentAPI] = None
         self._project_settings_api: Optional[ProjectSettingsAPI] = None
         self._role_api: Optional[RoleAPI] = None
         self._role_binding_api: Optional[RoleBindingAPI] = None
@@ -194,12 +194,12 @@ class AmbientClient:
             self._project_api = ProjectAPI(self)
         return self._project_api
     @property
-    def project_agents(self) -> ProjectAgentAPI:
-        """Get the ProjectAgent API interface."""
-        if self._project_agent_api is None:
-            from ._project_agent_api import ProjectAgentAPI
-            self._project_agent_api = ProjectAgentAPI(self)
-        return self._project_agent_api
+    def agents(self) -> AgentAPI:
+        """Get the Agent API interface."""
+        if self._agent_api is None:
+            from ._agent_api import AgentAPI
+            self._agent_api = AgentAPI(self)
+        return self._agent_api
     @property
     def project_settings(self) -> ProjectSettingsAPI:
         """Get the ProjectSettings API interface."""

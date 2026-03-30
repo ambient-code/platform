@@ -17,6 +17,7 @@ import (
 	"github.com/openshift-online/rh-trex-ai/plugins/generic"
 
 	"github.com/ambient-code/platform/components/ambient-api-server/plugins/inbox"
+	"github.com/ambient-code/platform/components/ambient-api-server/plugins/roleBindings"
 	"github.com/ambient-code/platform/components/ambient-api-server/plugins/sessions"
 )
 
@@ -43,6 +44,17 @@ func Service(s *environments.Services) AgentService {
 	return nil
 }
 
+func projectPromptFetcher(s *environments.Services) ProjectPromptFetcher {
+	if s == nil {
+		return nil
+	}
+	if obj := s.GetService("ProjectPromptFetcher"); obj != nil {
+		locator := obj.(func() ProjectPromptFetcher)
+		return locator()
+	}
+	return nil
+}
+
 func notImplemented(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusNotImplemented)
@@ -61,18 +73,19 @@ func init() {
 		}
 		agentSvc := Service(envServices)
 		agentHandler := NewAgentHandler(agentSvc, generic.Service(envServices))
-		igniteHandler := NewIgniteHandler(agentSvc, inbox.Service(envServices), sessions.Service(envServices), sessions.MessageSvc(envServices))
-		subHandler := NewAgentSubresourceHandler(agentSvc, sessions.Service(envServices), generic.Service(envServices))
+		startHandler := NewStartHandler(agentSvc, inbox.Service(envServices), sessions.Service(envServices), sessions.MessageSvc(envServices), projectPromptFetcher(envServices))
+		subHandler := NewAgentSubresourceHandler(agentSvc, sessions.Service(envServices), generic.Service(envServices), roleBindings.Service(envServices))
 
 		projectsRouter := apiV1Router.PathPrefix("/projects").Subrouter()
 		projectsRouter.HandleFunc("/{id}/agents", agentHandler.List).Methods(http.MethodGet)
 		projectsRouter.HandleFunc("/{id}/agents", agentHandler.Create).Methods(http.MethodPost)
-		projectsRouter.HandleFunc("/{id}/agents/{pa_id}", agentHandler.Get).Methods(http.MethodGet)
-		projectsRouter.HandleFunc("/{id}/agents/{pa_id}", agentHandler.Patch).Methods(http.MethodPatch)
-		projectsRouter.HandleFunc("/{id}/agents/{pa_id}", agentHandler.Delete).Methods(http.MethodDelete)
-		projectsRouter.HandleFunc("/{id}/agents/{pa_id}/ignite", igniteHandler.Ignite).Methods(http.MethodPost)
-		projectsRouter.HandleFunc("/{id}/agents/{pa_id}/ignition", igniteHandler.IgnitionPreview).Methods(http.MethodGet)
-		projectsRouter.HandleFunc("/{id}/agents/{pa_id}/sessions", subHandler.ListSessions).Methods(http.MethodGet)
+		projectsRouter.HandleFunc("/{id}/agents/{agent_id}", agentHandler.Get).Methods(http.MethodGet)
+		projectsRouter.HandleFunc("/{id}/agents/{agent_id}", agentHandler.Patch).Methods(http.MethodPatch)
+		projectsRouter.HandleFunc("/{id}/agents/{agent_id}", agentHandler.Delete).Methods(http.MethodDelete)
+		projectsRouter.HandleFunc("/{id}/agents/{agent_id}/start", startHandler.Start).Methods(http.MethodPost)
+		projectsRouter.HandleFunc("/{id}/agents/{agent_id}/start", startHandler.StartPreview).Methods(http.MethodGet)
+		projectsRouter.HandleFunc("/{id}/agents/{agent_id}/sessions", subHandler.ListSessions).Methods(http.MethodGet)
+		projectsRouter.HandleFunc("/{id}/agents/{agent_id}/role_bindings", subHandler.ListRoleBindings).Methods(http.MethodGet)
 		projectsRouter.HandleFunc("/{id}/home", notImplemented).Methods(http.MethodGet)
 		projectsRouter.Use(authMiddleware.AuthenticateAccountJWT)
 		projectsRouter.Use(authzMiddleware.AuthorizeApi)

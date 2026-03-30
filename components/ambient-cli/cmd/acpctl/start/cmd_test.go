@@ -11,11 +11,11 @@ import (
 
 func TestStart_Success(t *testing.T) {
 	srv := testhelper.NewServer(t)
-	srv.Handle("/api/ambient/v1/projects/proj-1/agents/pa-1/ignite", func(w http.ResponseWriter, r *http.Request) {
+	srv.Handle("/api/ambient/v1/projects/proj-1/agents/pa-1/start", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			t.Errorf("expected POST, got %s", r.Method)
 		}
-		srv.RespondJSON(t, w, http.StatusCreated, &types.IgniteResponse{
+		srv.RespondJSON(t, w, http.StatusCreated, &types.StartResponse{
 			Session: &types.Session{
 				ObjectReference: types.ObjectReference{ID: "s1"},
 				Name:            "my-session",
@@ -39,7 +39,7 @@ func TestStart_Success(t *testing.T) {
 
 func TestStart_NotFound(t *testing.T) {
 	srv := testhelper.NewServer(t)
-	srv.Handle("/api/ambient/v1/projects/proj-1/agents/missing/ignite", func(w http.ResponseWriter, r *http.Request) {
+	srv.Handle("/api/ambient/v1/projects/proj-1/agents/missing/start", func(w http.ResponseWriter, r *http.Request) {
 		srv.RespondJSON(t, w, http.StatusNotFound, &types.APIError{
 			Code:   "not_found",
 			Reason: "project-agent not found",
@@ -51,8 +51,8 @@ func TestStart_NotFound(t *testing.T) {
 	if result.Err == nil {
 		t.Fatal("expected error for missing project-agent")
 	}
-	if !strings.Contains(result.Err.Error(), "ignite agent") {
-		t.Errorf("expected 'ignite agent' in error, got: %v", result.Err)
+	if !strings.Contains(result.Err.Error(), "start agent") {
+		t.Errorf("expected 'start agent' in error, got: %v", result.Err)
 	}
 }
 
@@ -79,8 +79,8 @@ func TestStart_RequiresProjectID(t *testing.T) {
 
 func TestStart_OutputContainsID(t *testing.T) {
 	srv := testhelper.NewServer(t)
-	srv.Handle("/api/ambient/v1/projects/proj-1/agents/pa-abc/ignite", func(w http.ResponseWriter, r *http.Request) {
-		srv.RespondJSON(t, w, http.StatusCreated, &types.IgniteResponse{
+	srv.Handle("/api/ambient/v1/projects/proj-1/agents/pa-abc/start", func(w http.ResponseWriter, r *http.Request) {
+		srv.RespondJSON(t, w, http.StatusCreated, &types.StartResponse{
 			Session: &types.Session{
 				ObjectReference: types.ObjectReference{ID: "abc-123"},
 				Phase:           "pending",

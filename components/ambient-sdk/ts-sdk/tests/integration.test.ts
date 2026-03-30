@@ -16,7 +16,6 @@ import {
   AgentPatchBuilder,
   ProjectBuilder,
   ProjectPatchBuilder,
-  ProjectAgentBuilder,
 } from '../src';
 
 const SKIP = !process.env.AMBIENT_TOKEN;
@@ -127,59 +126,42 @@ describeIntegration('projects', () => {
     expect(updated.id).toBe(projectId);
   });
 
-  // projectAgents sub-tests nested to reuse projectId
-  describeIntegration('projectAgents (within project)', () => {
-    let agentId: string;
+  // agents within project sub-tests nested to reuse projectId
+  describeIntegration('agents (within project)', () => {
     let paId: string;
-    const agentName = `sdk-test-linked-agent-${uid()}`;
+    const agentName = `sdk-test-proj-agent-${uid()}`;
 
-    beforeAll(async () => {
-      const agent = await client.agents.create(
-        new AgentBuilder().name(agentName).ownerUserId('dev/user').build()
-      );
-      agentId = agent.id;
-    });
-
-    it('create — projectAgents.create()', async () => {
-      const pa = await client.projectAgents.create(projectId, new ProjectAgentBuilder()
-        .agentId(agentId)
+    it('create — agents.createInProject()', async () => {
+      const pa = await client.agents.createInProject(projectId, new AgentBuilder()
+        .name(agentName)
         .projectId(projectId)
         .build()
       );
       expect(pa.id).toBeTruthy();
-      expect(pa.agent_id).toBe(agentId);
       expect(pa.project_id).toBe(projectId);
       paId = pa.id;
     });
 
-    it('get — projectAgents.get()', async () => {
-      const pa = await client.projectAgents.get(projectId, paId);
+    it('get — agents.getByProject()', async () => {
+      const pa = await client.agents.getByProject(projectId, paId);
       expect(pa.id).toBe(paId);
     });
 
-    it('list — projectAgents.list()', async () => {
-      const result = await client.projectAgents.list(projectId, { page: 1, size: 50 });
+    it('list — agents.listByProject()', async () => {
+      const result = await client.agents.listByProject(projectId, { page: 1, size: 50 });
       expect(result.items).toBeInstanceOf(Array);
       expect(result.items.find(pa => pa.id === paId)).toBeDefined();
     });
 
-    it('listAll — projectAgents.listAll() AsyncGenerator', async () => {
-      const pas: any[] = [];
-      for await (const pa of client.projectAgents.listAll(projectId)) {
-        pas.push(pa);
-      }
-      expect(pas.some(pa => pa.id === paId)).toBe(true);
-    });
-
-    it('sessions — projectAgents.sessions()', async () => {
-      const result = await client.projectAgents.sessions(projectId, paId, { page: 1, size: 10 });
+    it('sessions — agents.sessions()', async () => {
+      const result = await client.agents.sessions(projectId, paId, { page: 1, size: 10 });
       expect(result.items).toBeInstanceOf(Array);
     });
 
     it('inboxMessages.send() and inboxMessages.list()', async () => {
       const msg = await client.inboxMessages.send(projectId, paId, {
         body: 'Hello from SDK integration test',
-        project_agent_id: paId,
+        agent_id: paId,
         from_name: 'test-runner',
       });
       expect(msg.id).toBeTruthy();
@@ -197,18 +179,18 @@ describeIntegration('projects', () => {
       expect(msgs.length).toBeGreaterThanOrEqual(1);
     });
 
-    it('ignite — projectAgents.ignite()', async () => {
-      const resp = await client.projectAgents.ignite(projectId, paId, 'SDK integration test session poke');
+    it('start — agents.start()', async () => {
+      const resp = await client.agents.start(projectId, paId, 'SDK integration test session poke');
       expect(resp).toBeDefined();
     });
 
-    it('getIgnition — projectAgents.getIgnition()', async () => {
-      const resp = await client.projectAgents.getIgnition(projectId, paId);
+    it('getIgnition — agents.getIgnition()', async () => {
+      const resp = await client.agents.getIgnition(projectId, paId);
       expect(resp).toBeDefined();
     });
 
-    it('delete — projectAgents.delete()', async () => {
-      await expect(client.projectAgents.delete(projectId, paId)).resolves.toBeUndefined();
+    it('delete — agents.deleteInProject()', async () => {
+      await expect(client.agents.deleteInProject(projectId, paId)).resolves.toBeUndefined();
     });
   });
 

@@ -27,7 +27,7 @@ func NewAgentHandler(agent AgentService, generic services.GenericService) *agent
 }
 
 func (h agentHandler) Create(w http.ResponseWriter, r *http.Request) {
-	var agent openapi.ProjectAgent
+	var agent openapi.Agent
 	cfg := &handlers.HandlerConfig{
 		Body: &agent,
 		Validators: []handlers.Validate{
@@ -51,14 +51,14 @@ func (h agentHandler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h agentHandler) Patch(w http.ResponseWriter, r *http.Request) {
-	var patch openapi.ProjectAgentPatchRequest
+	var patch openapi.AgentPatchRequest
 
 	cfg := &handlers.HandlerConfig{
 		Body:       &patch,
 		Validators: []handlers.Validate{},
 		Action: func() (interface{}, *errors.ServiceError) {
 			ctx := r.Context()
-			id := mux.Vars(r)["pa_id"]
+			id := mux.Vars(r)["agent_id"]
 			found, err := h.agent.Get(ctx, id)
 			if err != nil {
 				return nil, err
@@ -108,12 +108,12 @@ func (h agentHandler) List(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				return nil, err
 			}
-			agentList := openapi.ProjectAgentList{
-				Kind:  "ProjectAgentList",
+			agentList := openapi.AgentList{
+				Kind:  "AgentList",
 				Page:  int32(paging.Page),
 				Size:  int32(paging.Size),
 				Total: int32(paging.Total),
-				Items: []openapi.ProjectAgent{},
+				Items: []openapi.Agent{},
 			}
 
 			for _, agent := range agents {
@@ -137,7 +137,7 @@ func (h agentHandler) List(w http.ResponseWriter, r *http.Request) {
 func (h agentHandler) Get(w http.ResponseWriter, r *http.Request) {
 	cfg := &handlers.HandlerConfig{
 		Action: func() (interface{}, *errors.ServiceError) {
-			id := mux.Vars(r)["pa_id"]
+			id := mux.Vars(r)["agent_id"]
 			ctx := r.Context()
 			agent, err := h.agent.Get(ctx, id)
 			if err != nil {
@@ -154,7 +154,7 @@ func (h agentHandler) Get(w http.ResponseWriter, r *http.Request) {
 func (h agentHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	cfg := &handlers.HandlerConfig{
 		Action: func() (interface{}, *errors.ServiceError) {
-			id := mux.Vars(r)["pa_id"]
+			id := mux.Vars(r)["agent_id"]
 			ctx := r.Context()
 			err := h.agent.Delete(ctx, id)
 			if err != nil {

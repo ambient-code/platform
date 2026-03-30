@@ -16,6 +16,62 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var projectUpdateArgs struct {
+	name        string
+	description string
+	prompt      string
+	labels      string
+	annotations string
+}
+
+var updateCmd = &cobra.Command{
+	Use:   "update <name-or-id>",
+	Short: "Update a project",
+	Args:  cobra.ExactArgs(1),
+	Example: `  acpctl project update my-project --description "New description"
+  acpctl project update my-project --prompt "Workspace context"
+  acpctl project update my-project --name new-name`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		client, err := connection.NewClientFromConfig()
+		if err != nil {
+			return err
+		}
+
+		cfg, err := config.Load()
+		if err != nil {
+			return err
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), cfg.GetRequestTimeout())
+		defer cancel()
+
+		patch := sdktypes.NewProjectPatchBuilder()
+		if cmd.Flags().Changed("name") {
+			patch = patch.Name(projectUpdateArgs.name)
+		}
+		if cmd.Flags().Changed("description") {
+			patch = patch.Description(projectUpdateArgs.description)
+		}
+		if cmd.Flags().Changed("prompt") {
+			patch = patch.Prompt(projectUpdateArgs.prompt)
+		}
+		if cmd.Flags().Changed("labels") {
+			patch = patch.Labels(projectUpdateArgs.labels)
+		}
+		if cmd.Flags().Changed("annotations") {
+			patch = patch.Annotations(projectUpdateArgs.annotations)
+		}
+
+		updated, err := client.Projects().Update(ctx, args[0], patch.Build())
+		if err != nil {
+			return fmt.Errorf("update project: %w", err)
+		}
+
+		fmt.Fprintf(cmd.OutOrStdout(), "project/%s updated\n", updated.Name)
+		return nil
+	},
+}
+
 var dnsLabelPattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
 
 var Cmd = &cobra.Command{
@@ -62,6 +118,13 @@ func init() {
 	Cmd.AddCommand(setCmd)
 	Cmd.AddCommand(currentCmd)
 	Cmd.AddCommand(listCmd)
+	Cmd.AddCommand(updateCmd)
+
+	updateCmd.Flags().StringVar(&projectUpdateArgs.name, "name", "", "New project name")
+	updateCmd.Flags().StringVar(&projectUpdateArgs.description, "description", "", "New description")
+	updateCmd.Flags().StringVar(&projectUpdateArgs.prompt, "prompt", "", "New workspace context prompt")
+	updateCmd.Flags().StringVar(&projectUpdateArgs.labels, "labels", "", "New labels (JSON string)")
+	updateCmd.Flags().StringVar(&projectUpdateArgs.annotations, "annotations", "", "New annotations (JSON string)")
 }
 
 func projectMain(cmd *cobra.Command, args []string) error {

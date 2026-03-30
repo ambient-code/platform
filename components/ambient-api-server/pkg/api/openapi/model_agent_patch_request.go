@@ -18,10 +18,13 @@ import (
 // checks if the AgentPatchRequest type satisfies the MappedNullable interface at compile time
 var _ MappedNullable = &AgentPatchRequest{}
 
-// AgentPatchRequest PATCH creates a new Agent version (version+1). The prior version is preserved.
+// AgentPatchRequest struct for AgentPatchRequest
 type AgentPatchRequest struct {
-	// Updating prompt creates a new immutable version of this agent
-	Prompt *string `json:"prompt,omitempty"`
+	Name *string `json:"name,omitempty"`
+	// Update agent prompt (access controlled by RBAC)
+	Prompt      *string `json:"prompt,omitempty"`
+	Labels      *string `json:"labels,omitempty"`
+	Annotations *string `json:"annotations,omitempty"`
 }
 
 // NewAgentPatchRequest instantiates a new AgentPatchRequest object
@@ -39,6 +42,38 @@ func NewAgentPatchRequest() *AgentPatchRequest {
 func NewAgentPatchRequestWithDefaults() *AgentPatchRequest {
 	this := AgentPatchRequest{}
 	return &this
+}
+
+// GetName returns the Name field value if set, zero value otherwise.
+func (o *AgentPatchRequest) GetName() string {
+	if o == nil || IsNil(o.Name) {
+		var ret string
+		return ret
+	}
+	return *o.Name
+}
+
+// GetNameOk returns a tuple with the Name field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *AgentPatchRequest) GetNameOk() (*string, bool) {
+	if o == nil || IsNil(o.Name) {
+		return nil, false
+	}
+	return o.Name, true
+}
+
+// HasName returns a boolean if a field has been set.
+func (o *AgentPatchRequest) HasName() bool {
+	if o != nil && !IsNil(o.Name) {
+		return true
+	}
+
+	return false
+}
+
+// SetName gets a reference to the given string and assigns it to the Name field.
+func (o *AgentPatchRequest) SetName(v string) {
+	o.Name = &v
 }
 
 // GetPrompt returns the Prompt field value if set, zero value otherwise.
@@ -73,6 +108,70 @@ func (o *AgentPatchRequest) SetPrompt(v string) {
 	o.Prompt = &v
 }
 
+// GetLabels returns the Labels field value if set, zero value otherwise.
+func (o *AgentPatchRequest) GetLabels() string {
+	if o == nil || IsNil(o.Labels) {
+		var ret string
+		return ret
+	}
+	return *o.Labels
+}
+
+// GetLabelsOk returns a tuple with the Labels field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *AgentPatchRequest) GetLabelsOk() (*string, bool) {
+	if o == nil || IsNil(o.Labels) {
+		return nil, false
+	}
+	return o.Labels, true
+}
+
+// HasLabels returns a boolean if a field has been set.
+func (o *AgentPatchRequest) HasLabels() bool {
+	if o != nil && !IsNil(o.Labels) {
+		return true
+	}
+
+	return false
+}
+
+// SetLabels gets a reference to the given string and assigns it to the Labels field.
+func (o *AgentPatchRequest) SetLabels(v string) {
+	o.Labels = &v
+}
+
+// GetAnnotations returns the Annotations field value if set, zero value otherwise.
+func (o *AgentPatchRequest) GetAnnotations() string {
+	if o == nil || IsNil(o.Annotations) {
+		var ret string
+		return ret
+	}
+	return *o.Annotations
+}
+
+// GetAnnotationsOk returns a tuple with the Annotations field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *AgentPatchRequest) GetAnnotationsOk() (*string, bool) {
+	if o == nil || IsNil(o.Annotations) {
+		return nil, false
+	}
+	return o.Annotations, true
+}
+
+// HasAnnotations returns a boolean if a field has been set.
+func (o *AgentPatchRequest) HasAnnotations() bool {
+	if o != nil && !IsNil(o.Annotations) {
+		return true
+	}
+
+	return false
+}
+
+// SetAnnotations gets a reference to the given string and assigns it to the Annotations field.
+func (o *AgentPatchRequest) SetAnnotations(v string) {
+	o.Annotations = &v
+}
+
 func (o AgentPatchRequest) MarshalJSON() ([]byte, error) {
 	toSerialize, err := o.ToMap()
 	if err != nil {
@@ -83,8 +182,17 @@ func (o AgentPatchRequest) MarshalJSON() ([]byte, error) {
 
 func (o AgentPatchRequest) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
+	if !IsNil(o.Name) {
+		toSerialize["name"] = o.Name
+	}
 	if !IsNil(o.Prompt) {
 		toSerialize["prompt"] = o.Prompt
+	}
+	if !IsNil(o.Labels) {
+		toSerialize["labels"] = o.Labels
+	}
+	if !IsNil(o.Annotations) {
+		toSerialize["annotations"] = o.Annotations
 	}
 	return toSerialize, nil
 }

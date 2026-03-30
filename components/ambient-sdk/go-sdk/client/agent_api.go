@@ -50,6 +50,7 @@ func (a *AgentAPI) List(ctx context.Context, opts *types.ListOptions) (*types.Ag
 	}
 	return &result, nil
 }
+
 func (a *AgentAPI) Update(ctx context.Context, id string, patch map[string]any) (*types.Agent, error) {
 	body, err := json.Marshal(patch)
 	if err != nil {

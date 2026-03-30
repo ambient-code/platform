@@ -51,7 +51,7 @@ func (a *SessionAPI) StreamEvents(ctx context.Context, sessionID string) (io.Rea
 	req.Header.Set("Authorization", "Bearer "+a.client.token)
 	req.Header.Set("X-Ambient-Project", a.client.project)
 
-	resp, err := a.client.httpClient.Do(req)
+	resp, err := a.client.streamingClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("connect to event stream: %w", err)
 	}

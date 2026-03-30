@@ -16,10 +16,10 @@ export type { Project, ProjectList, ProjectCreateRequest, ProjectPatchRequest } 
 export { ProjectBuilder, ProjectPatchBuilder } from './project';
 export { ProjectAPI } from './project_api';
 
-export type { ProjectAgent, ProjectAgentCreateRequest, ProjectAgentPatchRequest } from './project_agent';
-export { ProjectAgentBuilder, ProjectAgentPatchBuilder } from './project_agent';
-export { ProjectAgentAPI } from './project_agent_api';
-export type { ProjectAgentList, SessionList as AgentSessionList, IgniteRequest, IgniteResponse } from './project_agent_api';
+export type { Agent, AgentList, AgentCreateRequest, AgentPatchRequest } from './agent';
+export { AgentBuilder, AgentPatchBuilder } from './agent';
+export { AgentAPI } from './agent_api';
+export type { AgentSessionList, StartRequest, StartResponse } from './agent_api';
 
 export type { ProjectSettings, ProjectSettingsList, ProjectSettingsCreateRequest, ProjectSettingsPatchRequest } from './project_settings';
 export { ProjectSettingsBuilder, ProjectSettingsPatchBuilder } from './project_settings';

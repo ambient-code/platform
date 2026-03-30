@@ -72,7 +72,7 @@ func seedBuiltInRoles(tx *gorm.DB) error {
 			name:        "project:editor",
 			displayName: "Project Editor",
 			description: "Create and manage sessions and agents in a project",
-			permissions: []string{"project:read", "agent:create", "agent:read", "agent:update", "agent:list", "agent:ignite", "session:create", "session:read", "session:update", "session:list", "session_message:*", "project_document:read", "project_document:create", "project_document:update", "project_document:list", "blackboard:read", "blackboard:watch"},
+			permissions: []string{"project:read", "agent:create", "agent:read", "agent:update", "agent:list", "agent:start", "session:create", "session:read", "session:update", "session:list", "session_message:*", "project_document:read", "project_document:create", "project_document:update", "project_document:list", "blackboard:read", "blackboard:watch"},
 		},
 		{
 			name:        "project:viewer",
@@ -83,8 +83,8 @@ func seedBuiltInRoles(tx *gorm.DB) error {
 		{
 			name:        "agent:operator",
 			displayName: "Agent Operator",
-			description: "Manage and ignite agents",
-			permissions: []string{"agent:read", "agent:update", "agent:ignite", "agent:list", "session:read", "session:list"},
+			description: "Manage and start agents",
+			permissions: []string{"agent:read", "agent:update", "agent:start", "agent:list", "session:read", "session:list"},
 		},
 		{
 			name:        "agent:observer",

@@ -59,7 +59,7 @@ func registerSessionTools(s *server.MCPServer, c *client.Client, transport strin
 				mcp.Description("Task prompt for the session."),
 				mcp.Required(),
 			),
-			mcp.WithString("agent_id", mcp.Description("ProjectAgent ID to execute the session.")),
+			mcp.WithString("agent_id", mcp.Description("Agent ID to execute the session.")),
 			mcp.WithString("model", mcp.Description("LLM model override (e.g. 'claude-sonnet-4-6').")),
 			mcp.WithString("parent_session_id", mcp.Description("Calling session ID for agent-to-agent delegation.")),
 			mcp.WithString("name", mcp.Description("Human-readable session name.")),
@@ -205,7 +205,7 @@ func registerAgentTools(s *server.MCPServer, c *client.Client) {
 
 	s.AddTool(
 		mcp.NewTool("patch_agent_annotations",
-			mcp.WithDescription("Merges key-value annotation pairs into a ProjectAgent's annotations. Agent annotations are persistent across sessions — use them for durable agent state."),
+			mcp.WithDescription("Merges key-value annotation pairs into an Agent's annotations. Agent annotations are persistent across sessions — use them for durable agent state."),
 			mcp.WithString("project_id",
 				mcp.Description("Project ID the agent belongs to."),
 				mcp.Required(),
