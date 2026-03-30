@@ -92,7 +92,7 @@ spec:
       volumes:
         - name: project-kube-token
           secret:
-            secretName: tenantaccess-ambient-control-plane-token
+            secretName: ambient-control-plane-token
         - name: vertex-credentials
           secret:
             secretName: ambient-vertex

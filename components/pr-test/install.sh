@@ -11,7 +11,6 @@ REQUIRED_SOURCE_SECRETS=(
   ambient-vertex
   ambient-api-server
   ambient-api-server-db
-  tenantaccess-ambient-control-plane-token
 )
 
 usage() {
@@ -47,6 +46,9 @@ del s['metadata']['creationTimestamp']
 s['metadata'].pop('ownerReferences', None)
 s['metadata'].pop('annotations', None)
 s.pop('status', None)
+# Service account token secrets cannot be applied directly; re-create as Opaque
+if s.get('type') == 'kubernetes.io/service-account-token':
+    s['type'] = 'Opaque'
 print(json.dumps(s))
 " | oc apply -n "$NAMESPACE" -f -
 }
@@ -144,7 +146,7 @@ oc set env deployment/ambient-control-plane -n "$NAMESPACE" \
   CP_RUNTIME_NAMESPACE="$NAMESPACE"
 
 KUBE_HOST=$(oc whoami --show-server)
-KUBE_CA=$(oc get secret tenantaccess-ambient-control-plane-token -n "$NAMESPACE" \
+KUBE_CA=$(oc get secret ambient-control-plane-token -n "$NAMESPACE" \
   -o jsonpath='{.data.ca\.crt}')
 
 python3 - << PYEOF
