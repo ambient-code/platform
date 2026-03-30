@@ -382,6 +382,46 @@ npm run dev
 - Backend, operator, or runner changes (those still need image rebuild + load)
 - Testing changes to container configuration or deployment manifests
 
+## Benchmarking Developer Loops
+
+Use the benchmark harness when the user wants measured cold-start or rebuild timing rather than ad hoc impressions.
+
+### Commands
+
+```bash
+# Human-friendly local summary
+make benchmark
+
+# Agent / automation friendly output
+make benchmark FORMAT=tsv
+
+# Single component
+make benchmark COMPONENT=frontend MODE=cold
+make benchmark COMPONENT=backend MODE=warm
+```
+
+### Agent Guidance
+
+- Prefer `FORMAT=tsv` when another agent, script, or evaluation harness will consume the output.
+- Prefer the default `human` format for interactive local use in a terminal.
+- `frontend` benchmarking requires **Node.js 20+**.
+- `warm` currently measures **rebuild proxies**, not browser-observed hot reload latency.
+- If `reports/benchmarks/` is not writable in the current environment, the harness will fall back to a temp directory and print a warning.
+- Session benchmarking is **contract-only** in v1 (`bench_session_*` stubs in `scripts/benchmarks/bench-manifest.sh`).
+- Start with the **smallest relevant benchmark**:
+  - backend/operator/public-api change -> `MODE=warm COMPONENT=<component> REPEATS=1`
+  - frontend contributor setup -> `MODE=cold COMPONENT=frontend REPEATS=1`
+  - only run all components when you explicitly need the whole matrix
+- Treat preflight failures as useful environment signals; do not work around them unless the user asks.
+- Use full-sweep benchmarking sparingly because each component still performs untimed setup before the measured warm rebuild.
+
+### Interpreting Results
+
+- `cold`: approximates first-contributor setup/install cost with isolated caches
+- `warm`: approximates incremental rebuild cost after setup has already completed
+- `budget_ok=false` on cold runs means the component exceeded the 60-second contributor budget
+- Large deltas on a single repeat should be treated cautiously; use more repeats before drawing conclusions
+
 ## Best Practices
 
 1. **Use local dev server for frontend**: Fastest feedback loop, no image rebuilds needed

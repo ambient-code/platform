@@ -60,6 +60,7 @@ venv.bak/
 # Environment files
 .env
 .env.local
+components/frontend/.env.local
 .env.uat
 .dev-bootstrap.env
 
