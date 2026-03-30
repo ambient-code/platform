@@ -31,7 +31,7 @@ To log in with a static token:
   acpctl login --token <token> --url https://api.example.com
 
 To log in via browser (OAuth2 authorization code + PKCE via Red Hat SSO):
-  acpctl login --use-auth-code --client-id <client-id> --url https://api.example.com`,
+  acpctl login --use-auth-code --url https://api.example.com`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: run,
 }
