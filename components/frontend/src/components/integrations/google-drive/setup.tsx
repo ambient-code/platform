@@ -53,8 +53,8 @@ export default function GoogleDriveSetupPage({
 
   // Handle OAuth callback redirect
   useEffect(() => {
-    const code = searchParams.get("code");
-    const state = searchParams.get("state");
+    const code = searchParams?.get("code");
+    const state = searchParams?.get("state");
 
     if (code && state) {
       setStep("authenticating");

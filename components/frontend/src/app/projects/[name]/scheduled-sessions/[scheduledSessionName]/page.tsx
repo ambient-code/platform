@@ -38,8 +38,8 @@ import { ScheduledSessionRunsTable } from "./_components/scheduled-session-runs-
 export default function ScheduledSessionDetailPage() {
   const params = useParams<{ name: string; scheduledSessionName: string }>();
   const router = useRouter();
-  const projectName = params.name;
-  const scheduledSessionName = params.scheduledSessionName;
+  const projectName = params?.name ?? "";
+  const scheduledSessionName = params?.scheduledSessionName ?? "";
 
   const { data: scheduledSession, isLoading } = useScheduledSession(
     projectName,

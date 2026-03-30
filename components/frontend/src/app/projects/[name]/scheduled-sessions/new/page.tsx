@@ -80,7 +80,7 @@ type FormValues = z.infer<typeof formSchema>;
 export default function CreateScheduledSessionPage() {
   const params = useParams<{ name: string }>();
   const router = useRouter();
-  const projectName = params.name;
+  const projectName = params?.name ?? "";
 
   const [selectedWorkflow, setSelectedWorkflow] = useState("none");
   const [customGitUrl, setCustomGitUrl] = useState("");
