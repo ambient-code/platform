@@ -340,6 +340,33 @@ func HandleAGUIRunProxy(c *gin.Context) {
 		emitUserMessagesSnapshot(sessionName, runID, threadID, minimalMsgs)
 	}
 
+	// ── Inject current model from session spec into forwarded_props ──
+	// This enables live model switching without pod restart by overriding
+	// the LLM_MODEL env var on a per-run basis.
+	if handlers.DynamicClient != nil {
+		gvr := handlers.GetAgenticSessionV1Alpha1Resource()
+		sessionObj, err := handlers.DynamicClient.Resource(gvr).Namespace(projectName).Get(
+			context.Background(), sessionName, metav1.GetOptions{},
+		)
+		if err == nil {
+			if spec, found, _ := unstructured.NestedMap(sessionObj.Object, "spec"); found {
+				if llmSettings, found, _ := unstructured.NestedMap(spec, "llmSettings"); found {
+					if model, found, _ := unstructured.NestedString(llmSettings, "model"); found && model != "" {
+						// Initialize ForwardedProps if nil
+						if input.ForwardedProps == nil {
+							input.ForwardedProps = make(map[string]interface{})
+						}
+						// Only set model if not already provided by client
+						if _, exists := input.ForwardedProps["model"]; !exists {
+							input.ForwardedProps["model"] = model
+							log.Printf("AGUI Proxy: injected model=%s for session %s/%s", model, projectName, sessionName)
+						}
+					}
+				}
+			}
+		}
+	}
+
 	// ── Forward to runner in background, return JSON immediately ──
 	bodyBytes, err := json.Marshal(input)
 	if err != nil {

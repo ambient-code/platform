@@ -1215,15 +1215,27 @@ func UpdateSession(c *gin.Context) {
 		return
 	}
 
-	// Prevent spec changes while session is running or being created
+	// Prevent most spec changes while session is running or being created
+	// EXCEPTION: Allow llmSettings.model updates for live model switching
 	if status, ok := item.Object["status"].(map[string]interface{}); ok {
 		if phase, ok := status["phase"].(string); ok {
 			if strings.EqualFold(phase, "Running") || strings.EqualFold(phase, "Creating") {
-				c.JSON(http.StatusConflict, gin.H{
-					"error": "Cannot modify session specification while the session is running",
-					"phase": phase,
-				})
-				return
+				// Check if only llmSettings.model is being updated
+				isOnlyModelUpdate := req.LLMSettings != nil && req.LLMSettings.Model != "" &&
+					req.InitialPrompt == nil &&
+					req.DisplayName == nil &&
+					req.Timeout == nil &&
+					req.LLMSettings.Temperature == 0 &&
+					req.LLMSettings.MaxTokens == 0
+
+				if !isOnlyModelUpdate {
+					c.JSON(http.StatusConflict, gin.H{
+						"error": "Cannot modify session specification while the session is running (except model)",
+						"phase": phase,
+						"hint":  "Only llmSettings.model can be updated on running sessions",
+					})
+					return
+				}
 			}
 		}
 	}

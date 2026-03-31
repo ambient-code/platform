@@ -17,6 +17,9 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useMcpStatus } from "@/services/queries/use-mcp";
 import { useIntegrationsStatus } from "@/services/queries/use-integrations";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { sessionKeys } from "@/services/queries";
+import { toast } from "sonner";
 import type { AgenticSession } from "@/types/agentic-session";
 
 import { SessionDetails } from "./settings/session-details";
@@ -41,6 +44,7 @@ export function SessionSettingsModal({
   onEditName,
 }: SessionSettingsModalProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>("session");
+  const queryClient = useQueryClient();
 
   const phase = session.status?.phase || "Pending";
   const isRunning = phase === "Running";
@@ -60,6 +64,38 @@ export function SessionSettingsModal({
     integrationsStatus?.jira?.connected,
     integrationsStatus?.google?.connected,
   ].filter(Boolean).length;
+
+  // Model update mutation
+  const updateModelMutation = useMutation({
+    mutationFn: async (newModel: string) => {
+      const response = await fetch(
+        `/api/projects/${projectName}/agentic-sessions/${session.metadata.name}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            llmSettings: {
+              model: newModel,
+            },
+          }),
+        }
+      );
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to update model");
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: sessionKeys.detail(projectName, session.metadata.name),
+      });
+      toast.success("Model updated successfully. The new model will be used for the next run.");
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Failed to update model");
+    },
+  });
 
   const tabs: {
     id: SettingsTab;
@@ -122,7 +158,14 @@ export function SessionSettingsModal({
           {/* Tab content */}
           <div className="flex-1 p-6 overflow-y-auto">
             {activeTab === "session" && (
-              <SessionDetails session={session} onEditName={onEditName} />
+              <SessionDetails
+                session={session}
+                projectName={projectName}
+                onEditName={onEditName}
+                onModelUpdate={async (newModel) => {
+                  await updateModelMutation.mutateAsync(newModel);
+                }}
+              />
             )}
             {activeTab === "mcp" && (
               <McpServersPanel
