@@ -1240,6 +1240,28 @@ func UpdateSession(c *gin.Context) {
 		}
 	}
 
+	// Validate model availability if updating model
+	if req.LLMSettings != nil && req.LLMSettings.Model != "" {
+		// Extract runner type from session spec to determine provider
+		envVars, envOk := item.Object["spec"].(map[string]interface{})["environmentVariables"].(map[string]interface{})
+		runnerTypeID := "ambient-runner"
+		if envOk {
+			if rt, ok := envVars["RUNNER_TYPE"].(string); ok && rt != "" {
+				runnerTypeID = rt
+			}
+		}
+
+		runnerProvider := ""
+		if rt, rtErr := GetRuntime(runnerTypeID); rtErr == nil {
+			runnerProvider = rt.Provider
+		}
+
+		if !isModelAvailable(c.Request.Context(), reqK8s, req.LLMSettings.Model, runnerProvider, project) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Model is not available for this runner type"})
+			return
+		}
+	}
+
 	// Update spec
 	spec := item.Object["spec"].(map[string]interface{})
 	if req.InitialPrompt != nil {
