@@ -91,15 +91,21 @@ Discovery is behind a feature flag.
 
 A way to browse and find skills, workflows, and plugins from curated sources.
 
-### Source Types
+### Discovery vs Runtime
 
-The scanner must support three types of sources:
+Plugins are a **discovery format only** — the marketplace reads `plugin.json` and `marketplace.json` to display what's available. But at runtime, there is no plugin concept. When a user installs something, it becomes a source reference. The runner clones it as a regular source and adds it to `add_dirs`. Claude finds the skills inside. No plugin hooks, MCP servers, or LSP servers from plugins at runtime.
 
-1. **Claude Code plugins** — directories with `.claude-plugin/plugin.json` containing `skills/`, `commands/`, `agents/`, `hooks/`, `.mcp.json`. This is the primary format to follow and expect. Skills are namespaced as `plugin-name:skill-name`.
+### Source Types (for discovery/browsing)
 
-2. **Claude Code marketplace catalogs** — `marketplace.json` files listing plugins with their sources. Users could add the same marketplace from local Claude Code via `/plugin marketplace add`.
+The marketplace scanner must read these formats to display available items:
+
+1. **Claude Code marketplace catalogs** — `marketplace.json` files listing plugins with their sources. The scanner reads plugin metadata to extract skills, commands, and agents for display.
+
+2. **Claude Code plugins** — directories with `.claude-plugin/plugin.json` containing `skills/`, `commands/`, `agents/`. The scanner reads `plugin.json` for metadata and scans the plugin's directories to list its contents. Plugin-specific features (hooks, MCP, LSP) are shown as metadata but not loaded at runtime.
 
 3. **Standalone repos with `.claude/`** — any Git repo containing `.claude/skills/`, `.claude/commands/`, `.claude/agents/`. Also supports root-level `skills/`, `commands/`, `agents/` (registry layout).
+
+4. **Catalog JSON** — `data.json` files (like ai-helpers) listing items with metadata. Normalized to the same display format.
 
 ### How
 
@@ -135,7 +141,7 @@ We follow Claude Code's plugin and skill formats as the standard. The [Agent Ski
 
 ### Everything is a Source Reference
 
-All installed items are source references — Git URLs pointing to repos containing skills, plugins, or workflows. There is no type distinction in the data model. The runner auto-detects what each source contains when it clones and scans.
+All installed items are source references — Git URLs pointing to repos containing skills or workflows. There is no type distinction in the data model. Whether the source is a plugin repo, a standalone skills repo, or a workflow — at runtime, the runner clones it and adds it to `add_dirs`. Claude discovers the skills inside. The plugin format is only relevant for marketplace browsing, not for runtime loading.
 
 ### Workspace Level
 
@@ -189,7 +195,7 @@ The workspace registry is not auto-injected. Selection happens at session creati
 
 1. User picks a workflow (or "General chat" for none)
 2. The workflow's `ambient.json` `sources` array declares dependencies — those are auto-loaded
-3. User can add any number of additional sources from the workspace registry — workflows, skills, commands, plugins, anything
+3. User can add any number of additional sources from the workspace registry
 4. The session stores the workflow reference + any additional source references
 
 This means:
