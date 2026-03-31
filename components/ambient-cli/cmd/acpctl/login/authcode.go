@@ -20,7 +20,7 @@ import (
 
 const (
 	defaultIssuerURL = "https://sso.redhat.com/auth/realms/redhat-external"
-	// TODO(RHOAIENG-55817): replace with a dedicated acpctl public client ID once registered in the redhat-external realm.
+	// TODO(RHOAIENG-56155): replace with a dedicated acpctl public client ID once registered in the redhat-external realm.
 	defaultClientID = "ocm-cli"
 	callbackTimeout = 5 * time.Minute
 	callbackHTML    = `<!DOCTYPE html><html><body>
