@@ -103,3 +103,58 @@ export async function updateIntegrationSecrets(
     { data }
   );
 }
+
+/**
+ * Get workspace-level generic secrets values (arbitrary credentials)
+ * Hardcoded secret name: "ambient-generic-secrets"
+ */
+export async function getGenericSecrets(projectName: string): Promise<Secret[]> {
+  const data = await apiClient.get<Record<string, string>>(
+    `/projects/${projectName}/generic-secrets`
+  );
+  return Object.entries<string>(data || {}).map(([key, value]) => ({ key, value }));
+}
+
+/**
+ * Update workspace-level generic secrets values (arbitrary credentials)
+ * Hardcoded secret name: "ambient-generic-secrets"
+ */
+export async function updateGenericSecrets(
+  projectName: string,
+  secrets: Secret[]
+): Promise<void> {
+  const data: Record<string, string> = Object.fromEntries(
+    secrets.map(s => [s.key, s.value])
+  );
+  await apiClient.put<void, { data: Record<string, string> }>(
+    `/projects/${projectName}/generic-secrets`,
+    { data }
+  );
+}
+
+/**
+ * Get user-level generic secrets values (arbitrary credentials per user)
+ * Stored in cluster-level secret "user-generic-secrets"
+ */
+export async function getUserGenericSecrets(): Promise<Secret[]> {
+  const data = await apiClient.get<Record<string, string>>(
+    `/auth/generic-secrets`
+  );
+  return Object.entries<string>(data || {}).map(([key, value]) => ({ key, value }));
+}
+
+/**
+ * Update user-level generic secrets values (arbitrary credentials per user)
+ * Stored in cluster-level secret "user-generic-secrets"
+ */
+export async function updateUserGenericSecrets(
+  secrets: Secret[]
+): Promise<void> {
+  const data: Record<string, string> = Object.fromEntries(
+    secrets.map(s => [s.key, s.value])
+  );
+  await apiClient.put<void, { data: Record<string, string> }>(
+    `/auth/generic-secrets`,
+    { data }
+  );
+}

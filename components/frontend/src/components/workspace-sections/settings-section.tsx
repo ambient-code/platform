@@ -13,7 +13,7 @@ import { Plus, Trash2, Eye, EyeOff, ChevronDown, ChevronRight } from "lucide-rea
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { toast } from "sonner";
 import { useProject, useUpdateProject } from "@/services/queries/use-projects";
-import { useSecretsValues, useUpdateSecrets, useIntegrationSecrets, useUpdateIntegrationSecrets } from "@/services/queries/use-secrets";
+import { useSecretsValues, useUpdateSecrets, useIntegrationSecrets, useUpdateIntegrationSecrets, useGenericSecrets, useUpdateGenericSecrets } from "@/services/queries/use-secrets";
 import { useClusterInfo } from "@/hooks/use-cluster-info";
 import { FeatureFlagsSection } from "./feature-flags-section";
 import { useRunnerTypes } from "@/services/queries/use-runner-types";
@@ -45,6 +45,9 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
   const [s3SecretKey, setS3SecretKey] = useState<string>("");
   const [showS3SecretKey, setShowS3SecretKey] = useState<boolean>(false);
   const [s3Expanded, setS3Expanded] = useState<boolean>(false);
+  const [genericSecrets, setGenericSecrets] = useState<Array<{ key: string; value: string }>>([]);
+  const [showGenericValues, setShowGenericValues] = useState<Record<number, boolean>>({});
+  const [genericSecretsExpanded, setGenericSecretsExpanded] = useState<boolean>(false);
 
   // Derive runner API key definitions from the runner-types registry.
   // Falls back to a hardcoded list if the fetch fails.
@@ -91,10 +94,12 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
   const { data: project, isLoading: projectLoading } = useProject(projectName);
   const { data: runnerSecrets } = useSecretsValues(projectName);  // ambient-runner-secrets (ANTHROPIC_API_KEY)
   const { data: integrationSecrets } = useIntegrationSecrets(projectName);  // ambient-non-vertex-integrations (GITHUB_TOKEN, GIT_USER_*, JIRA_*, custom)
+  const { data: workspaceGenericSecrets } = useGenericSecrets(projectName);  // ambient-generic-secrets (workspace-level arbitrary credentials)
   const { vertexEnabled } = useClusterInfo();
   const updateProjectMutation = useUpdateProject();
   const updateSecretsMutation = useUpdateSecrets();
   const updateIntegrationSecretsMutation = useUpdateIntegrationSecrets();
+  const updateGenericSecretsMutation = useUpdateGenericSecrets();
 
   // Sync project data to form
   useEffect(() => {
@@ -125,6 +130,14 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
       setSecrets(allSecretsArr.filter(s => !FIXED_KEYS.includes(s.key)));
     }
   }, [runnerSecrets, integrationSecrets, FIXED_KEYS, allRequiredSecrets]);
+
+  // Sync generic secrets to state with change detection
+  useEffect(() => {
+    if (workspaceGenericSecrets &&
+        JSON.stringify(workspaceGenericSecrets) !== JSON.stringify(genericSecrets)) {
+      setGenericSecrets(workspaceGenericSecrets);
+    }
+  }, [workspaceGenericSecrets, genericSecrets]);
 
   const handleSave = () => {
     if (!project) return;
@@ -233,6 +246,40 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
 
   const removeSecretRow = (idx: number) => {
     setSecrets((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  // Save generic secrets (ambient-generic-secrets)
+  const handleSaveGenericSecrets = () => {
+    if (!projectName) return;
+
+    if (genericSecrets.length === 0) {
+      toast.error("No generic secrets to save");
+      return;
+    }
+
+    updateGenericSecretsMutation.mutate(
+      {
+        projectName,
+        secrets: genericSecrets.filter(s => s.key),
+      },
+      {
+        onSuccess: () => {
+          toast.success("Saved to ambient-generic-secrets");
+        },
+        onError: (error) => {
+          const message = error instanceof Error ? error.message : "Failed to save generic secrets";
+          toast.error(message);
+        },
+      }
+    );
+  };
+
+  const addGenericSecretRow = () => {
+    setGenericSecrets((prev) => [...prev, { key: "", value: "" }]);
+  };
+
+  const removeGenericSecretRow = (idx: number) => {
+    setGenericSecrets((prev) => prev.filter((_, i) => i !== idx));
   };
 
   return (
@@ -614,6 +661,116 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
             </Button>
           </div>
         </CardContent>
+      </Card>
+
+      {/* Generic Secrets Section */}
+      <Card>
+        <CardHeader>
+          <div
+            className="flex items-center cursor-pointer"
+            onClick={() => setGenericSecretsExpanded(!genericSecretsExpanded)}
+          >
+            {genericSecretsExpanded ? (
+              <ChevronDown className="h-4 w-4 mr-2" />
+            ) : (
+              <ChevronRight className="h-4 w-4 mr-2" />
+            )}
+            <div className="flex-1">
+              <CardTitle>Generic Secrets</CardTitle>
+              <CardDescription>
+                Arbitrary credentials (AWS keys, API tokens, etc.) available in all sessions, schedules, and webhooks
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        {genericSecretsExpanded && (
+          <>
+            <Separator />
+            <CardContent className="space-y-4">
+              <Alert>
+                <Info className="h-4 w-4" />
+                <AlertTitle>Workspace-level secrets</AlertTitle>
+                <AlertDescription>
+                  These secrets are available to all sessions in this workspace. They are injected as environment variables.
+                </AlertDescription>
+              </Alert>
+
+              <div className="space-y-2">
+                {genericSecrets.map((secret, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <Input
+                      placeholder="KEY_NAME"
+                      value={secret.key}
+                      onChange={(e) => {
+                        const updated = [...genericSecrets];
+                        updated[idx].key = e.target.value;
+                        setGenericSecrets(updated);
+                      }}
+                      className="w-1/3"
+                    />
+                    <div className="flex-1 relative">
+                      <Input
+                        type={showGenericValues[idx] ? "text" : "password"}
+                        placeholder="secret value"
+                        value={secret.value}
+                        onChange={(e) => {
+                          const updated = [...genericSecrets];
+                          updated[idx].value = e.target.value;
+                          setGenericSecrets(updated);
+                        }}
+                        className="pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setShowGenericValues((prev) => ({ ...prev, [idx]: !prev[idx] }))
+                        }
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      >
+                        {showGenericValues[idx] ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => removeGenericSecretRow(idx)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+
+              <Button variant="outline" onClick={addGenericSecretRow} className="w-full">
+                <Plus className="h-4 w-4 mr-2" />
+                Add Secret
+              </Button>
+
+              <div className="pt-2">
+                <Button
+                  onClick={handleSaveGenericSecrets}
+                  disabled={updateGenericSecretsMutation.isPending || genericSecrets.length === 0}
+                >
+                  {updateGenericSecretsMutation.isPending ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4 mr-2" />
+                      Save Generic Secrets
+                    </>
+                  )}
+                </Button>
+              </div>
+            </CardContent>
+          </>
+        )}
       </Card>
 
       <FeatureFlagsSection projectName={projectName} />

@@ -87,3 +87,51 @@ export function useUpdateIntegrationSecrets() {
     },
   });
 }
+
+// Workspace-level generic secrets hooks (ambient-generic-secrets)
+
+export function useGenericSecrets(projectName: string) {
+  return useQuery({
+    queryKey: ['generic-secrets', projectName],
+    queryFn: () => secretsApi.getGenericSecrets(projectName),
+    enabled: !!projectName,
+  });
+}
+
+export function useUpdateGenericSecrets() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      projectName,
+      secrets,
+    }: {
+      projectName: string;
+      secrets: secretsApi.Secret[];
+    }) => secretsApi.updateGenericSecrets(projectName, secrets),
+    onSuccess: (_, { projectName }) => {
+      queryClient.invalidateQueries({ queryKey: ['generic-secrets', projectName] });
+    },
+  });
+}
+
+// User-level generic secrets hooks (user-generic-secrets)
+
+export function useUserGenericSecrets() {
+  return useQuery({
+    queryKey: ['user-generic-secrets'],
+    queryFn: () => secretsApi.getUserGenericSecrets(),
+  });
+}
+
+export function useUpdateUserGenericSecrets() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ secrets }: { secrets: secretsApi.Secret[] }) =>
+      secretsApi.updateUserGenericSecrets(secrets),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['user-generic-secrets'] });
+    },
+  });
+}

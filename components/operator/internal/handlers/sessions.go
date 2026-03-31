@@ -637,6 +637,7 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 	// Hardcoded secret names (convention over configuration)
 	const runnerSecretsName = "ambient-runner-secrets"               // ANTHROPIC_API_KEY only (ignored when Vertex enabled)
 	const integrationSecretsName = "ambient-non-vertex-integrations" // GIT_*, JIRA_*, custom keys (optional)
+	const genericSecretsName = "ambient-generic-secrets"             // Workspace-level generic secrets (optional)
 
 	// Only check for runner secrets when Vertex is disabled
 	// When Vertex is enabled, ambient-vertex secret is used instead
@@ -671,6 +672,16 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 		log.Printf("No %s secret found in %s (optional, skipping)", integrationSecretsName, sessionNamespace)
 	}
 
+	genericSecretsExist := false
+	if _, err := config.K8sClient.CoreV1().Secrets(sessionNamespace).Get(context.TODO(), genericSecretsName, v1.GetOptions{}); err == nil {
+		genericSecretsExist = true
+		log.Printf("Found %s secret in %s, will inject as env vars", genericSecretsName, sessionNamespace)
+	} else if !errors.IsNotFound(err) {
+		log.Printf("Error checking for %s secret in %s: %v", genericSecretsName, sessionNamespace, err)
+	} else {
+		log.Printf("No %s secret found in %s (optional, skipping)", genericSecretsName, sessionNamespace)
+	}
+
 	statusPatch.AddCondition(conditionUpdate{
 		Type:    conditionSecretsReady,
 		Status:  "True",
@@ -701,6 +712,9 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 
 	// NOTE: Google email no longer fetched by operator - runner fetches credentials at runtime
 	// Runner will set USER_GOOGLE_EMAIL from backend API response in _populate_runtime_credentials()
+
+	// Fetch user-level generic secrets and prepare as environment variables with USER_ prefix
+	userGenericSecretEnvVars := fetchUserGenericSecrets(userID, appConfig.BackendNamespace)
 
 	// Parse user-provided environmentVariables once for use across all containers
 	userEnvVars := parseEnvironmentVariables(spec)
@@ -1168,6 +1182,9 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 				// Inject registry-defined env vars (e.g. RUNNER_TYPE, RUNNER_STATE_DIR)
 				base = appendNonConflictingEnvVars(base, registryEnvVars)
 
+				// Inject user-level generic secrets with USER_ prefix
+				base = appendNonConflictingEnvVars(base, userGenericSecretEnvVars)
+
 				// Apply user-provided environmentVariables with replace-if-exists
 				// semantics (overrides are intentional for the runner container)
 				base = replaceOrAppendEnvVars(base, userEnvVars)
@@ -1187,6 +1204,17 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 					log.Printf("Injecting integration secrets from '%s' for session %s", integrationSecretsName, name)
 				} else {
 					log.Printf("Skipping integration secrets '%s' for session %s (not found or not configured)", integrationSecretsName, name)
+				}
+
+				if genericSecretsExist {
+					sources = append(sources, corev1.EnvFromSource{
+						SecretRef: &corev1.SecretEnvSource{
+							LocalObjectReference: corev1.LocalObjectReference{Name: genericSecretsName},
+						},
+					})
+					log.Printf("Injecting generic secrets from '%s' for session %s", genericSecretsName, name)
+				} else {
+					log.Printf("Skipping generic secrets '%s' for session %s (not found or not configured)", genericSecretsName, name)
 				}
 
 				if !vertexEnabled && runnerSecretsName != "" {
@@ -1445,6 +1473,52 @@ func parseEnvironmentVariables(spec map[string]interface{}) []corev1.EnvVar {
 		}
 	}
 	return envVars
+}
+
+// fetchUserGenericSecrets retrieves user-level generic secrets from the cluster-level Secret
+// and returns them as environment variables with USER_ prefix to avoid workspace conflicts.
+// Returns nil if the user has no generic secrets configured.
+func fetchUserGenericSecrets(userID, backendNamespace string) []corev1.EnvVar {
+	if userID == "" {
+		return nil
+	}
+
+	const secretName = "user-generic-secrets"
+	// Sanitize userID for use as secret key (matches backend handler logic)
+	secretKey := strings.ReplaceAll(userID, ":", "-")
+	secretKey = strings.ReplaceAll(secretKey, "/", "-")
+
+	secret, err := config.K8sClient.CoreV1().Secrets(backendNamespace).Get(context.TODO(), secretName, v1.GetOptions{})
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			log.Printf("Error fetching user generic secrets for user %s: %v", userID, err)
+		}
+		return nil
+	}
+
+	if secret.Data == nil || len(secret.Data[secretKey]) == 0 {
+		return nil
+	}
+
+	var userSecrets map[string]string
+	if err := json.Unmarshal(secret.Data[secretKey], &userSecrets); err != nil {
+		log.Printf("Failed to unmarshal user generic secrets for user %s: %v", userID, err)
+		return nil
+	}
+
+	if len(userSecrets) == 0 {
+		return nil
+	}
+
+	// Convert to env vars with USER_ prefix
+	out := make([]corev1.EnvVar, 0, len(userSecrets))
+	for k, v := range userSecrets {
+		envVarName := "USER_" + k
+		out = append(out, corev1.EnvVar{Name: envVarName, Value: v})
+	}
+
+	log.Printf("Injecting %d user-level generic secrets for user %s (with USER_ prefix)", len(out), userID)
+	return out
 }
 
 // appendNonConflictingEnvVars appends env vars from extra to base, skipping any

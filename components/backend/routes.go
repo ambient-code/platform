@@ -117,6 +117,8 @@ func registerRoutes(r *gin.Engine) {
 			projectGroup.PUT("/runner-secrets", handlers.UpdateRunnerSecrets)
 			projectGroup.GET("/integration-secrets", handlers.ListIntegrationSecrets)
 			projectGroup.PUT("/integration-secrets", handlers.UpdateIntegrationSecrets)
+			projectGroup.GET("/generic-secrets", handlers.ListGenericSecrets)
+			projectGroup.PUT("/generic-secrets", handlers.UpdateGenericSecrets)
 
 			// Feature flags admin endpoints (workspace-scoped with Unleash fallback)
 			projectGroup.GET("/feature-flags", handlers.ListFeatureFlags)
@@ -168,6 +170,10 @@ func registerRoutes(r *gin.Engine) {
 		api.POST("/auth/mcp/:serverName/connect", handlers.ConnectMCPServer)
 		api.GET("/auth/mcp/:serverName/status", handlers.GetMCPServerStatus)
 		api.DELETE("/auth/mcp/:serverName/disconnect", handlers.DisconnectMCPServer)
+
+		// User-level generic secrets (arbitrary credentials per user)
+		api.GET("/auth/generic-secrets", handlers.ListUserGenericSecrets)
+		api.PUT("/auth/generic-secrets", handlers.UpdateUserGenericSecrets)
 
 		// Cluster info endpoint (public, no auth required)
 		api.GET("/cluster-info", handlers.GetClusterInfo)
