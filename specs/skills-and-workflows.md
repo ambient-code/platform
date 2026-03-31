@@ -2,7 +2,7 @@
 
 ## Summary
 
-A workflow is a `CLAUDE.md` prompt plus a list of sources in `ambient.json`. Skills are the atomic reusable unit. ACP automates the cloning and wiring. Locally, a `/load-workflow` skill or manual `--add-dir` does the same thing.
+A workflow is a `CLAUDE.md` prompt plus a list of sources in `ambient.json`. Skills are the atomic reusable unit. Everything installed is a source reference — the runner auto-detects what's inside. ACP automates the cloning and wiring. Locally, a `/load-workflow` skill or manual `--add-dir` does the same thing. The marketplace feature is behind a feature flag.
 
 ---
 
@@ -64,7 +64,7 @@ You are a systematic bug fixer. Follow these phases:
 ```
 
 Sources support two formats:
-- **Structured object**: `{"url": "...", "branch": "...", "path": "..."}` — works with any Git host, branch is explicit
+- **Structured object**: `{"url": "...", "branch": "...", "path": "..."}` — works with any Git host, branch is explicit. Supports optional `tag` or `sha` field for pinning.
 - **Single URL string**: `"https://github.com/org/repo/tree/main/path"` — auto-parsed, convenient for sharing
 
 Skills are the reusable atoms. Workflows are recipes. The same skill can appear in multiple workflows.
@@ -85,6 +85,8 @@ Multi-agent orchestration (research agent → writer agent → editor agent pipe
 
 ## Discovery
 
+Discovery is behind a feature flag.
+
 ### What
 
 A way to browse and find skills, workflows, and plugins from curated sources.
@@ -97,7 +99,7 @@ The scanner must support three types of sources:
 
 2. **Claude Code marketplace catalogs** — `marketplace.json` files listing plugins with their sources. Users could add the same marketplace from local Claude Code via `/plugin marketplace add`.
 
-3. **Standalone repos with `.claude/`** — any Git repo containing `.claude/skills/`, `.claude/commands/`, `.claude/agents/`. Also supports root-level `skills/`, `commands/`, `agents/` (registry layout like ai-helpers).
+3. **Standalone repos with `.claude/`** — any Git repo containing `.claude/skills/`, `.claude/commands/`, `.claude/agents/`. Also supports root-level `skills/`, `commands/`, `agents/` (registry layout).
 
 ### How
 
@@ -105,7 +107,7 @@ A cluster-level ConfigMap (`marketplace-sources`) holds available registry sourc
 
 - Browsable catalogs from each source with search and type filters
 - Compact card tiles with name, description, type badge
-- Detail panel on click with full description, source repo link
+- Detail panel on click showing extracted skills, commands, and agents inside the source — rendered readably, not as a raw file viewer
 - "Import Custom" to scan any Git URL and discover items
 - Direct one-click install to workspace
 
@@ -125,58 +127,64 @@ When given a Git URL (from marketplace or custom), the backend:
 
 ### Format Alignment
 
-We follow Claude Code's plugin and skill formats as the standard. The [Agent Skills](https://agentskills.io) open standard that Claude Code implements is the closest cross-tool specification. Our catalog format normalizes to the same shape regardless of source type.
+We follow Claude Code's plugin and skill formats as the standard. The [Agent Skills](https://agentskills.io) open standard that Claude Code implements is the closest cross-tool specification.
 
 ---
 
 ## Installation & Configuration
 
+### Everything is a Source Reference
+
+All installed items are source references — Git URLs pointing to repos containing skills, plugins, or workflows. There is no type distinction in the data model. The runner auto-detects what each source contains when it clones and scans.
+
 ### Workspace Level
 
-Items installed at the workspace level are stored in the ProjectSettings CR (`spec.installedItems`). These represent the workspace's **library** — what's available, not what's auto-loaded into every session.
+Source references installed at the workspace level are stored in the ProjectSettings CR. These represent the workspace's **registry** — what's available to sessions.
 
-When creating a session, users select which installed items to include. The workflow they choose pulls in its own skill dependencies from the `sources` array in `ambient.json`.
+The registry is NOT auto-injected into every session. At session creation, users select which sources to load from the registry. The workflow they choose also pulls in its own dependencies from the `sources` array in `ambient.json`.
+
+Items can optionally be marked as "always add" — these load into every session by default. This is useful for org-wide standards or team-shared skills. (Needs further design discussion.)
 
 ### Session Level
 
-Skills can be added to a running session via the context panel:
+Sources can be added to a running session via the context panel:
 
 - "Import Skills" in the Add Context dropdown
 - Provide a Git URL + optional branch + path
-- Backend clones, scans, writes skill files to `/workspace/file-uploads/.claude/`
-- Claude discovers them via live change detection (already in `add_dirs`)
+- Backend clones, scans, loads skills into discoverable locations
+- Claude discovers them via live change detection
 - Persisted via S3 state-sync on session suspend/resume
 
-### Workflow Builder
+### Skill Storage in the Runner
 
-A UI for composing workflows from standalone skills:
+Skills, commands, and agents must end up where Claude Code expects them for automatic discovery. The workspace root already has a `.claude/` directory that is persisted by state-sync. Sources should be loaded so their contents are discoverable — either via `add_dirs` pointing to each source's `.claude/` structure, or by writing directly into the workspace `.claude/`. The exact mechanism needs further discussion, but the key constraint is: Claude must discover them without any non-standard configuration.
 
-- Select skills from the workspace library or browse marketplace
-- Each skill is a reference (source URL + path), not a copy
-- Write the workflow prompt as `CLAUDE.md`
-- Configure metadata in `ambient.json` (name, description, rubric)
-- The `sources` array is built from selected skills
-- Save as a workflow that can be:
-  - Stored in the workspace
-  - Exported as a Git repo
-  - Exported as a Claude Code plugin
+Plugins and workflows should also be co-located in this space for consistency.
 
-The key constraint: skills are never copied into the workflow. The `ambient.json` holds source references. At load time, the runner resolves dependencies and clones each source.
+### Versioning
+
+Sources reference branches by default, which means sessions always get the latest version — providing auto-update behavior. For pinning, sources support optional `tag` or `sha` fields:
+
+```json
+{"url": "https://github.com/org/skills.git", "branch": "main", "path": "assess", "sha": "a1b2c3d4"}
+```
+
+When a SHA is specified, the runner checks out that exact commit. When only a branch is specified, the runner clones the latest. This gives users the choice: use `branch` for auto-update, use `sha` or `tag` for stability.
 
 ### How Selection Works
 
-The workspace library is not auto-injected. Selection happens at session creation:
+The workspace registry is not auto-injected. Selection happens at session creation:
 
 1. User picks a workflow (or "General chat" for none)
 2. The workflow's `ambient.json` `sources` array declares dependencies — those are auto-loaded
-3. User can optionally add standalone skills from the workspace library
-4. The session CRD stores the workflow reference + any additional skill sources
+3. User can add any number of additional sources from the workspace registry — workflows, skills, commands, plugins, anything
+4. The session stores the workflow reference + any additional source references
 
 This means:
-- Installing 50 skills to the workspace doesn't bloat every session
+- Installing 50 sources to the workspace doesn't bloat every session
 - The workflow controls its own dependencies
 - Users can augment with extras per session
-- Workspace-level "always-on" skills could be supported via a flag but are not the default
+- "Always add" items provide workspace-level defaults (needs further design)
 
 ---
 
@@ -186,37 +194,27 @@ This means:
 
 When a session starts, sources are loaded in layers:
 
-1. **Workflow sources** — skills from the workflow's `ambient.json` `sources` array, cloned and added to `add_dirs`
-2. **Additional standalone sources** — extra skills the user selected at session creation
-3. **Live additions** — skills imported during the session via the context panel
+1. **Workflow sources** — skills from the workflow's `ambient.json` `sources` array, cloned and loaded
+2. **Additional sources** — extra sources the user selected at session creation
+3. **Live additions** — sources imported during the session via the context panel
 
-All layers produce directories with `.claude/skills/`, `.claude/commands/`, `.claude/agents/` structure. Each directory is passed to the Claude Agent SDK as an `--add-dir`. Claude Code handles discovery from there.
+All layers make skills discoverable by Claude Code through the standard `.claude/skills/`, `.claude/commands/`, `.claude/agents/` directory structure.
 
-The `CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1` env var is set so that `CLAUDE.md` files from add-dirs are also loaded.
+### Visualization
+
+Users should be able to see what's loaded in a session — not as raw files, but as extracted, readable metadata:
+
+**In the session context panel**: A dedicated Skills section shows all loaded skills, commands, and agents across all sources. Each item displays its name, type badge, and source. Expandable per source to see what came from where. Items can be removed individually.
+
+**In the marketplace**: Clicking a source shows a detail panel with all the skills, commands, and agents it contains — rendered with descriptions and metadata, not as a file tree.
 
 ### Authentication for Sources
 
 Private repos and authenticated services (MCP servers) use the existing workspace credential system. If the workspace has GitHub/GitLab integrations configured, private source repos are cloned using those credentials via the git credential helper. MCP sources that require auth and TLS are handled through workspace integration configuration. No new auth fields in the manifest.
 
-### Runtime Management
-
-The session context panel shows:
-
-- **Repositories** — Git repos cloned as working directories (existing)
-- **Skills** — imported skills/commands/agents with type badges and source links
-- **Uploads** — uploaded files (existing)
-
-Users can add skill sources live (Import Skills button). The backend clones the source, writes files to `/workspace/file-uploads/.claude/`, and Claude picks them up immediately. Users can remove individual skills — the file is deleted and Claude stops seeing it.
-
 ### Workflow Metadata
 
-The runner's `/content/workflow-metadata` endpoint returns all discovered skills, commands, and agents from:
-- The active workflow's `.claude/` directory
-- Any additional source directories
-- `/workspace/file-uploads/.claude/` (live imports)
-- Built-in Claude Code skills (batch, simplify, debug, claude-api, loop)
-
-The frontend uses this to populate the Skills toolbar button and `/` autocomplete in the chat input.
+The runner's `/content/workflow-metadata` endpoint returns all discovered skills, commands, and agents across all loaded sources and built-in Claude Code skills. The frontend uses this to populate the Skills toolbar button and `/` autocomplete in the chat input.
 
 ---
 
@@ -235,7 +233,7 @@ claude \
 
 ### 2. Load-workflow skill
 
-A meta-skill that reads a workflow's `ambient.json`, clones each source, and passes them as `--add-dir`:
+A meta-skill that reads a workflow's `ambient.json`, clones each source, and sets them up for Claude:
 
 ```
 ~/.claude/skills/load-workflow/SKILL.md
@@ -249,7 +247,7 @@ Usage:
 The skill instructs Claude to:
 1. Fetch the workflow's `ambient.json`
 2. Clone each source to temp directories
-3. Symlink `.claude/` structures into the project
+3. Set up `.claude/` structures so skills are discoverable
 4. The workflow's `CLAUDE.md` is loaded automatically
 
 This makes ACP workflows portable — anyone with Claude Code can use them without ACP.
@@ -258,12 +256,6 @@ This makes ACP workflows portable — anyone with Claude Code can use them witho
 
 ## Open Questions
 
-1. **Skill versioning**: Sources reference branches today. Should we support tags or SHAs for pinning? What happens when a skill source updates — do sessions get the latest on next start?
+1. **Skill storage path**: Should sources be loaded into the workspace root `.claude/` (simple, persisted) or as separate `add_dirs` per source (clean separation)? Need to investigate `add_dirs` limits and understand the tradeoffs.
 
-2. **Plugin format**: Should workflow export produce a Claude Code plugin (`plugin.json`)? Pros: portable, namespaced, versioned. Cons: plugins cache/copy files which breaks the dynamic reference model.
-
-3. **RHAI alignment**: How does this map to RHAIRFE-1370 (Skills Registry)? Our `sources` format and marketplace could inform the product's in-cluster registry design.
-
-4. **Security**: How do we verify skill sources haven't been tampered with? Git commit SHAs provide content-addressable verification. Enterprise customers may need signed manifests.
-
-5. **Workspace defaults**: Should some workspace-level items be "always-on" (loaded in every session regardless of workflow)? Or should this be handled via org-level Claude Code managed settings?
+2. **"Always add" defaults**: Should some workspace-level sources be auto-loaded into every session? How is this configured? Needs further discussion.
