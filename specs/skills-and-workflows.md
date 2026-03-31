@@ -157,9 +157,21 @@ Sources can be added to a running session via the context panel:
 
 ### Skill Storage in the Runner
 
-Skills, commands, and agents must end up where Claude Code expects them for automatic discovery. The workspace root already has a `.claude/` directory that is persisted by state-sync. Sources should be loaded so their contents are discoverable — either via `add_dirs` pointing to each source's `.claude/` structure, or by writing directly into the workspace `.claude/`. The exact mechanism needs further discussion, but the key constraint is: Claude must discover them without any non-standard configuration.
+Each source gets its own directory at `/workspace/sources/{name}/`, added to the Claude Agent SDK as a separate `--add-dir`. Claude Code discovers `.claude/skills/`, `.claude/commands/`, `.claude/agents/` inside each add_dir automatically via its standard discovery mechanism.
 
-Plugins and workflows should also be co-located in this space for consistency.
+This mirrors how repos work (`/workspace/repos/{name}/`). Benefits:
+
+- **Clean separation** — each source is isolated, easy to see what came from where
+- **No conflicts** — two sources with a skill named `review` coexist in separate add_dirs
+- **Simple removal** — removing a source is `rm -rf /workspace/sources/{name}/`
+- **Standard mechanism** — `add_dirs` is exactly what Claude Code designed for external skill loading
+- **Persistence** — `/workspace/sources/` is backed up by state-sync alongside repos and file-uploads
+
+Writing into the project's `.claude/` directory would pollute the working directory and create ownership ambiguity (which source owns which skill?). Separate add_dirs avoids this entirely.
+
+The workspace's active workflow remains the `cwd`. Additional sources are supplementary add_dirs. Repos, sources, artifacts, and file-uploads each get their own add_dir — Claude discovers from all of them.
+
+Items marked "always add" in the workspace registry are pre-selected at session creation. Users can uncheck them. No magic auto-injection — explicit, visible, reversible.
 
 ### Versioning
 
@@ -194,11 +206,11 @@ This means:
 
 When a session starts, sources are loaded in layers:
 
-1. **Workflow sources** — skills from the workflow's `ambient.json` `sources` array, cloned and loaded
-2. **Additional sources** — extra sources the user selected at session creation
-3. **Live additions** — sources imported during the session via the context panel
+1. **Workflow sources** — skills from the workflow's `ambient.json` `sources` array, cloned to `/workspace/sources/{name}/` and added to `add_dirs`
+2. **Additional sources** — extra sources the user selected at session creation, same mechanism
+3. **Live additions** — sources imported during the session via the context panel, cloned to `/workspace/sources/` on the fly
 
-All layers make skills discoverable by Claude Code through the standard `.claude/skills/`, `.claude/commands/`, `.claude/agents/` directory structure.
+Each source directory contains `.claude/skills/`, `.claude/commands/`, `.claude/agents/` as appropriate. Claude Code discovers from all `add_dirs` automatically.
 
 ### Visualization
 
@@ -256,6 +268,4 @@ This makes ACP workflows portable — anyone with Claude Code can use them witho
 
 ## Open Questions
 
-1. **Skill storage path**: Should sources be loaded into the workspace root `.claude/` (simple, persisted) or as separate `add_dirs` per source (clean separation)? Need to investigate `add_dirs` limits and understand the tradeoffs.
-
-2. **"Always add" defaults**: Should some workspace-level sources be auto-loaded into every session? How is this configured? Needs further discussion.
+1. **"Always add" defaults**: Should some workspace-level sources be auto-loaded into every session? Current proposal: a `default` flag on installed items — pre-selected at session creation, user can uncheck. Needs further discussion.
