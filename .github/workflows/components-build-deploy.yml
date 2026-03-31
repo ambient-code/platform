@@ -6,12 +6,6 @@ on:
   pull_request:
     branches: [main, alpha]
   workflow_dispatch:
-    inputs:
-      components:
-        description: 'Components to build (comma-separated: frontend,backend,operator,ambient-runner,state-sync,public-api,ambient-api-server) - leave empty for all'
-        required: false
-        type: string
-        default: ''
 
 concurrency:
   group: components-build-deploy-${{ github.event.pull_request.number || github.ref }}
@@ -29,7 +23,7 @@ jobs:
       - name: Build component matrices
         id: matrix
         run: |
-          # All components definition
+          # All components — cache makes unchanged components fast
           ALL_COMPONENTS='[
             {"name":"frontend","context":"./components/frontend","image":"quay.io/ambient_code/vteam_frontend","dockerfile":"./components/frontend/Dockerfile"},
             {"name":"backend","context":"./components/backend","image":"quay.io/ambient_code/vteam_backend","dockerfile":"./components/backend/Dockerfile"},
@@ -40,27 +34,15 @@ jobs:
             {"name":"ambient-api-server","context":"./components/ambient-api-server","image":"quay.io/ambient_code/vteam_api_server","dockerfile":"./components/ambient-api-server/Dockerfile"}
           ]'
 
-          SELECTED="${{ github.event.inputs.components }}"
-
-          if [ -n "$SELECTED" ]; then
-            # Dispatch with specific components
-            FILTERED=$(echo "$ALL_COMPONENTS" | jq -c --arg sel "$SELECTED" '[.[] | select(.name as $n | $sel | split(",") | map(gsub("^\\s+|\\s+$";"")) | index($n))]')
-          else
-            # Build all components — cache makes unchanged components fast
-            FILTERED="$ALL_COMPONENTS"
-          fi
-
-          # Build matrix includes context/dockerfile; merge matrix only needs name/image
-          BUILD_MATRIX=$(echo "$FILTERED" | jq -c '.')
-          MERGE_MATRIX=$(echo "$FILTERED" | jq -c '[.[] | {name, image}]')
-          HAS_BUILDS=$(echo "$FILTERED" | jq -c 'length > 0')
+          BUILD_MATRIX=$(echo "$ALL_COMPONENTS" | jq -c '.')
+          MERGE_MATRIX=$(echo "$ALL_COMPONENTS" | jq -c '[.[] | {name, image}]')
 
           echo "build-matrix=$BUILD_MATRIX" >> $GITHUB_OUTPUT
           echo "merge-matrix=$MERGE_MATRIX" >> $GITHUB_OUTPUT
-          echo "has-builds=$HAS_BUILDS" >> $GITHUB_OUTPUT
+          echo "has-builds=true" >> $GITHUB_OUTPUT
 
           echo "Components to build:"
-          echo "$FILTERED" | jq -r '.[].name'
+          echo "$ALL_COMPONENTS" | jq -r '.[].name'
 
   build:
     needs: detect-changes
