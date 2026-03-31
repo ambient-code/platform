@@ -1215,16 +1215,56 @@ func UpdateSession(c *gin.Context) {
 		return
 	}
 
-	// Prevent spec changes while session is running or being created
+	// Prevent most spec changes while session is running or being created
+	// Exception: llmSettings.model can be updated live (takes effect on next run)
 	if status, ok := item.Object["status"].(map[string]interface{}); ok {
 		if phase, ok := status["phase"].(string); ok {
 			if strings.EqualFold(phase, "Running") || strings.EqualFold(phase, "Creating") {
-				c.JSON(http.StatusConflict, gin.H{
-					"error": "Cannot modify session specification while the session is running",
-					"phase": phase,
-				})
-				return
+				// Check if request is ONLY updating llmSettings (live model switching)
+				isOnlyModelUpdate := req.LLMSettings != nil &&
+					req.InitialPrompt == nil &&
+					req.DisplayName == nil &&
+					req.Timeout == nil
+
+				if !isOnlyModelUpdate {
+					c.JSON(http.StatusConflict, gin.H{
+						"error": "Cannot modify session specification while the session is running (except llmSettings)",
+						"phase": phase,
+					})
+					return
+				}
+				log.Printf("Live model update on Running session %s: %+v", sessionName, req.LLMSettings)
 			}
+		}
+	}
+
+	// Validate model if being updated
+	if req.LLMSettings != nil && req.LLMSettings.Model != "" {
+		// Get runner type from existing session spec to determine provider
+		spec := item.Object["spec"].(map[string]interface{})
+		runnerTypeID := DefaultRunnerType // default
+		if envVars, ok := spec["environmentVariables"].(map[string]interface{}); ok {
+			if rt, ok := envVars["RUNNER_TYPE"].(string); ok && rt != "" {
+				runnerTypeID = rt
+			}
+		}
+
+		// Resolve provider for validation
+		runnerProvider := ""
+		if rt, rtErr := GetRuntime(runnerTypeID); rtErr == nil {
+			runnerProvider = rt.Provider
+		} else {
+			log.Printf("WARNING: could not resolve runner type %q from registry: %v", runnerTypeID, rtErr)
+		}
+
+		// Validate model is available for this runner's provider
+		k8sClt, _ := GetK8sClientsForRequest(c)
+		if !isModelAvailable(c.Request.Context(), k8sClt, req.LLMSettings.Model, runnerProvider, project) {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "Model is not available for this runner type",
+				"model": req.LLMSettings.Model,
+			})
+			return
 		}
 	}
 

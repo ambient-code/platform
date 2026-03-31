@@ -140,11 +140,28 @@ class ClaudeBridge(PlatformBridge):
         current_user_id: str = "",
         current_user_name: str = "",
         caller_token: str = "",
+        current_model: str = "",
+        current_model_vertex_id: str = "",
     ) -> AsyncIterator[BaseEvent]:
-        """Full run lifecycle: initialize → session worker → tracing."""
+        """Full run lifecycle: initialize → session worker → tracing.
+
+        Live model switching: current_model and current_model_vertex_id from
+        the backend override the env var model for this run.
+        """
         thread_id = input_data.thread_id or (self._context.session_id if self._context else "")
 
         await self._initialize_run(thread_id, current_user_id, current_user_name, caller_token)
+
+        # Live model switching: inject current model into forwarded_props
+        if current_model:
+            if input_data.forwarded_props is None:
+                input_data.forwarded_props = {}
+            input_data.forwarded_props["model"] = current_model
+            logger.info(f"Live model switch: using {current_model}")
+            # Update env var for Vertex AI mapping (used by setup_sdk_authentication)
+            if current_model_vertex_id:
+                os.environ["LLM_MODEL_VERTEX_ID"] = current_model_vertex_id
+                logger.info(f"Vertex ID set: {current_model_vertex_id}")
 
         from ag_ui_claude_sdk.utils import process_messages
 

@@ -180,6 +180,13 @@ export type StopAgenticSessionResponse = {
   message: string;
 };
 
+export type UpdateAgenticSessionRequest = {
+  llmSettings?: Partial<LLMSettings>;
+  displayName?: string;
+  initialPrompt?: string;
+  timeout?: number;
+};
+
 export type CloneAgenticSessionRequest = {
   targetProject: string;
   newSessionName: string;

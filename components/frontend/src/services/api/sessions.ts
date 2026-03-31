@@ -12,6 +12,7 @@ import type {
   ListAgenticSessionsPaginatedResponse,
   StopAgenticSessionRequest,
   StopAgenticSessionResponse,
+  UpdateAgenticSessionRequest,
   CloneAgenticSessionRequest,
   CloneAgenticSessionResponse,
   PaginationParams,
@@ -186,6 +187,20 @@ export async function getSessionPodEvents(
   sessionName: string
 ): Promise<PodEventsResponse> {
   return apiClient.get(`/projects/${projectName}/agentic-sessions/${sessionName}/pod-events`);
+}
+
+/**
+ * Update session spec (supports live model switching)
+ */
+export async function updateSession(
+  projectName: string,
+  sessionName: string,
+  updates: UpdateAgenticSessionRequest
+): Promise<AgenticSession> {
+  return apiClient.put<AgenticSession, UpdateAgenticSessionRequest>(
+    `/projects/${projectName}/agentic-sessions/${sessionName}`,
+    updates
+  );
 }
 
 /**

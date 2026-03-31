@@ -68,6 +68,9 @@ async def run_agent(input_data: RunnerInput, request: Request):
     # The caller's bearer token — used for credential requests so each user
     # can only access their own credentials (no BOT_TOKEN impersonation).
     caller_token = request.headers.get("x-caller-token", "")
+    # Extract current model for live model switching
+    current_model = request.headers.get("x-current-model", "")
+    current_model_vertex_id = request.headers.get("x-current-model-vertex-id", "")
     if current_user_id:
         from ambient_runner.platform.auth import sanitize_user_context
 
@@ -75,6 +78,8 @@ async def run_agent(input_data: RunnerInput, request: Request):
             current_user_id, current_user_name
         )
         logger.info(f"Run user context: {current_user_id}")
+    if current_model:
+        logger.info(f"Run with live model: {current_model}")
 
     logger.info(
         f"Run: thread_id={run_agent_input.thread_id}, run_id={run_agent_input.run_id}"
@@ -87,6 +92,8 @@ async def run_agent(input_data: RunnerInput, request: Request):
                 current_user_id=current_user_id,
                 current_user_name=current_user_name,
                 caller_token=caller_token,
+                current_model=current_model,
+                current_model_vertex_id=current_model_vertex_id,
             ):
                 try:
                     yield encoder.encode(event)

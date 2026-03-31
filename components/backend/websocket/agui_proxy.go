@@ -367,8 +367,12 @@ func HandleAGUIRunProxy(c *gin.Context) {
 		log.Printf("Run with per-user credentials for %s/%s", projectName, sessionName)
 	}
 
+	// Fetch current model from session spec for live model switching
+	currentModel := getCurrentModel(projectName, sessionName)
+	currentModelVertexID := getCurrentModelVertexID(projectName, sessionName, currentModel)
+
 	// Start background goroutine to proxy runner SSE → persist + broadcast
-	go proxyRunnerStream(runnerURL, bodyBytes, sessionName, runID, threadID, currentUserID, currentUserName, callerToken)
+	go proxyRunnerStream(runnerURL, bodyBytes, sessionName, runID, threadID, currentUserID, currentUserName, callerToken, currentModel, currentModelVertexID)
 
 	// Return metadata immediately — events arrive via GET /agui/events
 	c.JSON(http.StatusOK, gin.H{
@@ -382,13 +386,14 @@ func HandleAGUIRunProxy(c *gin.Context) {
 // a background goroutine so the POST /agui/run handler can return immediately.
 // If userID is provided, forwards user context headers for credential scoping.
 // callerToken is the original user's bearer token for per-user credential requests.
-func proxyRunnerStream(runnerURL string, bodyBytes []byte, sessionName, runID, threadID, userID, userName, callerToken string) {
+// currentModel and currentModelVertexID are forwarded to enable live model switching.
+func proxyRunnerStream(runnerURL string, bodyBytes []byte, sessionName, runID, threadID, userID, userName, callerToken, currentModel, currentModelVertexID string) {
 	logSuffix := ""
 	if userID != "" {
 		logSuffix = fmt.Sprintf(" (user=%s)", userID)
 	}
 	log.Printf("AGUI Proxy: connecting to runner at %s%s", runnerURL, logSuffix)
-	resp, err := connectToRunner(runnerURL, bodyBytes, userID, userName, callerToken)
+	resp, err := connectToRunner(runnerURL, bodyBytes, userID, userName, callerToken, currentModel, currentModelVertexID)
 	if err != nil {
 		log.Printf("AGUI Proxy: runner unavailable for %s: %v", sessionName, err)
 		// Publish error events so GET /agui/events subscribers see the failure
@@ -784,7 +789,7 @@ var runnerHTTPClient = &http.Client{
 // container startup time and K8s Service DNS propagation. Retries on
 // "connection refused", "no such host", and "dial tcp" errors with
 // exponential backoff (500ms initial, 1.5x, capped at 5s, 15 attempts).
-func connectToRunner(runnerURL string, bodyBytes []byte, userID, userName, callerToken string) (*http.Response, error) {
+func connectToRunner(runnerURL string, bodyBytes []byte, userID, userName, callerToken, currentModel, currentModelVertexID string) (*http.Response, error) {
 	maxAttempts := 15
 	retryDelay := 500 * time.Millisecond
 	maxDelay := 5 * time.Second
@@ -808,6 +813,13 @@ func connectToRunner(runnerURL string, bodyBytes []byte, userID, userName, calle
 		// for credential requests with the user's own identity.
 		if callerToken != "" {
 			req.Header.Set("X-Caller-Token", callerToken)
+		}
+		// Forward current model for live model switching
+		if currentModel != "" {
+			req.Header.Set("X-Current-Model", currentModel)
+		}
+		if currentModelVertexID != "" {
+			req.Header.Set("X-Current-Model-Vertex-ID", currentModelVertexID)
 		}
 
 		resp, err := runnerHTTPClient.Do(req)
@@ -1289,4 +1301,53 @@ func HandleTaskList(c *gin.Context) {
 
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024*1024))
 	c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), body)
+}
+
+// ─── Live Model Switching Helpers ────────────────────────────────────
+
+// getCurrentModel fetches the current model from the session spec.
+// Returns empty string if unable to read (runner will fall back to env var).
+func getCurrentModel(projectName, sessionName string) string {
+	if handlers.DynamicClient == nil {
+		return ""
+	}
+
+	gvr := handlers.GetAgenticSessionV1Alpha1Resource()
+	obj, err := handlers.DynamicClient.Resource(gvr).Namespace(projectName).Get(
+		context.Background(), sessionName, metav1.GetOptions{},
+	)
+	if err != nil {
+		return ""
+	}
+
+	model, _, _ := unstructured.NestedString(obj.Object, "spec", "llmSettings", "model")
+	return model
+}
+
+// getCurrentModelVertexID resolves the Vertex AI model ID for the given model.
+// Returns empty string if Vertex ID mapping is not needed or unavailable.
+func getCurrentModelVertexID(projectName, sessionName, model string) string {
+	if model == "" {
+		return ""
+	}
+
+	// Load model manifest from ConfigMap mount
+	manifestPath := handlers.ManifestPath()
+	manifest, err := handlers.LoadManifest(manifestPath)
+	if err != nil {
+		log.Printf("WARNING: failed to load model manifest for Vertex ID resolution: %v", err)
+		return ""
+	}
+
+	// Find model entry and extract Vertex ID
+	for _, entry := range manifest.Models {
+		if entry.ID == model && entry.Available {
+			if entry.VertexID != "" {
+				log.Printf("Resolved Vertex ID for model %q: %s", model, entry.VertexID)
+			}
+			return entry.VertexID
+		}
+	}
+
+	return ""
 }
