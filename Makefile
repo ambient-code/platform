@@ -3,11 +3,12 @@
 .PHONY: local-dev-token
 .PHONY: local-logs local-logs-backend local-logs-frontend local-logs-operator local-shell local-shell-frontend
 .PHONY: local-test local-test-dev local-test-quick test-all local-troubleshoot local-port-forward local-stop-port-forward
-.PHONY: push-all registry-login setup-hooks remove-hooks lint check-kind check-kubectl check-local-context dev-bootstrap kind-rebuild kind-reload-backend kind-reload-frontend kind-reload-operator kind-status kind-login
+.PHONY: push-all registry-login setup-hooks remove-hooks lint check-minikube check-kind check-kubectl check-local-context dev-bootstrap kind-rebuild kind-reload-backend kind-reload-frontend kind-reload-operator kind-status kind-login
+.PHONY: preflight-cluster preflight dev-env dev
 .PHONY: e2e-test e2e-setup e2e-clean deploy-langfuse-openshift
 .PHONY: unleash-port-forward unleash-status
 .PHONY: setup-minio minio-console minio-logs minio-status
-.PHONY: validate-makefile lint-makefile check-shell makefile-health
+.PHONY: validate-makefile lint-makefile check-shell makefile-health benchmark benchmark-ci
 .PHONY: _create-operator-config _auto-port-forward _show-access-info _kind-load-images
 
 # Default target
@@ -66,9 +67,9 @@ STATE_SYNC_IMAGE ?= vteam_state_sync:$(IMAGE_TAG)
 PUBLIC_API_IMAGE ?= vteam_public_api:$(IMAGE_TAG)
 API_SERVER_IMAGE ?= vteam_api_server:$(IMAGE_TAG)
 
-# Podman prefixes image names with localhost/ — kind load needs to use the same
-# name so containerd can match the image reference used in the deployment spec
-KIND_IMAGE_PREFIX := $(if $(filter podman,$(CONTAINER_ENGINE)),localhost/,)
+# kind-local overlay always references localhost/vteam_* images.
+# Podman produces this prefix natively; for Docker we tag before loading.
+KIND_IMAGE_PREFIX := localhost/
 
 # Load local developer config (KIND_HOST, etc.) — gitignored, set once per machine
 -include .env.local
@@ -129,10 +130,11 @@ help: ## Display this help message
 	@echo '$(COLOR_BOLD)Ambient Code Platform - Development Makefile$(COLOR_RESET)'
 	@echo ''
 	@echo '$(COLOR_BOLD)Quick Start:$(COLOR_RESET)'
-	@echo '  $(COLOR_GREEN)make kind-up$(COLOR_RESET)             Start local development environment'
-	@echo '  $(COLOR_GREEN)make local-status$(COLOR_RESET)        Check status of local environment'
-	@echo '  $(COLOR_GREEN)make local-logs$(COLOR_RESET)          View logs from all components'
-	@echo '  $(COLOR_GREEN)make local-down$(COLOR_RESET)          Stop local environment'
+	@echo '  $(COLOR_GREEN)make dev$(COLOR_RESET)                  Start local dev environment (interactive)'
+	@echo '  $(COLOR_GREEN)make dev COMPONENT=frontend$(COLOR_RESET)   Hot-reload frontend against kind cluster'
+	@echo '  $(COLOR_GREEN)make kind-up$(COLOR_RESET)             Full cluster deploy (no hot-reload)'
+	@echo '  $(COLOR_GREEN)make kind-status$(COLOR_RESET)         Check kind cluster status'
+	@echo '  $(COLOR_GREEN)make kind-down$(COLOR_RESET)           Stop and delete the kind cluster'
 	@echo ''
 	@echo '$(COLOR_BOLD)Quality Assurance:$(COLOR_RESET)'
 	@echo '  $(COLOR_GREEN)make validate-makefile$(COLOR_RESET)   Validate Makefile quality (runs in CI)'
@@ -151,7 +153,7 @@ help: ## Display this help message
 	@echo '  Ports: frontend=$(KIND_FWD_FRONTEND_PORT) backend=$(KIND_FWD_BACKEND_PORT) http=$(KIND_HTTP_PORT) https=$(KIND_HTTPS_PORT)'
 	@echo ''
 	@echo '$(COLOR_BOLD)Examples:$(COLOR_RESET)'
-	@echo '  make kind-up LOCAL_IMAGES=true    Build from source and deploy to kind (requires podman)'
+	@echo '  make kind-up LOCAL_IMAGES=true    Build from source and deploy to kind'
 	@echo '  make kind-rebuild                 Rebuild and reload all components in kind'
 	@echo '  make kind-status                  Show all kind clusters and their ports'
 	@echo '  make kind-up CONTAINER_ENGINE=docker'
@@ -536,7 +538,246 @@ clean: ## Clean up Kubernetes resources
 
 ##@ Kind Local Development
 
-kind-up: check-kind check-kubectl ## Start kind cluster (LOCAL_IMAGES=true to build from source, requires podman)
+# COMPONENT for dev/preflight: comma-separated frontend, backend (e.g. frontend,backend). Empty = port-forward only.
+COMPONENT ?=
+# When true, `make dev` runs `kind-up` without prompting if the cluster is missing.
+AUTO_CLUSTER ?= false
+# Backend URL for dev-env: use local go run (8080) vs port-forwarded cluster port.
+DEV_BACKEND_LOCAL ?= false
+
+preflight-cluster: ## Validate kind, kubectl, and container engine (daemon running)
+	@echo "$(COLOR_BOLD)Preflight (cluster tools)$(COLOR_RESET)"
+	@FAILED=0; \
+	OS=$$(uname -s); \
+	printf '%s\n' "---"; \
+	if command -v kind >/dev/null 2>&1; then \
+		KVER=$$(kind version -q 2>/dev/null || kind version 2>/dev/null | head -1); \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) kind $$KVER"; \
+	else \
+		echo "$(COLOR_RED)✗$(COLOR_RESET) kind not found"; \
+		if [ "$$OS" = "Darwin" ]; then echo "  Install: brew install kind"; else echo "  Install: go install sigs.k8s.io/kind@latest"; fi; \
+		echo "           https://kind.sigs.k8s.io/docs/user/quick-start/"; \
+		FAILED=1; \
+	fi; \
+	if command -v kubectl >/dev/null 2>&1; then \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) kubectl $$(kubectl version --client -o yaml 2>/dev/null | grep gitVersion | head -1 | sed 's/.*: //' || kubectl version --client 2>/dev/null | head -1)"; \
+	else \
+		echo "$(COLOR_RED)✗$(COLOR_RESET) kubectl not found"; \
+		if [ "$$OS" = "Darwin" ]; then echo "  Install: brew install kubectl"; else echo "  Install: https://kubernetes.io/docs/tasks/tools/"; fi; \
+		FAILED=1; \
+	fi; \
+	CE="$(CONTAINER_ENGINE)"; \
+	if [ "$$CE" = "podman" ]; then \
+		if command -v podman >/dev/null 2>&1 && podman info >/dev/null 2>&1; then \
+			echo "$(COLOR_GREEN)✓$(COLOR_RESET) podman $$(podman --version 2>/dev/null | head -1) (daemon running)"; \
+		else \
+			echo "$(COLOR_RED)✗$(COLOR_RESET) podman missing or daemon not running"; \
+			if [ "$$OS" = "Darwin" ]; then echo "  Install: brew install podman && podman machine start"; else echo "  Install: https://podman.io/getting-started/installation"; fi; \
+			FAILED=1; \
+		fi; \
+	else \
+		if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then \
+			echo "$(COLOR_GREEN)✓$(COLOR_RESET) docker $$(docker --version 2>/dev/null) (daemon running)"; \
+		else \
+			echo "$(COLOR_RED)✗$(COLOR_RESET) docker missing or daemon not running"; \
+			if [ "$$OS" = "Darwin" ]; then echo "  Install: https://docs.docker.com/desktop/install/mac-install/"; else echo "  Install: https://docs.docker.com/engine/install/"; fi; \
+			FAILED=1; \
+		fi; \
+	fi; \
+	printf '%s\n' "---"; \
+	if [ "$$FAILED" -ne 0 ]; then \
+		echo "$(COLOR_RED)Preflight failed: fix the issues above.$(COLOR_RESET)"; \
+		exit 1; \
+	fi; \
+	echo "$(COLOR_GREEN)✓$(COLOR_RESET) Cluster tool checks passed."
+
+preflight: preflight-cluster ## Validate dev environment (cluster tools + optional Node/Go by COMPONENT)
+	@echo "$(COLOR_BOLD)Preflight (language tools)$(COLOR_RESET)"
+	@FAILED=0; \
+	OS=$$(uname -s); \
+	NEED_NODE=0; NEED_GO=0; \
+	COMP="$(COMPONENT)"; \
+	if [ -z "$$COMP" ]; then NEED_NODE=1; NEED_GO=1; \
+	else \
+		for piece in $$(echo "$$COMP" | tr ',' ' '); do \
+			p=$$(echo "$$piece" | sed 's/^[[:space:]]*//;s/[[:space:]]*$$//'); \
+			[ -z "$$p" ] && continue; \
+			case "$$p" in \
+				frontend) NEED_NODE=1 ;; \
+				backend) NEED_GO=1 ;; \
+				*) echo "$(COLOR_RED)✗$(COLOR_RESET) Unknown COMPONENT: $$p (use frontend, backend, or frontend,backend)"; FAILED=1 ;; \
+			esac; \
+		done; \
+	fi; \
+	if [ "$$NEED_NODE" -eq 1 ]; then \
+		if command -v node >/dev/null 2>&1; then \
+			NVER=$$(node -v 2>/dev/null | sed 's/^v//'); \
+			NMAJ=$$(echo "$$NVER" | cut -d. -f1); \
+			if [ "$${NMAJ:-0}" -ge 20 ] 2>/dev/null; then \
+				echo "$(COLOR_GREEN)✓$(COLOR_RESET) node v$$NVER"; \
+			else \
+				echo "$(COLOR_RED)✗$(COLOR_RESET) node $$NVER (need >= 20)"; \
+				if [ "$$OS" = "Darwin" ]; then echo "  Install: brew install node@20"; else echo "  Install: https://nodejs.org/ (LTS)"; fi; \
+				FAILED=1; \
+			fi; \
+		else \
+			echo "$(COLOR_RED)✗$(COLOR_RESET) node not found (need >= 20)"; \
+			if [ "$$OS" = "Darwin" ]; then echo "  Install: brew install node@20"; else echo "  Install: https://nodejs.org/"; fi; \
+			FAILED=1; \
+		fi; \
+		if command -v npm >/dev/null 2>&1; then \
+			echo "$(COLOR_GREEN)✓$(COLOR_RESET) npm $$(npm -v)"; \
+		else \
+			echo "$(COLOR_RED)✗$(COLOR_RESET) npm not found"; \
+			FAILED=1; \
+		fi; \
+	fi; \
+	if [ "$$NEED_GO" -eq 1 ]; then \
+		if command -v go >/dev/null 2>&1; then \
+			GVER=$$(go env GOVERSION 2>/dev/null | sed 's/^go//'); \
+			GMAJ=$$(echo "$$GVER" | cut -d. -f1); \
+			GMIN=$$(echo "$$GVER" | cut -d. -f2); \
+			if [ "$${GMAJ:-0}" -gt 1 ] || { [ "$${GMAJ:-0}" -eq 1 ] && [ "$${GMIN:-0}" -ge 21 ]; }; then \
+				echo "$(COLOR_GREEN)✓$(COLOR_RESET) go $$GVER"; \
+			else \
+				echo "$(COLOR_RED)✗$(COLOR_RESET) go $$GVER (need >= 1.21)"; \
+				if [ "$$OS" = "Darwin" ]; then echo "  Install: brew install go"; else echo "  Install: https://go.dev/dl/"; fi; \
+				FAILED=1; \
+			fi; \
+		else \
+			echo "$(COLOR_RED)✗$(COLOR_RESET) go not found (need >= 1.21)"; \
+			if [ "$$OS" = "Darwin" ]; then echo "  Install: brew install go"; else echo "  Install: https://go.dev/dl/"; fi; \
+			FAILED=1; \
+		fi; \
+	fi; \
+	if [ "$$FAILED" -ne 0 ]; then \
+		echo "$(COLOR_RED)Preflight failed: fix the issues above.$(COLOR_RESET)"; \
+		exit 1; \
+	fi; \
+	echo "$(COLOR_GREEN)✓$(COLOR_RESET) Language tool checks passed."
+
+dev-env: check-kubectl check-local-context ## Generate components/frontend/.env.local from cluster state (DEV_BACKEND_LOCAL=true for local backend on :8080)
+	@set -e; \
+	BACKEND_URL="http://localhost:$(KIND_FWD_BACKEND_PORT)/api"; \
+	if [ "$(DEV_BACKEND_LOCAL)" = "true" ]; then BACKEND_URL="http://localhost:8080/api"; fi; \
+	TOKEN=$$(kubectl get secret test-user-token -n $(NAMESPACE) -o jsonpath='{.data.token}' 2>/dev/null | base64 -d 2>/dev/null || true); \
+	if [ -z "$$TOKEN" ]; then \
+		echo "$(COLOR_YELLOW)⚠$(COLOR_RESET) test-user-token not found — OC_TOKEN left empty (run kind-up if cluster is new)"; \
+	fi; \
+	ENV_FILE="components/frontend/.env.local"; \
+	{ \
+		echo "# Generated by make dev-env — do not commit"; \
+		echo "BACKEND_URL=$$BACKEND_URL"; \
+		echo "ENABLE_OC_WHOAMI=0"; \
+		if [ -n "$$TOKEN" ]; then echo "OC_TOKEN=$$TOKEN"; else echo "OC_TOKEN="; fi; \
+	} > "$$ENV_FILE.tmp"; \
+	if [ -f "$$ENV_FILE" ] && cmp -s "$$ENV_FILE.tmp" "$$ENV_FILE"; then \
+		rm -f "$$ENV_FILE.tmp"; \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) $$ENV_FILE unchanged"; \
+	else \
+		mv "$$ENV_FILE.tmp" "$$ENV_FILE"; \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Wrote $$ENV_FILE"; \
+	fi
+
+dev: ## Local dev: preflight, cluster, dev-env, port-forwards; COMPONENT=frontend|backend|frontend,backend for hot-reload
+	@if [ -z "$(COMPONENT)" ]; then $(MAKE) --no-print-directory preflight-cluster; else $(MAKE) --no-print-directory preflight; fi
+	@set -e; \
+	if [ "$(CONTAINER_ENGINE)" = "podman" ]; then export KIND_EXPERIMENTAL_PROVIDER=podman; fi; \
+	CLUSTER_RUNNING=0; \
+	if kind get clusters 2>/dev/null | grep -q "^$(KIND_CLUSTER_NAME)$$"; then CLUSTER_RUNNING=1; fi; \
+	if [ "$$CLUSTER_RUNNING" -eq 0 ]; then \
+		if [ "$(AUTO_CLUSTER)" = "true" ]; then \
+			echo "$(COLOR_BLUE)▶$(COLOR_RESET) AUTO_CLUSTER=true — running kind-up..."; \
+			$(MAKE) kind-up CONTAINER_ENGINE=$(CONTAINER_ENGINE); \
+		elif [ -t 0 ]; then \
+			printf "Kind cluster '$(KIND_CLUSTER_NAME)' is not running. Run 'make kind-up' now? [y/N] "; \
+			read -r _ans; \
+			case "$$_ans" in y|Y|yes|YES) $(MAKE) kind-up CONTAINER_ENGINE=$(CONTAINER_ENGINE) ;; \
+			*) echo "$(COLOR_RED)✗$(COLOR_RESET) Start the cluster first: $(COLOR_BOLD)make kind-up$(COLOR_RESET)"; exit 1 ;; esac; \
+		else \
+			echo "$(COLOR_RED)✗$(COLOR_RESET) Kind cluster '$(KIND_CLUSTER_NAME)' is not running."; \
+			echo "  Run: $(COLOR_BOLD)make kind-up$(COLOR_RESET) or $(COLOR_BOLD)make dev AUTO_CLUSTER=true$(COLOR_RESET)"; \
+			exit 1; \
+		fi; \
+	fi; \
+	if [ "$(CONTAINER_ENGINE)" = "podman" ]; then \
+		KIND_EXPERIMENTAL_PROVIDER=podman kubectl config use-context kind-$(KIND_CLUSTER_NAME) 2>/dev/null || \
+			kubectl config use-context kind-$(KIND_CLUSTER_NAME); \
+	else \
+		kubectl config use-context kind-$(KIND_CLUSTER_NAME); \
+	fi; \
+	COMP="$(COMPONENT)"; \
+	HAS_FRONT=0; HAS_BACK=0; \
+	for piece in $$(echo "$$COMP" | tr ',' ' '); do \
+		p=$$(echo "$$piece" | sed 's/^[[:space:]]*//;s/[[:space:]]*$$//'); \
+		case "$$p" in frontend) HAS_FRONT=1 ;; backend) HAS_BACK=1 ;; esac; \
+	done; \
+	DEV_LOCAL=0; \
+	if [ "$$HAS_FRONT" -eq 1 ] && [ "$$HAS_BACK" -eq 1 ]; then DEV_LOCAL=1; \
+	elif [ "$$HAS_BACK" -eq 1 ] && [ "$$HAS_FRONT" -eq 0 ]; then DEV_LOCAL=1; \
+	fi; \
+	if [ -z "$$COMP" ]; then \
+		$(MAKE) dev-env DEV_BACKEND_LOCAL=false; \
+	else \
+		$(MAKE) dev-env DEV_BACKEND_LOCAL=$$( [ "$$DEV_LOCAL" -eq 1 ] && echo true || echo false ); \
+	fi; \
+	echo ""; \
+	echo "$(COLOR_BOLD)Access:$(COLOR_RESET)"; \
+	echo "  Frontend: http://localhost:$(KIND_FWD_FRONTEND_PORT)"; \
+	echo "  Backend:  http://localhost:$(KIND_FWD_BACKEND_PORT)"; \
+	echo ""; \
+	PF_PIDS=""; \
+	cleanup() { \
+		for pid in $$PF_PIDS; do kill "$$pid" 2>/dev/null || true; done; \
+		echo ""; echo "$(COLOR_GREEN)✓$(COLOR_RESET) Stopped port-forward(s)."; \
+	}; \
+	trap cleanup INT TERM; \
+	if [ -z "$$COMP" ]; then \
+		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Port-forwarding frontend + backend (Ctrl+C to stop)..."; \
+		kubectl port-forward -n $(NAMESPACE) svc/frontend-service $(KIND_FWD_FRONTEND_PORT):3000 >/tmp/acp-dev-pf-frontend.log 2>&1 & PF_PIDS="$$PF_PIDS $$!"; \
+		kubectl port-forward -n $(NAMESPACE) svc/backend-service $(KIND_FWD_BACKEND_PORT):8080 >/tmp/acp-dev-pf-backend.log 2>&1 & PF_PIDS="$$PF_PIDS $$!"; \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Port-forwards running."; \
+		echo "$(COLOR_YELLOW)Press Ctrl+C to stop.$(COLOR_RESET)"; \
+		wait; \
+	elif [ "$$HAS_FRONT" -eq 1 ] && [ "$$HAS_BACK" -eq 0 ]; then \
+		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Port-forward backend only; starting frontend dev..."; \
+		kubectl port-forward -n $(NAMESPACE) svc/backend-service $(KIND_FWD_BACKEND_PORT):8080 >/tmp/acp-dev-pf-backend.log 2>&1 & PF_PIDS=$$!; \
+		sleep 1; \
+		cd components/frontend && npm run dev; \
+	elif [ "$$HAS_BACK" -eq 1 ] && [ "$$HAS_FRONT" -eq 0 ]; then \
+		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Port-forward frontend only; starting backend dev..."; \
+		kubectl port-forward -n $(NAMESPACE) svc/frontend-service $(KIND_FWD_FRONTEND_PORT):3000 >/tmp/acp-dev-pf-frontend.log 2>&1 & PF_PIDS=$$!; \
+		sleep 1; \
+		cd components/backend && go run .; \
+	elif [ "$$HAS_FRONT" -eq 1 ] && [ "$$HAS_BACK" -eq 1 ]; then \
+		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Hot-reload: backend + frontend (local)..."; \
+		(cd components/backend && go run .) & GO_PID=$$!; \
+		(cd components/frontend && npm run dev) & NPM_PID=$$!; \
+		trap 'kill $$GO_PID $$NPM_PID 2>/dev/null; cleanup' INT TERM; \
+		wait $$GO_PID $$NPM_PID; \
+	fi
+
+##@ Benchmarking
+
+benchmark: ## Run component benchmarks (COMPONENT=frontend MODE=cold|warm|both REPEATS=3)
+	@bash scripts/benchmarks/component-bench.sh \
+		$(if $(COMPONENT),--components $(COMPONENT)) \
+		$(if $(MODE),--mode $(MODE)) \
+		$(if $(REPEATS),--repeats $(REPEATS)) \
+		$(if $(BASELINE),--baseline-ref $(BASELINE)) \
+		$(if $(CANDIDATE),--candidate-ref $(CANDIDATE)) \
+		$(if $(FORMAT),--format $(FORMAT))
+
+benchmark-ci: ## Run component benchmarks in CI mode
+	@bash scripts/benchmarks/component-bench.sh --ci \
+		$(if $(COMPONENT),--components $(COMPONENT)) \
+		$(if $(MODE),--mode $(MODE)) \
+		$(if $(REPEATS),--repeats $(REPEATS)) \
+		$(if $(BASELINE),--baseline-ref $(BASELINE)) \
+		$(if $(CANDIDATE),--candidate-ref $(CANDIDATE)) \
+		$(if $(FORMAT),--format $(FORMAT))
+
+kind-up: preflight-cluster ## Start kind cluster and deploy the platform (LOCAL_IMAGES=true builds from source)
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Starting kind cluster '$(KIND_CLUSTER_NAME)'..."
 	@cd e2e && KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) KIND_HTTP_PORT=$(KIND_HTTP_PORT) KIND_HTTPS_PORT=$(KIND_HTTPS_PORT) KIND_HOST=$(KIND_HOST) CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/setup-kind.sh
 	@if [ -n "$(KIND_HOST)" ]; then \
@@ -749,7 +990,7 @@ kind-reload-operator: check-kind check-kubectl check-local-context ## Rebuild an
 	@kubectl rollout status deployment/agentic-operator -n $(NAMESPACE) --timeout=60s
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Operator reloaded"
 
-kind-status: ## Show all kind clusters and their port assignments
+kind-status: check-kind ## Show all kind clusters and their port assignments
 	@echo "$(COLOR_BOLD)Kind Cluster Status$(COLOR_RESET)"
 	@echo ""
 	@echo "$(COLOR_BOLD)Current worktree:$(COLOR_RESET)"
@@ -834,13 +1075,38 @@ local-reload-operator: ## Deprecated: use kind-reload-operator
 
 ##@ Internal Helpers (do not call directly)
 
+check-minikube: ## Check if minikube is installed
+	@OS=$$(uname -s); \
+	if command -v minikube >/dev/null 2>&1; then \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) minikube $$(minikube version 2>/dev/null | head -1)"; \
+	else \
+		echo "$(COLOR_RED)✗$(COLOR_RESET) minikube not found"; \
+		if [ "$$OS" = "Darwin" ]; then echo "  Install: brew install minikube"; fi; \
+		echo "  Install: https://minikube.sigs.k8s.io/docs/start/"; \
+		exit 1; \
+	fi
+
 check-kind: ## Check if kind is installed
-	@command -v kind >/dev/null 2>&1 || \
-		(echo "$(COLOR_RED)✗$(COLOR_RESET) kind not found. Install: https://kind.sigs.k8s.io/docs/user/quick-start/" && exit 1)
+	@OS=$$(uname -s); \
+	if command -v kind >/dev/null 2>&1; then \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) kind $$(kind version -q 2>/dev/null || kind version 2>/dev/null | head -1)"; \
+	else \
+		echo "$(COLOR_RED)✗$(COLOR_RESET) kind not found"; \
+		if [ "$$OS" = "Darwin" ]; then echo "  Install: brew install kind"; else echo "  Install: go install sigs.k8s.io/kind@latest"; fi; \
+		echo "  https://kind.sigs.k8s.io/docs/user/quick-start/"; \
+		exit 1; \
+	fi
 
 check-kubectl: ## Check if kubectl is installed
-	@command -v kubectl >/dev/null 2>&1 || \
-		(echo "$(COLOR_RED)✗$(COLOR_RESET) kubectl not found. Install: https://kubernetes.io/docs/tasks/tools/" && exit 1)
+	@OS=$$(uname -s); \
+	if command -v kubectl >/dev/null 2>&1; then \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) kubectl $$(kubectl version --client -o yaml 2>/dev/null | grep gitVersion | head -1 | sed 's/.*: //' || kubectl version --client 2>/dev/null | head -1)"; \
+	else \
+		echo "$(COLOR_RED)✗$(COLOR_RESET) kubectl not found"; \
+		if [ "$$OS" = "Darwin" ]; then echo "  Install: brew install kubectl"; fi; \
+		echo "  Install: https://kubernetes.io/docs/tasks/tools/"; \
+		exit 1; \
+	fi
 
 check-local-context: ## Verify kubectl context points to a local kind cluster
 ifneq ($(SKIP_CONTEXT_CHECK),true)
@@ -883,6 +1149,7 @@ _kind-load-images: ## Internal: Load images into kind cluster
 			$(CONTAINER_ENGINE) exec -i $(KIND_CLUSTER_NAME)-control-plane \
 			ctr --namespace=k8s.io images import -; \
 		else \
+			docker tag $$img $(KIND_IMAGE_PREFIX)$$img 2>/dev/null || true; \
 			kind load docker-image $(KIND_IMAGE_PREFIX)$$img --name $(KIND_CLUSTER_NAME); \
 		fi; \
 	done
@@ -966,7 +1233,7 @@ _auto-port-forward: ## Internal: Auto-start port forwarding on macOS with Podman
 		echo ""; \
 		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Starting port forwarding in background..."; \
 		echo "  Waiting for services to be ready..."; \
-		kubectl wait --for=condition=ready pod -l app=backend -n $(NAMESPACE) --timeout=60s 2>/dev/null || true; \
+		kubectl wait --for=condition=ready pod -l app=backend-api -n $(NAMESPACE) --timeout=60s 2>/dev/null || true; \
 		kubectl wait --for=condition=ready pod -l app=frontend -n $(NAMESPACE) --timeout=60s 2>/dev/null || true; \
 		mkdir -p /tmp/ambient-code; \
 		kubectl port-forward -n $(NAMESPACE) svc/backend-service 8080:8080 > /tmp/ambient-code/port-forward-backend.log 2>&1 & \
