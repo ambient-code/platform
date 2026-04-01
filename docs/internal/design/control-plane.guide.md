@@ -148,6 +148,7 @@ acpctl messages -f hang                      CLI          closed      replaced g
 acpctl send -f                               CLI          closed      added --follow flag; calls streamMessages after push
 assistant payload JSON blob (grpc_transport)  Runner       closed      _write_message() now pushes plain text (Run 8)
 TenantSA RBAC race on namespace re-create    CP           open        see Known Races below
+Runner credential fetch → /credentials/{id}/token  Runner    open        blocked on Wave 4 BE (Credential CRUD + /token endpoint); see Wave 5 below
 ```
 
 ---
@@ -359,6 +360,52 @@ sessionsRouter.HandleFunc("/{id}/events", sessionHandler.StreamRunnerEvents).Met
 curl -N http://localhost:8000/api/ambient/v1/sessions/{id}/events
 # Should stream AG-UI events until RUN_FINISHED
 ```
+
+---
+
+#### Wave 5 — Runner: Migrate credential fetch to Credential Kind API
+
+**File:** `components/runners/ambient-runner/ambient_runner/platform/auth.py`
+
+**Blocked on:** Wave 4 BE (Credential CRUD + `GET /credentials/{id}/token` endpoint live in ambient-api-server)
+
+**What to do:**
+
+1. The CP must inject a `CREDENTIAL_IDS` env var into the runner pod — a JSON-encoded map of `provider → credential_id` resolved for this session. Resolution follows the RBAC scope resolver (agent → project → global, narrower wins per provider). The CP must read visible credentials from the api-server and build this map before pod creation.
+
+2. The runner's `_fetch_credential(context, credential_type)` must be updated to call the new endpoint:
+
+```python
+# Instead of:
+url = f"{base}/projects/{project}/agentic-sessions/{session_id}/credentials/{credential_type}"
+
+# New:
+credential_ids = json.loads(os.getenv("CREDENTIAL_IDS", "{}"))
+credential_id = credential_ids.get(credential_type)
+if not credential_id:
+    logger.warning(f"No credential_id for provider {credential_type}")
+    return {}
+url = f"{base}/api/ambient/v1/credentials/{credential_id}/token"
+```
+
+3. The hostname allowlist on `BACKEND_API_URL` must be preserved (same env var, same check).
+
+4. The response field mapping in `populate_runtime_credentials()` must be updated — the new token response shape uses `token` uniformly (no more `apiToken` for Jira):
+
+| Provider | Old field | New field |
+|----------|-----------|-----------|
+| `github`  | `token`    | `token`   |
+| `gitlab`  | `token`    | `token`   |
+| `jira`    | `apiToken` | `token`   |
+| `google`  | `accessToken` | `token` (full SA JSON string) |
+
+5. The CP must grant `credential:token-reader` on each injected credential ID to the runner pod's service account at session start. This is a platform-internal RoleBinding created by the CP's KubeReconciler, not via user-facing `POST /role_bindings`.
+
+**Acceptance:**
+- Create a `gitlab` Credential via `acpctl credential create`
+- Create a session; verify CP injects `CREDENTIAL_IDS={"gitlab": "<id>"}` env var into the pod
+- Runner fetches `GET /credentials/<id>/token`; `GITLAB_TOKEN` is set in the pod
+- `ruff format .` and `ruff check .` pass
 
 ---
 

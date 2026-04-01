@@ -17,26 +17,26 @@ import (
 	"fmt"
 )
 
-// checks if the AgentList type satisfies the MappedNullable interface at compile time
-var _ MappedNullable = &AgentList{}
+// checks if the CredentialList type satisfies the MappedNullable interface at compile time
+var _ MappedNullable = &CredentialList{}
 
-// AgentList struct for AgentList
-type AgentList struct {
-	Kind  string  `json:"kind"`
-	Page  int32   `json:"page"`
-	Size  int32   `json:"size"`
-	Total int32   `json:"total"`
-	Items []Agent `json:"items"`
+// CredentialList struct for CredentialList
+type CredentialList struct {
+	Kind  string       `json:"kind"`
+	Page  int32        `json:"page"`
+	Size  int32        `json:"size"`
+	Total int32        `json:"total"`
+	Items []Credential `json:"items"`
 }
 
-type _AgentList AgentList
+type _CredentialList CredentialList
 
-// NewAgentList instantiates a new AgentList object
+// NewCredentialList instantiates a new CredentialList object
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewAgentList(kind string, page int32, size int32, total int32, items []Agent) *AgentList {
-	this := AgentList{}
+func NewCredentialList(kind string, page int32, size int32, total int32, items []Credential) *CredentialList {
+	this := CredentialList{}
 	this.Kind = kind
 	this.Page = page
 	this.Size = size
@@ -45,16 +45,16 @@ func NewAgentList(kind string, page int32, size int32, total int32, items []Agen
 	return &this
 }
 
-// NewAgentListWithDefaults instantiates a new AgentList object
+// NewCredentialListWithDefaults instantiates a new CredentialList object
 // This constructor will only assign default values to properties that have it defined,
 // but it doesn't guarantee that properties required by API are set
-func NewAgentListWithDefaults() *AgentList {
-	this := AgentList{}
+func NewCredentialListWithDefaults() *CredentialList {
+	this := CredentialList{}
 	return &this
 }
 
 // GetKind returns the Kind field value
-func (o *AgentList) GetKind() string {
+func (o *CredentialList) GetKind() string {
 	if o == nil {
 		var ret string
 		return ret
@@ -65,7 +65,7 @@ func (o *AgentList) GetKind() string {
 
 // GetKindOk returns a tuple with the Kind field value
 // and a boolean to check if the value has been set.
-func (o *AgentList) GetKindOk() (*string, bool) {
+func (o *CredentialList) GetKindOk() (*string, bool) {
 	if o == nil {
 		return nil, false
 	}
@@ -73,12 +73,12 @@ func (o *AgentList) GetKindOk() (*string, bool) {
 }
 
 // SetKind sets field value
-func (o *AgentList) SetKind(v string) {
+func (o *CredentialList) SetKind(v string) {
 	o.Kind = v
 }
 
 // GetPage returns the Page field value
-func (o *AgentList) GetPage() int32 {
+func (o *CredentialList) GetPage() int32 {
 	if o == nil {
 		var ret int32
 		return ret
@@ -89,7 +89,7 @@ func (o *AgentList) GetPage() int32 {
 
 // GetPageOk returns a tuple with the Page field value
 // and a boolean to check if the value has been set.
-func (o *AgentList) GetPageOk() (*int32, bool) {
+func (o *CredentialList) GetPageOk() (*int32, bool) {
 	if o == nil {
 		return nil, false
 	}
@@ -97,12 +97,12 @@ func (o *AgentList) GetPageOk() (*int32, bool) {
 }
 
 // SetPage sets field value
-func (o *AgentList) SetPage(v int32) {
+func (o *CredentialList) SetPage(v int32) {
 	o.Page = v
 }
 
 // GetSize returns the Size field value
-func (o *AgentList) GetSize() int32 {
+func (o *CredentialList) GetSize() int32 {
 	if o == nil {
 		var ret int32
 		return ret
@@ -113,7 +113,7 @@ func (o *AgentList) GetSize() int32 {
 
 // GetSizeOk returns a tuple with the Size field value
 // and a boolean to check if the value has been set.
-func (o *AgentList) GetSizeOk() (*int32, bool) {
+func (o *CredentialList) GetSizeOk() (*int32, bool) {
 	if o == nil {
 		return nil, false
 	}
@@ -121,12 +121,12 @@ func (o *AgentList) GetSizeOk() (*int32, bool) {
 }
 
 // SetSize sets field value
-func (o *AgentList) SetSize(v int32) {
+func (o *CredentialList) SetSize(v int32) {
 	o.Size = v
 }
 
 // GetTotal returns the Total field value
-func (o *AgentList) GetTotal() int32 {
+func (o *CredentialList) GetTotal() int32 {
 	if o == nil {
 		var ret int32
 		return ret
@@ -137,7 +137,7 @@ func (o *AgentList) GetTotal() int32 {
 
 // GetTotalOk returns a tuple with the Total field value
 // and a boolean to check if the value has been set.
-func (o *AgentList) GetTotalOk() (*int32, bool) {
+func (o *CredentialList) GetTotalOk() (*int32, bool) {
 	if o == nil {
 		return nil, false
 	}
@@ -145,14 +145,14 @@ func (o *AgentList) GetTotalOk() (*int32, bool) {
 }
 
 // SetTotal sets field value
-func (o *AgentList) SetTotal(v int32) {
+func (o *CredentialList) SetTotal(v int32) {
 	o.Total = v
 }
 
 // GetItems returns the Items field value
-func (o *AgentList) GetItems() []Agent {
+func (o *CredentialList) GetItems() []Credential {
 	if o == nil {
-		var ret []Agent
+		var ret []Credential
 		return ret
 	}
 
@@ -161,7 +161,7 @@ func (o *AgentList) GetItems() []Agent {
 
 // GetItemsOk returns a tuple with the Items field value
 // and a boolean to check if the value has been set.
-func (o *AgentList) GetItemsOk() ([]Agent, bool) {
+func (o *CredentialList) GetItemsOk() ([]Credential, bool) {
 	if o == nil {
 		return nil, false
 	}
@@ -169,11 +169,11 @@ func (o *AgentList) GetItemsOk() ([]Agent, bool) {
 }
 
 // SetItems sets field value
-func (o *AgentList) SetItems(v []Agent) {
+func (o *CredentialList) SetItems(v []Credential) {
 	o.Items = v
 }
 
-func (o AgentList) MarshalJSON() ([]byte, error) {
+func (o CredentialList) MarshalJSON() ([]byte, error) {
 	toSerialize, err := o.ToMap()
 	if err != nil {
 		return []byte{}, err
@@ -181,7 +181,7 @@ func (o AgentList) MarshalJSON() ([]byte, error) {
 	return json.Marshal(toSerialize)
 }
 
-func (o AgentList) ToMap() (map[string]interface{}, error) {
+func (o CredentialList) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
 	toSerialize["kind"] = o.Kind
 	toSerialize["page"] = o.Page
@@ -191,7 +191,7 @@ func (o AgentList) ToMap() (map[string]interface{}, error) {
 	return toSerialize, nil
 }
 
-func (o *AgentList) UnmarshalJSON(data []byte) (err error) {
+func (o *CredentialList) UnmarshalJSON(data []byte) (err error) {
 	// This validates that all required properties are included in the JSON object
 	// by unmarshalling the object into a generic map with string keys and checking
 	// that every required field exists as a key in the generic map.
@@ -217,53 +217,53 @@ func (o *AgentList) UnmarshalJSON(data []byte) (err error) {
 		}
 	}
 
-	varAgentList := _AgentList{}
+	varCredentialList := _CredentialList{}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
-	err = decoder.Decode(&varAgentList)
+	err = decoder.Decode(&varCredentialList)
 
 	if err != nil {
 		return err
 	}
 
-	*o = AgentList(varAgentList)
+	*o = CredentialList(varCredentialList)
 
 	return err
 }
 
-type NullableAgentList struct {
-	value *AgentList
+type NullableCredentialList struct {
+	value *CredentialList
 	isSet bool
 }
 
-func (v NullableAgentList) Get() *AgentList {
+func (v NullableCredentialList) Get() *CredentialList {
 	return v.value
 }
 
-func (v *NullableAgentList) Set(val *AgentList) {
+func (v *NullableCredentialList) Set(val *CredentialList) {
 	v.value = val
 	v.isSet = true
 }
 
-func (v NullableAgentList) IsSet() bool {
+func (v NullableCredentialList) IsSet() bool {
 	return v.isSet
 }
 
-func (v *NullableAgentList) Unset() {
+func (v *NullableCredentialList) Unset() {
 	v.value = nil
 	v.isSet = false
 }
 
-func NewNullableAgentList(val *AgentList) *NullableAgentList {
-	return &NullableAgentList{value: val, isSet: true}
+func NewNullableCredentialList(val *CredentialList) *NullableCredentialList {
+	return &NullableCredentialList{value: val, isSet: true}
 }
 
-func (v NullableAgentList) MarshalJSON() ([]byte, error) {
+func (v NullableCredentialList) MarshalJSON() ([]byte, error) {
 	return json.Marshal(v.value)
 }
 
-func (v *NullableAgentList) UnmarshalJSON(src []byte) error {
+func (v *NullableCredentialList) UnmarshalJSON(src []byte) error {
 	v.isSet = true
 	return json.Unmarshal(src, &v.value)
 }

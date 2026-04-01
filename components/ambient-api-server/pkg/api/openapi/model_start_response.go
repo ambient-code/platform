@@ -22,7 +22,7 @@ var _ MappedNullable = &StartResponse{}
 type StartResponse struct {
 	Session *Session `json:"session,omitempty"`
 	// Assembled start prompt — Agent.prompt + Inbox + Session.prompt + peer roster
-	StartingPrompt *string `json:"starting_prompt,omitempty"`
+	IgnitionPrompt *string `json:"ignition_prompt,omitempty"`
 }
 
 // NewStartResponse instantiates a new StartResponse object
@@ -74,36 +74,36 @@ func (o *StartResponse) SetSession(v Session) {
 	o.Session = &v
 }
 
-// GetStartingPrompt returns the StartingPrompt field value if set, zero value otherwise.
-func (o *StartResponse) GetStartingPrompt() string {
-	if o == nil || IsNil(o.StartingPrompt) {
+// GetIgnitionPrompt returns the IgnitionPrompt field value if set, zero value otherwise.
+func (o *StartResponse) GetIgnitionPrompt() string {
+	if o == nil || IsNil(o.IgnitionPrompt) {
 		var ret string
 		return ret
 	}
-	return *o.StartingPrompt
+	return *o.IgnitionPrompt
 }
 
-// GetStartingPromptOk returns a tuple with the StartingPrompt field value if set, nil otherwise
+// GetIgnitionPromptOk returns a tuple with the IgnitionPrompt field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-func (o *StartResponse) GetStartingPromptOk() (*string, bool) {
-	if o == nil || IsNil(o.StartingPrompt) {
+func (o *StartResponse) GetIgnitionPromptOk() (*string, bool) {
+	if o == nil || IsNil(o.IgnitionPrompt) {
 		return nil, false
 	}
-	return o.StartingPrompt, true
+	return o.IgnitionPrompt, true
 }
 
-// HasStartingPrompt returns a boolean if a field has been set.
-func (o *StartResponse) HasStartingPrompt() bool {
-	if o != nil && !IsNil(o.StartingPrompt) {
+// HasIgnitionPrompt returns a boolean if a field has been set.
+func (o *StartResponse) HasIgnitionPrompt() bool {
+	if o != nil && !IsNil(o.IgnitionPrompt) {
 		return true
 	}
 
 	return false
 }
 
-// SetStartingPrompt gets a reference to the given string and assigns it to the StartingPrompt field.
-func (o *StartResponse) SetStartingPrompt(v string) {
-	o.StartingPrompt = &v
+// SetIgnitionPrompt gets a reference to the given string and assigns it to the IgnitionPrompt field.
+func (o *StartResponse) SetIgnitionPrompt(v string) {
+	o.IgnitionPrompt = &v
 }
 
 func (o StartResponse) MarshalJSON() ([]byte, error) {
@@ -119,8 +119,8 @@ func (o StartResponse) ToMap() (map[string]interface{}, error) {
 	if !IsNil(o.Session) {
 		toSerialize["session"] = o.Session
 	}
-	if !IsNil(o.StartingPrompt) {
-		toSerialize["starting_prompt"] = o.StartingPrompt
+	if !IsNil(o.IgnitionPrompt) {
+		toSerialize["ignition_prompt"] = o.IgnitionPrompt
 	}
 	return toSerialize, nil
 }

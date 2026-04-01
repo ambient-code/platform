@@ -2,8 +2,9 @@
 
 **Date:** 2026-03-20
 **Status:** Proposed — Pending Consensus
-**Last Updated:** 2026-03-21 — collapsed Agent+ProjectAgent into single project-scoped Agent; Agent.prompt is mutable
+**Last Updated:** 2026-03-31 — added Credential Kind; extended RoleBinding.scope with `credential`; new credential roles and API endpoints
 **Guide:** `ambient-model.guide.md` — implementation waves, gap table, build commands, run log
+**Design:** `credentials-session.md` — full Credential Kind design spec and rationale
 
 ---
 
@@ -11,8 +12,13 @@
 
 The Ambient API server provides a coordination layer for orchestrating fleets of persistent agents across projects. The model is intentionally simple:
 
+- **Project** — a workspace. Groups agents and provides shared context (`prompt`) injected into every session ignition.
 - **Agent** — a project-scoped, mutable definition. Agents belong to exactly one Project. `prompt` defines who the agent is and is directly editable (subject to RBAC).
 - **Session** — an ephemeral Kubernetes execution run, created exclusively via agent ignition. Only one active session per Agent at a time.
+- **Message** — a single AG-UI event in the LLM conversation. Append-only; the canonical record of what happened in a session.
+- **Inbox** — a persistent message queue on an Agent. Messages survive across sessions and are drained into the ignition context at the next run.
+- **Credential** — a platform-scoped, RBAC-owned secret. Stores a Personal Access Token or equivalent for an external provider (GitHub, GitLab, Jira, Google). Consumed by runners at session start.
+- **RoleBinding** — binds a Resource to a Role at a given scope (`global`, `project`, `agent`, `session`, `credential`). Ownership and access for all Kinds is expressed through RoleBindings.
 
 The stable address of an agent is `{project_name}/{agent_name}`. It holds the inbox and links to the active session.
 
@@ -142,8 +148,25 @@ erDiagram
         string ID PK
         string user_id FK
         string role_id FK
-        string scope    "global | project | agent | session"
+        string scope    "global | project | agent | session | credential"
         string scope_id "empty for global"
+        time   created_at
+        time   updated_at
+        time   deleted_at
+    }
+
+    %% ── Credential (platform-scoped PAT/token store) ─────────────────────────
+
+    Credential {
+        string ID PK "KSUID"
+        string name "human-readable"
+        string description
+        string provider "github | gitlab | jira | google"
+        string token "write-only; stored encrypted"
+        string url "nullable; service instance URL"
+        string email "nullable; required for Jira"
+        jsonb  labels
+        jsonb  annotations
         time   created_at
         time   updated_at
         time   deleted_at
@@ -157,6 +180,7 @@ erDiagram
     User            ||--o{ RoleBinding      : "bound_to"
 
     RoleBinding     }o--o| Agent            : "owns"
+    RoleBinding     }o--o| Credential       : "owns_or_accesses"
 
     Agent           ||--o{ Session          : "runs"
     Agent           ||--o| Session          : "current_session"
@@ -293,6 +317,19 @@ The `acpctl` CLI mirrors the API 1-for-1. Every REST operation has a correspondi
 | `POST /sessions/{id}/messages` | `acpctl session send <id> --body <text>` | ✅ implemented |
 | `GET /sessions/{id}/events` | `acpctl session events <id>` | ✅ implemented |
 
+#### Credentials
+
+| REST API | `acpctl` Command | Status |
+|---|---|---|
+| `GET /credentials` | `acpctl credential list` | 🔲 planned |
+| `GET /credentials?provider={p}` | `acpctl credential list --provider <p>` | 🔲 planned |
+| `POST /credentials` | `acpctl credential create --name <n> --provider <p> --token <t\|@->  [--url <u>] [--email <e>] [--description <d>]` | 🔲 planned |
+| `GET /credentials/{id}` | `acpctl credential get <id>` | 🔲 planned |
+| `PATCH /credentials/{id}` | `acpctl credential update <id> [--token <t>] [--description <d>]` | 🔲 planned |
+| `DELETE /credentials/{id}` | `acpctl credential delete <id> --confirm` | 🔲 planned |
+| `GET /credentials/{id}/role_bindings` | _(not yet exposed)_ | 🔲 planned |
+| `GET /credentials/{id}/token` | `acpctl credential token <id>` | 🔲 planned |
+
 #### RBAC
 
 | REST API | `acpctl` Command | Status |
@@ -323,6 +360,7 @@ The `acpctl` CLI mirrors the API 1-for-1. Every REST operation has a correspondi
 |---|---|
 | `Project` | `name`, `description`, `prompt`, `labels`, `annotations` |
 | `Agent` | `name`, `prompt`, `labels`, `annotations`, `inbox` (seed messages) |
+| `Credential` | `name`, `description`, `provider`, `token` (env var reference), `url`, `email`, `labels`, `annotations` |
 
 `Agent` resources in `.ambient/teams/` files also carry an `inbox` list of seed messages. On apply, any message in the list is posted to the agent's inbox if an identical message (same `from_name` + `body`) does not already exist there.
 
@@ -529,6 +567,45 @@ GET    /api/ambient/v1/sessions/{id}/events                  SSE AG-UI event str
 GET    /api/ambient/v1/sessions/{id}/role_bindings           RBAC bindings
 ```
 
+### Credentials
+
+```
+GET    /api/ambient/v1/credentials                           list credentials visible to the caller
+GET    /api/ambient/v1/credentials?provider={provider}       filter by provider
+POST   /api/ambient/v1/credentials                           create a credential
+GET    /api/ambient/v1/credentials/{id}                      read credential (metadata only; token never returned)
+PATCH  /api/ambient/v1/credentials/{id}                      update credential
+DELETE /api/ambient/v1/credentials/{id}                      soft delete
+GET    /api/ambient/v1/credentials/{id}/role_bindings        RBAC bindings on this credential
+GET    /api/ambient/v1/credentials/{id}/token                fetch raw token — restricted to credential:token-reader
+```
+
+`token` is accepted on `POST` and `PATCH` but **never returned** by the standard read endpoints. It is stored encrypted in the database. The database row is the authoritative store; a future Vault integration can be adopted by pointing the row at a Vault path without changing the API surface.
+
+`GET /credentials/{id}/token` is the **only** endpoint that returns the raw token. It is gated by the `credential:token-reader` role — a distinct role not implied by `credential:reader`. Runners are granted `credential:token-reader` by the platform at session start. Human users and service accounts do not hold this role by default.
+
+#### Provider Enum
+
+| Provider | Service | Token type | `url` | `email` |
+|----------|---------|------------|-------|---------|
+| `github` | GitHub.com or GitHub Enterprise | Personal Access Token | optional; required for GHE | — |
+| `gitlab` | GitLab.com or self-hosted | Personal Access Token | optional; required for self-hosted | — |
+| `jira` | Jira Cloud (Atlassian) | API Token | required (Atlassian instance URL) | required (used in Basic auth) |
+| `google` | Google Cloud / Workspace | Service Account JSON serialized to string | — | — |
+
+#### Token Response Shape (Runner)
+
+When a runner fetches a credential, the response payload shape is consistent across providers:
+
+```json
+{ "provider": "gitlab", "token": "glpat-...",       "url": "https://gitlab.myco.com" }
+{ "provider": "github", "token": "github_pat_...",  "url": "https://github.com" }
+{ "provider": "jira",   "token": "ATATT3x...",      "url": "https://myco.atlassian.net", "email": "bot@myco.com" }
+{ "provider": "google", "token": "{\"type\":\"service_account\", ...}" }
+```
+
+`token` is always present. `url` and `email` are included when set. Google's token field carries the full Service Account JSON serialized as a string.
+
 ---
 
 ## RBAC
@@ -541,8 +618,30 @@ GET    /api/ambient/v1/sessions/{id}/role_bindings           RBAC bindings
 | `project` | Applies to all Agents and sessions in a project |
 | `agent` | Applies to one Agent and all its sessions |
 | `session` | Applies to one session run only |
+| `credential` | Applies to one Credential resource |
 
-Effective permissions = union of all applicable bindings (global ∪ project ∪ agent ∪ session). No deny rules.
+Effective permissions = union of all applicable bindings (global ∪ project ∪ agent ∪ session ∪ credential). No deny rules.
+
+For Credential resolution at session start, the resolver walks agent → project → global and returns the most specific matching credential for the requested provider. A narrower scope always wins.
+
+#### Credential Scope — Access Granularity
+
+A credential is a platform-level resource. What determines who and what can use it is entirely the RoleBinding scope. The same credential can be shared at any granularity:
+
+| RoleBinding scope | scope_id | Effect |
+|-------------------|----------|--------|
+| `credential` | `credential_id` | Ownership or explicit per-credential grant. Auto-created as `credential:owner` at creation. |
+| `agent` | `agent_id` | Only one specific agent (and its sessions) can use this credential. |
+| `project` | `project_id` | All agents in a project share this credential automatically. |
+| `global` | _(empty)_ | Platform-wide fallback; every session resolves this credential when no narrower binding exists. |
+
+Named patterns:
+- **Personal PAT** — user creates credential; `credential:owner` binding is private to them.
+- **Project Robot Account** — shared credential with a `project`-scoped `credential:reader` binding; all agents in the project use it.
+- **Agent-specific identity** — `agent`-scoped binding; one agent runs as a specific identity without exposing it to siblings.
+- **Platform-wide credential** — `global`-scoped binding; acts as the org-wide fallback for any session on the platform.
+
+Users may hold many credentials and share them across many projects. RBAC expresses sharing; there is no hardcoded ownership field.
 
 ### Built-in Roles
 
@@ -557,6 +656,9 @@ Effective permissions = union of all applicable bindings (global ∪ project ∪
 | `agent:editor` | Update prompt and metadata on a specific Agent |
 | `agent:observer` | Read a specific Agent and its sessions |
 | `agent:runner` | Minimum viable pod credential: read agent, push messages, send inbox |
+| `credential:owner` | Full control of a Credential: update token, delete, manage bindings. Auto-granted at creation. |
+| `credential:reader` | Read credential metadata (name, provider, url, email). Token value is never included. |
+| `credential:token-reader` | Fetch the raw token via `GET /credentials/{id}/token`. Granted only to runner service accounts. Human users do not hold this role. |
 
 ### Permission Matrix
 
@@ -571,6 +673,9 @@ Effective permissions = union of all applicable bindings (global ∪ project ∪
 | `agent:editor` | — | update | — | — | — | — |
 | `agent:observer` | — | read | read/list | — | — | — |
 | `agent:runner` | — | read | read | send | — | — |
+| `credential:owner` | — | — | — | — | — | manage bindings | metadata: full | token: — |
+| `credential:reader` | — | — | — | — | — | — | metadata: read | token: — |
+| `credential:token-reader` | — | — | — | — | — | — | metadata: — | token: read |
 
 ### RBAC Endpoints
 
@@ -589,6 +694,12 @@ GET    /api/ambient/v1/users/{id}/role_bindings
 GET    /api/ambient/v1/projects/{id}/role_bindings
 GET    /api/ambient/v1/projects/{id}/agents/{agent_id}/role_bindings
 GET    /api/ambient/v1/sessions/{id}/role_bindings
+GET    /api/ambient/v1/credentials/{id}/role_bindings
+```
+
+The `credential:token-reader` role is granted to the runner service account by the platform at session start. It is never granted via user-facing `POST /role_bindings`. It is a platform-internal binding managed by the operator.
+
+```
 ```
 
 ---
@@ -602,7 +713,7 @@ Every first-class Kind carries two JSONB columns:
 | `labels` | Queryable key/value tags. Use for filtering, grouping, and selection. | `{"env": "prod", "team": "platform", "tier": "critical"}` |
 | `annotations` | Freeform key/value metadata. Use for tooling notes, human remarks, external references. | `{"last-reviewed": "2026-03-21", "jira": "PLAT-123", "owner-slack": "@mturansk"}` |
 
-**Kinds with `labels` + `annotations`:** User, Project, Agent, Session
+**Kinds with `labels` + `annotations`:** User, Project, Agent, Session, Credential
 
 **Kinds without:** Inbox (ephemeral message queue), SessionMessage (append-only event stream), Role, RoleBinding (RBAC internals — structured by design)
 
@@ -615,9 +726,10 @@ Instead of a separate `metadata` table (requires joins) or a polymorphic EAV tab
 - **GIN-indexed**: PostgreSQL JSONB supports `GIN` (Generalized Inverted Index), making containment queries (`@>`) nearly as fast as standard column lookups at scale.
 
 ```sql
-CREATE INDEX idx_projects_labels ON projects USING GIN (labels);
-CREATE INDEX idx_agents_labels   ON agents   USING GIN (labels);
-CREATE INDEX idx_sessions_labels ON sessions USING GIN (labels);
+CREATE INDEX idx_projects_labels     ON projects     USING GIN (labels);
+CREATE INDEX idx_agents_labels       ON agents       USING GIN (labels);
+CREATE INDEX idx_sessions_labels     ON sessions     USING GIN (labels);
+CREATE INDEX idx_credentials_labels  ON credentials  USING GIN (labels);
 ```
 
 ### Query patterns
@@ -726,6 +838,10 @@ This structure means you can define and compose bespoke agent suites — entire 
 | Agent is project-scoped, not global | Simplicity. An agent's identity and prompt are contextual to the project it serves. No indirection via a global registry. |
 | Agent.prompt is mutable | Prompt editing is a routine operational task. RBAC controls who can change it. No versioning overhead. |
 | Agent ownership via RBAC, not a hardcoded FK | Ownership is expressed as a RoleBinding (`scope=agent`, `scope_id=agent_id`). Enables multi-owner and delegated ownership consistently across all Kinds. |
+| Credential ownership via RBAC, same pattern | `RoleBinding(scope=credential, scope_id=credential_id, role=credential:owner)` auto-created at credential creation. Enables shared Robot Accounts and team-wide PATs without schema changes. |
+| Credential is platform-scoped, not project-scoped | Credentials (especially Robot Accounts) are shared across teams and projects. Nesting under a project would force duplication. |
+| Credential token is write-only | Prevents token exfiltration via the standard REST API. Raw token only surfaced to runners via the runtime credentials path, not to end users. |
+| Five-scope RBAC (`global`, `project`, `agent`, `session`, `credential`) | `credential` scope enables per-credential access grants; combined with project/global scope it allows Robot Accounts shared at any granularity. |
 | One active Session per Agent | Avoids concurrent conflicting runs; ignition is idempotent |
 | Inbox on Agent, not Session | Messages persist across re-ignitions; addressed to the agent, not the run |
 | Inbox drained at ignition | Unread messages become part of the ignition context; session picks up where things left off |
@@ -733,13 +849,71 @@ This structure means you can define and compose bespoke agent suites — entire 
 | Sessions created only via ignite | Sessions are run artifacts; direct `POST /sessions` does not exist |
 | Every layer carries a `prompt` | Project.prompt = workspace context; Agent.prompt = who the agent is; Session.prompt = what this run does; Inbox = prior requests. Pokes roll downhill. |
 | `SessionMessage` is append-only | Canonical record of the LLM conversation; never edited or deleted |
-| Four-scope RBAC (`global`, `project`, `agent`, `session`) | `agent` scope enables sharing one agent without exposing the whole project |
 | `agent:editor` role | Allows prompt updates without full operator access |
 | `agent:runner` role | Pods get minimum viable credential: read agent definition, push session messages, send inbox |
 | Union-only permissions | No deny rules — simpler mental model for fleet operators |
 | CLI mirrors API 1-for-1 | Every endpoint has a corresponding command; status tracked explicitly |
 | This document is the spec | A reconciler will compare the spec (this doc) against code status and surface gaps |
 | `labels` / `annotations` are JSONB, not strings | Enables GIN-indexed key/value queries (`@>` operator) without joins; every row carries its own metadata without a separate EAV table. `labels` = queryable tags; `annotations` = freeform notes. Applied to first-class Kinds: User, Project, Agent, Session. Not applied to Inbox, SessionMessage, Role/RoleBinding. |
+
+---
+
+## Credential — Usage
+
+```sh
+# Create a GitLab PAT — token via env var (avoids shell history exposure)
+acpctl credential create --name my-gitlab-pat --provider gitlab \
+  --token "$GITLAB_PAT" --url https://gitlab.myco.com
+# credential/my-gitlab-pat created
+
+# Token via stdin (also avoids shell history)
+echo "$GITLAB_PAT" | acpctl credential create --name my-gitlab-pat --provider gitlab \
+  --token @- --url https://gitlab.myco.com
+
+# List credentials
+acpctl credential list
+# NAME              PROVIDER  URL                      CREATED
+# my-gitlab-pat     gitlab    https://gitlab.myco.com  2026-03-31
+
+# Rotate a token
+acpctl credential update my-gitlab-pat --token "$GITLAB_PAT_NEW"
+
+# Share a Robot Account with an entire project
+acpctl create role-binding --user-id alice@myco.com --role-id credential:reader \
+  --scope project --scope-id my-project
+
+# Declarative apply — token sourced from env var
+```
+
+```yaml
+kind: Credential
+metadata:
+  name: platform-gitlab-pat
+spec:
+  provider: gitlab
+  token: $GITLAB_PAT
+  url: https://gitlab.myco.com
+  labels:
+    team: platform
+```
+
+```sh
+acpctl apply -f credential.yaml
+# credential/platform-gitlab-pat created
+```
+
+---
+
+## Design Decisions — Credential
+
+| Decision | Rationale |
+|----------|-----------|
+| Token stored in database, encrypted at rest | Single authoritative store. A future Vault integration can be adopted by pointing the DB row at a Vault path without changing the API surface. |
+| `google` token serialized as a string | Service Account JSON is serialized into the single `token` field. Keeps the schema uniform across all providers. |
+| No validation on creation | First-use error is acceptable. Avoids a network call to the provider at creation time and the failure modes that come with it. |
+| Credential rotation is user-managed | Users update the token via `PATCH` or `acpctl credential update`. No platform-side rotation or expiry tracking. |
+| No migration utility for existing K8s Secrets | Users re-enter credentials via the new API. The old Secret-based path is removed when the new API is live. |
+| Users may hold many credentials, share across many projects | RBAC expresses sharing. No limit on how many credentials a user holds or how many projects a credential is shared to. |
 
 ---
 
@@ -764,7 +938,10 @@ _Last updated: 2026-03-22. Use this as the authoritative index — click into co
 | **Projects — labels/annotations** | ✅ PATCH accepts `labels`/`annotations` | ✅ fields on `Project` type; `ProjectAPI.Update(patch map[string]any)` | ⚠️ no dedicated subcommand | |
 | **RBAC — roles** | ✅ | ✅ `RoleAPI` | ✅ `create role` only; list/get not exposed | |
 | **RBAC — role bindings** | ✅ | ✅ `RoleBindingAPI` | ✅ `create role-binding` only; list/delete not exposed | |
+| **Credentials — CRUD** | 🔲 | 🔲 | 🔲 `credential list/get/create/update/delete` | New Kind; not yet implemented |
+| **Credentials — token fetch (runner)** | 🔲 `GET /credentials/{id}/token` | 🔲 | n/a | Gated by `credential:token-reader`; granted to runner SA by operator |
 | **Declarative apply** | n/a | uses SDK | ✅ `apply -f`, `apply -k` | Upsert semantics; supports inbox seeding |
+| **Declarative apply — Credential kind** | n/a | 🔲 | 🔲 | Planned; token sourced from env var in YAML |
 
 ### Labels/Annotations — SDK Ergonomics Gap
 
