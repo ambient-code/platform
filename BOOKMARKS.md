@@ -12,6 +12,7 @@ Progressive disclosure for task-specific documentation and references.
 - [Testing](#testing)
 - [Observability](#observability)
 - [Design Documents](#design-documents)
+- [Dependency Automation](#dependency-automation)
 - [Amber Automation](#amber-automation)
 
 ---
@@ -181,6 +182,22 @@ How sessions are initialized and configured.
 ### [Spec-Runtime Synchronization](docs/internal/design/spec-runtime-synchronization.md)
 
 Keeping spec and runtime state in sync.
+
+---
+
+## Dependency Automation
+
+### [SDK Version Bump Workflow](.github/workflows/sdk-version-bump.yml)
+
+Daily automated check for `claude-agent-sdk` and `anthropic` SDK updates. Bumps `pyproject.toml`, regenerates `uv.lock`, and creates a PR with a feature analysis report.
+
+### [SDK Version Bump Script](scripts/sdk-version-bump.py)
+
+Orchestrates PyPI version checking, `pyproject.toml` updates, GitHub changelog fetching, and report generation.
+
+### [SDK Feature Report Generator](scripts/sdk_report.py)
+
+Parses GitHub release notes into structured feature data. Detects runner relevance (Claude/Gemini), status (New/GA/Beta/Deprecated), opt-in requirements, and behavior changes.
 
 ---
 
