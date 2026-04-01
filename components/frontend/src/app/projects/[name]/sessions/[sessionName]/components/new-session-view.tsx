@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { MessageSquarePlus, ArrowUp, Loader2, Plus, GitBranch, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -20,10 +20,14 @@ import {
 import { RunnerModelSelector, getDefaultModel } from "./runner-model-selector";
 import { WorkflowSelector } from "./workflow-selector";
 import { AddContextModal } from "./modals/add-context-modal";
+import { AdvancedSdkOptions } from "@/components/advanced-sdk-options";
 import { useRunnerTypes } from "@/services/queries/use-runner-types";
 import { useModels } from "@/services/queries/use-models";
+import { useQuery } from "@tanstack/react-query";
+import { evaluateFeatureFlag } from "@/services/api/feature-flags-admin";
 import { DEFAULT_RUNNER_TYPE_ID } from "@/services/api/runner-types";
 import type { WorkflowConfig } from "../lib/types";
+import type { SdkOptions } from "@/types/api/sessions";
 
 type PendingRepo = {
   url: string;
@@ -40,6 +44,7 @@ type NewSessionViewProps = {
     model: string;
     workflow?: string;
     repos?: Array<{ url: string; branch?: string; autoPush?: boolean }>;
+    sdkOptions?: SdkOptions;
   }) => void;
   ootbWorkflows: WorkflowConfig[];
   onLoadCustomWorkflow?: () => void;
@@ -54,10 +59,19 @@ export function NewSessionView({
   isSubmitting = false,
 }: NewSessionViewProps) {
   const { data: runnerTypes } = useRunnerTypes(projectName);
+  const { data: advancedFlagData } = useQuery({
+    queryKey: ["workspace-flag", projectName, "advanced-sdk-options"],
+    queryFn: () => evaluateFeatureFlag(projectName, "advanced-sdk-options"),
+    enabled: !!projectName,
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
+  const showAdvancedOptions = advancedFlagData?.enabled ?? false;
 
   const [prompt, setPrompt] = useState("");
   const [selectedRunner, setSelectedRunner] = useState<string>(DEFAULT_RUNNER_TYPE_ID);
   const [selectedModel, setSelectedModel] = useState<string>("");
+  const [sdkOptions, setSdkOptions] = useState<SdkOptions>({});
 
   const currentRunner = runnerTypes?.find((r) => r.id === selectedRunner);
   const currentProvider = currentRunner?.provider;
@@ -99,6 +113,10 @@ export function NewSessionView({
   const [selectedWorkflow, setSelectedWorkflow] = useState("none");
   const [pendingRepos, setPendingRepos] = useState<PendingRepo[]>([]);
   const [contextModalOpen, setContextModalOpen] = useState(false);
+  const modelOptions = useMemo(
+    () => modelsData?.models?.map((m) => ({ id: m.id, name: m.label })) ?? [],
+    [modelsData?.models],
+  );
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Auto-resize the textarea as the user types.
@@ -128,14 +146,18 @@ export function NewSessionView({
     // Require either a prompt OR a workflow with startupPrompt
     if (!trimmed && !hasWorkflow) return;
 
+    // Only include sdkOptions if any values were set
+    const hasOptions = Object.values(sdkOptions).some((v) => v !== undefined);
+
     onCreateSession({
       prompt: trimmed,
       runner: selectedRunner,
       model: selectedModel,
       workflow: hasWorkflow ? selectedWorkflow : undefined,
       repos: pendingRepos.length > 0 ? pendingRepos.map((r) => ({ url: r.url, branch: r.branch, autoPush: r.autoPush })) : undefined,
+      sdkOptions: hasOptions ? sdkOptions : undefined,
     });
-  }, [prompt, selectedRunner, selectedModel, selectedWorkflow, pendingRepos, onCreateSession]);
+  }, [prompt, selectedRunner, selectedModel, selectedWorkflow, pendingRepos, sdkOptions, onCreateSession]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -225,6 +247,15 @@ export function NewSessionView({
             </div>
           </div>
         </div>
+
+        {/* Advanced SDK Options (behind feature flag) */}
+        {showAdvancedOptions && (
+          <AdvancedSdkOptions
+            value={sdkOptions}
+            onChange={setSdkOptions}
+            models={modelOptions}
+          />
+        )}
 
         {/* Pending repo badges */}
         {pendingRepos.length > 0 && (

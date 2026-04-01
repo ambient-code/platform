@@ -39,6 +39,16 @@
           "value": "workspace"
         }
       ]
+    },
+    {
+      "name": "advanced-sdk-options",
+      "description": "Show Advanced SDK Options in session creation UI",
+      "tags": [
+        {
+          "type": "scope",
+          "value": "workspace"
+        }
+      ]
     }
   ]
 }

@@ -9,6 +9,7 @@ Owns the entire Claude session lifecycle:
 - Interrupt and graceful shutdown
 """
 
+import json
 import logging
 import os
 import time
@@ -31,6 +32,21 @@ logger = logging.getLogger(__name__)
 
 # Maximum stderr lines kept in ring buffer for error reporting
 _MAX_STDERR_LINES = 50
+
+# Platform-managed SDK option keys that users may not override.
+# Defense-in-depth: backend also filters via allowedSdkOptionKeys.
+_SDK_OPTIONS_DENYLIST = frozenset(
+    {
+        "cwd",
+        "resume",
+        "mcp_servers",
+        "setting_sources",
+        "stderr",
+        "continue_conversation",
+        "add_dirs",
+        "api_key",
+    }
+)
 
 
 class ClaudeBridge(PlatformBridge):
@@ -615,6 +631,35 @@ class ClaudeBridge(PlatformBridge):
             options["add_dirs"] = self._add_dirs
         if self._configured_model:
             options["model"] = self._configured_model
+
+        sdk_options_json = os.getenv("SDK_OPTIONS", "")
+        if sdk_options_json:
+            try:
+                sdk_opts = json.loads(sdk_options_json)
+                applied = 0
+                for key, value in sdk_opts.items():
+                    if key in _SDK_OPTIONS_DENYLIST:
+                        logger.warning(f"Ignoring denied SDK option key: {key}")
+                        continue
+                    if key == "system_prompt" and value:
+                        # Append user system prompt as addendum, don't replace
+                        existing = options.get("system_prompt", {})
+                        existing_text = (
+                            existing.get("text", "")
+                            if isinstance(existing, dict)
+                            else str(existing)
+                        )
+                        options["system_prompt"] = {
+                            "type": "text",
+                            "text": f"{existing_text}\n\n## Custom Instructions\n{value}",
+                        }
+                        applied += 1
+                    elif value is not None:
+                        options[key] = value
+                        applied += 1
+                logger.info(f"Merged {applied} SDK options from SDK_OPTIONS env var")
+            except (json.JSONDecodeError, TypeError):
+                logger.warning("Failed to parse SDK_OPTIONS env var, ignoring")
 
         adapter = ClaudeAgentAdapter(
             name="claude_code_runner",

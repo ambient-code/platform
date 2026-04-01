@@ -187,21 +187,6 @@ export function FeatureFlagsSection({ projectName }: FeatureFlagsSectionProps) {
     setLocalState(initial);
   };
 
-  const getTypeBadge = (type?: string) => {
-    switch (type) {
-      case "experiment":
-        return <Badge variant="secondary">Experiment</Badge>;
-      case "operational":
-        return <Badge variant="outline">Operational</Badge>;
-      case "kill-switch":
-        return <Badge variant="destructive">Kill Switch</Badge>;
-      case "permission":
-        return <Badge>Permission</Badge>;
-      default:
-        return <Badge variant="outline">Release</Badge>;
-    }
-  };
-
   // Check if Unleash is not configured (service unavailable error)
   const isNotConfigured =
     isError &&
@@ -283,7 +268,6 @@ export function FeatureFlagsSection({ projectName }: FeatureFlagsSectionProps) {
                       <TableHead className="hidden lg:table-cell">Description</TableHead>
                       <TableHead className="w-[100px]">Default</TableHead>
                       <TableHead className="w-[200px]">Override</TableHead>
-                      <TableHead className="hidden xl:table-cell">Type</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -293,7 +277,6 @@ export function FeatureFlagsSection({ projectName }: FeatureFlagsSectionProps) {
                         group={group}
                         localState={localState}
                         onOverrideChange={handleOverrideChange}
-                        getTypeBadge={getTypeBadge}
                       />
                     ))}
                   </TableBody>
@@ -358,17 +341,15 @@ function GroupRows({
   group,
   localState,
   onOverrideChange,
-  getTypeBadge,
 }: {
   group: FlagGroup;
   localState: Record<string, LocalFlagState>;
   onOverrideChange: (flagName: string, value: OverrideValue) => void;
-  getTypeBadge: (type?: string) => React.ReactNode;
 }) {
   return (
     <>
       <TableRow className="bg-muted/30 hover:bg-muted/30">
-        <TableCell colSpan={5} className="py-2">
+        <TableCell colSpan={4} className="py-2">
           <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             {group.label}
           </span>
@@ -415,9 +396,6 @@ function GroupRows({
                 value={currentOverride}
                 onChange={(v) => onOverrideChange(flag.name, v)}
               />
-            </TableCell>
-            <TableCell className="hidden xl:table-cell">
-              {getTypeBadge(flag.type)}
             </TableCell>
           </TableRow>
         );

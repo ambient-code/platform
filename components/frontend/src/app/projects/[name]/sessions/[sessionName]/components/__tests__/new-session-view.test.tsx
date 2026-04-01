@@ -1,6 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { NewSessionView } from '../new-session-view';
+
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { retry: false } },
+});
+const wrapper = ({ children }: { children: React.ReactNode }) => (
+  <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+);
 
 vi.mock('../runner-model-selector', () => ({
   RunnerModelSelector: ({ onSelect }: { onSelect: (r: string, m: string) => void }) => (
@@ -53,6 +61,10 @@ vi.mock('../modals/add-context-modal', () => ({
   ),
 }));
 
+vi.mock('@/services/api/feature-flags-admin', () => ({
+  evaluateFeatureFlag: vi.fn().mockResolvedValue({ enabled: false }),
+}));
+
 describe('NewSessionView', () => {
   const defaultProps = {
     projectName: 'test-project',
@@ -65,32 +77,32 @@ describe('NewSessionView', () => {
   });
 
   it('renders heading and subtitle', () => {
-    render(<NewSessionView {...defaultProps} />);
+    render(<NewSessionView {...defaultProps} />, { wrapper });
     expect(screen.getByText('What are you working on?')).toBeDefined();
     expect(screen.getByText(/Start a new session/)).toBeDefined();
   });
 
   it('renders textarea with placeholder', () => {
-    render(<NewSessionView {...defaultProps} />);
+    render(<NewSessionView {...defaultProps} />, { wrapper });
     const textarea = screen.getByPlaceholderText("Describe what you'd like to work on...");
     expect(textarea).toBeDefined();
   });
 
   it('renders runner/model selector and workflow selector', () => {
-    render(<NewSessionView {...defaultProps} />);
+    render(<NewSessionView {...defaultProps} />, { wrapper });
     expect(screen.getByTestId('runner-model-selector')).toBeDefined();
     expect(screen.getByTestId('workflow-selector')).toBeDefined();
   });
 
   it('send button is disabled when textarea is empty', () => {
-    render(<NewSessionView {...defaultProps} />);
+    render(<NewSessionView {...defaultProps} />, { wrapper });
     const allButtons = screen.getAllByRole('button');
     const lastButton = allButtons[allButtons.length - 1];
     expect(lastButton.hasAttribute('disabled')).toBe(true);
   });
 
   it('calls onCreateSession with prompt when submitted', () => {
-    render(<NewSessionView {...defaultProps} />);
+    render(<NewSessionView {...defaultProps} />, { wrapper });
     const textarea = screen.getByPlaceholderText("Describe what you'd like to work on...");
     fireEvent.change(textarea, { target: { value: 'Build a REST API' } });
     fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
@@ -104,14 +116,14 @@ describe('NewSessionView', () => {
   });
 
   it('does not submit when prompt is empty', () => {
-    render(<NewSessionView {...defaultProps} />);
+    render(<NewSessionView {...defaultProps} />, { wrapper });
     const textarea = screen.getByPlaceholderText("Describe what you'd like to work on...");
     fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
     expect(defaultProps.onCreateSession).not.toHaveBeenCalled();
   });
 
   it('Shift+Enter does not submit (allows newline)', () => {
-    render(<NewSessionView {...defaultProps} />);
+    render(<NewSessionView {...defaultProps} />, { wrapper });
     const textarea = screen.getByPlaceholderText("Describe what you'd like to work on...");
     fireEvent.change(textarea, { target: { value: 'some text' } });
     fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: true });

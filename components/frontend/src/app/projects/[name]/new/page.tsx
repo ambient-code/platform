@@ -7,6 +7,7 @@ import { NewSessionView } from "../sessions/[sessionName]/components/new-session
 import { CustomWorkflowDialog } from "../sessions/[sessionName]/components/modals/custom-workflow-dialog";
 import { useCreateSession } from "@/services/queries";
 import { useOOTBWorkflows } from "@/services/queries/use-workflows";
+import type { SdkOptions } from "@/types/api/sessions";
 
 export default function NewSessionPage() {
   const params = useParams();
@@ -25,6 +26,7 @@ export default function NewSessionPage() {
       model: string;
       workflow?: string;
       repos?: Array<{ url: string; branch?: string; autoPush?: boolean }>;
+      sdkOptions?: SdkOptions;
     }) => {
       const workflowConfig = config.workflow === "custom" && customWorkflow
         ? { gitUrl: customWorkflow.gitUrl, branch: customWorkflow.branch, path: customWorkflow.path }
@@ -57,6 +59,7 @@ export default function NewSessionPage() {
                   })),
                 }
               : {}),
+            ...(config.sdkOptions ? { sdkOptions: config.sdkOptions } : {}),
           },
         },
         {

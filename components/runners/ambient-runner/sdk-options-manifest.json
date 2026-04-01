@@ -1,0 +1,95 @@
+{
+  "description": "Canonical list of Claude Agent SDK ClaudeAgentOptions fields",
+  "generatedFrom": "claude-agent-sdk (PyPI)",
+  "generatedAt": "2026-04-01T00:00:00+00:00",
+  "options": {
+    "add_dirs": {
+      "type": "list[str]",
+      "required": false
+    },
+    "allowed_tools": {
+      "type": "list[str]",
+      "required": false
+    },
+    "betas": {
+      "type": "list[str]",
+      "required": false
+    },
+    "continue_conversation": {
+      "type": "bool",
+      "required": false
+    },
+    "cwd": {
+      "type": "str",
+      "required": false
+    },
+    "enable_file_checkpointing": {
+      "type": "bool",
+      "required": false
+    },
+    "fallback_model": {
+      "type": "str",
+      "required": false
+    },
+    "include_partial_messages": {
+      "type": "bool",
+      "required": false
+    },
+    "max_budget_usd": {
+      "type": "float",
+      "required": false
+    },
+    "max_thinking_tokens": {
+      "type": "int",
+      "required": false
+    },
+    "max_tokens": {
+      "type": "int",
+      "required": false
+    },
+    "max_turns": {
+      "type": "int",
+      "required": false
+    },
+    "mcp_servers": {
+      "type": "dict",
+      "required": false
+    },
+    "model": {
+      "type": "str",
+      "required": false
+    },
+    "output_format": {
+      "type": "str",
+      "required": false
+    },
+    "permission_mode": {
+      "type": "str",
+      "required": false
+    },
+    "resume": {
+      "type": "str",
+      "required": false
+    },
+    "setting_sources": {
+      "type": "list[str]",
+      "required": false
+    },
+    "stderr": {
+      "type": "callable",
+      "required": false
+    },
+    "strict_mcp_config": {
+      "type": "bool",
+      "required": false
+    },
+    "system_prompt": {
+      "type": "dict | str",
+      "required": false
+    },
+    "temperature": {
+      "type": "float",
+      "required": false
+    }
+  }
+}

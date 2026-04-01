@@ -52,19 +52,20 @@ type AgenticSessionStatus struct {
 }
 
 type CreateAgenticSessionRequest struct {
-	InitialPrompt        string             `json:"initialPrompt,omitempty"`
-	DisplayName          string             `json:"displayName,omitempty"`
-	RunnerType           string             `json:"runnerType,omitempty"`
-	LLMSettings          *LLMSettings       `json:"llmSettings,omitempty"`
-	Timeout              *int               `json:"timeout,omitempty"`
-	InactivityTimeout    *int               `json:"inactivityTimeout,omitempty"`
-	ParentSessionID      string             `json:"parent_session_id,omitempty"`
-	Repos                []SimpleRepo       `json:"repos,omitempty"`
-	ActiveWorkflow       *WorkflowSelection `json:"activeWorkflow,omitempty"`
-	UserContext          *UserContext       `json:"userContext,omitempty"`
-	EnvironmentVariables map[string]string  `json:"environmentVariables,omitempty"`
-	Labels               map[string]string  `json:"labels,omitempty"`
-	Annotations          map[string]string  `json:"annotations,omitempty"`
+	InitialPrompt        string                 `json:"initialPrompt,omitempty"`
+	DisplayName          string                 `json:"displayName,omitempty"`
+	RunnerType           string                 `json:"runnerType,omitempty"`
+	LLMSettings          *LLMSettings           `json:"llmSettings,omitempty"`
+	Timeout              *int                   `json:"timeout,omitempty"`
+	InactivityTimeout    *int                   `json:"inactivityTimeout,omitempty"`
+	ParentSessionID      string                 `json:"parent_session_id,omitempty"`
+	Repos                []SimpleRepo           `json:"repos,omitempty"`
+	ActiveWorkflow       *WorkflowSelection     `json:"activeWorkflow,omitempty"`
+	UserContext          *UserContext           `json:"userContext,omitempty"`
+	EnvironmentVariables map[string]string      `json:"environmentVariables,omitempty"`
+	Labels               map[string]string      `json:"labels,omitempty"`
+	Annotations          map[string]string      `json:"annotations,omitempty"`
+	SdkOptions           map[string]interface{} `json:"sdkOptions,omitempty"`
 }
 
 type CloneSessionRequest struct {
@@ -73,10 +74,11 @@ type CloneSessionRequest struct {
 }
 
 type UpdateAgenticSessionRequest struct {
-	InitialPrompt *string      `json:"initialPrompt,omitempty"`
-	DisplayName   *string      `json:"displayName,omitempty"`
-	Timeout       *int         `json:"timeout,omitempty"`
-	LLMSettings   *LLMSettings `json:"llmSettings,omitempty"`
+	InitialPrompt *string                `json:"initialPrompt,omitempty"`
+	DisplayName   *string                `json:"displayName,omitempty"`
+	Timeout       *int                   `json:"timeout,omitempty"`
+	LLMSettings   *LLMSettings           `json:"llmSettings,omitempty"`
+	SdkOptions    map[string]interface{} `json:"sdkOptions,omitempty"`
 }
 
 type CloneAgenticSessionRequest struct {

@@ -106,6 +106,41 @@ func isBinaryContentType(contentType string) bool {
 }
 
 // parseSpec parses AgenticSessionSpec with v1alpha1 fields
+// allowedSdkOptionKeys defines the keys users may set via sdkOptions.
+// Platform-managed keys (cwd, resume, mcp_servers, setting_sources, stderr,
+// continue_conversation, add_dirs) are excluded to prevent users from
+// overriding security-critical settings.
+var allowedSdkOptionKeys = map[string]bool{
+	"temperature":               true,
+	"max_tokens":                true,
+	"max_thinking_tokens":       true,
+	"max_turns":                 true,
+	"max_budget_usd":            true,
+	"fallback_model":            true,
+	"model":                     true,
+	"timeout":                   true,
+	"inactivity_timeout":        true,
+	"permission_mode":           true,
+	"output_format":             true,
+	"include_partial_messages":  true,
+	"enable_file_checkpointing": true,
+	"strict_mcp_config":         true,
+	"betas":                     true,
+	"allowed_tools":             true,
+	"system_prompt":             true,
+}
+
+// filterSdkOptions returns only the allowed keys from the input map.
+func filterSdkOptions(opts map[string]interface{}) map[string]interface{} {
+	filtered := make(map[string]interface{}, len(opts))
+	for k, v := range opts {
+		if allowedSdkOptionKeys[k] {
+			filtered[k] = v
+		}
+	}
+	return filtered
+}
+
 func parseSpec(spec map[string]interface{}) types.AgenticSessionSpec {
 	result := types.AgenticSessionSpec{}
 
@@ -771,6 +806,19 @@ func CreateSession(c *gin.Context) {
 		envVars["JIRA_READ_ONLY_MODE"] = "false"
 	}
 
+	// Serialize sdkOptions as JSON into SDK_OPTIONS env var (filtered to allowed keys only)
+	if len(req.SdkOptions) > 0 {
+		filtered := filterSdkOptions(req.SdkOptions)
+		if len(filtered) > 0 {
+			sdkOptsJSON, err := json.Marshal(filtered)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("failed to serialize sdkOptions: %v", err)})
+				return
+			}
+			envVars["SDK_OPTIONS"] = string(sdkOptsJSON)
+		}
+	}
+
 	// Handle session continuation
 	if req.ParentSessionID != "" {
 		envVars["PARENT_SESSION_ID"] = req.ParentSessionID
@@ -1262,6 +1310,24 @@ func UpdateSession(c *gin.Context) {
 
 	if req.Timeout != nil {
 		spec["timeout"] = *req.Timeout
+	}
+
+	// Update SDK options in environmentVariables (filtered to allowed keys only)
+	if len(req.SdkOptions) > 0 {
+		filtered := filterSdkOptions(req.SdkOptions)
+		if len(filtered) > 0 {
+			sdkOptsJSON, err := json.Marshal(filtered)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("failed to serialize sdkOptions: %v", err)})
+				return
+			}
+			envVars, _ := spec["environmentVariables"].(map[string]interface{})
+			if envVars == nil {
+				envVars = make(map[string]interface{})
+			}
+			envVars["SDK_OPTIONS"] = string(sdkOptsJSON)
+			spec["environmentVariables"] = envVars
+		}
 	}
 
 	// Update the resource
