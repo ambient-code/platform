@@ -219,3 +219,53 @@ func TestGitLabConnection(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"valid": true, "message": "GitLab connection successful"})
 }
+
+// validateCodeRabbitAPIKeyImpl is the default implementation
+func validateCodeRabbitAPIKeyImpl(ctx context.Context, apiKey string) error {
+	if apiKey == "" {
+		return fmt.Errorf("API key is empty")
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	req, err := http.NewRequestWithContext(ctx, "GET", "https://api.coderabbit.ai/api/v1/health", nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("request failed")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("invalid API key")
+	}
+
+	return nil
+}
+
+// ValidateCodeRabbitAPIKey is mockable for testing
+var ValidateCodeRabbitAPIKey = validateCodeRabbitAPIKeyImpl
+
+// TestCodeRabbitConnection handles POST /api/auth/coderabbit/test
+func TestCodeRabbitConnection(c *gin.Context) {
+	var req struct {
+		APIKey string `json:"apiKey" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	err := ValidateCodeRabbitAPIKey(c.Request.Context(), req.APIKey)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"valid": false, "error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"valid": true, "message": "CodeRabbit connection successful"})
+}

@@ -19,6 +19,7 @@ export function IntegrationsPanel() {
   const gitlabConfigured = integrationsStatus?.gitlab?.connected ?? false;
   const jiraConfigured = integrationsStatus?.jira?.connected ?? false;
   const googleConfigured = integrationsStatus?.google?.connected ?? false;
+  const coderabbitConfigured = integrationsStatus?.coderabbit?.connected ?? false;
 
   const integrations = [
     {
@@ -47,6 +48,12 @@ export function IntegrationsPanel() {
       name: "Jira",
       configured: jiraConfigured,
       configuredMessage: "Authenticated. Issue and project access enabled.",
+    },
+    {
+      key: "coderabbit",
+      name: "CodeRabbit",
+      configured: coderabbitConfigured,
+      configuredMessage: "Authenticated. AI code review enabled in sessions.",
     },
   ].sort((a, b) => a.name.localeCompare(b.name));
 
@@ -132,4 +139,3 @@ function IntegrationCard({
     </div>
   );
 }
-

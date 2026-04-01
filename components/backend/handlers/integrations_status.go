@@ -42,6 +42,9 @@ func GetIntegrationsStatus(c *gin.Context) {
 	// MCP server credentials status
 	response["mcpServers"] = getMCPServerStatusForUser(ctx, userID)
 
+	// CodeRabbit status
+	response["coderabbit"] = getCodeRabbitStatusForUser(ctx, userID)
+
 	c.JSON(http.StatusOK, response)
 }
 
@@ -142,5 +145,18 @@ func getGitLabStatusForUser(ctx context.Context, userID string) gin.H {
 		"instanceUrl": creds.InstanceURL,
 		"updatedAt":   creds.UpdatedAt,
 		"valid":       true,
+	}
+}
+
+func getCodeRabbitStatusForUser(ctx context.Context, userID string) gin.H {
+	creds, err := GetCodeRabbitCredentials(ctx, userID)
+	if err != nil || creds == nil {
+		return gin.H{"connected": false}
+	}
+
+	return gin.H{
+		"connected": true,
+		"updatedAt": creds.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		"valid":     true,
 	}
 }

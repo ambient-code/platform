@@ -63,6 +63,17 @@ repos:
         files: ^components/frontend/.*\.(ts|tsx|js|jsx)$
         pass_filenames: true
 
+  # ── CodeRabbit AI review ───────────────────────────────────────────
+  - repo: local
+    hooks:
+      - id: coderabbit-review
+        name: coderabbit review
+        entry: scripts/pre-commit/coderabbit-review.sh
+        language: script
+        always_run: true
+        pass_filenames: false
+        require_serial: true
+
   # ── Branch protection ────────────────────────────────────────────────
   - repo: local
     hooks:

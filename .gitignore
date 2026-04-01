@@ -140,3 +140,4 @@ hack/
 
 # Personal exports
 *.csv
+.worktrees/
