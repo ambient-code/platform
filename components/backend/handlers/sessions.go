@@ -762,8 +762,12 @@ func CreateSession(c *gin.Context) {
 		envVars[k] = v
 	}
 
-	// When the jira-write Unleash flag is enabled, let the Jira MCP server write.
-	if FeatureEnabled("jira-write") {
+	// When the jira-write flag is enabled for this workspace, let the Jira MCP server write.
+	overrides, err := getWorkspaceOverrides(c.Request.Context(), reqK8s, project)
+	if err != nil {
+		log.Printf("WARNING: failed to read feature flag overrides for project %s: %v", project, err)
+	}
+	if isRunnerEnabledWithOverrides("jira-write", overrides) {
 		envVars["JIRA_READ_ONLY_MODE"] = "false"
 	}
 
