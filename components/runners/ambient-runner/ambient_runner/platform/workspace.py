@@ -48,19 +48,17 @@ def setup_workflow_paths(
             workflow_path = str(
                 Path(context.workspace_path) / "workflows" / derived_name
             )
+            cwd_path = workflow_path
             if Path(workflow_path).exists():
-                cwd_path = workflow_path
                 logger.info(f"Using workflow as CWD: {derived_name}")
             else:
-                logger.warning(
-                    f"Workflow directory not found: {workflow_path}, using default"
-                )
-                cwd_path = str(Path(context.workspace_path) / "workflows" / "default")
+                logger.warning(f"Workflow directory not found: {workflow_path}")
         else:
-            cwd_path = str(Path(context.workspace_path) / "workflows" / "default")
+            logger.warning(
+                "Could not derive workflow name from URL; using workspace root"
+            )
     except Exception as e:
-        logger.warning(f"Failed to derive workflow name: {e}, using default")
-        cwd_path = str(Path(context.workspace_path) / "workflows" / "default")
+        logger.warning(f"Failed to derive workflow name: {e}; using workspace root")
 
     # Add all repos as additional directories
     repos_base = Path(context.workspace_path) / "repos"

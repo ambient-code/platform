@@ -91,6 +91,41 @@ describe('InputWithHistory', () => {
     );
   });
 
+  it('reopens dropdown from the keyboard with ArrowDown after it was closed', () => {
+    render(
+      <InputWithHistory historyKey="test" value="" onChange={onChange} />
+    );
+    const input = screen.getByRole('textbox');
+
+    fireEvent.focus(input);
+    fireEvent.keyDown(input, { key: 'Escape' });
+    expect(screen.queryByText('previous query')).toBeNull();
+
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    expect(screen.getByText('previous query')).toBeDefined();
+
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ target: { value: 'previous query' } })
+    );
+  });
+
+  it('opens dropdown from the keyboard with ArrowUp and selects the last history item first', () => {
+    render(
+      <InputWithHistory historyKey="test" value="" onChange={onChange} />
+    );
+    const input = screen.getByRole('textbox');
+
+    fireEvent.focus(input);
+    fireEvent.keyDown(input, { key: 'Escape' });
+    fireEvent.keyDown(input, { key: 'ArrowUp' });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ target: { value: 'another one' } })
+    );
+  });
+
   it('closes dropdown on Escape', () => {
     render(
       <InputWithHistory historyKey="test" value="" onChange={onChange} />

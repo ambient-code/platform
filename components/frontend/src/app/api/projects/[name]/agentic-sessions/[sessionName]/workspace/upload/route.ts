@@ -147,6 +147,17 @@ async function validateFileType(buffer: ArrayBuffer, claimedType: string): Promi
         return detected.mime;
       }
 
+      // Special case: allow zip variations (WinZip reports application/x-zip-compressed,
+      // but magic-byte detection returns application/zip)
+      const isZipVariant = (type: string) =>
+        type === 'application/zip' ||
+        type === 'application/x-zip-compressed' ||
+        type === 'application/x-zip' ||
+        type === 'application/x-compressed';
+      if (isZipVariant(normalizedClaimed) && isZipVariant(normalizedDetected)) {
+        return detected.mime;
+      }
+
       // Types don't match - reject
       throw new Error(
         `Content-Type mismatch: claimed '${normalizedClaimed}' but detected '${normalizedDetected}'. ` +

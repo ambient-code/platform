@@ -81,24 +81,31 @@ def timestamp() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+_REDACT_PATTERNS = [
+    (re.compile(r"gh[pousr]_[a-zA-Z0-9]{36,255}"), "gh*_***REDACTED***"),
+    (re.compile(r"sk-ant-[a-zA-Z0-9\-_]{30,200}"), "sk-ant-***REDACTED***"),
+    (re.compile(r"pk-lf-[a-zA-Z0-9\-_]{10,100}"), "pk-lf-***REDACTED***"),
+    (re.compile(r"sk-lf-[a-zA-Z0-9\-_]{10,100}"), "sk-lf-***REDACTED***"),
+    (re.compile(r"x-access-token:[^@\s]+@"), "x-access-token:***REDACTED***@"),
+    (re.compile(r"oauth2:[^@\s]+@"), "oauth2:***REDACTED***@"),
+    (re.compile(r"://[^:@\s]+:[^@\s]+@"), "://***REDACTED***@"),
+    (re.compile(r"AIza[a-zA-Z0-9\-_]{30,}"), "AIza***REDACTED***"),
+    (
+        re.compile(
+            r"(ANTHROPIC_API_KEY|LANGFUSE_SECRET_KEY|LANGFUSE_PUBLIC_KEY|BOT_TOKEN|GIT_TOKEN|GEMINI_API_KEY|GOOGLE_API_KEY)\s*=\s*[^\s\'\"]+",
+        ),
+        r"\1=***REDACTED***",
+    ),
+]
+
+
 def redact_secrets(text: str) -> str:
     """Redact tokens and secrets from text for safe logging."""
     if not text:
         return text
 
-    text = re.sub(r"gh[pousr]_[a-zA-Z0-9]{36,255}", "gh*_***REDACTED***", text)
-    text = re.sub(r"sk-ant-[a-zA-Z0-9\-_]{30,200}", "sk-ant-***REDACTED***", text)
-    text = re.sub(r"pk-lf-[a-zA-Z0-9\-_]{10,100}", "pk-lf-***REDACTED***", text)
-    text = re.sub(r"sk-lf-[a-zA-Z0-9\-_]{10,100}", "sk-lf-***REDACTED***", text)
-    text = re.sub(r"x-access-token:[^@\s]+@", "x-access-token:***REDACTED***@", text)
-    text = re.sub(r"oauth2:[^@\s]+@", "oauth2:***REDACTED***@", text)
-    text = re.sub(r"://[^:@\s]+:[^@\s]+@", "://***REDACTED***@", text)
-    text = re.sub(r"AIza[a-zA-Z0-9\-_]{30,}", "AIza***REDACTED***", text)
-    text = re.sub(
-        r'(ANTHROPIC_API_KEY|LANGFUSE_SECRET_KEY|LANGFUSE_PUBLIC_KEY|BOT_TOKEN|GIT_TOKEN|GEMINI_API_KEY|GOOGLE_API_KEY)\s*=\s*[^\s\'"]+',
-        r"\1=***REDACTED***",
-        text,
-    )
+    for pattern, replacement in _REDACT_PATTERNS:
+        text = pattern.sub(replacement, text)
     return text
 
 

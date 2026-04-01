@@ -2127,12 +2127,19 @@ func ListOOTBWorkflows(c *gin.Context) {
 		var ambientConfig struct {
 			Name        string `json:"name"`
 			Description string `json:"description"`
+			Enabled     *bool  `json:"enabled,omitempty"`
 		}
 		if err == nil {
 			// Parse ambient.json if found
 			if parseErr := json.Unmarshal(ambientData, &ambientConfig); parseErr != nil {
 				log.Printf("ListOOTBWorkflows: failed to parse ambient.json for %s: %v", entryName, parseErr)
 			}
+		}
+
+		// Skip workflows explicitly disabled in ambient.json
+		if ambientConfig.Enabled != nil && !*ambientConfig.Enabled {
+			log.Printf("ListOOTBWorkflows: skipping disabled workflow %s", entryName)
+			continue
 		}
 
 		// Use ambient.json values or fallback to directory name

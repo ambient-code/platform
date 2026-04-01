@@ -40,6 +40,14 @@ vi.mock('../workflow-selector', () => ({
   WorkflowSelector: () => <button data-testid="workflow-selector">No workflow</button>,
 }));
 
+vi.mock('../modals/add-context-modal', () => ({
+  AddContextModal: ({ onAddRepository }: { open: boolean; onAddRepository: (url: string, branch: string, autoPush?: boolean) => Promise<void> }) => (
+    <span data-testid="add-repo-btn" role="none" onClick={() => onAddRepository('https://github.com/org/platform.git', '')}>
+      Add repo
+    </span>
+  ),
+}));
+
 describe('NewSessionView', () => {
   const defaultProps = {
     projectName: 'test-project',
@@ -103,5 +111,22 @@ describe('NewSessionView', () => {
     fireEvent.change(textarea, { target: { value: 'some text' } });
     fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: true });
     expect(defaultProps.onCreateSession).not.toHaveBeenCalled();
+  });
+
+  it('removes a pending repo badge when the X button is clicked', () => {
+    render(<NewSessionView {...defaultProps} />);
+
+    // Add a repo via the always-rendered mock AddContextModal
+    fireEvent.click(screen.getByTestId('add-repo-btn'));
+
+    // Badge should appear with the repo name derived from URL
+    expect(screen.getByText('platform')).toBeDefined();
+
+    // Click the remove button
+    const removeBtn = screen.getByRole('button', { name: /Remove platform/i });
+    fireEvent.click(removeBtn);
+
+    // Badge should be gone
+    expect(screen.queryByText('platform')).toBeNull();
   });
 });

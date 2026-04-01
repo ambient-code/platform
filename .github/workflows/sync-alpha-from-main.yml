@@ -1,0 +1,199 @@
+name: Sync Alpha from Main
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: sync-alpha-from-main
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Rebase main into alpha
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Check if alpha is already up to date
+        id: check
+        run: |
+          MAIN_SHA="$(git rev-parse origin/main)"
+          ALPHA_SHA="$(git rev-parse origin/alpha)"
+          COMMIT_COUNT="$(git rev-list --count "${ALPHA_SHA}..${MAIN_SHA}")"
+
+          echo "main_sha=${MAIN_SHA}" >> "$GITHUB_OUTPUT"
+          echo "alpha_sha=${ALPHA_SHA}" >> "$GITHUB_OUTPUT"
+          echo "commit_count=${COMMIT_COUNT}" >> "$GITHUB_OUTPUT"
+
+          if [ "${COMMIT_COUNT}" -eq 0 ]; then
+            echo "needs_sync=false" >> "$GITHUB_OUTPUT"
+            echo "alpha is already up to date with main"
+          else
+            echo "needs_sync=true" >> "$GITHUB_OUTPUT"
+            echo "Commits in main not in alpha: ${COMMIT_COUNT}"
+          fi
+
+      - name: Check for existing open sync PR
+        if: steps.check.outputs.needs_sync == 'true'
+        id: existing_pr
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          EXISTING=$(gh pr list \
+            --base alpha \
+            --state open \
+            --json headRefName \
+            --jq '[.[] | select(.headRefName | startswith("chore/sync-alpha-from-main-"))] | length')
+
+          if [ "${EXISTING}" -gt 0 ]; then
+            echo "Open sync PR already exists — skipping"
+            echo "pr_exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "pr_exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create work branch off alpha
+        if: steps.check.outputs.needs_sync == 'true' && steps.existing_pr.outputs.pr_exists == 'false'
+        id: branch
+        run: |
+          TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
+          WORK_BRANCH="chore/sync-alpha-from-main-${TIMESTAMP}"
+          echo "work_branch=${WORK_BRANCH}" >> "$GITHUB_OUTPUT"
+
+          git checkout -b "${WORK_BRANCH}" origin/alpha
+          echo "Created ${WORK_BRANCH} from origin/alpha"
+
+      - name: Attempt rebase of main onto work branch
+        if: steps.check.outputs.needs_sync == 'true' && steps.existing_pr.outputs.pr_exists == 'false'
+        id: rebase
+        env:
+          WORK_BRANCH: ${{ steps.branch.outputs.work_branch }}
+          MAIN_SHA: ${{ steps.check.outputs.main_sha }}
+          ALPHA_SHA: ${{ steps.check.outputs.alpha_sha }}
+        run: |
+          MERGE_BASE="$(git merge-base "${ALPHA_SHA}" "${MAIN_SHA}")"
+
+          git rebase --onto "${WORK_BRANCH}" "${MERGE_BASE}" origin/main && {
+            echo "rebase_clean=true" >> "$GITHUB_OUTPUT"
+            git checkout -B "${WORK_BRANCH}"
+            echo "Rebase completed cleanly"
+          } || {
+            echo "rebase_clean=false" >> "$GITHUB_OUTPUT"
+            git rebase --abort 2>/dev/null || true
+
+            echo "Rebase had conflicts — falling back to merge"
+            MERGE_MSG=$(cat <<'MSG'
+chore: merge main into alpha (conflict resolution required)
+
+Automated merge of origin/main into origin/alpha.
+Rebase encountered conflicts; falling back to merge.
+A human must resolve conflict markers before merging this PR.
+MSG
+)
+            git merge --no-ff --allow-unrelated-histories origin/main -m "${MERGE_MSG}" || {
+              git add -A
+              CONFLICT_MSG=$(cat <<'MSG'
+chore: best-effort merge main into alpha (conflicts present)
+
+Automated merge of origin/main into origin/alpha.
+Both rebase and merge encountered conflicts. Conflict markers
+are present and must be resolved before this PR can be merged.
+MSG
+)
+              git commit --no-verify -m "${CONFLICT_MSG}"
+            }
+          }
+
+      - name: Push work branch
+        if: steps.check.outputs.needs_sync == 'true' && steps.existing_pr.outputs.pr_exists == 'false'
+        env:
+          WORK_BRANCH: ${{ steps.branch.outputs.work_branch }}
+        run: |
+          git push origin "${WORK_BRANCH}"
+
+      - name: Open PR against alpha
+        if: steps.check.outputs.needs_sync == 'true' && steps.existing_pr.outputs.pr_exists == 'false'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WORK_BRANCH: ${{ steps.branch.outputs.work_branch }}
+          COMMIT_COUNT: ${{ steps.check.outputs.commit_count }}
+          REBASE_CLEAN: ${{ steps.rebase.outputs.rebase_clean }}
+          MAIN_SHA: ${{ steps.check.outputs.main_sha }}
+          ALPHA_SHA: ${{ steps.check.outputs.alpha_sha }}
+        run: |
+          if [ "${REBASE_CLEAN}" = "true" ]; then
+            CONFLICT_NOTE="Rebase completed cleanly — no conflicts detected. This PR can be merged directly."
+          else
+            CONFLICT_NOTE="⚠️ **Conflicts detected.** Rebase fell back to merge. Search for \`<<<<<<<\` conflict markers and resolve before merging."
+          fi
+
+          gh pr create \
+            --base alpha \
+            --head "${WORK_BRANCH}" \
+            --title "chore: sync alpha from main ($(date +%Y-%m-%d))" \
+            --body "## Summary
+
+Automated sync of \`main\` into \`alpha\` triggered by push to \`main\`.
+
+| | |
+|---|---|
+| Commits synced | ${COMMIT_COUNT} |
+| origin/main | \`${MAIN_SHA:0:8}\` |
+| origin/alpha | \`${ALPHA_SHA:0:8}\` |
+
+## Status
+
+${CONFLICT_NOTE}
+
+## Review Instructions
+
+1. Check for conflict markers (\`<<<<<<<\`) in changed files.
+2. Resolve any conflicts and push to this branch.
+3. Verify the build passes.
+4. Merge into \`alpha\`.
+
+---
+*Auto-generated by \`.github/workflows/sync-alpha-from-main.yml\`*"
+
+      - name: Summary
+        if: always()
+        env:
+          NEEDS_SYNC: ${{ steps.check.outputs.needs_sync }}
+          PR_EXISTS: ${{ steps.existing_pr.outputs.pr_exists || 'false' }}
+          COMMIT_COUNT: ${{ steps.check.outputs.commit_count || '0' }}
+          REBASE_CLEAN: ${{ steps.rebase.outputs.rebase_clean || 'n/a' }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          if [ "${NEEDS_SYNC}" = "false" ]; then
+            echo "## ✅ Already in sync" >> "$GITHUB_STEP_SUMMARY"
+            echo "alpha is up to date with main — nothing to do." >> "$GITHUB_STEP_SUMMARY"
+          elif [ "${PR_EXISTS}" = "true" ]; then
+            echo "## ℹ️ Sync PR already open" >> "$GITHUB_STEP_SUMMARY"
+            echo "An open sync PR already exists against alpha — skipped." >> "$GITHUB_STEP_SUMMARY"
+          elif [ "${JOB_STATUS}" = "failure" ]; then
+            echo "## ❌ Sync failed" >> "$GITHUB_STEP_SUMMARY"
+            echo "Check the logs above for details." >> "$GITHUB_STEP_SUMMARY"
+          elif [ "${REBASE_CLEAN}" = "true" ]; then
+            echo "## ✅ PR opened — clean rebase" >> "$GITHUB_STEP_SUMMARY"
+            echo "${COMMIT_COUNT} commits synced from main to alpha with no conflicts." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "## ⚠️ PR opened — conflicts require resolution" >> "$GITHUB_STEP_SUMMARY"
+            echo "${COMMIT_COUNT} commits from main; rebase had conflicts. PR opened for human resolution." >> "$GITHUB_STEP_SUMMARY"
+          fi

@@ -167,10 +167,15 @@ class ClaudeBridge(PlatformBridge):
             try:
                 message_stream = worker.query(user_msg, session_id=session_label)
 
-                from ambient_runner.middleware import tracing_middleware
+                from ambient_runner.middleware import (
+                    secret_redaction_middleware,
+                    tracing_middleware,
+                )
 
                 wrapped_stream = tracing_middleware(
-                    self._adapter.run(input_data, message_stream=message_stream),
+                    secret_redaction_middleware(
+                        self._adapter.run(input_data, message_stream=message_stream),
+                    ),
                     obs=self._obs,
                     model=self._configured_model,
                     prompt=user_msg,
