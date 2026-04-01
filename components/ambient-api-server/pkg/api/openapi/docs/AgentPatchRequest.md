@@ -1,4 +1,4 @@
-# ProjectAgentPatchRequest
+# AgentPatchRequest
 
 ## Properties
 
@@ -11,120 +11,120 @@ Name | Type | Description | Notes
 
 ## Methods
 
-### NewProjectAgentPatchRequest
+### NewAgentPatchRequest
 
-`func NewProjectAgentPatchRequest() *ProjectAgentPatchRequest`
+`func NewAgentPatchRequest() *AgentPatchRequest`
 
-NewProjectAgentPatchRequest instantiates a new ProjectAgentPatchRequest object
+NewAgentPatchRequest instantiates a new AgentPatchRequest object
 This constructor will assign default values to properties that have it defined,
 and makes sure properties required by API are set, but the set of arguments
 will change when the set of required properties is changed
 
-### NewProjectAgentPatchRequestWithDefaults
+### NewAgentPatchRequestWithDefaults
 
-`func NewProjectAgentPatchRequestWithDefaults() *ProjectAgentPatchRequest`
+`func NewAgentPatchRequestWithDefaults() *AgentPatchRequest`
 
-NewProjectAgentPatchRequestWithDefaults instantiates a new ProjectAgentPatchRequest object
+NewAgentPatchRequestWithDefaults instantiates a new AgentPatchRequest object
 This constructor will only assign default values to properties that have it defined,
 but it doesn't guarantee that properties required by API are set
 
 ### GetName
 
-`func (o *ProjectAgentPatchRequest) GetName() string`
+`func (o *AgentPatchRequest) GetName() string`
 
 GetName returns the Name field if non-nil, zero value otherwise.
 
 ### GetNameOk
 
-`func (o *ProjectAgentPatchRequest) GetNameOk() (*string, bool)`
+`func (o *AgentPatchRequest) GetNameOk() (*string, bool)`
 
 GetNameOk returns a tuple with the Name field if it's non-nil, zero value otherwise
 and a boolean to check if the value has been set.
 
 ### SetName
 
-`func (o *ProjectAgentPatchRequest) SetName(v string)`
+`func (o *AgentPatchRequest) SetName(v string)`
 
 SetName sets Name field to given value.
 
 ### HasName
 
-`func (o *ProjectAgentPatchRequest) HasName() bool`
+`func (o *AgentPatchRequest) HasName() bool`
 
 HasName returns a boolean if a field has been set.
 
 ### GetPrompt
 
-`func (o *ProjectAgentPatchRequest) GetPrompt() string`
+`func (o *AgentPatchRequest) GetPrompt() string`
 
 GetPrompt returns the Prompt field if non-nil, zero value otherwise.
 
 ### GetPromptOk
 
-`func (o *ProjectAgentPatchRequest) GetPromptOk() (*string, bool)`
+`func (o *AgentPatchRequest) GetPromptOk() (*string, bool)`
 
 GetPromptOk returns a tuple with the Prompt field if it's non-nil, zero value otherwise
 and a boolean to check if the value has been set.
 
 ### SetPrompt
 
-`func (o *ProjectAgentPatchRequest) SetPrompt(v string)`
+`func (o *AgentPatchRequest) SetPrompt(v string)`
 
 SetPrompt sets Prompt field to given value.
 
 ### HasPrompt
 
-`func (o *ProjectAgentPatchRequest) HasPrompt() bool`
+`func (o *AgentPatchRequest) HasPrompt() bool`
 
 HasPrompt returns a boolean if a field has been set.
 
 ### GetLabels
 
-`func (o *ProjectAgentPatchRequest) GetLabels() string`
+`func (o *AgentPatchRequest) GetLabels() string`
 
 GetLabels returns the Labels field if non-nil, zero value otherwise.
 
 ### GetLabelsOk
 
-`func (o *ProjectAgentPatchRequest) GetLabelsOk() (*string, bool)`
+`func (o *AgentPatchRequest) GetLabelsOk() (*string, bool)`
 
 GetLabelsOk returns a tuple with the Labels field if it's non-nil, zero value otherwise
 and a boolean to check if the value has been set.
 
 ### SetLabels
 
-`func (o *ProjectAgentPatchRequest) SetLabels(v string)`
+`func (o *AgentPatchRequest) SetLabels(v string)`
 
 SetLabels sets Labels field to given value.
 
 ### HasLabels
 
-`func (o *ProjectAgentPatchRequest) HasLabels() bool`
+`func (o *AgentPatchRequest) HasLabels() bool`
 
 HasLabels returns a boolean if a field has been set.
 
 ### GetAnnotations
 
-`func (o *ProjectAgentPatchRequest) GetAnnotations() string`
+`func (o *AgentPatchRequest) GetAnnotations() string`
 
 GetAnnotations returns the Annotations field if non-nil, zero value otherwise.
 
 ### GetAnnotationsOk
 
-`func (o *ProjectAgentPatchRequest) GetAnnotationsOk() (*string, bool)`
+`func (o *AgentPatchRequest) GetAnnotationsOk() (*string, bool)`
 
 GetAnnotationsOk returns a tuple with the Annotations field if it's non-nil, zero value otherwise
 and a boolean to check if the value has been set.
 
 ### SetAnnotations
 
-`func (o *ProjectAgentPatchRequest) SetAnnotations(v string)`
+`func (o *AgentPatchRequest) SetAnnotations(v string)`
 
 SetAnnotations sets Annotations field to given value.
 
 ### HasAnnotations
 
-`func (o *ProjectAgentPatchRequest) HasAnnotations() bool`
+`func (o *AgentPatchRequest) HasAnnotations() bool`
 
 HasAnnotations returns a boolean if a field has been set.
 

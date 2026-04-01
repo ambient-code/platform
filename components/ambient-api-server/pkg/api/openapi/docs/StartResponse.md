@@ -1,78 +1,78 @@
-# IgniteResponse
+# StartResponse
 
 ## Properties
 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **Session** | Pointer to [**Session**](Session.md) |  | [optional] 
-**IgnitionPrompt** | Pointer to **string** | Assembled ignition prompt — Agent.prompt + Inbox + Session.prompt + peer roster | [optional] 
+**IgnitionPrompt** | Pointer to **string** | Assembled start prompt — Agent.prompt + Inbox + Session.prompt + peer roster | [optional] 
 
 ## Methods
 
-### NewIgniteResponse
+### NewStartResponse
 
-`func NewIgniteResponse() *IgniteResponse`
+`func NewStartResponse() *StartResponse`
 
-NewIgniteResponse instantiates a new IgniteResponse object
+NewStartResponse instantiates a new StartResponse object
 This constructor will assign default values to properties that have it defined,
 and makes sure properties required by API are set, but the set of arguments
 will change when the set of required properties is changed
 
-### NewIgniteResponseWithDefaults
+### NewStartResponseWithDefaults
 
-`func NewIgniteResponseWithDefaults() *IgniteResponse`
+`func NewStartResponseWithDefaults() *StartResponse`
 
-NewIgniteResponseWithDefaults instantiates a new IgniteResponse object
+NewStartResponseWithDefaults instantiates a new StartResponse object
 This constructor will only assign default values to properties that have it defined,
 but it doesn't guarantee that properties required by API are set
 
 ### GetSession
 
-`func (o *IgniteResponse) GetSession() Session`
+`func (o *StartResponse) GetSession() Session`
 
 GetSession returns the Session field if non-nil, zero value otherwise.
 
 ### GetSessionOk
 
-`func (o *IgniteResponse) GetSessionOk() (*Session, bool)`
+`func (o *StartResponse) GetSessionOk() (*Session, bool)`
 
 GetSessionOk returns a tuple with the Session field if it's non-nil, zero value otherwise
 and a boolean to check if the value has been set.
 
 ### SetSession
 
-`func (o *IgniteResponse) SetSession(v Session)`
+`func (o *StartResponse) SetSession(v Session)`
 
 SetSession sets Session field to given value.
 
 ### HasSession
 
-`func (o *IgniteResponse) HasSession() bool`
+`func (o *StartResponse) HasSession() bool`
 
 HasSession returns a boolean if a field has been set.
 
 ### GetIgnitionPrompt
 
-`func (o *IgniteResponse) GetIgnitionPrompt() string`
+`func (o *StartResponse) GetIgnitionPrompt() string`
 
 GetIgnitionPrompt returns the IgnitionPrompt field if non-nil, zero value otherwise.
 
 ### GetIgnitionPromptOk
 
-`func (o *IgniteResponse) GetIgnitionPromptOk() (*string, bool)`
+`func (o *StartResponse) GetIgnitionPromptOk() (*string, bool)`
 
 GetIgnitionPromptOk returns a tuple with the IgnitionPrompt field if it's non-nil, zero value otherwise
 and a boolean to check if the value has been set.
 
 ### SetIgnitionPrompt
 
-`func (o *IgniteResponse) SetIgnitionPrompt(v string)`
+`func (o *StartResponse) SetIgnitionPrompt(v string)`
 
 SetIgnitionPrompt sets IgnitionPrompt field to given value.
 
 ### HasIgnitionPrompt
 
-`func (o *IgniteResponse) HasIgnitionPrompt() bool`
+`func (o *StartResponse) HasIgnitionPrompt() bool`
 
 HasIgnitionPrompt returns a boolean if a field has been set.
 

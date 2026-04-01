@@ -12,6 +12,7 @@ const (
 	ResourceBlackboard      Resource = "blackboard"
 	ResourceRole            Resource = "role"
 	ResourceRoleBinding     Resource = "role_binding"
+	ResourceCredential      Resource = "credential"
 )
 
 type Action string
@@ -24,8 +25,9 @@ const (
 	ActionList    Action = "list"
 	ActionWatch   Action = "watch"
 	ActionStart   Action = "start"
-	ActionCheckin Action = "checkin"
-	ActionMessage Action = "message"
+	ActionCheckin    Action = "checkin"
+	ActionMessage    Action = "message"
+	ActionFetchToken Action = "fetch_token"
 )
 
 type Permission struct {
@@ -48,6 +50,10 @@ const (
 	RoleAgentOperator = "agent:operator"
 	RoleAgentObserver = "agent:observer"
 	RoleAgentRunner   = "agent:runner"
+
+	RoleCredentialOwner       = "credential:owner"
+	RoleCredentialReader      = "credential:reader"
+	RoleCredentialTokenReader = "credential:token-reader"
 )
 
 var (
@@ -71,7 +77,7 @@ var (
 	PermAgentUpdate = Permission{ResourceAgent, ActionUpdate}
 	PermAgentDelete = Permission{ResourceAgent, ActionDelete}
 	PermAgentList   = Permission{ResourceAgent, ActionList}
-	PermAgentStart = Permission{ResourceAgent, ActionStart}
+	PermAgentStart  = Permission{ResourceAgent, ActionStart}
 
 	PermSessionRead   = Permission{ResourceSession, ActionRead}
 	PermSessionList   = Permission{ResourceSession, ActionList}
@@ -91,4 +97,11 @@ var (
 	PermRoleBindingList   = Permission{ResourceRoleBinding, ActionList}
 	PermRoleBindingCreate = Permission{ResourceRoleBinding, ActionCreate}
 	PermRoleBindingDelete = Permission{ResourceRoleBinding, ActionDelete}
+
+	PermCredentialCreate     = Permission{ResourceCredential, ActionCreate}
+	PermCredentialRead       = Permission{ResourceCredential, ActionRead}
+	PermCredentialUpdate     = Permission{ResourceCredential, ActionUpdate}
+	PermCredentialDelete     = Permission{ResourceCredential, ActionDelete}
+	PermCredentialList       = Permission{ResourceCredential, ActionList}
+	PermCredentialFetchToken = Permission{ResourceCredential, ActionFetchToken}
 )

@@ -1,4 +1,4 @@
-# ProjectAgentSessionList
+# AgentList
 
 ## Properties
 
@@ -8,123 +8,123 @@ Name | Type | Description | Notes
 **Page** | **int32** |  | 
 **Size** | **int32** |  | 
 **Total** | **int32** |  | 
-**Items** | [**[]Session**](Session.md) |  | 
+**Items** | [**[]Agent**](Agent.md) |  | 
 
 ## Methods
 
-### NewProjectAgentSessionList
+### NewAgentList
 
-`func NewProjectAgentSessionList(kind string, page int32, size int32, total int32, items []Session, ) *ProjectAgentSessionList`
+`func NewAgentList(kind string, page int32, size int32, total int32, items []Agent, ) *AgentList`
 
-NewProjectAgentSessionList instantiates a new ProjectAgentSessionList object
+NewAgentList instantiates a new AgentList object
 This constructor will assign default values to properties that have it defined,
 and makes sure properties required by API are set, but the set of arguments
 will change when the set of required properties is changed
 
-### NewProjectAgentSessionListWithDefaults
+### NewAgentListWithDefaults
 
-`func NewProjectAgentSessionListWithDefaults() *ProjectAgentSessionList`
+`func NewAgentListWithDefaults() *AgentList`
 
-NewProjectAgentSessionListWithDefaults instantiates a new ProjectAgentSessionList object
+NewAgentListWithDefaults instantiates a new AgentList object
 This constructor will only assign default values to properties that have it defined,
 but it doesn't guarantee that properties required by API are set
 
 ### GetKind
 
-`func (o *ProjectAgentSessionList) GetKind() string`
+`func (o *AgentList) GetKind() string`
 
 GetKind returns the Kind field if non-nil, zero value otherwise.
 
 ### GetKindOk
 
-`func (o *ProjectAgentSessionList) GetKindOk() (*string, bool)`
+`func (o *AgentList) GetKindOk() (*string, bool)`
 
 GetKindOk returns a tuple with the Kind field if it's non-nil, zero value otherwise
 and a boolean to check if the value has been set.
 
 ### SetKind
 
-`func (o *ProjectAgentSessionList) SetKind(v string)`
+`func (o *AgentList) SetKind(v string)`
 
 SetKind sets Kind field to given value.
 
 
 ### GetPage
 
-`func (o *ProjectAgentSessionList) GetPage() int32`
+`func (o *AgentList) GetPage() int32`
 
 GetPage returns the Page field if non-nil, zero value otherwise.
 
 ### GetPageOk
 
-`func (o *ProjectAgentSessionList) GetPageOk() (*int32, bool)`
+`func (o *AgentList) GetPageOk() (*int32, bool)`
 
 GetPageOk returns a tuple with the Page field if it's non-nil, zero value otherwise
 and a boolean to check if the value has been set.
 
 ### SetPage
 
-`func (o *ProjectAgentSessionList) SetPage(v int32)`
+`func (o *AgentList) SetPage(v int32)`
 
 SetPage sets Page field to given value.
 
 
 ### GetSize
 
-`func (o *ProjectAgentSessionList) GetSize() int32`
+`func (o *AgentList) GetSize() int32`
 
 GetSize returns the Size field if non-nil, zero value otherwise.
 
 ### GetSizeOk
 
-`func (o *ProjectAgentSessionList) GetSizeOk() (*int32, bool)`
+`func (o *AgentList) GetSizeOk() (*int32, bool)`
 
 GetSizeOk returns a tuple with the Size field if it's non-nil, zero value otherwise
 and a boolean to check if the value has been set.
 
 ### SetSize
 
-`func (o *ProjectAgentSessionList) SetSize(v int32)`
+`func (o *AgentList) SetSize(v int32)`
 
 SetSize sets Size field to given value.
 
 
 ### GetTotal
 
-`func (o *ProjectAgentSessionList) GetTotal() int32`
+`func (o *AgentList) GetTotal() int32`
 
 GetTotal returns the Total field if non-nil, zero value otherwise.
 
 ### GetTotalOk
 
-`func (o *ProjectAgentSessionList) GetTotalOk() (*int32, bool)`
+`func (o *AgentList) GetTotalOk() (*int32, bool)`
 
 GetTotalOk returns a tuple with the Total field if it's non-nil, zero value otherwise
 and a boolean to check if the value has been set.
 
 ### SetTotal
 
-`func (o *ProjectAgentSessionList) SetTotal(v int32)`
+`func (o *AgentList) SetTotal(v int32)`
 
 SetTotal sets Total field to given value.
 
 
 ### GetItems
 
-`func (o *ProjectAgentSessionList) GetItems() []Session`
+`func (o *AgentList) GetItems() []Agent`
 
 GetItems returns the Items field if non-nil, zero value otherwise.
 
 ### GetItemsOk
 
-`func (o *ProjectAgentSessionList) GetItemsOk() (*[]Session, bool)`
+`func (o *AgentList) GetItemsOk() (*[]Agent, bool)`
 
 GetItemsOk returns a tuple with the Items field if it's non-nil, zero value otherwise
 and a boolean to check if the value has been set.
 
 ### SetItems
 
-`func (o *ProjectAgentSessionList) SetItems(v []Session)`
+`func (o *AgentList) SetItems(v []Agent)`
 
 SetItems sets Items field to given value.
 
