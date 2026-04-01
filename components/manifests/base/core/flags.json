@@ -29,6 +29,16 @@
           "value": "workspace"
         }
       ]
+    },
+    {
+      "name": "jira-write",
+      "description": "Allow Jira MCP server to perform write operations in new sessions",
+      "tags": [
+        {
+          "type": "scope",
+          "value": "workspace"
+        }
+      ]
     }
   ]
 }
