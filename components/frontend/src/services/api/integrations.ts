@@ -35,6 +35,11 @@ export type IntegrationsStatus = {
     valid?: boolean
   }
   mcpServers?: Record<string, { connected: boolean; valid?: boolean }>
+  coderabbit?: {
+    connected: boolean
+    updatedAt?: string
+    valid?: boolean
+  }
 }
 
 /**

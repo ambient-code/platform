@@ -212,6 +212,14 @@ async def fetch_gitlab_token(context: RunnerContext) -> str:
     return data.get("token", "")
 
 
+async def fetch_coderabbit_credentials(context: RunnerContext) -> dict:
+    """Fetch CodeRabbit credentials from backend API."""
+    data = await _fetch_credential(context, "coderabbit")
+    if data.get("apiKey"):
+        logger.info("Using CodeRabbit credentials from backend")
+    return data
+
+
 async def fetch_token_for_url(context: RunnerContext, url: str) -> str:
     """Fetch appropriate token based on repository URL host."""
     try:
@@ -300,6 +308,15 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
                 git_user_email = gitlab_creds["email"]
     except Exception as e:
         logger.warning(f"Failed to refresh GitLab credentials: {e}")
+
+    # CodeRabbit credentials
+    try:
+        coderabbit_creds = await fetch_coderabbit_credentials(context)
+        if coderabbit_creds.get("apiKey"):
+            os.environ["CODERABBIT_API_KEY"] = coderabbit_creds["apiKey"]
+            logger.info("Updated CodeRabbit API key in environment")
+    except Exception as e:
+        logger.warning(f"Failed to refresh CodeRabbit credentials: {e}")
 
     # GitHub credentials (with user identity — takes precedence)
     try:
