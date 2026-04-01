@@ -159,6 +159,7 @@ Branch naming conventions:
 - Follow the existing code patterns and style
 - Write clear, descriptive commit messages
 - Keep commits focused and atomic
+- **Gate new features behind feature flags** (see [Adding a Feature Behind a Flag](docs/internal/developer/adding-a-feature.md))
 - Test your changes locally
 
 ### 3. Commit Your Changes
@@ -321,9 +322,10 @@ npm test
 
 1. **Run all quality checks** for the components you modified
 2. **Run tests** and ensure they pass
-3. **Update documentation** if you changed functionality
-4. **Rebase on latest main** to avoid merge conflicts
-5. **Test locally** with Kind if possible
+3. **Gate new features behind a feature flag** — all new user-facing features must be flag-gated ([guide](docs/internal/developer/adding-a-feature.md))
+4. **Update documentation** if you changed functionality
+5. **Rebase on latest main** to avoid merge conflicts
+6. **Test locally** with Kind if possible
 
 ### PR Description
 

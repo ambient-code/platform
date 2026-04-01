@@ -112,6 +112,22 @@ Stateless gateway design, token forwarding, input validation.
 
 ---
 
+## Feature Flags
+
+### [Adding a Feature Behind a Flag](docs/internal/developer/adding-a-feature.md)
+
+Step-by-step guide for gating new features. Covers flag naming, registration, backend/frontend gating, visibility, and testing.
+
+### [Feature Flags Overview](docs/internal/feature-flags/README.md)
+
+Unleash integration, admin UI, workspace overrides, API endpoints.
+
+### [Fail Modes Reference](docs/internal/feature-flags/fail-modes.md)
+
+Which methods fail open vs closed, evaluation precedence, naming conventions.
+
+---
+
 ## Development Environment
 
 ### [Kind Local Development](docs/internal/developer/local-development/kind.md)

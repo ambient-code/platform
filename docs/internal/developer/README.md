@@ -52,6 +52,11 @@ Welcome to the Ambient Code Platform developer guide! This section covers everyt
   - Security patterns
   - Error handling
 
+### Feature Flags
+- **[Adding a Feature Behind a Flag](adding-a-feature.md)** - Step-by-step guide for gating new features
+- **[Feature Flags Overview](../feature-flags/)** - Unleash integration, fail modes, workspace overrides
+- **[ADR-0007: Unleash Feature Flags](../adr/0007-unleash-feature-flags.md)** - Architectural decision and rationale
+
 ### Component Development
 Each component has detailed development documentation:
 - [Frontend README](../../components/frontend/README.md) - Next.js development
