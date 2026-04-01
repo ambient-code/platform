@@ -568,12 +568,17 @@ func GetCodeRabbitCredentialsForSession(c *gin.Context) {
 		return
 	}
 
+	// Verify authenticated user owns this session (RBAC: prevent accessing other users' credentials)
+	// Note: BOT_TOKEN (session ServiceAccount) won't have userID in context, which is fine -
+	// BOT_TOKEN is already scoped to this specific session via RBAC
 	authenticatedUserID := c.GetString("userID")
 	if authenticatedUserID != "" && authenticatedUserID != userID {
 		log.Printf("RBAC violation: user %s attempted to access credentials for session owned by %s", authenticatedUserID, userID)
 		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied: session belongs to different user"})
 		return
 	}
+	// If authenticatedUserID is empty, this is likely BOT_TOKEN (session-scoped ServiceAccount)
+	// which is allowed because it's already restricted to this session via K8s RBAC
 
 	creds, err := GetCodeRabbitCredentials(c.Request.Context(), userID)
 	if err != nil {
