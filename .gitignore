@@ -88,6 +88,9 @@ dmypy.json
 
 # Claude Code
 .claude/settings.local.json
+.claude/worktrees/
+
+# Git worktrees
 .worktrees/
 
 # mkdocs
