@@ -1392,9 +1392,13 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 
 	// Create session Service pointing to the runner's FastAPI server
 	// Backend proxies both AG-UI and content requests to this service endpoint
+	svcName := fmt.Sprintf("session-%s", name)
+	if len(svcName) > 63 {
+		return fmt.Errorf("session name %q too long: derived Service name %q is %d chars (max 63)", name, svcName, len(svcName))
+	}
 	aguiSvc := &corev1.Service{
 		ObjectMeta: v1.ObjectMeta{
-			Name:      fmt.Sprintf("session-%s", name),
+			Name:      svcName,
 			Namespace: sessionNamespace,
 			Labels: map[string]string{
 				"app":             "ambient-code",
@@ -1422,7 +1426,7 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 	if _, serr := config.K8sClient.CoreV1().Services(sessionNamespace).Create(context.TODO(), aguiSvc, v1.CreateOptions{}); serr != nil && !errors.IsAlreadyExists(serr) {
 		log.Printf("Failed to create AG-UI service for %s: %v", name, serr)
 	} else {
-		log.Printf("Created AG-UI service session-%s for AgenticSession %s", name, name)
+		log.Printf("Created AG-UI service %s for AgenticSession %s", svcName, name)
 	}
 
 	// Pod created — controller-runtime reconciler will handle monitoring
