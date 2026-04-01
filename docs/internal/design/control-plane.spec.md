@@ -116,6 +116,7 @@ Each section is joined with `\n\n`. Empty sections are omitted. If all four are 
 | `USE_VERTEX` / `ANTHROPIC_VERTEX_PROJECT_ID` / `CLOUD_ML_REGION` | CP config | Vertex AI config (when enabled) |
 | `GOOGLE_APPLICATION_CREDENTIALS` | `/app/vertex/ambient-code-key.json` | Vertex service account path |
 | `LLM_MODEL` / `LLM_TEMPERATURE` / `LLM_MAX_TOKENS` | session fields | Per-session model config |
+| `CREDENTIAL_IDS` | JSON map `{provider: credential_id}` | Resolved credentials for this session; runner calls `/credentials/{id}/token` per provider |
 
 ---
 
@@ -353,6 +354,49 @@ Behavior:
 - Exits on `RUN_FINISHED`, `RUN_ERROR`, or Ctrl+C
 
 Status: 🔲 planned
+
+---
+
+## Runner Credential Fetch
+
+The runner fetches provider credentials at session start before invoking Claude. Credentials are resolved by the CP and injected into the runner pod as `CREDENTIAL_IDS` — a JSON-encoded map of `provider → credential_id`:
+
+```
+CREDENTIAL_IDS={"gitlab": "01JX...", "github": "01JY...", "jira": "01JZ..."}
+```
+
+The CP builds this map from the Credential Kind RBAC resolver: for each provider, walk agent → project → global scope and take the most specific matching credential. Credentials not visible to this session are excluded.
+
+The runner calls `GET /api/ambient/v1/credentials/{id}/token` for each provider present in `CREDENTIAL_IDS`. The token endpoint is gated by `credential:token-reader` — the CP grants this role to the runner pod's service account at session start for each injected credential ID.
+
+**Token response shape:**
+
+```json
+{ "provider": "gitlab", "token": "glpat-...",      "url": "https://gitlab.myco.com" }
+{ "provider": "github", "token": "github_pat_...", "url": "https://github.com" }
+{ "provider": "jira",   "token": "ATATT3x...",     "url": "https://myco.atlassian.net", "email": "bot@myco.com" }
+{ "provider": "google", "token": "{\"type\":\"service_account\", ...}" }
+{ "provider": "other",  "token": "...", "url": "https://my-service.example.com" }
+```
+
+`token` is always present. `url` and `email` are included when set on the Credential. The runner maps each response to environment variables and on-disk files consumed by Claude Code and its tools.
+
+### Environment Variables Set by Runner After Credential Fetch
+
+| Provider | Env vars set | Files written |
+|----------|-------------|---------------|
+| `google` | `USER_GOOGLE_EMAIL` | `credentials.json` (token value is full SA JSON) |
+| `jira`   | `JIRA_URL`, `JIRA_API_TOKEN`, `JIRA_EMAIL` | — |
+| `gitlab` | `GITLAB_TOKEN` | `/tmp/.ambient_gitlab_token` |
+| `github` | `GITHUB_TOKEN` | `/tmp/.ambient_github_token` |
+
+### Additional Environment Variable Injected by CP
+
+| Var | Value | Purpose |
+|-----|-------|---------|
+| `CREDENTIAL_IDS` | JSON map `{provider: id}` | Resolved credential IDs for this session; runner uses to call `/credentials/{id}/token` |
+
+Status: 🔲 planned — blocked on Credential Kind (ambient-model.spec.md Wave 4 BE)
 
 ---
 
