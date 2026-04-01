@@ -12,9 +12,15 @@ Owns the entire Claude session lifecycle:
 import logging
 import os
 import time
-from typing import Any, AsyncIterator, Optional
+from typing import Any, AsyncIterator
 
-from ag_ui.core import BaseEvent, EventType, RunAgentInput, RunStartedEvent, RunFinishedEvent
+from ag_ui.core import (
+    BaseEvent,
+    EventType,
+    RunAgentInput,
+    RunStartedEvent,
+    RunFinishedEvent,
+)
 from ag_ui_claude_sdk import ClaudeAgentAdapter
 from ag_ui_claude_sdk.adapter import now_ms
 
@@ -107,7 +113,9 @@ class ClaudeBridge(PlatformBridge):
 
         prev_user = self._context.current_user_id if self._context else ""
         if self._context:
-            self._context.set_current_user(current_user_id, current_user_name, caller_token)
+            self._context.set_current_user(
+                current_user_id, current_user_name, caller_token
+            )
 
         await self._ensure_ready()
 
@@ -142,9 +150,13 @@ class ClaudeBridge(PlatformBridge):
         caller_token: str = "",
     ) -> AsyncIterator[BaseEvent]:
         """Full run lifecycle: initialize → session worker → tracing."""
-        thread_id = input_data.thread_id or (self._context.session_id if self._context else "")
+        thread_id = input_data.thread_id or (
+            self._context.session_id if self._context else ""
+        )
 
-        await self._initialize_run(thread_id, current_user_id, current_user_name, caller_token)
+        await self._initialize_run(
+            thread_id, current_user_id, current_user_name, caller_token
+        )
 
         from ag_ui_claude_sdk.utils import process_messages
 
@@ -222,14 +234,16 @@ class ClaudeBridge(PlatformBridge):
 
                 # Clear credentials after turn completes (shared session security).
                 # In finally to ensure cleanup even on errors/cancellation.
-                if (self._context.get_env("KEEP_CREDENTIALS_PERSISTENT") or "").lower() != "true":
+                if (
+                    self._context.get_env("KEEP_CREDENTIALS_PERSISTENT") or ""
+                ).lower() != "true":
                     from ambient_runner.platform.auth import clear_runtime_credentials
 
                     clear_runtime_credentials()
 
         self._first_run = False
 
-    async def interrupt(self, thread_id: Optional[str] = None) -> None:
+    async def interrupt(self, thread_id: str | None = None) -> None:
         """Interrupt the running session for a given thread."""
         if not self._session_manager:
             raise RuntimeError("No active session manager")
@@ -249,7 +263,7 @@ class ClaudeBridge(PlatformBridge):
         if self._obs:
             self._obs.record_interrupt()
 
-    async def stop_task(self, task_id: str, thread_id: Optional[str] = None) -> None:
+    async def stop_task(self, task_id: str, thread_id: str | None = None) -> None:
         """Stop a background task (subagent) by ID."""
         if not self._session_manager:
             raise RuntimeError("No active session manager")
@@ -308,7 +322,9 @@ class ClaudeBridge(PlatformBridge):
                 return
 
             # Task lifecycle → CUSTOM events, no run envelope needed
-            if isinstance(msg, (TaskStartedMessage, TaskProgressMessage, TaskNotificationMessage)):
+            if isinstance(
+                msg, (TaskStartedMessage, TaskProgressMessage, TaskNotificationMessage)
+            ):
                 yield self._adapter._emit_task_event(msg)
                 for hook_evt in self._adapter.drain_hook_events():
                     yield hook_evt
@@ -576,9 +592,7 @@ class ClaudeBridge(PlatformBridge):
             build_mcp_servers,
         )
 
-        self._mcp_servers = build_mcp_servers(
-            self._context, self._cwd_path, self._obs
-        )
+        self._mcp_servers = build_mcp_servers(self._context, self._cwd_path, self._obs)
         self._allowed_tools = build_allowed_tools(self._mcp_servers)
         logger.info("Rebuilt MCP servers with updated credentials")
 

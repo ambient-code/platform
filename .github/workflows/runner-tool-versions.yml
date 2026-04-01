@@ -1,0 +1,362 @@
+name: Runner Image Freshness Check
+
+on:
+  schedule:
+    # Run weekly on Monday at 9 AM UTC
+    - cron: '0 9 * * 1'
+
+  workflow_dispatch: # Allow manual triggering
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: runner-tool-versions
+  cancel-in-progress: false
+
+env:
+  DOCKERFILE: components/runners/ambient-runner/Dockerfile
+
+jobs:
+  check-versions:
+    name: Check runner component versions
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── Collect current versions from Dockerfile ──────────────────────
+
+      - name: Parse current versions
+        id: current
+        run: |
+          parse() { grep -oP "ARG $1=\K[^\s]+" "$DOCKERFILE"; }
+          echo "base_digest=$(grep -oP 'ubi@sha256:\K[a-f0-9]+' "$DOCKERFILE")" >> "$GITHUB_OUTPUT"
+          echo "gh=$(parse GH_VERSION)" >> "$GITHUB_OUTPUT"
+          echo "glab=$(parse GLAB_VERSION)" >> "$GITHUB_OUTPUT"
+          echo "uv=$(parse UV_VERSION)" >> "$GITHUB_OUTPUT"
+          echo "pre_commit=$(parse PRE_COMMIT_VERSION)" >> "$GITHUB_OUTPUT"
+          echo "gemini_cli=$(parse GEMINI_CLI_VERSION)" >> "$GITHUB_OUTPUT"
+
+      # ── Fetch latest upstream versions ────────────────────────────────
+
+      - name: Install skopeo
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq skopeo > /dev/null
+
+      - name: Fetch latest versions
+        id: latest
+        run: |
+          fetch_version() {
+            local name="$1" url="$2" jq_path="$3" strip_v="${4:-false}"
+            local version
+            version=$(curl -sf --max-time 30 "$url" | jq -r "$jq_path")
+            if [ -z "$version" ] || [ "$version" = "null" ]; then
+              echo "Failed to fetch latest $name version"
+              exit 1
+            fi
+            [ "$strip_v" = "true" ] && version="${version#v}"
+            echo "${name}=${version}" >> "$GITHUB_OUTPUT"
+            echo "$name: $version"
+          }
+
+          # Base image digest (via skopeo, not curl)
+          DIGEST=$(skopeo inspect --no-tags \
+            "docker://registry.access.redhat.com/ubi10/ubi:latest" 2>/dev/null \
+            | jq -r '.Digest' | sed 's/sha256://')
+          if [ -z "$DIGEST" ] || [ "$DIGEST" = "null" ]; then
+            echo "Failed to fetch base image digest"
+            exit 1
+          fi
+          echo "base_digest=$DIGEST" >> "$GITHUB_OUTPUT"
+          echo "Base image: $DIGEST"
+
+          # Tool versions (fetched concurrently)
+          pids=()
+          names=()
+
+          fetch_version gh \
+            "https://api.github.com/repos/cli/cli/releases/latest" \
+            '.tag_name' true &
+          pids+=($!); names+=("gh")
+          fetch_version glab \
+            "https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/releases" \
+            '.[0].tag_name' true &
+          pids+=($!); names+=("glab")
+          fetch_version uv \
+            "https://pypi.org/pypi/uv/json" \
+            '.info.version' &
+          pids+=($!); names+=("uv")
+          fetch_version pre_commit \
+            "https://pypi.org/pypi/pre-commit/json" \
+            '.info.version' &
+          pids+=($!); names+=("pre-commit")
+          fetch_version gemini_cli \
+            "https://registry.npmjs.org/@google/gemini-cli/latest" \
+            '.version' &
+          pids+=($!); names+=("gemini-cli")
+
+          failed=false
+          for i in "${!pids[@]}"; do
+            if ! wait "${pids[$i]}"; then
+              echo "::error::Failed to fetch ${names[$i]} version"
+              failed=true
+            fi
+          done
+          [ "$failed" = "true" ] && exit 1
+
+      # ── Determine what needs updating ─────────────────────────────────
+
+      - name: Compare versions
+        id: diff
+        env:
+          CUR_BASE: ${{ steps.current.outputs.base_digest }}
+          LAT_BASE: ${{ steps.latest.outputs.base_digest }}
+          CUR_GH: ${{ steps.current.outputs.gh }}
+          LAT_GH: ${{ steps.latest.outputs.gh }}
+          CUR_GLAB: ${{ steps.current.outputs.glab }}
+          LAT_GLAB: ${{ steps.latest.outputs.glab }}
+          CUR_UV: ${{ steps.current.outputs.uv }}
+          LAT_UV: ${{ steps.latest.outputs.uv }}
+          CUR_PC: ${{ steps.current.outputs.pre_commit }}
+          LAT_PC: ${{ steps.latest.outputs.pre_commit }}
+          CUR_GEM: ${{ steps.current.outputs.gemini_cli }}
+          LAT_GEM: ${{ steps.latest.outputs.gemini_cli }}
+        run: |
+          needs_update=false
+          updates=""
+
+          is_newer() {
+            local cur="$1" lat="$2"
+            [ "$(printf '%s\n%s' "$cur" "$lat" | sort -V | tail -1)" != "$cur" ]
+          }
+
+          check_tool() {
+            local key="$1" cur="$2" lat="$3"
+            if is_newer "$cur" "$lat"; then
+              echo "${key}=true" >> "$GITHUB_OUTPUT"
+              needs_update=true
+              updates="${updates}${key},"
+            else
+              echo "${key}=false" >> "$GITHUB_OUTPUT"
+            fi
+          }
+
+          if [ "$CUR_BASE" != "$LAT_BASE" ]; then
+            echo "base=true" >> "$GITHUB_OUTPUT"
+            needs_update=true
+            updates="${updates}base,"
+          else
+            echo "base=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          check_tool gh "$CUR_GH" "$LAT_GH"
+          check_tool glab "$CUR_GLAB" "$LAT_GLAB"
+          check_tool uv "$CUR_UV" "$LAT_UV"
+          check_tool pc "$CUR_PC" "$LAT_PC"
+          check_tool gem "$CUR_GEM" "$LAT_GEM"
+
+          echo "any=$needs_update" >> "$GITHUB_OUTPUT"
+          echo "updates=$updates" >> "$GITHUB_OUTPUT"
+          echo "Components to update: ${updates:-none}"
+
+      # ── Apply updates to Dockerfile ───────────────────────────────────
+
+      - name: Update Dockerfile versions
+        if: steps.diff.outputs.any == 'true'
+        env:
+          CUR_BASE: ${{ steps.current.outputs.base_digest }}
+          LAT_BASE: ${{ steps.latest.outputs.base_digest }}
+          CUR_GH: ${{ steps.current.outputs.gh }}
+          LAT_GH: ${{ steps.latest.outputs.gh }}
+          CUR_GLAB: ${{ steps.current.outputs.glab }}
+          LAT_GLAB: ${{ steps.latest.outputs.glab }}
+          CUR_UV: ${{ steps.current.outputs.uv }}
+          LAT_UV: ${{ steps.latest.outputs.uv }}
+          CUR_PC: ${{ steps.current.outputs.pre_commit }}
+          LAT_PC: ${{ steps.latest.outputs.pre_commit }}
+          CUR_GEM: ${{ steps.current.outputs.gemini_cli }}
+          LAT_GEM: ${{ steps.latest.outputs.gemini_cli }}
+          UPD_BASE: ${{ steps.diff.outputs.base }}
+          UPD_GH: ${{ steps.diff.outputs.gh }}
+          UPD_GLAB: ${{ steps.diff.outputs.glab }}
+          UPD_UV: ${{ steps.diff.outputs.uv }}
+          UPD_PC: ${{ steps.diff.outputs.pc }}
+          UPD_GEM: ${{ steps.diff.outputs.gem }}
+        run: |
+          # Build sed expressions for all components that need updating
+          SED_ARGS=()
+          [ "$UPD_BASE" = "true" ] && SED_ARGS+=(-e "s|ubi@sha256:${CUR_BASE}|ubi@sha256:${LAT_BASE}|")
+          [ "$UPD_GH" = "true" ] && SED_ARGS+=(-e "s/ARG GH_VERSION=${CUR_GH}/ARG GH_VERSION=${LAT_GH}/")
+          [ "$UPD_GLAB" = "true" ] && SED_ARGS+=(-e "s/ARG GLAB_VERSION=${CUR_GLAB}/ARG GLAB_VERSION=${LAT_GLAB}/")
+          [ "$UPD_UV" = "true" ] && SED_ARGS+=(-e "s/ARG UV_VERSION=${CUR_UV}/ARG UV_VERSION=${LAT_UV}/")
+          [ "$UPD_PC" = "true" ] && SED_ARGS+=(-e "s/ARG PRE_COMMIT_VERSION=${CUR_PC}/ARG PRE_COMMIT_VERSION=${LAT_PC}/")
+          [ "$UPD_GEM" = "true" ] && SED_ARGS+=(-e "s/ARG GEMINI_CLI_VERSION=${CUR_GEM}/ARG GEMINI_CLI_VERSION=${LAT_GEM}/")
+
+          if [ ${#SED_ARGS[@]} -gt 0 ]; then
+            sed -i "${SED_ARGS[@]}" "$DOCKERFILE"
+          fi
+
+          # Sanity check: all ARGs still present and non-empty
+          for arg in GH_VERSION GLAB_VERSION UV_VERSION PRE_COMMIT_VERSION GEMINI_CLI_VERSION; do
+            if ! grep -qP "ARG ${arg}=\S+" "$DOCKERFILE"; then
+              echo "ERROR: ${arg} missing or empty after update"
+              exit 1
+            fi
+          done
+
+      # ── Create PR ─────────────────────────────────────────────────────
+
+      - name: Check for existing PR
+        if: steps.diff.outputs.any == 'true'
+        id: existing_pr
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          EXISTING=$(gh pr list \
+            --head "auto/update-runner-image" \
+            --state open \
+            --json number \
+            --jq 'length')
+          if [ "$EXISTING" -gt 0 ]; then
+            echo "pr_exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "pr_exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Update branch and open PR if needed
+        if: steps.diff.outputs.any == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CUR_BASE: ${{ steps.current.outputs.base_digest }}
+          LAT_BASE: ${{ steps.latest.outputs.base_digest }}
+          CUR_GH: ${{ steps.current.outputs.gh }}
+          LAT_GH: ${{ steps.latest.outputs.gh }}
+          CUR_GLAB: ${{ steps.current.outputs.glab }}
+          LAT_GLAB: ${{ steps.latest.outputs.glab }}
+          CUR_UV: ${{ steps.current.outputs.uv }}
+          LAT_UV: ${{ steps.latest.outputs.uv }}
+          CUR_PC: ${{ steps.current.outputs.pre_commit }}
+          LAT_PC: ${{ steps.latest.outputs.pre_commit }}
+          CUR_GEM: ${{ steps.current.outputs.gemini_cli }}
+          LAT_GEM: ${{ steps.latest.outputs.gemini_cli }}
+          UPD_BASE: ${{ steps.diff.outputs.base }}
+          UPD_GH: ${{ steps.diff.outputs.gh }}
+          UPD_GLAB: ${{ steps.diff.outputs.glab }}
+          UPD_UV: ${{ steps.diff.outputs.uv }}
+          UPD_PC: ${{ steps.diff.outputs.pc }}
+          UPD_GEM: ${{ steps.diff.outputs.gem }}
+        run: |
+          BRANCH="auto/update-runner-image"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git checkout -B "$BRANCH"
+          git add "$DOCKERFILE"
+
+          # Build a short summary for the commit title
+          CHANGED=""
+          [ "$UPD_BASE" = "true" ] && CHANGED="${CHANGED}base-image "
+          [ "$UPD_GH" = "true" ] && CHANGED="${CHANGED}gh "
+          [ "$UPD_GLAB" = "true" ] && CHANGED="${CHANGED}glab "
+          [ "$UPD_UV" = "true" ] && CHANGED="${CHANGED}uv "
+          [ "$UPD_PC" = "true" ] && CHANGED="${CHANGED}pre-commit "
+          [ "$UPD_GEM" = "true" ] && CHANGED="${CHANGED}gemini-cli "
+          CHANGED=$(echo "$CHANGED" | xargs | tr ' ' ', ')
+
+          git commit -m "chore(runner): update ${CHANGED}
+
+          Automated weekly runner image freshness update."
+
+          git push -u --force-with-lease origin "$BRANCH"
+
+          # Build PR body with version table
+          status() {
+            if [ "$1" = "true" ]; then echo "\`$2\` -> \`$3\`"; else echo "\`$2\` (up to date)"; fi
+          }
+
+          PR_BODY="## Runner Image Freshness Update
+
+          | Component | Status |
+          |-----------|--------|
+          | Base image (ubi10/ubi) | $(status "$UPD_BASE" "${CUR_BASE:0:12}…" "${LAT_BASE:0:12}…") |
+          | gh (GitHub CLI) | $(status "$UPD_GH" "$CUR_GH" "$LAT_GH") |
+          | glab (GitLab CLI) | $(status "$UPD_GLAB" "$CUR_GLAB" "$LAT_GLAB") |
+          | uv | $(status "$UPD_UV" "$CUR_UV" "$LAT_UV") |
+          | pre-commit | $(status "$UPD_PC" "$CUR_PC" "$LAT_PC") |
+          | gemini-cli | $(status "$UPD_GEM" "$CUR_GEM" "$LAT_GEM") |
+
+          ### Components not version-pinned (updated with base image)
+
+          git, jq, Node.js, Go (go-toolset) — installed via dnf from UBI 10 AppStream.
+          Their versions advance when the base image digest is updated.
+
+          ## Test Plan
+
+          - [ ] Container image builds successfully
+          - [ ] Runner starts and all tools are accessible
+          - [ ] Smoke test: \`gh version\`, \`glab version\`, \`uv --version\`, \`gemini --version\`
+
+          ---
+          *Auto-generated by runner-tool-versions workflow*"
+
+          if [ "${{ steps.existing_pr.outputs.pr_exists }}" = "false" ]; then
+            gh pr create \
+              --title "chore(runner): freshen runner image (${CHANGED})" \
+              --body "$PR_BODY" \
+              --base main \
+              --head "$BRANCH"
+          fi
+
+      # ── Summary ───────────────────────────────────────────────────────
+
+      - name: Summary
+        if: always()
+        env:
+          CUR_BASE: ${{ steps.current.outputs.base_digest }}
+          LAT_BASE: ${{ steps.latest.outputs.base_digest }}
+          CUR_GH: ${{ steps.current.outputs.gh }}
+          LAT_GH: ${{ steps.latest.outputs.gh }}
+          CUR_GLAB: ${{ steps.current.outputs.glab }}
+          LAT_GLAB: ${{ steps.latest.outputs.glab }}
+          CUR_UV: ${{ steps.current.outputs.uv }}
+          LAT_UV: ${{ steps.latest.outputs.uv }}
+          CUR_PC: ${{ steps.current.outputs.pre_commit }}
+          LAT_PC: ${{ steps.latest.outputs.pre_commit }}
+          CUR_GEM: ${{ steps.current.outputs.gemini_cli }}
+          LAT_GEM: ${{ steps.latest.outputs.gemini_cli }}
+          ANY_UPDATE: ${{ steps.diff.outputs.any }}
+          PR_EXISTS: ${{ steps.existing_pr.outputs.pr_exists || 'false' }}
+        run: |
+          icon() { [ "$1" = "$2" ] && echo "✅" || echo "⬆️"; }
+
+          {
+            echo "## Runner Image Freshness Report"
+            echo ""
+            echo "| Component | Current | Latest | |"
+            echo "|-----------|---------|--------|-|"
+            echo "| Base image | \`${CUR_BASE:0:12}…\` | \`${LAT_BASE:0:12}…\` | $(icon "$CUR_BASE" "$LAT_BASE") |"
+            echo "| gh | \`${CUR_GH}\` | \`${LAT_GH}\` | $(icon "$CUR_GH" "$LAT_GH") |"
+            echo "| glab | \`${CUR_GLAB}\` | \`${LAT_GLAB}\` | $(icon "$CUR_GLAB" "$LAT_GLAB") |"
+            echo "| uv | \`${CUR_UV}\` | \`${LAT_UV}\` | $(icon "$CUR_UV" "$LAT_UV") |"
+            echo "| pre-commit | \`${CUR_PC}\` | \`${LAT_PC}\` | $(icon "$CUR_PC" "$LAT_PC") |"
+            echo "| gemini-cli | \`${CUR_GEM}\` | \`${LAT_GEM}\` | $(icon "$CUR_GEM" "$LAT_GEM") |"
+            echo ""
+            if [ "$ANY_UPDATE" = "true" ]; then
+              if [ "$PR_EXISTS" = "true" ]; then
+                echo "Update PR already exists."
+              else
+                echo "PR created with updates."
+              fi
+            else
+              echo "All components are up to date."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
