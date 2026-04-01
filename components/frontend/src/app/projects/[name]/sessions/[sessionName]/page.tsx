@@ -1702,6 +1702,7 @@ export default function ProjectSessionDetailPage({
                 sessionName={sessionName}
                 taskId={tab.taskId}
                 task={task}
+                isActive={isActive}
               />
             </div>
           );
