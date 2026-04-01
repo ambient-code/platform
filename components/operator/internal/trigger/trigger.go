@@ -57,11 +57,13 @@ func RunSessionTrigger() {
 	if reuseLastSession {
 		reused, err := tryReuseLastSession(dynamicClient, projectNamespace, scheduledSessionName, template)
 		if err != nil {
-			log.Printf("Failed to reuse last session, falling back to creating new: %v", err)
-		} else if reused {
+			// Don't fall through to create — the reuse may have partially succeeded
+			log.Fatalf("Failed to reuse last session for %s: %v", scheduledSessionName, err)
+		}
+		if reused {
 			return
 		}
-		// Fall through to create a new session if no reusable session was found
+		// No reusable session found — fall through to create a new one
 	}
 
 	createNewSession(dynamicClient, projectNamespace, scheduledSessionName, template)
@@ -198,6 +200,13 @@ func resumeSessionWithPrompt(dynamicClient dynamic.Interface, namespace, session
 			return fmt.Errorf("failed to get session: %v", err)
 		}
 
+		annotations := item.GetAnnotations()
+		if annotations == nil {
+			annotations = make(map[string]string)
+		}
+		annotations["ambient-code.io/desired-phase"] = "Running"
+		annotations["ambient-code.io/start-requested-at"] = time.Now().Format(time.RFC3339)
+
 		if prompt != "" {
 			spec, _ := item.Object["spec"].(map[string]interface{})
 			if spec == nil {
@@ -205,15 +214,10 @@ func resumeSessionWithPrompt(dynamicClient dynamic.Interface, namespace, session
 			}
 			spec["initialPrompt"] = prompt
 			item.Object["spec"] = spec
+			// Only force prompt execution when there's a prompt to execute
+			annotations["ambient-code.io/force-execute-prompt"] = "true"
 		}
 
-		annotations := item.GetAnnotations()
-		if annotations == nil {
-			annotations = make(map[string]string)
-		}
-		annotations["ambient-code.io/desired-phase"] = "Running"
-		annotations["ambient-code.io/start-requested-at"] = time.Now().Format(time.RFC3339)
-		annotations["ambient-code.io/force-execute-prompt"] = "true"
 		item.SetAnnotations(annotations)
 
 		_, err = dynamicClient.Resource(gvr).Namespace(namespace).Update(ctx, item, metav1.UpdateOptions{})

@@ -31,6 +31,9 @@ const (
 	labelCreatedBy             = "ambient-code.io/created-by"
 	annotationDisplayName      = "ambient-code.io/display-name"
 	annotationReuseLastSession = "ambient-code.io/reuse-last-session"
+
+	// flagReuseLastSession is the Unleash feature flag for the reuse last session option.
+	flagReuseLastSession = "scheduled-session.reuse.enabled"
 )
 
 // checkScheduledSessionAccess verifies the user token and checks RBAC permission
@@ -115,6 +118,11 @@ func CreateScheduledSession(c *gin.Context) {
 	if !isValidCronExpression(req.Schedule) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid cron schedule format"})
 		return
+	}
+
+	// Gate reuseLastSession behind feature flag
+	if req.ReuseLastSession && !isReuseEnabled(c) {
+		req.ReuseLastSession = false
 	}
 
 	userID := c.GetString("userID")
@@ -261,6 +269,11 @@ func UpdateScheduledSession(c *gin.Context) {
 		log.Printf("Invalid request body for scheduled session update %s in project %s: %v", name, project, err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
 		return
+	}
+
+	// Gate reuseLastSession behind feature flag
+	if req.ReuseLastSession != nil && *req.ReuseLastSession && !isReuseEnabled(c) {
+		req.ReuseLastSession = nil
 	}
 
 	cj, err := K8sClientScheduled.BatchV1().CronJobs(project).Get(c.Request.Context(), name, metav1.GetOptions{})
@@ -535,6 +548,22 @@ func cronJobToScheduledSession(cj *batchv1.CronJob) types.ScheduledSession {
 	return ss
 }
 
+// isReuseEnabled checks if the reuse last session feature flag is enabled,
+// respecting workspace-scoped overrides.
+func isReuseEnabled(c *gin.Context) bool {
+	project := c.GetString("project")
+	reqK8s, _ := GetK8sClientsForRequest(c)
+	if reqK8s != nil {
+		overrides, err := getWorkspaceOverrides(c.Request.Context(), reqK8s, project)
+		if err == nil && overrides != nil {
+			if val, exists := overrides[flagReuseLastSession]; exists {
+				return val == "true"
+			}
+		}
+	}
+	return FeatureEnabled(flagReuseLastSession)
+}
+
 // upsertTriggerEnvVar updates or appends an environment variable in the trigger container.
 func upsertTriggerEnvVar(cj *batchv1.CronJob, name, value string) {
 	for i := range cj.Spec.JobTemplate.Spec.Template.Spec.Containers {
@@ -550,6 +579,7 @@ func upsertTriggerEnvVar(cj *batchv1.CronJob, name, value string) {
 			return
 		}
 	}
+	log.Printf("Warning: trigger container not found in CronJob %s/%s while setting %s", cj.Namespace, cj.Name, name)
 }
 
 // sanitizeLabelValue ensures a string is safe for use as a Kubernetes label value.
