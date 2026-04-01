@@ -84,6 +84,7 @@ func registerRoutes(r *gin.Engine) {
 			projectGroup.GET("/agentic-sessions/:sessionName/credentials/jira", handlers.GetJiraCredentialsForSession)
 			projectGroup.GET("/agentic-sessions/:sessionName/credentials/gitlab", handlers.GetGitLabTokenForSession)
 			projectGroup.GET("/agentic-sessions/:sessionName/credentials/mcp/:serverName", handlers.GetMCPCredentialsForSession)
+			projectGroup.GET("/agentic-sessions/:sessionName/credentials/coderabbit", handlers.GetCodeRabbitCredentialsForSession)
 
 			// Session export
 			projectGroup.GET("/agentic-sessions/:sessionName/export", websocket.HandleExportSession)
@@ -158,6 +159,12 @@ func registerRoutes(r *gin.Engine) {
 		api.GET("/auth/gitlab/status", handlers.GetGitLabStatusGlobal)
 		api.DELETE("/auth/gitlab/disconnect", handlers.DisconnectGitLabGlobal)
 		api.POST("/auth/gitlab/test", handlers.TestGitLabConnection)
+
+		// Cluster-level CodeRabbit (user-scoped)
+		api.POST("/auth/coderabbit/connect", handlers.ConnectCodeRabbit)
+		api.GET("/auth/coderabbit/status", handlers.GetCodeRabbitStatus)
+		api.DELETE("/auth/coderabbit/disconnect", handlers.DisconnectCodeRabbit)
+		api.POST("/auth/coderabbit/test", handlers.TestCodeRabbitConnection)
 
 		// Generic MCP server credentials (user-scoped)
 		api.POST("/auth/mcp/:serverName/connect", handlers.ConnectMCPServer)

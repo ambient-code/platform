@@ -537,3 +537,57 @@ func fetchGitLabUserIdentity(ctx context.Context, token, instanceURL string) (us
 	log.Printf("Fetched GitLab user identity: name=%q hasEmail=%t", userName, email != "")
 	return userName, email
 }
+
+// GetCodeRabbitCredentialsForSession handles GET /api/projects/:project/agentic-sessions/:session/credentials/coderabbit
+func GetCodeRabbitCredentialsForSession(c *gin.Context) {
+	project := c.Param("projectName")
+	session := c.Param("sessionName")
+
+	reqK8s, reqDyn := GetK8sClientsForRequest(c)
+	if reqK8s == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		return
+	}
+
+	gvr := GetAgenticSessionV1Alpha1Resource()
+	obj, err := reqDyn.Resource(gvr).Namespace(project).Get(c.Request.Context(), session, v1.GetOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Session not found"})
+			return
+		}
+		log.Printf("Failed to get session %s/%s: %v", project, session, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get session"})
+		return
+	}
+
+	userID, found, err := unstructured.NestedString(obj.Object, "spec", "userContext", "userId")
+	if !found || err != nil || userID == "" {
+		log.Printf("Failed to extract userID from session %s/%s: found=%v, err=%v", project, session, found, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "User ID not found in session"})
+		return
+	}
+
+	authenticatedUserID := c.GetString("userID")
+	if authenticatedUserID != "" && authenticatedUserID != userID {
+		log.Printf("RBAC violation: user %s attempted to access credentials for session owned by %s", authenticatedUserID, userID)
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied: session belongs to different user"})
+		return
+	}
+
+	creds, err := GetCodeRabbitCredentials(c.Request.Context(), userID)
+	if err != nil {
+		log.Printf("Failed to get CodeRabbit credentials for user %s: %v", userID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get CodeRabbit credentials"})
+		return
+	}
+
+	if creds == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "CodeRabbit credentials not configured"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"apiKey": creds.APIKey,
+	})
+}
