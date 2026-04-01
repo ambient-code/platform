@@ -331,7 +331,7 @@ func ensureSessionTriggerRBAC(namespace string, owner *unstructured.Unstructured
 			{
 				APIGroups: []string{"vteam.ambient-code"},
 				Resources: []string{"agenticsessions"},
-				Verbs:     []string{"create", "get", "list"},
+				Verbs:     []string{"create", "get", "list", "update"},
 			},
 		},
 	}

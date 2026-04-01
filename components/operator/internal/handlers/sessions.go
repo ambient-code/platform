@@ -768,7 +768,7 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 		stateSyncImage = runtime.Sandbox.StateSyncImage
 	}
 
-	runnerPort := int32(defaultRunnerPort)
+	runnerPort := int32(DefaultRunnerPort)
 	if runtime != nil && runtime.Container.Port > 0 {
 		runnerPort = int32(runtime.Container.Port)
 	}
@@ -1119,8 +1119,13 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 					log.Printf("Session %s: passing PARENT_SESSION_ID=%s to runner", name, parentSessionID)
 				}
 
-				// Add IS_RESUME if this session has been started before
-				if status, found, _ := unstructured.NestedMap(currentObj.Object, "status"); found {
+				// Add IS_RESUME if this session has been started before,
+				// unless force-execute-prompt is set (scheduled session reuse wants the prompt to run).
+				forceExecutePrompt := annotations["ambient-code.io/force-execute-prompt"] == "true"
+				if forceExecutePrompt {
+					log.Printf("Session %s: force-execute-prompt annotation set, skipping IS_RESUME", name)
+					_ = clearAnnotation(sessionNamespace, name, "ambient-code.io/force-execute-prompt")
+				} else if status, found, _ := unstructured.NestedMap(currentObj.Object, "status"); found {
 					if startTime, ok := status["startTime"].(string); ok && startTime != "" {
 						base = append(base, corev1.EnvVar{Name: "IS_RESUME", Value: "true"})
 						log.Printf("Session %s: marking as resume (IS_RESUME=true, startTime=%s)", name, startTime)

@@ -23,8 +23,8 @@ const (
 	persistenceNone = "none"
 	persistenceS3   = "s3"
 
-	// defaultRunnerPort is the fallback AG-UI server port.
-	defaultRunnerPort = 8001
+	// DefaultRunnerPort is the fallback AG-UI server port.
+	DefaultRunnerPort = 8001
 )
 
 // AgentRuntimeSpec — parsed from registry ConfigMap JSON.
@@ -142,14 +142,14 @@ func getRunnerPort(namespace, sessionName string) int32 {
 		context.Background(), svcName, v1.GetOptions{},
 	)
 	if err != nil {
-		return defaultRunnerPort
+		return DefaultRunnerPort
 	}
 	for _, port := range svc.Spec.Ports {
 		if port.Name == "agui" {
 			return port.Port
 		}
 	}
-	return defaultRunnerPort
+	return DefaultRunnerPort
 }
 
 // getRuntimeSpec looks up a runtime by ID from the registry.
