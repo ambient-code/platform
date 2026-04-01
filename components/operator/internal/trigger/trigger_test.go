@@ -77,6 +77,22 @@ func TestSanitizeName(t *testing.T) {
 	}
 }
 
+func TestSanitizeName_ScheduledSessionUUID(t *testing.T) {
+	// Scheduled session names contain UUIDs (e.g. "schedule-cb9522da-ce4d-4bc8-8cc8-5647407288f5").
+	// Without sanitization, "session-" + name + "-" + timestamp = 64 chars, exceeding
+	// the 63-char K8s Service name limit.  sanitizeName must cap at 40 chars.
+	input := "schedule-cb9522da-ce4d-4bc8-8cc8-5647407288f5"
+	result := sanitizeName(input)
+	if len(result) > 40 {
+		t.Errorf("sanitizeName(%q) length = %d, want <= 40", input, len(result))
+	}
+	// session-{sanitized}-{10-digit-ts} must fit in 63 chars
+	svcName := "session-" + result + "-1775052000"
+	if len(svcName) > 63 {
+		t.Errorf("derived Service name %q length = %d, exceeds 63-char K8s limit", svcName, len(svcName))
+	}
+}
+
 func TestSanitizeName_TruncationPreservesValidSuffix(t *testing.T) {
 	// Verify that truncation to 40 chars does not leave a trailing hyphen
 	input := "abcdefghijklmnopqrstuvwxyz1234567890abcd!"

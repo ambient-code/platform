@@ -232,9 +232,14 @@ func resumeSessionWithPrompt(dynamicClient dynamic.Interface, namespace, session
 
 // createNewSession creates a new AgenticSession CR (original behavior).
 func createNewSession(dynamicClient dynamic.Interface, namespace, scheduledSessionName string, template map[string]interface{}) {
+	// Build session name and display name.
+	// The most restrictive derived K8s resource name is the Service:
+	//   "session-" (8 chars) + sessionName ≤ 63  →  sessionName ≤ 55
+	// sanitizeName caps at 40 chars, so namePrefix + "-" + timestamp (10)
+	// yields at most 51 chars — well within the 55-char budget.
 	now := time.Now()
 	ts := strconv.FormatInt(now.Unix(), 10)
-	namePrefix := scheduledSessionName
+	namePrefix := sanitizeName(scheduledSessionName)
 	if dn, ok := template["displayName"].(string); ok && dn != "" {
 		namePrefix = sanitizeName(dn)
 		// Set display name with human-readable timestamp, e.g. "Daily Jira Summary (Jan 1, 2026 - 00:00:00)"
