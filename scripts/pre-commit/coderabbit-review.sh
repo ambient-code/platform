@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # coderabbit-review.sh — run CodeRabbit CLI review on staged changes.
 # Skips gracefully if the CLI or auth is not available.
+# Treats transient failures (rate limits, network errors) as warnings.
 set -euo pipefail
 
 # Resolve binary name
@@ -27,4 +28,21 @@ if [ -z "${CODERABBIT_API_KEY:-}" ]; then
     fi
 fi
 
-exec timeout 300 "$CR" review --type uncommitted --prompt-only
+# Run review; capture output to distinguish findings from transient errors
+OUTPUT=$(timeout 300 "$CR" review --type uncommitted --prompt-only 2>&1) || EXIT_CODE=$?
+EXIT_CODE=${EXIT_CODE:-0}
+
+echo "$OUTPUT"
+
+if [ "$EXIT_CODE" -eq 0 ]; then
+    exit 0
+fi
+
+# Rate limits and network errors should warn, not block
+if echo "$OUTPUT" | grep -qi "rate limit\|network\|timeout\|connection"; then
+    echo "CodeRabbit: transient error (see above) — not blocking commit"
+    exit 0
+fi
+
+# Actual review findings — block the commit
+exit "$EXIT_CODE"
