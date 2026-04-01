@@ -23,7 +23,6 @@
     {
       "name": "scheduled-session.reuse.enabled",
       "description": "Enable reuse last session option for scheduled sessions",
-      "enabledByDefault": true,
       "tags": [
         {
           "type": "scope",
