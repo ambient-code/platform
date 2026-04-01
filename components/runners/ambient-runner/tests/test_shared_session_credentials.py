@@ -4,6 +4,7 @@ import json
 import os
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from io import BytesIO
+from pathlib import Path
 from threading import Thread
 from unittest.mock import AsyncMock, MagicMock, patch
 from urllib.error import HTTPError
@@ -13,8 +14,11 @@ import pytest
 from ambient_runner.platform.auth import (
     _GITHUB_TOKEN_FILE,
     _GITLAB_TOKEN_FILE,
+    _GH_WRAPPER_PATH,
+    _WRAPPER_BIN_DIR,
     _fetch_credential,
     clear_runtime_credentials,
+    install_gh_wrapper,
     populate_runtime_credentials,
     sanitize_user_context,
 )
@@ -710,3 +714,158 @@ class TestRefreshCredentialsTool:
 
         assert result.get("isError") is None or result.get("isError") is False
         assert "successfully" in result["content"][0]["text"].lower()
+
+
+# ---------------------------------------------------------------------------
+# gh CLI wrapper (mid-run GITHUB_TOKEN refresh support)
+# ---------------------------------------------------------------------------
+
+
+class TestGhWrapper:
+    """Tests for gh CLI wrapper that propagates mid-run credential refreshes.
+
+    The CLI subprocess is spawned once and its environment is fixed at that
+    point.  Updating os.environ["GITHUB_TOKEN"] later does not propagate into
+    the subprocess.  A wrapper script placed in PATH before the subprocess
+    spawns reads the token file on every gh invocation so the latest token is
+    always used.
+    """
+
+    import ambient_runner.platform.auth as _auth_module
+
+    def _cleanup(self):
+        import shutil
+
+        shutil.rmtree(_WRAPPER_BIN_DIR, ignore_errors=True)
+        _GITHUB_TOKEN_FILE.unlink(missing_ok=True)
+
+    def _reset_installed_flag(self):
+        import ambient_runner.platform.auth as _auth
+
+        _auth._gh_wrapper_installed = False
+
+    def test_install_gh_wrapper_creates_wrapper_script(self):
+        """install_gh_wrapper writes an executable wrapper at _GH_WRAPPER_PATH."""
+        self._cleanup()
+        self._reset_installed_flag()
+        try:
+            with patch("shutil.which", return_value="/usr/bin/gh"):
+                install_gh_wrapper()
+
+            wrapper = Path(_GH_WRAPPER_PATH)
+            assert wrapper.exists(), "Wrapper script should be created"
+            content = wrapper.read_text()
+            assert "/tmp/.ambient_github_token" in content
+            assert "/usr/bin/gh" in content
+            # Must be executable
+            assert wrapper.stat().st_mode & 0o111, "Wrapper must be executable"
+        finally:
+            self._cleanup()
+            self._reset_installed_flag()
+
+    def test_install_gh_wrapper_prepends_wrapper_dir_to_path(self):
+        """install_gh_wrapper prepends _WRAPPER_BIN_DIR to PATH."""
+        self._cleanup()
+        self._reset_installed_flag()
+        original_path = os.environ.get("PATH", "")
+        try:
+            with patch("shutil.which", return_value="/usr/bin/gh"):
+                install_gh_wrapper()
+
+            new_path = os.environ.get("PATH", "")
+            assert new_path.startswith(f"{_WRAPPER_BIN_DIR}:"), (
+                "Wrapper dir should be prepended to PATH"
+            )
+        finally:
+            os.environ["PATH"] = original_path
+            self._cleanup()
+            self._reset_installed_flag()
+
+    def test_install_gh_wrapper_skips_when_gh_not_found(self):
+        """install_gh_wrapper does nothing when gh binary is not on PATH."""
+        self._cleanup()
+        self._reset_installed_flag()
+        try:
+            with patch("shutil.which", return_value=None):
+                install_gh_wrapper()
+
+            assert not Path(_GH_WRAPPER_PATH).exists(), (
+                "Wrapper should not be created when gh is absent"
+            )
+        finally:
+            self._cleanup()
+            self._reset_installed_flag()
+
+    def test_install_gh_wrapper_is_idempotent(self):
+        """Calling install_gh_wrapper twice does not duplicate PATH entries."""
+        self._cleanup()
+        self._reset_installed_flag()
+        original_path = os.environ.get("PATH", "")
+        try:
+            with patch("shutil.which", return_value="/usr/bin/gh"):
+                install_gh_wrapper()
+                install_gh_wrapper()  # second call should be a no-op
+
+            path_parts = os.environ.get("PATH", "").split(":")
+            count = path_parts.count(_WRAPPER_BIN_DIR)
+            assert count == 1, (
+                f"Wrapper dir should appear exactly once in PATH, got {count}"
+            )
+        finally:
+            os.environ["PATH"] = original_path
+            self._cleanup()
+            self._reset_installed_flag()
+
+    def test_wrapper_script_reads_token_file_before_env_var(self):
+        """Wrapper script prioritises the token file over the env var (mid-run refresh)."""
+        self._cleanup()
+        self._reset_installed_flag()
+        try:
+            with patch("shutil.which", return_value="/usr/bin/gh"):
+                install_gh_wrapper()
+
+            content = Path(_GH_WRAPPER_PATH).read_text()
+            # Token file read must appear before the exec line
+            file_read_pos = content.index("/tmp/.ambient_github_token")
+            exec_pos = content.index("exec /usr/bin/gh")
+            assert file_read_pos < exec_pos, (
+                "Token file read must precede exec in wrapper script"
+            )
+        finally:
+            self._cleanup()
+            self._reset_installed_flag()
+
+    @pytest.mark.asyncio
+    async def test_populate_installs_gh_wrapper(self):
+        """populate_runtime_credentials installs the gh wrapper."""
+        self._cleanup()
+        self._reset_installed_flag()
+        original_path = os.environ.get("PATH", "")
+        try:
+            with (
+                patch("ambient_runner.platform.auth._fetch_credential") as mock_fetch,
+                patch("shutil.which", return_value="/usr/bin/gh"),
+            ):
+
+                async def _creds(ctx, ctype):
+                    if ctype == "github":
+                        return {
+                            "token": "gh-token",
+                            "userName": "u",
+                            "email": "u@e.com",
+                        }
+                    return {}
+
+                mock_fetch.side_effect = _creds
+                ctx = _make_context()
+                await populate_runtime_credentials(ctx)
+
+            assert Path(_GH_WRAPPER_PATH).exists(), (
+                "populate_runtime_credentials should install the gh wrapper"
+            )
+        finally:
+            os.environ["PATH"] = original_path
+            self._cleanup()
+            self._reset_installed_flag()
+            for key in ["GITHUB_TOKEN", "GIT_USER_NAME", "GIT_USER_EMAIL"]:
+                os.environ.pop(key, None)

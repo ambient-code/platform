@@ -42,6 +42,13 @@ _GOOGLE_WORKSPACE_CREDS_FILE = Path(
 _GITHUB_TOKEN_FILE = Path("/tmp/.ambient_github_token")
 _GITLAB_TOKEN_FILE = Path("/tmp/.ambient_gitlab_token")
 
+# Directory containing wrapper scripts that shadow real binaries so that
+# mid-run credential refreshes are visible to already-spawned subprocesses.
+# Prepended to PATH before the CLI subprocess is spawned so every child
+# process inherits it.
+_WRAPPER_BIN_DIR = "/tmp/.ambient-bin"
+_GH_WRAPPER_PATH = f"{_WRAPPER_BIN_DIR}/gh"
+
 
 # ---------------------------------------------------------------------------
 # Vertex AI credential validation (shared across all bridges)
@@ -404,9 +411,10 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
         if github_creds.get("email"):
             git_user_email = github_creds["email"]
 
-    # Configure git identity and credential helper
+    # Configure git identity, credential helper, and gh wrapper
     await configure_git_identity(git_user_name, git_user_email)
     install_git_credential_helper()
+    install_gh_wrapper()
 
     if auth_failures:
         raise PermissionError(
@@ -583,6 +591,66 @@ esac
 """
 
 _credential_helper_installed = False  # reset on every new process / deployment
+_gh_wrapper_installed = False  # reset on every new process / deployment
+
+
+def install_gh_wrapper() -> None:
+    """Write a gh CLI wrapper and prepend its directory to PATH (once per process).
+
+    The wrapper reads GITHUB_TOKEN from /tmp/.ambient_github_token so that
+    mid-run credential refreshes propagate into already-spawned CLI subprocesses.
+    Git operations are handled by the git credential helper; this wrapper covers
+    gh CLI calls (gh pr create, gh issue, etc.) which read GITHUB_TOKEN directly
+    from their environment (fixed at subprocess spawn time).
+    """
+    global _gh_wrapper_installed
+    if _gh_wrapper_installed:
+        return
+
+    import shutil
+    import stat
+
+    # Find the real gh binary, excluding our wrapper dir to avoid a circular lookup.
+    current_path = os.environ.get("PATH", "")
+    search_path = ":".join(p for p in current_path.split(":") if p != _WRAPPER_BIN_DIR)
+    real_gh = shutil.which("gh", path=search_path)
+    if not real_gh:
+        logger.debug("gh CLI not found; skipping gh wrapper installation")
+        return
+
+    wrapper_dir = Path(_WRAPPER_BIN_DIR)
+    try:
+        wrapper_dir.mkdir(parents=True, exist_ok=True)
+        wrapper_path = Path(_GH_WRAPPER_PATH)
+        wrapper_script = f"""\
+#!/bin/sh
+# Ambient gh CLI wrapper.
+# Reads GITHUB_TOKEN from the token file so mid-run credential refreshes
+# propagate into already-spawned CLI subprocesses (subprocess env is fixed
+# at creation time; the file is updated by the runner on every refresh).
+if [ -f "/tmp/.ambient_github_token" ]; then
+    _token=$(cat /tmp/.ambient_github_token 2>/dev/null)
+    if [ -n "$_token" ]; then
+        GITHUB_TOKEN="$_token"
+        export GITHUB_TOKEN
+    fi
+fi
+exec {real_gh} "$@"
+"""
+        wrapper_path.write_text(wrapper_script)
+        wrapper_path.chmod(
+            stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH
+        )  # 755
+
+        # Prepend wrapper dir to PATH so our wrapper takes precedence over the
+        # real gh binary for any subprocess spawned after this point.
+        if _WRAPPER_BIN_DIR not in current_path.split(":"):
+            os.environ["PATH"] = f"{_WRAPPER_BIN_DIR}:{current_path}"
+
+        _gh_wrapper_installed = True
+        logger.info("Installed gh wrapper at %s", _GH_WRAPPER_PATH)
+    except Exception as e:
+        logger.warning(f"Failed to install gh wrapper: {e}")
 
 
 def install_git_credential_helper() -> None:
