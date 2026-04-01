@@ -151,9 +151,7 @@ def create_ambient_app(
             active_streams = getattr(bridge, "_active_streams", None)
             if active_streams is not None and session_id not in active_streams:
                 active_streams[session_id] = asyncio.Queue(maxsize=100)
-                logger.info(
-                    "Pre-registered SSE queue for session=%s", session_id
-                )
+                logger.info("Pre-registered SSE queue for session=%s", session_id)
 
         # Auto-execute prompts when present (skipped only for resumes,
         # where the conversation is continued rather than re-started).

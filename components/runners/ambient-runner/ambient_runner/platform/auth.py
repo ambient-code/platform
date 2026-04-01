@@ -103,18 +103,20 @@ def sanitize_user_context(user_id: str, user_name: str) -> tuple[str, str]:
 async def _fetch_credential(context: RunnerContext, credential_type: str) -> dict:
     """Fetch credentials from backend API at runtime."""
     base = os.getenv("BACKEND_API_URL", "").rstrip("/")
-    project = os.getenv("PROJECT_NAME") or os.getenv("AGENTIC_SESSION_NAMESPACE", "")
-    project = project.strip()
-    session_id = context.session_id
 
-    if not base or not project or not session_id:
+    if not base:
         logger.warning(
-            f"Cannot fetch {credential_type} credentials: missing environment "
-            f"variables (base={base}, project={project}, session={session_id})"
+            f"Cannot fetch {credential_type} credentials: BACKEND_API_URL not set"
         )
         return {}
 
-    url = f"{base}/projects/{project}/agentic-sessions/{session_id}/credentials/{credential_type}"
+    credential_ids = _json.loads(os.getenv("CREDENTIAL_IDS", "{}"))
+    credential_id = credential_ids.get(credential_type)
+    if not credential_id:
+        logger.debug(f"No credential_id for provider {credential_type}; skipping fetch")
+        return {}
+
+    url = f"{base}/api/ambient/v1/credentials/{credential_id}/token"
 
     # Reject non-cluster URLs to prevent token exfiltration via user-overridden env vars
     parsed = urlparse(base)
@@ -297,17 +299,6 @@ async def fetch_token_for_url(context: RunnerContext, url: str) -> str:
         return os.getenv("GITHUB_TOKEN") or await fetch_github_token(context)
 
 
-def clear_runtime_credentials() -> None:
-    """Clear all runtime credentials from environment before repopulating."""
-    for key in ("JIRA_URL", "JIRA_API_TOKEN", "JIRA_EMAIL",
-                "GITLAB_TOKEN", "GITHUB_TOKEN", "USER_GOOGLE_EMAIL"):
-        os.environ.pop(key, None)
-
-    creds_file = Path("/workspace/.google_workspace_mcp/credentials/credentials.json")
-    if creds_file.exists():
-        creds_file.unlink()
-
-
 async def populate_runtime_credentials(context: RunnerContext) -> None:
     """Fetch all credentials from backend and populate environment variables.
 
@@ -335,28 +326,18 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
         logger.warning(f"Failed to refresh Google credentials: {google_creds}")
         if isinstance(google_creds, PermissionError):
             auth_failures.append(str(google_creds))
-    elif google_creds.get("accessToken"):
+    elif google_creds.get("token"):
         try:
-            creds_dir = _GOOGLE_WORKSPACE_CREDS_FILE.parent
-            creds_dir.mkdir(parents=True, exist_ok=True)
-
-            # The refresh token is written to disk because workspace-mcp
-            # runs as a child process and cannot call back to the platform
-            # backend to obtain fresh access tokens on its own.
-            creds_data = {
-                "token": google_creds.get("accessToken"),
-                "refresh_token": google_creds.get("refreshToken", ""),
-                "token_uri": "https://oauth2.googleapis.com/token",
-                "client_id": os.getenv("GOOGLE_OAUTH_CLIENT_ID", ""),
-                "client_secret": os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", ""),
-                "scopes": google_creds.get("scopes", []),
-                "expiry": google_creds.get("expiresAt", ""),
-            }
-
-            with open(_GOOGLE_WORKSPACE_CREDS_FILE, "w") as f:
-                _json.dump(creds_data, f, indent=2)
-            _GOOGLE_WORKSPACE_CREDS_FILE.chmod(0o600)
-            logger.info("Updated Google credentials file for workspace-mcp")
+            sa_json = google_creds["token"]
+            gac_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "")
+            if gac_path:
+                creds_path = Path(gac_path)
+            else:
+                creds_path = _GOOGLE_WORKSPACE_CREDS_FILE
+            creds_path.parent.mkdir(parents=True, exist_ok=True)
+            creds_path.write_text(sa_json)
+            creds_path.chmod(0o600)
+            logger.info(f"Updated Google service account credentials at {creds_path}")
 
             user_email = google_creds.get("email", "")
             if user_email and user_email != _PLACEHOLDER_EMAIL:
@@ -369,9 +350,9 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
         logger.warning(f"Failed to refresh Jira credentials: {jira_creds}")
         if isinstance(jira_creds, PermissionError):
             auth_failures.append(str(jira_creds))
-    elif jira_creds.get("apiToken"):
+    elif jira_creds.get("token"):
         os.environ["JIRA_URL"] = jira_creds.get("url", "")
-        os.environ["JIRA_API_TOKEN"] = jira_creds.get("apiToken", "")
+        os.environ["JIRA_API_TOKEN"] = jira_creds.get("token", "")
         os.environ["JIRA_EMAIL"] = jira_creds.get("email", "")
         logger.info("Updated Jira credentials in environment")
 

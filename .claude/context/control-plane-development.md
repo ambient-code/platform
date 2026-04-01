@@ -9,7 +9,7 @@
 - **Protocol:** gRPC (proto definitions in `components/ambient-api-server/proto/ambient/v1/`)
 - **Runner entry:** `components/runners/ambient-runner/main.py`
 - **gRPC bridge:** `components/runners/ambient-runner/ambient_runner/bridges/claude/grpc_transport.py`
-- **Runner env:** controlled by operator via pod env vars — see `operator-development.md`
+- **Runner env:** controlled by CP via pod env vars — see `kube_reconciler.go:buildEnv()`
 
 ---
 
@@ -19,7 +19,7 @@ The CP was once reverted from upstream because it interfered with the runner's S
 
 | Concern | Runner expects | CP must preserve |
 |---|---|---|
-| Session start | Job pod scheduled by operator | CP does not reschedule |
+| Session start | Pod provisioned by CP | CP does not reschedule |
 | Event emission | Runner pushes AG-UI events via gRPC | CP forwards in order, never drops |
 | `RUN_FINISHED` | Emitted once, last | CP forwards exactly once — never duplicated |
 | `MESSAGES_SNAPSHOT` | Emitted periodically | CP forwards in order |
@@ -74,11 +74,27 @@ Two classes:
 
 **`GRPCMessageWriter`** — per-turn event consumer. Accumulates `MESSAGES_SNAPSHOT` content. On `RUN_FINISHED` or `RUN_ERROR`, calls `PushSessionMessage(event_type="assistant", payload=assistant_text)` — writes the durable DB record.
 
-Only active when `AMBIENT_GRPC_ENABLED=true` (set by operator when `AMBIENT_GRPC_URL` is non-empty).
+Only active when `AMBIENT_GRPC_ENABLED=true` (set by CP when `AMBIENT_GRPC_URL` is non-empty).
 
 ### Inbox drain at session start
 
-The runner drains the agent's inbox before starting the Claude Code session. All unread messages are assembled into `INITIAL_PROMPT` via `assembleInitialPrompt()` in the operator (see `kube_reconciler.go`). The runner receives this as the `INITIAL_PROMPT` env var.
+The runner drains the agent's inbox before starting the Claude Code session. All unread messages are assembled into `INITIAL_PROMPT` via `assembleInitialPrompt()` in the CP (`reconciler/kube_reconciler.go`). The runner receives this as the `INITIAL_PROMPT` env var.
+
+### Credential fetch (Wave 5)
+
+The CP resolves credentials for the session before pod creation. For each provider (github, gitlab, jira, google), it walks agent → project → global scope and takes the most specific matching credential. It then:
+
+1. Builds `CREDENTIAL_IDS` — a JSON map of `provider → credential_id` — and injects it into the runner pod env
+2. Grants `credential:token-reader` on each credential ID to the runner pod's service account
+
+The runner reads `CREDENTIAL_IDS` at startup and calls `GET /api/ambient/v1/credentials/{id}/token` per provider. Response always uses `token` field (uniform across all providers). See `platform/auth.py:_fetch_credential()`.
+
+| Provider | Env var(s) set | File written |
+|----------|---------------|--------------|
+| `github` | `GITHUB_TOKEN` | `/tmp/.ambient_github_token` |
+| `gitlab` | `GITLAB_TOKEN` | `/tmp/.ambient_gitlab_token` |
+| `jira` | `JIRA_URL`, `JIRA_API_TOKEN`, `JIRA_EMAIL` | — |
+| `google` | `USER_GOOGLE_EMAIL` | `credentials.json` (token value is full SA JSON) |
 
 ### AG-UI event order (invariant)
 
@@ -102,7 +118,7 @@ The api-server does not have a built-in proxy to runner pods. Runner pods are ad
 http://session-{KubeCrName}.{KubeNamespace}.svc.cluster.local:8001
 ```
 
-The `Session` model stores `KubeCrName` and `KubeNamespace` — both available from the DB. The runner listens on port `8001` (set via `AGUI_PORT` env var by the operator; runner default is `8000` but the operator overrides it).
+The `Session` model stores `KubeCrName` and `KubeNamespace` — both available from the DB. The runner listens on port `8001` (set via `AGUI_PORT` env var by the CP; runner default is `8000` but the CP overrides it).
 
 This pattern is used by `components/backend/websocket/agui_proxy.go` (V1 backend). Any new proxy endpoint in the api-server must implement this same addressing.
 

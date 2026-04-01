@@ -170,9 +170,11 @@ class SessionWorker:
 
                     # Wait for reader to signal ResultMessage received,
                     # but also bail if the reader task dies mid-turn.
-                    reader_done = asyncio.ensure_future(
-                        asyncio.shield(self._reader_task)
-                    ) if self._reader_task else None
+                    reader_done = (
+                        asyncio.ensure_future(asyncio.shield(self._reader_task))
+                        if self._reader_task
+                        else None
+                    )
                     turn_wait = asyncio.ensure_future(self._turn_done.wait())
 
                     waiters = [turn_wait]
@@ -190,13 +192,12 @@ class SessionWorker:
 
                     if reader_done and reader_done in done:
                         logger.error(
-                            "[SessionWorker] Reader died mid-turn for "
-                            "thread=%s",
+                            "[SessionWorker] Reader died mid-turn for thread=%s",
                             self.thread_id,
                         )
-                        await output_queue.put(WorkerError(
-                            RuntimeError("SDK message reader died")
-                        ))
+                        await output_queue.put(
+                            WorkerError(RuntimeError("SDK message reader died"))
+                        )
                         break
 
                 except Exception as exc:
@@ -247,10 +248,14 @@ class SessionWorker:
             async for msg in client.receive_messages():
                 msg_type = type(msg).__name__
                 subtype = getattr(msg, "subtype", "")
-                route = "run" if self._active_output_queue is not None else "between-run"
+                route = (
+                    "run" if self._active_output_queue is not None else "between-run"
+                )
                 logger.debug(
                     "[Reader] %s (subtype=%s) → %s queue",
-                    msg_type, subtype, route,
+                    msg_type,
+                    subtype,
+                    route,
                 )
 
                 # Capture session_id from init message (for resume)

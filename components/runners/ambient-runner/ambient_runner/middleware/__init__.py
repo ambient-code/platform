@@ -10,4 +10,9 @@ from ambient_runner.middleware.grpc_push import grpc_push_middleware
 from ambient_runner.middleware.secret_redaction import secret_redaction_middleware
 from ambient_runner.middleware.tracing import tracing_middleware
 
-__all__ = ["tracing_middleware", "secret_redaction_middleware", "grpc_push_middleware", "emit_developer_message"]
+__all__ = [
+    "tracing_middleware",
+    "secret_redaction_middleware",
+    "grpc_push_middleware",
+    "emit_developer_message",
+]

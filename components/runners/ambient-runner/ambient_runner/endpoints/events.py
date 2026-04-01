@@ -51,7 +51,9 @@ async def get_events(thread_id: str, request: Request):
     The GRPCSessionListener fan-out loop feeds events into the queue.
     """
     bridge = request.app.state.bridge
-    active_streams: dict[str, asyncio.Queue] | None = getattr(bridge, "_active_streams", None)
+    active_streams: dict[str, asyncio.Queue] | None = getattr(
+        bridge, "_active_streams", None
+    )
 
     if active_streams is None:
         raise HTTPException(
@@ -139,7 +141,9 @@ async def wait_for_events(thread_id: str, request: Request):
     immediately on connection (before PushSessionMessage is called).
     """
     bridge = request.app.state.bridge
-    active_streams: dict[str, asyncio.Queue] | None = getattr(bridge, "_active_streams", None)
+    active_streams: dict[str, asyncio.Queue] | None = getattr(
+        bridge, "_active_streams", None
+    )
 
     if active_streams is None:
         raise HTTPException(

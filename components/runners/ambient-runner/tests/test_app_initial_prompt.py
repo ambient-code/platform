@@ -416,7 +416,9 @@ class TestCreateAmbientAppLifespanGRPCOff:
 
         with (
             patch.dict(os.environ, env_overrides),
-            patch.object(bridge, "start_grpc_listener", new_callable=AsyncMock) as mock_start,
+            patch.object(
+                bridge, "start_grpc_listener", new_callable=AsyncMock
+            ) as mock_start,
             patch.object(bridge, "shutdown", new_callable=AsyncMock),
         ):
             async with app.router.lifespan_context(app):
@@ -440,7 +442,9 @@ class TestCreateAmbientAppLifespanGRPCOff:
                 {"AMBIENT_GRPC_URL": "localhost:9000", "INITIAL_PROMPT": ""},
                 clear=False,
             ),
-            patch.object(bridge, "start_grpc_listener", new_callable=AsyncMock) as mock_start,
+            patch.object(
+                bridge, "start_grpc_listener", new_callable=AsyncMock
+            ) as mock_start,
             patch.object(bridge, "shutdown", new_callable=AsyncMock),
         ):
             async with app.router.lifespan_context(app):
@@ -484,7 +488,9 @@ class TestCreateAmbientAppLifespanGRPCOn:
                     "SESSION_ID": "sess-grpc-on",
                 },
             ),
-            patch.object(bridge, "start_grpc_listener", side_effect=_mock_start_grpc_listener) as mock_start,
+            patch.object(
+                bridge, "start_grpc_listener", side_effect=_mock_start_grpc_listener
+            ) as mock_start,
             patch.object(bridge, "shutdown", new_callable=AsyncMock),
         ):
             async with app.router.lifespan_context(app):
@@ -511,7 +517,9 @@ class TestCreateAmbientAppLifespanGRPCOn:
                     "INITIAL_PROMPT": "",
                 },
             ),
-            patch.object(bridge, "start_grpc_listener", new_callable=AsyncMock) as mock_start,
+            patch.object(
+                bridge, "start_grpc_listener", new_callable=AsyncMock
+            ) as mock_start,
             patch.object(bridge, "shutdown", new_callable=AsyncMock),
         ):
             async with app.router.lifespan_context(app):
