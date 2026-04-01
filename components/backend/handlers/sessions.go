@@ -762,6 +762,13 @@ func CreateSession(c *gin.Context) {
 		envVars[k] = v
 	}
 
+	// When the jira-write flag is enabled for this workspace, let the MCP server write.
+	overrides, _ := getWorkspaceOverrides(c.Request.Context(), reqK8s, project)
+	if isRunnerEnabledWithOverrides("jira-write", overrides) {
+		envVars["JIRA_READ_ONLY_MODE"] = "false"
+		log.Printf("Jira write enabled for project %s (feature flag jira-write)", project)
+	}
+
 	// Handle session continuation
 	if req.ParentSessionID != "" {
 		envVars["PARENT_SESSION_ID"] = req.ParentSessionID
