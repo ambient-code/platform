@@ -195,6 +195,7 @@ Migration rules:
 - `AMBIENT_ENV=integration_testing` spins up ephemeral Postgres via testcontainers-go
 - Requires podman socket: `systemctl --user start podman.socket`
 - `DOCKER_HOST=unix:///run/user/$(id -u)/podman/podman.sock`
+- **Always set `TESTCONTAINERS_RYUK_DISABLED=true`** — ryuk tries to connect to `/var/run/docker.sock` which is unavailable; without this flag tests abort before running
 - Mock DAOs (`mock_dao.go`) for unit tests without DB
 - Presenter nil safety: nil-guard each nullable field independently — `UpdatedAt` and `CreatedAt` can be nil independently; treating them as a pair causes panics
 
@@ -208,6 +209,7 @@ cd components/ambient-api-server
 make generate          # Regenerate OpenAPI Go client from openapi/*.yaml
 make binary            # Compile the ambient-api-server binary
 make test              # Integration tests — spins up testcontainer PostgreSQL
+                       # Full invocation: DOCKER_HOST=unix:///run/user/$(id -u)/podman/podman.sock TESTCONTAINERS_RYUK_DISABLED=true AMBIENT_ENV=integration_testing go test -p 1 -v ./...
 make test-integration  # Run only ./test/integration/... package
 make proto             # Regenerate gRPC stubs from proto/
 make proto-lint        # Lint proto definitions
