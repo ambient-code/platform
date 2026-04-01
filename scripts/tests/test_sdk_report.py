@@ -4,7 +4,6 @@ import sys
 import textwrap
 from pathlib import Path
 
-import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -73,9 +72,7 @@ class TestParseReleaseBody:
         assert len(features) >= 2
 
         # First feature should be filesystem memory tools
-        fs_feature = next(
-            f for f in features if "filesystem" in f.name.lower()
-        )
+        fs_feature = next(f for f in features if "filesystem" in f.name.lower())
         assert fs_feature.category == "feature"
         assert "#1247" in fs_feature.pr_ref
 
@@ -150,7 +147,11 @@ class TestFeatureDetection:
         body = "### Features\n\n* **api:** GA thinking-display-setting ([207340c](https://example.com/commit/207340c))"
         features = parse_release_body("0.85.0", body)
         ga_feature = next(
-            (f for f in features if "ga" in f.name.lower() or "ga" in f.description.lower()),
+            (
+                f
+                for f in features
+                if "ga" in f.name.lower() or "ga" in f.description.lower()
+            ),
             None,
         )
         assert ga_feature is not None
@@ -167,8 +168,14 @@ class TestBuildReport:
             body: str
 
         entries = [
-            FakeEntry("0.1.50", "### New Features\n\n- **Session info**: Added tag field (#667)"),
-            FakeEntry("0.1.49", "### Bug Fixes\n\n- **Streaming**: Fixed streaming issue (#671)"),
+            FakeEntry(
+                "0.1.50",
+                "### New Features\n\n- **Session info**: Added tag field (#667)",
+            ),
+            FakeEntry(
+                "0.1.49",
+                "### Bug Fixes\n\n- **Streaming**: Fixed streaming issue (#671)",
+            ),
         ]
 
         report = build_report("claude-agent-sdk", "0.1.48", "0.1.50", entries)

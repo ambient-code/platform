@@ -290,9 +290,7 @@ def check_versions(repo_root: Path) -> list[VersionInfo]:
     return results
 
 
-def apply_updates(
-    repo_root: Path, versions: list[VersionInfo]
-) -> tuple[bool, str]:
+def apply_updates(repo_root: Path, versions: list[VersionInfo]) -> tuple[bool, str]:
     """Apply version updates to pyproject.toml and regenerate lockfile.
 
     Args:
@@ -328,9 +326,7 @@ def apply_updates(
         entries = fetch_github_changelog(
             v.github_repo, v.current_version, v.latest_version
         )
-        report = build_report(
-            v.pypi_name, v.current_version, v.latest_version, entries
-        )
+        report = build_report(v.pypi_name, v.current_version, v.latest_version, entries)
         reports.append(report)
 
     pr_body = render_report_markdown(reports)

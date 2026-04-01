@@ -77,7 +77,15 @@ _TYPE_MAP = {
 
 def parse_event(
     line: str,
-) -> InitEvent | MessageEvent | ToolUseEvent | ToolResultEvent | ErrorEvent | ResultEvent | None:
+) -> (
+    InitEvent
+    | MessageEvent
+    | ToolUseEvent
+    | ToolResultEvent
+    | ErrorEvent
+    | ResultEvent
+    | None
+):
     """Parse a JSON line into the appropriate event dataclass.
 
     Returns ``None`` when the line cannot be parsed or has an unknown type.

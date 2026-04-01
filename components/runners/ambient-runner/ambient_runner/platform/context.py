@@ -52,7 +52,9 @@ class RunnerContext:
         """Get a metadata value."""
         return self.metadata.get(key, default)
 
-    def set_current_user(self, user_id: str, user_name: str = "", token: str = "") -> None:
+    def set_current_user(
+        self, user_id: str, user_name: str = "", token: str = ""
+    ) -> None:
         """Set the current user for per-message credential scoping."""
         self.current_user_id = user_id
         self.current_user_name = user_name

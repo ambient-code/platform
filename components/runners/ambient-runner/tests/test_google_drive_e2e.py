@@ -155,7 +155,9 @@ async def test_google_drive_authentication_flow():
     shutil.rmtree(secret_mount_dir.parent, ignore_errors=True)
 
 
-@pytest.mark.skip(reason="Tool invocation test not yet implemented - requires Claude SDK integration")
+@pytest.mark.skip(
+    reason="Tool invocation test not yet implemented - requires Claude SDK integration"
+)
 @pytest.mark.skipif(
     not os.getenv("GOOGLE_DRIVE_E2E_TEST"),
     reason="Requires GOOGLE_DRIVE_E2E_TEST=true and real credentials",
