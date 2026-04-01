@@ -361,20 +361,13 @@ class TestFetchCredentialHeaders:
             thread.join(timeout=2)
 
     @pytest.mark.asyncio
-    async def test_returns_empty_when_no_credential_id_for_provider(self):
+    async def test_returns_empty_when_no_credential_id_for_provider(self, monkeypatch):
         """Verify graceful skip when CREDENTIAL_IDS does not contain the requested provider."""
-        with patch.dict(
-            os.environ,
-            {
-                "BACKEND_API_URL": "http://127.0.0.1:1/api",
-                "CREDENTIAL_IDS": json.dumps({"gitlab": "some-id"}),
-            },
-            clear=False,
-        ):
-            os.environ.pop("CREDENTIAL_IDS", None)
-            with patch.dict(os.environ, {"CREDENTIAL_IDS": json.dumps({"gitlab": "some-id"})}):
-                ctx = _make_context(current_user_id="user-123")
-                result = await _fetch_credential(ctx, "github")
+        monkeypatch.setenv("BACKEND_API_URL", "http://127.0.0.1:1/api")
+        monkeypatch.setenv("CREDENTIAL_IDS", json.dumps({"gitlab": "some-id"}))
+
+        ctx = _make_context(current_user_id="user-123")
+        result = await _fetch_credential(ctx, "github")
 
         assert result == {}
 
@@ -442,12 +435,14 @@ class TestCredentialLifecycle:
         )
         thread.start()
 
-        credential_ids = json.dumps({
-            "github": "cred-gh",
-            "google": "cred-google",
-            "jira": "cred-jira",
-            "gitlab": "cred-gl",
-        })
+        credential_ids = json.dumps(
+            {
+                "github": "cred-gh",
+                "google": "cred-google",
+                "jira": "cred-jira",
+                "gitlab": "cred-gl",
+            }
+        )
 
         try:
             with patch.dict(

@@ -82,7 +82,7 @@ The runner drains the agent's inbox before starting the Claude Code session. All
 
 ### Credential fetch (Wave 5)
 
-The CP resolves credentials for the session before pod creation. For each provider (github, gitlab, jira, google), it walks agent → project → global scope and takes the most specific matching credential. It then:
+The CP resolves credentials for the session before pod creation. It calls `sdk.Credentials().ListAll()` — the API server applies RBAC-scoped filtering server-side, returning only credentials visible to the session's service account. The CP takes the first credential per provider (first-match wins; ordering is server-determined). It then:
 
 1. Builds `CREDENTIAL_IDS` — a JSON map of `provider → credential_id` — and injects it into the runner pod env
 2. Grants `credential:token-reader` on each credential ID to the runner pod's service account

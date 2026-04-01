@@ -647,7 +647,7 @@ func (r *SimpleKubeReconciler) resolveCredentialIDs(ctx context.Context, sdk *sd
 
 func (r *SimpleKubeReconciler) ensureCredentialRoleBindings(ctx context.Context, namespace, saName string, credentialIDs map[string]string) error {
 	for provider, credID := range credentialIDs {
-		name := fmt.Sprintf("credential-token-reader-%s", provider)
+		name := fmt.Sprintf("%s-credential-%s", saName, provider)
 		rb := &unstructured.Unstructured{
 			Object: map[string]interface{}{
 				"apiVersion": "rbac.authorization.k8s.io/v1",

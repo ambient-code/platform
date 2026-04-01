@@ -446,18 +446,25 @@ def clear_runtime_credentials() -> None:
         except OSError as e:
             logger.warning(f"Failed to remove token file {token_file}: {e}")
 
-    # Remove Google Workspace credential file if present (uses same hardcoded path as populate_runtime_credentials)
-    google_cred_file = _GOOGLE_WORKSPACE_CREDS_FILE
-    if google_cred_file.exists():
-        try:
-            google_cred_file.unlink()
-            cleared.append("google_workspace_credentials_file")
-            # Clean up empty parent dirs
-            cred_dir = google_cred_file.parent
-            if cred_dir.exists() and not any(cred_dir.iterdir()):
-                cred_dir.rmdir()
-        except OSError as e:
-            logger.warning(f"Failed to remove Google credential file: {e}")
+    # Remove Google credential files — both the default workspace path and any
+    # path set via GOOGLE_APPLICATION_CREDENTIALS (used for SA JSON in Wave 5).
+    google_cred_files = {_GOOGLE_WORKSPACE_CREDS_FILE}
+    gac_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "")
+    if gac_path:
+        google_cred_files.add(Path(gac_path))
+
+    for google_cred_file in google_cred_files:
+        if google_cred_file.exists():
+            try:
+                google_cred_file.unlink()
+                cleared.append(str(google_cred_file.name))
+                cred_dir = google_cred_file.parent
+                if cred_dir.exists() and not any(cred_dir.iterdir()):
+                    cred_dir.rmdir()
+            except OSError as e:
+                logger.warning(
+                    f"Failed to remove Google credential file {google_cred_file}: {e}"
+                )
 
     if cleared:
         logger.info(f"Cleared credentials: {', '.join(cleared)}")
